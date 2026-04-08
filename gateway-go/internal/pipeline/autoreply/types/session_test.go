@@ -58,10 +58,10 @@ func TestIsSessionIdle(t *testing.T) {
 func TestDefaultSessionResetPolicy(t *testing.T) {
 	p := DefaultSessionResetPolicy()
 	if p.MaxAgeMs != 0 {
-		t.Errorf("expected MaxAgeMs=0, got %d", p.MaxAgeMs)
+		t.Errorf("got %d, want MaxAgeMs=0", p.MaxAgeMs)
 	}
 	if p.MaxIdleMs != 0 {
-		t.Errorf("expected MaxIdleMs=0, got %d", p.MaxIdleMs)
+		t.Errorf("got %d, want MaxIdleMs=0", p.MaxIdleMs)
 	}
 	if p.OnNewAgent {
 		t.Error("expected OnNewAgent=false")

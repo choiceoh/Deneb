@@ -25,17 +25,17 @@ func TestPlainText(t *testing.T) {
 		t.Errorf("got %q", ir.Text)
 	}
 	if len(ir.Styles) != 0 {
-		t.Errorf("expected no styles, got %d", len(ir.Styles))
+		t.Errorf("got %d, want no styles", len(ir.Styles))
 	}
 	if len(ir.Links) != 0 {
-		t.Errorf("expected no links, got %d", len(ir.Links))
+		t.Errorf("got %d, want no links", len(ir.Links))
 	}
 }
 
 func TestEmptyInput(t *testing.T) {
 	ir := parse("")
 	if ir.Text != "" {
-		t.Errorf("expected empty text, got %q", ir.Text)
+		t.Errorf("got %q, want empty text", ir.Text)
 	}
 }
 
@@ -46,7 +46,7 @@ func TestEmptyInput(t *testing.T) {
 func TestBold(t *testing.T) {
 	ir := parse("**bold**")
 	if !strings.Contains(ir.Text, "bold") {
-		t.Errorf("expected 'bold' in text, got %q", ir.Text)
+		t.Errorf("got %q, want 'bold' in text", ir.Text)
 	}
 	assertHasStyle(t, ir, StyleBold)
 }
@@ -54,7 +54,7 @@ func TestBold(t *testing.T) {
 func TestItalic(t *testing.T) {
 	ir := parse("*italic*")
 	if !strings.Contains(ir.Text, "italic") {
-		t.Errorf("expected 'italic' in text, got %q", ir.Text)
+		t.Errorf("got %q, want 'italic' in text", ir.Text)
 	}
 	assertHasStyle(t, ir, StyleItalic)
 }
@@ -62,7 +62,7 @@ func TestItalic(t *testing.T) {
 func TestStrikethrough(t *testing.T) {
 	ir := parse("~~strike~~")
 	if !strings.Contains(ir.Text, "strike") {
-		t.Errorf("expected 'strike' in text, got %q", ir.Text)
+		t.Errorf("got %q, want 'strike' in text", ir.Text)
 	}
 	assertHasStyle(t, ir, StyleStrikethrough)
 }
@@ -70,7 +70,7 @@ func TestStrikethrough(t *testing.T) {
 func TestInlineCode(t *testing.T) {
 	ir := parse("use `code` here")
 	if !strings.Contains(ir.Text, "code") {
-		t.Errorf("expected 'code' in text, got %q", ir.Text)
+		t.Errorf("got %q, want 'code' in text", ir.Text)
 	}
 	found := false
 	for _, s := range ir.Styles {
@@ -99,7 +99,7 @@ func TestNestedStyles(t *testing.T) {
 func TestCodeBlock(t *testing.T) {
 	ir := parse("```\ncode\n```")
 	if !strings.Contains(ir.Text, "code") {
-		t.Errorf("expected 'code' in text, got %q", ir.Text)
+		t.Errorf("got %q, want 'code' in text", ir.Text)
 	}
 	assertHasStyle(t, ir, StyleCodeBlock)
 }
@@ -107,7 +107,7 @@ func TestCodeBlock(t *testing.T) {
 func TestCodeBlockWithLanguage(t *testing.T) {
 	ir := parse("```go\nfmt.Println()\n```")
 	if !strings.Contains(ir.Text, "fmt.Println()") {
-		t.Errorf("expected code content, got %q", ir.Text)
+		t.Errorf("got %q, want code content", ir.Text)
 	}
 	assertHasStyle(t, ir, StyleCodeBlock)
 }
@@ -119,13 +119,13 @@ func TestCodeBlockWithLanguage(t *testing.T) {
 func TestLink(t *testing.T) {
 	ir := parse("[click](https://example.com)")
 	if !strings.Contains(ir.Text, "click") {
-		t.Errorf("expected 'click' in text, got %q", ir.Text)
+		t.Errorf("got %q, want 'click' in text", ir.Text)
 	}
 	if strings.Contains(ir.Text, "https://") {
 		t.Error("URL should not appear in text")
 	}
 	if len(ir.Links) != 1 {
-		t.Fatalf("expected 1 link, got %d", len(ir.Links))
+		t.Fatalf("got %d, want 1 link", len(ir.Links))
 	}
 	if ir.Links[0].Href != "https://example.com" {
 		t.Errorf("href = %q", ir.Links[0].Href)
@@ -142,7 +142,7 @@ func TestLink(t *testing.T) {
 func TestHeadingNone(t *testing.T) {
 	ir := parse("# Title")
 	if !strings.Contains(strings.TrimSpace(ir.Text), "Title") {
-		t.Errorf("expected 'Title', got %q", ir.Text)
+		t.Errorf("got %q, want 'Title'", ir.Text)
 	}
 	if len(ir.Styles) != 0 {
 		t.Error("heading_style=none should produce no styles")
@@ -154,7 +154,7 @@ func TestHeadingBold(t *testing.T) {
 	opts.HeadingStyle = "bold"
 	ir := parseWith("# Title", &opts)
 	if !strings.Contains(ir.Text, "Title") {
-		t.Errorf("expected 'Title', got %q", ir.Text)
+		t.Errorf("got %q, want 'Title'", ir.Text)
 	}
 	assertHasStyle(t, ir, StyleBold)
 }
@@ -173,33 +173,33 @@ func TestHeadingStripped(t *testing.T) {
 func TestBulletList(t *testing.T) {
 	ir := parse("- a\n- b")
 	if !strings.Contains(ir.Text, "• a") {
-		t.Errorf("expected '• a', got %q", ir.Text)
+		t.Errorf("got %q, want '• a'", ir.Text)
 	}
 	if !strings.Contains(ir.Text, "• b") {
-		t.Errorf("expected '• b', got %q", ir.Text)
+		t.Errorf("got %q, want '• b'", ir.Text)
 	}
 }
 
 func TestOrderedList(t *testing.T) {
 	ir := parse("1. first\n2. second")
 	if !strings.Contains(ir.Text, "1. first") {
-		t.Errorf("expected '1. first', got %q", ir.Text)
+		t.Errorf("got %q, want '1. first'", ir.Text)
 	}
 	if !strings.Contains(ir.Text, "2. second") {
-		t.Errorf("expected '2. second', got %q", ir.Text)
+		t.Errorf("got %q, want '2. second'", ir.Text)
 	}
 }
 
 func TestNestedList(t *testing.T) {
 	ir := parse("- a\n  - b\n  - c\n- d")
 	if !strings.Contains(ir.Text, "• a") {
-		t.Errorf("expected '• a', got %q", ir.Text)
+		t.Errorf("got %q, want '• a'", ir.Text)
 	}
 	if !strings.Contains(ir.Text, "• b") {
-		t.Errorf("expected '• b', got %q", ir.Text)
+		t.Errorf("got %q, want '• b'", ir.Text)
 	}
 	if !strings.Contains(ir.Text, "• d") {
-		t.Errorf("expected '• d', got %q", ir.Text)
+		t.Errorf("got %q, want '• d'", ir.Text)
 	}
 }
 
@@ -210,7 +210,7 @@ func TestNestedList(t *testing.T) {
 func TestBlockquote(t *testing.T) {
 	ir := parse("> quoted")
 	if !strings.Contains(ir.Text, "quoted") {
-		t.Errorf("expected 'quoted', got %q", ir.Text)
+		t.Errorf("got %q, want 'quoted'", ir.Text)
 	}
 	assertHasStyle(t, ir, StyleBlockquote)
 }
@@ -220,7 +220,7 @@ func TestBlockquotePrefix(t *testing.T) {
 	opts.BlockquotePrefix = "> "
 	ir := parseWith("> text", &opts)
 	if !strings.HasPrefix(ir.Text, "> ") {
-		t.Errorf("expected prefix '> ', got %q", ir.Text)
+		t.Errorf("got %q, want prefix '> '", ir.Text)
 	}
 }
 
@@ -231,7 +231,7 @@ func TestBlockquotePrefix(t *testing.T) {
 func TestHorizontalRule(t *testing.T) {
 	ir := parse("---")
 	if !strings.Contains(ir.Text, "───") {
-		t.Errorf("expected '───', got %q", ir.Text)
+		t.Errorf("got %q, want '───'", ir.Text)
 	}
 }
 
@@ -249,7 +249,7 @@ func TestParagraphsSeparated(t *testing.T) {
 func TestSoftBreak(t *testing.T) {
 	ir := parse("line1\nline2")
 	if !strings.Contains(ir.Text, "line1") || !strings.Contains(ir.Text, "line2") {
-		t.Errorf("expected both lines, got %q", ir.Text)
+		t.Errorf("got %q, want both lines", ir.Text)
 	}
 }
 
@@ -263,7 +263,7 @@ func TestSpoiler(t *testing.T) {
 	ir := parseWith("||hidden||", &opts)
 	trimmed := strings.TrimSpace(ir.Text)
 	if trimmed != "hidden" {
-		t.Errorf("expected 'hidden', got %q", trimmed)
+		t.Errorf("got %q, want 'hidden'", trimmed)
 	}
 	assertHasStyle(t, ir, StyleSpoiler)
 }
@@ -299,7 +299,7 @@ func TestTwoSpoilers(t *testing.T) {
 		}
 	}
 	if spoilerCount != 2 {
-		t.Errorf("expected 2 spoiler spans, got %d", spoilerCount)
+		t.Errorf("got %d, want 2 spoiler spans", spoilerCount)
 	}
 }
 
@@ -330,7 +330,7 @@ func TestTableBullets(t *testing.T) {
 	opts.TableMode = "bullets"
 	ir := parseWith("| A | B |\n|---|---|\n| 1 | 2 |", &opts)
 	if !strings.Contains(ir.Text, "1") || !strings.Contains(ir.Text, "2") {
-		t.Errorf("expected cell content, got %q", ir.Text)
+		t.Errorf("got %q, want cell content", ir.Text)
 	}
 }
 
@@ -339,10 +339,10 @@ func TestTableCode(t *testing.T) {
 	opts.TableMode = "code"
 	ir := parseWith("| A | B |\n|---|---|\n| 1 | 2 |", &opts)
 	if !strings.Contains(ir.Text, "|") {
-		t.Errorf("expected pipe delimiters, got %q", ir.Text)
+		t.Errorf("got %q, want pipe delimiters", ir.Text)
 	}
 	if !strings.Contains(ir.Text, "---") {
-		t.Errorf("expected divider, got %q", ir.Text)
+		t.Errorf("got %q, want divider", ir.Text)
 	}
 	assertHasStyle(t, ir, StyleCodeBlock)
 }
@@ -352,10 +352,10 @@ func TestTableBulletsHeaderValue(t *testing.T) {
 	opts.TableMode = "bullets"
 	ir := parseWith("| Name | Value |\n|------|-------|\n| A | 1 |\n| B | 2 |", &opts)
 	if !strings.Contains(ir.Text, "Value: 1") {
-		t.Errorf("expected 'Value: 1', got %q", ir.Text)
+		t.Errorf("got %q, want 'Value: 1'", ir.Text)
 	}
 	if !strings.Contains(ir.Text, "Value: 2") {
-		t.Errorf("expected 'Value: 2', got %q", ir.Text)
+		t.Errorf("got %q, want 'Value: 2'", ir.Text)
 	}
 }
 
@@ -382,7 +382,7 @@ func TestHasTablesFlag(t *testing.T) {
 func TestImageAltText(t *testing.T) {
 	ir := parse("![alt text](img.png)")
 	if !strings.Contains(ir.Text, "alt text") {
-		t.Errorf("expected alt text, got %q", ir.Text)
+		t.Errorf("got %q, want alt text", ir.Text)
 	}
 }
 
@@ -410,10 +410,10 @@ func TestMergeAdjacentSameStyle(t *testing.T) {
 	}
 	merged := mergeStyleSpans(spans)
 	if len(merged) != 1 {
-		t.Fatalf("expected 1 span, got %d", len(merged))
+		t.Fatalf("got %d, want 1 span", len(merged))
 	}
 	if merged[0].End != 10 {
-		t.Errorf("expected end=10, got %d", merged[0].End)
+		t.Errorf("got %d, want end=10", merged[0].End)
 	}
 }
 
@@ -424,10 +424,10 @@ func TestMergeOverlapping(t *testing.T) {
 	}
 	merged := mergeStyleSpans(spans)
 	if len(merged) != 1 {
-		t.Fatalf("expected 1 span, got %d", len(merged))
+		t.Fatalf("got %d, want 1 span", len(merged))
 	}
 	if merged[0].End != 12 {
-		t.Errorf("expected end=12, got %d", merged[0].End)
+		t.Errorf("got %d, want end=12", merged[0].End)
 	}
 }
 
@@ -438,7 +438,7 @@ func TestMergeDifferentStylesNotMerged(t *testing.T) {
 	}
 	merged := mergeStyleSpans(spans)
 	if len(merged) != 2 {
-		t.Errorf("expected 2 spans, got %d", len(merged))
+		t.Errorf("got %d, want 2 spans", len(merged))
 	}
 }
 
@@ -463,7 +463,7 @@ func TestMergeBlockquoteOverlappingMerged(t *testing.T) {
 		t.Fatalf("overlapping blockquotes should merge, got %d", len(merged))
 	}
 	if merged[0].End != 10 {
-		t.Errorf("expected end=10, got %d", merged[0].End)
+		t.Errorf("got %d, want end=10", merged[0].End)
 	}
 }
 
@@ -471,7 +471,7 @@ func TestClampStyleDropsEmpty(t *testing.T) {
 	spans := []StyleSpan{{Start: 15, End: 20, Style: StyleBold}}
 	clamped := clampStyleSpans(spans, 10)
 	if len(clamped) != 0 {
-		t.Errorf("expected 0 spans, got %d", len(clamped))
+		t.Errorf("got %d, want 0 spans", len(clamped))
 	}
 }
 
@@ -479,10 +479,10 @@ func TestClampStyleClips(t *testing.T) {
 	spans := []StyleSpan{{Start: 5, End: 20, Style: StyleBold}}
 	clamped := clampStyleSpans(spans, 10)
 	if len(clamped) != 1 {
-		t.Fatalf("expected 1 span, got %d", len(clamped))
+		t.Fatalf("got %d, want 1 span", len(clamped))
 	}
 	if clamped[0].End != 10 {
-		t.Errorf("expected end=10, got %d", clamped[0].End)
+		t.Errorf("got %d, want end=10", clamped[0].End)
 	}
 }
 
@@ -493,7 +493,7 @@ func TestClampStyleClips(t *testing.T) {
 func TestToPlainText(t *testing.T) {
 	result := ToPlainText("**bold** and [link](https://example.com)")
 	if !strings.Contains(result, "bold") {
-		t.Errorf("expected 'bold', got %q", result)
+		t.Errorf("got %q, want 'bold'", result)
 	}
 	if strings.Contains(result, "**") {
 		t.Error("bold markers should be stripped")

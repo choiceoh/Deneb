@@ -64,7 +64,7 @@ func TestBuildRecentMessageIDKey_EmptyMessageID(t *testing.T) {
 	}
 	key := buildRecentMessageIDKey(run, "session:main")
 	if key != "" {
-		t.Errorf("expected empty key for empty messageID, got %q", key)
+		t.Errorf("got %q, want empty key for empty messageID", key)
 	}
 }
 
@@ -75,7 +75,7 @@ func TestBuildRecentMessageIDKey_WhitespaceMessageID(t *testing.T) {
 	}
 	key := buildRecentMessageIDKey(run, "session:main")
 	if key != "" {
-		t.Errorf("expected empty key for whitespace messageID, got %q", key)
+		t.Errorf("got %q, want empty key for whitespace messageID", key)
 	}
 }
 

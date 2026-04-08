@@ -35,7 +35,7 @@ func TestMarkdownToIR_Empty(t *testing.T) {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if result.Text != "" {
-		t.Errorf("expected empty text, got %q", result.Text)
+		t.Errorf("got %q, want empty text", result.Text)
 	}
 }
 
@@ -69,7 +69,7 @@ func TestMarkdownDetectFences_Basic(t *testing.T) {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if len(spans) != 1 {
-		t.Errorf("expected 1 fence span, got %d", len(spans))
+		t.Errorf("got %d, want 1 fence span", len(spans))
 	}
 	t.Logf("Fences: %s", string(fences))
 }
@@ -77,7 +77,7 @@ func TestMarkdownDetectFences_Basic(t *testing.T) {
 func TestMarkdownDetectFences_Empty(t *testing.T) {
 	fences := testutil.Must(MarkdownDetectFences(""))
 	if string(fences) != "[]" {
-		t.Errorf("expected empty array, got %s", string(fences))
+		t.Errorf("got %s, want empty array", string(fences))
 	}
 }
 
@@ -102,7 +102,7 @@ func TestMarkdownToIR_Headings(t *testing.T) {
 		t.Error("expected non-empty text after heading strip")
 	}
 	if strings.Contains(result.Text, "# ") {
-		t.Errorf("expected heading markers stripped, got %q", result.Text)
+		t.Errorf("got %q, want heading markers stripped", result.Text)
 	}
 }
 
@@ -115,10 +115,10 @@ func TestMarkdownToIR_Links(t *testing.T) {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if !strings.Contains(result.Text, "Click here") {
-		t.Errorf("expected link text preserved, got %q", result.Text)
+		t.Errorf("got %q, want link text preserved", result.Text)
 	}
 	if strings.Contains(result.Text, "https://") {
-		t.Errorf("expected URL stripped from text, got %q", result.Text)
+		t.Errorf("got %q, want URL stripped from text", result.Text)
 	}
 }
 
@@ -130,7 +130,7 @@ func TestMarkdownDetectFences_TildeFence(t *testing.T) {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if len(spans) != 1 {
-		t.Errorf("expected 1 tilde fence span, got %d", len(spans))
+		t.Errorf("got %d, want 1 tilde fence span", len(spans))
 	}
 }
 
@@ -145,11 +145,11 @@ func TestMarkdownDetectFences_Unclosed(t *testing.T) {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if len(spans) != 1 {
-		t.Fatalf("expected 1 unclosed fence span, got %d", len(spans))
+		t.Fatalf("got %d, want 1 unclosed fence span", len(spans))
 	}
 	// Unclosed fence should extend to end of text
 	if spans[0].End != len(text) {
-		t.Errorf("expected unclosed fence end=%d, got %d", len(text), spans[0].End)
+		t.Errorf("got %d, want unclosed fence end=%d", spans[0].End, len(text))
 	}
 }
 
@@ -161,7 +161,7 @@ func TestMarkdownDetectFences_MultipleFences(t *testing.T) {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if len(spans) != 2 {
-		t.Errorf("expected 2 fence spans, got %d", len(spans))
+		t.Errorf("got %d, want 2 fence spans", len(spans))
 	}
 }
 
@@ -173,7 +173,7 @@ func TestMarkdownDetectFences_IndentedFence(t *testing.T) {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if len(spans) != 1 {
-		t.Errorf("expected 1 indented fence span, got %d", len(spans))
+		t.Errorf("got %d, want 1 indented fence span", len(spans))
 	}
 }
 
@@ -186,7 +186,7 @@ func TestMarkdownDetectFences_TooMuchIndent(t *testing.T) {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if len(spans) != 0 {
-		t.Errorf("expected 0 fence spans for 4-space indent, got %d", len(spans))
+		t.Errorf("got %d, want 0 fence spans for 4-space indent", len(spans))
 	}
 }
 
@@ -198,7 +198,7 @@ func TestMarkdownDetectFences_NoFences(t *testing.T) {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if len(spans) != 0 {
-		t.Errorf("expected 0 fences, got %d", len(spans))
+		t.Errorf("got %d, want 0 fences", len(spans))
 	}
 }
 

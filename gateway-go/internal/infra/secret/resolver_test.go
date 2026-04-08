@@ -14,13 +14,13 @@ func TestResolve(t *testing.T) {
 		t.Fatal("expected OK")
 	}
 	if len(result.Assignments) != 2 {
-		t.Fatalf("expected 2 assignments, got %d", len(result.Assignments))
+		t.Fatalf("got %d, want 2 assignments", len(result.Assignments))
 	}
 	if len(result.InactiveRefPaths) != 1 {
-		t.Fatalf("expected 1 inactive, got %d", len(result.InactiveRefPaths))
+		t.Fatalf("got %d, want 1 inactive", len(result.InactiveRefPaths))
 	}
 	if result.InactiveRefPaths[0] != "openai.missing" {
-		t.Fatalf("expected 'openai.missing', got %q", result.InactiveRefPaths[0])
+		t.Fatalf("got %q, want 'openai.missing'", result.InactiveRefPaths[0])
 	}
 }
 

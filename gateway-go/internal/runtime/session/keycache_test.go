@@ -37,7 +37,7 @@ func TestKeyCachePutMissWithTTL(t *testing.T) {
 		t.Fatal("expected known miss (hit with empty key)")
 	}
 	if key != "" {
-		t.Errorf("expected empty key for miss, got %q", key)
+		t.Errorf("got %q, want empty key for miss", key)
 	}
 }
 
@@ -70,13 +70,13 @@ func TestKeyCacheLRUEviction(t *testing.T) {
 		c.Put(fmt.Sprintf("run-%d", i), fmt.Sprintf("key-%d", i))
 	}
 	if c.Len() != KeyCacheLimit {
-		t.Fatalf("expected %d entries, got %d", KeyCacheLimit, c.Len())
+		t.Fatalf("got %d, want %d entries", c.Len(), KeyCacheLimit)
 	}
 
 	// Adding one more should evict the oldest (run-0).
 	c.Put("run-new", "key-new")
 	if c.Len() != KeyCacheLimit {
-		t.Fatalf("expected %d entries after eviction, got %d", KeyCacheLimit, c.Len())
+		t.Fatalf("got %d, want %d entries after eviction", c.Len(), KeyCacheLimit)
 	}
 
 	// run-0 should be evicted.
@@ -99,10 +99,10 @@ func TestKeyCacheUpdateExisting(t *testing.T) {
 
 	key, ok := c.Get("run-1")
 	if !ok || key != "new-key" {
-		t.Errorf("expected updated key, got %q", key)
+		t.Errorf("got %q, want updated key", key)
 	}
 	if c.Len() != 1 {
-		t.Errorf("expected 1 entry, got %d", c.Len())
+		t.Errorf("got %d, want 1 entry", c.Len())
 	}
 }
 
@@ -113,6 +113,6 @@ func TestKeyCacheClear(t *testing.T) {
 	c.Clear()
 
 	if c.Len() != 0 {
-		t.Errorf("expected empty cache after clear, got %d", c.Len())
+		t.Errorf("got %d, want empty cache after clear", c.Len())
 	}
 }

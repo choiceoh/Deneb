@@ -10,28 +10,28 @@ import (
 func TestExtractMentions_None(t *testing.T) {
 	got := ExtractMentions("hello world, no mentions here")
 	if len(got) != 0 {
-		t.Errorf("expected nil, got %v", got)
+		t.Errorf("got %v, want nil", got)
 	}
 }
 
 func TestExtractMentions_Single(t *testing.T) {
 	got := ExtractMentions("hey @alice how are you")
 	if len(got) != 1 || got[0] != "alice" {
-		t.Errorf("expected [alice], got %v", got)
+		t.Errorf("got %v, want [alice]", got)
 	}
 }
 
 func TestExtractMentions_Multiple(t *testing.T) {
 	got := ExtractMentions("@alice and @bob meet @carol")
 	if len(got) != 3 {
-		t.Fatalf("expected 3 mentions, got %d: %v", len(got), got)
+		t.Fatalf("got %d: %v, want 3 mentions", len(got), got)
 	}
 }
 
 func TestExtractMentions_Deduplication(t *testing.T) {
 	got := ExtractMentions("@alice @alice @alice")
 	if len(got) != 1 || got[0] != "alice" {
-		t.Errorf("expected [alice] (deduped), got %v", got)
+		t.Errorf("got %v, want [alice] (deduped)", got)
 	}
 }
 
@@ -45,7 +45,7 @@ func TestExtractMentions_PreservesOrder(t *testing.T) {
 func TestExtractMentions_Empty(t *testing.T) {
 	got := ExtractMentions("")
 	if len(got) != 0 {
-		t.Errorf("expected nil for empty input, got %v", got)
+		t.Errorf("got %v, want nil for empty input", got)
 	}
 }
 
@@ -86,7 +86,7 @@ func TestContainsMention_WordBoundary(t *testing.T) {
 
 func TestStripInboundMeta_Empty(t *testing.T) {
 	if got := StripInboundMeta(""); got != "" {
-		t.Errorf("expected empty, got %q", got)
+		t.Errorf("got %q, want empty", got)
 	}
 }
 
@@ -112,7 +112,7 @@ func TestStripInboundMeta_ForwardedHeader(t *testing.T) {
 func TestStripInboundMeta_Trimmed(t *testing.T) {
 	got := StripInboundMeta("  hello world  ")
 	if got != "hello world" {
-		t.Errorf("expected trimmed result, got %q", got)
+		t.Errorf("got %q, want trimmed result", got)
 	}
 }
 
@@ -121,7 +121,7 @@ func TestStripInboundMeta_Trimmed(t *testing.T) {
 func TestNormalizeInlineWhitespace_Collapses(t *testing.T) {
 	got := NormalizeInlineWhitespace("  hello   world  ")
 	if got != "hello world" {
-		t.Errorf("expected collapsed whitespace, got %q", got)
+		t.Errorf("got %q, want collapsed whitespace", got)
 	}
 }
 
@@ -161,7 +161,7 @@ func TestResolvePath_RelativeWithBase(t *testing.T) {
 	r := MediaPathResolver{BaseDir: "/base"}
 	got := r.ResolvePath("file.mp4")
 	if got != "/base/file.mp4" {
-		t.Errorf("relative path with base expected /base/file.mp4, got %q", got)
+		t.Errorf("relative path with base got %q, want /base/file.mp4", got)
 	}
 }
 
@@ -186,7 +186,7 @@ func TestResolvePath_Empty(t *testing.T) {
 func TestReplyInline_Trims(t *testing.T) {
 	got := ReplyInline("  hello  ")
 	if got != "hello" {
-		t.Errorf("expected trimmed, got %q", got)
+		t.Errorf("got %q, want trimmed", got)
 	}
 }
 

@@ -18,7 +18,7 @@ func TestStoreLoadEmpty(t *testing.T) {
 		t.Errorf("version = %d, want 1", store.Version)
 	}
 	if len(store.Jobs) != 0 {
-		t.Errorf("expected 0 jobs, got %d", len(store.Jobs))
+		t.Errorf("got %d, want 0 jobs", len(store.Jobs))
 	}
 }
 

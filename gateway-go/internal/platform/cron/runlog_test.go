@@ -45,7 +45,7 @@ func TestRunLogStatusFilter(t *testing.T) {
 
 	page := rl.ReadPage("j", RunLogReadOpts{Status: "error"})
 	if page.Total != 1 {
-		t.Errorf("expected 1 error entry, got %d", page.Total)
+		t.Errorf("got %d, want 1 error entry", page.Total)
 	}
 }
 
@@ -80,6 +80,6 @@ func TestRunLogTextSearch(t *testing.T) {
 
 	page := rl.ReadPage("j", RunLogReadOpts{Query: "weather"})
 	if page.Total != 1 {
-		t.Errorf("expected 1 match, got %d", page.Total)
+		t.Errorf("got %d, want 1 match", page.Total)
 	}
 }

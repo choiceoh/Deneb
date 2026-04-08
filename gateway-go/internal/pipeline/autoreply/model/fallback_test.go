@@ -18,7 +18,7 @@ func TestBuildFallbackNotice(t *testing.T) {
 	t.Run("same model returns empty", func(t *testing.T) {
 		got := BuildFallbackNotice("anthropic", "claude-3", "anthropic", "claude-3", nil)
 		if got != "" {
-			t.Errorf("expected empty, got %q", got)
+			t.Errorf("got %q, want empty", got)
 		}
 	})
 
@@ -29,7 +29,7 @@ func TestBuildFallbackNotice(t *testing.T) {
 			t.Error("expected non-empty notice")
 		}
 		if !strings.HasPrefix(got, "↪") {
-			t.Errorf("expected arrow prefix, got %q", got)
+			t.Errorf("got %q, want arrow prefix", got)
 		}
 	})
 }

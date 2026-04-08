@@ -44,7 +44,7 @@ func TestUnmarshalParams(t *testing.T) {
 	err = unmarshalParams([]byte(`{"name":"test"}`), &out)
 	testutil.NoError(t, err)
 	if out.Name != "test" {
-		t.Errorf("expected name 'test', got %q", out.Name)
+		t.Errorf("got %q, want name 'test'", out.Name)
 	}
 
 	err = unmarshalParams([]byte(`{invalid`), &out)

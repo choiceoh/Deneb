@@ -38,7 +38,7 @@ func TestProviderRuntimeResolverResolvePlugin(t *testing.T) {
 		t.Fatal("expected plugin for 'openai'")
 	}
 	if p.ID() != "openai" {
-		t.Errorf("expected ID 'openai', got %q", p.ID())
+		t.Errorf("got %q, want ID 'openai'", p.ID())
 	}
 
 	// Cache hit.
@@ -50,7 +50,7 @@ func TestProviderRuntimeResolverResolvePlugin(t *testing.T) {
 	// Not found.
 	p3 := resolver.ResolvePlugin("nonexistent")
 	if p3 != nil {
-		t.Errorf("expected nil for nonexistent provider, got %v", p3)
+		t.Errorf("got %v, want nil for nonexistent provider", p3)
 	}
 }
 
@@ -71,7 +71,7 @@ func TestProviderRuntimeResolverWithAliases(t *testing.T) {
 		t.Fatal("expected plugin for alias 'bedrock'")
 	}
 	if p.ID() != "amazon-bedrock" {
-		t.Errorf("expected ID 'amazon-bedrock', got %q", p.ID())
+		t.Errorf("got %q, want ID 'amazon-bedrock'", p.ID())
 	}
 
 	// Lookup by normalized alias.
@@ -120,7 +120,7 @@ func TestProviderRuntimeResolverCapabilities(t *testing.T) {
 	// Non-existent provider.
 	c2 := resolver.ResolveCapabilities("nonexistent")
 	if c2 != nil {
-		t.Errorf("expected nil capabilities for nonexistent, got %v", c2)
+		t.Errorf("got %v, want nil capabilities for nonexistent", c2)
 	}
 }
 

@@ -64,7 +64,7 @@ func TestFileTranscriptStore_LoadMissing(t *testing.T) {
 	msgs, total, err := store.Load("nonexistent", 0)
 	testutil.NoError(t, err)
 	if total != 0 || len(msgs) != 0 {
-		t.Errorf("expected empty result, got total=%d msgs=%d", total, len(msgs))
+		t.Errorf("got total=%d msgs=%d, want empty result", total, len(msgs))
 	}
 }
 

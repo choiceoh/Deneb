@@ -7,7 +7,7 @@ import (
 func TestNormalizeDiscoveryResultNil(t *testing.T) {
 	result := NormalizeDiscoveryResult("openai", nil)
 	if len(result) != 0 {
-		t.Errorf("expected empty map for nil result, got %v", result)
+		t.Errorf("got %v, want empty map for nil result", result)
 	}
 }
 
@@ -16,7 +16,7 @@ func TestNormalizeDiscoveryResultSingleProvider(t *testing.T) {
 		Provider: &DiscoveryProviderConfig{ID: "openai", BaseURL: "https://api.openai.com"},
 	})
 	if len(result) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(result))
+		t.Fatalf("got %d, want 1 entry", len(result))
 	}
 	if _, ok := result["openai"]; !ok {
 		t.Error("expected key 'openai' in result")
@@ -32,7 +32,7 @@ func TestNormalizeDiscoveryResultMultipleProviders(t *testing.T) {
 		},
 	})
 	if len(result) != 2 {
-		t.Fatalf("expected 2 entries (empty key skipped), got %d", len(result))
+		t.Fatalf("got %d, want 2 entries (empty key skipped)", len(result))
 	}
 }
 
@@ -44,7 +44,7 @@ func TestNormalizeDiscoveryResultNormalizesKeys(t *testing.T) {
 	})
 	// aws-bedrock normalizes to amazon-bedrock.
 	if _, ok := result["amazon-bedrock"]; !ok {
-		t.Errorf("expected normalized key 'amazon-bedrock', got %v", result)
+		t.Errorf("got %v, want normalized key 'amazon-bedrock'", result)
 	}
 }
 
@@ -61,22 +61,22 @@ func TestGroupDiscoveryProvidersByOrder(t *testing.T) {
 	// Check simple group is sorted.
 	simple := grouped[DiscoveryOrderSimple]
 	if len(simple) != 2 {
-		t.Fatalf("expected 2 simple providers, got %d", len(simple))
+		t.Fatalf("got %d, want 2 simple providers", len(simple))
 	}
 	if simple[0].Label != "Alpha" || simple[1].Label != "Bravo" {
-		t.Errorf("expected alphabetical order [Alpha, Bravo], got [%s, %s]",
+		t.Errorf("got [%s, %s], want alphabetical order [Alpha, Bravo]",
 			simple[0].Label, simple[1].Label)
 	}
 
 	// Check other groups.
 	if len(grouped[DiscoveryOrderProfile]) != 1 {
-		t.Errorf("expected 1 profile provider, got %d", len(grouped[DiscoveryOrderProfile]))
+		t.Errorf("got %d, want 1 profile provider", len(grouped[DiscoveryOrderProfile]))
 	}
 	if len(grouped[DiscoveryOrderPaired]) != 0 {
-		t.Errorf("expected 0 paired providers, got %d", len(grouped[DiscoveryOrderPaired]))
+		t.Errorf("got %d, want 0 paired providers", len(grouped[DiscoveryOrderPaired]))
 	}
 	if len(grouped[DiscoveryOrderLate]) != 1 {
-		t.Errorf("expected 1 late provider, got %d", len(grouped[DiscoveryOrderLate]))
+		t.Errorf("got %d, want 1 late provider", len(grouped[DiscoveryOrderLate]))
 	}
 }
 

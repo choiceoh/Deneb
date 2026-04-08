@@ -14,7 +14,7 @@ func TestMustResponseOK_Success(t *testing.T) {
 		t.Fatal("expected OK=true")
 	}
 	if resp.ID != "test-1" {
-		t.Errorf("expected ID=test-1, got %s", resp.ID)
+		t.Errorf("got %s, want ID=test-1", resp.ID)
 	}
 }
 
@@ -41,7 +41,7 @@ func TestMustResponseOK_MarshalFail(t *testing.T) {
 		t.Fatal("expected error shape")
 	}
 	if resp.Error.Code != ErrUnavailable {
-		t.Errorf("expected code %s, got %s", ErrUnavailable, resp.Error.Code)
+		t.Errorf("got %s, want code %s", resp.Error.Code, ErrUnavailable)
 	}
 }
 

@@ -74,10 +74,10 @@ func TestToolHTTP_methodPost(t *testing.T) {
 	})
 	testutil.NoError(t, err)
 	if gotMethod != "POST" {
-		t.Errorf("expected POST, got %q", gotMethod)
+		t.Errorf("got %q, want POST", gotMethod)
 	}
 	if gotBody != "payload" {
-		t.Errorf("expected body payload, got %q", gotBody)
+		t.Errorf("got %q, want body payload", gotBody)
 	}
 	if !strings.Contains(out, "HTTP 201") {
 		t.Errorf("expected 201: %q", out)
@@ -98,7 +98,7 @@ func TestToolHTTP_jsonBody(t *testing.T) {
 		"json":   map[string]string{"key": "value"},
 	})
 	if !strings.Contains(gotContentType, "application/json") {
-		t.Errorf("expected json content-type, got %q", gotContentType)
+		t.Errorf("got %q, want json content-type", gotContentType)
 	}
 }
 
@@ -115,7 +115,7 @@ func TestToolHTTP_customHeaders(t *testing.T) {
 		"headers": map[string]string{"X-Custom": "test-value"},
 	})
 	if gotHeader != "test-value" {
-		t.Errorf("expected custom header, got %q", gotHeader)
+		t.Errorf("got %q, want custom header", gotHeader)
 	}
 }
 

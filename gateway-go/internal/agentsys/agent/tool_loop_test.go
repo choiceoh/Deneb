@@ -25,19 +25,19 @@ func TestToolLoopDetector_GenericRepeat(t *testing.T) {
 	// 3rd call: warning.
 	r := d.RecordAndCheck("read", args)
 	if !r.Stuck || r.Level != ToolLoopWarning || r.Detector != "generic_repeat" {
-		t.Fatalf("expected warning at 3, got stuck=%v level=%v detector=%s", r.Stuck, r.Level, r.Detector)
+		t.Fatalf("got stuck=%v level=%v detector=%s, want warning at 3", r.Stuck, r.Level, r.Detector)
 	}
 
 	// Calls 4: still warning.
 	r = d.RecordAndCheck("read", args)
 	if r.Level != ToolLoopWarning {
-		t.Fatalf("expected warning at 4, got level=%v", r.Level)
+		t.Fatalf("got level=%v, want warning at 4", r.Level)
 	}
 
 	// 5th call: critical.
 	r = d.RecordAndCheck("read", args)
 	if !r.Stuck || r.Level != ToolLoopCritical || r.Detector != "generic_repeat" {
-		t.Fatalf("expected critical at 5, got stuck=%v level=%v detector=%s", r.Stuck, r.Level, r.Detector)
+		t.Fatalf("got stuck=%v level=%v detector=%s, want critical at 5", r.Stuck, r.Level, r.Detector)
 	}
 }
 
@@ -77,7 +77,7 @@ func TestToolLoopDetector_PollNoProgress(t *testing.T) {
 	// 3rd poll with same result: warning.
 	r := d.RecordAndCheck("process", args)
 	if !r.Stuck || r.Level != ToolLoopWarning || r.Detector != "poll_no_progress" {
-		t.Fatalf("expected poll_no_progress warning at 3, got stuck=%v level=%v detector=%s", r.Stuck, r.Level, r.Detector)
+		t.Fatalf("got stuck=%v level=%v detector=%s, want poll_no_progress warning at 3", r.Stuck, r.Level, r.Detector)
 	}
 }
 
@@ -124,10 +124,10 @@ func TestToolLoopDetector_PingPong(t *testing.T) {
 	d.RecordAndCheck("read", argsA)       // call 5
 	r := d.RecordAndCheck("write", argsB) // call 6
 	if !r.Stuck || r.Detector != "ping_pong" {
-		t.Fatalf("expected ping_pong warning at 6 alternating calls, got stuck=%v detector=%s", r.Stuck, r.Detector)
+		t.Fatalf("got stuck=%v detector=%s, want ping_pong warning at 6 alternating calls", r.Stuck, r.Detector)
 	}
 	if r.Level != ToolLoopWarning {
-		t.Fatalf("expected warning level, got %v", r.Level)
+		t.Fatalf("got %v, want warning level", r.Level)
 	}
 }
 
@@ -155,7 +155,7 @@ func TestToolLoopDetector_GlobalCircuitBreaker(t *testing.T) {
 	// 5th call: circuit breaker.
 	r := d.RecordAndCheck("read", args)
 	if !r.Stuck || r.Level != ToolLoopCritical || r.Detector != "circuit_breaker" {
-		t.Fatalf("expected circuit_breaker at 5, got stuck=%v level=%v detector=%s", r.Stuck, r.Level, r.Detector)
+		t.Fatalf("got stuck=%v level=%v detector=%s, want circuit_breaker at 5", r.Stuck, r.Level, r.Detector)
 	}
 }
 

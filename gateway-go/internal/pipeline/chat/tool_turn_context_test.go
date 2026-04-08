@@ -20,13 +20,13 @@ func TestTurnContext_StoreAndLoad(t *testing.T) {
 
 	r := tc.Load("toolu_1")
 	if r == nil {
-		t.Fatal("expected result, got nil")
+		t.Fatal("got nil, want result")
 	}
 	if r.ToolName != "read" {
-		t.Errorf("expected tool name 'read', got %q", r.ToolName)
+		t.Errorf("got %q, want tool name 'read'", r.ToolName)
 	}
 	if r.Output != "file contents" {
-		t.Errorf("expected output 'file contents', got %q", r.Output)
+		t.Errorf("got %q, want output 'file contents'", r.Output)
 	}
 
 	// Non-existent key.
@@ -44,7 +44,7 @@ func TestTurnContext_Wait_AlreadyAvailable(t *testing.T) {
 		t.Fatal("expected ok=true for already-available result")
 	}
 	if r.Output != "match" {
-		t.Errorf("expected output 'match', got %q", r.Output)
+		t.Errorf("got %q, want output 'match'", r.Output)
 	}
 }
 
@@ -70,7 +70,7 @@ func TestTurnContext_Wait_BlocksUntilStored(t *testing.T) {
 		t.Fatal("expected ok=true after store")
 	}
 	if result.Output != "done" {
-		t.Errorf("expected 'done', got %q", result.Output)
+		t.Errorf("got %q, want 'done'", result.Output)
 	}
 }
 
@@ -128,7 +128,7 @@ func TestTurnContext_ConcurrentAccess(t *testing.T) {
 
 	ids := tc.IDs()
 	if len(ids) != 20 {
-		t.Errorf("expected 20 stored results, got %d", len(ids))
+		t.Errorf("got %d, want 20 stored results", len(ids))
 	}
 }
 

@@ -58,13 +58,13 @@ func TestCompactAndPersist_NoLLMCompaction(t *testing.T) {
 		t.Fatal("expected no LLM compaction for small context")
 	}
 	if len(compacted) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(compacted))
+		t.Fatalf("got %d, want 2 messages", len(compacted))
 	}
 
 	// No summary nodes should be created.
 	nodes := testutil.Must(s.LoadSummaries("s1", 0))
 	if len(nodes) != 0 {
-		t.Fatalf("expected 0 summary nodes, got %d", len(nodes))
+		t.Fatalf("got %d, want 0 summary nodes", len(nodes))
 	}
 }
 
@@ -105,7 +105,7 @@ func TestCompactAndPersist_WithLLMCompaction(t *testing.T) {
 		t.Fatal("expected LLM compaction to fire")
 	}
 	if len(compacted) >= len(msgs) {
-		t.Fatalf("expected fewer messages after compaction, got %d (was %d)", len(compacted), len(msgs))
+		t.Fatalf("got %d (was %d), want fewer messages after compaction", len(compacted), len(msgs))
 	}
 
 	// A summary node should be persisted in the DAG.

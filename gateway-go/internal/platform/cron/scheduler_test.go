@@ -34,7 +34,7 @@ func TestScheduler_ImmediateOneShot(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	if called.Load() != 1 {
-		t.Errorf("expected 1 call, got %d", called.Load())
+		t.Errorf("got %d, want 1 call", called.Load())
 	}
 
 	status := s.Get("test-1")
@@ -42,7 +42,7 @@ func TestScheduler_ImmediateOneShot(t *testing.T) {
 		t.Fatal("expected task status")
 	}
 	if status.RunCount != 1 {
-		t.Errorf("expected runCount=1, got %d", status.RunCount)
+		t.Errorf("got %d, want runCount=1", status.RunCount)
 	}
 }
 
@@ -64,7 +64,7 @@ func TestScheduler_IntervalTask(t *testing.T) {
 
 	count := called.Load()
 	if count < 2 {
-		t.Errorf("expected at least 2 calls, got %d", count)
+		t.Errorf("got %d, want at least 2 calls", count)
 	}
 }
 
@@ -105,7 +105,7 @@ func TestScheduler_List(t *testing.T) {
 
 	list := s.List()
 	if len(list) != 2 {
-		t.Errorf("expected 2 tasks, got %d", len(list))
+		t.Errorf("got %d, want 2 tasks", len(list))
 	}
 }
 
@@ -127,7 +127,7 @@ func TestScheduler_ErrorTracking(t *testing.T) {
 		t.Fatal("expected task status")
 	}
 	if status.LastError != "something broke" {
-		t.Errorf("expected error message, got %q", status.LastError)
+		t.Errorf("got %q, want error message", status.LastError)
 	}
 }
 

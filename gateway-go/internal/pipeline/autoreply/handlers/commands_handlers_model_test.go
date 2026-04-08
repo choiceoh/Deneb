@@ -99,7 +99,7 @@ func TestHandleVerboseCommand_SetOn(t *testing.T) {
 		Args: &CommandArgs{Raw: "on"},
 	})
 	if result.SessionMod == nil || result.SessionMod.VerboseLevel != types.VerboseOn {
-		t.Errorf("expected VerboseLevel=on, got %+v", result.SessionMod)
+		t.Errorf("got %+v, want VerboseLevel=on", result.SessionMod)
 	}
 	if result.IsError {
 		t.Error("expected no error")
@@ -111,7 +111,7 @@ func TestHandleVerboseCommand_SetFull(t *testing.T) {
 		Args: &CommandArgs{Raw: "full"},
 	})
 	if result.SessionMod == nil || result.SessionMod.VerboseLevel != types.VerboseFull {
-		t.Errorf("expected VerboseLevel=full, got %+v", result.SessionMod)
+		t.Errorf("got %+v, want VerboseLevel=full", result.SessionMod)
 	}
 }
 

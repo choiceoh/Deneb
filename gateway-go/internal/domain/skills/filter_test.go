@@ -7,14 +7,14 @@ import (
 func TestNormalizeSkillFilter_Nil(t *testing.T) {
 	result := NormalizeSkillFilter(nil)
 	if result != nil {
-		t.Errorf("expected nil for nil input, got %v", result)
+		t.Errorf("got %v, want nil for nil input", result)
 	}
 }
 
 func TestNormalizeSkillFilter_Empty(t *testing.T) {
 	result := NormalizeSkillFilter([]string{})
 	if len(result) != 0 {
-		t.Errorf("expected empty slice, got %v", result)
+		t.Errorf("got %v, want empty slice", result)
 	}
 }
 
@@ -23,7 +23,7 @@ func TestNormalizeSkillFilter_TrimsAndDeduplicates(t *testing.T) {
 	result := NormalizeSkillFilter(input)
 
 	if len(result) != 3 {
-		t.Fatalf("expected 3 unique entries, got %d: %v", len(result), result)
+		t.Fatalf("got %d: %v, want 3 unique entries", len(result), result)
 	}
 	// Should be sorted.
 	expected := []string{"coding", "github", "weather"}
@@ -39,7 +39,7 @@ func TestNormalizeSkillFilter_SkipsEmpty(t *testing.T) {
 	result := NormalizeSkillFilter(input)
 
 	if len(result) != 1 || result[0] != "valid" {
-		t.Errorf("expected [valid], got %v", result)
+		t.Errorf("got %v, want [valid]", result)
 	}
 }
 

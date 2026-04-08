@@ -82,10 +82,10 @@ func TestRestoreAndWakeSessions_RestoresTelegramSessions(t *testing.T) {
 			continue
 		}
 		if s.Status != session.StatusDone {
-			t.Errorf("%s: expected status DONE, got %q", key, s.Status)
+			t.Errorf("%s: got %q, want status DONE", key, s.Status)
 		}
 		if s.Channel != "telegram" {
-			t.Errorf("%s: expected channel telegram, got %q", key, s.Channel)
+			t.Errorf("%s: got %q, want channel telegram", key, s.Channel)
 		}
 	}
 }
@@ -131,6 +131,6 @@ func TestRestoreAndWakeSessions_NoTranscriptDir(t *testing.T) {
 	srv.restoreAndWakeSessions(context.Background())
 
 	if count := mgr.Count(); count != 0 {
-		t.Errorf("expected 0 sessions, got %d", count)
+		t.Errorf("got %d, want 0 sessions", count)
 	}
 }

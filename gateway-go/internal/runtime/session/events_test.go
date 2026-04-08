@@ -23,13 +23,13 @@ func TestEventBusSubscribeEmit(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if len(received) != 2 {
-		t.Fatalf("expected 2 events, got %d", len(received))
+		t.Fatalf("got %d, want 2 events", len(received))
 	}
 	if received[0].Kind != EventCreated {
-		t.Errorf("expected EventCreated, got %s", received[0].Kind)
+		t.Errorf("got %s, want EventCreated", received[0].Kind)
 	}
 	if received[1].NewStatus != StatusRunning {
-		t.Errorf("expected StatusRunning, got %s", received[1].NewStatus)
+		t.Errorf("got %s, want StatusRunning", received[1].NewStatus)
 	}
 }
 
@@ -42,13 +42,13 @@ func TestEventBusUnsubscribe(t *testing.T) {
 
 	bus.Emit(Event{Kind: EventCreated, Key: "s1"})
 	if count != 1 {
-		t.Fatalf("expected 1, got %d", count)
+		t.Fatalf("got %d, want 1", count)
 	}
 
 	unsub()
 	bus.Emit(Event{Kind: EventDeleted, Key: "s1"})
 	if count != 1 {
-		t.Fatalf("expected still 1 after unsub, got %d", count)
+		t.Fatalf("got %d, want still 1 after unsub", count)
 	}
 }
 

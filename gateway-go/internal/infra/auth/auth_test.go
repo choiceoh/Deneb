@@ -28,10 +28,10 @@ func TestValidateToken(t *testing.T) {
 	token := issueTestToken(secret, "device-1", RoleOperator)
 	claims := testutil.Must(v.ValidateToken(token))
 	if claims.DeviceID != "device-1" {
-		t.Errorf("expected device-1, got %s", claims.DeviceID)
+		t.Errorf("got %s, want device-1", claims.DeviceID)
 	}
 	if claims.Role != RoleOperator {
-		t.Errorf("expected operator, got %s", claims.Role)
+		t.Errorf("got %s, want operator", claims.Role)
 	}
 }
 
@@ -42,7 +42,7 @@ func TestValidateToken_AgentRole(t *testing.T) {
 	token := issueTestToken(secret, "agent-1", RoleAgent)
 	claims := testutil.Must(v.ValidateToken(token))
 	if claims.Role != RoleAgent {
-		t.Errorf("expected agent, got %s", claims.Role)
+		t.Errorf("got %s, want agent", claims.Role)
 	}
 }
 

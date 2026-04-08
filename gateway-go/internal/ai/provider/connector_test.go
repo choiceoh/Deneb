@@ -17,7 +17,7 @@ func TestConnector_Do_BearerAuth(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		if auth != "Bearer test-token" {
-			t.Errorf("expected Bearer auth, got %q", auth)
+			t.Errorf("got %q, want Bearer auth", auth)
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -32,7 +32,7 @@ func TestConnector_Do_BearerAuth(t *testing.T) {
 	resp := testutil.Must(c.Do(context.Background(), http.MethodGet, "/test", nil))
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected 200, got %d", resp.StatusCode)
+		t.Errorf("got %d, want 200", resp.StatusCode)
 	}
 }
 
@@ -40,7 +40,7 @@ func TestConnector_Do_APIKeyAuth(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Header.Get("x-api-key")
 		if key != "sk-123" {
-			t.Errorf("expected x-api-key sk-123, got %q", key)
+			t.Errorf("got %q, want x-api-key sk-123", key)
 		}
 		// Should NOT have Authorization header.
 		if auth := r.Header.Get("Authorization"); auth != "" {
@@ -63,7 +63,7 @@ func TestConnector_Do_APIKeyAuth(t *testing.T) {
 func TestConnector_Do_CustomHeaders(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Custom") != "value-abc" {
-			t.Errorf("expected X-Custom=value-abc, got %q", r.Header.Get("X-Custom"))
+			t.Errorf("got %q, want X-Custom=value-abc", r.Header.Get("X-Custom"))
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -84,7 +84,7 @@ func TestConnector_Do_EnvVarExpansion(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Token") != "expanded-value" {
-			t.Errorf("expected expanded env var, got %q", r.Header.Get("X-Token"))
+			t.Errorf("got %q, want expanded env var", r.Header.Get("X-Token"))
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -119,7 +119,7 @@ func TestConnector_JSON_RoundTrip(t *testing.T) {
 	err := c.JSON(context.Background(), http.MethodPost, "/echo", map[string]string{"msg": "hello"}, &resp)
 	testutil.NoError(t, err)
 	if resp.Status != "ok" {
-		t.Errorf("expected status ok, got %q", resp.Status)
+		t.Errorf("got %q, want status ok", resp.Status)
 	}
 	if resp.Len == 0 {
 		t.Error("expected non-zero body length")
@@ -141,10 +141,10 @@ func TestConnector_JSON_ErrorResponse(t *testing.T) {
 	}
 	var ce *ConnectorError
 	if !errors.As(err, &ce) {
-		t.Fatalf("expected ConnectorError, got %T", err)
+		t.Fatalf("got %T, want ConnectorError", err)
 	}
 	if ce.StatusCode != http.StatusUnauthorized {
-		t.Errorf("expected status 401, got %d", ce.StatusCode)
+		t.Errorf("got %d, want status 401", ce.StatusCode)
 	}
 }
 

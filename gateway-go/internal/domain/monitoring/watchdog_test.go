@@ -16,10 +16,10 @@ func TestChannelHealthMonitor_HealthSnapshot(t *testing.T) {
 
 	snap := m.HealthSnapshot()
 	if len(snap) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(snap))
+		t.Fatalf("got %d, want 1 result", len(snap))
 	}
 	if snap[0].ChannelID != "telegram" {
-		t.Errorf("expected channelId telegram, got %q", snap[0].ChannelID)
+		t.Errorf("got %q, want channelId telegram", snap[0].ChannelID)
 	}
 	if !snap[0].Healthy {
 		t.Error("telegram should be healthy")
@@ -33,7 +33,7 @@ func TestChannelHealthMonitor_HealthSnapshot_Stopped(t *testing.T) {
 
 	snap := m.HealthSnapshot()
 	if len(snap) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(snap))
+		t.Fatalf("got %d, want 1 result", len(snap))
 	}
 	if snap[0].Healthy {
 		t.Error("stopped channel should be unhealthy")
@@ -100,7 +100,7 @@ func TestChannelHealthMonitor_CooldownPreventsRestart(t *testing.T) {
 	m.check() // still cooldown
 
 	if restartCount != 1 {
-		t.Errorf("expected 1 restart (cooldown), got %d", restartCount)
+		t.Errorf("got %d, want 1 restart (cooldown)", restartCount)
 	}
 }
 

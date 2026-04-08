@@ -148,7 +148,7 @@ func TestErrorCodeConstants(t *testing.T) {
 		ErrDependencyFailed, ErrFeatureDisabled,
 	}
 	if len(codes) != 14 {
-		t.Errorf("expected 14 error codes, got %d", len(codes))
+		t.Errorf("got %d, want 14 error codes", len(codes))
 	}
 	seen := make(map[string]struct{})
 	for _, c := range codes {

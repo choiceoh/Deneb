@@ -19,7 +19,7 @@ func TestFormatEnvelopeTimestamp(t *testing.T) {
 	t.Run("empty defaults to utc", func(t *testing.T) {
 		got := FormatEnvelopeTimestamp(ts, "")
 		if !strings.Contains(got, "UTC") {
-			t.Errorf("expected UTC, got %q", got)
+			t.Errorf("got %q, want UTC", got)
 		}
 	})
 }

@@ -30,7 +30,7 @@ func TestRunStateMachineStartEnd(t *testing.T) {
 	defer mu.Unlock()
 
 	if len(patches) != 4 {
-		t.Fatalf("expected 4 patches, got %d", len(patches))
+		t.Fatalf("got %d, want 4 patches", len(patches))
 	}
 	if *patches[0].ActiveRuns != 1 || !*patches[0].Busy {
 		t.Errorf("patch[0] unexpected: %+v", patches[0])

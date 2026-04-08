@@ -262,7 +262,7 @@ func TestConsoleHandler_Timestamp(t *testing.T) {
 
 	got := buf.String()
 	if !strings.HasPrefix(got, "14:05:09 ") {
-		t.Errorf("expected second-precision timestamp, got %q", got)
+		t.Errorf("got %q, want second-precision timestamp", got)
 	}
 	// Should NOT have any fractional seconds.
 	if strings.HasPrefix(got, "14:05:09.") {

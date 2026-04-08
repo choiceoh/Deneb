@@ -48,17 +48,17 @@ func TestNewSubagentCommandDepsFromACP(t *testing.T) {
 	// ListRuns should return only agents parented by session:main.
 	runs := deps.ListRuns("session:main")
 	if len(runs) != 2 {
-		t.Fatalf("expected 2 runs for session:main, got %d", len(runs))
+		t.Fatalf("got %d, want 2 runs for session:main", len(runs))
 	}
 	// Active (agent-1) should be first.
 	if runs[0].RunID != "agent-1" {
-		t.Errorf("expected first run=agent-1, got %s", runs[0].RunID)
+		t.Errorf("got %s, want first run=agent-1", runs[0].RunID)
 	}
 	if runs[0].Label != "researcher" {
-		t.Errorf("expected label=researcher, got %s", runs[0].Label)
+		t.Errorf("got %s, want label=researcher", runs[0].Label)
 	}
 	if runs[1].RunID != "agent-2" {
-		t.Errorf("expected second run=agent-2, got %s", runs[1].RunID)
+		t.Errorf("got %s, want second run=agent-2", runs[1].RunID)
 	}
 
 	// Kill should work.
@@ -79,7 +79,7 @@ func TestNewSubagentCommandDepsFromACP(t *testing.T) {
 	runs2 := deps.ListRuns("session:main")
 	killCount := testutil.Must(deps.Kill.KillAll("session:main", runs2))
 	if killCount != 1 { // only agent-4 was running
-		t.Errorf("expected killAll=1, got %d", killCount)
+		t.Errorf("got %d, want killAll=1", killCount)
 	}
 }
 
@@ -149,7 +149,7 @@ func TestPruneStaleACPAgents(t *testing.T) {
 
 	pruned := PruneStaleACPAgents(reg, 60000) // 1 minute max age
 	if pruned != 1 {
-		t.Errorf("expected 1 pruned, got %d", pruned)
+		t.Errorf("got %d, want 1 pruned", pruned)
 	}
 	if reg.Get("old") != nil {
 		t.Error("expected 'old' to be pruned")

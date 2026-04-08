@@ -25,9 +25,9 @@ func TestReplyDispatcherSendAndComplete(t *testing.T) {
 		t.Fatal("expected send after complete to fail")
 	}
 	if calls != 1 {
-		t.Fatalf("expected 1 deliver call, got %d", calls)
+		t.Fatalf("got %d, want 1 deliver call", calls)
 	}
 	if got := d.Counts()[types.DispatchKindFinal]; got != 1 {
-		t.Fatalf("expected final count=1, got %d", got)
+		t.Fatalf("got %d, want final count=1", got)
 	}
 }

@@ -286,13 +286,13 @@ func TestStreamChat_MultipleToolCalls(t *testing.T) {
 
 	// Tool 0 should be at block index 0, tool 1 at block index 1.
 	if len(blocks) != 2 {
-		t.Fatalf("expected 2 blocks, got %d", len(blocks))
+		t.Fatalf("got %d, want 2 blocks", len(blocks))
 	}
 	if b := blocks[0]; b == nil || b.startName != "read" {
-		t.Errorf("block 0: expected name=read, got %+v", b)
+		t.Errorf("block 0: got %+v, want name=read", b)
 	}
 	if b := blocks[1]; b == nil || b.startName != "grep" {
-		t.Errorf("block 1: expected name=grep, got %+v", b)
+		t.Errorf("block 1: got %+v, want name=grep", b)
 	}
 
 	// Verify deltas went to correct blocks.
@@ -306,7 +306,7 @@ func TestStreamChat_MultipleToolCalls(t *testing.T) {
 
 	// Both blocks should be stopped.
 	if len(stopIndices) != 2 {
-		t.Errorf("expected 2 stop events, got %d", len(stopIndices))
+		t.Errorf("got %d, want 2 stop events", len(stopIndices))
 	}
 }
 

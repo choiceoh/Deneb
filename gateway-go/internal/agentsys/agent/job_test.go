@@ -29,7 +29,7 @@ func TestJobTracker_LifecycleStartEnd(t *testing.T) {
 		t.Fatal("expected cached snapshot")
 	}
 	if snap.Status != RunStatusOK {
-		t.Errorf("expected status OK, got %s", snap.Status)
+		t.Errorf("got %s, want status OK", snap.Status)
 	}
 }
 
@@ -45,7 +45,7 @@ func TestJobTracker_AbortedRunTimeout(t *testing.T) {
 		t.Fatal("expected cached snapshot")
 	}
 	if snap.Status != RunStatusTimeout {
-		t.Errorf("expected status timeout, got %s", snap.Status)
+		t.Errorf("got %s, want status timeout", snap.Status)
 	}
 }
 
@@ -84,7 +84,7 @@ func TestJobTracker_WaitForJob_CachedResult(t *testing.T) {
 		t.Fatal("expected cached snapshot")
 	}
 	if snap.Status != RunStatusOK {
-		t.Errorf("expected OK, got %s", snap.Status)
+		t.Errorf("got %s, want OK", snap.Status)
 	}
 }
 
@@ -118,12 +118,12 @@ func TestJobTracker_ActiveRunCount(t *testing.T) {
 	jt.OnLifecycleEvent(LifecycleEvent{RunID: "b", Phase: "start", Ts: now})
 
 	if jt.ActiveRunCount() != 2 {
-		t.Errorf("expected 2 active runs, got %d", jt.ActiveRunCount())
+		t.Errorf("got %d, want 2 active runs", jt.ActiveRunCount())
 	}
 
 	jt.OnLifecycleEvent(LifecycleEvent{RunID: "a", Phase: "end", Ts: now + 100})
 	if jt.ActiveRunCount() != 1 {
-		t.Errorf("expected 1 active run, got %d", jt.ActiveRunCount())
+		t.Errorf("got %d, want 1 active run", jt.ActiveRunCount())
 	}
 }
 
@@ -152,7 +152,7 @@ func TestJobTracker_WaitForJob_ErrorThenRestartThenEnd(t *testing.T) {
 			t.Fatal("expected snapshot after restart/end sequence")
 		}
 		if snap.Status != RunStatusOK {
-			t.Fatalf("expected status OK, got %s", snap.Status)
+			t.Fatalf("got %s, want status OK", snap.Status)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("WaitForJob did not return in time")
@@ -194,9 +194,9 @@ func TestJobTracker_WaitForJob_IgnoresStaleCacheWhenRequested(t *testing.T) {
 		t.Fatal("expected fresh snapshot after new lifecycle events")
 	}
 	if snap.Status != RunStatusOK {
-		t.Fatalf("expected OK status, got %s", snap.Status)
+		t.Fatalf("got %s, want OK status", snap.Status)
 	}
 	if snap.EndedAt == nil || *snap.EndedAt != now+200 {
-		t.Fatalf("expected endedAt=%d, got %v", now+200, snap.EndedAt)
+		t.Fatalf("got %v, want endedAt=%d", snap.EndedAt, now+200)
 	}
 }

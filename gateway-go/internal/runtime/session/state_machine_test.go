@@ -61,7 +61,7 @@ func TestIsTerminal(t *testing.T) {
 
 func TestValidateTransition(t *testing.T) {
 	if err := ValidateTransition("", StatusRunning); err != nil {
-		t.Errorf("expected nil, got %v", err)
+		t.Errorf("got %v, want nil", err)
 	}
 	err := ValidateTransition(StatusRunning, StatusRunning)
 	if err == nil {
@@ -69,7 +69,7 @@ func TestValidateTransition(t *testing.T) {
 	}
 	var te *TransitionError
 	if !errors.As(err, &te) {
-		t.Fatalf("expected TransitionError, got %T", err)
+		t.Fatalf("got %T, want TransitionError", err)
 	}
 	if te.From != StatusRunning || te.To != StatusRunning {
 		t.Errorf("wrong fields: from=%s to=%s", te.From, te.To)

@@ -13,7 +13,7 @@ func TestNormalizeStoredCronJobs_LegacyJobId(t *testing.T) {
 		t.Fatal("expected mutation")
 	}
 	if jobs[0]["id"] != "abc" {
-		t.Fatalf("expected id=abc, got %v", jobs[0]["id"])
+		t.Fatalf("got %v, want id=abc", jobs[0]["id"])
 	}
 	if _, has := jobs[0]["jobId"]; has {
 		t.Fatal("expected jobId to be removed")
@@ -36,10 +36,10 @@ func TestNormalizeStoredCronJobs_LegacyStringSchedule(t *testing.T) {
 		t.Fatal("expected schedule to be map")
 	}
 	if sched["kind"] != "cron" {
-		t.Fatalf("expected kind=cron, got %v", sched["kind"])
+		t.Fatalf("got %v, want kind=cron", sched["kind"])
 	}
 	if sched["expr"] != "*/5 * * * *" {
-		t.Fatalf("expected expr='*/5 * * * *', got %v", sched["expr"])
+		t.Fatalf("got %v, want expr='*/5 * * * *'", sched["expr"])
 	}
 	if result.Issues.LegacyScheduleString == 0 {
 		t.Fatal("expected LegacyScheduleString issue count > 0")
@@ -59,10 +59,10 @@ func TestNormalizeStoredCronJobs_InferPayloadFromTopLevel(t *testing.T) {
 		t.Fatal("expected payload to be map")
 	}
 	if payload["kind"] != "agentTurn" {
-		t.Fatalf("expected kind=agentTurn, got %v", payload["kind"])
+		t.Fatalf("got %v, want kind=agentTurn", payload["kind"])
 	}
 	if payload["message"] != "run task" {
-		t.Fatalf("expected message='run task', got %v", payload["message"])
+		t.Fatalf("got %v, want message='run task'", payload["message"])
 	}
 }
 
@@ -76,7 +76,7 @@ func TestNormalizeStoredCronJobs_NormalizePayloadKind(t *testing.T) {
 	}
 	payload := jobs[0]["payload"].(map[string]any)
 	if payload["kind"] != "agentTurn" {
-		t.Fatalf("expected agentTurn, got %v", payload["kind"])
+		t.Fatalf("got %v, want agentTurn", payload["kind"])
 	}
 }
 
@@ -94,7 +94,7 @@ func TestNormalizeStoredCronJobs_SessionTargetCurrentToIsolated(t *testing.T) {
 		t.Fatal("expected mutation")
 	}
 	if jobs[0]["sessionTarget"] != "isolated" {
-		t.Fatalf("expected isolated, got %v", jobs[0]["sessionTarget"])
+		t.Fatalf("got %v, want isolated", jobs[0]["sessionTarget"])
 	}
 }
 
@@ -104,7 +104,7 @@ func TestNormalizeStoredCronJobs_WakeModeDefault(t *testing.T) {
 	}
 	NormalizeStoredCronJobs(jobs)
 	if jobs[0]["wakeMode"] != "now" {
-		t.Fatalf("expected wakeMode=now, got %v", jobs[0]["wakeMode"])
+		t.Fatalf("got %v, want wakeMode=now", jobs[0]["wakeMode"])
 	}
 }
 
@@ -123,7 +123,7 @@ func TestNormalizeStoredCronJobs_LegacyDeliveryMode(t *testing.T) {
 	}
 	delivery := jobs[0]["delivery"].(map[string]any)
 	if delivery["mode"] != "announce" {
-		t.Fatalf("expected mode=announce, got %v", delivery["mode"])
+		t.Fatalf("got %v, want mode=announce", delivery["mode"])
 	}
 	if result.Issues.LegacyDeliveryMode == 0 {
 		t.Fatal("expected LegacyDeliveryMode issue count > 0")
@@ -168,6 +168,6 @@ func TestNormalizeStoredCronJobs_AutoDeliveryForIsolatedAgentTurn(t *testing.T) 
 		t.Fatal("expected delivery to be set")
 	}
 	if delivery["mode"] != "announce" {
-		t.Fatalf("expected mode=announce, got %v", delivery["mode"])
+		t.Fatalf("got %v, want mode=announce", delivery["mode"])
 	}
 }

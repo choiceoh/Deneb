@@ -9,7 +9,7 @@ import (
 func TestNormalizeRequiredName(t *testing.T) {
 	name := testutil.Must(NormalizeRequiredName("  My Job  "))
 	if name != "My Job" {
-		t.Errorf("expected 'My Job', got %q", name)
+		t.Errorf("got %q, want 'My Job'", name)
 	}
 
 	_, err := NormalizeRequiredName("")
@@ -29,7 +29,7 @@ func TestInferLegacyName_FromPayload(t *testing.T) {
 	}
 	name := InferLegacyName(job)
 	if name != "Run the backup script" {
-		t.Errorf("expected 'Run the backup script', got %q", name)
+		t.Errorf("got %q, want 'Run the backup script'", name)
 	}
 }
 
@@ -40,7 +40,7 @@ func TestInferLegacyName_FromSchedule(t *testing.T) {
 	}
 	name := InferLegacyName(job)
 	if name != "Cron: 0 */2 * * *" {
-		t.Errorf("expected 'Cron: 0 */2 * * *', got %q", name)
+		t.Errorf("got %q, want 'Cron: 0 */2 * * *'", name)
 	}
 }
 
@@ -51,7 +51,7 @@ func TestInferLegacyName_Every(t *testing.T) {
 	}
 	name := InferLegacyName(job)
 	if name != "Every: 30000ms" {
-		t.Errorf("expected 'Every: 30000ms', got %q", name)
+		t.Errorf("got %q, want 'Every: 30000ms'", name)
 	}
 }
 
@@ -62,7 +62,7 @@ func TestInferLegacyName_At(t *testing.T) {
 	}
 	name := InferLegacyName(job)
 	if name != "One-shot" {
-		t.Errorf("expected 'One-shot', got %q", name)
+		t.Errorf("got %q, want 'One-shot'", name)
 	}
 }
 
@@ -70,7 +70,7 @@ func TestInferLegacyName_Fallback(t *testing.T) {
 	job := StoreJob{Payload: StorePayload{Kind: "systemEvent"}}
 	name := InferLegacyName(job)
 	if name != "Cron job" {
-		t.Errorf("expected 'Cron job', got %q", name)
+		t.Errorf("got %q, want 'Cron job'", name)
 	}
 }
 

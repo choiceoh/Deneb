@@ -131,7 +131,7 @@ func TestBot_InboundMessageCallback(t *testing.T) {
 		t.Fatal("expected to receive an update")
 	}
 	if received.UpdateID != 42 {
-		t.Errorf("expected update_id 42, got %d", received.UpdateID)
+		t.Errorf("got %d, want update_id 42", received.UpdateID)
 	}
 	if received.Message == nil || received.Message.Text != "hello from user" {
 		t.Error("expected message text 'hello from user'")
@@ -163,13 +163,13 @@ func TestBot_DrainMessages(t *testing.T) {
 
 	msgs := bot.DrainMessages()
 	if len(msgs) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(msgs))
+		t.Fatalf("got %d, want 2 messages", len(msgs))
 	}
 
 	// Drain again should be empty.
 	msgs = bot.DrainMessages()
 	if len(msgs) != 0 {
-		t.Errorf("expected 0 messages after drain, got %d", len(msgs))
+		t.Errorf("got %d, want 0 messages after drain", len(msgs))
 	}
 }
 

@@ -26,7 +26,7 @@ func TestCatalogCache_GetAfterUpdate(t *testing.T) {
 		t.Fatal("expected model to be cached")
 	}
 	if m.Provider != "anthropic" {
-		t.Errorf("expected provider 'anthropic', got %q", m.Provider)
+		t.Errorf("got %q, want provider 'anthropic'", m.Provider)
 	}
 }
 
@@ -67,6 +67,6 @@ func TestCatalogCache_Count(t *testing.T) {
 	}
 	cc.Update(map[string]ModelMeta{"m1": {ID: "m1"}, "m2": {ID: "m2"}})
 	if cc.Count() != 2 {
-		t.Errorf("expected count 2, got %d", cc.Count())
+		t.Errorf("got %d, want count 2", cc.Count())
 	}
 }

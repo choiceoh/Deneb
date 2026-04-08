@@ -243,7 +243,7 @@ func TestBuildAttachmentBlocks(t *testing.T) {
 			t.Fatalf("got %d blocks, want 1", len(blocks))
 		}
 		if blocks[0].Source == nil || blocks[0].Source.Type != "url" {
-			t.Errorf("expected url source, got %+v", blocks[0].Source)
+			t.Errorf("got %+v, want url source", blocks[0].Source)
 		}
 	})
 

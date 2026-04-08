@@ -61,14 +61,14 @@ func TestResolveDeliveryTarget(t *testing.T) {
 		)
 		testutil.NoError(t, err)
 		if target.Channel != "telegram" || target.To != "12345" {
-			t.Errorf("expected telegram/12345, got %s/%s", target.Channel, target.To)
+			t.Errorf("got %s/%s, want telegram/12345", target.Channel, target.To)
 		}
 	})
 
 	t.Run("defaults", func(t *testing.T) {
 		target := testutil.Must(ResolveDeliveryTarget(nil, "telegram", "12345"))
 		if target.Channel != "telegram" || target.To != "12345" {
-			t.Errorf("expected defaults, got %s/%s", target.Channel, target.To)
+			t.Errorf("got %s/%s, want defaults", target.Channel, target.To)
 		}
 	})
 

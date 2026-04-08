@@ -168,12 +168,12 @@ func TestIndex_RemoveEntry(t *testing.T) {
 		Meta: Frontmatter{Title: "Test", Category: "기술"},
 	})
 	if len(idx.Entries) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(idx.Entries))
+		t.Fatalf("got %d, want 1 entry", len(idx.Entries))
 	}
 
 	idx.RemoveEntry("기술/test.md")
 	if len(idx.Entries) != 0 {
-		t.Errorf("expected 0 entries after remove, got %d", len(idx.Entries))
+		t.Errorf("got %d, want 0 entries after remove", len(idx.Entries))
 	}
 }
 

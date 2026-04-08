@@ -162,7 +162,7 @@ func TestSystemPresence_withBroadcast(t *testing.T) {
 	resp := callMethod(m, "system-presence", map[string]any{"payload": map[string]string{"user": "alice"}})
 	mustOK(t, resp)
 	if capturedEvent != "presence" {
-		t.Errorf("expected presence event, got %q", capturedEvent)
+		t.Errorf("got %q, want presence event", capturedEvent)
 	}
 	result := extractResult(t, resp)
 	if result["sent"].(float64) != 2 {
@@ -210,7 +210,7 @@ func TestSystemEvent_withBroadcast(t *testing.T) {
 	})
 	mustOK(t, resp)
 	if capturedEvent != "my.custom.event" {
-		t.Errorf("expected my.custom.event, got %q", capturedEvent)
+		t.Errorf("got %q, want my.custom.event", capturedEvent)
 	}
 	_ = capturedPayload // verified event name is sufficient
 }

@@ -8,47 +8,47 @@ import (
 func TestParse_Empty(t *testing.T) {
 	r := Parse("")
 	if r.Text != "" || len(r.MediaURLs) != 0 {
-		t.Errorf("expected empty result, got %+v", r)
+		t.Errorf("got %+v, want empty result", r)
 	}
 }
 
 func TestParse_NoMedia(t *testing.T) {
 	r := Parse("Hello world, no media here.")
 	if r.Text != "Hello world, no media here." {
-		t.Errorf("expected original text, got %q", r.Text)
+		t.Errorf("got %q, want original text", r.Text)
 	}
 	if len(r.MediaURLs) != 0 {
-		t.Errorf("expected no URLs, got %v", r.MediaURLs)
+		t.Errorf("got %v, want no URLs", r.MediaURLs)
 	}
 }
 
 func TestParse_SingleURL(t *testing.T) {
 	r := Parse("Here is an image\nMEDIA: https://example.com/image.png")
 	if len(r.MediaURLs) != 1 || r.MediaURLs[0] != "https://example.com/image.png" {
-		t.Errorf("expected one URL, got %v", r.MediaURLs)
+		t.Errorf("got %v, want one URL", r.MediaURLs)
 	}
 	if strings.Contains(r.Text, "MEDIA:") {
 		t.Errorf("MEDIA: line should be stripped: %s", r.Text)
 	}
 	if !strings.Contains(r.Text, "Here is an image") {
-		t.Errorf("expected text preserved, got %q", r.Text)
+		t.Errorf("got %q, want text preserved", r.Text)
 	}
 }
 
 func TestParse_LocalPath(t *testing.T) {
 	r := Parse("MEDIA: /tmp/output.wav\nDone.")
 	if len(r.MediaURLs) != 1 || r.MediaURLs[0] != "/tmp/output.wav" {
-		t.Errorf("expected /tmp/output.wav, got %v", r.MediaURLs)
+		t.Errorf("got %v, want /tmp/output.wav", r.MediaURLs)
 	}
 	if !strings.Contains(r.Text, "Done.") {
-		t.Errorf("expected Done. in text, got %q", r.Text)
+		t.Errorf("got %q, want Done. in text", r.Text)
 	}
 }
 
 func TestParse_FileProtocolNormalized(t *testing.T) {
 	r := Parse("MEDIA: file:///tmp/audio.mp3")
 	if len(r.MediaURLs) != 1 || r.MediaURLs[0] != "/tmp/audio.mp3" {
-		t.Errorf("expected stripped file:// path, got %v", r.MediaURLs)
+		t.Errorf("got %v, want stripped file:// path", r.MediaURLs)
 	}
 }
 
@@ -56,10 +56,10 @@ func TestParse_InsideFenceIgnored(t *testing.T) {
 	input := "text\n```\nMEDIA: https://example.com/skip.png\n```\nMEDIA: https://example.com/keep.png"
 	r := Parse(input)
 	if len(r.MediaURLs) != 1 {
-		t.Fatalf("expected 1 URL (fence-skipped), got %d: %v", len(r.MediaURLs), r.MediaURLs)
+		t.Fatalf("got %d: %v, want 1 URL (fence-skipped)", len(r.MediaURLs), r.MediaURLs)
 	}
 	if r.MediaURLs[0] != "https://example.com/keep.png" {
-		t.Errorf("expected keep.png, got %s", r.MediaURLs[0])
+		t.Errorf("got %s, want keep.png", r.MediaURLs[0])
 	}
 	if !strings.Contains(r.Text, "MEDIA: https://example.com/skip.png") {
 		t.Errorf("fenced MEDIA line should be preserved in text")
@@ -90,42 +90,42 @@ func TestParse_MultipleMedia(t *testing.T) {
 	input := "MEDIA: https://a.com/1.png\ntext\nMEDIA: https://b.com/2.png"
 	r := Parse(input)
 	if len(r.MediaURLs) != 2 {
-		t.Errorf("expected 2 URLs, got %d: %v", len(r.MediaURLs), r.MediaURLs)
+		t.Errorf("got %d: %v, want 2 URLs", len(r.MediaURLs), r.MediaURLs)
 	}
 }
 
 func TestParse_BacktickWrapped(t *testing.T) {
 	r := Parse("MEDIA: `https://example.com/img.png`")
 	if len(r.MediaURLs) != 1 || r.MediaURLs[0] != "https://example.com/img.png" {
-		t.Errorf("expected backtick-unwrapped URL, got %v", r.MediaURLs)
+		t.Errorf("got %v, want backtick-unwrapped URL", r.MediaURLs)
 	}
 }
 
 func TestParse_QuotedPathWithSpaces(t *testing.T) {
 	r := Parse(`MEDIA: "/tmp/my file with spaces.mp3"`)
 	if len(r.MediaURLs) != 1 || r.MediaURLs[0] != "/tmp/my file with spaces.mp3" {
-		t.Errorf("expected quoted path, got %v", r.MediaURLs)
+		t.Errorf("got %v, want quoted path", r.MediaURLs)
 	}
 }
 
 func TestParse_BareFilename(t *testing.T) {
 	r := Parse("MEDIA: image.png")
 	if len(r.MediaURLs) != 1 || r.MediaURLs[0] != "image.png" {
-		t.Errorf("expected bare filename, got %v", r.MediaURLs)
+		t.Errorf("got %v, want bare filename", r.MediaURLs)
 	}
 }
 
 func TestParse_BareFilenameM4A(t *testing.T) {
 	r := Parse("MEDIA: recording.m4a")
 	if len(r.MediaURLs) != 1 || r.MediaURLs[0] != "recording.m4a" {
-		t.Errorf("expected bare filename, got %v", r.MediaURLs)
+		t.Errorf("got %v, want bare filename", r.MediaURLs)
 	}
 }
 
 func TestParse_InvalidMediaKept(t *testing.T) {
 	r := Parse("MEDIA: not a valid path")
 	if len(r.MediaURLs) != 0 {
-		t.Errorf("expected no URLs, got %v", r.MediaURLs)
+		t.Errorf("got %v, want no URLs", r.MediaURLs)
 	}
 	if !strings.Contains(r.Text, "MEDIA:") {
 		t.Errorf("invalid MEDIA: line should be kept in text")
@@ -135,7 +135,7 @@ func TestParse_InvalidMediaKept(t *testing.T) {
 func TestParse_WindowsPath(t *testing.T) {
 	r := Parse("MEDIA: C:\\Users\\test\\photo.jpg")
 	if len(r.MediaURLs) != 1 {
-		t.Errorf("expected Windows path accepted, got %v", r.MediaURLs)
+		t.Errorf("got %v, want Windows path accepted", r.MediaURLs)
 	}
 }
 
@@ -152,7 +152,7 @@ func TestParse_DirectiveKeyValue(t *testing.T) {
 func TestParse_UnclosedBracket(t *testing.T) {
 	r := Parse("Hello [[ not closed")
 	if r.Text != "Hello [[ not closed" {
-		t.Errorf("expected text preserved, got %q", r.Text)
+		t.Errorf("got %q, want text preserved", r.Text)
 	}
 	if r.AudioAsVoice {
 		t.Error("expected no audio_as_voice")
@@ -162,21 +162,21 @@ func TestParse_UnclosedBracket(t *testing.T) {
 func TestParse_UNCPath(t *testing.T) {
 	r := Parse("MEDIA: \\\\server\\share\\file.mp3")
 	if len(r.MediaURLs) != 1 {
-		t.Errorf("expected UNC path accepted, got %v", r.MediaURLs)
+		t.Errorf("got %v, want UNC path accepted", r.MediaURLs)
 	}
 }
 
 func TestParse_RelativePath(t *testing.T) {
 	r := Parse("MEDIA: ./local/file.mp3")
 	if len(r.MediaURLs) != 1 || r.MediaURLs[0] != "./local/file.mp3" {
-		t.Errorf("expected relative path, got %v", r.MediaURLs)
+		t.Errorf("got %v, want relative path", r.MediaURLs)
 	}
 }
 
 func TestParse_TildePath(t *testing.T) {
 	r := Parse("MEDIA: ~/music/song.mp3")
 	if len(r.MediaURLs) != 1 || r.MediaURLs[0] != "~/music/song.mp3" {
-		t.Errorf("expected tilde path, got %v", r.MediaURLs)
+		t.Errorf("got %v, want tilde path", r.MediaURLs)
 	}
 }
 
@@ -187,7 +187,7 @@ func TestParse_UnclosedFence(t *testing.T) {
 	r := Parse(input)
 	// Unclosed fence — MEDIA line inside should be kept as text.
 	if len(r.MediaURLs) != 0 {
-		t.Errorf("expected no URLs (inside unclosed fence), got %v", r.MediaURLs)
+		t.Errorf("got %v, want no URLs (inside unclosed fence)", r.MediaURLs)
 	}
 	if !strings.Contains(r.Text, "MEDIA: https://example.com/skip.png") {
 		t.Errorf("fenced MEDIA line should be preserved: %s", r.Text)
@@ -200,7 +200,7 @@ func TestParse_TildeFence(t *testing.T) {
 	input := "text\n~~~\nMEDIA: https://example.com/skip.png\n~~~\nMEDIA: https://example.com/keep.png"
 	r := Parse(input)
 	if len(r.MediaURLs) != 1 || r.MediaURLs[0] != "https://example.com/keep.png" {
-		t.Errorf("expected only keep.png, got %v", r.MediaURLs)
+		t.Errorf("got %v, want only keep.png", r.MediaURLs)
 	}
 }
 
@@ -218,7 +218,7 @@ func TestParse_EmptyPayload(t *testing.T) {
 func TestParse_WhitespaceOnly(t *testing.T) {
 	r := Parse("   \n\t  ")
 	if r.Text != "" {
-		t.Errorf("expected empty text, got %q", r.Text)
+		t.Errorf("got %q, want empty text", r.Text)
 	}
 }
 
@@ -227,7 +227,7 @@ func TestParse_WhitespaceOnly(t *testing.T) {
 func TestParse_LeadingWhitespace(t *testing.T) {
 	r := Parse("  MEDIA: https://example.com/img.png")
 	if len(r.MediaURLs) != 1 || r.MediaURLs[0] != "https://example.com/img.png" {
-		t.Errorf("expected URL with leading whitespace, got %v", r.MediaURLs)
+		t.Errorf("got %v, want URL with leading whitespace", r.MediaURLs)
 	}
 }
 
@@ -247,21 +247,21 @@ func TestParse_LikelyLocalPathDropped(t *testing.T) {
 func TestCollapseWhitespace_MultipleNewlines(t *testing.T) {
 	got := collapseWhitespace("a\n\n\nb")
 	if got != "a\nb" {
-		t.Errorf("expected single newline, got %q", got)
+		t.Errorf("got %q, want single newline", got)
 	}
 }
 
 func TestCollapseWhitespace_MultipleSpaces(t *testing.T) {
 	got := collapseWhitespace("a   b")
 	if got != "a b" {
-		t.Errorf("expected single space, got %q", got)
+		t.Errorf("got %q, want single space", got)
 	}
 }
 
 func TestCollapseWhitespace_TrailingSpaceBeforeNewline(t *testing.T) {
 	got := collapseWhitespace("a   \nb")
 	if got != "a\nb" {
-		t.Errorf("expected trailing space trimmed, got %q", got)
+		t.Errorf("got %q, want trailing space trimmed", got)
 	}
 }
 

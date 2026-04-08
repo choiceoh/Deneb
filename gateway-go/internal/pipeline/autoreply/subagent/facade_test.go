@@ -17,9 +17,9 @@ func TestIsACPSessionFacade(t *testing.T) {
 
 func TestStopReasonFacade(t *testing.T) {
 	if got := TranslateStopReason(session.StatusDone); got != "stop" {
-		t.Fatalf("expected stop reason stop, got %q", got)
+		t.Fatalf("got %q, want stop reason stop", got)
 	}
 	if got := TranslateACPStopReasonToStatus("cancel"); got != session.StatusKilled {
-		t.Fatalf("expected killed status for cancel, got %q", got)
+		t.Fatalf("got %q, want killed status for cancel", got)
 	}
 }

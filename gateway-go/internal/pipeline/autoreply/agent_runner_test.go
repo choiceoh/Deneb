@@ -196,7 +196,7 @@ func TestDefaultAgentRunner_ContextOverflowRecovery(t *testing.T) {
 	runner.onSessionReset = func(key, reason string) {
 		resetCalled = true
 		if reason != "context_overflow" {
-			t.Errorf("expected 'context_overflow', got %q", reason)
+			t.Errorf("got %q, want 'context_overflow'", reason)
 		}
 	}
 	// Replace the LLM with a streamer that always returns a context-overflow error.
@@ -284,7 +284,7 @@ func TestAgentRunnerMemory_CompactWithSummary(t *testing.T) {
 
 	history := mem.History()
 	if len(history) < 3 {
-		t.Errorf("expected at least 3 messages (system + summary + recent), got %d", len(history))
+		t.Errorf("got %d, want at least 3 messages (system + summary + recent)", len(history))
 	}
 	foundSummary := false
 	for _, m := range history {

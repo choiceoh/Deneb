@@ -21,7 +21,7 @@ func TestHandleChatBtw_MissingParams(t *testing.T) {
 		t.Error("expected error for missing params")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrInvalidRequest {
-		t.Errorf("expected INVALID_REQUEST, got %v", resp.Error)
+		t.Errorf("got %v, want INVALID_REQUEST", resp.Error)
 	}
 }
 
@@ -39,7 +39,7 @@ func TestHandleChatBtw_MissingQuestion(t *testing.T) {
 		t.Error("expected error for missing question")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
-		t.Errorf("expected MISSING_PARAM, got %v", resp.Error)
+		t.Errorf("got %v, want MISSING_PARAM", resp.Error)
 	}
 }
 
@@ -57,7 +57,7 @@ func TestHandleChatBtw_MissingSessionKey(t *testing.T) {
 		t.Error("expected error for missing sessionKey")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
-		t.Errorf("expected MISSING_PARAM, got %v", resp.Error)
+		t.Errorf("got %v, want MISSING_PARAM", resp.Error)
 	}
 }
 
@@ -75,7 +75,7 @@ func TestHandleChatBtw_NoChatHandler(t *testing.T) {
 		t.Error("expected error when chat handler unavailable")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrUnavailable {
-		t.Errorf("expected UNAVAILABLE, got %v", resp.Error)
+		t.Errorf("got %v, want UNAVAILABLE", resp.Error)
 	}
 }
 
@@ -98,10 +98,10 @@ func TestHandleChatBtw_Success(t *testing.T) {
 			broadcastEvent = event
 			data, _ := payload.(map[string]any)
 			if data["kind"] != "btw" {
-				t.Errorf("expected kind=btw, got %v", data["kind"])
+				t.Errorf("got %v, want kind=btw", data["kind"])
 			}
 			if data["text"] != "4" {
-				t.Errorf("expected text=4, got %v", data["text"])
+				t.Errorf("got %v, want text=4", data["text"])
 			}
 			return 1, nil
 		},
@@ -116,10 +116,10 @@ func TestHandleChatBtw_Success(t *testing.T) {
 	})
 
 	if !resp.OK {
-		t.Errorf("expected success, got error: %v", resp.Error)
+		t.Errorf("got error: %v, want success", resp.Error)
 	}
 	if broadcastEvent != "chat.side_result" {
-		t.Errorf("expected broadcast event chat.side_result, got %s", broadcastEvent)
+		t.Errorf("got %s, want broadcast event chat.side_result", broadcastEvent)
 	}
 }
 
@@ -141,6 +141,6 @@ func TestHandleChatBtw_ChatError(t *testing.T) {
 		t.Error("expected error on chat failure")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrDependencyFailed {
-		t.Errorf("expected DEPENDENCY_FAILED, got %v", resp.Error)
+		t.Errorf("got %v, want DEPENDENCY_FAILED", resp.Error)
 	}
 }

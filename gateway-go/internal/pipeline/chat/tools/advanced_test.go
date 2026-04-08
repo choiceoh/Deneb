@@ -157,7 +157,7 @@ func TestToolSearchAndRead_maxFiles(t *testing.T) {
 func TestMergeRanges_noOverlap(t *testing.T) {
 	ranges := mergeRanges([]int{5, 50}, 2, 100)
 	if len(ranges) != 2 {
-		t.Fatalf("expected 2 ranges, got %d", len(ranges))
+		t.Fatalf("got %d, want 2 ranges", len(ranges))
 	}
 	// First range: lines 3-7 (0-based: 2-6)
 	if ranges[0].start != 2 || ranges[0].end != 6 {
@@ -168,7 +168,7 @@ func TestMergeRanges_noOverlap(t *testing.T) {
 func TestMergeRanges_overlap(t *testing.T) {
 	ranges := mergeRanges([]int{5, 8}, 3, 100)
 	if len(ranges) != 1 {
-		t.Fatalf("expected 1 merged range, got %d", len(ranges))
+		t.Fatalf("got %d, want 1 merged range", len(ranges))
 	}
 }
 

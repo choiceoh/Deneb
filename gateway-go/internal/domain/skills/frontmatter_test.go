@@ -44,14 +44,14 @@ alt: 'single quoted'
 func TestParseFrontmatter_Empty(t *testing.T) {
 	fm := ParseFrontmatter("")
 	if len(fm) != 0 {
-		t.Errorf("expected empty frontmatter, got %v", fm)
+		t.Errorf("got %v, want empty frontmatter", fm)
 	}
 }
 
 func TestParseFrontmatter_NoDelimiter(t *testing.T) {
 	fm := ParseFrontmatter("just some text\nno frontmatter")
 	if len(fm) != 0 {
-		t.Errorf("expected empty frontmatter, got %v", fm)
+		t.Errorf("got %v, want empty frontmatter", fm)
 	}
 }
 
@@ -62,7 +62,7 @@ title: Should Not Parse
 ---`
 	fm := ParseFrontmatter(content)
 	if len(fm) != 0 {
-		t.Errorf("expected empty when non-empty line before delimiter, got %v", fm)
+		t.Errorf("got %v, want empty when non-empty line before delimiter", fm)
 	}
 }
 
@@ -255,7 +255,7 @@ func TestResolveDenebMetadata_NoMetadata(t *testing.T) {
 	fm := ParsedFrontmatter{"title": "Test"}
 	meta := ResolveDenebMetadata(fm)
 	if meta != nil {
-		t.Errorf("expected nil for no metadata, got %+v", meta)
+		t.Errorf("got %+v, want nil for no metadata", meta)
 	}
 }
 
@@ -263,7 +263,7 @@ func TestResolveDenebMetadata_EmptyMetadata(t *testing.T) {
 	fm := ParsedFrontmatter{"metadata": ""}
 	meta := ResolveDenebMetadata(fm)
 	if meta != nil {
-		t.Errorf("expected nil for empty metadata, got %+v", meta)
+		t.Errorf("got %+v, want nil for empty metadata", meta)
 	}
 }
 
@@ -271,7 +271,7 @@ func TestResolveDenebMetadata_InvalidJSON(t *testing.T) {
 	fm := ParsedFrontmatter{"metadata": "{invalid"}
 	meta := ResolveDenebMetadata(fm)
 	if meta != nil {
-		t.Errorf("expected nil for invalid JSON, got %+v", meta)
+		t.Errorf("got %+v, want nil for invalid JSON", meta)
 	}
 }
 
@@ -279,7 +279,7 @@ func TestResolveDenebMetadata_NoDenebKey(t *testing.T) {
 	fm := ParsedFrontmatter{"metadata": `{"other": {}}`}
 	meta := ResolveDenebMetadata(fm)
 	if meta != nil {
-		t.Errorf("expected nil when no 'deneb' key, got %+v", meta)
+		t.Errorf("got %+v, want nil when no 'deneb' key", meta)
 	}
 }
 
@@ -295,10 +295,10 @@ func TestResolveDenebMetadata_ValidMetadata(t *testing.T) {
 		t.Error("expected Always=true")
 	}
 	if meta.SkillKey != "weather" {
-		t.Errorf("expected skillKey='weather', got %q", meta.SkillKey)
+		t.Errorf("got %q, want skillKey='weather'", meta.SkillKey)
 	}
 	if meta.Emoji != "☀️" {
-		t.Errorf("expected emoji='☀️', got %q", meta.Emoji)
+		t.Errorf("got %q, want emoji='☀️'", meta.Emoji)
 	}
 }
 
@@ -314,10 +314,10 @@ func TestResolveDenebMetadata_WithRequires(t *testing.T) {
 		t.Fatal("expected non-nil Requires")
 	}
 	if len(meta.Requires.Bins) != 2 {
-		t.Errorf("expected 2 bins, got %d", len(meta.Requires.Bins))
+		t.Errorf("got %d, want 2 bins", len(meta.Requires.Bins))
 	}
 	if len(meta.Requires.Env) != 1 {
-		t.Errorf("expected 1 env, got %d", len(meta.Requires.Env))
+		t.Errorf("got %d, want 1 env", len(meta.Requires.Env))
 	}
 }
 
@@ -330,7 +330,7 @@ func TestResolveDenebMetadata_WithTags(t *testing.T) {
 		t.Fatal("expected non-nil metadata")
 	}
 	if len(meta.Tags) != 3 {
-		t.Fatalf("expected 3 tags, got %d", len(meta.Tags))
+		t.Fatalf("got %d, want 3 tags", len(meta.Tags))
 	}
 	if meta.Tags[0] != "cli" || meta.Tags[1] != "productivity" || meta.Tags[2] != "google" {
 		t.Errorf("unexpected tags: %v", meta.Tags)
@@ -346,10 +346,10 @@ func TestResolveDenebMetadata_WithRelatedSkills(t *testing.T) {
 		t.Fatal("expected non-nil metadata")
 	}
 	if len(meta.Tags) != 2 {
-		t.Fatalf("expected 2 tags, got %d", len(meta.Tags))
+		t.Fatalf("got %d, want 2 tags", len(meta.Tags))
 	}
 	if len(meta.RelatedSkills) != 2 {
-		t.Fatalf("expected 2 related_skills, got %d", len(meta.RelatedSkills))
+		t.Fatalf("got %d, want 2 related_skills", len(meta.RelatedSkills))
 	}
 	if meta.RelatedSkills[0] != "morning-letter" || meta.RelatedSkills[1] != "gog" {
 		t.Errorf("unexpected related_skills: %v", meta.RelatedSkills)
@@ -366,7 +366,7 @@ func TestExtractFrontmatterBlock_Valid(t *testing.T) {
 		t.Errorf("header should contain frontmatter, got %q", header)
 	}
 	if offset <= 0 {
-		t.Errorf("expected positive offset, got %d", offset)
+		t.Errorf("got %d, want positive offset", offset)
 	}
 	body := content[offset:]
 	if !strings.Contains(body, "# Body") {
@@ -378,10 +378,10 @@ func TestExtractFrontmatterBlock_NoFrontmatter(t *testing.T) {
 	content := "Just some text\nNo frontmatter here"
 	header, offset := ExtractFrontmatterBlock(content)
 	if header != "" {
-		t.Errorf("expected empty header for no frontmatter, got %q", header)
+		t.Errorf("got %q, want empty header for no frontmatter", header)
 	}
 	if offset != 0 {
-		t.Errorf("expected 0 offset, got %d", offset)
+		t.Errorf("got %d, want 0 offset", offset)
 	}
 }
 

@@ -29,10 +29,10 @@ func TestExecute_SimpleCommand(t *testing.T) {
 	})
 
 	if result.Status != StatusDone {
-		t.Errorf("expected done, got %s", result.Status)
+		t.Errorf("got %s, want done", result.Status)
 	}
 	if result.ExitCode != 0 {
-		t.Errorf("expected exit code 0, got %d", result.ExitCode)
+		t.Errorf("got %d, want exit code 0", result.ExitCode)
 	}
 	if result.Stdout == "" {
 		t.Error("expected non-empty stdout")
@@ -51,7 +51,7 @@ func TestExecute_FailedCommand(t *testing.T) {
 	})
 
 	if result.Status != StatusFailed {
-		t.Errorf("expected failed, got %s", result.Status)
+		t.Errorf("got %s, want failed", result.Status)
 	}
 	if result.ExitCode == 0 {
 		t.Error("expected non-zero exit code")
@@ -67,7 +67,7 @@ func TestExecute_NonExistentCommand(t *testing.T) {
 	})
 
 	if result.Status != StatusFailed {
-		t.Errorf("expected failed, got %s", result.Status)
+		t.Errorf("got %s, want failed", result.Status)
 	}
 }
 
@@ -82,7 +82,7 @@ func TestExecute_Timeout(t *testing.T) {
 	})
 
 	if result.Status != StatusKilled {
-		t.Errorf("expected killed, got %s", result.Status)
+		t.Errorf("got %s, want killed", result.Status)
 	}
 }
 
@@ -97,7 +97,7 @@ func TestExecute_ApprovalDenied(t *testing.T) {
 	})
 
 	if result.Status != StatusDenied {
-		t.Errorf("expected denied, got %s", result.Status)
+		t.Errorf("got %s, want denied", result.Status)
 	}
 }
 
@@ -113,7 +113,7 @@ func TestExecute_ApprovalGranted(t *testing.T) {
 	})
 
 	if result.Status != StatusDone {
-		t.Errorf("expected done, got %s", result.Status)
+		t.Errorf("got %s, want done", result.Status)
 	}
 }
 
@@ -127,7 +127,7 @@ func TestExecute_NoApprover(t *testing.T) {
 	})
 
 	if result.Status != StatusDenied {
-		t.Errorf("expected denied with no approver, got %s", result.Status)
+		t.Errorf("got %s, want denied with no approver", result.Status)
 	}
 }
 
@@ -142,7 +142,7 @@ func TestGet_And_List(t *testing.T) {
 		t.Error("expected process 'a'")
 	}
 	if snap != nil && snap.Status != StatusDone {
-		t.Errorf("expected done, got %s", snap.Status)
+		t.Errorf("got %s, want done", snap.Status)
 	}
 	if m.Get("nonexistent") != nil {
 		t.Error("expected nil for nonexistent")
@@ -150,7 +150,7 @@ func TestGet_And_List(t *testing.T) {
 
 	list := m.List()
 	if len(list) != 2 {
-		t.Errorf("expected 2 processes, got %d", len(list))
+		t.Errorf("got %d, want 2 processes", len(list))
 	}
 }
 
@@ -189,7 +189,7 @@ func TestPrune(t *testing.T) {
 
 	pruned := m.Prune(1 * time.Millisecond)
 	if pruned != 1 {
-		t.Errorf("expected 1 pruned, got %d", pruned)
+		t.Errorf("got %d, want 1 pruned", pruned)
 	}
 
 	if m.Get("old") != nil {
@@ -218,7 +218,7 @@ func TestExecute_ConcurrentPipeDrain(t *testing.T) {
 	})
 
 	if result.Status != StatusDone {
-		t.Errorf("expected done, got %s (error: %s)", result.Status, result.Error)
+		t.Errorf("got %s (error: %s), want done", result.Status, result.Error)
 	}
 	if result.Stdout == "" {
 		t.Error("expected non-empty stdout")
@@ -235,7 +235,7 @@ func TestExecuteBackground(t *testing.T) {
 	})
 
 	if id != "bg-1" {
-		t.Errorf("expected id 'bg-1', got %s", id)
+		t.Errorf("got %s, want id 'bg-1'", id)
 	}
 
 	// Poll until done (max 2 seconds).
@@ -244,7 +244,7 @@ func TestExecuteBackground(t *testing.T) {
 		snap := m.Get(id)
 		if snap != nil && (snap.Status == StatusDone || snap.Status == StatusFailed) {
 			if snap.Status != StatusDone {
-				t.Errorf("expected done, got %s", snap.Status)
+				t.Errorf("got %s, want done", snap.Status)
 			}
 			return
 		}
@@ -264,13 +264,13 @@ func TestParallelDrain_LargeOutput(t *testing.T) {
 		TimeoutMs: 10000,
 	})
 	if result.Status != StatusDone {
-		t.Errorf("expected done, got %s (error: %s)", result.Status, result.Error)
+		t.Errorf("got %s (error: %s), want done", result.Status, result.Error)
 	}
 	if len(result.Stdout) < 100000 {
-		t.Errorf("expected large stdout, got %d bytes", len(result.Stdout))
+		t.Errorf("got %d bytes, want large stdout", len(result.Stdout))
 	}
 	if len(result.Stderr) < 100000 {
-		t.Errorf("expected large stderr, got %d bytes", len(result.Stderr))
+		t.Errorf("got %d bytes, want large stderr", len(result.Stderr))
 	}
 }
 

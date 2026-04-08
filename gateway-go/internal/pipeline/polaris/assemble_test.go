@@ -52,7 +52,7 @@ func TestAssembleContext_NoLCMData(t *testing.T) {
 
 	result := testutil.Must(AssembleContext(store, legacy, "s1", 30_000, 48, 100, slog.Default()))
 	if len(result.Messages) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(result.Messages))
+		t.Fatalf("got %d, want 2 messages", len(result.Messages))
 	}
 	if result.WasCompacted {
 		t.Fatal("should not be compacted without LCM data")
@@ -71,13 +71,13 @@ func TestAssembleContext_RecentOnly(t *testing.T) {
 
 	result := testutil.Must(AssembleContext(store, legacy, "s1", 30_000, 48, 100, slog.Default()))
 	if len(result.Messages) != 10 {
-		t.Fatalf("expected 10 messages, got %d", len(result.Messages))
+		t.Fatalf("got %d, want 10 messages", len(result.Messages))
 	}
 	if result.WasCompacted {
 		t.Fatal("should not be compacted without summaries")
 	}
 	if result.TotalMessages != 10 {
-		t.Fatalf("expected total 10, got %d", result.TotalMessages)
+		t.Fatalf("got %d, want total 10", result.TotalMessages)
 	}
 }
 
@@ -108,7 +108,7 @@ func TestAssembleContext_WithSummaries(t *testing.T) {
 	}
 	// Should have 1 summary message + 10 recent messages (index 10-19).
 	if len(result.Messages) != 11 {
-		t.Fatalf("expected 11 messages (1 summary + 10 recent), got %d", len(result.Messages))
+		t.Fatalf("got %d, want 11 messages (1 summary + 10 recent)", len(result.Messages))
 	}
 }
 
@@ -143,7 +143,7 @@ func TestAssembleContext_MultiLevelSummaries(t *testing.T) {
 	}
 	// Should prefer the level-2 condensed summary (1 msg) + 10 recent (index 20-29).
 	if len(result.Messages) != 11 {
-		t.Fatalf("expected 11 messages (1 condensed + 10 recent), got %d", len(result.Messages))
+		t.Fatalf("got %d, want 11 messages (1 condensed + 10 recent)", len(result.Messages))
 	}
 }
 
@@ -181,9 +181,9 @@ func TestSelectBestSummaries(t *testing.T) {
 
 	selected := selectBestSummaries(nodes, 19)
 	if len(selected) != 1 {
-		t.Fatalf("expected 1 (condensed), got %d", len(selected))
+		t.Fatalf("got %d, want 1 (condensed)", len(selected))
 	}
 	if selected[0].Level != 2 {
-		t.Fatalf("expected level 2, got %d", selected[0].Level)
+		t.Fatalf("got %d, want level 2", selected[0].Level)
 	}
 }

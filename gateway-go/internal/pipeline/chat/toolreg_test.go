@@ -35,6 +35,6 @@ func TestToolRegistry_Names(t *testing.T) {
 
 	names := reg.Names()
 	if len(names) != 2 {
-		t.Errorf("expected 2 names, got %d", len(names))
+		t.Errorf("got %d, want 2 names", len(names))
 	}
 }

@@ -176,18 +176,18 @@ func TestFilterBySkillFilter(t *testing.T) {
 	// nil filter = unrestricted.
 	result := FilterBySkillFilter(entries, nil)
 	if len(result) != 3 {
-		t.Errorf("expected 3, got %d", len(result))
+		t.Errorf("got %d, want 3", len(result))
 	}
 
 	// Empty filter = no skills.
 	result = FilterBySkillFilter(entries, []string{})
 	if len(result) != 0 {
-		t.Errorf("expected 0, got %d", len(result))
+		t.Errorf("got %d, want 0", len(result))
 	}
 
 	// Specific filter.
 	result = FilterBySkillFilter(entries, []string{"github", "weather"})
 	if len(result) != 2 {
-		t.Errorf("expected 2, got %d", len(result))
+		t.Errorf("got %d, want 2", len(result))
 	}
 }

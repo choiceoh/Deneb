@@ -248,11 +248,11 @@ func TestDetectSignals(t *testing.T) {
 					}
 				}
 				if !found {
-					t.Errorf("expected signal %q, got %v", tt.want, signals)
+					t.Errorf("got %v, want signal %q", signals, tt.want)
 				}
 			}
 			if tt.want == "" && len(signals) > 0 {
-				t.Errorf("expected no signals, got %v", signals)
+				t.Errorf("got %v, want no signals", signals)
 			}
 		})
 	}
@@ -270,7 +270,7 @@ func TestDetectSignals_SPAShell(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Errorf("expected js_required for SPA shell, got %v", signals)
+		t.Errorf("got %v, want js_required for SPA shell", signals)
 	}
 }
 
@@ -284,7 +284,7 @@ func TestDetectSignals_MetaRefreshLogin(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Errorf("expected redirect_to_login, got %v", signals)
+		t.Errorf("got %v, want redirect_to_login", signals)
 	}
 }
 
@@ -556,11 +556,11 @@ func TestStripThinkingTags(t *testing.T) {
 func TestAppendUnique(t *testing.T) {
 	ss := appendUnique([]string{"a", "b"}, "b")
 	if len(ss) != 2 {
-		t.Errorf("expected 2, got %d", len(ss))
+		t.Errorf("got %d, want 2", len(ss))
 	}
 	ss = appendUnique(ss, "c")
 	if len(ss) != 3 {
-		t.Errorf("expected 3, got %d", len(ss))
+		t.Errorf("got %d, want 3", len(ss))
 	}
 }
 

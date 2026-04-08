@@ -55,7 +55,7 @@ func TestChatSend_AsyncOK(t *testing.T) {
 	})
 	resp := h.Send(context.Background(), req)
 	if !resp.OK {
-		t.Errorf("expected async start success, got error: %v", resp.Error)
+		t.Errorf("got error: %v, want async start success", resp.Error)
 	}
 }
 
@@ -69,7 +69,7 @@ func TestChatSend_AsyncStart(t *testing.T) {
 	})
 	resp := h.Send(context.Background(), req)
 	if !resp.OK {
-		t.Errorf("expected success, got error: %v", resp.Error)
+		t.Errorf("got error: %v, want success", resp.Error)
 	}
 	// Verify the response contains the runId.
 	var payload map[string]any
@@ -77,10 +77,10 @@ func TestChatSend_AsyncStart(t *testing.T) {
 		t.Fatalf("failed to parse response payload: %v", err)
 	}
 	if payload["runId"] != "run-123" {
-		t.Errorf("expected runId=run-123, got %v", payload["runId"])
+		t.Errorf("got %v, want runId=run-123", payload["runId"])
 	}
 	if payload["status"] != "started" {
-		t.Errorf("expected status=started, got %v", payload["status"])
+		t.Errorf("got %v, want status=started", payload["status"])
 	}
 }
 
@@ -132,17 +132,17 @@ func TestSessionsSend_AsyncStart(t *testing.T) {
 	})
 	resp := h.SessionsSend(context.Background(), req)
 	if !resp.OK {
-		t.Fatalf("expected success, got error: %v", resp.Error)
+		t.Fatalf("got error: %v, want success", resp.Error)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(resp.Payload, &payload); err != nil {
 		t.Fatalf("parse payload: %v", err)
 	}
 	if payload["status"] != "started" {
-		t.Errorf("expected status=started, got %v", payload["status"])
+		t.Errorf("got %v, want status=started", payload["status"])
 	}
 	if payload["runId"] != "idem-1" {
-		t.Errorf("expected runId=idem-1, got %v", payload["runId"])
+		t.Errorf("got %v, want runId=idem-1", payload["runId"])
 	}
 }
 
@@ -163,14 +163,14 @@ func TestSessionsSteer_AppliesModel(t *testing.T) {
 	})
 	resp := h.SessionsSteer(context.Background(), req)
 	if !resp.OK {
-		t.Fatalf("expected success, got error: %v", resp.Error)
+		t.Fatalf("got error: %v, want success", resp.Error)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(resp.Payload, &payload); err != nil {
 		t.Fatalf("parse payload: %v", err)
 	}
 	if payload["status"] != "started" {
-		t.Errorf("expected status=started, got %v", payload["status"])
+		t.Errorf("got %v, want status=started", payload["status"])
 	}
 }
 
@@ -179,14 +179,14 @@ func TestSessionsAbort_NoActiveRun(t *testing.T) {
 	req := makeReq("1", "sessions.abort", map[string]any{"key": "no-such-session"})
 	resp := h.SessionsAbort(context.Background(), req)
 	if !resp.OK {
-		t.Fatalf("expected OK with no-active-run, got error: %v", resp.Error)
+		t.Fatalf("got error: %v, want OK with no-active-run", resp.Error)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(resp.Payload, &payload); err != nil {
 		t.Fatalf("parse payload: %v", err)
 	}
 	if payload["status"] != "no-active-run" {
-		t.Errorf("expected status=no-active-run, got %v", payload["status"])
+		t.Errorf("got %v, want status=no-active-run", payload["status"])
 	}
 }
 
@@ -204,17 +204,17 @@ func TestSessionsAbort_ByRunID(t *testing.T) {
 	abortReq := makeReq("2", "sessions.abort", map[string]any{"runId": "run-to-abort"})
 	resp := h.SessionsAbort(context.Background(), abortReq)
 	if !resp.OK {
-		t.Fatalf("expected OK, got error: %v", resp.Error)
+		t.Fatalf("got error: %v, want OK", resp.Error)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(resp.Payload, &payload); err != nil {
 		t.Fatalf("parse payload: %v", err)
 	}
 	if payload["status"] != "aborted" {
-		t.Errorf("expected status=aborted, got %v", payload["status"])
+		t.Errorf("got %v, want status=aborted", payload["status"])
 	}
 	if payload["abortedRunId"] != "run-to-abort" {
-		t.Errorf("expected abortedRunId=run-to-abort, got %v", payload["abortedRunId"])
+		t.Errorf("got %v, want abortedRunId=run-to-abort", payload["abortedRunId"])
 	}
 }
 
