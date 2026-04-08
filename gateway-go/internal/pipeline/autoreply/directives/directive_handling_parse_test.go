@@ -72,15 +72,6 @@ func TestParseFullInlineDirectives_ExecWithMultipleOptions(t *testing.T) {
 	}
 }
 
-func TestParseFullInlineDirectives_DisableElevated(t *testing.T) {
-	result := ParseFullInlineDirectives("/elevated on", &FullDirectiveParseOptions{
-		DisableElevated: true,
-	})
-	if result.HasElevatedDirective {
-		t.Fatal("expected elevated directive to be disabled")
-	}
-}
-
 func TestIsFullDirectiveOnly(t *testing.T) {
 	directives := ParseFullInlineDirectives("/think high /fast on", nil)
 	if !IsFullDirectiveOnly(directives, directives.Cleaned, false) {

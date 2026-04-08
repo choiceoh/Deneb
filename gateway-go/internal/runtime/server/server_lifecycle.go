@@ -46,10 +46,8 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	s.startedAt = time.Now()
 	s.startTickBroadcaster(ctx)
 	s.StartMonitoring(ctx)
-	s.startConfigWatcher(ctx)
 	s.startProcessPruner(ctx)
 	s.sessions.StartGC(ctx)
-	s.startSessionWAL()
 
 	// Propagate server lifecycle context to the chat handler so background
 	// goroutines (auto-memory extraction) stop cleanly on shutdown.
@@ -303,11 +301,6 @@ func (s *Server) doShutdown() error {
 	}
 	if s.snapshotLifecycleUnsub != nil {
 		s.snapshotLifecycleUnsub()
-	}
-
-	// 12b. Stop session WAL (flush + close).
-	if s.sessionWAL != nil {
-		s.sessionWAL.Stop()
 	}
 
 	// 13. Cancel lifecycle context so remaining background goroutines exit,

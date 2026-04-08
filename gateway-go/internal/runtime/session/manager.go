@@ -410,18 +410,6 @@ func (m *Manager) List() []*Session {
 	return result
 }
 
-// replaySet stores a session without state machine validation or event emission.
-// Used only during WAL replay where entries were already validated at write time.
-func (m *Manager) replaySet(s *Session) {
-	if s == nil || s.Key == "" {
-		return
-	}
-	m.lazyInit()
-	m.mu.Lock()
-	m.sessions[s.Key] = s
-	m.mu.Unlock()
-}
-
 // Count returns the number of active sessions.
 func (m *Manager) Count() int {
 	m.lazyInit()

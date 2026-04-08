@@ -132,12 +132,6 @@ var requiredMethods = []string{
 	"usage.cost",
 	"usage.status",
 
-	// Presence.
-	"last-heartbeat",
-	"set-heartbeats",
-	"system-event",
-	"system-presence",
-
 	// Platform.
 	"secrets.reload",
 	"secrets.resolve",

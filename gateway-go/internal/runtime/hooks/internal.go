@@ -232,8 +232,6 @@ func eventToInternal(event Event) (eventType InternalHookEventType, action strin
 		return EventTypeGateway, "channel-disconnect"
 	case EventToolUse:
 		return EventTypeCommand, "tool-use"
-	case EventGitHubWebhook:
-		return EventTypeGateway, "github-webhook"
 	default:
 		return InternalHookEventType(event), string(event)
 	}

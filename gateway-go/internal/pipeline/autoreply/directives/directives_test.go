@@ -93,12 +93,6 @@ func TestParseInlineDirectives(t *testing.T) {
 		}
 	})
 
-	t.Run("elevated disabled", func(t *testing.T) {
-		d := ParseInlineDirectives("/elevated on hello", &DirectiveParseOptions{DisableElevated: true})
-		if d.HasElevatedDirective {
-			t.Error("elevated should be disabled")
-		}
-	})
 }
 
 func TestIsDirectiveOnly(t *testing.T) {

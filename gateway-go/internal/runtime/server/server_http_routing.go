@@ -21,44 +21,6 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("/ready", methodNotAllowed)
 	mux.HandleFunc("/readyz", methodNotAllowed)
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
-	mux.HandleFunc("POST /api/v1/rpc", s.handleRPC)
-	mux.HandleFunc("GET /ws", s.handleWsUpgrade)
-
-	// HTTP API endpoints (P2 migration).
-	mux.HandleFunc("POST /tools/invoke", s.handleToolsInvoke)
-	mux.HandleFunc("POST /sessions/{key}/kill", s.handleSessionKill)
-	mux.HandleFunc("GET /sessions/{key}/history", s.handleSessionHistory)
-
-	// Admin endpoints (dev/live testing — loopback only, no auth).
-	mux.HandleFunc("GET /admin/model", s.handleAdminModelGet)
-	mux.HandleFunc("PUT /admin/model", s.handleAdminModelPut)
-
-	// Hooks HTTP webhook endpoint — intercepts /hooks/* before the fallback.
-	if s.hooksHTTP != nil {
-		hooksHandler := s.hooksHTTP
-		mux.HandleFunc("/hooks/", func(w http.ResponseWriter, r *http.Request) {
-			if !hooksHandler.Handle(w, r) {
-				http.NotFound(w, r)
-			}
-		})
-		mux.HandleFunc("/hooks", func(w http.ResponseWriter, r *http.Request) {
-			if !hooksHandler.Handle(w, r) {
-				http.NotFound(w, r)
-			}
-		})
-	}
-
-	// GitHub webhook endpoint — receives push/PR/issue events from GitHub.
-	// Auth: HMAC-SHA256 signature (X-Hub-Signature-256). No bearer token needed.
-	mux.HandleFunc("POST /webhook/github", s.handleGitHubWebhook)
-	mux.HandleFunc("/webhook/github", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.Header().Set("Allow", "POST")
-			writeText(w, http.StatusMethodNotAllowed, "Method Not Allowed")
-		} else {
-			s.handleGitHubWebhook(w, r)
-		}
-	})
 
 	// Catch-all handler: root fallback.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

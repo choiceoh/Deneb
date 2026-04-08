@@ -2,7 +2,7 @@
 //
 // server.New():
 //   1. Core structs (ServerTransport, ServerRPC, ServerRuntime) + 5 subsystems
-//   2. Event infra (Broadcaster, Publisher, KeyCache, GatewaySubs)
+//   2. Event infra (Broadcaster, Publisher, GatewaySubs)
 //   3. Process manager, Cron scheduler/service, Hooks registry
 //   4. Monitoring (activity tracker, channel events, auth rate limiter)
 //   5. Provider auth (AuthManager, ProviderRuntime) — conditional

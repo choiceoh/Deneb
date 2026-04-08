@@ -29,10 +29,6 @@ type InlineDirectives struct {
 	ReasoningLevel        types.ReasoningLevel
 	RawReasoningLevel     string
 
-	HasElevatedDirective bool
-	ElevatedLevel        types.ElevatedLevel
-	RawElevatedLevel     string
-
 	HasStatusDirective bool
 
 	HasModelDirective bool
@@ -52,7 +48,6 @@ var (
 	verboseDirectiveRe   = regexp.MustCompile(`(?i)(?:^|\s)/verbose(?:\s+([a-zA-Z0-9_-]+))?\s*`)
 	fastDirectiveRe      = regexp.MustCompile(`(?i)(?:^|\s)/fast(?:\s+([a-zA-Z0-9_-]+))?\s*`)
 	reasoningDirectiveRe = regexp.MustCompile(`(?i)(?:^|\s)/reasoning(?:\s+([a-zA-Z0-9_-]+))?\s*`)
-	elevatedDirectiveRe  = regexp.MustCompile(`(?i)(?:^|\s)/elevated(?:\s+([a-zA-Z0-9_-]+))?\s*`)
 	statusDirectiveRe    = regexp.MustCompile(`(?i)(?:^|\s)/status\s*$`)
 	queueDirectiveRe     = regexp.MustCompile(`(?i)(?:^|\s)/queue(?:\s+([a-zA-Z0-9_-]+))?\s*`)
 	deepworkDirectiveRe  = regexp.MustCompile(`(?i)(?:^|\s)/deepwork\s*`)
@@ -91,14 +86,6 @@ func ParseInlineDirectives(body string, opts *DirectiveParseOptions) InlineDirec
 		text, reasoningDirectiveRe, func(raw string) (types.ReasoningLevel, bool) { return types.NormalizeReasoningLevel(raw) },
 		types.ReasoningOn,
 	)
-
-	// Extract /elevated directive (unless disabled).
-	if !opts.DisableElevated {
-		text, result.HasElevatedDirective, result.ElevatedLevel, result.RawElevatedLevel = extractLevelDirective(
-			text, elevatedDirectiveRe, func(raw string) (types.ElevatedLevel, bool) { return types.NormalizeElevatedLevel(raw) },
-			types.ElevatedOn,
-		)
-	}
 
 	// Extract /status directive.
 	if !opts.DisableStatus {
@@ -141,9 +128,8 @@ func ParseInlineDirectives(body string, opts *DirectiveParseOptions) InlineDirec
 
 // DirectiveParseOptions configures directive parsing.
 type DirectiveParseOptions struct {
-	ModelAliases    []string
-	DisableElevated bool
-	DisableStatus   bool
+	ModelAliases  []string
+	DisableStatus bool
 }
 
 // IsDirectiveOnly returns true if the message contains only directives (no user text).
@@ -152,7 +138,6 @@ func IsDirectiveOnly(directives InlineDirectives) bool {
 		!directives.HasVerboseDirective &&
 		!directives.HasFastDirective &&
 		!directives.HasReasoningDirective &&
-		!directives.HasElevatedDirective &&
 		!directives.HasModelDirective &&
 		!directives.HasQueueDirective &&
 		!directives.HasDeepWorkDirective {

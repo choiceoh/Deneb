@@ -73,11 +73,6 @@ func RunAgent(
 	// for diminishing-returns detection.
 	var recentNudgeDeltas [2]int
 
-	// Tool loop detector: prevents the agent from getting stuck in
-	// repetitive tool call patterns (same call, ping-pong, etc.).
-	loopDetector := NewLoopDetector()
-	loopThresholds := DefaultLoopThresholds()
-
 	for turn := range cfg.MaxTurns {
 		result.Turns = turn + 1
 
@@ -483,27 +478,6 @@ func RunAgent(
 				Name:    tc.Name,
 				IsError: isErr,
 			})
-		}
-
-		// Tool loop detection: check each tool call for stuck patterns.
-		for _, tc := range turnRes.toolCalls {
-			verdict := loopDetector.Check(tc.Name, tc.Input, loopThresholds)
-			if verdict.Message != "" {
-				toolResults = append(toolResults, llm.ContentBlock{
-					Type: "text",
-					Text: verdict.Message,
-				})
-				if verdict.Level == "blocked" {
-					logger.Warn("tool loop circuit breaker triggered",
-						"tool", tc.Name,
-						"turn", turn)
-				} else {
-					logger.Info("tool loop detected",
-						"level", verdict.Level,
-						"tool", tc.Name,
-						"turn", turn)
-				}
-			}
 		}
 
 		// Inject turn budget warning when approaching the limit so the LLM

@@ -87,48 +87,6 @@ func BenchmarkManagerConcurrentGetSet(b *testing.B) {
 	})
 }
 
-// BenchmarkKeyCacheGet measures LRU cache hit performance (run ID → session key).
-func BenchmarkKeyCacheGet(b *testing.B) {
-	c := NewKeyCache()
-	for i := range 200 {
-		c.Put(fmt.Sprintf("run-%d", i), fmt.Sprintf("sess-%d", i))
-	}
-	b.ResetTimer()
-	for i := range b.N {
-		c.Get(fmt.Sprintf("run-%d", i%200))
-	}
-}
-
-// BenchmarkKeyCachePut measures LRU cache insert with eviction pressure.
-func BenchmarkKeyCachePut(b *testing.B) {
-	c := NewKeyCache()
-	b.ResetTimer()
-	for i := range b.N {
-		c.Put(fmt.Sprintf("run-%d", i), fmt.Sprintf("sess-%d", i))
-	}
-}
-
-// BenchmarkKeyCacheConcurrent measures contended cache access.
-func BenchmarkKeyCacheConcurrent(b *testing.B) {
-	c := NewKeyCache()
-	for i := range 200 {
-		c.Put(fmt.Sprintf("run-%d", i), fmt.Sprintf("sess-%d", i))
-	}
-	b.ResetTimer()
-	b.RunParallel(func(pb *testing.PB) {
-		i := 0
-		for pb.Next() {
-			key := fmt.Sprintf("run-%d", i%200)
-			if i%5 == 0 {
-				c.Put(key, fmt.Sprintf("sess-%d", i))
-			} else {
-				c.Get(key)
-			}
-			i++
-		}
-	})
-}
-
 // BenchmarkApplyLifecycleEvent measures the full lifecycle event path
 // (create-if-missing + status transition + event emission).
 func BenchmarkApplyLifecycleEvent(b *testing.B) {

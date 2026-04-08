@@ -1,6 +1,6 @@
 // directive_handling.go — Full directive handling implementation.
 // Mirrors src/auto-reply/reply/directive-handling.impl.ts (517 LOC),
-// directive-handling.model.ts (506 LOC), directive-handling.auth.ts (246 LOC),
+// directive-handling.model.ts (506 LOC),
 // directive-handling.persist.ts (225 LOC), directive-handling.levels.ts (46 LOC),
 // directive-handling.fast-lane.ts (99 LOC), directive-handling.shared.ts (80 LOC),
 // directive-handling.params.ts (56 LOC), directive-handling.model-picker.ts (28 LOC),
@@ -66,9 +66,8 @@ func HandleDirectives(body string, sess *types.SessionState, opts DirectiveHandl
 
 	// 1. Parse inline directives.
 	parseOpts := &DirectiveParseOptions{
-		ModelAliases:    opts.ModelAliases,
-		DisableElevated: opts.DisableElevated,
-		DisableStatus:   opts.DisableStatus,
+		ModelAliases:  opts.ModelAliases,
+		DisableStatus: opts.DisableStatus,
 	}
 	directives := ParseInlineDirectives(body, parseOpts)
 	result.CleanedBody = directives.Cleaned
@@ -106,18 +105,6 @@ func HandleDirectives(body string, sess *types.SessionState, opts DirectiveHandl
 		hasAnyChange = true
 		mod.ReasoningLevel = directives.ReasoningLevel
 		result.AckText += formatDirectiveAck("Reasoning", string(directives.ReasoningLevel))
-	}
-
-	// Elevated level.
-	if directives.HasElevatedDirective {
-		// Auth check: elevated changes may require authorization.
-		if opts.RequireAuthForElevated && !opts.IsAuthorized {
-			result.Errors = append(result.Errors, "⚠️ Elevated mode changes require authorization.")
-		} else {
-			hasAnyChange = true
-			mod.ElevatedLevel = directives.ElevatedLevel
-			result.AckText += formatDirectiveAck("Elevated", string(directives.ElevatedLevel))
-		}
 	}
 
 	// Model directive.
@@ -159,13 +146,10 @@ func HandleDirectives(body string, sess *types.SessionState, opts DirectiveHandl
 
 // DirectiveHandlingOptions configures directive handling.
 type DirectiveHandlingOptions struct {
-	ModelAliases           []string
-	ModelCandidates        []model.ModelCandidate
-	DisableElevated        bool
-	DisableStatus          bool
-	RequireAuthForElevated bool
-	IsAuthorized           bool
-	StatusHandler          func(session *types.SessionState) string
+	ModelAliases    []string
+	ModelCandidates []model.ModelCandidate
+	DisableStatus   bool
+	StatusHandler   func(session *types.SessionState) string
 }
 
 // PersistDirectives applies directive results to the session store.
@@ -200,9 +184,6 @@ func PersistDirectives(sess *types.SessionState, result DirectiveHandlingResult)
 	if mod.ReasoningLevel != "" {
 		update.ReasoningLevel = &mod.ReasoningLevel
 	}
-	if mod.ElevatedLevel != "" {
-		update.ElevatedLevel = &mod.ElevatedLevel
-	}
 	if mod.SendPolicy != "" {
 		update.SendPolicy = &mod.SendPolicy
 	}
@@ -219,7 +200,6 @@ type ResolvedLevels struct {
 	VerboseLevel   types.VerboseLevel
 	FastMode       bool
 	ReasoningLevel types.ReasoningLevel
-	ElevatedLevel  types.ElevatedLevel
 }
 
 func ResolveCurrentDirectiveLevels(sess *types.SessionState, defaults ResolvedLevels) ResolvedLevels {
@@ -237,9 +217,6 @@ func ResolveCurrentDirectiveLevels(sess *types.SessionState, defaults ResolvedLe
 	result.FastMode = sess.FastMode
 	if sess.ReasoningLevel != "" {
 		result.ReasoningLevel = sess.ReasoningLevel
-	}
-	if sess.ElevatedLevel != "" {
-		result.ElevatedLevel = sess.ElevatedLevel
 	}
 	return result
 }
@@ -338,9 +315,6 @@ func BuildFastLaneReply(directives InlineDirectives) *types.ReplyPayload {
 	}
 	if directives.HasReasoningDirective {
 		parts = append(parts, fmt.Sprintf("💭 Reasoning: %s", directives.ReasoningLevel))
-	}
-	if directives.HasElevatedDirective {
-		parts = append(parts, fmt.Sprintf("🔓 Elevated: %s", directives.ElevatedLevel))
 	}
 	if len(parts) == 0 {
 		return nil

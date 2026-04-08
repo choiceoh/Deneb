@@ -67,9 +67,3 @@ func WithTranscript(w *transcript.Writer) Option {
 	}
 }
 
-// WithHooksHTTP sets the hooks HTTP webhook handler.
-func WithHooksHTTP(h *HooksHTTPHandler) Option {
-	return func(s *Server) {
-		s.hooksHTTP = h
-	}
-}
