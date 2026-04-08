@@ -56,14 +56,6 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 		Deferred:    true,
 	})
 
-	// Progress tracking: structured plan for multi-step work.
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "update_plan",
-		Description: "Update your work plan with step statuses. For non-trivial multi-step tasks, keep a plan updated so the user sees progress. Skip for simple 1-2 step tasks. Keep exactly one step in_progress. After calling, continue working — do not stop to describe the plan.",
-		InputSchema: updatePlanToolSchema(),
-		Fn:          tools.ToolUpdatePlan(nil), // Plan store is in-memory only for now.
-	})
-
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
 	// because it depends on local AI hooks that live in the chat package.
 	// NOTE: fetch_tools is registered by chat.RegisterCoreTools because it
@@ -523,57 +515,6 @@ func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDep
 			Description:     "LLM 위키 지식베이스: search (검색), read (페이지 읽기), index (목차), write (작성/수정), log (일지), daily (최근 일지), status (통계). 과거 결정/맥락/인물/프로젝트 등 장기 지식을 마크다운 위키로 관리",
 			InputSchema:     wikiToolSchema(),
 			Fn:              tools.ToolWiki(wikiDeps, workspaceDir),
-			ConcurrencySafe: true,
-		})
-	}
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "projects_list",
-		Description:     "프로젝트 목록과 메타데이터 조회. 본문 데이터 없음, ID/이름/상태/지역 등 목록만 반환",
-		InputSchema:     projectsListToolSchema(),
-		Fn:              tools.ToolProjectsList(wikiDeps),
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "projects_get_field",
-		Description:     "특정 프로젝트의 특정 필드만 조회. 전체 문서를 가져오지 않고 필요한 값만 반환",
-		InputSchema:     projectsGetFieldToolSchema(),
-		Fn:              tools.ToolProjectsGetField(wikiDeps),
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "projects_search",
-		Description:     "자연어 쿼리로 프로젝트 데이터 검색. 관련 프로젝트와 스니펫 반환",
-		InputSchema:     projectsSearchToolSchema(),
-		Fn:              tools.ToolProjectsSearch(wikiDeps),
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "projects_get_document",
-		Description:     "프로젝트 원본 문서 조회. 섹션 미지정 시 목차만 반환, 섹션 지정 시 해당 섹션 내용 반환",
-		InputSchema:     projectsGetDocumentToolSchema(),
-		Fn:              tools.ToolProjectsGetDocument(wikiDeps),
-		ConcurrencySafe: true,
-	})
-	if wikiDeps.Store != nil {
-		registry.RegisterTool(toolctx.ToolDef{
-			Name:            "projects_write",
-			Description:     "프로젝트 위키 페이지 생성/수정. 새 프로젝트 등록이나 기존 프로젝트 정보 업데이트",
-			InputSchema:     projectsWriteToolSchema(),
-			Fn:              tools.ToolProjectsWrite(wikiDeps),
-			ConcurrencySafe: true,
-		})
-		registry.RegisterTool(toolctx.ToolDef{
-			Name:            "memory_store",
-			Description:     "위키 지식베이스에 정보 저장. 사람/기술/업무/결정/선호 등 모든 카테고리에 장기 지식을 기록",
-			InputSchema:     memoryStoreToolSchema(),
-			Fn:              tools.ToolMemoryStore(wikiDeps),
-			ConcurrencySafe: true,
-		})
-		registry.RegisterTool(toolctx.ToolDef{
-			Name:            "memory_recall",
-			Description:     "위키 지식베이스에서 정보 조회. search (검색), read (페이지 읽기), list (카테고리별 목록)",
-			InputSchema:     memoryRecallToolSchema(),
-			Fn:              tools.ToolMemoryRecall(wikiDeps),
 			ConcurrencySafe: true,
 		})
 	}
