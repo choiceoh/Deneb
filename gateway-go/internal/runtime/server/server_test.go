@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -54,40 +53,6 @@ func TestReadyEndpoint(t *testing.T) {
 	}
 }
 
-func TestRPCEndpoint_ValidRequest(t *testing.T) {
-	srv := testutil.Must(New(":0"))
-	body := `{"method":"health","id":"test-1"}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/rpc", strings.NewReader(body))
-	w := httptest.NewRecorder()
-
-	srv.handleRPC(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("got %d, want 200", w.Code)
-	}
-
-	var resp map[string]any
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp["ok"] != true {
-		t.Error("expected ok=true")
-	}
-}
-
-func TestRPCEndpoint_MissingMethod(t *testing.T) {
-	srv := testutil.Must(New(":0"))
-	body := `{"id":"test-1"}`
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/rpc", strings.NewReader(body))
-	w := httptest.NewRecorder()
-
-	srv.handleRPC(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("got %d, want 400", w.Code)
-	}
-}
-
 func TestServerStartStop(t *testing.T) {
 	srv := testutil.Must(New("127.0.0.1:0"))
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -122,4 +87,3 @@ func TestServerHealthEndpointLive(t *testing.T) {
 		t.Errorf("status = %v, want ok", body["status"])
 	}
 }
-

@@ -47,8 +47,7 @@ func (s *Server) registerBuiltinMethods() {
 			}
 			return map[string]telegram.Status{}
 		},
-		SessionCount:    s.sessions.Count,
-		ConnectionCount: func() int64 { return int64(s.clientCnt.Load()) },
+		SessionCount: s.sessions.Count,
 		LastHeartbeatMs: func() int64 {
 			if s.activity == nil {
 				return 0

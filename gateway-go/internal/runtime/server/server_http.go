@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,15 +8,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/timeouts"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
-)
-
-const (
-	// maxRPCBodyBytes limits the HTTP RPC request body to 1 MB.
-	maxRPCBodyBytes = 1 * 1024 * 1024
 )
 
 // handleMetrics responds with Prometheus-compatible text exposition of all metrics.
@@ -48,8 +39,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	if s.cronService != nil {
 		cronTasks = s.cronService.Status().TaskCount
 	}
-
-	hooksCount := 0
 
 	// Channel health summary.
 	channelHealthSummary := map[string]int{"healthy": 0, "unhealthy": 0}
@@ -82,13 +71,11 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"subsystems": map[string]any{
 			"core": "go",
 		},
-		"connections": s.clientCnt.Load(),
-		"sessions":    s.sessions.Count(),
-		"channels":    channelHealthSummary,
+		"sessions": s.sessions.Count(),
+		"channels": channelHealthSummary,
 		"workers": map[string]int{
 			"processes": activeProcesses,
 			"cron":      cronTasks,
-			"hooks":     hooksCount,
 		},
 		"providers": providerCount,
 	})
@@ -142,43 +129,4 @@ func formatUptimeHTTP(d time.Duration) string {
 		return fmt.Sprintf("%dh", h)
 	}
 	return fmt.Sprintf("%dh %dm", h, rm)
-}
-
-// handleRPC processes HTTP JSON-RPC requests via the dispatcher.
-// Extracts Bearer token from Authorization header for authentication.
-func (s *Server) handleRPC(w http.ResponseWriter, r *http.Request) {
-	// Track activity.
-	if s.activity != nil {
-		s.activity.Touch()
-	}
-
-	var req struct {
-		Method string          `json:"method"`
-		Params json.RawMessage `json:"params,omitempty"`
-		ID     string          `json:"id"`
-	}
-
-	limited := http.MaxBytesReader(w, r.Body, maxRPCBodyBytes)
-	if err := json.NewDecoder(limited).Decode(&req); err != nil {
-		s.writeJSON(w, http.StatusBadRequest, rpcerr.InvalidRequest("invalid JSON").Response(""))
-		return
-	}
-
-	if req.Method == "" || req.ID == "" {
-		s.writeJSON(w, http.StatusBadRequest, rpcerr.New(protocol.ErrMissingParam, "method and id are required").Response(req.ID))
-		return
-	}
-
-	frame := &protocol.RequestFrame{
-		Type:   protocol.FrameTypeRequest,
-		ID:     req.ID,
-		Method: req.Method,
-		Params: req.Params,
-	}
-
-	dispatchCtx, dispatchCancel := context.WithTimeout(r.Context(), timeouts.RPCDispatch)
-	resp := s.dispatcher.Dispatch(dispatchCtx, frame)
-	dispatchCancel()
-
-	s.writeJSON(w, http.StatusOK, resp)
 }
