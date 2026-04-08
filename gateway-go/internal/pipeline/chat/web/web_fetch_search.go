@@ -1,7 +1,7 @@
 // web_fetch_search.go — Search provider implementations for the unified web tool.
 //
-// Provider priority: Tavily → Brave Search → DuckDuckGo.
-// Tavily returns AI-synthesized answers with search results — ideal for agents.
+// Provider priority: Perplexity Sonar → Brave Search → DuckDuckGo.
+// Perplexity returns AI-synthesized answers with citations — concise, no token bloat.
 // Brave returns traditional search results (title, URL, snippet).
 // DuckDuckGo is the zero-config fallback (no API key needed).
 package web
@@ -22,15 +22,15 @@ import (
 // --- Provider dispatch ---
 
 // webSearch dispatches to the best available search provider.
-// Priority: Tavily → Brave → DuckDuckGo.
+// Priority: Perplexity → Brave → DuckDuckGo.
 func webSearch(ctx context.Context, query string, count int) (string, error) {
-	tavilyKey := os.Getenv("TAVILY_API_KEY")
-	if tavilyKey != "" {
-		answer, results, err := tavilyCall(ctx, tavilyKey, query, count)
+	pplxKey := os.Getenv("PERPLEXITY_API_KEY")
+	if pplxKey != "" {
+		answer, citations, err := perplexitySearch(ctx, pplxKey, query)
 		if err != nil {
 			return "", err
 		}
-		return formatTavilyResult(answer, results), nil
+		return formatPerplexityResult(answer, citations), nil
 	}
 	braveKey := braveAPIKey()
 	if braveKey != "" {
@@ -42,17 +42,13 @@ func webSearch(ctx context.Context, query string, count int) (string, error) {
 // webSearchWithURLs searches and returns both formatted output and fetchable URLs.
 // Used by search+fetch mode.
 func webSearchWithURLs(ctx context.Context, query string, count int) (output string, urls []string, err error) {
-	tavilyKey := os.Getenv("TAVILY_API_KEY")
-	if tavilyKey != "" {
-		answer, results, err := tavilyCall(ctx, tavilyKey, query, count)
+	pplxKey := os.Getenv("PERPLEXITY_API_KEY")
+	if pplxKey != "" {
+		answer, citations, err := perplexitySearch(ctx, pplxKey, query)
 		if err != nil {
 			return "", nil, err
 		}
-		var resultURLs []string
-		for _, r := range results {
-			resultURLs = append(resultURLs, r.URL)
-		}
-		return formatTavilyResult(answer, results), resultURLs, nil
+		return formatPerplexityResult(answer, citations), citations, nil
 	}
 	braveKey := braveAPIKey()
 	if braveKey != "" {
@@ -79,82 +75,91 @@ func braveAPIKey() string {
 	return key
 }
 
-// --- Tavily Search ---
+// --- Perplexity Sonar ---
 
-// tavilyResponse is the parsed Tavily Search API response.
-type tavilyResponse struct {
-	Answer  string         `json:"answer"`
-	Results []tavilyResult `json:"results"`
+// perplexityRequest is the chat completion request for Perplexity Sonar API.
+type perplexityRequest struct {
+	Model    string               `json:"model"`
+	Messages []perplexityMessage  `json:"messages"`
 }
 
-type tavilyResult struct {
-	Title   string  `json:"title"`
-	URL     string  `json:"url"`
-	Content string  `json:"content"`
-	Score   float64 `json:"score"`
+type perplexityMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
-// tavilyCall performs a search via the Tavily Search API.
-// Returns an AI-synthesized answer and search results with URLs.
-func tavilyCall(ctx context.Context, apiKey, query string, count int) (answer string, results []tavilyResult, err error) {
-	if count <= 0 {
-		count = 5
-	}
-	reqBody := map[string]any{
-		"query":          query,
-		"max_results":    count,
-		"include_answer": true,
-		"search_depth":   "basic",
+// perplexityResponse is the parsed Perplexity Sonar API response.
+type perplexityResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+	Citations []string `json:"citations"`
+}
+
+// perplexitySearch performs a search via the Perplexity Sonar API.
+// Returns an AI-synthesized answer and citation URLs.
+func perplexitySearch(ctx context.Context, apiKey, query string) (answer string, citations []string, err error) {
+	reqBody := perplexityRequest{
+		Model: "sonar",
+		Messages: []perplexityMessage{
+			{Role: "user", Content: query},
+		},
 	}
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", nil, fmt.Errorf("marshal tavily request: %w", err)
+		return "", nil, fmt.Errorf("marshal perplexity request: %w", err)
 	}
 
 	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost,
-		"https://api.tavily.com/search", bytes.NewReader(body))
+		"https://api.perplexity.ai/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", nil, fmt.Errorf("create tavily request: %w", err)
+		return "", nil, fmt.Errorf("create perplexity request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	resp, err := SharedClient(30 * time.Second).Do(req)
 	if err != nil {
-		return "", nil, fmt.Errorf("tavily request failed: %w", err)
+		return "", nil, fmt.Errorf("perplexity request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", nil, fmt.Errorf("tavily HTTP %d: %s", resp.StatusCode, string(respBody))
+		return "", nil, fmt.Errorf("perplexity HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	var result tavilyResponse
+	var result perplexityResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", nil, fmt.Errorf("parse tavily response: %w", err)
+		return "", nil, fmt.Errorf("parse perplexity response: %w", err)
 	}
 
-	return result.Answer, result.Results, nil
+	if len(result.Choices) == 0 {
+		return "", nil, fmt.Errorf("perplexity returned no choices")
+	}
+
+	return result.Choices[0].Message.Content, result.Citations, nil
 }
 
-func formatTavilyResult(answer string, results []tavilyResult) string {
+func formatPerplexityResult(answer string, citations []string) string {
 	var sb strings.Builder
 	if answer != "" {
 		sb.WriteString(answer)
 		sb.WriteString("\n\n")
 	}
-	if len(results) > 0 {
+	if len(citations) > 0 {
 		sb.WriteString("**Sources:**\n")
-		for i, r := range results {
-			fmt.Fprintf(&sb, "%d. **%s**\n   %s\n   %s\n\n", i+1, r.Title, r.URL, r.Content)
+		for i, u := range citations {
+			fmt.Fprintf(&sb, "%d. %s\n", i+1, u)
 		}
 	}
 	if sb.Len() == 0 {
-		return "No results from Tavily."
+		return "No results from Perplexity."
 	}
 	return sb.String()
 }
