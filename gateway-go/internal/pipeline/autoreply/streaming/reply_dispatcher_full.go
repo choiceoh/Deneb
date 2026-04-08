@@ -27,7 +27,6 @@ type FullReplyDispatcher struct {
 	mu          sync.Mutex
 	deliver     types.DeliverFunc
 	logger      *slog.Logger
-	ctx         context.Context
 	counts      map[types.ReplyDispatchKind]int
 	pending     int
 	complete    bool
@@ -48,7 +47,7 @@ type FullDispatcherConfig struct {
 }
 
 // NewFullReplyDispatcher creates a new full dispatcher.
-func NewFullReplyDispatcher(ctx context.Context, cfg FullDispatcherConfig) *FullReplyDispatcher {
+func NewFullReplyDispatcher(cfg FullDispatcherConfig) *FullReplyDispatcher {
 	sendTimeout := cfg.SendTimeout
 	if sendTimeout <= 0 {
 		sendTimeout = 15 * time.Second
@@ -56,7 +55,6 @@ func NewFullReplyDispatcher(ctx context.Context, cfg FullDispatcherConfig) *Full
 	return &FullReplyDispatcher{
 		deliver:     cfg.Deliver,
 		logger:      cfg.Logger,
-		ctx:         ctx,
 		counts:      make(map[types.ReplyDispatchKind]int),
 		idleCh:      make(chan struct{}),
 		humanDelay:  cfg.HumanDelay,
@@ -66,21 +64,21 @@ func NewFullReplyDispatcher(ctx context.Context, cfg FullDispatcherConfig) *Full
 }
 
 // SendTool delivers a tool result payload.
-func (d *FullReplyDispatcher) SendTool(payload types.ReplyPayload) bool {
-	return d.send(payload, types.DispatchKindTool)
+func (d *FullReplyDispatcher) SendTool(ctx context.Context, payload types.ReplyPayload) bool {
+	return d.send(ctx, payload, types.DispatchKindTool)
 }
 
 // SendBlock delivers a block reply payload (streaming chunk).
-func (d *FullReplyDispatcher) SendBlock(payload types.ReplyPayload) bool {
-	return d.send(payload, types.DispatchKindBlock)
+func (d *FullReplyDispatcher) SendBlock(ctx context.Context, payload types.ReplyPayload) bool {
+	return d.send(ctx, payload, types.DispatchKindBlock)
 }
 
 // SendFinal delivers the final reply payload.
-func (d *FullReplyDispatcher) SendFinal(payload types.ReplyPayload) bool {
-	return d.send(payload, types.DispatchKindFinal)
+func (d *FullReplyDispatcher) SendFinal(ctx context.Context, payload types.ReplyPayload) bool {
+	return d.send(ctx, payload, types.DispatchKindFinal)
 }
 
-func (d *FullReplyDispatcher) send(payload types.ReplyPayload, kind types.ReplyDispatchKind) bool {
+func (d *FullReplyDispatcher) send(ctx context.Context, payload types.ReplyPayload, kind types.ReplyDispatchKind) bool {
 	d.mu.Lock()
 	if d.complete {
 		d.mu.Unlock()
@@ -91,10 +89,10 @@ func (d *FullReplyDispatcher) send(payload types.ReplyPayload, kind types.ReplyD
 	d.mu.Unlock()
 
 	// Apply human-like delay between sends.
-	d.applyHumanDelay()
+	d.applyHumanDelay(ctx)
 
 	// Wrap delivery with timeout.
-	deliverCtx, cancel := context.WithTimeout(d.ctx, d.sendTimeout)
+	deliverCtx, cancel := context.WithTimeout(ctx, d.sendTimeout)
 	defer cancel()
 
 	if err := d.deliver(deliverCtx, payload, kind); err != nil {
@@ -116,7 +114,7 @@ func (d *FullReplyDispatcher) send(payload types.ReplyPayload, kind types.ReplyD
 	return true
 }
 
-func (d *FullReplyDispatcher) applyHumanDelay() {
+func (d *FullReplyDispatcher) applyHumanDelay(ctx context.Context) {
 	d.mu.Lock()
 	last := d.lastSendAt
 	minDelay := d.humanDelay.MinMs
@@ -132,7 +130,7 @@ func (d *FullReplyDispatcher) applyHumanDelay() {
 			delay = maxDelay
 		}
 		select {
-		case <-d.ctx.Done():
+		case <-ctx.Done():
 		case <-time.After(time.Duration(delay) * time.Millisecond):
 		}
 	}
@@ -155,7 +153,7 @@ func (d *FullReplyDispatcher) MarkComplete() {
 }
 
 // WaitForIdle blocks until all pending sends complete.
-func (d *FullReplyDispatcher) WaitForIdle(timeout time.Duration) bool {
+func (d *FullReplyDispatcher) WaitForIdle(ctx context.Context, timeout time.Duration) bool {
 	d.mu.Lock()
 	if d.pending == 0 {
 		d.mu.Unlock()
@@ -168,7 +166,7 @@ func (d *FullReplyDispatcher) WaitForIdle(timeout time.Duration) bool {
 		return true
 	case <-time.After(timeout):
 		return false
-	case <-d.ctx.Done():
+	case <-ctx.Done():
 		return false
 	}
 }
