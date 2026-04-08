@@ -6,7 +6,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/transcript"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -52,14 +51,6 @@ func (s *Server) RuntimeConfig() *config.GatewayRuntimeConfig {
 // methods without going through HTTP/WebSocket.
 func (s *Server) DispatchRPC(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 	return s.dispatcher.Dispatch(ctx, req)
-}
-
-// WithAuthValidator sets the auth validator for token-based authentication.
-// If not set, the server operates in no-auth mode (all connections are trusted).
-func WithAuthValidator(v *auth.Validator) Option {
-	return func(s *Server) {
-		s.authValidator = v
-	}
 }
 
 // WithProviders sets the provider plugin registry.

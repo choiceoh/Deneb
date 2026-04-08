@@ -102,7 +102,7 @@ func TestBot_InboundMessageCallback(t *testing.T) {
 
 	c := NewClient(ClientConfig{Token: "test-token"})
 	c.baseURL = srv.URL + "/bottest-token"
-	cfg := &Config{BotToken: "test-token", DmPolicy: DmPolicyOpen}
+	cfg := &Config{BotToken: "test-token"}
 
 	bot := NewBot(c, cfg, func(_ context.Context, update *Update) {
 		select {
@@ -170,61 +170,6 @@ func TestBot_DrainMessages(t *testing.T) {
 	msgs = bot.DrainMessages()
 	if len(msgs) != 0 {
 		t.Errorf("got %d, want 0 messages after drain", len(msgs))
-	}
-}
-
-func TestBot_AllowList(t *testing.T) {
-	bot, _, srv := newTestBotSetup(t, func(w http.ResponseWriter, r *http.Request) {})
-	defer srv.Close()
-
-	// Default pairing policy + no allowlist → denied (fail-closed).
-	msg := &Message{From: &User{ID: 1}, Chat: Chat{Type: "private"}}
-	r := CheckAccess(bot.config, msg)
-	if r.Allowed {
-		t.Error("expected message denied with default pairing policy and no allowlist")
-	}
-
-	// With allowlist + default pairing policy — paired users allowed.
-	bot.config.AllowFrom = AllowList{IDs: []int64{42}}
-	r = CheckAccess(bot.config, msg)
-	if r.Allowed {
-		t.Error("expected message rejected for non-paired user")
-	}
-	msg.From.ID = 42
-	r = CheckAccess(bot.config, msg)
-	if !r.Allowed {
-		t.Error("expected message allowed for paired user")
-	}
-
-	// Open DM policy — all allowed.
-	bot.config.DmPolicy = DmPolicyOpen
-	msg.From.ID = 999
-	r = CheckAccess(bot.config, msg)
-	if !r.Allowed {
-		t.Error("expected message allowed with open DM policy")
-	}
-
-	// Wildcard allows all (allowlist policy).
-	bot.config.DmPolicy = DmPolicyAllowlist
-	bot.config.AllowFrom = AllowList{Wildcard: true}
-	msg.From.ID = 999
-	r = CheckAccess(bot.config, msg)
-	if !r.Allowed {
-		t.Error("expected message allowed with wildcard allowlist")
-	}
-
-	// Username matching (allowlist policy).
-	bot.config.AllowFrom = AllowList{Usernames: []string{"peter"}}
-	msg.From.ID = 0
-	msg.From.Username = ""
-	r = CheckAccess(bot.config, msg)
-	if r.Allowed {
-		t.Error("expected rejection when username is empty")
-	}
-	msg.From.Username = "Peter"
-	r = CheckAccess(bot.config, msg)
-	if !r.Allowed {
-		t.Error("expected case-insensitive username match")
 	}
 }
 

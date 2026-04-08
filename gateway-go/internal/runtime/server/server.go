@@ -19,7 +19,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/auth"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/dedupe"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
@@ -42,18 +41,16 @@ type ServerTransport struct {
 	addr       string
 	httpServer *http.Server
 	clients    sync.Map     // connID → *WsClient; concurrent-safe client tracking
-	clientCnt  atomic.Int32 // current WebSocket connection count (capped at maxWebSocketClients)
+	clientCnt  atomic.Int32 // current WebSocket connection count
 	startedAt  time.Time
 }
 
-// ServerRPC owns dispatcher construction and RPC/auth wiring state.
+// ServerRPC owns dispatcher construction and RPC wiring state.
 type ServerRPC struct {
 	dispatcher              *rpc.Dispatcher
-	authValidator           *auth.Validator
 	providers               *provider.Registry
 	authManager             *provider.AuthManager
 	providerRuntime         *provider.ProviderRuntimeResolver
-	authRateLimiter         *auth.AuthRateLimiter
 	acpDeps                 *handlerprocess.ACPDeps
 	acpLifecycleUnsub       func()
 	acpResultInjectionUnsub func()
@@ -206,7 +203,6 @@ func New(addr string, opts ...Option) (*Server, error) {
 	s.snapshotStore = telegram.NewSnapshotStore()
 	s.activity = monitoring.NewActivityTracker()
 	s.channelEvents = monitoring.NewChannelEventTracker()
-	s.authRateLimiter = auth.NewAuthRateLimiter(10, 60*1000, 5*60*1000)
 
 	// Provider auth manager and runtime resolver.
 	if s.providers != nil {

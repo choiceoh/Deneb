@@ -161,59 +161,6 @@ func TestHooksHTTP_QueryParamTokenRejected(t *testing.T) {
 	}
 }
 
-// ─── Test: Rate limiting after failures returns 429 ────────────────────
-
-func TestHooksHTTP_RateLimitingReturns429(t *testing.T) {
-	h, _ := testHooksHandler()
-
-	// Exhaust the failure limit.
-	for i := range hookAuthFailureLimit {
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
-		req.Header.Set("Authorization", "Bearer wrong")
-		req.RemoteAddr = "1.2.3.4:12345"
-		w := httptest.NewRecorder()
-		h.Handle(w, req)
-		if w.Code != http.StatusUnauthorized {
-			t.Fatalf("attempt %d: got %d, want 401", i+1, w.Code)
-		}
-	}
-
-	// Next attempt should be rate-limited.
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
-	req.Header.Set("Authorization", "Bearer wrong")
-	req.RemoteAddr = "1.2.3.4:12345"
-	w := httptest.NewRecorder()
-	h.Handle(w, req)
-	if w.Code != http.StatusTooManyRequests {
-		t.Errorf("got %d, want 429", w.Code)
-	}
-}
-
-// ─── Test: Rate limit is per-IP ────────────────────────────────────────
-
-func TestHooksHTTP_RateLimitPerIP(t *testing.T) {
-	h, _ := testHooksHandler()
-
-	// Exhaust limit for 1.2.3.4.
-	for range hookAuthFailureLimit {
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
-		req.Header.Set("Authorization", "Bearer wrong")
-		req.RemoteAddr = "1.2.3.4:12345"
-		w := httptest.NewRecorder()
-		h.Handle(w, req)
-	}
-
-	// Different IP should not be rate-limited.
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
-	req.Header.Set("Authorization", "Bearer wrong")
-	req.RemoteAddr = "5.6.7.8:12345"
-	w := httptest.NewRecorder()
-	h.Handle(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("got %d, want 401 for different IP", w.Code)
-	}
-}
-
 // ─── Test: Wake endpoint with valid payload ────────────────────────────
 
 func TestHooksHTTP_WakeEndpoint(t *testing.T) {
@@ -685,42 +632,5 @@ func TestResolveClientIP(t *testing.T) {
 				t.Errorf("resolveClientIP() = %q, want %q", got, tt.want)
 			}
 		})
-	}
-}
-
-// ─── Test: Successful auth resets rate limiter ─────────────────────────
-
-func TestHooksHTTP_SuccessfulAuthResetsRateLimit(t *testing.T) {
-	h, _ := testHooksHandler()
-
-	// Record some failures.
-	for range hookAuthFailureLimit - 1 {
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
-		req.Header.Set("Authorization", "Bearer wrong")
-		req.RemoteAddr = "10.0.0.1:12345"
-		w := httptest.NewRecorder()
-		h.Handle(w, req)
-	}
-
-	// Successful auth should reset.
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{"text":"ok"}`))
-	req.Header.Set("Authorization", "Bearer test-secret-token")
-	req.RemoteAddr = "10.0.0.1:12345"
-	w := httptest.NewRecorder()
-	h.Handle(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("got %d, want 200", w.Code)
-	}
-
-	// After reset, failures should start from 0 again.
-	for i := range hookAuthFailureLimit {
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hooks/wake", strings.NewReader(`{}`))
-		req.Header.Set("Authorization", "Bearer wrong")
-		req.RemoteAddr = "10.0.0.1:12345"
-		w := httptest.NewRecorder()
-		h.Handle(w, req)
-		if w.Code != http.StatusUnauthorized {
-			t.Fatalf("attempt %d after reset: got %d, want 401", i+1, w.Code)
-		}
 	}
 }

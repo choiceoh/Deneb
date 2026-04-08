@@ -61,10 +61,10 @@ func (s *Server) initGmailPoll() {
 	// Wire Telegram notifier.
 	if s.telegramPlug != nil {
 		tgCfg := s.telegramPlug.Config()
-		if tgCfg != nil && len(tgCfg.AllowFrom.IDs) > 0 {
+		if tgCfg != nil && tgCfg.ChatID != 0 {
 			s.gmailPollSvc.SetNotifier(&telegramNotifier{
 				plugin: s.telegramPlug,
-				chatID: tgCfg.AllowFrom.IDs[0],
+				chatID: tgCfg.ChatID,
 				logger: s.logger,
 			})
 		}

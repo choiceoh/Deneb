@@ -7,7 +7,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/timeouts"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/ws"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -58,14 +57,6 @@ func (s *Server) runMessageLoop(ctx context.Context, client *WsClient) {
 
 		if req.Method == "" || req.ID == "" {
 			s.logger.Warn("request missing method/id", "connId", client.connID)
-			continue
-		}
-
-		// Authorize: role-based permissions.
-		if authErr := rpc.AuthorizeMethod(req.Method, client.role, client.authed); authErr != nil {
-			if err := s.writeFrame(ctx, client, protocol.NewResponseError(req.ID, authErr)); err != nil {
-				return
-			}
 			continue
 		}
 

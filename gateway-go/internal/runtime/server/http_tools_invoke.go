@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/auth"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -125,27 +124,7 @@ func (s *Server) handleToolsInvoke(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// authorizeHTTP performs Bearer token authentication for HTTP endpoints.
-// Returns true if authorized, false if the response was written with an error.
-func (s *Server) authorizeHTTP(w http.ResponseWriter, r *http.Request) bool {
-	if s.authValidator == nil {
-		// No-auth mode: trust all.
-		return true
-	}
-
-	token := auth.BearerToken(r)
-	if token == "" {
-		s.writeJSON(w, http.StatusUnauthorized, map[string]any{
-			"ok": false, "error": map[string]string{"type": "unauthorized", "message": "Bearer token required"},
-		})
-		return false
-	}
-
-	if _, err := s.authValidator.ValidateToken(token); err != nil {
-		s.writeJSON(w, http.StatusUnauthorized, map[string]any{
-			"ok": false, "error": map[string]string{"type": "unauthorized", "message": "invalid token: " + err.Error()},
-		})
-		return false
-	}
+// authorizeHTTP always returns true for single-user deployment.
+func (s *Server) authorizeHTTP(_ http.ResponseWriter, _ *http.Request) bool {
 	return true
 }
