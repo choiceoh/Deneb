@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 )
 
@@ -84,6 +85,27 @@ func (b *Bridge) Search(query string, maxResults int) ([]toolctx.SearchResult, e
 // CloneRecent delegates to the legacy store.
 func (b *Bridge) CloneRecent(srcKey, dstKey string, limit int) error {
 	return b.legacy.CloneRecent(srcKey, dstKey, limit)
+}
+
+// AssembleContext builds the LLM context for a session via the Polaris summary DAG.
+// It ensures legacy JSONL data is migrated first, then delegates to the DAG-based
+// assembly which uses summaries for old messages and raw messages for recent ones.
+func (b *Bridge) AssembleContext(
+	sessionKey string,
+	memoryTokenBudget int,
+	freshTailCount int,
+	logger *slog.Logger,
+) (*AssemblyResult, error) {
+	b.ensureMigrated(sessionKey)
+	return assembleContextFull(b.store, sessionKey, memoryTokenBudget, freshTailCount, logger)
+}
+
+// AssemblyResult holds the output of context assembly.
+type AssemblyResult struct {
+	Messages        []llm.Message
+	EstimatedTokens int
+	TotalMessages   int
+	WasCompacted    bool // true if summary nodes were used
 }
 
 // ensureMigrated runs lazy migration for a session (once per process lifetime).

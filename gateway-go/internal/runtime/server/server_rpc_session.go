@@ -63,16 +63,21 @@ func (s *Server) registerSessionRPCMethods() {
 		cached := chat.NewCachedTranscriptStore(
 			chat.NewFileTranscriptStore(transcriptDir), 0)
 
-		// Wrap with LCM dual-write bridge (immutable SQLite store).
-		if home, err := os.UserHomeDir(); err == nil {
+		// Wrap with Polaris dual-write bridge (required for summary-based assembly).
+		home, err := os.UserHomeDir()
+		if err != nil {
+			s.logger.Error("polaris: cannot determine home directory", "error", err)
+		} else {
 			polarisStore, polarisErr := polaris.NewStore(home + "/.deneb/polaris.db")
 			if polarisErr != nil {
-				s.logger.Warn("polaris: failed to open store, falling back to JSONL only", "error", polarisErr)
-				transcriptStore = cached
+				s.logger.Error("polaris: failed to open store", "error", polarisErr)
 			} else {
 				transcriptStore = polaris.NewBridge(cached, polarisStore, s.logger)
 			}
-		} else {
+		}
+		// Fallback: if Polaris initialization failed, use cached store directly.
+		// Assembly will return an error but the gateway can still serve other functions.
+		if transcriptStore == nil {
 			transcriptStore = cached
 		}
 	}

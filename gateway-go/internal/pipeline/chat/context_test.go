@@ -1,11 +1,8 @@
 package chat
 
 import (
-	"fmt"
 	"log/slog"
 	"testing"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestDefaultContextConfig(t *testing.T) {
@@ -48,123 +45,22 @@ func TestEstimateTokens(t *testing.T) {
 	})
 }
 
-func TestTranscriptToMessages(t *testing.T) {
-	t.Run("converts roles and content", func(t *testing.T) {
-		transcript := []ChatMessage{
-			NewTextChatMessage("user", "hello", 0),
-			NewTextChatMessage("assistant", "hi there", 0),
-		}
-		msgs := transcriptToMessages(transcript)
-		if len(msgs) != 2 {
-			t.Fatalf("got %d messages, want 2", len(msgs))
-		}
-		if msgs[0].Role != "user" {
-			t.Errorf("msgs[0].Role = %q, want %q", msgs[0].Role, "user")
-		}
-		if msgs[1].Role != "assistant" {
-			t.Errorf("msgs[1].Role = %q, want %q", msgs[1].Role, "assistant")
-		}
-	})
-
-	t.Run("empty role defaults to user", func(t *testing.T) {
-		transcript := []ChatMessage{
-			NewTextChatMessage("", "no role", 0),
-		}
-		msgs := transcriptToMessages(transcript)
-		if msgs[0].Role != "user" {
-			t.Errorf("msgs[0].Role = %q, want %q", msgs[0].Role, "user")
-		}
-	})
-
-	t.Run("empty transcript", func(t *testing.T) {
-		msgs := transcriptToMessages(nil)
-		if len(msgs) != 0 {
-			t.Errorf("got %d messages, want 0", len(msgs))
-		}
-	})
-}
-
-func TestAssembleContextFallback(t *testing.T) {
-	store := newMemTranscriptStore()
-
-	// Populate with messages.
-	for i := range 5 {
-		msg := NewTextChatMessage("user", fmt.Sprintf("message %d", i), int64(i*1000))
-		store.Append("test", msg)
+func TestAssembleContextRequiresBridge(t *testing.T) {
+	// assembleContext must reject non-Bridge stores.
+	store := &nonBridgeStore{}
+	cfg := DefaultContextConfig()
+	_, err := assembleContext(store, "test", cfg, slog.Default())
+	if err == nil {
+		t.Fatal("expected error for non-Bridge store")
 	}
-
-	t.Run("returns all messages within token budget", func(t *testing.T) {
-		cfg := DefaultContextConfig()
-		result := testutil.Must(assembleContext(store, "test", cfg, slog.Default()))
-		if len(result.Messages) != 5 {
-			t.Errorf("got %d messages, want 5", len(result.Messages))
-		}
-		if result.TotalMessages != 5 {
-			t.Errorf("TotalMessages = %d, want 5", result.TotalMessages)
-		}
-	})
-
-	t.Run("trims by token budget", func(t *testing.T) {
-		cfg := DefaultContextConfig()
-		cfg.MemoryTokenBudget = 1 // extremely low budget → keeps only last message
-		result := testutil.Must(assembleContext(store, "test", cfg, slog.Default()))
-		if len(result.Messages) != 1 {
-			t.Errorf("got %d messages, want 1", len(result.Messages))
-		}
-		if result.TotalMessages != 5 {
-			t.Errorf("TotalMessages = %d, want 5", result.TotalMessages)
-		}
-	})
-
-	t.Run("empty session returns empty result", func(t *testing.T) {
-		cfg := DefaultContextConfig()
-		result := testutil.Must(assembleContext(store, "nonexistent", cfg, slog.Default()))
-		if len(result.Messages) != 0 {
-			t.Errorf("got %d messages, want 0", len(result.Messages))
-		}
-	})
 }
 
-// memTranscriptStore is a minimal in-memory TranscriptStore for testing.
-type memTranscriptStore struct {
-	data map[string][]ChatMessage
-}
+// nonBridgeStore is a minimal TranscriptStore that is NOT a polaris.Bridge.
+type nonBridgeStore struct{}
 
-func newMemTranscriptStore() *memTranscriptStore {
-	return &memTranscriptStore{data: make(map[string][]ChatMessage)}
-}
-
-func (s *memTranscriptStore) Load(key string, limit int) ([]ChatMessage, int, error) {
-	msgs := s.data[key]
-	total := len(msgs)
-	if limit > 0 && limit < total {
-		msgs = msgs[total-limit:]
-	}
-	return msgs, total, nil
-}
-
-func (s *memTranscriptStore) Append(key string, msg ChatMessage) error {
-	s.data[key] = append(s.data[key], msg)
-	return nil
-}
-
-func (s *memTranscriptStore) Delete(key string) error {
-	delete(s.data, key)
-	return nil
-}
-
-func (s *memTranscriptStore) ListKeys() ([]string, error) {
-	keys := make([]string, 0, len(s.data))
-	for k := range s.data {
-		keys = append(keys, k)
-	}
-	return keys, nil
-}
-
-func (s *memTranscriptStore) Search(_ string, _ int) ([]SearchResult, error) {
-	return nil, nil
-}
-
-func (s *memTranscriptStore) CloneRecent(_, _ string, _ int) error {
-	return nil
-}
+func (s *nonBridgeStore) Load(string, int) ([]ChatMessage, int, error) { return nil, 0, nil }
+func (s *nonBridgeStore) Append(string, ChatMessage) error             { return nil }
+func (s *nonBridgeStore) Delete(string) error                          { return nil }
+func (s *nonBridgeStore) ListKeys() ([]string, error)                  { return nil, nil }
+func (s *nonBridgeStore) Search(string, int) ([]SearchResult, error)   { return nil, nil }
+func (s *nonBridgeStore) CloneRecent(string, string, int) error        { return nil }
