@@ -18,7 +18,7 @@ func TestValidateParams_UnknownMethod(t *testing.T) {
 	vpe := &ValidateParamsError{}
 	ok := errors.As(err, &vpe)
 	if !ok || vpe.Kind != "unknown_method" {
-		t.Fatalf("expected unknown_method, got %v", err)
+		t.Fatalf("got %v, want unknown_method", err)
 	}
 }
 
@@ -30,14 +30,14 @@ func TestValidateParams_InvalidJSON(t *testing.T) {
 	vpe := &ValidateParamsError{}
 	ok := errors.As(err, &vpe)
 	if !ok || vpe.Kind != "invalid_json" {
-		t.Fatalf("expected invalid_json, got %v", err)
+		t.Fatalf("got %v, want invalid_json", err)
 	}
 }
 
 func TestValidateParams_SessionsListEmpty(t *testing.T) {
 	result := testutil.Must(ValidateParams("sessions.list", "{}"))
 	if !result.Valid {
-		t.Fatalf("expected valid, got errors: %v", result.Errors)
+		t.Fatalf("got errors: %v, want valid", result.Errors)
 	}
 }
 
@@ -47,7 +47,7 @@ func TestValidateParams_AdditionalProperties(t *testing.T) {
 		t.Fatal("expected invalid for unknown properties")
 	}
 	if result.Errors[0].Keyword != "additionalProperties" {
-		t.Fatalf("expected additionalProperties, got %s", result.Errors[0].Keyword)
+		t.Fatalf("got %s, want additionalProperties", result.Errors[0].Keyword)
 	}
 }
 
@@ -99,7 +99,7 @@ func TestValidateParams_GoldenShapes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := testutil.Must(ValidateParams(tt.method, tt.params))
 			if result.Valid != tt.valid {
-				t.Fatalf("expected valid=%v, got valid=%v errors=%v", tt.valid, result.Valid, result.Errors)
+				t.Fatalf("got valid=%v errors=%v, want valid=%v", result.Valid, result.Errors, tt.valid)
 			}
 			if tt.keyword != "" {
 				found := false
@@ -110,7 +110,7 @@ func TestValidateParams_GoldenShapes(t *testing.T) {
 					}
 				}
 				if !found {
-					t.Fatalf("expected keyword=%s, got errors=%v", tt.keyword, result.Errors)
+					t.Fatalf("got errors=%v, want keyword=%s", result.Errors, tt.keyword)
 				}
 			}
 		})
@@ -134,14 +134,14 @@ func TestSessions_SendMissingRequired(t *testing.T) {
 		}
 	}
 	if !hasKey || !hasMsg {
-		t.Fatalf("expected required errors for key and message, got %v", result.Errors)
+		t.Fatalf("got %v, want required errors for key and message", result.Errors)
 	}
 }
 
 func TestSessions_SendValid(t *testing.T) {
 	result := testutil.Must(ValidateParams("sessions.send", `{"key":"sess-1","message":"hello"}`))
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
@@ -165,14 +165,14 @@ func TestSessions_PatchInvalidEnum(t *testing.T) {
 		}
 	}
 	if !hasEnum {
-		t.Fatalf("expected enum error, got %v", result.Errors)
+		t.Fatalf("got %v, want enum error", result.Errors)
 	}
 }
 
 func TestSessions_UsageDatePattern(t *testing.T) {
 	result := testutil.Must(ValidateParams("sessions.usage", `{"startDate":"2024-01-15"}`))
 	if !result.Valid {
-		t.Fatalf("expected valid date, got %v", result.Errors)
+		t.Fatalf("got %v, want valid date", result.Errors)
 	}
 
 	result = testutil.Must(ValidateParams("sessions.usage", `{"startDate":"not-a-date"}`))
@@ -183,7 +183,7 @@ func TestSessions_UsageDatePattern(t *testing.T) {
 		}
 	}
 	if !hasPattern {
-		t.Fatalf("expected pattern error for bad date, got %v", result.Errors)
+		t.Fatalf("got %v, want pattern error for bad date", result.Errors)
 	}
 }
 
@@ -192,7 +192,7 @@ func TestAgent_SendValid(t *testing.T) {
 		`{"to":"user1","message":"hi","idempotencyKey":"k1"}`)
 	testutil.NoError(t, err)
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
@@ -207,14 +207,14 @@ func TestAgent_WakeInvalidMode(t *testing.T) {
 		}
 	}
 	if !hasEnum {
-		t.Fatalf("expected enum error, got %v", result.Errors)
+		t.Fatalf("got %v, want enum error", result.Errors)
 	}
 }
 
 func TestCron_ListValid(t *testing.T) {
 	result := testutil.Must(ValidateParams("cron.list", `{"limit":50,"sortBy":"name"}`))
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
@@ -223,21 +223,21 @@ func TestCron_AddValid(t *testing.T) {
 		`{"name":"daily-check","schedule":{"kind":"cron","expr":"0 9 * * *"},"sessionTarget":"main","wakeMode":"now","payload":{"kind":"systemEvent","text":"check"}}`)
 	testutil.NoError(t, err)
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
 func TestCron_RemoveValid(t *testing.T) {
 	result := testutil.Must(ValidateParams("cron.remove", `{"id":"job-1"}`))
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
 func TestCron_RemoveWithJobId(t *testing.T) {
 	result := testutil.Must(ValidateParams("cron.remove", `{"jobId":"job-1"}`))
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
@@ -253,28 +253,28 @@ func TestCron_SessionTargetCustom(t *testing.T) {
 		`{"name":"t","schedule":{"kind":"at","at":"2024-01-01"},"sessionTarget":"session:my-key","wakeMode":"now","payload":{"kind":"systemEvent","text":"t"}}`)
 	testutil.NoError(t, err)
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
 func TestConfig_GetValid(t *testing.T) {
 	result := testutil.Must(ValidateParams("config.get", `{}`))
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
 func TestConfig_SetValid(t *testing.T) {
 	result := testutil.Must(ValidateParams("config.set", `{"raw":"yaml content"}`))
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
 func TestConfig_SchemaLookupValid(t *testing.T) {
 	result := testutil.Must(ValidateParams("config.schema.lookup", `{"path":"gateway.port"}`))
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
@@ -287,7 +287,7 @@ func TestLogsTail_LimitTooHigh(t *testing.T) {
 		}
 	}
 	if !hasMax {
-		t.Fatalf("expected maximum error, got %v", result.Errors)
+		t.Fatalf("got %v, want maximum error", result.Errors)
 	}
 }
 
@@ -296,7 +296,7 @@ func TestChatSend_Valid(t *testing.T) {
 		`{"sessionKey":"sk","message":"hi","idempotencyKey":"idk1"}`)
 	testutil.NoError(t, err)
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
@@ -305,35 +305,35 @@ func TestChatInject_Valid(t *testing.T) {
 		`{"sessionKey":"sk","message":"injected"}`)
 	testutil.NoError(t, err)
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
 func TestChannels_StatusValid(t *testing.T) {
 	result := testutil.Must(ValidateParams("telegram.status", `{"probe":true,"timeoutMs":5000}`))
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
 func TestAgents_CreateValid(t *testing.T) {
 	result := testutil.Must(ValidateParams("agents.create", `{"name":"bot","workspace":"/home/bot"}`))
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
 func TestSkills_InstallValid(t *testing.T) {
 	result := testutil.Must(ValidateParams("skills.install", `{"name":"weather","installId":"i1"}`))
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
 func TestExec_ResolveValid(t *testing.T) {
 	result := testutil.Must(ValidateParams("exec.approval.resolve", `{"id":"req-1","decision":"allow"}`))
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
@@ -342,7 +342,7 @@ func TestSecrets_ResolveValid(t *testing.T) {
 		`{"commandName":"cmd","targetIds":["a","b"]}`)
 	testutil.NoError(t, err)
 	if !result.Valid {
-		t.Fatalf("expected valid, got %v", result.Errors)
+		t.Fatalf("got %v, want valid", result.Errors)
 	}
 }
 
@@ -352,7 +352,7 @@ func TestSecrets_ResolveMissing(t *testing.T) {
 		t.Fatal("expected invalid")
 	}
 	if len(result.Errors) < 2 {
-		t.Fatalf("expected at least 2 errors, got %d", len(result.Errors))
+		t.Fatalf("got %d, want at least 2 errors", len(result.Errors))
 	}
 }
 

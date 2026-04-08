@@ -36,13 +36,13 @@ func TestWriter_EnsureSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	if header.Type != "session" {
-		t.Errorf("expected type=session, got %q", header.Type)
+		t.Errorf("got %q, want type=session", header.Type)
 	}
 	if header.Version != 1 {
-		t.Errorf("expected version=1, got %d", header.Version)
+		t.Errorf("got %d, want version=1", header.Version)
 	}
 	if header.ID != "test-session" {
-		t.Errorf("expected id=test-session, got %q", header.ID)
+		t.Errorf("got %q, want id=test-session", header.ID)
 	}
 
 	// Idempotent: calling again should not error or duplicate.
@@ -78,7 +78,7 @@ func TestWriter_AppendMessage(t *testing.T) {
 
 	// 1 header + 2 messages = 3 lines
 	if len(lines) != 3 {
-		t.Errorf("expected 3 lines, got %d", len(lines))
+		t.Errorf("got %d, want 3 lines", len(lines))
 	}
 
 	// Verify messages are valid JSON.
@@ -127,7 +127,7 @@ func TestWriter_AppendStructured(t *testing.T) {
 	path, _ := w.SessionPath("sess2")
 	lines := readLines(t, path)
 	if len(lines) != 2 { // header + 1 message
-		t.Errorf("expected 2 lines, got %d", len(lines))
+		t.Errorf("got %d, want 2 lines", len(lines))
 	}
 }
 
@@ -148,7 +148,7 @@ func TestWriter_SessionPath(t *testing.T) {
 	path := testutil.Must(w.SessionPath("my-key"))
 	expected := filepath.Join("/base/dir", "my-key.jsonl")
 	if path != expected {
-		t.Errorf("expected %q, got %q", expected, path)
+		t.Errorf("got %q, want %q", path, expected)
 	}
 }
 

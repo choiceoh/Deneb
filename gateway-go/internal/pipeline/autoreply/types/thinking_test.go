@@ -280,42 +280,42 @@ func TestListThinkingLevelLabels(t *testing.T) {
 	// Binary provider.
 	labels := ListThinkingLevelLabels("z.ai")
 	if len(labels) != 2 {
-		t.Fatalf("expected 2 labels for binary provider, got %d", len(labels))
+		t.Fatalf("got %d, want 2 labels for binary provider", len(labels))
 	}
 	if labels[0] != "off" || labels[1] != "on" {
-		t.Errorf("expected [off, on], got %v", labels)
+		t.Errorf("got %v, want [off, on]", labels)
 	}
 
 	// Normal provider.
 	labels = ListThinkingLevelLabels("openai")
 	if len(labels) != 6 {
-		t.Fatalf("expected 6 labels for normal provider, got %d", len(labels))
+		t.Fatalf("got %d, want 6 labels for normal provider", len(labels))
 	}
 }
 
 func TestFormatThinkingLevels(t *testing.T) {
 	got := FormatThinkingLevels("z.ai", ", ")
 	if got != "off, on" {
-		t.Errorf("expected 'off, on', got %q", got)
+		t.Errorf("got %q, want 'off, on'", got)
 	}
 
 	// Default separator.
 	got = FormatThinkingLevels("z.ai", "")
 	if got != "off, on" {
-		t.Errorf("expected 'off, on' with default separator, got %q", got)
+		t.Errorf("got %q, want 'off, on' with default separator", got)
 	}
 
 	// Custom separator.
 	got = FormatThinkingLevels("z.ai", " | ")
 	if got != "off | on" {
-		t.Errorf("expected 'off | on', got %q", got)
+		t.Errorf("got %q, want 'off | on'", got)
 	}
 }
 
 func TestBaseThinkingLevels(t *testing.T) {
 	levels := BaseThinkingLevels()
 	if len(levels) != 6 {
-		t.Fatalf("expected 6 base thinking levels, got %d", len(levels))
+		t.Fatalf("got %d, want 6 base thinking levels", len(levels))
 	}
 	// Should not include xhigh.
 	for _, l := range levels {

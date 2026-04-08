@@ -92,7 +92,7 @@ func TestOptimize_WithinBudget(t *testing.T) {
 
 	result := budget.Optimize(fragments)
 	if len(result) != 3 {
-		t.Fatalf("expected 3 fragments, got %d", len(result))
+		t.Fatalf("got %d, want 3 fragments", len(result))
 	}
 	// Content should be unchanged.
 	for i, f := range result {
@@ -114,7 +114,7 @@ func TestOptimize_RemovePriority3(t *testing.T) {
 
 	result := budget.Optimize(fragments)
 	if len(result) != 2 {
-		t.Fatalf("expected 2 fragments, got %d", len(result))
+		t.Fatalf("got %d, want 2 fragments", len(result))
 	}
 	for _, f := range result {
 		if f.Name == "low_priority" {
@@ -136,7 +136,7 @@ func TestOptimize_ShrinkPriority2(t *testing.T) {
 	result := budget.Optimize(fragments)
 	// proactive_hints removed, memory shrunk.
 	if len(result) != 2 {
-		t.Fatalf("expected 2 fragments, got %d", len(result))
+		t.Fatalf("got %d, want 2 fragments", len(result))
 	}
 	for _, f := range result {
 		if f.Name == "memory" {
@@ -162,10 +162,10 @@ func TestOptimize_RemovePriority2(t *testing.T) {
 
 	result := budget.Optimize(fragments)
 	if len(result) != 1 {
-		t.Fatalf("expected 1 fragment, got %d", len(result))
+		t.Fatalf("got %d, want 1 fragment", len(result))
 	}
 	if result[0].Name != "soul" {
-		t.Errorf("expected soul to survive, got %s", result[0].Name)
+		t.Errorf("got %s, want soul to survive", result[0].Name)
 	}
 }
 
@@ -178,7 +178,7 @@ func TestOptimize_Priority0NeverRemoved(t *testing.T) {
 
 	result := budget.Optimize(fragments)
 	if len(result) != 1 {
-		t.Fatalf("expected 1 fragment, got %d", len(result))
+		t.Fatalf("got %d, want 1 fragment", len(result))
 	}
 	if result[0].Content != fragments[0].Content {
 		t.Error("priority 0 content should never be modified")
@@ -193,7 +193,7 @@ func TestOptimize_Priority1NeverRemoved(t *testing.T) {
 
 	result := budget.Optimize(fragments)
 	if len(result) != 1 {
-		t.Fatalf("expected 1 fragment, got %d", len(result))
+		t.Fatalf("got %d, want 1 fragment", len(result))
 	}
 }
 
@@ -201,7 +201,7 @@ func TestOptimize_EmptyInput(t *testing.T) {
 	budget := PromptBudget{Total: 1000}
 	result := budget.Optimize(nil)
 	if result != nil {
-		t.Errorf("expected nil, got %v", result)
+		t.Errorf("got %v, want nil", result)
 	}
 }
 
@@ -213,7 +213,7 @@ func TestOptimize_ZeroBudget(t *testing.T) {
 	// Zero budget returns fragments unchanged (no optimization attempted).
 	result := budget.Optimize(fragments)
 	if len(result) != 1 {
-		t.Fatalf("expected 1 fragment, got %d", len(result))
+		t.Fatalf("got %d, want 1 fragment", len(result))
 	}
 }
 

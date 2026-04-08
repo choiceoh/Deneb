@@ -19,7 +19,7 @@ func TestAuthorizeRequiresAuth(t *testing.T) {
 		t.Fatal("non-public method should require auth")
 	}
 	if err.Code != protocol.ErrUnauthorized {
-		t.Errorf("expected UNAUTHORIZED, got %q", err.Code)
+		t.Errorf("got %q, want UNAUTHORIZED", err.Code)
 	}
 }
 
@@ -43,7 +43,7 @@ func TestAuthorizeProbeBlocked(t *testing.T) {
 		t.Fatal("probe should not access non-public methods")
 	}
 	if err.Code != protocol.ErrForbidden {
-		t.Errorf("expected FORBIDDEN, got %q", err.Code)
+		t.Errorf("got %q, want FORBIDDEN", err.Code)
 	}
 }
 

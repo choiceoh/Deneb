@@ -52,7 +52,7 @@ func TestService_OnEvent_multipleListeners(t *testing.T) {
 	s.OnEvent(func(CycleEvent) { count++ })
 	s.emit(CycleEvent{Type: "test"})
 	if count != 2 {
-		t.Errorf("expected 2 listeners called, got %d", count)
+		t.Errorf("got %d, want 2 listeners called", count)
 	}
 }
 

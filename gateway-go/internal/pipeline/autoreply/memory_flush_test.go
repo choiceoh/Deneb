@@ -15,10 +15,10 @@ func TestResolveMemoryFlushSettings_defaults(t *testing.T) {
 		t.Error("expected enabled=true")
 	}
 	if s.SoftThresholdTokens != DefaultMemoryFlushSoftTokens {
-		t.Errorf("expected softTokens=%d, got %d", DefaultMemoryFlushSoftTokens, s.SoftThresholdTokens)
+		t.Errorf("got %d, want softTokens=%d", s.SoftThresholdTokens, DefaultMemoryFlushSoftTokens)
 	}
 	if s.ForceFlushTranscriptBytes != DefaultMemoryFlushForceTranscriptBytes {
-		t.Errorf("expected forceBytes=%d, got %d", DefaultMemoryFlushForceTranscriptBytes, s.ForceFlushTranscriptBytes)
+		t.Errorf("got %d, want forceBytes=%d", s.ForceFlushTranscriptBytes, DefaultMemoryFlushForceTranscriptBytes)
 	}
 	if !strings.Contains(s.Prompt, "Pre-compaction memory flush") {
 		t.Error("expected default prompt")
@@ -37,7 +37,7 @@ func TestResolveMemoryFlushSettings_custom(t *testing.T) {
 		Prompt:              "Custom flush prompt.",
 	})
 	if s.SoftThresholdTokens != 8000 {
-		t.Errorf("expected softTokens=8000, got %d", s.SoftThresholdTokens)
+		t.Errorf("got %d, want softTokens=8000", s.SoftThresholdTokens)
 	}
 	if !strings.Contains(s.Prompt, "Custom flush prompt") {
 		t.Error("expected custom prompt content")
@@ -53,7 +53,7 @@ func TestResolveMemoryFlushRelativePath(t *testing.T) {
 	nowMs := int64(1705276800000)
 	path := ResolveMemoryFlushRelativePath(nowMs, "UTC")
 	if path != "memory/2024-01-15.md" {
-		t.Errorf("expected memory/2024-01-15.md, got %s", path)
+		t.Errorf("got %s, want memory/2024-01-15.md", path)
 	}
 }
 

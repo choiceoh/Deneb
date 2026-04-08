@@ -13,7 +13,7 @@ func TestNewRunner(t *testing.T) {
 		t.Fatal("expected non-nil runner")
 	}
 	if r.denebDir != "/tmp/deneb-test-maintenance" {
-		t.Fatalf("expected denebDir to be set, got %q", r.denebDir)
+		t.Fatalf("got %q, want denebDir to be set", r.denebDir)
 	}
 }
 
@@ -60,7 +60,7 @@ func TestRunCleansOldSessions(t *testing.T) {
 	report := r.Run(false)
 
 	if len(report.Sessions) != 1 {
-		t.Fatalf("expected 1 cleaned session, got %d", len(report.Sessions))
+		t.Fatalf("got %d, want 1 cleaned session", len(report.Sessions))
 	}
 	if !report.Sessions[0].Removed {
 		t.Fatal("expected old session to be removed")
@@ -96,7 +96,7 @@ func TestRunCleansOldLogs(t *testing.T) {
 	report := r.Run(false)
 
 	if len(report.Logs) != 1 {
-		t.Fatalf("expected 1 cleaned log, got %d", len(report.Logs))
+		t.Fatalf("got %d, want 1 cleaned log", len(report.Logs))
 	}
 }
 
@@ -120,7 +120,7 @@ func TestDryRunDoesNotRemoveFiles(t *testing.T) {
 	report := r.Run(true)
 
 	if len(report.Sessions) != 1 {
-		t.Fatalf("expected 1 session in report, got %d", len(report.Sessions))
+		t.Fatalf("got %d, want 1 session in report", len(report.Sessions))
 	}
 
 	// File should still exist.
@@ -162,10 +162,10 @@ func TestSummarizeReport(t *testing.T) {
 		t.Fatal("expected non-nil summary")
 	}
 	if summary.SessionsCleaned != 1 {
-		t.Fatalf("expected 1 session cleaned, got %d", summary.SessionsCleaned)
+		t.Fatalf("got %d, want 1 session cleaned", summary.SessionsCleaned)
 	}
 	if summary.LogsCleaned != 0 {
-		t.Fatalf("expected 0 logs cleaned, got %d", summary.LogsCleaned)
+		t.Fatalf("got %d, want 0 logs cleaned", summary.LogsCleaned)
 	}
 }
 
@@ -215,6 +215,6 @@ func TestLogSizeBudgetCleanup(t *testing.T) {
 
 	// Should have removed the oldest file (a.log) to bring total under 50 MB.
 	if len(files) < 1 {
-		t.Fatalf("expected at least 1 file cleaned, got %d", len(files))
+		t.Fatalf("got %d, want at least 1 file cleaned", len(files))
 	}
 }

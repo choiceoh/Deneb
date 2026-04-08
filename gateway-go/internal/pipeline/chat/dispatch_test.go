@@ -37,7 +37,7 @@ func TestSanitizeInput_stripsControlChars(t *testing.T) {
 	got := sanitizeInput(input)
 	// \x00 and \x01 are control chars and should be stripped.
 	if got == want {
-		t.Errorf("expected control chars to be stripped, got %q", got)
+		t.Errorf("got %q, want control chars to be stripped", got)
 	}
 	if got != "helloworld!" {
 		t.Errorf("got %q, want %q", got, "helloworld!")
@@ -120,7 +120,7 @@ func TestPendingQueue_enqueueAndDrain(t *testing.T) {
 
 	// Initially no pending.
 	if got := h.drainPending(key); got != nil {
-		t.Fatalf("expected nil drain, got %+v", got)
+		t.Fatalf("got %+v, want nil drain", got)
 	}
 
 	// Enqueue a message.
@@ -316,7 +316,7 @@ func TestBudgetHistory_keepsRecentMessages(t *testing.T) {
 	}
 	// Should have fewer messages than original due to budget.
 	if len(result.Messages) >= 20 {
-		t.Errorf("expected messages to be truncated, got %d", len(result.Messages))
+		t.Errorf("got %d, want messages to be truncated", len(result.Messages))
 	}
 	if len(result.Messages) == 0 {
 		t.Error("expected at least some messages")

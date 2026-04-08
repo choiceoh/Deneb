@@ -35,10 +35,10 @@ func TestNotifyQueue_SingleItem(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if len(flushed) != 1 {
-		t.Fatalf("expected 1 item, got %d", len(flushed))
+		t.Fatalf("got %d, want 1 item", len(flushed))
 	}
 	if flushed[0].label != "worker-1" {
-		t.Errorf("expected label worker-1, got %s", flushed[0].label)
+		t.Errorf("got %s, want label worker-1", flushed[0].label)
 	}
 }
 
@@ -71,7 +71,7 @@ func TestNotifyQueue_Batching(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if len(flushed) != 3 {
-		t.Fatalf("expected 3 items batched, got %d", len(flushed))
+		t.Fatalf("got %d, want 3 items batched", len(flushed))
 	}
 }
 
@@ -113,7 +113,7 @@ func TestNotifyQueue_DebounceResets(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if flushCount != 1 {
-		t.Errorf("expected 1 flush (debounced), got %d", flushCount)
+		t.Errorf("got %d, want 1 flush (debounced)", flushCount)
 	}
 }
 
@@ -217,6 +217,6 @@ func TestDeferredSubagentNotifications_Drain(t *testing.T) {
 	// Channel empty — should return empty.
 	result = fn()
 	if result != "" {
-		t.Errorf("expected empty when channel drained, got %q", result)
+		t.Errorf("got %q, want empty when channel drained", result)
 	}
 }

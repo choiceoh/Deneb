@@ -16,10 +16,10 @@ func TestInstallAndGetStatus(t *testing.T) {
 
 	status := m.Status("")
 	if len(status.Skills) != 1 {
-		t.Fatalf("expected 1 skill, got %d", len(status.Skills))
+		t.Fatalf("got %d, want 1 skill", len(status.Skills))
 	}
 	if status.Skills[0].Key != "weather" {
-		t.Fatalf("expected key 'weather', got %q", status.Skills[0].Key)
+		t.Fatalf("got %q, want key 'weather'", status.Skills[0].Key)
 	}
 	if !status.Skills[0].Installed {
 		t.Fatal("expected installed=true")
@@ -66,7 +66,7 @@ func TestListBins(t *testing.T) {
 	m.SetBins([]string{"ffmpeg", "yt-dlp"})
 	bins := m.ListBins()
 	if len(bins) != 2 {
-		t.Fatalf("expected 2 bins, got %d", len(bins))
+		t.Fatalf("got %d, want 2 bins", len(bins))
 	}
 }
 
@@ -76,6 +76,6 @@ func TestRegisterSkill(t *testing.T) {
 
 	status := m.Status("")
 	if len(status.Skills) != 1 {
-		t.Fatalf("expected 1 skill, got %d", len(status.Skills))
+		t.Fatalf("got %d, want 1 skill", len(status.Skills))
 	}
 }

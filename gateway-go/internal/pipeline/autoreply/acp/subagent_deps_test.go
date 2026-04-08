@@ -112,7 +112,7 @@ func TestSubagentCommandDeps_ListSubagents(t *testing.T) {
 	// No agents.
 	result := deps.ListSubagents("")
 	if result != "No active subagents." {
-		t.Errorf("expected 'No active subagents.', got %q", result)
+		t.Errorf("got %q, want 'No active subagents.'", result)
 	}
 
 	// Add some agents.

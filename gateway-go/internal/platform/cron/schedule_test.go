@@ -48,7 +48,7 @@ func TestComputeNextRunAtMs_AtPast(t *testing.T) {
 
 	next := ComputeNextRunAtMs(schedule, time.Now().UnixMilli())
 	if next != 0 {
-		t.Errorf("expected 0 for past 'at' schedule, got %d", next)
+		t.Errorf("got %d, want 0 for past 'at' schedule", next)
 	}
 }
 
@@ -179,7 +179,7 @@ func TestCronNamedDays(t *testing.T) {
 	// Verify it's actually a Monday.
 	nextTime := time.UnixMilli(next)
 	if nextTime.Weekday() != time.Monday {
-		t.Errorf("expected Monday, got %s", nextTime.Weekday())
+		t.Errorf("got %s, want Monday", nextTime.Weekday())
 	}
 }
 
@@ -194,7 +194,7 @@ func TestCronNamedRange(t *testing.T) {
 	nextTime := time.UnixMilli(next)
 	dow := nextTime.Weekday()
 	if dow == time.Saturday || dow == time.Sunday {
-		t.Errorf("expected weekday, got %s", dow)
+		t.Errorf("got %s, want weekday", dow)
 	}
 }
 

@@ -14,12 +14,12 @@ func TestCreateAndListAgents(t *testing.T) {
 		t.Fatal("expected non-empty agentId")
 	}
 	if a.Name != "Test Agent" {
-		t.Fatalf("expected 'Test Agent', got %q", a.Name)
+		t.Fatalf("got %q, want 'Test Agent'", a.Name)
 	}
 
 	agents := s.List()
 	if len(agents) != 1 {
-		t.Fatalf("expected 1 agent, got %d", len(agents))
+		t.Fatalf("got %d, want 1 agent", len(agents))
 	}
 }
 
@@ -27,7 +27,7 @@ func TestCreateWithCustomID(t *testing.T) {
 	s := NewStore()
 	a := s.Create(CreateParams{AgentID: "my-agent", Name: "Custom"})
 	if a.AgentID != "my-agent" {
-		t.Fatalf("expected 'my-agent', got %q", a.AgentID)
+		t.Fatalf("got %q, want 'my-agent'", a.AgentID)
 	}
 }
 
@@ -37,10 +37,10 @@ func TestGetAgent(t *testing.T) {
 
 	got := s.Get(created.AgentID)
 	if got == nil {
-		t.Fatal("expected agent, got nil")
+		t.Fatal("got nil, want agent")
 	}
 	if got.Name != "Finder" {
-		t.Fatalf("expected 'Finder', got %q", got.Name)
+		t.Fatalf("got %q, want 'Finder'", got.Name)
 	}
 
 	if s.Get("nonexistent") != nil {
@@ -58,10 +58,10 @@ func TestUpdateAgent(t *testing.T) {
 	})
 	testutil.NoError(t, err)
 	if updated.Name != "Updated" {
-		t.Fatalf("expected 'Updated', got %q", updated.Name)
+		t.Fatalf("got %q, want 'Updated'", updated.Name)
 	}
 	if updated.Model != "claude-3" {
-		t.Fatalf("expected 'claude-3', got %q", updated.Model)
+		t.Fatalf("got %q, want 'claude-3'", updated.Model)
 	}
 }
 
@@ -95,13 +95,13 @@ func TestFileOperations(t *testing.T) {
 	// Set file.
 	f := testutil.Must(s.SetFile(a.AgentID, "config.json", "eyJ0ZXN0IjogdHJ1ZX0="))
 	if f.Name != "config.json" {
-		t.Fatalf("expected 'config.json', got %q", f.Name)
+		t.Fatalf("got %q, want 'config.json'", f.Name)
 	}
 
 	// List files.
 	files := testutil.Must(s.ListFiles(a.AgentID))
 	if len(files) != 1 {
-		t.Fatalf("expected 1 file, got %d", len(files))
+		t.Fatalf("got %d, want 1 file", len(files))
 	}
 	// List should not include content.
 	if files[0].ContentBase64 != "" {

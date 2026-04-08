@@ -419,7 +419,7 @@ func windowedHistory(rows []ResultRow, windowSize int) string {
 	}
 
 	// Count discarded rows outside the window for the summary.
-	var outsideTotal, outsideKept int
+	var outsideTotal int
 	for i := range windowStart {
 		if rows[i].Iteration == 0 {
 			continue // baseline always shown
@@ -429,8 +429,6 @@ func windowedHistory(rows []ResultRow, windowSize int) string {
 		}
 		outsideTotal++
 	}
-	outsideKept = 0 // all kept are shown individually
-
 	var sb strings.Builder
 
 	// Summary of older discarded iterations.
@@ -452,7 +450,6 @@ func windowedHistory(rows []ResultRow, windowSize int) string {
 	}
 
 	// Include all rows within the window.
-	_ = outsideKept
 	for i := windowStart; i < len(rows); i++ {
 		sb.WriteString(formatResultRow(rows[i]))
 	}

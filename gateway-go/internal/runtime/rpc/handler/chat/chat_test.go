@@ -26,7 +26,7 @@ func (m *mockBtwHandler) HandleBtw(_ context.Context, _, _ string) (string, erro
 func TestMethods_NilChat_ReturnsNil(t *testing.T) {
 	m := Methods(Deps{Chat: nil})
 	if m != nil {
-		t.Fatalf("expected nil, got %v", m)
+		t.Fatalf("got %v, want nil", m)
 	}
 }
 
@@ -63,7 +63,7 @@ func TestChatBtw_MissingQuestion(t *testing.T) {
 		t.Fatal("expected error for missing question")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
-		t.Fatalf("expected MISSING_PARAM, got %+v", resp.Error)
+		t.Fatalf("got %+v, want MISSING_PARAM", resp.Error)
 	}
 }
 
@@ -82,7 +82,7 @@ func TestChatBtw_MissingSessionKey(t *testing.T) {
 		t.Fatal("expected error for missing sessionKey")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
-		t.Fatalf("expected MISSING_PARAM, got %+v", resp.Error)
+		t.Fatalf("got %+v, want MISSING_PARAM", resp.Error)
 	}
 }
 
@@ -98,7 +98,7 @@ func TestChatBtw_MissingParams(t *testing.T) {
 		t.Fatal("expected error for missing params")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrInvalidRequest {
-		t.Fatalf("expected INVALID_REQUEST, got %+v", resp.Error)
+		t.Fatalf("got %+v, want INVALID_REQUEST", resp.Error)
 	}
 }
 
@@ -115,7 +115,7 @@ func TestChatBtw_NilChatHandler(t *testing.T) {
 		t.Fatal("expected error for nil chat handler")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrUnavailable {
-		t.Fatalf("expected UNAVAILABLE, got %+v", resp.Error)
+		t.Fatalf("got %+v, want UNAVAILABLE", resp.Error)
 	}
 }
 
@@ -131,7 +131,7 @@ func TestChatBtw_Success(t *testing.T) {
 	}
 	resp := handler(context.Background(), req)
 	if !resp.OK {
-		t.Fatalf("expected OK, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want OK", resp.Error)
 	}
 
 	var payload struct {
@@ -141,7 +141,7 @@ func TestChatBtw_Success(t *testing.T) {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 	if payload.Text != "the answer is 42" {
-		t.Fatalf("expected text='the answer is 42', got %q", payload.Text)
+		t.Fatalf("got %q, want text='the answer is 42'", payload.Text)
 	}
 }
 
@@ -160,7 +160,7 @@ func TestChatBtw_HandlerError(t *testing.T) {
 		t.Fatal("expected error from handler failure")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrDependencyFailed {
-		t.Fatalf("expected DEPENDENCY_FAILED, got %+v", resp.Error)
+		t.Fatalf("got %+v, want DEPENDENCY_FAILED", resp.Error)
 	}
 }
 
@@ -171,14 +171,14 @@ func TestChatBtw_BroadcasterCalledOnSuccess(t *testing.T) {
 		Broadcaster: func(event string, payload any) (int, []error) {
 			broadcasted = true
 			if event != "chat.side_result" {
-				t.Fatalf("expected event=chat.side_result, got %s", event)
+				t.Fatalf("got %s, want event=chat.side_result", event)
 			}
 			m, ok := payload.(map[string]any)
 			if !ok {
 				t.Fatal("expected map payload")
 			}
 			if m["kind"] != "btw" {
-				t.Fatalf("expected kind=btw, got %v", m["kind"])
+				t.Fatalf("got %v, want kind=btw", m["kind"])
 			}
 			return 1, nil
 		},

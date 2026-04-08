@@ -55,18 +55,18 @@ func TestSendTextHTMLFallbackAllChunks(t *testing.T) {
 	testutil.NoError(t, err)
 	numChunks := len(results)
 	if numChunks < 3 {
-		t.Fatalf("expected at least 3 results, got %d", numChunks)
+		t.Fatalf("got %d, want at least 3 results", numChunks)
 	}
 
 	// Only the first chunk should have tried HTML (then fallen back).
 	// All subsequent chunks should go straight to plain text.
 	if htmlCalls.Load() != 1 {
-		t.Errorf("expected 1 HTML attempt (first chunk only), got %d", htmlCalls.Load())
+		t.Errorf("got %d, want 1 HTML attempt (first chunk only)", htmlCalls.Load())
 	}
 	// Total calls: 1 HTML fail + N plain text successes = N+1.
 	expectedCalls := int32(numChunks + 1)
 	if callCount.Load() != expectedCalls {
-		t.Errorf("expected %d total API calls, got %d", expectedCalls, callCount.Load())
+		t.Errorf("got %d, want %d total API calls", callCount.Load(), expectedCalls)
 	}
 }
 
@@ -87,7 +87,7 @@ func TestSendTextHTMLFallbackOnlyOnParseError(t *testing.T) {
 		ParseMode: "HTML",
 	})
 	if err == nil {
-		t.Fatal("expected error for forbidden, got nil")
+		t.Fatal("got nil, want error for forbidden")
 	}
 	// Should contain the original error, not a fallback attempt.
 	if !strings.Contains(err.Error(), "chunk 0") {
@@ -112,10 +112,10 @@ func TestSendTextNoFallbackWithoutHTML(t *testing.T) {
 
 	_, err := SendText(context.Background(), c, 123, "hello", SendOptions{})
 	if err == nil {
-		t.Fatal("expected error, got nil")
+		t.Fatal("got nil, want error")
 	}
 	if callCount.Load() != 1 {
-		t.Errorf("expected exactly 1 call (no fallback), got %d", callCount.Load())
+		t.Errorf("got %d, want exactly 1 call (no fallback)", callCount.Load())
 	}
 }
 
@@ -160,7 +160,7 @@ func TestUploadPooledBuffer(t *testing.T) {
 	c, srv := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		ct := r.Header.Get("Content-Type")
 		if !strings.Contains(ct, "multipart/form-data") {
-			t.Errorf("expected multipart content type, got %s", ct)
+			t.Errorf("got %s, want multipart content type", ct)
 		}
 		resp := APIResponse{
 			OK:     true,

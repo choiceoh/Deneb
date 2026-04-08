@@ -319,7 +319,7 @@ func TestSanitizeHTML_NoSpecialChars(t *testing.T) {
 	input := "plain text with no special characters"
 	got := SanitizeHTML(input)
 	if got != input {
-		t.Errorf("expected no-op for plain text, got %q", got)
+		t.Errorf("got %q, want no-op for plain text", got)
 	}
 }
 

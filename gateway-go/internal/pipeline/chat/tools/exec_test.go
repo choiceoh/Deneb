@@ -68,7 +68,7 @@ func TestTruncateForLLM(t *testing.T) {
 		s := string(make([]rune, maxOutputRunes))
 		got := TruncateForLLM(s)
 		if len([]rune(got)) != maxOutputRunes {
-			t.Errorf("expected %d runes, got %d", maxOutputRunes, len([]rune(got)))
+			t.Errorf("got %d, want %d runes", len([]rune(got)), maxOutputRunes)
 		}
 	})
 

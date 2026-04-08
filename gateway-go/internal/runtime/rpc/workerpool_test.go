@@ -33,7 +33,7 @@ func TestWorkerPoolConcurrencyLimit(t *testing.T) {
 	wg.Wait()
 
 	if got := maxConcurrent.Load(); got > 2 {
-		t.Errorf("expected max concurrency ≤2, got %d", got)
+		t.Errorf("got %d, want max concurrency ≤2", got)
 	}
 }
 
@@ -53,13 +53,13 @@ func TestWorkerPoolStats(t *testing.T) {
 
 	stats := pool.Stats()
 	if stats.Done != 3 {
-		t.Errorf("expected 3 done, got %d", stats.Done)
+		t.Errorf("got %d, want 3 done", stats.Done)
 	}
 	if stats.MaxSize != 4 {
-		t.Errorf("expected max size 4, got %d", stats.MaxSize)
+		t.Errorf("got %d, want max size 4", stats.MaxSize)
 	}
 	if stats.Active != 0 {
-		t.Errorf("expected 0 active after completion, got %d", stats.Active)
+		t.Errorf("got %d, want 0 active after completion", stats.Active)
 	}
 }
 

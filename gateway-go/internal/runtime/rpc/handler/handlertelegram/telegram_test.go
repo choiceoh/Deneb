@@ -60,7 +60,7 @@ func TestMessagingPoll_nilPlugin(t *testing.T) {
 	handlers := MessagingMethods(MessagingDeps{})
 	resp := handlers["poll"](context.Background(), &protocol.RequestFrame{ID: "test-1"})
 	if !resp.OK {
-		t.Fatalf("expected OK response, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want OK response", resp.Error)
 	}
 	var payload struct {
 		Messages []any `json:"messages"`
@@ -70,10 +70,10 @@ func TestMessagingPoll_nilPlugin(t *testing.T) {
 		t.Fatalf("failed to unmarshal payload: %v", err)
 	}
 	if payload.Count != 0 {
-		t.Errorf("expected count 0, got %d", payload.Count)
+		t.Errorf("got %d, want count 0", payload.Count)
 	}
 	if len(payload.Messages) != 0 {
-		t.Errorf("expected empty messages, got %d", len(payload.Messages))
+		t.Errorf("got %d, want empty messages", len(payload.Messages))
 	}
 }
 

@@ -51,10 +51,10 @@ func TestSendMessage(t *testing.T) {
 		var req map[string]any
 		json.NewDecoder(r.Body).Decode(&req)
 		if req["chat_id"].(float64) != 456 {
-			t.Errorf("expected chat_id 456, got %v", req["chat_id"])
+			t.Errorf("got %v, want chat_id 456", req["chat_id"])
 		}
 		if req["text"] != "hello" {
-			t.Errorf("expected text 'hello', got %v", req["text"])
+			t.Errorf("got %v, want text 'hello'", req["text"])
 		}
 
 		resp := APIResponse{
@@ -74,7 +74,7 @@ func TestSendMessage(t *testing.T) {
 	var msg Message
 	json.Unmarshal(result, &msg)
 	if msg.MessageID != 1 {
-		t.Errorf("expected message_id 1, got %d", msg.MessageID)
+		t.Errorf("got %d, want message_id 1", msg.MessageID)
 	}
 }
 
@@ -95,15 +95,15 @@ func TestAPIError(t *testing.T) {
 		"text":    "test",
 	})
 	if err == nil {
-		t.Fatal("expected error, got nil")
+		t.Fatal("got nil, want error")
 	}
 
 	apiErr, ok := err.(*httpretry.APIError)
 	if !ok {
-		t.Fatalf("expected *httpretry.APIError, got %T", err)
+		t.Fatalf("got %T, want *httpretry.APIError", err)
 	}
 	if apiErr.StatusCode != 400 {
-		t.Errorf("expected StatusCode 400, got %d", apiErr.StatusCode)
+		t.Errorf("got %d, want StatusCode 400", apiErr.StatusCode)
 	}
 	if !isParseError(apiErr) {
 		t.Error("expected isParseError to be true")
@@ -129,13 +129,13 @@ func TestRateLimitError(t *testing.T) {
 	})
 	apiErr, ok := err.(*httpretry.APIError)
 	if !ok {
-		t.Fatalf("expected *httpretry.APIError, got %T", err)
+		t.Fatalf("got %T, want *httpretry.APIError", err)
 	}
 	if !apiErr.IsRateLimited() {
 		t.Error("expected IsRateLimited to be true")
 	}
 	if apiErr.RetryAfter != 5*time.Second {
-		t.Errorf("expected RetryAfter 5s, got %v", apiErr.RetryAfter)
+		t.Errorf("got %v, want RetryAfter 5s", apiErr.RetryAfter)
 	}
 }
 
@@ -154,13 +154,13 @@ func TestGetUpdates(t *testing.T) {
 
 	updates := testutil.Must(c.GetUpdates(context.Background(), 100, 1))
 	if len(updates) != 2 {
-		t.Fatalf("expected 2 updates, got %d", len(updates))
+		t.Fatalf("got %d, want 2 updates", len(updates))
 	}
 	if updates[0].Message.Text != "hi" {
-		t.Errorf("expected first message 'hi', got %q", updates[0].Message.Text)
+		t.Errorf("got %q, want first message 'hi'", updates[0].Message.Text)
 	}
 	if updates[1].UpdateID != 101 {
-		t.Errorf("expected update_id 101, got %d", updates[1].UpdateID)
+		t.Errorf("got %d, want update_id 101", updates[1].UpdateID)
 	}
 }
 

@@ -23,7 +23,7 @@ func TestDispatchRegisteredMethod(t *testing.T) {
 	resp := d.Dispatch(context.Background(), req)
 
 	if !resp.OK {
-		t.Errorf("expected OK response, got error: %+v", resp.Error)
+		t.Errorf("got error: %+v, want OK response", resp.Error)
 	}
 }
 
@@ -70,7 +70,7 @@ func TestDispatchTimeoutReturnsAgentTimeout(t *testing.T) {
 		t.Fatal("expected timeout error response")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrAgentTimeout {
-		t.Fatalf("expected AGENT_TIMEOUT, got %+v", resp.Error)
+		t.Fatalf("got %+v, want AGENT_TIMEOUT", resp.Error)
 	}
 }
 
@@ -90,7 +90,7 @@ func TestDispatchCanceledContextReturnsAgentTimeout(t *testing.T) {
 		t.Fatal("expected timeout error response for canceled context")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrAgentTimeout {
-		t.Fatalf("expected AGENT_TIMEOUT, got %+v", resp.Error)
+		t.Fatalf("got %+v, want AGENT_TIMEOUT", resp.Error)
 	}
 }
 
@@ -105,7 +105,7 @@ func TestMethods(t *testing.T) {
 
 	methods := d.Methods()
 	if len(methods) != 2 {
-		t.Errorf("expected 2 methods, got %d", len(methods))
+		t.Errorf("got %d, want 2 methods", len(methods))
 	}
 }
 
@@ -164,7 +164,7 @@ func TestDispatchWithMiddleware(t *testing.T) {
 	req := &protocol.RequestFrame{ID: "mw-1", Method: "test.mw"}
 	resp := d.Dispatch(context.Background(), req)
 	if !resp.OK {
-		t.Fatalf("expected OK, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want OK", resp.Error)
 	}
 
 	// Wait for goroutine to complete and record all entries.
@@ -174,7 +174,7 @@ func TestDispatchWithMiddleware(t *testing.T) {
 	defer mu.Unlock()
 	want := []string{"mw1-before", "mw2-before", "handler", "mw2-after", "mw1-after"}
 	if len(order) != len(want) {
-		t.Fatalf("expected %d calls, got %d: %v", len(want), len(order), order)
+		t.Fatalf("got %d: %v, want %d calls", len(order), order, len(want))
 	}
 	for i, w := range want {
 		if order[i] != w {
@@ -219,7 +219,7 @@ func TestDispatchWithWorkerPool(t *testing.T) {
 	wg.Wait()
 
 	if got := maxConcurrent.Load(); got > 2 {
-		t.Errorf("expected max concurrency ≤2 with pool size 2, got %d", got)
+		t.Errorf("got %d, want max concurrency ≤2 with pool size 2", got)
 	}
 
 	// pool.done is incremented in the Submit defer AFTER the handler returns,
@@ -229,7 +229,7 @@ func TestDispatchWithWorkerPool(t *testing.T) {
 	for pool.Stats().Done != 6 {
 		select {
 		case <-deadline:
-			t.Fatalf("expected 6 done, got %d", pool.Stats().Done)
+			t.Fatalf("got %d, want 6 done", pool.Stats().Done)
 		default:
 			runtime.Gosched()
 		}

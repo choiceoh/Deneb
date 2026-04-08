@@ -88,7 +88,7 @@ func TestHooksHTTP_GetMethodReturns405(t *testing.T) {
 		t.Fatal("expected hooks path to be handled")
 	}
 	if w.Code != http.StatusMethodNotAllowed {
-		t.Errorf("expected 405, got %d", w.Code)
+		t.Errorf("got %d, want 405", w.Code)
 	}
 	if w.Header().Get("Allow") != "POST" {
 		t.Errorf("expected Allow: POST header")
@@ -107,7 +107,7 @@ func TestHooksHTTP_MissingTokenReturns401(t *testing.T) {
 		t.Fatal("expected hooks path to be handled")
 	}
 	if w.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401, got %d", w.Code)
+		t.Errorf("got %d, want 401", w.Code)
 	}
 }
 
@@ -124,7 +124,7 @@ func TestHooksHTTP_InvalidTokenReturns401(t *testing.T) {
 		t.Fatal("expected hooks path to be handled")
 	}
 	if w.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401, got %d", w.Code)
+		t.Errorf("got %d, want 401", w.Code)
 	}
 }
 
@@ -141,7 +141,7 @@ func TestHooksHTTP_XDenebTokenHeader(t *testing.T) {
 		t.Fatal("expected hooks path to be handled")
 	}
 	if w.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", w.Code)
+		t.Errorf("got %d, want 200", w.Code)
 	}
 }
 
@@ -157,7 +157,7 @@ func TestHooksHTTP_QueryParamTokenRejected(t *testing.T) {
 		t.Fatal("expected hooks path to be handled")
 	}
 	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", w.Code)
+		t.Errorf("got %d, want 400", w.Code)
 	}
 }
 
@@ -174,7 +174,7 @@ func TestHooksHTTP_RateLimitingReturns429(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.Handle(w, req)
 		if w.Code != http.StatusUnauthorized {
-			t.Fatalf("attempt %d: expected 401, got %d", i+1, w.Code)
+			t.Fatalf("attempt %d: got %d, want 401", i+1, w.Code)
 		}
 	}
 
@@ -185,7 +185,7 @@ func TestHooksHTTP_RateLimitingReturns429(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.Handle(w, req)
 	if w.Code != http.StatusTooManyRequests {
-		t.Errorf("expected 429, got %d", w.Code)
+		t.Errorf("got %d, want 429", w.Code)
 	}
 }
 
@@ -210,7 +210,7 @@ func TestHooksHTTP_RateLimitPerIP(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.Handle(w, req)
 	if w.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401 for different IP, got %d", w.Code)
+		t.Errorf("got %d, want 401 for different IP", w.Code)
 	}
 }
 
@@ -228,7 +228,7 @@ func TestHooksHTTP_WakeEndpoint(t *testing.T) {
 		t.Fatal("expected handled")
 	}
 	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
+		t.Fatalf("got %d, want 200", w.Code)
 	}
 
 	var resp map[string]any
@@ -239,16 +239,16 @@ func TestHooksHTTP_WakeEndpoint(t *testing.T) {
 		t.Error("expected ok=true")
 	}
 	if resp["mode"] != "now" {
-		t.Errorf("expected mode=now, got %v", resp["mode"])
+		t.Errorf("got %v, want mode=now", resp["mode"])
 	}
 
 	dispatchers.mu.Lock()
 	defer dispatchers.mu.Unlock()
 	if len(dispatchers.wakeEvents) != 1 {
-		t.Fatalf("expected 1 wake event, got %d", len(dispatchers.wakeEvents))
+		t.Fatalf("got %d, want 1 wake event", len(dispatchers.wakeEvents))
 	}
 	if dispatchers.wakeEvents[0].text != "hello world" {
-		t.Errorf("expected text 'hello world', got %q", dispatchers.wakeEvents[0].text)
+		t.Errorf("got %q, want text 'hello world'", dispatchers.wakeEvents[0].text)
 	}
 }
 
@@ -263,12 +263,12 @@ func TestHooksHTTP_WakeDefaultMode(t *testing.T) {
 
 	h.Handle(w, req)
 	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
+		t.Fatalf("got %d, want 200", w.Code)
 	}
 	var resp map[string]any
 	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp["mode"] != "now" {
-		t.Errorf("expected default mode=now, got %v", resp["mode"])
+		t.Errorf("got %v, want default mode=now", resp["mode"])
 	}
 }
 
@@ -283,7 +283,7 @@ func TestHooksHTTP_WakeInvalidMode(t *testing.T) {
 
 	h.Handle(w, req)
 	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", w.Code)
+		t.Errorf("got %d, want 400", w.Code)
 	}
 }
 
@@ -301,7 +301,7 @@ func TestHooksHTTP_AgentEndpoint(t *testing.T) {
 		t.Fatal("expected handled")
 	}
 	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
+		t.Fatalf("got %d, want 200", w.Code)
 	}
 
 	var resp map[string]any
@@ -319,10 +319,10 @@ func TestHooksHTTP_AgentEndpoint(t *testing.T) {
 	dispatchers.mu.Lock()
 	defer dispatchers.mu.Unlock()
 	if len(dispatchers.agentJobs) != 1 {
-		t.Fatalf("expected 1 agent job, got %d", len(dispatchers.agentJobs))
+		t.Fatalf("got %d, want 1 agent job", len(dispatchers.agentJobs))
 	}
 	if dispatchers.agentJobs[0].Message != "run task" {
-		t.Errorf("expected message 'run task', got %q", dispatchers.agentJobs[0].Message)
+		t.Errorf("got %q, want message 'run task'", dispatchers.agentJobs[0].Message)
 	}
 }
 
@@ -337,7 +337,7 @@ func TestHooksHTTP_AgentMissingMessage(t *testing.T) {
 
 	h.Handle(w, req)
 	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", w.Code)
+		t.Errorf("got %d, want 400", w.Code)
 	}
 }
 
@@ -353,7 +353,7 @@ func TestHooksHTTP_Idempotency(t *testing.T) {
 	w1 := httptest.NewRecorder()
 	h.Handle(w1, req1)
 	if w1.Code != http.StatusOK {
-		t.Fatalf("first request: expected 200, got %d", w1.Code)
+		t.Fatalf("first request: got %d, want 200", w1.Code)
 	}
 	var resp1 map[string]any
 	_ = json.NewDecoder(w1.Body).Decode(&resp1)
@@ -365,14 +365,14 @@ func TestHooksHTTP_Idempotency(t *testing.T) {
 	w2 := httptest.NewRecorder()
 	h.Handle(w2, req2)
 	if w2.Code != http.StatusOK {
-		t.Fatalf("second request: expected 200, got %d", w2.Code)
+		t.Fatalf("second request: got %d, want 200", w2.Code)
 	}
 	var resp2 map[string]any
 	_ = json.NewDecoder(w2.Body).Decode(&resp2)
 	runID2 := resp2["runId"].(string)
 
 	if runID1 != runID2 {
-		t.Errorf("expected same runId for idempotent request, got %q and %q", runID1, runID2)
+		t.Errorf("got %q and %q, want same runId for idempotent request", runID1, runID2)
 	}
 }
 
@@ -389,13 +389,13 @@ func TestHooksHTTP_SessionKeyRejectedWhenNotAllowed(t *testing.T) {
 
 	h.Handle(w, req)
 	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", w.Code)
+		t.Errorf("got %d, want 400", w.Code)
 	}
 	var resp map[string]any
 	_ = json.NewDecoder(w.Body).Decode(&resp)
 	errMsg, _ := resp["error"].(string)
 	if !strings.Contains(errMsg, "sessionKey") {
-		t.Errorf("expected error about sessionKey, got %q", errMsg)
+		t.Errorf("got %q, want error about sessionKey", errMsg)
 	}
 }
 
@@ -412,7 +412,7 @@ func TestHooksHTTP_SessionKeyAcceptedWhenAllowed(t *testing.T) {
 
 	h.Handle(w, req)
 	if w.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", w.Code)
+		t.Errorf("got %d, want 200", w.Code)
 	}
 	dispatchers.mu.Lock()
 	defer dispatchers.mu.Unlock()
@@ -420,7 +420,7 @@ func TestHooksHTTP_SessionKeyAcceptedWhenAllowed(t *testing.T) {
 		t.Fatal("expected 1 agent job")
 	}
 	if dispatchers.agentJobs[0].SessionKey != "custom-key" {
-		t.Errorf("expected sessionKey 'custom-key', got %q", dispatchers.agentJobs[0].SessionKey)
+		t.Errorf("got %q, want sessionKey 'custom-key'", dispatchers.agentJobs[0].SessionKey)
 	}
 }
 
@@ -437,7 +437,7 @@ func TestHooksHTTP_MaxBodySizeReturns413(t *testing.T) {
 
 	h.Handle(w, req)
 	if w.Code != http.StatusRequestEntityTooLarge {
-		t.Errorf("expected 413, got %d", w.Code)
+		t.Errorf("got %d, want 413", w.Code)
 	}
 }
 
@@ -451,7 +451,7 @@ func TestHooksHTTP_EmptySubpathReturns404(t *testing.T) {
 
 	h.Handle(w, req)
 	if w.Code != http.StatusNotFound {
-		t.Errorf("expected 404, got %d", w.Code)
+		t.Errorf("got %d, want 404", w.Code)
 	}
 }
 
@@ -465,7 +465,7 @@ func TestHooksHTTP_UnknownEndpointReturns404(t *testing.T) {
 
 	h.Handle(w, req)
 	if w.Code != http.StatusNotFound {
-		t.Errorf("expected 404, got %d", w.Code)
+		t.Errorf("got %d, want 404", w.Code)
 	}
 }
 
@@ -482,7 +482,7 @@ func TestHooksHTTP_AgentPolicyRejectsDisallowedAgent(t *testing.T) {
 
 	h.Handle(w, req)
 	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", w.Code)
+		t.Errorf("got %d, want 400", w.Code)
 	}
 }
 
@@ -499,7 +499,7 @@ func TestHooksHTTP_AgentPolicyAllowsDefaultAgent(t *testing.T) {
 
 	h.Handle(w, req)
 	if w.Code != http.StatusOK {
-		t.Errorf("expected 200 for default agent, got %d", w.Code)
+		t.Errorf("got %d, want 200 for default agent", w.Code)
 	}
 }
 
@@ -524,21 +524,21 @@ func TestHooksHTTP_CustomMappingWake(t *testing.T) {
 
 	h.Handle(w, req)
 	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
+		t.Fatalf("got %d, want 200", w.Code)
 	}
 	var resp map[string]any
 	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp["mode"] != "next-heartbeat" {
-		t.Errorf("expected mode=next-heartbeat, got %v", resp["mode"])
+		t.Errorf("got %v, want mode=next-heartbeat", resp["mode"])
 	}
 
 	dispatchers.mu.Lock()
 	defer dispatchers.mu.Unlock()
 	if len(dispatchers.wakeEvents) != 1 {
-		t.Fatalf("expected 1 wake event, got %d", len(dispatchers.wakeEvents))
+		t.Fatalf("got %d, want 1 wake event", len(dispatchers.wakeEvents))
 	}
 	if dispatchers.wakeEvents[0].text != "Push from deneb/deneb" {
-		t.Errorf("expected templated text, got %q", dispatchers.wakeEvents[0].text)
+		t.Errorf("got %q, want templated text", dispatchers.wakeEvents[0].text)
 	}
 }
 
@@ -563,16 +563,16 @@ func TestHooksHTTP_CustomMappingAgent(t *testing.T) {
 
 	h.Handle(w, req)
 	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
+		t.Fatalf("got %d, want 200", w.Code)
 	}
 
 	dispatchers.mu.Lock()
 	defer dispatchers.mu.Unlock()
 	if len(dispatchers.agentJobs) != 1 {
-		t.Fatalf("expected 1 agent job, got %d", len(dispatchers.agentJobs))
+		t.Fatalf("got %d, want 1 agent job", len(dispatchers.agentJobs))
 	}
 	if dispatchers.agentJobs[0].Message != "Deploy gateway" {
-		t.Errorf("expected 'Deploy gateway', got %q", dispatchers.agentJobs[0].Message)
+		t.Errorf("got %q, want 'Deploy gateway'", dispatchers.agentJobs[0].Message)
 	}
 }
 
@@ -591,7 +591,7 @@ func TestHooksHTTP_SessionKeyPrefixValidation(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.Handle(w, req)
 	if w.Code != http.StatusOK {
-		t.Errorf("expected 200 for allowed prefix, got %d", w.Code)
+		t.Errorf("got %d, want 200 for allowed prefix", w.Code)
 	}
 
 	// Disallowed prefix.
@@ -601,7 +601,7 @@ func TestHooksHTTP_SessionKeyPrefixValidation(t *testing.T) {
 	w2 := httptest.NewRecorder()
 	h.Handle(w2, req2)
 	if w2.Code != http.StatusBadRequest {
-		t.Errorf("expected 400 for disallowed prefix, got %d", w2.Code)
+		t.Errorf("got %d, want 400 for disallowed prefix", w2.Code)
 	}
 }
 
@@ -613,7 +613,7 @@ func TestHooksHTTP_ReplayCacheKeyGeneration(t *testing.T) {
 	// Empty idempotency key → empty cache key.
 	key := rc.buildKey("token", "scope", "")
 	if key != "" {
-		t.Errorf("expected empty key for empty idempotency, got %q", key)
+		t.Errorf("got %q, want empty key for empty idempotency", key)
 	}
 
 	// Non-empty produces a deterministic key.
@@ -652,11 +652,11 @@ func TestConstantTimeEqual(t *testing.T) {
 func TestGenerateUUID(t *testing.T) {
 	id := generateUUID()
 	if len(id) != 36 {
-		t.Errorf("expected 36-char UUID, got %d chars: %q", len(id), id)
+		t.Errorf("got %d chars: %q, want 36-char UUID", len(id), id)
 	}
 	parts := strings.Split(id, "-")
 	if len(parts) != 5 {
-		t.Errorf("expected 5 UUID segments, got %d", len(parts))
+		t.Errorf("got %d, want 5 UUID segments", len(parts))
 	}
 }
 
@@ -709,7 +709,7 @@ func TestHooksHTTP_SuccessfulAuthResetsRateLimit(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.Handle(w, req)
 	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
+		t.Fatalf("got %d, want 200", w.Code)
 	}
 
 	// After reset, failures should start from 0 again.
@@ -720,7 +720,7 @@ func TestHooksHTTP_SuccessfulAuthResetsRateLimit(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.Handle(w, req)
 		if w.Code != http.StatusUnauthorized {
-			t.Fatalf("attempt %d after reset: expected 401, got %d", i+1, w.Code)
+			t.Fatalf("attempt %d after reset: got %d, want 401", i+1, w.Code)
 		}
 	}
 }

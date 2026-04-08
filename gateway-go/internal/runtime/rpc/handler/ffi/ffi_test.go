@@ -39,17 +39,17 @@ func TestProtocolValidate_invalidFramePayload(t *testing.T) {
 	m := ProtocolMethods()
 	resp := callHandler(m, "protocol.validate", map[string]any{"frame": `{"type":"wat"}`})
 	if resp == nil || resp.Error != nil {
-		t.Fatalf("expected OK validation payload, got %+v", resp)
+		t.Fatalf("got %+v, want OK validation payload", resp)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(resp.Payload, &payload); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 	if payload["valid"] != false {
-		t.Fatalf("expected valid=false, got %v", payload["valid"])
+		t.Fatalf("got %v, want valid=false", payload["valid"])
 	}
 	if _, ok := payload["error"]; !ok {
-		t.Fatalf("expected error detail in payload, got %#v", payload)
+		t.Fatalf("got %#v, want error detail in payload", payload)
 	}
 }
 
@@ -60,14 +60,14 @@ func TestProtocolValidateParams_schemaValidationPath(t *testing.T) {
 		"params": `{"key":"abc"}`,
 	})
 	if resp == nil || resp.Error != nil {
-		t.Fatalf("expected success, got %+v", resp)
+		t.Fatalf("got %+v, want success", resp)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(resp.Payload, &payload); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 	if _, ok := payload["valid"]; !ok {
-		t.Fatalf("expected valid flag, got %#v", payload)
+		t.Fatalf("got %#v, want valid flag", payload)
 	}
 }
 
@@ -140,7 +140,7 @@ func TestSecurityValidateErrorCode_unknownCode(t *testing.T) {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 	if payload["valid"] != false {
-		t.Fatalf("expected valid=false for unknown code, got %v", payload["valid"])
+		t.Fatalf("got %v, want valid=false for unknown code", payload["valid"])
 	}
 }
 

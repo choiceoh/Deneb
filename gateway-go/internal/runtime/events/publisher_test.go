@@ -39,7 +39,7 @@ func TestPublisher_PublishSessionMessage(t *testing.T) {
 
 	// Should receive both session.message and sessions.changed.
 	if len(sub.received) < 1 {
-		t.Errorf("expected at least 1 event, got %d", len(sub.received))
+		t.Errorf("got %d, want at least 1 event", len(sub.received))
 	}
 }
 
@@ -57,10 +57,10 @@ func TestPublisher_PublishAgentEvent_Sequencing(t *testing.T) {
 	// Verify sequences increment per runId.
 	pub.seqMu.Lock()
 	if pub.agentSeq["run-1"] != 2 {
-		t.Errorf("expected seq 2 for run-1, got %d", pub.agentSeq["run-1"])
+		t.Errorf("got %d, want seq 2 for run-1", pub.agentSeq["run-1"])
 	}
 	if pub.agentSeq["run-2"] != 1 {
-		t.Errorf("expected seq 1 for run-2, got %d", pub.agentSeq["run-2"])
+		t.Errorf("got %d, want seq 1 for run-2", pub.agentSeq["run-2"])
 	}
 	pub.seqMu.Unlock()
 

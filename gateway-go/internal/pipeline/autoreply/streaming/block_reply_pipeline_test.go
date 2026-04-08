@@ -38,7 +38,7 @@ func TestBlockReplyPipelineFull_BasicSend(t *testing.T) {
 
 	sent := getSent()
 	if len(sent) != 1 {
-		t.Fatalf("expected 1 sent payload, got %d", len(sent))
+		t.Fatalf("got %d, want 1 sent payload", len(sent))
 	}
 	if sent[0].Text != "hello" {
 		t.Fatalf("unexpected text: %q", sent[0].Text)
@@ -75,11 +75,11 @@ func TestBlockReplyPipelineFull_SequentialDelivery(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if len(order) != 5 {
-		t.Fatalf("expected 5 sent, got %d", len(order))
+		t.Fatalf("got %d, want 5 sent", len(order))
 	}
 	for i := 0; i < 5; i++ {
 		if order[i] != i {
-			t.Fatalf("expected order[%d]=%d, got %d (order=%v)", i, i, order[i], order)
+			t.Fatalf("got %d (order=%v), want order[%d]=%d", order[i], order, i, i)
 		}
 	}
 }
@@ -93,7 +93,7 @@ func TestBlockReplyPipelineFull_Dedup(t *testing.T) {
 
 	sent := getSent()
 	if len(sent) != 1 {
-		t.Fatalf("expected 1 sent payload (dedup), got %d", len(sent))
+		t.Fatalf("got %d, want 1 sent payload (dedup)", len(sent))
 	}
 }
 
@@ -107,7 +107,7 @@ func TestBlockReplyPipelineFull_DifferentThreadingNotDeduped(t *testing.T) {
 
 	sent := getSent()
 	if len(sent) != 2 {
-		t.Fatalf("expected 2 sent payloads (different threading), got %d", len(sent))
+		t.Fatalf("got %d, want 2 sent payloads (different threading)", len(sent))
 	}
 }
 

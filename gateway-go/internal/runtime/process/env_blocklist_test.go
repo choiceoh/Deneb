@@ -66,7 +66,7 @@ func TestSanitizeEnv(t *testing.T) {
 	}
 
 	if len(result) != len(expected) {
-		t.Fatalf("expected %d entries, got %d: %v", len(expected), len(result), result)
+		t.Fatalf("got %d: %v, want %d entries", len(result), result, len(expected))
 	}
 	for _, entry := range result {
 		if _, ok := expected[entry]; !ok {

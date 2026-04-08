@@ -56,7 +56,7 @@ func TestBackgroundGC(t *testing.T) {
 	tr.Check("gc-1")
 	tr.Check("gc-2")
 	if tr.Len() != 2 {
-		t.Fatalf("expected 2, got %d", tr.Len())
+		t.Fatalf("got %d, want 2", tr.Len())
 	}
 	// Wait well beyond TTL + GC interval for sweep to complete.
 	time.Sleep(300 * time.Millisecond)

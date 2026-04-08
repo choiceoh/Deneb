@@ -14,7 +14,7 @@ func TestFormatForChannel_TextOnly(t *testing.T) {
 	}
 	result := FormatForChannel(resp)
 	if result != "Hello\nWorld" {
-		t.Errorf("expected 'Hello\\nWorld', got %q", result)
+		t.Errorf("got %q, want 'Hello\\nWorld'", result)
 	}
 }
 
@@ -30,7 +30,7 @@ func TestFormatForChannel_MixedParts(t *testing.T) {
 	result := FormatForChannel(resp)
 	expected := "The answer is 42.\n[tool: calculator]\nhttps://example.com/img.png"
 	if result != expected {
-		t.Errorf("expected %q, got %q", expected, result)
+		t.Errorf("got %q, want %q", result, expected)
 	}
 }
 
@@ -42,7 +42,7 @@ func TestFormatForChannel_ThinkingOnly(t *testing.T) {
 	}
 	result := FormatForChannel(resp)
 	if result != "" {
-		t.Errorf("expected empty for thinking-only, got %q", result)
+		t.Errorf("got %q, want empty for thinking-only", result)
 	}
 }
 
@@ -54,7 +54,7 @@ func TestFormatForChannel_ToolResultString(t *testing.T) {
 	}
 	result := FormatForChannel(resp)
 	if result != "file contents here" {
-		t.Errorf("expected 'file contents here', got %q", result)
+		t.Errorf("got %q, want 'file contents here'", result)
 	}
 }
 
@@ -66,7 +66,7 @@ func TestFormatForChannel_ToolResultArray(t *testing.T) {
 	}
 	result := FormatForChannel(resp)
 	if result != "line1\nline2" {
-		t.Errorf("expected 'line1\\nline2', got %q", result)
+		t.Errorf("got %q, want 'line1\\nline2'", result)
 	}
 }
 
@@ -84,7 +84,7 @@ func TestFormatForChannel_ImageNoURL(t *testing.T) {
 	}
 	result := FormatForChannel(resp)
 	if result != "[image]" {
-		t.Errorf("expected '[image]', got %q", result)
+		t.Errorf("got %q, want '[image]'", result)
 	}
 }
 
@@ -119,7 +119,7 @@ func TestExtractText(t *testing.T) {
 	}
 	result := ExtractText(resp)
 	if result != "Answer:\n42" {
-		t.Errorf("expected 'Answer:\\n42', got %q", result)
+		t.Errorf("got %q, want 'Answer:\\n42'", result)
 	}
 
 	if ExtractText(nil) != "" {

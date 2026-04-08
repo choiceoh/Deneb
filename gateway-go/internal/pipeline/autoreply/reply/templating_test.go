@@ -12,7 +12,7 @@ func TestApplyTemplate_NoPlaceholders(t *testing.T) {
 	vars := TemplateVars{AgentID: "agent1"}
 	got := ApplyTemplate("hello world", vars)
 	if got != "hello world" {
-		t.Errorf("no placeholders: expected unchanged, got %q", got)
+		t.Errorf("no placeholders: got %q, want unchanged", got)
 	}
 }
 
@@ -26,49 +26,49 @@ func TestApplyTemplate_Empty(t *testing.T) {
 func TestApplyTemplate_AgentID(t *testing.T) {
 	got := ApplyTemplate("agent={{agentId}}", TemplateVars{AgentID: "abc123"})
 	if got != "agent=abc123" {
-		t.Errorf("expected agent=abc123, got %q", got)
+		t.Errorf("got %q, want agent=abc123", got)
 	}
 }
 
 func TestApplyTemplate_Model(t *testing.T) {
 	got := ApplyTemplate("model={{model}}", TemplateVars{Model: "claude-3"})
 	if got != "model=claude-3" {
-		t.Errorf("expected model=claude-3, got %q", got)
+		t.Errorf("got %q, want model=claude-3", got)
 	}
 }
 
 func TestApplyTemplate_Provider(t *testing.T) {
 	got := ApplyTemplate("provider={{provider}}", TemplateVars{Provider: "anthropic"})
 	if got != "provider=anthropic" {
-		t.Errorf("expected provider=anthropic, got %q", got)
+		t.Errorf("got %q, want provider=anthropic", got)
 	}
 }
 
 func TestApplyTemplate_Channel(t *testing.T) {
 	got := ApplyTemplate("ch={{channel}}", TemplateVars{Channel: "telegram"})
 	if got != "ch=telegram" {
-		t.Errorf("expected ch=telegram, got %q", got)
+		t.Errorf("got %q, want ch=telegram", got)
 	}
 }
 
 func TestApplyTemplate_IsGroupTrue(t *testing.T) {
 	got := ApplyTemplate("group={{isGroup}}", TemplateVars{IsGroup: true})
 	if got != "group=true" {
-		t.Errorf("expected group=true, got %q", got)
+		t.Errorf("got %q, want group=true", got)
 	}
 }
 
 func TestApplyTemplate_IsGroupFalse(t *testing.T) {
 	got := ApplyTemplate("group={{isGroup}}", TemplateVars{IsGroup: false})
 	if got != "group=false" {
-		t.Errorf("expected group=false, got %q", got)
+		t.Errorf("got %q, want group=false", got)
 	}
 }
 
 func TestApplyTemplate_MultipleVars(t *testing.T) {
 	got := ApplyTemplate("{{model}}/{{provider}}", TemplateVars{Model: "gpt-4", Provider: "openai"})
 	if got != "gpt-4/openai" {
-		t.Errorf("expected gpt-4/openai, got %q", got)
+		t.Errorf("got %q, want gpt-4/openai", got)
 	}
 }
 
@@ -77,7 +77,7 @@ func TestApplyTemplate_Timestamp(t *testing.T) {
 	got := ApplyTemplate("ts={{timestamp}}", TemplateVars{Timestamp: ts})
 	// Should contain RFC3339 formatted timestamp
 	if !strings.Contains(got, "2026-03-29") {
-		t.Errorf("expected timestamp in output, got %q", got)
+		t.Errorf("got %q, want timestamp in output", got)
 	}
 }
 
@@ -99,7 +99,7 @@ func TestApplyTemplate_UnknownPlaceholderPreserved(t *testing.T) {
 func TestApplyTemplate_FromTo(t *testing.T) {
 	got := ApplyTemplate("{{from}}->{{to}}", TemplateVars{From: "user", To: "bot"})
 	if got != "user->bot" {
-		t.Errorf("expected user->bot, got %q", got)
+		t.Errorf("got %q, want user->bot", got)
 	}
 }
 

@@ -211,7 +211,7 @@ func TestMethodCount(t *testing.T) {
 	methods := d.Methods()
 	// We expect at least 99 methods (TS BASE_METHODS has 113, plus Go-only methods).
 	if len(methods) < 99 {
-		t.Errorf("expected at least 99 registered methods, got %d", len(methods))
+		t.Errorf("got %d, want at least 99 registered methods", len(methods))
 	}
 	t.Logf("total registered methods: %d", len(methods))
 }

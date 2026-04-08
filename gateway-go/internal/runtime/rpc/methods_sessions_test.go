@@ -46,26 +46,26 @@ func TestToolsCatalog_ReturnsGroups(t *testing.T) {
 	d, _ := sessionDispatcher(t)
 	payload, resp := dispatchJSON(t, d, "tools.catalog", nil)
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	if payload["agentId"] != "default" {
-		t.Errorf("expected agentId=default, got %v", payload["agentId"])
+		t.Errorf("got %v, want agentId=default", payload["agentId"])
 	}
 	groups, ok := payload["groups"].([]any)
 	if !ok || len(groups) == 0 {
-		t.Fatalf("expected non-empty groups array, got %v", payload["groups"])
+		t.Fatalf("got %v, want non-empty groups array", payload["groups"])
 	}
 	// Verify first group is "fs" / "Files".
 	first := groups[0].(map[string]any)
 	if first["id"] != "fs" {
-		t.Errorf("expected first group id=fs, got %v", first["id"])
+		t.Errorf("got %v, want first group id=fs", first["id"])
 	}
 	if first["label"] != "Files" {
-		t.Errorf("expected first group label=Files, got %v", first["label"])
+		t.Errorf("got %v, want first group label=Files", first["label"])
 	}
 	profiles, ok := payload["profiles"].([]any)
 	if !ok || len(profiles) != 4 {
-		t.Errorf("expected 4 profiles, got %v", payload["profiles"])
+		t.Errorf("got %v, want 4 profiles", payload["profiles"])
 	}
 }
 
@@ -73,10 +73,10 @@ func TestToolsCatalog_CustomAgentID(t *testing.T) {
 	d, _ := sessionDispatcher(t)
 	payload, resp := dispatchJSON(t, d, "tools.catalog", map[string]string{"agentId": "my-agent"})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	if payload["agentId"] != "my-agent" {
-		t.Errorf("expected agentId=my-agent, got %v", payload["agentId"])
+		t.Errorf("got %v, want agentId=my-agent", payload["agentId"])
 	}
 }
 
@@ -84,7 +84,7 @@ func TestToolsCatalog_CoreToolCount(t *testing.T) {
 	d, _ := sessionDispatcher(t)
 	payload, resp := dispatchJSON(t, d, "tools.catalog", nil)
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	groups := payload["groups"].([]any)
 	total := 0
@@ -92,7 +92,7 @@ func TestToolsCatalog_CoreToolCount(t *testing.T) {
 		total += len(g.(map[string]any)["tools"].([]any))
 	}
 	if total != 18 {
-		t.Errorf("expected 18 core tools, got %d", total)
+		t.Errorf("got %d, want 18 core tools", total)
 	}
 }
 
@@ -100,7 +100,7 @@ func TestToolsCatalog_FiltersEmptyGroups(t *testing.T) {
 	d, _ := sessionDispatcher(t)
 	payload, resp := dispatchJSON(t, d, "tools.catalog", nil)
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	groups := payload["groups"].([]any)
 	for _, g := range groups {
@@ -127,22 +127,22 @@ func TestSessionsPatch_AppliesFields(t *testing.T) {
 		"model": "claude-3",
 	})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	if payload["ok"] != true {
-		t.Errorf("expected ok=true, got %v", payload["ok"])
+		t.Errorf("got %v, want ok=true", payload["ok"])
 	}
 	if payload["key"] != "test-session" {
-		t.Errorf("expected key=test-session, got %v", payload["key"])
+		t.Errorf("got %v, want key=test-session", payload["key"])
 	}
 
 	// Verify in-memory state.
 	s := deps.Sessions.Get("test-session")
 	if s.Label != "My Session" {
-		t.Errorf("expected label=My Session, got %v", s.Label)
+		t.Errorf("got %v, want label=My Session", s.Label)
 	}
 	if s.Model != "claude-3" {
-		t.Errorf("expected model=claude-3, got %v", s.Model)
+		t.Errorf("got %v, want model=claude-3", s.Model)
 	}
 }
 
@@ -155,7 +155,7 @@ func TestSessionsPatch_MissingKey(t *testing.T) {
 		t.Fatal("expected error for missing key")
 	}
 	if resp.Error.Code != protocol.ErrMissingParam {
-		t.Errorf("expected MISSING_PARAM, got %v", resp.Error.Code)
+		t.Errorf("got %v, want MISSING_PARAM", resp.Error.Code)
 	}
 }
 
@@ -166,14 +166,14 @@ func TestSessionsPatch_CreatesIfNotExists(t *testing.T) {
 		"label": "Auto-created",
 	})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	s := deps.Sessions.Get("new-session")
 	if s == nil {
 		t.Fatal("expected session to be created")
 	}
 	if s.Label != "Auto-created" {
-		t.Errorf("expected label=Auto-created, got %v", s.Label)
+		t.Errorf("got %v, want label=Auto-created", s.Label)
 	}
 }
 
@@ -190,17 +190,17 @@ func TestSessionsReset_ClearsState(t *testing.T) {
 	// Verify running.
 	s := sm.Get("reset-me")
 	if s.Status != session.StatusRunning {
-		t.Fatalf("expected running, got %v", s.Status)
+		t.Fatalf("got %v, want running", s.Status)
 	}
 
 	_, resp := dispatchJSON(t, d, "sessions.reset", map[string]any{"key": "reset-me"})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 
 	s = sm.Get("reset-me")
 	if s.Status != "" {
-		t.Errorf("expected empty status after reset, got %v", s.Status)
+		t.Errorf("got %v, want empty status after reset", s.Status)
 	}
 	if s.StartedAt != nil {
 		t.Errorf("expected nil startedAt after reset")
@@ -224,7 +224,7 @@ func TestSessionsReset_ReasonNew(t *testing.T) {
 		"reason": "new",
 	})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	if payload["ok"] != true {
 		t.Errorf("expected ok=true")
@@ -241,11 +241,11 @@ func TestSessionsPreview_EmptyKeys(t *testing.T) {
 		"keys": []string{},
 	})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	previews := payload["previews"].([]any)
 	if len(previews) != 0 {
-		t.Errorf("expected empty previews, got %d", len(previews))
+		t.Errorf("got %d, want empty previews", len(previews))
 	}
 }
 
@@ -255,16 +255,16 @@ func TestSessionsPreview_NoBridge_ReturnsMissing(t *testing.T) {
 		"keys": []string{"session-1", "session-2"},
 	})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	previews := payload["previews"].([]any)
 	if len(previews) != 2 {
-		t.Fatalf("expected 2 previews, got %d", len(previews))
+		t.Fatalf("got %d, want 2 previews", len(previews))
 	}
 	for _, p := range previews {
 		preview := p.(map[string]any)
 		if preview["status"] != "missing" {
-			t.Errorf("expected status=missing, got %v", preview["status"])
+			t.Errorf("got %v, want status=missing", preview["status"])
 		}
 	}
 }
@@ -279,13 +279,13 @@ func TestSessionsResolve_ByKey(t *testing.T) {
 
 	payload, resp := dispatchJSON(t, d, "sessions.resolve", map[string]any{"key": "my-session"})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	if payload["ok"] != true {
-		t.Errorf("expected ok=true, got %v", payload["ok"])
+		t.Errorf("got %v, want ok=true", payload["ok"])
 	}
 	if payload["key"] != "my-session" {
-		t.Errorf("expected key=my-session, got %v", payload["key"])
+		t.Errorf("got %v, want key=my-session", payload["key"])
 	}
 }
 
@@ -299,13 +299,13 @@ func TestSessionsResolve_BySessionID(t *testing.T) {
 
 	payload, resp := dispatchJSON(t, d, "sessions.resolve", map[string]any{"sessionId": "uuid-123"})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	if payload["ok"] != true {
 		t.Errorf("expected ok=true")
 	}
 	if payload["key"] != "sid-session" {
-		t.Errorf("expected key=sid-session, got %v", payload["key"])
+		t.Errorf("got %v, want key=sid-session", payload["key"])
 	}
 }
 
@@ -317,13 +317,13 @@ func TestSessionsResolve_ByLabel(t *testing.T) {
 
 	payload, resp := dispatchJSON(t, d, "sessions.resolve", map[string]any{"label": "test-label"})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	if payload["ok"] != true {
 		t.Errorf("expected ok=true")
 	}
 	if payload["key"] != "labeled" {
-		t.Errorf("expected key=labeled, got %v", payload["key"])
+		t.Errorf("got %v, want key=labeled", payload["key"])
 	}
 }
 
@@ -359,7 +359,7 @@ func TestSessionsResolve_AmbiguousLabel(t *testing.T) {
 		t.Fatal("expected error for ambiguous label")
 	}
 	if resp.Error.Code != protocol.ErrConflict {
-		t.Errorf("expected CONFLICT error, got %v", resp.Error.Code)
+		t.Errorf("got %v, want CONFLICT error", resp.Error.Code)
 	}
 }
 
@@ -385,10 +385,10 @@ func TestSessionsResolve_AgentIDFilter(t *testing.T) {
 		"agentId": "default",
 	})
 	if !resp.OK {
-		t.Fatalf("expected ok with agentId filter, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok with agentId filter", resp.Error)
 	}
 	if payload["key"] != "my-session" {
-		t.Errorf("expected key=my-session, got %v", payload["key"])
+		t.Errorf("got %v, want key=my-session", payload["key"])
 	}
 }
 
@@ -399,7 +399,7 @@ func TestSessionsResolve_NotFound(t *testing.T) {
 		t.Fatal("expected error response for not-found session")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrNotFound {
-		t.Errorf("expected NOT_FOUND error, got %+v", resp.Error)
+		t.Errorf("got %+v, want NOT_FOUND error", resp.Error)
 	}
 }
 
@@ -421,10 +421,10 @@ func TestSessionsResolve_ExcludesGlobalByDefault(t *testing.T) {
 		"includeGlobal": true,
 	})
 	if !resp.OK {
-		t.Fatalf("expected ok with includeGlobal=true, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok with includeGlobal=true", resp.Error)
 	}
 	if payload["key"] != "global-session" {
-		t.Errorf("expected key=global-session, got %v", payload["key"])
+		t.Errorf("got %v, want key=global-session", payload["key"])
 	}
 }
 
@@ -435,10 +435,10 @@ func TestSessionsResolve_KeyBypassesKindFilter(t *testing.T) {
 
 	payload, resp := dispatchJSON(t, d, "sessions.resolve", map[string]any{"key": "global-key"})
 	if !resp.OK {
-		t.Fatalf("expected ok for direct key lookup of global, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok for direct key lookup of global", resp.Error)
 	}
 	if payload["key"] != "global-key" {
-		t.Errorf("expected key=global-key, got %v", payload["key"])
+		t.Errorf("got %v, want key=global-key", payload["key"])
 	}
 }
 
@@ -454,10 +454,10 @@ func TestApplyPatch_PartialUpdate(t *testing.T) {
 		t.Error("expected changed=true")
 	}
 	if s.Label != "new" {
-		t.Errorf("expected label=new, got %v", s.Label)
+		t.Errorf("got %v, want label=new", s.Label)
 	}
 	if s.Model != "old-model" {
-		t.Errorf("expected model unchanged, got %v", s.Model)
+		t.Errorf("got %v, want model unchanged", s.Model)
 	}
 }
 
@@ -498,7 +498,7 @@ func TestManager_ResetSession(t *testing.T) {
 		t.Fatal("expected session after reset")
 	}
 	if s.Status != "" {
-		t.Errorf("expected empty status, got %v", s.Status)
+		t.Errorf("got %v, want empty status", s.Status)
 	}
 }
 
@@ -521,7 +521,7 @@ func TestManager_FindBySessionID(t *testing.T) {
 		t.Fatal("expected to find session by sessionId")
 	}
 	if found.Key != "s1" {
-		t.Errorf("expected key=s1, got %v", found.Key)
+		t.Errorf("got %v, want key=s1", found.Key)
 	}
 }
 
@@ -533,10 +533,10 @@ func TestManager_FindByLabel(t *testing.T) {
 
 	matches := m.FindByLabel("my-label")
 	if len(matches) != 1 {
-		t.Fatalf("expected 1 match, got %d", len(matches))
+		t.Fatalf("got %d, want 1 match", len(matches))
 	}
 	if matches[0].Key != "s1" {
-		t.Errorf("expected key=s1, got %v", matches[0].Key)
+		t.Errorf("got %v, want key=s1", matches[0].Key)
 	}
 }
 

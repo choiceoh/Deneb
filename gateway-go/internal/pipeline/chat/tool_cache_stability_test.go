@@ -78,7 +78,7 @@ func TestFilterDeniedTools(t *testing.T) {
 	t.Run("empty deny set", func(t *testing.T) {
 		result := FilterDeniedTools(tools, nil)
 		if len(result) != 4 {
-			t.Errorf("expected 4, got %d", len(result))
+			t.Errorf("got %d, want 4", len(result))
 		}
 	})
 
@@ -86,7 +86,7 @@ func TestFilterDeniedTools(t *testing.T) {
 		deny := map[string]struct{}{"dangerous": {}, "exec": {}}
 		result := FilterDeniedTools(tools, deny)
 		if len(result) != 2 {
-			t.Fatalf("expected 2, got %d", len(result))
+			t.Fatalf("got %d, want 2", len(result))
 		}
 		for _, r := range result {
 			if _, ok := deny[r.Name]; ok {

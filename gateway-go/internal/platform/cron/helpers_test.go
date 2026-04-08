@@ -34,7 +34,7 @@ func TestParseSchedule(t *testing.T) {
 			}
 			testutil.NoError(t, err)
 			if sched.IntervalMs != tt.wantMs {
-				t.Fatalf("expected %d ms, got %d", tt.wantMs, sched.IntervalMs)
+				t.Fatalf("got %d, want %d ms", sched.IntervalMs, tt.wantMs)
 			}
 		})
 	}
@@ -79,13 +79,13 @@ func TestParseSmartSchedule(t *testing.T) {
 			sched, err := ParseSmartSchedule(tt.input)
 			if tt.wantErr {
 				if err == nil {
-					t.Fatalf("expected error, got kind=%q", sched.Kind)
+					t.Fatalf("got kind=%q, want error", sched.Kind)
 				}
 				return
 			}
 			testutil.NoError(t, err)
 			if sched.Kind != tt.wantKind {
-				t.Fatalf("expected kind=%q, got %q", tt.wantKind, sched.Kind)
+				t.Fatalf("got %q, want kind=%q", sched.Kind, tt.wantKind)
 			}
 		})
 	}

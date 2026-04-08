@@ -25,7 +25,7 @@ func TestBootstrapGatewayConfigMissingFile(t *testing.T) {
 		t.Error("expected auto-generated token for missing config")
 	}
 	if result.Auth.Mode != "token" {
-		t.Errorf("expected auth mode=token, got %q", result.Auth.Mode)
+		t.Errorf("got %q, want auth mode=token", result.Auth.Mode)
 	}
 	if result.Auth.Token == "" {
 		t.Error("expected non-empty resolved token")
@@ -56,7 +56,7 @@ func TestBootstrapGatewayConfigWithToken(t *testing.T) {
 		t.Error("should not generate token when one is configured")
 	}
 	if result.Auth.Token != "my-secret-token" {
-		t.Errorf("expected configured token, got %q", result.Auth.Token)
+		t.Errorf("got %q, want configured token", result.Auth.Token)
 	}
 }
 
@@ -73,7 +73,7 @@ func TestBootstrapGatewayConfigTokenFromEnv(t *testing.T) {
 	})
 	testutil.NoError(t, err)
 	if result.Auth.Token != "env-token-123" {
-		t.Errorf("expected env token, got %q", result.Auth.Token)
+		t.Errorf("got %q, want env token", result.Auth.Token)
 	}
 	if result.GeneratedToken != "" {
 		t.Error("should not generate token when env token exists")
@@ -101,10 +101,10 @@ func TestBootstrapGatewayConfigPasswordMode(t *testing.T) {
 	})
 	testutil.NoError(t, err)
 	if result.Auth.Mode != "password" {
-		t.Errorf("expected auth mode=password, got %q", result.Auth.Mode)
+		t.Errorf("got %q, want auth mode=password", result.Auth.Mode)
 	}
 	if result.Auth.Password != "test-password" {
-		t.Errorf("expected password, got %q", result.Auth.Password)
+		t.Errorf("got %q, want password", result.Auth.Password)
 	}
 }
 
@@ -188,7 +188,7 @@ func TestBootstrapAuthOverride(t *testing.T) {
 	})
 	testutil.NoError(t, err)
 	if result.Auth.Token != "override-token" {
-		t.Errorf("expected override token, got %q", result.Auth.Token)
+		t.Errorf("got %q, want override token", result.Auth.Token)
 	}
 }
 
@@ -208,7 +208,7 @@ func TestResolveMediaCleanupTTLMs(t *testing.T) {
 			t.Errorf("hours=%d: unexpected error: %v", tt.hours, err)
 		}
 		if ms != tt.expected {
-			t.Errorf("hours=%d: expected %d, got %d", tt.hours, tt.expected, ms)
+			t.Errorf("hours=%d: got %d, want %d", tt.hours, ms, tt.expected)
 		}
 	}
 }
@@ -244,7 +244,7 @@ func TestPersistDefaultModel(t *testing.T) {
 			t.Fatal("expected agents in written config")
 		}
 		if agents["defaultModel"] != "zai/glm-5.1" {
-			t.Errorf("expected defaultModel=zai/glm-5.1, got %v", agents["defaultModel"])
+			t.Errorf("got %v, want defaultModel=zai/glm-5.1", agents["defaultModel"])
 		}
 
 		// Existing fields preserved.
@@ -257,7 +257,7 @@ func TestPersistDefaultModel(t *testing.T) {
 			t.Fatal("expected gateway.auth preserved")
 		}
 		if auth["token"] != "keep-me" {
-			t.Errorf("expected preserved token, got %v", auth["token"])
+			t.Errorf("got %v, want preserved token", auth["token"])
 		}
 
 		// Meta timestamp set.
@@ -289,7 +289,7 @@ func TestPersistDefaultModel(t *testing.T) {
 			t.Fatal("expected agents in config created from scratch")
 		}
 		if agents["defaultModel"] != "google/gemini-3.1-pro" {
-			t.Errorf("expected defaultModel=google/gemini-3.1-pro, got %v", agents["defaultModel"])
+			t.Errorf("got %v, want defaultModel=google/gemini-3.1-pro", agents["defaultModel"])
 		}
 	})
 }
@@ -297,7 +297,7 @@ func TestPersistDefaultModel(t *testing.T) {
 func TestGenerateRandomToken(t *testing.T) {
 	token := testutil.Must(generateRandomToken())
 	if len(token) != generatedTokenBytes*2 { // hex encoding doubles length
-		t.Errorf("expected %d hex chars, got %d", generatedTokenBytes*2, len(token))
+		t.Errorf("got %d, want %d hex chars", len(token), generatedTokenBytes*2)
 	}
 
 	// Should be unique.

@@ -48,7 +48,7 @@ func TestSpilloverStore_SessionIsolation(t *testing.T) {
 	// Load from different session should fail.
 	_, err := store.Load(spillID, "session-b")
 	if err == nil {
-		t.Fatal("expected error for different session, got nil")
+		t.Fatal("got nil, want error for different session")
 	}
 	if !strings.Contains(err.Error(), "different session") {
 		t.Fatalf("unexpected error: %v", err)
@@ -61,7 +61,7 @@ func TestSpilloverStore_UnknownID(t *testing.T) {
 
 	_, err := store.Load("sp_nonexistent", "any-session")
 	if err == nil {
-		t.Fatal("expected error for unknown ID, got nil")
+		t.Fatal("got nil, want error for unknown ID")
 	}
 	if !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("unexpected error: %v", err)
@@ -186,7 +186,7 @@ func TestSpilloverStore_DiskFile(t *testing.T) {
 	// Verify exactly one file exists on disk.
 	entries := testutil.Must(os.ReadDir(dir))
 	if len(entries) != 1 {
-		t.Fatalf("expected 1 file, got %d", len(entries))
+		t.Fatalf("got %d, want 1 file", len(entries))
 	}
 
 	// Verify file content.

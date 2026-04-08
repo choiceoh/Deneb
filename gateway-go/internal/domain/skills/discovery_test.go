@@ -21,7 +21,7 @@ func TestDiscoverWorkspaceSkills_empty(t *testing.T) {
 	cfg := isolatedConfig(tmpDir)
 	entries := DiscoverWorkspaceSkills(cfg)
 	if len(entries) != 0 {
-		t.Fatalf("expected 0 entries, got %d", len(entries))
+		t.Fatalf("got %d, want 0 entries", len(entries))
 	}
 }
 
@@ -47,16 +47,16 @@ This is a test skill.
 	cfg := isolatedConfig(tmpDir)
 	entries := DiscoverWorkspaceSkills(cfg)
 	if len(entries) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(entries))
+		t.Fatalf("got %d, want 1 entry", len(entries))
 	}
 	if entries[0].Skill.Name != "test-skill" {
-		t.Errorf("expected name 'test-skill', got %q", entries[0].Skill.Name)
+		t.Errorf("got %q, want name 'test-skill'", entries[0].Skill.Name)
 	}
 	if entries[0].Skill.Description != "A test skill" {
-		t.Errorf("expected description 'A test skill', got %q", entries[0].Skill.Description)
+		t.Errorf("got %q, want description 'A test skill'", entries[0].Skill.Description)
 	}
 	if entries[0].Skill.Source != SourceWorkspace {
-		t.Errorf("expected source workspace, got %q", entries[0].Skill.Source)
+		t.Errorf("got %q, want source workspace", entries[0].Skill.Source)
 	}
 }
 
@@ -80,11 +80,11 @@ func TestDiscoverWorkspaceSkills_precedence(t *testing.T) {
 	cfg.BundledSkillsDir = bundledDir
 	entries := DiscoverWorkspaceSkills(cfg)
 	if len(entries) != 1 {
-		t.Fatalf("expected 1 entry (merged), got %d", len(entries))
+		t.Fatalf("got %d, want 1 entry (merged)", len(entries))
 	}
 	// Workspace should win over bundled.
 	if entries[0].Skill.Description != "workspace version" {
-		t.Errorf("expected workspace version to win, got %q", entries[0].Skill.Description)
+		t.Errorf("got %q, want workspace version to win", entries[0].Skill.Description)
 	}
 }
 
@@ -104,7 +104,7 @@ func TestDiscoverWorkspaceSkills_oversizedSkip(t *testing.T) {
 	cfg := isolatedConfig(tmpDir)
 	entries := DiscoverWorkspaceSkills(cfg)
 	if len(entries) != 0 {
-		t.Fatalf("expected 0 entries (oversized should be skipped), got %d", len(entries))
+		t.Fatalf("got %d, want 0 entries (oversized should be skipped)", len(entries))
 	}
 }
 
@@ -114,7 +114,7 @@ func TestResolveNestedSkillsRoot(t *testing.T) {
 	// No nested skills/ directory — should return dir itself.
 	result := resolveNestedSkillsRoot(tmpDir, 100)
 	if result != tmpDir {
-		t.Errorf("expected %q, got %q", tmpDir, result)
+		t.Errorf("got %q, want %q", result, tmpDir)
 	}
 
 	// Create nested skills/ with a skill.
@@ -125,7 +125,7 @@ func TestResolveNestedSkillsRoot(t *testing.T) {
 	result = resolveNestedSkillsRoot(tmpDir, 100)
 	expected := filepath.Join(tmpDir, "skills")
 	if result != expected {
-		t.Errorf("expected %q, got %q", expected, result)
+		t.Errorf("got %q, want %q", result, expected)
 	}
 }
 
@@ -152,13 +152,13 @@ func TestDiscoverWorkspaceSkills_categoryFromFrontmatter(t *testing.T) {
 	cfg := isolatedConfig(tmpDir)
 	entries := DiscoverWorkspaceSkills(cfg)
 	if len(entries) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(entries))
+		t.Fatalf("got %d, want 1 entry", len(entries))
 	}
 	if entries[0].Skill.Category != "devops" {
-		t.Errorf("expected category 'devops', got %q", entries[0].Skill.Category)
+		t.Errorf("got %q, want category 'devops'", entries[0].Skill.Category)
 	}
 	if entries[0].Skill.Version != "1.0.0" {
-		t.Errorf("expected version '1.0.0', got %q", entries[0].Skill.Version)
+		t.Errorf("got %q, want version '1.0.0'", entries[0].Skill.Version)
 	}
 }
 
@@ -175,14 +175,14 @@ func TestDiscoverWorkspaceSkills_nestedCategoryDir(t *testing.T) {
 	cfg := isolatedConfig(tmpDir)
 	entries := DiscoverWorkspaceSkills(cfg)
 	if len(entries) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(entries))
+		t.Fatalf("got %d, want 1 entry", len(entries))
 	}
 	if entries[0].Skill.Name != "my-agent" {
-		t.Errorf("expected name 'my-agent', got %q", entries[0].Skill.Name)
+		t.Errorf("got %q, want name 'my-agent'", entries[0].Skill.Name)
 	}
 	// Category should be the parent directory name "coding".
 	if entries[0].Skill.Category != "coding" {
-		t.Errorf("expected category 'coding' from directory, got %q", entries[0].Skill.Category)
+		t.Errorf("got %q, want category 'coding' from directory", entries[0].Skill.Category)
 	}
 }
 
@@ -199,11 +199,11 @@ func TestDiscoverWorkspaceSkills_nestedCategoryOverride(t *testing.T) {
 	cfg := isolatedConfig(tmpDir)
 	entries := DiscoverWorkspaceSkills(cfg)
 	if len(entries) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(entries))
+		t.Fatalf("got %d, want 1 entry", len(entries))
 	}
 	// Frontmatter category "integration" should override directory category "tools".
 	if entries[0].Skill.Category != "integration" {
-		t.Errorf("expected category 'integration' (frontmatter override), got %q", entries[0].Skill.Category)
+		t.Errorf("got %q, want category 'integration' (frontmatter override)", entries[0].Skill.Category)
 	}
 }
 
@@ -224,7 +224,7 @@ func TestDiscoverWorkspaceSkills_mixedFlatAndNested(t *testing.T) {
 	cfg := isolatedConfig(tmpDir)
 	entries := DiscoverWorkspaceSkills(cfg)
 	if len(entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(entries))
+		t.Fatalf("got %d, want 2 entries", len(entries))
 	}
 
 	// Find each by name.

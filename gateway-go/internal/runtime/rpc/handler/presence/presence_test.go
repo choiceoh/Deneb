@@ -26,7 +26,7 @@ func TestStore_UpdateAndList(t *testing.T) {
 
 	entries := s.List()
 	if len(entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(entries))
+		t.Fatalf("got %d, want 2 entries", len(entries))
 	}
 }
 
@@ -37,13 +37,13 @@ func TestStore_KeyGeneration(t *testing.T) {
 	s.Update(PresenceEntry{Text: "online", DeviceID: "dev1", InstanceID: "inst1"})
 	s.Update(PresenceEntry{Text: "idle", DeviceID: "dev1", InstanceID: "inst1"})
 	if entries := s.List(); len(entries) != 1 {
-		t.Fatalf("expected 1 entry (same key), got %d", len(entries))
+		t.Fatalf("got %d, want 1 entry (same key)", len(entries))
 	}
 
 	// Different InstanceID should create a new entry.
 	s.Update(PresenceEntry{Text: "online", DeviceID: "dev1", InstanceID: "inst2"})
 	if entries := s.List(); len(entries) != 2 {
-		t.Fatalf("expected 2 entries (different instance), got %d", len(entries))
+		t.Fatalf("got %d, want 2 entries (different instance)", len(entries))
 	}
 }
 
@@ -53,7 +53,7 @@ func TestStore_FallbackKeyIsText(t *testing.T) {
 	s.Update(PresenceEntry{Text: "online"})
 	s.Update(PresenceEntry{Text: "online"})
 	if entries := s.List(); len(entries) != 1 {
-		t.Fatalf("expected 1 entry (text-keyed), got %d", len(entries))
+		t.Fatalf("got %d, want 1 entry (text-keyed)", len(entries))
 	}
 }
 
@@ -104,7 +104,7 @@ func TestHeartbeatState_RecordAndLast(t *testing.T) {
 		t.Fatal("expected non-nil last heartbeat")
 	}
 	if last["ts"] != float64(123456) {
-		t.Fatalf("expected ts=123456, got %v", last["ts"])
+		t.Fatalf("got %v, want ts=123456", last["ts"])
 	}
 }
 
@@ -123,10 +123,10 @@ func TestSystemEvent_ValidParams(t *testing.T) {
 	}
 	resp := handler(context.Background(), req)
 	if !resp.OK {
-		t.Fatalf("expected OK, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want OK", resp.Error)
 	}
 	if entries := store.List(); len(entries) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(entries))
+		t.Fatalf("got %d, want 1 entry", len(entries))
 	}
 }
 
@@ -144,7 +144,7 @@ func TestSystemEvent_MissingText(t *testing.T) {
 		t.Fatal("expected error for missing text")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
-		t.Fatalf("expected MISSING_PARAM, got %+v", resp.Error)
+		t.Fatalf("got %+v, want MISSING_PARAM", resp.Error)
 	}
 }
 
@@ -170,7 +170,7 @@ func TestSystemEvent_BroadcasterCalled(t *testing.T) {
 		Broadcaster: func(event string, payload any) (int, []error) {
 			broadcasted = true
 			if event != "presence" {
-				t.Fatalf("expected event=presence, got %s", event)
+				t.Fatalf("got %s, want event=presence", event)
 			}
 			return 1, nil
 		},
@@ -199,7 +199,7 @@ func TestSystemPresence_EmptyStore(t *testing.T) {
 	req := &protocol.RequestFrame{ID: "test-4"}
 	resp := handler(context.Background(), req)
 	if !resp.OK {
-		t.Fatalf("expected OK, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want OK", resp.Error)
 	}
 
 	var payload struct {
@@ -209,7 +209,7 @@ func TestSystemPresence_EmptyStore(t *testing.T) {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 	if len(payload.Entries) != 0 {
-		t.Fatalf("expected 0 entries, got %d", len(payload.Entries))
+		t.Fatalf("got %d, want 0 entries", len(payload.Entries))
 	}
 }
 
@@ -224,7 +224,7 @@ func TestSystemPresence_PopulatedStore(t *testing.T) {
 	req := &protocol.RequestFrame{ID: "test-5"}
 	resp := handler(context.Background(), req)
 	if !resp.OK {
-		t.Fatalf("expected OK, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want OK", resp.Error)
 	}
 
 	var payload struct {
@@ -234,7 +234,7 @@ func TestSystemPresence_PopulatedStore(t *testing.T) {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 	if len(payload.Entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(payload.Entries))
+		t.Fatalf("got %d, want 2 entries", len(payload.Entries))
 	}
 }
 
@@ -255,7 +255,7 @@ func TestSetHeartbeats_Enable(t *testing.T) {
 	}
 	resp := handler(context.Background(), req)
 	if !resp.OK {
-		t.Fatalf("expected OK, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want OK", resp.Error)
 	}
 	if !state.Enabled() {
 		t.Fatal("expected heartbeats to be enabled")
@@ -285,7 +285,7 @@ func TestSetHeartbeats_Disable(t *testing.T) {
 	}
 	resp := handler(context.Background(), req)
 	if !resp.OK {
-		t.Fatalf("expected OK, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want OK", resp.Error)
 	}
 	if state.Enabled() {
 		t.Fatal("expected heartbeats to be disabled")
@@ -307,7 +307,7 @@ func TestSetHeartbeats_MissingEnabledParam(t *testing.T) {
 		t.Fatal("expected error for missing enabled param")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrValidationFailed {
-		t.Fatalf("expected VALIDATION_FAILED, got %+v", resp.Error)
+		t.Fatalf("got %+v, want VALIDATION_FAILED", resp.Error)
 	}
 }
 
@@ -332,7 +332,7 @@ func TestSetHeartbeats_BroadcasterCalled(t *testing.T) {
 		Broadcaster: func(event string, payload any) (int, []error) {
 			broadcasted = true
 			if event != "heartbeat.config" {
-				t.Fatalf("expected event=heartbeat.config, got %s", event)
+				t.Fatalf("got %s, want event=heartbeat.config", event)
 			}
 			return 1, nil
 		},
@@ -362,7 +362,7 @@ func TestLastHeartbeat_NoRecorded(t *testing.T) {
 	req := &protocol.RequestFrame{ID: "test-10"}
 	resp := handler(context.Background(), req)
 	if !resp.OK {
-		t.Fatalf("expected OK, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want OK", resp.Error)
 	}
 
 	var payload map[string]any
@@ -388,7 +388,7 @@ func TestLastHeartbeat_AfterRecording(t *testing.T) {
 	req := &protocol.RequestFrame{ID: "test-11"}
 	resp := handler(context.Background(), req)
 	if !resp.OK {
-		t.Fatalf("expected OK, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want OK", resp.Error)
 	}
 
 	var payload map[string]any
@@ -396,10 +396,10 @@ func TestLastHeartbeat_AfterRecording(t *testing.T) {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 	if payload["ts"] != float64(999) {
-		t.Fatalf("expected ts=999, got %v", payload["ts"])
+		t.Fatalf("got %v, want ts=999", payload["ts"])
 	}
 	if payload["status"] != "ok" {
-		t.Fatalf("expected status=ok, got %v", payload["status"])
+		t.Fatalf("got %v, want status=ok", payload["status"])
 	}
 }
 

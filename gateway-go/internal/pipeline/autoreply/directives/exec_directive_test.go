@@ -38,7 +38,7 @@ func TestExtractExecDirective_WithHost(t *testing.T) {
 		t.Fatal("expected directive")
 	}
 	if result.ExecHost != ExecHostSandbox {
-		t.Fatalf("expected host=sandbox, got %q", result.ExecHost)
+		t.Fatalf("got %q, want host=sandbox", result.ExecHost)
 	}
 	if !result.HasExecOptions {
 		t.Fatal("expected HasExecOptions")
@@ -51,13 +51,13 @@ func TestExtractExecDirective_MultipleOptions(t *testing.T) {
 		t.Fatal("expected directive")
 	}
 	if result.ExecHost != ExecHostGateway {
-		t.Fatalf("expected host=gateway, got %q", result.ExecHost)
+		t.Fatalf("got %q, want host=gateway", result.ExecHost)
 	}
 	if result.ExecSecurity != ExecSecurityFull {
-		t.Fatalf("expected security=full, got %q", result.ExecSecurity)
+		t.Fatalf("got %q, want security=full", result.ExecSecurity)
 	}
 	if result.ExecAsk != ExecAskAlways {
-		t.Fatalf("expected ask=always, got %q", result.ExecAsk)
+		t.Fatalf("got %q, want ask=always", result.ExecAsk)
 	}
 	if result.Cleaned != "do stuff" {
 		t.Fatalf("unexpected cleaned: %q", result.Cleaned)
@@ -80,7 +80,7 @@ func TestExtractExecDirective_ColonSyntax(t *testing.T) {
 		t.Fatal("expected directive")
 	}
 	if result.ExecHost != ExecHostSandbox {
-		t.Fatalf("expected host=sandbox with colon syntax, got %q", result.ExecHost)
+		t.Fatalf("got %q, want host=sandbox with colon syntax", result.ExecHost)
 	}
 }
 
@@ -90,7 +90,7 @@ func TestExtractExecDirective_NodeOption(t *testing.T) {
 		t.Fatal("expected directive")
 	}
 	if result.ExecNode != "my-worker" {
-		t.Fatalf("expected node=my-worker, got %q", result.ExecNode)
+		t.Fatalf("got %q, want node=my-worker", result.ExecNode)
 	}
 }
 

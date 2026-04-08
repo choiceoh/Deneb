@@ -82,7 +82,7 @@ func TestBuildCoreToolCatalog_ToolProfiles(t *testing.T) {
 
 func TestCatalogProfileOptions(t *testing.T) {
 	if len(catalogProfileOptions) != 4 {
-		t.Fatalf("expected 4 profile options, got %d", len(catalogProfileOptions))
+		t.Fatalf("got %d, want 4 profile options", len(catalogProfileOptions))
 	}
 
 	expected := []string{ProfileMinimal, ProfileCoding, ProfileMessaging, ProfileFull}

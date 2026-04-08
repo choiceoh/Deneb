@@ -35,7 +35,7 @@ func TestWebSocketHandshake(t *testing.T) {
 		t.Fatalf("unmarshal challenge: %v", err)
 	}
 	if challengeEvent["event"] != "connect.challenge" {
-		t.Fatalf("expected connect.challenge event, got %v", challengeEvent["event"])
+		t.Fatalf("got %v, want connect.challenge event", challengeEvent["event"])
 	}
 
 	// Send connect request.

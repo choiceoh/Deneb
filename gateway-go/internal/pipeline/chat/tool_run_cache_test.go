@@ -40,7 +40,7 @@ func TestRunCache_Invalidate(t *testing.T) {
 		t.Fatal("expected miss after Invalidate")
 	}
 	if rc.Len() != 0 {
-		t.Fatalf("expected 0 entries after Invalidate, got %d", rc.Len())
+		t.Fatalf("got %d, want 0 entries after Invalidate", rc.Len())
 	}
 }
 
@@ -66,7 +66,7 @@ func TestRunCache_InvalidateByPath(t *testing.T) {
 		t.Fatal("find:b (scope=core-rs/core) should survive — different subtree")
 	}
 	if rc.Len() != 1 {
-		t.Fatalf("expected 1 surviving entry, got %d", rc.Len())
+		t.Fatalf("got %d, want 1 surviving entry", rc.Len())
 	}
 }
 

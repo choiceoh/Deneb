@@ -8,11 +8,11 @@ import (
 func TestNew_Format(t *testing.T) {
 	id := New("run")
 	if !strings.HasPrefix(id, "run_") {
-		t.Fatalf("expected prefix run_, got %s", id)
+		t.Fatalf("got %s, want prefix run_", id)
 	}
 	// "run_" (4) + 4 digits = 8
 	if len(id) != len("run_")+4 {
-		t.Fatalf("expected len %d, got %d (%s)", len("run_")+4, len(id), id)
+		t.Fatalf("got %d (%s), want len %d", len(id), id, len("run_")+4)
 	}
 	t.Logf("generated id: %s", id)
 }
@@ -35,12 +35,12 @@ func TestNew_Wrap(t *testing.T) {
 	b := New("p")
 	c := New("p")
 	if a != "p_9998" {
-		t.Fatalf("expected p_9998, got %s", a)
+		t.Fatalf("got %s, want p_9998", a)
 	}
 	if b != "p_9999" {
-		t.Fatalf("expected p_9999, got %s", b)
+		t.Fatalf("got %s, want p_9999", b)
 	}
 	if c != "p_0000" {
-		t.Fatalf("expected p_0000, got %s", c)
+		t.Fatalf("got %s, want p_0000", c)
 	}
 }

@@ -21,7 +21,7 @@ func TestHealthEndpoint(t *testing.T) {
 	srv.handleHealth(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
+		t.Fatalf("got %d, want 200", w.Code)
 	}
 
 	var resp map[string]any
@@ -29,7 +29,7 @@ func TestHealthEndpoint(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	if resp["status"] != "ok" {
-		t.Errorf("expected status ok, got %v", resp["status"])
+		t.Errorf("got %v, want status ok", resp["status"])
 	}
 	if _, ok := resp["subsystems"]; !ok {
 		t.Errorf("expected subsystems field in health response")
@@ -43,14 +43,14 @@ func TestReadyEndpoint(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.handleReady(w, req)
 	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("expected 503, got %d", w.Code)
+		t.Errorf("got %d, want 503", w.Code)
 	}
 
 	srv.ready.Store(true)
 	w = httptest.NewRecorder()
 	srv.handleReady(w, req)
 	if w.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", w.Code)
+		t.Errorf("got %d, want 200", w.Code)
 	}
 }
 
@@ -63,7 +63,7 @@ func TestRPCEndpoint_ValidRequest(t *testing.T) {
 	srv.handleRPC(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
+		t.Fatalf("got %d, want 200", w.Code)
 	}
 
 	var resp map[string]any
@@ -84,7 +84,7 @@ func TestRPCEndpoint_MissingMethod(t *testing.T) {
 	srv.handleRPC(w, req)
 
 	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", w.Code)
+		t.Fatalf("got %d, want 400", w.Code)
 	}
 }
 
@@ -229,7 +229,7 @@ func TestPhase1MethodsReachableViaRPC(t *testing.T) {
 				t.Fatalf("decode: %v", err)
 			}
 			if body["ok"] != true {
-				t.Errorf("%s: expected ok=true, got %v (error: %v)", tc.method, body["ok"], body["error"])
+				t.Errorf("%s: got %v (error: %v), want ok=true", tc.method, body["ok"], body["error"])
 			}
 		})
 	}

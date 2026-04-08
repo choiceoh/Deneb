@@ -33,20 +33,20 @@ func TestCachedTranscriptStore_CacheHit(t *testing.T) {
 	msgs, total, err := cache.Load("s1", 0)
 	testutil.NoError(t, err)
 	if len(msgs) != 1 || total != 1 {
-		t.Fatalf("expected 1 message, got %d (total=%d)", len(msgs), total)
+		t.Fatalf("got %d (total=%d), want 1 message", len(msgs), total)
 	}
 	if inner.loadCount != 1 {
-		t.Fatalf("expected 1 inner load, got %d", inner.loadCount)
+		t.Fatalf("got %d, want 1 inner load", inner.loadCount)
 	}
 
 	// Second load: cache hit.
 	msgs, total, err = cache.Load("s1", 0)
 	testutil.NoError(t, err)
 	if len(msgs) != 1 || total != 1 {
-		t.Fatalf("expected 1 message on cache hit, got %d", len(msgs))
+		t.Fatalf("got %d, want 1 message on cache hit", len(msgs))
 	}
 	if inner.loadCount != 1 {
-		t.Fatalf("expected still 1 inner load, got %d", inner.loadCount)
+		t.Fatalf("got %d, want still 1 inner load", inner.loadCount)
 	}
 }
 
@@ -66,10 +66,10 @@ func TestCachedTranscriptStore_WriteThrough(t *testing.T) {
 	msgs, total, err := cache.Load("s1", 0)
 	testutil.NoError(t, err)
 	if len(msgs) != 2 || total != 2 {
-		t.Fatalf("expected 2 messages after write-through, got %d (total=%d)", len(msgs), total)
+		t.Fatalf("got %d (total=%d), want 2 messages after write-through", len(msgs), total)
 	}
 	if inner.loadCount != 1 {
-		t.Fatalf("expected 1 inner load, got %d", inner.loadCount)
+		t.Fatalf("got %d, want 1 inner load", inner.loadCount)
 	}
 }
 
@@ -86,10 +86,10 @@ func TestCachedTranscriptStore_InvalidateOnDelete(t *testing.T) {
 	msgs, total, err := cache.Load("s1", 0)
 	testutil.NoError(t, err)
 	if len(msgs) != 0 || total != 0 {
-		t.Fatalf("expected empty after delete, got %d messages", len(msgs))
+		t.Fatalf("got %d messages, want empty after delete", len(msgs))
 	}
 	if inner.loadCount != 2 {
-		t.Fatalf("expected 2 inner loads (initial + post-delete), got %d", inner.loadCount)
+		t.Fatalf("got %d, want 2 inner loads (initial + post-delete)", inner.loadCount)
 	}
 }
 
@@ -104,10 +104,10 @@ func TestCachedTranscriptStore_AppendBeforeLoad(t *testing.T) {
 	msgs, total, err := cache.Load("s1", 0)
 	testutil.NoError(t, err)
 	if len(msgs) != 1 || total != 1 {
-		t.Fatalf("expected 1 message after append-seed, got %d (total=%d)", len(msgs), total)
+		t.Fatalf("got %d (total=%d), want 1 message after append-seed", len(msgs), total)
 	}
 	if inner.loadCount != 0 {
-		t.Fatalf("expected 0 inner loads (cache should be seeded by Append), got %d", inner.loadCount)
+		t.Fatalf("got %d, want 0 inner loads (cache should be seeded by Append)", inner.loadCount)
 	}
 }
 
@@ -122,7 +122,7 @@ func TestCachedTranscriptStore_TTLExpiry(t *testing.T) {
 	// After TTL, should re-read from inner.
 	cache.Load("s1", 0)
 	if inner.loadCount != 2 {
-		t.Fatalf("expected 2 inner loads after TTL expiry, got %d", inner.loadCount)
+		t.Fatalf("got %d, want 2 inner loads after TTL expiry", inner.loadCount)
 	}
 }
 
@@ -137,10 +137,10 @@ func TestCachedTranscriptStore_LimitSlicing(t *testing.T) {
 	msgs, total, err := cache.Load("s1", 3)
 	testutil.NoError(t, err)
 	if len(msgs) != 3 {
-		t.Fatalf("expected 3 messages with limit, got %d", len(msgs))
+		t.Fatalf("got %d, want 3 messages with limit", len(msgs))
 	}
 	if total != 10 {
-		t.Fatalf("expected total=10, got %d", total)
+		t.Fatalf("got %d, want total=10", total)
 	}
 }
 

@@ -10,31 +10,31 @@ import (
 func TestExtractLinks_Empty(t *testing.T) {
 	urls := testutil.Must(ExtractLinks("", 5))
 	if len(urls) != 0 {
-		t.Fatalf("expected empty, got %v", urls)
+		t.Fatalf("got %v, want empty", urls)
 	}
 }
 
 func TestExtractLinks_BareURLs(t *testing.T) {
 	urls := testutil.Must(ExtractLinks("Check https://example.com and https://rust-lang.org", 5))
 	if len(urls) != 2 {
-		t.Fatalf("expected 2 URLs, got %d: %v", len(urls), urls)
+		t.Fatalf("got %d: %v, want 2 URLs", len(urls), urls)
 	}
 	if urls[0] != "https://example.com" {
-		t.Errorf("expected https://example.com, got %s", urls[0])
+		t.Errorf("got %s, want https://example.com", urls[0])
 	}
 }
 
 func TestExtractLinks_MaxLimit(t *testing.T) {
 	urls := testutil.Must(ExtractLinks("https://a.com https://b.com https://c.com", 2))
 	if len(urls) != 2 {
-		t.Fatalf("expected 2 URLs, got %d", len(urls))
+		t.Fatalf("got %d, want 2 URLs", len(urls))
 	}
 }
 
 func TestExtractLinks_SSRFBlocked(t *testing.T) {
 	urls := testutil.Must(ExtractLinks("https://example.com http://127.0.0.1/admin", 5))
 	if len(urls) != 1 {
-		t.Fatalf("expected 1 URL (SSRF blocked), got %d: %v", len(urls), urls)
+		t.Fatalf("got %d: %v, want 1 URL (SSRF blocked)", len(urls), urls)
 	}
 }
 
@@ -53,35 +53,35 @@ func TestHTMLToMarkdown_Empty(t *testing.T) {
 	text, title, err := HTMLToMarkdown("")
 	testutil.NoError(t, err)
 	if text != "" || title != "" {
-		t.Errorf("expected empty output, got text=%q title=%q", text, title)
+		t.Errorf("got text=%q title=%q, want empty output", text, title)
 	}
 }
 
 func TestBase64Estimate_Basic(t *testing.T) {
 	est := testutil.Must(Base64Estimate("AAAA"))
 	if est != 3 {
-		t.Errorf("expected 3, got %d", est)
+		t.Errorf("got %d, want 3", est)
 	}
 }
 
 func TestBase64Estimate_Padding(t *testing.T) {
 	est := testutil.Must(Base64Estimate("AA=="))
 	if est != 1 {
-		t.Errorf("expected 1, got %d", est)
+		t.Errorf("got %d, want 1", est)
 	}
 }
 
 func TestBase64Estimate_Empty(t *testing.T) {
 	est := testutil.Must(Base64Estimate(""))
 	if est != 0 {
-		t.Errorf("expected 0, got %d", est)
+		t.Errorf("got %d, want 0", est)
 	}
 }
 
 func TestBase64Canonicalize_Valid(t *testing.T) {
 	result := testutil.Must(Base64Canonicalize(" A A A A "))
 	if result != "AAAA" {
-		t.Errorf("expected AAAA, got %s", result)
+		t.Errorf("got %s, want AAAA", result)
 	}
 }
 
@@ -99,7 +99,7 @@ func TestParseMediaTokens_NoMedia(t *testing.T) {
 		t.Errorf("expected original text, got: %s", text)
 	}
 	if len(urls) != 0 {
-		t.Errorf("expected no URLs, got %v", urls)
+		t.Errorf("got %v, want no URLs", urls)
 	}
 	if voice {
 		t.Error("expected no audio_as_voice")
@@ -110,7 +110,7 @@ func TestParseMediaTokens_WithURL(t *testing.T) {
 	text, urls, _, err := ParseMediaTokens("output\nMEDIA: https://example.com/img.png\ndone")
 	testutil.NoError(t, err)
 	if len(urls) != 1 || urls[0] != "https://example.com/img.png" {
-		t.Errorf("expected one URL, got %v", urls)
+		t.Errorf("got %v, want one URL", urls)
 	}
 	if strings.Contains(text, "MEDIA:") {
 		t.Errorf("MEDIA: line should be stripped from text: %s", text)
@@ -129,14 +129,14 @@ func TestParseMediaTokens_Empty(t *testing.T) {
 	text, urls, voice, err := ParseMediaTokens("")
 	testutil.NoError(t, err)
 	if text != "" || len(urls) != 0 || voice {
-		t.Errorf("expected empty output, got text=%q urls=%v voice=%v", text, urls, voice)
+		t.Errorf("got text=%q urls=%v voice=%v, want empty output", text, urls, voice)
 	}
 }
 
 func TestExtractLinks_Deduplication(t *testing.T) {
 	urls := testutil.Must(ExtractLinks("https://example.com and again https://example.com", 5))
 	if len(urls) != 1 {
-		t.Errorf("expected 1 deduplicated URL, got %d: %v", len(urls), urls)
+		t.Errorf("got %d: %v, want 1 deduplicated URL", len(urls), urls)
 	}
 }
 
@@ -145,14 +145,14 @@ func TestExtractLinks_DefaultMaxLinks(t *testing.T) {
 	input := "https://a.com https://b.com https://c.com https://d.com https://e.com https://f.com https://g.com"
 	urls := testutil.Must(ExtractLinks(input, 0))
 	if len(urls) != 5 {
-		t.Errorf("expected 5 URLs (default max), got %d", len(urls))
+		t.Errorf("got %d, want 5 URLs (default max)", len(urls))
 	}
 }
 
 func TestExtractLinks_WhitespaceOnly(t *testing.T) {
 	urls := testutil.Must(ExtractLinks("   \n\t  ", 5))
 	if len(urls) != 0 {
-		t.Errorf("expected empty for whitespace-only, got %v", urls)
+		t.Errorf("got %v, want empty for whitespace-only", urls)
 	}
 }
 
@@ -187,10 +187,10 @@ func TestHTMLToMarkdown_NoTitle(t *testing.T) {
 	text, title, err := HTMLToMarkdown("<body><p>Hello</p></body>")
 	testutil.NoError(t, err)
 	if title != "" {
-		t.Errorf("expected empty title, got %q", title)
+		t.Errorf("got %q, want empty title", title)
 	}
 	if !strings.Contains(text, "Hello") {
-		t.Errorf("expected Hello in text, got %q", text)
+		t.Errorf("got %q, want Hello in text", text)
 	}
 }
 
@@ -198,14 +198,14 @@ func TestBase64Estimate_WithWhitespace(t *testing.T) {
 	// "AAAA" with embedded whitespace should still estimate 3 bytes
 	est := testutil.Must(Base64Estimate("A A\nA\tA"))
 	if est != 3 {
-		t.Errorf("expected 3, got %d", est)
+		t.Errorf("got %d, want 3", est)
 	}
 }
 
 func TestBase64Estimate_WhitespaceOnly(t *testing.T) {
 	est := testutil.Must(Base64Estimate("   \n\t  "))
 	if est != 0 {
-		t.Errorf("expected 0 for whitespace-only, got %d", est)
+		t.Errorf("got %d, want 0 for whitespace-only", est)
 	}
 }
 
@@ -227,7 +227,7 @@ func TestBase64Canonicalize_WithNewlines(t *testing.T) {
 	// Valid base64 with embedded newlines
 	result := testutil.Must(Base64Canonicalize("AQID\nBAUG"))
 	if result != "AQIDBAUG" {
-		t.Errorf("expected AQIDBAUG, got %s", result)
+		t.Errorf("got %s, want AQIDBAUG", result)
 	}
 }
 
@@ -235,7 +235,7 @@ func TestParseMediaTokens_FilePath(t *testing.T) {
 	text, urls, _, err := ParseMediaTokens("Here is the image\nMEDIA: /tmp/photo.jpg")
 	testutil.NoError(t, err)
 	if len(urls) != 1 || urls[0] != "/tmp/photo.jpg" {
-		t.Errorf("expected file path URL, got %v", urls)
+		t.Errorf("got %v, want file path URL", urls)
 	}
 	if strings.Contains(text, "MEDIA:") {
 		t.Errorf("MEDIA: line should be stripped, got: %s", text)
@@ -247,7 +247,7 @@ func TestParseMediaTokens_MultipleMedia(t *testing.T) {
 	text, urls, _, err := ParseMediaTokens(input)
 	testutil.NoError(t, err)
 	if len(urls) != 2 {
-		t.Errorf("expected 2 URLs, got %d: %v", len(urls), urls)
+		t.Errorf("got %d: %v, want 2 URLs", len(urls), urls)
 	}
 	if strings.Contains(text, "MEDIA:") {
 		t.Errorf("MEDIA: lines should be stripped")
@@ -259,7 +259,7 @@ func TestParseMediaTokens_InvalidMediaKept(t *testing.T) {
 	text, urls, _, err := ParseMediaTokens("MEDIA: not a valid path")
 	testutil.NoError(t, err)
 	if len(urls) != 0 {
-		t.Errorf("expected no URLs for invalid media, got %v", urls)
+		t.Errorf("got %v, want no URLs for invalid media", urls)
 	}
 	if !strings.Contains(text, "MEDIA:") {
 		t.Errorf("invalid MEDIA: line should be kept in text")
@@ -270,7 +270,7 @@ func TestParseMediaTokens_FileScheme(t *testing.T) {
 	text, urls, _, err := ParseMediaTokens("MEDIA: file:///home/user/img.png")
 	testutil.NoError(t, err)
 	if len(urls) != 1 || urls[0] != "/home/user/img.png" {
-		t.Errorf("expected stripped file:// path, got %v", urls)
+		t.Errorf("got %v, want stripped file:// path", urls)
 	}
 	_ = text
 }
@@ -280,10 +280,10 @@ func TestParseMediaTokens_InsideFenceIgnored(t *testing.T) {
 	text, urls, _, err := ParseMediaTokens(input)
 	testutil.NoError(t, err)
 	if len(urls) != 1 {
-		t.Fatalf("expected 1 URL (fence-skipped), got %d: %v", len(urls), urls)
+		t.Fatalf("got %d: %v, want 1 URL (fence-skipped)", len(urls), urls)
 	}
 	if urls[0] != "https://example.com/keep.png" {
-		t.Errorf("expected keep.png, got %s", urls[0])
+		t.Errorf("got %s, want keep.png", urls[0])
 	}
 	if !strings.Contains(text, "MEDIA: https://example.com/skip.png") {
 		t.Errorf("fenced MEDIA line should be preserved in text")
@@ -294,6 +294,6 @@ func TestParseMediaTokens_WindowsPath(t *testing.T) {
 	_, urls, _, err := ParseMediaTokens("MEDIA: C:\\Users\\test\\photo.jpg")
 	testutil.NoError(t, err)
 	if len(urls) != 1 {
-		t.Errorf("expected Windows path accepted, got %v", urls)
+		t.Errorf("got %v, want Windows path accepted", urls)
 	}
 }

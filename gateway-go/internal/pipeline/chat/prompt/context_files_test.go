@@ -20,24 +20,24 @@ func TestLoadContextFiles(t *testing.T) {
 	files := LoadContextFiles(dir)
 
 	if len(files) != 2 {
-		t.Fatalf("expected 2 context files, got %d", len(files))
+		t.Fatalf("got %d, want 2 context files", len(files))
 	}
 
 	if files[0].Path != "AGENTS.md" {
-		t.Errorf("expected first file to be AGENTS.md, got %q", files[0].Path)
+		t.Errorf("got %q, want first file to be AGENTS.md", files[0].Path)
 	}
 	if files[0].Content != agentsMd {
 		t.Errorf("unexpected AGENTS.md content: %q", files[0].Content)
 	}
 	if files[1].Path != "SOUL.md" {
-		t.Errorf("expected second file to be SOUL.md, got %q", files[1].Path)
+		t.Errorf("got %q, want second file to be SOUL.md", files[1].Path)
 	}
 }
 
 func TestLoadContextFilesEmpty(t *testing.T) {
 	files := LoadContextFiles("")
 	if files != nil {
-		t.Errorf("expected nil for empty workspace dir, got %v", files)
+		t.Errorf("got %v, want nil for empty workspace dir", files)
 	}
 }
 
@@ -85,7 +85,7 @@ func TestSessionSnapshotFrozen(t *testing.T) {
 	// First load with session key — populates snapshot.
 	files := LoadContextFiles(dir, WithSessionSnapshot("s1"))
 	if len(files) != 1 || files[0].Content != "fact-v1" {
-		t.Fatalf("expected AGENTS.md with fact-v1, got %v", files)
+		t.Fatalf("got %v, want AGENTS.md with fact-v1", files)
 	}
 
 	// Mutate file on disk (simulates mid-session update).
@@ -94,14 +94,14 @@ func TestSessionSnapshotFrozen(t *testing.T) {
 	// Same session key — must return frozen snapshot (fact-v1).
 	files = LoadContextFiles(dir, WithSessionSnapshot("s1"))
 	if len(files) != 1 || files[0].Content != "fact-v1" {
-		t.Fatalf("expected frozen snapshot fact-v1, got %q", files[0].Content)
+		t.Fatalf("got %q, want frozen snapshot fact-v1", files[0].Content)
 	}
 
 	// Different session key — gets fresh content.
 	ResetContextFileCacheForTest() // clear mtime cache to force re-read
 	files = LoadContextFiles(dir, WithSessionSnapshot("s2"))
 	if len(files) != 1 || files[0].Content != "fact-v2" {
-		t.Fatalf("expected fresh fact-v2 for new session, got %q", files[0].Content)
+		t.Fatalf("got %q, want fresh fact-v2 for new session", files[0].Content)
 	}
 
 	// Clear snapshot — next call for s1 loads fresh.
@@ -109,7 +109,7 @@ func TestSessionSnapshotFrozen(t *testing.T) {
 	ResetContextFileCacheForTest()
 	files = LoadContextFiles(dir, WithSessionSnapshot("s1"))
 	if len(files) != 1 || files[0].Content != "fact-v2" {
-		t.Fatalf("expected fresh fact-v2 after clear, got %q", files[0].Content)
+		t.Fatalf("got %q, want fresh fact-v2 after clear", files[0].Content)
 	}
 }
 

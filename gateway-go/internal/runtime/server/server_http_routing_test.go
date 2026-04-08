@@ -56,7 +56,7 @@ func TestHandleRoot_ResponseShape(t *testing.T) {
 	srv.handleRoot(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
+		t.Fatalf("got %d, want 200", w.Code)
 	}
 
 	var resp map[string]any

@@ -29,7 +29,6 @@ func DispatchInbound(
 	ctx context.Context,
 	params DispatchInboundParams,
 ) InboundDispatchResult {
-	_ = ctx
 	if params.Text == "" && len(params.Attachments) == 0 {
 		return InboundDispatchResult{}
 	}

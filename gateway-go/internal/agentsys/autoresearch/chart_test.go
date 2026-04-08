@@ -108,7 +108,7 @@ func TestSaveChart(t *testing.T) {
 
 	expected := filepath.Join(dir, configDir, "chart.png")
 	if path != expected {
-		t.Fatalf("expected path %s, got %s", expected, path)
+		t.Fatalf("got %s, want path %s", path, expected)
 	}
 
 	data := testutil.Must(os.ReadFile(path))

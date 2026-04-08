@@ -189,7 +189,7 @@ func TestUnmarshalLLM(t *testing.T) {
 {"facts": [{"content": "사용자가 Go를 선호", "importance": 0.8,}, {"content": "DGX Spark 사용", "importance": 0.7,},]}`
 		r := testutil.Must(UnmarshalLLM[facts](raw))
 		if len(r.Facts) != 2 {
-			t.Errorf("expected 2 facts, got %d", len(r.Facts))
+			t.Errorf("got %d, want 2 facts", len(r.Facts))
 		}
 	})
 
@@ -202,7 +202,7 @@ func TestUnmarshalLLM(t *testing.T) {
 		raw := `{"items": [{"id": 1}, {"id": 2}, {"id": 3, "val`
 		r := testutil.Must(UnmarshalLLM[results](raw))
 		if len(r.Items) != 2 {
-			t.Errorf("expected 2 recovered items, got %d", len(r.Items))
+			t.Errorf("got %d, want 2 recovered items", len(r.Items))
 		}
 	})
 

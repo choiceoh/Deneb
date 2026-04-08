@@ -8,14 +8,14 @@ import (
 func TestChunkText(t *testing.T) {
 	t.Run("empty text", func(t *testing.T) {
 		if got := Text("", 100); got != nil {
-			t.Errorf("expected nil, got %v", got)
+			t.Errorf("got %v, want nil", got)
 		}
 	})
 
 	t.Run("text within limit", func(t *testing.T) {
 		got := Text("hello", 100)
 		if len(got) != 1 || got[0] != "hello" {
-			t.Errorf("expected single chunk, got %v", got)
+			t.Errorf("got %v, want single chunk", got)
 		}
 	})
 
@@ -23,7 +23,7 @@ func TestChunkText(t *testing.T) {
 		text := "hello world foo bar"
 		got := Text(text, 12)
 		if len(got) < 2 {
-			t.Errorf("expected multiple chunks, got %v", got)
+			t.Errorf("got %v, want multiple chunks", got)
 		}
 		for _, chunk := range got {
 			if len(chunk) > 12 {
@@ -36,7 +36,7 @@ func TestChunkText(t *testing.T) {
 		text := "line one\nline two\nline three"
 		got := Text(text, 18)
 		if len(got) < 2 {
-			t.Errorf("expected multiple chunks, got %v", got)
+			t.Errorf("got %v, want multiple chunks", got)
 		}
 		// First chunk should break at a newline.
 		if strings.Contains(got[0], "\n") && len(got[0]) > 18 {
@@ -47,7 +47,7 @@ func TestChunkText(t *testing.T) {
 	t.Run("zero limit returns whole text", func(t *testing.T) {
 		got := Text("hello", 0)
 		if len(got) != 1 || got[0] != "hello" {
-			t.Errorf("expected single chunk with zero limit, got %v", got)
+			t.Errorf("got %v, want single chunk with zero limit", got)
 		}
 	})
 }
@@ -56,7 +56,7 @@ func TestChunkByParagraph(t *testing.T) {
 	t.Run("no paragraphs", func(t *testing.T) {
 		got := ByParagraph("single paragraph", 100, true)
 		if len(got) != 1 {
-			t.Errorf("expected 1 chunk, got %d", len(got))
+			t.Errorf("got %d, want 1 chunk", len(got))
 		}
 	})
 
@@ -64,7 +64,7 @@ func TestChunkByParagraph(t *testing.T) {
 		text := "paragraph one\n\nparagraph two\n\nparagraph three"
 		got := ByParagraph(text, 100, true)
 		if len(got) != 3 {
-			t.Errorf("expected 3 chunks, got %d: %v", len(got), got)
+			t.Errorf("got %d: %v, want 3 chunks", len(got), got)
 		}
 	})
 
@@ -72,7 +72,7 @@ func TestChunkByParagraph(t *testing.T) {
 		text := "para1\n\n" + strings.Repeat("a", 50)
 		got := ByParagraph(text, 20, true)
 		if len(got) < 3 {
-			t.Errorf("expected at least 3 chunks, got %d", len(got))
+			t.Errorf("got %d, want at least 3 chunks", len(got))
 		}
 	})
 
@@ -81,7 +81,7 @@ func TestChunkByParagraph(t *testing.T) {
 		got := ByParagraph(text, 20, false)
 		// Should not split the long paragraph.
 		if len(got) != 2 {
-			t.Errorf("expected 2 chunks (no split), got %d", len(got))
+			t.Errorf("got %d, want 2 chunks (no split)", len(got))
 		}
 	})
 }
@@ -91,7 +91,7 @@ func TestChunkByNewline(t *testing.T) {
 		text := "line1\nline2\nline3"
 		got := ByNewline(text, 100, true, true)
 		if len(got) != 3 {
-			t.Errorf("expected 3 chunks, got %d: %v", len(got), got)
+			t.Errorf("got %d: %v, want 3 chunks", len(got), got)
 		}
 	})
 
@@ -99,7 +99,7 @@ func TestChunkByNewline(t *testing.T) {
 		text := "line1\n\n\nline2"
 		got := ByNewline(text, 100, true, true)
 		if len(got) != 2 {
-			t.Errorf("expected 2 chunks, got %d: %v", len(got), got)
+			t.Errorf("got %d: %v, want 2 chunks", len(got), got)
 		}
 		// Second chunk should have leading newlines.
 		if !strings.HasPrefix(got[1], "\n") {
@@ -128,12 +128,12 @@ func TestChunkTextWithMode(t *testing.T) {
 
 func TestResolveTextChunkLimit(t *testing.T) {
 	if got := ResolveTextLimit(0, 0); got != DefaultLimit {
-		t.Errorf("expected default %d, got %d", DefaultLimit, got)
+		t.Errorf("got %d, want default %d", got, DefaultLimit)
 	}
 	if got := ResolveTextLimit(2000, 0); got != 2000 {
-		t.Errorf("expected provider limit 2000, got %d", got)
+		t.Errorf("got %d, want provider limit 2000", got)
 	}
 	if got := ResolveTextLimit(0, 3000); got != 3000 {
-		t.Errorf("expected fallback 3000, got %d", got)
+		t.Errorf("got %d, want fallback 3000", got)
 	}
 }

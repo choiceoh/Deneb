@@ -19,7 +19,7 @@ func TestParseSSE_BasicEvent(t *testing.T) {
 	events := collectEvents(input)
 
 	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
+		t.Fatalf("got %d, want 1 event", len(events))
 	}
 	if events[0].Type != "message_start" {
 		t.Errorf("type = %q, want %q", events[0].Type, "message_start")
@@ -34,7 +34,7 @@ func TestParseSSE_MultipleEvents(t *testing.T) {
 	events := collectEvents(input)
 
 	if len(events) != 2 {
-		t.Fatalf("expected 2 events, got %d", len(events))
+		t.Fatalf("got %d, want 2 events", len(events))
 	}
 	if events[0].Type != "a" {
 		t.Errorf("events[0].Type = %q", events[0].Type)
@@ -49,7 +49,7 @@ func TestParseSSE_MultiLineData(t *testing.T) {
 	events := collectEvents(input)
 
 	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
+		t.Fatalf("got %d, want 1 event", len(events))
 	}
 	if string(events[0].Payload) != "line1\nline2" {
 		t.Errorf("payload = %q, want %q", string(events[0].Payload), "line1\nline2")
@@ -61,7 +61,7 @@ func TestParseSSE_CommentIgnored(t *testing.T) {
 	events := collectEvents(input)
 
 	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
+		t.Fatalf("got %d, want 1 event", len(events))
 	}
 	if events[0].Type != "ping" {
 		t.Errorf("type = %q", events[0].Type)
@@ -74,7 +74,7 @@ func TestParseSSE_EmptyData(t *testing.T) {
 	events := collectEvents(input)
 
 	if len(events) != 0 {
-		t.Errorf("expected 0 events, got %d", len(events))
+		t.Errorf("got %d, want 0 events", len(events))
 	}
 }
 
@@ -84,7 +84,7 @@ func TestParseSSE_NoTrailingBlankLine(t *testing.T) {
 	events := collectEvents(input)
 
 	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
+		t.Fatalf("got %d, want 1 event", len(events))
 	}
 	if events[0].Type != "final" {
 		t.Errorf("type = %q", events[0].Type)
@@ -97,7 +97,7 @@ func TestParseSSE_DataWithColon(t *testing.T) {
 	events := collectEvents(input)
 
 	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
+		t.Fatalf("got %d, want 1 event", len(events))
 	}
 	expected := `{"url":"https://example.com"}`
 	if string(events[0].Payload) != expected {
@@ -111,7 +111,7 @@ func TestParseSSE_NoEventField(t *testing.T) {
 	events := collectEvents(input)
 
 	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
+		t.Fatalf("got %d, want 1 event", len(events))
 	}
 	if events[0].Type != "" {
 		t.Errorf("type = %q, want empty", events[0].Type)

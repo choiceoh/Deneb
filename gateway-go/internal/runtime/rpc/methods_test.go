@@ -49,7 +49,7 @@ func TestBuiltinMethodsRegistered(t *testing.T) {
 	d := testDispatcher()
 	methods := d.Methods()
 	if len(methods) < 20 {
-		t.Errorf("expected at least 20 built-in methods, got %d: %v", len(methods), methods)
+		t.Errorf("got %d: %v, want at least 20 built-in methods", len(methods), methods)
 	}
 	expected := []string{
 		"health.check", "sessions.get", "sessions.list", "sessions.delete",
@@ -76,15 +76,15 @@ func TestHealthCheck(t *testing.T) {
 	d := testDispatcher()
 	resp := dispatch(t, d, ciHealthMethod, nil)
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	var payload map[string]any
 	json.Unmarshal(resp.Payload, &payload)
 	if payload["status"] != "ok" {
-		t.Errorf("expected status=ok, got %v", payload["status"])
+		t.Errorf("got %v, want status=ok", payload["status"])
 	}
 	if payload["runtime"] != "go" {
-		t.Errorf("expected runtime=go, got %v", payload["runtime"])
+		t.Errorf("got %v, want runtime=go", payload["runtime"])
 	}
 }
 
@@ -92,12 +92,12 @@ func TestSystemInfo(t *testing.T) {
 	d := testDispatcher()
 	resp := dispatch(t, d, "system.info", nil)
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	var payload map[string]any
 	json.Unmarshal(resp.Payload, &payload)
 	if payload["runtime"] != "go" {
-		t.Errorf("expected runtime=go, got %v", payload["runtime"])
+		t.Errorf("got %v, want runtime=go", payload["runtime"])
 	}
 }
 
@@ -151,11 +151,11 @@ func TestRPCSmokeFrequentMethods(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := dispatch(t, d, tc.method, tc.params)
 			if tc.expectOK != resp.OK {
-				t.Fatalf("expected ok=%v, got ok=%v (error=%+v)", tc.expectOK, resp.OK, resp.Error)
+				t.Fatalf("got ok=%v (error=%+v), want ok=%v", resp.OK, resp.Error, tc.expectOK)
 			}
 			if tc.expectErr != "" {
 				if resp.Error == nil || resp.Error.Code != tc.expectErr {
-					t.Fatalf("expected error code %q, got %+v", tc.expectErr, resp.Error)
+					t.Fatalf("got %+v, want error code %q", resp.Error, tc.expectErr)
 				}
 			}
 			if len(tc.expectFields) == 0 {
@@ -197,14 +197,14 @@ func TestProtocolValidate_FrameContracts(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := dispatch(t, d, "protocol.validate", map[string]string{"frame": tc.frame})
 			if !resp.OK {
-				t.Fatalf("expected ok (validation result in payload), got error: %+v", resp.Error)
+				t.Fatalf("got error: %+v, want ok (validation result in payload)", resp.Error)
 			}
 			var payload map[string]any
 			if err := json.Unmarshal(resp.Payload, &payload); err != nil {
 				t.Fatalf("unmarshal payload: %v", err)
 			}
 			if payload["valid"] != tc.expectValid {
-				t.Errorf("expected valid=%v, got %v", tc.expectValid, payload["valid"])
+				t.Errorf("got %v, want valid=%v", payload["valid"], tc.expectValid)
 			}
 		})
 	}
@@ -217,7 +217,7 @@ func TestSessionsGet_NotFound(t *testing.T) {
 		t.Error("expected error for nonexistent session")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrNotFound {
-		t.Errorf("expected NOT_FOUND, got %+v", resp.Error)
+		t.Errorf("got %+v, want NOT_FOUND", resp.Error)
 	}
 }
 
@@ -250,7 +250,7 @@ func TestSessionsDelete(t *testing.T) {
 
 	resp := dispatch(t, d, "sessions.delete", map[string]string{"key": "test-1"})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	if sm.Get("test-1") != nil {
 		t.Error("session should have been deleted")
@@ -270,7 +270,7 @@ func TestSessionsDelete_RunningBlocked(t *testing.T) {
 		t.Fatal("expected CONFLICT error for running session without force")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrConflict {
-		t.Errorf("expected CONFLICT, got %+v", resp.Error)
+		t.Errorf("got %+v, want CONFLICT", resp.Error)
 	}
 	if sm.Get("run-1") == nil {
 		t.Fatal("running session should NOT have been deleted")
@@ -279,7 +279,7 @@ func TestSessionsDelete_RunningBlocked(t *testing.T) {
 	// With force=true: should succeed.
 	resp = dispatch(t, d, "sessions.delete", map[string]any{"key": "run-1", "force": true})
 	if !resp.OK {
-		t.Fatalf("expected ok with force=true, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok with force=true", resp.Error)
 	}
 	if sm.Get("run-1") != nil {
 		t.Error("session should have been deleted with force")
@@ -299,7 +299,7 @@ func TestProtocolValidateParams_MissingMethod(t *testing.T) {
 		t.Error("expected error for missing method")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
-		t.Errorf("expected MISSING_PARAM, got %+v", resp.Error)
+		t.Errorf("got %+v, want MISSING_PARAM", resp.Error)
 	}
 }
 
@@ -312,7 +312,7 @@ func TestProtocolValidateParams_MissingParams(t *testing.T) {
 		t.Error("expected error for missing params")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
-		t.Errorf("expected MISSING_PARAM, got %+v", resp.Error)
+		t.Errorf("got %+v, want MISSING_PARAM", resp.Error)
 	}
 }
 
@@ -326,7 +326,7 @@ func TestSessionsList(t *testing.T) {
 
 	resp := dispatch(t, d, "sessions.list", nil)
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 }
 
@@ -338,7 +338,7 @@ func TestTelegramList(t *testing.T) {
 	d := testDispatcher()
 	resp := dispatch(t, d, "telegram.list", nil)
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 }
 
@@ -349,7 +349,7 @@ func TestTelegramGet_MissingID(t *testing.T) {
 		t.Error("expected error for missing id")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
-		t.Errorf("expected MISSING_PARAM, got %+v", resp.Error)
+		t.Errorf("got %+v, want MISSING_PARAM", resp.Error)
 	}
 }
 
@@ -360,7 +360,7 @@ func TestTelegramGet_NotFound(t *testing.T) {
 		t.Error("expected error for nonexistent channel")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrNotFound {
-		t.Errorf("expected NOT_FOUND, got %+v", resp.Error)
+		t.Errorf("got %+v, want NOT_FOUND", resp.Error)
 	}
 }
 
@@ -368,7 +368,7 @@ func TestTelegramStatus(t *testing.T) {
 	d := testDispatcher()
 	resp := dispatch(t, d, "telegram.status", nil)
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 }
 
@@ -380,7 +380,7 @@ func TestSecurityValidateSessionKey_Valid(t *testing.T) {
 	d := testDispatcher()
 	resp := dispatch(t, d, "security.validate_session_key", map[string]string{"key": "valid-session-key"})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	var payload map[string]any
 	json.Unmarshal(resp.Payload, &payload)
@@ -393,12 +393,12 @@ func TestSecurityValidateSessionKey_EmptyKey(t *testing.T) {
 	d := testDispatcher()
 	resp := dispatch(t, d, "security.validate_session_key", map[string]string{"key": ""})
 	if !resp.OK {
-		t.Fatalf("expected ok (valid=false), got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok (valid=false)", resp.Error)
 	}
 	var payload map[string]any
 	json.Unmarshal(resp.Payload, &payload)
 	if payload["valid"] != false {
-		t.Errorf("expected valid=false for empty key, got %v", payload["valid"])
+		t.Errorf("got %v, want valid=false for empty key", payload["valid"])
 	}
 }
 
@@ -408,7 +408,7 @@ func TestSecuritySanitizeHTML_Valid(t *testing.T) {
 		"input": "<b>hello</b><script>alert(1)</script>",
 	})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	var payload map[string]any
 	json.Unmarshal(resp.Payload, &payload)
@@ -423,7 +423,7 @@ func TestSecurityIsURL_ReturnsOK(t *testing.T) {
 		"url": "https://example.com/path",
 	})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	var payload map[string]any
 	json.Unmarshal(resp.Payload, &payload)
@@ -436,12 +436,12 @@ func TestSecurityValidateErrorCode_KnownCode(t *testing.T) {
 	d := testDispatcher()
 	resp := dispatch(t, d, "security.validate_error_code", map[string]string{"code": "NOT_FOUND"})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	var payload map[string]any
 	json.Unmarshal(resp.Payload, &payload)
 	if payload["valid"] != true {
-		t.Errorf("expected valid=true for NOT_FOUND code, got %v", payload["valid"])
+		t.Errorf("got %v, want valid=true for NOT_FOUND code", payload["valid"])
 	}
 }
 
@@ -456,7 +456,7 @@ func TestMarkdownDetectFences_Valid(t *testing.T) {
 		"text": "```go\nfmt.Println(\"hello\")\n```",
 	})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 	var payload map[string]any
 	json.Unmarshal(resp.Payload, &payload)

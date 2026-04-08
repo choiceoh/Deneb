@@ -52,20 +52,20 @@ func requireOK(t *testing.T, resp *protocol.ResponseFrame) {
 		if resp.Error != nil {
 			errMsg = fmt.Sprintf("%s: %s", resp.Error.Code, resp.Error.Message)
 		}
-		t.Fatalf("expected OK response, got error: %s", errMsg)
+		t.Fatalf("got error: %s, want OK response", errMsg)
 	}
 }
 
 func requireError(t *testing.T, resp *protocol.ResponseFrame, expectedCode string) {
 	t.Helper()
 	if resp.OK {
-		t.Fatalf("expected error response with code %q, got OK", expectedCode)
+		t.Fatalf("got OK, want error response with code %q", expectedCode)
 	}
 	if resp.Error == nil {
-		t.Fatalf("expected error response, got nil error")
+		t.Fatalf("got nil error, want error response")
 	}
 	if resp.Error.Code != expectedCode {
-		t.Fatalf("expected error code %q, got %q: %s", expectedCode, resp.Error.Code, resp.Error.Message)
+		t.Fatalf("got %q: %s, want error code %q", resp.Error.Code, resp.Error.Message, expectedCode)
 	}
 }
 
@@ -89,10 +89,10 @@ func TestACPStatus(t *testing.T) {
 	result := unmarshalPayload(t, resp)
 
 	if result["enabled"] != true {
-		t.Errorf("expected enabled=true, got %v", result["enabled"])
+		t.Errorf("got %v, want enabled=true", result["enabled"])
 	}
 	if result["totalAgents"] != float64(0) {
-		t.Errorf("expected totalAgents=0, got %v", result["totalAgents"])
+		t.Errorf("got %v, want totalAgents=0", result["totalAgents"])
 	}
 }
 
@@ -111,10 +111,10 @@ func TestACPStatus_WithAgents(t *testing.T) {
 	result := unmarshalPayload(t, resp)
 
 	if result["totalAgents"] != float64(2) {
-		t.Errorf("expected totalAgents=2, got %v", result["totalAgents"])
+		t.Errorf("got %v, want totalAgents=2", result["totalAgents"])
 	}
 	if result["activeAgents"] != float64(1) {
-		t.Errorf("expected activeAgents=1, got %v", result["activeAgents"])
+		t.Errorf("got %v, want activeAgents=1", result["activeAgents"])
 	}
 }
 
@@ -156,7 +156,7 @@ func TestACPList_Empty(t *testing.T) {
 	result := unmarshalPayload(t, resp)
 
 	if result["count"] != float64(0) {
-		t.Errorf("expected count=0, got %v", result["count"])
+		t.Errorf("got %v, want count=0", result["count"])
 	}
 }
 
@@ -175,7 +175,7 @@ func TestACPList_WithParentFilter(t *testing.T) {
 	result := unmarshalPayload(t, resp)
 
 	if result["count"] != float64(1) {
-		t.Errorf("expected count=1 for parent-a filter, got %v", result["count"])
+		t.Errorf("got %v, want count=1 for parent-a filter", result["count"])
 	}
 }
 
@@ -238,7 +238,7 @@ func TestACPKill_Success(t *testing.T) {
 		t.Fatal("expected agent still in registry")
 	}
 	if agent.Status != "killed" {
-		t.Errorf("expected status=killed, got %s", agent.Status)
+		t.Errorf("got %s, want status=killed", agent.Status)
 	}
 }
 
@@ -282,10 +282,10 @@ func TestACPSend_ByAgentID(t *testing.T) {
 	requireOK(t, resp)
 
 	if sentKey != "acp:test:agent-send" {
-		t.Errorf("expected send to acp:test:agent-send, got %s", sentKey)
+		t.Errorf("got %s, want send to acp:test:agent-send", sentKey)
 	}
 	if sentMsg != "hello agent" {
-		t.Errorf("expected message 'hello agent', got %s", sentMsg)
+		t.Errorf("got %s, want message 'hello agent'", sentMsg)
 	}
 }
 
@@ -306,7 +306,7 @@ func TestACPSend_BySessionKey(t *testing.T) {
 	requireOK(t, resp)
 
 	if sentKey != "agent:main:main" {
-		t.Errorf("expected send to agent:main:main, got %s", sentKey)
+		t.Errorf("got %s, want send to agent:main:main", sentKey)
 	}
 }
 
@@ -416,7 +416,7 @@ func TestACPBindings_All(t *testing.T) {
 	result := unmarshalPayload(t, resp)
 
 	if result["count"] != float64(2) {
-		t.Errorf("expected count=2, got %v", result["count"])
+		t.Errorf("got %v, want count=2", result["count"])
 	}
 }
 
@@ -441,7 +441,7 @@ func TestACPBindings_FilterBySession(t *testing.T) {
 	result := unmarshalPayload(t, resp)
 
 	if result["count"] != float64(1) {
-		t.Errorf("expected count=1 for agent:main:main, got %v", result["count"])
+		t.Errorf("got %v, want count=1 for agent:main:main", result["count"])
 	}
 }
 

@@ -33,7 +33,7 @@ func TestDebouncerImmediateFlush(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	mu.Lock()
 	if len(flushed) != 2 {
-		t.Errorf("expected 2 flushes, got %d", len(flushed))
+		t.Errorf("got %d, want 2 flushes", len(flushed))
 	}
 	mu.Unlock()
 }
@@ -63,7 +63,7 @@ func TestDebouncerBatching(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	mu.Lock()
 	if len(flushed) != 0 {
-		t.Errorf("expected 0 flushes before debounce, got %d", len(flushed))
+		t.Errorf("got %d, want 0 flushes before debounce", len(flushed))
 	}
 	mu.Unlock()
 
@@ -71,9 +71,9 @@ func TestDebouncerBatching(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	mu.Lock()
 	if len(flushed) != 1 {
-		t.Errorf("expected 1 flush after debounce, got %d", len(flushed))
+		t.Errorf("got %d, want 1 flush after debounce", len(flushed))
 	} else if len(flushed[0]) != 3 {
-		t.Errorf("expected batch of 3, got %d", len(flushed[0]))
+		t.Errorf("got %d, want batch of 3", len(flushed[0]))
 	}
 	mu.Unlock()
 }
@@ -101,9 +101,9 @@ func TestDebouncerFlushKey(t *testing.T) {
 
 	mu.Lock()
 	if len(flushed) != 1 {
-		t.Errorf("expected 1 flush after FlushKey, got %d", len(flushed))
+		t.Errorf("got %d, want 1 flush after FlushKey", len(flushed))
 	} else if len(flushed[0]) != 2 {
-		t.Errorf("expected batch of 2, got %d", len(flushed[0]))
+		t.Errorf("got %d, want batch of 2", len(flushed[0]))
 	}
 	mu.Unlock()
 }
@@ -141,13 +141,13 @@ func TestDebouncerRetryUntilSuccess(t *testing.T) {
 	}
 
 	if got := attempts.Load(); got != 3 {
-		t.Fatalf("expected 3 attempts (2 retries then success), got %d", got)
+		t.Fatalf("got %d, want 3 attempts (2 retries then success)", got)
 	}
 
 	mu.Lock()
 	defer mu.Unlock()
 	if len(flushed) != 1 {
-		t.Fatalf("expected single successful flush batch, got %d", len(flushed))
+		t.Fatalf("got %d, want single successful flush batch", len(flushed))
 	}
 	if len(flushed[0]) != 2 || flushed[0][0] != "one" || flushed[0][1] != "two" {
 		t.Fatalf("unexpected flushed batch: %#v", flushed[0])
@@ -177,12 +177,12 @@ func TestDebouncerStopsAfterMaxRetries(t *testing.T) {
 	}
 
 	if got := attempts.Load(); got != 4 {
-		t.Fatalf("expected 4 total attempts, got %d", got)
+		t.Fatalf("got %d, want 4 total attempts", got)
 	}
 
 	// After max retries, queue should drop the failed batch and not keep retrying.
 	time.Sleep(60 * time.Millisecond)
 	if got := attempts.Load(); got != 4 {
-		t.Fatalf("expected retries to stop at 4 attempts, got %d", got)
+		t.Fatalf("got %d, want retries to stop at 4 attempts", got)
 	}
 }

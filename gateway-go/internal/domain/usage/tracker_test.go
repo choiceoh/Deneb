@@ -23,10 +23,10 @@ func TestRecordCall(t *testing.T) {
 
 	status := tracker.Status()
 	if status.Providers["anthropic"].Calls != 2 {
-		t.Fatalf("expected 2 anthropic calls, got %d", status.Providers["anthropic"].Calls)
+		t.Fatalf("got %d, want 2 anthropic calls", status.Providers["anthropic"].Calls)
 	}
 	if status.Providers["openai"].Calls != 1 {
-		t.Fatalf("expected 1 openai call, got %d", status.Providers["openai"].Calls)
+		t.Fatalf("got %d, want 1 openai call", status.Providers["openai"].Calls)
 	}
 }
 
@@ -39,16 +39,16 @@ func TestRecordTokens(t *testing.T) {
 	status := tracker.Status()
 	stats := status.Providers["anthropic"]
 	if stats.Tokens.Input != 250 {
-		t.Fatalf("expected 250 input tokens, got %d", stats.Tokens.Input)
+		t.Fatalf("got %d, want 250 input tokens", stats.Tokens.Input)
 	}
 	if stats.Tokens.Output != 500 {
-		t.Fatalf("expected 500 output tokens, got %d", stats.Tokens.Output)
+		t.Fatalf("got %d, want 500 output tokens", stats.Tokens.Output)
 	}
 	if stats.Tokens.CacheRead != 50 {
-		t.Fatalf("expected 50 cache read tokens, got %d", stats.Tokens.CacheRead)
+		t.Fatalf("got %d, want 50 cache read tokens", stats.Tokens.CacheRead)
 	}
 	if stats.Tokens.CacheWrite != 10 {
-		t.Fatalf("expected 10 cache write tokens, got %d", stats.Tokens.CacheWrite)
+		t.Fatalf("got %d, want 10 cache write tokens", stats.Tokens.CacheWrite)
 	}
 }
 
@@ -64,7 +64,7 @@ func TestStatus(t *testing.T) {
 		t.Fatal("expected non-empty startedAt")
 	}
 	if len(status.Providers) != 1 {
-		t.Fatalf("expected 1 provider, got %d", len(status.Providers))
+		t.Fatalf("got %d, want 1 provider", len(status.Providers))
 	}
 }
 
@@ -76,10 +76,10 @@ func TestCost(t *testing.T) {
 
 	cost := tracker.Cost()
 	if cost.TotalCalls != 3 {
-		t.Fatalf("expected 3 total calls, got %d", cost.TotalCalls)
+		t.Fatalf("got %d, want 3 total calls", cost.TotalCalls)
 	}
 	if len(cost.Providers) != 2 {
-		t.Fatalf("expected 2 providers, got %d", len(cost.Providers))
+		t.Fatalf("got %d, want 2 providers", len(cost.Providers))
 	}
 }
 
@@ -102,6 +102,6 @@ func TestEmptyStatus(t *testing.T) {
 	status := tracker.Status()
 
 	if len(status.Providers) != 0 {
-		t.Fatalf("expected 0 providers, got %d", len(status.Providers))
+		t.Fatalf("got %d, want 0 providers", len(status.Providers))
 	}
 }
