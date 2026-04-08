@@ -3,11 +3,10 @@ package toolctx
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"sort"
 	"testing"
 	"time"
-
-	"github.com/google/go-cmp/cmp"
 )
 
 // ---------------------------------------------------------------------------
@@ -137,8 +136,8 @@ func TestDeliveryContextRoundtrip(t *testing.T) {
 	dc := &DeliveryContext{Channel: "telegram", To: "user1"}
 	ctx := WithDeliveryContext(context.Background(), dc)
 	got := DeliveryFromContext(ctx)
-	if diff := cmp.Diff(dc, got); diff != "" {
-		t.Errorf("DeliveryFromContext mismatch (-want +got):\n%s", diff)
+	if !reflect.DeepEqual(dc, got) {
+		t.Errorf("DeliveryFromContext mismatch:\n  want: %+v\n   got: %+v", dc, got)
 	}
 }
 
@@ -294,8 +293,8 @@ func TestDeferredActivation_activate(t *testing.T) {
 	got := da.ActivatedNames()
 	sort.Strings(got)
 	want := []string{"calendar", "gmail"}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("ActivatedNames mismatch (-want +got):\n%s", diff)
+	if !reflect.DeepEqual(want, got) {
+		t.Errorf("ActivatedNames mismatch:\n  want: %v\n   got: %v", want, got)
 	}
 }
 
@@ -307,8 +306,8 @@ func TestDeferredActivation_multipleMerge(t *testing.T) {
 	got := da.ActivatedNames()
 	sort.Strings(got)
 	want := []string{"calendar", "exec", "gmail"}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("ActivatedNames mismatch (-want +got):\n%s", diff)
+	if !reflect.DeepEqual(want, got) {
+		t.Errorf("ActivatedNames mismatch:\n  want: %v\n   got: %v", want, got)
 	}
 }
 
@@ -541,8 +540,8 @@ func TestTurnContext_storeLoadRoundtrip(t *testing.T) {
 	if got == nil {
 		t.Fatal("Load returned nil after Store")
 	}
-	if diff := cmp.Diff(result, got); diff != "" {
-		t.Errorf("Load mismatch (-want +got):\n%s", diff)
+	if !reflect.DeepEqual(result, got) {
+		t.Errorf("Load mismatch:\n  want: %+v\n   got: %+v", result, got)
 	}
 }
 
@@ -561,8 +560,8 @@ func TestTurnContext_ids(t *testing.T) {
 	ids := tc.IDs()
 	sort.Strings(ids)
 	want := []string{"id-a", "id-b"}
-	if diff := cmp.Diff(want, ids); diff != "" {
-		t.Errorf("IDs mismatch (-want +got):\n%s", diff)
+	if !reflect.DeepEqual(want, ids) {
+		t.Errorf("IDs mismatch:\n  want: %v\n   got: %v", want, ids)
 	}
 }
 

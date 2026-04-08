@@ -5,10 +5,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
+	"reflect"
 	"sort"
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
 )
 
 // ---------------------------------------------------------------------------
@@ -51,8 +50,8 @@ func TestTextContent(t *testing.T) {
 	t.Parallel()
 	got := TextContent("hello world")
 	want := ContentBlock{Type: "text", Text: "hello world"}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("TextContent mismatch (-want +got):\n%s", diff)
+	if !reflect.DeepEqual(want, got) {
+		t.Errorf("TextContent mismatch:\n  want: %+v\n   got: %+v", want, got)
 	}
 }
 
@@ -437,8 +436,8 @@ func TestObjectSchema_RequiredAndOptionalProps(t *testing.T) {
 	}
 	sort.Strings(required)
 	wantRequired := []string{"email", "name"}
-	if diff := cmp.Diff(wantRequired, required); diff != "" {
-		t.Errorf("required mismatch (-want +got):\n%s", diff)
+	if !reflect.DeepEqual(wantRequired, required) {
+		t.Errorf("required mismatch:\n  want: %v\n   got: %v", wantRequired, required)
 	}
 }
 
@@ -573,8 +572,8 @@ func TestResourceManager_SubscribeMultiple(t *testing.T) {
 	}
 	sort.Strings(uris)
 	want := []string{"deneb://config", "deneb://sessions", "deneb://status"}
-	if diff := cmp.Diff(want, uris); diff != "" {
-		t.Errorf("subscribed URIs mismatch (-want +got):\n%s", diff)
+	if !reflect.DeepEqual(want, uris) {
+		t.Errorf("subscribed URIs mismatch:\n  want: %v\n   got: %v", want, uris)
 	}
 }
 
