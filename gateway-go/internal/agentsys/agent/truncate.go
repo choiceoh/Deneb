@@ -1,8 +1,11 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
 // DefaultMaxOutput is the head/tail truncation budget for tool results.
@@ -11,6 +14,13 @@ import (
 // LLM sees context (paths, invocations) at the top and errors/results at
 // the bottom.
 const DefaultMaxOutput = 32 * 1024 // 32K chars
+
+// CompactedMaxOutput is the reduced budget applied to tool results from
+// previous turns. The LLM already processed the full result on the turn it
+// was produced; subsequent turns only need enough context to remember what
+// the tool returned. This dramatically reduces token cost in multi-turn
+// agent loops where the full message history is resent every turn.
+const CompactedMaxOutput = 4 * 1024 // 4K chars
 
 // TruncateHeadTail preserves the first and last half of content when it
 // exceeds maxChars, replacing the middle with a truncation marker.
@@ -40,4 +50,42 @@ func TruncateHeadTail(content string, maxChars int, spillID string) string {
 	}
 
 	return head + marker + tail
+}
+
+// CompactPriorToolResults shrinks tool_result content blocks in messages from
+// completed turns so that subsequent LLM calls carry less baggage. Only
+// messages before lastTurnStartIdx are eligible (the current turn's results
+// are kept at full size so the LLM can reason about them). Returns the number
+// of blocks that were actually compacted.
+func CompactPriorToolResults(messages []llm.Message, lastTurnStartIdx int) int {
+	compacted := 0
+	for i := range messages[:lastTurnStartIdx] {
+		if messages[i].Role != "user" {
+			continue
+		}
+		// Try to parse as content blocks (tool result messages are block arrays).
+		var blocks []llm.ContentBlock
+		if err := json.Unmarshal(messages[i].Content, &blocks); err != nil {
+			continue // plain text message, skip
+		}
+
+		changed := false
+		for j := range blocks {
+			if blocks[j].Type != "tool_result" {
+				continue
+			}
+			if len(blocks[j].Content) <= CompactedMaxOutput {
+				continue
+			}
+			blocks[j].Content = TruncateHeadTail(blocks[j].Content, CompactedMaxOutput, "")
+			changed = true
+			compacted++
+		}
+
+		if changed {
+			raw, _ := json.Marshal(blocks)
+			messages[i].Content = raw
+		}
+	}
+	return compacted
 }
