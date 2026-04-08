@@ -11,7 +11,7 @@ import (
 
 // Context assembly defaults.
 const (
-	defaultMemoryTokenBudget  = 200_000
+	defaultMemoryTokenBudget  = 150_000
 	defaultSystemPromptBudget = 30_000
 	defaultFreshTailCount     = 48
 )
