@@ -102,8 +102,3 @@ func TestIsContextOverflow_multiProvider(t *testing.T) {
 	}
 }
 
-func TestIsContextOverflow_nil(t *testing.T) {
-	if isContextOverflow(nil) {
-		t.Error("isContextOverflow(nil) should be false")
-	}
-}

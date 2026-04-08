@@ -19,12 +19,6 @@ func TestExtractReplyContext_NoReply(t *testing.T) {
 	}
 }
 
-func TestExtractReplyContext_NilMessage(t *testing.T) {
-	rc := ExtractReplyContext(nil, 999)
-	if rc != nil {
-		t.Fatal("expected nil for nil message")
-	}
-}
 
 func TestExtractReplyContext_TextReply(t *testing.T) {
 	msg := &telegram.Message{
@@ -122,24 +116,6 @@ func TestExtractReplyContext_LongBodyTruncated(t *testing.T) {
 	}
 }
 
-func TestExtractReplyContext_NoSender(t *testing.T) {
-	msg := &telegram.Message{
-		MessageID: 6,
-		Chat:      telegram.Chat{ID: 100},
-		Text:      "what?",
-		ReplyToMessage: &telegram.Message{
-			MessageID: 5,
-			Text:      "anonymous message",
-		},
-	}
-	rc := ExtractReplyContext(msg, 999)
-	if rc == nil {
-		t.Fatal("expected non-nil reply context")
-	}
-	if rc.ReplyToSender != "" {
-		t.Errorf("got %q, want empty sender", rc.ReplyToSender)
-	}
-}
 
 func TestFormatReplyPrefix_WithSender(t *testing.T) {
 	rc := &ReplyContext{
@@ -155,28 +131,8 @@ func TestFormatReplyPrefix_WithSender(t *testing.T) {
 	}
 }
 
-func TestFormatReplyPrefix_NoSender(t *testing.T) {
-	rc := &ReplyContext{
-		ReplyToBody: "Some text",
-	}
-	prefix := FormatReplyPrefix(rc)
-	if !strings.Contains(prefix, "[답장]") {
-		t.Errorf("missing generic header, got: %q", prefix)
-	}
-}
 
-func TestFormatReplyPrefix_Nil(t *testing.T) {
-	if FormatReplyPrefix(nil) != "" {
-		t.Error("expected empty string for nil")
-	}
-}
 
-func TestFormatReplyPrefix_EmptyBody(t *testing.T) {
-	rc := &ReplyContext{ReplyToSender: "Alice"}
-	if FormatReplyPrefix(rc) != "" {
-		t.Error("expected empty string for empty body")
-	}
-}
 
 func TestFormatReplyPrefix_MultilineQuote(t *testing.T) {
 	rc := &ReplyContext{

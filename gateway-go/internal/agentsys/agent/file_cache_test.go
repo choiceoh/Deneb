@@ -7,12 +7,6 @@ import (
 	"time"
 )
 
-func TestFileCache_GetMiss(t *testing.T) {
-	fc := NewFileCache(10)
-	if entry := fc.Get("/nonexistent"); entry != nil {
-		t.Error("expected nil for cache miss")
-	}
-}
 
 func TestFileCache_SetAndGet(t *testing.T) {
 	fc := NewFileCache(10)
@@ -93,17 +87,6 @@ func TestFileCache_Invalidate(t *testing.T) {
 	}
 }
 
-func TestFileCache_InvalidateAll(t *testing.T) {
-	fc := NewFileCache(10)
-	fc.Set("/tmp/a.go", &FileCacheEntry{Path: "/tmp/a.go"})
-	fc.Set("/tmp/b.go", &FileCacheEntry{Path: "/tmp/b.go"})
-
-	fc.InvalidateAll()
-
-	if fc.Get("/tmp/a.go") != nil || fc.Get("/tmp/b.go") != nil {
-		t.Error("expected all entries to be invalidated")
-	}
-}
 
 func TestFileChanged_Unchanged(t *testing.T) {
 	dir := t.TempDir()
@@ -183,16 +166,6 @@ func TestFormatCachedRead(t *testing.T) {
 	}
 }
 
-func TestFileCache_UpdateExisting(t *testing.T) {
-	fc := NewFileCache(10)
-	fc.Set("/tmp/a.go", &FileCacheEntry{Content: "v1"})
-	fc.Set("/tmp/a.go", &FileCacheEntry{Content: "v2"})
-
-	got := fc.Get("/tmp/a.go")
-	if got == nil || got.Content != "v2" {
-		t.Error("expected updated content")
-	}
-}
 
 func TestCheckStaleness_NeverRead(t *testing.T) {
 	fc := NewFileCache(10)

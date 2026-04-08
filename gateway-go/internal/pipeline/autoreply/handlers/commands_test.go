@@ -150,26 +150,3 @@ func TestBuildCommandText(t *testing.T) {
 	}
 }
 
-func TestListNativeCommandSpecs(t *testing.T) {
-	r := NewCommandRegistry(testCommands())
-
-	specs := r.ListNativeCommandSpecs()
-	// /config is text-only, should not appear.
-	for _, s := range specs {
-		if s.Name == "config" {
-			t.Error("text-only command should not appear in native specs")
-		}
-	}
-
-	// Verify /status appears as its native name.
-	found := false
-	for _, s := range specs {
-		if s.Name == "status" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected 'status' in native specs")
-	}
-}

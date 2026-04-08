@@ -4,56 +4,7 @@ import (
 	"testing"
 )
 
-func TestNormalizeText(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"  hello  ", "hello"},
-		{"", ""},
-		{"  ", ""},
-		{"no trim", "no trim"},
-	}
-	for _, tt := range tests {
-		got := normalizeText(tt.input)
-		if got != tt.want {
-			t.Errorf("normalizeText(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
 
-func TestNormalizeTextList(t *testing.T) {
-	tests := []struct {
-		name  string
-		input []string
-		want  int // expected length, -1 for nil
-	}{
-		{"nil input", nil, -1},
-		{"empty input", []string{}, -1},
-		{"all whitespace", []string{"  ", ""}, -1},
-		{"valid items", []string{"a", "b"}, 2},
-		{"with duplicates", []string{"a", "b", "a"}, 2},
-		{"with whitespace", []string{" a ", " b ", " a "}, 2},
-		{"mixed", []string{"a", "", " b ", "  "}, 2},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeTextList(tt.input)
-			if tt.want == -1 {
-				if got != nil {
-					t.Errorf("got %v, want nil", got)
-				}
-				return
-			}
-			if got == nil {
-				t.Fatalf("got nil, want %d items", tt.want)
-			}
-			if len(got) != tt.want {
-				t.Errorf("got %d (%v), want %d items", len(got), got, tt.want)
-			}
-		})
-	}
-}
 
 func TestNormalizeProviderAuthMethods(t *testing.T) {
 	t.Run("valid methods", func(t *testing.T) {

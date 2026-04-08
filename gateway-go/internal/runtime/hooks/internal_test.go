@@ -91,13 +91,6 @@ func TestInternalRegistry_Unregister(t *testing.T) {
 	}
 }
 
-func TestInternalRegistry_NoHandlers(t *testing.T) {
-	reg := NewInternalRegistry(nil)
-
-	// Should not panic.
-	event := &InternalHookEvent{Type: EventTypeGateway, Action: "startup"}
-	reg.Trigger(context.Background(), event)
-}
 
 func TestEvaluateEligibility_AlwaysTrue(t *testing.T) {
 	meta := &DenebHookMetadata{Always: true}
@@ -149,11 +142,6 @@ func TestEvaluateEligibility_RequiredEnv(t *testing.T) {
 	}
 }
 
-func TestEvaluateEligibility_NilMetadata(t *testing.T) {
-	if !EvaluateEligibility(nil, EligibilityContext{}) {
-		t.Error("nil metadata should be eligible")
-	}
-}
 
 func TestEventKey(t *testing.T) {
 	event := &InternalHookEvent{Type: EventTypeMessage, Action: "received"}

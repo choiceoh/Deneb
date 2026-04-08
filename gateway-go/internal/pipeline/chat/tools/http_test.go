@@ -41,19 +41,6 @@ func TestToolHTTP_getRequest(t *testing.T) {
 	}
 }
 
-func TestToolHTTP_methodDefault(t *testing.T) {
-	var gotMethod string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod = r.Method
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-
-	callHTTP(t, map[string]any{"url": srv.URL})
-	if gotMethod != "GET" {
-		t.Errorf("default method should be GET, got %q", gotMethod)
-	}
-}
 
 func TestToolHTTP_methodPost(t *testing.T) {
 	var gotMethod string

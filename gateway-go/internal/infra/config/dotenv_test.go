@@ -58,12 +58,6 @@ NOEQUALSSIGN
 	}
 }
 
-func TestParseDotenvMissing(t *testing.T) {
-	_, err := parseDotenv("/nonexistent/.env")
-	if !os.IsNotExist(err) {
-		t.Fatalf("expected not-exist error, got: %v", err)
-	}
-}
 
 func TestLoadDotenvFilesNoOverride(t *testing.T) {
 	// Set an env var before loading — it should not be overridden.

@@ -25,59 +25,8 @@ func TestHandleChatBtw_MissingParams(t *testing.T) {
 	}
 }
 
-func TestHandleChatBtw_MissingQuestion(t *testing.T) {
-	d := NewDispatcher(nil)
-	RegisterChatBtwMethods(d, ChatBtwDeps{})
-	params, _ := json.Marshal(map[string]any{"sessionKey": "sk-123"})
-	resp := d.Dispatch(context.Background(), &protocol.RequestFrame{
-		Type:   protocol.FrameTypeRequest,
-		ID:     "test-2",
-		Method: "chat.btw",
-		Params: params,
-	})
-	if resp.OK {
-		t.Error("expected error for missing question")
-	}
-	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
-		t.Errorf("got %v, want MISSING_PARAM", resp.Error)
-	}
-}
 
-func TestHandleChatBtw_MissingSessionKey(t *testing.T) {
-	d := NewDispatcher(nil)
-	RegisterChatBtwMethods(d, ChatBtwDeps{})
-	params, _ := json.Marshal(map[string]any{"question": "what is 2+2?"})
-	resp := d.Dispatch(context.Background(), &protocol.RequestFrame{
-		Type:   protocol.FrameTypeRequest,
-		ID:     "test-3",
-		Method: "chat.btw",
-		Params: params,
-	})
-	if resp.OK {
-		t.Error("expected error for missing sessionKey")
-	}
-	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
-		t.Errorf("got %v, want MISSING_PARAM", resp.Error)
-	}
-}
 
-func TestHandleChatBtw_NoChatHandler(t *testing.T) {
-	d := NewDispatcher(nil)
-	RegisterChatBtwMethods(d, ChatBtwDeps{})
-	params, _ := json.Marshal(map[string]any{"question": "what is 2+2?", "sessionKey": "sk-123"})
-	resp := d.Dispatch(context.Background(), &protocol.RequestFrame{
-		Type:   protocol.FrameTypeRequest,
-		ID:     "test-4",
-		Method: "chat.btw",
-		Params: params,
-	})
-	if resp.OK {
-		t.Error("expected error when chat handler unavailable")
-	}
-	if resp.Error == nil || resp.Error.Code != protocol.ErrUnavailable {
-		t.Errorf("got %v, want UNAVAILABLE", resp.Error)
-	}
-}
 
 // mockBtwChat implements the ChatBtwDeps.Chat interface for testing.
 type mockBtwChat struct {

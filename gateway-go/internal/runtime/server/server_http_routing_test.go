@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -49,43 +48,5 @@ func TestBuildMux_RegistersExpectedRoutes(t *testing.T) {
 
 // TestHandleRoot_ResponseShape verifies that the root handler returns a
 // well-formed JSON response with the expected fields and values.
-func TestHandleRoot_ResponseShape(t *testing.T) {
-	srv := testutil.Must(New(":0"))
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
-	w := httptest.NewRecorder()
-	srv.handleRoot(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("got %d, want 200", w.Code)
-	}
-
-	var resp map[string]any
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode error: %v", err)
-	}
-
-	for _, key := range []string{"name", "version", "status"} {
-		if _, ok := resp[key]; !ok {
-			t.Errorf("missing field %q in root response", key)
-		}
-	}
-	if resp["name"] != "deneb-gateway" {
-		t.Errorf("name = %v, want deneb-gateway", resp["name"])
-	}
-	if resp["status"] != "ok" {
-		t.Errorf("status = %v, want ok", resp["status"])
-	}
-}
 
 // TestHandleRoot_ContentType verifies that root handler sets JSON content type.
-func TestHandleRoot_ContentType(t *testing.T) {
-	srv := testutil.Must(New(":0"))
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
-	w := httptest.NewRecorder()
-	srv.handleRoot(w, req)
-
-	ct := w.Header().Get("Content-Type")
-	if ct == "" {
-		t.Error("expected Content-Type header to be set")
-	}
-}

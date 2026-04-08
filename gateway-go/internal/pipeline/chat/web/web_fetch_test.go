@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
-	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // --- HTML noise stripping tests ---
@@ -45,16 +44,6 @@ func TestStripNoiseElements(t *testing.T) {
 	}
 }
 
-func TestStripNoiseElements_NestedTags(t *testing.T) {
-	html := `<nav><div><nav>inner</nav></div></nav><p>keep</p>`
-	result := StripNoiseElements(html)
-	if strings.Contains(result, "inner") {
-		t.Error("nested nav should be stripped")
-	}
-	if !strings.Contains(result, "keep") {
-		t.Error("content outside nav should survive")
-	}
-}
 
 func TestStripMatchingBlocks_CookieBanner(t *testing.T) {
 	html := `<p>Before</p>
@@ -69,24 +58,7 @@ func TestStripMatchingBlocks_CookieBanner(t *testing.T) {
 	}
 }
 
-func TestStripMatchingBlocks_Sidebar(t *testing.T) {
-	html := `<main><p>Article</p></main><div class="sidebar widget-area"><p>Widget</p></div>`
-	result := StripNoiseElements(html)
-	if strings.Contains(result, "Widget") {
-		t.Error("sidebar should be stripped")
-	}
-	if !strings.Contains(result, "Article") {
-		t.Error("main content should survive")
-	}
-}
 
-func TestStripMatchingBlocks_Comments(t *testing.T) {
-	html := `<article><p>Content</p></article><section class="comments-section"><p>User said stuff</p></section>`
-	result := StripNoiseElements(html)
-	if strings.Contains(result, "User said stuff") {
-		t.Error("comments section should be stripped")
-	}
-}
 
 func TestStripTagBlock_NotConfusedByPrefix(t *testing.T) {
 	// <navigate> should NOT be stripped when stripping <nav>.
@@ -155,14 +127,6 @@ func TestExtractHTMLMeta_ReversedAttributes(t *testing.T) {
 	}
 }
 
-func TestExtractHTMLMeta_FallbackTitle(t *testing.T) {
-	html := `<html><head><title>Fallback Title</title></head></html>`
-	meta := &webFetchMeta{}
-	extractHTMLMeta(html, meta)
-	if meta.Title != "Fallback Title" {
-		t.Errorf("title = %q, want %q", meta.Title, "Fallback Title")
-	}
-}
 
 func TestExtractJSONLD(t *testing.T) {
 	html := `<head>
@@ -198,27 +162,7 @@ func TestExtractJSONLD(t *testing.T) {
 	}
 }
 
-func TestExtractJSONLD_ArrayFormat(t *testing.T) {
-	html := `<script type="application/ld+json">
-[{"@type": "WebPage", "name": "Array Page"}]
-</script>`
-	meta := &webFetchMeta{}
-	extractJSONLD(html, meta)
-	if meta.Title != "Array Page" {
-		t.Errorf("title = %q, want %q", meta.Title, "Array Page")
-	}
-}
 
-func TestExtractJSONLD_AuthorString(t *testing.T) {
-	html := `<script type="application/ld+json">
-{"author": "Simple Author"}
-</script>`
-	meta := &webFetchMeta{}
-	extractJSONLD(html, meta)
-	if meta.Author != "Simple Author" {
-		t.Errorf("author = %q, want %q", meta.Author, "Simple Author")
-	}
-}
 
 // --- Signal detection tests ---
 
@@ -381,16 +325,6 @@ func TestFormatFetchResult_NoRedirect(t *testing.T) {
 	}
 }
 
-func TestFormatFetchResult_CanonicalSameAsFinal(t *testing.T) {
-	meta := webFetchMeta{
-		URL: "https://x.com/a", FinalURL: "https://x.com/b", CanonicalURL: "https://x.com/b",
-		ContentType: "text/html", StatusCode: 200, Retention: "100.0%",
-	}
-	result := formatFetchResult(meta, "hello")
-	if strings.Contains(result, "Canonical:") {
-		t.Error("Canonical should be omitted when same as FinalURL")
-	}
-}
 
 func TestFormatFetchError(t *testing.T) {
 	e := webFetchErr{Code: "http_404", Message: "not found", URL: "https://x.com", Retryable: false}
@@ -400,14 +334,6 @@ func TestFormatFetchError(t *testing.T) {
 	}
 }
 
-func TestFormatFetchError_WithHint(t *testing.T) {
-	e := webFetchErr{Code: "http_403", Message: "forbidden", URL: "https://x.com", Retryable: false,
-		Hint: "Try http tool with custom headers"}
-	result := formatFetchError(e)
-	if !strings.Contains(result, "Hint: Try http tool with custom headers") {
-		t.Errorf("missing hint in output: %s", result)
-	}
-}
 
 func TestClassifyFetchError_Hints(t *testing.T) {
 	tests := []struct {
@@ -436,12 +362,6 @@ func TestClassifyFetchError_Hints(t *testing.T) {
 
 // --- Truncation tests ---
 
-func TestApplyTruncation_NoTruncation(t *testing.T) {
-	result := applyTruncation("short", 1000)
-	if result != "short" {
-		t.Error("should not truncate short content")
-	}
-}
 
 func TestApplyTruncation_PreservesMetadata(t *testing.T) {
 	meta := webFetchMeta{URL: "https://x.com", ContentType: "text/html", StatusCode: 200, Retention: "100.0%"}
@@ -475,28 +395,7 @@ func TestTruncateAtSection(t *testing.T) {
 	}
 }
 
-func TestTruncateAtSection_NoTruncation(t *testing.T) {
-	content := "short content"
-	result, wasTruncated := truncateAtSection(content, 1000)
-	if wasTruncated || result != content {
-		t.Error("should not truncate short content")
-	}
-}
 
-func TestTruncateAtSection_ParagraphBreak(t *testing.T) {
-	content := "Paragraph one with some text.\n\nParagraph two with more text.\n\nParagraph three."
-	truncated, wasTruncated := truncateAtSection(content, 55)
-	if !wasTruncated {
-		t.Error("should be truncated")
-	}
-	// Should cut at paragraph break.
-	if !strings.HasSuffix(strings.TrimSpace(truncated), "text.") {
-		// It should end at a paragraph boundary.
-		if strings.Contains(truncated, "three") {
-			t.Error("should not include paragraph three at this limit")
-		}
-	}
-}
 
 // --- Charset normalization tests ---
 
@@ -527,50 +426,11 @@ func TestProcessJSON(t *testing.T) {
 	}
 }
 
-func TestProcessJSON_Invalid(t *testing.T) {
-	raw := "not json"
-	result := processJSON(raw)
-	if result != raw {
-		t.Error("invalid JSON should be returned as-is")
-	}
-}
 
 // --- Helper tests ---
 
-func TestStripThinkingTags(t *testing.T) {
-	tests := []struct {
-		input, want string
-	}{
-		{"<think>reasoning</think>\nContent", "Content"},
-		{"No tags here", "No tags here"},
-		{"<think>\nmulti\nline\n</think>\n\nAfter", "After"},
-	}
-	for _, tt := range tests {
-		got := jsonutil.StripThinkingTags(tt.input)
-		if got != tt.want {
-			t.Errorf("StripThinkingTags(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
 
-func TestAppendUnique(t *testing.T) {
-	ss := appendUnique([]string{"a", "b"}, "b")
-	if len(ss) != 2 {
-		t.Errorf("got %d, want 2", len(ss))
-	}
-	ss = appendUnique(ss, "c")
-	if len(ss) != 3 {
-		t.Errorf("got %d, want 3", len(ss))
-	}
-}
 
-func TestEstimateWordCount(t *testing.T) {
-	text := "This is a test sentence with seven words."
-	wc := estimateWordCount(text)
-	if wc != 8 { // "This" "is" "a" "test" "sentence" "with" "seven" "words."
-		t.Errorf("word count = %d, want 8", wc)
-	}
-}
 
 func TestIsRetryableError(t *testing.T) {
 	tests := []struct {

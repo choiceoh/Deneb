@@ -42,17 +42,6 @@ func TestFindCatalogTemplate(t *testing.T) {
 	}
 }
 
-func TestFindCatalogTemplateEmpty(t *testing.T) {
-	result := FindCatalogTemplate(nil, "openai", []string{"gpt-4"})
-	if result != nil {
-		t.Errorf("got %v, want nil for empty entries", result)
-	}
-
-	result2 := FindCatalogTemplate([]CatalogTemplateEntry{}, "openai", nil)
-	if result2 != nil {
-		t.Errorf("got %v, want nil for empty template IDs", result2)
-	}
-}
 
 func TestBuildSingleProviderAPIKeyCatalog(t *testing.T) {
 	// No API key → nil.

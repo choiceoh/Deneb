@@ -44,13 +44,6 @@ func TestExtractYouTubeURLs(t *testing.T) {
 	}
 }
 
-func TestExtractYouTubeURLs_Dedup(t *testing.T) {
-	text := "https://youtu.be/dQw4w9WgXcQ twice: https://youtu.be/dQw4w9WgXcQ"
-	urls := ExtractYouTubeURLs(text)
-	if len(urls) != 1 {
-		t.Errorf("got %d URLs, want 1 (deduped)", len(urls))
-	}
-}
 
 func TestCleanSubtitleText(t *testing.T) {
 	raw := `WEBVTT

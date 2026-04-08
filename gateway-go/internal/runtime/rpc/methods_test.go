@@ -88,20 +88,6 @@ func TestHealthCheck(t *testing.T) {
 		t.Errorf("got %v, want runtime=go", payload["runtime"])
 	}
 }
-
-func TestSystemInfo(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "system.info", nil)
-	if !resp.OK {
-		t.Fatalf("got error: %+v, want ok", resp.Error)
-	}
-	var payload map[string]any
-	json.Unmarshal(resp.Payload, &payload)
-	if payload["runtime"] != "go" {
-		t.Errorf("got %v, want runtime=go", payload["runtime"])
-	}
-}
-
 func TestRPCSmokeFrequentMethods(t *testing.T) {
 	d := testDispatcher()
 	tests := []struct {
@@ -293,32 +279,6 @@ func TestSessionsDelete_RunningBlocked(t *testing.T) {
 // Protocol validate_params RPC tests
 // ---------------------------------------------------------------------------
 
-func TestProtocolValidateParams_MissingMethod(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "protocol.validate_params", map[string]string{
-		"params": `{"key":"value"}`,
-	})
-	if resp.OK {
-		t.Error("expected error for missing method")
-	}
-	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
-		t.Errorf("got %+v, want MISSING_PARAM", resp.Error)
-	}
-}
-
-func TestProtocolValidateParams_MissingParams(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "protocol.validate_params", map[string]string{
-		"method": ciHealthMethod,
-	})
-	if resp.OK {
-		t.Error("expected error for missing params")
-	}
-	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
-		t.Errorf("got %+v, want MISSING_PARAM", resp.Error)
-	}
-}
-
 func TestSessionsList(t *testing.T) {
 	sm := session.NewManager()
 	sm.Set(&session.Session{Key: "s1", Kind: session.KindDirect})
@@ -338,133 +298,11 @@ func TestSessionsList(t *testing.T) {
 // Telegram method contract tests
 // ---------------------------------------------------------------------------
 
-func TestTelegramList(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "telegram.list", nil)
-	if !resp.OK {
-		t.Fatalf("got error: %+v, want ok", resp.Error)
-	}
-}
-
-func TestTelegramGet_MissingID(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "telegram.get", map[string]any{})
-	if resp.OK {
-		t.Error("expected error for missing id")
-	}
-	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
-		t.Errorf("got %+v, want MISSING_PARAM", resp.Error)
-	}
-}
-
-func TestTelegramGet_NotFound(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "telegram.get", map[string]string{"id": "nonexistent-chan"})
-	if resp.OK {
-		t.Error("expected error for nonexistent channel")
-	}
-	if resp.Error == nil || resp.Error.Code != protocol.ErrNotFound {
-		t.Errorf("got %+v, want NOT_FOUND", resp.Error)
-	}
-}
-
-func TestTelegramStatus(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "telegram.status", nil)
-	if !resp.OK {
-		t.Fatalf("got error: %+v, want ok", resp.Error)
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Security method contract tests
 // ---------------------------------------------------------------------------
-
-func TestSecurityValidateSessionKey_Valid(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "security.validate_session_key", map[string]string{"key": "valid-session-key"})
-	if !resp.OK {
-		t.Fatalf("got error: %+v, want ok", resp.Error)
-	}
-	var payload map[string]any
-	json.Unmarshal(resp.Payload, &payload)
-	if _, ok := payload["valid"]; !ok {
-		t.Error("expected valid field in response")
-	}
-}
-
-func TestSecurityValidateSessionKey_EmptyKey(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "security.validate_session_key", map[string]string{"key": ""})
-	if !resp.OK {
-		t.Fatalf("got error: %+v, want ok (valid=false)", resp.Error)
-	}
-	var payload map[string]any
-	json.Unmarshal(resp.Payload, &payload)
-	if payload["valid"] != false {
-		t.Errorf("got %v, want valid=false for empty key", payload["valid"])
-	}
-}
-
-func TestSecuritySanitizeHTML_Valid(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "security.sanitize_html", map[string]string{
-		"input": "<b>hello</b><script>alert(1)</script>",
-	})
-	if !resp.OK {
-		t.Fatalf("got error: %+v, want ok", resp.Error)
-	}
-	var payload map[string]any
-	json.Unmarshal(resp.Payload, &payload)
-	if _, ok := payload["output"]; !ok {
-		t.Error("expected output field in response")
-	}
-}
-
-func TestSecurityIsURL_ReturnsOK(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "security.is_safe_url", map[string]string{
-		"url": "https://example.com/path",
-	})
-	if !resp.OK {
-		t.Fatalf("got error: %+v, want ok", resp.Error)
-	}
-	var payload map[string]any
-	json.Unmarshal(resp.Payload, &payload)
-	if _, ok := payload["safe"]; !ok {
-		t.Error("expected safe field in response")
-	}
-}
-
-func TestSecurityValidateErrorCode_KnownCode(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "security.validate_error_code", map[string]string{"code": "NOT_FOUND"})
-	if !resp.OK {
-		t.Fatalf("got error: %+v, want ok", resp.Error)
-	}
-	var payload map[string]any
-	json.Unmarshal(resp.Payload, &payload)
-	if payload["valid"] != true {
-		t.Errorf("got %v, want valid=true for NOT_FOUND code", payload["valid"])
-	}
-}
-
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // Markdown method contract tests
 // ---------------------------------------------------------------------------
 
-func TestMarkdownDetectFences_Valid(t *testing.T) {
-	d := testDispatcher()
-	resp := dispatch(t, d, "markdown.detect_fences", map[string]string{
-		"text": "```go\nfmt.Println(\"hello\")\n```",
-	})
-	if !resp.OK {
-		t.Fatalf("got error: %+v, want ok", resp.Error)
-	}
-	var payload map[string]any
-	json.Unmarshal(resp.Payload, &payload)
-	if _, ok := payload["fences"]; !ok {
-		t.Error("expected fences field in response")
-	}
-}

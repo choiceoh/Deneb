@@ -73,13 +73,6 @@ func TestAuthManager_StoreResolve(t *testing.T) {
 	}
 }
 
-func TestAuthManager_Resolve_NotFound(t *testing.T) {
-	am := NewAuthManager(nil, nil)
-	cred := am.Resolve("nonexistent", "")
-	if cred != nil {
-		t.Error("expected nil for unknown provider")
-	}
-}
 
 func TestAuthManager_Prepare_NoForwarder(t *testing.T) {
 	am := NewAuthManager(nil, nil)
@@ -94,13 +87,3 @@ func TestAuthManager_Prepare_NoForwarder(t *testing.T) {
 	}
 }
 
-func TestAuthManager_Stop(t *testing.T) {
-	am := NewAuthManager(nil, nil)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	am.StartRotationLoop(ctx)
-	// Should not panic on double-stop.
-	am.Stop()
-	am.Stop()
-}

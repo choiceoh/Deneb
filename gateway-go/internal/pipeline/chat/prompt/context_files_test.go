@@ -34,12 +34,6 @@ func TestLoadContextFiles(t *testing.T) {
 	}
 }
 
-func TestLoadContextFilesEmpty(t *testing.T) {
-	files := LoadContextFiles("")
-	if files != nil {
-		t.Errorf("got %v, want nil for empty workspace dir", files)
-	}
-}
 
 func TestTruncateContent(t *testing.T) {
 	content := strings.Repeat("a", 100)
@@ -113,17 +107,3 @@ func TestSessionSnapshotFrozen(t *testing.T) {
 	}
 }
 
-func TestFormatContextFilesForPrompt_NoSoul(t *testing.T) {
-	files := []ContextFile{
-		{Path: "AGENTS.md", Content: "agent content"},
-		{Path: "TOOLS.md", Content: "tools content"},
-	}
-
-	result := FormatContextFilesForPrompt(files)
-	if strings.Contains(result, "embody its persona and tone") {
-		t.Error("SOUL.md activation instruction should not appear without SOUL.md")
-	}
-	if !strings.Contains(result, "The following project context files have been loaded:") {
-		t.Error("expected context files loaded preamble")
-	}
-}

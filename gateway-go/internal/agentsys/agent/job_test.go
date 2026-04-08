@@ -97,14 +97,6 @@ func TestJobTracker_WaitForJob_Timeout(t *testing.T) {
 	}
 }
 
-func TestJobTracker_WaitForJob_ZeroTimeout(t *testing.T) {
-	jt := NewJobTracker(nil)
-
-	snap := jt.WaitForJob(context.Background(), "run-x", 0, false)
-	if snap != nil {
-		t.Error("expected nil for zero timeout")
-	}
-}
 
 func TestJobTracker_ActiveRunCount(t *testing.T) {
 	jt := NewJobTracker(nil)

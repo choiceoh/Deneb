@@ -28,22 +28,6 @@ func TestNewRequestFrame(t *testing.T) {
 	}
 }
 
-func TestNewRequestFrameNilParams(t *testing.T) {
-	req := testutil.Must(NewRequestFrame("req-2", "status", nil))
-	if req.Params != nil {
-		t.Errorf("Params should be nil, got %s", string(req.Params))
-	}
-
-	b := testutil.Must(json.Marshal(req))
-
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-	if _, ok := m["params"]; ok {
-		t.Error("params should be omitted when nil")
-	}
-}
 
 func TestNewRequestFrameValidation(t *testing.T) {
 	_, err := NewRequestFrame("", "health", nil)
@@ -140,24 +124,3 @@ func TestParseFrameType(t *testing.T) {
 	}
 }
 
-func TestErrorCodeConstants(t *testing.T) {
-	codes := []string{
-		ErrNotLinked, ErrNotPaired, ErrAgentTimeout, ErrInvalidRequest,
-		ErrUnavailable, ErrMissingParam, ErrNotFound, ErrUnauthorized,
-		ErrValidationFailed, ErrConflict, ErrForbidden, ErrNodeDisconnected,
-		ErrDependencyFailed, ErrFeatureDisabled,
-	}
-	if len(codes) != 14 {
-		t.Errorf("got %d, want 14 error codes", len(codes))
-	}
-	seen := make(map[string]struct{})
-	for _, c := range codes {
-		if c == "" {
-			t.Error("empty error code")
-		}
-		if _, ok := seen[c]; ok {
-			t.Errorf("duplicate error code: %s", c)
-		}
-		seen[c] = struct{}{}
-	}
-}

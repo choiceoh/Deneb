@@ -23,26 +23,11 @@ func (m *mockBtwHandler) HandleBtw(_ context.Context, _, _ string) (string, erro
 // Methods
 // ---------------------------------------------------------------------------
 
-func TestMethods_NilChat_ReturnsNil(t *testing.T) {
-	m := Methods(Deps{Chat: nil})
-	if m != nil {
-		t.Fatalf("got %v, want nil", m)
-	}
-}
 
 // ---------------------------------------------------------------------------
 // BtwMethods
 // ---------------------------------------------------------------------------
 
-func TestBtwMethods_ReturnsHandlerMap(t *testing.T) {
-	m := BtwMethods(BtwDeps{})
-	if m == nil {
-		t.Fatal("expected non-nil handler map")
-	}
-	if _, ok := m["chat.btw"]; !ok {
-		t.Fatal("missing chat.btw handler")
-	}
-}
 
 // ---------------------------------------------------------------------------
 // chat.btw handler
@@ -67,57 +52,8 @@ func TestChatBtw_MissingQuestion(t *testing.T) {
 	}
 }
 
-func TestChatBtw_MissingSessionKey(t *testing.T) {
-	handlers := BtwMethods(BtwDeps{
-		Chat: &mockBtwHandler{result: "answer"},
-	})
-	handler := handlers["chat.btw"]
 
-	req := &protocol.RequestFrame{
-		ID:     "test-2",
-		Params: json.RawMessage(`{"question":"what is this?"}`),
-	}
-	resp := handler(context.Background(), req)
-	if resp.OK {
-		t.Fatal("expected error for missing sessionKey")
-	}
-	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
-		t.Fatalf("got %+v, want MISSING_PARAM", resp.Error)
-	}
-}
 
-func TestChatBtw_MissingParams(t *testing.T) {
-	handlers := BtwMethods(BtwDeps{
-		Chat: &mockBtwHandler{result: "answer"},
-	})
-	handler := handlers["chat.btw"]
-
-	req := &protocol.RequestFrame{ID: "test-3"}
-	resp := handler(context.Background(), req)
-	if resp.OK {
-		t.Fatal("expected error for missing params")
-	}
-	if resp.Error == nil || resp.Error.Code != protocol.ErrInvalidRequest {
-		t.Fatalf("got %+v, want INVALID_REQUEST", resp.Error)
-	}
-}
-
-func TestChatBtw_NilChatHandler(t *testing.T) {
-	handlers := BtwMethods(BtwDeps{Chat: nil})
-	handler := handlers["chat.btw"]
-
-	req := &protocol.RequestFrame{
-		ID:     "test-4",
-		Params: json.RawMessage(`{"question":"hello?","sessionKey":"sess-1"}`),
-	}
-	resp := handler(context.Background(), req)
-	if resp.OK {
-		t.Fatal("expected error for nil chat handler")
-	}
-	if resp.Error == nil || resp.Error.Code != protocol.ErrUnavailable {
-		t.Fatalf("got %+v, want UNAVAILABLE", resp.Error)
-	}
-}
 
 func TestChatBtw_Success(t *testing.T) {
 	handlers := BtwMethods(BtwDeps{

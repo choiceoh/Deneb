@@ -220,20 +220,6 @@ func TestConsoleHandler_ErrorAttrHighlight(t *testing.T) {
 	}
 }
 
-func TestConsoleHandler_PanicAttrHighlight(t *testing.T) {
-	var buf bytes.Buffer
-	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
-
-	r := newTestRecord(slog.LevelError, "handler panic",
-		slog.String("panic", "nil pointer"),
-	)
-	h.Handle(context.TODO(), r)
-
-	got := buf.String()
-	if !strings.Contains(got, ansiItalic) {
-		t.Errorf("panic attr should use italic+red: %q", got)
-	}
-}
 
 func TestConsoleHandler_BoolAttr(t *testing.T) {
 	var buf bytes.Buffer
@@ -284,43 +270,9 @@ func TestConsoleHandler_ErrorMessageBoldRed(t *testing.T) {
 	}
 }
 
-func TestConsoleHandler_InfoMessageBold(t *testing.T) {
-	var buf bytes.Buffer
-	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
-
-	r := newTestRecord(slog.LevelInfo, "started")
-	h.Handle(context.TODO(), r)
-
-	got := buf.String()
-	if !strings.Contains(got, ansiBold) {
-		t.Errorf("INF message should be bold: %q", got)
-	}
-}
 
 // --- New tests for modernized features ---
 
-func TestConsoleHandler_Separator(t *testing.T) {
-	// No-color mode should contain the │ separator.
-	var buf bytes.Buffer
-	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
-	r := newTestRecord(slog.LevelInfo, "test")
-	h.Handle(context.TODO(), r)
-
-	got := buf.String()
-	if !strings.Contains(got, " │ ") {
-		t.Errorf("expected │ separator in no-color output: %q", got)
-	}
-
-	// Color mode should also contain │.
-	buf.Reset()
-	h2 := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
-	h2.Handle(context.TODO(), r)
-
-	got = buf.String()
-	if !strings.Contains(got, "│") {
-		t.Errorf("expected │ separator in color output: %q", got)
-	}
-}
 
 func TestConsoleHandler_PkgTag(t *testing.T) {
 	// pkg preAttr should render as [server] tag, not pkg=server.

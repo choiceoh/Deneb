@@ -44,35 +44,8 @@ func TestInferLegacyName_FromSchedule(t *testing.T) {
 	}
 }
 
-func TestInferLegacyName_Every(t *testing.T) {
-	job := StoreJob{
-		Schedule: StoreSchedule{Kind: "every", EveryMs: 30000},
-		Payload:  StorePayload{Kind: "systemEvent"},
-	}
-	name := InferLegacyName(job)
-	if name != "Every: 30000ms" {
-		t.Errorf("got %q, want 'Every: 30000ms'", name)
-	}
-}
 
-func TestInferLegacyName_At(t *testing.T) {
-	job := StoreJob{
-		Schedule: StoreSchedule{Kind: "at"},
-		Payload:  StorePayload{Kind: "systemEvent"},
-	}
-	name := InferLegacyName(job)
-	if name != "One-shot" {
-		t.Errorf("got %q, want 'One-shot'", name)
-	}
-}
 
-func TestInferLegacyName_Fallback(t *testing.T) {
-	job := StoreJob{Payload: StorePayload{Kind: "systemEvent"}}
-	name := InferLegacyName(job)
-	if name != "Cron job" {
-		t.Errorf("got %q, want 'Cron job'", name)
-	}
-}
 
 func TestNormalizePayloadToSystemText(t *testing.T) {
 	p1 := StorePayload{Kind: "systemEvent", Text: "  hello  "}

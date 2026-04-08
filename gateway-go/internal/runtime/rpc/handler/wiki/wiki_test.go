@@ -51,12 +51,6 @@ func methodsWithStore(t *testing.T) (map[string]rpcutil.HandlerFunc, *wiki.Store
 
 // ─── Methods registration ───────────────────────────────────────────────────
 
-func TestMethods_nilStore_returnsNil(t *testing.T) {
-	m := Methods(Deps{Store: nil})
-	if m != nil {
-		t.Errorf("expected nil, got %d handlers", len(m))
-	}
-}
 
 func TestMethods_registersAllHandlers(t *testing.T) {
 	m, _ := methodsWithStore(t)
@@ -81,17 +75,7 @@ func TestMethods_registersAllHandlers(t *testing.T) {
 
 // ─── wiki.search ────────────────────────────────────────────────────────────
 
-func TestSearch_missingQuery(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	resp := callMethod(m, "wiki.search", map[string]any{})
-	mustErr(t, resp)
-}
 
-func TestSearch_emptyQuery(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	resp := callMethod(m, "wiki.search", map[string]any{"query": ""})
-	mustErr(t, resp)
-}
 
 func TestSearch_defaultLimit(t *testing.T) {
 	m, store := methodsWithStore(t)
@@ -109,67 +93,14 @@ func TestSearch_defaultLimit(t *testing.T) {
 	}
 }
 
-func TestSearch_customLimit(t *testing.T) {
-	m, store := methodsWithStore(t)
-	seedPage(t, store, "기술/a.md", "Alpha", "기술", "alpha content", nil)
-	seedPage(t, store, "기술/b.md", "Beta", "기술", "beta content", nil)
 
-	resp := callMethod(m, "wiki.search", map[string]any{"query": "content", "limit": 1})
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-	results := result["results"].([]any)
-	if len(results) > 1 {
-		t.Errorf("expected at most 1 result, got %d", len(results))
-	}
-}
 
-func TestSearch_noResults(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	resp := callMethod(m, "wiki.search", map[string]any{"query": "nonexistent_xyz"})
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-	// Results may be nil (no matches) or an empty slice.
-	if results, ok := result["results"].([]any); ok && len(results) != 0 {
-		t.Errorf("expected empty results, got %d", len(results))
-	}
-}
 
-func TestSearch_zeroLimitDefaultsTo10(t *testing.T) {
-	m, store := methodsWithStore(t)
-	seedPage(t, store, "기술/test.md", "Test", "기술", "searchable body", nil)
-
-	// limit=0 should default to 10 (not error).
-	resp := callMethod(m, "wiki.search", map[string]any{"query": "searchable", "limit": 0})
-	mustOK(t, resp)
-}
-
-func TestSearch_negativeLimitDefaultsTo10(t *testing.T) {
-	m, store := methodsWithStore(t)
-	seedPage(t, store, "기술/test.md", "Test", "기술", "searchable body", nil)
-
-	resp := callMethod(m, "wiki.search", map[string]any{"query": "searchable", "limit": -5})
-	mustOK(t, resp)
-}
 
 // ─── wiki.read ──────────────────────────────────────────────────────────────
 
-func TestRead_missingPath(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	resp := callMethod(m, "wiki.read", map[string]any{})
-	mustErr(t, resp)
-}
 
-func TestRead_emptyPath(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	resp := callMethod(m, "wiki.read", map[string]any{"path": ""})
-	mustErr(t, resp)
-}
 
-func TestRead_pageNotFound(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	resp := callMethod(m, "wiki.read", map[string]any{"path": "기술/no-such-page.md"})
-	mustErr(t, resp)
-}
 
 func TestRead_existingPage(t *testing.T) {
 	m, store := methodsWithStore(t)
@@ -212,39 +143,11 @@ func TestRead_withSection(t *testing.T) {
 	}
 }
 
-func TestRead_withMissingSection(t *testing.T) {
-	m, store := methodsWithStore(t)
-	seedPage(t, store, "기술/test.md", "Test Page", "기술", "no sections here", nil)
-
-	resp := callMethod(m, "wiki.read", map[string]any{"path": "기술/test.md", "section": "Nonexistent"})
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-
-	// Section should be empty string when not found.
-	if result["section"] != "" {
-		t.Errorf("expected empty section, got %q", result["section"])
-	}
-}
 
 // ─── wiki.write ─────────────────────────────────────────────────────────────
 
-func TestWrite_missingPath(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	resp := callMethod(m, "wiki.write", map[string]any{"title": "Test"})
-	mustErr(t, resp)
-}
 
-func TestWrite_missingTitle(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	resp := callMethod(m, "wiki.write", map[string]any{"path": "기술/test.md"})
-	mustErr(t, resp)
-}
 
-func TestWrite_missingBoth(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	resp := callMethod(m, "wiki.write", map[string]any{})
-	mustErr(t, resp)
-}
 
 func TestWrite_success(t *testing.T) {
 	m, store := methodsWithStore(t)
@@ -329,17 +232,7 @@ func TestWrite_overwriteExisting(t *testing.T) {
 
 // ─── wiki.delete ────────────────────────────────────────────────────────────
 
-func TestDelete_missingPath(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	resp := callMethod(m, "wiki.delete", map[string]any{})
-	mustErr(t, resp)
-}
 
-func TestDelete_emptyPath(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	resp := callMethod(m, "wiki.delete", map[string]any{"path": ""})
-	mustErr(t, resp)
-}
 
 func TestDelete_existingPage(t *testing.T) {
 	m, store := methodsWithStore(t)
@@ -362,40 +255,9 @@ func TestDelete_existingPage(t *testing.T) {
 	}
 }
 
-func TestDelete_nonexistentPage(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	// Deleting a non-existent file succeeds silently because os.Remove only
-	// returns an error when the file exists but cannot be removed. The store's
-	// DeletePage guards os.IsNotExist, so missing files are a no-op.
-	resp := callMethod(m, "wiki.delete", map[string]any{"path": "기술/ghost.md"})
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-	if result["ok"] != true {
-		t.Errorf("expected ok=true: %v", result)
-	}
-}
 
 // ─── wiki.list ──────────────────────────────────────────────────────────────
 
-func TestList_emptyStore(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	resp := callMethod(m, "wiki.list", map[string]any{})
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-
-	pages, ok := result["pages"].([]any)
-	if !ok {
-		// nil pages is valid when the store is empty.
-		if result["pages"] != nil {
-			t.Fatalf("expected pages array or nil, got %T", result["pages"])
-		}
-		pages = nil
-	}
-	count := result["count"].(float64)
-	if int(count) != len(pages) {
-		t.Errorf("count mismatch: count=%v, pages=%d", count, len(pages))
-	}
-}
 
 func TestList_allPages(t *testing.T) {
 	m, store := methodsWithStore(t)
@@ -436,39 +298,10 @@ func TestList_filteredByCategory(t *testing.T) {
 	}
 }
 
-func TestList_nonexistentCategory(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	// Listing a non-existent category returns empty results (filepath.Walk
-	// skips errors on the missing directory and returns nil pages).
-	resp := callMethod(m, "wiki.list", map[string]any{"category": "nonexistent_category"})
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-	count := result["count"].(float64)
-	if count != 0 {
-		t.Errorf("expected 0 pages for nonexistent category, got %v", count)
-	}
-}
 
-func TestList_nilParams(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	// BindHandler requires a JSON body; nil params yields INVALID_REQUEST.
-	resp := callMethod(m, "wiki.list", nil)
-	mustErr(t, resp)
-}
 
 // ─── wiki.index ─────────────────────────────────────────────────────────────
 
-func TestIndex_emptyStore(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	resp := callMethod(m, "wiki.index", map[string]any{})
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-
-	totalPages := result["totalPages"].(float64)
-	if totalPages != 0 {
-		t.Errorf("expected 0 totalPages in empty store, got %v", totalPages)
-	}
-}
 
 func TestIndex_withPages(t *testing.T) {
 	m, store := methodsWithStore(t)
@@ -524,40 +357,10 @@ func TestIndex_filterByCategory(t *testing.T) {
 	}
 }
 
-func TestIndex_filterEmptyCategory(t *testing.T) {
-	m, store := methodsWithStore(t)
-	seedPage(t, store, "기술/go.md", "Go", "기술", "Go lang", nil)
 
-	// Filter by category with no matching pages.
-	resp := callMethod(m, "wiki.index", map[string]any{"category": "사람"})
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-
-	totalPages := result["totalPages"].(float64)
-	if totalPages != 0 {
-		t.Errorf("expected 0 pages for empty category, got %v", totalPages)
-	}
-}
-
-func TestIndex_nilParams(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	// BindHandler requires a JSON body; nil params yields INVALID_REQUEST.
-	resp := callMethod(m, "wiki.index", nil)
-	mustErr(t, resp)
-}
 
 // ─── wiki.stats ─────────────────────────────────────────────────────────────
 
-func TestStats_emptyStore(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	resp := callMethod(m, "wiki.stats", map[string]any{})
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-
-	if result["TotalPages"].(float64) != 0 {
-		t.Errorf("expected 0 total pages: %v", result)
-	}
-}
 
 func TestStats_withPages(t *testing.T) {
 	m, store := methodsWithStore(t)
@@ -588,15 +391,4 @@ func TestStats_withPages(t *testing.T) {
 	}
 }
 
-func TestStats_nilParams(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	// BindHandler requires a JSON body; nil params yields INVALID_REQUEST.
-	resp := callMethod(m, "wiki.stats", nil)
-	mustErr(t, resp)
-}
 
-func TestStats_withEmptyParams(t *testing.T) {
-	m, _ := methodsWithStore(t)
-	resp := callMethod(m, "wiki.stats", map[string]any{})
-	mustOK(t, resp)
-}

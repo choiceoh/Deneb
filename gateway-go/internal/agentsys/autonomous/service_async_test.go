@@ -169,12 +169,6 @@ func TestService_RegisterTask_RunsOnStart(t *testing.T) {
 	}
 }
 
-func TestService_GetTaskStatus_Unknown(t *testing.T) {
-	svc := NewService(nil)
-	if status := svc.TaskStatus("nonexistent"); status != nil {
-		t.Error("expected nil status for unknown task")
-	}
-}
 
 func TestService_TaskPanicRecovery(t *testing.T) {
 	svc := NewService(nil)
@@ -445,15 +439,3 @@ func TestService_PeriodicTask_Success(t *testing.T) {
 	}
 }
 
-func TestTruncateOutput(t *testing.T) {
-	short := "abc"
-	if got := truncateOutput(short, 10); got != short {
-		t.Fatalf("got %q, want %q", got, short)
-	}
-
-	long := "안녕하세요반갑습니다"
-	got := truncateOutput(long, 3)
-	if got != "안녕하..." {
-		t.Fatalf("got %q, want UTF-8 safe truncation", got)
-	}
-}

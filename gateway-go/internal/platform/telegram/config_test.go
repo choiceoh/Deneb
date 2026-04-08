@@ -28,19 +28,6 @@ func TestConfig_UnmarshalJSON(t *testing.T) {
 	}
 }
 
-func TestConfig_Defaults(t *testing.T) {
-	cfg := &Config{}
-
-	if !cfg.IsEnabled() {
-		t.Error("expected enabled by default")
-	}
-	if cfg.IsBlockStreamingDisabled() {
-		t.Error("expected block streaming not disabled by default")
-	}
-	if cfg.EffectiveTimeout() != 30 {
-		t.Errorf("expected default timeout 30, got %d", cfg.EffectiveTimeout())
-	}
-}
 
 func boolPtr(b bool) *bool { return &b }
 

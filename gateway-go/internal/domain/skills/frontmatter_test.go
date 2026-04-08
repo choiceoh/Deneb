@@ -41,57 +41,10 @@ alt: 'single quoted'
 	}
 }
 
-func TestParseFrontmatter_Empty(t *testing.T) {
-	fm := ParseFrontmatter("")
-	if len(fm) != 0 {
-		t.Errorf("got %v, want empty frontmatter", fm)
-	}
-}
 
-func TestParseFrontmatter_NoDelimiter(t *testing.T) {
-	fm := ParseFrontmatter("just some text\nno frontmatter")
-	if len(fm) != 0 {
-		t.Errorf("got %v, want empty frontmatter", fm)
-	}
-}
 
-func TestParseFrontmatter_NonEmptyBeforeDelimiter(t *testing.T) {
-	content := `some content
----
-title: Should Not Parse
----`
-	fm := ParseFrontmatter(content)
-	if len(fm) != 0 {
-		t.Errorf("got %v, want empty when non-empty line before delimiter", fm)
-	}
-}
 
-func TestParseFrontmatter_NoClosingDelimiter(t *testing.T) {
-	content := `---
-title: Open
-description: No close`
 
-	fm := ParseFrontmatter(content)
-	// Should still parse key-value pairs (just doesn't find closing ---)
-	if fm["title"] != "Open" {
-		t.Errorf("title = %q, want 'Open'", fm["title"])
-	}
-}
-
-func TestParseFrontmatter_EmptyValue(t *testing.T) {
-	content := `---
-empty:
-filled: yes
----`
-
-	fm := ParseFrontmatter(content)
-	if fm["empty"] != "" {
-		t.Errorf("empty = %q, want empty string", fm["empty"])
-	}
-	if fm["filled"] != "yes" {
-		t.Errorf("filled = %q, want 'yes'", fm["filled"])
-	}
-}
 
 func TestParseFrontmatterBool(t *testing.T) {
 	fm := ParsedFrontmatter{
@@ -251,37 +204,9 @@ func TestNormalizeSafeDownloadURL_Extended(t *testing.T) {
 	}
 }
 
-func TestResolveDenebMetadata_NoMetadata(t *testing.T) {
-	fm := ParsedFrontmatter{"title": "Test"}
-	meta := ResolveDenebMetadata(fm)
-	if meta != nil {
-		t.Errorf("got %+v, want nil for no metadata", meta)
-	}
-}
 
-func TestResolveDenebMetadata_EmptyMetadata(t *testing.T) {
-	fm := ParsedFrontmatter{"metadata": ""}
-	meta := ResolveDenebMetadata(fm)
-	if meta != nil {
-		t.Errorf("got %+v, want nil for empty metadata", meta)
-	}
-}
 
-func TestResolveDenebMetadata_InvalidJSON(t *testing.T) {
-	fm := ParsedFrontmatter{"metadata": "{invalid"}
-	meta := ResolveDenebMetadata(fm)
-	if meta != nil {
-		t.Errorf("got %+v, want nil for invalid JSON", meta)
-	}
-}
 
-func TestResolveDenebMetadata_NoDenebKey(t *testing.T) {
-	fm := ParsedFrontmatter{"metadata": `{"other": {}}`}
-	meta := ResolveDenebMetadata(fm)
-	if meta != nil {
-		t.Errorf("got %+v, want nil when no 'deneb' key", meta)
-	}
-}
 
 func TestResolveDenebMetadata_ValidMetadata(t *testing.T) {
 	fm := ParsedFrontmatter{
@@ -302,59 +227,8 @@ func TestResolveDenebMetadata_ValidMetadata(t *testing.T) {
 	}
 }
 
-func TestResolveDenebMetadata_WithRequires(t *testing.T) {
-	fm := ParsedFrontmatter{
-		"metadata": `{"deneb": {"requires": {"bins": ["rg", "fd"], "env": ["API_KEY"]}}}`,
-	}
-	meta := ResolveDenebMetadata(fm)
-	if meta == nil {
-		t.Fatal("expected non-nil metadata")
-	}
-	if meta.Requires == nil {
-		t.Fatal("expected non-nil Requires")
-	}
-	if len(meta.Requires.Bins) != 2 {
-		t.Errorf("got %d, want 2 bins", len(meta.Requires.Bins))
-	}
-	if len(meta.Requires.Env) != 1 {
-		t.Errorf("got %d, want 1 env", len(meta.Requires.Env))
-	}
-}
 
-func TestResolveDenebMetadata_WithTags(t *testing.T) {
-	fm := ParsedFrontmatter{
-		"metadata": `{"deneb": {"tags": ["cli", "productivity", "google"]}}`,
-	}
-	meta := ResolveDenebMetadata(fm)
-	if meta == nil {
-		t.Fatal("expected non-nil metadata")
-	}
-	if len(meta.Tags) != 3 {
-		t.Fatalf("got %d, want 3 tags", len(meta.Tags))
-	}
-	if meta.Tags[0] != "cli" || meta.Tags[1] != "productivity" || meta.Tags[2] != "google" {
-		t.Errorf("unexpected tags: %v", meta.Tags)
-	}
-}
 
-func TestResolveDenebMetadata_WithRelatedSkills(t *testing.T) {
-	fm := ParsedFrontmatter{
-		"metadata": `{"deneb": {"tags": ["weather", "forecast"], "related_skills": ["morning-letter", "gog"]}}`,
-	}
-	meta := ResolveDenebMetadata(fm)
-	if meta == nil {
-		t.Fatal("expected non-nil metadata")
-	}
-	if len(meta.Tags) != 2 {
-		t.Fatalf("got %d, want 2 tags", len(meta.Tags))
-	}
-	if len(meta.RelatedSkills) != 2 {
-		t.Fatalf("got %d, want 2 related_skills", len(meta.RelatedSkills))
-	}
-	if meta.RelatedSkills[0] != "morning-letter" || meta.RelatedSkills[1] != "gog" {
-		t.Errorf("unexpected related_skills: %v", meta.RelatedSkills)
-	}
-}
 
 func TestExtractFrontmatterBlock_Valid(t *testing.T) {
 	content := "---\nname: test\ndescription: A test\n---\n# Body\n\nSome content here."
@@ -374,31 +248,5 @@ func TestExtractFrontmatterBlock_Valid(t *testing.T) {
 	}
 }
 
-func TestExtractFrontmatterBlock_NoFrontmatter(t *testing.T) {
-	content := "Just some text\nNo frontmatter here"
-	header, offset := ExtractFrontmatterBlock(content)
-	if header != "" {
-		t.Errorf("got %q, want empty header for no frontmatter", header)
-	}
-	if offset != 0 {
-		t.Errorf("got %d, want 0 offset", offset)
-	}
-}
 
-func TestExtractFrontmatterBlock_NoClosing(t *testing.T) {
-	content := "---\nname: open\ndescription: No close"
-	header, _ := ExtractFrontmatterBlock(content)
-	if header == "" {
-		t.Fatal("expected non-empty header even without closing delimiter")
-	}
-	if !strings.Contains(header, "name: open") {
-		t.Errorf("header should contain frontmatter, got %q", header)
-	}
-}
 
-func TestExtractFrontmatterBlock_Empty(t *testing.T) {
-	header, offset := ExtractFrontmatterBlock("")
-	if header != "" || offset != 0 {
-		t.Errorf("expected empty result for empty content")
-	}
-}

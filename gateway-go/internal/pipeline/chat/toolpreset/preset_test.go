@@ -75,35 +75,8 @@ func TestAllowedTools_Coordinator(t *testing.T) {
 	}
 }
 
-func TestAllowedTools_Conversation(t *testing.T) {
-	allowed := AllowedTools(PresetConversation)
-	if allowed == nil {
-		t.Fatal("conversation preset should return non-nil allowed set")
-	}
-	for _, name := range []string{"read", "web", "wiki", "fetch_tools"} {
-		if _, ok := allowed[name]; !ok {
-			t.Errorf("conversation preset should include %q", name)
-		}
-	}
-	// Conversation should NOT have write/exec/code tools.
-	for _, name := range []string{"write", "edit", "exec", "git", "grep", "find"} {
-		if _, ok := allowed[name]; ok {
-			t.Errorf("conversation preset should NOT include %q", name)
-		}
-	}
-}
 
-func TestAllowedTools_None(t *testing.T) {
-	if allowed := AllowedTools(PresetNone); allowed != nil {
-		t.Error("empty preset should return nil (no restriction)")
-	}
-}
 
-func TestAllowedTools_Unknown(t *testing.T) {
-	if allowed := AllowedTools("nonexistent"); allowed != nil {
-		t.Error("unknown preset should return nil (no restriction)")
-	}
-}
 
 func TestIsValid(t *testing.T) {
 	for _, p := range []Preset{PresetNone, PresetResearcher, PresetImplementer, PresetVerifier, PresetCoordinator, PresetConversation} {

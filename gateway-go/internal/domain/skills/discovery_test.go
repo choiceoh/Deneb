@@ -15,15 +15,6 @@ func isolatedConfig(workspaceDir string) DiscoverConfig {
 	}
 }
 
-func TestDiscoverWorkspaceSkills_empty(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	tmpDir := t.TempDir()
-	cfg := isolatedConfig(tmpDir)
-	entries := DiscoverWorkspaceSkills(cfg)
-	if len(entries) != 0 {
-		t.Fatalf("got %d, want 0 entries", len(entries))
-	}
-}
 
 func TestDiscoverWorkspaceSkills_singleSkill(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())

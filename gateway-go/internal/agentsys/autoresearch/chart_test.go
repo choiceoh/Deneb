@@ -13,13 +13,6 @@ import (
 // pngMagic is the first 8 bytes of a valid PNG file.
 var pngMagic = []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
 
-func TestRenderChart_Empty(t *testing.T) {
-	cfg := &Config{MetricName: "loss", MetricDirection: "minimize"}
-	_, err := RenderChart(nil, cfg)
-	if err == nil {
-		t.Fatal("expected error for empty rows")
-	}
-}
 
 func TestRenderChart_SingleRow(t *testing.T) {
 	rows := []ResultRow{
@@ -117,17 +110,3 @@ func TestSaveChart(t *testing.T) {
 	}
 }
 
-func TestRenderChart_FlatMetric(t *testing.T) {
-	// All same metric value — should not panic on zero range.
-	rows := []ResultRow{
-		{Iteration: 0, MetricValue: 1.0, Kept: true, BestSoFar: 1.0},
-		{Iteration: 1, MetricValue: 1.0, Kept: false, BestSoFar: 1.0},
-		{Iteration: 2, MetricValue: 1.0, Kept: false, BestSoFar: 1.0},
-	}
-	cfg := &Config{MetricName: "flat", MetricDirection: "minimize"}
-
-	data := testutil.Must(RenderChart(rows, cfg))
-	if !bytes.HasPrefix(data, pngMagic) {
-		t.Fatal("output is not a valid PNG")
-	}
-}

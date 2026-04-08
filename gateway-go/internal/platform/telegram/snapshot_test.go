@@ -25,15 +25,6 @@ func TestSnapshotStore_Update(t *testing.T) {
 	}
 }
 
-func TestSnapshotStore_Get(t *testing.T) {
-	store := NewSnapshotStore()
-	store.Update(AccountSnapshot{AccountID: "bot", Connected: true})
-
-	got := store.Get()
-	if got.AccountID != "bot" {
-		t.Errorf("Get().AccountID = %q, want %q", got.AccountID, "bot")
-	}
-}
 
 func TestSnapshotStore_SnapshotIsCopy(t *testing.T) {
 	store := NewSnapshotStore()

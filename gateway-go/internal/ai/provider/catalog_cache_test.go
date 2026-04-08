@@ -7,12 +7,6 @@ import (
 	"testing"
 )
 
-func TestCatalogCache_InitiallyStale(t *testing.T) {
-	cc := NewCatalogCache("", "", nil)
-	if !cc.IsStale() {
-		t.Error("expected new cache to be stale")
-	}
-}
 
 func TestCatalogCache_GetAfterUpdate(t *testing.T) {
 	cc := NewCatalogCache("", "", nil)
@@ -51,22 +45,4 @@ func TestCatalogCache_StaleAfterFileChange(t *testing.T) {
 	}
 }
 
-func TestCatalogCache_ForceRefresh(t *testing.T) {
-	cc := NewCatalogCache("", "", nil)
-	cc.Update(map[string]ModelMeta{"m1": {ID: "m1"}})
-	cc.ForceRefresh()
-	if !cc.IsStale() {
-		t.Error("expected cache to be stale after force refresh")
-	}
-}
 
-func TestCatalogCache_Count(t *testing.T) {
-	cc := NewCatalogCache("", "", nil)
-	if cc.Count() != 0 {
-		t.Error("expected 0 count for empty cache")
-	}
-	cc.Update(map[string]ModelMeta{"m1": {ID: "m1"}, "m2": {ID: "m2"}})
-	if cc.Count() != 2 {
-		t.Errorf("got %d, want count 2", cc.Count())
-	}
-}

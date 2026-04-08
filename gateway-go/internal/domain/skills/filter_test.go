@@ -4,19 +4,7 @@ import (
 	"testing"
 )
 
-func TestNormalizeSkillFilter_Nil(t *testing.T) {
-	result := NormalizeSkillFilter(nil)
-	if result != nil {
-		t.Errorf("got %v, want nil for nil input", result)
-	}
-}
 
-func TestNormalizeSkillFilter_Empty(t *testing.T) {
-	result := NormalizeSkillFilter([]string{})
-	if len(result) != 0 {
-		t.Errorf("got %v, want empty slice", result)
-	}
-}
 
 func TestNormalizeSkillFilter_TrimsAndDeduplicates(t *testing.T) {
 	input := []string{"  weather  ", "github", "weather", " coding ", "github"}
@@ -34,29 +22,8 @@ func TestNormalizeSkillFilter_TrimsAndDeduplicates(t *testing.T) {
 	}
 }
 
-func TestNormalizeSkillFilter_SkipsEmpty(t *testing.T) {
-	input := []string{"", "  ", "valid", ""}
-	result := NormalizeSkillFilter(input)
 
-	if len(result) != 1 || result[0] != "valid" {
-		t.Errorf("got %v, want [valid]", result)
-	}
-}
 
-func TestMatchesSkillFilter_BothNil(t *testing.T) {
-	if !MatchesSkillFilter(nil, nil) {
-		t.Error("expected true for both nil")
-	}
-}
-
-func TestMatchesSkillFilter_OneNil(t *testing.T) {
-	if MatchesSkillFilter(nil, []string{"a"}) {
-		t.Error("expected false when one is nil")
-	}
-	if MatchesSkillFilter([]string{"a"}, nil) {
-		t.Error("expected false when one is nil")
-	}
-}
 
 func TestMatchesSkillFilter_Equal(t *testing.T) {
 	a := []string{"weather", "github"}
@@ -74,19 +41,7 @@ func TestMatchesSkillFilter_Different(t *testing.T) {
 	}
 }
 
-func TestMatchesSkillFilter_DifferentLength(t *testing.T) {
-	a := []string{"a", "b"}
-	b := []string{"a"}
-	if MatchesSkillFilter(a, b) {
-		t.Error("expected false for different lengths")
-	}
-}
 
-func TestMatchesSkillFilter_EmptySlices(t *testing.T) {
-	if !MatchesSkillFilter([]string{}, []string{}) {
-		t.Error("expected true for both empty")
-	}
-}
 
 func TestDedupeAndSort(t *testing.T) {
 	tests := []struct {

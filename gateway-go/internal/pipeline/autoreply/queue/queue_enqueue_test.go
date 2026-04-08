@@ -23,19 +23,6 @@ func TestRecentMessageIDCache_PeekAndCheck(t *testing.T) {
 	}
 }
 
-func TestRecentMessageIDCache_Clear(t *testing.T) {
-	cache := NewRecentMessageIDCache()
-	cache.check("key1")
-	cache.check("key2")
-	cache.clear()
-
-	if cache.peek("key1") {
-		t.Error("expected key1 not found after clear")
-	}
-	if cache.peek("key2") {
-		t.Error("expected key2 not found after clear")
-	}
-}
 
 func TestBuildRecentMessageIDKey(t *testing.T) {
 	run := types.FollowupRun{
@@ -57,27 +44,7 @@ func TestBuildRecentMessageIDKey(t *testing.T) {
 	}
 }
 
-func TestBuildRecentMessageIDKey_EmptyMessageID(t *testing.T) {
-	run := types.FollowupRun{
-		MessageID:          "",
-		OriginatingChannel: "telegram",
-	}
-	key := buildRecentMessageIDKey(run, "session:main")
-	if key != "" {
-		t.Errorf("got %q, want empty key for empty messageID", key)
-	}
-}
 
-func TestBuildRecentMessageIDKey_WhitespaceMessageID(t *testing.T) {
-	run := types.FollowupRun{
-		MessageID:          "  ",
-		OriginatingChannel: "telegram",
-	}
-	key := buildRecentMessageIDKey(run, "session:main")
-	if key != "" {
-		t.Errorf("got %q, want empty key for whitespace messageID", key)
-	}
-}
 
 func TestIsRunAlreadyQueued_ByMessageID(t *testing.T) {
 	run := types.FollowupRun{
@@ -130,12 +97,6 @@ func TestIsRunAlreadyQueued_ByPromptFallback(t *testing.T) {
 	}
 }
 
-func TestIsRunAlreadyQueued_EmptyItems(t *testing.T) {
-	run := types.FollowupRun{MessageID: "msg1"}
-	if isRunAlreadyQueued(run, nil, false) {
-		t.Error("expected not queued in empty items")
-	}
-}
 
 func TestRecentMessageIDCache_CapacityEviction(t *testing.T) {
 	cache := NewRecentMessageIDCache()

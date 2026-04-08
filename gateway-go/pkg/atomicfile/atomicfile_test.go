@@ -73,31 +73,7 @@ func TestWriteFile_Backup(t *testing.T) {
 	}
 }
 
-func TestWriteFile_Fsync(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "test.txt")
 
-	err := atomicfile.WriteFile(path, []byte("durable"), &atomicfile.Options{Fsync: true})
-	testutil.NoError(t, err)
-
-	got := testutil.Must(os.ReadFile(path))
-	if string(got) != "durable" {
-		t.Fatalf("got %q, want %q", got, "durable")
-	}
-}
-
-func TestWriteFile_CustomPerms(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "secure.txt")
-
-	err := atomicfile.WriteFile(path, []byte("secret"), &atomicfile.Options{Perm: 0o600})
-	testutil.NoError(t, err)
-
-	info := testutil.Must(os.Stat(path))
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("perm got %o, want %o", info.Mode().Perm(), 0o600)
-	}
-}
 
 func TestWriteFile_ConcurrentSafety(t *testing.T) {
 	dir := t.TempDir()

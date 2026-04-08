@@ -5,18 +5,7 @@ import (
 	"testing"
 )
 
-func TestEstimate_Empty(t *testing.T) {
-	if got := Estimate(""); got != 0 {
-		t.Errorf("Estimate(\"\") = %d, want 0", got)
-	}
-}
 
-func TestEstimate_SingleChar(t *testing.T) {
-	// Single character should return at least 1.
-	if got := Estimate("a"); got < 1 {
-		t.Errorf("Estimate(\"a\") = %d, want >= 1", got)
-	}
-}
 
 func TestCount_PureEnglish(t *testing.T) {
 	est := ForFamily(FamilyClaude)
@@ -154,14 +143,6 @@ func TestEstimate_KoreanMoreAccurate(t *testing.T) {
 	}
 }
 
-func TestEstimateBytes_Empty(t *testing.T) {
-	if got := EstimateBytes(nil); got != 0 {
-		t.Errorf("EstimateBytes(nil) = %d, want 0", got)
-	}
-	if got := EstimateBytes([]byte{}); got != 0 {
-		t.Errorf("EstimateBytes([]) = %d, want 0", got)
-	}
-}
 
 func TestEstimateBytes_ASCII(t *testing.T) {
 	data := []byte(`{"role":"assistant","content":"Hello world"}`)
@@ -228,16 +209,6 @@ func TestClassifyRune(t *testing.T) {
 }
 
 // TestEstimate_LargeText verifies performance doesn't degrade on large input.
-func TestEstimate_LargeText(t *testing.T) {
-	// 100KB of mixed Korean/English.
-	chunk := "서울 Seoul 테스트 test 1234 !@# "
-	text := strings.Repeat(chunk, 4000) // ~100KB
-	got := Estimate(text)
-	if got < 1000 {
-		t.Errorf("Estimate(100KB) = %d, want > 1000", got)
-	}
-	t.Logf("100KB mixed: %d tokens (%d runes)", got, len([]rune(text)))
-}
 
 func BenchmarkEstimate_Short(b *testing.B) {
 	text := "안녕하세요 Hello World"

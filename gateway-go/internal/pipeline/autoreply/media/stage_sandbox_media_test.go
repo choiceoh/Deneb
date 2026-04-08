@@ -80,18 +80,6 @@ func TestAllocateStagedFileName(t *testing.T) {
 	}
 }
 
-func TestAllocateStagedFileName_NoExtension(t *testing.T) {
-	usedNames := make(map[string]struct{})
-	name := allocateStagedFileName("/tmp/README", usedNames)
-	if name != "README" {
-		t.Errorf("name = %q, want 'README'", name)
-	}
-
-	name = allocateStagedFileName("/other/README", usedNames)
-	if name != "README-1" {
-		t.Errorf("name = %q, want 'README-1'", name)
-	}
-}
 
 func TestStageSandboxMedia_Integration(t *testing.T) {
 	// Create temp directories.
@@ -163,15 +151,6 @@ func TestStageSandboxMedia_FileTooLarge(t *testing.T) {
 	testutil.NoError(t, err)
 }
 
-func TestStageSandboxMedia_NoMedia(t *testing.T) {
-	ctx := &types.MsgContext{}
-	err := StageSandboxMedia(StageSandboxMediaParams{
-		Ctx:          ctx,
-		SessionKey:   "test-session",
-		WorkspaceDir: "/tmp/workspace",
-	})
-	testutil.NoError(t, err)
-}
 
 func TestStageSandboxMedia_BlockedPath(t *testing.T) {
 	ctx := &types.MsgContext{

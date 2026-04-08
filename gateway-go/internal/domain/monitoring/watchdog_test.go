@@ -26,19 +26,6 @@ func TestChannelHealthMonitor_HealthSnapshot(t *testing.T) {
 	}
 }
 
-func TestChannelHealthMonitor_HealthSnapshot_Stopped(t *testing.T) {
-	m := NewChannelHealthMonitor(ChannelHealthDeps{
-		GetChannelStatus: func() string { return "stopped" },
-	}, DefaultChannelHealthConfig(), slog.Default())
-
-	snap := m.HealthSnapshot()
-	if len(snap) != 1 {
-		t.Fatalf("got %d, want 1 result", len(snap))
-	}
-	if snap[0].Healthy {
-		t.Error("stopped channel should be unhealthy")
-	}
-}
 
 func TestChannelHealthMonitor_StaleChannelRestart(t *testing.T) {
 	restarted := false

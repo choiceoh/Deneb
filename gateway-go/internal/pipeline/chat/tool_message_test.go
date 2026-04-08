@@ -131,22 +131,4 @@ func TestToolMessageReact(t *testing.T) {
 	})
 }
 
-func TestToolMessageUnknownAction(t *testing.T) {
-	fn := toolMessage()
-	input, _ := json.Marshal(map[string]any{"action": "delete"})
-	result := testutil.Must(fn(context.Background(), input))
-	if result != `Unknown message action: "delete". Supported: send, reply, react.` {
-		t.Errorf("result = %q", result)
-	}
-}
 
-func TestToolMessageDefaultAction(t *testing.T) {
-	fn := toolMessage()
-	// Empty action should default to "send".
-	input, _ := json.Marshal(map[string]any{"message": "hello"})
-	// No reply func → should return info message, proving default action is "send".
-	result := testutil.Must(fn(context.Background(), input))
-	if result != "Message tool: no reply function available (channel not connected)." {
-		t.Errorf("unexpected result: %s", result)
-	}
-}

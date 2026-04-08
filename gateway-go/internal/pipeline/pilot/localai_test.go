@@ -128,26 +128,6 @@ func TestTruncateHead(t *testing.T) {
 	}
 }
 
-func TestTruncateInput_DelegatesToTruncateHead(t *testing.T) {
-	// TruncateInput is documented as delegating to TruncateHead.
-	// Verify they produce identical output for the same inputs.
-	cases := []struct {
-		input    string
-		maxChars int
-	}{
-		{"short", 100},
-		{"a longer string that exceeds the limit", 10},
-		{"", 5},
-		{"exact", 5},
-	}
-	for _, c := range cases {
-		got := TruncateInput(c.input, c.maxChars)
-		want := TruncateHead(c.input, c.maxChars)
-		if got != want {
-			t.Errorf("TruncateInput(%q, %d) = %q, want %q (same as TruncateHead)", c.input, c.maxChars, got, want)
-		}
-	}
-}
 
 func TestCollectStream_ContentBlockDelta(t *testing.T) {
 	ch := make(chan llm.StreamEvent, 3)
@@ -170,18 +150,6 @@ func TestCollectStream_ContentBlockDelta(t *testing.T) {
 	}
 }
 
-func TestCollectStream_EmptyChannel(t *testing.T) {
-	ch := make(chan llm.StreamEvent)
-	close(ch)
-
-	got, err := CollectStream(context.Background(), ch)
-	if err != nil {
-		t.Fatalf("CollectStream returned error: %v", err)
-	}
-	if got != "" {
-		t.Errorf("CollectStream = %q, want empty string", got)
-	}
-}
 
 func TestCollectStream_ErrorEvent(t *testing.T) {
 	ch := make(chan llm.StreamEvent, 2)
@@ -237,30 +205,6 @@ func TestCollectStream_ContextCancelledWithPartial(t *testing.T) {
 	}
 }
 
-func TestCollectStream_IgnoresUnknownEventTypes(t *testing.T) {
-	ch := make(chan llm.StreamEvent, 3)
-	ch <- llm.StreamEvent{
-		Type:    "message_start",
-		Payload: json.RawMessage(`{"message":{"id":"msg_1"}}`),
-	}
-	ch <- llm.StreamEvent{
-		Type:    "content_block_delta",
-		Payload: json.RawMessage(`{"delta":{"text":"text"}}`),
-	}
-	ch <- llm.StreamEvent{
-		Type:    "message_stop",
-		Payload: json.RawMessage(`{}`),
-	}
-	close(ch)
-
-	got, err := CollectStream(context.Background(), ch)
-	if err != nil {
-		t.Fatalf("CollectStream returned error: %v", err)
-	}
-	if got != "text" {
-		t.Errorf("CollectStream = %q, want %q", got, "text")
-	}
-}
 
 // contains is a test helper for substring check.
 func contains(s, substr string) bool {

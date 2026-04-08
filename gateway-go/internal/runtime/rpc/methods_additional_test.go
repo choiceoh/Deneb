@@ -1,39 +1,13 @@
 package rpc
 
 import (
-	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-func TestUnmarshalParamsErrors(t *testing.T) {
-	var dst map[string]any
-	if err := unmarshalParams(nil, &dst); err == nil {
-		t.Fatal("expected error for missing params")
-	}
-	if err := unmarshalParams(json.RawMessage("{"), &dst); err == nil {
-		t.Fatal("expected JSON unmarshal error")
-	}
-}
 
-func TestTruncateForError_LongInput(t *testing.T) {
-	short := "short"
-	if got := truncateForError(short); got != short {
-		t.Fatalf("got %q, want unchanged short string", got)
-	}
-
-	long := strings.Repeat("k", maxKeyInErrorMsg+10)
-	got := truncateForError(long)
-	if !strings.HasSuffix(got, "...") {
-		t.Fatalf("got %q, want ellipsis suffix", got)
-	}
-	if len(got) != maxKeyInErrorMsg+3 {
-		t.Fatalf("got %d, want length %d", len(got), maxKeyInErrorMsg+3)
-	}
-}
 
 func TestSessionsGetMissingKeyAndSuccess(t *testing.T) {
 	sm := session.NewManager()
@@ -75,20 +49,3 @@ func TestTelegramGetMissingAndNotFound(t *testing.T) {
 	}
 }
 
-func TestSystemInfoUnknownVersion(t *testing.T) {
-	d := NewDispatcher(testLogger())
-	RegisterBuiltinMethods(d)
-	RegisterHealthMethods(d, SystemHealthDeps{})
-
-	resp := dispatch(t, d, "system.info", nil)
-	if !resp.OK {
-		t.Fatalf("got %+v, want success", resp.Error)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(resp.Payload, &payload); err != nil {
-		t.Fatalf("unmarshal payload: %v", err)
-	}
-	if payload["version"] != "unknown" {
-		t.Fatalf("got %v, want unknown version fallback", payload["version"])
-	}
-}

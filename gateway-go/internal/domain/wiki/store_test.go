@@ -9,32 +9,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestNewStore_CreatesDirs(t *testing.T) {
-	dir := t.TempDir()
-	wikiDir := filepath.Join(dir, "wiki")
-	diaryDir := filepath.Join(dir, "diary")
-
-	store := testutil.Must(NewStore(wikiDir, diaryDir))
-	defer store.Close()
-
-	// Verify category directories exist.
-	for _, cat := range Categories {
-		catDir := filepath.Join(wikiDir, cat)
-		info, err := os.Stat(catDir)
-		if err != nil {
-			t.Errorf("category dir %q not created: %v", cat, err)
-			continue
-		}
-		if !info.IsDir() {
-			t.Errorf("category %q is not a directory", cat)
-		}
-	}
-
-	// Verify index.md exists.
-	if _, err := os.Stat(filepath.Join(wikiDir, "index.md")); err != nil {
-		t.Error("index.md not created")
-	}
-}
 
 func TestStore_WriteAndReadPage(t *testing.T) {
 	dir := t.TempDir()

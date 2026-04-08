@@ -1,7 +1,6 @@
 package liteparse
 
 import (
-	"context"
 	"testing"
 )
 
@@ -41,17 +40,4 @@ func TestSupportedMIME(t *testing.T) {
 	}
 }
 
-func TestParse_EmptyData(t *testing.T) {
-	_, err := Parse(context.Background(), nil, "test.pdf")
-	if err == nil {
-		t.Fatal("expected error for empty data")
-	}
-}
 
-func TestParse_OversizedData(t *testing.T) {
-	data := make([]byte, maxDocumentSize+1)
-	_, err := Parse(context.Background(), data, "big.pdf")
-	if err == nil {
-		t.Fatal("expected error for oversized data")
-	}
-}

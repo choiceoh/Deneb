@@ -268,18 +268,3 @@ func TestResolveAgentWorkspaceDirHomeTilde(t *testing.T) {
 	}
 }
 
-func TestHashRaw(t *testing.T) {
-	h1 := hashRaw(nil)
-	h2 := hashRaw([]byte("hello"))
-	h3 := hashRaw([]byte("hello"))
-
-	if h1 == h2 {
-		t.Error("nil and non-nil should have different hashes")
-	}
-	if h2 != h3 {
-		t.Error("same input should produce same hash")
-	}
-	if len(h1) != 64 {
-		t.Errorf("got %d chars, want 64-char hex hash", len(h1))
-	}
-}

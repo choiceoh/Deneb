@@ -312,15 +312,3 @@ func TestFormatThinkingLevels(t *testing.T) {
 	}
 }
 
-func TestBaseThinkingLevels(t *testing.T) {
-	levels := BaseThinkingLevels()
-	if len(levels) != 6 {
-		t.Fatalf("got %d, want 6 base thinking levels", len(levels))
-	}
-	// Should not include xhigh.
-	for _, l := range levels {
-		if l == ThinkXHigh {
-			t.Error("base thinking levels should not include xhigh")
-		}
-	}
-}

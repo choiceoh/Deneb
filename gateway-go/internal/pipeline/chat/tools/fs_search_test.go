@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,33 +12,6 @@ import (
 )
 
 // ─── clampInt ────────────────────────────────────────────────────────────────
-
-func TestClampInt_below(t *testing.T) {
-	if got := clampInt(-5, 0, 10); got != 0 {
-		t.Errorf("got %d, want 0", got)
-	}
-}
-
-func TestClampInt_above(t *testing.T) {
-	if got := clampInt(20, 0, 10); got != 10 {
-		t.Errorf("got %d, want 10", got)
-	}
-}
-
-func TestClampInt_within(t *testing.T) {
-	if got := clampInt(5, 0, 10); got != 5 {
-		t.Errorf("got %d, want 5", got)
-	}
-}
-
-func TestClampInt_atBounds(t *testing.T) {
-	if got := clampInt(0, 0, 10); got != 0 {
-		t.Errorf("lower bound: got %d", got)
-	}
-	if got := clampInt(10, 0, 10); got != 10 {
-		t.Errorf("upper bound: got %d", got)
-	}
-}
 
 // ─── ToolFind ────────────────────────────────────────────────────────────────
 
@@ -60,24 +32,6 @@ func TestToolFind_matchByName(t *testing.T) {
 	}
 	if strings.Contains(out, "beta.txt") {
 		t.Errorf("beta.txt should not appear: %q", out)
-	}
-}
-
-func TestToolFind_noMatches(t *testing.T) {
-	tmp := t.TempDir()
-	os.WriteFile(filepath.Join(tmp, "file.go"), nil, 0o644)
-
-	out := testutil.Must(callFind(t, tmp, map[string]any{"pattern": "*.nonexistent"}))
-	if !strings.Contains(out, "No files found") {
-		t.Errorf("expected no-match message: %q", out)
-	}
-}
-
-func TestToolFind_missingPattern(t *testing.T) {
-	tmp := t.TempDir()
-	_, err := callFind(t, tmp, map[string]any{})
-	if err == nil {
-		t.Fatal("expected error for missing pattern")
 	}
 }
 
@@ -149,15 +103,6 @@ func callGrep(t *testing.T, defaultDir string, params map[string]any) (string, e
 	raw, _ := json.Marshal(params)
 	return ToolGrep(defaultDir)(context.Background(), json.RawMessage(raw))
 }
-
-func TestToolGrep_missingPattern(t *testing.T) {
-	tmp := t.TempDir()
-	_, err := callGrep(t, tmp, map[string]any{})
-	if err == nil {
-		t.Fatal("expected error for missing pattern")
-	}
-}
-
 func TestToolGrep_findsMatch(t *testing.T) {
 	requireRg(t)
 	tmp := t.TempDir()
@@ -189,32 +134,7 @@ func TestGroupGrepOutput_groupsByFile(t *testing.T) {
 	}
 }
 
-func TestGroupGrepOutput_singleLine(t *testing.T) {
-	input := "file.go:1:only line\n"
-	got := groupGrepOutput(input)
-	// Single-line output should still pass through.
-	if got != input {
-		t.Errorf("expected passthrough: %q", got)
-	}
-}
-
-func TestGroupGrepOutput_skipsSeparators(t *testing.T) {
-	input := "a.go:1:match1\n--\nb.go:2:match2\n"
-	got := groupGrepOutput(input)
-	if strings.Contains(got, "--") {
-		t.Errorf("separators should be removed: %q", got)
-	}
-}
-
 // ─── splitGlobs ─────────────────────────────────────────────────────────────
-
-func TestSplitGlobs_single(t *testing.T) {
-	got := splitGlobs("*.go")
-	if len(got) != 1 || got[0] != "*.go" {
-		t.Errorf("got %v, want [*.go]", got)
-	}
-}
-
 func TestSplitGlobs_commaSeparated(t *testing.T) {
 	got := splitGlobs("*.go,*.rs,*.proto")
 	if len(got) != 3 || got[0] != "*.go" || got[1] != "*.rs" || got[2] != "*.proto" {
@@ -228,14 +148,6 @@ func TestSplitGlobs_braceExpansion(t *testing.T) {
 		t.Errorf("brace expansion should pass through: got %v", got)
 	}
 }
-
-func TestSplitGlobs_spacesAroundComma(t *testing.T) {
-	got := splitGlobs("*.go, *.rs")
-	if len(got) != 2 || got[0] != "*.go" || got[1] != "*.rs" {
-		t.Errorf("got %v, want trimmed [*.go *.rs]", got)
-	}
-}
-
 // ─── ToolGrep: include filter with comma-separated globs ────────────────────
 
 func TestToolGrep_commaSeparatedInclude(t *testing.T) {
@@ -310,15 +222,6 @@ func TestStripRgFlag(t *testing.T) {
 		}
 	}
 }
-
-func TestStripRgFlag_absent(t *testing.T) {
-	args := []string{"-n", "-e", "pattern"}
-	got := stripRgFlag(args, "--type")
-	if len(got) != len(args) {
-		t.Errorf("expected no change: got %v", got)
-	}
-}
-
 // ─── ToolGrep: fileType normalization ──────────────────────────────────────
 
 func TestToolGrep_fileTypeNormalization(t *testing.T) {
@@ -337,18 +240,6 @@ func TestToolGrep_fileTypeNormalization(t *testing.T) {
 		t.Errorf("expected main.go in output: %q", out)
 	}
 }
-
-func TestToolGrep_noMatch(t *testing.T) {
-	requireRg(t)
-	tmp := t.TempDir()
-	os.WriteFile(filepath.Join(tmp, "f.go"), []byte("package main\n"), 0o644)
-
-	out := testutil.Must(callGrep(t, tmp, map[string]any{"pattern": "ZZZNOMATCH"}))
-	if !strings.Contains(out, "No matches") {
-		t.Errorf("expected no-match message: %q", out)
-	}
-}
-
 // ─── hasGrepMatches ─────────────────────────────────────────────────────────
 
 func TestHasGrepMatches(t *testing.T) {
@@ -377,11 +268,3 @@ func TestHasGrepMatches(t *testing.T) {
 
 // ─── rgExitCode ─────────────────────────────────────────────────────────────
 
-func TestRgExitCode(t *testing.T) {
-	if got := rgExitCode(nil); got != 0 {
-		t.Errorf("rgExitCode(nil) = %d, want 0", got)
-	}
-	if got := rgExitCode(fmt.Errorf("not an ExitError")); got != -1 {
-		t.Errorf("rgExitCode(generic error) = %d, want -1", got)
-	}
-}

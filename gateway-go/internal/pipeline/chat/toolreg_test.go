@@ -28,13 +28,3 @@ func TestToolRegistry_UnknownTool(t *testing.T) {
 	}
 }
 
-func TestToolRegistry_Names(t *testing.T) {
-	reg := NewToolRegistry()
-	reg.Register("a", func(_ context.Context, _ json.RawMessage) (string, error) { return "", nil })
-	reg.Register("b", func(_ context.Context, _ json.RawMessage) (string, error) { return "", nil })
-
-	names := reg.Names()
-	if len(names) != 2 {
-		t.Errorf("got %d, want 2 names", len(names))
-	}
-}

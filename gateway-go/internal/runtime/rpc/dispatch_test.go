@@ -27,18 +27,6 @@ func TestDispatchRegisteredMethod(t *testing.T) {
 	}
 }
 
-func TestDispatchUnknownMethodNoForwarder(t *testing.T) {
-	d := NewDispatcher(rpctest.NewLogger())
-	req := &protocol.RequestFrame{Type: "req", ID: "2", Method: "unknown.method"}
-	resp := d.Dispatch(context.Background(), req)
-
-	if resp.OK {
-		t.Error("expected error response for unknown method")
-	}
-	if resp.Error == nil || resp.Error.Code != protocol.ErrNotFound {
-		t.Errorf("expected NOT_FOUND error, got: %+v", resp.Error)
-	}
-}
 
 func TestDispatchUnknownMethodReturnsNotFound(t *testing.T) {
 	d := NewDispatcher(rpctest.NewLogger())

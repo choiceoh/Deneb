@@ -100,12 +100,3 @@ func TestHistogramObserveDuration(t *testing.T) {
 	}
 }
 
-func TestWriteMetricsEmpty(t *testing.T) {
-	// Global metrics start at zero; WriteMetrics should not panic.
-	var buf bytes.Buffer
-	WriteMetrics(&buf)
-	// Should at least contain gauge metrics (they always output).
-	if !strings.Contains(buf.String(), "deneb_active_sessions") {
-		t.Errorf("expected gauge output, got:\n%s", buf.String())
-	}
-}

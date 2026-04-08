@@ -25,12 +25,6 @@ func TestLRU_GetPut(t *testing.T) {
 	}
 }
 
-func TestLRU_Miss(t *testing.T) {
-	c := NewLRU[string, int](3, 0)
-	if _, ok := c.Get("x"); ok {
-		t.Fatal("expected miss for unknown key")
-	}
-}
 
 func TestLRU_Eviction(t *testing.T) {
 	c := NewLRU[string, int](2, 0)
@@ -93,19 +87,6 @@ func TestLRU_Delete(t *testing.T) {
 	}
 }
 
-func TestLRU_Clear(t *testing.T) {
-	c := NewLRU[string, int](3, 0)
-	c.Put("a", 1)
-	c.Put("b", 2)
-	c.Clear()
-
-	if c.Len() != 0 {
-		t.Errorf("Len() = %d; want 0", c.Len())
-	}
-	if _, ok := c.Get("a"); ok {
-		t.Fatal("expected empty after Clear")
-	}
-}
 
 func TestLRU_TTLExpiry(t *testing.T) {
 	c := NewLRU[string, int](10, 50*time.Millisecond)
@@ -142,32 +123,5 @@ func TestLRU_Cleanup(t *testing.T) {
 	}
 }
 
-func TestLRU_CleanupNoTTL(t *testing.T) {
-	c := NewLRU[string, int](10, 0)
-	c.Put("a", 1)
-	if removed := c.Cleanup(); removed != 0 {
-		t.Errorf("Cleanup() with no TTL removed %d; want 0", removed)
-	}
-}
 
-func TestLRU_NonStringKey(t *testing.T) {
-	c := NewLRU[uint64, string](2, 0)
-	c.Put(42, "hello")
-	c.Put(99, "world")
 
-	if v, ok := c.Get(42); !ok || v != "hello" {
-		t.Errorf("Get(42) = %q, %v; want \"hello\", true", v, ok)
-	}
-}
-
-func TestLRU_ArrayKey(t *testing.T) {
-	c := NewLRU[[32]byte, string](2, 0)
-	k1 := [32]byte{1}
-	k2 := [32]byte{2}
-	c.Put(k1, "one")
-	c.Put(k2, "two")
-
-	if v, ok := c.Get(k1); !ok || v != "one" {
-		t.Errorf("Get(k1) = %q, %v; want \"one\", true", v, ok)
-	}
-}

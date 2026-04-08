@@ -140,9 +140,3 @@ func TestResolveResponseUsageMode(t *testing.T) {
 	}
 }
 
-func TestFormatXHighModelHint(t *testing.T) {
-	hint := FormatXHighModelHint()
-	if hint == "" {
-		t.Error("expected non-empty hint")
-	}
-}

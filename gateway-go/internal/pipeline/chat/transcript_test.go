@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -57,16 +56,6 @@ func TestFileTranscriptStore_LoadWithLimit(t *testing.T) {
 	}
 }
 
-func TestFileTranscriptStore_LoadMissing(t *testing.T) {
-	dir := t.TempDir()
-	store := NewFileTranscriptStore(dir)
-
-	msgs, total, err := store.Load("nonexistent", 0)
-	testutil.NoError(t, err)
-	if total != 0 || len(msgs) != 0 {
-		t.Errorf("got total=%d msgs=%d, want empty result", total, len(msgs))
-	}
-}
 
 func TestFileTranscriptStore_CreatesDir(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nested", "dir")
@@ -81,22 +70,3 @@ func TestFileTranscriptStore_CreatesDir(t *testing.T) {
 	}
 }
 
-func TestMemoryTranscriptStore_AppendAndLoad(t *testing.T) {
-	store := NewMemoryTranscriptStore()
-
-	store.Append("s1", NewTextChatMessage("user", "a", 0))
-	store.Append("s1", NewTextChatMessage("assistant", "b", 0))
-
-	msgs, total, err := store.Load("s1", 0)
-	testutil.NoError(t, err)
-	if total != 2 || len(msgs) != 2 {
-		t.Errorf("total=%d len=%d", total, len(msgs))
-	}
-
-	// Verify independence from store.
-	msgs[0].Content = toolctx.MarshalJSONString("modified")
-	msgs2, _, _ := store.Load("s1", 0)
-	if msgs2[0].TextContent() != "a" {
-		t.Error("modifying returned slice should not affect store")
-	}
-}

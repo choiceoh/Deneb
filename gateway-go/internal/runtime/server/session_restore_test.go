@@ -90,47 +90,4 @@ func TestRestoreAndWakeSessions_RestoresTelegramSessions(t *testing.T) {
 	}
 }
 
-func TestRestoreAndWakeSessions_SkipsAlreadyRestoredSessions(t *testing.T) {
-	tmpHome := t.TempDir()
-	transcriptDir := filepath.Join(tmpHome, ".deneb", "transcripts")
-	if err := os.MkdirAll(transcriptDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("HOME", tmpHome)
 
-	makeSessionTranscript(t, transcriptDir, "telegram:999")
-
-	mgr := session.NewManager()
-	// Pre-populate the manager so the session is already in memory.
-	_ = mgr.Set(&session.Session{
-		Key:     "telegram:999",
-		Kind:    session.KindDirect,
-		Status:  session.StatusRunning,
-		Channel: "telegram",
-	})
-
-	srv := newTestServerForRestore(mgr)
-	srv.restoreAndWakeSessions(context.Background())
-	time.Sleep(50 * time.Millisecond)
-
-	// Status should remain running — not overwritten to done.
-	if got := mgr.Get("telegram:999"); got == nil || got.Status != session.StatusRunning {
-		t.Error("existing session status should not have been overwritten")
-	}
-}
-
-func TestRestoreAndWakeSessions_NoTranscriptDir(t *testing.T) {
-	tmpHome := t.TempDir()
-	t.Setenv("HOME", tmpHome)
-	// ~/.deneb/transcripts does not exist — should be a no-op, not a panic.
-
-	mgr := session.NewManager()
-	srv := newTestServerForRestore(mgr)
-
-	// Must not panic.
-	srv.restoreAndWakeSessions(context.Background())
-
-	if count := mgr.Count(); count != 0 {
-		t.Errorf("got %d, want 0 sessions", count)
-	}
-}

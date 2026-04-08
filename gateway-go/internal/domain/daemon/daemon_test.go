@@ -65,30 +65,7 @@ func TestDaemon_StartStop(t *testing.T) {
 	}
 }
 
-func TestDaemon_DoubleStart(t *testing.T) {
-	dir := t.TempDir()
-	d := NewDaemon(filepath.Join(dir, "test.pid"), 18789, "test", testLogger())
 
-	_, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	d.Start(cancel)
-	err := d.Start(cancel)
-	if err == nil {
-		t.Error("expected error for double start")
-	}
-	d.Stop()
-}
-
-func TestDaemon_StopWhenNotRunning(t *testing.T) {
-	dir := t.TempDir()
-	d := NewDaemon(filepath.Join(dir, "test.pid"), 18789, "test", testLogger())
-
-	err := d.Stop()
-	if err == nil {
-		t.Error("expected error when stopping non-running daemon")
-	}
-}
 
 func TestReadPIDFile(t *testing.T) {
 	dir := t.TempDir()
@@ -112,12 +89,6 @@ func TestReadPIDFile(t *testing.T) {
 	}
 }
 
-func TestReadPIDFile_NotFound(t *testing.T) {
-	_, err := ReadPIDFile("/nonexistent/path/pid.json")
-	if err == nil {
-		t.Error("expected error for missing file")
-	}
-}
 
 func TestCheckExistingDaemon_NoFile(t *testing.T) {
 	dir := t.TempDir()

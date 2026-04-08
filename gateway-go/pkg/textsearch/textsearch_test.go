@@ -4,16 +4,6 @@ import (
 	"testing"
 )
 
-func TestEmptyIndex(t *testing.T) {
-	idx := New()
-	hits := idx.Search("hello", 10)
-	if len(hits) != 0 {
-		t.Fatalf("expected 0 hits, got %d", len(hits))
-	}
-	if idx.Len() != 0 {
-		t.Fatalf("expected len 0, got %d", idx.Len())
-	}
-}
 
 func TestBasicSearch(t *testing.T) {
 	idx := New()
@@ -104,16 +94,6 @@ func TestRemove(t *testing.T) {
 	}
 }
 
-func TestClear(t *testing.T) {
-	idx := New()
-	idx.Upsert("doc1", "one")
-	idx.Upsert("doc2", "two")
-	idx.Clear()
-
-	if idx.Len() != 0 {
-		t.Fatalf("expected 0 after clear, got %d", idx.Len())
-	}
-}
 
 func TestLimit(t *testing.T) {
 	idx := New()

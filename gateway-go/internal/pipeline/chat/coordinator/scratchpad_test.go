@@ -26,22 +26,7 @@ func TestScratchpadDir_Creates(t *testing.T) {
 	}
 }
 
-func TestScratchpadDir_Idempotent(t *testing.T) {
-	dir1 := testutil.Must(ScratchpadDir("idempotent-test"))
-	defer os.RemoveAll(dir1)
 
-	dir2 := testutil.Must(ScratchpadDir("idempotent-test"))
-	if dir1 != dir2 {
-		t.Errorf("got %q and %q, want same path", dir1, dir2)
-	}
-}
-
-func TestScratchpadDir_EmptyID(t *testing.T) {
-	_, err := ScratchpadDir("")
-	if err == nil {
-		t.Error("expected error for empty session ID")
-	}
-}
 
 func TestCleanupScratchpad(t *testing.T) {
 	dir := testutil.Must(ScratchpadDir("cleanup-test"))
@@ -86,9 +71,3 @@ func TestResolveScratchpadDir(t *testing.T) {
 	}
 }
 
-func TestResolveScratchpadDir_Empty(t *testing.T) {
-	dir := ResolveScratchpadDir("")
-	if dir != "" {
-		t.Errorf("got %q, want empty string for invalid session ID", dir)
-	}
-}

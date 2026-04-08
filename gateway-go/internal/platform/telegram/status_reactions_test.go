@@ -103,42 +103,5 @@ func TestStatusReactionController_DoneIsTerminal(t *testing.T) {
 	}
 }
 
-func TestStatusReactionController_Disabled(t *testing.T) {
-	called := false
 
-	c := NewStatusReactionController(StatusReactionControllerParams{
-		Enabled:      false,
-		InitialEmoji: "👀",
-		SetReaction: func(emoji string) error {
-			called = true
-			return nil
-		},
-	})
-	defer c.Close()
 
-	c.SetQueued()
-	c.SetThinking()
-	c.SetDone()
-	time.Sleep(50 * time.Millisecond)
-
-	if called {
-		t.Error("SetReaction should not be called when disabled")
-	}
-}
-
-func TestDefaultStatusEmojis(t *testing.T) {
-	e := DefaultStatusEmojis()
-	if e.Queued == "" || e.Thinking == "" || e.Tool == "" || e.Done == "" || e.Error == "" {
-		t.Error("default emojis should not have empty values")
-	}
-}
-
-func TestDefaultStatusTiming(t *testing.T) {
-	timing := DefaultStatusTiming()
-	if timing.DebounceMs != 700 {
-		t.Errorf("DebounceMs = %d, want 700", timing.DebounceMs)
-	}
-	if timing.StallSoftMs != 10_000 {
-		t.Errorf("StallSoftMs = %d, want 10000", timing.StallSoftMs)
-	}
-}

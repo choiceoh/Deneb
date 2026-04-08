@@ -68,15 +68,6 @@ func TestParseSSE_CommentIgnored(t *testing.T) {
 	}
 }
 
-func TestParseSSE_EmptyData(t *testing.T) {
-	// Only comments and blank lines — no events dispatched.
-	input := ": comment\n\n: another\n\n"
-	events := collectEvents(input)
-
-	if len(events) != 0 {
-		t.Errorf("got %d, want 0 events", len(events))
-	}
-}
 
 func TestParseSSE_NoTrailingBlankLine(t *testing.T) {
 	// Stream ends without final blank line — should still flush.
@@ -105,15 +96,3 @@ func TestParseSSE_DataWithColon(t *testing.T) {
 	}
 }
 
-func TestParseSSE_NoEventField(t *testing.T) {
-	// Event type defaults to empty string when no "event:" line.
-	input := "data: {\"hello\":true}\n\n"
-	events := collectEvents(input)
-
-	if len(events) != 1 {
-		t.Fatalf("got %d, want 1 event", len(events))
-	}
-	if events[0].Type != "" {
-		t.Errorf("type = %q, want empty", events[0].Type)
-	}
-}

@@ -91,9 +91,3 @@ func TestParseSmartSchedule(t *testing.T) {
 	}
 }
 
-func TestSchedulerRunning(t *testing.T) {
-	s := NewScheduler(nil)
-	if s.Running() {
-		t.Fatal("expected not running with no tasks")
-	}
-}

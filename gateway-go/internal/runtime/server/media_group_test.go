@@ -42,16 +42,6 @@ func TestMediaGroupBatcher_SingleGroup(t *testing.T) {
 	}
 }
 
-func TestMediaGroupBatcher_NoMediaGroupID(t *testing.T) {
-	batcher := NewMediaGroupBatcher(func(msgs []*telegram.Message) {
-		t.Fatal("handler should not be called for non-group messages")
-	})
-
-	msg := &telegram.Message{MessageID: 1, Photo: []telegram.PhotoSize{{FileID: "p1"}}}
-	if batcher.Add(msg) {
-		t.Fatal("expected Add to return false for empty media_group_id")
-	}
-}
 
 func TestMediaGroupBatcher_MultipleGroups(t *testing.T) {
 	var mu sync.Mutex

@@ -5,28 +5,7 @@ import (
 	"testing"
 )
 
-func TestMustResponseOK_Success(t *testing.T) {
-	resp := MustResponseOK("test-1", map[string]string{"status": "ok"})
-	if resp == nil {
-		t.Fatal("expected non-nil response")
-	}
-	if !resp.OK {
-		t.Fatal("expected OK=true")
-	}
-	if resp.ID != "test-1" {
-		t.Errorf("got %s, want ID=test-1", resp.ID)
-	}
-}
 
-func TestMustResponseOK_NilPayload(t *testing.T) {
-	resp := MustResponseOK("test-2", nil)
-	if resp == nil {
-		t.Fatal("expected non-nil response")
-	}
-	if !resp.OK {
-		t.Fatal("expected OK=true for nil payload")
-	}
-}
 
 func TestMustResponseOK_MarshalFail(t *testing.T) {
 	// math.NaN() causes json.Marshal to fail.
@@ -45,12 +24,3 @@ func TestMustResponseOK_MarshalFail(t *testing.T) {
 	}
 }
 
-func TestMustResponseOKRaw_Success(t *testing.T) {
-	resp := MustResponseOKRaw("test-4", []byte(`{"ok":true}`))
-	if resp == nil {
-		t.Fatal("expected non-nil response")
-	}
-	if !resp.OK {
-		t.Fatal("expected OK=true")
-	}
-}

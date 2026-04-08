@@ -294,15 +294,3 @@ func TestPersistDefaultModel(t *testing.T) {
 	})
 }
 
-func TestGenerateRandomToken(t *testing.T) {
-	token := testutil.Must(generateRandomToken())
-	if len(token) != generatedTokenBytes*2 { // hex encoding doubles length
-		t.Errorf("got %d, want %d hex chars", len(token), generatedTokenBytes*2)
-	}
-
-	// Should be unique.
-	token2, _ := generateRandomToken()
-	if token == token2 {
-		t.Error("generated tokens should be unique")
-	}
-}

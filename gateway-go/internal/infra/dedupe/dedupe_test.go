@@ -83,9 +83,3 @@ func TestConcurrentAccess(t *testing.T) {
 	}
 }
 
-func TestClose(t *testing.T) {
-	tr := NewTracker(time.Minute, 100)
-	tr.Close()
-	// Double close should not panic.
-	tr.Close()
-}

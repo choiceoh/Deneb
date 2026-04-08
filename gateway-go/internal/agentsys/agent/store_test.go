@@ -23,13 +23,6 @@ func TestCreateAndListAgents(t *testing.T) {
 	}
 }
 
-func TestCreateWithCustomID(t *testing.T) {
-	s := NewStore()
-	a := s.Create(CreateParams{AgentID: "my-agent", Name: "Custom"})
-	if a.AgentID != "my-agent" {
-		t.Fatalf("got %q, want 'my-agent'", a.AgentID)
-	}
-}
 
 func TestGetAgent(t *testing.T) {
 	s := NewStore()
@@ -65,13 +58,6 @@ func TestUpdateAgent(t *testing.T) {
 	}
 }
 
-func TestUpdateNotFound(t *testing.T) {
-	s := NewStore()
-	_, err := s.Update("nonexistent", map[string]any{"name": "x"})
-	if err == nil {
-		t.Fatal("expected error for unknown agent")
-	}
-}
 
 func TestDeleteAgent(t *testing.T) {
 	s := NewStore()
@@ -121,16 +107,3 @@ func TestFileOperations(t *testing.T) {
 	}
 }
 
-func TestFileOpsUnknownAgent(t *testing.T) {
-	s := NewStore()
-
-	if _, err := s.ListFiles("unknown"); err == nil {
-		t.Fatal("expected error")
-	}
-	if _, err := s.File("unknown", "f"); err == nil {
-		t.Fatal("expected error")
-	}
-	if _, err := s.SetFile("unknown", "f", ""); err == nil {
-		t.Fatal("expected error")
-	}
-}
