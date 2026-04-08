@@ -134,7 +134,7 @@ func TestLLMCompact_SummarizesOld(t *testing.T) {
 		msgs = append(msgs, textMsg("assistant", fmt.Sprintf("Answer %d with lots of content %s", i, strings.Repeat("detail ", 50))))
 	}
 
-	cfg := DefaultConfig()
+	cfg := NewConfig(200_000)
 	cfg.ContextBudget = 1000 // low budget to trigger compaction
 
 	s := &mockSummarizer{}
@@ -164,7 +164,7 @@ func TestEmergencyCompact_EvictsOldestSummarizesNonEvicted(t *testing.T) {
 		msgs = append(msgs, textMsg("assistant", fmt.Sprintf("Reply %d %s", i, strings.Repeat("y", 2000))))
 	}
 
-	cfg := DefaultConfig()
+	cfg := NewConfig(200_000)
 	// Budget: 40 msgs × ~1000 tok = ~40K + 35K input = 75K. Budget 60K forces partial eviction.
 	cfg.ContextBudget = 60000
 
@@ -206,7 +206,7 @@ func TestCompact_PipelineOrder(t *testing.T) {
 		msgs = append(msgs, textMsg("assistant", "a"))
 	}
 
-	cfg := DefaultConfig()
+	cfg := NewConfig(200_000)
 	cfg.ContextBudget = 999999 // high budget, no LLM compaction
 
 	result, r := Compact(context.Background(), cfg, msgs, nil, nil)

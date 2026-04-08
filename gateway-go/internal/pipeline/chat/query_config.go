@@ -23,9 +23,6 @@ type QueryConfig struct {
 	// MemoryTokenBudget is the Aurora context (transcript history) token budget.
 	MemoryTokenBudget uint64
 
-	// LiveTokenBudget is the total agent loop token budget (system + tools + memory + live messages).
-	LiveTokenBudget uint64
-
 	// MaxTurns is the maximum agent loop iterations.
 	MaxTurns int
 
@@ -47,7 +44,6 @@ type QueryConfig struct {
 func DefaultQueryConfig() QueryConfig {
 	return QueryConfig{
 		MemoryTokenBudget: defaultMemoryTokenBudget,
-		LiveTokenBudget:   defaultLiveTokenBudget,
 		MaxTurns:          defaultMaxTurns,
 		MaxOutputTokens:   defaultMaxTokens,
 		AgentTimeout:      defaultAgentTimeout,

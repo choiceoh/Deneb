@@ -42,8 +42,9 @@ func (e *Engine) CompactAndPersist(
 	sessionKey string,
 	messages []llm.Message,
 	summarizer compact.Summarizer,
+	contextBudget int,
 ) ([]llm.Message, compact.Result) {
-	polarisCfg := compact.DefaultConfig()
+	polarisCfg := compact.NewConfig(contextBudget)
 
 	// Summary reuse: if context already has injected summaries (from
 	// AssembleContext), Polaris would re-summarize them. Detect and skip.

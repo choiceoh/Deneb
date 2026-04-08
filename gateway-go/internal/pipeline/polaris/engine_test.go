@@ -53,7 +53,7 @@ func TestCompactAndPersist_NoLLMCompaction(t *testing.T) {
 		llmMsg("assistant", "hi"),
 	}
 
-	compacted, result := e.CompactAndPersist(context.Background(), "s1", msgs, nil)
+	compacted, result := e.CompactAndPersist(context.Background(), "s1", msgs, nil, 170_000)
 	if result.LLMCompacted {
 		t.Fatal("expected no LLM compaction for small context")
 	}
@@ -72,9 +72,9 @@ func TestCompactAndPersist_WithLLMCompaction(t *testing.T) {
 	e, s := testEngine(t)
 
 	// Seed enough messages to trigger LLM compaction.
-	// Polaris triggers at 80% of 150K = 120K tokens.
-	// We need total tokens > 120K. Each message ~5K tokens.
-	// 30 messages × 5K = 150K tokens > 120K threshold.
+	// Polaris triggers at 80% of 170K = 136K tokens.
+	// We need total tokens > 136K. Each message ~5K tokens.
+	// 30 messages × 5K = 150K tokens > 136K threshold.
 	bigText := makeString(10000) // ~5000 tokens (runes/2)
 	for i := 0; i < 30; i++ {
 		s.AppendMessage("s1", toolctx.ChatMessage{
@@ -96,7 +96,7 @@ func TestCompactAndPersist_WithLLMCompaction(t *testing.T) {
 
 	summarizer := &mockSummarizer{summary: "### 핵심 사실\n- [테스트] 요약된 내용"}
 
-	compacted, result := e.CompactAndPersist(context.Background(), "s1", msgs, summarizer)
+	compacted, result := e.CompactAndPersist(context.Background(), "s1", msgs, summarizer, 170_000)
 
 	if !summarizer.called {
 		t.Fatal("summarizer was not called")

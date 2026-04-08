@@ -11,11 +11,9 @@ import (
 
 // Context assembly defaults.
 const (
-	defaultMemoryTokenBudget  = 30_000
-	defaultLiveTokenBudget    = 120_000 // total agent loop token budget (system + tools + memory + live messages)
+	defaultMemoryTokenBudget  = 200_000
 	defaultSystemPromptBudget = 30_000
 	defaultFreshTailCount     = 48
-	defaultMaxMessages        = 100
 )
 
 // AssemblyResult holds the output of context assembly.
@@ -29,20 +27,16 @@ type AssemblyResult struct {
 // ContextConfig configures context assembly behavior.
 type ContextConfig struct {
 	MemoryTokenBudget  uint64 // max tokens for transcript history
-	LiveTokenBudget    uint64 // total agent loop token budget (system + tools + memory + live)
 	SystemPromptBudget uint64 // max tokens for system prompt fragments
 	FreshTailCount     uint32 // messages protected from eviction
-	MaxMessages        int    // max messages to load from transcript
 }
 
 // DefaultContextConfig returns sensible defaults.
 func DefaultContextConfig() ContextConfig {
 	return ContextConfig{
 		MemoryTokenBudget:  defaultMemoryTokenBudget,
-		LiveTokenBudget:    defaultLiveTokenBudget,
 		SystemPromptBudget: defaultSystemPromptBudget,
 		FreshTailCount:     defaultFreshTailCount,
-		MaxMessages:        defaultMaxMessages,
 	}
 }
 
@@ -61,11 +55,6 @@ func assembleContext(
 	cfg ContextConfig,
 	logger *slog.Logger,
 ) (*AssemblyResult, error) {
-	limit := cfg.MaxMessages
-	if limit <= 0 {
-		limit = defaultMaxMessages
-	}
-
 	// LCM-aware assembly: use summary DAG when available.
 	if bridge, ok := store.(*polaris.Bridge); ok {
 		result, err := polaris.AssembleContext(
@@ -73,7 +62,6 @@ func assembleContext(
 			sessionKey,
 			int(cfg.MemoryTokenBudget),
 			int(cfg.FreshTailCount),
-			limit,
 			logger,
 		)
 		if err != nil {
@@ -87,15 +75,10 @@ func assembleContext(
 		}, nil
 	}
 
-	// Legacy tail-N assembly.
-	msgs, total, err := store.Load(sessionKey, limit)
+	// Legacy assembly: load all, trim by token budget.
+	msgs, total, err := store.Load(sessionKey, 0)
 	if err != nil {
 		return nil, fmt.Errorf("load transcript: %w", err)
-	}
-
-	// Tail-N truncation.
-	if len(msgs) > limit {
-		msgs = msgs[len(msgs)-limit:]
 	}
 
 	// Token-budget truncation: drop oldest messages until history fits.
