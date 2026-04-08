@@ -105,9 +105,6 @@ After each evolution cycle, update the skill's version and add a brief comment i
 For systematic optimization, use the autoresearch infrastructure:
 
 ```bash
-# Generate a quality metric for the target skill
-scripts/dev/metric-gen.sh quality
-
 # Start autoresearch targeting the skill file
 scripts/dev/autoresearch.sh start \
   --target skills/<category>/<name>/SKILL.md \

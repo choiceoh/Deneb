@@ -36,11 +36,18 @@ ITERATE_STATE_DIR="/tmp/deneb-iterate-state"
 
 # Parse arguments.
 METRIC_CMD=""
+METRIC_PRESET=""
 USE_BASELINE=false
 SAVE_BASELINE=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --metric) METRIC_CMD="$2"; shift 2 ;;
+    --metric)
+      # Accept preset name (smoke|quality|combined) or raw command.
+      case "${2:-}" in
+        smoke|quality|combined) METRIC_PRESET="$2"; shift 2 ;;
+        *) METRIC_CMD="$2"; shift 2 ;;
+      esac
+      ;;
     --port) PORT="$2"; shift 2 ;;
     --baseline) USE_BASELINE=true; shift ;;
     --save-baseline) SAVE_BASELINE=true; shift ;;
@@ -228,13 +235,13 @@ echo "ok (${WAIT_MS}ms)"
 PASS=0
 TOTAL=0
 
-if [[ -n "$METRIC_CMD" ]]; then
-  # Custom metric command.
+_run_metric_cmd() {
+  # Run a metric command or preset; sets METRIC_VAL, QUALITY_JSON, CHECK_MS, TOTAL, PASS.
+  local cmd="$1"
   echo -n "metric... "
   CHECK_START=$(date +%s%N)
-  METRIC_OUT=$(eval "$METRIC_CMD" 2>&1) || true
+  METRIC_OUT=$(eval "$cmd" 2>&1) || true
 
-  # Extract metric_value=N from output.
   METRIC_VAL=$(echo "$METRIC_OUT" | grep -oP 'metric_value=\K[\d.]+' | tail -1)
   if [[ -z "$METRIC_VAL" ]]; then
     echo "FAIL (no metric_value in output)"
@@ -244,7 +251,6 @@ if [[ -n "$METRIC_CMD" ]]; then
     echo "$METRIC_VAL"
   fi
 
-  # Extract quality breakdown if present (from quality-metric.sh).
   METRIC_DETAIL=$(echo "$METRIC_OUT" | grep '^DENEB_METRIC_DETAIL ' | tail -1 | sed 's/^DENEB_METRIC_DETAIL //')
   if [[ -n "$METRIC_DETAIL" ]]; then
     QUALITY_JSON=$(python3 -c "
@@ -263,6 +269,50 @@ print(json.dumps(d))
   CHECK_MS=$(( ($(date +%s%N) - CHECK_START) / 1000000 ))
   TOTAL=1
   PASS=$( [[ "$(echo "$METRIC_VAL > 0" | bc -l 2>/dev/null || echo 0)" == "1" ]] && echo 1 || echo 0 )
+}
+
+if [[ -n "$METRIC_PRESET" ]]; then
+  # Built-in metric presets (no code generation needed).
+  case "$METRIC_PRESET" in
+    quality)
+      _run_metric_cmd "\"$SCRIPT_DIR/quality-metric.sh\"" ;;
+    combined)
+      # Smoke (20%) + Quality (80%).
+      echo -n "metric(combined)... "
+      CHECK_START=$(date +%s%N)
+
+      SMOKE_PASS=0
+      STATUS=$(curl -sf "http://$HOST:$PORT/health" 2>/dev/null \
+        | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+      [[ "$STATUS" == "ok" ]] && SMOKE_PASS=$((SMOKE_PASS+1))
+      READY=$(curl -sf -o /dev/null -w "%{http_code}" "http://$HOST:$PORT/ready" 2>/dev/null || echo "000")
+      [[ "$READY" == "200" ]] && SMOKE_PASS=$((SMOKE_PASS+1))
+
+      if [[ "$SMOKE_PASS" -eq 0 ]]; then
+        METRIC_VAL=0
+        echo "0 (smoke failed)"
+      else
+        Q_OUT=$("$SCRIPT_DIR/quality-metric.sh" 2>&1) || true
+        Q_VAL=$(echo "$Q_OUT" | grep -oP 'metric_value=\K[\d.]+' | tail -1)
+        Q_VAL=${Q_VAL:-0}
+        SMOKE_SCORE=$(python3 -c "print(round($SMOKE_PASS / 2 * 20))")
+        Q_SCORE=$(python3 -c "print(round($Q_VAL / 100 * 80))")
+        METRIC_VAL=$(python3 -c "print($SMOKE_SCORE + $Q_SCORE)")
+        echo "$METRIC_VAL"
+      fi
+
+      CHECK_MS=$(( ($(date +%s%N) - CHECK_START) / 1000000 ))
+      TOTAL=1
+      PASS=$( [[ "$(echo "$METRIC_VAL > 0" | bc -l 2>/dev/null || echo 0)" == "1" ]] && echo 1 || echo 0 )
+      ;;
+    *)
+      echo "Unknown metric preset: $METRIC_PRESET"
+      exit 1
+      ;;
+  esac
+
+elif [[ -n "$METRIC_CMD" ]]; then
+  _run_metric_cmd "$METRIC_CMD"
 
 else
   # Default: built-in smoke test (health + ready, no WebSocket).

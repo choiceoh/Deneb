@@ -33,6 +33,10 @@ from typing import Optional
 # Add scripts dir to path for shared module.
 sys.path.insert(0, str(Path(__file__).parent))
 from telegram_test_client import TelegramTestClient, ChatCapture, check_prerequisites
+from checks import (
+    check_korean_response, check_no_leaked_markup, check_telegram_safe,
+    check_response_substance, check_no_filler, check_latency,
+)
 
 try:
     import yaml
@@ -462,65 +466,9 @@ class GatewayClient:
 
 # --- Quality Checks ---
 
-def check_korean_response(text: str) -> tuple[bool, str]:
-    """Check response language is Korean or English (rejects other languages)."""
-    # Strip fenced code blocks and inline code which are inherently English.
-    prose = re.sub(r"```[\s\S]*?```", "", text)
-    prose = re.sub(r"`[^`]+`", "", prose)
-    korean_chars = len(re.findall(r"[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]", prose))
-    english_chars = len(re.findall(r"[a-zA-Z]", prose))
-    ko_en = korean_chars + english_chars
-    # Count ALL Unicode letters (Korean, English, Chinese, Cyrillic, etc.)
-    total_alpha = sum(1 for c in prose if c.isalpha())
-    if total_alpha == 0:
-        # No alphabetic content (numbers, emoji, symbols only) — acceptable.
-        return True, "no alphabetic content (ok)"
-    ratio = ko_en / total_alpha
-    if ratio > 0.7:
-        return True, f"ko+en: {ratio:.0%} (ko={korean_chars}, en={english_chars})"
-    return False, f"ko+en ratio too low: {ratio:.0%} ({ko_en}/{total_alpha})"
-
-
-def check_no_leaked_markup(text: str) -> tuple[bool, str]:
-    patterns = [
-        (r"<function=", "leaked <function= tag"),
-        (r"</?thinking>", "leaked thinking tag"),
-        (r"</?artifact", "leaked artifact tag"),
-        (r"\[\[reply_to", "leaked reply directive"),
-        (r"MEDIA:\S+", "leaked MEDIA token"),
-        (r"NO_REPLY", "leaked NO_REPLY token"),
-        (r"SILENT_REPLY", "leaked SILENT_REPLY token"),
-    ]
-    for pat, desc in patterns:
-        if re.search(pat, text):
-            return False, desc
-    return True, "clean"
-
-
-def check_telegram_safe(text: str) -> tuple[bool, str]:
-    issues = []
-    if len(text) > 4096:
-        issues.append(f"exceeds 4096 char limit ({len(text)} chars)")
-    open_tags = re.findall(r"<(b|i|code|pre|s|u|a|blockquote|tg-spoiler)[\s>]", text)
-    close_tags = re.findall(r"</(b|i|code|pre|s|u|a|blockquote|tg-spoiler)>", text)
-    if len(open_tags) != len(close_tags):
-        issues.append(f"mismatched HTML tags (open={len(open_tags)}, close={len(close_tags)})")
-    if issues:
-        return False, "; ".join(issues)
-    return True, f"length={len(text)} chars"
-
-
-def check_response_substance(text: str, min_chars: int = 10, min_alpha: int = 5) -> tuple[bool, str]:
-    """Check if response has actual substance (not empty/trivial)."""
-    stripped = text.strip()
-    if not stripped:
-        return False, "empty response"
-    if len(stripped) < min_chars:
-        return False, f"too short ({len(stripped)} chars)"
-    alpha = re.findall(r"[\w]", stripped)
-    if len(alpha) < min_alpha:
-        return False, "no meaningful content"
-    return True, f"{len(stripped)} chars"
+# Core check functions imported from checks.py:
+# check_korean_response, check_no_leaked_markup, check_telegram_safe,
+# check_response_substance, check_no_filler, check_latency
 
 
 def check_no_hallucinated_tool(capture: ChatCapture) -> tuple[bool, str]:
@@ -536,12 +484,6 @@ def check_no_hallucinated_tool(capture: ChatCapture) -> tuple[bool, str]:
     return True, f"{len(starts)} tools OK"
 
 
-def check_latency(latency_ms: float, max_ms: float) -> tuple[bool, str]:
-    if latency_ms <= max_ms:
-        return True, f"{latency_ms:.0f}ms (limit: {max_ms:.0f}ms)"
-    return False, f"{latency_ms:.0f}ms exceeds {max_ms:.0f}ms limit"
-
-
 def check_streaming_flow(capture: ChatCapture) -> tuple[bool, str]:
     if not capture.events:
         return False, "no events received"
@@ -552,18 +494,6 @@ def check_streaming_flow(capture: ChatCapture) -> tuple[bool, str]:
     if chat_events:
         return True, f"{len(chat_events)} chat events, {len(capture.deltas)} deltas"
     return True, f"{len(capture.events)} total events"
-
-
-def check_no_filler(text: str) -> tuple[bool, str]:
-    filler_patterns = [
-        r"^(Great question|I'd be happy to|Sure,? I can|Of course|Certainly|Absolutely)",
-        r"^(좋은 질문|물론이죠|당연하죠|기꺼이)",
-    ]
-    for pat in filler_patterns:
-        match = re.match(pat, text.strip(), re.IGNORECASE)
-        if match:
-            return False, f"starts with filler: '{match.group()}'"
-    return True, "no filler detected"
 
 
 # --- Check Evaluator ---
