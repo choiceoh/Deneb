@@ -17,7 +17,7 @@ func TestBuildSystemPromptContainsSections(t *testing.T) {
 		RuntimeInfo: &RuntimeInfo{
 			Host:         "dgx-spark",
 			OS:           "linux",
-			Arch:         "amd64",
+			Arch:         "arm64",
 			Model:        "claude-sonnet-4-20250514",
 			DefaultModel: "claude-sonnet-4-20250514",
 		},
@@ -130,7 +130,7 @@ func TestBuildRuntimeLine(t *testing.T) {
 		AgentID: "default",
 		Host:    "dgx-spark",
 		OS:      "linux",
-		Arch:    "amd64",
+		Arch:    "arm64",
 		Model:   "claude-sonnet-4-20250514",
 	}
 

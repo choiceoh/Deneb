@@ -29,7 +29,7 @@ concurrency:
 jobs:
   changes:
     name: detect changed domains
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     outputs:
       tool-schemas: ${{ steps.filter.outputs.tool-schemas }}
       model-caps: ${{ steps.filter.outputs.model-caps }}
@@ -54,7 +54,7 @@ jobs:
     name: tool schemas
     needs: changes
     if: needs.changes.outputs.tool-schemas == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
 
@@ -72,7 +72,7 @@ jobs:
     name: model capabilities
     needs: changes
     if: needs.changes.outputs.model-caps == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
 

@@ -30,7 +30,7 @@ jobs:
   # ── 1. Spellcheck ────────────────────────────────────────────
   spellcheck:
     name: Spellcheck
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
@@ -51,7 +51,7 @@ jobs:
   # ── 2. Link check (external URLs) ───────────────────────────
   link-check:
     name: Link Check
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -80,7 +80,7 @@ jobs:
   # ── 3. Mintlify build check ──────────────────────────────────
   build:
     name: Mintlify Build Check
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
