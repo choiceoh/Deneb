@@ -88,23 +88,18 @@ type Server struct {
 	processes     *process.Manager
 	daemon        *daemon.Daemon
 	runtimeCfg    *config.GatewayRuntimeConfig
-	configWatcher *config.Watcher
-	version       string
+	version string
 	logColor      bool // true when ANSI color output is enabled
 	logger        *slog.Logger
 
 	// Session, chat, and hook subsystems — logically grouped to reduce God-Object growth.
-	*SessionManager // sessions, keyCache, transcript, presenceStore, heartbeatState
+	*SessionManager // sessions, transcript
 	*ChatManager    // chatHandler, toolDeps, telegramPlug
-	*HookManager    // hooks, hooksHTTP, cron, cronRunLog
+	*HookManager    // hooks, cron, cronRunLog
 
 	// bridgeInjector is late-bound: created in registerEarlyMethods,
 	// populated in registerLateMethods after chatHandler is ready.
 	bridgeInjector *handlerbridge.Injector
-
-	// githubWebhookCfg is non-nil when GITHUB_WEBHOOK_SECRET is set.
-	// Resolved once at startup from environment variables; never mutated.
-	githubWebhookCfg *GitHubWebhookConfig
 
 	// lifecycleCtx is cancelled by doShutdown() so background goroutines
 	// exit promptly even if the caller's original context is still alive.
@@ -165,7 +160,6 @@ func New(addr string, opts ...Option) (*Server, error) {
 
 	s.broadcaster = events.NewBroadcaster()
 	s.broadcaster.SetLogger(s.logger)
-	s.keyCache = session.NewKeyCache()
 	s.gatewaySubs = events.NewGatewayEventSubscriptions(events.GatewaySubscriptionParams{
 		Broadcaster: s.broadcaster,
 		Logger:      s.logger,
@@ -193,12 +187,6 @@ func New(addr string, opts ...Option) (*Server, error) {
 		}
 	}
 	s.initHooksFromConfig()
-
-	// GitHub webhook: resolved from env vars; nil when GITHUB_WEBHOOK_SECRET is unset.
-	s.githubWebhookCfg = GitHubWebhookConfigFromEnv()
-	if s.githubWebhookCfg != nil {
-		s.logger.Info("github webhook enabled", "chatID", s.githubWebhookCfg.ChatID != "")
-	}
 
 	s.snapshotStore = telegram.NewSnapshotStore()
 	s.activity = monitoring.NewActivityTracker()

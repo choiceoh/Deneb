@@ -259,9 +259,6 @@ func ApplyDirectivesToSession(inline directives.InlineDirectives, sess *types.Se
 	if inline.HasReasoningDirective {
 		sess.ReasoningLevel = inline.ReasoningLevel
 	}
-	if inline.HasElevatedDirective {
-		sess.ElevatedLevel = inline.ElevatedLevel
-	}
 	if inline.HasModelDirective && inline.RawModelDirective != "" {
 		sess.Model = inline.RawModelDirective
 	}

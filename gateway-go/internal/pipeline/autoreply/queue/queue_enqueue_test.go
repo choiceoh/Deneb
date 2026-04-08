@@ -1,9 +1,9 @@
 package queue
 
 import (
+	"fmt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"testing"
-	"time"
 )
 
 func TestRecentMessageIDCache_PeekAndCheck(t *testing.T) {
@@ -137,15 +137,25 @@ func TestIsRunAlreadyQueued_EmptyItems(t *testing.T) {
 	}
 }
 
-func TestRecentMessageIDCache_Expiry(t *testing.T) {
+func TestRecentMessageIDCache_CapacityEviction(t *testing.T) {
 	cache := NewRecentMessageIDCache()
 
-	// Manually insert an expired entry.
-	cache.mu.Lock()
-	cache.entries["expired"] = dedupeEntry{seenAt: time.Now().Add(-recentMessageIDTTL - time.Second)}
-	cache.mu.Unlock()
+	// Fill to capacity.
+	for i := 0; i < recentMessageIDMaxSize; i++ {
+		cache.check(fmt.Sprintf("key%d", i))
+	}
 
-	if cache.peek("expired") {
-		t.Error("expected expired entry to not be found")
+	// The first key should still be present (at capacity, not over).
+	if !cache.peek("key0") {
+		t.Error("expected key0 found at capacity")
+	}
+
+	// Adding one more triggers a clear, so old keys disappear.
+	cache.check("overflow")
+	if cache.peek("key0") {
+		t.Error("expected key0 evicted after overflow")
+	}
+	if !cache.peek("overflow") {
+		t.Error("expected overflow key present after reset")
 	}
 }

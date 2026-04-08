@@ -55,16 +55,6 @@ func TestHandleDirectives_ModelWithCandidates(t *testing.T) {
 	}
 }
 
-func TestHandleDirectives_ElevatedBlocked(t *testing.T) {
-	result := HandleDirectives("/elevated on", nil, DirectiveHandlingOptions{
-		RequireAuthForElevated: true,
-		IsAuthorized:           false,
-	})
-	if len(result.Errors) == 0 {
-		t.Error("expected auth error")
-	}
-}
-
 func TestPersistDirectives(t *testing.T) {
 	session := &types.SessionState{}
 	result := DirectiveHandlingResult{

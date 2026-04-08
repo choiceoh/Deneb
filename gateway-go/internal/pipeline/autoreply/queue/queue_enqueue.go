@@ -5,107 +5,45 @@ package queue
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"strings"
-	"sync"
 	"time"
 )
 
 const (
-	// recentMessageIDTTL is the TTL for the recent message ID dedup cache.
-	recentMessageIDTTL = 5 * time.Minute
-	// recentMessageIDMaxSize is the max entries in the dedup cache.
-	recentMessageIDMaxSize = 10_000
+	// recentMessageIDMaxSize is the max entries before the dedup cache resets.
+	// Single-user deployment: 100 entries is plenty.
+	recentMessageIDMaxSize = 100
 )
 
-// dedupeEntry tracks a recently seen message ID.
-type dedupeEntry struct {
-	seenAt time.Time
-}
-
-// expiryEntry is a node in the FIFO expiry queue.
-type expiryEntry struct {
-	key       string
-	expiresAt time.Time
-}
-
-// RecentMessageIDCache is a bounded TTL cache for message ID deduplication.
-//
-// Expiry design: instead of scanning the whole map every N operations, we
-// maintain a FIFO expiry queue (entries are appended in insertion order and
-// therefore roughly sorted by expiration time). prune() sweeps from the front
-// of the queue until it hits a non-expired entry, giving O(1) amortized cost
-// per prune call regardless of map size.
-//
-// A key may appear more than once in the queue if it was re-added after its
-// initial insertion; the stale queue entry is harmlessly skipped during prune
-// because we verify the map entry's actual seenAt before deleting.
+// RecentMessageIDCache is a simple bounded set for message ID deduplication.
+// Single-user deployment — no TTL, no FIFO queue, no mutex needed.
+// When the map exceeds recentMessageIDMaxSize, it clears entirely.
 type RecentMessageIDCache struct {
-	mu      sync.Mutex
-	entries map[string]dedupeEntry
-	expiry  []expiryEntry // FIFO; front holds the earliest expiration
-	checks  int
+	entries map[string]struct{}
 }
 
 func NewRecentMessageIDCache() *RecentMessageIDCache {
 	return &RecentMessageIDCache{
-		entries: make(map[string]dedupeEntry),
+		entries: make(map[string]struct{}),
 	}
 }
 
-// peek returns true if the key is in the cache and not expired.
+// peek returns true if the key is in the cache.
 func (c *RecentMessageIDCache) peek(key string) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	entry, ok := c.entries[key]
-	if !ok {
-		return false
-	}
-	if time.Since(entry.seenAt) > recentMessageIDTTL {
-		delete(c.entries, key)
-		return false
-	}
-	return true
+	_, ok := c.entries[key]
+	return ok
 }
 
-// check adds a key to the cache and prunes expired entries if over capacity.
+// check adds a key to the cache. Clears the map if over capacity.
 func (c *RecentMessageIDCache) check(key string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	now := time.Now()
-	c.entries[key] = dedupeEntry{seenAt: now}
-	c.expiry = append(c.expiry, expiryEntry{key: key, expiresAt: now.Add(recentMessageIDTTL)})
-	c.checks++
-	if len(c.entries) > recentMessageIDMaxSize || c.checks%100 == 0 {
-		c.prune()
+	if len(c.entries) >= recentMessageIDMaxSize {
+		c.entries = make(map[string]struct{})
 	}
+	c.entries[key] = struct{}{}
 }
 
 // clear removes all entries.
 func (c *RecentMessageIDCache) clear() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.entries = make(map[string]dedupeEntry)
-	c.expiry = c.expiry[:0]
-	c.checks = 0
-}
-
-// prune sweeps expired entries from the front of the FIFO expiry queue.
-// Because entries are appended in time order the front always holds the
-// oldest (soonest-to-expire) entries, so we stop as soon as we reach a
-// live entry. O(expired) per call — amortized O(1) per insertion.
-func (c *RecentMessageIDCache) prune() {
-	now := time.Now()
-	i := 0
-	for i < len(c.expiry) && c.expiry[i].expiresAt.Before(now) {
-		key := c.expiry[i].key
-		// Only remove the map entry if the key hasn't been refreshed since
-		// this queue entry was added (i.e., its actual expiry has passed).
-		if e, ok := c.entries[key]; ok && e.seenAt.Add(recentMessageIDTTL).Before(now) {
-			delete(c.entries, key)
-		}
-		i++
-	}
-	// Slide the queue forward, reusing the backing array to avoid allocation.
-	c.expiry = c.expiry[i:]
+	c.entries = make(map[string]struct{})
 }
 
 // buildRecentMessageIDKey builds a dedup key for a followup run.

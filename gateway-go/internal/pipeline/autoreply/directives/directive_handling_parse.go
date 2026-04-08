@@ -2,7 +2,7 @@
 // Mirrors src/auto-reply/reply/directive-handling.parse.ts (229 LOC).
 //
 // Chains extraction in the same order as TS:
-// think → verbose → fast → reasoning → elevated → exec → status → model → queue
+// think → verbose → fast → reasoning → exec → status → model → queue
 //
 // The basic ParseInlineDirectives already handles think through queue (basic).
 // This layer adds:
@@ -51,7 +51,6 @@ type FullInlineDirectives struct {
 // FullDirectiveParseOptions configures the full directive parser.
 type FullDirectiveParseOptions struct {
 	ModelAliases         []string
-	DisableElevated      bool
 	AllowStatusDirective bool // defaults to true if unset
 }
 
@@ -59,7 +58,7 @@ type FullDirectiveParseOptions struct {
 // including /exec and full /queue options. This matches the full TS pipeline
 // from directive-handling.parse.ts.
 //
-// The chain order mirrors TS: think → verbose → fast → reasoning → elevated
+// The chain order mirrors TS: think → verbose → fast → reasoning
 // → exec → status → model → queue. The basic ParseInlineDirectives handles
 // think through model+queue(basic). This function then re-extracts /exec with
 // full key=value args and /queue with debounce/cap/drop options.
@@ -71,9 +70,8 @@ func ParseFullInlineDirectives(body string, opts *FullDirectiveParseOptions) Ful
 
 	// Step 1: Parse basic directives (think, verbose, fast, reasoning, elevated, status, model, queue).
 	basic := ParseInlineDirectives(body, &DirectiveParseOptions{
-		ModelAliases:    opts.ModelAliases,
-		DisableElevated: opts.DisableElevated,
-		DisableStatus:   !allowStatus,
+		ModelAliases:  opts.ModelAliases,
+		DisableStatus: !allowStatus,
 	})
 
 	result := FullInlineDirectives{
@@ -125,7 +123,6 @@ func IsFullDirectiveOnly(directives FullInlineDirectives, cleanedBody string, is
 		directives.HasVerboseDirective ||
 		directives.HasFastDirective ||
 		directives.HasReasoningDirective ||
-		directives.HasElevatedDirective ||
 		directives.HasExecDirective ||
 		directives.HasModelDirective ||
 		directives.HasQueueDirective

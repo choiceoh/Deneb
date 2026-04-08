@@ -11,7 +11,6 @@ import (
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
 	handlertelegram "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlertelegram"
 	handlerplatform "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/platform"
-	handlerpresence "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/presence"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/provider"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/session"
@@ -48,8 +47,6 @@ type ExtendedDeps = handleragent.ExtendedDeps
 type AgentsDeps = handleragent.AgentsDeps
 type SessionDeps = handlersession.Deps
 type GatewayRuntimeDeps = handlergateway.Deps
-type HeartbeatDeps = handlerpresence.HeartbeatDeps
-type PresenceDeps = handlerpresence.Deps
 
 // --- Registration wrappers ---
 
@@ -132,12 +129,6 @@ func RegisterIdentityMethods(d *Dispatcher, version string) {
 }
 func RegisterSecretMethods(d *Dispatcher, deps SecretDeps) {
 	d.RegisterDomain(handlerplatform.SecretMethods(deps))
-}
-func RegisterHeartbeatMethods(d *Dispatcher, deps HeartbeatDeps) {
-	d.RegisterDomain(handlerpresence.HeartbeatMethods(deps))
-}
-func RegisterPresenceMethods(d *Dispatcher, deps PresenceDeps) {
-	d.RegisterDomain(handlerpresence.Methods(deps))
 }
 func RegisterGatewayRuntimeMethods(d *Dispatcher, deps GatewayRuntimeDeps) {
 	d.RegisterDomain(handlergateway.RuntimeMethods(deps))

@@ -48,17 +48,12 @@ func (d *FollowupDrainCallbacks) Delete(key string) {
 	delete(d.callbacks, key)
 }
 
-// backoffDelays defines exponential backoff durations for consecutive failures.
-var backoffDelays = []time.Duration{
-	1 * time.Second,
-	2 * time.Second,
-	4 * time.Second,
-	8 * time.Second,
-	16 * time.Second,
-}
+// retryDelay is the single retry delay before giving up.
+// Single-user deployment: one retry after 2s is sufficient.
+const retryDelay = 2 * time.Second
 
-// maxConsecutiveFailures caps the backoff index.
-const maxConsecutiveFailures = 5
+// maxConsecutiveFailures — single retry, then give up.
+const maxConsecutiveFailures = 2
 
 // FollowupDrainService manages followup queue draining.
 type FollowupDrainService struct {
@@ -143,13 +138,9 @@ func (s *FollowupDrainService) drainLoop(key string, queue *FollowupQueueState, 
 			time.Sleep(time.Duration(debounceMs) * time.Millisecond)
 		}
 
-		// Apply exponential backoff on consecutive failures.
+		// Single retry with fixed delay.
 		if consecutiveFailures > 0 {
-			idx := consecutiveFailures - 1
-			if idx >= len(backoffDelays) {
-				idx = len(backoffDelays) - 1
-			}
-			time.Sleep(backoffDelays[idx])
+			time.Sleep(retryDelay)
 		}
 
 		// --- Collect (auto-debounce) mode ---

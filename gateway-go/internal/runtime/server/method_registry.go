@@ -21,7 +21,6 @@ import (
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
 	handlertask "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlertask"
 	handlertelegram "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlertelegram"
-	handlerpresence "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/presence"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/provider"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/session"
@@ -40,14 +39,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	// Fail fast if core hub fields are missing.
 	if err := hub.Validate(); err != nil {
 		return fmt.Errorf("server init: hub validation: %w", err)
-	}
-
-	// Lazy-init presence/heartbeat state.
-	if s.presenceStore == nil {
-		s.presenceStore = handlerpresence.NewStore()
-	}
-	if s.heartbeatState == nil {
-		s.heartbeatState = handlerpresence.NewHeartbeatState()
 	}
 
 	// Create Telegram plugin from config if available.
@@ -129,16 +120,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// --- Approvals ---
 		handlerprocess.ApprovalMethods(handlerprocess.ApprovalDeps{
 			Store:       hub.Approvals(),
-			Broadcaster: hub.Broadcast,
-		}),
-
-		// --- Presence and heartbeat ---
-		handlerpresence.Methods(handlerpresence.Deps{
-			Store:       s.presenceStore,
-			Broadcaster: hub.Broadcast,
-		}),
-		handlerpresence.HeartbeatMethods(handlerpresence.HeartbeatDeps{
-			State:       s.heartbeatState,
 			Broadcaster: hub.Broadcast,
 		}),
 
