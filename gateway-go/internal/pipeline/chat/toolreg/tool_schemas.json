@@ -686,7 +686,7 @@
       },
       "query": {
         "type": "string",
-        "description": "Web search query. Tavily (AI answer + results) > Brave Search > DuckDuckGo fallback"
+        "description": "Web search query. Perplexity Sonar (AI answer + citations) > Brave Search > DuckDuckGo fallback"
       },
       "queries": {
         "type": "array",
