@@ -234,25 +234,3 @@ func needsFollowup(result *AgentTurnResult) bool {
 	}
 	return false
 }
-
-// ACPStreamSettings configures ACP streaming behavior.
-type ACPStreamSettings struct {
-	Enabled    bool
-	BufferSize int
-	FlushMs    int64
-}
-
-// DefaultACPStreamSettings returns sensible defaults.
-func DefaultACPStreamSettings() ACPStreamSettings {
-	return ACPStreamSettings{
-		Enabled:    true,
-		BufferSize: 4096,
-		FlushMs:    100,
-	}
-}
-
-// ACPResetTarget specifies an ACP target for reset operations.
-type ACPResetTarget struct {
-	AgentID    string
-	SessionKey string
-}

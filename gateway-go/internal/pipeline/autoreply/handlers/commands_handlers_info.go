@@ -7,19 +7,17 @@ func handleStatusCommand(ctx CommandContext) (*CommandResult, error) {
 	}
 	s := ctx.Session
 	report := StatusReport{
-		SessionKey:      s.SessionKey,
-		AgentID:         s.AgentID,
-		Model:           s.Model,
-		Provider:        s.Provider,
-		Channel:         s.Channel,
-		IsGroup:         s.IsGroup,
-		ThinkLevel:      s.ThinkLevel,
-		FastMode:        s.FastMode,
-		VerboseLevel:    s.VerboseLevel,
-		ReasoningLevel:  s.ReasoningLevel,
-		ElevatedLevel:   s.ElevatedLevel,
-		SendPolicy:      s.SendPolicy,
-		GroupActivation: s.GroupActivation,
+		SessionKey:     s.SessionKey,
+		AgentID:        s.AgentID,
+		Model:          s.Model,
+		Provider:       s.Provider,
+		Channel:        s.Channel,
+		IsGroup:        s.IsGroup,
+		ThinkLevel:     s.ThinkLevel,
+		FastMode:       s.FastMode,
+		VerboseLevel:   s.VerboseLevel,
+		ReasoningLevel: s.ReasoningLevel,
+		ElevatedLevel:  s.ElevatedLevel,
 	}
 	// Populate server-level fields from StatusDeps.
 	if ctx.Deps != nil && ctx.Deps.Status != nil {

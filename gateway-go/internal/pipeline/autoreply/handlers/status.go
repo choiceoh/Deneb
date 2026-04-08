@@ -14,20 +14,18 @@ import (
 
 // StatusReport holds all data for building a status message.
 type StatusReport struct {
-	SessionKey      string
-	AgentID         string
-	Model           string
-	Provider        string
-	Channel         string
-	IsGroup         bool
-	ThinkLevel      types.ThinkLevel
-	FastMode        bool
-	VerboseLevel    types.VerboseLevel
-	ReasoningLevel  types.ReasoningLevel
-	ElevatedLevel   types.ElevatedLevel
-	SendPolicy      string
-	GroupActivation types.GroupActivationMode
-	RunCount        int
+	SessionKey     string
+	AgentID        string
+	Model          string
+	Provider       string
+	Channel        string
+	IsGroup        bool
+	ThinkLevel     types.ThinkLevel
+	FastMode       bool
+	VerboseLevel   types.VerboseLevel
+	ReasoningLevel types.ReasoningLevel
+	ElevatedLevel  types.ElevatedLevel
+	RunCount       int
 
 	// Context usage.
 	ContextUsedTokens  int
@@ -86,13 +84,6 @@ func BuildStatusMessage(report StatusReport) string {
 	// Channel section.
 	if report.Channel != "" {
 		sections = append(sections, fmt.Sprintf("📡 **Channel:** %s", report.Channel))
-	}
-	if report.IsGroup {
-		activation := "mention"
-		if report.GroupActivation != "" {
-			activation = string(report.GroupActivation)
-		}
-		sections = append(sections, fmt.Sprintf("👥 **Group activation:** %s", activation))
 	}
 
 	// Gateway info section.

@@ -19,7 +19,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/inbound"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/streaming"
 	subagentpkg "github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/subagent"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -208,21 +207,6 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		msgCtx.BodyForAgent = inbound.StripMentions(msgCtx.BodyForAgent, "")
 		msgCtx.BodyForCommands = inbound.StripMentions(msgCtx.BodyForCommands, "")
 
-		// Handle /activation command to change group activation mode.
-		if hasCmd, activationMode := autoreply.ParseActivationCommand(msgCtx.BodyForCommands, p.cmdRegistry); hasCmd {
-			if activationMode != "" && p.server.sessions != nil {
-				activationStr := string(activationMode)
-				p.server.sessions.Patch(sessionKey, session.PatchFields{GroupActivation: &activationStr})
-				p.sendCommandReply(chatID, &handlers.CommandResult{
-					Reply: fmt.Sprintf("👥 Group activation: **%s**", activationMode), SkipAgent: true,
-				})
-			} else {
-				p.sendCommandReply(chatID, &handlers.CommandResult{
-					Reply: "👥 Usage: /activation mention|always", SkipAgent: true,
-				})
-			}
-			return
-		}
 	}
 
 	// Quick commands with inline keyboard or formatted response.
@@ -376,23 +360,11 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		)
 	}
 	if len(dispatchResult.Payloads) > 0 && !executor.didSend {
-		// Deliver reply payloads through the full streaming pipeline for
-		// sequential ordering, deduplication, and coalescing.
-		pipeline := streaming.NewBlockReplyPipelineFull(context.Background(), streaming.BlockReplyPipelineConfig{
-			OnBlockReply: func(ctx context.Context, payload types.ReplyPayload) error {
-				if payload.Text != "" {
-					p.sendCommandReply(chatID, &handlers.CommandResult{Reply: payload.Text})
-				}
-				return nil
-			},
-			TimeoutMs: 10000,
-			Logger:    p.logger,
-		})
 		for _, payload := range dispatchResult.Payloads {
-			pipeline.Enqueue(payload)
+			if payload.Text != "" {
+				p.sendCommandReply(chatID, &handlers.CommandResult{Reply: payload.Text})
+			}
 		}
-		pipeline.FlushAndWait(true)
-		pipeline.Stop()
 	}
 
 	// Remove ack reaction after the reply is sent — but only when the agent

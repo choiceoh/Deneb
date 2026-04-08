@@ -98,8 +98,6 @@ type AgentConfig struct {
 	ToolPreset string `json:"toolPreset,omitempty"` // researcher, implementer, verifier, coordinator
 
 	// Channel / messaging policy.
-	SendPolicy      string `json:"sendPolicy,omitempty"`
-	GroupActivation string `json:"groupActivation,omitempty"`
 }
 
 // Session represents a gateway session row.

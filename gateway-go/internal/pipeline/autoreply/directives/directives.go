@@ -35,10 +35,6 @@ type InlineDirectives struct {
 	RawModelDirective string
 	RawModelProfile   string
 
-	HasQueueDirective bool
-	QueueReset        bool
-	RawQueueMode      string
-
 	HasDeepWorkDirective bool
 }
 
@@ -49,7 +45,6 @@ var (
 	fastDirectiveRe      = regexp.MustCompile(`(?i)(?:^|\s)/fast(?:\s+([a-zA-Z0-9_-]+))?\s*`)
 	reasoningDirectiveRe = regexp.MustCompile(`(?i)(?:^|\s)/reasoning(?:\s+([a-zA-Z0-9_-]+))?\s*`)
 	statusDirectiveRe    = regexp.MustCompile(`(?i)(?:^|\s)/status\s*$`)
-	queueDirectiveRe     = regexp.MustCompile(`(?i)(?:^|\s)/queue(?:\s+([a-zA-Z0-9_-]+))?\s*`)
 	deepworkDirectiveRe  = regexp.MustCompile(`(?i)(?:^|\s)/deepwork\s*`)
 )
 
@@ -110,18 +105,6 @@ func ParseInlineDirectives(body string, opts *DirectiveParseOptions) InlineDirec
 		text = deepworkDirectiveRe.ReplaceAllString(text, " ")
 	}
 
-	// Extract /queue directive.
-	if m := queueDirectiveRe.FindStringSubmatchIndex(text); m != nil {
-		result.HasQueueDirective = true
-		if m[2] >= 0 {
-			result.RawQueueMode = text[m[2]:m[3]]
-		}
-		if strings.ToLower(result.RawQueueMode) == "reset" {
-			result.QueueReset = true
-		}
-		text = text[:m[0]] + " " + text[m[1]:]
-	}
-
 	result.Cleaned = cleanDirectiveOutput(text)
 	return result
 }
@@ -139,7 +122,6 @@ func IsDirectiveOnly(directives InlineDirectives) bool {
 		!directives.HasFastDirective &&
 		!directives.HasReasoningDirective &&
 		!directives.HasModelDirective &&
-		!directives.HasQueueDirective &&
 		!directives.HasDeepWorkDirective {
 		return false
 	}

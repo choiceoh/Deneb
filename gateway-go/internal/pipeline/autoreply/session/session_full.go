@@ -15,17 +15,15 @@ import (
 
 // SessionUpdate describes a mutation to apply to a session.
 type SessionUpdate struct {
-	Model           *string
-	Provider        *string
-	ThinkLevel      *types.ThinkLevel
-	FastMode        *bool
-	VerboseLevel    *types.VerboseLevel
-	ReasoningLevel  *types.ReasoningLevel
-	ElevatedLevel   *types.ElevatedLevel
-	SendPolicy      *string
-	GroupActivation *types.GroupActivationMode
-	SystemPrompt    *string
-	Label           *string
+	Model          *string
+	Provider       *string
+	ThinkLevel     *types.ThinkLevel
+	FastMode       *bool
+	VerboseLevel   *types.VerboseLevel
+	ReasoningLevel *types.ReasoningLevel
+	ElevatedLevel  *types.ElevatedLevel
+	SystemPrompt   *string
+	Label          *string
 }
 
 // ApplySessionUpdate applies an update to a session state.
@@ -50,12 +48,6 @@ func ApplySessionUpdate(sess *types.SessionState, update SessionUpdate) {
 	}
 	if update.ElevatedLevel != nil {
 		sess.ElevatedLevel = *update.ElevatedLevel
-	}
-	if update.SendPolicy != nil {
-		sess.SendPolicy = *update.SendPolicy
-	}
-	if update.GroupActivation != nil {
-		sess.GroupActivation = *update.GroupActivation
 	}
 	sess.UpdatedAt = time.Now().UnixMilli()
 }

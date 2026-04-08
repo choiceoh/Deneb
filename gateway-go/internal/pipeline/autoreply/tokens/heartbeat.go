@@ -122,19 +122,6 @@ func collapseWhitespace(s string) string {
 	return strings.TrimSpace(wsCollapseRe.ReplaceAllString(s, " "))
 }
 
-// stripMarkup removes HTML tags, &nbsp;, and markdown edge wrappers.
-func stripMarkup(text string) string {
-	// Drop HTML tags.
-	htmlRe := regexp.MustCompile(`<[^>]*>`)
-	text = htmlRe.ReplaceAllString(text, " ")
-	// Decode common nbsp variant.
-	text = strings.ReplaceAll(strings.ReplaceAll(text, "&nbsp;", " "), "&NBSP;", " ")
-	// Remove markdown-ish wrappers at the edges.
-	text = strings.TrimLeft(text, "*`~_")
-	text = strings.TrimRight(text, "*`~_")
-	return text
-}
-
 // StripHeartbeatToken removes the HEARTBEAT_OK token from agent output and
 // decides whether the reply should be skipped (suppressed).
 func StripHeartbeatToken(raw string, mode StripHeartbeatMode, maxAckChars int) StripHeartbeatResult {
@@ -153,32 +140,19 @@ func StripHeartbeatToken(raw string, mode StripHeartbeatMode, maxAckChars int) S
 		maxAckChars = DefaultHeartbeatAckChars
 	}
 
-	trimmedNormalized := stripMarkup(trimmed)
-	hasToken := strings.Contains(trimmed, HeartbeatToken) ||
-		strings.Contains(trimmedNormalized, HeartbeatToken)
-	if !hasToken {
+	if !strings.Contains(trimmed, HeartbeatToken) {
 		return StripHeartbeatResult{Text: trimmed}
 	}
 
-	strippedOrigText, strippedOrigDid := stripTokenAtEdges(trimmed)
-	strippedNormText, strippedNormDid := stripTokenAtEdges(trimmedNormalized)
-
-	var pickedText string
-	var pickedDid bool
-	if strippedOrigDid && strippedOrigText != "" {
-		pickedText, pickedDid = strippedOrigText, strippedOrigDid
-	} else {
-		pickedText, pickedDid = strippedNormText, strippedNormDid
-	}
-
-	if !pickedDid {
+	stripped, didStrip := stripTokenAtEdges(trimmed)
+	if !didStrip {
 		return StripHeartbeatResult{Text: trimmed}
 	}
-	if pickedText == "" {
+	if stripped == "" {
 		return StripHeartbeatResult{ShouldSkip: true, DidStrip: true}
 	}
 
-	rest := strings.TrimSpace(pickedText)
+	rest := strings.TrimSpace(stripped)
 	if mode == StripModeHeartbeat && len(rest) <= maxAckChars {
 		return StripHeartbeatResult{ShouldSkip: true, DidStrip: true}
 	}

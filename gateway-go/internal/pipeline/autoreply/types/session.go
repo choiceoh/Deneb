@@ -9,23 +9,21 @@ import (
 // Embeds SessionOrigin for routing fields shared with MsgContext.
 type SessionState struct {
 	SessionOrigin
-	AgentID         string
-	IsNew           bool
-	IsReset         bool
-	IsThread        bool
-	Model           string
-	Provider        string
-	ThinkLevel      ThinkLevel
-	FastMode        bool
-	VerboseLevel    VerboseLevel
-	ReasoningLevel  ReasoningLevel
-	ElevatedLevel   ElevatedLevel
-	GroupActivation GroupActivationMode
-	SendPolicy      string
-	ToolPreset      string // tool preset restricting available tools (researcher, implementer, verifier, coordinator)
-	DeepWork        bool   // deep work mode: extended timeouts and continuations for 2-3 hour autonomous sessions
-	CreatedAt       int64
-	UpdatedAt       int64
+	AgentID        string
+	IsNew          bool
+	IsReset        bool
+	IsThread       bool
+	Model          string
+	Provider       string
+	ThinkLevel     ThinkLevel
+	FastMode       bool
+	VerboseLevel   VerboseLevel
+	ReasoningLevel ReasoningLevel
+	ElevatedLevel  ElevatedLevel
+	ToolPreset     string // tool preset restricting available tools (researcher, implementer, verifier, coordinator)
+	DeepWork       bool   // deep work mode: extended timeouts and continuations for 2-3 hour autonomous sessions
+	CreatedAt      int64
+	UpdatedAt      int64
 }
 
 // SessionResetTrigger identifies what caused a session reset.
@@ -102,18 +100,16 @@ func BuildSessionHint(flags SessionHintFlags) string {
 
 // SessionModification describes changes to apply to the session.
 type SessionModification struct {
-	Reset           bool
-	Model           string
-	Provider        string
-	ThinkLevel      ThinkLevel
-	VerboseLevel    VerboseLevel
-	FastMode        *bool
-	ReasoningLevel  ReasoningLevel
-	ElevatedLevel   ElevatedLevel
-	SendPolicy      string
-	GroupActivation GroupActivationMode
-	SystemPrompt    *string
-	Label           *string
+	Reset          bool
+	Model          string
+	Provider       string
+	ThinkLevel     ThinkLevel
+	VerboseLevel   VerboseLevel
+	FastMode       *bool
+	ReasoningLevel ReasoningLevel
+	ElevatedLevel  ElevatedLevel
+	SystemPrompt   *string
+	Label          *string
 	// Session lifecycle.
 	MaxAgeMs int64
 }

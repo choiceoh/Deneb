@@ -33,8 +33,6 @@ type DirectiveHandlingResult struct {
 	Errors []string
 	// Model resolution result.
 	ModelResolution *DirectiveModelResolution
-	// Queue changes.
-	QueueChanges *DirectiveQueueChanges
 }
 
 // DirectiveModelResolution holds the result of model directive resolution.
@@ -48,15 +46,6 @@ type DirectiveModelResolution struct {
 	FuzzyMatched   bool
 	FuzzyCandidate string
 	FuzzyScore     int
-}
-
-// DirectiveQueueChanges describes queue modifications from directives.
-// The queue always operates in auto-debounce mode; the only meaningful
-// directive is "reset" (clear pending items).
-type DirectiveQueueChanges struct {
-	Reset      bool
-	DebounceMs int
-	Cap        int
 }
 
 // HandleDirectives processes all inline directives in a message body.
@@ -121,15 +110,6 @@ func HandleDirectives(body string, sess *types.SessionState, opts DirectiveHandl
 		}
 	}
 
-	// Queue directive.
-	if directives.HasQueueDirective {
-		queueChanges := resolveQueueDirective(directives)
-		result.QueueChanges = &queueChanges
-		if queueChanges.Reset {
-			result.AckText += "Queue reset. "
-		}
-	}
-
 	// Status directive (handled as immediate reply).
 	if directives.HasStatusDirective && opts.StatusHandler != nil {
 		statusReply := opts.StatusHandler(sess)
@@ -183,12 +163,6 @@ func PersistDirectives(sess *types.SessionState, result DirectiveHandlingResult)
 	}
 	if mod.ReasoningLevel != "" {
 		update.ReasoningLevel = &mod.ReasoningLevel
-	}
-	if mod.SendPolicy != "" {
-		update.SendPolicy = &mod.SendPolicy
-	}
-	if mod.GroupActivation != "" {
-		update.GroupActivation = &mod.GroupActivation
 	}
 	session.ApplySessionUpdate(sess, update)
 }
@@ -277,95 +251,12 @@ func resolveModelDirective(rawModel, rawProfile string, opts DirectiveHandlingOp
 	}
 }
 
-// --- Queue directive resolution ---
-
-func resolveQueueDirective(directives InlineDirectives) DirectiveQueueChanges {
-	changes := DirectiveQueueChanges{}
-	if directives.QueueReset {
-		changes.Reset = true
-	}
-	// Mode switching (off/auto/manual) removed: the queue always operates in
-	// auto-debounce mode for the single-user Telegram bot.
-	return changes
-}
-
-// --- Fast lane ---
-
-// IsFastLaneDirective returns true if the directive can be handled without
-// running the full agent pipeline (pure mode toggle).
-func IsFastLaneDirective(directives InlineDirectives) bool {
-	if !IsDirectiveOnly(directives) {
-		return false
-	}
-	// Fast lane: only mode toggles, no model changes or queue.
-	return !directives.HasModelDirective && !directives.HasQueueDirective && !directives.HasStatusDirective
-}
-
-// BuildFastLaneReply creates a quick acknowledgment reply for fast-lane directives.
-func BuildFastLaneReply(directives InlineDirectives) *types.ReplyPayload {
-	var parts []string
-	if directives.HasThinkDirective {
-		parts = append(parts, fmt.Sprintf("🧠 Think: %s", directives.ThinkLevel))
-	}
-	if directives.HasFastDirective {
-		parts = append(parts, fmt.Sprintf("⚡ Fast: %s", boolToOnOff(directives.FastMode)))
-	}
-	if directives.HasVerboseDirective {
-		parts = append(parts, fmt.Sprintf("📝 Verbose: %s", directives.VerboseLevel))
-	}
-	if directives.HasReasoningDirective {
-		parts = append(parts, fmt.Sprintf("💭 Reasoning: %s", directives.ReasoningLevel))
-	}
-	if len(parts) == 0 {
-		return nil
-	}
-	return &types.ReplyPayload{Text: strings.Join(parts, "\n")}
-}
-
 // --- Helpers ---
 
 func formatDirectiveAck(name, value string) string {
 	return fmt.Sprintf("%s → %s. ", name, value)
 }
 
-// DirectiveParams extracts @param-style parameters from directive text.
-type DirectiveParams struct {
-	Params map[string]string
-}
-
-// ParseDirectiveParams extracts @key=value pairs from text.
-func ParseDirectiveParams(text string) DirectiveParams {
-	params := DirectiveParams{Params: make(map[string]string)}
-	words := strings.Fields(text)
-	for _, word := range words {
-		if !strings.HasPrefix(word, "@") {
-			continue
-		}
-		kv := word[1:] // strip @
-		if idx := strings.IndexByte(kv, '='); idx >= 0 {
-			key := kv[:idx]
-			value := kv[idx+1:]
-			params.Params[key] = value
-		} else {
-			params.Params[kv] = "true"
-		}
-	}
-	return params
-}
-
-// ValidateQueueDirective checks if queue directive values are valid.
-func ValidateQueueDirective(changes DirectiveQueueChanges) []string {
-	var errors []string
-	if changes.DebounceMs < 0 {
-		errors = append(errors, "Queue debounce must be non-negative.")
-	}
-	if changes.Cap < 0 {
-		errors = append(errors, "Queue cap must be non-negative.")
-	}
-	return errors
-}
-
-// boolToOnOff converts a bool to "on" or "off".
 func boolToOnOff(b bool) string {
 	if b {
 		return "on"

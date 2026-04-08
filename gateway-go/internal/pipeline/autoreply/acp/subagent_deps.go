@@ -123,12 +123,11 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 				SessionKey: sessionKey,
 				Channel:    "acp",
 			},
-			AgentID:         agentID,
-			Model:           params.Model,
-			Provider:        params.Provider,
-			ThinkLevel:      params.ThinkLevel,
-			ToolPreset:      params.ToolPreset,
-			GroupActivation: types.ActivationAlways,
+			AgentID:    agentID,
+			Model:      params.Model,
+			Provider:   params.Provider,
+			ThinkLevel: params.ThinkLevel,
+			ToolPreset: params.ToolPreset,
 		}
 		if err := d.SaveSession(sess); err != nil {
 			d.logger().Warn("failed to save subagent session",
