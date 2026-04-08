@@ -10,8 +10,8 @@ func TestDefaultContextConfig(t *testing.T) {
 	if cfg.MemoryTokenBudget != defaultMemoryTokenBudget {
 		t.Errorf("MemoryTokenBudget = %d, want %d", cfg.MemoryTokenBudget, defaultMemoryTokenBudget)
 	}
-	if cfg.FreshTailCount != 48 {
-		t.Errorf("FreshTailCount = %d, want %d", cfg.FreshTailCount, 48)
+	if cfg.FreshTailCount != 24 {
+		t.Errorf("FreshTailCount = %d, want %d", cfg.FreshTailCount, 24)
 	}
 }
 
