@@ -11,8 +11,33 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 )
 
-// ToolPolarisSearch creates the polaris_search tool: keyword search over compressed history.
-func ToolPolarisSearch(store *polaris.Store) toolctx.ToolFunc {
+// ToolPolaris creates the unified polaris tool with action dispatch (search/describe/expand).
+func ToolPolaris(store *polaris.Store, localAI LocalAIFunc) toolctx.ToolFunc {
+	searchFn := toolPolarisSearch(store)
+	describeFn := toolPolarisDescribe(store)
+	expandFn := toolPolarisExpand(store, localAI)
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		var p struct {
+			Action string `json:"action"`
+		}
+		if err := json.Unmarshal(input, &p); err != nil {
+			return "", fmt.Errorf("parse input: %w", err)
+		}
+		switch p.Action {
+		case "search":
+			return searchFn(ctx, input)
+		case "describe":
+			return describeFn(ctx, input)
+		case "expand":
+			return expandFn(ctx, input)
+		default:
+			return "action은 search, describe, expand 중 하나를 지정하세요.", nil
+		}
+	}
+}
+
+// toolPolarisSearch is the search sub-action: keyword search over compressed history.
+func toolPolarisSearch(store *polaris.Store) toolctx.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Query      string `json:"query"`
@@ -52,8 +77,8 @@ func ToolPolarisSearch(store *polaris.Store) toolctx.ToolFunc {
 	}
 }
 
-// ToolPolarisDescribe creates the polaris_describe tool: overview of summary DAG structure.
-func ToolPolarisDescribe(store *polaris.Store) toolctx.ToolFunc {
+// toolPolarisDescribe is the describe sub-action: overview of summary DAG structure.
+func toolPolarisDescribe(store *polaris.Store) toolctx.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			TimeRange string `json:"time_range"`
@@ -110,9 +135,8 @@ func ToolPolarisDescribe(store *polaris.Store) toolctx.ToolFunc {
 // LocalAIFunc calls local AI for sub-agent delegation. Injected to avoid import cycles.
 type LocalAIFunc func(ctx context.Context, system, user string, maxTokens int) (string, error)
 
-// ToolPolarisExpand creates the polaris_expand tool: restore raw messages from a summary.
-// If localAI is provided and a question is given, delegates to local AI for an answer.
-func ToolPolarisExpand(store *polaris.Store, localAI LocalAIFunc) toolctx.ToolFunc {
+// toolPolarisExpand is the expand sub-action: restore raw messages from a summary.
+func toolPolarisExpand(store *polaris.Store, localAI LocalAIFunc) toolctx.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			SummaryID int    `json:"summary_id"`
@@ -122,7 +146,7 @@ func ToolPolarisExpand(store *polaris.Store, localAI LocalAIFunc) toolctx.ToolFu
 			return "", fmt.Errorf("parse input: %w", err)
 		}
 		if p.SummaryID <= 0 {
-			return "summary_id가 필요합니다. polaris_describe로 먼저 ID를 확인하세요.", nil
+			return "summary_id가 필요합니다. polaris(action=describe)로 먼저 ID를 확인하세요.", nil
 		}
 
 		sessionKey := toolctx.SessionKeyFromContext(ctx)

@@ -96,33 +96,17 @@ func RegisterAutoresearchTool(registry toolctx.ToolRegistrar, runner *autoresear
 	})
 }
 
-// RegisterPolarisTools registers Polaris context management retrieval tools.
+// RegisterPolarisTools registers the unified Polaris tool (search/describe/expand).
 // Called separately because the store and localAI are not part of CoreToolDeps.
 func RegisterPolarisTools(registry toolctx.ToolRegistrar, store *polaris.Store, localAI tools.LocalAIFunc) {
 	if store == nil {
 		return
 	}
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "polaris_search",
-		Description:     "압축된 대화 이력에서 키워드 검색. 요약 노드와 원본 메시지 모두 검색.",
-		InputSchema:     polarisSearchToolSchema(),
-		Fn:              tools.ToolPolarisSearch(store),
-		Deferred:        true,
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "polaris_describe",
-		Description:     "이전 대화의 요약 구조를 설명. 어떤 주제가 언제 논의되었는지 파악할 때 사용.",
-		InputSchema:     polarisDescribeToolSchema(),
-		Fn:              tools.ToolPolarisDescribe(store),
-		Deferred:        true,
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "polaris_expand",
-		Description:     "요약된 이전 대화의 원본을 복원하여 상세 질문에 답변. polaris_describe로 요약 ID 확인 후 사용.",
-		InputSchema:     polarisExpandToolSchema(),
-		Fn:              tools.ToolPolarisExpand(store, localAI),
+		Name:            "polaris",
+		Description:     "압축된 대화 이력 관리. search (키워드 검색), describe (요약 구조 조회), expand (원본 복원)",
+		InputSchema:     polarisToolSchema(),
+		Fn:              tools.ToolPolaris(store, localAI),
 		Deferred:        true,
 		ConcurrencySafe: true,
 	})
@@ -243,35 +227,21 @@ func RegisterProcessTools(registry toolctx.ToolRegistrar, d *toolctx.ProcessDeps
 	})
 }
 
-// RegisterWebTools registers web fetch, HTTP, and deep research tools.
+// RegisterWebTools registers the unified web tool (search/request/research modes).
 func RegisterWebTools(registry toolctx.ToolRegistrar, llmClient *llm.Client, defaultModel string) {
 	webCache := web.NewFetchCache()
 	localAI := web.NewLocalAIExtractor()
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "web",
-		Description:     "Search the web, fetch URLs, or search+auto-fetch in one call. Modes: {url:...} fetch, {query:...} search, {query:...,fetch:N} search+fetch, {queries:[...]} parallel search (max 5 queries at once)",
-		InputSchema:     webToolSchema(),
-		Fn:              web.Tool(webCache, localAI),
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "http",
-		Description:     "Raw HTTP for APIs/webhooks needing custom headers/auth/body. For web pages use web tool (has HTML extraction, bot evasion, caching)",
-		InputSchema:     httpToolSchema(),
-		Fn:              tools.ToolHTTP(),
-		ConcurrencySafe: true,
-	})
 
-	// Deep research: auto-decomposes complex questions into parallel sub-queries.
 	var drLLM web.DeepResearchLLM
 	if llmClient != nil {
 		drLLM = &deepResearchLLMAdapter{client: llmClient}
 	}
+
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "deep_research",
-		Description:     "Deep web research for complex multi-constraint questions. Auto-decomposes into parallel sub-queries, searches+fetches all at once, returns structured findings. Much faster and more accurate than sequential web searches for questions requiring cross-referencing multiple facts",
-		InputSchema:     deepResearchToolSchema(),
-		Fn:              web.DeepResearchTool(webCache, localAI, drLLM, defaultModel),
+		Name:            "web",
+		Description:     "Web access: search (web search/fetch, default), request (raw HTTP for APIs), research (deep multi-query research). Use mode parameter to select",
+		InputSchema:     webToolSchema(),
+		Fn:              web.MergedTool(webCache, localAI, tools.ToolHTTP(), drLLM, defaultModel),
 		ConcurrencySafe: true,
 	})
 }
@@ -296,35 +266,12 @@ func (a *deepResearchLLMAdapter) Complete(ctx context.Context, model, system, us
 // RegisterSessionTools registers session management tools.
 func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps) {
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "sessions_list",
-		Description:     "List active sessions with kind/status. Filter by kinds: main, group, cron, hook",
-		InputSchema:     sessionsListToolSchema(),
-		Fn:              tools.ToolSessionsList(d.Manager),
+		Name:            "sessions",
+		Description:     "Session management: list (active sessions), history (message log), search (transcript keyword search), send (cross-session message)",
+		InputSchema:     sessionsToolSchema(),
+		Fn:              tools.ToolSessions(d),
 		Deferred:        true,
 		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "sessions_history",
-		Description:     "Fetch message history from another session (default: last 20 messages)",
-		InputSchema:     sessionsHistoryToolSchema(),
-		Fn:              tools.ToolSessionsHistory(d.Transcript),
-		Deferred:        true,
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "sessions_search",
-		Description:     "Search all past session transcripts by keyword",
-		InputSchema:     sessionsSearchToolSchema(),
-		Fn:              tools.ToolSessionsSearch(d.Transcript),
-		Deferred:        true,
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "sessions_send",
-		Description: "Send a message to another session (defaults to \"main\" if sessionKey omitted)",
-		InputSchema: sessionsSendToolSchema(),
-		Fn:          tools.ToolSessionsSend(d),
-		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "sessions_spawn",
@@ -374,16 +321,8 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 		Fn:          tools.ToolGmail(gmailPipelineDeps),
 		Deferred:    true,
 	})
-	// Morning letter: needs executor for web search calls.
-	if exec, ok := registry.(toolctx.ToolExecutor); ok {
-		registry.RegisterTool(toolctx.ToolDef{
-			Name:        "morning_letter",
-			Description: "Collect daily morning briefing data (모닝레터). Fetches weather, exchange rates, copper price (MetalpriceAPI), calendar, and email in parallel. Returns structured JSON for you to compose the final letter",
-			InputSchema: morningLetterToolSchema(),
-			Fn:          tools.ToolMorningLetter(exec, tools.MorningLetterOpts{DiaryDir: diaryDir}),
-			Deferred:    true,
-		})
-	}
+	// NOTE: morning_letter is no longer registered as a tool. The data collection
+	// function (CollectMorningLetterData) is called directly by the boot/routine handler.
 }
 
 // buildLocalAIProbe converts toolreg LocalAIDeps into the tools.LocalAIProbe
@@ -403,25 +342,14 @@ func buildLocalAIProbe(localAI *LocalAIDeps) tools.LocalAIProbe {
 	return probe
 }
 
-// RegisterSkillsTools registers skill discovery and management tools.
+// RegisterSkillsTools registers the unified skills tool (list/create/patch/delete/read/list_files).
 func RegisterSkillsTools(registry toolctx.ToolRegistrar, getSnapshot tools.SkillsSnapshotProvider, workspaceDir string, invalidateCache tools.SkillManageInvalidateFn) {
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "skills_list",
-		Description:     "List available skills for specialized tasks. Use when the current task might match a skill not in the system prompt.",
-		InputSchema:     skillsListToolSchema(),
-		Fn:              tools.ToolSkillsList(getSnapshot),
-		Deferred:        true,
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name: "skill_manage",
-		Description: "Create, patch, read, or delete skills. Use when: " +
-			"(1) complex task succeeded (5+ tool calls) and the workflow is reusable, " +
-			"(2) an existing skill has outdated/wrong instructions discovered during use, " +
-			"(3) user explicitly asks to remember a procedure or create a skill. " +
-			"Confirm with user before creating or deleting. Skip for simple one-offs.",
-		InputSchema:     skillManageToolSchema(),
-		Fn:              tools.ToolSkillManage(workspaceDir, invalidateCache),
+		Name: "skills",
+		Description: "Skill management: list (browse/search), create, patch, read, delete, list_files. " +
+			"Use list when the current task might match a skill. Create reusable workflows from complex tasks.",
+		InputSchema:     skillsToolSchema(),
+		Fn:              tools.ToolSkills(getSnapshot, workspaceDir, invalidateCache),
 		Deferred:        true,
 		ConcurrencySafe: true,
 	})
@@ -471,38 +399,11 @@ func RegisterDataTools(registry toolctx.ToolRegistrar) {
 	})
 }
 
-// RegisterAdvancedTools registers composed tools that combine basic tool
-// operations into higher-level, multi-step workflows.
-func RegisterAdvancedTools(registry toolctx.ToolRegistrar, workspaceDir string) {
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "batch_read",
-		Description:     "Read multiple files in one call (up to 20). Each file supports offset/limit/function extraction. Partial failures reported individually without aborting",
-		InputSchema:     batchReadToolSchema(),
-		Fn:              tools.ToolBatchRead(workspaceDir),
-		Deferred:        true,
-		ConcurrencySafe: true,
-	})
-}
+// RegisterAdvancedTools is a placeholder — batch_read was removed.
+func RegisterAdvancedTools(_ toolctx.ToolRegistrar, _ string) {}
 
-// RegisterHiddenTools registers hidden tools (agent/gateway logs).
-func RegisterHiddenTools(registry toolctx.ToolRegistrar, agentLog *agentlog.Writer) {
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "agent_logs",
-		Description:     "현재 세션의 이전 에이전트 런 상세 로그를 조회합니다. 문제 진단, 이전 실행 결과 확인, 도구 실행 시간 분석에 사용합니다",
-		InputSchema:     agentLogsToolSchema(),
-		Fn:              tools.ToolAgentLogs(agentLog),
-		Hidden:          true,
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "gateway_logs",
-		Description:     "게이트웨이 프로세스 로그를 조회합니다. 레벨/패키지/패턴 필터링 지원. 서버 오류 진단, 요청 추적, 성능 분석에 사용합니다",
-		InputSchema:     gatewayLogsToolSchema(),
-		Fn:              tools.ToolGatewayLogs(),
-		Hidden:          true,
-		ConcurrencySafe: true,
-	})
-}
+// RegisterHiddenTools is a placeholder — agent_logs/gateway_logs were removed from the tool registry.
+func RegisterHiddenTools(_ toolctx.ToolRegistrar, _ *agentlog.Writer) {}
 
 // RegisterWikiTools registers wiki knowledge base tools for long-term knowledge
 // access (search, read, write, log). Project-specific tools provide structured

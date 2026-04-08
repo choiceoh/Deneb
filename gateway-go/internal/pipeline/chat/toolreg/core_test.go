@@ -157,14 +157,9 @@ func TestRegisterAdvancedTools_registersTools(t *testing.T) {
 	reg := &mockRegistrar{}
 	RegisterAdvancedTools(reg, t.TempDir())
 
-	if len(reg.tools) == 0 {
-		t.Fatal("expected RegisterAdvancedTools to register at least one tool")
-	}
-	names := reg.toolNames()
-	for _, want := range []string{"batch_read"} {
-		if !containsName(names, want) {
-			t.Errorf("missing expected tool %q", want)
-		}
+	// batch_read was removed — RegisterAdvancedTools is now a no-op.
+	if len(reg.tools) != 0 {
+		t.Fatalf("expected RegisterAdvancedTools to register no tools (batch_read removed), got %d", len(reg.tools))
 	}
 }
 
@@ -174,20 +169,9 @@ func TestRegisterHiddenTools_registersTools(t *testing.T) {
 	reg := &mockRegistrar{}
 	RegisterHiddenTools(reg, nil)
 
-	if len(reg.tools) == 0 {
-		t.Fatal("expected RegisterHiddenTools to register at least one tool")
-	}
-	names := reg.toolNames()
-	for _, want := range []string{"agent_logs", "gateway_logs"} {
-		if !containsName(names, want) {
-			t.Errorf("missing expected tool %q", want)
-		}
-	}
-	// All hidden tools should have Hidden=true.
-	for _, td := range reg.tools {
-		if !td.Hidden {
-			t.Errorf("tool %q should be hidden", td.Name)
-		}
+	// agent_logs/gateway_logs were removed — RegisterHiddenTools is now a no-op.
+	if len(reg.tools) != 0 {
+		t.Fatalf("expected RegisterHiddenTools to register no tools, got %d", len(reg.tools))
 	}
 }
 

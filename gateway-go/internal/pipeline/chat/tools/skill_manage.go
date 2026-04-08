@@ -24,10 +24,31 @@ import (
 // skills prompt cache so changes take effect on the next turn.
 type SkillManageInvalidateFn func()
 
-// ToolSkillManage returns a tool that lets the LLM create, patch, read, and
-// delete skills at runtime. This is the hermes-agent pattern: the agent
-// creates procedural memory (skills) from experience.
-func ToolSkillManage(workspaceDir string, invalidate SkillManageInvalidateFn) ToolFunc {
+// ToolSkills creates the unified skills tool with action dispatch (list/create/patch/delete/read/list_files).
+func ToolSkills(getSnapshot SkillsSnapshotProvider, workspaceDir string, invalidate SkillManageInvalidateFn) ToolFunc {
+	listFn := toolSkillsList(getSnapshot)
+	manageFn := toolSkillManage(workspaceDir, invalidate)
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		var p struct {
+			Action string `json:"action"`
+		}
+		if err := json.Unmarshal(input, &p); err != nil {
+			return "", fmt.Errorf("parse input: %w", err)
+		}
+		switch p.Action {
+		case "list":
+			return listFn(ctx, input)
+		case "create", "patch", "delete", "read", "list_files":
+			return manageFn(ctx, input)
+		default:
+			return "action은 list, create, patch, delete, read, list_files 중 하나를 지정하세요.", nil
+		}
+	}
+}
+
+// toolSkillManage returns a tool that lets the LLM create, patch, read, and
+// delete skills at runtime.
+func toolSkillManage(workspaceDir string, invalidate SkillManageInvalidateFn) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action      string `json:"action"`

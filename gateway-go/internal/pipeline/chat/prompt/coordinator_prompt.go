@@ -65,7 +65,7 @@ func writeCoordinatorPrompt(s *strings.Builder, params SystemPromptParams, scrat
 	s.WriteString("You can ONLY use these tools:\n")
 	s.WriteString("- sessions_spawn: create worker sub-agents (always set tool_preset)\n")
 	s.WriteString("- subagents: monitor and steer workers (list, steer, kill)\n")
-	s.WriteString("- sessions_list / sessions_history / sessions_send: session management\n")
+	s.WriteString("- sessions (action=list/history/send): session management\n")
 	s.WriteString("- read / grep / find: read code (for synthesis phase)\n")
 	s.WriteString("- memory / kv: persistent knowledge\n\n")
 

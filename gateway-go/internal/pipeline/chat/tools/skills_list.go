@@ -11,8 +11,8 @@ import (
 // SkillsSnapshotProvider returns the current cached skills snapshot.
 type SkillsSnapshotProvider func() *skills.FullSkillSnapshot
 
-// ToolSkillsList returns a tool function that lists discoverable skills.
-func ToolSkillsList(getSnapshot SkillsSnapshotProvider) ToolFunc {
+// toolSkillsList returns a tool function that lists discoverable skills.
+func toolSkillsList(getSnapshot SkillsSnapshotProvider) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Query    string `json:"query"`
