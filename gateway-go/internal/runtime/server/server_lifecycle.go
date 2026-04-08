@@ -22,6 +22,11 @@ import (
 // background subsystems (tick broadcaster, monitoring, process pruner, hooks).
 // Shared by Run and StartAndListen to avoid duplicating the startup sequence.
 func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
+	// Derive a lifecycle context that doShutdown() cancels so background
+	// goroutines exit promptly even if the caller's ctx is still alive.
+	s.lifecycleCtx, s.lifecycleCancel = context.WithCancel(ctx)
+	ctx = s.lifecycleCtx
+
 	mux := s.buildMux()
 
 	ln, err := net.Listen("tcp", s.addr)
@@ -310,7 +315,11 @@ func (s *Server) doShutdown() error {
 		s.sessionWAL.Stop()
 	}
 
-	// 13. Wait for background goroutines launched via safeGo to finish.
+	// 13. Cancel lifecycle context so remaining background goroutines exit,
+	// then wait for them to finish.
+	if s.lifecycleCancel != nil {
+		s.lifecycleCancel()
+	}
 	stopWithTimeout(5*time.Second, "bgWg.Wait", s.logger, s.bgWg.Wait)
 
 	return httpErr
