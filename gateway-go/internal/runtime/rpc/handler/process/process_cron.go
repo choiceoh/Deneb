@@ -3,7 +3,6 @@ package process
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
@@ -19,13 +18,12 @@ type CronAdvancedDeps struct {
 }
 
 // CronAdvancedMethods returns the advanced cron CRUD RPC handlers
-// (wake, cron.status, cron.add, cron.update, cron.remove, cron.run, cron.runs).
+// (cron.status, cron.add, cron.update, cron.remove, cron.run, cron.runs).
 func CronAdvancedMethods(deps CronAdvancedDeps) map[string]rpcutil.HandlerFunc {
 	if deps.Service == nil {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
-		"wake":        cronWake(deps),
 		"cron.status": cronStatus(deps),
 		"cron.add":    cronAdd(deps),
 		"cron.update": cronUpdate(deps),
@@ -33,31 +31,6 @@ func CronAdvancedMethods(deps CronAdvancedDeps) map[string]rpcutil.HandlerFunc {
 		"cron.run":    cronRun(deps),
 		"cron.runs":   cronRuns(deps),
 	}
-}
-
-func cronWake(deps CronAdvancedDeps) rpcutil.HandlerFunc {
-	type params struct {
-		Mode string `json:"mode"`
-		Text string `json:"text"`
-	}
-	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		deps.Service.Wake(context.Background(), p.Mode, p.Text)
-
-		status := deps.Service.Status()
-
-		if deps.Broadcaster != nil {
-			deps.Broadcaster("wake", map[string]any{
-				"mode": p.Mode,
-				"text": p.Text,
-				"ts":   time.Now().UnixMilli(),
-			})
-		}
-
-		return map[string]any{
-			"nextHeartbeatAtMs": status.NextRunAtMs,
-			"mode":              p.Mode,
-		}, nil
-	})
 }
 
 func cronStatus(deps CronAdvancedDeps) rpcutil.HandlerFunc {

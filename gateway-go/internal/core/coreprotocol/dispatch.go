@@ -26,14 +26,9 @@ func lookupValidator(method string) ValidatorFn {
 		return validateSessionsResetParams
 	case "sessions.delete":
 		return validateSessionsDeleteParams
-	case "sessions.usage":
-		return validateSessionsUsageParams
-
 	// Secrets methods
 	case "secrets.resolve":
 		return validateSecretsResolveParams
-	case "secrets.resolve.result":
-		return validateObjectParams
 	case "secrets.reload":
 		return validateSecretsReloadParams
 
@@ -48,9 +43,6 @@ func lookupValidator(method string) ValidatorFn {
 		return validateChatAbortParams
 	case "chat.inject":
 		return validateChatInjectParams
-	case "chat.event":
-		return validateObjectParams
-
 	// Config methods
 	case "config.get":
 		return validateConfigGetParams
@@ -64,8 +56,6 @@ func lookupValidator(method string) ValidatorFn {
 		return validateConfigSchemaParams
 	case "config.schema.lookup":
 		return validateConfigSchemaLookupParams
-	case "config.schema.lookup.result":
-		return validateObjectParams
 	case "update.run":
 		return validateUpdateRunParams
 
@@ -74,24 +64,13 @@ func lookupValidator(method string) ValidatorFn {
 		return validateChannelsStatusParams
 	case "telegram.logout":
 		return validateChannelsLogoutParams
-	case "weblogin.start":
-		return validateWebLoginStartParams
-	case "weblogin.wait":
-		return validateWebLoginWaitParams
-
 	// Agent methods
-	case "agent.send":
-		return validateSendParams
-	case "agent.poll":
-		return validatePollParams
 	case "agent":
 		return validateAgentParams
-	case "agent.identity":
+	case "agent.identity.get":
 		return validateAgentIdentityParams
 	case "agent.wait":
 		return validateAgentWaitParams
-	case "agent.wake":
-		return validateWakeParams
 
 	// Agents CRUD
 	case "agents.list":
@@ -146,11 +125,6 @@ func lookupValidator(method string) ValidatorFn {
 		return validateExecApprovalRequestParams
 	case "exec.approval.resolve":
 		return validateExecApprovalResolveParams
-	case "exec.approvals.node.get":
-		return validateExecApprovalsNodeGetParams
-	case "exec.approvals.node.set":
-		return validateExecApprovalsNodeSetParams
-
 	default:
 		return nil
 	}

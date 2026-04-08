@@ -27,7 +27,6 @@ type ChatBtwDeps = handlerchat.BtwDeps
 type SessionExecDeps = handlersession.ExecDeps
 type ChannelLifecycleDeps = handlertelegram.LifecycleDeps
 type EventsDeps = handlerevents.EventsDeps
-type MessagingDeps = handlertelegram.MessagingDeps
 type ApprovalDeps = handlerprocess.ApprovalDeps
 type ACPDeps = handlerprocess.ACPDeps
 type CronAdvancedDeps = handlerprocess.CronAdvancedDeps
@@ -79,9 +78,6 @@ func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 }
 func RegisterEventBroadcastMethods(d *Dispatcher, deps EventsDeps) {
 	d.RegisterDomain(handlerevents.BroadcastMethods(deps))
-}
-func RegisterMessagingMethods(d *Dispatcher, deps MessagingDeps) {
-	d.RegisterDomain(handlertelegram.MessagingMethods(deps))
 }
 func RegisterApprovalMethods(d *Dispatcher, deps ApprovalDeps) {
 	d.RegisterDomain(handlerprocess.ApprovalMethods(deps))
