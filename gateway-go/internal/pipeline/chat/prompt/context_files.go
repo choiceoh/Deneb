@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -36,97 +35,10 @@ const (
 	ctxCacheRevalidateInterval = 5 * time.Minute
 )
 
-// ctxCache is a singleton mtime-based cache for context files.
-// On cache hit (same workspace, all mtimes unchanged) the expensive
-// EvalSymlinks + ReadFile calls are skipped entirely.
-var ctxCache = &contextFileCache{}
-
-// sessionSnapshots stores frozen context files per session.
-// Once populated on first load, subsequent loads for the same session
-// return the snapshot without checking disk — keeping the system prompt
-// stable for LLM prefix cache optimization.
-var sessionSnapshots = &sessionSnapshotCache{}
-
-type sessionSnapshotCache struct {
-	mu    sync.Mutex
-	store map[string][]ContextFile
-}
-
-func (c *sessionSnapshotCache) get(key string) ([]ContextFile, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.store == nil {
-		return nil, false
-	}
-	files, ok := c.store[key]
-	return files, ok
-}
-
-func (c *sessionSnapshotCache) set(key string, files []ContextFile) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.store == nil {
-		c.store = make(map[string][]ContextFile)
-	}
-	c.store[key] = files
-}
-
-func (c *sessionSnapshotCache) delete(key string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	delete(c.store, key)
-}
-
-type contextFileCache struct {
-	mu        sync.Mutex
-	workspace string
-	files     []ContextFile
-	// resolved maps resolved file paths to their mtime at cache time.
-	resolved map[string]time.Time
-	cachedAt time.Time
-}
-
-// ResetContextFileCacheForTest clears the package-level context-file cache
-// and all session snapshots. Intended for tests to avoid cross-test state leakage.
+// ResetContextFileCacheForTest clears all prompt caches.
+// Intended for tests to avoid cross-test state leakage.
 func ResetContextFileCacheForTest() {
-	ctxCache.mu.Lock()
-	ctxCache.workspace = ""
-	ctxCache.files = nil
-	ctxCache.resolved = nil
-	ctxCache.cachedAt = time.Time{}
-	ctxCache.mu.Unlock()
-
-	sessionSnapshots.mu.Lock()
-	sessionSnapshots.store = nil
-	sessionSnapshots.mu.Unlock()
-}
-
-// isValid checks whether the cache can be reused for the given workspace.
-// It stat()s each previously resolved path and compares mtimes.
-func (c *contextFileCache) isValid(workspace string) bool {
-	if c.workspace != workspace || len(c.resolved) == 0 {
-		return false
-	}
-	if time.Since(c.cachedAt) > ctxCacheRevalidateInterval {
-		return false
-	}
-	for path, cachedMtime := range c.resolved {
-		info, err := os.Stat(path)
-		if err != nil {
-			return false // file disappeared
-		}
-		if !info.ModTime().Equal(cachedMtime) {
-			return false
-		}
-	}
-	return true
-}
-
-func (c *contextFileCache) store(workspace string, files []ContextFile, resolved map[string]time.Time) {
-	c.workspace = workspace
-	c.files = files
-	c.resolved = resolved
-	c.cachedAt = time.Now()
+	Cache.Reset()
 }
 
 // LoadContextFiles scans the workspace directory and its ancestors for known
@@ -149,26 +61,26 @@ func LoadContextFiles(workspaceDir string, opts ...LoadContextOption) []ContextF
 
 	// Frozen snapshot: return cached files if this session already loaded.
 	if cfg.sessionKey != "" {
-		if frozen, ok := sessionSnapshots.get(cfg.sessionKey); ok {
+		if frozen, ok := Cache.SessionSnapshot(cfg.sessionKey); ok {
 			return frozen
 		}
 	}
 
-	ctxCache.mu.Lock()
-	defer ctxCache.mu.Unlock()
+	Cache.LockCtx()
+	defer Cache.UnlockCtx()
 
 	var files []ContextFile
-	if ctxCache.isValid(workspaceDir) {
-		files = ctxCache.files
+	if cached, ok := Cache.ContextFiles(workspaceDir); ok {
+		files = cached
 	} else {
 		var resolved map[string]time.Time
 		files, resolved = loadContextFilesFromDisk(workspaceDir)
-		ctxCache.store(workspaceDir, files, resolved)
+		Cache.SetContextFiles(workspaceDir, files, resolved)
 	}
 
 	// Freeze for this session.
 	if cfg.sessionKey != "" {
-		sessionSnapshots.set(cfg.sessionKey, files)
+		Cache.SetSessionSnapshot(cfg.sessionKey, files)
 	}
 
 	return files
@@ -194,7 +106,7 @@ func WithSessionSnapshot(sessionKey string) LoadContextOption {
 // ClearSessionSnapshot removes the frozen context files for a session.
 // Call on session reset or terminal state transition.
 func ClearSessionSnapshot(sessionKey string) {
-	sessionSnapshots.delete(sessionKey)
+	Cache.ClearSession(sessionKey)
 }
 
 // loadContextFilesFromDisk performs the actual filesystem scan.

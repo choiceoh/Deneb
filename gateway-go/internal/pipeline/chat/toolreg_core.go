@@ -1,9 +1,9 @@
 package chat
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolreg"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 )
 
 // RegisterCoreTools populates the tool registry with all core agent tools.

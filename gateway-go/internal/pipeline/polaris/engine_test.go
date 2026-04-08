@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
