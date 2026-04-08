@@ -3,6 +3,7 @@ package polaris
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -14,6 +15,11 @@ import (
 // summaryPrefix is injected by AssembleContext into summary messages.
 // Used to detect already-summarized content and skip re-summarization.
 const summaryPrefix = "[이전 대화 요약"
+
+const (
+	// bootstrapRawThreshold: if older messages are below this, inject raw (no LLM).
+	bootstrapRawThreshold = 50_000
+)
 
 // Engine orchestrates Polaris compaction with DAG persistence and condensation.
 // Long-lived: stored on Bridge, shared across runs for the same session.
@@ -37,6 +43,11 @@ func NewEngine(store *Store, logger *slog.Logger, cfg Config) *Engine {
 // CompactAndPersist runs Polaris compaction and persists any LLM summary
 // into the DAG as a leaf node. Skips re-summarization when the context
 // already contains summary messages from AssembleContext.
+//
+// Bootstrap: when no summaries exist in the DAG, older messages that were
+// dropped by freshTailCount during assembly are recovered here. If the older
+// messages are < 50K tokens they are injected raw; otherwise they are
+// LLM-compacted and the summary is persisted to the DAG.
 func (e *Engine) CompactAndPersist(
 	ctx context.Context,
 	sessionKey string,
@@ -44,10 +55,13 @@ func (e *Engine) CompactAndPersist(
 	summarizer compact.Summarizer,
 	contextBudget int,
 ) ([]llm.Message, compact.Result) {
+	// Bootstrap: recover older messages dropped by freshTailCount.
+	messages = e.bootstrapIfNeeded(ctx, sessionKey, messages, summarizer)
+
 	polarisCfg := compact.NewConfig(contextBudget)
 
 	// Summary reuse: if context already has injected summaries (from
-	// AssembleContext), Polaris would re-summarize them. Detect and skip.
+	// AssembleContext or bootstrap), Polaris would re-summarize them. Detect and skip.
 	if hasSummaryMessages(messages) {
 		// Polaris can still micro-compact and handle emergency, but the
 		// LLM tier should not re-summarize our injected summaries.
@@ -118,6 +132,101 @@ func (e *Engine) persistSummary(sessionKey, summary string, compactedCount int) 
 	e.logger.Info("polaris: persisted summary node",
 		"id", id, "session", sessionKey,
 		"range", [2]int{msgStart, msgEnd}, "tokens", node.TokenEst)
+}
+
+// bootstrapIfNeeded recovers older messages that were dropped by freshTailCount
+// during assembly when no DAG summaries exist yet. This breaks the catch-22
+// where truncated context never triggers LLM compaction.
+//
+// Policy:
+//   - older < 50K tokens → inject raw messages (no LLM call)
+//   - older ≥ 50K tokens → LLM compact + persist to DAG
+func (e *Engine) bootstrapIfNeeded(
+	ctx context.Context,
+	sessionKey string,
+	messages []llm.Message,
+	summarizer compact.Summarizer,
+) []llm.Message {
+	coverage, _ := e.store.LatestSummaryCoverage(sessionKey)
+	if coverage >= 0 {
+		return messages // summaries already exist in DAG
+	}
+
+	maxIdx, err := e.store.MaxMsgIndex(sessionKey)
+	if err != nil || maxIdx < 0 {
+		return messages
+	}
+
+	totalMessages := maxIdx + 1
+	if totalMessages <= len(messages) {
+		return messages // no dropped messages
+	}
+
+	// Older messages: everything before the fresh tail.
+	olderEnd := maxIdx - len(messages) // inclusive end index
+	if olderEnd < 0 {
+		return messages
+	}
+
+	olderChatMsgs, err := e.store.LoadMessages(sessionKey, 0, olderEnd)
+	if err != nil || len(olderChatMsgs) == 0 {
+		return messages
+	}
+
+	olderLLM := chatToLLM(olderChatMsgs)
+	olderTokens := compact.EstimateMessagesTokens(olderLLM)
+
+	if olderTokens < bootstrapRawThreshold {
+		// Under threshold: inject raw older messages before fresh tail.
+		enriched := make([]llm.Message, 0, len(olderLLM)+len(messages))
+		enriched = append(enriched, olderLLM...)
+		enriched = append(enriched, messages...)
+		e.logger.Info("polaris: bootstrap raw inject",
+			"session", sessionKey,
+			"olderMessages", len(olderLLM),
+			"olderTokens", olderTokens)
+		return enriched
+	}
+
+	// Over threshold: LLM compact older messages.
+	if summarizer == nil {
+		return messages
+	}
+
+	summary := compact.BootstrapCompact(ctx, olderLLM, summarizer, e.logger)
+	if summary == "" {
+		return messages
+	}
+
+	// Inject summary message at the front of context.
+	summaryText := fmt.Sprintf("%s (메시지 0-%d)]\n\n%s", summaryPrefix, olderEnd, summary)
+	summaryMsg := llm.NewTextMessage("user", summaryText)
+	enriched := make([]llm.Message, 0, 1+len(messages))
+	enriched = append(enriched, summaryMsg)
+	enriched = append(enriched, messages...)
+
+	// Persist to DAG so future assembly picks it up directly.
+	node := SummaryNode{
+		SessionKey: sessionKey,
+		Level:      1,
+		Content:    summary,
+		TokenEst:   compact.EstimateTokens(summary),
+		CreatedAt:  time.Now().UnixMilli(),
+		MsgStart:   0,
+		MsgEnd:     olderEnd,
+	}
+	id, err := e.store.InsertSummary(node)
+	if err != nil {
+		e.logger.Warn("polaris: bootstrap persist failed", "error", err)
+	} else {
+		e.logger.Info("polaris: bootstrap summary created",
+			"id", id, "session", sessionKey,
+			"range", [2]int{0, olderEnd},
+			"olderMessages", len(olderChatMsgs),
+			"summaryTokens", node.TokenEst)
+	}
+
+	return enriched
 }
 
 // ShouldCompact evaluates whether proactive compaction is needed.
