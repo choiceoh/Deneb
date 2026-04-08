@@ -44,7 +44,7 @@ func TestDoStream_ClientError_NoRetry(t *testing.T) {
 		t.Fatal("expected error for 400 response")
 	}
 	if calls != 1 {
-		t.Errorf("expected 1 call (no retry), got %d", calls)
+		t.Errorf("got %d, want 1 call (no retry)", calls)
 	}
 }
 
@@ -64,7 +64,7 @@ func TestDoStream_ServerError_Retries(t *testing.T) {
 	body := testutil.Must(c.DoStream(context.Background(), req))
 	defer body.Close()
 	if calls != 3 {
-		t.Errorf("expected 3 calls, got %d", calls)
+		t.Errorf("got %d, want 3 calls", calls)
 	}
 }
 
@@ -106,7 +106,7 @@ func TestDoStream_RateLimitRetryAfter(t *testing.T) {
 	body := testutil.Must(c.DoStream(ctx, req))
 	defer body.Close()
 	if calls != 2 {
-		t.Errorf("expected 2 calls, got %d", calls)
+		t.Errorf("got %d, want 2 calls", calls)
 	}
 }
 
@@ -166,7 +166,7 @@ func TestDoStream_DefaultMaxRetries(t *testing.T) {
 	}
 	// 1 initial + 6 retries = 7 total calls.
 	if calls != 7 {
-		t.Errorf("expected 7 calls (1 + 6 retries), got %d", calls)
+		t.Errorf("got %d, want 7 calls (1 + 6 retries)", calls)
 	}
 }
 
@@ -186,7 +186,7 @@ func TestDoStream_504_Retries(t *testing.T) {
 	body := testutil.Must(c.DoStream(context.Background(), req))
 	defer body.Close()
 	if calls != 2 {
-		t.Errorf("expected 2 calls (1 timeout + 1 success), got %d", calls)
+		t.Errorf("got %d, want 2 calls (1 timeout + 1 success)", calls)
 	}
 }
 
@@ -203,7 +203,7 @@ func TestDoStream_410_NoRetry(t *testing.T) {
 		t.Fatal("expected error for 410 response")
 	}
 	if calls != 1 {
-		t.Errorf("expected 1 call (no retry on 410 Gone), got %d", calls)
+		t.Errorf("got %d, want 1 call (no retry on 410 Gone)", calls)
 	}
 }
 
@@ -220,7 +220,7 @@ func TestDoStream_501_NoRetry(t *testing.T) {
 		t.Fatal("expected error for 501 response")
 	}
 	if calls != 1 {
-		t.Errorf("expected 1 call (no retry on 501 Not Implemented), got %d", calls)
+		t.Errorf("got %d, want 1 call (no retry on 501 Not Implemented)", calls)
 	}
 }
 
@@ -237,7 +237,7 @@ func TestDoStream_429Code1302_NoRetry(t *testing.T) {
 		t.Fatal("expected error for 429 code 1302 response")
 	}
 	if calls != 1 {
-		t.Errorf("expected 1 call (no retry on provider hard rate-limit), got %d", calls)
+		t.Errorf("got %d, want 1 call (no retry on provider hard rate-limit)", calls)
 	}
 }
 
@@ -319,7 +319,7 @@ func TestDoStream_ExpiredContext_NoRetry(t *testing.T) {
 	}
 	// Should have made 1 call (the initial), then context expires during/before retry delay.
 	if calls > 2 {
-		t.Errorf("expected at most 2 calls (context should expire before retries), got %d", calls)
+		t.Errorf("got %d, want at most 2 calls (context should expire before retries)", calls)
 	}
 }
 
@@ -339,6 +339,6 @@ func TestDoStream_429OtherCode_Retries(t *testing.T) {
 	body := testutil.Must(c.DoStream(context.Background(), req))
 	defer body.Close()
 	if calls != 3 {
-		t.Errorf("expected 3 calls for retryable 429 payload, got %d", calls)
+		t.Errorf("got %d, want 3 calls for retryable 429 payload", calls)
 	}
 }

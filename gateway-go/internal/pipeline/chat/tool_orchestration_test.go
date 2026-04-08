@@ -32,13 +32,13 @@ func TestPartitionToolCalls(t *testing.T) {
 		}
 		batches := PartitionToolCalls(calls, testIsSafe)
 		if len(batches) != 1 {
-			t.Fatalf("expected 1 batch, got %d", len(batches))
+			t.Fatalf("got %d, want 1 batch", len(batches))
 		}
 		if !batches[0].Concurrent {
 			t.Error("should be concurrent")
 		}
 		if len(batches[0].Calls) != 3 {
-			t.Errorf("expected 3 calls, got %d", len(batches[0].Calls))
+			t.Errorf("got %d, want 3 calls", len(batches[0].Calls))
 		}
 	})
 
@@ -51,7 +51,7 @@ func TestPartitionToolCalls(t *testing.T) {
 		}
 		batches := PartitionToolCalls(calls, testIsSafe)
 		if len(batches) != 3 {
-			t.Fatalf("expected 3 batches, got %d", len(batches))
+			t.Fatalf("got %d, want 3 batches", len(batches))
 		}
 		if !batches[0].Concurrent || len(batches[0].Calls) != 2 {
 			t.Error("first batch: 2 concurrent reads")
@@ -71,7 +71,7 @@ func TestPartitionToolCalls(t *testing.T) {
 		}
 		batches := PartitionToolCalls(calls, testIsSafe)
 		if len(batches) != 2 {
-			t.Fatalf("expected 2 batches, got %d", len(batches))
+			t.Fatalf("got %d, want 2 batches", len(batches))
 		}
 		for _, b := range batches {
 			if b.Concurrent {
@@ -87,7 +87,7 @@ func TestPartitionToolCalls(t *testing.T) {
 		}
 		batches := PartitionToolCalls(calls, nil)
 		if len(batches) != 2 {
-			t.Fatalf("expected 2 serial batches, got %d", len(batches))
+			t.Fatalf("got %d, want 2 serial batches", len(batches))
 		}
 		for _, b := range batches {
 			if b.Concurrent {
@@ -114,7 +114,7 @@ func TestExecuteBatch_Serial(t *testing.T) {
 
 	results := ExecuteBatch(context.Background(), batch, executor)
 	if len(results) != 2 {
-		t.Fatalf("expected 2 results, got %d", len(results))
+		t.Fatalf("got %d, want 2 results", len(results))
 	}
 	if order[0] != "1" || order[1] != "2" {
 		t.Errorf("serial order wrong: %v", order)
@@ -141,7 +141,7 @@ func TestExecuteBatch_Concurrent(t *testing.T) {
 
 	results := ExecuteBatch(context.Background(), batch, executor)
 	if len(results) != 3 {
-		t.Fatalf("expected 3 results, got %d", len(results))
+		t.Fatalf("got %d, want 3 results", len(results))
 	}
 	for _, r := range results {
 		if r.IsError {
@@ -170,7 +170,7 @@ func TestExecuteBatch_SiblingError(t *testing.T) {
 
 	results := ExecuteBatch(context.Background(), batch, executor)
 	if len(results) != 3 {
-		t.Fatalf("expected 3 results, got %d", len(results))
+		t.Fatalf("got %d, want 3 results", len(results))
 	}
 	if !results[0].IsError {
 		t.Error("first should error")

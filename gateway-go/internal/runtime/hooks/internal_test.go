@@ -29,13 +29,13 @@ func TestInternalRegistry_TwoLevelMatching(t *testing.T) {
 	reg.Trigger(context.Background(), event)
 
 	if len(order) != 2 {
-		t.Fatalf("expected 2 handlers called, got %d", len(order))
+		t.Fatalf("got %d, want 2 handlers called", len(order))
 	}
 	if order[0] != "type" {
-		t.Errorf("expected type handler first, got %q", order[0])
+		t.Errorf("got %q, want type handler first", order[0])
 	}
 	if order[1] != "specific" {
-		t.Errorf("expected specific handler second, got %q", order[1])
+		t.Errorf("got %q, want specific handler second", order[1])
 	}
 }
 
@@ -78,7 +78,7 @@ func TestInternalRegistry_Unregister(t *testing.T) {
 
 	reg.Trigger(context.Background(), event)
 	if callCount != 1 {
-		t.Fatalf("expected 1, got %d", callCount)
+		t.Fatalf("got %d, want 1", callCount)
 	}
 
 	if !reg.Unregister("command:new", "handler-a") {
@@ -87,7 +87,7 @@ func TestInternalRegistry_Unregister(t *testing.T) {
 
 	reg.Trigger(context.Background(), event)
 	if callCount != 1 {
-		t.Errorf("expected still 1 after unregister, got %d", callCount)
+		t.Errorf("got %d, want still 1 after unregister", callCount)
 	}
 }
 
@@ -158,7 +158,7 @@ func TestEvaluateEligibility_NilMetadata(t *testing.T) {
 func TestEventKey(t *testing.T) {
 	event := &InternalHookEvent{Type: EventTypeMessage, Action: "received"}
 	if event.EventKey() != "message:received" {
-		t.Errorf("expected 'message:received', got %q", event.EventKey())
+		t.Errorf("got %q, want 'message:received'", event.EventKey())
 	}
 }
 
@@ -169,7 +169,7 @@ func TestListHandlers(t *testing.T) {
 
 	handlers := reg.ListHandlers()
 	if len(handlers) != 2 {
-		t.Errorf("expected 2 event keys, got %d", len(handlers))
+		t.Errorf("got %d, want 2 event keys", len(handlers))
 	}
 	if len(handlers["command"]) != 1 || handlers["command"][0] != "a" {
 		t.Error("expected handler 'a' for 'command'")

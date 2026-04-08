@@ -10,7 +10,7 @@ func TestExtractQueueDirective_NoDirective(t *testing.T) {
 		t.Error("expected no directive")
 	}
 	if d.Cleaned != "hello world" {
-		t.Errorf("expected cleaned 'hello world', got %q", d.Cleaned)
+		t.Errorf("got %q, want cleaned 'hello world'", d.Cleaned)
 	}
 }
 
@@ -57,10 +57,10 @@ func TestExtractQueueDirective_WithOptions(t *testing.T) {
 		t.Fatal("expected directive")
 	}
 	if d.DebounceMs != 2000 {
-		t.Errorf("expected debounce 2000, got %d", d.DebounceMs)
+		t.Errorf("got %d, want debounce 2000", d.DebounceMs)
 	}
 	if d.Cap != 5 {
-		t.Errorf("expected cap 5, got %d", d.Cap)
+		t.Errorf("got %d, want cap 5", d.Cap)
 	}
 	if !d.HasOptions {
 		t.Error("expected HasOptions=true")
@@ -70,7 +70,7 @@ func TestExtractQueueDirective_WithOptions(t *testing.T) {
 func TestExtractQueueDirective_DebounceGoDuration(t *testing.T) {
 	d := ExtractQueueDirective("/queue collect debounce:3s")
 	if d.DebounceMs != 3000 {
-		t.Errorf("expected debounce 3000ms from '3s', got %d", d.DebounceMs)
+		t.Errorf("got %d, want debounce 3000ms from '3s'", d.DebounceMs)
 	}
 }
 

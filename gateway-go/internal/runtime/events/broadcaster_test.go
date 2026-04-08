@@ -41,13 +41,13 @@ func TestBroadcast_AllSubscribers(t *testing.T) {
 
 	sent, errs := b.Broadcast("test.event", map[string]string{"key": "value"})
 	if sent != 2 {
-		t.Errorf("expected 2 sent, got %d", sent)
+		t.Errorf("got %d, want 2 sent", sent)
 	}
 	if len(errs) != 0 {
-		t.Errorf("expected no errors, got %v", errs)
+		t.Errorf("got %v, want no errors", errs)
 	}
 	if len(s1.received) != 1 {
-		t.Errorf("s1 expected 1 message, got %d", len(s1.received))
+		t.Errorf("s1 got %d, want 1 message", len(s1.received))
 	}
 }
 
@@ -61,7 +61,7 @@ func TestBroadcast_SkipsUnauthenticated(t *testing.T) {
 
 	sent, _ := b.Broadcast("test", nil)
 	if sent != 1 {
-		t.Errorf("expected 1 sent, got %d", sent)
+		t.Errorf("got %d, want 1 sent", sent)
 	}
 	if len(s1.received) != 0 {
 		t.Error("unauthed subscriber should not receive events")
@@ -77,13 +77,13 @@ func TestBroadcast_Filter(t *testing.T) {
 	// Event that matches filter.
 	sent, _ := b.Broadcast("wanted", nil)
 	if sent != 1 {
-		t.Errorf("expected 1 sent for matching event, got %d", sent)
+		t.Errorf("got %d, want 1 sent for matching event", sent)
 	}
 
 	// Event that doesn't match filter.
 	sent, _ = b.Broadcast("unwanted", nil)
 	if sent != 0 {
-		t.Errorf("expected 0 sent for non-matching event, got %d", sent)
+		t.Errorf("got %d, want 0 sent for non-matching event", sent)
 	}
 }
 
@@ -95,10 +95,10 @@ func TestBroadcast_SendError(t *testing.T) {
 
 	sent, errs := b.Broadcast("test", nil)
 	if sent != 0 {
-		t.Errorf("expected 0 sent, got %d", sent)
+		t.Errorf("got %d, want 0 sent", sent)
 	}
 	if len(errs) != 1 {
-		t.Errorf("expected 1 error, got %d", len(errs))
+		t.Errorf("got %d, want 1 error", len(errs))
 	}
 }
 
@@ -108,12 +108,12 @@ func TestUnsubscribe(t *testing.T) {
 
 	b.Subscribe(s1, Filter{})
 	if b.Count() != 1 {
-		t.Errorf("expected count 1, got %d", b.Count())
+		t.Errorf("got %d, want count 1", b.Count())
 	}
 
 	b.Unsubscribe("s1")
 	if b.Count() != 0 {
-		t.Errorf("expected count 0, got %d", b.Count())
+		t.Errorf("got %d, want count 0", b.Count())
 	}
 }
 
@@ -126,7 +126,7 @@ func TestBroadcastRaw(t *testing.T) {
 	data := []byte(`{"type":"event","event":"raw","payload":{}}`)
 	sent := b.BroadcastRaw("raw", data)
 	if sent != 1 {
-		t.Errorf("expected 1 sent, got %d", sent)
+		t.Errorf("got %d, want 1 sent", sent)
 	}
 	if len(s1.received) != 1 {
 		t.Error("expected subscriber to receive raw data")
@@ -143,7 +143,7 @@ func TestSequenceIncrement(t *testing.T) {
 	b.Broadcast("e3", nil)
 
 	if len(s.received) != 3 {
-		t.Fatalf("expected 3 messages, got %d", len(s.received))
+		t.Fatalf("got %d, want 3 messages", len(s.received))
 	}
 }
 
@@ -159,7 +159,7 @@ func TestBroadcastToConnIDs(t *testing.T) {
 	targets := map[string]struct{}{"s1": {}}
 	sent, _ := b.BroadcastToConnIDs("test", nil, targets)
 	if sent != 1 {
-		t.Errorf("expected 1 targeted send, got %d", sent)
+		t.Errorf("got %d, want 1 targeted send", sent)
 	}
 	if len(s1.received) != 1 {
 		t.Error("s1 should receive targeted event")
@@ -177,13 +177,13 @@ func TestSessionEventSubscriptions(t *testing.T) {
 
 	subs := b.SessionEventSubscriberConnIDs()
 	if len(subs) != 2 {
-		t.Errorf("expected 2 session subs, got %d", len(subs))
+		t.Errorf("got %d, want 2 session subs", len(subs))
 	}
 
 	b.UnsubscribeSessionEvents("conn-1")
 	subs = b.SessionEventSubscriberConnIDs()
 	if len(subs) != 1 {
-		t.Errorf("expected 1 session sub after unsubscribe, got %d", len(subs))
+		t.Errorf("got %d, want 1 session sub after unsubscribe", len(subs))
 	}
 }
 
@@ -196,17 +196,17 @@ func TestSessionMessageSubscriptions(t *testing.T) {
 
 	subs := b.SessionMessageSubscriberConnIDs("session-abc")
 	if len(subs) != 2 {
-		t.Errorf("expected 2 subs for session-abc, got %d", len(subs))
+		t.Errorf("got %d, want 2 subs for session-abc", len(subs))
 	}
 	subs = b.SessionMessageSubscriberConnIDs("session-xyz")
 	if len(subs) != 1 {
-		t.Errorf("expected 1 sub for session-xyz, got %d", len(subs))
+		t.Errorf("got %d, want 1 sub for session-xyz", len(subs))
 	}
 
 	b.UnsubscribeSessionMessageEvents("conn-1", "session-abc")
 	subs = b.SessionMessageSubscriberConnIDs("session-abc")
 	if len(subs) != 1 {
-		t.Errorf("expected 1 sub after unsubscribe, got %d", len(subs))
+		t.Errorf("got %d, want 1 sub after unsubscribe", len(subs))
 	}
 }
 
@@ -215,12 +215,12 @@ func TestToolEventRecipients(t *testing.T) {
 
 	b.RegisterToolEventRecipient("run-1", "conn-1")
 	if got := b.ToolEventRecipient("run-1"); got != "conn-1" {
-		t.Errorf("expected conn-1, got %q", got)
+		t.Errorf("got %q, want conn-1", got)
 	}
 
 	b.UnregisterToolEventRecipient("run-1")
 	if got := b.ToolEventRecipient("run-1"); got != "" {
-		t.Errorf("expected empty after unregister, got %q", got)
+		t.Errorf("got %q, want empty after unregister", got)
 	}
 }
 

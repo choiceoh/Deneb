@@ -211,14 +211,14 @@ func TestGroupGrepOutput_skipsSeparators(t *testing.T) {
 func TestSplitGlobs_single(t *testing.T) {
 	got := splitGlobs("*.go")
 	if len(got) != 1 || got[0] != "*.go" {
-		t.Errorf("expected [*.go], got %v", got)
+		t.Errorf("got %v, want [*.go]", got)
 	}
 }
 
 func TestSplitGlobs_commaSeparated(t *testing.T) {
 	got := splitGlobs("*.go,*.rs,*.proto")
 	if len(got) != 3 || got[0] != "*.go" || got[1] != "*.rs" || got[2] != "*.proto" {
-		t.Errorf("expected [*.go *.rs *.proto], got %v", got)
+		t.Errorf("got %v, want [*.go *.rs *.proto]", got)
 	}
 }
 
@@ -232,7 +232,7 @@ func TestSplitGlobs_braceExpansion(t *testing.T) {
 func TestSplitGlobs_spacesAroundComma(t *testing.T) {
 	got := splitGlobs("*.go, *.rs")
 	if len(got) != 2 || got[0] != "*.go" || got[1] != "*.rs" {
-		t.Errorf("expected trimmed [*.go *.rs], got %v", got)
+		t.Errorf("got %v, want trimmed [*.go *.rs]", got)
 	}
 }
 

@@ -208,7 +208,7 @@ func TestWiringRules_ValidateHub(t *testing.T) {
 	// Empty hub (via zero-value config) should fail validation.
 	hub := rpcutil.NewGatewayHub(rpcutil.HubConfig{})
 	if err := hub.Validate(); err == nil {
-		t.Fatal("expected validation error for empty hub, got nil")
+		t.Fatal("got nil, want validation error for empty hub")
 	}
 }
 
@@ -224,17 +224,17 @@ func TestWiringRules_PhaseOrdering(t *testing.T) {
 	// Normal progression should not panic.
 	hub.AdvancePhase(rpcutil.PhaseEarly)
 	if hub.Phase() != rpcutil.PhaseEarly {
-		t.Fatalf("expected PhaseEarly, got %d", hub.Phase())
+		t.Fatalf("got %d, want PhaseEarly", hub.Phase())
 	}
 
 	hub.AdvancePhase(rpcutil.PhaseSession)
 	if hub.Phase() != rpcutil.PhaseSession {
-		t.Fatalf("expected PhaseSession, got %d", hub.Phase())
+		t.Fatalf("got %d, want PhaseSession", hub.Phase())
 	}
 
 	hub.AdvancePhase(rpcutil.PhaseLate)
 	if hub.Phase() != rpcutil.PhaseLate {
-		t.Fatalf("expected PhaseLate, got %d", hub.Phase())
+		t.Fatalf("got %d, want PhaseLate", hub.Phase())
 	}
 
 	// Going backwards should panic.
@@ -266,7 +266,7 @@ func assertPanics(t *testing.T, name string, fn func()) {
 	t.Helper()
 	defer func() {
 		if r := recover(); r == nil {
-			t.Errorf("%s: expected panic, got none", name)
+			t.Errorf("%s: got none, want panic", name)
 		}
 	}()
 	fn()

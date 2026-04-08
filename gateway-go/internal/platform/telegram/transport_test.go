@@ -15,16 +15,16 @@ func TestNewStickyDialer_DefaultStrategy(t *testing.T) {
 
 	d := newStickyDialer(slog.Default())
 	if len(d.strategies) != 3 {
-		t.Fatalf("expected 3 strategies, got %d", len(d.strategies))
+		t.Fatalf("got %d, want 3 strategies", len(d.strategies))
 	}
 	if d.strategies[0].name != "dual-stack" {
-		t.Errorf("expected first strategy dual-stack, got %s", d.strategies[0].name)
+		t.Errorf("got %s, want first strategy dual-stack", d.strategies[0].name)
 	}
 	if d.strategies[1].name != "ipv4-only" {
-		t.Errorf("expected second strategy ipv4-only, got %s", d.strategies[1].name)
+		t.Errorf("got %s, want second strategy ipv4-only", d.strategies[1].name)
 	}
 	if d.strategies[2].name != "pinned-ip" {
-		t.Errorf("expected third strategy pinned-ip, got %s", d.strategies[2].name)
+		t.Errorf("got %s, want third strategy pinned-ip", d.strategies[2].name)
 	}
 }
 
@@ -53,7 +53,7 @@ func TestStickyDialer_ConnectsToLocalServer(t *testing.T) {
 	conn.Close()
 
 	if idx := d.stickyIndex.Load(); idx != 0 {
-		t.Errorf("expected sticky index 0, got %d", idx)
+		t.Errorf("got %d, want sticky index 0", idx)
 	}
 }
 
@@ -64,7 +64,7 @@ func TestStickyDialer_ResetSticky(t *testing.T) {
 	d.stickyIndex.Store(2)
 	d.ResetSticky()
 	if idx := d.stickyIndex.Load(); idx != 0 {
-		t.Errorf("expected sticky index 0 after reset, got %d", idx)
+		t.Errorf("got %d, want sticky index 0 after reset", idx)
 	}
 }
 
@@ -75,11 +75,11 @@ func TestStickyDialer_PinnedIPResolveHost(t *testing.T) {
 	pinnedStrategy := d.strategies[2]
 
 	if got := pinnedStrategy.resolveHost(telegramAPIHost); got != fallbackIPv4 {
-		t.Errorf("expected %s for %s, got %s", fallbackIPv4, telegramAPIHost, got)
+		t.Errorf("got %s, want %s for %s", got, fallbackIPv4, telegramAPIHost)
 	}
 
 	if got := pinnedStrategy.resolveHost("example.com"); got != "example.com" {
-		t.Errorf("expected example.com, got %s", got)
+		t.Errorf("got %s, want example.com", got)
 	}
 }
 
@@ -91,10 +91,10 @@ func TestNewTelegramTransport(t *testing.T) {
 		t.Fatal("expected non-nil transport")
 	}
 	if transport.MaxIdleConns != maxIdleConns {
-		t.Errorf("expected MaxIdleConns %d, got %d", maxIdleConns, transport.MaxIdleConns)
+		t.Errorf("got %d, want MaxIdleConns %d", transport.MaxIdleConns, maxIdleConns)
 	}
 	if transport.IdleConnTimeout != keepAliveTimeout {
-		t.Errorf("expected IdleConnTimeout %v, got %v", keepAliveTimeout, transport.IdleConnTimeout)
+		t.Errorf("got %v, want IdleConnTimeout %v", transport.IdleConnTimeout, keepAliveTimeout)
 	}
 	if transport.ForceAttemptHTTP2 {
 		t.Error("expected ForceAttemptHTTP2 to be false")

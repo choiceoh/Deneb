@@ -33,7 +33,7 @@ func TestDeliveryContext(t *testing.T) {
 	t.Run("missing returns nil", func(t *testing.T) {
 		got := DeliveryFromContext(context.Background())
 		if got != nil {
-			t.Errorf("expected nil, got %+v", got)
+			t.Errorf("got %+v, want nil", got)
 		}
 	})
 }
@@ -76,7 +76,7 @@ func TestSessionKey(t *testing.T) {
 	t.Run("missing returns empty string", func(t *testing.T) {
 		got := SessionKeyFromContext(context.Background())
 		if got != "" {
-			t.Errorf("expected empty string, got %q", got)
+			t.Errorf("got %q, want empty string", got)
 		}
 	})
 }

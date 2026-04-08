@@ -41,15 +41,15 @@ func TestNormalizeTextList(t *testing.T) {
 			got := normalizeTextList(tt.input)
 			if tt.want == -1 {
 				if got != nil {
-					t.Errorf("expected nil, got %v", got)
+					t.Errorf("got %v, want nil", got)
 				}
 				return
 			}
 			if got == nil {
-				t.Fatalf("expected %d items, got nil", tt.want)
+				t.Fatalf("got nil, want %d items", tt.want)
 			}
 			if len(got) != tt.want {
-				t.Errorf("expected %d items, got %d (%v)", tt.want, len(got), got)
+				t.Errorf("got %d (%v), want %d items", len(got), got, tt.want)
 			}
 		})
 	}
@@ -68,10 +68,10 @@ func TestNormalizeProviderAuthMethods(t *testing.T) {
 			Auth:       auth,
 		})
 		if len(diags) != 0 {
-			t.Errorf("expected 0 diagnostics, got %d: %v", len(diags), diags)
+			t.Errorf("got %d: %v, want 0 diagnostics", len(diags), diags)
 		}
 		if len(result) != 2 {
-			t.Fatalf("expected 2 methods, got %d", len(result))
+			t.Fatalf("got %d, want 2 methods", len(result))
 		}
 	})
 
@@ -86,10 +86,10 @@ func TestNormalizeProviderAuthMethods(t *testing.T) {
 			Auth:       auth,
 		})
 		if len(diags) != 1 || diags[0].Level != "error" {
-			t.Errorf("expected 1 error diagnostic, got %v", diags)
+			t.Errorf("got %v, want 1 error diagnostic", diags)
 		}
 		if len(result) != 0 {
-			t.Errorf("expected 0 valid methods, got %d", len(result))
+			t.Errorf("got %d, want 0 valid methods", len(result))
 		}
 	})
 
@@ -105,10 +105,10 @@ func TestNormalizeProviderAuthMethods(t *testing.T) {
 			Auth:       auth,
 		})
 		if len(diags) != 1 || diags[0].Level != "error" {
-			t.Errorf("expected 1 error diagnostic for duplicate, got %v", diags)
+			t.Errorf("got %v, want 1 error diagnostic for duplicate", diags)
 		}
 		if len(result) != 1 {
-			t.Errorf("expected 1 valid method (first), got %d", len(result))
+			t.Errorf("got %d, want 1 valid method (first)", len(result))
 		}
 	})
 
@@ -126,7 +126,7 @@ func TestNormalizeProviderAuthMethods(t *testing.T) {
 			t.Fatal("expected 1 method")
 		}
 		if result[0].Label != "my-method" {
-			t.Errorf("expected label to default to ID, got %q", result[0].Label)
+			t.Errorf("got %q, want label to default to ID", result[0].Label)
 		}
 	})
 }
@@ -149,25 +149,25 @@ func TestNormalizeRegisteredProvider(t *testing.T) {
 			Provider: provider,
 		})
 		if len(diags) != 0 {
-			t.Errorf("expected 0 diagnostics, got %v", diags)
+			t.Errorf("got %v, want 0 diagnostics", diags)
 		}
 		if result == nil {
 			t.Fatal("expected non-nil result")
 		}
 		if result.ID != "openai" {
-			t.Errorf("expected trimmed ID 'openai', got %q", result.ID)
+			t.Errorf("got %q, want trimmed ID 'openai'", result.ID)
 		}
 		if result.Label != "OpenAI" {
-			t.Errorf("expected trimmed label 'OpenAI', got %q", result.Label)
+			t.Errorf("got %q, want trimmed label 'OpenAI'", result.Label)
 		}
 		if len(result.Aliases) != 1 || result.Aliases[0] != "oai" {
-			t.Errorf("expected deduplicated aliases [oai], got %v", result.Aliases)
+			t.Errorf("got %v, want deduplicated aliases [oai]", result.Aliases)
 		}
 		if len(result.EnvVars) != 1 || result.EnvVars[0] != "OPENAI_API_KEY" {
-			t.Errorf("expected filtered env vars [OPENAI_API_KEY], got %v", result.EnvVars)
+			t.Errorf("got %v, want filtered env vars [OPENAI_API_KEY]", result.EnvVars)
 		}
 		if result.DocsPath != "/providers/openai" {
-			t.Errorf("expected trimmed docsPath, got %q", result.DocsPath)
+			t.Errorf("got %q, want trimmed docsPath", result.DocsPath)
 		}
 	})
 
@@ -179,10 +179,10 @@ func TestNormalizeRegisteredProvider(t *testing.T) {
 			Provider: provider,
 		})
 		if result != nil {
-			t.Errorf("expected nil for missing ID, got %v", result)
+			t.Errorf("got %v, want nil for missing ID", result)
 		}
 		if len(diags) != 1 || diags[0].Level != "error" {
-			t.Errorf("expected error diagnostic for missing ID, got %v", diags)
+			t.Errorf("got %v, want error diagnostic for missing ID", diags)
 		}
 	})
 
@@ -198,7 +198,7 @@ func TestNormalizeRegisteredProvider(t *testing.T) {
 			Provider: provider,
 		})
 		if result.Label != "test" {
-			t.Errorf("expected label to default to ID 'test', got %q", result.Label)
+			t.Errorf("got %q, want label to default to ID 'test'", result.Label)
 		}
 	})
 

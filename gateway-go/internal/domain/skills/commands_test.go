@@ -30,13 +30,13 @@ func TestResolveUniqueSkillCommandName(t *testing.T) {
 	// First call should get _2 suffix.
 	name := resolveUniqueSkillCommandName("github", used)
 	if name != "github_2" {
-		t.Errorf("expected github_2, got %q", name)
+		t.Errorf("got %q, want github_2", name)
 	}
 
 	// Unused name should pass through.
 	name = resolveUniqueSkillCommandName("weather", used)
 	if name != "weather" {
-		t.Errorf("expected weather, got %q", name)
+		t.Errorf("got %q, want weather", name)
 	}
 }
 
@@ -58,13 +58,13 @@ func TestBuildSkillCommandSpecs(t *testing.T) {
 
 	specs := BuildSkillCommandSpecs(entries, nil)
 	if len(specs) != 2 {
-		t.Fatalf("expected 2 specs (internal excluded), got %d", len(specs))
+		t.Fatalf("got %d, want 2 specs (internal excluded)", len(specs))
 	}
 	if specs[0].Name != "github" {
-		t.Errorf("expected github, got %q", specs[0].Name)
+		t.Errorf("got %q, want github", specs[0].Name)
 	}
 	if specs[1].Name != "weather" {
-		t.Errorf("expected weather, got %q", specs[1].Name)
+		t.Errorf("got %q, want weather", specs[1].Name)
 	}
 }
 
@@ -78,10 +78,10 @@ func TestBuildSkillCommandSpecs_reserved(t *testing.T) {
 	reserved := map[string]struct{}{"help": {}}
 	specs := BuildSkillCommandSpecs(entries, reserved)
 	if len(specs) != 1 {
-		t.Fatalf("expected 1 spec, got %d", len(specs))
+		t.Fatalf("got %d, want 1 spec", len(specs))
 	}
 	if specs[0].Name != "help_2" {
-		t.Errorf("expected help_2 (reserved name dedup), got %q", specs[0].Name)
+		t.Errorf("got %q, want help_2 (reserved name dedup)", specs[0].Name)
 	}
 }
 
@@ -100,15 +100,15 @@ func TestBuildSkillCommandSpecs_dispatch(t *testing.T) {
 
 	specs := BuildSkillCommandSpecs(entries, nil)
 	if len(specs) != 1 {
-		t.Fatalf("expected 1 spec, got %d", len(specs))
+		t.Fatalf("got %d, want 1 spec", len(specs))
 	}
 	if specs[0].Dispatch == nil {
 		t.Fatal("expected dispatch to be set")
 	}
 	if specs[0].Dispatch.ToolName != "my_tool" {
-		t.Errorf("expected toolName 'my_tool', got %q", specs[0].Dispatch.ToolName)
+		t.Errorf("got %q, want toolName 'my_tool'", specs[0].Dispatch.ToolName)
 	}
 	if specs[0].Dispatch.ArgMode != "raw" {
-		t.Errorf("expected argMode 'raw', got %q", specs[0].Dispatch.ArgMode)
+		t.Errorf("got %q, want argMode 'raw'", specs[0].Dispatch.ArgMode)
 	}
 }

@@ -202,7 +202,7 @@ func TestChunkText_SplitsAtNewline(t *testing.T) {
 	text := "line one\nline two\nline three"
 	chunks := ChunkText(text, 15)
 	if len(chunks) < 2 {
-		t.Errorf("expected multiple chunks, got %d: %v", len(chunks), chunks)
+		t.Errorf("got %d: %v, want multiple chunks", len(chunks), chunks)
 	}
 }
 
@@ -210,7 +210,7 @@ func TestChunkHTML_NoSplitNeeded(t *testing.T) {
 	html := "<b>short</b>"
 	chunks := ChunkHTML(html, 100)
 	if len(chunks) != 1 || chunks[0] != html {
-		t.Errorf("expected single chunk %q, got %v", html, chunks)
+		t.Errorf("got %v, want single chunk %q", chunks, html)
 	}
 }
 
@@ -218,7 +218,7 @@ func TestChunkHTML_SplitsLongText(t *testing.T) {
 	html := strings.Repeat("a", 100)
 	chunks := ChunkHTML(html, 30)
 	if len(chunks) < 3 {
-		t.Errorf("expected at least 3 chunks, got %d", len(chunks))
+		t.Errorf("got %d, want at least 3 chunks", len(chunks))
 	}
 }
 
@@ -227,10 +227,10 @@ func TestChunkHTML_SplitsLongText(t *testing.T) {
 func TestSplitCaptionAndBody_Short(t *testing.T) {
 	caption, body := SplitCaptionAndBody("short text", MaxCaptionLength, MaxTextLength)
 	if caption != "short text" {
-		t.Errorf("expected caption 'short text', got %q", caption)
+		t.Errorf("got %q, want caption 'short text'", caption)
 	}
 	if body != nil {
-		t.Errorf("expected nil body, got %v", body)
+		t.Errorf("got %v, want nil body", body)
 	}
 }
 
@@ -250,7 +250,7 @@ func TestSplitCaptionAndBody_Long(t *testing.T) {
 func TestMarkdownToTelegramChunks_Short(t *testing.T) {
 	chunks := MarkdownToTelegramChunks("hello **world**", TextChunkLimit)
 	if len(chunks) != 1 {
-		t.Fatalf("expected 1 chunk, got %d", len(chunks))
+		t.Fatalf("got %d, want 1 chunk", len(chunks))
 	}
 	if chunks[0] != "hello <b>world</b>" {
 		t.Errorf("got %q", chunks[0])
@@ -261,7 +261,7 @@ func TestMarkdownToTelegramChunks_Long(t *testing.T) {
 	md := strings.Repeat("word ", 1000)
 	chunks := MarkdownToTelegramChunks(md, TextChunkLimit)
 	if len(chunks) < 2 {
-		t.Errorf("expected multiple chunks, got %d", len(chunks))
+		t.Errorf("got %d, want multiple chunks", len(chunks))
 	}
 }
 
@@ -281,30 +281,30 @@ func TestChunkByNewline(t *testing.T) {
 	// Short text — no chunking.
 	chunks := ChunkByNewline("hello\nworld", 100)
 	if len(chunks) != 1 {
-		t.Fatalf("expected 1 chunk, got %d", len(chunks))
+		t.Fatalf("got %d, want 1 chunk", len(chunks))
 	}
 	if chunks[0] != "hello\nworld" {
-		t.Errorf("expected original text, got %q", chunks[0])
+		t.Errorf("got %q, want original text", chunks[0])
 	}
 
 	// Lines that fit in separate chunks.
 	chunks = ChunkByNewline("aaa\nbbb\nccc", 5)
 	if len(chunks) != 3 {
-		t.Fatalf("expected 3 chunks, got %d: %v", len(chunks), chunks)
+		t.Fatalf("got %d: %v, want 3 chunks", len(chunks), chunks)
 	}
 
 	// Lines that can be merged.
 	chunks = ChunkByNewline("aa\nbb\ncc\ndd", 6)
 	// "aa\nbb" = 5 chars, "cc\ndd" = 5 chars → 2 chunks.
 	if len(chunks) != 2 {
-		t.Fatalf("expected 2 chunks, got %d: %v", len(chunks), chunks)
+		t.Fatalf("got %d: %v, want 2 chunks", len(chunks), chunks)
 	}
 
 	// Single line exceeding maxLen falls back to length-based chunking.
 	long := strings.Repeat("x", 20)
 	chunks = ChunkByNewline(long, 10)
 	if len(chunks) != 2 {
-		t.Fatalf("expected 2 chunks for long line, got %d", len(chunks))
+		t.Fatalf("got %d, want 2 chunks for long line", len(chunks))
 	}
 }
 
@@ -356,7 +356,7 @@ func TestTruncateDraftHTML_Short(t *testing.T) {
 	// Text within limit should be returned as-is.
 	got := TruncateDraftHTML("hello", 100)
 	if got != "hello" {
-		t.Errorf("expected unchanged text, got %q", got)
+		t.Errorf("got %q, want unchanged text", got)
 	}
 }
 
@@ -368,7 +368,7 @@ func TestTruncateDraftHTML_Long(t *testing.T) {
 		t.Errorf("result exceeds limit: %d > %d", len(got), MaxTextLength)
 	}
 	if !strings.HasPrefix(got, "…\n") {
-		t.Errorf("expected '…\\n' prefix, got %q", got[:10])
+		t.Errorf("got %q, want '…\\n' prefix", got[:10])
 	}
 	if !utf8.ValidString(got) {
 		t.Errorf("result is invalid UTF-8")
@@ -477,7 +477,7 @@ func TestChunkHTML_CodeFenceReopensWithLang(t *testing.T) {
 	chunks := ChunkHTML(html, 100)
 
 	if len(chunks) < 2 {
-		t.Fatalf("expected multiple chunks, got %d", len(chunks))
+		t.Fatalf("got %d, want multiple chunks", len(chunks))
 	}
 	for i := 1; i < len(chunks); i++ {
 		if strings.Contains(chunks[i], "<pre><code") && !strings.Contains(chunks[i], `class="language-rust"`) {

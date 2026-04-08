@@ -52,14 +52,14 @@ func TestCatalog_RegisterAndList(t *testing.T) {
 
 	entries := c.List()
 	if len(entries) != 3 {
-		t.Fatalf("expected 3 entries, got %d", len(entries))
+		t.Fatalf("got %d, want 3 entries", len(entries))
 	}
 	// Should be sorted alphabetically.
 	if entries[0].Skill.Name != "coding" {
-		t.Errorf("expected first entry to be 'coding', got %q", entries[0].Skill.Name)
+		t.Errorf("got %q, want first entry to be 'coding'", entries[0].Skill.Name)
 	}
 	if entries[1].Skill.Name != "github" {
-		t.Errorf("expected second entry to be 'github', got %q", entries[1].Skill.Name)
+		t.Errorf("got %q, want second entry to be 'github'", entries[1].Skill.Name)
 	}
 }
 
@@ -104,11 +104,11 @@ func TestNormalizeSkillFilter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := NormalizeSkillFilter(tt.input)
 			if tt.isNil && got != nil {
-				t.Errorf("expected nil, got %v", got)
+				t.Errorf("got %v, want nil", got)
 				return
 			}
 			if !tt.isNil && got == nil && len(tt.expected) > 0 {
-				t.Errorf("expected %v, got nil", tt.expected)
+				t.Errorf("got nil, want %v", tt.expected)
 				return
 			}
 		})
@@ -141,10 +141,10 @@ user-invocable: true
 `
 	fm := ParseFrontmatter(content)
 	if fm["name"] != "test-skill" {
-		t.Errorf("expected name 'test-skill', got %q", fm["name"])
+		t.Errorf("got %q, want name 'test-skill'", fm["name"])
 	}
 	if fm["description"] != "A test skill" {
-		t.Errorf("expected description, got %q", fm["description"])
+		t.Errorf("got %q, want description", fm["description"])
 	}
 }
 
@@ -173,13 +173,13 @@ func TestResolveSkillInvocationPolicy(t *testing.T) {
 
 func TestNormalizeSafeBrewFormula(t *testing.T) {
 	if got := normalizeSafeBrewFormula("ffmpeg"); got != "ffmpeg" {
-		t.Errorf("expected 'ffmpeg', got %q", got)
+		t.Errorf("got %q, want 'ffmpeg'", got)
 	}
 	if got := normalizeSafeBrewFormula("-bad"); got != "" {
-		t.Errorf("expected empty for leading dash, got %q", got)
+		t.Errorf("got %q, want empty for leading dash", got)
 	}
 	if got := normalizeSafeBrewFormula("../escape"); got != "" {
-		t.Errorf("expected empty for path traversal, got %q", got)
+		t.Errorf("got %q, want empty for path traversal", got)
 	}
 }
 
@@ -188,9 +188,9 @@ func TestNormalizeSafeDownloadURL(t *testing.T) {
 		t.Error("expected valid URL")
 	}
 	if got := normalizeSafeDownloadURL("ftp://bad.com/file"); got != "" {
-		t.Errorf("expected empty for non-http scheme, got %q", got)
+		t.Errorf("got %q, want empty for non-http scheme", got)
 	}
 	if got := normalizeSafeDownloadURL("has spaces"); got != "" {
-		t.Errorf("expected empty for URL with spaces, got %q", got)
+		t.Errorf("got %q, want empty for URL with spaces", got)
 	}
 }

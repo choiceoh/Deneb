@@ -10,7 +10,7 @@ import (
 func TestDetectFences_Simple(t *testing.T) {
 	spans := DetectFences("hello\n```js\ncode\n```\nend")
 	if len(spans) != 1 {
-		t.Fatalf("expected 1 span, got %d", len(spans))
+		t.Fatalf("got %d, want 1 span", len(spans))
 	}
 	if spans[0].OpenLine != "```js" {
 		t.Errorf("openLine = %q", spans[0].OpenLine)
@@ -23,7 +23,7 @@ func TestDetectFences_Simple(t *testing.T) {
 func TestDetectFences_Tilde(t *testing.T) {
 	spans := DetectFences("~~~\ncode\n~~~")
 	if len(spans) != 1 {
-		t.Fatalf("expected 1 span, got %d", len(spans))
+		t.Fatalf("got %d, want 1 span", len(spans))
 	}
 	if spans[0].Marker != "~~~" {
 		t.Errorf("marker = %q", spans[0].Marker)
@@ -34,7 +34,7 @@ func TestDetectFences_Unclosed(t *testing.T) {
 	input := "```\ncode\nno close"
 	spans := DetectFences(input)
 	if len(spans) != 1 {
-		t.Fatalf("expected 1 span, got %d", len(spans))
+		t.Fatalf("got %d, want 1 span", len(spans))
 	}
 	if spans[0].End != len(input) {
 		t.Errorf("unclosed fence end=%d, want %d", spans[0].End, len(input))
@@ -44,7 +44,7 @@ func TestDetectFences_Unclosed(t *testing.T) {
 func TestDetectFences_Indented(t *testing.T) {
 	spans := DetectFences("   ```\ncode\n   ```")
 	if len(spans) != 1 {
-		t.Fatalf("expected 1 span, got %d", len(spans))
+		t.Fatalf("got %d, want 1 span", len(spans))
 	}
 	if spans[0].Indent != "   " {
 		t.Errorf("indent = %q", spans[0].Indent)
@@ -61,14 +61,14 @@ func TestDetectFences_TooMuchIndent(t *testing.T) {
 func TestDetectFences_NoFences(t *testing.T) {
 	spans := DetectFences("just text\nno fences here")
 	if len(spans) != 0 {
-		t.Errorf("expected 0 spans, got %d", len(spans))
+		t.Errorf("got %d, want 0 spans", len(spans))
 	}
 }
 
 func TestDetectFences_MultipleFences(t *testing.T) {
 	spans := DetectFences("```\na\n```\n\n```\nb\n```")
 	if len(spans) != 2 {
-		t.Errorf("expected 2 spans, got %d", len(spans))
+		t.Errorf("got %d, want 2 spans", len(spans))
 	}
 }
 
@@ -76,7 +76,7 @@ func TestDetectFences_ClosingNeedsSameChar(t *testing.T) {
 	// Open with ``` but try to close with ~~~ — should not close.
 	spans := DetectFences("```\ncode\n~~~\nmore\n```")
 	if len(spans) != 1 {
-		t.Fatalf("expected 1 span, got %d", len(spans))
+		t.Fatalf("got %d, want 1 span", len(spans))
 	}
 	if spans[0].Marker != "```" {
 		t.Errorf("marker = %q", spans[0].Marker)
@@ -87,14 +87,14 @@ func TestDetectFences_ClosingNeedsEnoughMarkers(t *testing.T) {
 	// Open with ```` (4) — closing ``` (3) should not close.
 	spans := DetectFences("````\ncode\n```\nstill open\n````")
 	if len(spans) != 1 {
-		t.Fatalf("expected 1 span, got %d", len(spans))
+		t.Fatalf("got %d, want 1 span", len(spans))
 	}
 }
 
 func TestDetectFences_Empty(t *testing.T) {
 	spans := DetectFences("")
 	if spans != nil {
-		t.Errorf("expected nil, got %v", spans)
+		t.Errorf("got %v, want nil", spans)
 	}
 }
 
@@ -107,7 +107,7 @@ func TestDetectFences_JSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(parsed) != 1 {
-		t.Fatalf("expected 1, got %d", len(parsed))
+		t.Fatalf("got %d, want 1", len(parsed))
 	}
 	fields := parsed[0]
 	for _, key := range []string{"start", "end", "openLine", "marker", "indent"} {
@@ -166,7 +166,7 @@ func TestMatchFenceLine_NotFence(t *testing.T) {
 func TestMatchFenceLine_LongMarker(t *testing.T) {
 	_, marker, _ := matchFenceLine("``````")
 	if marker != "``````" {
-		t.Errorf("expected 6 backticks, got %q", marker)
+		t.Errorf("got %q, want 6 backticks", marker)
 	}
 }
 
@@ -177,14 +177,14 @@ func TestMatchFenceLine_LongMarker(t *testing.T) {
 func TestPreprocessSpoilers_NoDelimiters(t *testing.T) {
 	result := preprocessSpoilers("hello world")
 	if result != "hello world" {
-		t.Errorf("expected passthrough, got %q", result)
+		t.Errorf("got %q, want passthrough", result)
 	}
 }
 
 func TestPreprocessSpoilers_SingleDelimiter(t *testing.T) {
 	result := preprocessSpoilers("hello || world")
 	if result != "hello || world" {
-		t.Errorf("expected passthrough for single ||, got %q", result)
+		t.Errorf("got %q, want passthrough for single ||", result)
 	}
 }
 
@@ -231,6 +231,6 @@ func TestPreprocessSpoilers_OddDelimiters(t *testing.T) {
 		remaining = remaining[idx+len(sentinelClose):]
 	}
 	if openCount != 1 || closeCount != 1 {
-		t.Errorf("expected 1 open + 1 close, got %d + %d", openCount, closeCount)
+		t.Errorf("got %d + %d, want 1 open + 1 close", openCount, closeCount)
 	}
 }

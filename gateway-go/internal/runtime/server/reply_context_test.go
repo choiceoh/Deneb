@@ -137,7 +137,7 @@ func TestExtractReplyContext_NoSender(t *testing.T) {
 		t.Fatal("expected non-nil reply context")
 	}
 	if rc.ReplyToSender != "" {
-		t.Errorf("expected empty sender, got %q", rc.ReplyToSender)
+		t.Errorf("got %q, want empty sender", rc.ReplyToSender)
 	}
 }
 

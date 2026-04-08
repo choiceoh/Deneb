@@ -17,7 +17,7 @@ func TestFindCatalogTemplate(t *testing.T) {
 		t.Fatal("expected to find gpt-4")
 	}
 	if result.ID != "gpt-4" {
-		t.Errorf("expected ID 'gpt-4', got %q", result.ID)
+		t.Errorf("got %q, want ID 'gpt-4'", result.ID)
 	}
 
 	// First matching template wins.
@@ -26,13 +26,13 @@ func TestFindCatalogTemplate(t *testing.T) {
 		t.Fatal("expected to find gpt-3.5-turbo")
 	}
 	if result2.ID != "gpt-3.5-turbo" {
-		t.Errorf("expected ID 'gpt-3.5-turbo', got %q", result2.ID)
+		t.Errorf("got %q, want ID 'gpt-3.5-turbo'", result2.ID)
 	}
 
 	// Not found.
 	result3 := FindCatalogTemplate(entries, "openai", []string{"nonexistent"})
 	if result3 != nil {
-		t.Errorf("expected nil, got %v", result3)
+		t.Errorf("got %v, want nil", result3)
 	}
 
 	// Different provider.
@@ -45,12 +45,12 @@ func TestFindCatalogTemplate(t *testing.T) {
 func TestFindCatalogTemplateEmpty(t *testing.T) {
 	result := FindCatalogTemplate(nil, "openai", []string{"gpt-4"})
 	if result != nil {
-		t.Errorf("expected nil for empty entries, got %v", result)
+		t.Errorf("got %v, want nil for empty entries", result)
 	}
 
 	result2 := FindCatalogTemplate([]CatalogTemplateEntry{}, "openai", nil)
 	if result2 != nil {
-		t.Errorf("expected nil for empty template IDs, got %v", result2)
+		t.Errorf("got %v, want nil for empty template IDs", result2)
 	}
 }
 
@@ -64,7 +64,7 @@ func TestBuildSingleProviderAPIKeyCatalog(t *testing.T) {
 		},
 	})
 	if result != nil {
-		t.Errorf("expected nil with empty API key, got %v", result)
+		t.Errorf("got %v, want nil with empty API key", result)
 	}
 
 	// With API key.
@@ -79,10 +79,10 @@ func TestBuildSingleProviderAPIKeyCatalog(t *testing.T) {
 		t.Fatal("expected non-nil result with API key")
 	}
 	if result2.Provider.APIKey != "sk-test-key" {
-		t.Errorf("expected API key 'sk-test-key', got %q", result2.Provider.APIKey)
+		t.Errorf("got %q, want API key 'sk-test-key'", result2.Provider.APIKey)
 	}
 	if result2.Provider.BaseURL != "https://api.openai.com" {
-		t.Errorf("expected base URL from builder, got %q", result2.Provider.BaseURL)
+		t.Errorf("got %q, want base URL from builder", result2.Provider.BaseURL)
 	}
 }
 
@@ -112,7 +112,7 @@ func TestBuildSingleProviderAPIKeyCatalogWithExplicitBaseURL(t *testing.T) {
 	}
 	// Explicit baseUrl overrides the builder's.
 	if result.Provider.BaseURL != "https://custom.api.com" {
-		t.Errorf("expected explicit base URL, got %q", result.Provider.BaseURL)
+		t.Errorf("got %q, want explicit base URL", result.Provider.BaseURL)
 	}
 }
 
@@ -129,7 +129,7 @@ func TestBuildPairedProviderAPIKeyCatalog(t *testing.T) {
 		},
 	})
 	if result != nil {
-		t.Errorf("expected nil with empty API key, got %v", result)
+		t.Errorf("got %v, want nil with empty API key", result)
 	}
 
 	// With API key.
@@ -147,7 +147,7 @@ func TestBuildPairedProviderAPIKeyCatalog(t *testing.T) {
 		t.Fatal("expected non-nil result with API key")
 	}
 	if len(result2.Providers) != 2 {
-		t.Fatalf("expected 2 providers, got %d", len(result2.Providers))
+		t.Fatalf("got %d, want 2 providers", len(result2.Providers))
 	}
 	for id, p := range result2.Providers {
 		if p.APIKey != "vol-key" {

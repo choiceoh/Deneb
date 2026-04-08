@@ -11,13 +11,13 @@ func TestParseFullInlineDirectives_WithExec(t *testing.T) {
 		t.Fatal("expected think directive")
 	}
 	if result.ThinkLevel != types.ThinkHigh {
-		t.Fatalf("expected types.ThinkHigh, got %q", result.ThinkLevel)
+		t.Fatalf("got %q, want types.ThinkHigh", result.ThinkLevel)
 	}
 	if !result.HasExecDirective {
 		t.Fatal("expected exec directive")
 	}
 	if result.ExecHost != ExecHostSandbox {
-		t.Fatalf("expected host=sandbox, got %q", result.ExecHost)
+		t.Fatalf("got %q, want host=sandbox", result.ExecHost)
 	}
 	if result.Cleaned != "hello" {
 		t.Fatalf("unexpected cleaned: %q", result.Cleaned)
@@ -59,13 +59,13 @@ func TestParseFullInlineDirectives_ExecWithMultipleOptions(t *testing.T) {
 		t.Fatal("expected exec directive")
 	}
 	if result.ExecHost != ExecHostSandbox {
-		t.Fatalf("expected host=sandbox, got %q", result.ExecHost)
+		t.Fatalf("got %q, want host=sandbox", result.ExecHost)
 	}
 	if result.ExecSecurity != ExecSecurityFull {
-		t.Fatalf("expected security=full, got %q", result.ExecSecurity)
+		t.Fatalf("got %q, want security=full", result.ExecSecurity)
 	}
 	if result.ExecAsk != ExecAskAlways {
-		t.Fatalf("expected ask=always, got %q", result.ExecAsk)
+		t.Fatalf("got %q, want ask=always", result.ExecAsk)
 	}
 	if !result.HasExecOptions {
 		t.Fatal("expected HasExecOptions")

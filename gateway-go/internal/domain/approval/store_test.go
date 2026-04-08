@@ -19,7 +19,7 @@ func TestCreateRequest(t *testing.T) {
 		t.Fatal("expected non-empty ID")
 	}
 	if req.Command != "rm -rf /" {
-		t.Fatalf("expected command 'rm -rf /', got %q", req.Command)
+		t.Fatalf("got %q, want command 'rm -rf /'", req.Command)
 	}
 	if req.Decision != nil {
 		t.Fatal("expected nil decision on new request")
@@ -36,7 +36,7 @@ func TestCreateRequestWithCustomID(t *testing.T) {
 		Command: "ls",
 	})
 	if req.ID != "custom-id" {
-		t.Fatalf("expected ID 'custom-id', got %q", req.ID)
+		t.Fatalf("got %q, want ID 'custom-id'", req.ID)
 	}
 }
 
@@ -46,10 +46,10 @@ func TestGetRequest(t *testing.T) {
 
 	got := s.Get(req.ID)
 	if got == nil {
-		t.Fatal("expected request, got nil")
+		t.Fatal("got nil, want request")
 	}
 	if got.Command != "echo hello" {
-		t.Fatalf("expected command 'echo hello', got %q", got.Command)
+		t.Fatalf("got %q, want command 'echo hello'", got.Command)
 	}
 
 	// Get returns a copy.
@@ -79,7 +79,7 @@ func TestResolve(t *testing.T) {
 		t.Fatal("expected decision to be set")
 	}
 	if *got.Decision != DecisionAllowOnce {
-		t.Fatalf("expected allow-once, got %v", *got.Decision)
+		t.Fatalf("got %v, want allow-once", *got.Decision)
 	}
 	if got.ResolvedAtMs == nil {
 		t.Fatal("expected resolvedAtMs to be set")
@@ -150,16 +150,16 @@ func TestGlobalSnapshot(t *testing.T) {
 		t.Fatal("expected default global snapshot")
 	}
 	if snap.File.Version != 1 {
-		t.Fatalf("expected version 1, got %d", snap.File.Version)
+		t.Fatalf("got %d, want version 1", snap.File.Version)
 	}
 
 	s.SetGlobalSnapshot(ApprovalsFile{Version: 2, GlobalDeny: []string{"rm"}}, "hash123")
 	snap = s.GlobalSnapshot()
 	if snap.File.Version != 2 {
-		t.Fatalf("expected version 2, got %d", snap.File.Version)
+		t.Fatalf("got %d, want version 2", snap.File.Version)
 	}
 	if snap.Hash != "hash123" {
-		t.Fatalf("expected hash 'hash123', got %q", snap.Hash)
+		t.Fatalf("got %q, want hash 'hash123'", snap.Hash)
 	}
 }
 
@@ -172,7 +172,7 @@ func TestCleanup(t *testing.T) {
 	time.Sleep(5 * time.Millisecond)
 	removed := s.Cleanup()
 	if removed != 1 {
-		t.Fatalf("expected 1 removed, got %d", removed)
+		t.Fatalf("got %d, want 1 removed", removed)
 	}
 }
 

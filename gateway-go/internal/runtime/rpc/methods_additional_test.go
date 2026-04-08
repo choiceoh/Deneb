@@ -22,16 +22,16 @@ func TestUnmarshalParamsErrors(t *testing.T) {
 func TestTruncateForError_LongInput(t *testing.T) {
 	short := "short"
 	if got := truncateForError(short); got != short {
-		t.Fatalf("expected unchanged short string, got %q", got)
+		t.Fatalf("got %q, want unchanged short string", got)
 	}
 
 	long := strings.Repeat("k", maxKeyInErrorMsg+10)
 	got := truncateForError(long)
 	if !strings.HasSuffix(got, "...") {
-		t.Fatalf("expected ellipsis suffix, got %q", got)
+		t.Fatalf("got %q, want ellipsis suffix", got)
 	}
 	if len(got) != maxKeyInErrorMsg+3 {
-		t.Fatalf("expected length %d, got %d", maxKeyInErrorMsg+3, len(got))
+		t.Fatalf("got %d, want length %d", len(got), maxKeyInErrorMsg+3)
 	}
 }
 
@@ -43,12 +43,12 @@ func TestSessionsGetMissingKeyAndSuccess(t *testing.T) {
 
 	resp := dispatch(t, d, "sessions.get", map[string]any{})
 	if resp.OK || resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
-		t.Fatalf("expected missing param error, got %+v", resp)
+		t.Fatalf("got %+v, want missing param error", resp)
 	}
 
 	resp = dispatch(t, d, "sessions.get", map[string]any{"key": "abc"})
 	if !resp.OK {
-		t.Fatalf("expected success, got error %+v", resp.Error)
+		t.Fatalf("got error %+v, want success", resp.Error)
 	}
 }
 
@@ -58,18 +58,18 @@ func TestTelegramGetMissingAndNotFound(t *testing.T) {
 
 	missing := dispatch(t, d, "telegram.get", map[string]any{})
 	if missing.OK || missing.Error == nil || missing.Error.Code != protocol.ErrMissingParam {
-		t.Fatalf("expected missing param error, got %+v", missing)
+		t.Fatalf("got %+v, want missing param error", missing)
 	}
 
 	notFound := dispatch(t, d, "telegram.get", map[string]any{"id": "nope"})
 	if notFound.OK || notFound.Error == nil || notFound.Error.Code != protocol.ErrNotFound {
-		t.Fatalf("expected not found error, got %+v", notFound)
+		t.Fatalf("got %+v, want not found error", notFound)
 	}
 
 	// Without TelegramPlugin set, "telegram" should also be not found.
 	notFound = dispatch(t, d, "telegram.get", map[string]any{"id": "telegram"})
 	if notFound.OK || notFound.Error == nil || notFound.Error.Code != protocol.ErrNotFound {
-		t.Fatalf("expected not found for telegram without plugin, got %+v", notFound)
+		t.Fatalf("got %+v, want not found for telegram without plugin", notFound)
 	}
 }
 
@@ -78,13 +78,13 @@ func TestSystemInfoUnknownVersion(t *testing.T) {
 	RegisterBuiltinMethods(d, Deps{Sessions: session.NewManager()})
 	resp := dispatch(t, d, "system.info", nil)
 	if !resp.OK {
-		t.Fatalf("expected success, got %+v", resp.Error)
+		t.Fatalf("got %+v, want success", resp.Error)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(resp.Payload, &payload); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 	if payload["version"] != "unknown" {
-		t.Fatalf("expected unknown version fallback, got %v", payload["version"])
+		t.Fatalf("got %v, want unknown version fallback", payload["version"])
 	}
 }

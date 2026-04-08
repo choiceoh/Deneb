@@ -68,7 +68,7 @@ func TestDecodeBase64URL_Invalid(t *testing.T) {
 	// Invalid base64 should return the original string.
 	result := decodeBase64URL("not-valid-base64!!!")
 	if result != "not-valid-base64!!!" {
-		t.Errorf("expected original string for invalid base64, got %q", result)
+		t.Errorf("got %q, want original string for invalid base64", result)
 	}
 }
 
@@ -115,13 +115,13 @@ func TestExtractBody_Multipart_FallsBackToHTML(t *testing.T) {
 	}
 	body := extractBody(p)
 	if body == "" {
-		t.Error("expected HTML fallback body, got empty")
+		t.Error("got empty, want HTML fallback body")
 	}
 }
 
 func TestExtractBody_Nil(t *testing.T) {
 	if body := extractBody(nil); body != "" {
-		t.Errorf("expected empty for nil payload, got %q", body)
+		t.Errorf("got %q, want empty for nil payload", body)
 	}
 }
 
@@ -145,7 +145,7 @@ func TestFormatSearchResults(t *testing.T) {
 
 func TestFormatSearchResults_Empty(t *testing.T) {
 	if result := FormatSearchResults(nil); result != "" {
-		t.Errorf("expected empty, got %q", result)
+		t.Errorf("got %q, want empty", result)
 	}
 }
 
@@ -197,6 +197,6 @@ func TestFormatLabels(t *testing.T) {
 
 func TestFormatLabels_Empty(t *testing.T) {
 	if result := FormatLabels(nil); result != "" {
-		t.Errorf("expected empty, got %q", result)
+		t.Errorf("got %q, want empty", result)
 	}
 }

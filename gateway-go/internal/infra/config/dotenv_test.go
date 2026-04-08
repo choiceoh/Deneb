@@ -78,7 +78,7 @@ func TestLoadDotenvFilesNoOverride(t *testing.T) {
 
 	pairs := testutil.Must(parseDotenv(envFile))
 	if pairs[key] != "replaced" {
-		t.Fatalf("expected parsed value 'replaced', got %q", pairs[key])
+		t.Fatalf("got %q, want parsed value 'replaced'", pairs[key])
 	}
 
 	// Simulate the no-override logic from LoadDotenvFiles.

@@ -27,7 +27,7 @@ func TestBlockReplyCoalescer_BasicFlush(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if len(flushed) != 1 {
-		t.Fatalf("expected 1 flushed payload, got %d", len(flushed))
+		t.Fatalf("got %d, want 1 flushed payload", len(flushed))
 	}
 	if flushed[0].Text != "hello world this is a test" {
 		t.Fatalf("unexpected text: %q", flushed[0].Text)
@@ -49,7 +49,7 @@ func TestBlockReplyCoalescer_MediaFlushesImmediately(t *testing.T) {
 
 	// The buffered text should have been flushed before media, and media sent directly.
 	if len(flushed) < 2 {
-		t.Fatalf("expected at least 2 flushed payloads, got %d", len(flushed))
+		t.Fatalf("got %d, want at least 2 flushed payloads", len(flushed))
 	}
 }
 
@@ -69,10 +69,10 @@ func TestBlockReplyCoalescer_CoalescesText(t *testing.T) {
 	c.Flush(true)
 
 	if len(flushed) != 1 {
-		t.Fatalf("expected 1 flushed payload (coalesced), got %d", len(flushed))
+		t.Fatalf("got %d, want 1 flushed payload (coalesced)", len(flushed))
 	}
 	if flushed[0].Text != "hello\nworld" {
-		t.Fatalf("expected coalesced text, got %q", flushed[0].Text)
+		t.Fatalf("got %q, want coalesced text", flushed[0].Text)
 	}
 }
 
@@ -91,7 +91,7 @@ func TestBlockReplyCoalescer_MaxCharsForceFlush(t *testing.T) {
 
 	// Should flush when exceeding maxChars.
 	if len(flushed) < 1 {
-		t.Fatalf("expected at least 1 flushed payload, got %d", len(flushed))
+		t.Fatalf("got %d, want at least 1 flushed payload", len(flushed))
 	}
 }
 
@@ -110,7 +110,7 @@ func TestBlockReplyCoalescer_FlushOnEnqueue(t *testing.T) {
 	c.Enqueue(types.ReplyPayload{Text: "two"})
 
 	if len(flushed) != 2 {
-		t.Fatalf("expected 2 flushed payloads (flush on enqueue), got %d", len(flushed))
+		t.Fatalf("got %d, want 2 flushed payloads (flush on enqueue)", len(flushed))
 	}
 }
 
@@ -130,7 +130,7 @@ func TestBlockReplyCoalescer_ReplyToConflict(t *testing.T) {
 
 	// Should flush separately due to reply-to conflict.
 	if len(flushed) != 2 {
-		t.Fatalf("expected 2 flushed payloads (reply-to conflict), got %d", len(flushed))
+		t.Fatalf("got %d, want 2 flushed payloads (reply-to conflict)", len(flushed))
 	}
 }
 
@@ -152,7 +152,7 @@ func TestBlockReplyCoalescer_Abort(t *testing.T) {
 
 	// Only the first payload should be flushed (buffer cleared on abort).
 	if len(flushed) > 1 {
-		t.Fatalf("expected at most 1 flushed payload, got %d", len(flushed))
+		t.Fatalf("got %d, want at most 1 flushed payload", len(flushed))
 	}
 }
 
@@ -180,7 +180,7 @@ func TestBlockReplyCoalescer_IdleTimer(t *testing.T) {
 	mu.Unlock()
 
 	if count != 1 {
-		t.Fatalf("expected 1 flushed payload from idle timer, got %d", count)
+		t.Fatalf("got %d, want 1 flushed payload from idle timer", count)
 	}
 	c.Stop()
 }

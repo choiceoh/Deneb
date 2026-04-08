@@ -23,7 +23,7 @@ func TestDispatchFromConfig_AbortTrigger(t *testing.T) {
 		t.Fatal("expected abort to be handled")
 	}
 	if len(result.Payloads) != 0 {
-		t.Fatalf("expected no payloads for abort, got %d", len(result.Payloads))
+		t.Fatalf("got %d, want no payloads for abort", len(result.Payloads))
 	}
 	if !mem.WasRecentlyAborted("sess-1", 5000) {
 		t.Fatal("expected session to be recorded as recently aborted")
@@ -78,7 +78,7 @@ func TestDispatchFromConfig_CommandRouting(t *testing.T) {
 		t.Fatal("expected command to be handled")
 	}
 	if len(result.Payloads) == 0 || result.Payloads[0].Text != "pong" {
-		t.Fatalf("expected 'pong' payload, got %v", result.Payloads)
+		t.Fatalf("got %v, want 'pong' payload", result.Payloads)
 	}
 }
 
@@ -152,7 +152,7 @@ func TestFollowupRunner_NoFollowup(t *testing.T) {
 	}
 	payloads := testutil.Must(runner.RunFollowups(context.Background(), initial, firstResult))
 	if len(payloads) != 1 || payloads[0].Text != "hello" {
-		t.Fatalf("expected single payload 'hello', got %v", payloads)
+		t.Fatalf("got %v, want single payload 'hello'", payloads)
 	}
 }
 

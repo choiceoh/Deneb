@@ -16,7 +16,7 @@ func TestFetchCache_HitMiss(t *testing.T) {
 	c.Put("https://example.com", "hello")
 	got, ok := c.Get("https://example.com")
 	if !ok || got != "hello" {
-		t.Fatalf("expected hit with 'hello', got %q ok=%v", got, ok)
+		t.Fatalf("got %q ok=%v, want hit with 'hello'", got, ok)
 	}
 
 	// Different key is a miss.
@@ -71,6 +71,6 @@ func TestFetchCache_UpdateExisting(t *testing.T) {
 
 	got, ok := c.Get("https://a.com")
 	if !ok || got != "v2" {
-		t.Fatalf("expected updated value 'v2', got %q", got)
+		t.Fatalf("got %q, want updated value 'v2'", got)
 	}
 }

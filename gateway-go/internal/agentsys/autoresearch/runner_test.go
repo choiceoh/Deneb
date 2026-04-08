@@ -165,7 +165,7 @@ func TestAppendAndReadResults(t *testing.T) {
 	// Should have header + 2 data rows.
 	lines := splitNonEmpty(content)
 	if len(lines) != 3 {
-		t.Errorf("expected 3 lines (header + 2 rows), got %d:\n%s", len(lines), content)
+		t.Errorf("got %d:\n%s, want 3 lines (header + 2 rows)", len(lines), content)
 	}
 }
 
@@ -185,7 +185,7 @@ func TestParseResults(t *testing.T) {
 
 	parsed := testutil.Must(ParseResults(dir))
 	if len(parsed) != 3 {
-		t.Fatalf("expected 3 rows, got %d", len(parsed))
+		t.Fatalf("got %d, want 3 rows", len(parsed))
 	}
 	if parsed[0].Hypothesis != "baseline" {
 		t.Errorf("first row hypothesis = %q, want baseline", parsed[0].Hypothesis)
@@ -332,7 +332,7 @@ lr = 0.002
 		t.Errorf("hypothesis = %q", hypothesis)
 	}
 	if len(changes) != 1 {
-		t.Fatalf("expected 1 change, got %d", len(changes))
+		t.Fatalf("got %d, want 1 change", len(changes))
 	}
 	content, ok := changes["train.py"]
 	if !ok {
@@ -366,7 +366,7 @@ new model content
 `
 	_, changes := parseLLMResponse(resp, []string{"train.py", "model.py"})
 	if len(changes) != 2 {
-		t.Errorf("expected 2 changes, got %d", len(changes))
+		t.Errorf("got %d, want 2 changes", len(changes))
 	}
 }
 

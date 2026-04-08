@@ -11,7 +11,7 @@ func TestEstimateInputTokens(t *testing.T) {
 	req := SimpleRequest("system prompt", "안녕하세요", 100, PriorityCritical, "test")
 	tokens := estimateInputTokens(&req)
 	if tokens < 1 {
-		t.Errorf("expected positive token estimate, got %d", tokens)
+		t.Errorf("got %d, want positive token estimate", tokens)
 	}
 }
 
@@ -29,7 +29,7 @@ func TestResponseCache(t *testing.T) {
 	cache.Put(&req, "world")
 	text, ok := cache.Get(&req, 0)
 	if !ok || text != "world" {
-		t.Fatalf("expected cache hit with 'world', got ok=%v text=%q", ok, text)
+		t.Fatalf("got ok=%v text=%q, want cache hit with 'world'", ok, text)
 	}
 
 	// Different request = miss.
@@ -60,7 +60,7 @@ func TestResponseCacheEviction(t *testing.T) {
 	}
 
 	if cache.Len() > 3 {
-		t.Fatalf("expected max 3 entries, got %d", cache.Len())
+		t.Fatalf("got %d, want max 3 entries", cache.Len())
 	}
 }
 
@@ -86,7 +86,7 @@ func TestPriorityQueue(t *testing.T) {
 	close(done) // non-blocking pop
 	first := q.PopWait(done)
 	if first == nil || first.req.CallerTag != "crit" {
-		t.Fatalf("expected critical first, got %v", first)
+		t.Fatalf("got %v, want critical first", first)
 	}
 }
 
@@ -124,14 +124,14 @@ func TestQueueDropOldestBackground(t *testing.T) {
 	select {
 	case res := <-bg1Ch:
 		if res.err != ErrQueueFull {
-			t.Fatalf("expected ErrQueueFull, got %v", res.err)
+			t.Fatalf("got %v, want ErrQueueFull", res.err)
 		}
 	default:
 		t.Fatal("bg1 should have received error")
 	}
 
 	if q.Len() != 2 {
-		t.Fatalf("expected 2 remaining, got %d", q.Len())
+		t.Fatalf("got %d, want 2 remaining", q.Len())
 	}
 }
 
@@ -176,7 +176,7 @@ func TestSubmit_UnhealthyRejectsBackground(t *testing.T) {
 	req := SimpleRequest("sys", "test", 100, PriorityBackground, "test")
 	_, err := h.Submit(context.Background(), req)
 	if err != ErrUnhealthy {
-		t.Fatalf("expected ErrUnhealthy for background on unhealthy hub, got %v", err)
+		t.Fatalf("got %v, want ErrUnhealthy for background on unhealthy hub", err)
 	}
 
 	h.cancel()

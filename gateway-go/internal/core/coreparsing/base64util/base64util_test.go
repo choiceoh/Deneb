@@ -8,47 +8,47 @@ import (
 
 func TestEstimate_Empty(t *testing.T) {
 	if got := Estimate(""); got != 0 {
-		t.Errorf("expected 0, got %d", got)
+		t.Errorf("got %d, want 0", got)
 	}
 	if got := Estimate("   "); got != 0 {
-		t.Errorf("expected 0 for whitespace, got %d", got)
+		t.Errorf("got %d, want 0 for whitespace", got)
 	}
 }
 
 func TestEstimate_NoPadding(t *testing.T) {
 	// "AAAA" = 4 base64 chars -> 3 decoded bytes.
 	if got := Estimate("AAAA"); got != 3 {
-		t.Errorf("expected 3, got %d", got)
+		t.Errorf("got %d, want 3", got)
 	}
 }
 
 func TestEstimate_SinglePadding(t *testing.T) {
 	// "AAA=" = 4 chars, 1 padding -> 2 decoded bytes.
 	if got := Estimate("AAA="); got != 2 {
-		t.Errorf("expected 2, got %d", got)
+		t.Errorf("got %d, want 2", got)
 	}
 }
 
 func TestEstimate_DoublePadding(t *testing.T) {
 	// "AA==" = 4 chars, 2 padding -> 1 decoded byte.
 	if got := Estimate("AA=="); got != 1 {
-		t.Errorf("expected 1, got %d", got)
+		t.Errorf("got %d, want 1", got)
 	}
 }
 
 func TestEstimate_WithWhitespace(t *testing.T) {
 	if got := Estimate("  AA AA  "); got != Estimate("AAAA") {
-		t.Errorf("expected same as AAAA, got %d", got)
+		t.Errorf("got %d, want same as AAAA", got)
 	}
 	if got := Estimate("A A\nA\tA"); got != 3 {
-		t.Errorf("expected 3, got %d", got)
+		t.Errorf("got %d, want 3", got)
 	}
 }
 
 func TestEstimate_URLSafe(t *testing.T) {
 	// URL-safe chars don't affect size estimation (same count).
 	if got := Estimate("ab-_"); got != 3 {
-		t.Errorf("expected 3, got %d", got)
+		t.Errorf("got %d, want 3", got)
 	}
 }
 
@@ -78,12 +78,12 @@ func TestCanonicalize_URLSafe(t *testing.T) {
 	// URL-safe uses '-' for '+' and '_' for '/'.
 	got := testutil.Must(Canonicalize("ab-_"))
 	if got != "ab+/" {
-		t.Errorf("expected ab+/, got %s", got)
+		t.Errorf("got %s, want ab+/", got)
 	}
 	// Mixed standard and URL-safe.
 	got = testutil.Must(Canonicalize("ab+_"))
 	if got != "ab+/" {
-		t.Errorf("expected ab+/, got %s", got)
+		t.Errorf("got %s, want ab+/", got)
 	}
 }
 
@@ -127,7 +127,7 @@ func TestEstimate_MixedURLSafe(t *testing.T) {
 
 func TestEstimate_TabsAndNewlines(t *testing.T) {
 	if got := Estimate("\tAA\n==\r"); got != 1 {
-		t.Errorf("expected 1, got %d", got)
+		t.Errorf("got %d, want 1", got)
 	}
 }
 
@@ -136,7 +136,7 @@ func TestEstimate_TabsAndNewlines(t *testing.T) {
 func TestCanonicalize_MixedStandardAndURLSafe(t *testing.T) {
 	got := testutil.Must(Canonicalize("ab+_"))
 	if got != "ab+/" {
-		t.Errorf("expected ab+/, got %s", got)
+		t.Errorf("got %s, want ab+/", got)
 	}
 }
 

@@ -116,7 +116,7 @@ func TestPreSerialize(t *testing.T) {
 		t.Fatalf("RawInputSchema is not valid JSON: %v", err)
 	}
 	if parsed["type"] != "object" {
-		t.Errorf("expected type=object, got %v", parsed["type"])
+		t.Errorf("got %v, want type=object", parsed["type"])
 	}
 	props, ok := parsed["properties"].(map[string]any)
 	if !ok {
@@ -166,6 +166,6 @@ func TestTool_MarshalJSON_PreSerialized(t *testing.T) {
 		t.Fatalf("input_schema is not valid JSON: %v", err)
 	}
 	if schema["type"] != "object" {
-		t.Errorf("expected type=object in input_schema, got %v", schema["type"])
+		t.Errorf("got %v, want type=object in input_schema", schema["type"])
 	}
 }

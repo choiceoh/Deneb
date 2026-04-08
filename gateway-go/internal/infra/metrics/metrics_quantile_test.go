@@ -36,7 +36,7 @@ func TestHistogramQuantilesEmpty(t *testing.T) {
 	h := NewHistogram("test_empty", "test", []float64{1, 5, 10}, "method")
 	qs := h.Quantiles([]float64{0.50}, "nonexistent")
 	if qs != nil {
-		t.Errorf("expected nil for missing series, got %v", qs)
+		t.Errorf("got %v, want nil for missing series", qs)
 	}
 }
 

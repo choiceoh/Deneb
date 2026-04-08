@@ -27,7 +27,7 @@ func TestResolveStateDirOverride(t *testing.T) {
 
 	dir := ResolveStateDir()
 	if dir != tmp {
-		t.Errorf("expected %q, got %q", tmp, dir)
+		t.Errorf("got %q, want %q", dir, tmp)
 	}
 }
 
@@ -41,7 +41,7 @@ func TestResolveConfigPathOverride(t *testing.T) {
 
 	got := ResolveConfigPath()
 	if got != cfgPath {
-		t.Errorf("expected %q, got %q", cfgPath, got)
+		t.Errorf("got %q, want %q", got, cfgPath)
 	}
 }
 
@@ -61,7 +61,7 @@ func TestLoadConfigMissing(t *testing.T) {
 		t.Fatal("expected gateway defaults")
 	}
 	if snap.Config.Gateway.Bind != "loopback" {
-		t.Errorf("expected bind=loopback, got %q", snap.Config.Gateway.Bind)
+		t.Errorf("got %q, want bind=loopback", snap.Config.Gateway.Bind)
 	}
 	if snap.Config.Gateway.Auth == nil || snap.Config.Gateway.Auth.Mode != "token" {
 		t.Error("expected auth.mode=token default")
@@ -102,10 +102,10 @@ func TestLoadConfigValid(t *testing.T) {
 		t.Errorf("expected port=%d", port)
 	}
 	if snap.Config.Gateway.Bind != "lan" {
-		t.Errorf("expected bind=lan, got %q", snap.Config.Gateway.Bind)
+		t.Errorf("got %q, want bind=lan", snap.Config.Gateway.Bind)
 	}
 	if snap.Config.Gateway.Auth.Mode != "password" {
-		t.Errorf("expected auth.mode=password, got %q", snap.Config.Gateway.Auth.Mode)
+		t.Errorf("got %q, want auth.mode=password", snap.Config.Gateway.Auth.Mode)
 	}
 	if snap.Config.Gateway.Auth.Password != "test-pw" {
 		t.Errorf("expected password=test-pw")
@@ -151,7 +151,7 @@ func TestResolveGatewayPort(t *testing.T) {
 	// Default.
 	port := ResolveGatewayPort(nil)
 	if port != DefaultGatewayPort {
-		t.Errorf("expected %d, got %d", DefaultGatewayPort, port)
+		t.Errorf("got %d, want %d", port, DefaultGatewayPort)
 	}
 
 	// Config override.
@@ -159,14 +159,14 @@ func TestResolveGatewayPort(t *testing.T) {
 	cfg := &DenebConfig{Gateway: &GatewayConfig{Port: &p}}
 	port = ResolveGatewayPort(cfg)
 	if port != 12345 {
-		t.Errorf("expected 12345, got %d", port)
+		t.Errorf("got %d, want 12345", port)
 	}
 
 	// Env override takes precedence.
 	t.Setenv("DENEB_GATEWAY_PORT", "54321")
 	port = ResolveGatewayPort(cfg)
 	if port != 54321 {
-		t.Errorf("expected 54321, got %d", port)
+		t.Errorf("got %d, want 54321", port)
 	}
 }
 
@@ -201,12 +201,12 @@ func TestResolveAgentWorkspaceDirNilConfig(t *testing.T) {
 		t.Fatal("expected non-empty workspace dir")
 	}
 	if filepath.Base(dir) != "workspace" {
-		t.Errorf("expected basename 'workspace', got %q", filepath.Base(dir))
+		t.Errorf("got %q, want basename 'workspace'", filepath.Base(dir))
 	}
 	// Should be under ~/.deneb/workspace.
 	parent := filepath.Base(filepath.Dir(dir))
 	if parent != ".deneb" {
-		t.Errorf("expected parent '.deneb', got %q", parent)
+		t.Errorf("got %q, want parent '.deneb'", parent)
 	}
 }
 
@@ -220,7 +220,7 @@ func TestResolveAgentWorkspaceDirFromDefaults(t *testing.T) {
 	}
 	dir := ResolveAgentWorkspaceDir(cfg)
 	if dir != "/srv/my-workspace" {
-		t.Errorf("expected /srv/my-workspace, got %q", dir)
+		t.Errorf("got %q, want /srv/my-workspace", dir)
 	}
 }
 
@@ -239,7 +239,7 @@ func TestResolveAgentWorkspaceDirFromAgentList(t *testing.T) {
 	dir := ResolveAgentWorkspaceDir(cfg)
 	// Per-agent with default=true takes precedence over agents.defaults.workspace.
 	if dir != "/srv/main-workspace" {
-		t.Errorf("expected /srv/main-workspace, got %q", dir)
+		t.Errorf("got %q, want /srv/main-workspace", dir)
 	}
 }
 
@@ -247,7 +247,7 @@ func TestResolveAgentWorkspaceDirProfile(t *testing.T) {
 	t.Setenv("DENEB_PROFILE", "work")
 	dir := ResolveAgentWorkspaceDir(nil)
 	if filepath.Base(dir) != "workspace-work" {
-		t.Errorf("expected basename 'workspace-work', got %q", filepath.Base(dir))
+		t.Errorf("got %q, want basename 'workspace-work'", filepath.Base(dir))
 	}
 }
 
@@ -264,7 +264,7 @@ func TestResolveAgentWorkspaceDirHomeTilde(t *testing.T) {
 		t.Error("expected ~ to be expanded")
 	}
 	if !filepath.IsAbs(dir) {
-		t.Errorf("expected absolute path, got %q", dir)
+		t.Errorf("got %q, want absolute path", dir)
 	}
 }
 
@@ -280,6 +280,6 @@ func TestHashRaw(t *testing.T) {
 		t.Error("same input should produce same hash")
 	}
 	if len(h1) != 64 {
-		t.Errorf("expected 64-char hex hash, got %d chars", len(h1))
+		t.Errorf("got %d chars, want 64-char hex hash", len(h1))
 	}
 }

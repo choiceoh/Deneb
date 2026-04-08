@@ -37,13 +37,13 @@ func TestDaemon_StartStop(t *testing.T) {
 
 	status := d.Status()
 	if status.State != StateRunning {
-		t.Errorf("expected running, got %s", status.State)
+		t.Errorf("got %s, want running", status.State)
 	}
 	if status.Port != 18789 {
-		t.Errorf("expected port 18789, got %d", status.Port)
+		t.Errorf("got %d, want port 18789", status.Port)
 	}
 	if status.Version != "test" {
-		t.Errorf("expected version 'test', got %s", status.Version)
+		t.Errorf("got %s, want version 'test'", status.Version)
 	}
 
 	// PID file should exist.
@@ -102,13 +102,13 @@ func TestReadPIDFile(t *testing.T) {
 
 	info := testutil.Must(ReadPIDFile(pidFile))
 	if info.Port != 18789 {
-		t.Errorf("expected port 18789, got %d", info.Port)
+		t.Errorf("got %d, want port 18789", info.Port)
 	}
 	if info.Version != "1.0.0" {
-		t.Errorf("expected version 1.0.0, got %s", info.Version)
+		t.Errorf("got %s, want version 1.0.0", info.Version)
 	}
 	if info.PID != os.Getpid() {
-		t.Errorf("expected PID %d, got %d", os.Getpid(), info.PID)
+		t.Errorf("got %d, want PID %d", info.PID, os.Getpid())
 	}
 }
 
@@ -144,6 +144,6 @@ func TestCheckExistingDaemon_CurrentProcess(t *testing.T) {
 		t.Fatal("expected existing daemon info")
 	}
 	if info.PID != os.Getpid() {
-		t.Errorf("expected PID %d, got %d", os.Getpid(), info.PID)
+		t.Errorf("got %d, want PID %d", info.PID, os.Getpid())
 	}
 }

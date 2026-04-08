@@ -29,7 +29,7 @@ func TestBuildInboundMediaNote(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
 		got := BuildInboundMediaNote(nil, MediaNoteOptions{})
 		if got != "" {
-			t.Errorf("expected empty, got %q", got)
+			t.Errorf("got %q, want empty", got)
 		}
 	})
 
@@ -48,7 +48,7 @@ func TestBuildInboundMediaNote(t *testing.T) {
 			{MimeType: "audio/mp3", Name: "b.mp3"},
 		}, MediaNoteOptions{})
 		if !strings.Contains(got, "media attached") {
-			t.Errorf("expected multi-media note, got %q", got)
+			t.Errorf("got %q, want multi-media note", got)
 		}
 	})
 
@@ -57,7 +57,7 @@ func TestBuildInboundMediaNote(t *testing.T) {
 			{MimeType: "audio/ogg", Name: "voice.ogg"},
 		}, MediaNoteOptions{StripTranscribedAudio: true})
 		if got != "" {
-			t.Errorf("expected empty after stripping audio, got %q", got)
+			t.Errorf("got %q, want empty after stripping audio", got)
 		}
 	})
 
@@ -66,7 +66,7 @@ func TestBuildInboundMediaNote(t *testing.T) {
 			{MimeType: "image/png"},
 		}, MediaNoteOptions{SuppressMediaUnderstanding: true})
 		if got != "[1 media attached]" {
-			t.Errorf("expected count-only note, got %q", got)
+			t.Errorf("got %q, want count-only note", got)
 		}
 	})
 }

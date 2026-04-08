@@ -41,10 +41,10 @@ func TestUnmarshalParams_ValidJSON(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if out.Name != "alice" {
-		t.Fatalf("expected name=alice, got %s", out.Name)
+		t.Fatalf("got %s, want name=alice", out.Name)
 	}
 	if out.Age != 30 {
-		t.Fatalf("expected age=30, got %d", out.Age)
+		t.Fatalf("got %d, want age=30", out.Age)
 	}
 }
 
@@ -133,7 +133,7 @@ func TestRequireKey(t *testing.T) {
 					t.Fatal("expected OK=false")
 				}
 				if errResp.Error == nil || errResp.Error.Code != protocol.ErrMissingParam {
-					t.Fatalf("expected MISSING_PARAM error, got %+v", errResp.Error)
+					t.Fatalf("got %+v, want MISSING_PARAM error", errResp.Error)
 				}
 			} else {
 				if errResp != nil {
@@ -157,13 +157,13 @@ func TestErrMissingKey(t *testing.T) {
 		t.Fatal("expected OK=false")
 	}
 	if resp.ID != "req-42" {
-		t.Fatalf("expected ID=req-42, got %s", resp.ID)
+		t.Fatalf("got %s, want ID=req-42", resp.ID)
 	}
 	if resp.Error == nil {
 		t.Fatal("expected non-nil error")
 	}
 	if resp.Error.Code != protocol.ErrMissingParam {
-		t.Fatalf("expected code MISSING_PARAM, got %s", resp.Error.Code)
+		t.Fatalf("got %s, want code MISSING_PARAM", resp.Error.Code)
 	}
 }
 
@@ -177,15 +177,15 @@ func TestParamError(t *testing.T) {
 		t.Fatal("expected OK=false")
 	}
 	if resp.ID != "req-7" {
-		t.Fatalf("expected ID=req-7, got %s", resp.ID)
+		t.Fatalf("got %s, want ID=req-7", resp.ID)
 	}
 	if resp.Error == nil {
 		t.Fatal("expected non-nil error")
 	}
 	if resp.Error.Code != protocol.ErrInvalidRequest {
-		t.Fatalf("expected code INVALID_REQUEST, got %s", resp.Error.Code)
+		t.Fatalf("got %s, want code INVALID_REQUEST", resp.Error.Code)
 	}
 	if !strings.Contains(resp.Error.Message, "invalid params") {
-		t.Fatalf("expected message to contain 'invalid params', got %s", resp.Error.Message)
+		t.Fatalf("got %s, want message to contain 'invalid params'", resp.Error.Message)
 	}
 }

@@ -129,7 +129,7 @@ func TestParseCommandArgs(t *testing.T) {
 			t.Fatal("expected args")
 		}
 		if args.Values["command"] != "echo hello world" {
-			t.Errorf("expected 'echo hello world', got %q", args.Values["command"])
+			t.Errorf("got %q, want 'echo hello world'", args.Values["command"])
 		}
 	})
 

@@ -54,7 +54,7 @@ func TestValidateFrame_NegativeSeq(t *testing.T) {
 		t.Fatal("expected error for negative seq")
 	}
 	if !strings.Contains(err.Error(), "non-negative") {
-		t.Fatalf("expected non-negative error, got %v", err)
+		t.Fatalf("got %v, want non-negative error", err)
 	}
 }
 
@@ -75,7 +75,7 @@ func TestValidateFrame_OversizedID(t *testing.T) {
 		t.Fatal("expected error for oversized id")
 	}
 	if !strings.Contains(err.Error(), "maximum length") {
-		t.Fatalf("expected maximum length error, got %v", err)
+		t.Fatalf("got %v, want maximum length error", err)
 	}
 }
 

@@ -81,7 +81,7 @@ func TestThinkingRuntime_ResolveDefault_Builtin(t *testing.T) {
 	rt := NewThinkingRuntime()
 	level := rt.ResolveThinkingDefaultForModel("anthropic", "claude-opus-4.6", nil)
 	if level != types.ThinkAdaptive {
-		t.Errorf("expected adaptive for claude 4.6, got %q", level)
+		t.Errorf("got %q, want adaptive for claude 4.6", level)
 	}
 }
 
@@ -91,7 +91,7 @@ func TestThinkingRuntime_ResolveDefault_Plugin(t *testing.T) {
 
 	level := rt.ResolveThinkingDefaultForModel("custom", "model-x", nil)
 	if level != types.ThinkHigh {
-		t.Errorf("expected plugin to override: high, got %q", level)
+		t.Errorf("got %q, want plugin to override: high", level)
 	}
 }
 
@@ -113,7 +113,7 @@ func TestThinkingRuntime_ListLabels_Binary(t *testing.T) {
 	rt := NewThinkingRuntime()
 	labels := rt.ListThinkingLevelLabels("zai", "")
 	if len(labels) != 2 || labels[0] != "off" || labels[1] != "on" {
-		t.Errorf("expected [off, on] for binary provider, got %v", labels)
+		t.Errorf("got %v, want [off, on] for binary provider", labels)
 	}
 }
 

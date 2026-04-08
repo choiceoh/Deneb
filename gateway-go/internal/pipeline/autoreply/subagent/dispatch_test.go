@@ -70,25 +70,25 @@ func TestResolveSubagentTarget(t *testing.T) {
 	// By index.
 	entry, err := ResolveSubagentTarget(runs, "1")
 	if err != "" || entry == nil {
-		t.Fatalf("expected entry for index 1, got err=%q", err)
+		t.Fatalf("got err=%q, want entry for index 1", err)
 	}
 
 	// By label.
 	entry, err = ResolveSubagentTarget(runs, "alpha")
 	if err != "" || entry == nil || entry.Label != "alpha" {
-		t.Fatalf("expected alpha, got err=%q entry=%v", err, entry)
+		t.Fatalf("got err=%q entry=%v, want alpha", err, entry)
 	}
 
 	// By runId prefix.
 	entry, err = ResolveSubagentTarget(runs, "abc12345")
 	if err != "" || entry == nil || entry.RunID != "abc12345-long-id" {
-		t.Fatalf("expected abc12345, got err=%q", err)
+		t.Fatalf("got err=%q, want abc12345", err)
 	}
 
 	// By session key.
 	entry, err = ResolveSubagentTarget(runs, "key:sub:2")
 	if err != "" || entry == nil || entry.ChildSessionKey != "key:sub:2" {
-		t.Fatalf("expected key:sub:2, got err=%q", err)
+		t.Fatalf("got err=%q, want key:sub:2", err)
 	}
 
 	// Unknown.

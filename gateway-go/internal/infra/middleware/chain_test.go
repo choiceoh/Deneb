@@ -48,7 +48,7 @@ func TestChain_Order(t *testing.T) {
 
 	expected := []string{"m1-before", "m2-before", "m2-after", "m1-after"}
 	if len(order) != len(expected) {
-		t.Fatalf("expected %d calls, got %d", len(expected), len(order))
+		t.Fatalf("got %d, want %d calls", len(order), len(expected))
 	}
 	for i, v := range expected {
 		if order[i] != v {

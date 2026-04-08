@@ -22,13 +22,13 @@ func TestFollowupQueueRegistry_GetOrCreate(t *testing.T) {
 		t.Fatal("expected non-nil queue")
 	}
 	if q.Mode != types.FollowupModeCollect {
-		t.Errorf("expected mode=collect, got %s", q.Mode)
+		t.Errorf("got %s, want mode=collect", q.Mode)
 	}
 	if q.DebounceMs != 500 {
-		t.Errorf("expected debounce=500, got %d", q.DebounceMs)
+		t.Errorf("got %d, want debounce=500", q.DebounceMs)
 	}
 	if q.Cap != 10 {
-		t.Errorf("expected cap=10, got %d", q.Cap)
+		t.Errorf("got %d, want cap=10", q.Cap)
 	}
 
 	// Second call returns same object.
@@ -51,7 +51,7 @@ func TestFollowupQueueRegistry_Clear(t *testing.T) {
 
 	cleared := r.Clear("k")
 	if cleared != 3 {
-		t.Errorf("expected cleared=3, got %d", cleared)
+		t.Errorf("got %d, want cleared=3", cleared)
 	}
 	if r.Existing("k") != nil {
 		t.Error("expected queue to be deleted after clear")
@@ -68,7 +68,7 @@ func TestEnqueueFollowupRun_basic(t *testing.T) {
 		t.Error("expected enqueue to succeed")
 	}
 	if r.Depth("k") != 1 {
-		t.Errorf("expected depth=1, got %d", r.Depth("k"))
+		t.Errorf("got %d, want depth=1", r.Depth("k"))
 	}
 
 	// Duplicate should be rejected.
@@ -77,7 +77,7 @@ func TestEnqueueFollowupRun_basic(t *testing.T) {
 		t.Error("expected duplicate to be rejected")
 	}
 	if r.Depth("k") != 1 {
-		t.Errorf("expected depth=1 after dup, got %d", r.Depth("k"))
+		t.Errorf("got %d, want depth=1 after dup", r.Depth("k"))
 	}
 }
 
@@ -96,7 +96,7 @@ func TestEnqueueFollowupRun_summarizeDropPolicy(t *testing.T) {
 		t.Error("expected summarize-drop to reject")
 	}
 	if r.Depth("k") != 2 {
-		t.Errorf("expected depth=2, got %d", r.Depth("k"))
+		t.Errorf("got %d, want depth=2", r.Depth("k"))
 	}
 	// Check that the dropped item was summarized.
 	q := r.Existing("k")
@@ -104,10 +104,10 @@ func TestEnqueueFollowupRun_summarizeDropPolicy(t *testing.T) {
 		t.Fatal("expected queue to exist")
 	}
 	if q.DroppedCount != 1 {
-		t.Errorf("expected droppedCount=1, got %d", q.DroppedCount)
+		t.Errorf("got %d, want droppedCount=1", q.DroppedCount)
 	}
 	if len(q.SummaryLines) != 1 || q.SummaryLines[0] != "3" {
-		t.Errorf("expected summary line '3', got %v", q.SummaryLines)
+		t.Errorf("got %v, want summary line '3'", q.SummaryLines)
 	}
 }
 
@@ -191,10 +191,10 @@ func TestClearSessionQueues(t *testing.T) {
 
 	result := ClearSessionQueues(r, nil, []string{"k1", "k1", "k2"})
 	if result.FollowupCleared != 2 {
-		t.Errorf("expected followupCleared=2, got %d", result.FollowupCleared)
+		t.Errorf("got %d, want followupCleared=2", result.FollowupCleared)
 	}
 	if len(result.Keys) != 2 {
-		t.Errorf("expected 2 unique keys, got %d", len(result.Keys))
+		t.Errorf("got %d, want 2 unique keys", len(result.Keys))
 	}
 }
 
@@ -220,7 +220,7 @@ func TestFollowupQueue_ConcurrentEnqueue(t *testing.T) {
 
 	depth := r.Depth("k")
 	if depth != numEnqueues {
-		t.Errorf("expected depth=%d, got %d", numEnqueues, depth)
+		t.Errorf("got %d, want depth=%d", depth, numEnqueues)
 	}
 }
 
@@ -266,17 +266,17 @@ func TestFollowupDrainService_basic(t *testing.T) {
 	count := drainedCount
 	drainedMu.Unlock()
 	if count < 1 {
-		t.Errorf("expected at least 1 drain callback (collect batches items), got %d", count)
+		t.Errorf("got %d, want at least 1 drain callback (collect batches items)", count)
 	}
 }
 
 func TestResolveFollowupQueueSettings(t *testing.T) {
 	s := ResolveFollowupQueueSettings(types.ResolveFollowupQueueSettingsParams{})
 	if s.Mode != types.FollowupModeCollect {
-		t.Errorf("expected default mode=collect, got %s", s.Mode)
+		t.Errorf("got %s, want default mode=collect", s.Mode)
 	}
 	if s.DebounceMs != DefaultFollowupDebounceMs {
-		t.Errorf("expected default debounce=%d, got %d", DefaultFollowupDebounceMs, s.DebounceMs)
+		t.Errorf("got %d, want default debounce=%d", s.DebounceMs, DefaultFollowupDebounceMs)
 	}
 
 	s2 := ResolveFollowupQueueSettings(types.ResolveFollowupQueueSettingsParams{
@@ -285,9 +285,9 @@ func TestResolveFollowupQueueSettings(t *testing.T) {
 	})
 	// Mode is always collect.
 	if s2.Mode != types.FollowupModeCollect {
-		t.Errorf("expected mode=collect, got %s", s2.Mode)
+		t.Errorf("got %s, want mode=collect", s2.Mode)
 	}
 	if s2.DebounceMs != 2000 {
-		t.Errorf("expected debounce=2000, got %d", s2.DebounceMs)
+		t.Errorf("got %d, want debounce=2000", s2.DebounceMs)
 	}
 }

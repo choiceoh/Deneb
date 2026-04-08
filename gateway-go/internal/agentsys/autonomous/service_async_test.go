@@ -84,16 +84,16 @@ func TestServiceIncrementDreamTurnRunsDreamCycle(t *testing.T) {
 
 	d.mu.Lock()
 	if d.incrementCount != 1 {
-		t.Fatalf("expected increment count 1, got %d", d.incrementCount)
+		t.Fatalf("got %d, want increment count 1", d.incrementCount)
 	}
 	if d.runCount != 1 {
-		t.Fatalf("expected run count 1, got %d", d.runCount)
+		t.Fatalf("got %d, want run count 1", d.runCount)
 	}
 	d.mu.Unlock()
 
 	n.mu.Lock()
 	if n.calls != 1 {
-		t.Fatalf("expected 1 notification call, got %d", n.calls)
+		t.Fatalf("got %d, want 1 notification call", n.calls)
 	}
 	if n.message == "" {
 		t.Fatal("expected non-empty notification message")
@@ -117,7 +117,7 @@ func TestServiceIncrementDreamTurnRunErrorEmitsFailure(t *testing.T) {
 
 	n.mu.Lock()
 	if n.calls != 1 {
-		t.Fatalf("expected 1 notification call, got %d", n.calls)
+		t.Fatalf("got %d, want 1 notification call", n.calls)
 	}
 	if n.message == "" {
 		t.Fatal("expected failure notification message")
@@ -448,12 +448,12 @@ func TestService_PeriodicTask_Success(t *testing.T) {
 func TestTruncateOutput(t *testing.T) {
 	short := "abc"
 	if got := truncateOutput(short, 10); got != short {
-		t.Fatalf("expected %q, got %q", short, got)
+		t.Fatalf("got %q, want %q", got, short)
 	}
 
 	long := "안녕하세요반갑습니다"
 	got := truncateOutput(long, 3)
 	if got != "안녕하..." {
-		t.Fatalf("expected UTF-8 safe truncation, got %q", got)
+		t.Fatalf("got %q, want UTF-8 safe truncation", got)
 	}
 }

@@ -115,7 +115,7 @@ func TestStreamBroadcasterEvents(t *testing.T) {
 	sb.EmitComplete("final", llm.TokenUsage{InputTokens: 100, OutputTokens: 50})
 
 	if len(events) != 6 {
-		t.Fatalf("expected 6 events, got %d", len(events))
+		t.Fatalf("got %d, want 6 events", len(events))
 	}
 
 	// Verify event types.

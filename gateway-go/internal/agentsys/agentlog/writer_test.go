@@ -125,7 +125,7 @@ func TestWriter_PathSanitization(t *testing.T) {
 	// Verify the file is inside baseDir.
 	entries, _ := os.ReadDir(dir)
 	if len(entries) != 1 {
-		t.Errorf("expected 1 file in baseDir, got %d", len(entries))
+		t.Errorf("got %d, want 1 file in baseDir", len(entries))
 	}
 }
 

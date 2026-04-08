@@ -23,7 +23,7 @@ func TestSystemString(t *testing.T) {
 	t.Run("empty string returns nil", func(t *testing.T) {
 		raw := SystemString("")
 		if raw != nil {
-			t.Errorf("expected nil, got %s", raw)
+			t.Errorf("got %s, want nil", raw)
 		}
 	})
 }
@@ -53,14 +53,14 @@ func TestSystemBlocks(t *testing.T) {
 	t.Run("empty blocks returns nil", func(t *testing.T) {
 		raw := SystemBlocks(nil)
 		if raw != nil {
-			t.Errorf("expected nil, got %s", raw)
+			t.Errorf("got %s, want nil", raw)
 		}
 	})
 
 	t.Run("empty slice returns nil", func(t *testing.T) {
 		raw := SystemBlocks([]ContentBlock{})
 		if raw != nil {
-			t.Errorf("expected nil, got %s", raw)
+			t.Errorf("got %s, want nil", raw)
 		}
 	})
 }

@@ -49,7 +49,7 @@ func TestSessionsCreate(t *testing.T) {
 		"kind": "direct",
 	})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 
 	s := deps.Sessions.Get("test-session")
@@ -71,7 +71,7 @@ func TestSessionsCreate_MissingKey(t *testing.T) {
 		t.Error("expected error for missing key")
 	}
 	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
-		t.Errorf("expected MISSING_PARAM, got %+v", resp.Error)
+		t.Errorf("got %+v, want MISSING_PARAM", resp.Error)
 	}
 }
 
@@ -93,7 +93,7 @@ func TestSessionsLifecycle_FullFields(t *testing.T) {
 		"ts":    1000,
 	})
 	if !resp.OK {
-		t.Fatalf("start: expected ok, got error: %+v", resp.Error)
+		t.Fatalf("start: got error: %+v, want ok", resp.Error)
 	}
 
 	s := deps.Sessions.Get("lc-test")
@@ -115,7 +115,7 @@ func TestSessionsLifecycle_FullFields(t *testing.T) {
 		"stopReason": "aborted",
 	})
 	if !resp.OK {
-		t.Fatalf("end: expected ok, got error: %+v", resp.Error)
+		t.Fatalf("end: got error: %+v, want ok", resp.Error)
 	}
 
 	s = deps.Sessions.Get("lc-test")
@@ -141,7 +141,7 @@ func TestSessionsLifecycle_WithStartedAtEndedAt(t *testing.T) {
 		"startedAt": sa,
 	})
 	if !resp.OK {
-		t.Fatalf("start: expected ok, got error: %+v", resp.Error)
+		t.Fatalf("start: got error: %+v, want ok", resp.Error)
 	}
 
 	s := deps.Sessions.Get("ts-test")
@@ -158,7 +158,7 @@ func TestSessionsLifecycle_WithStartedAtEndedAt(t *testing.T) {
 		"endedAt": ea,
 	})
 	if !resp.OK {
-		t.Fatalf("end: expected ok, got error: %+v", resp.Error)
+		t.Fatalf("end: got error: %+v, want ok", resp.Error)
 	}
 
 	s = deps.Sessions.Get("ts-test")
@@ -186,7 +186,7 @@ func TestSessionsLifecycle_TimeoutAborted(t *testing.T) {
 		"aborted": true,
 	})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 
 	s := deps.Sessions.Get("to-test")
@@ -208,7 +208,7 @@ func TestSessionsLifecycle_Error(t *testing.T) {
 		"key": "err-test", "phase": "error", "ts": 1500,
 	})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 
 	s := deps.Sessions.Get("err-test")
@@ -233,7 +233,7 @@ func TestSessionsLifecycle_ResponseIncludesAbortedLastRun(t *testing.T) {
 		"stopReason": "aborted",
 	})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 
 	// Verify the response payload includes abortedLastRun.
@@ -256,7 +256,7 @@ func TestSessionsDelete_EmitsLifecycleEvent(t *testing.T) {
 
 	resp := dispatch(t, d, "sessions.delete", map[string]string{"key": "del-test"})
 	if !resp.OK {
-		t.Fatalf("expected ok, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 
 	// Give the async lifecycle channel time to process.

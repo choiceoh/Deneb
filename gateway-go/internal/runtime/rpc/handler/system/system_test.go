@@ -47,7 +47,7 @@ func TestFindLatestLogFile_SingleFile(t *testing.T) {
 
 	got := testutil.Must(findLatestLogFile(dir))
 	if filepath.Base(got) != "app.log" {
-		t.Errorf("expected app.log, got %q", filepath.Base(got))
+		t.Errorf("got %q, want app.log", filepath.Base(got))
 	}
 }
 
@@ -58,7 +58,7 @@ func TestFindLatestLogFile_SkipsDirectories(t *testing.T) {
 
 	got := testutil.Must(findLatestLogFile(dir))
 	if filepath.Base(got) != "real.log" {
-		t.Errorf("expected real.log, got %q", filepath.Base(got))
+		t.Errorf("got %q, want real.log", filepath.Base(got))
 	}
 }
 

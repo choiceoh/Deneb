@@ -197,6 +197,6 @@ func TestLogAttrs(t *testing.T) {
 	attrs := e.LogAttrs()
 	// Should have: code, ErrNotFound, message, "missing", sessionKey, "s1"
 	if len(attrs) < 6 {
-		t.Errorf("expected at least 6 attrs, got %d: %v", len(attrs), attrs)
+		t.Errorf("got %d: %v, want at least 6 attrs", len(attrs), attrs)
 	}
 }

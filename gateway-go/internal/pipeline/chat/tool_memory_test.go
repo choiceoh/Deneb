@@ -20,7 +20,7 @@ func TestCollectMemoryFiles(t *testing.T) {
 			t.Fatalf("got %d files, want 1", len(files))
 		}
 		if !strings.HasSuffix(files[0], "MEMORY.md") {
-			t.Errorf("expected MEMORY.md, got %q", files[0])
+			t.Errorf("got %q, want MEMORY.md", files[0])
 		}
 	})
 

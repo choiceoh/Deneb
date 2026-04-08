@@ -51,8 +51,8 @@ func TestStateDirPolicyPrecedence(t *testing.T) {
 
 			got := policy.ResolveFrom(home)
 			if filepath.Base(got) != tc.expectedBasename {
-				t.Errorf("expected basename %q, got %q (full path: %q)",
-					tc.expectedBasename, filepath.Base(got), got)
+				t.Errorf("got %q (full path: %q), want basename %q",
+					filepath.Base(got), got, tc.expectedBasename)
 			}
 		})
 	}
@@ -103,8 +103,8 @@ func TestConfigPathPolicyPrecedence(t *testing.T) {
 
 			got := policy.ResolveFrom(stateDir)
 			if filepath.Base(got) != tc.expectedBasename {
-				t.Errorf("expected basename %q, got %q (full path: %q)",
-					tc.expectedBasename, filepath.Base(got), got)
+				t.Errorf("got %q (full path: %q), want basename %q",
+					filepath.Base(got), got, tc.expectedBasename)
 			}
 		})
 	}
@@ -161,7 +161,7 @@ func TestGatewayPortPolicyPrecedence(t *testing.T) {
 
 			got := policy.ResolveFrom(tc.configPort)
 			if got != tc.expected {
-				t.Errorf("expected %d, got %d", tc.expected, got)
+				t.Errorf("got %d, want %d", got, tc.expected)
 			}
 		})
 	}

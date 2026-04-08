@@ -32,7 +32,7 @@ func TestScratchpadDir_Idempotent(t *testing.T) {
 
 	dir2 := testutil.Must(ScratchpadDir("idempotent-test"))
 	if dir1 != dir2 {
-		t.Errorf("expected same path, got %q and %q", dir1, dir2)
+		t.Errorf("got %q and %q, want same path", dir1, dir2)
 	}
 }
 
@@ -89,6 +89,6 @@ func TestResolveScratchpadDir(t *testing.T) {
 func TestResolveScratchpadDir_Empty(t *testing.T) {
 	dir := ResolveScratchpadDir("")
 	if dir != "" {
-		t.Errorf("expected empty string for invalid session ID, got %q", dir)
+		t.Errorf("got %q, want empty string for invalid session ID", dir)
 	}
 }

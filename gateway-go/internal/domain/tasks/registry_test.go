@@ -59,7 +59,7 @@ func TestStore_UpsertAndGetTask(t *testing.T) {
 
 	got := testutil.Must(store.Task("task-1"))
 	if got == nil {
-		t.Fatal("expected task, got nil")
+		t.Fatal("got nil, want task")
 	}
 	if got.TaskID != "task-1" {
 		t.Errorf("TaskID = %q, want %q", got.TaskID, "task-1")

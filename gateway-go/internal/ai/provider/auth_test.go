@@ -55,7 +55,7 @@ func TestAuthManager_StoreResolve(t *testing.T) {
 		t.Fatal("expected credential")
 	}
 	if cred.APIKey != "sk-123" {
-		t.Errorf("expected sk-123, got %q", cred.APIKey)
+		t.Errorf("got %q, want sk-123", cred.APIKey)
 	}
 
 	// Resolve with normalization.
@@ -69,7 +69,7 @@ func TestAuthManager_StoreResolve(t *testing.T) {
 		t.Fatal("expected credential for normalized bedrock")
 	}
 	if cred.APIKey != "aws-key" {
-		t.Errorf("expected aws-key, got %q", cred.APIKey)
+		t.Errorf("got %q, want aws-key", cred.APIKey)
 	}
 }
 
@@ -90,7 +90,7 @@ func TestAuthManager_Prepare_NoForwarder(t *testing.T) {
 	})
 	testutil.NoError(t, err)
 	if prepared.APIKey != "raw-key" {
-		t.Errorf("expected raw-key passthrough, got %q", prepared.APIKey)
+		t.Errorf("got %q, want raw-key passthrough", prepared.APIKey)
 	}
 }
 

@@ -652,6 +652,6 @@ func TestIntegration_SlashCommandReset(t *testing.T) {
 	// Transcript should be cleared.
 	msgs, _, _ = transcript.Load(sessionKey, 0)
 	if len(msgs) != 0 {
-		t.Errorf("expected empty transcript after reset, got %d messages", len(msgs))
+		t.Errorf("got %d messages, want empty transcript after reset", len(msgs))
 	}
 }

@@ -18,25 +18,25 @@ func TestResolveGatewayRuntimeConfigDefaults(t *testing.T) {
 	})
 	testutil.NoError(t, err)
 	if rtCfg.BindHost != "127.0.0.1" {
-		t.Errorf("expected 127.0.0.1, got %q", rtCfg.BindHost)
+		t.Errorf("got %q, want 127.0.0.1", rtCfg.BindHost)
 	}
 	if rtCfg.Port != 18789 {
-		t.Errorf("expected port 18789, got %d", rtCfg.Port)
+		t.Errorf("got %d, want port 18789", rtCfg.Port)
 	}
 	if !rtCfg.ControlUIEnabled {
 		t.Error("control UI should be enabled by default")
 	}
 	if rtCfg.ControlUIBasePath != "/" {
-		t.Errorf("expected basePath=/, got %q", rtCfg.ControlUIBasePath)
+		t.Errorf("got %q, want basePath=/", rtCfg.ControlUIBasePath)
 	}
 	if rtCfg.AuthMode != "token" {
-		t.Errorf("expected auth mode=token, got %q", rtCfg.AuthMode)
+		t.Errorf("got %q, want auth mode=token", rtCfg.AuthMode)
 	}
 	if rtCfg.TailscaleMode != "off" {
-		t.Errorf("expected tailscale mode=off, got %q", rtCfg.TailscaleMode)
+		t.Errorf("got %q, want tailscale mode=off", rtCfg.TailscaleMode)
 	}
 	if rtCfg.ChannelHealthCheckMinutes != 5 {
-		t.Errorf("expected health check=5, got %d", rtCfg.ChannelHealthCheckMinutes)
+		t.Errorf("got %d, want health check=5", rtCfg.ChannelHealthCheckMinutes)
 	}
 }
 
@@ -56,7 +56,7 @@ func TestResolveGatewayRuntimeConfigBindOverride(t *testing.T) {
 	})
 	testutil.NoError(t, err)
 	if rtCfg.BindHost != "0.0.0.0" {
-		t.Errorf("expected 0.0.0.0 for lan bind, got %q", rtCfg.BindHost)
+		t.Errorf("got %q, want 0.0.0.0 for lan bind", rtCfg.BindHost)
 	}
 }
 
@@ -123,7 +123,7 @@ func TestResolveGatewayRuntimeConfigTrustedProxyLoopback(t *testing.T) {
 	})
 	testutil.NoError(t, err)
 	if rtCfg.AuthMode != "trusted-proxy" {
-		t.Errorf("expected trusted-proxy, got %q", rtCfg.AuthMode)
+		t.Errorf("got %q, want trusted-proxy", rtCfg.AuthMode)
 	}
 }
 

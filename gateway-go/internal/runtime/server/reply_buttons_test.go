@@ -27,19 +27,19 @@ func TestParseReplyButtons_ValidDirective(t *testing.T) {
 		t.Fatal("expected keyboard")
 	}
 	if len(kb.InlineKeyboard) != 2 {
-		t.Fatalf("expected 2 rows, got %d", len(kb.InlineKeyboard))
+		t.Fatalf("got %d, want 2 rows", len(kb.InlineKeyboard))
 	}
 	if len(kb.InlineKeyboard[0]) != 2 {
-		t.Fatalf("expected 2 buttons in row 1, got %d", len(kb.InlineKeyboard[0]))
+		t.Fatalf("got %d, want 2 buttons in row 1", len(kb.InlineKeyboard[0]))
 	}
 	if kb.InlineKeyboard[0][0].Text != "Yes" {
-		t.Fatalf("expected 'Yes', got %q", kb.InlineKeyboard[0][0].Text)
+		t.Fatalf("got %q, want 'Yes'", kb.InlineKeyboard[0][0].Text)
 	}
 	if kb.InlineKeyboard[0][0].CallbackData != "yes" {
-		t.Fatalf("expected 'yes', got %q", kb.InlineKeyboard[0][0].CallbackData)
+		t.Fatalf("got %q, want 'yes'", kb.InlineKeyboard[0][0].CallbackData)
 	}
 	if kb.InlineKeyboard[1][0].Text != "Cancel" {
-		t.Fatalf("expected 'Cancel', got %q", kb.InlineKeyboard[1][0].Text)
+		t.Fatalf("got %q, want 'Cancel'", kb.InlineKeyboard[1][0].Text)
 	}
 }
 
@@ -56,7 +56,7 @@ func TestParseReplyButtons_LabelOnlyButtons(t *testing.T) {
 	}
 	// When no pipe separator, callback_data defaults to label.
 	if kb.InlineKeyboard[0][0].CallbackData != "Option A" {
-		t.Fatalf("expected callback_data = label, got %q", kb.InlineKeyboard[0][0].CallbackData)
+		t.Fatalf("got %q, want callback_data = label", kb.InlineKeyboard[0][0].CallbackData)
 	}
 }
 

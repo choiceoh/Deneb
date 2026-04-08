@@ -33,7 +33,7 @@ func TestModelsList_nilProviders(t *testing.T) {
 	}
 	resp := handlers["models.list"](context.Background(), req)
 	if !resp.OK {
-		t.Fatalf("expected OK, got error: %+v", resp.Error)
+		t.Fatalf("got error: %+v, want OK", resp.Error)
 	}
 	var payload struct {
 		Models []any `json:"models"`
@@ -42,6 +42,6 @@ func TestModelsList_nilProviders(t *testing.T) {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
 	if len(payload.Models) != 0 {
-		t.Errorf("expected empty models, got %d", len(payload.Models))
+		t.Errorf("got %d, want empty models", len(payload.Models))
 	}
 }

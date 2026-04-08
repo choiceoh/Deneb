@@ -228,13 +228,13 @@ func TestBuildDefaultRuntimeInfo(t *testing.T) {
 		t.Fatal("expected non-nil RuntimeInfo")
 	}
 	if info.Model != "claude-sonnet-4-6" {
-		t.Errorf("expected model claude-sonnet-4-6, got %s", info.Model)
+		t.Errorf("got %s, want model claude-sonnet-4-6", info.Model)
 	}
 	if info.DefaultModel != "claude-sonnet-4-6" {
-		t.Errorf("expected default_model claude-sonnet-4-6, got %s", info.DefaultModel)
+		t.Errorf("got %s, want default_model claude-sonnet-4-6", info.DefaultModel)
 	}
 	if info.OS != "linux" {
-		t.Errorf("expected OS \"linux\", got %q", info.OS)
+		t.Errorf("got %q, want OS \"linux\"", info.OS)
 	}
 	if info.Arch == "" {
 		t.Error("expected Arch to be set from runtime.GOARCH")
