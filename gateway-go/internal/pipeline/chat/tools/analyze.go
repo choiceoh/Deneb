@@ -118,13 +118,16 @@ func outlineGo(path, displayPath string) (string, error) {
 					fmt.Fprintf(&sb, "type %s (%s)  :%d\n", s.Name.Name, kind, line)
 
 					// List methods for structs/interfaces inline.
-					if st, ok := s.Type.(*ast.InterfaceType); ok && st.Methods != nil {
-						for _, m := range st.Methods.List {
-							if len(m.Names) > 0 {
-								mLine := fset.Position(m.Pos()).Line
-								fmt.Fprintf(&sb, "  .%s  :%d\n", m.Names[0].Name, mLine)
-							}
+					st, ok := s.Type.(*ast.InterfaceType)
+					if !ok || st.Methods == nil {
+						continue
+					}
+					for _, m := range st.Methods.List {
+						if len(m.Names) == 0 {
+							continue
 						}
+						mLine := fset.Position(m.Pos()).Line
+						fmt.Fprintf(&sb, "  .%s  :%d\n", m.Names[0].Name, mLine)
 					}
 
 				case *ast.ValueSpec:
@@ -176,19 +179,21 @@ func outlineRust(path, displayPath string) (string, error) {
 
 	addMatches := func(re *regexp.Regexp, kind string, nameIdx int) {
 		for _, loc := range re.FindAllStringIndex(content, -1) {
-			lineNum := strings.Count(content[:loc[0]], "\n") + 1
 			match := re.FindStringSubmatch(content[loc[0]:loc[1]])
-			if match != nil && nameIdx < len(match) {
-				// Skip items inside function bodies (indented).
-				if lineNum <= len(lines) {
-					lineContent := lines[lineNum-1]
-					indent := len(lineContent) - len(strings.TrimLeft(lineContent, " \t"))
-					// Top-level items have 0 indent; impl items have 4.
-					if indent <= 4 {
-						entries = append(entries, entry{kind: kind, name: match[nameIdx], line: lineNum})
-					}
-				}
+			if match == nil || nameIdx >= len(match) {
+				continue
 			}
+			lineNum := strings.Count(content[:loc[0]], "\n") + 1
+			if lineNum > len(lines) {
+				continue
+			}
+			// Skip items inside function bodies (indented).
+			lineContent := lines[lineNum-1]
+			indent := len(lineContent) - len(strings.TrimLeft(lineContent, " \t"))
+			if indent > 4 {
+				continue
+			}
+			entries = append(entries, entry{kind: kind, name: match[nameIdx], line: lineNum})
 		}
 	}
 

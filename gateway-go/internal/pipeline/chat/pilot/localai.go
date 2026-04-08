@@ -122,7 +122,7 @@ func CheckLocalAIHealth() bool {
 		localAILastCheck.Store(now)
 		return false
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
 	healthy := resp.StatusCode == http.StatusOK
 	localAIHealthy.Store(healthy)

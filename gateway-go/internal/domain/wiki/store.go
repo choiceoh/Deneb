@@ -108,17 +108,18 @@ func (s *Store) writePageInternal(relPath string, page *Page, skipBacklinks bool
 	}
 
 	// Capture old related list before updating index.
-	s.mu.Lock()
 	var oldRelated []string
-	if old, ok := s.index.Entries[relPath]; ok {
-		oldRelated = old.Related
-	}
-	s.index.UpdateEntry(relPath, page)
-	if err := s.index.Save(filepath.Join(s.dir, "index.md")); err != nil {
-		s.mu.Unlock()
+	if err := func() error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if old, ok := s.index.Entries[relPath]; ok {
+			oldRelated = old.Related
+		}
+		s.index.UpdateEntry(relPath, page)
+		return s.index.Save(filepath.Join(s.dir, "index.md"))
+	}(); err != nil {
 		return err
 	}
-	s.mu.Unlock()
 
 	// Maintain bidirectional backlinks.
 	if !skipBacklinks {
@@ -146,13 +147,14 @@ func (s *Store) DeletePage(relPath string) error {
 		s.fts.removePage(relPath)
 	}
 
-	s.mu.Lock()
-	s.index.RemoveEntry(relPath)
-	if err := s.index.Save(filepath.Join(s.dir, "index.md")); err != nil {
-		s.mu.Unlock()
+	if err := func() error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.index.RemoveEntry(relPath)
+		return s.index.Save(filepath.Join(s.dir, "index.md"))
+	}(); err != nil {
 		return err
 	}
-	s.mu.Unlock()
 
 	_ = s.AppendLog("delete", relPath) // best-effort: audit log is non-critical
 

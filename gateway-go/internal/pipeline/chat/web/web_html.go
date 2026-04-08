@@ -157,7 +157,7 @@ func (s *LocalAIExtractor) available() bool {
 		s.state = localAIUnavailable
 		return false
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		s.state = localAIAvailable
 		slog.Info("localai available", "url", s.baseURL, "model", s.model)

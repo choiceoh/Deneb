@@ -89,7 +89,6 @@ func (m *Manager) Install(name, installID string) *InstallResult {
 		Enabled:     true,
 		UpdatedAtMs: now,
 	}
-	_ = installID
 
 	return &InstallResult{OK: true, Message: fmt.Sprintf("skill %q installed", name)}
 }

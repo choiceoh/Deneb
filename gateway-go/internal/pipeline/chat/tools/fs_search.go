@@ -101,69 +101,22 @@ func ToolGrep(defaultDir string) ToolFunc {
 		// Use -e to avoid flag confusion when pattern starts with '-'.
 		args = append(args, "-e", p.Pattern, "--", searchPath)
 
-		stdout, _, err := runRg(ctx, args)
-		if err != nil {
-			exitCode := rgExitCode(err)
-			// rg exit code 1 means no matches (not an error).
-			if exitCode == 1 {
-				return "No matches found.", nil
-			}
-			// If stdout has valid match lines despite the error (e.g. rg hit
-			// partial file-access errors but still found matches), use them.
-			if len(stdout) > 0 && hasGrepMatches(stdout) {
-				if p.Mode == "" || p.Mode == "content" {
-					return groupGrepOutput(string(stdout)), nil
-				}
-				return string(stdout), nil
-			}
-			// Exit code 2 often means invalid regex or unrecognized type.
-			if exitCode == 2 {
-				// Retry 1: treat pattern as literal string (-F).
-				fixedArgs := make([]string, len(args))
-				copy(fixedArgs, args)
-				fixedArgs = append([]string{"-F"}, fixedArgs...)
-				if retryOut, _, retryErr := runRg(ctx, fixedArgs); retryErr == nil {
-					if p.Mode == "" || p.Mode == "content" {
-						return groupGrepOutput(string(retryOut)), nil
-					}
-					return string(retryOut), nil
-				} else if rgExitCode(retryErr) == 1 {
-					return "No matches found.", nil
-				} else if p.FileType != "" {
-					// Retry 2: strip --type (commonly unrecognized), keep -F.
-					bareArgs := stripRgFlag(fixedArgs, "--type")
-					if bareOut, _, bareErr := runRg(ctx, bareArgs); bareErr == nil {
-						if p.Mode == "" || p.Mode == "content" {
-							return groupGrepOutput(string(bareOut)), nil
-						}
-						return string(bareOut), nil
-					} else if rgExitCode(bareErr) == 1 {
-						return "No matches found.", nil
-					}
-				}
-			}
-			// Last resort: bare search with minimal flags (no type, no glob, fixed string).
-			bareMinArgs := []string{"-F", "-n", fmt.Sprintf("--max-count=%d", maxResults)}
-			switch p.Mode {
-			case "files_only":
-				bareMinArgs = append(bareMinArgs, "-l")
-			case "count":
-				bareMinArgs = append(bareMinArgs, "-c")
-			}
-			bareMinArgs = append(bareMinArgs, "-e", p.Pattern, "--", searchPath)
-			if bareMinOut, _, bareMinErr := runRg(ctx, bareMinArgs); bareMinErr == nil {
-				if p.Mode == "" || p.Mode == "content" {
-					return groupGrepOutput(string(bareMinOut)), nil
-				}
-				return string(bareMinOut), nil
-			} else if rgExitCode(bareMinErr) == 1 {
-				return "No matches found.", nil
-			}
-
-			// Include the failed command for diagnostics.
-			return "", fmt.Errorf("grep failed (rg %s): %s", strings.Join(args, " "), strings.TrimSpace(string(stdout)))
+		// Build bare-minimum args for last-resort fallback.
+		bareMinArgs := []string{"-F", "-n", fmt.Sprintf("--max-count=%d", maxResults)}
+		if p.Mode == "files_only" {
+			bareMinArgs = append(bareMinArgs, "-l")
+		} else if p.Mode == "count" {
+			bareMinArgs = append(bareMinArgs, "-c")
 		}
-		// Group content-mode output by file to reduce path repetition.
+		bareMinArgs = append(bareMinArgs, "-e", p.Pattern, "--", searchPath)
+
+		stdout, err := rgWithFallbacks(ctx, args, bareMinArgs, p.FileType)
+		if err != nil {
+			return "", err
+		}
+		if stdout == nil {
+			return "No matches found.", nil
+		}
 		if p.Mode == "" || p.Mode == "content" {
 			return groupGrepOutput(string(stdout)), nil
 		}
@@ -508,6 +461,54 @@ func ResolvePath(path, defaultDir string) string {
 	}
 
 	return resolved
+}
+
+// rgWithFallbacks runs ripgrep with automatic retry on failure.
+// Returns (output, nil) on success, (nil, nil) on no matches, or (nil, err) on failure.
+// primaryArgs are the initial rg arguments. bareMinArgs are used as last resort.
+// fileType triggers an extra retry that strips --type when non-empty.
+func rgWithFallbacks(ctx context.Context, primaryArgs, bareMinArgs []string, fileType string) ([]byte, error) {
+	out, _, err := runRg(ctx, primaryArgs)
+	if err == nil {
+		return out, nil
+	}
+
+	exitCode := rgExitCode(err)
+	if exitCode == 1 {
+		return nil, nil
+	}
+
+	// Stdout may contain valid matches despite the error (e.g. partial file-access errors).
+	if len(out) > 0 && hasGrepMatches(out) {
+		return out, nil
+	}
+
+	if exitCode == 2 {
+		// Retry 1: treat pattern as literal string (-F).
+		fixedArgs := append([]string{"-F"}, primaryArgs...)
+		if retryOut, _, retryErr := runRg(ctx, fixedArgs); retryErr == nil {
+			return retryOut, nil
+		} else if rgExitCode(retryErr) == 1 {
+			return nil, nil
+		} else if fileType != "" {
+			// Retry 2: strip unrecognized --type, keep -F.
+			bareArgs := stripRgFlag(fixedArgs, "--type")
+			if bareOut, _, bareErr := runRg(ctx, bareArgs); bareErr == nil {
+				return bareOut, nil
+			} else if rgExitCode(bareErr) == 1 {
+				return nil, nil
+			}
+		}
+	}
+
+	// Last resort: bare minimum search.
+	if bareMinOut, _, bareMinErr := runRg(ctx, bareMinArgs); bareMinErr == nil {
+		return bareMinOut, nil
+	} else if rgExitCode(bareMinErr) == 1 {
+		return nil, nil
+	}
+
+	return nil, fmt.Errorf("grep failed (rg %s): %s", strings.Join(primaryArgs, " "), strings.TrimSpace(string(out)))
 }
 
 // runRg executes ripgrep with separate stdout/stderr capture.

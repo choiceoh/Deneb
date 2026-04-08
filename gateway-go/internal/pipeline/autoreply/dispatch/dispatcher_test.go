@@ -12,16 +12,17 @@ import (
 func TestReplyDispatcherSendAndComplete(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	calls := 0
-	d := NewReplyDispatcher(context.Background(), func(_ context.Context, _ types.ReplyPayload, _ types.ReplyDispatchKind) error {
+	d := NewReplyDispatcher(func(_ context.Context, _ types.ReplyPayload, _ types.ReplyDispatchKind) error {
 		calls++
 		return nil
 	}, logger)
 
-	if ok := d.Send(types.ReplyPayload{Text: "hi"}, types.DispatchKindFinal); !ok {
+	ctx := context.Background()
+	if ok := d.Send(ctx, types.ReplyPayload{Text: "hi"}, types.DispatchKindFinal); !ok {
 		t.Fatal("expected first send to succeed")
 	}
 	d.MarkComplete()
-	if ok := d.Send(types.ReplyPayload{Text: "late"}, types.DispatchKindFinal); ok {
+	if ok := d.Send(ctx, types.ReplyPayload{Text: "late"}, types.DispatchKindFinal); ok {
 		t.Fatal("expected send after complete to fail")
 	}
 	if calls != 1 {

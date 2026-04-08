@@ -26,8 +26,8 @@ var (
 // RegisterSystemHandler registers a named handler for system-type skills.
 func RegisterSystemHandler(name string, handler SystemHandler) {
 	systemHandlersMu.Lock()
+	defer systemHandlersMu.Unlock()
 	systemHandlers[name] = handler
-	systemHandlersMu.Unlock()
 }
 
 // ExecuteLocalSkill runs a local-type skill command and returns its output.

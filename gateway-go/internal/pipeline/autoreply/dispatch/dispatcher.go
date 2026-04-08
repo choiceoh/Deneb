@@ -14,24 +14,22 @@ type ReplyDispatcher struct {
 	mu       sync.Mutex
 	deliver  types.DeliverFunc
 	logger   *slog.Logger
-	ctx      context.Context
 	counts   map[types.ReplyDispatchKind]int
 	complete bool
 }
 
 // NewReplyDispatcher creates a new dispatcher.
-func NewReplyDispatcher(ctx context.Context, deliver types.DeliverFunc, logger *slog.Logger) *ReplyDispatcher {
+func NewReplyDispatcher(deliver types.DeliverFunc, logger *slog.Logger) *ReplyDispatcher {
 	return &ReplyDispatcher{
 		deliver: deliver,
 		logger:  logger,
-		ctx:     ctx,
 		counts:  make(map[types.ReplyDispatchKind]int),
 	}
 }
 
 // Send delivers a reply payload with the given dispatch kind.
 // Returns false if the dispatcher has been marked complete.
-func (d *ReplyDispatcher) Send(payload types.ReplyPayload, kind types.ReplyDispatchKind) bool {
+func (d *ReplyDispatcher) Send(ctx context.Context, payload types.ReplyPayload, kind types.ReplyDispatchKind) bool {
 	d.mu.Lock()
 	if d.complete {
 		d.mu.Unlock()
@@ -40,7 +38,7 @@ func (d *ReplyDispatcher) Send(payload types.ReplyPayload, kind types.ReplyDispa
 	d.counts[kind]++
 	d.mu.Unlock()
 
-	if err := d.deliver(d.ctx, payload, kind); err != nil {
+	if err := d.deliver(ctx, payload, kind); err != nil {
 		d.logger.Warn("reply dispatch error", "kind", kind, "error", err)
 	}
 	return true
