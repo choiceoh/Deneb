@@ -8,9 +8,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coremarkdown"
 )
 
-// MarkdownToIR parses markdown text into an intermediate representation using
-// the pure-Go goldmark-based parser. Returns JSON-encoded IR with text, styles,
-// links, and code block detection.
+// MarkdownToIR parses markdown text into an intermediate representation.
+// Returns JSON-encoded IR with text, styles, links, and code block detection.
 func MarkdownToIR(markdown, optionsJSON string) (json.RawMessage, error) {
 	if markdown == "" {
 		return json.RawMessage(`{"text":"","styles":[],"links":[],"has_code_blocks":false}`), nil

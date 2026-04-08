@@ -1,4 +1,4 @@
-// Package coremarkdown provides a pure-Go markdown-to-IR parser using goldmark.
+// Package coremarkdown provides a pure-Go markdown-to-IR parser.
 // It produces the same JSON structure as the Rust FFI (core-rs/core/src/markdown/).
 package coremarkdown
 

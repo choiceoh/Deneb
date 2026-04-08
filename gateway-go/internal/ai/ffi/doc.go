@@ -20,7 +20,7 @@
 //   - ParseMediaTokens: MEDIA: token extraction
 //
 // Markdown:
-//   - MarkdownToIR: Markdown to IR parser (goldmark-based)
+//   - MarkdownToIR: Markdown to IR parser
 //   - MarkdownDetectFences: Fenced code block detection
 //   - MarkdownToPlainText: Markdown stripping convenience
 //
