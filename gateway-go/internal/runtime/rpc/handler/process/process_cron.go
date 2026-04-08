@@ -36,15 +36,11 @@ func CronAdvancedMethods(deps CronAdvancedDeps) map[string]rpcutil.HandlerFunc {
 }
 
 func cronWake(deps CronAdvancedDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Mode string `json:"mode"`
-			Text string `json:"text"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-
+	type params struct {
+		Mode string `json:"mode"`
+		Text string `json:"text"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		deps.Service.Wake(context.Background(), p.Mode, p.Text)
 
 		status := deps.Service.Status()
@@ -57,11 +53,11 @@ func cronWake(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"nextHeartbeatAtMs": status.NextRunAtMs,
 			"mode":              p.Mode,
-		})
-	}
+		}, nil
+	})
 }
 
 func cronStatus(deps CronAdvancedDeps) rpcutil.HandlerFunc {
@@ -76,32 +72,29 @@ func cronStatus(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 }
 
 func cronAdd(deps CronAdvancedDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			ID       string `json:"id,omitempty"`
-			Name     string `json:"name"`
-			Schedule string `json:"schedule"`
-			Command  string `json:"command"`
-			AgentID  string `json:"agentId,omitempty"`
-			Enabled  *bool  `json:"enabled,omitempty"`
+	type params struct {
+		ID       string `json:"id,omitempty"`
+		Name     string `json:"name"`
+		Schedule string `json:"schedule"`
+		Command  string `json:"command"`
+		AgentID  string `json:"agentId,omitempty"`
+		Enabled  *bool  `json:"enabled,omitempty"`
 
-			// Extended fields for persistent cron jobs.
-			Delivery     *cron.JobDeliveryConfig `json:"delivery,omitempty"`
-			FailureAlert *cron.CronFailureAlert  `json:"failureAlert,omitempty"`
-			Tz           string                  `json:"tz,omitempty"`
-			StaggerMs    int64                   `json:"staggerMs,omitempty"`
-			AnchorTime   string                  `json:"anchorTime,omitempty"`
-			RetryCount   int                     `json:"retryCount,omitempty"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
+		// Extended fields for persistent cron jobs.
+		Delivery     *cron.JobDeliveryConfig `json:"delivery,omitempty"`
+		FailureAlert *cron.CronFailureAlert  `json:"failureAlert,omitempty"`
+		Tz           string                  `json:"tz,omitempty"`
+		StaggerMs    int64                   `json:"staggerMs,omitempty"`
+		AnchorTime   string                  `json:"anchorTime,omitempty"`
+		RetryCount   int                     `json:"retryCount,omitempty"`
+	}
+	return rpcutil.BindHandlerCtx[params](func(ctx context.Context, p params) (any, error) {
 		if p.Name == "" || p.Schedule == "" || p.Command == "" {
-			return rpcerr.New(protocol.ErrMissingParam, "name, schedule, and command are required").Response(req.ID)
+			return nil, rpcerr.New(protocol.ErrMissingParam, "name, schedule, and command are required")
 		}
 		const maxCommandLen = 4096
 		if len(p.Command) > maxCommandLen {
-			return rpcerr.New(protocol.ErrValidationFailed, "command exceeds maximum length of 4096 characters").Response(req.ID)
+			return nil, rpcerr.New(protocol.ErrValidationFailed, "command exceeds maximum length of 4096 characters")
 		}
 
 		schedule, err := cron.ParseSmartScheduleWithOpts(p.Schedule, cron.SmartScheduleOpts{
@@ -110,7 +103,7 @@ func cronAdd(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			AnchorTime: p.AnchorTime,
 		})
 		if err != nil {
-			return rpcerr.Newf(protocol.ErrValidationFailed, "invalid schedule: %v", err).Response(req.ID)
+			return nil, rpcerr.Newf(protocol.ErrValidationFailed, "invalid schedule: %v", err)
 		}
 
 		id := p.ID
@@ -138,40 +131,36 @@ func cronAdd(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 		}
 
 		if err := deps.Service.Add(ctx, job); err != nil {
-			return rpcerr.Wrap(protocol.ErrConflict, err).Response(req.ID)
+			return nil, rpcerr.Wrap(protocol.ErrConflict, err)
 		}
 
 		if deps.Broadcaster != nil {
 			deps.Broadcaster("cron.changed", map[string]any{"action": "added", "id": id})
 		}
 
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"id":       id,
 			"name":     p.Name,
 			"schedule": p.Schedule,
 			"command":  p.Command,
 			"enabled":  enabled,
-		})
-	}
+		}, nil
+	})
 }
 
 func cronUpdate(deps CronAdvancedDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			ID    string         `json:"id,omitempty"`
-			JobID string         `json:"jobId,omitempty"`
-			Patch map[string]any `json:"patch"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-
+	type params struct {
+		ID    string         `json:"id,omitempty"`
+		JobID string         `json:"jobId,omitempty"`
+		Patch map[string]any `json:"patch"`
+	}
+	return rpcutil.BindHandlerCtx[params](func(ctx context.Context, p params) (any, error) {
 		id := p.ID
 		if id == "" {
 			id = p.JobID
 		}
 		if id == "" {
-			return rpcerr.New(protocol.ErrMissingParam, "id or jobId is required").Response(req.ID)
+			return nil, rpcerr.New(protocol.ErrMissingParam, "id or jobId is required")
 		}
 
 		err := deps.Service.Update(ctx, id, func(job *cron.StoreJob) {
@@ -204,7 +193,7 @@ func cronUpdate(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			}
 		})
 		if err != nil {
-			return rpcerr.Wrap(protocol.ErrNotFound, err).Response(req.ID)
+			return nil, rpcerr.Wrap(protocol.ErrNotFound, err)
 		}
 
 		if deps.Broadcaster != nil {
@@ -212,26 +201,22 @@ func cronUpdate(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 		}
 
 		job := deps.Service.Job(id)
-		return rpcutil.RespondOK(req.ID, job)
-	}
+		return job, nil
+	})
 }
 
 func cronRemove(deps CronAdvancedDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			ID    string `json:"id,omitempty"`
-			JobID string `json:"jobId,omitempty"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-
+	type params struct {
+		ID    string `json:"id,omitempty"`
+		JobID string `json:"jobId,omitempty"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		id := p.ID
 		if id == "" {
 			id = p.JobID
 		}
 		if id == "" {
-			return rpcerr.New(protocol.ErrMissingParam, "id or jobId is required").Response(req.ID)
+			return nil, rpcerr.New(protocol.ErrMissingParam, "id or jobId is required")
 		}
 
 		err := deps.Service.Remove(id)
@@ -241,40 +226,36 @@ func cronRemove(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			deps.Broadcaster("cron.changed", map[string]any{"action": "removed", "id": id})
 		}
 
-		return rpcutil.RespondOK(req.ID, map[string]bool{"removed": removed})
-	}
+		return map[string]bool{"removed": removed}, nil
+	})
 }
 
 func cronRun(deps CronAdvancedDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			ID    string `json:"id,omitempty"`
-			JobID string `json:"jobId,omitempty"`
-			Mode  string `json:"mode,omitempty"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-
+	type params struct {
+		ID    string `json:"id,omitempty"`
+		JobID string `json:"jobId,omitempty"`
+		Mode  string `json:"mode,omitempty"`
+	}
+	return rpcutil.BindHandlerCtx[params](func(ctx context.Context, p params) (any, error) {
 		id := p.ID
 		if id == "" {
 			id = p.JobID
 		}
 		if id == "" {
-			return rpcerr.New(protocol.ErrMissingParam, "id or jobId is required").Response(req.ID)
+			return nil, rpcerr.New(protocol.ErrMissingParam, "id or jobId is required")
 		}
 
 		outcome, err := deps.Service.Run(ctx, id, p.Mode)
 		if err != nil {
-			return rpcerr.Wrap(protocol.ErrNotFound, err).Response(req.ID)
+			return nil, rpcerr.Wrap(protocol.ErrNotFound, err)
 		}
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"id":         id,
 			"status":     outcome.Status,
 			"error":      outcome.Error,
 			"durationMs": outcome.DurationMs,
-		})
-	}
+		}, nil
+	})
 }
 
 func cronRuns(deps CronAdvancedDeps) rpcutil.HandlerFunc {
@@ -382,28 +363,24 @@ func cronListPage(deps CronServiceDeps) rpcutil.HandlerFunc {
 }
 
 func cronGetJob(deps CronServiceDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			ID    string `json:"id,omitempty"`
-			JobID string `json:"jobId,omitempty"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-
+	type params struct {
+		ID    string `json:"id,omitempty"`
+		JobID string `json:"jobId,omitempty"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		id := p.ID
 		if id == "" {
 			id = p.JobID
 		}
 		if id == "" {
-			return rpcerr.New(protocol.ErrMissingParam, "id or jobId is required").Response(req.ID)
+			return nil, rpcerr.New(protocol.ErrMissingParam, "id or jobId is required")
 		}
 
 		job := deps.Service.Job(id)
 		if job == nil {
-			return rpcerr.Newf(protocol.ErrNotFound, "job not found: %s", id).Response(req.ID)
+			return nil, rpcerr.Newf(protocol.ErrNotFound, "job not found: %s", id)
 		}
 
-		return rpcutil.RespondOK(req.ID, job)
-	}
+		return job, nil
+	})
 }

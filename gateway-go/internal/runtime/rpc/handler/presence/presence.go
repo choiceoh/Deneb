@@ -163,31 +163,28 @@ func systemPresence(deps Deps) rpcutil.HandlerFunc {
 
 // systemEvent records a presence event and broadcasts the updated list.
 func systemEvent(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Text            string   `json:"text"`
-			DeviceID        string   `json:"deviceId,omitempty"`
-			InstanceID      string   `json:"instanceId,omitempty"`
-			Host            string   `json:"host,omitempty"`
-			IP              string   `json:"ip,omitempty"`
-			Mode            string   `json:"mode,omitempty"`
-			Version         string   `json:"version,omitempty"`
-			Platform        string   `json:"platform,omitempty"`
-			DeviceFamily    string   `json:"deviceFamily,omitempty"`
-			ModelIdentifier string   `json:"modelIdentifier,omitempty"`
-			Reason          string   `json:"reason,omitempty"`
-			Roles           []string `json:"roles,omitempty"`
-			Scopes          []string `json:"scopes,omitempty"`
-			Tags            []string `json:"tags,omitempty"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
+	type params struct {
+		Text            string   `json:"text"`
+		DeviceID        string   `json:"deviceId,omitempty"`
+		InstanceID      string   `json:"instanceId,omitempty"`
+		Host            string   `json:"host,omitempty"`
+		IP              string   `json:"ip,omitempty"`
+		Mode            string   `json:"mode,omitempty"`
+		Version         string   `json:"version,omitempty"`
+		Platform        string   `json:"platform,omitempty"`
+		DeviceFamily    string   `json:"deviceFamily,omitempty"`
+		ModelIdentifier string   `json:"modelIdentifier,omitempty"`
+		Reason          string   `json:"reason,omitempty"`
+		Roles           []string `json:"roles,omitempty"`
+		Scopes          []string `json:"scopes,omitempty"`
+		Tags            []string `json:"tags,omitempty"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		if p.Text == "" {
-			return rpcerr.New(protocol.ErrMissingParam, "text required").Response(req.ID)
+			return nil, rpcerr.MissingParam("text")
 		}
 
-		entry := deps.Store.Update(PresenceEntry{
+		deps.Store.Update(PresenceEntry{
 			Text:            p.Text,
 			DeviceID:        p.DeviceID,
 			InstanceID:      p.InstanceID,
@@ -210,9 +207,8 @@ func systemEvent(deps Deps) rpcutil.HandlerFunc {
 			})
 		}
 
-		_ = entry // used for broadcast above
-		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true})
-	}
+		return map[string]any{"ok": true}, nil
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -243,28 +239,22 @@ func lastHeartbeat(deps HeartbeatDeps) rpcutil.HandlerFunc {
 
 // setHeartbeats enables or disables heartbeats and broadcasts the config change.
 func setHeartbeats(deps HeartbeatDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Enabled *bool `json:"enabled"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
+	type params struct {
+		Enabled *bool `json:"enabled"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		if p.Enabled == nil {
-			return rpcerr.ValidationFailed("invalid set-heartbeats params: enabled (boolean) required").Response(req.ID)
+			return nil, rpcerr.ValidationFailed("invalid set-heartbeats params: enabled (boolean) required")
 		}
-
 		deps.State.SetEnabled(*p.Enabled)
-
 		if deps.Broadcaster != nil {
 			deps.Broadcaster("heartbeat.config", map[string]any{
 				"enabled": *p.Enabled,
 			})
 		}
-
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"ok":      true,
 			"enabled": *p.Enabled,
-		})
-	}
+		}, nil
+	})
 }

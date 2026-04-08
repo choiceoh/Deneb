@@ -1,11 +1,8 @@
 package ffi
 
 import (
-	"context"
-
 	ffipkg "github.com/choiceoh/deneb/gateway-go/internal/ai/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // SecurityMethods returns handlers for security-related RPC methods.
@@ -19,58 +16,38 @@ func SecurityMethods() map[string]rpcutil.HandlerFunc {
 }
 
 func securityValidateSessionKey() rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Key string `json:"key"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-		err := ffipkg.ValidateSessionKey(p.Key)
-		return rpcutil.RespondOK(req.ID, map[string]any{
-			"valid": err == nil,
-		})
+	type params struct {
+		Key string `json:"key"`
 	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		err := ffipkg.ValidateSessionKey(p.Key)
+		return map[string]any{"valid": err == nil}, nil
+	})
 }
 
 func securitySanitizeHTML() rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Input string `json:"input"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-		return rpcutil.RespondOK(req.ID, map[string]any{
-			"output": ffipkg.SanitizeHTML(p.Input),
-		})
+	type params struct {
+		Input string `json:"input"`
 	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		return map[string]any{"output": ffipkg.SanitizeHTML(p.Input)}, nil
+	})
 }
 
 func securityIsSafeURL() rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			URL string `json:"url"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-		return rpcutil.RespondOK(req.ID, map[string]any{
-			"safe": ffipkg.IsSafeURL(p.URL),
-		})
+	type params struct {
+		URL string `json:"url"`
 	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		return map[string]any{"safe": ffipkg.IsSafeURL(p.URL)}, nil
+	})
 }
 
 func securityValidateErrorCode() rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Code string `json:"code"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-		return rpcutil.RespondOK(req.ID, map[string]any{
-			"valid": ffipkg.ValidateErrorCode(p.Code),
-		})
+	type params struct {
+		Code string `json:"code"`
 	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		return map[string]any{"valid": ffipkg.ValidateErrorCode(p.Code)}, nil
+	})
 }

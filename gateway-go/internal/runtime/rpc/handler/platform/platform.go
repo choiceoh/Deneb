@@ -43,19 +43,14 @@ func secretsReload(deps SecretDeps) rpcutil.HandlerFunc {
 }
 
 func secretsResolve(deps SecretDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			CommandName string   `json:"commandName"`
-			TargetIDs   []string `json:"targetIds"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-		if p.CommandName == "" || len(p.TargetIDs) == 0 {
-			return rpcerr.MissingParam("commandName and targetIds").Response(req.ID)
-		}
-
-		result := deps.Resolver.Resolve(p.CommandName, p.TargetIDs)
-		return rpcutil.RespondOK(req.ID, result)
+	type params struct {
+		CommandName string   `json:"commandName"`
+		TargetIDs   []string `json:"targetIds"`
 	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if p.CommandName == "" || len(p.TargetIDs) == 0 {
+			return nil, rpcerr.MissingParam("commandName and targetIds")
+		}
+		return deps.Resolver.Resolve(p.CommandName, p.TargetIDs), nil
+	})
 }

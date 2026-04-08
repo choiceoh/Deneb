@@ -75,28 +75,24 @@ func ExecMethods(deps ExecDeps) map[string]rpcutil.HandlerFunc {
 // ---------------------------------------------------------------------------
 
 func sessionsPatch(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Key string `json:"key"`
-			session.PatchFields
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-		key, errResp := rpcutil.RequireKey(req.ID, p.Key)
-		if errResp != nil {
-			return errResp
+	type params struct {
+		Key string `json:"key"`
+		session.PatchFields
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		key := strings.TrimSpace(p.Key)
+		if key == "" {
+			return nil, rpcerr.MissingParam("key")
 		}
 
 		updated := deps.Sessions.Patch(key, p.PatchFields)
 		emitSessionLifecycle(deps.GatewaySubs, key, "patch")
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		return map[string]any{
 			"ok":    true,
 			"key":   key,
 			"entry": updated,
-		})
-		return resp
-	}
+		}, nil
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -104,17 +100,14 @@ func sessionsPatch(deps Deps) rpcutil.HandlerFunc {
 // ---------------------------------------------------------------------------
 
 func sessionsReset(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Key    string `json:"key"`
-			Reason string `json:"reason"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-		key, errResp := rpcutil.RequireKey(req.ID, p.Key)
-		if errResp != nil {
-			return errResp
+	type params struct {
+		Key    string `json:"key"`
+		Reason string `json:"reason"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		key := strings.TrimSpace(p.Key)
+		if key == "" {
+			return nil, rpcerr.MissingParam("key")
 		}
 		reason := "reset"
 		if p.Reason == "new" {
@@ -123,19 +116,17 @@ func sessionsReset(deps Deps) rpcutil.HandlerFunc {
 
 		s := deps.Sessions.ResetSession(key)
 		if s == nil {
-			return rpcerr.NotFound("session").
-				WithSession(rpcutil.TruncateForError(key)).
-				Response(req.ID)
+			return nil, rpcerr.NotFound("session").
+				WithSession(rpcutil.TruncateForError(key))
 		}
 
 		emitSessionLifecycle(deps.GatewaySubs, key, reason)
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		return map[string]any{
 			"ok":    true,
 			"key":   key,
 			"entry": s,
-		})
-		return resp
-	}
+		}, nil
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -201,27 +192,22 @@ func sessionsPreview(deps Deps) rpcutil.HandlerFunc {
 // ---------------------------------------------------------------------------
 
 func sessionsResolve(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Key            string `json:"key"`
-			SessionID      string `json:"sessionId"`
-			Label          string `json:"label"`
-			AgentID        string `json:"agentId"`
-			SpawnedBy      string `json:"spawnedBy"`
-			IncludeGlobal  *bool  `json:"includeGlobal"`
-			IncludeUnknown *bool  `json:"includeUnknown"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-
+	type params struct {
+		Key            string `json:"key"`
+		SessionID      string `json:"sessionId"`
+		Label          string `json:"label"`
+		AgentID        string `json:"agentId"`
+		SpawnedBy      string `json:"spawnedBy"`
+		IncludeGlobal  *bool  `json:"includeGlobal"`
+		IncludeUnknown *bool  `json:"includeUnknown"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		idCount := boolCount(p.Key != "", p.SessionID != "", p.Label != "")
 		if idCount == 0 {
-			return rpcerr.MissingParam("key, sessionId, or label").Response(req.ID)
+			return nil, rpcerr.MissingParam("key, sessionId, or label")
 		}
 		if idCount > 1 {
-			return rpcerr.New(protocol.ErrInvalidRequest, "provide exactly one of key, sessionId, or label").
-				Response(req.ID)
+			return nil, rpcerr.New(protocol.ErrInvalidRequest, "provide exactly one of key, sessionId, or label")
 		}
 
 		// TS behavior: key lookup is direct (no kind filter); sessionId and
@@ -244,21 +230,19 @@ func sessionsResolve(deps Deps) rpcutil.HandlerFunc {
 			if len(matches) == 1 {
 				found = matches[0]
 			} else if len(matches) > 1 {
-				return rpcerr.Conflict("ambiguous label: multiple sessions match").
-					Response(req.ID)
+				return nil, rpcerr.Conflict("ambiguous label: multiple sessions match")
 			}
 		}
 
 		if found != nil {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			return map[string]any{
 				"ok":  true,
 				"key": found.Key,
-			})
-			return resp
+			}, nil
 		}
 
-		return rpcerr.NotFound("session").Response(req.ID)
-	}
+		return nil, rpcerr.NotFound("session")
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -266,32 +250,28 @@ func sessionsResolve(deps Deps) rpcutil.HandlerFunc {
 // ---------------------------------------------------------------------------
 
 func sessionsOverflowCheck(_ Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			SessionKey    string `json:"sessionKey"`
-			CurrentTokens int64  `json:"currentTokens"`
-			MaxTokens     int64  `json:"maxTokens"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
-
+	type params struct {
+		SessionKey    string `json:"sessionKey"`
+		CurrentTokens int64  `json:"currentTokens"`
+		MaxTokens     int64  `json:"maxTokens"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		if p.MaxTokens <= 0 {
-			return rpcutil.RespondOK(req.ID, map[string]any{
+			return map[string]any{
 				"isOverflow": false,
 				"usage":      0.0,
-			})
+			}, nil
 		}
 
 		usage := float64(p.CurrentTokens) / float64(p.MaxTokens)
 		isOverflow := usage > 0.9 // 90% threshold
 
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"isOverflow":          isOverflow,
 			"usage":               usage,
 			"emergencyPruneRatio": minf(maxf((usage-0.7)/usage, 0), 0.5),
-		})
-	}
+		}, nil
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -299,30 +279,24 @@ func sessionsOverflowCheck(_ Deps) rpcutil.HandlerFunc {
 // ---------------------------------------------------------------------------
 
 func agentIdentityGet(deps ExecDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			AgentID string `json:"agentId"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
+	type params struct {
+		AgentID string `json:"agentId"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		if p.AgentID == "" {
-			return rpcerr.MissingParam("agentId").
-				WithMethod("agent.identity.get").
-				Response(req.ID)
+			return nil, rpcerr.MissingParam("agentId").
+				WithMethod("agent.identity.get")
 		}
 		if deps.Agents == nil {
-			return rpcerr.NotFound("agent store").
-				WithMethod("agent.identity.get").
-				Response(req.ID)
+			return nil, rpcerr.NotFound("agent store").
+				WithMethod("agent.identity.get")
 		}
 		ag := deps.Agents.Get(p.AgentID)
 		if ag == nil {
-			return rpcerr.NotFound("agent").
-				WithAgent(p.AgentID).
-				Response(req.ID)
+			return nil, rpcerr.NotFound("agent").
+				WithAgent(p.AgentID)
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+		return map[string]any{
 			"agentId":      ag.AgentID,
 			"name":         ag.Name,
 			"description":  ag.Description,
@@ -330,9 +304,8 @@ func agentIdentityGet(deps ExecDeps) rpcutil.HandlerFunc {
 			"systemPrompt": ag.SystemPrompt,
 			"tools":        ag.Tools,
 			"metadata":     ag.Metadata,
-		})
-		return resp
-	}
+		}, nil
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -340,39 +313,32 @@ func agentIdentityGet(deps ExecDeps) rpcutil.HandlerFunc {
 // ---------------------------------------------------------------------------
 
 func agentWait(deps ExecDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			RunID        string `json:"runId"`
-			TimeoutMs    int64  `json:"timeoutMs,omitempty"`
-			IgnoreCached bool   `json:"ignoreCached,omitempty"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
+	type params struct {
+		RunID        string `json:"runId"`
+		TimeoutMs    int64  `json:"timeoutMs,omitempty"`
+		IgnoreCached bool   `json:"ignoreCached,omitempty"`
+	}
+	return rpcutil.BindHandlerCtx[params](func(ctx context.Context, p params) (any, error) {
 		if p.RunID == "" {
-			return rpcerr.MissingParam("runId").
-				WithMethod("agent.wait").
-				Response(req.ID)
+			return nil, rpcerr.MissingParam("runId").
+				WithMethod("agent.wait")
 		}
 		if deps.JobTracker == nil {
-			return rpcerr.Unavailable("job tracker not available").
-				WithMethod("agent.wait").
-				Response(req.ID)
+			return nil, rpcerr.Unavailable("job tracker not available").
+				WithMethod("agent.wait")
 		}
 		if p.TimeoutMs <= 0 {
 			p.TimeoutMs = 60_000
 		}
 		snapshot := deps.JobTracker.WaitForJob(ctx, p.RunID, p.TimeoutMs, p.IgnoreCached)
 		if snapshot == nil {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
+			return map[string]any{
 				"status":  "timeout",
 				"message": "job did not complete within timeout",
-			})
-			return resp
+			}, nil
 		}
-		resp, _ := protocol.NewResponseOK(req.ID, snapshot)
-		return resp
-	}
+		return snapshot, nil
+	})
 }
 
 // ---------------------------------------------------------------------------

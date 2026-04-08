@@ -99,96 +99,73 @@ func configGet() rpcutil.HandlerFunc {
 }
 
 func configSet(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Raw      string `json:"raw"`
-			BaseHash string `json:"baseHash"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
+	type params struct {
+		Raw      string `json:"raw"`
+		BaseHash string `json:"baseHash"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		if p.Raw == "" {
-			return rpcerr.MissingParam("raw").Response(req.ID)
+			return nil, rpcerr.MissingParam("raw")
 		}
-
-		// Validate JSON syntax and config structure.
 		issues, warnings, err := config.ValidateRawConfig([]byte(p.Raw))
 		if err != nil {
-			return rpcerr.WrapValidationFailed("config validation error", err).Response(req.ID)
+			return nil, rpcerr.WrapValidationFailed("config validation error", err)
 		}
 		if len(issues) > 0 {
-			return rpcerr.ValidationFailed("invalid config: " + issues[0].String()).Response(req.ID)
+			return nil, rpcerr.ValidationFailed("invalid config: " + issues[0].String())
 		}
-
-		// Load current config to verify baseHash (optimistic concurrency).
 		snapshot, loadErr := config.LoadConfigFromDefaultPath()
 		if loadErr == nil && snapshot != nil && p.BaseHash != "" {
 			if snapshot.Hash != p.BaseHash {
-				return rpcerr.Conflict("config has been modified since last read (hash mismatch)").Response(req.ID)
+				return nil, rpcerr.Conflict("config has been modified since last read (hash mismatch)")
 			}
 		}
-
-		// Write config to the default path.
 		cfgPath := config.ResolveConfigPath()
 		if err := os.WriteFile(cfgPath, []byte(p.Raw), 0o644); err != nil { //nolint:gosec // G306 — world-readable config is intentional
-			return rpcerr.WrapUnavailable("failed to write config", err).Response(req.ID)
+			return nil, rpcerr.WrapUnavailable("failed to write config", err)
 		}
-
 		newHash := config.HashString(p.Raw)
-
 		if deps.Broadcaster != nil {
 			deps.Broadcaster("config.changed", map[string]any{"hash": newHash})
 		}
-
-		resp := rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"ok":       true,
 			"hash":     newHash,
 			"warnings": warnings,
-		})
-		return resp
-	}
+		}, nil
+	})
 }
 
 func configApply(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Raw            string `json:"raw"`
-			BaseHash       string `json:"baseHash"`
-			SessionKey     string `json:"sessionKey,omitempty"`
-			Note           string `json:"note,omitempty"`
-			RestartDelayMs int    `json:"restartDelayMs,omitempty"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
+	type params struct {
+		Raw            string `json:"raw"`
+		BaseHash       string `json:"baseHash"`
+		SessionKey     string `json:"sessionKey,omitempty"`
+		Note           string `json:"note,omitempty"`
+		RestartDelayMs int    `json:"restartDelayMs,omitempty"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		if p.Raw == "" {
-			return rpcerr.MissingParam("raw").Response(req.ID)
+			return nil, rpcerr.MissingParam("raw")
 		}
-
-		// Validate JSON syntax and config structure.
 		issues, warnings, err := config.ValidateRawConfig([]byte(p.Raw))
 		if err != nil {
-			return rpcerr.WrapValidationFailed("config validation error", err).Response(req.ID)
+			return nil, rpcerr.WrapValidationFailed("config validation error", err)
 		}
 		if len(issues) > 0 {
-			return rpcerr.ValidationFailed("invalid config: " + issues[0].String()).Response(req.ID)
+			return nil, rpcerr.ValidationFailed("invalid config: " + issues[0].String())
 		}
-
-		// Concurrency check.
 		snapshot, loadErr := config.LoadConfigFromDefaultPath()
 		if loadErr == nil && snapshot != nil && p.BaseHash != "" {
 			if snapshot.Hash != p.BaseHash {
-				return rpcerr.Conflict("config has been modified since last read (hash mismatch)").Response(req.ID)
+				return nil, rpcerr.Conflict("config has been modified since last read (hash mismatch)")
 			}
 		}
-
 		cfgPath := config.ResolveConfigPath()
 		if err := os.WriteFile(cfgPath, []byte(p.Raw), 0o644); err != nil { //nolint:gosec // G306 — world-readable config is intentional
-			return rpcerr.WrapUnavailable("failed to write config", err).Response(req.ID)
+			return nil, rpcerr.WrapUnavailable("failed to write config", err)
 		}
-
 		newHash := config.HashString(p.Raw)
-
 		if deps.Broadcaster != nil {
 			deps.Broadcaster("config.applied", map[string]any{
 				"hash":       newHash,
@@ -196,81 +173,62 @@ func configApply(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 				"note":       p.Note,
 			})
 		}
-
-		resp := rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"ok":       true,
 			"hash":     newHash,
 			"warnings": warnings,
-		})
-		return resp
-	}
+		}, nil
+	})
 }
 
 func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Raw            string `json:"raw"`
-			BaseHash       string `json:"baseHash"`
-			SessionKey     string `json:"sessionKey,omitempty"`
-			Note           string `json:"note,omitempty"`
-			RestartDelayMs int    `json:"restartDelayMs,omitempty"`
-		}](req)
-		if errResp != nil {
-			return errResp
-		}
+	type params struct {
+		Raw            string `json:"raw"`
+		BaseHash       string `json:"baseHash"`
+		SessionKey     string `json:"sessionKey,omitempty"`
+		Note           string `json:"note,omitempty"`
+		RestartDelayMs int    `json:"restartDelayMs,omitempty"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
 		if p.Raw == "" {
-			return rpcerr.MissingParam("raw").Response(req.ID)
+			return nil, rpcerr.MissingParam("raw")
 		}
-
-		// Parse the patch.
 		var patch map[string]any
 		if err := json.Unmarshal([]byte(p.Raw), &patch); err != nil {
-			return rpcerr.WrapValidationFailed("invalid JSON patch", err).Response(req.ID)
+			return nil, rpcerr.WrapValidationFailed("invalid JSON patch", err)
 		}
-
-		// Load current config for concurrency check.
 		snapshot, err := config.LoadConfigFromDefaultPath()
 		if err != nil {
-			return rpcerr.WrapUnavailable("failed to load config", err).Response(req.ID)
+			return nil, rpcerr.WrapUnavailable("failed to load config", err)
 		}
-
-		// Concurrency check.
 		if p.BaseHash != "" {
 			if snapshot.Hash != p.BaseHash {
-				return rpcerr.Conflict("config has been modified since last read (hash mismatch)").Response(req.ID)
+				return nil, rpcerr.Conflict("config has been modified since last read (hash mismatch)")
 			}
 		}
-
-		// Merge patch into current config.
 		var current map[string]any
 		if err := json.Unmarshal([]byte(snapshot.Raw), &current); err != nil {
-			return rpcerr.WrapUnavailable("failed to parse current config", err).Response(req.ID)
+			return nil, rpcerr.WrapUnavailable("failed to parse current config", err)
 		}
 		for k, v := range patch {
 			current[k] = v
 		}
-
 		merged, err := json.MarshalIndent(current, "", "  ")
 		if err != nil {
-			return rpcerr.Unavailable("failed to marshal merged config").Response(req.ID)
+			return nil, rpcerr.Unavailable("failed to marshal merged config")
 		}
-
-		// Validate merged config before writing.
 		issues, warnings, valErr := config.ValidateRawConfig(merged)
 		if valErr != nil {
-			return rpcerr.WrapValidationFailed("config validation error", valErr).Response(req.ID)
+			return nil, rpcerr.WrapValidationFailed("config validation error", valErr)
 		}
 		if len(issues) > 0 {
-			return rpcerr.ValidationFailed("merged config is invalid: " + issues[0].String()).Response(req.ID)
+			return nil, rpcerr.ValidationFailed("merged config is invalid: " + issues[0].String())
 		}
-
 		cfgPath := config.ResolveConfigPath()
 		if err := os.WriteFile(cfgPath, merged, 0o644); err != nil { //nolint:gosec // G306 — world-readable config is intentional
-			return rpcerr.WrapUnavailable("failed to write config", err).Response(req.ID)
+			return nil, rpcerr.WrapUnavailable("failed to write config", err)
 		}
-
 		newHash := config.HashString(string(merged))
-
 		if deps.Broadcaster != nil {
 			deps.Broadcaster("config.patched", map[string]any{
 				"hash":       newHash,
@@ -278,14 +236,12 @@ func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 				"note":       p.Note,
 			})
 		}
-
-		resp := rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"ok":       true,
 			"hash":     newHash,
 			"warnings": warnings,
-		})
-		return resp
-	}
+		}, nil
+	})
 }
 
 func configSchema(_ ConfigAdvancedDeps) rpcutil.HandlerFunc {
@@ -297,20 +253,13 @@ func configSchema(_ ConfigAdvancedDeps) rpcutil.HandlerFunc {
 }
 
 func configSchemaLookup(_ ConfigAdvancedDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		p, errResp := rpcutil.DecodeParams[struct {
-			Path string `json:"path"`
-		}](req)
-		if errResp != nil || p.Path == "" {
-			return rpcerr.MissingParam("path").Response(req.ID)
-		}
-
-		node := config.LookupSchema(p.Path)
-		if node == nil {
-			resp := rpcutil.RespondOK(req.ID, nil)
-			return resp
-		}
-		resp := rpcutil.RespondOK(req.ID, node)
-		return resp
+	type params struct {
+		Path string `json:"path"`
 	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if p.Path == "" {
+			return nil, rpcerr.MissingParam("path")
+		}
+		return config.LookupSchema(p.Path), nil
+	})
 }

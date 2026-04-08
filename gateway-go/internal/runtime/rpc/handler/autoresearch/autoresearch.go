@@ -30,19 +30,12 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 	}
 }
 
-func requireRunner(deps Deps, reqID string) *protocol.ResponseFrame {
-	if deps.Runner == nil {
-		return rpcerr.Unavailable("autoresearch runner not initialized").Response(reqID)
-	}
-	return nil
-}
-
 // --- autoresearch.status ---
 
 func arStatus(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireRunner(deps, req.ID); errResp != nil {
-			return errResp
+		if deps.Runner == nil {
+			return rpcerr.Unavailable("autoresearch runner not initialized").Response(req.ID)
 		}
 
 		snap := deps.Runner.Status()
@@ -78,37 +71,34 @@ func arStatus(deps Deps) rpcutil.HandlerFunc {
 // --- autoresearch.start ---
 
 func arStart(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireRunner(deps, req.ID); errResp != nil {
-			return errResp
-		}
-		p, errResp := rpcutil.DecodeParams[struct {
-			Workdir string `json:"workdir"`
-		}](req)
-		if errResp != nil {
-			return errResp
+	type params struct {
+		Workdir string `json:"workdir"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if deps.Runner == nil {
+			return nil, rpcerr.Unavailable("autoresearch runner not initialized")
 		}
 		if p.Workdir == "" {
-			return rpcerr.MissingParam("workdir").Response(req.ID)
+			return nil, rpcerr.MissingParam("workdir")
 		}
 		if err := deps.Runner.Start(p.Workdir); err != nil {
-			return rpcerr.Wrap(protocol.ErrConflict, err).Response(req.ID)
+			return nil, rpcerr.WrapConflict("autoresearch start failed", err)
 		}
 		snap := deps.Runner.Status()
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"ok":      true,
 			"running": snap.Running,
 			"workdir": snap.Workdir,
-		})
-	}
+		}, nil
+	})
 }
 
 // --- autoresearch.stop ---
 
 func arStop(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireRunner(deps, req.ID); errResp != nil {
-			return errResp
+		if deps.Runner == nil {
+			return rpcerr.Unavailable("autoresearch runner not initialized").Response(req.ID)
 		}
 		if !deps.Runner.IsRunning() {
 			return rpcutil.RespondOK(req.ID, map[string]any{
@@ -139,16 +129,13 @@ func arStop(deps Deps) rpcutil.HandlerFunc {
 // --- autoresearch.results ---
 
 func arResults(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireRunner(deps, req.ID); errResp != nil {
-			return errResp
-		}
-		p, errResp := rpcutil.DecodeParams[struct {
-			Workdir string `json:"workdir"`
-			Format  string `json:"format"`
-		}](req)
-		if errResp != nil {
-			return errResp
+	type params struct {
+		Workdir string `json:"workdir"`
+		Format  string `json:"format"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if deps.Runner == nil {
+			return nil, rpcerr.Unavailable("autoresearch runner not initialized")
 		}
 
 		workdir := p.Workdir
@@ -156,21 +143,21 @@ func arResults(deps Deps) rpcutil.HandlerFunc {
 			workdir = deps.Runner.Workdir()
 		}
 		if workdir == "" {
-			return rpcerr.MissingParam("workdir").Response(req.ID)
+			return nil, rpcerr.MissingParam("workdir")
 		}
 
 		if p.Format == "tsv" {
 			raw, err := ar.ReadResults(workdir)
 			if err != nil {
-				return rpcerr.NotFound("results").Response(req.ID)
+				return nil, rpcerr.NotFound("results")
 			}
-			return rpcutil.RespondOK(req.ID, map[string]any{"tsv": raw})
+			return map[string]any{"tsv": raw}, nil
 		}
 
 		// Default: structured JSON.
 		rows, err := ar.ParseResults(workdir)
 		if err != nil {
-			return rpcerr.NotFound("results").Response(req.ID)
+			return nil, rpcerr.NotFound("results")
 		}
 
 		result := map[string]any{
@@ -181,36 +168,33 @@ func arResults(deps Deps) rpcutil.HandlerFunc {
 			result["trend"] = ar.TrendAnalysis(rows, cfg)
 			result["summary"] = ar.Summary(workdir, cfg)
 		}
-		return rpcutil.RespondOK(req.ID, result)
-	}
+		return result, nil
+	})
 }
 
 // --- autoresearch.config ---
 
 func arConfig(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireRunner(deps, req.ID); errResp != nil {
-			return errResp
-		}
-		p, errResp := rpcutil.DecodeParams[struct {
-			Workdir         string           `json:"workdir"`
-			TargetFiles     []string         `json:"target_files,omitempty"`
-			MetricCmd       string           `json:"metric_cmd,omitempty"`
-			MetricName      string           `json:"metric_name,omitempty"`
-			MetricDirection string           `json:"metric_direction,omitempty"`
-			TimeBudgetSec   int              `json:"time_budget_sec,omitempty"`
-			BranchTag       string           `json:"branch_tag,omitempty"`
-			Model           string           `json:"model,omitempty"`
-			MetricPattern   string           `json:"metric_pattern,omitempty"`
-			MaxIterations   int              `json:"max_iterations,omitempty"`
-			CacheEnabled    bool             `json:"cache_enabled,omitempty"`
-			Constants       []ar.ConstantDef `json:"constants,omitempty"`
-		}](req)
-		if errResp != nil {
-			return errResp
+	type params struct {
+		Workdir         string           `json:"workdir"`
+		TargetFiles     []string         `json:"target_files,omitempty"`
+		MetricCmd       string           `json:"metric_cmd,omitempty"`
+		MetricName      string           `json:"metric_name,omitempty"`
+		MetricDirection string           `json:"metric_direction,omitempty"`
+		TimeBudgetSec   int              `json:"time_budget_sec,omitempty"`
+		BranchTag       string           `json:"branch_tag,omitempty"`
+		Model           string           `json:"model,omitempty"`
+		MetricPattern   string           `json:"metric_pattern,omitempty"`
+		MaxIterations   int              `json:"max_iterations,omitempty"`
+		CacheEnabled    bool             `json:"cache_enabled,omitempty"`
+		Constants       []ar.ConstantDef `json:"constants,omitempty"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if deps.Runner == nil {
+			return nil, rpcerr.Unavailable("autoresearch runner not initialized")
 		}
 		if p.Workdir == "" {
-			return rpcerr.MissingParam("workdir").Response(req.ID)
+			return nil, rpcerr.MissingParam("workdir")
 		}
 
 		// Load existing or create new.
@@ -255,123 +239,114 @@ func arConfig(deps Deps) rpcutil.HandlerFunc {
 		}
 
 		if err := cfg.Validate(); err != nil {
-			return rpcerr.Wrap(protocol.ErrInvalidRequest, err).Response(req.ID)
+			return nil, rpcerr.WrapInvalidRequest("invalid autoresearch config", err)
 		}
 		if err := ar.SaveConfig(p.Workdir, cfg); err != nil {
-			return rpcerr.Wrap(protocol.ErrUnavailable, err).Response(req.ID)
+			return nil, rpcerr.WrapUnavailable("failed to save config", err)
 		}
 
 		deps.Runner.SetWorkdir(p.Workdir)
 
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"ok":     true,
 			"config": cfg,
-		})
-	}
+		}, nil
+	})
 }
 
 // --- autoresearch.resume ---
 
 func arResume(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireRunner(deps, req.ID); errResp != nil {
-			return errResp
-		}
-		p, errResp := rpcutil.DecodeParams[struct {
-			Workdir string `json:"workdir"`
-		}](req)
-		if errResp != nil {
-			return errResp
+	type params struct {
+		Workdir string `json:"workdir"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if deps.Runner == nil {
+			return nil, rpcerr.Unavailable("autoresearch runner not initialized")
 		}
 		if p.Workdir == "" {
-			return rpcerr.MissingParam("workdir").Response(req.ID)
+			return nil, rpcerr.MissingParam("workdir")
 		}
 
 		cfg, err := ar.LoadConfig(p.Workdir)
 		if err != nil {
-			return rpcerr.NotFound("config").Response(req.ID)
+			return nil, rpcerr.NotFound("config")
 		}
 		if cfg.TotalIterations == 0 {
-			return rpcerr.InvalidRequest("no iterations completed — use start instead").Response(req.ID)
+			return nil, rpcerr.InvalidRequest("no iterations completed — use start instead")
 		}
 
 		cfg.Resume = true
 		if err := ar.SaveConfig(p.Workdir, cfg); err != nil {
-			return rpcerr.Wrap(protocol.ErrUnavailable, err).Response(req.ID)
+			return nil, rpcerr.WrapUnavailable("failed to save config", err)
 		}
 
 		if err := deps.Runner.Start(p.Workdir); err != nil {
-			return rpcerr.Wrap(protocol.ErrConflict, err).Response(req.ID)
+			return nil, rpcerr.WrapConflict("autoresearch resume failed", err)
 		}
 		snap := deps.Runner.Status()
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"ok":              true,
 			"running":         snap.Running,
 			"resumed_from":    cfg.TotalIterations,
 			"best_metric":     cfg.BestMetric,
 			"baseline_metric": cfg.BaselineMetric,
-		})
-	}
+		}, nil
+	})
 }
 
 // --- autoresearch.archive ---
 
 func arArchive(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireRunner(deps, req.ID); errResp != nil {
-			return errResp
-		}
-		p, errResp := rpcutil.DecodeParams[struct {
-			Workdir string `json:"workdir"`
-		}](req)
-		if errResp != nil {
-			return errResp
+	type params struct {
+		Workdir string `json:"workdir"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if deps.Runner == nil {
+			return nil, rpcerr.Unavailable("autoresearch runner not initialized")
 		}
 		if p.Workdir == "" {
-			return rpcerr.MissingParam("workdir").Response(req.ID)
+			return nil, rpcerr.MissingParam("workdir")
 		}
 
 		cfg, err := ar.LoadConfig(p.Workdir)
 		if err != nil {
-			return rpcerr.NotFound("config").Response(req.ID)
+			return nil, rpcerr.NotFound("config")
 		}
 		path, err := ar.ArchiveRun(p.Workdir, cfg.BranchTag)
 		if err != nil {
-			return rpcerr.Wrap(protocol.ErrUnavailable, err).Response(req.ID)
+			return nil, rpcerr.WrapUnavailable("archive failed", err)
 		}
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"ok":   true,
 			"path": path,
 			"tag":  cfg.BranchTag,
-		})
-	}
+		}, nil
+	})
 }
 
 // --- autoresearch.runs ---
 
 func arRuns(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireRunner(deps, req.ID); errResp != nil {
-			return errResp
-		}
-		p, errResp := rpcutil.DecodeParams[struct {
-			Workdir string `json:"workdir"`
-		}](req)
-		if errResp != nil {
-			return errResp
+	type params struct {
+		Workdir string `json:"workdir"`
+	}
+	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		if deps.Runner == nil {
+			return nil, rpcerr.Unavailable("autoresearch runner not initialized")
 		}
 		if p.Workdir == "" {
-			return rpcerr.MissingParam("workdir").Response(req.ID)
+			return nil, rpcerr.MissingParam("workdir")
 		}
 
 		runs, err := ar.ListRuns(p.Workdir)
 		if err != nil {
-			return rpcerr.Wrap(protocol.ErrUnavailable, err).Response(req.ID)
+			return nil, rpcerr.WrapUnavailable("failed to list runs", err)
 		}
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		return map[string]any{
 			"ok":    true,
 			"runs":  runs,
 			"count": len(runs),
-		})
-	}
+		}, nil
+	})
 }
