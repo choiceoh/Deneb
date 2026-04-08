@@ -213,7 +213,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		ss.WriteString("1. 작업이 스킬의 description 또는 tags와 일치\n")
 		ss.WriteString("2. 사용자가 슬래시 커맨드(`/이름`)로 스킬을 직접 호출\n")
 		ss.WriteString("3. 복합 워크플로우(빌드, 배포, 릴리스, PR, 커밋 등) — 단계를 즉흥으로 만들지 마라\n")
-		ss.WriteString("4. 위 목록에 없지만 해당할 수 있는 작업 → `skills_list`로 먼저 검색\n\n")
+		ss.WriteString("4. 위 목록에 없지만 해당할 수 있는 작업 → `skills`(action=list)로 먼저 검색\n\n")
 		ss.WriteString("### 사용 방법\n")
 		ss.WriteString("1. <available_skills>에서 일치하는 스킬 하나 선택 (description 기준)\n")
 		ss.WriteString("2. 해당 스킬의 <location>에서 SKILL.md를 `read`\n")

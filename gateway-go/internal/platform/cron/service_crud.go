@@ -195,7 +195,14 @@ func (s *Service) Run(ctx context.Context, id string, mode string) (*RunOutcome,
 // EnqueueRun queues a job for async execution.
 func (s *Service) EnqueueRun(ctx context.Context, id string, mode string) error {
 	go func() {
-		s.Run(ctx, id, mode)
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("panic in async cron run", "job", id, "panic", r)
+			}
+		}()
+		if _, err := s.Run(ctx, id, mode); err != nil {
+			s.logger.Warn("async cron run failed", "job", id, "error", err)
+		}
 	}()
 	return nil
 }

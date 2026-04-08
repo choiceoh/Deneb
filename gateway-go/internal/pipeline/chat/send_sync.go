@@ -113,9 +113,8 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 		resolvedModel = h.registry.FullModelID(modelrole.RoleMain)
 	}
 
-	stopReason := ""
-	if result != nil {
-		stopReason = result.StopReason
+	if result == nil {
+		return nil, fmt.Errorf("agent run returned nil result")
 	}
 
 	return &SyncResult{
@@ -123,7 +122,7 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 		Model:        resolvedModel,
 		InputTokens:  result.Usage.InputTokens,
 		OutputTokens: result.Usage.OutputTokens,
-		StopReason:   stopReason,
+		StopReason:   result.StopReason,
 	}, nil
 }
 
@@ -182,9 +181,8 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 		resolvedModel = h.registry.FullModelID(modelrole.RoleMain)
 	}
 
-	stopReason := ""
-	if result != nil {
-		stopReason = result.StopReason
+	if result == nil {
+		return nil, fmt.Errorf("agent run returned nil result")
 	}
 
 	return &SyncResult{
@@ -192,6 +190,6 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 		Model:        resolvedModel,
 		InputTokens:  result.Usage.InputTokens,
 		OutputTokens: result.Usage.OutputTokens,
-		StopReason:   stopReason,
+		StopReason:   result.StopReason,
 	}, nil
 }
