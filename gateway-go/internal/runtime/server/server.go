@@ -20,7 +20,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/dedupe"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/middleware"
 	arSession "github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
@@ -33,15 +32,12 @@ import (
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// ServerTransport owns HTTP/WS lifecycle and connection state.
+// ServerTransport owns HTTP lifecycle and connection state.
 type ServerTransport struct {
 	addr       string
 	httpServer *http.Server
-	clients    sync.Map     // connID → *WsClient; concurrent-safe client tracking
-	clientCnt  atomic.Int32 // current WebSocket connection count
 	startedAt  time.Time
 }
 
@@ -82,15 +78,14 @@ type Server struct {
 	*InfraSubsystem
 	*GenesisSubsystem
 
-	dedupe        *dedupe.Tracker
-	broadcaster   *events.Broadcaster
-	publisher     *events.Publisher
-	processes     *process.Manager
-	daemon        *daemon.Daemon
-	runtimeCfg    *config.GatewayRuntimeConfig
-	version string
-	logColor      bool // true when ANSI color output is enabled
-	logger        *slog.Logger
+	broadcaster *events.Broadcaster
+	publisher   *events.Publisher
+	processes   *process.Manager
+	daemon      *daemon.Daemon
+	runtimeCfg  *config.GatewayRuntimeConfig
+	version     string
+	logColor    bool // true when ANSI color output is enabled
+	logger      *slog.Logger
 
 	// Session, chat, and hook subsystems — logically grouped to reduce God-Object growth.
 	*SessionManager // sessions, transcript
@@ -139,12 +134,8 @@ func New(addr string, opts ...Option) (*Server, error) {
 		MemorySubsystem:     &MemorySubsystem{},
 		AutonomousSubsystem: &AutonomousSubsystem{},
 		GenesisSubsystem:    &GenesisSubsystem{},
-		dedupe: dedupe.NewTracker(
-			time.Duration(protocol.DedupeTTLMs)*time.Millisecond,
-			protocol.DedupeMax,
-		),
-		version: "0.1.0-go",
-		logger:  slog.Default(),
+		version:             "0.1.0-go",
+		logger:              slog.Default(),
 		SessionManager: &SessionManager{
 			sessions:       session.NewManager(),
 			abortMemory:    arSession.NewAbortMemory(2000),

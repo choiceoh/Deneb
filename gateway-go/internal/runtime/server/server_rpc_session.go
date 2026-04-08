@@ -146,9 +146,8 @@ func (s *Server) registerSessionRPCMethods() {
 	// Wire server-level status data for /status command.
 	s.chatHandler.SetStatusDepsFunc(func(sessionKey string) chat.StatusDeps {
 		sd := chat.StatusDeps{
-			Version:       s.version,
-			StartedAt:     s.startedAt,
-			WSConnections: s.clientCnt.Load(),
+			Version:   s.version,
+			StartedAt: s.startedAt,
 		}
 		if s.sessions != nil {
 			sd.SessionCount = s.sessions.Count()

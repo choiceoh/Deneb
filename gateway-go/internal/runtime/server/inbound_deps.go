@@ -36,7 +36,6 @@ func (p *InboundProcessor) buildCommandDeps(sessionKey string) *handlers.Command
 	if p.server.sessions != nil {
 		sd.SessionCount = p.server.sessions.Count()
 	}
-	sd.WSConnections = p.server.clientCnt.Load()
 
 	// Per-provider usage stats.
 	if p.server.usageTracker != nil {

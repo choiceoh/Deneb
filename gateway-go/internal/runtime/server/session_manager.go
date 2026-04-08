@@ -18,4 +18,3 @@ type SessionManager struct {
 	historyTracker *arSession.HistoryTracker // per-session conversation history
 	sessionUsage   *arSession.SessionUsage   // aggregate token usage for /status reporting
 }
-

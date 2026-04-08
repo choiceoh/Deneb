@@ -48,9 +48,7 @@ func (p *InboundProcessor) handleStatusDashboardCommand(chatID, sessionKey strin
 	if p.server.sessions != nil {
 		fmt.Fprintf(&b, " | Sessions: %d", p.server.sessions.Count())
 	}
-
-	// WS connections.
-	fmt.Fprintf(&b, " | WS: %d\n", p.server.clientCnt.Load())
+	b.WriteByte('\n')
 	b.WriteByte('\n')
 
 	// Current session info.

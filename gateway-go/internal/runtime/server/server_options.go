@@ -1,13 +1,11 @@
 package server
 
 import (
-	"context"
 	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // Option configures the gateway server.
@@ -46,13 +44,6 @@ func (s *Server) RuntimeConfig() *config.GatewayRuntimeConfig {
 	return s.runtimeCfg
 }
 
-// DispatchRPC dispatches an RPC request through the server's dispatcher.
-// This allows internal components (e.g., model prewarm) to invoke RPC
-// methods without going through HTTP/WebSocket.
-func (s *Server) DispatchRPC(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-	return s.dispatcher.Dispatch(ctx, req)
-}
-
 // WithProviders sets the provider plugin registry.
 func WithProviders(r *provider.Registry) Option {
 	return func(s *Server) {
@@ -66,4 +57,3 @@ func WithTranscript(w *transcript.Writer) Option {
 		s.transcript = w
 	}
 }
-

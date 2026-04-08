@@ -12,10 +12,8 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/logging"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/ws"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/hooks"
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // initAndListen creates the HTTP server, binds to the address, and starts
@@ -44,7 +42,6 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	}
 
 	s.startedAt = time.Now()
-	s.startTickBroadcaster(ctx)
 	s.StartMonitoring(ctx)
 	s.startProcessPruner(ctx)
 	s.sessions.StartGC(ctx)
@@ -187,10 +184,7 @@ func (s *Server) doShutdown() error {
 	s.ready.Store(false)
 	logging.PrintShutdown(os.Stderr, time.Since(s.startedAt), s.logColor)
 
-	// 1. Broadcast shutdown event to all connected clients.
-	s.broadcastShutdownEvent()
-
-	// 2. Stop accepting new connections.
+	// 1. Stop accepting new connections.
 	var httpErr error
 	if s.httpServer != nil {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -198,34 +192,22 @@ func (s *Server) doShutdown() error {
 		httpErr = s.httpServer.Shutdown(shutdownCtx)
 	}
 
-	// 3. Close existing WebSocket clients.
-	s.clients.Range(func(key, value any) bool {
-		client := value.(*WsClient)
-		if err := client.conn.Close(ws.StatusGoingAway, "server shutting down"); err != nil {
-			s.logger.Debug("ws close during shutdown", "connId", client.connID, "error", err)
-		}
-		return true
-	})
-
-	// 4. Stop gateway event subscriptions (bounded to avoid hanging).
+	// 2. Stop gateway event subscriptions (bounded to avoid hanging).
 	if s.gatewaySubs != nil {
 		stopWithTimeout(5*time.Second, "gatewaySubs.Stop", s.logger, s.gatewaySubs.Stop)
 	}
 
-	// 5. Stop dedupe background GC.
-	s.dedupe.Close()
-
-	// 6. Stop cron service.
+	// 3. Stop cron service.
 	if s.cronService != nil {
 		s.cronService.Stop()
 	}
 
-	// 6b. Stop autonomous service (dreaming).
+	// 4. Stop autonomous service (dreaming).
 	if s.autonomousSvc != nil {
 		s.autonomousSvc.Stop()
 	}
 
-	// 6b2. Cleanup genesis subsystem.
+	// 5. Cleanup genesis subsystem.
 	if s.genesisSvc != nil {
 		s.genesisSvc.Stop()
 	}
@@ -233,56 +215,56 @@ func (s *Server) doShutdown() error {
 		s.genesisTracker.Close()
 	}
 
-	// 6b3. Stop local AI hub (drains queued requests, cancels in-flight).
+	// 6. Stop local AI hub (drains queued requests, cancels in-flight).
 	if s.localAIHub != nil {
 		s.localAIHub.Shutdown()
 	}
 
-	// 6c. Close task store.
+	// 7. Close task store.
 	if s.taskStore != nil {
 		s.taskStore.Close()
 	}
 
-	// 6d. Stop autoresearch runner.
+	// 8. Stop autoresearch runner.
 	if s.autoresearchRunner != nil {
 		s.autoresearchRunner.Stop()
 	}
 
 	// Gmail polling is stopped by autonomous service (registered as periodic task).
 
-	// 7. Fire gateway.stop internal hook.
+	// 9. Fire gateway.stop internal hook.
 	if s.internalHooks != nil {
 		s.internalHooks.TriggerFromEvent(context.Background(), hooks.EventGatewayStop, "", nil)
 	}
 
-	// 8. Stop Telegram plugin.
+	// 10. Stop Telegram plugin.
 	if s.telegramPlug != nil {
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		s.telegramPlug.Stop(stopCtx)
 		stopCancel()
 	}
 
-	// 9. Close run state machine.
+	// 11. Close run state machine.
 	if s.runStateMachine != nil {
 		s.runStateMachine.Close()
 	}
 
-	// 10. Close chat handler.
+	// 12. Close chat handler.
 	if s.chatHandler != nil {
 		s.chatHandler.Close()
 	}
 
-	// 11. Close wiki store (FTS database).
+	// 13. Close wiki store (FTS database).
 	if s.wikiStore != nil {
 		s.wikiStore.Close()
 	}
 
-	// 11b. Stop process manager background goroutine.
+	// 14. Stop process manager background goroutine.
 	if s.processes != nil {
 		s.processes.Stop()
 	}
 
-	// 12. ACP cleanup: persist bindings, registry, and unsubscribe lifecycle sync.
+	// 15. ACP cleanup: persist bindings, registry, and unsubscribe lifecycle sync.
 	if s.acpDeps != nil && s.acpDeps.BindingStore != nil && s.acpDeps.Bindings != nil {
 		if err := s.acpDeps.BindingStore.SyncFromService(s.acpDeps.Bindings); err != nil {
 			s.logger.Warn("failed to persist ACP bindings on shutdown", "error", err)
@@ -323,21 +305,4 @@ func stopWithTimeout(d time.Duration, label string, logger *slog.Logger, fn func
 	case <-time.After(d):
 		logger.Warn(label + " timed out")
 	}
-}
-
-// broadcastShutdownEvent sends a shutdown event to all authenticated clients
-// so they can reconnect or show an appropriate message.
-func (s *Server) broadcastShutdownEvent() {
-	ev, _ := protocol.NewEventFrame("shutdown", map[string]any{
-		"reason": "server shutting down",
-	})
-	s.clients.Range(func(key, value any) bool {
-		client := value.(*WsClient)
-		if client.authed {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			s.writeFrame(ctx, client, ev)
-			cancel()
-		}
-		return true
-	})
 }
