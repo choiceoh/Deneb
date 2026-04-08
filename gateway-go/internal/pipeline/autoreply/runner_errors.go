@@ -64,93 +64,10 @@ func (k AgentErrorKind) IsTransient() bool {
 	return k == AgentErrorTransient || k == AgentErrorRateLimit || k == AgentErrorServerDown
 }
 
-// NeedsSessionReset returns true for errors requiring conversation reset.
-func (k AgentErrorKind) NeedsSessionReset() bool {
-	return k == AgentErrorContextOverflow || k == AgentErrorRoleOrdering || k == AgentErrorCompaction
-}
-
-// UserMessage returns a Korean user-facing error message.
-// Returns "" for AgentErrorUnknown (caller should use the raw error).
-func (k AgentErrorKind) UserMessage() string {
-	switch k {
-	case AgentErrorContextOverflow:
-		return ContextOverflowMessage
-	case AgentErrorBilling:
-		return BillingErrorMessage
-	case AgentErrorRoleOrdering:
-		return RoleOrderingMessage
-	case AgentErrorCompaction:
-		return CompactionFailureMessage
-	case AgentErrorAuth:
-		return AuthFailedMessage
-	case AgentErrorRateLimit:
-		return RateLimitMessage
-	case AgentErrorServerDown:
-		return ServerUnavailableMessage
-	default:
-		return ""
-	}
-}
-
-// Error message constants.
-const (
-	BillingErrorMessage      = "⚠️ Billing error — please check your API key or plan."
-	ContextOverflowMessage   = "⚠️ Context overflow — prompt too large for this model. Try a shorter message or a larger-context model."
-	RoleOrderingMessage      = "⚠️ Message ordering conflict. I've reset the conversation - please try again."
-	CompactionFailureMessage = "⚠️ Context limit exceeded during compaction. I've reset our conversation to start fresh - please try again."
-	TransientRetryDelayMs    = 2500
-
-	RateLimitMessage         = "⚠️ API 요청 한도 초과 (429) — 잠시 후 다시 시도해 주세요."
-	ServerUnavailableMessage = "⚠️ 서버 일시 장애 — 잠시 후 다시 시도해 주세요."
-	AuthFailedMessage        = "⚠️ API 인증 실패 — API 키를 확인해 주세요."
-)
-
-// Legacy classification functions — kept for external callers (e.g. chat/run_exec.go).
-
 // IsTransientHTTPError checks if an error is a retryable transient HTTP error.
 func IsTransientHTTPError(msg string) bool {
 	k := ClassifyAgentError(msg)
 	return k.IsTransient()
-}
-
-// IsContextOverflowError checks if an error message indicates context overflow.
-func IsContextOverflowError(msg string) bool {
-	return ClassifyAgentError(msg) == AgentErrorContextOverflow
-}
-
-// IsBillingError checks if an error is billing-related.
-func IsBillingError(msg string) bool {
-	return ClassifyAgentError(msg) == AgentErrorBilling
-}
-
-// IsRoleOrderingError checks if an error is a role ordering conflict.
-func IsRoleOrderingError(msg string) bool {
-	return ClassifyAgentError(msg) == AgentErrorRoleOrdering
-}
-
-// IsCompactionFailure checks if an error occurred during compaction.
-func IsCompactionFailure(msg string) bool {
-	return ClassifyAgentError(msg) == AgentErrorCompaction
-}
-
-// ClassifyErrorMessage returns a user-facing Korean error message.
-// Returns "" if no specific classification matches.
-func ClassifyErrorMessage(msg string) string {
-	return ClassifyAgentError(msg).UserMessage()
-}
-
-// resetReason returns the session reset reason string for errors that need it.
-func (k AgentErrorKind) resetReason() string {
-	switch k {
-	case AgentErrorContextOverflow:
-		return "context_overflow"
-	case AgentErrorRoleOrdering:
-		return "role_ordering"
-	case AgentErrorCompaction:
-		return "compaction_failure"
-	default:
-		return "unknown"
-	}
 }
 
 func isContextOverflow(lower string) bool {
