@@ -26,7 +26,7 @@ func TestAllowedTools_Implementer(t *testing.T) {
 	if allowed == nil {
 		t.Fatal("implementer preset should return non-nil allowed set")
 	}
-	for _, name := range []string{"read", "write", "edit", "multi_edit", "exec", "test", "git", "apply_patch"} {
+	for _, name := range []string{"read", "write", "edit", "multi_edit", "exec", "test", "git"} {
 		if _, ok := allowed[name]; !ok {
 			t.Errorf("implementer preset should include %q", name)
 		}

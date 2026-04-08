@@ -19,7 +19,7 @@ func TestRegisterCoreTools(t *testing.T) {
 		"cron", "gateway",
 		"sessions_list", "sessions_history", "sessions_search",
 		"sessions_send", "sessions_spawn",
-		"subagents", "image", "youtube_transcript",
+		"subagents", "youtube_transcript",
 		"fetch_tools",
 	}
 

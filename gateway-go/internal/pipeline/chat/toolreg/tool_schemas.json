@@ -1096,35 +1096,6 @@
     }
   },
   {
-    "name": "image",
-    "properties": {
-      "prompt": {
-        "type": "string",
-        "description": "What to analyze in the image(s)"
-      },
-      "image": {
-        "type": "string",
-        "description": "Single image path or URL"
-      },
-      "images": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "Multiple image paths or URLs (up to 20)"
-      },
-      "model": {
-        "type": "string",
-        "enum": [
-          "main",
-          "lightweight",
-          "fallback"
-        ],
-        "description": "Model role to use (default: lightweight)"
-      }
-    }
-  },
-  {
     "name": "youtube_transcript",
     "properties": {
       "url": {
@@ -1374,92 +1345,6 @@
     },
     "required": [
       "files"
-    ]
-  },
-  {
-    "name": "search_and_read",
-    "properties": {
-      "pattern": {
-        "type": "string",
-        "description": "Regex pattern to search for (same as grep)"
-      },
-      "path": {
-        "type": "string",
-        "description": "Directory to search in"
-      },
-      "include": {
-        "type": "string",
-        "description": "Glob pattern to filter files (e.g. \"*.go\")"
-      },
-      "fileType": {
-        "type": "string",
-        "description": "File type filter for ripgrep --type (e.g. \"go\", \"py\")"
-      },
-      "context_lines": {
-        "type": "number",
-        "description": "Lines of context around each match in the file read (default: 10)",
-        "default": 10,
-        "minimum": 0,
-        "maximum": 50
-      },
-      "max_files": {
-        "type": "number",
-        "description": "Maximum number of matching files to read (default: 5)",
-        "default": 5,
-        "minimum": 1,
-        "maximum": 20
-      }
-    },
-    "required": [
-      "pattern"
-    ]
-  },
-  {
-    "name": "inspect",
-    "properties": {
-      "file": {
-        "type": "string",
-        "description": "File path to inspect"
-      },
-      "symbol": {
-        "type": "string",
-        "description": "Specific symbol to inspect (function, type, method name). Enables symbol-level depth automatically"
-      },
-      "depth": {
-        "type": "string",
-        "description": "Inspection depth: shallow (outline+imports), deep (+git log+stats), symbol (+references+blame)",
-        "enum": [
-          "shallow",
-          "deep",
-          "symbol"
-        ],
-        "default": "shallow"
-      }
-    },
-    "required": [
-      "file"
-    ]
-  },
-  {
-    "name": "apply_patch",
-    "properties": {
-      "patch": {
-        "type": "string",
-        "description": "Unified diff content (output of git diff, diff -u, etc.)"
-      },
-      "strip": {
-        "type": "number",
-        "description": "Strip leading path components (like git apply -pN, default: 1)",
-        "default": 1
-      },
-      "dry_run": {
-        "type": "boolean",
-        "description": "Check if patch applies cleanly without modifying files (default: false)",
-        "default": false
-      }
-    },
-    "required": [
-      "patch"
     ]
   },
   {

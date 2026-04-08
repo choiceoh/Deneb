@@ -19,7 +19,7 @@ const (
 // researcherTools are read-only exploration tools for codebase investigation.
 var researcherTools = toSet(
 	"read", "grep", "find", "tree", "diff", "analyze",
-	"batch_read", "search_and_read", "inspect",
+	"batch_read",
 	"web", "http", "wiki", "fetch_tools",
 )
 
@@ -27,8 +27,8 @@ var researcherTools = toSet(
 var implementerTools = toSet(
 	"read", "write", "edit", "multi_edit",
 	"grep", "find", "tree", "diff", "analyze",
-	"test", "exec", "process", "git", "apply_patch",
-	"batch_read", "search_and_read", "inspect", "wiki",
+	"test", "exec", "process", "git",
+	"batch_read", "wiki",
 	"fetch_tools",
 )
 
@@ -36,7 +36,7 @@ var implementerTools = toSet(
 var verifierTools = toSet(
 	"read", "grep", "find", "tree", "diff", "analyze",
 	"test", "exec", "process",
-	"batch_read", "search_and_read", "inspect", "wiki",
+	"batch_read", "wiki",
 	"fetch_tools",
 )
 

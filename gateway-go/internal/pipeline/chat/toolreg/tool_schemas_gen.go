@@ -1012,34 +1012,6 @@ func subagentsToolSchema() map[string]any {
 	}
 }
 
-func imageToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"image": map[string]any{
-				"type":        "string",
-				"description": "Single image path or URL",
-			},
-			"images": map[string]any{
-				"type":        "array",
-				"description": "Multiple image paths or URLs (up to 20)",
-				"items": map[string]any{
-					"type": "string",
-				},
-			},
-			"model": map[string]any{
-				"type":        "string",
-				"description": "Model role to use (default: lightweight)",
-				"enum":        []string{"main", "lightweight", "fallback"},
-			},
-			"prompt": map[string]any{
-				"type":        "string",
-				"description": "What to analyze in the image(s)",
-			},
-		},
-	}
-}
-
 func youtubeTranscriptToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -1263,91 +1235,6 @@ func batchReadToolSchema() map[string]any {
 			},
 		},
 		"required": []string{"files"},
-	}
-}
-
-func searchAndReadToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"context_lines": map[string]any{
-				"type":        "number",
-				"description": "Lines of context around each match in the file read (default: 10)",
-				"default":     10,
-				"minimum":     0,
-				"maximum":     50,
-			},
-			"fileType": map[string]any{
-				"type":        "string",
-				"description": "File type filter for ripgrep --type (e.g. \"go\", \"py\")",
-			},
-			"include": map[string]any{
-				"type":        "string",
-				"description": "Glob pattern to filter files (e.g. \"*.go\")",
-			},
-			"max_files": map[string]any{
-				"type":        "number",
-				"description": "Maximum number of matching files to read (default: 5)",
-				"default":     5,
-				"minimum":     1,
-				"maximum":     20,
-			},
-			"path": map[string]any{
-				"type":        "string",
-				"description": "Directory to search in",
-			},
-			"pattern": map[string]any{
-				"type":        "string",
-				"description": "Regex pattern to search for (same as grep)",
-			},
-		},
-		"required": []string{"pattern"},
-	}
-}
-
-func inspectToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"depth": map[string]any{
-				"type":        "string",
-				"description": "Inspection depth: shallow (outline+imports), deep (+git log+stats), symbol (+references+blame)",
-				"default":     "shallow",
-				"enum":        []string{"shallow", "deep", "symbol"},
-			},
-			"file": map[string]any{
-				"type":        "string",
-				"description": "File path to inspect",
-			},
-			"symbol": map[string]any{
-				"type":        "string",
-				"description": "Specific symbol to inspect (function, type, method name). Enables symbol-level depth automatically",
-			},
-		},
-		"required": []string{"file"},
-	}
-}
-
-func applyPatchToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"dry_run": map[string]any{
-				"type":        "boolean",
-				"description": "Check if patch applies cleanly without modifying files (default: false)",
-				"default":     false,
-			},
-			"patch": map[string]any{
-				"type":        "string",
-				"description": "Unified diff content (output of git diff, diff -u, etc.)",
-			},
-			"strip": map[string]any{
-				"type":        "number",
-				"description": "Strip leading path components (like git apply -pN, default: 1)",
-				"default":     1,
-			},
-		},
-		"required": []string{"patch"},
 	}
 }
 

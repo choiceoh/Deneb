@@ -443,7 +443,7 @@ func TestIsCacheableTool(t *testing.T) {
 		}
 	}
 
-	notCacheable := []string{"write", "exec", "edit", "apply_patch", "git", "unknown"}
+	notCacheable := []string{"write", "exec", "edit", "git", "unknown"}
 	for _, name := range notCacheable {
 		if IsCacheableTool(name) {
 			t.Errorf("IsCacheableTool(%q) = true, want false", name)
@@ -452,7 +452,7 @@ func TestIsCacheableTool(t *testing.T) {
 }
 
 func TestIsMutationTool(t *testing.T) {
-	mutations := []string{"write", "edit", "multi_edit", "apply_patch", "git"}
+	mutations := []string{"write", "edit", "multi_edit", "git"}
 	for _, name := range mutations {
 		if !IsMutationTool(name) {
 			t.Errorf("IsMutationTool(%q) = false, want true", name)

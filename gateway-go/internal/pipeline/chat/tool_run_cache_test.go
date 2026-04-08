@@ -212,7 +212,7 @@ func TestIsCacheableTool(t *testing.T) {
 }
 
 func TestIsMutationTool(t *testing.T) {
-	for _, name := range []string{"write", "edit", "multi_edit", "apply_patch", "git"} {
+	for _, name := range []string{"write", "edit", "multi_edit", "git"} {
 		if !IsMutationTool(name) {
 			t.Fatalf("%s should be a mutation tool", name)
 		}

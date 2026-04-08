@@ -2,16 +2,12 @@ package tools
 
 import (
 	"context"
-	b64 "encoding/base64"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
@@ -289,133 +285,3 @@ func resolveChildTarget(children []*session.Session, target string) (child *sess
 }
 
 // --- session_status tool ---
-
-// --- image tool ---
-
-func ToolImage(client *llm.Client, defaultModel string) ToolFunc {
-	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		var p struct {
-			Prompt string   `json:"prompt"`
-			Image  string   `json:"image"`
-			Images []string `json:"images"`
-			Model  string   `json:"model"`
-		}
-		if err := jsonutil.UnmarshalInto("image params", input, &p); err != nil {
-			return "", err
-		}
-
-		// Collect all image paths/URLs.
-		var imagePaths []string
-		if p.Image != "" {
-			imagePaths = append(imagePaths, p.Image)
-		}
-		imagePaths = append(imagePaths, p.Images...)
-		if len(imagePaths) == 0 {
-			return "No images provided. Use 'image' for a single path/URL or 'images' for multiple.", nil
-		}
-		if len(imagePaths) > 20 {
-			return "Too many images (max 20).", nil
-		}
-
-		if client == nil {
-			return fmt.Sprintf("Vision model not available. %d image(s) provided but no LLM client configured. Images sent in the user's message are already visible to you.", len(imagePaths)), nil
-		}
-
-		prompt := p.Prompt
-		if prompt == "" {
-			prompt = "Describe what you see in the image(s) in detail."
-		}
-
-		// Build content blocks with images + text prompt.
-		var blocks []llm.ContentBlock
-		for _, imgPath := range imagePaths {
-			block, err := loadImageBlock(ctx, imgPath)
-			if err != nil {
-				return fmt.Sprintf("Failed to load image %q: %s", imgPath, err.Error()), nil
-			}
-			blocks = append(blocks, block)
-		}
-		blocks = append(blocks, llm.ContentBlock{Type: "text", Text: prompt})
-
-		model := p.Model
-		if model == "" {
-			model = defaultModel
-		}
-
-		// Call LLM with vision.
-		visionCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-		defer cancel()
-
-		events, err := client.StreamChat(visionCtx, llm.ChatRequest{
-			Model:     model,
-			Messages:  []llm.Message{llm.NewBlockMessage("user", blocks)},
-			MaxTokens: 4096,
-			Stream:    true,
-		})
-		if err != nil {
-			return fmt.Sprintf("Vision model call failed: %s", err.Error()), nil
-		}
-
-		// Collect streaming text response.
-		var result strings.Builder
-		for ev := range events {
-			if ev.Type == "content_block_delta" {
-				var delta struct {
-					Delta struct {
-						Text string `json:"text"`
-					} `json:"delta"`
-				}
-				if json.Unmarshal(ev.Payload, &delta) == nil && delta.Delta.Text != "" {
-					result.WriteString(delta.Delta.Text)
-				}
-			}
-		}
-
-		if result.Len() == 0 {
-			return "Vision model returned no response.", nil
-		}
-		return result.String(), nil
-	}
-}
-
-// loadImageBlock loads an image from a file path or URL and returns an LLM content block.
-func loadImageBlock(_ context.Context, path string) (llm.ContentBlock, error) {
-	var data []byte
-	var mimeType string
-
-	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
-		// URL: use OpenAI-style image_url block.
-		return llm.ContentBlock{
-			Type:     "image",
-			ImageURL: &llm.ImageURL{URL: path, Detail: "auto"},
-		}, nil
-	}
-
-	// Local file: read and base64-encode.
-	var err error
-	data, err = os.ReadFile(path)
-	if err != nil {
-		return llm.ContentBlock{}, fmt.Errorf("read image file: %w", err)
-	}
-
-	// Detect MIME type from magic bytes.
-	mimeType = http.DetectContentType(data)
-	if !strings.HasPrefix(mimeType, "image/") {
-		mimeType = "image/png" // fallback
-	}
-
-	encoded := base64Encode(data)
-	return llm.ContentBlock{
-		Type: "image",
-		Source: &llm.ImageSource{
-			Type:      "base64",
-			MediaType: mimeType,
-			Data:      encoded,
-		},
-	}, nil
-}
-
-// base64Encode encodes data to standard base64.
-func base64Encode(data []byte) string {
-	return b64.StdEncoding.EncodeToString(data)
-}
