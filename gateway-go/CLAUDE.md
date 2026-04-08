@@ -89,7 +89,6 @@ The sole user **does not read or write code**. All development is done through n
 | `internal/platform/telegram/format.go` | Reply formatter: code block collapsing, chunking, file extraction |
 | `internal/platform/telegram/reply_analysis.go` | Reply outcome classifier + Korean error translation for vibe coders |
 | `internal/platform/telegram/slash_commands.go` | Application command registration (vibe-coder commands only) |
-| `internal/platform/telegram/thread_namer.go` | Auto thread naming via local AI LLM |
 | `internal/platform/telegram/send.go` | SendText helper with auto-chunking |
 | `internal/runtime/server/inbound.go` | Inbound message processing, quick commands, autoreply pipeline |
 | `internal/runtime/server/server_chat_telegram.go` | Reply pipeline: dedup → draft edit → send |
