@@ -14,7 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coreparsing/htmlmd"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coreparsing/urlextract"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/web"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
@@ -65,11 +66,7 @@ func defaultLinkFetcher(ctx context.Context, url string) (body []byte, contentTy
 // converts HTML to markdown, and returns a formatted summary string.
 // Returns "" if no links found or all fetches fail.
 func EnrichMessageWithLinks(ctx context.Context, text string, fetchFn FetchFunc, logger *slog.Logger) string {
-	urls, err := ffi.ExtractLinks(text, maxLinksPerMessage)
-	if err != nil {
-		logger.Warn("link extraction failed", "error", err)
-		return ""
-	}
+	urls := urlextract.ExtractLinks(text, maxLinksPerMessage)
 	if len(urls) == 0 {
 		return ""
 	}
@@ -126,18 +123,10 @@ func fetchAndConvert(ctx context.Context, url string, fetchFn FetchFunc, logger 
 	var title, content string
 
 	if isHTMLContent(contentType) {
-		// Strip noise: Go handles class/ID patterns (ads, cookie banners),
-		// Rust handles tag-level noise (nav, aside, svg, iframe, form).
 		cleaned := web.StripNoiseElements(string(data))
-		text, t, err := ffi.HTMLToMarkdownStripNoise(cleaned)
-		if err != nil {
-			logger.Debug("html-to-markdown failed", "url", url, "error", err)
-			// Fall back to raw text with basic tag stripping.
-			content = string(data)
-		} else {
-			content = text
-			title = t
-		}
+		r := htmlmd.ConvertWithOpts(cleaned, htmlmd.Options{StripNoise: true})
+		content = r.Text
+		title = r.Title
 	} else {
 		content = string(data)
 	}

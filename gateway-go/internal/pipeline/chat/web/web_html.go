@@ -1,7 +1,7 @@
-// web_html.go — HTML → text conversion: FFI, local AI extraction pipeline.
+// web_html.go — HTML → text conversion pipeline.
 //
 // processHTML orchestrates the full extraction pipeline for HTML content.
-// ffiConvert is the FFI-backed HTML→Markdown baseline.
+// htmlmdConvert is the HTML→Markdown baseline.
 // LocalAIExtractor is the optional AI-powered extraction layer (Qwen via local AI).
 package web
 
@@ -18,8 +18,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/ffi"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coreparsing/htmlmd"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -37,9 +37,9 @@ func processHTML(ctx context.Context, html, url string, localAI *LocalAIExtracto
 	meta.Signals = detectSignals(html)
 
 	// Step 3: Strip noise elements.
-	// Tag-level noise (nav, aside, svg, iframe, form) is handled by Rust via
-	// strip_noise option. Class/ID-based noise (cookie banners, ads, sidebars,
-	// comments) is still handled by Go's StripNoiseElements.
+	// Tag-level noise (nav, aside, svg, iframe, form) is handled by htmlmd via
+	// StripNoise option. Class/ID-based noise (cookie banners, ads, sidebars,
+	// comments) is handled by Go's StripNoiseElements.
 	cleaned := StripNoiseElements(html)
 
 	// Step 4: Convert to Markdown.
@@ -47,14 +47,14 @@ func processHTML(ctx context.Context, html, url string, localAI *LocalAIExtracto
 	if localAI.available() {
 		extracted, err := localAI.extract(ctx, cleaned, url, meta.Language)
 		if err != nil {
-			slog.Warn("localai extraction failed, falling back to FFI",
+			slog.Warn("localai extraction failed, falling back to htmlmd",
 				"url", url, "error", err)
-			content = ffiConvertStripNoise(cleaned)
+			content = htmlmdConvertStripNoise(cleaned)
 		} else {
 			content = extracted
 		}
 	} else {
-		content = ffiConvertStripNoise(cleaned)
+		content = htmlmdConvertStripNoise(cleaned)
 	}
 
 	// Step 5: Post-extraction quality check.
@@ -66,25 +66,15 @@ func processHTML(ctx context.Context, html, url string, localAI *LocalAIExtracto
 	return content
 }
 
-// ffiConvert performs FFI-backed HTML -> Markdown conversion.
-func ffiConvert(html string) string {
-	text, _, err := ffi.HTMLToMarkdown(html)
-	if err != nil {
-		slog.Warn("ffi html-to-markdown failed", "error", err)
-		return html
-	}
-	return text
+// htmlmdConvert performs HTML -> Markdown conversion via coreparsing/htmlmd.
+func htmlmdConvert(html string) string {
+	return htmlmd.Convert(html).Text
 }
 
-// ffiConvertStripNoise performs FFI-backed HTML -> Markdown with noise stripping.
-// Suppresses nav, aside, svg, iframe, form elements at the Rust level.
-func ffiConvertStripNoise(html string) string {
-	text, _, err := ffi.HTMLToMarkdownStripNoise(html)
-	if err != nil {
-		slog.Warn("ffi html-to-markdown-strip-noise failed", "error", err)
-		return ffiConvert(html)
-	}
-	return text
+// htmlmdConvertStripNoise performs HTML -> Markdown with noise stripping.
+// Suppresses nav, aside, svg, iframe, form elements.
+func htmlmdConvertStripNoise(html string) string {
+	return htmlmd.ConvertWithOpts(html, htmlmd.Options{StripNoise: true}).Text
 }
 
 // --- local AI-powered content extraction ---
@@ -198,8 +188,8 @@ RULES:
 
 // extract calls local AI for intelligent content extraction from pre-cleaned HTML.
 func (s *LocalAIExtractor) extract(ctx context.Context, html, url, language string) (string, error) {
-	// Convert HTML to markdown via FFI first to reduce token count.
-	mdContent := ffiConvert(html)
+	// Convert HTML to markdown first to reduce token count.
+	mdContent := htmlmdConvert(html)
 
 	// Small content: AI adds little value, return directly.
 	if len(mdContent) < 2000 {

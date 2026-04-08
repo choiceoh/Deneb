@@ -13,7 +13,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/ffi"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coreparsing/mediatokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
@@ -112,19 +112,13 @@ func isInsideFence(spans []fenceSpan, offset int) bool {
 var audioAsVoiceTagRe = regexp.MustCompile(`(?i)\[\[\s*(?:audio_as_voice|voice)\s*\]\]`)
 
 // splitMediaFromOutput extracts MEDIA: tokens from output text.
-// Delegates to the Rust FFI implementation for single-source-of-truth parsing.
-// Falls back to the Go implementation if FFI is unavailable.
 func splitMediaFromOutput(raw string) (text string, mediaURLs []string, mediaURL string, audioAsVoice bool) {
-	cleanText, urls, voice, err := ffi.ParseMediaTokens(raw)
-	if err == nil {
-		var primary string
-		if len(urls) > 0 {
-			primary = urls[0]
-		}
-		return cleanText, urls, primary, voice
+	r := mediatokens.Parse(raw)
+	var primary string
+	if len(r.MediaURLs) > 0 {
+		primary = r.MediaURLs[0]
 	}
-	// FFI unavailable or failed — fall back to Go implementation.
-	return splitMediaFromOutputFallback(raw)
+	return r.Text, r.MediaURLs, primary, r.AudioAsVoice
 }
 
 // splitMediaFromOutputFallback is the pure-Go fallback for MEDIA token extraction.
