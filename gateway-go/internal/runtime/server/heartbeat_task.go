@@ -16,9 +16,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 )
+
+// Compile-time interface compliance.
+var _ autonomous.PeriodicTask = (*heartbeatTask)(nil)
 
 // heartbeatTask implements autonomous.PeriodicTask.
 // Every 5 minutes, checks HEARTBEAT.md and executes tasks found there.

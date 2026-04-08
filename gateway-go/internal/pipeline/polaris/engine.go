@@ -150,6 +150,9 @@ func hasSummaryMessages(messages []llm.Message) bool {
 	return false
 }
 
+// Compile-time interface compliance.
+var _ compact.Summarizer = (*capturingSummarizer)(nil)
+
 // capturingSummarizer wraps a Summarizer to capture the last summary output.
 type capturingSummarizer struct {
 	inner    compact.Summarizer

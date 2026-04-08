@@ -26,6 +26,9 @@ func buildThinkingConfig(level types.ThinkLevel) *llm.ThinkingConfig {
 	return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: budget}
 }
 
+// Compile-time interface compliance.
+var _ agent.LLMStreamer = (*thinkingStreamer)(nil)
+
 // thinkingStreamer wraps an LLMStreamer to inject a ThinkingConfig into every request.
 type thinkingStreamer struct {
 	inner    agent.LLMStreamer

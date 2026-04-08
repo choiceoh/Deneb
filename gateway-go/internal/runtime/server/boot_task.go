@@ -17,10 +17,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
 )
+
+// Compile-time interface compliance.
+var _ autonomous.PeriodicTask = (*bootTask)(nil)
 
 // bootTask implements autonomous.PeriodicTask.
 // Runs a full agent turn using BOOT.md content on startup and daily thereafter.

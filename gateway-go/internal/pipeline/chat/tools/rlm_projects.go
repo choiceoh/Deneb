@@ -469,6 +469,9 @@ type wikiPageWriter interface {
 	WritePage(relPath string, page *wiki.Page) error
 }
 
+// Compile-time interface compliance.
+var _ wikiPageWriter = (*wiki.Store)(nil)
+
 // ToolProjectsGetDocument returns a tool that retrieves a project page.
 // Without a section parameter, returns section headings (table of contents).
 // With a section, returns that section's content.
