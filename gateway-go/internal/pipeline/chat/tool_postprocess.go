@@ -202,7 +202,7 @@ func RegisterDefaultPostProcessors(registry *ToolRegistry) {
 	pp.Add("find", FindResultSummarizer)
 
 	// JSON formatting for structured tools.
-	for _, tool := range []string{"http", "kv", "sessions_list"} {
+	for _, tool := range []string{"web", "kv", "sessions"} {
 		pp.Add(tool, StructuredFormatter)
 	}
 

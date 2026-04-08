@@ -10,8 +10,7 @@
       "write": true,
       "exec": true,
       "git": true,
-      "multi_edit": true,
-      "notebook_edit": true
+      "multi_edit": true
     }
   },
   "channelSilentTools": {
@@ -21,15 +20,12 @@
       "telegram": [
         "gateway",
         "message",
-        "sessions_list",
-        "sessions_history",
-        "sessions_search",
-        "sessions_send",
+        "sessions",
         "sessions_spawn",
         "subagents",
         "kv",
         "bridge",
-        "skill_manage"
+        "skills"
       ]
     }
   },
@@ -45,7 +41,7 @@
       "diff": true,
       "wiki": true,
       "kv": true,
-      "sessions_list": true
+      "sessions": true
     }
   }
 }

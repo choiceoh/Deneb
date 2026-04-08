@@ -91,8 +91,8 @@ func TestBuildSystemPromptSkillsInjection(t *testing.T) {
 	if !strings.Contains(prompt, "test-skill") {
 		t.Error("missing skill content")
 	}
-	if !strings.Contains(prompt, "skills_list") {
-		t.Error("missing skills_list tool hint for discoverable skills")
+	if !strings.Contains(prompt, "skills") {
+		t.Error("missing skills tool hint for discoverable skills")
 	}
 }
 
@@ -102,12 +102,12 @@ func TestBuildSystemPromptNoSkills(t *testing.T) {
 	}
 
 	prompt := BuildSystemPrompt(params)
-	// Even without always-skills, the skills section appears with skills_list tool hint.
+	// Even without always-skills, the skills section appears with skills tool hint.
 	if !strings.Contains(prompt, "## 스킬") {
-		t.Error("skills section should always appear with skills_list tool hint")
+		t.Error("skills section should always appear with skills tool hint")
 	}
-	if !strings.Contains(prompt, "skills_list") {
-		t.Error("missing skills_list tool hint")
+	if !strings.Contains(prompt, "skills") {
+		t.Error("missing skills tool hint")
 	}
 }
 
@@ -284,7 +284,6 @@ func TestBuildSystemPromptConversationMode(t *testing.T) {
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
 			{Name: "web"},
-			{Name: "http"},
 			{Name: "wiki"},
 		},
 		ToolPreset: "conversation",
@@ -340,13 +339,12 @@ func TestBuildSystemPrompt_WebToolGuidance(t *testing.T) {
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
 			{Name: "web"},
-			{Name: "http"},
 		},
 	}
 
 	prompt := BuildSystemPrompt(params)
 	if !strings.Contains(prompt, "## Web") {
-		t.Error("expected ## Web section when web/http tools are registered")
+		t.Error("expected ## Web section when web tool is registered")
 	}
 	if !strings.Contains(prompt, "web(query=...)") {
 		t.Error("expected web search guidance")

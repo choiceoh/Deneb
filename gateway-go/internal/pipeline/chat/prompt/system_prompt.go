@@ -72,14 +72,14 @@ var toolCategories = []struct {
 	Label string
 	Names []string
 }{
-	{"File", []string{"read", "write", "edit", "grep", "find", "batch_read"}},
+	{"File", []string{"read", "write", "edit", "grep", "find"}},
 	{"Edit", []string{"multi_edit", "tree", "diff", "analyze", "test", "git"}},
 	{"Exec", []string{"exec", "process"}},
-	{"Web", []string{"web", "http", "deep_research"}},
+	{"Web", []string{"web"}},
 	{"Memory", []string{"wiki"}},
 	{"System", []string{"message", "gateway"}},
-	{"Routine", []string{"cron", "gmail", "morning_letter"}},
-	{"Sessions", []string{"sessions_list", "sessions_history", "sessions_search", "sessions_send", "sessions_spawn", "subagents"}},
+	{"Routine", []string{"cron", "gmail"}},
+	{"Sessions", []string{"sessions", "sessions_spawn", "subagents"}},
 	{"Media", []string{"youtube_transcript", "send_file"}},
 	{"Data", []string{"kv"}},
 }
@@ -224,7 +224,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		ss.WriteString("- 스킬이 존재하는 작업을 **스킬 없이 처리하지 마라.** 스킬이 더 정확하다.\n")
 		ss.WriteString("- 여러 개 해당하면 가장 구체적인 것 하나만 선택. 한 번에 하나만 읽어라.\n")
 		ss.WriteString("- 스킬 경로의 상대 경로는 SKILL.md 디렉토리 기준으로 해석.\n")
-		ss.WriteString("- 목록에 없는 작업도 `skills_list`로 확인 — discoverable 스킬이 더 있다.\n\n")
+		ss.WriteString("- 목록에 없는 작업도 `skills`(action=list)로 확인 — discoverable 스킬이 더 있다.\n\n")
 		// Skill Genesis: instruct the agent to identify reusable patterns.
 		ss.WriteString("### Skill Genesis (경험에서 스킬 자동 생성)\n")
 		ss.WriteString("복합 워크플로우(5+ 도구, 3+ 턴)를 완료하면 시스템이 자동으로 스킬 추출을 평가합니다.\n")
@@ -236,7 +236,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		// No always-skills, but discoverable skills may still exist.
 		ss.WriteString("## 스킬 (전문 절차서)\n\n")
 		ss.WriteString("스킬은 특정 작업에 대한 검증된 절차서다.\n")
-		ss.WriteString("`skills_list` 도구로 사용 가능한 스킬을 확인하라. 해당하는 스킬이 있으면 반드시 사용.\n\n")
+		ss.WriteString("`skills` 도구(action=list)로 사용 가능한 스킬을 확인하라. 해당하는 스킬이 있으면 반드시 사용.\n\n")
 	}
 
 	// --- Dynamic block ---
@@ -287,15 +287,14 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	}
 
 	// Web tool guidance (conditional).
-	_, hasWeb := toolSet["web"]
-	_, hasHTTP := toolSet["http"]
-	if hasWeb || hasHTTP {
+	if _, hasWeb := toolSet["web"]; hasWeb {
 		d.WriteString("## Web\n")
 		d.WriteString("- `web(query=...)`: web search. Returns AI answer (Perplexity) or link list (Brave/DDG).\n")
-		d.WriteString("- `web(query=..., fetch=N)`: search + auto-fetch top N pages in one call. Use when you need page content, not just snippets.\n")
+		d.WriteString("- `web(query=..., fetch=N)`: search + auto-fetch top N pages in one call.\n")
 		d.WriteString("- `web(url=...)`: fetch a URL (HTML noise-stripped, PDF/Office parsed, bot-block evasion).\n")
-		d.WriteString("- `http(...)`: raw HTTP for APIs/webhooks needing custom headers, auth, or body. Not for general web pages.\n")
-		d.WriteString("- On fetch failure (403/block): try http with custom headers, or search for cached/mirror versions.\n\n")
+		d.WriteString("- `web(mode=request, url=..., method=POST, json={...})`: raw HTTP for APIs needing custom headers/auth/body.\n")
+		d.WriteString("- `web(mode=research, question=...)`: deep multi-query research for complex questions.\n")
+		d.WriteString("- On fetch failure (403/block): try mode=request with custom headers, or search for cached versions.\n\n")
 	}
 
 	// Sub-agent delegation guidance (conditional).
@@ -337,7 +336,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	d.WriteString("## Messaging\n")
 	d.WriteString("- Telegram 4096 char limit. Split with message tool if needed.\n")
 	d.WriteString("- Reply tags: [[reply_to_current]] replies to triggering message (stripped before sending).\n")
-	d.WriteString("- Current session replies auto-route to source channel. Cross-session: sessions_send(sessionKey, msg).\n")
+	d.WriteString("- Current session replies auto-route to source channel. Cross-session: sessions(action=send, sessionKey=..., message=...).\n")
 	if _, ok := toolSet["message"]; ok {
 		fmt.Fprintf(&d, "- `message` for proactive sends + channel actions. If used for user-visible reply, respond with ONLY: %s.\n", SilentReplyToken)
 		fmt.Fprintf(&d, "- %s 규칙: 메시지 전체가 %s만이어야 한다. 다른 텍스트와 섞지 마라. 요청된 작업을 회피하는 데 쓰지 마라.\n", SilentReplyToken, SilentReplyToken)

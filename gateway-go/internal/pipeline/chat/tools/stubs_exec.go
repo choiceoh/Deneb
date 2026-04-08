@@ -21,10 +21,36 @@ func Truncate(s string, maxLen int) string {
 	return string(runes[:maxLen]) + "..."
 }
 
-// --- sessions_list tool ---
+// --- unified sessions tool ---
 
-// ToolSessionsList returns a tool function that lists active sessions.
-func ToolSessionsList(sessions *session.Manager) ToolFunc {
+// ToolSessions creates the unified sessions tool with action dispatch (list/history/search/send).
+func ToolSessions(d *toolctx.SessionDeps) ToolFunc {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		var p struct {
+			Action string `json:"action"`
+		}
+		if err := json.Unmarshal(input, &p); err != nil {
+			return "", fmt.Errorf("parse input: %w", err)
+		}
+		switch p.Action {
+		case "list":
+			return toolSessionsList(d.Manager)(ctx, input)
+		case "history":
+			return toolSessionsHistory(d.Transcript)(ctx, input)
+		case "search":
+			return toolSessionsSearch(d.Transcript)(ctx, input)
+		case "send":
+			return toolSessionsSend(d)(ctx, input)
+		default:
+			return "action은 list, history, search, send 중 하나를 지정하세요.", nil
+		}
+	}
+}
+
+// --- sessions list sub-action ---
+
+// toolSessionsList returns a tool function that lists active sessions.
+func toolSessionsList(sessions *session.Manager) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		currentKey := toolctx.SessionKeyFromContext(ctx)
 
@@ -77,10 +103,10 @@ func ToolSessionsList(sessions *session.Manager) ToolFunc {
 	}
 }
 
-// --- sessions_history tool ---
+// --- sessions history sub-action ---
 
-// ToolSessionsHistory returns a tool function that retrieves session transcript history.
-func ToolSessionsHistory(transcript toolctx.TranscriptStore) ToolFunc {
+// toolSessionsHistory returns a tool function that retrieves session transcript history.
+func toolSessionsHistory(transcript toolctx.TranscriptStore) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			SessionKey string `json:"sessionKey"`
@@ -122,10 +148,10 @@ func ToolSessionsHistory(transcript toolctx.TranscriptStore) ToolFunc {
 	}
 }
 
-// --- sessions_search tool ---
+// --- sessions search sub-action ---
 
-// ToolSessionsSearch returns a tool function that searches across session transcripts.
-func ToolSessionsSearch(transcript toolctx.TranscriptStore) ToolFunc {
+// toolSessionsSearch returns a tool function that searches across session transcripts.
+func toolSessionsSearch(transcript toolctx.TranscriptStore) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Query      string `json:"query"`
@@ -192,10 +218,10 @@ func ToolSessionsSearch(transcript toolctx.TranscriptStore) ToolFunc {
 	}
 }
 
-// --- sessions_send tool ---
+// --- sessions send sub-action ---
 
-// ToolSessionsSend returns a tool function that sends a message to another session.
-func ToolSessionsSend(d *toolctx.SessionDeps) ToolFunc {
+// toolSessionsSend returns a tool function that sends a message to another session.
+func toolSessionsSend(d *toolctx.SessionDeps) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			SessionKey string `json:"sessionKey"`

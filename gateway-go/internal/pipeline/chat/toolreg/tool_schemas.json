@@ -680,24 +680,34 @@
   {
     "name": "web",
     "properties": {
+      "mode": {
+        "type": "string",
+        "description": "Mode: search (web search/fetch, default), request (raw HTTP for APIs), research (deep multi-query research)",
+        "enum": [
+          "search",
+          "request",
+          "research"
+        ],
+        "default": "search"
+      },
       "url": {
         "type": "string",
-        "description": "URL to fetch and extract content. Handles HTML (noise-stripped), JSON, PDF/Office. Bot-block evasion included"
+        "description": "URL to fetch (search mode: HTML extraction+bot evasion; request mode: raw HTTP)"
       },
       "query": {
         "type": "string",
-        "description": "Web search query. Perplexity Sonar (AI answer + citations) > Brave Search > DuckDuckGo fallback"
+        "description": "Web search query (search mode). Perplexity Sonar > Brave > DuckDuckGo fallback"
       },
       "queries": {
         "type": "array",
         "items": {
           "type": "string"
         },
-        "description": "Multiple search queries executed in parallel (max 5). Use for multi-constraint questions that need cross-referencing"
+        "description": "Multiple queries: parallel search (search mode, max 5) or pre-decomposed sub-queries (research mode)"
       },
       "fetch": {
         "type": "number",
-        "description": "With query/queries: auto-fetch top N results per query in parallel (1-3, default: 0)"
+        "description": "Auto-fetch top N results per query (search mode, 1-3, default: 0)"
       },
       "maxChars": {
         "type": "number",
@@ -705,20 +715,11 @@
       },
       "count": {
         "type": "number",
-        "description": "Number of search results per query (default: 5)"
-      }
-    }
-  },
-  {
-    "name": "http",
-    "properties": {
-      "url": {
-        "type": "string",
-        "description": "HTTP or HTTPS URL"
+        "description": "Number of search results per query (search mode, default: 5)"
       },
       "method": {
         "type": "string",
-        "description": "HTTP method",
+        "description": "HTTP method (request mode only)",
         "enum": [
           "GET",
           "POST",
@@ -730,61 +731,43 @@
       },
       "headers": {
         "type": "object",
-        "description": "Request headers as key-value pairs",
+        "description": "Request headers (request mode only)",
         "additionalProperties": true
       },
       "body": {
         "type": "string",
-        "description": "Request body as string"
+        "description": "Request body string (request mode only)"
       },
       "json": {
         "type": "object",
-        "description": "JSON body (auto-sets Content-Type: application/json)",
+        "description": "JSON body, auto-sets Content-Type (request mode only)",
         "additionalProperties": true
       },
       "timeout": {
         "type": "number",
-        "description": "Timeout in seconds",
+        "description": "Timeout in seconds (request mode, default: 30)",
         "default": 30,
         "minimum": 1,
         "maximum": 120
       },
       "max_response_chars": {
         "type": "number",
-        "description": "Maximum response characters to return",
+        "description": "Max response chars (request mode, default: 50000)",
         "default": 50000
-      }
-    },
-    "required": [
-      "url"
-    ]
-  },
-  {
-    "name": "deep_research",
-    "properties": {
+      },
       "question": {
         "type": "string",
-        "description": "The research question to investigate. Complex multi-constraint questions work best"
-      },
-      "queries": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "Optional: pre-decomposed search queries. If omitted, the tool auto-decomposes the question into sub-queries via LLM"
+        "description": "Research question (research mode). Auto-decomposes into parallel sub-queries"
       },
       "maxQueries": {
         "type": "number",
-        "description": "Maximum number of sub-queries to generate (default: 5, max: 8)"
+        "description": "Max sub-queries to generate (research mode, default: 5, max: 8)"
       },
       "fetchPerQuery": {
         "type": "number",
-        "description": "Pages to auto-fetch per query (default: 2, max: 3)"
+        "description": "Pages to auto-fetch per sub-query (research mode, default: 2, max: 3)"
       }
-    },
-    "required": [
-      "question"
-    ]
+    }
   },
   {
     "name": "health_check",
@@ -963,12 +946,22 @@
     ]
   },
   {
-    "name": "sessions_list",
+    "name": "sessions",
     "properties": {
+      "action": {
+        "type": "string",
+        "description": "Session action",
+        "enum": [
+          "list",
+          "history",
+          "search",
+          "send"
+        ]
+      },
       "limit": {
         "type": "number",
-        "description": "Maximum sessions to return",
-        "default": 50,
+        "description": "Max sessions (list) or messages (history, default 20) to return",
+        "default": 20,
         "minimum": 1
       },
       "kinds": {
@@ -982,61 +975,30 @@
             "hook"
           ]
         },
-        "description": "Filter by session kind"
-      }
-    }
-  },
-  {
-    "name": "sessions_history",
-    "properties": {
+        "description": "Filter by session kind (list action)"
+      },
       "sessionKey": {
         "type": "string",
-        "description": "Session key to fetch history for"
+        "description": "Target session key (history/send actions)"
       },
-      "limit": {
-        "type": "number",
-        "description": "Number of messages to return",
-        "default": 20,
-        "minimum": 1
-      }
-    },
-    "required": [
-      "sessionKey"
-    ]
-  },
-  {
-    "name": "sessions_search",
-    "properties": {
       "query": {
         "type": "string",
-        "description": "Search keyword to find in session transcripts"
+        "description": "Search keyword (search action)"
       },
       "maxResults": {
         "type": "number",
-        "description": "Maximum number of matching messages to return (default 20)",
+        "description": "Max search results (search action, default 20)",
         "default": 20,
         "minimum": 1,
         "maximum": 100
-      }
-    },
-    "required": [
-      "query"
-    ]
-  },
-  {
-    "name": "sessions_send",
-    "properties": {
-      "sessionKey": {
-        "type": "string",
-        "description": "Target session key"
       },
       "message": {
         "type": "string",
-        "description": "Message to send"
+        "description": "Message to send (send action)"
       }
     },
     "required": [
-      "message"
+      "action"
     ]
   },
   {
@@ -1250,108 +1212,6 @@
     ]
   },
   {
-    "name": "agent_logs",
-    "properties": {
-      "run_id": {
-        "type": "string",
-        "description": "특정 런 ID로 필터 (생략 시 전체)"
-      },
-      "type": {
-        "type": "string",
-        "description": "로그 타입 필터: run.start, run.prep, turn.llm, turn.tool, run.end, run.error",
-        "enum": [
-          "run.start",
-          "run.prep",
-          "turn.llm",
-          "turn.tool",
-          "run.end",
-          "run.error"
-        ]
-      },
-      "limit": {
-        "type": "integer",
-        "description": "최대 반환 수 (기본 50, 최대 500)",
-        "default": 50,
-        "minimum": 1,
-        "maximum": 500
-      }
-    }
-  },
-  {
-    "name": "gateway_logs",
-    "properties": {
-      "lines": {
-        "type": "integer",
-        "description": "최근 N줄 반환 (기본 100, 최대 500)",
-        "default": 100,
-        "minimum": 1,
-        "maximum": 500
-      },
-      "level": {
-        "type": "string",
-        "description": "로그 레벨 필터: error, warn, info, debug (해당 레벨 이상만 표시)",
-        "enum": [
-          "error",
-          "warn",
-          "info",
-          "debug"
-        ]
-      },
-      "pattern": {
-        "type": "string",
-        "description": "정규식 패턴 필터 (매칭되는 줄만 표시)"
-      },
-      "pkg": {
-        "type": "string",
-        "description": "패키지 필터 (예: server, chat, telegram, rpc)"
-      }
-    }
-  },
-  {
-    "name": "batch_read",
-    "properties": {
-      "files": {
-        "type": "array",
-        "description": "List of files to read (up to 20). Each entry supports the same options as the read tool",
-        "items": {
-          "type": "object",
-          "properties": {
-            "file_path": {
-              "type": "string",
-              "description": "Absolute path to the file"
-            },
-            "offset": {
-              "type": "number",
-              "description": "Line number to start from (1-based)",
-              "minimum": 1
-            },
-            "limit": {
-              "type": "number",
-              "description": "Number of lines to read (default: 2000)",
-              "minimum": 1
-            },
-            "function": {
-              "type": "string",
-              "description": "Read only this function/method/type"
-            }
-          },
-          "required": [
-            "file_path"
-          ]
-        },
-        "minItems": 1,
-        "maxItems": 40
-      }
-    },
-    "required": [
-      "files"
-    ]
-  },
-  {
-    "name": "morning_letter",
-    "properties": {}
-  },
-  {
     "name": "autoresearch",
     "properties": {
       "action": {
@@ -1519,26 +1379,13 @@
     "required": []
   },
   {
-    "name": "skills_list",
-    "properties": {
-      "query": {
-        "type": "string",
-        "description": "Search filter to match skill name, description, category, or tag"
-      },
-      "category": {
-        "type": "string",
-        "description": "Filter by skill category (e.g., coding, productivity, devops)"
-      }
-    },
-    "required": []
-  },
-  {
-    "name": "skill_manage",
+    "name": "skills",
     "properties": {
       "action": {
         "type": "string",
-        "description": "Skill management action",
+        "description": "Action: list (search/browse skills), create, patch, delete, read, list_files",
         "enum": [
+          "list",
           "create",
           "patch",
           "delete",
@@ -1546,29 +1393,33 @@
           "list_files"
         ]
       },
-      "name": {
+      "query": {
         "type": "string",
-        "description": "Skill name (lowercase, hyphens). Must match directory name."
+        "description": "Search filter for list action (matches name, description, category, tag)"
       },
       "category": {
         "type": "string",
-        "description": "Skill category directory (coding, productivity, devops, integration). Required for create."
+        "description": "Filter category for list, or target category for create (coding, productivity, devops, integration)"
+      },
+      "name": {
+        "type": "string",
+        "description": "Skill name (lowercase, hyphens). Required for create/patch/delete/read/list_files"
       },
       "content": {
         "type": "string",
-        "description": "Full SKILL.md content for create, or patch content. Must include valid frontmatter."
+        "description": "Full SKILL.md content for create, or patch content"
       },
       "old_text": {
         "type": "string",
-        "description": "Text to find in existing SKILL.md (for patch action). Fuzzy: indentation and trailing whitespace differences are absorbed automatically."
+        "description": "Text to find in SKILL.md (patch action). Fuzzy whitespace matching"
       },
       "new_text": {
         "type": "string",
-        "description": "Replacement text (for patch action). Written verbatim."
+        "description": "Replacement text (patch action)"
       },
       "file_path": {
         "type": "string",
-        "description": "Relative path within skill directory for auxiliary files (scripts/, references/)"
+        "description": "Relative path within skill dir for auxiliary files"
       },
       "file_content": {
         "type": "string",
@@ -1576,8 +1427,7 @@
       }
     },
     "required": [
-      "action",
-      "name"
+      "action"
     ]
   },
   {
@@ -1702,54 +1552,50 @@
     ]
   },
   {
-    "name": "polaris_search",
+    "name": "polaris",
     "properties": {
+      "action": {
+        "type": "string",
+        "description": "Action: search (keyword search), describe (summary structure overview), expand (restore original messages from summary node)",
+        "enum": [
+          "search",
+          "describe",
+          "expand"
+        ]
+      },
       "query": {
         "type": "string",
-        "description": "검색 키워드 (한국어/영어). 압축된 이전 대화에서 키워드 매칭"
+        "description": "검색 키워드 (search action)"
       },
       "max_results": {
         "type": "integer",
-        "description": "최대 결과 수 (default: 10)",
+        "description": "최대 결과 수 (search action, default: 10)",
         "default": 10,
         "minimum": 1,
         "maximum": 50
-      }
-    },
-    "required": [
-      "query"
-    ]
-  },
-  {
-    "name": "polaris_describe",
-    "properties": {
+      },
       "time_range": {
         "type": "string",
-        "description": "시간 범위 필터: today, this_week, all (default: all)",
+        "description": "시간 범위 (describe action): today, this_week, all",
         "default": "all",
         "enum": [
           "today",
           "this_week",
           "all"
         ]
-      }
-    }
-  },
-  {
-    "name": "polaris_expand",
-    "properties": {
+      },
       "summary_id": {
         "type": "integer",
-        "description": "확장할 요약 노드 ID (polaris_describe 결과에서 획득)",
+        "description": "요약 노드 ID (expand action, describe 결과에서 획득)",
         "minimum": 1
       },
       "question": {
         "type": "string",
-        "description": "원본 대화에서 알고 싶은 구체적 질문 (선택)"
+        "description": "원본 대화에서 알고 싶은 질문 (expand action, 선택)"
       }
     },
     "required": [
-      "summary_id"
+      "action"
     ]
   }
 ]

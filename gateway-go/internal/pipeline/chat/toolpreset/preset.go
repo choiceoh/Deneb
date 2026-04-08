@@ -19,8 +19,7 @@ const (
 // researcherTools are read-only exploration tools for codebase investigation.
 var researcherTools = toSet(
 	"read", "grep", "find", "tree", "diff", "analyze",
-	"batch_read",
-	"web", "http", "wiki", "fetch_tools",
+	"web", "wiki", "fetch_tools",
 )
 
 // implementerTools include read + write + build tools for code changes.
@@ -28,23 +27,20 @@ var implementerTools = toSet(
 	"read", "write", "edit", "multi_edit",
 	"grep", "find", "tree", "diff", "analyze",
 	"test", "exec", "process", "git",
-	"batch_read", "wiki",
-	"fetch_tools",
+	"wiki", "fetch_tools",
 )
 
 // verifierTools include read + test + exec tools for verification.
 var verifierTools = toSet(
-	"read", "grep", "find", "tree", "diff", "analyze",
+	"read", "grep", "find", "tree", "diff",
 	"test", "exec", "process",
-	"batch_read", "wiki",
-	"fetch_tools",
+	"wiki", "fetch_tools",
 )
 
 // coordinatorTools are orchestration-only tools for the coordinator agent.
 var coordinatorTools = toSet(
-	"sessions_spawn", "subagents",
-	"sessions_list", "sessions_history", "sessions_send",
-	"read", "grep", "find", "wiki", "kv",
+	"sessions_spawn", "subagents", "sessions",
+	"read", "grep", "find", "kv",
 	"fetch_tools",
 )
 
@@ -52,7 +48,7 @@ var coordinatorTools = toSet(
 // Web access, wiki, plus read-only file inspection.
 var conversationTools = toSet(
 	"read",
-	"web", "http", "wiki", "fetch_tools",
+	"web", "wiki", "fetch_tools",
 )
 
 // bootTools are the minimal set for startup and daily-check agent turns.

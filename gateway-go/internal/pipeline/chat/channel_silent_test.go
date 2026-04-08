@@ -43,7 +43,7 @@ func TestShouldSilenceForChannel(t *testing.T) {
 			name:    "internal tools on telegram are still silenced",
 			channel: "telegram",
 			activities: []agent.ToolActivity{
-				{Name: "sessions_list"},
+				{Name: "sessions"},
 			},
 			want: true,
 		},

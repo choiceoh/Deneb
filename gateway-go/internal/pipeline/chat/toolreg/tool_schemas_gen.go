@@ -629,107 +629,84 @@ func webToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"body": map[string]any{
+				"type":        "string",
+				"description": "Request body string (request mode only)",
+			},
 			"count": map[string]any{
 				"type":        "number",
-				"description": "Number of search results per query (default: 5)",
+				"description": "Number of search results per query (search mode, default: 5)",
 			},
 			"fetch": map[string]any{
 				"type":        "number",
-				"description": "With query/queries: auto-fetch top N results per query in parallel (1-3, default: 0)",
+				"description": "Auto-fetch top N results per query (search mode, 1-3, default: 0)",
+			},
+			"fetchPerQuery": map[string]any{
+				"type":        "number",
+				"description": "Pages to auto-fetch per sub-query (research mode, default: 2, max: 3)",
+			},
+			"headers": map[string]any{
+				"type":                 "object",
+				"description":          "Request headers (request mode only)",
+				"additionalProperties": true,
+			},
+			"json": map[string]any{
+				"type":                 "object",
+				"description":          "JSON body, auto-sets Content-Type (request mode only)",
+				"additionalProperties": true,
 			},
 			"maxChars": map[string]any{
 				"type":        "number",
 				"description": "Maximum content characters total (default: 50000)",
 			},
+			"maxQueries": map[string]any{
+				"type":        "number",
+				"description": "Max sub-queries to generate (research mode, default: 5, max: 8)",
+			},
+			"max_response_chars": map[string]any{
+				"type":        "number",
+				"description": "Max response chars (request mode, default: 50000)",
+				"default":     50000,
+			},
+			"method": map[string]any{
+				"type":        "string",
+				"description": "HTTP method (request mode only)",
+				"default":     "GET",
+				"enum":        []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
+			},
+			"mode": map[string]any{
+				"type":        "string",
+				"description": "Mode: search (web search/fetch, default), request (raw HTTP for APIs), research (deep multi-query research)",
+				"default":     "search",
+				"enum":        []string{"search", "request", "research"},
+			},
 			"queries": map[string]any{
 				"type":        "array",
-				"description": "Multiple search queries executed in parallel (max 5). Use for multi-constraint questions that need cross-referencing",
+				"description": "Multiple queries: parallel search (search mode, max 5) or pre-decomposed sub-queries (research mode)",
 				"items": map[string]any{
 					"type": "string",
 				},
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Web search query. Perplexity Sonar (AI answer + citations) > Brave Search > DuckDuckGo fallback",
+				"description": "Web search query (search mode). Perplexity Sonar > Brave > DuckDuckGo fallback",
 			},
-			"url": map[string]any{
+			"question": map[string]any{
 				"type":        "string",
-				"description": "URL to fetch and extract content. Handles HTML (noise-stripped), JSON, PDF/Office. Bot-block evasion included",
-			},
-		},
-	}
-}
-
-func httpToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"body": map[string]any{
-				"type":        "string",
-				"description": "Request body as string",
-			},
-			"headers": map[string]any{
-				"type":                 "object",
-				"description":          "Request headers as key-value pairs",
-				"additionalProperties": true,
-			},
-			"json": map[string]any{
-				"type":                 "object",
-				"description":          "JSON body (auto-sets Content-Type: application/json)",
-				"additionalProperties": true,
-			},
-			"max_response_chars": map[string]any{
-				"type":        "number",
-				"description": "Maximum response characters to return",
-				"default":     50000,
-			},
-			"method": map[string]any{
-				"type":        "string",
-				"description": "HTTP method",
-				"default":     "GET",
-				"enum":        []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
+				"description": "Research question (research mode). Auto-decomposes into parallel sub-queries",
 			},
 			"timeout": map[string]any{
 				"type":        "number",
-				"description": "Timeout in seconds",
+				"description": "Timeout in seconds (request mode, default: 30)",
 				"default":     30,
 				"minimum":     1,
 				"maximum":     120,
 			},
 			"url": map[string]any{
 				"type":        "string",
-				"description": "HTTP or HTTPS URL",
+				"description": "URL to fetch (search mode: HTML extraction+bot evasion; request mode: raw HTTP)",
 			},
 		},
-		"required": []string{"url"},
-	}
-}
-
-func deepResearchToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"fetchPerQuery": map[string]any{
-				"type":        "number",
-				"description": "Pages to auto-fetch per query (default: 2, max: 3)",
-			},
-			"maxQueries": map[string]any{
-				"type":        "number",
-				"description": "Maximum number of sub-queries to generate (default: 5, max: 8)",
-			},
-			"queries": map[string]any{
-				"type":        "array",
-				"description": "Optional: pre-decomposed search queries. If omitted, the tool auto-decomposes the question into sub-queries via LLM",
-				"items": map[string]any{
-					"type": "string",
-				},
-			},
-			"question": map[string]any{
-				"type":        "string",
-				"description": "The research question to investigate. Complex multi-constraint questions work best",
-			},
-		},
-		"required": []string{"question"},
 	}
 }
 
@@ -886,13 +863,18 @@ func gatewayToolSchema() map[string]any {
 	}
 }
 
-func sessionsListToolSchema() map[string]any {
+func sessionsToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "Session action",
+				"enum":        []string{"list", "history", "search", "send"},
+			},
 			"kinds": map[string]any{
 				"type":        "array",
-				"description": "Filter by session kind",
+				"description": "Filter by session kind (list action)",
 				"items": map[string]any{
 					"type": "string",
 					"enum": []string{"main", "group", "cron", "hook"},
@@ -900,67 +882,31 @@ func sessionsListToolSchema() map[string]any {
 			},
 			"limit": map[string]any{
 				"type":        "number",
-				"description": "Maximum sessions to return",
-				"default":     50,
-				"minimum":     1,
-			},
-		},
-	}
-}
-
-func sessionsHistoryToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"limit": map[string]any{
-				"type":        "number",
-				"description": "Number of messages to return",
+				"description": "Max sessions (list) or messages (history, default 20) to return",
 				"default":     20,
 				"minimum":     1,
 			},
-			"sessionKey": map[string]any{
-				"type":        "string",
-				"description": "Session key to fetch history for",
-			},
-		},
-		"required": []string{"sessionKey"},
-	}
-}
-
-func sessionsSearchToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
 			"maxResults": map[string]any{
 				"type":        "number",
-				"description": "Maximum number of matching messages to return (default 20)",
+				"description": "Max search results (search action, default 20)",
 				"default":     20,
 				"minimum":     1,
 				"maximum":     100,
 			},
-			"query": map[string]any{
-				"type":        "string",
-				"description": "Search keyword to find in session transcripts",
-			},
-		},
-		"required": []string{"query"},
-	}
-}
-
-func sessionsSendToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
 			"message": map[string]any{
 				"type":        "string",
-				"description": "Message to send",
+				"description": "Message to send (send action)",
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "Search keyword (search action)",
 			},
 			"sessionKey": map[string]any{
 				"type":        "string",
-				"description": "Target session key",
+				"description": "Target session key (history/send actions)",
 			},
 		},
-		"required": []string{"message"},
+		"required": []string{"action"},
 	}
 }
 
@@ -1147,103 +1093,6 @@ func gmailToolSchema() map[string]any {
 	}
 }
 
-func agentLogsToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"limit": map[string]any{
-				"type":        "integer",
-				"description": "최대 반환 수 (기본 50, 최대 500)",
-				"default":     50,
-				"minimum":     1,
-				"maximum":     500,
-			},
-			"run_id": map[string]any{
-				"type":        "string",
-				"description": "특정 런 ID로 필터 (생략 시 전체)",
-			},
-			"type": map[string]any{
-				"type":        "string",
-				"description": "로그 타입 필터: run.start, run.prep, turn.llm, turn.tool, run.end, run.error",
-				"enum":        []string{"run.start", "run.prep", "turn.llm", "turn.tool", "run.end", "run.error"},
-			},
-		},
-	}
-}
-
-func gatewayLogsToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"level": map[string]any{
-				"type":        "string",
-				"description": "로그 레벨 필터: error, warn, info, debug (해당 레벨 이상만 표시)",
-				"enum":        []string{"error", "warn", "info", "debug"},
-			},
-			"lines": map[string]any{
-				"type":        "integer",
-				"description": "최근 N줄 반환 (기본 100, 최대 500)",
-				"default":     100,
-				"minimum":     1,
-				"maximum":     500,
-			},
-			"pattern": map[string]any{
-				"type":        "string",
-				"description": "정규식 패턴 필터 (매칭되는 줄만 표시)",
-			},
-			"pkg": map[string]any{
-				"type":        "string",
-				"description": "패키지 필터 (예: server, chat, telegram, rpc)",
-			},
-		},
-	}
-}
-
-func batchReadToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"files": map[string]any{
-				"type":        "array",
-				"description": "List of files to read (up to 20). Each entry supports the same options as the read tool",
-				"minItems":    1,
-				"maxItems":    40,
-				"items": map[string]any{
-					"type":     "object",
-					"required": []string{"file_path"},
-					"properties": map[string]any{
-						"file_path": map[string]any{
-							"type":        "string",
-							"description": "Absolute path to the file",
-						},
-						"function": map[string]any{
-							"type":        "string",
-							"description": "Read only this function/method/type",
-						},
-						"limit": map[string]any{
-							"type":        "number",
-							"description": "Number of lines to read (default: 2000)",
-							"minimum":     1,
-						},
-						"offset": map[string]any{
-							"type":        "number",
-							"description": "Line number to start from (1-based)",
-							"minimum":     1,
-						},
-					},
-				},
-			},
-		},
-		"required": []string{"files"},
-	}
-}
-
-func morningLetterToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-	}
-}
-
 func autoresearchToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -1390,38 +1239,22 @@ func fetchToolsToolSchema() map[string]any {
 	}
 }
 
-func skillsListToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"category": map[string]any{
-				"type":        "string",
-				"description": "Filter by skill category (e.g., coding, productivity, devops)",
-			},
-			"query": map[string]any{
-				"type":        "string",
-				"description": "Search filter to match skill name, description, category, or tag",
-			},
-		},
-	}
-}
-
-func skillManageToolSchema() map[string]any {
+func skillsToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Skill management action",
-				"enum":        []string{"create", "patch", "delete", "read", "list_files"},
+				"description": "Action: list (search/browse skills), create, patch, delete, read, list_files",
+				"enum":        []string{"list", "create", "patch", "delete", "read", "list_files"},
 			},
 			"category": map[string]any{
 				"type":        "string",
-				"description": "Skill category directory (coding, productivity, devops, integration). Required for create.",
+				"description": "Filter category for list, or target category for create (coding, productivity, devops, integration)",
 			},
 			"content": map[string]any{
 				"type":        "string",
-				"description": "Full SKILL.md content for create, or patch content. Must include valid frontmatter.",
+				"description": "Full SKILL.md content for create, or patch content",
 			},
 			"file_content": map[string]any{
 				"type":        "string",
@@ -1429,22 +1262,26 @@ func skillManageToolSchema() map[string]any {
 			},
 			"file_path": map[string]any{
 				"type":        "string",
-				"description": "Relative path within skill directory for auxiliary files (scripts/, references/)",
+				"description": "Relative path within skill dir for auxiliary files",
 			},
 			"name": map[string]any{
 				"type":        "string",
-				"description": "Skill name (lowercase, hyphens). Must match directory name.",
+				"description": "Skill name (lowercase, hyphens). Required for create/patch/delete/read/list_files",
 			},
 			"new_text": map[string]any{
 				"type":        "string",
-				"description": "Replacement text (for patch action). Written verbatim.",
+				"description": "Replacement text (patch action)",
 			},
 			"old_text": map[string]any{
 				"type":        "string",
-				"description": "Text to find in existing SKILL.md (for patch action). Fuzzy: indentation and trailing whitespace differences are absorbed automatically.",
+				"description": "Text to find in SKILL.md (patch action). Fuzzy whitespace matching",
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "Search filter for list action (matches name, description, category, tag)",
 			},
 		},
-		"required": []string{"action", "name"},
+		"required": []string{"action"},
 	}
 }
 
@@ -1545,55 +1382,43 @@ func wikiToolSchema() map[string]any {
 	}
 }
 
-func polarisSearchToolSchema() map[string]any {
+func polarisToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "Action: search (keyword search), describe (summary structure overview), expand (restore original messages from summary node)",
+				"enum":        []string{"search", "describe", "expand"},
+			},
 			"max_results": map[string]any{
 				"type":        "integer",
-				"description": "최대 결과 수 (default: 10)",
+				"description": "최대 결과 수 (search action, default: 10)",
 				"default":     10,
 				"minimum":     1,
 				"maximum":     50,
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "검색 키워드 (한국어/영어). 압축된 이전 대화에서 키워드 매칭",
+				"description": "검색 키워드 (search action)",
 			},
-		},
-		"required": []string{"query"},
-	}
-}
-
-func polarisDescribeToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
+			"question": map[string]any{
+				"type":        "string",
+				"description": "원본 대화에서 알고 싶은 질문 (expand action, 선택)",
+			},
+			"summary_id": map[string]any{
+				"type":        "integer",
+				"description": "요약 노드 ID (expand action, describe 결과에서 획득)",
+				"minimum":     1,
+			},
 			"time_range": map[string]any{
 				"type":        "string",
-				"description": "시간 범위 필터: today, this_week, all (default: all)",
+				"description": "시간 범위 (describe action): today, this_week, all",
 				"default":     "all",
 				"enum":        []string{"today", "this_week", "all"},
 			},
 		},
-	}
-}
-
-func polarisExpandToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"question": map[string]any{
-				"type":        "string",
-				"description": "원본 대화에서 알고 싶은 구체적 질문 (선택)",
-			},
-			"summary_id": map[string]any{
-				"type":        "integer",
-				"description": "확장할 요약 노드 ID (polaris_describe 결과에서 획득)",
-				"minimum":     1,
-			},
-		},
-		"required": []string{"summary_id"},
+		"required": []string{"action"},
 	}
 }
 
