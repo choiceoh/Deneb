@@ -145,6 +145,9 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 				DurationMs: time.Now().UnixMilli() - startedAt,
 			}
 		} else {
+			// Wait for descendant subagents if the output looks like an interim ack.
+			output = pollSubagentOutputs(runCtx, s.cfg.SubagentPoller, sessionKey, output)
+
 			// Deliver output to target channel.
 			var deliveryResult *DeliveryResult
 			if output != "" && target != nil && s.cfg.TelegramPlugin != nil {

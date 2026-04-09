@@ -108,37 +108,6 @@ func normalizeDelivery(d *JobDeliveryConfig) {
 	d.AccountID = strings.TrimSpace(d.AccountID)
 }
 
-// NormalizeJobPatch applies defaults and validation to a job update patch.
-func NormalizeJobPatch(existing *StoreJob, patch func(*StoreJob)) {
-	if existing == nil {
-		return
-	}
-	patch(existing)
-	NormalizeJobInput(existing)
-}
-
-// --- Additional normalize helpers (mirrors service/normalize.ts) ---
-
-// NormalizeRequiredName validates and trims a required name string.
-func NormalizeRequiredName(raw string) (string, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return "", fmt.Errorf("cron job name is required")
-	}
-	return trimmed, nil
-}
-
-// NormalizeOptionalText returns the trimmed string or empty if blank.
-func NormalizeOptionalText(raw string) string {
-	trimmed := strings.TrimSpace(raw)
-	return trimmed
-}
-
-// NormalizeOptionalSessionKey returns the trimmed session key or empty.
-func NormalizeOptionalSessionKey(raw string) string {
-	return strings.TrimSpace(raw)
-}
-
 // InferLegacyName generates a job name from payload or schedule info
 // when no explicit name is provided.
 func InferLegacyName(job StoreJob) string {
@@ -179,12 +148,4 @@ func InferLegacyName(job StoreJob) string {
 		return "One-shot"
 	}
 	return "Cron job"
-}
-
-// NormalizePayloadToSystemText extracts the user-facing text from a payload.
-func NormalizePayloadToSystemText(payload StorePayload) string {
-	if payload.Kind == "systemEvent" {
-		return strings.TrimSpace(payload.Text)
-	}
-	return strings.TrimSpace(payload.Message)
 }

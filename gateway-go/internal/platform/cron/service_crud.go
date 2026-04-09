@@ -101,13 +101,23 @@ func (s *Service) Job(id string) *StoreJob {
 }
 
 // Add creates a new cron job, saves it, and schedules it.
+// Validates "at" schedule timestamps and infers a name if not provided.
 func (s *Service) Add(ctx context.Context, job StoreJob) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	NormalizeJobInput(&job)
 
+	// Infer name from payload/schedule if not explicitly set.
+	if strings.TrimSpace(job.Name) == "" {
+		job.Name = InferLegacyName(job)
+	}
+
+	// Validate "at" schedule timestamps.
 	now := time.Now().UnixMilli()
+	if result := ValidateScheduleTimestamp(job.Schedule, now); !result.OK {
+		return fmt.Errorf("invalid schedule: %s", result.Message)
+	}
 	if job.CreatedAtMs == 0 {
 		job.CreatedAtMs = now
 	}
@@ -119,9 +129,6 @@ func (s *Service) Add(ctx context.Context, job StoreJob) error {
 	}
 
 	if job.Enabled && s.running {
-		if job.Schedule.Kind == "at" {
-			s.scheduleJobLocked(ctx, job)
-		}
 		s.armTimerLocked(ctx)
 	}
 
@@ -148,13 +155,8 @@ func (s *Service) Update(ctx context.Context, id string, patch func(*StoreJob)) 
 		return err
 	}
 
-	// Reschedule: unregister from scheduler (in case it was an "at" job),
-	// then re-register only if the updated job is still one-shot.
-	s.scheduler.Unregister(id)
+	// Re-arm the timer with the updated schedule.
 	if job.Enabled && s.running {
-		if job.Schedule.Kind == "at" {
-			s.scheduleJobLocked(ctx, *job)
-		}
 		s.armTimerLocked(ctx)
 	}
 	return nil
@@ -165,7 +167,6 @@ func (s *Service) Remove(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.scheduler.Unregister(id)
 	if err := s.store.RemoveJob(id); err != nil {
 		return err
 	}

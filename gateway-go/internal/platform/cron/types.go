@@ -1,14 +1,5 @@
-// types.go — Full cron type definitions matching src/cron/types.ts + types-shared.ts.
+// types.go — Cron type definitions.
 package cron
-
-// CronDeliveryMode defines how cron output is delivered.
-// Telegram-only deployment: only "none" and "announce" are used.
-type CronDeliveryMode string
-
-const (
-	DeliveryModeNone     CronDeliveryMode = "none"
-	DeliveryModeAnnounce CronDeliveryMode = "announce"
-)
 
 // CronSessionTarget specifies which session to run the job in.
 type CronSessionTarget string
@@ -18,14 +9,6 @@ const (
 	SessionTargetIsolated CronSessionTarget = "isolated"
 	SessionTargetCurrent  CronSessionTarget = "current"
 	SessionTargetSubagent CronSessionTarget = "subagent" // clone main session transcript
-)
-
-// CronWakeMode controls post-execution wake behavior.
-type CronWakeMode string
-
-const (
-	WakeModeNextHeartbeat CronWakeMode = "next-heartbeat"
-	WakeModeNow           CronWakeMode = "now"
 )
 
 // CronFailureAlert configures failure notification behavior.
