@@ -159,7 +159,6 @@ func TestToolLoopDetector_GlobalCircuitBreaker(t *testing.T) {
 	}
 }
 
-
 func TestToolLoopDetector_HistoryWindowSlides(t *testing.T) {
 	cfg := DefaultToolLoopConfig()
 	cfg.HistorySize = 5

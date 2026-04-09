@@ -89,4 +89,3 @@ func TestAbortCutoffLifecycle(t *testing.T) {
 		t.Error("second clear should return false")
 	}
 }
-

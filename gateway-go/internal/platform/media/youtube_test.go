@@ -44,7 +44,6 @@ func TestExtractYouTubeURLs(t *testing.T) {
 	}
 }
 
-
 func TestCleanSubtitleText(t *testing.T) {
 	raw := `WEBVTT
 Kind: captions

@@ -62,4 +62,3 @@ func TestFetchCache_Eviction(t *testing.T) {
 		t.Fatal("expected hit for d.com")
 	}
 }
-

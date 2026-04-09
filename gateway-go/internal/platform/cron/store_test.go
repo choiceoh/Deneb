@@ -108,4 +108,3 @@ func TestStorePersistence(t *testing.T) {
 		t.Error("expected persisted job")
 	}
 }
-

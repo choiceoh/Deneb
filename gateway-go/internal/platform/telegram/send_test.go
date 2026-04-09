@@ -95,7 +95,6 @@ func TestSendTextHTMLFallbackOnlyOnParseError(t *testing.T) {
 	}
 }
 
-
 func TestIsHTMLParseError(t *testing.T) {
 	tests := []struct {
 		name string
@@ -131,4 +130,3 @@ func TestIsHTMLParseError(t *testing.T) {
 		})
 	}
 }
-

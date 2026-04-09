@@ -59,5 +59,3 @@ func TestParseReplyButtons_LabelOnlyButtons(t *testing.T) {
 		t.Fatalf("got %q, want callback_data = label", kb.InlineKeyboard[0][0].CallbackData)
 	}
 }
-
-

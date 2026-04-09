@@ -34,7 +34,6 @@ func TestLoadContextFiles(t *testing.T) {
 	}
 }
 
-
 func TestTruncateContent(t *testing.T) {
 	content := strings.Repeat("a", 100)
 	result := truncateContent(content, 50)
@@ -106,4 +105,3 @@ func TestSessionSnapshotFrozen(t *testing.T) {
 		t.Fatalf("got %q, want fresh fact-v2 after clear", files[0].Content)
 	}
 }
-

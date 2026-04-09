@@ -26,8 +26,6 @@ func TestScratchpadDir_Creates(t *testing.T) {
 	}
 }
 
-
-
 func TestCleanupScratchpad(t *testing.T) {
 	dir := testutil.Must(ScratchpadDir("cleanup-test"))
 
@@ -70,4 +68,3 @@ func TestResolveScratchpadDir(t *testing.T) {
 		t.Fatalf("directory should exist: %v", err)
 	}
 }
-

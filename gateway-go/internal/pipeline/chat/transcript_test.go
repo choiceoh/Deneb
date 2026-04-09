@@ -56,7 +56,6 @@ func TestFileTranscriptStore_LoadWithLimit(t *testing.T) {
 	}
 }
 
-
 func TestFileTranscriptStore_CreatesDir(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nested", "dir")
 	store := NewFileTranscriptStore(dir)
@@ -69,4 +68,3 @@ func TestFileTranscriptStore_CreatesDir(t *testing.T) {
 		t.Errorf("expected file to exist: %v", err)
 	}
 }
-

@@ -111,7 +111,6 @@ func TestExtractSystemText(t *testing.T) {
 	})
 }
 
-
 func TestAppendJSONString(t *testing.T) {
 	cases := []struct {
 		name  string

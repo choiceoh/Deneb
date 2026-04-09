@@ -39,4 +39,3 @@ func TestAPIError_IsRateLimited(t *testing.T) {
 		t.Error("expected 500 to not be rate limited")
 	}
 }
-

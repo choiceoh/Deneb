@@ -60,4 +60,3 @@ func TestServerStartStop(t *testing.T) {
 	err := srv.Run(ctx)
 	testutil.NoError(t, err)
 }
-

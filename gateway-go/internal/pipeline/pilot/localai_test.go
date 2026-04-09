@@ -128,7 +128,6 @@ func TestTruncateHead(t *testing.T) {
 	}
 }
 
-
 func TestCollectStream_ContentBlockDelta(t *testing.T) {
 	ch := make(chan llm.StreamEvent, 3)
 	ch <- llm.StreamEvent{
@@ -149,7 +148,6 @@ func TestCollectStream_ContentBlockDelta(t *testing.T) {
 		t.Errorf("CollectStream = %q, want %q", got, "hello world")
 	}
 }
-
 
 func TestCollectStream_ErrorEvent(t *testing.T) {
 	ch := make(chan llm.StreamEvent, 2)
@@ -204,7 +202,6 @@ func TestCollectStream_ContextCancelledWithPartial(t *testing.T) {
 		t.Errorf("CollectStream err = %v, want nil (partial content returned)", err)
 	}
 }
-
 
 // contains is a test helper for substring check.
 func contains(s, substr string) bool {

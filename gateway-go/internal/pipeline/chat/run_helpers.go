@@ -43,6 +43,18 @@ func executeAgentRunWithDelta(
 	return executeAgentRun(ctx, params, deps, broadcaster, nil, nil, logger, runLog)
 }
 
+// isContextOverflow checks if an error indicates a context window overflow.
+func isContextOverflow(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "context_length_exceeded") ||
+		strings.Contains(msg, "context_too_long") ||
+		strings.Contains(msg, "prompt is too long") ||
+		strings.Contains(msg, "maximum context length")
+}
+
 // resolveWorkspaceDirForPrompt returns the workspace directory for system prompt assembly.
 // Reads agents.defaults.workspace / agents.list[].workspace from config,
 // falling back to ~/.deneb/workspace (matching TS resolveAgentWorkspaceDir).

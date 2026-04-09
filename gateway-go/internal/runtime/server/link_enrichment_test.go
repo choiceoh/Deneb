@@ -56,7 +56,6 @@ func TestEnrichMessageWithLinks_SingleHTMLLink(t *testing.T) {
 	}
 }
 
-
 func TestEnrichMessageWithLinks_FetchFailure(t *testing.T) {
 	logger := slog.Default()
 	fetch := stubFetcher(map[string]struct {
@@ -92,7 +91,6 @@ func TestEnrichMessageWithLinks_Truncation(t *testing.T) {
 		t.Fatal("expected truncation marker")
 	}
 }
-
 
 func TestFormatLinkSummary_WithTitle(t *testing.T) {
 	links := []LinkContent{

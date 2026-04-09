@@ -65,8 +65,6 @@ func TestDaemon_StartStop(t *testing.T) {
 	}
 }
 
-
-
 func TestReadPIDFile(t *testing.T) {
 	dir := t.TempDir()
 	pidFile := filepath.Join(dir, "test.pid")
@@ -88,7 +86,6 @@ func TestReadPIDFile(t *testing.T) {
 		t.Errorf("got %d, want PID %d", info.PID, os.Getpid())
 	}
 }
-
 
 func TestCheckExistingDaemon_NoFile(t *testing.T) {
 	dir := t.TempDir()

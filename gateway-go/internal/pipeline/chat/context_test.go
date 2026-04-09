@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-
-
 func TestAssembleContextRequiresBridge(t *testing.T) {
 	// assembleContext must reject non-Bridge stores.
 	store := &nonBridgeStore{}

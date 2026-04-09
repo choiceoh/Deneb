@@ -71,4 +71,3 @@ func TestPublisher_PublishAgentEvent_Sequencing(t *testing.T) {
 	}
 	pub.seqMu.Unlock()
 }
-

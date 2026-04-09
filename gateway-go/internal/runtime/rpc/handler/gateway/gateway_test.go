@@ -152,6 +152,7 @@ func TestSystemEvent_withBroadcast(t *testing.T) {
 	}
 	_ = capturedPayload // verified event name is sufficient
 }
+
 // ─── models.list ─────────────────────────────────────────────────────────────
 // ─── config.get ──────────────────────────────────────────────────────────────
 

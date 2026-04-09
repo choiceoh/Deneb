@@ -4,14 +4,11 @@ import (
 	"testing"
 )
 
-
-
 func TestService_StartStop(t *testing.T) {
 	s := NewService(nil)
 	s.Start()
 	s.Stop() // must not panic or deadlock
 }
-
 
 func TestService_OnEvent_listenerRegistered(t *testing.T) {
 	s := NewService(nil)
@@ -36,4 +33,3 @@ func TestService_OnEvent_multipleListeners(t *testing.T) {
 		t.Errorf("got %d, want 2 listeners called", count)
 	}
 }
-

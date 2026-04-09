@@ -25,7 +25,6 @@ func TestLRU_GetPut(t *testing.T) {
 	}
 }
 
-
 func TestLRU_Eviction(t *testing.T) {
 	c := NewLRU[string, int](2, 0)
 	c.Put("a", 1)
@@ -87,7 +86,6 @@ func TestLRU_Delete(t *testing.T) {
 	}
 }
 
-
 func TestLRU_TTLExpiry(t *testing.T) {
 	c := NewLRU[string, int](10, 50*time.Millisecond)
 	c.Put("a", 1)
@@ -122,6 +120,3 @@ func TestLRU_Cleanup(t *testing.T) {
 		t.Fatal("expected 'c' to survive cleanup")
 	}
 }
-
-
-

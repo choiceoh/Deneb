@@ -130,7 +130,6 @@ func TestPollState_HasSeen_MapLookup(t *testing.T) {
 	}
 }
 
-
 func TestPollState_MarkSeen(t *testing.T) {
 	state := &PollState{}
 	state.markSeen("x")

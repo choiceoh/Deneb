@@ -73,7 +73,6 @@ func TestAuthManager_StoreResolve(t *testing.T) {
 	}
 }
 
-
 func TestAuthManager_Prepare_NoForwarder(t *testing.T) {
 	am := NewAuthManager(nil, nil)
 
@@ -86,4 +85,3 @@ func TestAuthManager_Prepare_NoForwarder(t *testing.T) {
 		t.Errorf("got %q, want raw-key passthrough", prepared.APIKey)
 	}
 }
-

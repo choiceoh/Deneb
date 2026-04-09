@@ -76,7 +76,6 @@ func TestEmptyMainModelDefaultsToVllm(t *testing.T) {
 	}
 }
 
-
 func TestFallbackChain(t *testing.T) {
 	reg := NewRegistry(slog.Default(), "zai/test-model")
 

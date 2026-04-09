@@ -201,4 +201,3 @@ func TestExponentialBackoff(t *testing.T) {
 		t.Errorf("after reset, current %v != initial %v", b.Current(), b.Initial)
 	}
 }
-

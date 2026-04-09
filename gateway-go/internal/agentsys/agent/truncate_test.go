@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-
-
 func TestTruncateHeadTail_AboveLimit(t *testing.T) {
 	// Build content with identifiable head and tail.
 	head := strings.Repeat("H", 500)
@@ -70,4 +68,3 @@ func TestTruncateHeadTail_LineCount(t *testing.T) {
 		t.Error("should contain line count in marker")
 	}
 }
-

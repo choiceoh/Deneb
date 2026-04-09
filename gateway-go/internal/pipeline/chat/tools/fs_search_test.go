@@ -148,6 +148,7 @@ func TestSplitGlobs_braceExpansion(t *testing.T) {
 		t.Errorf("brace expansion should pass through: got %v", got)
 	}
 }
+
 // ─── ToolGrep: include filter with comma-separated globs ────────────────────
 
 func TestToolGrep_commaSeparatedInclude(t *testing.T) {
@@ -222,6 +223,7 @@ func TestStripRgFlag(t *testing.T) {
 		}
 	}
 }
+
 // ─── ToolGrep: fileType normalization ──────────────────────────────────────
 
 func TestToolGrep_fileTypeNormalization(t *testing.T) {
@@ -240,6 +242,7 @@ func TestToolGrep_fileTypeNormalization(t *testing.T) {
 		t.Errorf("expected main.go in output: %q", out)
 	}
 }
+
 // ─── hasGrepMatches ─────────────────────────────────────────────────────────
 
 func TestHasGrepMatches(t *testing.T) {
@@ -267,4 +270,3 @@ func TestHasGrepMatches(t *testing.T) {
 }
 
 // ─── rgExitCode ─────────────────────────────────────────────────────────────
-

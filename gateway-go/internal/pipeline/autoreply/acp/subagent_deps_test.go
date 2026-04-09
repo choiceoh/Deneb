@@ -189,4 +189,3 @@ func TestSubagentCommandDeps_ResetSubagent_RunningGuard(t *testing.T) {
 		t.Errorf("status after reset = %q, want 'idle'", agent.Status)
 	}
 }
-

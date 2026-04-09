@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-
 func TestResponseCache(t *testing.T) {
 	cache := newResponseCache(5*time.Minute, 100)
 
@@ -127,7 +126,6 @@ func TestQueueDropOldestBackground(t *testing.T) {
 		t.Fatalf("got %d, want 2 remaining", q.Len())
 	}
 }
-
 
 func TestCacheKey_DifferentMaxTokens(t *testing.T) {
 	r1 := SimpleRequest("sys", "hello", 100, PriorityNormal, "test")

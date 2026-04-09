@@ -119,4 +119,3 @@ func TestFullTypingSignaler_SignalTextDelta_StartsOnRealText(t *testing.T) {
 		t.Error("expected typing to start on real text")
 	}
 }
-

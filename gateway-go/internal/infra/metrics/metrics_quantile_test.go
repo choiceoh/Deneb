@@ -32,7 +32,6 @@ func TestHistogramQuantiles(t *testing.T) {
 	}
 }
 
-
 func TestHistogramWriteQuantiles(t *testing.T) {
 	h := NewHistogram("test_duration", "test", []float64{0.1, 0.5, 1, 5, 10}, "method")
 	h.Observe(0.3, "foo")
@@ -54,5 +53,3 @@ func TestHistogramWriteQuantiles(t *testing.T) {
 		t.Error("missing method label in output")
 	}
 }
-
-

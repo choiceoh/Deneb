@@ -75,9 +75,6 @@ func TestAllowedTools_Coordinator(t *testing.T) {
 	}
 }
 
-
-
-
 func TestIsValid(t *testing.T) {
 	for _, p := range []Preset{PresetNone, PresetResearcher, PresetImplementer, PresetVerifier, PresetCoordinator, PresetConversation} {
 		if !IsValid(p) {

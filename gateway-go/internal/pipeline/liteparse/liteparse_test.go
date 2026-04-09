@@ -39,5 +39,3 @@ func TestSupportedMIME(t *testing.T) {
 		}
 	}
 }
-
-

@@ -4,7 +4,6 @@ import (
 	"testing"
 )
 
-
 func TestNormalizeDiscoveryResultSingleProvider(t *testing.T) {
 	result := NormalizeDiscoveryResult("openai", &DiscoveryCatalogResult{
 		Provider: &DiscoveryProviderConfig{ID: "openai", BaseURL: "https://api.openai.com"},
@@ -73,4 +72,3 @@ func TestGroupDiscoveryProvidersByOrder(t *testing.T) {
 		t.Errorf("got %d, want 1 late provider", len(grouped[DiscoveryOrderLate]))
 	}
 }
-

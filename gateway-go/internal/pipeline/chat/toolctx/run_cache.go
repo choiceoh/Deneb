@@ -106,10 +106,10 @@ var cacheableTools = map[string]struct{}{
 }
 
 var mutationTools = map[string]struct{}{
-	"write":       {},
-	"edit":        {},
-	"multi_edit":  {},
-	"git":         {},
+	"write":      {},
+	"edit":       {},
+	"multi_edit": {},
+	"git":        {},
 }
 
 // IsCacheableTool returns true if the named tool's results can be cached.

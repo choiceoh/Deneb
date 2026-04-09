@@ -4,7 +4,6 @@ import (
 	"testing"
 )
 
-
 func TestBasicSearch(t *testing.T) {
 	idx := New()
 	idx.Upsert("doc1", "The quick brown fox")
@@ -93,7 +92,6 @@ func TestRemove(t *testing.T) {
 		t.Fatalf("expected 0 hits after remove, got %d", len(hits))
 	}
 }
-
 
 func TestLimit(t *testing.T) {
 	idx := New()

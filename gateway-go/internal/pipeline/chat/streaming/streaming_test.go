@@ -30,7 +30,6 @@ func TestTruncateForBroadcast(t *testing.T) {
 	}
 }
 
-
 func TestStreamBroadcasterEmitDelta(t *testing.T) {
 	t.Run("skips empty text", func(t *testing.T) {
 		called := false

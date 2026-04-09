@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-
-
 func TestCount_PureEnglish(t *testing.T) {
 	est := ForFamily(FamilyClaude)
 	// "The quick brown fox jumps over the lazy dog" = 44 chars
@@ -142,7 +140,6 @@ func TestEstimate_KoreanMoreAccurate(t *testing.T) {
 			scriptAware, runeDiv2)
 	}
 }
-
 
 func TestEstimateBytes_ASCII(t *testing.T) {
 	data := []byte(`{"role":"assistant","content":"Hello world"}`)

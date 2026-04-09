@@ -79,8 +79,8 @@ func braveAPIKey() string {
 
 // perplexityRequest is the chat completion request for Perplexity Sonar API.
 type perplexityRequest struct {
-	Model    string               `json:"model"`
-	Messages []perplexityMessage  `json:"messages"`
+	Model    string              `json:"model"`
+	Messages []perplexityMessage `json:"messages"`
 }
 
 type perplexityMessage struct {

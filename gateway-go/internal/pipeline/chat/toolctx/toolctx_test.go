@@ -13,42 +13,21 @@ import (
 // types.go
 // ---------------------------------------------------------------------------
 
-
-
-
-
 // ---------------------------------------------------------------------------
 // context.go — With*/FromContext roundtrips
 // ---------------------------------------------------------------------------
-
-
-
-
-
-
-
-
-
-
 
 // ---------------------------------------------------------------------------
 // context.go — ContinuationSignal
 // ---------------------------------------------------------------------------
 
-
-
-
 // ---------------------------------------------------------------------------
 // context.go — SpawnFlag
 // ---------------------------------------------------------------------------
 
-
-
-
 // ---------------------------------------------------------------------------
 // context.go — DeferredActivation
 // ---------------------------------------------------------------------------
-
 
 func TestDeferredActivation_activate(t *testing.T) {
 	da := NewDeferredActivation()
@@ -74,14 +53,9 @@ func TestDeferredActivation_multipleMerge(t *testing.T) {
 	}
 }
 
-
 // ---------------------------------------------------------------------------
 // run_cache.go
 // ---------------------------------------------------------------------------
-
-
-
-
 
 func TestRunCache_invalidateByPath_removesOverlapping(t *testing.T) {
 	rc := NewRunCache()
@@ -178,7 +152,6 @@ func TestIsMutationTool(t *testing.T) {
 	}
 }
 
-
 func TestBuildCacheKey_stripsCompress(t *testing.T) {
 	input := json.RawMessage(`{"path":"/src","compress":true}`)
 	got := BuildCacheKey("find", input)
@@ -208,17 +181,9 @@ func TestBuildCacheKey_stripsRef(t *testing.T) {
 	}
 }
 
-
-
 // ---------------------------------------------------------------------------
 // turn_context.go
 // ---------------------------------------------------------------------------
-
-
-
-
-
-
 
 func TestTurnContext_waitUnblockedByStore(t *testing.T) {
 	tc := NewTurnContext()
@@ -277,7 +242,6 @@ func TestTurnContext_toolTiming(t *testing.T) {
 	}
 }
 
-
 // ---------------------------------------------------------------------------
 // turn_context.go — DetectCycle
 // ---------------------------------------------------------------------------
@@ -311,5 +275,3 @@ func TestDetectCycle_selfLoop(t *testing.T) {
 		t.Error("DetectCycle returned nil for self-loop")
 	}
 }
-
-

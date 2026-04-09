@@ -67,4 +67,3 @@ func TestDefaultSessionResetPolicy(t *testing.T) {
 		t.Error("expected OnNewAgent=false")
 	}
 }
-

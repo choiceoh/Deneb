@@ -16,7 +16,6 @@ func TestLoadPrompt_Default(t *testing.T) {
 	}
 }
 
-
 func TestLoadPrompt_CustomFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "custom-prompt.md")
@@ -30,7 +29,6 @@ func TestLoadPrompt_CustomFile(t *testing.T) {
 		t.Errorf("loadPrompt = %q, want %q", prompt, custom)
 	}
 }
-
 
 func TestFormatEmailForAnalysis(t *testing.T) {
 	msg := &gmail.MessageDetail{

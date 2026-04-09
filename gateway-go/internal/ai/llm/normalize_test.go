@@ -136,4 +136,3 @@ func TestNormalizeMessages_ThreeConsecutive(t *testing.T) {
 		t.Fatalf("want 3 blocks, got %d", len(blocks))
 	}
 }
-

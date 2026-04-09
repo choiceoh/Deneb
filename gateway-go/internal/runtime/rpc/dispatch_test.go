@@ -27,7 +27,6 @@ func TestDispatchRegisteredMethod(t *testing.T) {
 	}
 }
 
-
 func TestDispatchUnknownMethodReturnsNotFound(t *testing.T) {
 	d := NewDispatcher(rpctest.NewLogger())
 	req := &protocol.RequestFrame{Type: "req", ID: "3", Method: "unknown.forwarded"}

@@ -125,4 +125,3 @@ func TestLookupSchemaEnums(t *testing.T) {
 		t.Fatalf("len(Enum) = %d, want 4", len(node.Enum))
 	}
 }
-

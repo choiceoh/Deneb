@@ -4,9 +4,6 @@ import (
 	"testing"
 )
 
-
-
-
 func TestSessionApplyPatch(t *testing.T) {
 	t.Run("empty patch no change", func(t *testing.T) {
 		s := &Session{Key: "k1", Label: "orig"}

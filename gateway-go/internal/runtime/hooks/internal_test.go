@@ -91,7 +91,6 @@ func TestInternalRegistry_Unregister(t *testing.T) {
 	}
 }
 
-
 func TestEvaluateEligibility_AlwaysTrue(t *testing.T) {
 	meta := &DenebHookMetadata{Always: true}
 	if !EvaluateEligibility(meta, EligibilityContext{}) {
@@ -141,7 +140,6 @@ func TestEvaluateEligibility_RequiredEnv(t *testing.T) {
 		t.Error("should pass when env var is set")
 	}
 }
-
 
 func TestEventKey(t *testing.T) {
 	event := &InternalHookEvent{Type: EventTypeMessage, Action: "received"}

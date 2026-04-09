@@ -118,6 +118,7 @@ func TestMatchFenceLine_Indented(t *testing.T) {
 		t.Errorf("got indent=%q marker=%q rest=%q", indent, marker, rest)
 	}
 }
+
 // ---------------------------------------------------------------------------
 // Spoiler preprocessing unit tests
 // ---------------------------------------------------------------------------

@@ -93,7 +93,6 @@ func TestCachedTranscriptStore_InvalidateOnDelete(t *testing.T) {
 	}
 }
 
-
 func TestCachedTranscriptStore_TTLExpiry(t *testing.T) {
 	inner := newCountingStore()
 	cache := NewCachedTranscriptStore(inner, 1*time.Millisecond)

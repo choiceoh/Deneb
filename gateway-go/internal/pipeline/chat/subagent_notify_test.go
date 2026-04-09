@@ -194,7 +194,6 @@ func TestIsTerminalStatus(t *testing.T) {
 	}
 }
 
-
 func TestDeferredSubagentNotifications_Drain(t *testing.T) {
 	ch := make(chan string, 2)
 	ch <- "child A done"

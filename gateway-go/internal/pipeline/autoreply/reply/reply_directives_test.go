@@ -193,4 +193,3 @@ func TestSplitMediaFromOutput_RelativePath(t *testing.T) {
 		t.Fatalf("got %d, want 1 URL for relative path", len(urls))
 	}
 }
-

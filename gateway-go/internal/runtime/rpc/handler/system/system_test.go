@@ -23,10 +23,6 @@ func TestFindLatestLogFile(t *testing.T) {
 	}
 }
 
-
-
-
-
 func TestTruncateLog(t *testing.T) {
 	tests := []struct {
 		name   string

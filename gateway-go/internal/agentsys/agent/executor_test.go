@@ -24,7 +24,6 @@ func TestExtractThinkingText_Basic(t *testing.T) {
 	}
 }
 
-
 func TestExtractThinkingText_MultipleBlocks(t *testing.T) {
 	blocks := []llm.ContentBlock{
 		{Type: "thinking", Thinking: "first thinking block"},
@@ -156,4 +155,3 @@ func TestConsumeStreamInto_DeltaIndexMismatch(t *testing.T) {
 		t.Errorf("text = %q, want %q (mismatched delta should be dropped)", result.text, "hello")
 	}
 }
-

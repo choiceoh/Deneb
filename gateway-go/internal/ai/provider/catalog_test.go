@@ -42,7 +42,6 @@ func TestFindCatalogTemplate(t *testing.T) {
 	}
 }
 
-
 func TestBuildSingleProviderAPIKeyCatalog(t *testing.T) {
 	// No API key → nil.
 	result := BuildSingleProviderAPIKeyCatalog(SingleProviderCatalogParams{

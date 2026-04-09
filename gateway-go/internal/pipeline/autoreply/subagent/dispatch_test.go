@@ -151,7 +151,6 @@ func TestHandleSubagentsInfoAction(t *testing.T) {
 	}
 }
 
-
 func TestHandleSubagentsCommand_help_for_unknown_action(t *testing.T) {
 	result := HandleSubagentsCommand("/subagents badaction", "key", "telegram", "acc", "", "sender", false, true, &SubagentCommandDeps{
 		ListRuns: func(string) []SubagentRunRecord { return nil },

@@ -54,7 +54,6 @@ func TestProviderRuntimeResolverResolvePlugin(t *testing.T) {
 	}
 }
 
-
 func TestProviderRuntimeResolverResetCache(t *testing.T) {
 	reg := NewRegistry()
 	tp := &testPlugin{id: "openai", label: "OpenAI"}
@@ -97,4 +96,3 @@ func TestProviderRuntimeResolverCapabilities(t *testing.T) {
 		t.Errorf("got %v, want nil capabilities for nonexistent", c2)
 	}
 }
-

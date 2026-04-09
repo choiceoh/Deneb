@@ -85,4 +85,3 @@ func TestSnapshot(t *testing.T) {
 		t.Fatalf("unexpected data: %+v", loaded)
 	}
 }
-

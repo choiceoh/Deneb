@@ -3,6 +3,7 @@ package urlextract
 import (
 	"testing"
 )
+
 func TestExtractLinks_BareURLs(t *testing.T) {
 	urls := ExtractLinks("Check https://example.com and https://rust-lang.org", 5)
 	if len(urls) != 2 {
@@ -133,6 +134,7 @@ func TestStripURLTail_BalancedCurlyBraces(t *testing.T) {
 		t.Errorf("got %s, want balanced {} preserved", got)
 	}
 }
+
 // --- Rust parity: markdown link with non-HTTP URL (should not be stripped) ---
 // --- Rust parity: minimum URL length (>7 chars) ---
 // --- Rust parity: case-insensitive scheme detection ---

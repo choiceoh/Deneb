@@ -51,7 +51,6 @@ func methodsWithStore(t *testing.T) (map[string]rpcutil.HandlerFunc, *wiki.Store
 
 // ─── Methods registration ───────────────────────────────────────────────────
 
-
 func TestMethods_registersAllHandlers(t *testing.T) {
 	m, _ := methodsWithStore(t)
 	expected := []string{
@@ -75,8 +74,6 @@ func TestMethods_registersAllHandlers(t *testing.T) {
 
 // ─── wiki.search ────────────────────────────────────────────────────────────
 
-
-
 func TestSearch_defaultLimit(t *testing.T) {
 	m, store := methodsWithStore(t)
 	seedPage(t, store, "기술/golang.md", "Go Language", "기술", "Go is a statically typed language.", []string{"go"})
@@ -93,14 +90,7 @@ func TestSearch_defaultLimit(t *testing.T) {
 	}
 }
 
-
-
-
-
 // ─── wiki.read ──────────────────────────────────────────────────────────────
-
-
-
 
 func TestRead_existingPage(t *testing.T) {
 	m, store := methodsWithStore(t)
@@ -143,11 +133,7 @@ func TestRead_withSection(t *testing.T) {
 	}
 }
 
-
 // ─── wiki.write ─────────────────────────────────────────────────────────────
-
-
-
 
 func TestWrite_success(t *testing.T) {
 	m, store := methodsWithStore(t)
@@ -232,8 +218,6 @@ func TestWrite_overwriteExisting(t *testing.T) {
 
 // ─── wiki.delete ────────────────────────────────────────────────────────────
 
-
-
 func TestDelete_existingPage(t *testing.T) {
 	m, store := methodsWithStore(t)
 	seedPage(t, store, "기술/to-delete.md", "Deletable", "기술", "to be deleted", nil)
@@ -255,9 +239,7 @@ func TestDelete_existingPage(t *testing.T) {
 	}
 }
 
-
 // ─── wiki.list ──────────────────────────────────────────────────────────────
-
 
 func TestList_allPages(t *testing.T) {
 	m, store := methodsWithStore(t)
@@ -298,10 +280,7 @@ func TestList_filteredByCategory(t *testing.T) {
 	}
 }
 
-
-
 // ─── wiki.index ─────────────────────────────────────────────────────────────
-
 
 func TestIndex_withPages(t *testing.T) {
 	m, store := methodsWithStore(t)
@@ -357,10 +336,7 @@ func TestIndex_filterByCategory(t *testing.T) {
 	}
 }
 
-
-
 // ─── wiki.stats ─────────────────────────────────────────────────────────────
-
 
 func TestStats_withPages(t *testing.T) {
 	m, store := methodsWithStore(t)
@@ -390,5 +366,3 @@ func TestStats_withPages(t *testing.T) {
 		t.Error("missing 기술 category count")
 	}
 }
-
-

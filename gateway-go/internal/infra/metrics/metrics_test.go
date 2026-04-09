@@ -99,4 +99,3 @@ func TestHistogramObserveDuration(t *testing.T) {
 		t.Errorf("expected count 1, got:\n%s", out)
 	}
 }
-

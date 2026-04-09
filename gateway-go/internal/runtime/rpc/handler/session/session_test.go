@@ -12,7 +12,6 @@ var callMethod = rpctest.Call
 // Methods (session management)
 // ---------------------------------------------------------------------------
 
-
 func TestSessionsPatch_missingKey(t *testing.T) {
 	m := Methods(Deps{})
 	resp := callMethod(m, "sessions.patch", map[string]any{})
@@ -52,4 +51,3 @@ func TestSessionsResolve_missingKey(t *testing.T) {
 // ---------------------------------------------------------------------------
 // ExecMethods
 // ---------------------------------------------------------------------------
-

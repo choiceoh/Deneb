@@ -190,8 +190,6 @@ func TestDoStream_504_Retries(t *testing.T) {
 	}
 }
 
-
-
 func TestDoStream_429Code1302_NoRetry(t *testing.T) {
 	calls := 0
 	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {

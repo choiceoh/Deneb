@@ -28,7 +28,6 @@ func toolResultMsg(content string) llm.Message {
 
 // --- EstimateTokens ---
 
-
 // --- MicroCompact ---
 
 func TestMicroCompact_NoChange(t *testing.T) {

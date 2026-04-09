@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-
 func TestCatalogCache_GetAfterUpdate(t *testing.T) {
 	cc := NewCatalogCache("", "", nil)
 	models := map[string]ModelMeta{
@@ -44,5 +43,3 @@ func TestCatalogCache_StaleAfterFileChange(t *testing.T) {
 		t.Error("expected cache to be stale after file change")
 	}
 }
-
-

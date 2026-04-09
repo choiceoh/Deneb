@@ -267,4 +267,3 @@ func TestResolveAgentWorkspaceDirHomeTilde(t *testing.T) {
 		t.Errorf("got %q, want absolute path", dir)
 	}
 }
-

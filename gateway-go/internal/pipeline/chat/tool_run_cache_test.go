@@ -69,7 +69,6 @@ func TestRunCache_InvalidateByPath(t *testing.T) {
 	}
 }
 
-
 func TestRunCache_InvalidateByPath_WorkspaceScope(t *testing.T) {
 	rc := NewRunCache()
 
@@ -212,4 +211,3 @@ func TestIsMutationTool(t *testing.T) {
 		t.Fatal("read should not be a mutation tool")
 	}
 }
-
