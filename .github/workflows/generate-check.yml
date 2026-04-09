@@ -10,14 +10,14 @@ on:
     paths:
       - "gateway-go/internal/pipeline/chat/toolreg/tool_schemas.json"
       - "gateway-go/cmd/tool-schema-gen/**"
-      - "gateway-go/internal/pipeline/autoreply/thinking/model_caps.yaml"
+      - "gateway-go/internal/pipeline/autoreply/thinking/model_caps.json"
       - "gateway-go/cmd/model-caps-gen/**"
   push:
     branches: [main]
     paths:
       - "gateway-go/internal/pipeline/chat/toolreg/tool_schemas.json"
       - "gateway-go/cmd/tool-schema-gen/**"
-      - "gateway-go/internal/pipeline/autoreply/thinking/model_caps.yaml"
+      - "gateway-go/internal/pipeline/autoreply/thinking/model_caps.json"
       - "gateway-go/cmd/model-caps-gen/**"
 
 concurrency:
@@ -44,7 +44,7 @@ jobs:
               - "gateway-go/internal/pipeline/chat/toolreg/tool_schemas.json"
               - "gateway-go/cmd/tool-schema-gen/**"
             model-caps:
-              - "gateway-go/internal/pipeline/autoreply/thinking/model_caps.yaml"
+              - "gateway-go/internal/pipeline/autoreply/thinking/model_caps.json"
               - "gateway-go/cmd/model-caps-gen/**"
 
 # ── Domain check jobs ──────────────────────────────────────────────────────
@@ -67,7 +67,7 @@ jobs:
       - name: tool schemas check (tool_schemas.json -> tool_schemas_gen.go)
         run: make tool-schemas-check
 
-  # model_caps.yaml -> model_caps_gen.go
+  # model_caps.json -> model_caps_gen.go
   model-caps:
     name: model capabilities
     needs: changes
@@ -85,5 +85,5 @@ jobs:
       - name: Install pyyaml
         run: pip install pyyaml
 
-      - name: model caps check (model_caps.yaml -> model_caps_gen.go)
+      - name: model caps check (model_caps.json -> model_caps_gen.go)
         run: make model-caps-check

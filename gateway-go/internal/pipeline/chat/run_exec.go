@@ -752,13 +752,49 @@ func executeAgentRun(
 		"messages", len(messages), "tools", len(tools))
 
 	// 11. Execute agent loop with model fallback chain.
+	// Includes mid-loop compaction retry: on context_length_exceeded, strip images
+	// and emergency-summarize before retrying up to maxCompactionRetries times.
+	const maxCompactionRetries = 2
 	agentStart := time.Now()
 	var agentResult *agent.AgentResult
 	var lastTransition QueryTransition
 
 	var runErr error
-	agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
-	if runErr != nil {
+	for compactAttempt := 0; compactAttempt <= maxCompactionRetries; compactAttempt++ {
+		agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+		if runErr == nil {
+			break
+		}
+
+		// Mid-loop compaction retry: on context overflow, strip images and
+		// emergency-summarize to reduce context before retrying.
+		if isContextOverflow(runErr) && compactAttempt < maxCompactionRetries && ctx.Err() == nil {
+			logger.Warn("context overflow, attempting mid-loop compaction",
+				"attempt", compactAttempt+1,
+				"maxRetries", maxCompactionRetries,
+				"messageCount", len(messages),
+				"error", runErr)
+
+			// Strip image blocks first (cheap, no LLM call).
+			messages = compact.StripImageBlocks(messages)
+
+			// Emergency summarize: keep head 2 + tail 8, summarize the middle.
+			if len(messages) > 10 {
+				var summarizer compact.Summarizer
+				if pilotHub := pilot.LocalAIHub(); pilotHub != nil {
+					summarizer = &localAISummarizer{}
+				}
+				if summarizer != nil {
+					contextBudget := int(deps.contextCfg.MemoryTokenBudget - deps.contextCfg.SystemPromptBudget) //nolint:gosec // G115
+					compactCfg := compact.NewConfig(contextBudget)
+					compactCtx, compactCancel := context.WithTimeout(ctx, 30*time.Second)
+					messages, _ = compact.Compact(compactCtx, compactCfg, messages, summarizer, logger)
+					compactCancel()
+				}
+			}
+			continue
+		}
+
 		// Transient HTTP retry: 502/503/521/429 → wait 2.5s, retry once.
 		if deps.isTransientError != nil && deps.isTransientError(runErr.Error()) && ctx.Err() == nil {
 			logger.Warn("transient HTTP error, retrying once", "error", runErr)
@@ -803,6 +839,7 @@ func executeAgentRun(
 		if runErr != nil {
 			return nil, runErr
 		}
+		break // success via transient retry or fallback
 	}
 	lastTransition = NewTerminal(TerminalCompleted, nil)
 

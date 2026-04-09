@@ -55,7 +55,6 @@ type StatusDeps struct {
 	Version           string
 	StartedAt         time.Time
 	SessionCount      int
-	WSConnections     int32
 	ProviderUsage     map[string]*ProviderUsageStats
 	ChannelHealth     []ChannelHealthEntry
 	LastFailureReason string // reason the most recent run failed, if any

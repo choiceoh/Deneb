@@ -391,6 +391,19 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			"검증 사항: 빌드, 테스트 통과, 추가 작업 필요 여부. 모든 것이 정상이면 최종 요약으로 마무리하세요.]"
 	}
 
+	// Diminishing returns guard: if we've done 3+ continuations and the last
+	// run produced very little output, stop — further continuations are unlikely
+	// to be productive and waste API calls.
+	const minUsefulOutputTokens = 500
+	if contReason != "" && params.ContinuationIndex >= 3 &&
+		chatResult.Usage.OutputTokens < minUsefulOutputTokens {
+		logger.Info("diminishing returns: stopping continuations",
+			"continuation", params.ContinuationIndex,
+			"outputTokens", chatResult.Usage.OutputTokens,
+			"threshold", minUsefulOutputTokens)
+		contReason = "" // suppress continuation
+	}
+
 	if contReason != "" && params.ContinuationIndex < maxConts && deps.startRunFn != nil {
 		nextIndex := params.ContinuationIndex + 1
 		logger.Info("autonomous continuation triggered",

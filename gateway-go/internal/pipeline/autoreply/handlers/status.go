@@ -35,7 +35,6 @@ type StatusReport struct {
 	Version           string
 	StartedAt         time.Time
 	SessionCount      int
-	WSConnections     int32
 	ProviderUsage     map[string]*ProviderUsageStats
 	ChannelHealth     []ChannelHealthEntry
 	LastFailureReason string // reason the most recent run failed, if any
@@ -100,8 +99,7 @@ func BuildStatusMessage(report StatusReport) string {
 
 	// System subsystem line.
 	if report.Version != "" || !report.StartedAt.IsZero() {
-		sections = append(sections, fmt.Sprintf("🔧 Sessions: %d | WS: %d",
-			report.SessionCount, report.WSConnections))
+		sections = append(sections, fmt.Sprintf("🔧 Sessions: %d", report.SessionCount))
 	}
 
 	// Per-provider API usage.
