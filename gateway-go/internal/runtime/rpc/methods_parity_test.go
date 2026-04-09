@@ -10,7 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/maintenance"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skill"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/usage"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/secret"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
@@ -108,7 +108,7 @@ func fullDispatcher() *Dispatcher {
 	RegisterCronAdvancedMethods(d, CronAdvancedDeps{Service: cron.NewService(cron.ServiceConfig{StorePath: "/tmp/deneb-cron-test-adv"}, nil, testLogger()), Broadcaster: broadcastFn})
 	RegisterCronServiceMethods(d, CronServiceDeps{Service: cron.NewService(cron.ServiceConfig{StorePath: "/tmp/deneb-cron-test"}, nil, testLogger())})
 	RegisterConfigAdvancedMethods(d, ConfigAdvancedDeps{Broadcaster: broadcastFn})
-	RegisterSkillMethods(d, SkillDeps{Skills: skill.NewManager(), Broadcaster: broadcastFn})
+	RegisterSkillMethods(d, SkillDeps{Skills: skills.NewRegistry(), Broadcaster: broadcastFn})
 	RegisterSecretMethods(d, SecretDeps{Resolver: secret.NewResolver()})
 	// Session state methods (patch/reset/preview/resolve/compact).
 	RegisterSessionMethods(d, SessionDeps{

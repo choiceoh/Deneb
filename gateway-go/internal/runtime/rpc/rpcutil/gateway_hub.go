@@ -18,7 +18,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skill"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -65,7 +65,7 @@ type HubConfig struct {
 
 	// Workflow subsystems.
 	Approvals *approval.Store
-	Skills    *skill.Manager
+	Skills    *skills.Registry
 
 	// Metadata.
 	Logger  *slog.Logger
@@ -101,7 +101,7 @@ type GatewayHub struct {
 
 	// Workflow subsystems.
 	approvals *approval.Store
-	skills    *skill.Manager
+	skills    *skills.Registry
 
 	// Wiki knowledge base (optional, nil when wiki is disabled).
 	wikiStore *wiki.Store
@@ -150,7 +150,7 @@ func (h *GatewayHub) CronService() *cron.Service                     { return h.
 func (h *GatewayHub) CronPersistLog() *cron.PersistentRunLog         { return h.cronPersistLog }
 func (h *GatewayHub) Tasks() *tasks.Registry                         { return h.tasks }
 func (h *GatewayHub) Approvals() *approval.Store                     { return h.approvals }
-func (h *GatewayHub) Skills() *skill.Manager                         { return h.skills }
+func (h *GatewayHub) Skills() *skills.Registry                       { return h.skills }
 func (h *GatewayHub) WikiStore() *wiki.Store                         { return h.wikiStore }
 func (h *GatewayHub) Logger() *slog.Logger                           { return h.logger }
 func (h *GatewayHub) Version() string                                { return h.version }

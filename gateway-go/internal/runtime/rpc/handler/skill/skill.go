@@ -6,7 +6,6 @@ package skill
 import (
 	"context"
 
-	skillpkg "github.com/choiceoh/deneb/gateway-go/internal/domain/skill"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -29,7 +28,7 @@ type BroadcastFunc = rpcutil.BroadcastFunc
 
 // Deps holds the dependencies for skills.* RPC methods.
 type Deps struct {
-	Skills      *skillpkg.Manager
+	Skills      *skills.Registry
 	Broadcaster BroadcastFunc
 }
 
@@ -105,7 +104,7 @@ func skillsUpdate(deps Deps) rpcutil.HandlerFunc {
 		if p.SkillKey == "" {
 			return nil, rpcerr.MissingParam("skillKey")
 		}
-		updated, err := deps.Skills.Update(p.SkillKey, skillpkg.SkillPatch{
+		updated, err := deps.Skills.Update(p.SkillKey, skills.ConfigPatch{
 			Enabled: p.Enabled,
 			APIKey:  p.APIKey,
 			Env:     p.Env,

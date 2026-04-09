@@ -7,6 +7,7 @@ package monitoring
 import (
 	"context"
 	"log/slog"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -209,7 +210,7 @@ func (m *ChannelHealthMonitor) HealthSnapshot() []ChannelHealthResult {
 			staleMs := now.UnixMilli() - lastEvent
 			if staleMs > m.cfg.StaleEventThresholdMs {
 				result.Healthy = false
-				result.Reason = "stale (" + itoa(int(staleMs/60000)) + " minutes since last event)"
+				result.Reason = "stale (" + strconv.Itoa(int(staleMs/60000)) + " minutes since last event)"
 			}
 		}
 	}
@@ -261,28 +262,4 @@ func (t *ChannelEventTracker) Touch() {
 // LastEventAt returns the last event timestamp, or 0 if unknown.
 func (t *ChannelEventTracker) LastEventAt() int64 {
 	return t.lastEventMs.Load()
-}
-
-// itoa is a simple int-to-string without importing strconv.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := false
-	if n < 0 {
-		neg = true
-		n = -n
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
 }

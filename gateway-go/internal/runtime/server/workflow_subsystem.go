@@ -5,7 +5,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skill"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/usage"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/secret"
 )
@@ -16,7 +16,7 @@ import (
 // Embedded in Server so fields are promoted and existing access patterns are unchanged.
 type WorkflowSubsystem struct {
 	approvals    *approval.Store
-	skills       *skill.Manager
+	skills       *skills.Registry
 	secrets      *secret.Resolver
 	jobTracker   *agent.JobTracker
 	usageTracker *usage.Tracker
@@ -27,7 +27,7 @@ type WorkflowSubsystem struct {
 func NewWorkflowSubsystem(logger *slog.Logger) *WorkflowSubsystem {
 	return &WorkflowSubsystem{
 		approvals:    approval.NewStore(),
-		skills:       skill.NewManager(),
+		skills:       skills.NewRegistry(),
 		secrets:      secret.NewResolver(),
 		jobTracker:   agent.NewJobTracker(logger),
 		usageTracker: usage.New(),
