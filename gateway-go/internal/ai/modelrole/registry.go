@@ -82,7 +82,7 @@ func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 	}
 
 	// Parse main model provider/name.
-	mainProvider, mainModelName := parseModelID(mainModel)
+	mainProvider, mainModelName := ParseModelID(mainModel)
 	mainBaseURL := resolveBaseURL(mainProvider)
 	mainAPIKey := resolveAPIKey(mainProvider)
 
@@ -235,9 +235,9 @@ func (r *Registry) ConfiguredModels() map[Role]ModelConfig {
 	return out
 }
 
-// parseModelID splits "provider/model" into provider and model name.
+// ParseModelID splits "provider/model" into provider and model name.
 // If no "/" prefix, returns empty provider and the original string.
-func parseModelID(model string) (providerID, modelName string) {
+func ParseModelID(model string) (providerID, modelName string) {
 	for i := range len(model) {
 		if model[i] == '/' {
 			return model[:i], model[i+1:]

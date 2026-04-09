@@ -10,15 +10,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 )
 
-// parseModelID splits a "provider/model" string into provider and model name.
-// If no prefix, returns empty provider and the original model string.
-func parseModelID(model string) (providerID, modelName string) {
-	if i := strings.IndexByte(model, '/'); i > 0 {
-		return model[:i], model[i+1:]
-	}
-	return "", model
-}
-
 // resolveClient creates an LLM client from provider configs, auth manager,
 // provider runtime resolver, or falls back to the pre-configured client.
 func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Client {
