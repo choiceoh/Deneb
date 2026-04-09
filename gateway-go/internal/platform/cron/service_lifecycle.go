@@ -6,7 +6,9 @@ import (
 	"time"
 )
 
-// Start loads jobs from the store and begins scheduling.
+// Start loads jobs from the store and arms the timer for all enabled jobs.
+// One-shot "at" jobs, recurring "every" jobs, and "cron" expression jobs
+// all go through the same timer-based system via NextRunAtMs.
 func (s *Service) Start(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -20,9 +22,7 @@ func (s *Service) Start(ctx context.Context) error {
 		return fmt.Errorf("load cron store: %w", err)
 	}
 
-	// Initialize scheduling for all enabled jobs.
-	// One-shot "at" jobs use the scheduler for immediate execution.
-	// Recurring "every"/"cron" jobs rely on the timer via NextRunAtMs.
+	// Ensure NextRunAtMs is set for all enabled jobs.
 	scheduled := 0
 	nowMs := time.Now().UnixMilli()
 	for i := range storeData.Jobs {
@@ -30,28 +30,19 @@ func (s *Service) Start(ctx context.Context) error {
 		if !job.Enabled {
 			continue
 		}
-		if job.Schedule.Kind == "at" {
-			// One-shot jobs: register with scheduler for immediate execution.
-			if err := s.scheduleJobLocked(ctx, *job); err != nil {
-				s.logger.Warn("failed to schedule cron job", "id", job.ID, "error", err)
-				continue
-			}
-		} else {
-			// Recurring jobs: ensure NextRunAtMs is set so the timer can fire them.
-			if job.State.NextRunAtMs <= 0 {
-				job.State.NextRunAtMs = ComputeNextRunAtMs(job.Schedule, nowMs)
-				if job.State.NextRunAtMs > 0 {
-					s.store.UpdateJobState(job.ID, job.State) //nolint:errcheck // best-effort
-				}
+		if job.State.NextRunAtMs <= 0 {
+			job.State.NextRunAtMs = ComputeNextRunAtMs(job.Schedule, nowMs)
+			if job.State.NextRunAtMs > 0 {
+				s.store.UpdateJobState(job.ID, job.State) //nolint:errcheck // best-effort
 			}
 		}
 		scheduled++
 	}
 
-	// Check for missed jobs (jobs that should have fired during downtime).
+	// Run jobs that should have fired during downtime.
 	s.recoverMissedJobsLocked(ctx, storeData)
 
-	// Arm the next-wake timer for recurring jobs.
+	// Arm the single timer for the earliest due job.
 	s.armTimerLocked(ctx)
 
 	s.running = true
@@ -61,14 +52,13 @@ func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop cancels all scheduled jobs and the timer.
+// Stop cancels the timer and marks the service as stopped.
 func (s *Service) Stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.running {
 		return
 	}
-	s.scheduler.Close()
 	s.disarmTimerLocked()
 	s.running = false
 	select {
@@ -79,18 +69,26 @@ func (s *Service) Stop() {
 	s.logger.Info("cron service stopped")
 }
 
-// Status returns the service status.
+// Status returns the service status from the store.
 func (s *Service) Status() ServiceStatus {
 	s.mu.Lock()
 	running := s.running
 	nextWake := s.nextWakeAtMs
 	s.mu.Unlock()
 
-	tasks := s.scheduler.List()
+	storeData, _ := s.store.Load()
+	enabledCount := 0
+	if storeData != nil {
+		for _, j := range storeData.Jobs {
+			if j.Enabled {
+				enabledCount++
+			}
+		}
+	}
+
 	return ServiceStatus{
 		Running:     running,
-		TaskCount:   len(tasks),
+		TaskCount:   enabledCount,
 		NextRunAtMs: nextWake,
-		Tasks:       tasks,
 	}
 }

@@ -31,14 +31,6 @@ type DeliveryResult struct {
 	LatencyMs int64  `json:"latencyMs,omitempty"`
 }
 
-// DeliveryPlan holds the resolved delivery parameters for a cron job run.
-type DeliveryPlan struct {
-	Target     DeliveryTarget `json:"target"`
-	BestEffort bool           `json:"bestEffort,omitempty"`
-	ChunkLimit int            `json:"chunkLimit,omitempty"`
-	ChunkMode  string         `json:"chunkMode,omitempty"`
-}
-
 // JobDeliveryConfig is the delivery section of a cron job definition.
 type JobDeliveryConfig struct {
 	Channel    string `json:"channel,omitempty"`    // channel ID or "last"

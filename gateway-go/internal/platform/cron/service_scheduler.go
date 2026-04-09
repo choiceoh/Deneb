@@ -2,12 +2,12 @@ package cron
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"time"
 )
 
-// --- Timer management (mirrors timer.ts, timer-helpers.ts) ---
+// --- Timer management ---
+// A single timer wakes at the earliest NextRunAtMs across all jobs.
+// On fire, it executes due jobs and re-arms for the next wake.
 
 func (s *Service) armTimerLocked(ctx context.Context) {
 	s.disarmTimerLocked()
@@ -133,39 +133,4 @@ func (s *Service) recoverMissedJobsLocked(ctx context.Context, storeData *CronSt
 			}()
 		}
 	}
-}
-
-func (s *Service) scheduleJobLocked(ctx context.Context, job StoreJob) error {
-	intervalMs := resolveJobIntervalMs(job)
-	if intervalMs <= 0 && job.Schedule.Kind != "at" {
-		return fmt.Errorf("job %q has no schedulable interval", job.ID)
-	}
-
-	immediate := job.Schedule.Kind == "at"
-	sched := Schedule{
-		IntervalMs: intervalMs,
-		Label:      job.Name,
-		Immediate:  immediate,
-	}
-
-	jobCopy := job
-	return s.scheduler.Register(ctx, job.ID, sched, func(taskCtx context.Context) error {
-		outcome := s.executeJobFull(taskCtx, jobCopy)
-		if outcome.Status == "error" {
-			return errors.New(outcome.Error)
-		}
-		return nil
-	})
-}
-
-func resolveJobIntervalMs(job StoreJob) int64 {
-	switch job.Schedule.Kind {
-	case "every":
-		return job.Schedule.EveryMs
-	case "cron":
-		return 60000 // poll every 60s, actual timing via ComputeNextRunAtMs
-	case "at":
-		return 0
-	}
-	return 0
 }

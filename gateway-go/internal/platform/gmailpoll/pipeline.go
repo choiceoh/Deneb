@@ -112,46 +112,24 @@ const finalAnalysisPrompt = `다음 이메일을 종합적으로 분석해주세
 %s
 %s%s`
 
-// AnalyzeEmailPipeline runs the 3-stage multi-LLM analysis pipeline.
+// AnalyzeEmailPipeline runs a 2-stage multi-LLM analysis pipeline.
+// Stage 1: extract thread context via local LLM.
+// Stage 2: final analysis combining email + thread context via main LLM.
 // Falls back to single-LLM analysis if pipeline deps are insufficient.
 func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail) (string, error) {
 	if !deps.canRunPipeline() {
-		// Fallback: single-LLM analysis (existing behavior).
 		return AnalyzeEmail(ctx, deps.LLMClient, deps.MainModel, DefaultPrompt, msg)
 	}
 
-	// Stage 1: parallel extraction.
-	var (
-		threadCtx ThreadContext
-		memoryCtx MemoryContext
-		threadErr error
-		memoryErr error
-		wg        sync.WaitGroup
-	)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		stage1aCtx, cancel := context.WithTimeout(ctx, stage1Timeout)
-		defer cancel()
-		threadCtx, threadErr = extractThreadContext(stage1aCtx, deps, msg)
-	}()
-
-	wg.Wait()
-
-	// Log errors but don't fail — graceful degradation.
-	_ = threadErr
-	_ = memoryErr
+	// Stage 1: extract thread context.
+	stage1Ctx, stage1Cancel := context.WithTimeout(ctx, stage1Timeout)
+	defer stage1Cancel()
+	threadCtx, _ := extractThreadContext(stage1Ctx, deps, msg) // best-effort
 
 	// Stage 2: final analysis combining all context.
 	stage2Ctx, cancel := context.WithTimeout(ctx, stage2Timeout)
 	defer cancel()
-	analysis, err := synthesizeAnalysis(stage2Ctx, deps, msg, threadCtx, memoryCtx)
-	if err != nil {
-		return "", err
-	}
-
-	return analysis, nil
+	return synthesizeAnalysis(stage2Ctx, deps, msg, threadCtx, MemoryContext{})
 }
 
 // --- batch analysis ---

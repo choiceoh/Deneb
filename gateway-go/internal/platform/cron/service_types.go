@@ -1,9 +1,43 @@
 package cron
 
 import (
+	"context"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
+
+// RunOutcome represents the result of a cron job execution.
+type RunOutcome struct {
+	Status     string          `json:"status"` // "ok", "error", "skipped", "timeout"
+	Output     string          `json:"output,omitempty"`
+	Error      string          `json:"error,omitempty"`
+	Delivery   *DeliveryResult `json:"delivery,omitempty"`
+	Retries    int             `json:"retries,omitempty"`
+	StartedAt  int64           `json:"startedAt"`
+	EndedAt    int64           `json:"endedAt"`
+	DurationMs int64           `json:"durationMs"`
+}
+
+// AgentRunner abstracts the agent execution so the cron package does not
+// depend on chat.Handler or protocol (which pull in CGo/FFI).
+type AgentRunner interface {
+	// RunAgentTurn executes an agent turn for a cron job and returns the text output.
+	// It blocks until the agent completes or the context is canceled.
+	RunAgentTurn(ctx context.Context, params AgentTurnParams) (output string, err error)
+}
+
+// AgentTurnParams holds parameters for a single cron agent turn.
+type AgentTurnParams struct {
+	SessionKey  string
+	SessionKind session.Kind // session kind (KindCron, etc.)
+	AgentID     string
+	Command     string
+	Channel     string
+	To          string
+	AccountID   string
+	ThreadID    string
+}
 
 // CronEvent describes a cron system event for listeners.
 type CronEvent struct {
@@ -37,14 +71,18 @@ type ServiceConfig struct {
 	// subagent cron runs can inherit recent conversation context.
 	MainSessionKey   string           // primary user session key for cloning context
 	TranscriptCloner TranscriptCloner // clones transcript messages between sessions
+
+	// SubagentPoller polls for descendant subagent completion after cron agent turns.
+	// When a cron job's agent produces an interim response (e.g., "확인 중"),
+	// the poller waits for descendant subagents to finish. Nil disables polling.
+	SubagentPoller SubagentPoller
 }
 
 // ServiceStatus is a snapshot of the cron service health and pending jobs.
 type ServiceStatus struct {
-	Running     bool         `json:"running"`
-	TaskCount   int          `json:"taskCount"`
-	NextRunAtMs int64        `json:"nextRunAtMs,omitempty"`
-	Tasks       []TaskStatus `json:"tasks,omitempty"`
+	Running     bool  `json:"running"`
+	TaskCount   int   `json:"taskCount"`
+	NextRunAtMs int64 `json:"nextRunAtMs,omitempty"`
 }
 
 // ListOptions controls simple job list queries (no pagination).

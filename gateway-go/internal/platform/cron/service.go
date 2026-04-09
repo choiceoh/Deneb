@@ -15,24 +15,24 @@ import (
 )
 
 // Service manages the full cron job lifecycle: CRUD, scheduling, execution, delivery.
+// All schedule kinds (at/every/cron) use a single timer-based system.
 // Session GC for cron runs is handled by session.Manager's Kind-based retention
 // (KindCron → 24h), so no separate reaper is needed.
 type Service struct {
-	mu        sync.Mutex
-	scheduler *Scheduler
-	store     *Store
-	runLog    *PersistentRunLog
-	agent     AgentRunner
-	logger    *slog.Logger
-	cfg       ServiceConfig
-	running   bool
-	stopCh    chan struct{}
+	mu      sync.Mutex
+	store   *Store
+	runLog  *PersistentRunLog
+	agent   AgentRunner
+	logger  *slog.Logger
+	cfg     ServiceConfig
+	running bool
+	stopCh  chan struct{}
 
 	// Per-job execution guard: prevents concurrent execution of the same job.
 	// Key = job ID, value = true while executing. Uses LoadOrStore for atomicity.
 	runningJobs sync.Map
 
-	// Timer state (mirrors TS timer.ts).
+	// Timer state: single timer wakes at the earliest NextRunAtMs across all jobs.
 	timerCancel  context.CancelFunc
 	nextWakeAtMs int64
 
@@ -68,6 +68,14 @@ func (s *Service) SetTelegramPlugin(plugin *telegram.Plugin) {
 	}
 }
 
+// SetSubagentPoller sets the poller for detecting descendant subagent completion.
+// When set, cron jobs that produce interim responses will wait for subagent results.
+func (s *Service) SetSubagentPoller(poller SubagentPoller) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cfg.SubagentPoller = poller
+}
+
 // SetTranscriptCloner sets the transcript cloner for subagent cron session support.
 // Called after the chat handler's transcript store is available.
 func (s *Service) SetTranscriptCloner(cloner TranscriptCloner, mainSessionKey string) {
@@ -82,7 +90,6 @@ func NewService(cfg ServiceConfig, agent AgentRunner, logger *slog.Logger) *Serv
 	rl := NewPersistentRunLog(cfg.StorePath)
 	rl.SetLogger(logger)
 	return &Service{
-		scheduler:     NewScheduler(logger),
 		store:         NewStore(cfg.StorePath),
 		runLog:        rl,
 		agent:         agent,

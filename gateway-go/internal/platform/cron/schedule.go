@@ -515,3 +515,143 @@ func FormatRelativeTime(targetMs int64) string {
 	}
 	return "지금"
 }
+
+// --- Smart schedule parsing ---
+
+// SmartScheduleOpts holds optional parameters for ParseSmartScheduleWithOpts.
+type SmartScheduleOpts struct {
+	Tz         string // timezone (e.g. "Asia/Seoul") — applied to cron kind
+	StaggerMs  int64  // stagger window in ms — applied to cron kind
+	AnchorTime string // anchor time (ISO 8601) — applied to every kind
+}
+
+// ParseSmartSchedule parses a schedule spec into a StoreSchedule, auto-detecting the kind:
+//   - Interval: "1h", "30m", "every 5m", raw milliseconds → kind="every"
+//   - Cron expression: "0 8 * * *", "@daily", "@hourly" → kind="cron"
+//   - Timestamp: ISO 8601 ("2026-04-06T08:00:00") → kind="at"
+func ParseSmartSchedule(spec string) (StoreSchedule, error) {
+	return ParseSmartScheduleWithOpts(spec, SmartScheduleOpts{})
+}
+
+// ParseSmartScheduleWithOpts is like ParseSmartSchedule but accepts additional options
+// for timezone, stagger, and anchor time.
+func ParseSmartScheduleWithOpts(spec string, opts SmartScheduleOpts) (StoreSchedule, error) {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return StoreSchedule{}, fmt.Errorf("empty schedule specification")
+	}
+
+	// Validate timezone upfront if provided.
+	if opts.Tz != "" {
+		if _, err := time.LoadLocation(opts.Tz); err != nil {
+			return StoreSchedule{}, fmt.Errorf("invalid timezone %q: %w", opts.Tz, err)
+		}
+	}
+
+	// 1. Cron shorthand aliases (@daily, @hourly, etc.)
+	lower := strings.ToLower(spec)
+	switch lower {
+	case "@yearly", "@annually", "@monthly", "@weekly", "@daily", "@midnight", "@hourly":
+		s := StoreSchedule{Kind: "cron", Expr: lower, Tz: opts.Tz, StaggerMs: opts.StaggerMs}
+		return s, nil
+	}
+
+	// 2. Looks like a cron expression (5 space-separated fields starting with digit or *)
+	fields := strings.Fields(spec)
+	if len(fields) == 5 && looksLikeCronExpr(fields) {
+		loc := time.Local
+		if opts.Tz != "" {
+			loc, _ = time.LoadLocation(opts.Tz) // best-effort: defaults to Local
+		}
+		now := time.Now()
+		next := evaluateCronExpr(spec, now, loc)
+		if next.IsZero() {
+			return StoreSchedule{}, fmt.Errorf("invalid cron expression %q: no matching time found in next 366 days", spec)
+		}
+		s := StoreSchedule{Kind: "cron", Expr: spec, Tz: opts.Tz, StaggerMs: opts.StaggerMs}
+		return s, nil
+	}
+
+	// 3. ISO 8601 timestamp → kind="at"
+	if ts := parseAbsoluteTimeMs(spec); ts > 0 {
+		if strings.Contains(spec, "T") || strings.Contains(spec, "-") {
+			return StoreSchedule{Kind: "at", At: spec}, nil
+		}
+	}
+
+	// 4. Interval: "every Xunit", Go duration, raw ms.
+	intervalMs, err := parseIntervalMs(spec)
+	if err != nil {
+		return StoreSchedule{}, err
+	}
+	s := StoreSchedule{Kind: "every", EveryMs: intervalMs}
+	// Apply anchor time for intervals.
+	if opts.AnchorTime != "" {
+		anchorMs := parseAbsoluteTimeMs(opts.AnchorTime)
+		if anchorMs <= 0 {
+			return StoreSchedule{}, fmt.Errorf("invalid anchor time %q", opts.AnchorTime)
+		}
+		s.AnchorMs = anchorMs
+	}
+	return s, nil
+}
+
+// looksLikeCronExpr returns true if the 5 fields look like a cron expression.
+func looksLikeCronExpr(fields []string) bool {
+	for _, f := range fields {
+		f = strings.ToLower(f)
+		for _, ch := range f {
+			if ch >= '0' && ch <= '9' {
+				continue
+			}
+			switch ch {
+			case '*', ',', '-', '/':
+				continue
+			}
+			// Allow month/day names (a-z).
+			if ch >= 'a' && ch <= 'z' {
+				continue
+			}
+			return false
+		}
+	}
+	return true
+}
+
+// parseIntervalMs parses a human-readable interval into milliseconds.
+// Supports: raw ms ("5000"), "every Xunit" ("every 5m"), Go duration ("30s").
+func parseIntervalMs(spec string) (int64, error) {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return 0, fmt.Errorf("empty schedule specification")
+	}
+
+	// Try raw milliseconds.
+	if ms, err := strconv.ParseInt(spec, 10, 64); err == nil && ms > 0 {
+		return ms, nil
+	}
+
+	// Try "every Xunit" format.
+	lower := strings.ToLower(spec)
+	if strings.HasPrefix(lower, "every ") {
+		durStr := strings.TrimSpace(lower[6:])
+		dur, err := time.ParseDuration(durStr)
+		if err != nil {
+			return 0, fmt.Errorf("invalid duration %q: %w", durStr, err)
+		}
+		if dur <= 0 {
+			return 0, fmt.Errorf("schedule duration must be positive")
+		}
+		return dur.Milliseconds(), nil
+	}
+
+	// Try Go duration directly.
+	dur, err := time.ParseDuration(spec)
+	if err != nil {
+		return 0, fmt.Errorf("unrecognized schedule format %q", spec)
+	}
+	if dur <= 0 {
+		return 0, fmt.Errorf("schedule duration must be positive")
+	}
+	return dur.Milliseconds(), nil
+}
