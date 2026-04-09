@@ -34,7 +34,6 @@ func TestFormatForChannel_MixedParts(t *testing.T) {
 	}
 }
 
-
 func TestFormatForChannel_ToolResultString(t *testing.T) {
 	resp := &ProviderResponse{
 		Content: []ContentPart{
@@ -58,7 +57,6 @@ func TestFormatForChannel_ToolResultArray(t *testing.T) {
 		t.Errorf("got %q, want 'line1\\nline2'", result)
 	}
 }
-
 
 func TestFormatForChannel_ImageNoURL(t *testing.T) {
 	resp := &ProviderResponse{

@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-
-
 func TestNormalizeProviderAuthMethods(t *testing.T) {
 	t.Run("valid methods", func(t *testing.T) {
 		auth := []ProviderAuthMethodDef{

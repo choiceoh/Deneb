@@ -192,4 +192,3 @@ func WrapValidationFailed(msg string, err error) *Error {
 func WrapConflict(msg string, err error) *Error {
 	return &Error{Code: protocol.ErrConflict, Message: msg + ": " + err.Error(), Cause: err}
 }
-

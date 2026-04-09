@@ -36,4 +36,3 @@ func TestSmokeHealthEndpoint(t *testing.T) {
 		t.Errorf("status = %v, want ok", body["status"])
 	}
 }
-

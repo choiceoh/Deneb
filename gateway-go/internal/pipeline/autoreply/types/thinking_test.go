@@ -311,4 +311,3 @@ func TestFormatThinkingLevels(t *testing.T) {
 		t.Errorf("got %q, want 'off | on'", got)
 	}
 }
-

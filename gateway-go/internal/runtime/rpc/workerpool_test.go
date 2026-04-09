@@ -62,4 +62,3 @@ func TestWorkerPoolStats(t *testing.T) {
 		t.Errorf("got %d, want 0 active after completion", stats.Active)
 	}
 }
-

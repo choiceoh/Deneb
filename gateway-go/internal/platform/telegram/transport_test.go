@@ -67,5 +67,3 @@ func TestStickyDialer_ResetSticky(t *testing.T) {
 		t.Errorf("got %d, want sticky index 0 after reset", idx)
 	}
 }
-
-

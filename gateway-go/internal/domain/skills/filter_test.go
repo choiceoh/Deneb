@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-
-
 func TestNormalizeSkillFilter_TrimsAndDeduplicates(t *testing.T) {
 	input := []string{"  weather  ", "github", "weather", " coding ", "github"}
 	result := NormalizeSkillFilter(input)
@@ -22,9 +20,6 @@ func TestNormalizeSkillFilter_TrimsAndDeduplicates(t *testing.T) {
 	}
 }
 
-
-
-
 func TestMatchesSkillFilter_Equal(t *testing.T) {
 	a := []string{"weather", "github"}
 	b := []string{"github", "weather"}
@@ -40,8 +35,6 @@ func TestMatchesSkillFilter_Different(t *testing.T) {
 		t.Error("expected false for different filters")
 	}
 }
-
-
 
 func TestDedupeAndSort(t *testing.T) {
 	tests := []struct {

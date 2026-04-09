@@ -27,4 +27,3 @@ func TestToolRegistry_UnknownTool(t *testing.T) {
 		t.Error("expected error for unknown tool")
 	}
 }
-

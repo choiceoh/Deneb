@@ -85,7 +85,6 @@ func seedFlow(t *testing.T, reg *tasks.Registry, label string, taskIDs ...string
 
 // ─── Methods() registration ─────────────────────────────────────────────────
 
-
 func TestMethods_registersAll9Handlers(t *testing.T) {
 	reg := newTestRegistry(t)
 	m := Methods(Deps{Registry: reg})
@@ -116,7 +115,6 @@ func TestMethods_registersAll9Handlers(t *testing.T) {
 
 // ─── task.status ────────────────────────────────────────────────────────────
 
-
 func TestTaskStatus_withTasks(t *testing.T) {
 	reg := newTestRegistry(t)
 	seedTask(t, reg, "alpha")
@@ -136,8 +134,6 @@ func TestTaskStatus_withTasks(t *testing.T) {
 }
 
 // ─── task.list ──────────────────────────────────────────────────────────────
-
-
 
 func TestTaskList_filterActive(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -243,8 +239,6 @@ func TestTaskList_filterByStatus(t *testing.T) {
 
 // ─── task.get ───────────────────────────────────────────────────────────────
 
-
-
 func TestTaskGet_byTaskID(t *testing.T) {
 	reg := newTestRegistry(t)
 	tr := seedTask(t, reg, "lookup-me")
@@ -273,11 +267,7 @@ func TestTaskGet_byRunID(t *testing.T) {
 	}
 }
 
-
-
 // ─── task.events ────────────────────────────────────────────────────────────
-
-
 
 func TestTaskEvents_returnsEvents(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -301,10 +291,7 @@ func TestTaskEvents_returnsEvents(t *testing.T) {
 	}
 }
 
-
 // ─── task.cancel ────────────────────────────────────────────────────────────
-
-
 
 func TestTaskCancel_success(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -332,7 +319,6 @@ func TestTaskCancel_success(t *testing.T) {
 	}
 }
 
-
 func TestTaskCancel_alreadyTerminal_error(t *testing.T) {
 	reg := newTestRegistry(t)
 	tr := seedTask(t, reg, "already-done")
@@ -346,7 +332,6 @@ func TestTaskCancel_alreadyTerminal_error(t *testing.T) {
 }
 
 // ─── task.audit ─────────────────────────────────────────────────────────────
-
 
 func TestTaskAudit_returnsFindings(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -369,8 +354,6 @@ func TestTaskAudit_returnsFindings(t *testing.T) {
 
 // ─── flow.list ──────────────────────────────────────────────────────────────
 
-
-
 func TestFlowList_filterActive(t *testing.T) {
 	reg := newTestRegistry(t)
 	seedFlow(t, reg, "active-flow")
@@ -390,9 +373,6 @@ func TestFlowList_filterActive(t *testing.T) {
 }
 
 // ─── flow.show ──────────────────────────────────────────────────────────────
-
-
-
 
 func TestFlowShow_success(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -424,9 +404,6 @@ func TestFlowShow_success(t *testing.T) {
 }
 
 // ─── flow.cancel ────────────────────────────────────────────────────────────
-
-
-
 
 func TestFlowCancel_success(t *testing.T) {
 	reg := newTestRegistry(t)
@@ -479,7 +456,6 @@ func TestFlowCancel_noActiveTasks(t *testing.T) {
 }
 
 // ─── task.list: combined status + default filter ────────────────────────────
-
 
 // ─── task.get: taskId takes priority over runId ─────────────────────────────
 

@@ -169,7 +169,6 @@ func TestService_RegisterTask_RunsOnStart(t *testing.T) {
 	}
 }
 
-
 func TestService_TaskPanicRecovery(t *testing.T) {
 	svc := NewService(nil)
 
@@ -438,4 +437,3 @@ func TestService_PeriodicTask_Success(t *testing.T) {
 		t.Error("LastRunAt should be set")
 	}
 }
-

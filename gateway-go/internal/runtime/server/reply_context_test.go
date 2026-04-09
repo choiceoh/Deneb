@@ -19,7 +19,6 @@ func TestExtractReplyContext_NoReply(t *testing.T) {
 	}
 }
 
-
 func TestExtractReplyContext_TextReply(t *testing.T) {
 	msg := &telegram.Message{
 		MessageID: 2,
@@ -116,7 +115,6 @@ func TestExtractReplyContext_LongBodyTruncated(t *testing.T) {
 	}
 }
 
-
 func TestFormatReplyPrefix_WithSender(t *testing.T) {
 	rc := &ReplyContext{
 		ReplyToBody:   "Original message",
@@ -130,9 +128,6 @@ func TestFormatReplyPrefix_WithSender(t *testing.T) {
 		t.Errorf("missing quoted text, got: %q", prefix)
 	}
 }
-
-
-
 
 func TestFormatReplyPrefix_MultilineQuote(t *testing.T) {
 	rc := &ReplyContext{

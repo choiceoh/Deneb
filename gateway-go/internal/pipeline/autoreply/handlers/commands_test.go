@@ -149,4 +149,3 @@ func TestBuildCommandText(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
-

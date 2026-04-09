@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-
-
 func TestParse_SingleURL(t *testing.T) {
 	r := Parse("Here is an image\nMEDIA: https://example.com/image.png")
 	if len(r.MediaURLs) != 1 || r.MediaURLs[0] != "https://example.com/image.png" {
@@ -61,7 +59,6 @@ func TestParse_AudioAsVoice(t *testing.T) {
 	}
 }
 
-
 func TestParse_MultipleMedia(t *testing.T) {
 	input := "MEDIA: https://a.com/1.png\ntext\nMEDIA: https://b.com/2.png"
 	r := Parse(input)
@@ -84,10 +81,6 @@ func TestParse_QuotedPathWithSpaces(t *testing.T) {
 	}
 }
 
-
-
-
-
 func TestParse_DirectiveKeyValue(t *testing.T) {
 	r := Parse("Hello [[audio_as_voice]] [[format=wav]]\nMEDIA: /tmp/voice.wav")
 	if !r.AudioAsVoice {
@@ -97,10 +90,6 @@ func TestParse_DirectiveKeyValue(t *testing.T) {
 		t.Errorf("directives should be stripped: %s", r.Text)
 	}
 }
-
-
-
-
 
 // --- Rust parity: unclosed fence extends to end ---
 
@@ -128,23 +117,12 @@ func TestParse_TildeFence(t *testing.T) {
 
 // --- Rust parity: empty payload kept ---
 
-
 // --- Rust parity: whitespace-only input ---
-
 
 // --- Rust parity: MEDIA: with leading whitespace ---
 
-
 // --- Rust parity: likely local path drops line ---
-
 
 // --- Rust parity: collapse_whitespace ---
 
-
-
-
 // --- Rust parity: isBareFilename edge cases ---
-
-
-
-

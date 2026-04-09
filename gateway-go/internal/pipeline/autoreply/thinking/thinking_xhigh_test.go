@@ -139,4 +139,3 @@ func TestResolveResponseUsageMode(t *testing.T) {
 		}
 	}
 }
-

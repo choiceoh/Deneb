@@ -44,7 +44,6 @@ func TestStripNoiseElements(t *testing.T) {
 	}
 }
 
-
 func TestStripMatchingBlocks_CookieBanner(t *testing.T) {
 	html := `<p>Before</p>
 <div class="cookie-consent-banner"><p>We use cookies</p><button>Accept</button></div>
@@ -57,8 +56,6 @@ func TestStripMatchingBlocks_CookieBanner(t *testing.T) {
 		t.Error("surrounding content should survive")
 	}
 }
-
-
 
 func TestStripTagBlock_NotConfusedByPrefix(t *testing.T) {
 	// <navigate> should NOT be stripped when stripping <nav>.
@@ -127,7 +124,6 @@ func TestExtractHTMLMeta_ReversedAttributes(t *testing.T) {
 	}
 }
 
-
 func TestExtractJSONLD(t *testing.T) {
 	html := `<head>
 <script type="application/ld+json">
@@ -161,8 +157,6 @@ func TestExtractJSONLD(t *testing.T) {
 		t.Errorf("ogType = %q, want %q", meta.OGType, "ld:Article")
 	}
 }
-
-
 
 // --- Signal detection tests ---
 
@@ -325,7 +319,6 @@ func TestFormatFetchResult_NoRedirect(t *testing.T) {
 	}
 }
 
-
 func TestFormatFetchError(t *testing.T) {
 	e := webFetchErr{Code: "http_404", Message: "not found", URL: "https://x.com", Retryable: false}
 	result := formatFetchError(e)
@@ -333,7 +326,6 @@ func TestFormatFetchError(t *testing.T) {
 		t.Errorf("unexpected error format: %s", result)
 	}
 }
-
 
 func TestClassifyFetchError_Hints(t *testing.T) {
 	tests := []struct {
@@ -361,7 +353,6 @@ func TestClassifyFetchError_Hints(t *testing.T) {
 }
 
 // --- Truncation tests ---
-
 
 func TestApplyTruncation_PreservesMetadata(t *testing.T) {
 	meta := webFetchMeta{URL: "https://x.com", ContentType: "text/html", StatusCode: 200, Retention: "100.0%"}
@@ -395,8 +386,6 @@ func TestTruncateAtSection(t *testing.T) {
 	}
 }
 
-
-
 // --- Charset normalization tests ---
 
 func TestNormalizeCharset_UTF8(t *testing.T) {
@@ -426,11 +415,7 @@ func TestProcessJSON(t *testing.T) {
 	}
 }
 
-
 // --- Helper tests ---
-
-
-
 
 func TestIsRetryableError(t *testing.T) {
 	tests := []struct {

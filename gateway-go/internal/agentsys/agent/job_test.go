@@ -97,7 +97,6 @@ func TestJobTracker_WaitForJob_Timeout(t *testing.T) {
 	}
 }
 
-
 func TestJobTracker_ActiveRunCount(t *testing.T) {
 	jt := NewJobTracker(nil)
 	now := time.Now().UnixMilli()

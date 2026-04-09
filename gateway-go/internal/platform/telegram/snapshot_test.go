@@ -25,7 +25,6 @@ func TestSnapshotStore_Update(t *testing.T) {
 	}
 }
 
-
 func TestSnapshotStore_SnapshotIsCopy(t *testing.T) {
 	store := NewSnapshotStore()
 	store.Update(AccountSnapshot{AccountID: "default", Connected: true})

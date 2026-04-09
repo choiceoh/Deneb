@@ -14,8 +14,6 @@ var call = rpctest.Call
 // ApprovalMethods
 // ---------------------------------------------------------------------------
 
-
-
 func TestExecApprovalRequest_missingCommand(t *testing.T) {
 	store := approval.NewStore()
 	m := ApprovalMethods(ApprovalDeps{Store: store})
@@ -27,7 +25,6 @@ func TestExecApprovalRequest_missingCommand(t *testing.T) {
 		t.Errorf("got error code %v, want ErrMissingParam", resp.Error.Code)
 	}
 }
-
 
 func TestExecApprovalWaitDecision_missingID(t *testing.T) {
 	store := approval.NewStore()
@@ -50,4 +47,3 @@ func TestExecApprovalsGet_returnsSnapshot(t *testing.T) {
 // ---------------------------------------------------------------------------
 // CronAdvancedMethods
 // ---------------------------------------------------------------------------
-

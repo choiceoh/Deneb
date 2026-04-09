@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-
 func TestOutputTrimmer_Long(t *testing.T) {
 	output := strings.Repeat("x", 70000)
 	result := OutputTrimmer(context.Background(), "test", output)
@@ -17,7 +16,6 @@ func TestOutputTrimmer_Long(t *testing.T) {
 		t.Error("expected trimmed marker in output")
 	}
 }
-
 
 func TestErrorEnricher_PermissionDenied(t *testing.T) {
 	output := "Error: permission denied"
@@ -35,7 +33,6 @@ func TestErrorEnricher_CommandNotFound(t *testing.T) {
 	}
 }
 
-
 func TestGrepResultSummarizer_Long(t *testing.T) {
 	var lines []string
 	for range 300 {
@@ -48,8 +45,6 @@ func TestGrepResultSummarizer_Long(t *testing.T) {
 	}
 }
 
-
-
 func TestStructuredFormatter_CompactJSON(t *testing.T) {
 	output := `{"key":"value","num":42}`
 	result := StructuredFormatter(context.Background(), "http", output)
@@ -57,9 +52,6 @@ func TestStructuredFormatter_CompactJSON(t *testing.T) {
 		t.Error("expected pretty-printed JSON")
 	}
 }
-
-
-
 
 func TestExecAnnotator_NonZeroExit(t *testing.T) {
 	output := "some error\nExit code: 1"

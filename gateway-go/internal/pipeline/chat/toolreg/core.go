@@ -330,7 +330,6 @@ func RegisterDataTools(registry toolctx.ToolRegistrar) {
 	})
 }
 
-
 // RegisterWikiTools registers wiki knowledge base tools for long-term knowledge
 // access (search, read, write, log). Project-specific tools provide structured
 // access to the "프로젝트" wiki category.

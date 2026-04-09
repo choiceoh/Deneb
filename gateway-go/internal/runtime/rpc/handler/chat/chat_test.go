@@ -23,11 +23,9 @@ func (m *mockBtwHandler) HandleBtw(_ context.Context, _, _ string) (string, erro
 // Methods
 // ---------------------------------------------------------------------------
 
-
 // ---------------------------------------------------------------------------
 // BtwMethods
 // ---------------------------------------------------------------------------
-
 
 // ---------------------------------------------------------------------------
 // chat.btw handler
@@ -51,9 +49,6 @@ func TestChatBtw_MissingQuestion(t *testing.T) {
 		t.Fatalf("got %+v, want MISSING_PARAM", resp.Error)
 	}
 }
-
-
-
 
 func TestChatBtw_Success(t *testing.T) {
 	handlers := BtwMethods(BtwDeps{

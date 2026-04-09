@@ -75,7 +75,6 @@ func TestGatewaySubscriptions_EmitLifecycle(t *testing.T) {
 	}
 }
 
-
 func TestGatewaySubscriptions_EmitTranscript(t *testing.T) {
 	b, gs := newTestGatewaySubscriptions()
 	defer gs.Stop()

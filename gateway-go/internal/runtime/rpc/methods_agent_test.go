@@ -128,7 +128,6 @@ func TestSessionsLifecycle_FullFields(t *testing.T) {
 	}
 }
 
-
 func TestSessionsLifecycle_TimeoutAborted(t *testing.T) {
 	deps := testExtendedDeps()
 	defer deps.GatewaySubs.Stop()

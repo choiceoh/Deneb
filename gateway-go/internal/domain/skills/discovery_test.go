@@ -15,7 +15,6 @@ func isolatedConfig(workspaceDir string) DiscoverConfig {
 	}
 }
 
-
 func TestDiscoverWorkspaceSkills_singleSkill(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()

@@ -89,5 +89,3 @@ func TestRestoreAndWakeSessions_RestoresTelegramSessions(t *testing.T) {
 		}
 	}
 }
-
-

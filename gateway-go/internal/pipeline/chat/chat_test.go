@@ -93,7 +93,6 @@ func TestChatHistory_MissingSessionKey(t *testing.T) {
 	}
 }
 
-
 func TestChatAbort_NotFound(t *testing.T) {
 	h := newTestHandler()
 	req := makeReq("1", "chat.abort", map[string]any{"clientRunId": "nonexistent"})
@@ -136,7 +135,6 @@ func TestSessionsSend_AsyncStart(t *testing.T) {
 		t.Errorf("got %v, want runId=idem-1", payload["runId"])
 	}
 }
-
 
 func TestSessionsSteer_AppliesModel(t *testing.T) {
 	h := newTestHandler()
@@ -200,7 +198,6 @@ func TestSessionsAbort_ByRunID(t *testing.T) {
 		t.Errorf("got %v, want abortedRunId=run-to-abort", payload["abortedRunId"])
 	}
 }
-
 
 func TestSanitizeInput(t *testing.T) {
 	tests := []struct {

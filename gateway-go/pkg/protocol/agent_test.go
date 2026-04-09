@@ -48,4 +48,3 @@ func TestAgentSpawnRequestJSON(t *testing.T) {
 		t.Errorf("Provider should be nil, got %v", decoded.Provider)
 	}
 }
-

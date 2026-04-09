@@ -134,4 +134,3 @@ func TestDraftStreamLoop_FinalizeFlushesAndStops(t *testing.T) {
 		t.Error("update after finalize should be ignored")
 	}
 }
-

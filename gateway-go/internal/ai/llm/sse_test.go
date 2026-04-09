@@ -68,7 +68,6 @@ func TestParseSSE_CommentIgnored(t *testing.T) {
 	}
 }
 
-
 func TestParseSSE_NoTrailingBlankLine(t *testing.T) {
 	// Stream ends without final blank line — should still flush.
 	input := "event: final\ndata: {\"done\":true}"
@@ -95,4 +94,3 @@ func TestParseSSE_DataWithColon(t *testing.T) {
 		t.Errorf("payload = %q, want %q", string(events[0].Payload), expected)
 	}
 }
-

@@ -31,4 +31,3 @@ func TestReload(t *testing.T) {
 		t.Fatal("expected OK")
 	}
 }
-

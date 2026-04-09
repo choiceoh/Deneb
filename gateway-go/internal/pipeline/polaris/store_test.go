@@ -157,5 +157,3 @@ func TestSessionTokens(t *testing.T) {
 		t.Fatalf("tokens: got %d, want > 0", tokens)
 	}
 }
-
-

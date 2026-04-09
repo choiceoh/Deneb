@@ -29,7 +29,6 @@ func TestCreateRequest(t *testing.T) {
 	}
 }
 
-
 func TestGetRequest(t *testing.T) {
 	s := NewStore()
 	req := s.CreateRequest(CreateRequestParams{Command: "echo hello"})
@@ -50,7 +49,6 @@ func TestGetRequest(t *testing.T) {
 	}
 }
 
-
 func TestResolve(t *testing.T) {
 	s := NewStore()
 	req := s.CreateRequest(CreateRequestParams{Command: "test"})
@@ -69,8 +67,6 @@ func TestResolve(t *testing.T) {
 		t.Fatal("expected resolvedAtMs to be set")
 	}
 }
-
-
 
 func TestWaitForDecision(t *testing.T) {
 	s := NewStore()

@@ -5,10 +5,6 @@ import (
 	"time"
 )
 
-
-
-
-
 func TestFormatUptime(t *testing.T) {
 	tests := []struct {
 		d    time.Duration

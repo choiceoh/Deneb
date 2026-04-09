@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-
 func TestFileCache_SetAndGet(t *testing.T) {
 	fc := NewFileCache(10)
 	entry := &FileCacheEntry{
@@ -87,7 +86,6 @@ func TestFileCache_Invalidate(t *testing.T) {
 	}
 }
 
-
 func TestFileChanged_Unchanged(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.txt")
@@ -165,7 +163,6 @@ func TestFormatCachedRead(t *testing.T) {
 		t.Errorf("expected cached content, got: %s", result)
 	}
 }
-
 
 func TestCheckStaleness_NeverRead(t *testing.T) {
 	fc := NewFileCache(10)

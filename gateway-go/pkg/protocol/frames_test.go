@@ -28,7 +28,6 @@ func TestNewRequestFrame(t *testing.T) {
 	}
 }
 
-
 func TestNewRequestFrameValidation(t *testing.T) {
 	_, err := NewRequestFrame("", "health", nil)
 	if err == nil {
@@ -123,4 +122,3 @@ func TestParseFrameType(t *testing.T) {
 		})
 	}
 }
-

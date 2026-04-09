@@ -154,7 +154,6 @@ func TestRPCSmokeFrequentMethods(t *testing.T) {
 	}
 }
 
-
 func TestSessionsGet_NotFound(t *testing.T) {
 	d := testDispatcher()
 	resp := dispatch(t, d, "sessions.get", map[string]string{"key": "nonexistent"})
@@ -247,5 +246,3 @@ func TestSessionsList(t *testing.T) {
 		t.Fatalf("got error: %+v, want ok", resp.Error)
 	}
 }
-
-

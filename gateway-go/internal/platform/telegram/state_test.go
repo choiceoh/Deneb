@@ -68,4 +68,3 @@ func TestRunStateMachineHeartbeat(t *testing.T) {
 		t.Error("heartbeat should stop after Close()")
 	}
 }
-

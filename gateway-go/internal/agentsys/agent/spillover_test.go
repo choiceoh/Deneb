@@ -11,7 +11,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-
 func TestSpilloverStore_StoreAndLoad(t *testing.T) {
 	dir := t.TempDir()
 	store := NewSpilloverStore(dir)
@@ -45,7 +44,6 @@ func TestSpilloverStore_SessionIsolation(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
-
 
 func TestSpilloverStore_FormatPreview(t *testing.T) {
 	content := strings.Repeat("A", 500) + strings.Repeat("B", 500) + strings.Repeat("C", MaxResultChars)

@@ -43,4 +43,3 @@ func TestBackoff_Jitter(t *testing.T) {
 		t.Error("jitter produced no variance over 100 samples")
 	}
 }
-

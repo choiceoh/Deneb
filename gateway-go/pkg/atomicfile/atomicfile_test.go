@@ -73,8 +73,6 @@ func TestWriteFile_Backup(t *testing.T) {
 	}
 }
 
-
-
 func TestWriteFile_ConcurrentSafety(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "concurrent.txt")

@@ -26,7 +26,6 @@ func TestChannelHealthMonitor_HealthSnapshot(t *testing.T) {
 	}
 }
 
-
 func TestChannelHealthMonitor_StaleChannelRestart(t *testing.T) {
 	restarted := false
 	m := NewChannelHealthMonitor(ChannelHealthDeps{

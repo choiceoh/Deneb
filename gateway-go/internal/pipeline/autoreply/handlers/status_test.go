@@ -30,13 +30,13 @@ func TestBuildStatusMessage_Basic(t *testing.T) {
 
 func TestBuildStatusMessage_ServerLevel(t *testing.T) {
 	report := StatusReport{
-		SessionKey:    "telegram:123",
-		Model:         "claude-sonnet-4-20250514",
-		Provider:      "anthropic",
-		Channel:       "telegram",
-		Version:       "3.11.4",
-		StartedAt:     time.Now().Add(-2*time.Hour - 30*time.Minute),
-		SessionCount:  1,
+		SessionKey:   "telegram:123",
+		Model:        "claude-sonnet-4-20250514",
+		Provider:     "anthropic",
+		Channel:      "telegram",
+		Version:      "3.11.4",
+		StartedAt:    time.Now().Add(-2*time.Hour - 30*time.Minute),
+		SessionCount: 1,
 		ProviderUsage: map[string]*ProviderUsageStats{
 			"anthropic": {Calls: 142, Input: 890_000, Output: 310_000},
 		},
@@ -85,5 +85,3 @@ func TestBuildStatusMessage_UnhealthyChannel(t *testing.T) {
 		t.Error("missing unhealthy reason")
 	}
 }
-
-

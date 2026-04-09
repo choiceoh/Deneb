@@ -102,6 +102,3 @@ func TestStatusReactionController_DoneIsTerminal(t *testing.T) {
 		t.Errorf("last reaction = %q, want %q (done)", last, emojis.Done)
 	}
 }
-
-
-

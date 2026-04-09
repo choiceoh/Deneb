@@ -131,7 +131,6 @@ func TestWriter_AppendStructured(t *testing.T) {
 	}
 }
 
-
 func TestWriter_SessionPath(t *testing.T) {
 	w := NewWriter("/base/dir", nil)
 	path := testutil.Must(w.SessionPath("my-key"))
@@ -225,4 +224,3 @@ func TestWriter_DeleteSession(t *testing.T) {
 		t.Errorf("DeleteSession (idempotent): %v", err)
 	}
 }
-

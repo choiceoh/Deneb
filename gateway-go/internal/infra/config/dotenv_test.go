@@ -58,7 +58,6 @@ NOEQUALSSIGN
 	}
 }
 
-
 func TestLoadDotenvFilesNoOverride(t *testing.T) {
 	// Set an env var before loading — it should not be overridden.
 	const key = "DOTENV_TEST_NO_OVERRIDE"

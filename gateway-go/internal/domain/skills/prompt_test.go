@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-
 func TestBuildSkillsPrompt_fullFormat(t *testing.T) {
 	skills := []PromptSkill{
 		{Name: "github", Description: "GitHub CLI operations", FilePath: "~/skills/github/SKILL.md"},
@@ -146,4 +145,3 @@ func TestFormatSkillsListResponse_tagFilter(t *testing.T) {
 		t.Error("expected github to match 'PR' tag query")
 	}
 }
-

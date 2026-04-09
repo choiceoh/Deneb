@@ -220,7 +220,6 @@ func TestConsoleHandler_ErrorAttrHighlight(t *testing.T) {
 	}
 }
 
-
 func TestConsoleHandler_BoolAttr(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
@@ -270,9 +269,7 @@ func TestConsoleHandler_ErrorMessageBoldRed(t *testing.T) {
 	}
 }
 
-
 // --- New tests for modernized features ---
-
 
 func TestConsoleHandler_PkgTag(t *testing.T) {
 	// pkg preAttr should render as [server] tag, not pkg=server.

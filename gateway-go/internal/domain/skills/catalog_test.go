@@ -88,8 +88,6 @@ func TestCatalog_BuildWorkspaceSnapshot(t *testing.T) {
 	}
 }
 
-
-
 func TestParseFrontmatter(t *testing.T) {
 	content := `---
 name: test-skill
@@ -130,5 +128,3 @@ func TestResolveSkillInvocationPolicy(t *testing.T) {
 		t.Error("default DisableModelInvocation should be false")
 	}
 }
-
-

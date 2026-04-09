@@ -17,4 +17,3 @@ func TestResolveCronJobTimeoutMs_DefaultAgentTurn(t *testing.T) {
 		t.Fatalf("got %d, want %d", got, AgentTurnSafetyTimeoutMs)
 	}
 }
-

@@ -230,8 +230,6 @@ func TestPersistence_SaveLoad(t *testing.T) {
 	t.Logf("saved=%.4f, loaded=%.4f", claudeFactor, loaded)
 }
 
-
-
 func TestRecordFeedback_Global(t *testing.T) {
 	defer saveGlobalCal()()
 	resetGlobalCal()

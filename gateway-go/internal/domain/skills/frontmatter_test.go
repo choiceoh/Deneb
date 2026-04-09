@@ -41,11 +41,6 @@ alt: 'single quoted'
 	}
 }
 
-
-
-
-
-
 func TestParseFrontmatterBool(t *testing.T) {
 	fm := ParsedFrontmatter{
 		"enabled":  "true",
@@ -204,10 +199,6 @@ func TestNormalizeSafeDownloadURL_Extended(t *testing.T) {
 	}
 }
 
-
-
-
-
 func TestResolveDenebMetadata_ValidMetadata(t *testing.T) {
 	fm := ParsedFrontmatter{
 		"metadata": `{"deneb": {"always": true, "skillKey": "weather", "emoji": "☀️", "os": ["linux"]}}`,
@@ -227,9 +218,6 @@ func TestResolveDenebMetadata_ValidMetadata(t *testing.T) {
 	}
 }
 
-
-
-
 func TestExtractFrontmatterBlock_Valid(t *testing.T) {
 	content := "---\nname: test\ndescription: A test\n---\n# Body\n\nSome content here."
 	header, offset := ExtractFrontmatterBlock(content)
@@ -247,6 +235,3 @@ func TestExtractFrontmatterBlock_Valid(t *testing.T) {
 		t.Errorf("body should contain content after frontmatter, got %q", body)
 	}
 }
-
-
-

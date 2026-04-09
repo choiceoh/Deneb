@@ -98,7 +98,6 @@ func TestWriter_ReadLimit(t *testing.T) {
 	}
 }
 
-
 func TestWriter_PathSanitization(t *testing.T) {
 	dir := t.TempDir()
 	w := NewWriter(dir)
@@ -116,8 +115,6 @@ func TestWriter_PathSanitization(t *testing.T) {
 		t.Errorf("got %d, want 1 file in baseDir", len(entries))
 	}
 }
-
-
 
 func TestRunLogger_Integration(t *testing.T) {
 	dir := t.TempDir()

@@ -25,9 +25,6 @@ func TestHandleChatBtw_MissingParams(t *testing.T) {
 	}
 }
 
-
-
-
 // mockBtwChat implements the ChatBtwDeps.Chat interface for testing.
 type mockBtwChat struct {
 	text string

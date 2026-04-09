@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-
 func TestConfigFromEnv_Overrides(t *testing.T) {
 	ResetConfigForTest()
 
@@ -34,4 +33,3 @@ func TestConfigFromEnv_Overrides(t *testing.T) {
 		t.Errorf("Tier1MinImportance = %f", cfg.Tier1MinImportance)
 	}
 }
-

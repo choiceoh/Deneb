@@ -14,9 +14,6 @@ func TestJPEG(t *testing.T) {
 	assertMIME(t, data, "image/jpeg")
 }
 
-
-
-
 func TestMP4(t *testing.T) {
 	data := []byte{
 		0x00, 0x00, 0x00, 0x1C, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm',
@@ -47,7 +44,6 @@ func TestHEIC(t *testing.T) {
 	}
 	assertMIME(t, dataMIF1, "image/heic")
 }
-
 
 func TestOOXML_XLSX(t *testing.T) {
 	data := make([]byte, 0, 50)
@@ -81,22 +77,7 @@ func TestPlainZIP(t *testing.T) {
 	assertMIME(t, data, "application/zip")
 }
 
-
-
 // --- Additional formats not in noffi fallback ---
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 func TestFtypFallback(t *testing.T) {
 	// Non-zero first byte but ftyp at offset 4
@@ -105,7 +86,6 @@ func TestFtypFallback(t *testing.T) {
 	}
 	assertMIME(t, data, "video/mp4")
 }
-
 
 func assertMIME(t *testing.T, data []byte, expected string) {
 	t.Helper()

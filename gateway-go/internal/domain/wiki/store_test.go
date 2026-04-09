@@ -9,7 +9,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-
 func TestStore_WriteAndReadPage(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))

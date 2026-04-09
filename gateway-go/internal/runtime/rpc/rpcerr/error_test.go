@@ -61,7 +61,6 @@ func TestToShapePreservesDetails(t *testing.T) {
 	}
 }
 
-
 func TestResponse(t *testing.T) {
 	e := MissingParam("key")
 	resp := e.Response("req-1")
@@ -142,9 +141,6 @@ func TestWrapConvenienceConstructors(t *testing.T) {
 		})
 	}
 }
-
-
-
 
 func TestLogAttrs(t *testing.T) {
 	e := New(protocol.ErrNotFound, "missing").WithSession("s1")

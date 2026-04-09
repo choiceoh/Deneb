@@ -26,7 +26,6 @@ func TestInstallAndGetStatus(t *testing.T) {
 	}
 }
 
-
 func TestUpdateSkill(t *testing.T) {
 	m := NewManager()
 	m.Install("coding", "inst-1")
@@ -44,7 +43,6 @@ func TestUpdateSkill(t *testing.T) {
 		t.Fatal("expected apiKey to be set")
 	}
 }
-
 
 func TestListBins(t *testing.T) {
 	m := NewManager()

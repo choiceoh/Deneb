@@ -41,7 +41,6 @@ func TestToolHTTP_getRequest(t *testing.T) {
 	}
 }
 
-
 func TestToolHTTP_methodPost(t *testing.T) {
 	var gotMethod string
 	var gotBody string

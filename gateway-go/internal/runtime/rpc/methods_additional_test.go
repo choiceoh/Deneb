@@ -7,8 +7,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-
-
 func TestSessionsGetMissingKeyAndSuccess(t *testing.T) {
 	sm := session.NewManager()
 	sm.Set(&session.Session{Key: "abc", Kind: session.KindDirect})
@@ -48,4 +46,3 @@ func TestTelegramGetMissingAndNotFound(t *testing.T) {
 		t.Fatalf("got %+v, want not found for telegram without plugin", notFound)
 	}
 }
-

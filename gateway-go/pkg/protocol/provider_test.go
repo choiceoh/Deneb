@@ -27,5 +27,3 @@ func TestProviderMetaJSON(t *testing.T) {
 		t.Errorf("Aliases = %v, want [claude]", decoded.Aliases)
 	}
 }
-
-

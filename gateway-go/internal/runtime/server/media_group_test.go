@@ -42,7 +42,6 @@ func TestMediaGroupBatcher_SingleGroup(t *testing.T) {
 	}
 }
 
-
 func TestMediaGroupBatcher_MultipleGroups(t *testing.T) {
 	var mu sync.Mutex
 	groups := make(map[string]int)

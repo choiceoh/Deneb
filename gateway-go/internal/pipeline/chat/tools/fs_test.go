@@ -57,6 +57,7 @@ func TestResolvePath_traversalClamped(t *testing.T) {
 		t.Errorf("resolved path %q not inside workspace %q", got, abs)
 	}
 }
+
 // ─── ToolRead ───────────────────────────────────────────────────────────────
 
 func TestToolRead_basic(t *testing.T) {
@@ -139,6 +140,7 @@ func Greet(name string) string {
 		t.Errorf("expected function body: %q", out)
 	}
 }
+
 // ─── ToolWrite ──────────────────────────────────────────────────────────────
 
 func TestToolWrite_basic(t *testing.T) {

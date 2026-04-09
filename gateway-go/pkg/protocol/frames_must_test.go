@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-
-
 func TestMustResponseOK_MarshalFail(t *testing.T) {
 	// math.NaN() causes json.Marshal to fail.
 	resp := MustResponseOK("test-3", math.NaN())
@@ -23,4 +21,3 @@ func TestMustResponseOK_MarshalFail(t *testing.T) {
 		t.Errorf("got %s, want code %s", resp.Error.Code, ErrUnavailable)
 	}
 }
-

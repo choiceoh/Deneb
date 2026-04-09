@@ -4,7 +4,6 @@ import (
 	"testing"
 )
 
-
 func TestRecordCall(t *testing.T) {
 	tracker := New()
 
@@ -87,4 +86,3 @@ func TestStatusIsolation(t *testing.T) {
 		t.Fatal("expected status snapshots to be independent")
 	}
 }
-

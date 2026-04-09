@@ -68,7 +68,6 @@ func TestToolsCatalog_ReturnsGroups(t *testing.T) {
 	}
 }
 
-
 func TestToolsCatalog_CoreToolCount(t *testing.T) {
 	d, _ := sessionDispatcher(t)
 	payload, resp := dispatchJSON(t, d, "tools.catalog", nil)
@@ -84,7 +83,6 @@ func TestToolsCatalog_CoreToolCount(t *testing.T) {
 		t.Errorf("got %d, want 15 core tools", total)
 	}
 }
-
 
 // ---------------------------------------------------------------------------
 // sessions.patch
@@ -119,7 +117,6 @@ func TestSessionsPatch_AppliesFields(t *testing.T) {
 		t.Errorf("got %v, want model=claude-3", s.Model)
 	}
 }
-
 
 func TestSessionsPatch_CreatesIfNotExists(t *testing.T) {
 	d, deps := sessionDispatcher(t)
@@ -169,12 +166,9 @@ func TestSessionsReset_ClearsState(t *testing.T) {
 	}
 }
 
-
-
 // ---------------------------------------------------------------------------
 // sessions.preview — without bridge returns missing
 // ---------------------------------------------------------------------------
-
 
 func TestSessionsPreview_NoBridge_ReturnsMissing(t *testing.T) {
 	d, _ := sessionDispatcher(t)
@@ -254,8 +248,6 @@ func TestSessionsResolve_ByLabel(t *testing.T) {
 	}
 }
 
-
-
 func TestSessionsResolve_AmbiguousLabel(t *testing.T) {
 	d, deps := sessionDispatcher(t)
 	label := "dup-label"
@@ -302,7 +294,6 @@ func TestSessionsResolve_AgentIDFilter(t *testing.T) {
 	}
 }
 
-
 func TestSessionsResolve_ExcludesGlobalByDefault(t *testing.T) {
 	d, deps := sessionDispatcher(t)
 	deps.Sessions.Create("global-session", session.KindGlobal)
@@ -346,17 +337,9 @@ func TestSessionsResolve_KeyBypassesKindFilter(t *testing.T) {
 // session.PatchFields unit tests
 // ---------------------------------------------------------------------------
 
-
-
-
 // ---------------------------------------------------------------------------
 // Manager helper tests
 // ---------------------------------------------------------------------------
-
-
-
-
-
 
 // ---------------------------------------------------------------------------
 // RegisterSessionMethods registration test
