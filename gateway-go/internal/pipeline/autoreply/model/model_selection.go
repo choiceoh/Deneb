@@ -100,3 +100,22 @@ func ScoreFuzzyMatch(query string, candidate ModelCandidate) int {
 
 	return 0
 }
+
+// FormatProviderModelRef formats a provider/model reference string.
+func FormatProviderModelRef(provider, model string) string {
+	if provider == "" {
+		return model
+	}
+	return provider + "/" + model
+}
+
+// ResolveModelOverride checks session and config for model overrides.
+func ResolveModelOverride(sessionModel, configModel, defaultModel string) string {
+	if sessionModel != "" {
+		return sessionModel
+	}
+	if configModel != "" {
+		return configModel
+	}
+	return defaultModel
+}

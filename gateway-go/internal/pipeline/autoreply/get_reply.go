@@ -11,10 +11,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/directives"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/model"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/reply"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/thinking"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/typing"
 )
@@ -128,56 +126,10 @@ func ReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.GetR
 		return nil, err
 	}
 
-	if deps.History != nil && result != nil && result.OutputText != "" {
-		deps.History.Append(sess.SessionKey, session.HistoryEntry{
-			Role: "assistant",
-			Text: result.OutputText,
-		})
-	}
-
-	// 10. Track model fallback transitions for user notification.
-	if result != nil && result.FallbackActive {
-		transition := model.ResolveFallbackTransition(
-			selection.Provider, selection.Model,
-			result.ProviderUsed, result.ModelUsed,
-			result.FallbackAttempts, nil,
-		)
-		if transition.FallbackTransitioned {
-			notice := model.BuildFallbackNotice(
-				selection.Provider, selection.Model,
-				result.ProviderUsed, result.ModelUsed,
-				result.FallbackAttempts,
-			)
-			if notice != "" {
-				result.Payloads = append([]types.ReplyPayload{{Text: notice}}, result.Payloads...)
-			}
-		}
-		if transition.FallbackCleared {
-			cleared := model.BuildFallbackClearedNotice(
-				selection.Provider, selection.Model,
-				transition.PreviousState.ActiveModel,
-			)
-			if cleared != "" {
-				result.Payloads = append([]types.ReplyPayload{{Text: cleared}}, result.Payloads...)
-			}
-		}
-	}
-
-	// 11. Build deliverable reply payloads: heartbeat stripping, leaked
-	// tool-call removal, threading, messaging tool dedup, silent suppression.
-	built := reply.BuildReplyPayloads(types.BuildReplyPayloadsParams{
-		Payloads:         result.Payloads,
-		IsHeartbeat:      opts.IsHeartbeat,
-		CurrentMessageID: msg.MessageSid,
-		OriginTo:         msg.To,
-		AccountID:        msg.AccountID,
-	})
-
-	// 12. Final normalization (heartbeat ack mode, response prefix).
-	return reply.FilterReplyPayloads(built, reply.NormalizeOpts{
-		HeartbeatMode:        tokens.StripModeMessage,
-		HeartbeatAckMaxChars: tokens.DefaultHeartbeatAckChars,
-	}), nil
+	// Reply delivery happens asynchronously via chatSendExecutor →
+	// chat.Handler.Send(). The returned Payloads are only used for
+	// command-level replies (not agent-generated content).
+	return result.Payloads, nil
 }
 
 // ReplyDeps provides dependencies for reply generation.

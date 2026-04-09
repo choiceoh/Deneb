@@ -1,14 +1,12 @@
 // agent_types.go — Shared types for the agent execution interface.
 //
-// AgentExecutor is the interface consumed by ReplyFromConfig (get_reply.go)
+// AgentExecutor is consumed by ReplyFromConfig (get_reply.go)
 // and implemented by chatSendExecutor (server/inbound_deps.go).
 package autoreply
 
 import (
 	"context"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/model"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
 
@@ -36,13 +34,8 @@ type AgentTurnConfig struct {
 }
 
 // AgentTurnResult holds the outcome of an agent turn.
+// The actual reply delivery happens asynchronously via chatSendExecutor →
+// chat.Handler.Send(). Payloads here are only used for command replies.
 type AgentTurnResult struct {
-	Payloads         []types.ReplyPayload
-	OutputText       string
-	TokensUsed       session.TokenUsage
-	ModelUsed        string
-	ProviderUsed     string
-	DurationMs       int64
-	FallbackActive   bool
-	FallbackAttempts []model.FallbackAttempt
+	Payloads []types.ReplyPayload
 }
