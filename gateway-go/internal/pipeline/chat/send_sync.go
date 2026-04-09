@@ -49,17 +49,11 @@ type SyncOptions struct {
 	MaxHistoryTokens int
 }
 
-// StreamDelta is emitted for each text chunk during a streaming synchronous run.
-type StreamDelta struct {
-	Text string
-}
-
-// SendSync runs the agent loop synchronously, blocking until the response is
-// complete or the context is canceled. Used by the OpenAI-compatible HTTP
-// endpoints that need the full response before replying.
-func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model string, opts *SyncOptions) (*SyncResult, error) {
+// prepareSyncRun builds RunParams and runDeps from the common sync arguments.
+// Both SendSync and SendSyncStream share this setup.
+func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string, opts *SyncOptions) (RunParams, runDeps, error) {
 	if h.sessions == nil {
-		return nil, fmt.Errorf("chat handler not initialized")
+		return RunParams{}, runDeps{}, fmt.Errorf("chat handler not initialized")
 	}
 
 	sess := h.sessions.Get(sessionKey)
@@ -71,7 +65,7 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 		SessionKey:  sessionKey,
 		Message:     sanitizeInput(message),
 		Model:       model,
-		ClientRunID: shortid.New("sync"),
+		ClientRunID: shortid.New(runIDPrefix),
 	}
 
 	if opts != nil {
@@ -100,11 +94,12 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 		deps.contextCfg.MemoryTokenBudget = uint64(opts.MaxHistoryTokens)
 	}
 
-	result, err := executeAgentRun(ctx, params, deps, nil, nil, nil, h.logger, nil)
-	if err != nil {
-		return nil, err
-	}
+	return params, deps, nil
+}
 
+// buildSyncResult converts a chatRunResult into a SyncResult, resolving the
+// model name through the fallback chain (explicit → default → registry).
+func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncResult, error) {
 	resolvedModel := model
 	if resolvedModel == "" {
 		resolvedModel = h.DefaultModel()
@@ -126,70 +121,33 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	}, nil
 }
 
+// SendSync runs the agent loop synchronously, blocking until the response is
+// complete or the context is canceled. Used by the OpenAI-compatible HTTP
+// endpoints that need the full response before replying.
+func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model string, opts *SyncOptions) (*SyncResult, error) {
+	params, deps, err := h.prepareSyncRun(sessionKey, message, model, "sync", opts)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := executeAgentRun(ctx, params, deps, nil, nil, nil, h.logger, nil)
+	if err != nil {
+		return nil, err
+	}
+	return h.buildSyncResult(model, result)
+}
+
 // SendSyncStream runs the agent loop, calling onDelta for each text chunk,
 // then returning the final result. Used by streaming OpenAI-compatible endpoints.
 func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model string, opts *SyncOptions, onDelta func(string)) (*SyncResult, error) {
-	if h.sessions == nil {
-		return nil, fmt.Errorf("chat handler not initialized")
+	params, deps, err := h.prepareSyncRun(sessionKey, message, model, "stream", opts)
+	if err != nil {
+		return nil, err
 	}
-
-	sess := h.sessions.Get(sessionKey)
-	if sess == nil {
-		sess = h.sessions.Create(sessionKey, "direct")
-	}
-
-	params := RunParams{
-		SessionKey:  sessionKey,
-		Message:     sanitizeInput(message),
-		Model:       model,
-		ClientRunID: shortid.New("stream"),
-	}
-
-	if opts != nil {
-		params.Temperature = opts.Temperature
-		params.TopP = opts.TopP
-		params.MaxTokens = opts.MaxTokens
-		params.FrequencyPenalty = opts.FrequencyPenalty
-		params.PresencePenalty = opts.PresencePenalty
-		params.Stop = opts.Stop
-		params.ResponseFormat = opts.ResponseFormat
-		params.ToolChoice = opts.ToolChoice
-		if len(opts.Messages) > 0 {
-			params.PrebuiltMessages = opts.Messages
-		}
-		if opts.SystemPrompt != "" {
-			params.System = opts.SystemPrompt
-		}
-		if opts.ToolPreset != "" {
-			sess.ToolPreset = opts.ToolPreset
-		}
-	}
-
-	deps := h.buildRunDeps()
-	deps.continuationEnabled = false // sync paths do not support autonomous continuation
 
 	result, err := executeAgentRunWithDelta(ctx, params, deps, onDelta, h.logger)
 	if err != nil {
 		return nil, err
 	}
-
-	resolvedModel := model
-	if resolvedModel == "" {
-		resolvedModel = h.DefaultModel()
-	}
-	if resolvedModel == "" && h.registry != nil {
-		resolvedModel = h.registry.FullModelID(modelrole.RoleMain)
-	}
-
-	if result == nil {
-		return nil, fmt.Errorf("agent run returned nil result")
-	}
-
-	return &SyncResult{
-		Text:         result.Text,
-		Model:        resolvedModel,
-		InputTokens:  result.Usage.InputTokens,
-		OutputTokens: result.Usage.OutputTokens,
-		StopReason:   result.StopReason,
-	}, nil
+	return h.buildSyncResult(model, result)
 }

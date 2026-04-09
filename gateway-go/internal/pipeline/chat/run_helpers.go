@@ -73,11 +73,6 @@ func resolveWorkspaceDirForPrompt() string {
 	return cachedWorkspaceDir
 }
 
-// memoryContextOpts returns LoadContextOptions for context file loading.
-func memoryContextOpts(_ runDeps) []prompt.LoadContextOption {
-	return nil
-}
-
 // deliveryChannel extracts the channel name from a delivery context.
 func deliveryChannel(d *DeliveryContext) string {
 	if d == nil {

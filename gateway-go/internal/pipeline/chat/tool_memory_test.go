@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -15,7 +16,7 @@ func TestCollectMemoryFiles(t *testing.T) {
 		dir := t.TempDir()
 		os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte("# Memory"), 0o644)
 
-		files := collectMemoryFiles(dir)
+		files := chattools.CollectMemoryFiles(dir)
 		if len(files) != 1 {
 			t.Fatalf("got %d files, want 1", len(files))
 		}
@@ -29,7 +30,7 @@ func TestCollectMemoryFiles(t *testing.T) {
 		os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte("upper"), 0o644)
 		os.WriteFile(filepath.Join(dir, "memory.md"), []byte("lower"), 0o644)
 
-		files := collectMemoryFiles(dir)
+		files := chattools.CollectMemoryFiles(dir)
 		if len(files) != 2 {
 			t.Fatalf("got %d files, want 2", len(files))
 		}
@@ -42,7 +43,7 @@ func TestCollectMemoryFiles(t *testing.T) {
 		os.WriteFile(filepath.Join(dir, "memory", "todo.md"), []byte("todo"), 0o644)
 		os.WriteFile(filepath.Join(dir, "memory", "data.txt"), []byte("txt"), 0o644) // not .md
 
-		files := collectMemoryFiles(dir)
+		files := chattools.CollectMemoryFiles(dir)
 		if len(files) != 2 {
 			t.Fatalf("got %d files, want 2 (.md only)", len(files))
 		}
@@ -50,7 +51,7 @@ func TestCollectMemoryFiles(t *testing.T) {
 
 	t.Run("empty workspace", func(t *testing.T) {
 		dir := t.TempDir()
-		files := collectMemoryFiles(dir)
+		files := chattools.CollectMemoryFiles(dir)
 		if len(files) != 0 {
 			t.Fatalf("got %d files, want 0", len(files))
 		}
@@ -63,13 +64,13 @@ func TestReadMemoryFile_CacheAndInvalidation(t *testing.T) {
 	os.WriteFile(path, []byte("v1"), 0o644)
 
 	// First read: cache miss.
-	content := testutil.Must(readMemoryFile(path))
+	content := testutil.Must(chattools.ReadMemoryFile(path))
 	if content != "v1" {
 		t.Fatalf("got %q, want %q", content, "v1")
 	}
 
 	// Second read: cache hit (same mtime).
-	content = testutil.Must(readMemoryFile(path))
+	content = testutil.Must(chattools.ReadMemoryFile(path))
 	if content != "v1" {
 		t.Fatalf("got %q, want %q", content, "v1")
 	}
@@ -81,7 +82,7 @@ func TestReadMemoryFile_CacheAndInvalidation(t *testing.T) {
 	os.WriteFile(path, []byte("v2"), 0o644)
 	os.Chtimes(path, newTime, newTime)
 
-	content = testutil.Must(readMemoryFile(path))
+	content = testutil.Must(chattools.ReadMemoryFile(path))
 	if content != "v2" {
 		t.Fatalf("got %q after modification, want %q", content, "v2")
 	}

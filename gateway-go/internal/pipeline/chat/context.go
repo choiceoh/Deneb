@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"fmt"
 	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -46,25 +45,18 @@ func estimateTokens(s string) int {
 	return tokenest.Estimate(s)
 }
 
-// assembleContext builds the LLM context via Polaris summary DAG.
+// assembleContext builds the LLM context via the Polaris summary DAG.
 //
 // Flow:
 //   - Summaries exist → [summary messages] + recent raw messages only (efficient).
 //   - No summaries yet → full message load → compaction creates summaries →
 //     next turn enters the summary path automatically.
-//
-// The store MUST be a *polaris.Bridge; legacy (non-Bridge) assembly is removed.
 func assembleContext(
-	store TranscriptStore,
+	bridge *polaris.Bridge,
 	sessionKey string,
 	cfg ContextConfig,
 	logger *slog.Logger,
 ) (*AssemblyResult, error) {
-	bridge, ok := store.(*polaris.Bridge)
-	if !ok {
-		return nil, fmt.Errorf("assembleContext: store must be *polaris.Bridge, got %T", store)
-	}
-
 	result, err := bridge.AssembleContext(
 		sessionKey,
 		int(cfg.MemoryTokenBudget),

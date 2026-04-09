@@ -14,7 +14,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/coordinator"
@@ -27,7 +26,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
-	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/runtime/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
@@ -90,60 +88,10 @@ func executeAgentRun(
 	}
 
 	// 2. Resolve model and provider early (no IO — pure config/registry lookups).
-	// Agent tools pass role names ("main", "lightweight", "fallback").
-	// /model command or RPC may pass model IDs ("google/gemini-3.1-pro") — these
-	// are treated as direct overrides (no fallback chain).
-	model := params.Model
-	initialRole := modelrole.RoleMain
-
-	if deps.registry != nil && model != "" {
-		// Role name → resolve to actual model ID with fallback chain.
-		if resolved, role, ok := deps.registry.ResolveModel(model); ok {
-			model = resolved
-			initialRole = role
-		}
-		// Raw model ID → no role mapping, no fallback chain (direct override).
-	}
-	if model == "" && cachedSession != nil && cachedSession.SpawnedBy != "" {
-		// Sub-agent: use explicit session model if set at spawn time,
-		// otherwise fall back to the configured subagent default model.
-		if cachedSession.Model != "" {
-			model = cachedSession.Model
-		} else if deps.subagentDefaultModel != "" {
-			model = deps.subagentDefaultModel
-		}
-	}
-	if model == "" {
-		model = deps.defaultModel
-	}
-	if model == "" && deps.registry != nil {
-		model = deps.registry.FullModelID(modelrole.RoleMain)
-	}
-	// Second-pass role resolution: fallback values (defaultModel, subagentDefaultModel,
-	// sess.Model) may contain role names like "main" that need registry resolution.
-	if deps.registry != nil && model != "" {
-		if resolved, role, ok := deps.registry.ResolveModel(model); ok {
-			model = resolved
-			initialRole = role
-		}
-	}
-	// Parse provider prefix (e.g., "google/gemini-3.0-flash" → provider="google", model="gemini-3.0-flash").
-	providerID, modelName := parseModelID(model)
-	model = modelName
-
-	// Sub-agent provider remapping: if this session was spawned by another
-	// agent and a "<provider>-subagent" config exists, use the alternate
-	// API key. This allows main and sub-agents to use different accounts
-	// on the same provider (separate rate limits).
-	if cachedSession != nil && cachedSession.SpawnedBy != "" && providerID != "" {
-		alt := providerID + "-subagent"
-		if deps.providerConfigs != nil {
-			if _, ok := deps.providerConfigs[alt]; ok {
-				logger.Info("subagent provider remap", "from", providerID, "to", alt)
-				providerID = alt
-			}
-		}
-	}
+	mr := resolveModel(params, deps, cachedSession)
+	model := mr.model
+	providerID := mr.providerID
+	initialRole := mr.initialRole
 
 	runLog.LogStart(agentlog.RunStartData{
 		Model:    model,
@@ -186,8 +134,8 @@ func executeAgentRun(
 	go func() {
 		defer prepWg.Done()
 
-		if deps.transcript != nil {
-			result, err := assembleContext(deps.transcript, params.SessionKey, deps.contextCfg, logger)
+		if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
+			result, err := assembleContext(bridge, params.SessionKey, deps.contextCfg, logger)
 			if err != nil {
 				contextErr = err
 			} else {
@@ -258,12 +206,11 @@ func executeAgentRun(
 			ToolDefs:      toolDefs,
 			DeferredTools: deferredToolInfos,
 			UserTimezone:  tz,
-			ContextFiles: prompt.LoadContextFiles(workspaceDir,
-				append(memoryContextOpts(deps), prompt.WithSessionSnapshot(params.SessionKey))...),
-			RuntimeInfo:  prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
-			Channel:      ch,
-			SkillsPrompt: loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
-			ToolPreset:   sessionToolPreset,
+			ContextFiles:  prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey)),
+			RuntimeInfo:   prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
+			Channel:       ch,
+			SkillsPrompt:  loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
+			ToolPreset:    sessionToolPreset,
 		}
 
 		// Coordinator mode: use the coordinator-specific system prompt.
@@ -594,72 +541,7 @@ func executeAgentRun(
 
 	// 10. Set up stream hooks via compositor: fan-out dispatch for each hook type.
 	var hc agent.HookCompositor
-
-	// Broadcaster: WebSocket streaming deltas.
-	if broadcaster != nil {
-		hc.OnTextDelta(broadcaster.EmitDelta)
-		hc.OnToolEmit(broadcaster.EmitToolStart)
-		hc.OnToolResult(func(name, toolUseID, result string, isErr bool) {
-			broadcaster.EmitToolResult(name, toolUseID, result, isErr)
-			if deps.broadcast != nil {
-				deps.broadcast("session.tool", map[string]any{
-					"sessionKey": params.SessionKey,
-					"runId":      params.ClientRunID,
-					"tool":       name,
-					"toolUseId":  toolUseID,
-					"isError":    isErr,
-				})
-			}
-		})
-	}
-
-	// Typing signaler: UI typing indicators.
-	if typingSignaler != nil {
-		hc.OnTextDelta(typingSignaler.SignalTextDelta)
-		hc.OnThinking(typingSignaler.SignalReasoningDelta)
-		hc.OnToolStart(func(_ string, _ string, _ []byte) {
-			typingSignaler.SignalToolStart()
-		})
-	}
-
-	// Status controller: Telegram emoji reactions.
-	if statusCtrl != nil {
-		hc.OnThinking(statusCtrl.SetThinking)
-		hc.OnToolStart(func(name, _ string, _ []byte) { statusCtrl.SetTool(name) })
-		// First text delta means we moved past thinking — set thinking
-		// emoji if not already in a tool phase.
-		hc.OnTextDelta(func(_ string) { statusCtrl.SetThinking() })
-	}
-
-	// Gateway event subscription: emit tool.start / tool.end for WebSocket clients.
-	if deps.emitAgentFn != nil {
-		hc.OnToolStart(func(name, _ string, _ []byte) {
-			deps.emitAgentFn("tool.start", params.SessionKey, params.ClientRunID, map[string]any{
-				"tool": name,
-				"ts":   time.Now().UnixMilli(),
-			})
-		})
-		hc.OnToolResult(func(name, _, _ string, isErr bool) {
-			deps.emitAgentFn("tool.end", params.SessionKey, params.ClientRunID, map[string]any{
-				"tool":    name,
-				"isError": isErr,
-				"ts":      time.Now().UnixMilli(),
-			})
-		})
-	}
-
-	// Internal hook registry: fire tool.use event after each tool completes.
-	if deps.internalHookRegistry != nil {
-		hc.OnToolResult(func(name, toolUseID, _ string, isErr bool) {
-			env := map[string]string{
-				"DENEB_TOOL":        name,
-				"DENEB_TOOL_USE_ID": toolUseID,
-				"DENEB_IS_ERROR":    fmt.Sprintf("%t", isErr),
-				"DENEB_SESSION_KEY": params.SessionKey,
-			}
-			go deps.internalHookRegistry.TriggerFromEvent(deps.shutdownCtx, hookspkg.EventToolUse, params.SessionKey, env)
-		})
-	}
+	wireStreamHooks(&hc, params, deps, broadcaster, typingSignaler, statusCtrl)
 
 	// Draft stream hook: real-time message editing during LLM streaming.
 	// Creates a throttled draft loop that sends/edits a Telegram message as

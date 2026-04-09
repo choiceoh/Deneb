@@ -31,7 +31,7 @@ func TestParseModelID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			prov, model := parseModelID(tt.input)
+			prov, model := modelrole.ParseModelID(tt.input)
 			if prov != tt.wantProv {
 				t.Errorf("provider = %q, want %q", prov, tt.wantProv)
 			}
