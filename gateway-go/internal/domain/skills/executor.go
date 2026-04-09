@@ -1,7 +1,6 @@
-// executor.go provides execution logic for local and system skill types.
+// executor.go provides execution logic for local skill types.
 //
 // Local skills run a shell command and return stdout.
-// System skills dispatch to registered gateway-internal handlers.
 package skills
 
 import (
@@ -10,25 +9,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
 )
-
-// SystemHandler is a function that handles a system skill invocation.
-type SystemHandler func(args string) (string, error)
-
-// systemHandlers is the registry of system skill handlers.
-var (
-	systemHandlers   = make(map[string]SystemHandler)
-	systemHandlersMu sync.RWMutex
-)
-
-// RegisterSystemHandler registers a named handler for system-type skills.
-func RegisterSystemHandler(name string, handler SystemHandler) {
-	systemHandlersMu.Lock()
-	defer systemHandlersMu.Unlock()
-	systemHandlers[name] = handler
-}
 
 // ExecuteLocalSkill runs a local-type skill command and returns its output.
 func ExecuteLocalSkill(entry SkillEntry, args string) (string, error) {
@@ -63,22 +45,8 @@ func ExecuteLocalSkill(entry SkillEntry, args string) (string, error) {
 	return strings.TrimRight(stdout.String(), "\n"), nil
 }
 
-// ExecuteSystemSkill dispatches to a registered system handler.
-func ExecuteSystemSkill(entry SkillEntry, args string) (string, error) {
-	handlerName := ""
-	if entry.Metadata != nil {
-		handlerName = entry.Metadata.SystemHandler
-	}
-	if handlerName == "" {
-		handlerName = entry.Skill.Name
-	}
-
-	systemHandlersMu.RLock()
-	handler, ok := systemHandlers[handlerName]
-	systemHandlersMu.RUnlock()
-
-	if !ok {
-		return "", fmt.Errorf("no system handler registered for %q", handlerName)
-	}
-	return handler(args)
+// ExecuteSystemSkill is a placeholder for gateway-internal skill dispatch.
+// No system handlers are currently registered; this always returns an error.
+func ExecuteSystemSkill(entry SkillEntry, _ string) (string, error) {
+	return "", fmt.Errorf("system skill %q: no handler registered (type:system is not supported)", entry.Skill.Name)
 }
