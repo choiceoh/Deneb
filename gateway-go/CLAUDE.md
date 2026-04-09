@@ -21,7 +21,6 @@ Go HTTP/WS gateway server — the primary Deneb runtime.
 | `internal/runtime/rpc/` | Registry-based RPC dispatcher, 150+ methods |
 | `internal/runtime/session/` | Session lifecycle state machine (`IDLE → RUNNING → DONE/FAILED/KILLED/TIMEOUT`) |
 | `internal/pipeline/chat/` | System prompt, tool registration, context files, slash commands |
-| `internal/infra/auth/` | Token auth, allowlists, credentials |
 | `internal/ai/llm/` | LLM client, sampling parameters, multimodal types |
 | `internal/platform/telegram/` | Telegram channel plugin (primary deployment target) |
 | `pkg/protocol/` | Hand-written JSON wire types |

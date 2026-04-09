@@ -25,7 +25,6 @@ func handleStatusCommand(ctx CommandContext) (*CommandResult, error) {
 		report.Version = sd.Version
 		report.StartedAt = sd.StartedAt
 		report.SessionCount = sd.SessionCount
-		report.WSConnections = sd.WSConnections
 		report.ProviderUsage = sd.ProviderUsage
 		report.ChannelHealth = sd.ChannelHealth
 		report.LastFailureReason = sd.LastFailureReason

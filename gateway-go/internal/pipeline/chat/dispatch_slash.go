@@ -319,8 +319,7 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 			}
 			sections = append(sections, fmt.Sprintf("🖥️ **Gateway** v%s%s", sd.Version, uptime))
 		}
-		sections = append(sections, fmt.Sprintf("🔧 Sessions: %d | WS: %d",
-			sd.SessionCount, sd.WSConnections))
+		sections = append(sections, fmt.Sprintf("🔧 Sessions: %d", sd.SessionCount))
 		if sd.LastFailureReason != "" {
 			sections = append(sections, fmt.Sprintf("⚠️ **마지막 오류:** %s", sd.LastFailureReason))
 		}

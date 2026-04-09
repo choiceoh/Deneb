@@ -391,7 +391,6 @@ type StatusDeps struct {
 	Version           string
 	StartedAt         time.Time
 	SessionCount      int
-	WSConnections     int32
 	ActiveRuns        int
 	LastFailureReason string
 }

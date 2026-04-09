@@ -63,6 +63,14 @@ func Compact(
 	var r Result
 	r.TokensBefore = EstimateMessagesTokens(messages)
 
+	// Snapshot file reads before compaction so we can restore them afterward.
+	// This preserves file contents the agent was actively editing.
+	fileReads := ExtractRecentFileReads(messages)
+
+	// Strip image blocks before summarization to prevent prompt-too-long errors.
+	// The stripped copy is used only for LLM calls; file restoration uses originals.
+	summarizeMessages := StripImageBlocks(messages)
+
 	// Tier 1: Emergency — evict oldest when a real user input is huge.
 	// Only fires for actual user messages, not tool_result blocks.
 	// Emergency already summarizes non-evicted old messages, so skip LLM tier after it.
@@ -70,25 +78,56 @@ func Compact(
 	lastInputTokens := lastUserInputTokens(messages)
 	if lastInputTokens >= DefaultEmergencyInputThreshold && summarizer != nil {
 		var evicted int
-		messages, evicted = EmergencyCompact(ctx, cfg, messages, lastInputTokens, summarizer, logger)
+		summarizeMessages, evicted = EmergencyCompact(ctx, cfg, summarizeMessages, lastInputTokens, summarizer, logger)
 		r.EmergencyEvicted = evicted
 		emergencyFired = evicted > 0
+		if emergencyFired {
+			messages = summarizeMessages
+		}
 	}
 
 	// Tier 2: Micro — strip code from old tool results (zero cost).
 	var pruned int
 	messages, pruned = MicroCompact(messages, DefaultMicroTurnThreshold)
 	r.MicroPruned = pruned
+	if !emergencyFired {
+		summarizeMessages = messages
+	}
 
 	// Tier 3: LLM — summarize old messages when over threshold.
 	// Skipped when emergency already summarized (avoids double summarization / fact loss).
 	if !emergencyFired && !cfg.SkipLLMCompaction {
 		threshold := int(float64(cfg.ContextBudget) * DefaultLLMThresholdPct)
-		if EstimateMessagesTokens(messages) > threshold && summarizer != nil {
-			compacted, ok := LLMCompact(ctx, cfg, messages, summarizer, logger)
+		if EstimateMessagesTokens(summarizeMessages) > threshold && summarizer != nil {
+			compacted, ok := LLMCompact(ctx, cfg, summarizeMessages, summarizer, logger)
 			if ok {
 				messages = compacted
 				r.LLMCompacted = true
+			}
+		}
+	}
+
+	// Post-compaction file restoration: re-inject recently-read file contents
+	// so the agent retains access to files it was actively working on.
+	// Insert before the final user message so the LLM sees restored files
+	// as prior context, not after the user's current input.
+	if (r.LLMCompacted || r.EmergencyEvicted > 0) && len(fileReads) > 0 {
+		if restored := BuildRestorationMessages(fileReads, restorationBudgetTokens); len(restored) > 0 {
+			// Find the last user message (current turn input) and insert before it.
+			insertIdx := len(messages)
+			for i := len(messages) - 1; i >= 0; i-- {
+				if messages[i].Role == "user" && !isToolResultMessage(messages[i].Content) {
+					insertIdx = i
+					break
+				}
+			}
+			result := make([]llm.Message, 0, len(messages)+len(restored))
+			result = append(result, messages[:insertIdx]...)
+			result = append(result, restored...)
+			result = append(result, messages[insertIdx:]...)
+			messages = result
+			if logger != nil {
+				logger.Info("polaris: restored file reads after compaction", "files", len(fileReads))
 			}
 		}
 	}

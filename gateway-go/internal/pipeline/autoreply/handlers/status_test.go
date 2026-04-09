@@ -37,7 +37,6 @@ func TestBuildStatusMessage_ServerLevel(t *testing.T) {
 		Version:       "3.11.4",
 		StartedAt:     time.Now().Add(-2*time.Hour - 30*time.Minute),
 		SessionCount:  1,
-		WSConnections: 0,
 		ProviderUsage: map[string]*ProviderUsageStats{
 			"anthropic": {Calls: 142, Input: 890_000, Output: 310_000},
 		},
@@ -54,7 +53,6 @@ func TestBuildStatusMessage_ServerLevel(t *testing.T) {
 		{"version", "Gateway v3.11.4"},
 		{"uptime", "2h 30m"},
 		{"sessions", "Sessions: 1"},
-		{"ws", "WS: 0"},
 		{"usage header", "API 사용량"},
 		{"provider name", "anthropic"},
 		{"calls", "142회"},
