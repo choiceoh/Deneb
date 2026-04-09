@@ -1,5 +1,4 @@
 // abort_cutoff.go — Abort cutoff tracking for message deduplication.
-// Mirrors src/auto-reply/reply/abort-cutoff.ts (138 LOC).
 package session
 
 import (

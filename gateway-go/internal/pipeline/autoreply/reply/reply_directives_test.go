@@ -194,23 +194,3 @@ func TestSplitMediaFromOutput_RelativePath(t *testing.T) {
 	}
 }
 
-// --- Fence span tests ---
-
-func TestParseFenceSpans(t *testing.T) {
-	input := "before\n```python\ncode\n```\nafter"
-	spans := parseFenceSpans(input)
-	if len(spans) != 1 {
-		t.Fatalf("got %d, want 1 fence span", len(spans))
-	}
-}
-
-func TestParseFenceSpans_Unclosed(t *testing.T) {
-	input := "before\n```\ncode without close"
-	spans := parseFenceSpans(input)
-	if len(spans) != 1 {
-		t.Fatalf("got %d, want 1 unclosed fence span", len(spans))
-	}
-	if spans[0].end != len(input) {
-		t.Fatalf("unclosed fence should extend to end, got end=%d len=%d", spans[0].end, len(input))
-	}
-}

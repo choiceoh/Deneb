@@ -1,8 +1,4 @@
 // acp.go — Agent Control Protocol (ACP) integration.
-// Mirrors src/auto-reply/reply/acp-projector.ts (512 LOC),
-// commands-acp/ (7 files), commands-subagents/ (11 files),
-// dispatch-acp.ts (367 LOC), dispatch-acp-delivery.ts (189 LOC),
-// acp-stream-settings.ts, acp-reset-target.ts.
 package acp
 
 import (

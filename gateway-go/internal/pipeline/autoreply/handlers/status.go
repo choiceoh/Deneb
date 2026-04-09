@@ -1,5 +1,4 @@
 // status.go — Status message builder.
-// Mirrors src/auto-reply/status.ts (866 LOC).
 package handlers
 
 import (

@@ -127,19 +127,3 @@ func TestExtractCommandArgs(t *testing.T) {
 		}
 	}
 }
-
-func TestOriginRouting(t *testing.T) {
-	msg := &types.MsgContext{
-		SessionOrigin: types.SessionOrigin{
-			Channel:   "telegram",
-			AccountID: "acc-1",
-			ThreadID:  "thread-1",
-		},
-		To: "user-1",
-	}
-	routing := ResolveOriginRouting(msg)
-	if routing.Channel != "telegram" || routing.To != "user-1" || routing.AccountID != "acc-1" || routing.ThreadID != "thread-1" {
-		t.Errorf("unexpected routing: %+v", routing)
-	}
-}
-

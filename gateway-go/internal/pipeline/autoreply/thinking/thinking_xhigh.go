@@ -24,8 +24,6 @@ func matchesExactOrPrefix(modelID string, ids []string) bool {
 }
 
 // SupportsBuiltInXHighThinking checks if a provider/model combo supports xhigh reasoning.
-//
-// Mirrors src/auto-reply/thinking.shared.ts supportsBuiltInXHighThinking().
 func SupportsBuiltInXHighThinking(provider, model string) bool {
 	providerID := types.NormalizeProviderID(provider)
 	modelID := strings.ToLower(strings.TrimSpace(model))
@@ -81,8 +79,6 @@ func FormatXHighModelHint() string {
 
 // ResolveThinkingDefaultForModel determines the default thinking level for a
 // provider/model combination.
-//
-// Mirrors src/auto-reply/thinking.shared.ts resolveThinkingDefaultForModel().
 func ResolveThinkingDefaultForModel(provider, model string, catalog []ThinkingCatalogEntry) types.ThinkLevel {
 	normalizedProvider := types.NormalizeProviderID(provider)
 	modelID := strings.TrimSpace(model)

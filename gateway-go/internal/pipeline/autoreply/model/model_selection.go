@@ -2,6 +2,15 @@ package model
 
 import "strings"
 
+// SplitProviderModel splits a "provider/model" reference into [provider, model].
+// If no provider is given, provider is empty and model is returned as-is.
+func SplitProviderModel(ref string) [2]string {
+	if idx := strings.IndexByte(ref, '/'); idx >= 0 {
+		return [2]string{ref[:idx], ref[idx+1:]}
+	}
+	return [2]string{"", ref}
+}
+
 // ModelSelection holds the resolved model for a reply.
 type ModelSelection struct {
 	Provider    string
@@ -90,15 +99,4 @@ func ScoreFuzzyMatch(query string, candidate ModelCandidate) int {
 	}
 
 	return 0
-}
-
-// ResolveModelOverride checks session and config for model overrides.
-func ResolveModelOverride(sessionModel, configModel, defaultModel string) string {
-	if sessionModel != "" {
-		return sessionModel
-	}
-	if configModel != "" {
-		return configModel
-	}
-	return defaultModel
 }
