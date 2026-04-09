@@ -19,13 +19,6 @@ import (
 var requiredMethods = []string{
 	// Agent.
 	"agent.status",
-	"agents.create",
-	"agents.delete",
-	"agents.files.get",
-	"agents.files.list",
-	"agents.files.set",
-	"agents.list",
-	"agents.update",
 
 	// ACP.
 	"acp.bind",

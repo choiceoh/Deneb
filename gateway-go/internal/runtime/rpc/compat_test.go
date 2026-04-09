@@ -44,7 +44,6 @@ type ConfigReloadDeps = handlersystem.ConfigReloadDeps
 type ConfigAdvancedDeps = handlersystem.ConfigAdvancedDeps
 type SecretDeps = handlerplatform.SecretDeps
 type ExtendedDeps = handleragent.ExtendedDeps
-type AgentsDeps = handleragent.AgentsDeps
 type SessionDeps = handlersession.Deps
 type TelegramStatusDeps = handlertelegram.StatusDeps
 type SystemHealthDeps = handlersystem.HealthDeps
@@ -73,9 +72,6 @@ func RegisterSessionExecMethods(d *Dispatcher, deps SessionExecDeps) {
 }
 func RegisterExtendedMethods(d *Dispatcher, deps ExtendedDeps) {
 	d.RegisterDomain(handleragent.ExtendedMethods(deps))
-}
-func RegisterAgentsMethods(d *Dispatcher, deps AgentsDeps) {
-	d.RegisterDomain(handleragent.CRUDMethods(deps))
 }
 func RegisterChannelLifecycleMethods(d *Dispatcher, deps ChannelLifecycleDeps) {
 	d.RegisterDomain(handlertelegram.LifecycleMethods(deps))

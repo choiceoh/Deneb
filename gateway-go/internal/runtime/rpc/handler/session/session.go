@@ -2,7 +2,7 @@
 //
 // Methods: sessions.patch, sessions.reset, sessions.preview, sessions.resolve,
 // sessions.repair, sessions.overflow_check, sessions.send,
-// sessions.steer, sessions.abort, agent, agent.identity.get, agent.wait.
+// sessions.steer, sessions.abort, agent, agent.wait.
 package session
 
 import (
@@ -30,7 +30,6 @@ type Deps struct {
 // ExecDeps holds dependencies for native session execution and agent RPC methods.
 type ExecDeps struct {
 	Chat       *chat.Handler
-	Agents     *agent.Store
 	JobTracker *agent.JobTracker
 }
 
@@ -65,8 +64,7 @@ func ExecMethods(deps ExecDeps) map[string]rpcutil.HandlerFunc {
 		"agent": func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 			return deps.Chat.SessionsSend(ctx, req)
 		},
-		"agent.identity.get": agentIdentityGet(deps),
-		"agent.wait":         agentWait(deps),
+		"agent.wait": agentWait(deps),
 	}
 }
 
@@ -270,40 +268,6 @@ func sessionsOverflowCheck(_ Deps) rpcutil.HandlerFunc {
 			"isOverflow":          isOverflow,
 			"usage":               usage,
 			"emergencyPruneRatio": minf(maxf((usage-0.7)/usage, 0), 0.5),
-		}, nil
-	})
-}
-
-// ---------------------------------------------------------------------------
-// agent.identity.get
-// ---------------------------------------------------------------------------
-
-func agentIdentityGet(deps ExecDeps) rpcutil.HandlerFunc {
-	type params struct {
-		AgentID string `json:"agentId"`
-	}
-	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		if p.AgentID == "" {
-			return nil, rpcerr.MissingParam("agentId").
-				WithMethod("agent.identity.get")
-		}
-		if deps.Agents == nil {
-			return nil, rpcerr.NotFound("agent store").
-				WithMethod("agent.identity.get")
-		}
-		ag := deps.Agents.Get(p.AgentID)
-		if ag == nil {
-			return nil, rpcerr.NotFound("agent").
-				WithAgent(p.AgentID)
-		}
-		return map[string]any{
-			"agentId":      ag.AgentID,
-			"name":         ag.Name,
-			"description":  ag.Description,
-			"model":        ag.Model,
-			"systemPrompt": ag.SystemPrompt,
-			"tools":        ag.Tools,
-			"metadata":     ag.Metadata,
 		}, nil
 	})
 }

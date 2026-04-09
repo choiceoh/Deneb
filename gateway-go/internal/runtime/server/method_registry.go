@@ -87,10 +87,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			Broadcaster:    hub.Broadcast,
 		}),
 		handlerprocess.ACPMethods(s.acpDeps),
-		handleragent.CRUDMethods(handleragent.AgentsDeps{
-			Agents:      hub.Agents(),
-			Broadcaster: hub.Broadcast,
-		}),
 
 		// --- Tools and skills ---
 		handlerskill.ToolMethods(handlerskill.ToolDeps{Processes: hub.Processes()}),
@@ -198,7 +194,6 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		}),
 		handlersession.ExecMethods(handlersession.ExecDeps{
 			Chat:       hub.Chat(),
-			Agents:     hub.Agents(),
 			JobTracker: hub.JobTracker(),
 		}),
 		// --- Wiki knowledge base (feature-flagged, late-bound) ---
