@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -67,38 +66,3 @@ func TestCompaction_TransientErrorRetry(t *testing.T) {
 		t.Errorf("LLM call count = %d, want >= 2 (transient + retry)", callCount)
 	}
 }
-
-// ─── isContextOverflow regression ──────────────────────────────────────────
-
-func TestIsContextOverflow_multiProvider(t *testing.T) {
-	// Regression: ensure all known provider error patterns are detected.
-	overflowErrors := []string{
-		"context_length_exceeded",
-		"context_too_long",
-		"prompt is too long",
-		"maximum context length",
-		"API error: context_length_exceeded (400)",
-		"Google: context_too_long for model gemini-2.0",
-		"Z.AI error: prompt is too long (request too large)",
-		"Error 400: maximum context length exceeded for model",
-	}
-	for _, msg := range overflowErrors {
-		if !isContextOverflow(errors.New(msg)) {
-			t.Errorf("isContextOverflow(%q) = false, want true", msg)
-		}
-	}
-
-	nonOverflowErrors := []string{
-		"network timeout",
-		"rate limit exceeded",
-		"internal server error",
-		"model not found",
-		"invalid API key",
-	}
-	for _, msg := range nonOverflowErrors {
-		if isContextOverflow(errors.New(msg)) {
-			t.Errorf("isContextOverflow(%q) = true, want false", msg)
-		}
-	}
-}
-

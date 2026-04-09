@@ -754,7 +754,6 @@ func executeAgentRun(
 	// 11. Execute agent loop with model fallback chain.
 	agentStart := time.Now()
 	var agentResult *agent.AgentResult
-	var lastTransition QueryTransition
 
 	var runErr error
 	agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
@@ -804,7 +803,6 @@ func executeAgentRun(
 			return nil, runErr
 		}
 	}
-	lastTransition = NewTerminal(TerminalCompleted, nil)
 
 	agentMs := time.Since(agentStart).Milliseconds()
 	totalMs := time.Since(runStart).Milliseconds()
@@ -814,7 +812,7 @@ func executeAgentRun(
 		"turns", agentResult.Turns,
 		"inputTokens", agentResult.Usage.InputTokens,
 		"outputTokens", agentResult.Usage.OutputTokens,
-		"transition", lastTransition.Reason())
+		"stopReason", agentResult.StopReason)
 
 	// Emit agent run.end event to gateway subscriptions.
 	if deps.emitAgentFn != nil {

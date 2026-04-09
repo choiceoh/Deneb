@@ -279,22 +279,6 @@ func (h *Handler) SetDraftDeleteFunc(fn DraftDeleteFunc) {
 	h.callbackMu.Unlock()
 }
 
-// SetEmitAgentFunc sets the callback that sends agent lifecycle events
-// (run.start, tool.start, tool.end) to the gateway event subscription pipeline.
-func (h *Handler) SetEmitAgentFunc(fn func(kind, sessionKey, runID string, payload map[string]any)) {
-	h.callbackMu.Lock()
-	h.emitAgentFn = fn
-	h.callbackMu.Unlock()
-}
-
-// SetEmitTranscriptFunc sets the callback that sends transcript updates
-// (user/assistant message appends) to the gateway event subscription pipeline.
-func (h *Handler) SetEmitTranscriptFunc(fn func(sessionKey string, message any, messageID string)) {
-	h.callbackMu.Lock()
-	h.emitTranscriptFn = fn
-	h.callbackMu.Unlock()
-}
-
 // SetChannelUploadLimit registers the maximum file upload size for a channel.
 // Called once per channel during server wiring (e.g., wireTelegramChatHandler).
 func (h *Handler) SetChannelUploadLimit(channelID string, maxBytes int64) {
@@ -356,14 +340,6 @@ func (h *Handler) ReactionFunc() ReactionFunc {
 func (h *Handler) SetDefaultModel(model string) {
 	h.callbackMu.Lock()
 	h.defaultModel = model
-	h.callbackMu.Unlock()
-}
-
-// SetProviderRuntime sets the provider runtime resolver for runtime auth
-// and missing-auth message generation during LLM client resolution.
-func (h *Handler) SetProviderRuntime(pr *provider.ProviderRuntimeResolver) {
-	h.callbackMu.Lock()
-	h.providerRuntime = pr
 	h.callbackMu.Unlock()
 }
 

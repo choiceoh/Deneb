@@ -2,8 +2,6 @@ package chat
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 	"unicode"
@@ -272,59 +270,6 @@ func (h *Handler) abortGCLoop() {
 			h.abortMu.Unlock()
 		}
 	}
-}
-
-// budgetHistory truncates a history payload to fit within maxHistoryBytes.
-func (h *Handler) budgetHistory(reqID string, payload json.RawMessage) *protocol.ResponseFrame {
-	var parsed struct {
-		Messages []json.RawMessage `json:"messages"`
-		Total    int               `json:"total"`
-	}
-	if err := json.Unmarshal(payload, &parsed); err != nil {
-		resp := protocol.MustResponseOK(reqID, map[string]any{
-			"messages":  []any{},
-			"total":     0,
-			"truncated": true,
-			"error":     "failed to parse history for budgeting",
-		})
-		return resp
-	}
-
-	// Keep messages from the end (most recent) until budget exhausted.
-	// Collect in reverse, then flip to preserve chronological order.
-	reversed := make([]json.RawMessage, 0, len(parsed.Messages))
-	totalBytes := 0
-	truncatedCount := 0
-	for i := len(parsed.Messages) - 1; i >= 0; i-- {
-		msgBytes := len(parsed.Messages[i])
-		if msgBytes > h.maxMessageBytes {
-			placeholder, _ := json.Marshal(map[string]any{
-				"role":      "system",
-				"content":   fmt.Sprintf("[message truncated: %d bytes]", msgBytes),
-				"truncated": true,
-			})
-			msgBytes = len(placeholder)
-			parsed.Messages[i] = placeholder
-			truncatedCount++
-		}
-		if totalBytes+msgBytes > h.maxHistoryBytes {
-			break
-		}
-		reversed = append(reversed, parsed.Messages[i])
-		totalBytes += msgBytes
-	}
-	// Reverse to restore chronological order.
-	for i, j := 0, len(reversed)-1; i < j; i, j = i+1, j-1 {
-		reversed[i], reversed[j] = reversed[j], reversed[i]
-	}
-
-	resp := protocol.MustResponseOK(reqID, map[string]any{
-		"messages":       reversed,
-		"total":          parsed.Total,
-		"truncatedCount": truncatedCount,
-		"budgeted":       true,
-	})
-	return resp
 }
 
 // sanitizeInput normalizes input text: NFC normalization approximation,

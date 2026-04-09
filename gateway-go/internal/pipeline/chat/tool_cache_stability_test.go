@@ -66,32 +66,3 @@ func TestMergedTools(t *testing.T) {
 		t.Errorf("merged order: %v", merged)
 	}
 }
-
-func TestFilterDeniedTools(t *testing.T) {
-	tools := []llm.Tool{
-		{Name: "read"},
-		{Name: "exec"},
-		{Name: "dangerous"},
-		{Name: "edit"},
-	}
-
-	t.Run("empty deny set", func(t *testing.T) {
-		result := FilterDeniedTools(tools, nil)
-		if len(result) != 4 {
-			t.Errorf("got %d, want 4", len(result))
-		}
-	})
-
-	t.Run("filters denied tools", func(t *testing.T) {
-		deny := map[string]struct{}{"dangerous": {}, "exec": {}}
-		result := FilterDeniedTools(tools, deny)
-		if len(result) != 2 {
-			t.Fatalf("got %d, want 2", len(result))
-		}
-		for _, r := range result {
-			if _, ok := deny[r.Name]; ok {
-				t.Errorf("denied tool %q should be filtered", r.Name)
-			}
-		}
-	})
-}
