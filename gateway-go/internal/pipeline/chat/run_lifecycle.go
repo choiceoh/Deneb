@@ -60,14 +60,14 @@ func persistInterruptedContext(deps runDeps, sessionKey string, result *agent.Ag
 // the reply is suppressed (silent), empty, or on error. This prevents orphaned
 // draft messages from lingering in the chat.
 func cleanupDraftMessage(ctx context.Context, delivery *DeliveryContext, deps runDeps, logger *slog.Logger) {
-	if delivery == nil || delivery.DraftMsgID == "" || deps.draftDeleteFn == nil {
+	if delivery == nil || delivery.DraftMsgID == "" || deps.callbacks.draftDeleteFn == nil {
 		return
 	}
 	msgID := delivery.DraftMsgID
 	delivery.DraftMsgID = "" // consumed
 	delCtx, delCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer delCancel()
-	if err := deps.draftDeleteFn(delCtx, delivery, msgID); err != nil {
+	if err := deps.callbacks.draftDeleteFn(delCtx, delivery, msgID); err != nil {
 		logger.Warn("draft stream cleanup failed", "msgId", msgID, "error", err)
 	}
 }
@@ -144,8 +144,8 @@ func handleRunSuccess(
 			if err := deps.transcript.Append(params.SessionKey, assistantMsg); err != nil {
 				logger.Error("failed to persist assistant message", "error", err)
 			}
-			if deps.emitTranscriptFn != nil {
-				deps.emitTranscriptFn(params.SessionKey, assistantMsg, "")
+			if deps.callbacks.emitTranscriptFn != nil {
+				deps.callbacks.emitTranscriptFn(params.SessionKey, assistantMsg, "")
 			}
 		}
 		// Sync Aurora summaries for channel replies when available.
@@ -167,14 +167,14 @@ func handleRunSuccess(
 			"inputTokens", result.Usage.InputTokens,
 			"outputTokens", result.Usage.OutputTokens)
 	}
-	if params.Delivery != nil && result.Text != "" && deps.parseReplyDirectives == nil {
+	if params.Delivery != nil && result.Text != "" && deps.chatport.ParseReplyDirectives == nil {
 		logger.Warn("parseReplyDirectives is nil, channel delivery skipped",
 			"session", params.SessionKey,
 			"channel", params.Delivery.Channel,
 			"textLen", len(result.Text))
 	}
-	if params.Delivery != nil && result.Text != "" && deps.parseReplyDirectives != nil {
-		directives := deps.parseReplyDirectives(result.Text, params.Delivery.MessageID, "")
+	if params.Delivery != nil && result.Text != "" && deps.chatport.ParseReplyDirectives != nil {
+		directives := deps.chatport.ParseReplyDirectives(result.Text, params.Delivery.MessageID, "")
 		if directives.IsSilent {
 			logger.Info("suppressing silent reply (NO_REPLY)")
 			// Clean up draft streaming message when reply is suppressed.
@@ -186,16 +186,16 @@ func handleRunSuccess(
 			if replyText != "" {
 				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer replyCancel()
-				if deps.replyFunc == nil {
+				if deps.callbacks.replyFunc == nil {
 					logger.Warn("replyFunc is nil, response will not be delivered",
 						"session", params.SessionKey,
 						"channel", params.Delivery.Channel,
 						"textLen", len(replyText))
 				}
-				if deps.replyFunc != nil {
+				if deps.callbacks.replyFunc != nil {
 					// Primary path: channel-specific reply function (handles dedup,
 					// formatting, chunking, etc.).
-					if err := deps.replyFunc(replyCtx, params.Delivery, replyText); err != nil {
+					if err := deps.callbacks.replyFunc(replyCtx, params.Delivery, replyText); err != nil {
 						logger.Error("channel reply failed", "error", err, "channel", params.Delivery.Channel)
 					} else {
 						// Fire message.send internal hook after successful delivery.
@@ -205,7 +205,7 @@ func handleRunSuccess(
 								"DENEB_TO":          params.Delivery.To,
 								"DENEB_SESSION_KEY": params.SessionKey,
 							}
-							go deps.internalHookRegistry.TriggerFromEvent(deps.shutdownCtx, hooks.EventMessageSend, params.SessionKey, env)
+							go deps.internalHookRegistry.TriggerFromEvent(deps.callbacks.shutdownCtx, hooks.EventMessageSend, params.SessionKey, env)
 						}
 					}
 				}
@@ -215,7 +215,7 @@ func handleRunSuccess(
 			// Each media URL is sent via mediaSendFn (photo/document/audio
 			// auto-detected by the channel adapter). [[audio_as_voice]] tag
 			// forces voice mode for audio files.
-			if deps.mediaSendFn != nil && len(directives.MediaURLs) > 0 {
+			if deps.callbacks.mediaSendFn != nil && len(directives.MediaURLs) > 0 {
 				mediaCtx, mediaCancel := context.WithTimeout(context.Background(), 60*time.Second)
 				defer mediaCancel()
 				for _, mediaURL := range directives.MediaURLs {
@@ -223,7 +223,7 @@ func handleRunSuccess(
 					if directives.AudioAsVoice {
 						mediaType = "voice"
 					}
-					if err := deps.mediaSendFn(mediaCtx, params.Delivery, mediaURL, mediaType, "", false); err != nil {
+					if err := deps.callbacks.mediaSendFn(mediaCtx, params.Delivery, mediaURL, mediaType, "", false); err != nil {
 						logger.Warn("media delivery failed", "url", mediaURL, "error", err)
 					}
 				}

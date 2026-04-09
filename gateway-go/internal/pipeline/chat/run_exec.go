@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/coordinator"
@@ -54,8 +55,8 @@ func executeAgentRun(
 	runStart := time.Now()
 
 	// Emit agent run.start event to gateway subscriptions.
-	if deps.emitAgentFn != nil {
-		deps.emitAgentFn("run.start", params.SessionKey, params.ClientRunID, map[string]any{
+	if deps.callbacks.emitAgentFn != nil {
+		deps.callbacks.emitAgentFn("run.start", params.SessionKey, params.ClientRunID, map[string]any{
 			"model": params.Model,
 			"ts":    runStart.UnixMilli(),
 		})
@@ -67,8 +68,8 @@ func executeAgentRun(
 		if err := deps.transcript.Append(params.SessionKey, userMsg); err != nil {
 			logger.Error("failed to persist user message", "error", err)
 		}
-		if deps.emitTranscriptFn != nil {
-			deps.emitTranscriptFn(params.SessionKey, userMsg, "")
+		if deps.callbacks.emitTranscriptFn != nil {
+			deps.callbacks.emitTranscriptFn(params.SessionKey, userMsg, "")
 		}
 	}
 	workspaceDir := params.WorkspaceDir
@@ -109,13 +110,131 @@ func executeAgentRun(
 	// Memory recall is now agent-driven: the agent calls memory(action=recall)
 	// as a tool when it needs past context. No parallel goroutine needed.
 
-	prepStart := time.Now()
-	// 5. Run tier-1 wiki injection, context assembly, and system prompt build in parallel.
-	var tier1Addition string
-	var messages []llm.Message
-	var contextErr error
-	var systemPrompt json.RawMessage
+	// Resolve session tool preset early (needed for both system prompt and tool list).
+	var sessionToolPreset string
+	if cachedSession != nil {
+		sessionToolPreset = cachedSession.ToolPreset
+	}
 
+	// Stage 1: Parallel context + prompt preparation.
+	prepStart := time.Now()
+	prep := prepareContextAndPrompt(params, deps, workspaceDir, sessionToolPreset, logger)
+	logger.Info("pipeline: parallel prep done (context+sysprompt)", "ms", time.Since(prepStart).Milliseconds())
+
+	if prep.ContextErr != nil {
+		logger.Error("context assembly failed, proceeding with degraded context",
+			"sessionKey", params.SessionKey, "error", prep.ContextErr)
+	}
+
+	// Stage 2: Assemble final message list (prebuilt, attachments, Polaris compaction).
+	messages := assembleMessages(ctx, params, deps, prep, logger)
+
+	// Stage 3: Finalize system prompt (budget optimization, coordinator suggestion, tier-1 injection).
+	systemPrompt := finalizePrompt(prep.SystemPrompt, prep.Tier1Wiki, deps.contextCfg, sessionToolPreset, params.Message)
+
+	logger.Info("pipeline: system prompt finalized",
+		"chars", len(systemPrompt))
+
+	runLog.LogPrep(agentlog.RunPrepData{
+		SystemPromptChars: len(systemPrompt),
+		ContextMessages:   len(messages),
+		PrepMs:            time.Since(runStart).Milliseconds(),
+	})
+
+	// Stage 4: Build tool list and agent config.
+	acd := agentConfigDeps{
+		Tools:               deps.tools,
+		MaxTokens:           deps.maxTokens,
+		ContinuationEnabled: deps.continuationEnabled,
+		SubagentNotifyCh:    deps.subagentNotifyCh,
+		EmitAgentFn:         deps.callbacks.emitAgentFn,
+		Transcript:          deps.transcript,
+	}
+	cfg, contSignal, spawnFlag := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, logger)
+	cfg.Model = model // set the resolved model
+
+	// Set up stream hooks via compositor: fan-out dispatch for each hook type.
+	var hc agent.HookCompositor
+	wireStreamHooks(&hc, params, deps, broadcaster, typingSignaler, statusCtrl)
+
+	// Draft stream hook: real-time message editing during LLM streaming.
+	var draftCtrl *telegram.DraftStreamLoop
+	var draftMsgIDFn func() string // retrieves current draft message ID
+	if deps.callbacks.draftEditFn != nil && params.Delivery != nil && params.Delivery.Channel == "telegram" {
+		draftCtrl, draftMsgIDFn = wireDraftStreamHook(ctx, &hc, params, deps, logger)
+	}
+	hooks := hc.Build()
+
+	// Defer cleanup so the draft is stopped on all exit paths.
+	if draftCtrl != nil {
+		defer func() {
+			draftCtrl.StopForClear()
+			if msgID := draftMsgIDFn(); msgID != "" && params.Delivery != nil {
+				params.Delivery.DraftMsgID = msgID
+			}
+		}()
+	}
+
+	logger.Info("pipeline: prep complete, starting agent loop",
+		"prepMs", time.Since(runStart).Milliseconds(),
+		"model", model, "provider", providerID,
+		"messages", len(messages), "tools", len(cfg.Tools))
+
+	// Execute agent loop with model fallback chain.
+	agentStart := time.Now()
+	agentResult, err := runAgentWithFallback(ctx, cfg, messages, client, deps, initialRole, hooks, logger, runLog)
+	if err != nil {
+		return nil, err
+	}
+
+	agentMs := time.Since(agentStart).Milliseconds()
+	totalMs := time.Since(runStart).Milliseconds()
+	logger.Info("pipeline: agent loop complete",
+		"agentMs", agentMs,
+		"totalMs", totalMs,
+		"turns", agentResult.Turns,
+		"inputTokens", agentResult.Usage.InputTokens,
+		"outputTokens", agentResult.Usage.OutputTokens,
+		"stopReason", agentResult.StopReason)
+
+	// Emit agent run.end event to gateway subscriptions.
+	if deps.callbacks.emitAgentFn != nil {
+		deps.callbacks.emitAgentFn("run.end", params.SessionKey, params.ClientRunID, map[string]any{
+			"model":        model,
+			"turns":        agentResult.Turns,
+			"durationMs":   totalMs,
+			"inputTokens":  agentResult.Usage.InputTokens,
+			"outputTokens": agentResult.Usage.OutputTokens,
+			"stopReason":   agentResult.StopReason,
+		})
+	}
+
+	return &chatRunResult{AgentResult: agentResult, ContSignal: contSignal, SpawnFlag: spawnFlag}, nil
+}
+
+// ---------------------------------------------------------------------------
+// Extracted stages: prepareContextAndPrompt, assembleMessages, finalizePrompt,
+// buildAgentConfig. These are called sequentially from executeAgentRun.
+// ---------------------------------------------------------------------------
+
+// prepResult holds the output of the parallel context/prompt preparation stage.
+type prepResult struct {
+	Messages     []llm.Message
+	SystemPrompt json.RawMessage
+	Tier1Wiki    string
+	ContextErr   error
+}
+
+// prepareContextAndPrompt runs wiki injection, context assembly, and system prompt
+// build in parallel. Returns the combined results.
+func prepareContextAndPrompt(
+	params RunParams,
+	deps runDeps,
+	workspaceDir string,
+	sessionToolPreset string,
+	logger *slog.Logger,
+) prepResult {
+	var result prepResult
 	var prepWg sync.WaitGroup
 
 	// Tier-1 wiki auto-injection (parallel).
@@ -124,35 +243,34 @@ func executeAgentRun(
 		defer prepWg.Done()
 		if deps.wikiStore != nil {
 			cfg := wiki.ConfigFromEnv()
-			tier1Addition = knowledge.FormatTier1(deps.wikiStore, cfg.Tier1MinImportance)
+			result.Tier1Wiki = knowledge.FormatTier1(deps.wikiStore, cfg.Tier1MinImportance)
 		}
 	}()
 
 	// Context assembly (parallel).
-	// Transcript-only fallback (Aurora removed).
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
 
 		if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
-			result, err := assembleContext(bridge, params.SessionKey, deps.contextCfg, logger)
+			ctxResult, err := assembleContext(bridge, params.SessionKey, deps.contextCfg, logger)
 			if err != nil {
-				contextErr = err
+				result.ContextErr = err
 			} else {
-				messages = result.Messages
+				result.Messages = ctxResult.Messages
 				// When messages were silently truncated (no summaries covering them),
 				// inject a notice so the AI knows its context is incomplete.
-				if !result.WasCompacted && result.TotalMessages > len(result.Messages) && len(result.Messages) > 0 {
-					dropped := result.TotalMessages - len(result.Messages)
+				if !ctxResult.WasCompacted && ctxResult.TotalMessages > len(ctxResult.Messages) && len(ctxResult.Messages) > 0 {
+					dropped := ctxResult.TotalMessages - len(ctxResult.Messages)
 					notice := fmt.Sprintf(
 						"[컨텍스트 알림: 이 세션의 전체 대화 %d개 메시지 중 최근 %d개만 포함되어 있습니다. "+
 							"이전 %d개 메시지는 컨텍스트 제한으로 생략되었습니다. "+
 							"이전 대화 내용을 정확히 기억하지 못할 수 있으니 유저에게 솔직히 알려주세요.]",
-						result.TotalMessages, len(result.Messages), dropped)
-					messages = append([]llm.Message{llm.NewTextMessage("user", notice)}, messages...)
+						ctxResult.TotalMessages, len(ctxResult.Messages), dropped)
+					result.Messages = append([]llm.Message{llm.NewTextMessage("user", notice)}, result.Messages...)
 					logger.Warn("context truncated without summaries",
-						"total", result.TotalMessages,
-						"loaded", len(result.Messages),
+						"total", ctxResult.TotalMessages,
+						"loaded", len(ctxResult.Messages),
 						"dropped", dropped,
 						"session", params.SessionKey)
 				}
@@ -160,22 +278,16 @@ func executeAgentRun(
 		}
 	}()
 
-	// Resolve session tool preset early (needed for both system prompt and tool list).
-	var sessionToolPreset string
-	if cachedSession != nil {
-		sessionToolPreset = cachedSession.ToolPreset
-	}
-
 	// System prompt build (parallel).
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
 		if params.System != "" {
-			systemPrompt = llm.SystemString(params.System)
+			result.SystemPrompt = llm.SystemString(params.System)
 			return
 		}
 		if deps.defaultSystem != "" {
-			systemPrompt = llm.SystemString(deps.defaultSystem)
+			result.SystemPrompt = llm.SystemString(deps.defaultSystem)
 			return
 		}
 		if deps.tools == nil {
@@ -207,7 +319,7 @@ func executeAgentRun(
 			DeferredTools: deferredToolInfos,
 			UserTimezone:  tz,
 			ContextFiles:  prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey)),
-			RuntimeInfo:   prompt.BuildDefaultRuntimeInfo(params.Model, deps.defaultModel),
+			RuntimeInfo:   prompt.BuildDefaultRuntimeInfo(params.Model, deps.callbacks.defaultModel),
 			Channel:       ch,
 			SkillsPrompt:  loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
 			ToolPreset:    sessionToolPreset,
@@ -216,7 +328,7 @@ func executeAgentRun(
 		// Coordinator mode: use the coordinator-specific system prompt.
 		if sessionToolPreset == string(toolpreset.PresetCoordinator) {
 			scratchpadDir := coordinator.ResolveScratchpadDir(params.SessionKey)
-			systemPrompt = llm.SystemString(prompt.BuildCoordinatorSystemPrompt(spp, scratchpadDir))
+			result.SystemPrompt = llm.SystemString(prompt.BuildCoordinatorSystemPrompt(spp, scratchpadDir))
 			return
 		}
 
@@ -233,16 +345,23 @@ func executeAgentRun(
 			last := &blocks[len(blocks)-1]
 			last.Text += "\n" + workerAddition
 		}
-		systemPrompt = llm.SystemBlocks(blocks)
+		result.SystemPrompt = llm.SystemBlocks(blocks)
 	}()
 
 	prepWg.Wait()
-	logger.Info("pipeline: parallel prep done (context+sysprompt)", "ms", time.Since(prepStart).Milliseconds())
+	return result
+}
 
-	if contextErr != nil {
-		logger.Error("context assembly failed, proceeding with degraded context",
-			"sessionKey", params.SessionKey, "error", contextErr)
-	}
+// assembleMessages builds the final message list from prebuilt messages, transcript
+// context, attachments, and Polaris compaction.
+func assembleMessages(
+	ctx context.Context,
+	params RunParams,
+	deps runDeps,
+	prep prepResult,
+	logger *slog.Logger,
+) []llm.Message {
+	messages := prep.Messages
 
 	// If the caller provided pre-built messages (e.g., OpenAI-compatible HTTP API
 	// with full conversation history, or continuation runs passing the previous
@@ -276,10 +395,8 @@ func executeAgentRun(
 		messages = appendAttachmentsToHistory(messages, params.Message, params.Attachments)
 	}
 
-	// 5b. Polaris compaction: tiered context compression.
+	// Polaris compaction: tiered context compression.
 	// Applied after message assembly, before prompt finalization.
-	// When Polaris bridge is active, summaries are persisted to the DAG
-	// and proactive condensation is triggered in the background.
 	if len(messages) > 0 {
 		polarisCtx, polarisCancel := context.WithTimeout(ctx, 30*time.Second)
 		var summarizer compact.Summarizer
@@ -324,16 +441,21 @@ func executeAgentRun(
 		}
 	}
 
-	// 6. Proactive context: no blocking wait. The hint is injected via
-	// DeferredSystemText on turn 1+. By then the goroutine has had the full
-	// duration of turn 0 (LLM response + tool execution) to complete — typically
-	// several seconds — giving effectively 100% hit rate with zero user wait.
+	return messages
+}
 
-	// 7. Budget-optimize variable prompt additions before appending.
-	// The base system prompt (identity, tools, skills, context files) is fixed;
-	// variable additions (tier-1 wiki) are optimized by priority.
+// finalizePrompt applies budget optimization, tier-1 wiki injection, and
+// coordinator suggestion to the system prompt.
+func finalizePrompt(
+	systemPrompt json.RawMessage,
+	tier1Addition string,
+	contextCfg ContextConfig,
+	sessionToolPreset string,
+	message string,
+) json.RawMessage {
+	// Budget-optimize variable prompt additions before appending.
 	if tier1Addition != "" {
-		promptBudget := prompt.PromptBudget{Total: deps.contextCfg.SystemPromptBudget}
+		promptBudget := prompt.PromptBudget{Total: contextCfg.SystemPromptBudget}
 		baseTokens := uint64(tokenest.Estimate(string(systemPrompt)))
 		var remainingBudget uint64
 		if promptBudget.Total > baseTokens {
@@ -350,44 +472,57 @@ func executeAgentRun(
 		}
 	}
 
-	// 7b. Auto-suggest coordinator mode if the message looks like a multi-file task
+	// Auto-suggest coordinator mode if the message looks like a multi-file task
 	// and the session is not already in coordinator mode.
-	if sessionToolPreset == "" && params.Message != "" && coordinator.ShouldSuggestCoordinator(params.Message) {
+	if sessionToolPreset == "" && message != "" && coordinator.ShouldSuggestCoordinator(message) {
 		hint := "\n\n[System hint: this request appears to involve multiple files. " +
 			"Consider suggesting coordinator mode (/coordinator) for structured multi-agent orchestration.]\n"
 		systemPrompt = llm.AppendSystemText(systemPrompt, hint)
 	}
 
-	logger.Info("pipeline: system prompt finalized",
-		"chars", len(systemPrompt))
+	return systemPrompt
+}
 
-	runLog.LogPrep(agentlog.RunPrepData{
-		SystemPromptChars: len(systemPrompt),
-		ContextMessages:   len(messages),
-		PrepMs:            time.Since(runStart).Milliseconds(),
-	})
+// agentConfigDeps holds dependencies specifically needed by buildAgentConfig.
+type agentConfigDeps struct {
+	Tools               *ToolRegistry
+	MaxTokens           int
+	ContinuationEnabled bool
+	SubagentNotifyCh    <-chan string
+	EmitAgentFn         func(kind, sessionKey, runID string, payload map[string]any)
+	Transcript          TranscriptStore
+}
 
-	// 8. Build tool list from registry (uses stored descriptions and schemas).
+// buildAgentConfig constructs the agent.AgentConfig, building tool lists and
+// wiring all turn-level hooks. Returns the config along with the continuation
+// signal and spawn flag for the run orchestrator.
+func buildAgentConfig(
+	params RunParams,
+	deps runDeps,
+	cachedSession *session.Session,
+	systemPrompt json.RawMessage,
+	sessionToolPreset string,
+	acd agentConfigDeps,
+	logger *slog.Logger,
+) (cfg agent.AgentConfig, contSignal *ContinuationSignal, spawnFlag *SpawnFlag) {
+	// Build tool list from registry (uses stored descriptions and schemas).
 	// If a tool preset is active, filter the tool list to only include allowed tools.
-	// Then partition into builtin prefix + dynamic suffix for prompt cache stability.
 	var tools []llm.Tool
-	if deps.tools != nil {
+	if acd.Tools != nil {
 		allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
-		rawTools := deps.tools.FilteredLLMTools(allowed)
+		rawTools := acd.Tools.FilteredLLMTools(allowed)
 
 		// Cache-stable ordering: built-in tools form a sorted prefix,
 		// dynamic tools (plugins, MCP) are sorted separately and appended.
-		// Changes to dynamic tools only invalidate cache from the boundary onward.
-		builtinNames := make(map[string]struct{}, len(deps.tools.Names()))
-		for _, name := range deps.tools.Names() {
+		builtinNames := make(map[string]struct{}, len(acd.Tools.Names()))
+		for _, name := range acd.Tools.Names() {
 			builtinNames[name] = struct{}{}
 		}
 		partition := PartitionTools(rawTools, builtinNames)
 		tools = partition.MergedTools()
 	}
 
-	// 9. Build agent config.
-	maxTokens := deps.maxTokens
+	maxTokens := acd.MaxTokens
 	if maxTokens <= 0 {
 		maxTokens = defaultMaxTokens
 	}
@@ -397,27 +532,18 @@ func executeAgentRun(
 	runCache := NewRunCache()
 
 	// FileCache lives for the entire agent run and deduplicates repeated file reads.
-	// When the same file is read again (unchanged mtime/size), a compact "already read"
-	// message is returned instead of the full content, saving context tokens.
 	fileCache := agent.NewFileCache(agent.DefaultFileCacheMaxItems)
 
 	// ContinuationSignal: shared across turns so continue_run tool can set it.
-	// Read by runAgentAsync after the agent loop returns.
-	// Only created for async paths where continuation is actually supported;
-	// sync paths (OpenAI HTTP) leave it nil so the continue_run tool returns
-	// "not available" instead of silently accepting and never following up.
-	var contSignal *ContinuationSignal
-	if deps.continuationEnabled {
+	if acd.ContinuationEnabled {
 		contSignal = NewContinuationSignal()
 	}
 
 	// SpawnFlag: tracks whether sessions_spawn was called during this run.
-	// Read by the executor (turn budget warning) and run orchestrator (continuation).
-	spawnFlag := NewSpawnFlag()
+	spawnFlag = NewSpawnFlag()
 
 	// DeferredActivation: tracks which deferred tools have been activated via
-	// fetch_tools during this run. The executor reads it each turn to inject
-	// newly activated tool schemas into the ChatRequest.
+	// fetch_tools during this run.
 	deferredActivation := NewDeferredActivation()
 
 	// Resolve thinking config from the session's ThinkingLevel setting.
@@ -464,10 +590,10 @@ func executeAgentRun(
 		maxOutputScaleFactors = []float64{1.5, 2.0, 2.0}
 	}
 
-	cfg := agent.AgentConfig{
+	cfg = agent.AgentConfig{
 		MaxTurns:         maxTurns,
 		Timeout:          agentTimeout,
-		Model:            model,
+		Model:            "", // set by caller after model resolution
 		System:           systemPrompt,
 		Tools:            tools,
 		MaxTokens:        maxTokens,
@@ -481,16 +607,14 @@ func executeAgentRun(
 		ToolChoice:       params.ToolChoice,
 		// Drop base64 image bytes from the message history after turn 0 so that
 		// subsequent tool-call turns don't retransmit the full image payload.
-		// Each inline image is ~1600 tokens; stripping saves that cost per turn
-		// from turn 1 onward for multi-turn runs that start with an image.
 		StripImagesAfterFirstTurn: hasImageAttachment(params.Attachments),
 		// Deferred context injection on turn 1+: subagent completion
 		// notifications via non-blocking channel reads.
-		DeferredSystemText: deferredSubagentNotifications(deps.subagentNotifyCh),
+		DeferredSystemText: deferredSubagentNotifications(acd.SubagentNotifyCh),
 		// Emit heartbeat at each turn so WS clients know the agent is alive.
 		OnTurn: func(turn int, accumulatedTokens int) {
-			if deps.emitAgentFn != nil {
-				deps.emitAgentFn("heartbeat", params.SessionKey, params.ClientRunID, map[string]any{
+			if acd.EmitAgentFn != nil {
+				acd.EmitAgentFn("heartbeat", params.SessionKey, params.ClientRunID, map[string]any{
 					"turn":   turn,
 					"tokens": accumulatedTokens,
 					"ts":     time.Now().UnixMilli(),
@@ -499,7 +623,6 @@ func executeAgentRun(
 		},
 		// Inject a fresh TurnContext at the start of each turn so that tools
 		// executing in parallel within the same turn can share results via $ref.
-		// RunCache is injected once and persists across turns.
 		OnTurnInit: func(ctx context.Context) context.Context {
 			ctx = WithTurnContext(ctx, NewTurnContext())
 			ctx = WithRunCache(ctx, runCache)
@@ -517,13 +640,12 @@ func executeAgentRun(
 			if len(names) == 0 {
 				return nil
 			}
-			return deps.tools.DeferredLLMTools(names)
+			return acd.Tools.DeferredLLMTools(names)
 		},
 		NudgeBudget:                 nudgeBudget,
 		MaxOutputTokensRecovery:     maxOutputRecovery,
 		MaxOutputTokensScaleFactors: maxOutputScaleFactors,
-		// Suppress nudge when continue_run was already called — the explicit
-		// continuation will start a fresh run, so nudging wastes turns.
+		// Suppress nudge when continue_run was already called.
 		ContinuationRequested: func() bool {
 			return contSignal != nil && contSignal.Requested()
 		},
@@ -536,110 +658,99 @@ func executeAgentRun(
 		OnMessagePersist: buildMessagePersister(deps, params, logger),
 	}
 
-	// Mid-run memory extraction removed: it used placeholder context ("[mid-run turn N, M tokens]")
-	// producing low-quality facts. End-of-run extraction (below) has full response text.
+	return cfg, contSignal, spawnFlag
+}
 
-	// 10. Set up stream hooks via compositor: fan-out dispatch for each hook type.
-	var hc agent.HookCompositor
-	wireStreamHooks(&hc, params, deps, broadcaster, typingSignaler, statusCtrl)
+// wireDraftStreamHook sets up the draft stream loop on the compositor and returns
+// the DraftStreamLoop controller. The caller must defer Ctrl.StopForClear().
+func wireDraftStreamHook(
+	ctx context.Context,
+	hc *agent.HookCompositor,
+	params RunParams,
+	deps runDeps,
+	logger *slog.Logger,
+) (*telegram.DraftStreamLoop, func() string) {
+	delivery := params.Delivery
+	var draftMu sync.Mutex
+	var draftMsgID string
 
-	// Draft stream hook: real-time message editing during LLM streaming.
-	// Creates a throttled draft loop that sends/edits a Telegram message as
-	// text deltas arrive, giving the user immediate visual feedback.
-	var draftCtrl *telegram.DraftStreamLoop
-	if deps.draftEditFn != nil && params.Delivery != nil && params.Delivery.Channel == "telegram" {
-		delivery := params.Delivery
-		var draftMu sync.Mutex
-		var draftMsgID string // tracks the sent message ID across edits
-		var accum strings.Builder
+	draftCtrl := telegram.NewDraftStreamLoop(800, func(text string) (bool, error) {
+		draftMu.Lock()
+		currentID := draftMsgID
+		draftMu.Unlock()
 
-		// Defer cleanup so the draft is stopped on all exit paths (success, error, fallback).
-		// Finalize flushes any pending text (so the user sees the complete streamed output),
-		// then stores the draft message ID on the delivery context. The reply pipeline
-		// will edit this message in-place instead of deleting it and sending a new one,
-		// preventing the "disappear then reappear" flicker on completion.
-		defer func() {
-			if draftCtrl != nil {
-				// Stop the draft loop without flushing. The reply pipeline will
-				// edit the draft message in-place with the final processed text.
-				// Flushing here would cause a double-edit: first with SanitizeDraftText
-				// (code blocks stripped), then immediately after with the final reply
-				// text (differently processed), producing a visible content flash
-				// or "clear and resend" flicker on Telegram.
-				draftCtrl.StopForClear()
-			}
-			// Store the draft message ID on the delivery context so the reply
-			// pipeline can edit the existing message instead of sending a new one.
-			draftMu.Lock()
-			msgID := draftMsgID
-			draftMu.Unlock()
-			if msgID != "" && delivery != nil {
-				delivery.DraftMsgID = msgID
-			}
-		}()
+		editCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
 
-		draftCtrl = telegram.NewDraftStreamLoop(800, func(text string) (bool, error) {
-			draftMu.Lock()
-			currentID := draftMsgID
-			draftMu.Unlock()
+		newID, err := deps.callbacks.draftEditFn(editCtx, delivery, currentID, text)
+		if err != nil {
+			logger.Warn("draft stream send/edit failed", "error", err)
+			return false, err
+		}
+		draftMu.Lock()
+		draftMsgID = newID
+		draftMu.Unlock()
+		return true, nil
+	})
 
-			editCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-			defer cancel()
-
-			newID, err := deps.draftEditFn(editCtx, delivery, currentID, text)
-			if err != nil {
-				logger.Warn("draft stream send/edit failed", "error", err)
-				return false, err
-			}
-			draftMu.Lock()
-			draftMsgID = newID
-			draftMu.Unlock()
-			return true, nil
-		})
-
-		// Section-based streaming: update on paragraph breaks or 500+ char accumulation.
-		var lastUpdateLen int
-		hc.OnTextDelta(func(text string) {
-			accum.WriteString(text)
-			current := accum.String()
-			delta := len(current) - lastUpdateLen
-			if delta < 100 {
-				return
-			}
-			newContent := current[lastUpdateLen:]
-			if strings.Contains(newContent, "\n\n") || delta >= 500 {
-				sanitized := current
-				if deps.sanitizeDraft != nil {
-					sanitized = deps.sanitizeDraft(current)
-				}
-				if sanitized == "" {
-					return
-				}
-				draftCtrl.Update(sanitized)
-				lastUpdateLen = len(current)
-			}
-		})
-
-		// Stop draft loop on tool start so no more edits are pushed.
-		hc.OnToolStart(func(_ string, _ string, _ []byte) {
-			draftCtrl.StopForClear()
-		})
+	getMsgID := func() string {
+		draftMu.Lock()
+		defer draftMu.Unlock()
+		return draftMsgID
 	}
 
-	hooks := hc.Build()
+	// Section-based streaming: update on paragraph breaks or 500+ char accumulation.
+	var accum strings.Builder
+	var lastUpdateLen int
+	hc.OnTextDelta(func(text string) {
+		accum.WriteString(text)
+		current := accum.String()
+		delta := len(current) - lastUpdateLen
+		if delta < 100 {
+			return
+		}
+		newContent := current[lastUpdateLen:]
+		if strings.Contains(newContent, "\n\n") || delta >= 500 {
+			sanitized := current
+			if deps.chatport.SanitizeDraft != nil {
+				sanitized = deps.chatport.SanitizeDraft(current)
+			}
+			if sanitized == "" {
+				return
+			}
+			draftCtrl.Update(sanitized)
+			lastUpdateLen = len(current)
+		}
+	})
 
-	logger.Info("pipeline: prep complete, starting agent loop",
-		"prepMs", time.Since(runStart).Milliseconds(),
-		"model", model, "provider", providerID,
-		"messages", len(messages), "tools", len(tools))
+	// Stop draft loop on tool start so no more edits are pushed.
+	hc.OnToolStart(func(_ string, _ string, _ []byte) {
+		draftCtrl.StopForClear()
+	})
 
-	// 11. Execute agent loop with model fallback chain.
-	// Includes mid-loop compaction retry: on context_length_exceeded, strip images
-	// and emergency-summarize before retrying up to maxCompactionRetries times.
+	return draftCtrl, getMsgID
+}
+
+// ---------------------------------------------------------------------------
+// Stage 3: runAgentWithFallback — agent loop with compaction retry + model fallback.
+// ---------------------------------------------------------------------------
+
+// runAgentWithFallback executes the agent loop with mid-loop compaction retries
+// on context overflow, transient HTTP error retries, and model fallback chain.
+func runAgentWithFallback(
+	ctx context.Context,
+	cfg agent.AgentConfig,
+	messages []llm.Message,
+	client *llm.Client,
+	deps runDeps,
+	initialRole modelrole.Role,
+	hooks agent.StreamHooks,
+	logger *slog.Logger,
+	runLog *agentlog.RunLogger,
+) (*agent.AgentResult, error) {
 	const maxCompactionRetries = 2
-	agentStart := time.Now()
-	var agentResult *agent.AgentResult
 
+	var agentResult *agent.AgentResult
 	var runErr error
 	for compactAttempt := 0; compactAttempt <= maxCompactionRetries; compactAttempt++ {
 		agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
@@ -677,7 +788,7 @@ func executeAgentRun(
 		}
 
 		// Transient HTTP retry: 502/503/521/429 → wait 2.5s, retry once.
-		if deps.isTransientError != nil && deps.isTransientError(runErr.Error()) && ctx.Err() == nil {
+		if deps.chatport.IsTransientError != nil && deps.chatport.IsTransientError(runErr.Error()) && ctx.Err() == nil {
 			logger.Warn("transient HTTP error, retrying once", "error", runErr)
 			select {
 			case <-ctx.Done():
@@ -723,29 +834,7 @@ func executeAgentRun(
 		break // success via transient retry or fallback
 	}
 
-	agentMs := time.Since(agentStart).Milliseconds()
-	totalMs := time.Since(runStart).Milliseconds()
-	logger.Info("pipeline: agent loop complete",
-		"agentMs", agentMs,
-		"totalMs", totalMs,
-		"turns", agentResult.Turns,
-		"inputTokens", agentResult.Usage.InputTokens,
-		"outputTokens", agentResult.Usage.OutputTokens,
-		"stopReason", agentResult.StopReason)
-
-	// Emit agent run.end event to gateway subscriptions.
-	if deps.emitAgentFn != nil {
-		deps.emitAgentFn("run.end", params.SessionKey, params.ClientRunID, map[string]any{
-			"model":        model,
-			"turns":        agentResult.Turns,
-			"durationMs":   totalMs,
-			"inputTokens":  agentResult.Usage.InputTokens,
-			"outputTokens": agentResult.Usage.OutputTokens,
-			"stopReason":   agentResult.StopReason,
-		})
-	}
-
-	return &chatRunResult{AgentResult: agentResult, ContSignal: contSignal, SpawnFlag: spawnFlag}, nil
+	return agentResult, nil
 }
 
 // resolveThinkingConfig maps a session ThinkingLevel string to an llm.ThinkingConfig.

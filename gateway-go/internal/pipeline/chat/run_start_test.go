@@ -116,13 +116,13 @@ func TestPendingQueue_enqueueAndDrain(t *testing.T) {
 	key := "test-session-1"
 
 	// Initially no pending.
-	if got := h.drainPending(key); got != nil {
+	if got := h.pending.Drain(key); got != nil {
 		t.Fatalf("got %+v, want nil drain", got)
 	}
 
 	// Enqueue a message.
-	h.enqueuePending(key, RunParams{SessionKey: key, Message: "first"})
-	p := h.drainPending(key)
+	h.pending.Enqueue(key, RunParams{SessionKey: key, Message: "first"})
+	p := h.pending.Drain(key)
 	if p == nil {
 		t.Fatal("expected pending message")
 	}
@@ -131,7 +131,7 @@ func TestPendingQueue_enqueueAndDrain(t *testing.T) {
 	}
 
 	// After drain, queue is empty.
-	if got := h.drainPending(key); got != nil {
+	if got := h.pending.Drain(key); got != nil {
 		t.Fatal("expected nil after drain")
 	}
 }
@@ -143,11 +143,11 @@ func TestPendingQueue_newerSupersedes(t *testing.T) {
 	defer h.Close()
 
 	key := "test-session-2"
-	h.enqueuePending(key, RunParams{SessionKey: key, Message: "old"})
-	h.enqueuePending(key, RunParams{SessionKey: key, Message: "new"})
+	h.pending.Enqueue(key, RunParams{SessionKey: key, Message: "old"})
+	h.pending.Enqueue(key, RunParams{SessionKey: key, Message: "new"})
 
 	// Only latest message survives (at-most-1 semantics).
-	p := h.drainPending(key)
+	p := h.pending.Drain(key)
 	if p == nil {
 		t.Fatal("expected pending message")
 	}
@@ -163,10 +163,10 @@ func TestPendingQueue_clearRemovesAll(t *testing.T) {
 	defer h.Close()
 
 	key := "test-session-3"
-	h.enqueuePending(key, RunParams{SessionKey: key, Message: "queued"})
-	h.clearPending(key)
+	h.pending.Enqueue(key, RunParams{SessionKey: key, Message: "queued"})
+	h.pending.Clear(key)
 
-	if got := h.drainPending(key); got != nil {
+	if got := h.pending.Drain(key); got != nil {
 		t.Fatal("expected nil after clear")
 	}
 }
@@ -180,20 +180,18 @@ func TestInterruptActiveRun_cancelsMatchingSession(t *testing.T) {
 	defer h.Close()
 
 	canceled := false
-	h.abortMu.Lock()
-	h.abortMap["run-1"] = &AbortEntry{
+	h.abort.Register("run-1", &AbortEntry{
 		SessionKey: "sess-A",
 		ClientRun:  "run-1",
 		CancelFn:   func() { canceled = true },
 		ExpiresAt:  time.Now().Add(time.Hour),
-	}
-	h.abortMap["run-2"] = &AbortEntry{
+	})
+	h.abort.Register("run-2", &AbortEntry{
 		SessionKey: "sess-B",
 		ClientRun:  "run-2",
 		CancelFn:   func() {},
 		ExpiresAt:  time.Now().Add(time.Hour),
-	}
-	h.abortMu.Unlock()
+	})
 
 	h.InterruptActiveRun("sess-A")
 
@@ -201,14 +199,12 @@ func TestInterruptActiveRun_cancelsMatchingSession(t *testing.T) {
 		t.Error("expected sess-A run to be canceled")
 	}
 
-	h.abortMu.Lock()
-	if _, ok := h.abortMap["run-1"]; ok {
-		t.Error("run-1 should have been removed from abortMap")
+	if h.abort.HasActiveRun("sess-A") {
+		t.Error("run-1 should have been removed")
 	}
-	if _, ok := h.abortMap["run-2"]; !ok {
-		t.Error("run-2 (different session) should still be in abortMap")
+	if !h.abort.HasActiveRun("sess-B") {
+		t.Error("run-2 (different session) should still exist")
 	}
-	h.abortMu.Unlock()
 }
 
 func TestInterruptActiveRun_noopWhenEmpty(t *testing.T) {
@@ -229,20 +225,18 @@ func TestCountActiveRuns(t *testing.T) {
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
-	if got := h.countActiveRuns("sess"); got != 0 {
+	if got := h.abort.CountForSession("sess"); got != 0 {
 		t.Errorf("got %d, want 0", got)
 	}
 
-	h.abortMu.Lock()
-	h.abortMap["r1"] = &AbortEntry{SessionKey: "sess", CancelFn: func() {}, ExpiresAt: time.Now().Add(time.Hour)}
-	h.abortMap["r2"] = &AbortEntry{SessionKey: "sess", CancelFn: func() {}, ExpiresAt: time.Now().Add(time.Hour)}
-	h.abortMap["r3"] = &AbortEntry{SessionKey: "other", CancelFn: func() {}, ExpiresAt: time.Now().Add(time.Hour)}
-	h.abortMu.Unlock()
+	h.abort.Register("r1", &AbortEntry{SessionKey: "sess", CancelFn: func() {}, ExpiresAt: time.Now().Add(time.Hour)})
+	h.abort.Register("r2", &AbortEntry{SessionKey: "sess", CancelFn: func() {}, ExpiresAt: time.Now().Add(time.Hour)})
+	h.abort.Register("r3", &AbortEntry{SessionKey: "other", CancelFn: func() {}, ExpiresAt: time.Now().Add(time.Hour)})
 
-	if got := h.countActiveRuns("sess"); got != 2 {
+	if got := h.abort.CountForSession("sess"); got != 2 {
 		t.Errorf("got %d, want 2", got)
 	}
-	if got := h.countActiveRuns("other"); got != 1 {
+	if got := h.abort.CountForSession("other"); got != 1 {
 		t.Errorf("got %d, want 1", got)
 	}
 }
@@ -255,17 +249,13 @@ func TestCleanupAbort_removesEntry(t *testing.T) {
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
-	h.abortMu.Lock()
-	h.abortMap["run-x"] = &AbortEntry{SessionKey: "s", CancelFn: func() {}, ExpiresAt: time.Now().Add(time.Hour)}
-	h.abortMu.Unlock()
+	h.abort.Register("run-x", &AbortEntry{SessionKey: "s", CancelFn: func() {}, ExpiresAt: time.Now().Add(time.Hour)})
 
-	h.cleanupAbort("run-x")
+	h.abort.Cleanup("run-x")
 
-	h.abortMu.Lock()
-	if _, ok := h.abortMap["run-x"]; ok {
+	if h.abort.HasActiveRun("s") {
 		t.Error("expected run-x to be removed")
 	}
-	h.abortMu.Unlock()
 }
 
 func TestCleanupAbort_emptyIDNoop(t *testing.T) {
@@ -275,5 +265,5 @@ func TestCleanupAbort_emptyIDNoop(t *testing.T) {
 	defer h.Close()
 
 	// Should not panic.
-	h.cleanupAbort("")
+	h.abort.Cleanup("")
 }

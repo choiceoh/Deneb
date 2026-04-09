@@ -60,8 +60,8 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		DeepWork:     p.DeepWork,
 	}
 
-	if h.hasActiveRunForSession(p.SessionKey) {
-		h.enqueuePending(p.SessionKey, runParams)
+	if h.abort.HasActiveRun(p.SessionKey) {
+		h.pending.Enqueue(p.SessionKey, runParams)
 		h.logger.Info("queued message for active run",
 			"sessionKey", p.SessionKey)
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
@@ -96,7 +96,7 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 	// replay after the new run completes — causing the "diary navigation" bug
 	// where the user's reply is discarded and a scheduled task takes over.
 	h.InterruptActiveRun(p.Key)
-	h.clearPending(p.Key)
+	h.pending.Clear(p.Key)
 
 	runID := p.IdempotencyKey
 	if runID == "" {
@@ -129,7 +129,7 @@ func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *
 
 	// Interrupt any active run and clear the pending queue for this session.
 	h.InterruptActiveRun(p.Key)
-	h.clearPending(p.Key)
+	h.pending.Clear(p.Key)
 
 	runID := shortid.New("steer")
 
@@ -155,27 +155,14 @@ func (h *Handler) SessionsAbort(_ context.Context, req *protocol.RequestFrame) *
 		return rpcerr.New(protocol.ErrMissingParam, "key or runId is required").Response(req.ID)
 	}
 
-	h.abortMu.Lock()
 	var abortedRunID string
 	var sessionKey string
 	if p.RunID != "" {
-		if entry, ok := h.abortMap[p.RunID]; ok {
-			entry.CancelFn()
-			abortedRunID = p.RunID
-			sessionKey = entry.SessionKey
-			delete(h.abortMap, p.RunID)
-		}
+		sessionKey, abortedRunID = h.abort.CancelByRunID(p.RunID)
 	} else {
 		sessionKey = p.Key
-		for id, entry := range h.abortMap {
-			if entry.SessionKey == p.Key {
-				entry.CancelFn()
-				abortedRunID = id
-				delete(h.abortMap, id)
-			}
-		}
+		abortedRunID = h.abort.CancelBySessionKey(p.Key)
 	}
-	h.abortMu.Unlock()
 
 	if abortedRunID == "" {
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
@@ -187,7 +174,7 @@ func (h *Handler) SessionsAbort(_ context.Context, req *protocol.RequestFrame) *
 
 	// Clear pending queue and transition session out of running state.
 	if sessionKey != "" {
-		h.clearPending(sessionKey)
+		h.pending.Clear(sessionKey)
 		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
 			Phase: session.PhaseEnd,
 			Ts:    time.Now().UnixMilli(),
@@ -296,27 +283,17 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 		return rpcerr.New(protocol.ErrMissingParam, "clientRunId or sessionKey is required").Response(req.ID)
 	}
 
-	h.abortMu.Lock()
-	var found bool
 	var resolvedKey string
+	var found bool
 	if p.ClientRunID != "" {
-		if entry, ok := h.abortMap[p.ClientRunID]; ok {
-			resolvedKey = entry.SessionKey
-			entry.CancelFn()
-			delete(h.abortMap, p.ClientRunID)
-			found = true
-		}
+		key, runID := h.abort.CancelByRunID(p.ClientRunID)
+		resolvedKey = key
+		found = runID != ""
 	} else {
 		resolvedKey = p.SessionKey
-		for id, entry := range h.abortMap {
-			if entry.SessionKey == p.SessionKey {
-				entry.CancelFn()
-				delete(h.abortMap, id)
-				found = true
-			}
-		}
+		runID := h.abort.CancelBySessionKey(p.SessionKey)
+		found = runID != ""
 	}
-	h.abortMu.Unlock()
 
 	if !found {
 		return rpcerr.NotFound("no active run").Response(req.ID)
@@ -328,7 +305,7 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 		key = p.SessionKey
 	}
 	if key != "" {
-		h.clearPending(key)
+		h.pending.Clear(key)
 		h.sessions.ApplyLifecycleEvent(key, session.LifecycleEvent{
 			Phase: session.PhaseEnd,
 			Ts:    time.Now().UnixMilli(),
@@ -358,8 +335,8 @@ func (h *Handler) SendDirect(sessionKey, message string) {
 		Delivery:   deliveryFromSessionKey(sessionKey),
 	}
 
-	if h.hasActiveRunForSession(sessionKey) {
-		h.enqueuePending(sessionKey, params)
+	if h.abort.HasActiveRun(sessionKey) {
+		h.pending.Enqueue(sessionKey, params)
 		h.logger.Info("bridge: queued message for active run", "sessionKey", sessionKey)
 		return
 	}
