@@ -54,7 +54,6 @@ type HubConfig struct {
 	InternalHooks *hooks.InternalRegistry // nil-safe
 
 	// Agent pipeline (Chat is late-bound via SetChat).
-	Agents     *agent.Store
 	JobTracker *agent.JobTracker
 
 	// Scheduling.
@@ -88,7 +87,6 @@ type GatewayHub struct {
 
 	// Agent pipeline.
 	chat       *chat.Handler // nil until SetChat (late phase).
-	agents     *agent.Store
 	jobTracker *agent.JobTracker
 
 	// local AI hub — centralized local LLM request management.
@@ -126,7 +124,6 @@ func NewGatewayHub(cfg HubConfig) *GatewayHub {
 		sessions:       cfg.Sessions,
 		processes:      cfg.Processes,
 		internalHooks:  cfg.InternalHooks,
-		agents:         cfg.Agents,
 		jobTracker:     cfg.JobTracker,
 		cronService:    cfg.CronService,
 		cronPersistLog: cfg.CronPersistLog,
@@ -148,7 +145,6 @@ func (h *GatewayHub) Processes() *process.Manager                    { return h.
 func (h *GatewayHub) Telegram() *telegram.Plugin                     { return h.telegram }
 func (h *GatewayHub) InternalHooks() *hooks.InternalRegistry         { return h.internalHooks }
 func (h *GatewayHub) Chat() *chat.Handler                            { return h.chat }
-func (h *GatewayHub) Agents() *agent.Store                           { return h.agents }
 func (h *GatewayHub) JobTracker() *agent.JobTracker                  { return h.jobTracker }
 func (h *GatewayHub) CronService() *cron.Service                     { return h.cronService }
 func (h *GatewayHub) CronPersistLog() *cron.PersistentRunLog         { return h.cronPersistLog }
@@ -223,9 +219,6 @@ func (h *GatewayHub) Validate() error {
 	}
 	if h.processes == nil {
 		missing = append(missing, "Processes")
-	}
-	if h.agents == nil {
-		missing = append(missing, "Agents")
 	}
 	if h.jobTracker == nil {
 		missing = append(missing, "JobTracker")

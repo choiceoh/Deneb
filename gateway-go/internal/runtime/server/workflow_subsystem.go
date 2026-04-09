@@ -16,7 +16,6 @@ import (
 // Embedded in Server so fields are promoted and existing access patterns are unchanged.
 type WorkflowSubsystem struct {
 	approvals    *approval.Store
-	agents       *agent.Store
 	skills       *skill.Manager
 	secrets      *secret.Resolver
 	jobTracker   *agent.JobTracker
@@ -28,7 +27,6 @@ type WorkflowSubsystem struct {
 func NewWorkflowSubsystem(logger *slog.Logger) *WorkflowSubsystem {
 	return &WorkflowSubsystem{
 		approvals:    approval.NewStore(),
-		agents:       agent.NewStore(),
 		skills:       skill.NewManager(),
 		secrets:      secret.NewResolver(),
 		jobTracker:   agent.NewJobTracker(logger),

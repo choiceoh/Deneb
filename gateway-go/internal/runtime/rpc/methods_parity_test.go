@@ -43,13 +43,6 @@ var tsBaseMethods = []string{
 	"exec.approval.resolve",
 	"models.list",
 	"tools.catalog",
-	"agents.list",
-	"agents.create",
-	"agents.update",
-	"agents.delete",
-	"agents.files.list",
-	"agents.files.get",
-	"agents.files.set",
 	"skills.status",
 	"skills.bins",
 	"skills.install",
@@ -87,7 +80,6 @@ var tsBaseMethods = []string{
 	"system-presence",
 	"system-event",
 	"agent",
-	"agent.identity.get",
 	"agent.wait",
 	"chat.history",
 	"chat.abort",
@@ -115,7 +107,6 @@ func fullDispatcher() *Dispatcher {
 	RegisterApprovalMethods(d, ApprovalDeps{Store: approval.NewStore(), Broadcaster: broadcastFn})
 	RegisterCronAdvancedMethods(d, CronAdvancedDeps{Service: cron.NewService(cron.ServiceConfig{StorePath: "/tmp/deneb-cron-test-adv"}, nil, testLogger()), Broadcaster: broadcastFn})
 	RegisterCronServiceMethods(d, CronServiceDeps{Service: cron.NewService(cron.ServiceConfig{StorePath: "/tmp/deneb-cron-test"}, nil, testLogger())})
-	RegisterAgentsMethods(d, AgentsDeps{Agents: agent.NewStore(), Broadcaster: broadcastFn})
 	RegisterConfigAdvancedMethods(d, ConfigAdvancedDeps{Broadcaster: broadcastFn})
 	RegisterSkillMethods(d, SkillDeps{Skills: skill.NewManager(), Broadcaster: broadcastFn})
 	RegisterSecretMethods(d, SecretDeps{Resolver: secret.NewResolver()})
@@ -133,7 +124,6 @@ func fullDispatcher() *Dispatcher {
 	// Phase 4: Native session execution / agent methods.
 	RegisterSessionExecMethods(d, SessionExecDeps{
 		Chat:       chat.NewHandler(session.NewManager(), nil, testLogger(), chat.DefaultHandlerConfig()),
-		Agents:     agent.NewStore(),
 		JobTracker: agent.NewJobTracker(testLogger()),
 	})
 
@@ -206,9 +196,9 @@ func TestTSBaseMethodParity(t *testing.T) {
 func TestMethodCount(t *testing.T) {
 	d := fullDispatcher()
 	methods := d.Methods()
-	// We expect at least 99 methods (TS BASE_METHODS has 113, plus Go-only methods).
-	if len(methods) < 99 {
-		t.Errorf("got %d, want at least 99 registered methods", len(methods))
+	// We expect at least 91 methods (TS BASE_METHODS minus removed agents CRUD/identity, plus Go-only methods).
+	if len(methods) < 91 {
+		t.Errorf("got %d, want at least 91 registered methods", len(methods))
 	}
 	t.Logf("total registered methods: %d", len(methods))
 }

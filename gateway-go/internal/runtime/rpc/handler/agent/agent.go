@@ -5,7 +5,6 @@ package agent
 import (
 	"context"
 
-	agentpkg "github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coresecurity"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
@@ -29,12 +28,6 @@ type ExtendedDeps struct {
 	CronService    *cron.Service
 	InternalHooks  *hooks.InternalRegistry
 	Broadcaster    rpcutil.BroadcastFunc
-}
-
-// AgentsDeps holds the dependencies for agents CRUD RPC methods.
-type AgentsDeps struct {
-	Agents      *agentpkg.Store
-	Broadcaster rpcutil.BroadcastFunc
 }
 
 // ExtendedMethods returns the extended agent/session/process/cron/hooks handlers.
@@ -62,23 +55,6 @@ func ExtendedMethods(deps ExtendedDeps) map[string]rpcutil.HandlerFunc {
 	m["sessions.lifecycle"] = sessionsLifecycle(deps)
 
 	return m
-}
-
-// CRUDMethods returns the agents.* CRUD handlers.
-func CRUDMethods(deps AgentsDeps) map[string]rpcutil.HandlerFunc {
-	if deps.Agents == nil {
-		return nil
-	}
-
-	return map[string]rpcutil.HandlerFunc{
-		"agents.list":       agentsList(deps),
-		"agents.create":     agentsCreate(deps),
-		"agents.update":     agentsUpdate(deps),
-		"agents.delete":     agentsDelete(deps),
-		"agents.files.list": agentsFilesList(deps),
-		"agents.files.get":  agentsFilesGet(deps),
-		"agents.files.set":  agentsFilesSet(deps),
-	}
 }
 
 // --- Process methods ---
@@ -307,160 +283,5 @@ func sessionsLifecycle(deps ExtendedDeps) rpcutil.HandlerFunc {
 		}
 
 		return s, nil
-	})
-}
-
-// --- Agents CRUD methods ---
-
-func agentsList(deps AgentsDeps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		agents := deps.Agents.List()
-		if agents == nil {
-			agents = make([]*agentpkg.Agent, 0)
-		}
-		return rpcutil.RespondOK(req.ID, map[string]any{"agents": agents})
-	}
-}
-
-func agentsCreate(deps AgentsDeps) rpcutil.HandlerFunc {
-	type params struct {
-		AgentID      string            `json:"agentId,omitempty"`
-		Name         string            `json:"name,omitempty"`
-		Description  string            `json:"description,omitempty"`
-		Model        string            `json:"model,omitempty"`
-		SystemPrompt string            `json:"systemPrompt,omitempty"`
-		Tools        []string          `json:"tools,omitempty"`
-		Metadata     map[string]string `json:"metadata,omitempty"`
-	}
-	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		created := deps.Agents.Create(agentpkg.CreateParams{
-			AgentID:      p.AgentID,
-			Name:         p.Name,
-			Description:  p.Description,
-			Model:        p.Model,
-			SystemPrompt: p.SystemPrompt,
-			Tools:        p.Tools,
-			Metadata:     p.Metadata,
-		})
-
-		if deps.Broadcaster != nil {
-			deps.Broadcaster("agents.changed", map[string]any{
-				"action":  "created",
-				"agentId": created.AgentID,
-			})
-		}
-
-		return map[string]any{"agent": created}, nil
-	})
-}
-
-func agentsUpdate(deps AgentsDeps) rpcutil.HandlerFunc {
-	type params struct {
-		AgentID string         `json:"agentId"`
-		Patch   map[string]any `json:"patch"`
-	}
-	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		if p.AgentID == "" {
-			return nil, rpcerr.MissingParam("agentId")
-		}
-
-		updated, err := deps.Agents.Update(p.AgentID, p.Patch)
-		if err != nil {
-			return nil, rpcerr.NotFound("agent").WithAgent(p.AgentID)
-		}
-
-		if deps.Broadcaster != nil {
-			deps.Broadcaster("agents.changed", map[string]any{
-				"action":  "updated",
-				"agentId": p.AgentID,
-			})
-		}
-
-		return map[string]any{"agent": updated}, nil
-	})
-}
-
-func agentsDelete(deps AgentsDeps) rpcutil.HandlerFunc {
-	type params struct {
-		AgentID string `json:"agentId"`
-	}
-	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		if p.AgentID == "" {
-			return nil, rpcerr.MissingParam("agentId")
-		}
-
-		removed := deps.Agents.Delete(p.AgentID)
-		if !removed {
-			return nil, rpcerr.NotFound("agent").WithAgent(p.AgentID)
-		}
-
-		if deps.Broadcaster != nil {
-			deps.Broadcaster("agents.changed", map[string]any{
-				"action":  "deleted",
-				"agentId": p.AgentID,
-			})
-		}
-
-		return map[string]bool{"removed": true}, nil
-	})
-}
-
-func agentsFilesList(deps AgentsDeps) rpcutil.HandlerFunc {
-	type params struct {
-		AgentID string `json:"agentId"`
-	}
-	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		if p.AgentID == "" {
-			return nil, rpcerr.MissingParam("agentId")
-		}
-
-		files, err := deps.Agents.ListFiles(p.AgentID)
-		if err != nil {
-			return nil, rpcerr.NotFound("agent").WithAgent(p.AgentID)
-		}
-		if files == nil {
-			files = make([]*agentpkg.FileEntry, 0)
-		}
-
-		return map[string]any{"files": files}, nil
-	})
-}
-
-func agentsFilesGet(deps AgentsDeps) rpcutil.HandlerFunc {
-	type params struct {
-		AgentID string `json:"agentId"`
-		Name    string `json:"name"`
-	}
-	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		if p.AgentID == "" || p.Name == "" {
-			return nil, rpcerr.MissingParam("agentId and name")
-		}
-
-		file, err := deps.Agents.File(p.AgentID, p.Name)
-		if err != nil {
-			return nil, rpcerr.NotFound("agent file").WithAgent(p.AgentID)
-		}
-
-		return file, nil
-	})
-}
-
-func agentsFilesSet(deps AgentsDeps) rpcutil.HandlerFunc {
-	type params struct {
-		AgentID       string `json:"agentId"`
-		Name          string `json:"name"`
-		ContentBase64 string `json:"contentBase64,omitempty"`
-	}
-	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		if p.AgentID == "" || p.Name == "" {
-			return nil, rpcerr.MissingParam("agentId and name")
-		}
-
-		file, err := deps.Agents.SetFile(p.AgentID, p.Name, p.ContentBase64)
-		if err != nil {
-			return nil, rpcerr.NotFound("agent").WithAgent(p.AgentID)
-		}
-
-		return file, nil
 	})
 }
