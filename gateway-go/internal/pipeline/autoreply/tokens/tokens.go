@@ -1,8 +1,6 @@
-// Package autoreply implements the auto-reply pipeline for the Go gateway.
-//
-// This mirrors src/auto-reply/ from the TypeScript codebase: command registry,
-// dispatch, text chunking, inbound debouncing, heartbeat token handling,
-// group activation, model directive extraction, and fallback state tracking.
+// Package tokens implements command registry, dispatch, text chunking,
+// inbound debouncing, heartbeat token handling, group activation,
+// model directive extraction, and fallback state tracking.
 package tokens
 
 import (

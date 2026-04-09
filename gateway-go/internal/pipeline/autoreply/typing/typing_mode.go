@@ -33,8 +33,6 @@ type TypingModeContext struct {
 }
 
 // ResolveTypingMode determines the typing indicator behavior based on context.
-//
-// Mirrors src/auto-reply/reply/typing-mode.ts resolveTypingMode().
 func ResolveTypingMode(ctx TypingModeContext) TypingMode {
 	// Suppress typing for heartbeats and system events.
 	if ctx.IsHeartbeat ||
@@ -55,8 +53,6 @@ func ResolveTypingMode(ctx TypingModeContext) TypingMode {
 // FullTypingSignaler provides phase-aware typing signal dispatch.
 // It wraps a TypingController and starts typing at appropriate phases
 // depending on the resolved TypingMode.
-//
-// Mirrors src/auto-reply/reply/typing-mode.ts createTypingSignaler().
 type FullTypingSignaler struct {
 	controller *TypingController
 	Mode       TypingMode

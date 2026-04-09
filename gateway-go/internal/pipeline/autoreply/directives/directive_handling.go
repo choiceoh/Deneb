@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/model"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/pipeline"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
@@ -203,7 +202,7 @@ func resolveModelDirective(rawModel, rawProfile string, opts DirectiveHandlingOp
 	}
 
 	// Parse provider/model from the raw string.
-	parts := pipeline.SplitProviderModel(rawModel)
+	parts := model.SplitProviderModel(rawModel)
 	provider := parts[0]
 	mdl := parts[1]
 

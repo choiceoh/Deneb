@@ -1,11 +1,8 @@
 // model_selection_full.go — Full model selection with stored overrides and fuzzy matching.
-// Mirrors src/auto-reply/reply/model-selection.ts (612 LOC).
 package model
 
 import (
 	"strings"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/pipeline"
 )
 
 // ModelSelectionState holds the full resolved model state.
@@ -52,7 +49,7 @@ func ResolveModelSelection(cfg ModelSelectionConfig) ModelSelectionState {
 			}
 		}
 		// Accept raw directive value even without candidate match.
-		parts := pipeline.SplitProviderModel(cfg.DirectiveModel)
+		parts := SplitProviderModel(cfg.DirectiveModel)
 		provider, model := parts[0], parts[1]
 		if cfg.DirectiveProvider != "" {
 			provider = cfg.DirectiveProvider
@@ -145,15 +142,4 @@ func resolveFromCandidates(rawModel, rawProvider string, candidates []ModelCandi
 		}
 	}
 	return nil
-}
-
-// ResolveStoredModelOverride checks session and parent session for model overrides.
-func ResolveStoredModelOverride(sessionModel, parentSessionModel, configModel string) string {
-	if sessionModel != "" {
-		return sessionModel
-	}
-	if parentSessionModel != "" {
-		return parentSessionModel
-	}
-	return configModel
 }

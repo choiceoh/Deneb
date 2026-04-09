@@ -1,9 +1,4 @@
 // session_full.go — Full session lifecycle management.
-// Mirrors src/auto-reply/reply/session.ts (602 LOC), session-updates.ts (308 LOC),
-// session-fork.ts (59 LOC), session-reset-model.ts (200 LOC),
-// session-reset-prompt.ts (18 LOC), session-run-accounting.ts (37 LOC),
-// session-usage.ts (173 LOC), session-hooks.ts (66 LOC),
-// session-delivery.ts (216 LOC).
 package session
 
 import (
@@ -149,27 +144,4 @@ func (u *SessionUsage) FormatUsage() string {
 	}
 	return fmt.Sprintf("%d tokens (%d in, %d out) across %d runs",
 		u.TotalTokens, u.InputTokens, u.OutputTokens, u.RunCount)
-}
-
-// SessionDelivery handles reply delivery to the originating channel.
-type SessionDelivery struct {
-	Channel   string
-	To        string
-	AccountID string
-	ThreadID  string
-	ReplyToID string
-}
-
-// BuildSessionDelivery creates delivery info from session state.
-func BuildSessionDelivery(sess *types.SessionState, msg *types.MsgContext) SessionDelivery {
-	delivery := SessionDelivery{
-		Channel:   sess.Channel,
-		To:        msg.To,
-		AccountID: sess.AccountID,
-		ThreadID:  sess.ThreadID,
-	}
-	if msg.ReplyToID != "" {
-		delivery.ReplyToID = msg.ReplyToID
-	}
-	return delivery
 }

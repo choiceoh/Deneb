@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/model"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/pipeline"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
 
@@ -29,7 +28,7 @@ func handleModelCommand(ctx CommandContext) (*CommandResult, error) {
 		provider = resolved.Provider
 		modelStr = resolved.Model
 	} else {
-		parts := pipeline.SplitProviderModel(raw)
+		parts := model.SplitProviderModel(raw)
 		provider = parts[0]
 		modelStr = parts[1]
 	}

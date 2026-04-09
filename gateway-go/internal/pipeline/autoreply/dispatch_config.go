@@ -1,12 +1,9 @@
-// dispatch_config.go — Full dispatch orchestration from config.
-// Mirrors src/auto-reply/reply/dispatch-from-config.ts (664 LOC),
-// dispatch-acp.ts (367 LOC), dispatch-acp-delivery.ts (189 LOC),
-// followup-runner.ts (415 LOC), origin-routing.ts (29 LOC),
-// dispatcher-registry.ts (58 LOC), provider-dispatcher.ts (44 LOC).
+// dispatch_config.go — Full dispatch orchestration: abort → command → agent.
 package autoreply
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/handlers"
@@ -119,6 +116,18 @@ func DispatchFromConfig(ctx context.Context, msg *types.MsgContext, cfg Dispatch
 	return DispatchResult{Payloads: payloads, Handled: true}
 }
 
+func extractCommandKey(text string) string {
+	trimmed := strings.TrimSpace(text)
+	if !strings.HasPrefix(trimmed, "/") {
+		return ""
+	}
+	end := strings.IndexAny(trimmed[1:], " \t\n")
+	if end == -1 {
+		return trimmed[1:]
+	}
+	return trimmed[1 : end+1]
+}
+
 func extractCommandArgs(normalized, cmdKey string) *handlers.CommandArgs {
 	prefix := "/" + cmdKey
 	if len(normalized) <= len(prefix) {
@@ -130,22 +139,4 @@ func extractCommandArgs(normalized, cmdKey string) *handlers.CommandArgs {
 		return &handlers.CommandArgs{Raw: raw}
 	}
 	return nil
-}
-
-// OriginRouting determines the reply target based on message origin.
-type OriginRouting struct {
-	Channel   string
-	To        string
-	AccountID string
-	ThreadID  string
-}
-
-// ResolveOriginRouting extracts routing info from the inbound message.
-func ResolveOriginRouting(msg *types.MsgContext) OriginRouting {
-	return OriginRouting{
-		Channel:   msg.Channel,
-		To:        msg.To,
-		AccountID: msg.AccountID,
-		ThreadID:  msg.ThreadID,
-	}
 }

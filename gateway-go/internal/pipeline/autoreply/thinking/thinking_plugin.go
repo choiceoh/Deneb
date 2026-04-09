@@ -15,11 +15,6 @@ type ProviderThinkingContext struct {
 // ProviderThinkingResolver is the callback interface for plugin-based thinking
 // level overrides. Each function returns a value and a boolean indicating whether
 // the plugin provided a decision.
-//
-// Mirrors src/plugins/provider-runtime.ts:
-// - resolveProviderBinaryThinking
-// - resolveProviderXHighThinking
-// - resolveProviderDefaultThinkingLevel
 type ProviderThinkingResolver interface {
 	// ResolveBinaryThinking returns whether the provider only supports on/off thinking.
 	// Returns (decision, hasDecision).
@@ -37,8 +32,6 @@ type ProviderThinkingResolver interface {
 // ThinkingRuntime wraps the shared thinking functions with plugin-aware overrides.
 // When a ProviderThinkingResolver is registered, its decisions take priority
 // over the built-in logic.
-//
-// Mirrors the wrapper pattern in src/auto-reply/thinking.ts.
 type ThinkingRuntime struct {
 	mu       sync.RWMutex
 	resolver ProviderThinkingResolver

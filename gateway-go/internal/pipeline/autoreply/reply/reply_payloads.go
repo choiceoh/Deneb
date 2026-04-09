@@ -1,7 +1,4 @@
 // reply_payloads.go — Reply payload processing, dedup, threading, and delivery.
-// Mirrors src/auto-reply/reply/reply-payloads.ts (274 LOC),
-// reply-delivery.ts (134 LOC), route-reply.ts (225 LOC),
-// session-delivery.ts (216 LOC).
 package reply
 
 import (
@@ -100,17 +97,6 @@ func ShouldSuppressMessagingToolReplies(messageProvider string, sentTargets []ty
 	return false
 }
 
-// FormatBtwTextForExternalDelivery wraps BTW (side question) text for delivery.
-func FormatBtwTextForExternalDelivery(question, answer string) string {
-	if answer == "" {
-		return ""
-	}
-	if question != "" {
-		return "💬 " + question + "\n\n" + answer
-	}
-	return answer
-}
-
 // NormalizeReplyPayloadDirectives processes [[tag]] directives in reply text.
 func NormalizeReplyPayloadDirectives(payload types.ReplyPayload, currentMessageID, silentToken string) types.ReplyPayload {
 	if payload.Text == "" {
@@ -189,6 +175,10 @@ func BuildReplyPayloads(params types.BuildReplyPayloadsParams) []types.ReplyPayl
 	if ShouldSuppressMessagingToolReplies(params.MessageProvider, params.SentTargets, params.OriginTo, params.AccountID) {
 		return nil
 	}
+
+	// 6. Deduplicate identical text/media payloads (agent can produce duplicates
+	// during streaming or when tool results echo the final reply).
+	payloads = DeduplicateReplyPayloads(payloads)
 
 	return payloads
 }

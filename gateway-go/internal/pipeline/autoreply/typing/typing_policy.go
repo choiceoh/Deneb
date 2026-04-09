@@ -20,8 +20,6 @@ type ResolvedRunTypingPolicy struct {
 
 // ResolveRunTypingPolicy resolves the typing policy and suppression flag
 // based on context (heartbeat, system event).
-//
-// Mirrors src/auto-reply/reply/typing-policy.ts.
 func ResolveRunTypingPolicy(params ResolveRunTypingPolicyParams) ResolvedRunTypingPolicy {
 	var policy types.TypingPolicy
 	switch {
