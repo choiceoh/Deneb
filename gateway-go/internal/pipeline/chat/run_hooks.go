@@ -60,15 +60,15 @@ func wireStreamHooks(
 	}
 
 	// Gateway event subscription: emit tool.start / tool.end for WebSocket clients.
-	if deps.emitAgentFn != nil {
+	if deps.callbacks.emitAgentFn != nil {
 		hc.OnToolStart(func(name, _ string, _ []byte) {
-			deps.emitAgentFn("tool.start", params.SessionKey, params.ClientRunID, map[string]any{
+			deps.callbacks.emitAgentFn("tool.start", params.SessionKey, params.ClientRunID, map[string]any{
 				"tool": name,
 				"ts":   time.Now().UnixMilli(),
 			})
 		})
 		hc.OnToolResult(func(name, _, _ string, isErr bool) {
-			deps.emitAgentFn("tool.end", params.SessionKey, params.ClientRunID, map[string]any{
+			deps.callbacks.emitAgentFn("tool.end", params.SessionKey, params.ClientRunID, map[string]any{
 				"tool":    name,
 				"isError": isErr,
 				"ts":      time.Now().UnixMilli(),
@@ -85,7 +85,7 @@ func wireStreamHooks(
 				"DENEB_IS_ERROR":    fmt.Sprintf("%t", isErr),
 				"DENEB_SESSION_KEY": params.SessionKey,
 			}
-			go deps.internalHookRegistry.TriggerFromEvent(deps.shutdownCtx, hookspkg.EventToolUse, params.SessionKey, env)
+			go deps.internalHookRegistry.TriggerFromEvent(deps.callbacks.shutdownCtx, hookspkg.EventToolUse, params.SessionKey, env)
 		})
 	}
 }

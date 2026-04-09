@@ -40,16 +40,12 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 	// Create a background context (not tied to the RPC request lifetime).
 	runCtx, runCancel := context.WithCancel(context.Background())
 
-	if params.ClientRunID != "" {
-		h.abortMu.Lock()
-		h.abortMap[params.ClientRunID] = &AbortEntry{
-			SessionKey: params.SessionKey,
-			ClientRun:  params.ClientRunID,
-			CancelFn:   runCancel,
-			ExpiresAt:  time.Now().Add(4 * time.Hour),
-		}
-		h.abortMu.Unlock()
-	}
+	h.abort.Register(params.ClientRunID, &AbortEntry{
+		SessionKey: params.SessionKey,
+		ClientRun:  params.ClientRunID,
+		CancelFn:   runCancel,
+		ExpiresAt:  time.Now().Add(4 * time.Hour),
+	})
 
 	// Broadcast session start event.
 	if h.broadcast != nil {
@@ -69,7 +65,7 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 
 	// Wire subagent notification channel so the running agent receives
 	// child completion notifications via DeferredSystemText.
-	deps.subagentNotifyCh = h.subagentNotifyCh(params.SessionKey)
+	deps.subagentNotifyCh = h.subagent.NotifyCh(params.SessionKey)
 
 	// Continuation (continue_run tool + autonomous multi-run) is active in
 	// Normal and Work modes. Chat mode (conversation-only) runs once and stops.
@@ -77,16 +73,14 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 		deps.continuationEnabled = false
 		deps.maxContinuations = 0
 	}
-	h.callbackMu.RLock()
-	rsm := h.runStateMachine
-	h.callbackMu.RUnlock()
+	rsm := h.RunStateMachine()
 	go func() {
 		if rsm != nil {
 			rsm.StartRun()
 			defer rsm.EndRun()
 		}
 		defer runCancel()
-		defer h.cleanupAbort(params.ClientRunID)
+		defer h.abort.Cleanup(params.ClientRunID)
 		defer func() {
 			if r := recover(); r != nil {
 				panicArgs := []any{"panic", r, "runId", params.ClientRunID}
@@ -119,70 +113,16 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 	return resp
 }
 
-// hasActiveRunForSession reports whether at least one run is active for the session.
-func (h *Handler) hasActiveRunForSession(sessionKey string) bool {
-	h.abortMu.Lock()
-	defer h.abortMu.Unlock()
-	for _, entry := range h.abortMap {
-		if entry.SessionKey == sessionKey {
-			return true
-		}
-	}
-	return false
-}
-
-// enqueuePending queues a message for processing after the active run completes.
-func (h *Handler) enqueuePending(sessionKey string, params RunParams) {
-	h.pendingMu.Lock()
-	defer h.pendingMu.Unlock()
-	q, ok := h.pendingMsgs[sessionKey]
-	if !ok {
-		q = &pendingRunQueue{}
-		h.pendingMsgs[sessionKey] = q
-	}
-	q.enqueue(params)
-}
-
-// drainPending removes and returns the next pending message for a session.
-func (h *Handler) drainPending(sessionKey string) *RunParams {
-	h.pendingMu.Lock()
-	q, ok := h.pendingMsgs[sessionKey]
-	h.pendingMu.Unlock()
-	if !ok {
-		return nil
-	}
-	return q.drain()
-}
-
-// clearPending removes all pending messages for a session (used on /reset).
-func (h *Handler) clearPending(sessionKey string) {
-	h.pendingMu.Lock()
-	delete(h.pendingMsgs, sessionKey)
-	h.pendingMu.Unlock()
-}
-
 // InterruptActiveRun cancels all active runs for a session key.
 func (h *Handler) InterruptActiveRun(sessionKey string) {
-	h.abortMu.Lock()
-	var toDelete []string
-	for id, entry := range h.abortMap {
-		if entry.SessionKey == sessionKey {
-			entry.CancelFn()
-			toDelete = append(toDelete, id)
-		}
-	}
-	for _, id := range toDelete {
-		delete(h.abortMap, id)
-	}
-	h.abortMu.Unlock()
+	h.abort.InterruptSession(sessionKey)
 }
 
 // buildRunDeps assembles the dependency struct for runAgentAsync.
-// Snapshots all callback fields under callbackMu so the run goroutine
+// Snapshots all callback fields atomically so the run goroutine
 // holds stable references even if Set*() is called concurrently.
 func (h *Handler) buildRunDeps() runDeps {
-	h.callbackMu.RLock()
-	deps := runDeps{
+	return runDeps{
 		sessions:             h.sessions,
 		llmClient:            h.llmClient,
 		transcript:           h.transcript,
@@ -190,14 +130,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		authManager:          h.authManager,
 		providerRuntime:      h.providerRuntime,
 		broadcast:            h.broadcast,
-		broadcastRaw:         h.broadcastRaw,
 		jobTracker:           h.jobTracker,
-		replyFunc:            h.replyFunc,
-		mediaSendFn:          h.mediaSendFn,
-		typingFn:             h.typingFn,
-		reactionFn:           h.reactionFn,
-		draftEditFn:          h.draftEditFn,
-		draftDeleteFn:        h.draftDeleteFn,
 		channelUploadLimitFn: h.ChannelUploadLimit,
 		providerConfigs:      h.providerConfigs,
 		logger:               h.logger,
@@ -205,70 +138,34 @@ func (h *Handler) buildRunDeps() runDeps {
 		dreamTurnFn:          h.dreamTurnFn,
 		agentLog:             h.agentLog,
 		registry:             h.registry,
-		emitAgentFn:          h.emitAgentFn,
-		emitTranscriptFn:     h.emitTranscriptFn,
 		contextCfg:           h.contextCfg,
-		defaultModel:         h.defaultModel,
 		subagentDefaultModel: h.subagentDefaultModel,
 		defaultSystem:        h.defaultSystem,
 		maxTokens:            h.maxTokens,
-		shutdownCtx:          h.shutdownCtx,
 		internalHookRegistry: h.internalHookRegistry,
-		drainPendingFn:       h.drainPending,
+		drainPendingFn:       h.pending.Drain,
 		startRunFn: func(params RunParams) {
-			// Re-use startAsyncRun for full lifecycle management (abort map,
-			// panic recovery, runStateMachine, session state transitions).
 			h.startAsyncRun("pending-"+params.ClientRunID, params, false)
 		},
 		maxContinuations:    5,
 		continuationEnabled: true,
 
+		// Atomic snapshot of channel callbacks (reply, media, typing, etc.).
+		callbacks: h.Snapshot(),
+
 		// chatport boundary: wire concrete autoreply implementations.
-		newTypingSignaler: func(onStart func()) chatport.TypingSignaler {
-			ctrl := typing.NewTypingController(typing.TypingControllerConfig{
-				OnStart:    onStart,
-				IntervalMs: 5000, // Telegram typing expires after 5s
-			})
-			return typing.NewFullTypingSignaler(ctrl, typing.TypingModeInstant, false)
+		chatport: chatportAdapters{
+			NewTypingSignaler: func(onStart func()) chatport.TypingSignaler {
+				ctrl := typing.NewTypingController(typing.TypingControllerConfig{
+					OnStart:    onStart,
+					IntervalMs: 5000, // Telegram typing expires after 5s
+				})
+				return typing.NewFullTypingSignaler(ctrl, typing.TypingModeInstant, false)
+			},
+			SanitizeDraft:        reply.SanitizeDraftText,
+			ParseReplyDirectives: reply.ParseReplyDirectives,
+			IsTransientError:     autoreply.IsTransientHTTPError,
 		},
-		sanitizeDraft:        reply.SanitizeDraftText,
-		parseReplyDirectives: reply.ParseReplyDirectives,
-		isTransientError:     autoreply.IsTransientHTTPError,
-	}
-	h.callbackMu.RUnlock()
-	return deps
-}
-
-// cleanupAbort removes a run's abort entry after the run completes.
-func (h *Handler) cleanupAbort(clientRunID string) {
-	if clientRunID == "" {
-		return
-	}
-	h.abortMu.Lock()
-	delete(h.abortMap, clientRunID)
-	h.abortMu.Unlock()
-}
-
-// abortGCLoop periodically cleans up expired abort entries.
-// Exits when h.done is closed (via Close()).
-func (h *Handler) abortGCLoop() {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-h.done:
-			return
-		case <-ticker.C:
-			h.abortMu.Lock()
-			now := time.Now()
-			for id, entry := range h.abortMap {
-				if now.After(entry.ExpiresAt) {
-					entry.CancelFn()
-					delete(h.abortMap, id)
-				}
-			}
-			h.abortMu.Unlock()
-		}
 	}
 }
 

@@ -12,9 +12,9 @@ import (
 // and LLM clients are available.
 // Embedded in Server so fields are promoted.
 type GenesisSubsystem struct {
-	genesisSvc          *genesis.Service
-	genesisTracker      *genesis.Tracker
-	genesisEvolver      *genesis.Evolver
-	skillCatalog        *skills.Catalog
-	genesisTranscripts  toolctx.TranscriptStore
+	genesisSvc         *genesis.Service
+	genesisTracker     *genesis.Tracker
+	genesisEvolver     *genesis.Evolver
+	skillCatalog       *skills.Catalog
+	genesisTranscripts toolctx.TranscriptStore
 }

@@ -17,6 +17,7 @@ package chat
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -54,16 +55,11 @@ type notifyItem struct {
 	lastOutput    string
 }
 
-// enqueue adds a notification and resets the debounce timer. If the queue
-// exceeds capacity, older items are dropped and replaced with a summary count.
+// enqueue adds a notification and resets the debounce timer.
 func (q *notifyQueue) enqueue(item notifyItem) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-
-	// Append unconditionally — flush handles overflow summarization.
 	q.items = append(q.items, item)
-
-	// Reset debounce timer.
 	if q.timer != nil {
 		q.timer.Stop()
 	}
@@ -80,17 +76,52 @@ func (q *notifyQueue) flush() {
 	items := q.items
 	q.items = nil
 	q.mu.Unlock()
-
 	q.flushFn(items)
 }
 
-// startSubagentNotifier subscribes to session lifecycle events and routes
-// completion notifications to parent sessions via debounced queues.
-// Called once from NewHandler.
-func (h *Handler) startSubagentNotifier() {
-	bus := h.sessions.EventBusRef()
+// SubagentNotifier manages child session completion notifications to parent sessions.
+// Thread-safe. Routes notifications via DeferredSystemText (parent running) or
+// triggers a new run (parent idle).
+type SubagentNotifier struct {
+	mu       sync.Mutex
+	channels map[string]chan string  // parent sessionKey → buffered notification channel
+	queues   map[string]*notifyQueue // parent sessionKey → debounced queue
+	logger   *slog.Logger
+
+	// Injected dependencies (avoid circular Handler reference).
+	hasActiveRun func(sessionKey string) bool
+	startRun     func(reqID string, params RunParams, isSteer bool)
+	enqueuePend  func(sessionKey string, params RunParams)
+	getSessions  func() *session.Manager
+}
+
+// SubagentNotifierDeps holds the dependencies for SubagentNotifier.
+type SubagentNotifierDeps struct {
+	Logger       *slog.Logger
+	HasActiveRun func(sessionKey string) bool
+	StartRun     func(reqID string, params RunParams, isSteer bool)
+	EnqueuePend  func(sessionKey string, params RunParams)
+	Sessions     func() *session.Manager
+}
+
+// NewSubagentNotifier creates a SubagentNotifier and subscribes to session events.
+func NewSubagentNotifier(deps SubagentNotifierDeps) *SubagentNotifier {
+	sn := &SubagentNotifier{
+		channels:     make(map[string]chan string),
+		queues:       make(map[string]*notifyQueue),
+		logger:       deps.Logger,
+		hasActiveRun: deps.HasActiveRun,
+		startRun:     deps.StartRun,
+		enqueuePend:  deps.EnqueuePend,
+		getSessions:  deps.Sessions,
+	}
+	if sn.logger == nil {
+		sn.logger = slog.Default()
+	}
+
+	sm := sn.getSessions()
+	bus := sm.EventBusRef()
 	bus.Subscribe(func(event session.Event) {
-		// Only care about status transitions to terminal states.
 		if event.Kind != session.EventStatusChanged {
 			return
 		}
@@ -98,7 +129,7 @@ func (h *Handler) startSubagentNotifier() {
 			return
 		}
 
-		child := h.sessions.Get(event.Key)
+		child := sm.Get(event.Key)
 		if child == nil || child.SpawnedBy == "" {
 			return
 		}
@@ -106,24 +137,44 @@ func (h *Handler) startSubagentNotifier() {
 		parentKey := child.SpawnedBy
 		item := buildNotifyItem(child)
 
-		q := h.getOrCreateNotifyQueue(parentKey)
+		q := sn.getOrCreateQueue(parentKey)
 		q.enqueue(item)
 
-		h.logger.Info("subagent completion queued for parent",
+		sn.logger.Info("subagent completion queued for parent",
 			"child", abbreviateSession(event.Key),
 			"parent", abbreviateSession(parentKey),
 			"status", string(event.NewStatus))
 	})
+
+	return sn
 }
 
-// getOrCreateNotifyQueue returns the debounced notification queue for a parent
-// session, creating it lazily with a flush function that routes to the
-// appropriate delivery path (DeferredSystemText or pendingMsgs).
-func (h *Handler) getOrCreateNotifyQueue(parentKey string) *notifyQueue {
-	h.subagentNotifyMu.Lock()
-	defer h.subagentNotifyMu.Unlock()
+// NotifyCh returns a read-only view of the notification channel for a parent
+// session, or nil if none exists. Used by DeferredSystemText composition.
+func (sn *SubagentNotifier) NotifyCh(sessionKey string) <-chan string {
+	sn.mu.Lock()
+	defer sn.mu.Unlock()
+	ch := sn.channels[sessionKey]
+	if ch == nil {
+		return nil
+	}
+	return ch
+}
 
-	if q, ok := h.subagentNotifyQueues[parentKey]; ok {
+// Reset clears all notification state.
+func (sn *SubagentNotifier) Reset() {
+	sn.mu.Lock()
+	sn.channels = make(map[string]chan string)
+	sn.queues = make(map[string]*notifyQueue)
+	sn.mu.Unlock()
+}
+
+// getOrCreateQueue returns the debounced queue for a parent, creating lazily.
+func (sn *SubagentNotifier) getOrCreateQueue(parentKey string) *notifyQueue {
+	sn.mu.Lock()
+	defer sn.mu.Unlock()
+
+	if q, ok := sn.queues[parentKey]; ok {
 		return q
 	}
 
@@ -132,65 +183,47 @@ func (h *Handler) getOrCreateNotifyQueue(parentKey string) *notifyQueue {
 		flushFn: func(items []notifyItem) {
 			notification := formatBatchNotification(items)
 
-			if h.hasActiveRunForSession(parentKey) {
-				// Parent is running: inject via DeferredSystemText.
-				h.pushSubagentNotification(parentKey, notification)
+			if sn.hasActiveRun(parentKey) {
+				sn.pushNotification(parentKey, notification)
 			} else {
-				// Parent is idle: trigger a new run.
-				h.triggerSubagentNotificationRun(parentKey, notification)
+				sn.triggerRun(parentKey, notification)
 			}
 
-			h.logger.Info("subagent batch notification flushed",
+			sn.logger.Info("subagent batch notification flushed",
 				"parent", abbreviateSession(parentKey),
 				"count", len(items),
-				"parentRunning", h.hasActiveRunForSession(parentKey))
+				"parentRunning", sn.hasActiveRun(parentKey))
 		},
 	}
-	h.subagentNotifyQueues[parentKey] = q
+	sn.queues[parentKey] = q
 	return q
 }
 
-// getOrCreateSubagentNotifyCh returns the notification channel for a parent
-// session, creating it lazily if needed.
-func (h *Handler) getOrCreateSubagentNotifyCh(sessionKey string) chan<- string {
-	h.subagentNotifyMu.Lock()
-	defer h.subagentNotifyMu.Unlock()
-	ch, ok := h.subagentNotifyChs[sessionKey]
+// getOrCreateCh returns the write end of the notification channel, creating lazily.
+func (sn *SubagentNotifier) getOrCreateCh(sessionKey string) chan<- string {
+	sn.mu.Lock()
+	defer sn.mu.Unlock()
+	ch, ok := sn.channels[sessionKey]
 	if !ok {
 		ch = make(chan string, subagentNotifyChCap)
-		h.subagentNotifyChs[sessionKey] = ch
+		sn.channels[sessionKey] = ch
 	}
 	return ch
 }
 
-// subagentNotifyCh returns a read-only view of the notification channel for a
-// parent session, or nil if none exists. Used by DeferredSystemText composition.
-func (h *Handler) subagentNotifyCh(sessionKey string) <-chan string {
-	h.subagentNotifyMu.Lock()
-	defer h.subagentNotifyMu.Unlock()
-	ch := h.subagentNotifyChs[sessionKey]
-	if ch == nil {
-		return nil
-	}
-	return ch
-}
-
-// pushSubagentNotification sends a notification to the parent's channel.
-// Non-blocking: if the channel is full, the notification is dropped with a
-// warning log (parent will still see the child's status via subagents tool).
-func (h *Handler) pushSubagentNotification(parentKey, notification string) {
-	ch := h.getOrCreateSubagentNotifyCh(parentKey)
+// pushNotification sends a notification to the parent's channel (non-blocking).
+func (sn *SubagentNotifier) pushNotification(parentKey, notification string) {
+	ch := sn.getOrCreateCh(parentKey)
 	select {
 	case ch <- notification:
 	default:
-		h.logger.Warn("subagent notification channel full, dropping",
+		sn.logger.Warn("subagent notification channel full, dropping",
 			"parent", abbreviateSession(parentKey))
 	}
 }
 
-// triggerSubagentNotificationRun starts a run for an idle parent session.
-// The agent receives the batch notification as a system-injected message.
-func (h *Handler) triggerSubagentNotificationRun(parentKey, notification string) {
+// triggerRun starts a run for an idle parent session.
+func (sn *SubagentNotifier) triggerRun(parentKey, notification string) {
 	params := RunParams{
 		SessionKey:  parentKey,
 		Message:     notification,
@@ -198,14 +231,12 @@ func (h *Handler) triggerSubagentNotificationRun(parentKey, notification string)
 		Delivery:    deliveryFromSessionKey(parentKey),
 	}
 
-	// Double-check: if a run started between the flush decision and here,
-	// safely enqueue instead of starting a second concurrent run.
-	if h.hasActiveRunForSession(parentKey) {
-		h.enqueuePending(parentKey, params)
+	if sn.hasActiveRun(parentKey) {
+		sn.enqueuePend(parentKey, params)
 		return
 	}
 
-	h.startAsyncRun("subnotify", params, false)
+	sn.startRun("subnotify", params, false)
 }
 
 // buildNotifyItem extracts the relevant fields from a completed child session.

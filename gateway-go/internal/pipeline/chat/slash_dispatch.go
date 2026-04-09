@@ -25,7 +25,7 @@ func (h *Handler) handleSlashCommand(
 	case "reset":
 		// Abort any active run, clear transcript, and discard frozen context snapshot.
 		h.InterruptActiveRun(sessionKey)
-		h.clearPending(sessionKey)
+		h.pending.Clear(sessionKey)
 		prompt.ClearSessionSnapshot(sessionKey)
 		if h.transcript != nil {
 			if err := h.transcript.Delete(sessionKey); err != nil {
@@ -45,7 +45,7 @@ func (h *Handler) handleSlashCommand(
 
 	case "kill":
 		h.InterruptActiveRun(sessionKey)
-		h.clearPending(sessionKey)
+		h.pending.Clear(sessionKey)
 		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
 			Phase: session.PhaseEnd,
 			Ts:    time.Now().UnixMilli(),
@@ -67,9 +67,7 @@ func (h *Handler) handleSlashCommand(
 					displayName = fmt.Sprintf("%s (%s)", modelArg, string(role))
 				}
 			}
-			h.callbackMu.Lock()
-			h.defaultModel = modelArg
-			h.callbackMu.Unlock()
+			h.SetDefaultModel(modelArg)
 			h.deliverSlashResponse(delivery, fmt.Sprintf("모델이 %s(으)로 변경되었습니다.", displayName))
 		}
 
@@ -125,7 +123,7 @@ func (h *Handler) handleSlashCommand(
 	case "coordinator":
 		// Activate coordinator mode: set ToolPreset on the session, reset transcript.
 		h.InterruptActiveRun(sessionKey)
-		h.clearPending(sessionKey)
+		h.pending.Clear(sessionKey)
 		if h.transcript != nil {
 			_ = h.transcript.Delete(sessionKey) // best-effort: transcript cleanup is non-critical
 		}
@@ -149,9 +147,7 @@ func (h *Handler) handleSlashCommand(
 
 // deliverSlashResponse sends a slash command response back to the originating channel.
 func (h *Handler) deliverSlashResponse(delivery *DeliveryContext, text string) {
-	h.callbackMu.RLock()
-	fn := h.replyFunc
-	h.callbackMu.RUnlock()
+	fn := h.ReplyFn()
 	if fn == nil || delivery == nil || text == "" {
 		return
 	}
@@ -207,9 +203,7 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 	if sess == nil {
 		return fmt.Sprintf("세션 %q: 정보 없음", sessionKey)
 	}
-	h.callbackMu.RLock()
-	model := h.defaultModel
-	h.callbackMu.RUnlock()
+	model := h.DefaultModel()
 	if model == "" && h.registry != nil {
 		model = h.registry.FullModelID(modelrole.RoleMain)
 	}
@@ -290,26 +284,19 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 	}
 
 	// Active runs.
-	activeRuns := h.countActiveRuns(sessionKey)
+	activeRuns := h.abort.CountForSession(sessionKey)
 	if activeRuns > 0 {
 		sections = append(sections, fmt.Sprintf("🏃 **실행 중:** %d개", activeRuns))
 	}
 
 	// Pending messages.
-	h.pendingMu.Lock()
-	pendingCount := 0
-	if q, ok := h.pendingMsgs[sessionKey]; ok {
-		pendingCount = q.len()
-	}
-	h.pendingMu.Unlock()
+	pendingCount := h.pending.Len(sessionKey)
 	if pendingCount > 0 {
 		sections = append(sections, fmt.Sprintf("📬 **대기 중:** %d개", pendingCount))
 	}
 
 	// Server-level info from StatusDepsFunc.
-	h.callbackMu.RLock()
-	statusFn := h.statusDepsFunc
-	h.callbackMu.RUnlock()
+	statusFn := h.StatusDeps()
 	if statusFn != nil {
 		sd := statusFn(sessionKey)
 		if sd.Version != "" {
@@ -331,19 +318,6 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 	}
 
 	return strings.Join(sections, "\n")
-}
-
-// countActiveRuns returns the number of active runs for a session.
-func (h *Handler) countActiveRuns(sessionKey string) int {
-	h.abortMu.Lock()
-	defer h.abortMu.Unlock()
-	count := 0
-	for _, entry := range h.abortMap {
-		if entry.SessionKey == sessionKey {
-			count++
-		}
-	}
-	return count
 }
 
 // formatCompactTokens formats token counts in compact form (e.g. "1.2M", "890K", "500").

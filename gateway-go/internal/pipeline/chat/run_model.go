@@ -50,7 +50,7 @@ func resolveModel(
 		}
 	}
 	if model == "" {
-		model = deps.defaultModel
+		model = deps.callbacks.defaultModel
 	}
 	if model == "" && deps.registry != nil {
 		model = deps.registry.FullModelID(modelrole.RoleMain)

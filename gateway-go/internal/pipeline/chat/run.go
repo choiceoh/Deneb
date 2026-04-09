@@ -72,9 +72,18 @@ const (
 	defaultAgentTimeout = 60 * time.Minute
 )
 
+// chatportAdapters holds injected implementations that decouple chat from autoreply.
+// When nil, the corresponding functionality is simply skipped.
+type chatportAdapters struct {
+	NewTypingSignaler    func(onStart func()) chatport.TypingSignaler // optional; creates phase-aware typing signaler
+	SanitizeDraft        chatport.DraftSanitizerFunc                  // optional; cleans streaming draft text
+	ParseReplyDirectives chatport.ParseReplyDirectivesFunc            // optional; parses reply directives
+	IsTransientError     chatport.IsTransientErrorFunc                // optional; checks transient HTTP errors
+}
+
 // runDeps holds the dependencies the async run needs from the Handler.
 // Optional fields (may be nil): transcript, tools, authManager,
-// broadcast, broadcastRaw, jobTracker. Required: sessions, logger.
+// broadcast, jobTracker. Required: sessions, logger.
 type runDeps struct {
 	sessions        *session.Manager                  // required
 	llmClient       *llm.Client                       // optional; resolved from authManager if nil
@@ -83,38 +92,21 @@ type runDeps struct {
 	authManager     *provider.AuthManager             // optional; uses pre-configured client if nil
 	providerRuntime *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
 	broadcast       BroadcastFunc                     // optional
-	broadcastRaw    streaming.BroadcastRawFunc        // optional
 	jobTracker      *agent.JobTracker                 // optional
-	replyFunc       ReplyFunc                         // optional; delivers response to originating channel
-	mediaSendFn     MediaSendFunc                     // optional; delivers files to originating channel
-	typingFn        TypingFunc                        // optional; sends typing indicator during run
-	reactionFn      ReactionFunc                      // optional; sets emoji reaction for status phases
 	// channelUploadLimitFn returns the max file upload size for a channel ID.
 	// Returns 0 if no limit is registered (tool applies its own default).
 	channelUploadLimitFn func(channelID string) int64 // optional
-	draftEditFn          DraftEditFunc                // optional; sends/edits streaming draft messages
-	draftDeleteFn        DraftDeleteFunc              // optional; deletes streaming draft messages
 	providerConfigs      map[string]ProviderConfig    // optional; config-based provider credentials
 	logger               *slog.Logger                 // required (defaults to slog.Default)
 
-	wikiStore   *wiki.Store               // optional; wiki knowledge base
-	dreamTurnFn func(ctx context.Context) // optional; increments dream turn via autonomous
-	agentLog    *agentlog.Writer          // optional; enables agent detail logging
-	registry    *modelrole.Registry       // centralized model role registry
-	// emitAgentFn sends agent lifecycle events (run.start, tool.start, tool.end)
-	// to the gateway event subscription pipeline. Optional; nil if not wired.
-	emitAgentFn func(kind, sessionKey, runID string, payload map[string]any)
-	// emitTranscriptFn sends transcript updates (user/assistant message appends)
-	// to the gateway event subscription pipeline. Optional; nil if not wired.
-	emitTranscriptFn     func(sessionKey string, message any, messageID string)
+	wikiStore            *wiki.Store               // optional; wiki knowledge base
+	dreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
+	agentLog             *agentlog.Writer          // optional; enables agent detail logging
+	registry             *modelrole.Registry       // centralized model role registry
 	contextCfg           ContextConfig
-	defaultModel         string
 	subagentDefaultModel string
 	defaultSystem        string
 	maxTokens            int
-	// shutdownCtx is the server lifecycle context; used to bound background
-	// goroutines (e.g., auto-memory extraction) so they stop on server shutdown.
-	shutdownCtx context.Context
 	// internalHookRegistry fires programmatic internal hooks.
 	internalHookRegistry *hooks.InternalRegistry
 	// drainPendingFn drains the next queued message for a session after the
@@ -136,12 +128,12 @@ type runDeps struct {
 	// notifications mid-run without polling. nil if not applicable.
 	subagentNotifyCh <-chan string
 
-	// chatport boundary: injected implementations that decouple chat from autoreply.
-	// When nil, the corresponding functionality is simply skipped.
-	newTypingSignaler    func(onStart func()) chatport.TypingSignaler // optional; creates phase-aware typing signaler
-	sanitizeDraft        chatport.DraftSanitizerFunc                  // optional; cleans streaming draft text
-	parseReplyDirectives chatport.ParseReplyDirectivesFunc            // optional; parses reply directives
-	isTransientError     chatport.IsTransientErrorFunc                // optional; checks transient HTTP errors
+	// callbacks is an atomic snapshot of channel callbacks taken at run start.
+	// Contains reply, media, typing, reaction, draft, emit, shutdown, and model fields.
+	callbacks CallbackSnapshot
+
+	// chatport holds injected adapters that decouple chat from autoreply.
+	chatport chatportAdapters
 }
 
 // abbreviateSession shortens channel prefixes in session keys for compact log output.
@@ -209,8 +201,8 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 
 	// Create streaming broadcaster for this run.
 	var broadcaster *streaming.Broadcaster
-	if deps.broadcastRaw != nil {
-		broadcaster = streaming.NewBroadcaster(deps.broadcastRaw, params.SessionKey, params.ClientRunID)
+	if deps.callbacks.broadcastRaw != nil {
+		broadcaster = streaming.NewBroadcaster(deps.callbacks.broadcastRaw, params.SessionKey, params.ClientRunID)
 		broadcaster.EmitStarted()
 	}
 
@@ -219,11 +211,11 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	if params.Delivery != nil {
 		ctx = WithDeliveryContext(ctx, params.Delivery)
 	}
-	if deps.replyFunc != nil {
-		ctx = WithReplyFunc(ctx, deps.replyFunc)
+	if deps.callbacks.replyFunc != nil {
+		ctx = WithReplyFunc(ctx, deps.callbacks.replyFunc)
 	}
-	if deps.mediaSendFn != nil {
-		ctx = WithMediaSendFunc(ctx, deps.mediaSendFn)
+	if deps.callbacks.mediaSendFn != nil {
+		ctx = WithMediaSendFunc(ctx, deps.callbacks.mediaSendFn)
 	}
 	// Inject the channel-specific upload limit so send_file can enforce
 	// the correct per-channel maximum without hard-coding channel names.
@@ -238,16 +230,16 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	// The factory (injected via chatport boundary) creates a TypingSignaler with
 	// a 5s keepalive matching Telegram's sendChatAction TTL.
 	var typingSignaler chatport.TypingSignaler
-	if deps.newTypingSignaler != nil && deps.typingFn != nil && params.Delivery != nil {
+	if deps.chatport.NewTypingSignaler != nil && deps.callbacks.typingFn != nil && params.Delivery != nil {
 		delivery := params.Delivery
-		typingSignaler = deps.newTypingSignaler(func() { _ = deps.typingFn(ctx, delivery) })
+		typingSignaler = deps.chatport.NewTypingSignaler(func() { _ = deps.callbacks.typingFn(ctx, delivery) })
 		typingSignaler.SignalRunStart()
 	}
 
 	// Set up status reaction controller for phase-aware emoji on the user's message.
 	// Shows: 👀 queued → 🤔 thinking → 🔥 tool → ⚡ web → 👍 done.
 	var statusCtrl *telegram.StatusReactionController
-	if deps.reactionFn != nil && params.Delivery != nil && params.Delivery.MessageID != "" {
+	if deps.callbacks.reactionFn != nil && params.Delivery != nil && params.Delivery.MessageID != "" {
 		delivery := params.Delivery
 		phaseEmojis := telegram.StatusReactionEmojis{
 			Queued:     "👀",
@@ -266,7 +258,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			SetReaction: func(emoji string) error {
 				rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 				defer cancel()
-				return deps.reactionFn(rctx, delivery, emoji)
+				return deps.callbacks.reactionFn(rctx, delivery, emoji)
 			},
 			Emojis: &phaseEmojis,
 			OnError: func(err error) {
