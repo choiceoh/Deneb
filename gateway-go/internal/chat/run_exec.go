@@ -41,26 +41,6 @@ var skillsCache struct {
 	built    bool
 }
 
-// skillsWatcher is the shared watcher that monitors SKILL.md file changes.
-// Initialized once by InitSkillsWatcher.
-var skillsWatcher *skills.Watcher
-
-
-// InitSkillsWatcher creates and starts the skills watcher for a workspace.
-// Call once at server startup. The watcher invalidates the skills prompt cache
-// when SKILL.md files change on disk.
-func InitSkillsWatcher(workspaceDir string) {
-	if skillsWatcher != nil {
-		return
-	}
-	skillsWatcher = skills.NewWatcher(nil)
-	skillsWatcher.RegisterChangeListener(func(event skills.SkillsChangeEvent) {
-		skillsCache.mu.Lock()
-		skillsCache.built = false
-		skillsCache.mu.Unlock()
-	})
-	skillsWatcher.EnsureWatcher(workspaceDir, nil, 250)
-}
 
 // loadCachedSkillsPrompt returns the cached skills prompt, rebuilding it when
 // the watcher version changes or on first call.

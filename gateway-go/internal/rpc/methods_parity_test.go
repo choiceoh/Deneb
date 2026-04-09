@@ -15,7 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/skill"
+	"github.com/choiceoh/deneb/gateway-go/internal/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
 	"github.com/choiceoh/deneb/gateway-go/internal/usage"
 	"github.com/choiceoh/deneb/gateway-go/internal/wizard"
@@ -128,7 +128,7 @@ func fullDispatcher() *Dispatcher {
 	RegisterCronServiceMethods(d, CronServiceDeps{Service: cron.NewService(cron.ServiceConfig{StorePath: "/tmp/deneb-cron-test"}, nil, testLogger())})
 	RegisterAgentsMethods(d, AgentsDeps{Agents: agent.NewStore(), Broadcaster: broadcastFn})
 	RegisterConfigAdvancedMethods(d, ConfigAdvancedDeps{Broadcaster: broadcastFn})
-	RegisterSkillMethods(d, SkillDeps{Skills: skill.NewManager(), Broadcaster: broadcastFn})
+	RegisterSkillMethods(d, SkillDeps{Skills: skills.NewRegistry(), Broadcaster: broadcastFn})
 	RegisterWizardMethods(d, WizardDeps{Engine: wizard.NewEngine()})
 	RegisterSecretMethods(d, SecretDeps{Resolver: secret.NewResolver()})
 	RegisterTalkMethods(d, TalkDeps{Talk: talk.NewState()})

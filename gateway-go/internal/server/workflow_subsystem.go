@@ -6,7 +6,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/secret"
-	"github.com/choiceoh/deneb/gateway-go/internal/skill"
+	"github.com/choiceoh/deneb/gateway-go/internal/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
 	"github.com/choiceoh/deneb/gateway-go/internal/usage"
 	"github.com/choiceoh/deneb/gateway-go/internal/wizard"
@@ -19,7 +19,7 @@ import (
 type WorkflowSubsystem struct {
 	approvals    *approval.Store
 	agents       *agent.Store
-	skills       *skill.Manager
+	skills       *skills.Registry
 	wizardEng    *wizard.Engine
 	secrets      *secret.Resolver
 	talkState    *talk.State
@@ -33,7 +33,7 @@ func NewWorkflowSubsystem(logger *slog.Logger) *WorkflowSubsystem {
 	return &WorkflowSubsystem{
 		approvals:    approval.NewStore(),
 		agents:       agent.NewStore(),
-		skills:       skill.NewManager(),
+		skills:       skills.NewRegistry(),
 		wizardEng:    wizard.NewEngine(),
 		secrets:      secret.NewResolver(),
 		talkState:    talk.NewState(),

@@ -21,10 +21,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/hooks"
+	"github.com/choiceoh/deneb/gateway-go/internal/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/localai"
-	"github.com/choiceoh/deneb/gateway-go/internal/skill"
+	"github.com/choiceoh/deneb/gateway-go/internal/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/talk"
 	"github.com/choiceoh/deneb/gateway-go/internal/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/telegram"
@@ -69,7 +69,7 @@ type HubConfig struct {
 
 	// Workflow subsystems.
 	Approvals *approval.Store
-	Skills    *skill.Manager
+	Skills    *skills.Registry
 	Wizard    *wizard.Engine
 	Talk      *talk.State // optional
 
@@ -110,7 +110,7 @@ type GatewayHub struct {
 
 	// Workflow subsystems.
 	approvals *approval.Store
-	skills    *skill.Manager
+	skills    *skills.Registry
 	wizard    *wizard.Engine
 	talk      *talk.State
 
@@ -166,12 +166,12 @@ func (h *GatewayHub) CronService() *cron.Service                     { return h.
 func (h *GatewayHub) CronPersistLog() *cron.PersistentRunLog         { return h.cronPersistLog }
 func (h *GatewayHub) Tasks() *tasks.Registry                         { return h.tasks }
 func (h *GatewayHub) Approvals() *approval.Store                     { return h.approvals }
-func (h *GatewayHub) Skills() *skill.Manager                         { return h.skills }
+func (h *GatewayHub) Skills() *skills.Registry                       { return h.skills }
 func (h *GatewayHub) Wizard() *wizard.Engine                         { return h.wizard }
 func (h *GatewayHub) Talk() *talk.State                              { return h.talk }
 func (h *GatewayHub) Logger() *slog.Logger                           { return h.logger }
 func (h *GatewayHub) Version() string                                { return h.version }
-func (h *GatewayHub) LocalAIHub() *localai.Hub                         { return h.localAIHub }
+func (h *GatewayHub) LocalAIHub() *localai.Hub                       { return h.localAIHub }
 
 // --- Late-binding setters ---
 
