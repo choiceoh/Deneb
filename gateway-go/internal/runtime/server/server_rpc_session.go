@@ -90,6 +90,7 @@ func (s *Server) registerSessionRPCMethods() {
 
 	chatCfg := chat.DefaultHandlerConfig()
 	chatCfg.Transcript = transcriptStore
+	s.genesisTranscripts = transcriptStore // share with genesis for session context loading
 	chatCfg.Tools = chat.NewToolRegistry()
 	chatCfg.JobTracker = s.jobTracker
 	chatCfg.AgentLog = agentLogWriter

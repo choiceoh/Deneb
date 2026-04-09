@@ -2,6 +2,7 @@ package server
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 )
@@ -25,7 +26,10 @@ func (s *Server) initGenesisServices() {
 	cfg := genesis.DefaultConfig()
 	cfg.Model = lwModel
 
-	s.genesisSvc = genesis.NewService(cfg, lwClient, nil, s.logger)
+	// Shared catalog so genesis can register generated skills and evolver can look them up.
+	s.skillCatalog = skills.NewCatalog(s.logger)
+
+	s.genesisSvc = genesis.NewService(cfg, lwClient, s.skillCatalog, s.logger)
 
 	tracker, err := genesis.NewTracker(s.logger)
 	if err != nil {
@@ -34,7 +38,7 @@ func (s *Server) initGenesisServices() {
 		s.genesisTracker = tracker
 	}
 
-	s.genesisEvolver = genesis.NewEvolver(lwClient, nil, s.genesisTracker, lwModel, s.logger)
+	s.genesisEvolver = genesis.NewEvolver(lwClient, s.skillCatalog, s.genesisTracker, lwModel, s.logger)
 
 	s.logger.Info("genesis: services initialized", "model", lwModel, "outputDir", cfg.OutputDir)
 }

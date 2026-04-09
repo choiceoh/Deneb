@@ -203,9 +203,10 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 
 		// --- Skill genesis (depends on chatHandler for LLM client) ---
 		handlerskill.GenesisMethods(handlerskill.GenesisDeps{
-			Genesis: s.genesisSvc,
-			Evolver: s.genesisEvolver,
-			Tracker: s.genesisTracker,
+			Genesis:     s.genesisSvc,
+			Evolver:     s.genesisEvolver,
+			Tracker:     s.genesisTracker,
+			Transcripts: s.genesisTranscripts,
 		}),
 	}
 

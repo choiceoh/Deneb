@@ -2,9 +2,12 @@ package skill
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -13,9 +16,10 @@ import (
 // GenesisDeps holds dependencies for skills.genesis, skills.evolve, and
 // skills.usage RPC methods.
 type GenesisDeps struct {
-	Genesis *genesis.Service
-	Evolver *genesis.Evolver
-	Tracker *genesis.Tracker
+	Genesis     *genesis.Service
+	Evolver     *genesis.Evolver
+	Tracker     *genesis.Tracker
+	Transcripts toolctx.TranscriptStore // optional: enables session-based genesis
 }
 
 // GenesisMethods returns genesis-related RPC handler methods.
@@ -68,9 +72,12 @@ func skillsGenesis(deps GenesisDeps) rpcutil.HandlerFunc {
 		if p.DreamSummary != "" {
 			skill, err = deps.Genesis.GenerateFromDream(ctx, p.DreamSummary)
 		} else {
-			// Build a minimal session context from session key.
-			sctx := genesis.SessionContext{
-				Key: p.SessionKey,
+			sctx, buildErr := buildSessionContext(deps.Transcripts, p.SessionKey)
+			if buildErr != nil {
+				return rpcutil.RespondOK(req.ID, map[string]any{
+					"ok":    false,
+					"error": "failed to load session: " + buildErr.Error(),
+				})
 			}
 			skill, err = deps.Genesis.Generate(ctx, sctx)
 		}
@@ -183,4 +190,59 @@ func skillsUsageReport(deps GenesisDeps) rpcutil.HandlerFunc {
 		}
 		return map[string]any{"stats": all}, nil
 	})
+}
+
+// buildSessionContext loads transcript messages and extracts genesis-relevant data.
+func buildSessionContext(store toolctx.TranscriptStore, sessionKey string) (genesis.SessionContext, error) {
+	sctx := genesis.SessionContext{Key: sessionKey}
+	if store == nil {
+		return sctx, nil // degrade gracefully — generate with minimal context
+	}
+
+	msgs, _, err := store.Load(sessionKey, 200)
+	if err != nil {
+		return sctx, err
+	}
+
+	var textParts []string
+	toolSet := make(map[string]struct{})
+	for _, msg := range msgs {
+		if msg.Role == "assistant" {
+			sctx.Turns++
+		}
+		text := msg.TextContent()
+		if text != "" {
+			textParts = append(textParts, msg.Role+": "+text)
+		}
+		// Extract tool names from content blocks.
+		for _, name := range extractToolNames(msg.Content) {
+			toolSet[name] = struct{}{}
+		}
+	}
+	sctx.AllText = strings.Join(textParts, "\n")
+	for name := range toolSet {
+		sctx.ToolActivities = append(sctx.ToolActivities, genesis.ToolActivity{Name: name})
+	}
+	return sctx, nil
+}
+
+// extractToolNames finds tool_use block names from a ChatMessage content field.
+func extractToolNames(content json.RawMessage) []string {
+	if len(content) == 0 || content[0] != '[' {
+		return nil
+	}
+	var blocks []struct {
+		Type string `json:"type"`
+		Name string `json:"name"`
+	}
+	if json.Unmarshal(content, &blocks) != nil {
+		return nil
+	}
+	var names []string
+	for _, b := range blocks {
+		if b.Type == "tool_use" && b.Name != "" {
+			names = append(names, b.Name)
+		}
+	}
+	return names
 }
