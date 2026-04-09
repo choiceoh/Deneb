@@ -3,7 +3,6 @@ package chat
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -43,30 +42,6 @@ func TestParseModelID(t *testing.T) {
 	}
 }
 
-func TestIsContextOverflow(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{"nil error", nil, false},
-		{"context_length_exceeded", errors.New("context_length_exceeded"), true},
-		{"context_too_long", errors.New("error: context_too_long for model"), true},
-		{"prompt is too long", errors.New("prompt is too long"), true},
-		{"maximum context length", errors.New("maximum context length exceeded"), true},
-		{"unrelated error", errors.New("network timeout"), false},
-		{"wrapped overflow", errors.New("api error: context_length_exceeded (400)"), true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isContextOverflow(tt.err)
-			if got != tt.want {
-				t.Errorf("isContextOverflow(%v) = %v, want %v", tt.err, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestDeliveryChannel(t *testing.T) {
 	t.Run("nil returns empty", func(t *testing.T) {
 		if got := deliveryChannel(nil); got != "" {
@@ -78,28 +53,6 @@ func TestDeliveryChannel(t *testing.T) {
 		d := &DeliveryContext{Channel: "telegram"}
 		if got := deliveryChannel(d); got != "telegram" {
 			t.Errorf("deliveryChannel = %q, want %q", got, "telegram")
-		}
-	})
-}
-
-func TestStopReasonFromCtx(t *testing.T) {
-	t.Run("deadline exceeded returns timeout", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 0)
-		defer cancel()
-		// Force the context to expire.
-		<-ctx.Done()
-		got := stopReasonFromCtx(ctx)
-		if got != "timeout" {
-			t.Errorf("stopReasonFromCtx = %q, want %q", got, "timeout")
-		}
-	})
-
-	t.Run("canceled returns aborted", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		got := stopReasonFromCtx(ctx)
-		if got != "aborted" {
-			t.Errorf("stopReasonFromCtx = %q, want %q", got, "aborted")
 		}
 	})
 }

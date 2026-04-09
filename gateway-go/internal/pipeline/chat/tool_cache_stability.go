@@ -72,19 +72,3 @@ func computeToolCacheKey(tools []llm.Tool) string {
 	}
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
-
-// FilterDeniedTools removes tools whose names appear in the deny set.
-// This prevents the model from seeing (and attempting to call) denied tools,
-// avoiding wasted generation tokens.
-func FilterDeniedTools(tools []llm.Tool, denySet map[string]struct{}) []llm.Tool {
-	if len(denySet) == 0 {
-		return tools
-	}
-	filtered := make([]llm.Tool, 0, len(tools))
-	for _, t := range tools {
-		if _, ok := denySet[t.Name]; !ok {
-			filtered = append(filtered, t)
-		}
-	}
-	return filtered
-}

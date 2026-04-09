@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -265,20 +264,6 @@ func handleRunSuccess(
 		"inputTokens", result.Usage.InputTokens,
 		"outputTokens", result.Usage.OutputTokens,
 	)
-}
-
-func shouldLogStructuredMemoryExtractionError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	// Context timeouts/cancelation in best-effort auto-memory are expected under load
-	// or shutdown and should not spam logs.
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		return false
-	}
-
-	return true
 }
 
 // handleRunError processes a failed or aborted agent run.

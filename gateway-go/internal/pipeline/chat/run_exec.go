@@ -757,7 +757,6 @@ func executeAgentRun(
 	const maxCompactionRetries = 2
 	agentStart := time.Now()
 	var agentResult *agent.AgentResult
-	var lastTransition QueryTransition
 
 	var runErr error
 	for compactAttempt := 0; compactAttempt <= maxCompactionRetries; compactAttempt++ {
@@ -841,7 +840,6 @@ func executeAgentRun(
 		}
 		break // success via transient retry or fallback
 	}
-	lastTransition = NewTerminal(TerminalCompleted, nil)
 
 	agentMs := time.Since(agentStart).Milliseconds()
 	totalMs := time.Since(runStart).Milliseconds()
@@ -851,7 +849,7 @@ func executeAgentRun(
 		"turns", agentResult.Turns,
 		"inputTokens", agentResult.Usage.InputTokens,
 		"outputTokens", agentResult.Usage.OutputTokens,
-		"transition", lastTransition.Reason())
+		"stopReason", agentResult.StopReason)
 
 	// Emit agent run.end event to gateway subscriptions.
 	if deps.emitAgentFn != nil {

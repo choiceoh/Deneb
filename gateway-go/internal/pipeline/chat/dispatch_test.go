@@ -1,9 +1,6 @@
 package chat
 
 import (
-	"encoding/json"
-	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -279,63 +276,4 @@ func TestCleanupAbort_emptyIDNoop(t *testing.T) {
 
 	// Should not panic.
 	h.cleanupAbort("")
-}
-
-// ─── budgetHistory ─────────────────────────────────────────────────────────
-
-func TestBudgetHistory_keepsRecentMessages(t *testing.T) {
-	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
-	cfg := DefaultHandlerConfig()
-	cfg.MaxHistoryBytes = 200 // very small budget to force truncation
-	cfg.MaxMessageBytes = 500
-	h := NewHandler(sm, bc, nil, cfg)
-	defer h.Close()
-
-	msgs := make([]json.RawMessage, 0, 20)
-	for i := range 20 {
-		raw, _ := json.Marshal(map[string]any{
-			"role":    "user",
-			"content": strings.Repeat("x", 50) + fmt.Sprintf(" msg-%d", i),
-		})
-		msgs = append(msgs, raw)
-	}
-	payload, _ := json.Marshal(map[string]any{"messages": msgs, "total": 20})
-
-	resp := h.budgetHistory("req-1", payload)
-	if resp == nil {
-		t.Fatal("expected response")
-	}
-	var result struct {
-		Messages []json.RawMessage `json:"messages"`
-		Budgeted bool              `json:"budgeted"`
-	}
-	json.Unmarshal(resp.Payload, &result)
-	if !result.Budgeted {
-		t.Error("expected budgeted=true")
-	}
-	// Should have fewer messages than original due to budget.
-	if len(result.Messages) >= 20 {
-		t.Errorf("got %d, want messages to be truncated", len(result.Messages))
-	}
-	if len(result.Messages) == 0 {
-		t.Error("expected at least some messages")
-	}
-}
-
-func TestBudgetHistory_invalidPayload(t *testing.T) {
-	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
-	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
-	defer h.Close()
-
-	resp := h.budgetHistory("req-1", json.RawMessage(`invalid json`))
-	if resp == nil {
-		t.Fatal("expected response even for invalid JSON")
-	}
-	var result map[string]any
-	json.Unmarshal(resp.Payload, &result)
-	if result["error"] == nil {
-		t.Error("expected error field in result")
-	}
 }
