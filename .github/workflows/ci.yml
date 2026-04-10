@@ -86,7 +86,7 @@ jobs:
           fi
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: go-coverage
           path: gateway-go/coverage.out
@@ -112,7 +112,7 @@ jobs:
           echo "Gateway smoke test passed"
 
       - name: Upload gateway binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: deneb-gateway
           path: gateway-go/gateway
