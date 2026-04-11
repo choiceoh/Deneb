@@ -111,7 +111,6 @@ func ReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.GetR
 		ContextTokens:  contextTokens,
 		MaxTokens:      maxTokens,
 		AuthProfile:    selection.AuthProfile,
-		DeepWork:       sess.DeepWork,
 	}
 
 	if deps.History != nil && cleanedBody != "" {

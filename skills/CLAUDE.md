@@ -29,10 +29,10 @@ description: One-line description of what skills belong in this category.
 
 | Category | Description | Skills |
 |---|---|---|
-| `coding` | Software development, code generation, version control, CI/CD | autoresearch, coding-agent, github, maestro, skill-creator, skill-evolution, skill-factory |
-| `productivity` | Daily workflows, documents, summarization, personal automation | gog, morning-letter, nano-pdf, session-logs, summarize |
+| `coding` | Software development, code generation, version control, CI/CD | autoresearch, github, maestro, skill-creator, skill-evolution, skill-factory |
+| `productivity` | Daily workflows, documents, summarization, personal automation | morning-letter, nano-pdf, session-logs, summarize |
 | `devops` | System monitoring, terminal management, infrastructure | healthcheck, tmux |
-| `integration` | External service connectivity, API bridges | mcporter, weather, xurl |
+| `integration` | External service connectivity, API bridges | mcporter |
 
 ## Skill vs Tool Decision
 

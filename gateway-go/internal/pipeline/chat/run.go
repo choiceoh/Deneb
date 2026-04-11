@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -14,7 +13,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
@@ -55,14 +53,6 @@ type RunParams struct {
 	// assembly. Used by the OpenAI-compatible HTTP API to pass through the full
 	// conversation history from the client.
 	PrebuiltMessages []llm.Message
-
-	// ContinuationIndex tracks the current autonomous continuation number.
-	// 0 = original run, 1+ = continuation runs. Not set by external callers.
-	ContinuationIndex int
-
-	// DeepWork enables extended autonomous mode (2-3 hours): maxTurns=50,
-	// timeout=30min/run, up to 30 continuations. Activated via /deepwork directive.
-	DeepWork bool
 }
 
 // Agent run defaults.
@@ -115,13 +105,6 @@ type runDeps struct {
 	// startRunFn starts a new async run (for processing queued messages).
 	// Set by the Handler; nil disables pending queue processing.
 	startRunFn func(params RunParams)
-	// maxContinuations is the maximum number of autonomous continuation runs
-	// triggered by the continue_run tool. 0 means use default (5).
-	maxContinuations int
-	// continuationEnabled controls whether the continue_run tool is functional.
-	// When false (sync paths), the ContinuationSignal is not injected into tool
-	// context, so the tool returns "not available" instead of silently no-oping.
-	continuationEnabled bool
 
 	// subagentNotifyCh receives completion notifications for child sessions
 	// spawned by the current session. Consumed by DeferredSystemText to inject
@@ -318,7 +301,6 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 
 	// Process pending message: if the user sent a message while this run was
 	// active, it was queued. Now that the run is complete, drain and process it.
-	// User messages take priority over autonomous continuation.
 	if deps.drainPendingFn != nil && deps.startRunFn != nil {
 		if pending := deps.drainPendingFn(params.SessionKey); pending != nil {
 			logger.Info("processing queued message after run completion",
@@ -327,149 +309,4 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			return
 		}
 	}
-
-	// Autonomous continuation is active in Normal and Work modes (or DeepWork).
-	// Chat mode (conversation-only) completes after a single run.
-	if !params.DeepWork {
-		sess := deps.sessions.Get(params.SessionKey)
-		if sess == nil || sess.Mode == session.ModeChat {
-			return
-		}
-	}
-
-	// Autonomous continuation: trigger a new run when:
-	// (a) the LLM explicitly called continue_run, OR
-	// (b) the agent was cut off by hitting max_turns, OR
-	// (c) the run had meaningful work (code changes) and this is the first run
-	//     → auto-start a verification continuation to check the work.
-	maxConts := deps.maxContinuations
-	if maxConts <= 0 {
-		maxConts = 5
-	}
-	if params.DeepWork {
-		maxConts = 30
-	}
-
-	var contReason string
-	var contMessage string
-	if chatResult.ContSignal != nil && chatResult.ContSignal.Requested() { //nolint:gocritic // ifElseChain — conditions are not comparable values
-		contReason = chatResult.ContSignal.Reason()
-		contMessage = "[System: Autonomous continuation %d/%d. Reason: %s.\n" +
-			"이전 실행의 컨텍스트:\n" +
-			"- 사용한 도구: " + summarizeToolActivity(chatResult.ToolActivities) + "\n" +
-			"- 에러 발생 도구: " + summarizeErrorTools(chatResult.ToolActivities) + "\n" +
-			"Continue your work. 동일한 실패를 반복하지 마세요.]"
-	} else if chatResult.StopReason == "max_turns" || chatResult.StopReason == "timeout" {
-		if chatResult.SpawnFlag != nil && chatResult.SpawnFlag.IsSet() {
-			// Spawn run: guide the continuation to synthesize results, not redo work.
-			contReason = "서브에이전트 결과 확인"
-			contMessage = "[System: Autonomous continuation %d/%d. Reason: %s.\n" +
-				"이전 실행에서 서브에이전트를 생성했습니다. 서브에이전트가 작업을 수행 중이거나 완료했습니다.\n" +
-				"subagents 도구로 상태를 한 번 확인하고, 완료된 결과가 있으면 합성하여 응답하세요.\n" +
-				"서브에이전트가 이미 한 작업을 직접 반복하지 마세요.]"
-		} else {
-			contReason = fmt.Sprintf("에이전트가 %s에 도달했지만 작업이 진행 중이었습니다", chatResult.StopReason)
-			contMessage = "[System: Autonomous continuation %d/%d. Reason: %s.\n" +
-				"이전 실행 요약:\n" +
-				"- 실행 턴: " + fmt.Sprintf("%d", chatResult.Turns) + "\n" +
-				"- 사용한 도구: " + summarizeToolActivity(chatResult.ToolActivities) + "\n" +
-				"- 에러 발생 도구: " + summarizeErrorTools(chatResult.ToolActivities) + "\n" +
-				"이전 실행이 중단된 지점부터 이어서 작업하세요. 동일한 접근법으로 같은 에러가 반복되면 다른 전략을 시도하세요.]"
-		}
-	} else if params.ContinuationIndex == 0 && hadMutatingToolActivity(chatResult.ToolActivities) {
-		contReason = "코드 변경 후 검증"
-		contMessage = "[System: Autonomous continuation %d/%d. 이전 실행에서 코드를 변경했습니다.\n" +
-			"변경한 도구: " + summarizeToolActivity(chatResult.ToolActivities) + "\n" +
-			"검증 사항: 빌드, 테스트 통과, 추가 작업 필요 여부. 모든 것이 정상이면 최종 요약으로 마무리하세요.]"
-	}
-
-	// Diminishing returns guard: if we've done 3+ continuations and the last
-	// run produced very little output, stop — further continuations are unlikely
-	// to be productive and waste API calls.
-	const minUsefulOutputTokens = 500
-	if contReason != "" && params.ContinuationIndex >= 3 &&
-		chatResult.Usage.OutputTokens < minUsefulOutputTokens {
-		logger.Info("diminishing returns: stopping continuations",
-			"continuation", params.ContinuationIndex,
-			"outputTokens", chatResult.Usage.OutputTokens,
-			"threshold", minUsefulOutputTokens)
-		contReason = "" // suppress continuation
-	}
-
-	if contReason != "" && params.ContinuationIndex < maxConts && deps.startRunFn != nil {
-		nextIndex := params.ContinuationIndex + 1
-		logger.Info("autonomous continuation triggered",
-			"reason", contReason,
-			"continuation", nextIndex,
-			"maxContinuations", maxConts,
-			"stopReason", chatResult.StopReason,
-			"deepWork", params.DeepWork)
-
-		contMsg := fmt.Sprintf(contMessage, nextIndex, maxConts, contReason)
-
-		contParams := RunParams{
-			SessionKey:        params.SessionKey,
-			ClientRunID:       shortid.New("cont"),
-			Message:           contMsg,
-			PrebuiltMessages:  chatResult.FinalMessages,
-			Delivery:          params.Delivery,
-			Model:             params.Model,
-			WorkspaceDir:      params.WorkspaceDir,
-			ContinuationIndex: nextIndex,
-			DeepWork:          params.DeepWork,
-		}
-		deps.startRunFn(contParams)
-	}
-}
-
-// hadMutatingToolActivity reports whether any tool call in the run was a
-// code-changing operation (edit, write, exec, etc.). Used to decide if an
-// automatic verification continuation is warranted.
-func hadMutatingToolActivity(activities []agent.ToolActivity) bool {
-	for _, a := range activities {
-		if _, ok := mutatingTools[a.Name]; ok {
-			return true
-		}
-	}
-	return false
-}
-
-// summarizeToolActivity returns a compact summary of tools used in a run.
-func summarizeToolActivity(activities []agent.ToolActivity) string {
-	if len(activities) == 0 {
-		return "없음"
-	}
-	counts := make(map[string]int)
-	for _, a := range activities {
-		counts[a.Name]++
-	}
-	var parts []string
-	for name, count := range counts {
-		if count > 1 {
-			parts = append(parts, fmt.Sprintf("%s×%d", name, count))
-		} else {
-			parts = append(parts, name)
-		}
-	}
-	if len(parts) > 8 {
-		parts = parts[:8]
-		parts = append(parts, "...")
-	}
-	return strings.Join(parts, ", ")
-}
-
-// summarizeErrorTools returns names of tools that had errors.
-func summarizeErrorTools(activities []agent.ToolActivity) string {
-	var errs []string
-	seen := make(map[string]struct{})
-	for _, a := range activities {
-		if _, ok := seen[a.Name]; a.IsError && !ok {
-			errs = append(errs, a.Name)
-			seen[a.Name] = struct{}{}
-		}
-	}
-	if len(errs) == 0 {
-		return "없음"
-	}
-	return strings.Join(errs, ", ")
 }

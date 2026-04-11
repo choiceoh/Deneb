@@ -30,12 +30,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
-// chatRunResult wraps the agent result with chat-layer continuation info.
+// chatRunResult wraps the agent result with chat-layer metadata.
 type chatRunResult struct {
 	*agent.AgentResult
-	// ContSignal is non-nil when the continue_run tool was available.
-	// Check ContSignal.Requested() to see if the LLM requested a continuation.
-	ContSignal *ContinuationSignal
 	// SpawnFlag is non-nil; IsSet() returns true when sessions_spawn was called.
 	SpawnFlag *SpawnFlag
 }
@@ -143,14 +140,13 @@ func executeAgentRun(
 
 	// Stage 4: Build tool list and agent config.
 	acd := agentConfigDeps{
-		Tools:               deps.tools,
-		MaxTokens:           deps.maxTokens,
-		ContinuationEnabled: deps.continuationEnabled,
-		SubagentNotifyCh:    deps.subagentNotifyCh,
-		EmitAgentFn:         deps.callbacks.emitAgentFn,
-		Transcript:          deps.transcript,
+		Tools:            deps.tools,
+		MaxTokens:        deps.maxTokens,
+		SubagentNotifyCh: deps.subagentNotifyCh,
+		EmitAgentFn:      deps.callbacks.emitAgentFn,
+		Transcript:       deps.transcript,
 	}
-	cfg, contSignal, spawnFlag := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, logger)
+	cfg, spawnFlag := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, logger)
 	cfg.Model = model // set the resolved model
 
 	// Set up stream hooks via compositor: fan-out dispatch for each hook type.
@@ -209,7 +205,7 @@ func executeAgentRun(
 		})
 	}
 
-	return &chatRunResult{AgentResult: agentResult, ContSignal: contSignal, SpawnFlag: spawnFlag}, nil
+	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -364,16 +360,13 @@ func assembleMessages(
 	messages := prep.Messages
 
 	// If the caller provided pre-built messages (e.g., OpenAI-compatible HTTP API
-	// with full conversation history, or continuation runs passing the previous
-	// run's final message array), use those instead of transcript context.
+	// with full conversation history), use those instead of transcript context.
 	if len(params.PrebuiltMessages) > 0 {
-		// Copy to avoid aliasing the caller's backing array (e.g., FinalMessages
-		// from a previous continuation run). Without the copy, append may write
-		// into shared capacity, corrupting the original slice.
+		// Copy to avoid aliasing the caller's backing array. Without the copy,
+		// append may write into shared capacity, corrupting the original slice.
 		messages = append([]llm.Message(nil), params.PrebuiltMessages...)
-		// Continuation runs set both PrebuiltMessages (previous run's context)
-		// and Message (continuation system message). Append the message so the
-		// LLM sees it without re-loading the entire transcript.
+		// When the caller also supplies a Message, append it so the LLM sees
+		// it without re-loading the entire transcript.
 		if params.Message != "" && len(params.Attachments) == 0 {
 			messages = append(messages, llm.NewTextMessage("user", params.Message))
 		}
@@ -485,17 +478,16 @@ func finalizePrompt(
 
 // agentConfigDeps holds dependencies specifically needed by buildAgentConfig.
 type agentConfigDeps struct {
-	Tools               *ToolRegistry
-	MaxTokens           int
-	ContinuationEnabled bool
-	SubagentNotifyCh    <-chan string
-	EmitAgentFn         func(kind, sessionKey, runID string, payload map[string]any)
-	Transcript          TranscriptStore
+	Tools            *ToolRegistry
+	MaxTokens        int
+	SubagentNotifyCh <-chan string
+	EmitAgentFn      func(kind, sessionKey, runID string, payload map[string]any)
+	Transcript       TranscriptStore
 }
 
 // buildAgentConfig constructs the agent.AgentConfig, building tool lists and
-// wiring all turn-level hooks. Returns the config along with the continuation
-// signal and spawn flag for the run orchestrator.
+// wiring all turn-level hooks. Returns the config along with the spawn flag
+// for the run orchestrator.
 func buildAgentConfig(
 	params RunParams,
 	deps runDeps,
@@ -504,7 +496,7 @@ func buildAgentConfig(
 	sessionToolPreset string,
 	acd agentConfigDeps,
 	logger *slog.Logger,
-) (cfg agent.AgentConfig, contSignal *ContinuationSignal, spawnFlag *SpawnFlag) {
+) (cfg agent.AgentConfig, spawnFlag *SpawnFlag) {
 	// Build tool list from registry (uses stored descriptions and schemas).
 	// If a tool preset is active, filter the tool list to only include allowed tools.
 	var tools []llm.Tool
@@ -534,11 +526,6 @@ func buildAgentConfig(
 	// FileCache lives for the entire agent run and deduplicates repeated file reads.
 	fileCache := agent.NewFileCache(agent.DefaultFileCacheMaxItems)
 
-	// ContinuationSignal: shared across turns so continue_run tool can set it.
-	if acd.ContinuationEnabled {
-		contSignal = NewContinuationSignal()
-	}
-
 	// SpawnFlag: tracks whether sessions_spawn was called during this run.
 	spawnFlag = NewSpawnFlag()
 
@@ -557,38 +544,17 @@ func buildAgentConfig(
 		maxTokens = *params.MaxTokens
 	}
 
-	// Mode-aware agent config: Work mode gets full agent capabilities;
-	// Normal/Chat modes get reduced limits for quick interactions.
-	isWorkMode := (cachedSession != nil && cachedSession.Mode == session.ModeWork) || params.DeepWork
-
-	maxTurns := 10
-	agentTimeout := 10 * time.Minute
-	if isWorkMode {
-		maxTurns = defaultMaxTurns         // 25
-		agentTimeout = defaultAgentTimeout // 60min
-	}
-	if params.DeepWork {
-		maxTurns = 50
-		agentTimeout = 30 * time.Minute
+	// Mode-aware agent config: Chat mode gets reduced limits for quick
+	// conversational replies; other modes use the default agent capabilities.
+	maxTurns := defaultMaxTurns         // 25
+	agentTimeout := defaultAgentTimeout // 60min
+	if cachedSession != nil && cachedSession.Mode == session.ModeChat {
+		maxTurns = 10
+		agentTimeout = 10 * time.Minute
 	}
 
-	// Work-only features: nudge budget, output recovery.
-	var nudgeBudget *agent.NudgeBudgetConfig
-	maxOutputRecovery := 1 // minimal recovery for all modes
+	maxOutputRecovery := 1
 	maxOutputScaleFactors := []float64{1.5}
-	if isWorkMode {
-		nudgeConts := 5
-		if params.DeepWork {
-			nudgeConts = 7
-		}
-		nudgeBudget = &agent.NudgeBudgetConfig{
-			MaxContinuations: nudgeConts,
-			BudgetThreshold:  0.9,
-			MinDeltaTokens:   300,
-		}
-		maxOutputRecovery = 3
-		maxOutputScaleFactors = []float64{1.5, 2.0, 2.0}
-	}
 
 	cfg = agent.AgentConfig{
 		MaxTurns:         maxTurns,
@@ -629,9 +595,6 @@ func buildAgentConfig(
 			ctx = WithFileCache(ctx, fileCache)
 			ctx = WithToolPreset(ctx, sessionToolPreset)
 			ctx = WithDeferredActivation(ctx, deferredActivation)
-			if contSignal != nil {
-				ctx = WithContinuationSignal(ctx, contSignal)
-			}
 			ctx = WithSpawnFlag(ctx, spawnFlag)
 			return ctx
 		},
@@ -642,22 +605,17 @@ func buildAgentConfig(
 			}
 			return acd.Tools.DeferredLLMTools(names)
 		},
-		NudgeBudget:                 nudgeBudget,
 		MaxOutputTokensRecovery:     maxOutputRecovery,
 		MaxOutputTokensScaleFactors: maxOutputScaleFactors,
-		// Suppress nudge when continue_run was already called.
-		ContinuationRequested: func() bool {
-			return contSignal != nil && contSignal.Requested()
-		},
-		SpawnDetected:    spawnFlag.IsSet,
-		ToolLoopDetector: agent.NewToolLoopDetector(agent.DefaultToolLoopConfig(), logger),
+		SpawnDetected:               spawnFlag.IsSet,
+		ToolLoopDetector:            agent.NewToolLoopDetector(agent.DefaultToolLoopConfig(), logger),
 		// Per-turn message persistence: persist each assistant and tool_result
 		// message immediately to transcript so intermediate findings survive
 		// across runs (fixes the "short-term memory loss" bug).
 		OnMessagePersist: buildMessagePersister(deps, params, logger),
 	}
 
-	return cfg, contSignal, spawnFlag
+	return cfg, spawnFlag
 }
 
 // wireDraftStreamHook sets up the draft stream loop on the compositor and returns

@@ -58,11 +58,6 @@ type AgentConfig struct {
 	// Savings: ~1600 tokens × image count per turn after turn 0.
 	StripImagesAfterFirstTurn bool
 
-	// NudgeBudget enables token-budget-based continuation: when the agent finishes
-	// with end_turn but the token budget is not yet exhausted, a nudge message is
-	// injected to prompt the LLM to check for remaining work. Nil = disabled.
-	NudgeBudget *NudgeBudgetConfig
-
 	// MaxOutputTokensRecovery is the maximum number of times to auto-recover when
 	// the LLM response is truncated by max_tokens. Each recovery injects a
 	// "resume where you left off" message and increases MaxTokens for the next
@@ -76,16 +71,9 @@ type AgentConfig struct {
 	// When nil or shorter than the recovery attempt, defaults to 2× for missing entries.
 	MaxOutputTokensScaleFactors []float64
 
-	// ContinuationRequested returns true when the continue_run tool has been
-	// called during this run. When set, the nudge budget continuation is
-	// suppressed to avoid wasting turns — the explicit continuation will
-	// handle follow-up work after the run completes.
-	ContinuationRequested func() bool
-
 	// SpawnDetected returns true when sessions_spawn was called during this run.
-	// Used to change turn-budget warnings from "call continue_run" to
-	// "end your turn — sub-agents are working", preventing the agent from
-	// requesting a continuation that duplicates the sub-agents' work.
+	// Used to emit a turn-budget warning that tells the agent to wrap up and
+	// yield to the sub-agent notification system when the turn limit is near.
 	SpawnDetected func() bool
 
 	// DynamicToolsProvider is called before each turn starting from turn 1.
@@ -113,23 +101,6 @@ type AgentConfig struct {
 	// each tool call against the detector and blocks execution on critical loops.
 	// Nil = disabled (default).
 	ToolLoopDetector *ToolLoopDetector
-}
-
-// NudgeBudgetConfig configures token-budget continuation (Claude Code pattern).
-// When the agent returns end_turn with budget remaining, a nudge message is
-// injected to encourage the LLM to check for remaining work.
-type NudgeBudgetConfig struct {
-	// MaxContinuations is the maximum number of nudge continuations. Default: 3.
-	MaxContinuations int
-	// BudgetThreshold is the fraction (0.0–1.0) of the total token budget at
-	// which nudging stops. E.g., 0.9 means stop nudging when 90% of the budget
-	// is consumed. Default: 0.9.
-	BudgetThreshold float64
-	// MinDeltaTokens is the minimum output tokens the LLM must produce on a
-	// nudge turn to be considered productive. If the last two nudge turns both
-	// produce fewer than this many tokens, nudging stops (diminishing returns).
-	// Default: 500.
-	MinDeltaTokens int
 }
 
 // TurnCallback is called after each agent turn with accumulated token count.
@@ -164,15 +135,10 @@ type AgentResult struct {
 	// knows what was being done when the user interrupted.
 	InterruptedToolNames []string
 
-	// NudgeContinuations is the number of token-budget nudge continuations
-	// that were triggered during this run. 0 when nudge is disabled.
-	NudgeContinuations int
 	// MaxTokensRecoveries is the number of max-output-tokens recovery retries
 	// that were triggered during this run. 0 when recovery is disabled.
 	MaxTokensRecoveries int
 
 	// FinalMessages is the message array at the end of the agent loop.
-	// Used by continuation runs to skip transcript reload — the next run
-	// receives this as PrebuiltMessages instead of re-assembling from scratch.
 	FinalMessages []llm.Message
 }

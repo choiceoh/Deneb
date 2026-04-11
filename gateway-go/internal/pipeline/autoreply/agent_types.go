@@ -30,7 +30,6 @@ type AgentTurnConfig struct {
 	MaxTokens      int
 	ContextTokens  int
 	AuthProfile    string
-	DeepWork       bool
 }
 
 // AgentTurnResult holds the outcome of an agent turn.

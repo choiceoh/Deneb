@@ -35,16 +35,14 @@ const (
 )
 
 // SessionMode controls the behavioral mode of a session.
-// Each mode gates different capabilities (tool sets, autonomous continuation, etc.).
+// Each mode gates different capabilities (tool sets, etc.).
 type SessionMode string
 
 const (
-	// ModeNormal is the default mode — full tools, autonomous continuation enabled.
+	// ModeNormal is the default mode — full tools.
 	ModeNormal SessionMode = ""
-	// ModeChat restricts tools to conversation-only (web search, etc.), no continuation.
+	// ModeChat restricts tools to conversation-only (web search, etc.).
 	ModeChat SessionMode = "chat"
-	// ModeWork enables extended agent behavior (higher continuation limits).
-	ModeWork SessionMode = "work"
 )
 
 // IsInternal returns true for session kinds that are system-internal

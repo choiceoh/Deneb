@@ -60,13 +60,6 @@ func RunAgent(
 	var maxTokensRecoveryCount int
 	baseMaxTokens := cfg.MaxTokens // Original value before any recovery scaling.
 
-	// Nudge budget continuation: tracks how many times we've injected a nudge
-	// message after end_turn to prompt the LLM for remaining work.
-	var nudgeContinuationCount int
-	// recentNudgeDeltas tracks output tokens produced on the last 2 nudge turns
-	// for diminishing-returns detection.
-	var recentNudgeDeltas [2]int
-
 	for turn := range cfg.MaxTurns {
 		result.Turns = turn + 1
 
@@ -231,50 +224,6 @@ func RunAgent(
 
 		// --- Check stop reason ---
 		if turnRes.stopReason == "end_turn" || len(turnRes.toolCalls) == 0 {
-			// --- Nudge budget continuation ---
-			// If the agent finished normally but the token budget is not exhausted,
-			// inject a nudge message to prompt for remaining work.
-			contAlreadyRequested := cfg.ContinuationRequested != nil && cfg.ContinuationRequested()
-			if cfg.NudgeBudget != nil && turnRes.stopReason == "end_turn" && turn > 0 && !contAlreadyRequested {
-				nb := cfg.NudgeBudget
-				maxConts := nb.MaxContinuations
-				if maxConts <= 0 {
-					maxConts = 3
-				}
-				threshold := nb.BudgetThreshold
-				if threshold <= 0 {
-					threshold = 0.9
-				}
-				minDelta := nb.MinDeltaTokens
-				if minDelta <= 0 {
-					minDelta = 500
-				}
-
-				totalTokens := result.Usage.InputTokens + result.Usage.OutputTokens
-				// Budget is estimated from MaxTurns * MaxTokens as a rough ceiling.
-				estimatedBudget := cfg.MaxTurns * cfg.MaxTokens
-				budgetUsed := float64(totalTokens) / float64(estimatedBudget)
-
-				// Check diminishing returns: if last 2 nudge deltas were both < minDelta, stop.
-				diminishing := nudgeContinuationCount >= 2 &&
-					recentNudgeDeltas[0] < minDelta && recentNudgeDeltas[1] < minDelta
-
-				if nudgeContinuationCount < maxConts && budgetUsed < threshold && !diminishing {
-					nudgeContinuationCount++
-					// Track output tokens for this nudge turn.
-					recentNudgeDeltas[nudgeContinuationCount%2] = turnRes.usage.OutputTokens
-
-					logger.Info("nudge continuation: prompting for remaining work",
-						"continuation", nudgeContinuationCount,
-						"maxContinuations", maxConts,
-						"budgetUsed", fmt.Sprintf("%.1f%%", budgetUsed*100))
-					messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
-					messages = append(messages, llm.NewTextMessage("user",
-						"[System: 작업이 완료되지 않았다면 이어서 진행하세요. 완전히 끝난 경우에만 최종 요약으로 마무리하세요.]"))
-					continue
-				}
-			}
-
 			// Persist the terminal assistant message (not appended to messages
 			// since the loop is ending, but must be in transcript for next run).
 			if cfg.OnMessagePersist != nil && turnRes.text != "" {
@@ -286,7 +235,6 @@ func RunAgent(
 			if result.StopReason == "" {
 				result.StopReason = "end_turn"
 			}
-			result.NudgeContinuations = nudgeContinuationCount
 			result.MaxTokensRecoveries = maxTokensRecoveryCount
 			result.FinalMessages = messages
 			return result, nil
@@ -348,15 +296,16 @@ func RunAgent(
 			})
 		}
 
-		// Inject turn budget warning when approaching the limit so the LLM
-		// can call continue_run proactively (it has no other way to know).
+		// When the turn budget is almost spent and sub-agents are running, nudge
+		// the agent to wrap up and yield to the notification system.
 		spawnActive := cfg.SpawnDetected != nil && cfg.SpawnDetected()
-		turnBudgetWarning := buildTurnBudgetWarning(turn, cfg.MaxTurns, spawnActive)
-		if turnBudgetWarning != "" {
-			toolResults = append(toolResults, llm.ContentBlock{
-				Type: "text",
-				Text: turnBudgetWarning,
-			})
+		if spawnActive {
+			if warning := buildTurnBudgetWarning(turn, cfg.MaxTurns); warning != "" {
+				toolResults = append(toolResults, llm.ContentBlock{
+					Type: "text",
+					Text: warning,
+				})
+			}
 		}
 
 		toolResultMsg := llm.NewBlockMessage("user", toolResults)
@@ -379,17 +328,16 @@ func RunAgent(
 	}
 
 	result.StopReason = "max_turns"
-	result.NudgeContinuations = nudgeContinuationCount
 	result.MaxTokensRecoveries = maxTokensRecoveryCount
 	result.FinalMessages = messages
 	return result, nil
 }
 
 // buildTurnBudgetWarning returns a warning message when the agent is
-// approaching the turn limit. This gives the LLM visibility into its
-// remaining budget so it can call continue_run proactively.
-// Returns "" when no warning is needed.
-func buildTurnBudgetWarning(currentTurn, maxTurns int, spawnActive bool) string {
+// approaching the turn limit while sub-agents are running. Used to tell the
+// agent to wrap up and yield to the notification system. Returns "" when no
+// warning is needed.
+func buildTurnBudgetWarning(currentTurn, maxTurns int) string {
 	remaining := maxTurns - currentTurn - 1 // -1 because turn is 0-based and we just finished it
 	if remaining <= 0 {
 		return ""
@@ -402,17 +350,7 @@ func buildTurnBudgetWarning(currentTurn, maxTurns int, spawnActive bool) string 
 	if remaining > threshold {
 		return ""
 	}
-	// When sub-agents are running, suppress the continue_run inducement.
-	// Instead, tell the agent to wrap up and yield to the notification system.
-	if spawnActive {
-		return fmt.Sprintf("[System: 턴 예산 정보 — 남은 턴 %d/%d. 서브에이전트가 작업 중입니다. 추가 작업이 없으면 턴을 종료하세요.]",
-			remaining, maxTurns)
-	}
-	if remaining <= 2 {
-		return fmt.Sprintf("[System: ⚠️ 턴 한도 임박 — 남은 턴 %d/%d. 작업이 남아있으면 지금 continue_run을 호출하세요.]",
-			remaining, maxTurns)
-	}
-	return fmt.Sprintf("[System: 턴 예산 정보 — 남은 턴 %d/%d. 작업이 많이 남아있으면 continue_run 호출을 준비하세요.]",
+	return fmt.Sprintf("[System: 턴 예산 정보 — 남은 턴 %d/%d. 서브에이전트가 작업 중입니다. 추가 작업이 없으면 턴을 종료하세요.]",
 		remaining, maxTurns)
 }
 
