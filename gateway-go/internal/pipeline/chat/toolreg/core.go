@@ -31,7 +31,12 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
 	// because it depends on local AI hooks that live in the chat package.
+	// NOTE: fetch_tools is registered by chat.RegisterCoreTools because it
+	// needs a FetchToolsRegistry interface that chat.ToolRegistry implements.
 }
+
+// FetchToolsSchema returns the fetch_tools schema for external registration.
+func FetchToolsSchema() map[string]any { return fetchToolsToolSchema() }
 
 // RegisterPolarisTools registers the unified Polaris tool (search/describe/expand).
 // Called separately because the store and localAI are not part of CoreToolDeps.

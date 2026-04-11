@@ -991,6 +991,27 @@ func polarisToolSchema() map[string]any {
 	}
 }
 
+func fetchToolsToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"names": map[string]any{
+				"type":        "array",
+				"description": "Exact tool names to activate (from the deferred tools list)",
+				"minItems":    1,
+				"maxItems":    10,
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "Keyword search to find matching deferred tools (alternative to names)",
+			},
+		},
+	}
+}
+
 // ToolMaxOutputs returns per-tool output character budgets from tool_schemas.json.
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {
