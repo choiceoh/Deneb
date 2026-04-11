@@ -74,11 +74,11 @@ func TestCompactAndPersist_WithLLMCompaction(t *testing.T) {
 	e, s := testEngine(t)
 
 	// Seed enough messages to trigger LLM compaction.
-	// Polaris triggers at 80% of 170K = 136K tokens.
-	// We need total tokens > 136K. Each message ~5K tokens.
-	// 30 messages × 5K = 150K tokens > 136K threshold.
+	// Polaris triggers at 90% of 170K = 153K tokens.
+	// We need total tokens > 153K. Each message ~5K tokens.
+	// 32 messages × 5K = 160K tokens > 153K threshold.
 	bigText := makeString(10000) // ~5000 tokens (runes/2)
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 32; i++ {
 		s.AppendMessage("s1", toolctx.ChatMessage{
 			Role:      "user",
 			Content:   marshalStr(bigText),
@@ -88,7 +88,7 @@ func TestCompactAndPersist_WithLLMCompaction(t *testing.T) {
 
 	// Build the llm.Message list matching the LCM store.
 	var msgs []llm.Message
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 32; i++ {
 		if i%2 == 0 {
 			msgs = append(msgs, llmMsg("user", bigText))
 		} else {
