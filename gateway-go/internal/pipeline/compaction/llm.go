@@ -14,11 +14,17 @@ import (
 // preserve uncompacted. Old messages before this are candidates for summarization.
 const keepRecentTurns = 6
 
+// chunkMaxTokens is the threshold above which old messages are split into
+// smaller chunks before summarization. Chunking avoids lost-in-the-middle
+// degradation when serialized input is very large.
+const chunkMaxTokens = 20_000
+
 // LLMCompact summarizes older messages using a local AI model when the context
 // exceeds the configured threshold. Recent turns are preserved intact.
 //
-// Target: the summary should fit within LLMTargetPct of the context budget,
-// leaving the rest for recent messages and new content.
+// When old messages exceed chunkMaxTokens, they are split into ≤chunkMaxTokens
+// chunks and summarized in parallel, then joined. This prevents quality
+// degradation from feeding excessively long input to the local model.
 func LLMCompact(
 	ctx context.Context,
 	cfg Config,
@@ -35,28 +41,33 @@ func LLMCompact(
 	old := messages[:splitIdx]
 	recent := messages[splitIdx:]
 
-	// Serialize old messages for summarization.
-	text := serializeMessages(old)
-	if EstimateTokens(text) < 500 {
-		return messages, false // too little to bother
-	}
-
-	// maxOutputTokens: target size for the summary, capped at 4096 to avoid
-	// slow local AI responses. The structured prompt produces dense output
-	// so 4096 tokens is sufficient for most compaction scenarios.
+	// maxOutput: proportional to context budget, no arbitrary cap.
+	// Larger context deserves a proportionally larger summary budget.
 	maxOutput := int(float64(cfg.ContextBudget) * DefaultLLMTargetPct)
-	if maxOutput > 4096 {
-		maxOutput = 4096
-	}
-	summary, err := summarizer.Summarize(ctx, compactionSystemPrompt, text, maxOutput)
-	if err != nil {
-		if logger != nil {
-			logger.Warn("polaris: LLM compaction failed", "error", err)
+
+	var summary string
+	if EstimateMessagesTokens(old) > chunkMaxTokens {
+		var ok bool
+		summary, ok = summarizeInChunks(ctx, old, summarizer, maxOutput, logger)
+		if !ok {
+			return messages, false
 		}
-		return messages, false
-	}
-	if summary == "" {
-		return messages, false
+	} else {
+		text := serializeMessages(old)
+		if EstimateTokens(text) < 500 {
+			return messages, false // too little to bother
+		}
+		var err error
+		summary, err = summarizer.Summarize(ctx, compactionSystemPrompt, text, maxOutput)
+		if err != nil {
+			if logger != nil {
+				logger.Warn("polaris: LLM compaction failed", "error", err)
+			}
+			return messages, false
+		}
+		if summary == "" {
+			return messages, false
+		}
 	}
 
 	// Rebuild: summary message + recent messages.
@@ -72,6 +83,88 @@ func LLMCompact(
 			"recentMessages", len(recent))
 	}
 	return compacted, true
+}
+
+// summarizeInChunks splits old messages into ≤chunkMaxTokens chunks,
+// summarizes them in parallel, and joins the results in order.
+// perChunkOutput = maxOutput / numChunks (floor 1024) to keep total bounded.
+func summarizeInChunks(
+	ctx context.Context,
+	old []llm.Message,
+	summarizer Summarizer,
+	maxOutput int,
+	logger *slog.Logger,
+) (string, bool) {
+	chunks := splitIntoChunks(old, chunkMaxTokens)
+	perChunkOutput := maxOutput / len(chunks)
+	if perChunkOutput < 1024 {
+		perChunkOutput = 1024
+	}
+
+	type chunkResult struct {
+		idx     int
+		summary string
+		err     error
+	}
+	resultCh := make(chan chunkResult, len(chunks))
+
+	for i, chunk := range chunks {
+		go func(idx int, msgs []llm.Message) {
+			text := serializeMessages(msgs)
+			if EstimateTokens(text) < 100 {
+				resultCh <- chunkResult{idx: idx}
+				return
+			}
+			s, err := summarizer.Summarize(ctx, compactionSystemPrompt, text, perChunkOutput)
+			resultCh <- chunkResult{idx: idx, summary: s, err: err}
+		}(i, chunk)
+	}
+
+	results := make([]string, len(chunks))
+	for range chunks {
+		r := <-resultCh
+		if r.err != nil {
+			if logger != nil {
+				logger.Warn("polaris: chunk summarization failed",
+					"chunk", r.idx, "total", len(chunks), "error", r.err)
+			}
+			return "", false
+		}
+		results[r.idx] = r.summary
+	}
+
+	var parts []string
+	for _, s := range results {
+		if s != "" {
+			parts = append(parts, s)
+		}
+	}
+	if len(parts) == 0 {
+		return "", false
+	}
+	return strings.Join(parts, "\n\n"), true
+}
+
+// splitIntoChunks groups messages into batches of ≤maxTokens tokens each.
+func splitIntoChunks(messages []llm.Message, maxTokens int) [][]llm.Message {
+	var chunks [][]llm.Message
+	var current []llm.Message
+	currentTokens := 0
+
+	for _, msg := range messages {
+		msgTokens := EstimateTokens(string(msg.Content)) + 4
+		if len(current) > 0 && currentTokens+msgTokens > maxTokens {
+			chunks = append(chunks, current)
+			current = nil
+			currentTokens = 0
+		}
+		current = append(current, msg)
+		currentTokens += msgTokens
+	}
+	if len(current) > 0 {
+		chunks = append(chunks, current)
+	}
+	return chunks
 }
 
 // findSplitPoint returns the message index that splits old (to compact) from
