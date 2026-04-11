@@ -337,6 +337,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	d.WriteString("- Telegram 4096 char limit. Split with message tool if needed.\n")
 	d.WriteString("- Reply tags: [[reply_to_current]] replies to triggering message (stripped before sending).\n")
 	d.WriteString("- Current session replies auto-route to source channel. Cross-session: sessions(action=send, sessionKey=..., message=...).\n")
+	d.WriteString("- 마크다운 테이블(`| col | col |`) 사용 금지 — Telegram에서 코드 블록으로 렌더되어 보기 나쁘다. 대신 불릿 목록, 굵은 라벨(`**항목:** 값`), 또는 짧은 문장으로 정리하라.\n")
 	if _, ok := toolSet["message"]; ok {
 		fmt.Fprintf(&d, "- `message` for proactive sends + channel actions. If used for user-visible reply, respond with ONLY: %s.\n", SilentReplyToken)
 		fmt.Fprintf(&d, "- %s 규칙: 메시지 전체가 %s만이어야 한다. 다른 텍스트와 섞지 마라. 요청된 작업을 회피하는 데 쓰지 마라.\n", SilentReplyToken, SilentReplyToken)
