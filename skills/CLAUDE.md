@@ -29,8 +29,8 @@ description: One-line description of what skills belong in this category.
 
 | Category | Description | Skills |
 |---|---|---|
-| `coding` | Software development, code generation, version control, CI/CD | autoresearch, github, maestro, skill-creator, skill-evolution, skill-factory |
-| `productivity` | Daily workflows, documents, summarization, personal automation | morning-letter, nano-pdf, session-logs, summarize |
+| `coding` | Software development, code generation, version control, CI/CD | autoresearch, github, skill-creator, skill-evolution, skill-factory |
+| `productivity` | Daily workflows, documents, summarization, personal automation | morning-letter, session-logs, summarize |
 | `devops` | System monitoring, terminal management, infrastructure | healthcheck, tmux |
 | `integration` | External service connectivity, API bridges | mcporter |
 
@@ -174,7 +174,6 @@ Experience → Factory → Creation → Use → Evolution → Improved Skill
 |---|---|---|
 | **Creation** | `skill-factory` | Extract reusable patterns from complex workflows |
 | **Authoring** | `skill-creator` | Create/edit/audit SKILL.md files |
-| **Composition** | `maestro` | Orchestrate multi-skill workflows (plan → execute → verify) |
 | **Evolution** | `skill-evolution` | Optimize skills via autoresearch methodology |
 
 ### Autonomous Skill Creation
