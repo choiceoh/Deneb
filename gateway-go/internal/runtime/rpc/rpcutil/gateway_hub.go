@@ -25,7 +25,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
@@ -49,9 +48,6 @@ type HubConfig struct {
 	// Session and process management.
 	Sessions  *session.Manager
 	Processes *process.Manager
-
-	// Channel plugins (Telegram is late-bound via SetTelegram).
-	InternalHooks *hooks.InternalRegistry // nil-safe
 
 	// Agent pipeline (Chat is late-bound via SetChat).
 	JobTracker *agent.JobTracker
@@ -82,8 +78,7 @@ type GatewayHub struct {
 	processes *process.Manager
 
 	// Channel plugins.
-	telegram      *telegram.Plugin        // nil until SetTelegram (early phase).
-	internalHooks *hooks.InternalRegistry // nil-safe
+	telegram *telegram.Plugin // nil until SetTelegram (early phase).
 
 	// Agent pipeline.
 	chat       *chat.Handler // nil until SetChat (late phase).
@@ -123,7 +118,6 @@ func NewGatewayHub(cfg HubConfig) *GatewayHub {
 		gatewaySubs:    cfg.GatewaySubs,
 		sessions:       cfg.Sessions,
 		processes:      cfg.Processes,
-		internalHooks:  cfg.InternalHooks,
 		jobTracker:     cfg.JobTracker,
 		cronService:    cfg.CronService,
 		cronPersistLog: cfg.CronPersistLog,
@@ -142,9 +136,8 @@ func (h *GatewayHub) Broadcaster() *events.Broadcaster               { return h.
 func (h *GatewayHub) GatewaySubs() *events.GatewayEventSubscriptions { return h.gatewaySubs }
 func (h *GatewayHub) Sessions() *session.Manager                     { return h.sessions }
 func (h *GatewayHub) Processes() *process.Manager                    { return h.processes }
-func (h *GatewayHub) Telegram() *telegram.Plugin                     { return h.telegram }
-func (h *GatewayHub) InternalHooks() *hooks.InternalRegistry         { return h.internalHooks }
-func (h *GatewayHub) Chat() *chat.Handler                            { return h.chat }
+func (h *GatewayHub) Telegram() *telegram.Plugin { return h.telegram }
+func (h *GatewayHub) Chat() *chat.Handler        { return h.chat }
 func (h *GatewayHub) JobTracker() *agent.JobTracker                  { return h.jobTracker }
 func (h *GatewayHub) CronService() *cron.Service                     { return h.cronService }
 func (h *GatewayHub) CronPersistLog() *cron.PersistentRunLog         { return h.cronPersistLog }

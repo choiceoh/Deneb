@@ -8,7 +8,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/hooks"
 )
 
 func (s *Server) SetDaemon(d *daemon.Daemon) {
@@ -26,12 +25,10 @@ func (s *Server) Publisher() *events.Publisher {
 }
 
 // GatewaySubscriptions returns the gateway event subscription manager
-// for emitting agent, heartbeat, transcript, and lifecycle events.
+// for emitting agent, transcript, and lifecycle events.
 func (s *Server) GatewaySubscriptions() *events.GatewayEventSubscriptions {
 	return s.gatewaySubs
 }
-
-// registerPhase2Methods registers chat, config, monitoring, and event subscription methods.
 
 func (s *Server) StartMonitoring(ctx context.Context) {
 	// Note: Gateway self-watchdog removed — it caused frequent false-positive
@@ -78,7 +75,7 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 			if err != nil {
 				s.logger.Error("telegram restart failed", "error", err)
 			} else {
-				s.emitChannelEvent("telegram", hooks.EventChannelConnect, "restarted")
+				s.emitChannelEvent("telegram", "restarted")
 			}
 			return err
 		},
@@ -86,14 +83,8 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 	s.safeGo("channel-health-monitor", func() { s.channelHealth.Run(ctx) })
 }
 
-// emitChannelEvent fires the internal hook and broadcasts a telegram.changed event.
-func (s *Server) emitChannelEvent(channelID string, hookEvent hooks.Event, action string) {
-	if s.internalHooks != nil {
-		env := map[string]string{"DENEB_CHANNEL_ID": channelID}
-		s.safeGo("internal-hooks:"+string(hookEvent), func() {
-			s.internalHooks.TriggerFromEvent(context.Background(), hookEvent, "", env)
-		})
-	}
+// emitChannelEvent broadcasts a telegram.changed event to WebSocket clients.
+func (s *Server) emitChannelEvent(channelID string, action string) {
 	s.broadcaster.Broadcast("telegram.changed", map[string]any{
 		"channelId": channelID,
 		"action":    action,

@@ -13,7 +13,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/logging"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/hooks"
 )
 
 // initAndListen creates the HTTP server, binds to the address, and starts
@@ -109,15 +108,6 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	}
 
 	// Gmail polling is managed by the autonomous service (registered in initGmailPoll).
-
-	// Fire gateway.start internal hook.
-	if s.internalHooks != nil {
-		addr := ln.Addr().String()
-		env := map[string]string{"DENEB_GATEWAY_ADDR": addr}
-		s.safeGo("internal-hooks:gateway.start", func() {
-			s.internalHooks.TriggerFromEvent(context.Background(), hooks.EventGatewayStart, "", env)
-		})
-	}
 
 	return ln, nil
 }
@@ -227,12 +217,7 @@ func (s *Server) doShutdown() error {
 
 	// Gmail polling is stopped by autonomous service (registered as periodic task).
 
-	// 9. Fire gateway.stop internal hook.
-	if s.internalHooks != nil {
-		s.internalHooks.TriggerFromEvent(context.Background(), hooks.EventGatewayStop, "", nil)
-	}
-
-	// 10. Stop Telegram plugin.
+	// 9. Stop Telegram plugin.
 	if s.telegramPlug != nil {
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		s.telegramPlug.Stop(stopCtx)
