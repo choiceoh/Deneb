@@ -9,6 +9,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
+func scoreTestLine(line string, idx, total int) int {
+	return scoreLine(line, strings.ToLower(line), idx, total)
+}
+
 func TestRankLines_ErrorInMiddle(t *testing.T) {
 	// Build log with an error buried in the middle — the main scenario
 	// this feature is designed for.
@@ -149,7 +153,7 @@ func TestRankLines_PreservesOriginalOrder(t *testing.T) {
 func TestScoreLine_Cumulative(t *testing.T) {
 	// A line with multiple matching patterns should get cumulative score.
 	// "panic" (+15) + "error" (+10) + base (1) = 26
-	score := scoreLine("panic: runtime error: invalid memory address", 5, 100)
+	score := scoreTestLine("panic: runtime error: invalid memory address", 5, 100)
 	if score < 26 {
 		t.Errorf("expected cumulative score >= 26, got %d", score)
 	}
@@ -159,11 +163,11 @@ func TestScoreLine_PositionalBonus(t *testing.T) {
 	plain := "just a normal line"
 
 	// First 10% gets +2.
-	early := scoreLine(plain, 0, 100)
+	early := scoreTestLine(plain, 0, 100)
 	// Middle gets base only.
-	mid := scoreLine(plain, 50, 100)
+	mid := scoreTestLine(plain, 50, 100)
 	// Last 20% gets +3.
-	late := scoreLine(plain, 90, 100)
+	late := scoreTestLine(plain, 90, 100)
 
 	if early <= mid {
 		t.Errorf("early line (%d) should score higher than mid (%d)", early, mid)
@@ -179,7 +183,7 @@ func TestScoreLine_PositionalBonus(t *testing.T) {
 func TestScoreLine_HTTPStatus(t *testing.T) {
 	statusLine := `GET /api/health returned 500 Internal Server Error`
 	plain := "some normal log line"
-	if scoreLine(statusLine, 50, 100) <= scoreLine(plain, 50, 100) {
+	if scoreTestLine(statusLine, 50, 100) <= scoreTestLine(plain, 50, 100) {
 		t.Error("HTTP error status line should score higher than plain line")
 	}
 }
@@ -187,7 +191,7 @@ func TestScoreLine_HTTPStatus(t *testing.T) {
 func TestScoreLine_JSONError(t *testing.T) {
 	jsonLine := `  "error": "connection refused"`
 	plain := "some normal log line"
-	if scoreLine(jsonLine, 50, 100) <= scoreLine(plain, 50, 100) {
+	if scoreTestLine(jsonLine, 50, 100) <= scoreTestLine(plain, 50, 100) {
 		t.Error("JSON error field should score higher than plain line")
 	}
 }
@@ -195,7 +199,7 @@ func TestScoreLine_JSONError(t *testing.T) {
 func TestScoreLine_SectionSeparator(t *testing.T) {
 	sep := "=== BUILD OUTPUT ==="
 	plain := "some normal log line"
-	if scoreLine(sep, 50, 100) <= scoreLine(plain, 50, 100) {
+	if scoreTestLine(sep, 50, 100) <= scoreTestLine(plain, 50, 100) {
 		t.Error("section separator should score higher than plain line")
 	}
 }

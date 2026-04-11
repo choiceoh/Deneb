@@ -37,10 +37,16 @@ func RankLines(content string, budget int) string {
 		return TruncateHeadTail(content, budget, "")
 	}
 
+	// Pre-compute lowercased lines once for scoring and context expansion.
+	lowers := make([]string, n)
+	for i, line := range lines {
+		lowers[i] = strings.ToLower(line)
+	}
+
 	// 1. Score each line.
 	scores := make([]int, n)
 	for i, line := range lines {
-		scores[i] = scoreLine(line, i, n)
+		scores[i] = scoreLine(line, lowers[i], i, n)
 	}
 
 	// 2. Mark context around anchor lines. Panic/fatal/goroutine anchors
@@ -52,8 +58,7 @@ func RankLines(content string, budget int) string {
 			continue
 		}
 		radius := contextRadius
-		lower := strings.ToLower(lines[i])
-		if strings.Contains(lower, "panic") || strings.Contains(lower, "fatal") || strings.HasPrefix(lower, "goroutine ") {
+		if isPanicAnchor(lowers[i]) {
 			radius = panicContextRadius
 		}
 		for j := max(0, i-radius); j <= min(n-1, i+radius); j++ {
@@ -81,29 +86,27 @@ func RankLines(content string, budget int) string {
 		contentBudget = budget / 2 // never reserve more than half
 	}
 	selected := make([]bool, n)
-	used := 0
+	used, count := 0, 0
 	for _, idx := range indices {
 		cost := len(lines[idx]) + 1 // +1 for newline
 		if used+cost > contentBudget {
+			if contentBudget-used < 2 {
+				break
+			}
 			continue
 		}
 		selected[idx] = true
 		used += cost
+		count++
 	}
 
-	// Fallback if nothing fits (e.g., every line individually > budget).
-	count := 0
-	for _, s := range selected {
-		if s {
-			count++
-		}
-	}
 	if count == 0 {
 		return TruncateHeadTail(content, budget, "")
 	}
 
 	// 5. Reassemble in original order with omission markers.
 	var b strings.Builder
+	b.Grow(used + overheadReserve)
 	totalOmitted := 0
 	i := 0
 	for i < n {
@@ -150,9 +153,8 @@ func RankLines(content string, budget int) string {
 //	section separator      +3
 //	last 20% position      +3
 //	first 10% position     +2
-func scoreLine(line string, idx, total int) int {
+func scoreLine(line, lower string, idx, total int) int {
 	score := 1
-	lower := strings.ToLower(line)
 
 	// Severity keywords.
 	if strings.Contains(lower, "panic") || strings.Contains(lower, "fatal") {
@@ -204,6 +206,12 @@ func scoreLine(line string, idx, total int) int {
 	}
 
 	return score
+}
+
+// isPanicAnchor reports whether a lowercased line indicates a panic, fatal
+// error, or goroutine header — used to apply wider context radius.
+func isPanicAnchor(lower string) bool {
+	return strings.Contains(lower, "panic") || strings.Contains(lower, "fatal") || strings.HasPrefix(lower, "goroutine ")
 }
 
 // containsAny reports whether s contains any of the given substrings.
