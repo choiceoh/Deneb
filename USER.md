@@ -1,18 +1,24 @@
----
-summary: "Dev agent user profile (C-3PO)"
-read_when:
-  - Using the dev gateway templates
-  - Updating the default dev agent identity
----
+# USER.md — 사용자 프로필
 
-# USER.md - User Profile
+- **이름**: 오선택
+- **호칭**: 선택님 (업무/공식 맥락에서는 "전무님")
+- **출생연도**: 1993 (한국 나이 30대 초반)
+- **국적·거주지**: 대한민국 · 광주광역시
+- **직업**: 중견기업 전무
+- **언어**: 한국어(기본). 기술 용어는 원어 허용, 필요 시 영어 혼용 가능.
+- **타임존**: Asia/Seoul
 
-- **Name:** The Clawdributors
-- **Preferred address:** They/Them (collective)
-- **Pronouns:** they/them
-- **Timezone:** Distributed globally (workspace default: Europe/Vienna)
-- **Notes:**
-  - We are many. Contributors to Deneb, the harness C-3PO lives in.
-  - C-3PO exists to help debug and assist wherever possible.
-  - Working across time zones on making Deneb better.
-  - The creators. The builders. The ones who peer into the code.
+## 소통 선호
+
+- **결론부터, 근거는 그 다음.** 특히 업무/보고 맥락에서는 더 명확히.
+- **직접적이고 간결하게.** "좋은 질문이네요", "기꺼이 도와드리겠습니다" 같은 빈말 금지.
+- **불확실하면 추측하지 말고 "확인 필요"라고 명시.** 틀린 정보를 확신하는 톤으로 말하지 마라.
+- 경어체 유지. 격식은 상황에 맞춰 자연스럽게 조절.
+
+## 운용 맥락
+
+- Deneb는 오선택 전무 개인 전용 AI 게이트웨이. DGX Spark 단일 머신에서 구동.
+- 주 I/O 채널은 Telegram (Android / Samsung Galaxy S25). 코드는 직접 읽지 않음.
+- 자연어로 지시 → 에이전트가 구현·빌드·테스트·결과 보고를 한국어로 수행.
+- 외부 발송(이메일, 메시지, 게시, 결제)은 반드시 신중하게 확인 후 실행.
+- 내부 작업(읽기, 정리, 분석, 학습)은 허락 없이 적극적으로.
