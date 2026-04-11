@@ -5,18 +5,12 @@ import (
 	"encoding/json"
 	"time"
 
-	handlerplatform "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/platform"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // registerAuthRPCMethods registers credential and channel-logout RPC methods.
 func (s *Server) registerAuthRPCMethods() {
-	// Secret resolution methods.
-	s.dispatcher.RegisterDomain(handlerplatform.SecretMethods(handlerplatform.SecretDeps{
-		Resolver: s.secrets,
-	}))
-
 	s.dispatcher.Register("telegram.logout", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		var p struct {
 			Channel string `json:"channel"`

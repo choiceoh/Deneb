@@ -28,7 +28,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
-	handlerbridge "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/bridge"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
@@ -91,10 +90,6 @@ type Server struct {
 	*SessionManager // sessions, transcript
 	*ChatManager    // chatHandler, toolDeps, telegramPlug
 	*HookManager    // hooks, cron, cronRunLog
-
-	// bridgeInjector is late-bound: created in registerEarlyMethods,
-	// populated in registerLateMethods after chatHandler is ready.
-	bridgeInjector *handlerbridge.Injector
 
 	// lifecycleCtx is cancelled by doShutdown() so background goroutines
 	// exit promptly even if the caller's original context is still alive.

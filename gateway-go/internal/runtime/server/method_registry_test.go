@@ -32,9 +32,6 @@ var requiredMethods = []string{
 	"acp.stop",
 	"acp.unbind",
 
-	// Bridge.
-	"bridge.send",
-
 	// Chat.
 	"chat.abort",
 	"chat.btw",
@@ -124,10 +121,6 @@ var requiredMethods = []string{
 	"update.run",
 	"usage.cost",
 	"usage.status",
-
-	// Platform.
-	"secrets.reload",
-	"secrets.resolve",
 
 	// Wiki: feature-flagged (DENEB_WIKI_ENABLED), not in required list.
 

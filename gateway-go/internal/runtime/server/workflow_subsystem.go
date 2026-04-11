@@ -7,7 +7,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/usage"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/secret"
 )
 
 // WorkflowSubsystem groups agent execution, approval, skill, and workflow
@@ -17,7 +16,6 @@ import (
 type WorkflowSubsystem struct {
 	approvals    *approval.Store
 	skills       *skills.Registry
-	secrets      *secret.Resolver
 	jobTracker   *agent.JobTracker
 	usageTracker *usage.Tracker
 }
@@ -28,7 +26,6 @@ func NewWorkflowSubsystem(logger *slog.Logger) *WorkflowSubsystem {
 	return &WorkflowSubsystem{
 		approvals:    approval.NewStore(),
 		skills:       skills.NewRegistry(),
-		secrets:      secret.NewResolver(),
 		jobTracker:   agent.NewJobTracker(logger),
 		usageTracker: usage.New(),
 	}
