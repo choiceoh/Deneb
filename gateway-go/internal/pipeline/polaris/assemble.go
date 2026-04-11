@@ -48,12 +48,12 @@ func assembleContextFull(
 		recent = recent[len(recent)-freshTailCount:]
 	}
 
-	// If no summaries exist, just return recent messages (token-trimmed).
+	// If no summaries exist, return recent messages as-is.
+	// Compaction will handle overflow (summarize first, truncate only as last resort).
 	if summaryCoverage < 0 {
-		trimmed := trimLLMToTokenBudget(recent, memoryTokenBudget)
-		tokens := compact.EstimateMessagesTokens(trimmed)
+		tokens := compact.EstimateMessagesTokens(recent)
 		return &AssemblyResult{
-			Messages:        trimmed,
+			Messages:        recent,
 			EstimatedTokens: tokens,
 			TotalMessages:   maxIdx + 1,
 		}, nil
@@ -91,13 +91,6 @@ func assembleContextFull(
 		}
 		summaryMsgs = trimLLMToTokenBudget(summaryMsgs, remaining)
 		summaryTokens = compact.EstimateMessagesTokens(summaryMsgs)
-		totalTokens = recentTokens + summaryTokens
-	}
-
-	// If recent messages alone exceed budget, trim recent (oldest first).
-	if memoryTokenBudget > 0 && recentTokens > memoryTokenBudget {
-		recent = trimLLMToTokenBudget(recent, memoryTokenBudget)
-		recentTokens = compact.EstimateMessagesTokens(recent)
 		totalTokens = recentTokens + summaryTokens
 	}
 
