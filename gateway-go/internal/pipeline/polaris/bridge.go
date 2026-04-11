@@ -16,7 +16,7 @@ var _ toolctx.TranscriptStore = (*Bridge)(nil)
 //
 // On first Load for a session, the Bridge lazily migrates existing JSONL
 // messages into the Polaris store (idempotent). Subsequent Appends dual-write
-// to both JSONL and SQLite.
+// to both stores.
 type Bridge struct {
 	legacy   toolctx.TranscriptStore
 	store    *Store
@@ -48,7 +48,7 @@ func (b *Bridge) Load(sessionKey string, limit int) ([]toolctx.ChatMessage, int,
 	return b.legacy.Load(sessionKey, limit)
 }
 
-// Append writes to both legacy JSONL and Polaris SQLite.
+// Append writes to both legacy JSONL and Polaris file store.
 func (b *Bridge) Append(sessionKey string, msg toolctx.ChatMessage) error {
 	if err := b.legacy.Append(sessionKey, msg); err != nil {
 		return err
@@ -67,7 +67,7 @@ func (b *Bridge) Delete(sessionKey string) error {
 	}
 	b.migrated.Delete(sessionKey)
 	if err := b.store.DeleteSession(sessionKey); err != nil {
-		b.logger.Warn("polaris: delete from sqlite failed", "session", sessionKey, "error", err)
+		b.logger.Warn("polaris: delete failed", "session", sessionKey, "error", err)
 	}
 	return nil
 }
