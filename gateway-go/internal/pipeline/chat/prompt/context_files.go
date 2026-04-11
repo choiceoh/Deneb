@@ -202,13 +202,15 @@ func loadContextFilesFromDisk(workspaceDir string) ([]ContextFile, map[string]ti
 }
 
 // collectSearchDirs returns the workspace dir plus its ancestors, stopping
-// at the user's home directory or filesystem root (max 10 levels).
+// at the user's home directory or filesystem root (max 6 levels).
+// Limit tightened for single-user DGX Spark deployment where deep ancestor
+// walks yield no additional context files but inflate the prompt budget.
 func collectSearchDirs(workspaceDir string) []string {
 	dirs := []string{workspaceDir}
 
 	home, _ := os.UserHomeDir()
 	current := workspaceDir
-	for range 10 {
+	for range 6 {
 		parent := filepath.Dir(current)
 		if parent == current {
 			break // reached filesystem root
