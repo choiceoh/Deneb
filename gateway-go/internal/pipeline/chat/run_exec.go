@@ -123,7 +123,23 @@ func executeAgentRun(
 	}
 
 	// Stage 2: Assemble final message list (prebuilt, attachments, Polaris compaction).
-	messages := assembleMessages(ctx, params, deps, prep, logger)
+	var cHooks *compactionHooks
+	if statusCtrl != nil || (deps.callbacks.typingFn != nil && params.Delivery != nil) {
+		cHooks = &compactionHooks{}
+		if statusCtrl != nil {
+			cHooks.onStart = statusCtrl.SetCompacting
+		}
+		if deps.callbacks.typingFn != nil && params.Delivery != nil {
+			delivery := params.Delivery
+			typingFn := deps.callbacks.typingFn
+			cHooks.typingFn = func() {
+				tCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				_ = typingFn(tCtx, delivery)
+			}
+		}
+	}
+	messages := assembleMessages(ctx, params, deps, prep, logger, cHooks)
 
 	// Stage 3: Finalize system prompt (budget optimization, coordinator suggestion, tier-1 injection).
 	systemPrompt := finalizePrompt(prep.SystemPrompt, prep.Tier1Wiki, deps.contextCfg, sessionToolPreset, params.Message)
@@ -327,6 +343,14 @@ func prepareContextAndPrompt(
 	return result
 }
 
+// compactionHooks holds optional callbacks for the STW compaction phase.
+// When LLM compaction fires, these hooks provide user-visible feedback
+// (status emoji + typing keepalive) so the user knows the system is working.
+type compactionHooks struct {
+	onStart  func() // called when LLM compaction begins (e.g. set ✍ emoji)
+	typingFn func() // sends typing indicator every 5s during compaction
+}
+
 // assembleMessages builds the final message list from prebuilt messages, transcript
 // context, attachments, and Polaris compaction.
 func assembleMessages(
@@ -335,6 +359,7 @@ func assembleMessages(
 	deps runDeps,
 	prep prepResult,
 	logger *slog.Logger,
+	hooks *compactionHooks,
 ) []llm.Message {
 	messages := prep.Messages
 
@@ -369,6 +394,10 @@ func assembleMessages(
 
 	// Polaris compaction: tiered context compression.
 	// Applied after message assembly, before prompt finalization.
+	// STW (Stop-the-World): when LLM compaction fires, the user sees a
+	// ✍ status emoji and typing keepalive until compaction completes.
+	// No LLM call is made until context is compressed — incoming messages
+	// are already queued by PendingQueue during the active run.
 	if len(messages) > 0 {
 		polarisCtx, polarisCancel := context.WithTimeout(ctx, 2*time.Minute)
 		var summarizer compact.Summarizer
@@ -377,6 +406,43 @@ func assembleMessages(
 		}
 		// Derive compaction budget from context assembly budgets so they stay in sync.
 		contextBudget := int(deps.contextCfg.MemoryTokenBudget - deps.contextCfg.SystemPromptBudget) //nolint:gosec // G115
+
+		// STW: pre-check if LLM compaction will likely fire.
+		// Signal the user before the (potentially slow) summarization starts.
+		var compactTypingDone chan struct{}
+		var compactStart time.Time
+		if hooks != nil && summarizer != nil {
+			currentTokens := compact.EstimateMessagesTokens(messages)
+			threshold := int(float64(contextBudget) * compact.DefaultLLMThresholdPct)
+			if currentTokens > threshold {
+				compactStart = time.Now()
+				if hooks.onStart != nil {
+					hooks.onStart()
+				}
+				logger.Info("pipeline: STW compaction starting",
+					"tokens", currentTokens, "budget", contextBudget,
+					"ratio", fmt.Sprintf("%.1f%%", float64(currentTokens)/float64(contextBudget)*100))
+				if hooks.typingFn != nil {
+					compactTypingDone = make(chan struct{})
+					typingFn := hooks.typingFn
+					go func() {
+						ticker := time.NewTicker(5 * time.Second)
+						defer ticker.Stop()
+						for {
+							select {
+							case <-compactTypingDone:
+								return
+							case <-ctx.Done():
+								return
+							case <-ticker.C:
+								typingFn()
+							}
+						}
+					}()
+				}
+			}
+		}
+
 		var polarisResult compact.Result
 		if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
 			engine := bridge.Engine()
@@ -392,6 +458,15 @@ func assembleMessages(
 			messages, polarisResult = compact.Compact(polarisCtx, compact.NewConfig(contextBudget), messages, summarizer, logger)
 		}
 		polarisCancel()
+
+		if compactTypingDone != nil {
+			close(compactTypingDone)
+		}
+		if !compactStart.IsZero() {
+			logger.Info("pipeline: STW compaction done",
+				"durationMs", time.Since(compactStart).Milliseconds())
+		}
+
 		if polarisResult.MicroPruned > 0 || polarisResult.LLMCompacted || polarisResult.EmergencyEvicted > 0 {
 			var tier string
 			switch {

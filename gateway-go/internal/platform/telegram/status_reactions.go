@@ -312,6 +312,12 @@ func (c *StatusReactionController) SetDone() {
 	c.finishWithEmoji(c.emojis.Done)
 }
 
+// SetCompacting sets the compacting reaction (immediate, non-terminal).
+// Shown during STW compaction while context is being summarized.
+func (c *StatusReactionController) SetCompacting() {
+	c.scheduleEmoji(c.emojis.Compacting, true, false)
+}
+
 // SetError sets the error reaction (terminal state).
 func (c *StatusReactionController) SetError() {
 	c.finishWithEmoji(c.emojis.Error)
