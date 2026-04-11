@@ -2,8 +2,6 @@
 // It produces the same JSON structure as the Rust FFI (core-rs/core/src/markdown/).
 package coremarkdown
 
-import "encoding/json"
-
 // MarkdownStyle enumerates the style kinds tracked in the IR.
 // JSON values match Rust's serde snake_case serialization.
 type MarkdownStyle string
@@ -37,28 +35,6 @@ type MarkdownIR struct {
 	Text   string      `json:"text"`
 	Styles []StyleSpan `json:"styles"`
 	Links  []LinkSpan  `json:"links"`
-}
-
-// IROutput is the full JSON shape returned by MarkdownToIR, matching the Rust
-// FFI output: MarkdownIR fields plus derived booleans.
-type IROutput struct {
-	Text          string      `json:"text"`
-	Styles        []StyleSpan `json:"styles"`
-	Links         []LinkSpan  `json:"links"`
-	HasCodeBlocks bool        `json:"has_code_blocks"`
-	HasTables     bool        `json:"has_tables"`
-}
-
-// MarshalIROutput serializes an IROutput to JSON, ensuring empty slices
-// are rendered as [] rather than null.
-func MarshalIROutput(out *IROutput) (json.RawMessage, error) {
-	if out.Styles == nil {
-		out.Styles = []StyleSpan{}
-	}
-	if out.Links == nil {
-		out.Links = []LinkSpan{}
-	}
-	return json.Marshal(out)
 }
 
 // FenceSpan describes a fenced code block's byte range in the source text.
