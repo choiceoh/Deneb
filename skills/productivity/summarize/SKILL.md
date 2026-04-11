@@ -11,7 +11,7 @@ metadata:
         "emoji": "🧾",
         "requires": { "bins": ["summarize"] },
         "tags": ["transcript", "summary", "URL", "podcast"],
-        "related_skills": ["nano-pdf"],
+        "related_skills": [],
         "install":
           [
             {
