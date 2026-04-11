@@ -127,30 +127,10 @@ func serializeSummaryBatch(nodes []SummaryNode) string {
 	return sb.String()
 }
 
-// condensationPrompt instructs the summarizer to merge multiple structured summaries.
-const condensationPrompt = `아래 여러 개의 구조화된 요약을 하나로 통합하라. 반드시 모든 섹션을 작성해야 한다.
+// condensationPrompt instructs the summarizer to merge multiple summaries into one.
+const condensationPrompt = `아래 여러 요약을 하나로 통합하라.
 
-## 규칙
-- 모든 구체적 사실을 빠짐없이 보존 (이름, 숫자, 날짜, 경로, 에러코드 등)
-- 중복 정보는 최신 값만 유지
-- 진행 상황이 업데이트된 경우 최신 상태만 기록
+- 모든 구체적 사실(이름, 숫자, 날짜, 경로, 에러코드)을 빠짐없이 보존하라
+- 중복 정보는 최신 값만 유지, 진행 상황은 최신 상태만 기록
 - 한국어로 작성 (고유명사/코드는 원문 유지)
-- 가능한 한 간결하게 작성하되 사실을 누락하지 마라
-
-## 출력 형식
-
-### 핵심 사실 (Facts)
-- [카테고리] 항목: 값
-
-### 진행 상황 (Progress)
-- [완료] 작업 설명
-- [진행중] 작업 설명
-
-### 결정 사항 (Decisions)
-- 결정 내용 (이유)
-
-### 도구 실행 결과 (Tool Outputs)
-- [도구명] 결과 요약
-
-### 대화 맥락 (Context)
-대화의 흐름과 유저의 의도 요약 (2-3문장)`
+- 불릿 위주로 간결하게, 사실 누락 금지`

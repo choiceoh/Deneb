@@ -126,34 +126,10 @@ func serializeMessages(messages []llm.Message) string {
 	return sb.String()
 }
 
-// compactionSystemPrompt is the structured summarization prompt (Korean).
-const compactionSystemPrompt = `아래 대화 내용을 정해진 형식으로 요약하라. 반드시 모든 섹션을 작성해야 한다.
+// compactionSystemPrompt is the summarization prompt for Polaris compaction (Korean).
+const compactionSystemPrompt = `아래 대화를 한국어로 요약하라.
 
-## 규칙
-- 모든 구체적 사실(이름, 숫자, 날짜, IP, 코드명, 에러코드, 경로 등)을 빠짐없이 기록
-- 사실이 수정된 경우 수정된 값만 기록 (원래 값 삭제)
-- 도구 실행 결과에서 핵심 데이터 추출하여 기록
-- 한국어로 작성 (고유명사/코드는 원문 유지)
-- 가능한 한 간결하게 작성하되 사실을 누락하지 마라
-
-## 출력 형식 (이 구조를 정확히 따르라)
-
-### 핵심 사실 (Facts)
-유저가 알려준 정보, 시스템에서 확인된 사실을 개별 항목으로:
-- [카테고리] 항목: 값
-
-### 진행 상황 (Progress)
-완료/진행중/차단된 작업:
-- [완료] 작업 설명
-- [진행중] 작업 설명
-
-### 결정 사항 (Decisions)
-유저가 내린 결정이나 선택:
-- 결정 내용 (이유)
-
-### 도구 실행 결과 (Tool Outputs)
-도구가 반환한 핵심 데이터:
-- [도구명] 결과 요약
-
-### 대화 맥락 (Context)
-대화의 흐름과 유저의 의도 요약 (2-3문장)`
+- 구체적 사실(이름, 숫자, 날짜, 경로, 에러코드, 결정사항)을 빠짐없이 보존하라
+- 완료/진행중 작업과 도구 실행 핵심 결과를 포함하라
+- 고유명사와 코드는 원문 유지, 중복은 최신 값만 남겨라
+- 불릿 위주로 간결하게, 사실 누락 금지`
