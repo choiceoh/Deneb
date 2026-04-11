@@ -17,7 +17,7 @@ import (
 // Pipeline timeouts.
 const (
 	stage1Timeout = 30 * time.Second
-	stage2Timeout = 60 * time.Second
+	stage2Timeout = 240 * time.Second
 
 	// Stage 1a: max emails to fetch for context.
 	maxThreadMessages = 5
