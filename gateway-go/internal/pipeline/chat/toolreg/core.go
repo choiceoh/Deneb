@@ -7,8 +7,6 @@
 package toolreg
 
 import (
-	"context"
-
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
@@ -21,11 +19,10 @@ import (
 func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps) {
 	RegisterFSTools(registry, deps)
 	RegisterProcessTools(registry, &deps.Process)
-	RegisterWebTools(registry, deps.LLMClient, deps.DefaultModel)
+	RegisterWebTools(registry)
 	RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
 	RegisterMediaTools(registry)
-	RegisterDataTools(registry)
 	var diaryDir string
 	if deps.Wiki.Store != nil {
 		diaryDir = deps.Wiki.Store.DiaryDir()
@@ -34,26 +31,6 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
 	// because it depends on local AI hooks that live in the chat package.
-	// NOTE: fetch_tools is registered by chat.RegisterCoreTools because it
-	// needs a FetchToolsRegistry interface that chat.ToolRegistry implements.
-}
-
-// FetchToolsSchema returns the fetch_tools schema for external registration.
-func FetchToolsSchema() map[string]any { return fetchToolsToolSchema() }
-
-// RegisterBridgeTool registers the inter-agent bridge tool.
-// Called separately because Broadcaster is not part of CoreToolDeps.
-func RegisterBridgeTool(registry toolctx.ToolRegistrar, broadcaster tools.BroadcastFunc) {
-	if broadcaster == nil {
-		return
-	}
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "bridge",
-		Description:     "다른 AI 에이전트(Claude Code 등)에게 메시지를 보낸다. 같은 서버에서 작업 중인 에이전트와 실시간 통신.",
-		InputSchema:     bridgeToolSchema(),
-		Fn:              tools.ToolBridge(broadcaster),
-		ConcurrencySafe: true,
-	})
 }
 
 // RegisterPolarisTools registers the unified Polaris tool (search/describe/expand).
@@ -63,12 +40,11 @@ func RegisterPolarisTools(registry toolctx.ToolRegistrar, store *polaris.Store, 
 		return
 	}
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "polaris",
-		Description:     "압축된 대화 이력 관리. search (키워드 검색), describe (요약 구조 조회), expand (원본 복원)",
-		InputSchema:     polarisToolSchema(),
-		Fn:              tools.ToolPolaris(store, localAI),
-		Deferred:        true,
-		ConcurrencySafe: true,
+		Name:        "polaris",
+		Description: "압축된 대화 이력 관리. search (키워드 검색), describe (요약 구조 조회), expand (원본 복원)",
+		InputSchema: polarisToolSchema(),
+		Fn:          tools.ToolPolaris(store, localAI),
+		Deferred:    true,
 	})
 }
 
@@ -76,11 +52,10 @@ func RegisterPolarisTools(registry toolctx.ToolRegistrar, store *polaris.Store, 
 func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps) {
 	workspaceDir := deps.WorkspaceDir
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "read",
-		Description:     "Read file contents with line numbers for code review (default: 2000 lines). Use offset/limit for large files; equivalent to a clean bat/cat -n view",
-		InputSchema:     readToolSchema(),
-		Fn:              tools.ToolRead(workspaceDir),
-		ConcurrencySafe: true,
+		Name:        "read",
+		Description: "Read file contents with line numbers for code review (default: 2000 lines). Use offset/limit for large files; equivalent to a clean bat/cat -n view",
+		InputSchema: readToolSchema(),
+		Fn:          tools.ToolRead(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "write",
@@ -95,53 +70,22 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		Fn:          tools.ToolEdit(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "grep",
-		Description:     "Regex search across files (rg / ripgrep). Use include/fileType to narrow scope. Returns file:line:match format",
-		InputSchema:     grepToolSchema(),
-		Fn:              tools.ToolGrep(workspaceDir),
-		ConcurrencySafe: true,
+		Name:        "grep",
+		Description: "Regex search across files (rg / ripgrep). Use include/fileType to narrow scope. Returns file:line:match format",
+		InputSchema: grepToolSchema(),
+		Fn:          tools.ToolGrep(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "find",
-		Description:     "Fast file search by glob pattern (fd-backed when available; e.g. \"**/*.go\"). Use grep to search inside files instead",
-		InputSchema:     findToolSchema(),
-		Fn:              tools.ToolFind(workspaceDir),
-		ConcurrencySafe: true,
+		Name:        "find",
+		Description: "Fast file search by glob pattern (fd-backed when available; e.g. \"**/*.go\"). Use grep to search inside files instead",
+		InputSchema: findToolSchema(),
+		Fn:          tools.ToolFind(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "multi_edit",
-		Description: "Batch search-and-replace across multiple files in one call. Up to 50 edits. Essential for refactoring, renaming symbols, updating imports",
-		InputSchema: multiEditToolSchema(),
-		Fn:          tools.ToolMultiEdit(workspaceDir),
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "tree",
-		Description:     "Display directory tree with depth control. Uses eza/exa for fast default listings when available. Filters: dirs_only, pattern glob, show_hidden. Skips node_modules/.git/target etc",
-		InputSchema:     treeToolSchema(),
-		Fn:              tools.ToolTree(workspaceDir),
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "diff",
-		Description:     "Git diff and file comparison. Modes: staged, unstaged, all (vs HEAD), commit (show commit), branch (compare branches), files (compare two files). Options: stat_only, context_lines, path filter",
-		InputSchema:     diffToolSchema(),
-		Fn:              tools.ToolDiff(workspaceDir),
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "analyze",
-		Description:     "Code analysis: outline (file structure), symbols (find definitions), references (find usages), imports (dependency graph), signature (function signatures). Supports Go (AST) and Rust (regex)",
-		InputSchema:     analyzeToolSchema(),
-		Fn:              tools.ToolAnalyze(workspaceDir),
-		Deferred:        true,
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "test",
-		Description: "Run tests/builds (go/cargo/make). Actions: run, build, check. Structured pass/fail/skip results",
-		InputSchema: testToolSchema(),
-		Fn:          tools.ToolTest(workspaceDir),
-		Deferred:    true,
+		Name:        "diff",
+		Description: "Git diff and file comparison. Modes: staged, unstaged, all (vs HEAD), commit (show commit), branch (compare branches), files (compare two files). Options: stat_only, context_lines, path filter",
+		InputSchema: diffToolSchema(),
+		Fn:          tools.ToolDiff(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "git",
@@ -155,19 +99,6 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		InputSchema: gatewayToolSchema(),
 		Fn:          tools.ToolGateway(workspaceDir),
 	})
-
-	// Spillover: read full content of a previously spilled large tool result.
-	if deps.SpilloverStore != nil {
-		registry.RegisterTool(toolctx.ToolDef{
-			Name:            "read_spillover",
-			Description:     "Read the full content of a previous large tool result by spill ID. Use when a tool result was too large and was replaced with a preview",
-			InputSchema:     readSpilloverToolSchema(),
-			Fn:              tools.ToolSpilloverRead(deps.SpilloverStore),
-			Deferred:        true,
-			ConcurrencySafe: true,
-		})
-	}
-
 }
 
 // RegisterProcessTools registers exec and process management tools.
@@ -179,59 +110,34 @@ func RegisterProcessTools(registry toolctx.ToolRegistrar, d *toolctx.ProcessDeps
 		Fn:          tools.ToolExec(d.Mgr, d.WorkspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "process",
-		Description:     "Manage background exec sessions: list running, poll/log output, kill by sessionId",
-		InputSchema:     processToolSchema(),
-		Fn:              tools.ToolProcess(d.Mgr),
-		ConcurrencySafe: true,
+		Name:        "process",
+		Description: "Manage background exec sessions: list running, poll/log output, kill by sessionId",
+		InputSchema: processToolSchema(),
+		Fn:          tools.ToolProcess(d.Mgr),
 	})
 }
 
-// RegisterWebTools registers the unified web tool (search/request/research modes).
-func RegisterWebTools(registry toolctx.ToolRegistrar, llmClient *llm.Client, defaultModel string) {
+// RegisterWebTools registers the unified web tool (search mode only).
+func RegisterWebTools(registry toolctx.ToolRegistrar) {
 	webCache := web.NewFetchCache()
 	localAI := web.NewLocalAIExtractor()
 
-	var drLLM web.DeepResearchLLM
-	if llmClient != nil {
-		drLLM = &deepResearchLLMAdapter{client: llmClient}
-	}
-
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "web",
-		Description:     "Web access: search (web search/fetch, default), request (raw HTTP for APIs), research (deep multi-query research). Use mode parameter to select",
-		InputSchema:     webToolSchema(),
-		Fn:              web.MergedTool(webCache, localAI, tools.ToolHTTP(), drLLM, defaultModel),
-		ConcurrencySafe: true,
-	})
-}
-
-// Compile-time interface compliance.
-var _ web.DeepResearchLLM = (*deepResearchLLMAdapter)(nil)
-
-// deepResearchLLMAdapter adapts llm.Client to web.DeepResearchLLM.
-type deepResearchLLMAdapter struct {
-	client *llm.Client
-}
-
-func (a *deepResearchLLMAdapter) Complete(ctx context.Context, model, system, user string, maxTokens int) (string, error) {
-	return a.client.Complete(ctx, llm.ChatRequest{
-		Model:     model,
-		System:    llm.SystemString(system),
-		Messages:  []llm.Message{llm.NewTextMessage("user", user)},
-		MaxTokens: maxTokens,
+		Name:        "web",
+		Description: "Web access: search the web or fetch page content. Use query for keyword search, url for direct fetch",
+		InputSchema: webToolSchema(),
+		Fn:          web.MergedTool(webCache, localAI),
 	})
 }
 
 // RegisterSessionTools registers session management tools.
 func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps) {
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "sessions",
-		Description:     "Session management: list (active sessions), history (message log), search (transcript keyword search), send (cross-session message)",
-		InputSchema:     sessionsToolSchema(),
-		Fn:              tools.ToolSessions(d),
-		Deferred:        true,
-		ConcurrencySafe: true,
+		Name:        "sessions",
+		Description: "Session management: list (active sessions), history (message log), search (transcript keyword search), send (cross-session message)",
+		InputSchema: sessionsToolSchema(),
+		Fn:          tools.ToolSessions(d),
+		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "sessions_spawn",
@@ -291,10 +197,9 @@ func RegisterSkillsTools(registry toolctx.ToolRegistrar, getSnapshot tools.Skill
 		Name: "skills",
 		Description: "Skill management: list (browse/search), create, patch, read, delete, list_files. " +
 			"Use list when the current task might match a skill. Create reusable workflows from complex tasks.",
-		InputSchema:     skillsToolSchema(),
-		Fn:              tools.ToolSkills(getSnapshot, workspaceDir, invalidateCache),
-		Deferred:        true,
-		ConcurrencySafe: true,
+		InputSchema: skillsToolSchema(),
+		Fn:          tools.ToolSkills(getSnapshot, workspaceDir, invalidateCache),
+		Deferred:    true,
 	})
 }
 
@@ -309,18 +214,6 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar) {
 	})
 }
 
-// RegisterDataTools registers persistent storage tools.
-func RegisterDataTools(registry toolctx.ToolRegistrar) {
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "kv",
-		Description:     "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
-		InputSchema:     kvToolSchema(),
-		Fn:              tools.ToolKV(),
-		Deferred:        true,
-		ConcurrencySafe: true,
-	})
-}
-
 // RegisterWikiTools registers wiki knowledge base tools for long-term knowledge
 // access (search, read, write, log). Project-specific tools provide structured
 // access to the "프로젝트" wiki category.
@@ -328,11 +221,10 @@ func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDep
 	// Wiki: unified knowledge base tool (search, read, write, log, daily, index, status).
 	if wikiDeps.Store != nil {
 		registry.RegisterTool(toolctx.ToolDef{
-			Name:            "wiki",
-			Description:     "LLM 위키 지식베이스: search (검색), read (페이지 읽기), index (목차), write (작성/수정), log (일지), daily (최근 일지), status (통계). 과거 결정/맥락/인물/프로젝트 등 장기 지식을 마크다운 위키로 관리",
-			InputSchema:     wikiToolSchema(),
-			Fn:              tools.ToolWiki(wikiDeps, workspaceDir),
-			ConcurrencySafe: true,
+			Name:        "wiki",
+			Description: "LLM 위키 지식베이스: search (검색), read (페이지 읽기), index (목차), write (작성/수정), log (일지), daily (최근 일지), status (통계). 과거 결정/맥락/인물/프로젝트 등 장기 지식을 마크다운 위키로 관리",
+			InputSchema: wikiToolSchema(),
+			Fn:          tools.ToolWiki(wikiDeps, workspaceDir),
 		})
 	}
 }

@@ -90,9 +90,6 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// Core tools (file I/O, exec, process, sessions, gateway, cron, image).
 	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
 
-	// Bridge: inter-agent communication tool.
-	toolreg.RegisterBridgeTool(chatCfg.Tools, s.broadcaster.Broadcast)
-
 	// Polaris: retrieval tools for compressed conversation history.
 	if bridge, ok := transcriptStore.(*polaris.Bridge); ok {
 		var localAI tools.LocalAIFunc

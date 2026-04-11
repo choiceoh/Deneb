@@ -185,9 +185,9 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		}
 		s.WriteString("\n")
 
-		// Tool Usage (compressed: parallel, first-class, CLI, pilot, chaining).
+		// Tool Usage (compressed: first-class, CLI, pilot, chaining).
 		s.WriteString("## Tool Usage\n")
-		s.WriteString("- Act immediately: call tools in parallel when independent, never ask confirmation for reversible ops, never ask the user to do what you can do yourself.\n")
+		s.WriteString("- Act immediately: call tools one at a time in order, never ask confirmation for reversible ops, never ask the user to do what you can do yourself.\n")
 		s.WriteString("- Use first-class tools directly: grep not exec+grep, edit not exec+sed, gmail not manual API calls. `grep`/`find`/`tree` are fast; prefer them over shelling out.\n")
 		s.WriteString("- For shell commands prefer `rg/fd/bat/eza/sd/dust/duf/procs/fx/ouch/btm`.\n")
 		s.WriteString("- Prefer edit over write for partial changes (smaller token footprint).\n")

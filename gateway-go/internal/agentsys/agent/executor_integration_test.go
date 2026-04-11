@@ -444,16 +444,19 @@ func TestRunAgent_ToolError(t *testing.T) {
 	}
 }
 
-func TestRunAgent_ParallelToolCalls(t *testing.T) {
+// TestRunAgent_MultipleToolCalls verifies that when the LLM emits multiple
+// tool_use blocks in a single turn, the executor runs them sequentially and
+// feeds all results back on the next turn. Parallel tool execution has been
+// removed; tools always run one at a time in stream order.
+func TestRunAgent_MultipleToolCalls(t *testing.T) {
 	tools := newFakeToolExecutor()
 	tools.outputs["read"] = "file A"
 	tools.outputs["grep"] = "match found"
 	tools.outputs["find"] = "/src/main.go"
-	tools.execTime = 10 * time.Millisecond // simulate some work
 
 	streamer := &fakeLLMStreamer{
 		turns: [][]llm.StreamEvent{
-			// Turn 1: LLM calls 3 tools in parallel.
+			// Turn 1: LLM emits 3 tool calls.
 			buildToolUseTurnEventsWithNames([]toolUseSpec{
 				{id: "toolu_1", name: "read", inputJSON: `{"path":"a.go"}`},
 				{id: "toolu_2", name: "grep", inputJSON: `{"pattern":"func"}`},
@@ -471,9 +474,7 @@ func TestRunAgent_ParallelToolCalls(t *testing.T) {
 	}
 
 	messages := []llm.Message{llm.NewTextMessage("user", "search")}
-	start := time.Now()
 	result, err := RunAgent(context.Background(), cfg, messages, streamer, tools, StreamHooks{}, nil, nil)
-	elapsed := time.Since(start)
 	testutil.NoError(t, err)
 
 	if tools.callCount() != 3 {
@@ -481,11 +482,6 @@ func TestRunAgent_ParallelToolCalls(t *testing.T) {
 	}
 	if result.Turns != 2 {
 		t.Errorf("Turns = %d, want 2", result.Turns)
-	}
-	// Parallel execution: 3 tools at 10ms each should take ~10-20ms, not 30ms+.
-	// Allow generous margin for CI but verify they didn't run sequentially.
-	if elapsed > 200*time.Millisecond {
-		t.Logf("warning: parallel tool execution took %v (expected < 200ms)", elapsed)
 	}
 }
 

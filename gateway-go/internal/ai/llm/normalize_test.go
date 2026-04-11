@@ -56,7 +56,8 @@ func TestNormalizeMessages_MergesConsecutiveUser(t *testing.T) {
 }
 
 func TestNormalizeMessages_MergesToolResultBlocks(t *testing.T) {
-	// Simulate parallel tool execution producing consecutive tool_result messages.
+	// Simulate multiple tool calls in a single turn producing consecutive
+	// tool_result messages.
 	blocks1 := []ContentBlock{
 		{Type: "tool_result", ToolUseID: "t1", Content: "result1"},
 	}

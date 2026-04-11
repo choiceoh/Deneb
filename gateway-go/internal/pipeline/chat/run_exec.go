@@ -608,7 +608,6 @@ func buildAgentConfig(
 		MaxOutputTokensRecovery:     maxOutputRecovery,
 		MaxOutputTokensScaleFactors: maxOutputScaleFactors,
 		SpawnDetected:               spawnFlag.IsSet,
-		StreamingToolExecution:      true,
 		ToolLoopDetector:            agent.NewToolLoopDetector(agent.DefaultToolLoopConfig(), logger),
 		// Per-turn message persistence: persist each assistant and tool_result
 		// message immediately to transcript so intermediate findings survive

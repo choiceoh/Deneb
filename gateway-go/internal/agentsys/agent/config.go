@@ -58,12 +58,6 @@ type AgentConfig struct {
 	// Savings: ~1600 tokens × image count per turn after turn 0.
 	StripImagesAfterFirstTurn bool
 
-	// StreamingToolExecution enables dispatching tool calls as soon as each
-	// tool_use block finishes streaming, rather than waiting for the entire
-	// LLM response to complete. Reduces latency when the LLM emits multiple
-	// tool_use blocks sequentially. Default: false (legacy behavior).
-	StreamingToolExecution bool
-
 	// MaxOutputTokensRecovery is the maximum number of times to auto-recover when
 	// the LLM response is truncated by max_tokens. Each recovery injects a
 	// "resume where you left off" message and increases MaxTokens for the next

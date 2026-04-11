@@ -1,8 +1,6 @@
 // hooks.go — StreamHooks callbacks for agent streaming events.
 package agent
 
-import "github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-
 // StreamHooks contains optional callbacks for agent streaming events.
 // All fields are optional — nil callbacks are silently skipped.
 type StreamHooks struct {
@@ -14,18 +12,11 @@ type StreamHooks struct {
 	// OnBeforeToolCall is called before each tool execution. Returns true to
 	// block the tool call (with blockReason as the tool output).
 	OnBeforeToolCall func(name, toolCallID string, input []byte) (block bool, blockReason string)
-	// OnToolBlockReady is called during streaming when a tool_use content block
-	// is fully received (on content_block_stop), before the stream ends. When
-	// set, enables streaming tool dispatch: the callback should start tool
-	// execution immediately. The index is the 0-based position within the turn's
-	// tool calls. When nil, tools are dispatched after the stream completes.
-	OnToolBlockReady func(toolCall llm.ContentBlock, index int)
 }
 
 // HookCompositor collects multiple handlers per hook and builds a StreamHooks
 // with fan-out dispatch. Fan-out hooks fire in registration order.
-// Hooks that return a value (OnBeforeToolCall) or have nil-means-disabled
-// semantics (OnToolBlockReady) are set directly via Set* methods.
+// Hooks that return a value (OnBeforeToolCall) are set directly via Set* methods.
 type HookCompositor struct {
 	textDelta  []func(string)
 	thinking   []func()
@@ -34,7 +25,6 @@ type HookCompositor struct {
 	toolResult []func(string, string, string, bool)
 
 	beforeToolCall func(string, string, []byte) (bool, string)
-	toolBlockReady func(llm.ContentBlock, int)
 }
 
 func (c *HookCompositor) OnTextDelta(fn func(string)) { c.textDelta = append(c.textDelta, fn) }
@@ -49,10 +39,6 @@ func (c *HookCompositor) OnToolResult(fn func(string, string, string, bool)) {
 
 func (c *HookCompositor) SetBeforeToolCall(fn func(string, string, []byte) (bool, string)) {
 	c.beforeToolCall = fn
-}
-
-func (c *HookCompositor) SetToolBlockReady(fn func(llm.ContentBlock, int)) {
-	c.toolBlockReady = fn
 }
 
 // Build returns a StreamHooks where each fan-out hook dispatches to all
@@ -95,6 +81,5 @@ func (c *HookCompositor) Build() StreamHooks {
 		}
 	}
 	h.OnBeforeToolCall = c.beforeToolCall
-	h.OnToolBlockReady = c.toolBlockReady
 	return h
 }

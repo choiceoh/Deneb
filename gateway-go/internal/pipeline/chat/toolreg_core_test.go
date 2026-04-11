@@ -19,7 +19,6 @@ func TestRegisterCoreTools(t *testing.T) {
 		"cron", "gateway",
 		"sessions", "sessions_spawn",
 		"subagents",
-		"fetch_tools",
 	}
 
 	registered := make(map[string]struct{})

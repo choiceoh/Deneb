@@ -23,31 +23,6 @@ func (m *mockRegistrar) toolNames() []string {
 	return names
 }
 
-// ─── FetchToolsSchema ─────────────────────────────────────────────────────────
-
-func TestFetchToolsSchema_validStructure(t *testing.T) {
-	schema := FetchToolsSchema()
-
-	if schema == nil {
-		t.Fatal("expected non-nil schema")
-	}
-	typ, ok := schema["type"].(string)
-	if !ok || typ != "object" {
-		t.Errorf("expected type=object, got %v", schema["type"])
-	}
-	props, ok := schema["properties"].(map[string]any)
-	if !ok {
-		t.Fatal("expected properties map")
-	}
-	// Should have "names" and "query" properties at minimum.
-	if _, ok := props["names"]; !ok {
-		t.Error("missing 'names' property in fetch_tools schema")
-	}
-	if _, ok := props["query"]; !ok {
-		t.Error("missing 'query' property in fetch_tools schema")
-	}
-}
-
 // ─── RegisterFSTools ──────────────────────────────────────────────────────────
 
 func TestRegisterFSTools_registersTools(t *testing.T) {
@@ -82,21 +57,6 @@ func TestRegisterProcessTools_registersTools(t *testing.T) {
 		if !containsName(names, want) {
 			t.Errorf("missing expected tool %q", want)
 		}
-	}
-}
-
-// ─── RegisterDataTools ────────────────────────────────────────────────────────
-
-func TestRegisterDataTools_registersTools(t *testing.T) {
-	reg := &mockRegistrar{}
-	RegisterDataTools(reg)
-
-	if len(reg.tools) == 0 {
-		t.Fatal("expected RegisterDataTools to register at least one tool")
-	}
-	names := reg.toolNames()
-	if !containsName(names, "kv") {
-		t.Error("missing expected tool 'kv'")
 	}
 }
 
