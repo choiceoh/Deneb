@@ -7,8 +7,6 @@ globs: [".github/**", "scripts/committer"]
 
 ## Commit & Pull Request Guidelines
 
-- Use `$deneb-pr-maintainer` at `.agents/skills/deneb-pr-maintainer/SKILL.md` for maintainer PR triage, review, close, search, and landing workflows.
-- This includes auto-close labels, bug-fix evidence gates, GitHub comment/search footguns, and maintainer PR decision flow.
 - `/landpr` lives in the global Codex prompts (`~/.codex/prompts/landpr.md`); when landing or merging any PR, always follow that `/landpr` process.
 - Create commits with `scripts/committer "<msg>" <file...>`; avoid manual `git add`/`git commit` so staging stays scoped.
 - Follow concise, action-oriented commit messages.
