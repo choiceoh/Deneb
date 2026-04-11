@@ -27,6 +27,16 @@ func TestCollectMemoryFiles(t *testing.T) {
 
 	t.Run("finds both cases", func(t *testing.T) {
 		dir := t.TempDir()
+		// On case-insensitive filesystems (macOS), MEMORY.md and memory.md are
+		// the same inode, so only 1 file can exist. Skip in that environment.
+		probe := filepath.Join(dir, "PROBE")
+		os.WriteFile(probe, []byte("u"), 0o644)
+		if _, err := os.Stat(filepath.Join(dir, "probe")); err == nil {
+			os.Remove(probe)
+			t.Skip("case-insensitive filesystem: MEMORY.md and memory.md are the same file")
+		}
+		os.Remove(probe)
+
 		os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte("upper"), 0o644)
 		os.WriteFile(filepath.Join(dir, "memory.md"), []byte("lower"), 0o644)
 
