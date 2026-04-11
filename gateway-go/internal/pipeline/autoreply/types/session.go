@@ -20,7 +20,7 @@ type SessionState struct {
 	VerboseLevel   VerboseLevel
 	ReasoningLevel ReasoningLevel
 	ElevatedLevel  ElevatedLevel
-	ToolPreset     string // tool preset restricting available tools (researcher, implementer, verifier, coordinator)
+	ToolPreset     string // tool preset restricting available tools (e.g. conversation, boot)
 	CreatedAt      int64
 	UpdatedAt      int64
 }
