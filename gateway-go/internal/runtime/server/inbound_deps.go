@@ -271,9 +271,6 @@ func (e *chatSendExecutor) RunTurn(ctx context.Context, cfg autoreply.AgentTurnC
 	if len(e.attachments) > 0 {
 		sendParams["attachments"] = e.attachments
 	}
-	if cfg.DeepWork {
-		sendParams["deepWork"] = true
-	}
 
 	req, err := protocol.NewRequestFrame(
 		"tg-"+e.chatID+"-"+strconv.FormatInt(e.messageID, 10),

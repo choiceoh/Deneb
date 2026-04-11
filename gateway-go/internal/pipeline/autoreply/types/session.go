@@ -21,7 +21,6 @@ type SessionState struct {
 	ReasoningLevel ReasoningLevel
 	ElevatedLevel  ElevatedLevel
 	ToolPreset     string // tool preset restricting available tools (researcher, implementer, verifier, coordinator)
-	DeepWork       bool   // deep work mode: extended timeouts and continuations for 2-3 hour autonomous sessions
 	CreatedAt      int64
 	UpdatedAt      int64
 }

@@ -255,7 +255,7 @@ func handleRunSuccess(
 		for _, ta := range result.ToolActivities {
 			toolNames = append(toolNames, ta.Name)
 		}
-		go recordDiary(deps.wikiStore, logger, params.Message, toolNames, params.ContinuationIndex)
+		go recordDiary(deps.wikiStore, logger, params.Message, toolNames)
 	}
 
 	logger.Info("agent run completed",

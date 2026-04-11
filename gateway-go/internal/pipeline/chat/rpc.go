@@ -24,7 +24,6 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		ClientRunID  string           `json:"clientRunId,omitempty"`
 		Model        string           `json:"model,omitempty"` // role name: "main","lightweight","fallback"
 		WorkspaceDir string           `json:"workspaceDir,omitempty"`
-		DeepWork     bool             `json:"deepWork,omitempty"` // extended autonomous mode (2-3 hours)
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
 		return rpcerr.WrapInvalidRequest("invalid chat.send params", err).Response(req.ID)
@@ -57,7 +56,6 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		ClientRunID:  p.ClientRunID,
 		Model:        p.Model,
 		WorkspaceDir: p.WorkspaceDir,
-		DeepWork:     p.DeepWork,
 	}
 
 	if h.abort.HasActiveRun(p.SessionKey) {

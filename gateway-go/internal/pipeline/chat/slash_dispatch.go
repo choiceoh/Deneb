@@ -87,37 +87,26 @@ func (h *Handler) handleSlashCommand(
 			sess.ToolPreset = "conversation"
 			_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
 			h.deliverSlashResponse(delivery, "💬 대화 모드 — 도구 없이 대화만 합니다.")
-		case "작업", "work":
-			sess.Mode = session.ModeWork
-			sess.ToolPreset = ""
-			_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
-			h.deliverSlashResponse(delivery, "🔨 작업 모드 — 모든 도구 + 자율 계속 실행이 활성화됩니다.")
 		case "일반", "normal":
 			sess.Mode = session.ModeNormal
 			sess.ToolPreset = ""
 			_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
-			h.deliverSlashResponse(delivery, "🔧 일반 모드 — 모든 도구를 사용하지만 자율 계속 실행은 비활성화됩니다.")
+			h.deliverSlashResponse(delivery, "🔧 일반 모드 — 모든 도구를 사용합니다.")
 		case "":
-			// Cycle: normal → chat → work → normal
-			switch sess.Mode {
-			case session.ModeNormal:
+			// Toggle: normal ↔ chat
+			if sess.Mode == session.ModeChat {
+				sess.Mode = session.ModeNormal
+				sess.ToolPreset = ""
+				_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
+				h.deliverSlashResponse(delivery, "🔧 일반 모드 — 모든 도구를 사용합니다.")
+			} else {
 				sess.Mode = session.ModeChat
 				sess.ToolPreset = "conversation"
 				_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
 				h.deliverSlashResponse(delivery, "💬 대화 모드 — 도구 없이 대화만 합니다.")
-			case session.ModeChat:
-				sess.Mode = session.ModeWork
-				sess.ToolPreset = ""
-				_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
-				h.deliverSlashResponse(delivery, "🔨 작업 모드 — 모든 도구 + 자율 계속 실행이 활성화됩니다.")
-			default:
-				sess.Mode = session.ModeNormal
-				sess.ToolPreset = ""
-				_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
-				h.deliverSlashResponse(delivery, "🔧 일반 모드 — 모든 도구를 사용하지만 자율 계속 실행은 비활성화됩니다.")
 			}
 		default:
-			h.deliverSlashResponse(delivery, "사용법: /mode [일반|대화|작업] — 인자 없이 순환 전환")
+			h.deliverSlashResponse(delivery, "사용법: /mode [일반|대화] — 인자 없이 토글")
 		}
 
 	case "coordinator":

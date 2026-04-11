@@ -67,12 +67,6 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 	// child completion notifications via DeferredSystemText.
 	deps.subagentNotifyCh = h.subagent.NotifyCh(params.SessionKey)
 
-	// Continuation (continue_run tool + autonomous multi-run) is active in
-	// Normal and Work modes. Chat mode (conversation-only) runs once and stops.
-	if sess.Mode == session.ModeChat && !params.DeepWork {
-		deps.continuationEnabled = false
-		deps.maxContinuations = 0
-	}
 	rsm := h.RunStateMachine()
 	go func() {
 		if rsm != nil {
@@ -147,8 +141,6 @@ func (h *Handler) buildRunDeps() runDeps {
 		startRunFn: func(params RunParams) {
 			h.startAsyncRun("pending-"+params.ClientRunID, params, false)
 		},
-		maxContinuations:    5,
-		continuationEnabled: true,
 
 		// Atomic snapshot of channel callbacks (reply, media, typing, etc.).
 		callbacks: h.Snapshot(),
