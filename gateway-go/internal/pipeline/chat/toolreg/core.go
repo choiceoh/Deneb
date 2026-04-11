@@ -103,12 +103,12 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		Description: "Gateway self-management: config read/write, restart (SIGUSR1), git pull + rebuild",
 		InputSchema: gatewayToolSchema(),
 		Fn:          tools.ToolGateway(workspaceDir),
+		Deferred:    true,
 	})
 
 	// Spillover: read full content of a previously spilled large tool result.
-	// Registered eagerly (not deferred) because fetch_tools — the only deferred
-	// activation trigger — no longer exists in main, and the trimmer embeds
-	// spill IDs directly in the truncated tool output as a recovery hint.
+	// Registered eagerly so the trim marker's embedded spill ID can be used
+	// in the same turn without a fetch_tools round-trip.
 	if deps.SpilloverStore != nil {
 		registry.RegisterTool(toolctx.ToolDef{
 			Name:        "read_spillover",
@@ -132,6 +132,7 @@ func RegisterProcessTools(registry toolctx.ToolRegistrar, d *toolctx.ProcessDeps
 		Description: "Manage background exec sessions: list running, poll/log output, kill by sessionId",
 		InputSchema: processToolSchema(),
 		Fn:          tools.ToolProcess(d.Mgr),
+		Deferred:    true,
 	})
 }
 

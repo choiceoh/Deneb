@@ -3,7 +3,7 @@
 // Three tiers applied in order:
 //  1. Emergency — single user input ≥30K tokens: evict oldest messages, compact remaining
 //  2. Micro     — strip code fences from tool results older than 4 turns (no LLM call)
-//  3. LLM       — at 80% of context budget: local AI summarizes old messages to 20% target
+//  3. LLM       — at 90% of context budget: local AI summarizes old messages to 20% target
 package compaction
 
 import (
@@ -17,7 +17,7 @@ import (
 
 const (
 	DefaultMicroTurnThreshold      = 4
-	DefaultLLMThresholdPct         = 0.80
+	DefaultLLMThresholdPct         = 0.90
 	DefaultLLMTargetPct            = 0.20
 	DefaultEmergencyInputThreshold = 30_000
 	runesPerToken                  = 2
