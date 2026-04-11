@@ -32,6 +32,18 @@
     ]
   },
   {
+    "name": "read_spillover",
+    "properties": {
+      "spill_id": {
+        "type": "string",
+        "description": "The spillover reference ID (e.g., sp_abc123) from a previous large tool result"
+      }
+    },
+    "required": [
+      "spill_id"
+    ]
+  },
+  {
     "name": "write",
     "properties": {
       "file_path": {

@@ -37,6 +37,19 @@ func readToolSchema() map[string]any {
 	}
 }
 
+func readSpilloverToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"spill_id": map[string]any{
+				"type":        "string",
+				"description": "The spillover reference ID (e.g., sp_abc123) from a previous large tool result",
+			},
+		},
+		"required": []string{"spill_id"},
+	}
+}
+
 func writeToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
