@@ -3,10 +3,16 @@ package media
 import (
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/liteparse"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
 
 func TestHasMedia(t *testing.T) {
+	// HasMedia gates PDF/Office documents on liteparse.Available(), which
+	// depends on whether the `lit` CLI is installed in the environment. The
+	// PDF subtest below uses this to stay deterministic across dev and CI.
+	pdfWant := liteparse.Available()
+
 	tests := []struct {
 		name string
 		msg  *telegram.Message
@@ -51,11 +57,11 @@ func TestHasMedia(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "non-image document (PDF, parseable by liteparse)",
+			name: "non-image document (PDF, parseable by liteparse when lit is installed)",
 			msg: &telegram.Message{
 				Document: &telegram.Document{FileID: "doc2", MimeType: "application/pdf"},
 			},
-			want: true, // liteparse supports PDF extraction
+			want: pdfWant,
 		},
 		{
 			name: "audio only (not processed)",
