@@ -3,21 +3,7 @@
 package types
 
 import (
-	"regexp"
 	"strings"
-)
-
-// ThinkLevel represents the thinking/reasoning depth for LLM inference.
-type ThinkLevel string
-
-const (
-	ThinkOff      ThinkLevel = "off"
-	ThinkMinimal  ThinkLevel = "minimal"
-	ThinkLow      ThinkLevel = "low"
-	ThinkMedium   ThinkLevel = "medium"
-	ThinkHigh     ThinkLevel = "high"
-	ThinkXHigh    ThinkLevel = "xhigh"
-	ThinkAdaptive ThinkLevel = "adaptive"
 )
 
 // VerboseLevel controls how much detail is shown in replies.
@@ -56,68 +42,6 @@ const (
 	UsageTokens UsageDisplayLevel = "tokens"
 	UsageFull   UsageDisplayLevel = "full"
 )
-
-// BudgetTokens returns the token budget for a thinking level.
-// Returns 0 for ThinkOff or unrecognized levels (meaning thinking is disabled).
-func (l ThinkLevel) BudgetTokens() int {
-	switch l {
-	case ThinkMinimal:
-		return 1024
-	case ThinkLow:
-		return 4096
-	case ThinkMedium:
-		return 10240
-	case ThinkHigh:
-		return 32768
-	case ThinkXHigh:
-		return 65536
-	case ThinkAdaptive:
-		return 16384
-	default:
-		return 0
-	}
-}
-
-// BaseThinkingLevels returns the standard thinking levels (without xhigh).
-func BaseThinkingLevels() []ThinkLevel {
-	return []ThinkLevel{ThinkOff, ThinkMinimal, ThinkLow, ThinkMedium, ThinkHigh, ThinkAdaptive}
-}
-
-var wsCollapseThinkRe = regexp.MustCompile(`[\s_-]+`)
-
-// NormalizeThinkLevel normalizes a user-provided thinking level string.
-func NormalizeThinkLevel(raw string) (ThinkLevel, bool) {
-	if raw == "" {
-		return "", false
-	}
-	key := strings.ToLower(strings.TrimSpace(raw))
-	collapsed := wsCollapseThinkRe.ReplaceAllString(key, "")
-
-	switch collapsed {
-	case "adaptive", "auto":
-		return ThinkAdaptive, true
-	case "xhigh", "extrahigh":
-		return ThinkXHigh, true
-	}
-
-	switch key {
-	case "off":
-		return ThinkOff, true
-	case "on", "enable", "enabled":
-		return ThinkLow, true
-	case "min", "minimal":
-		return ThinkMinimal, true
-	case "low", "thinkhard", "think-hard", "think_hard":
-		return ThinkLow, true
-	case "mid", "med", "medium", "thinkharder", "think-harder", "harder":
-		return ThinkMedium, true
-	case "high", "ultra", "ultrathink", "thinkhardest", "highest", "max":
-		return ThinkHigh, true
-	case "think":
-		return ThinkMinimal, true
-	}
-	return "", false
-}
 
 // NormalizeVerboseLevel normalizes a verbose level string.
 func NormalizeVerboseLevel(raw string) (VerboseLevel, bool) {
@@ -204,45 +128,4 @@ func NormalizeUsageDisplay(raw string) (UsageDisplayLevel, bool) {
 		return UsageFull, true
 	}
 	return "", false
-}
-
-// NormalizeProviderID normalizes a provider string to a canonical form.
-func NormalizeProviderID(provider string) string {
-	if provider == "" {
-		return ""
-	}
-	normalized := strings.ToLower(strings.TrimSpace(provider))
-	switch normalized {
-	case "z.ai", "z-ai":
-		return "zai"
-	case "bedrock", "aws-bedrock":
-		return "amazon-bedrock"
-	}
-	return normalized
-}
-
-// IsBinaryThinkingProvider returns true if the provider only supports on/off thinking.
-func IsBinaryThinkingProvider(provider string) bool {
-	return NormalizeProviderID(provider) == "zai"
-}
-
-// ListThinkingLevelLabels returns the appropriate labels for a provider's thinking levels.
-func ListThinkingLevelLabels(provider string) []string {
-	if IsBinaryThinkingProvider(provider) {
-		return []string{"off", "on"}
-	}
-	levels := BaseThinkingLevels()
-	result := make([]string, len(levels))
-	for i, l := range levels {
-		result[i] = string(l)
-	}
-	return result
-}
-
-// FormatThinkingLevels returns a comma-separated string of thinking levels.
-func FormatThinkingLevels(provider, separator string) string {
-	if separator == "" {
-		separator = ", "
-	}
-	return strings.Join(ListThinkingLevelLabels(provider), separator)
 }

@@ -65,15 +65,6 @@ func HandleDirectives(body string, sess *types.SessionState, opts DirectiveHandl
 	mod := &types.SessionModification{}
 	hasAnyChange := false
 
-	// Think level.
-	if directives.HasThinkDirective {
-		hasAnyChange = true
-		mod.ThinkLevel = directives.ThinkLevel
-		if directives.ThinkLevel != "" {
-			result.AckText += formatDirectiveAck("Thinking", string(directives.ThinkLevel))
-		}
-	}
-
 	// Verbose level.
 	if directives.HasVerboseDirective {
 		hasAnyChange = true
@@ -151,9 +142,6 @@ func PersistDirectives(sess *types.SessionState, result DirectiveHandlingResult)
 	if mod.Provider != "" {
 		update.Provider = &mod.Provider
 	}
-	if mod.ThinkLevel != "" {
-		update.ThinkLevel = &mod.ThinkLevel
-	}
 	if mod.FastMode != nil {
 		update.FastMode = mod.FastMode
 	}
@@ -169,7 +157,6 @@ func PersistDirectives(sess *types.SessionState, result DirectiveHandlingResult)
 // ResolveCurrentDirectiveLevels resolves effective levels from session + config.
 // Mirrors directive-handling.levels.ts resolveCurrentDirectiveLevels().
 type ResolvedLevels struct {
-	ThinkLevel     types.ThinkLevel
 	VerboseLevel   types.VerboseLevel
 	FastMode       bool
 	ReasoningLevel types.ReasoningLevel
@@ -180,9 +167,6 @@ func ResolveCurrentDirectiveLevels(sess *types.SessionState, defaults ResolvedLe
 
 	if sess == nil {
 		return result
-	}
-	if sess.ThinkLevel != "" {
-		result.ThinkLevel = sess.ThinkLevel
 	}
 	if sess.VerboseLevel != "" {
 		result.VerboseLevel = sess.VerboseLevel

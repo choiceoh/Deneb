@@ -3,17 +3,16 @@ package directives
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/model"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
-	"strings"
 	"testing"
 )
 
-func TestHandleDirectives_ThinkOnly(t *testing.T) {
-	result := HandleDirectives("/think high", nil, DirectiveHandlingOptions{})
+func TestHandleDirectives_FastOnly(t *testing.T) {
+	result := HandleDirectives("/fast", nil, DirectiveHandlingOptions{})
 	if result.SessionMod == nil {
 		t.Fatal("expected session mod")
 	}
-	if result.SessionMod.ThinkLevel != types.ThinkHigh {
-		t.Errorf("think = %q", result.SessionMod.ThinkLevel)
+	if result.SessionMod.FastMode == nil || !*result.SessionMod.FastMode {
+		t.Error("expected fast mode on")
 	}
 	if result.IsDirectiveOnly != true {
 		t.Error("expected directive-only")
@@ -21,18 +20,15 @@ func TestHandleDirectives_ThinkOnly(t *testing.T) {
 }
 
 func TestHandleDirectives_MultipleWithText(t *testing.T) {
-	result := HandleDirectives("hello /think medium /fast", nil, DirectiveHandlingOptions{})
+	result := HandleDirectives("hello /verbose full /fast", nil, DirectiveHandlingOptions{})
 	if result.IsDirectiveOnly {
 		t.Error("should not be directive-only")
 	}
 	if result.SessionMod == nil {
 		t.Fatal("expected session mod")
 	}
-	if result.SessionMod.ThinkLevel != types.ThinkMedium {
-		t.Errorf("think = %q", result.SessionMod.ThinkLevel)
-	}
-	if !strings.Contains(result.CleanedBody, "hello") {
-		t.Errorf("cleaned = %q", result.CleanedBody)
+	if result.SessionMod.VerboseLevel != types.VerboseFull {
+		t.Errorf("verbose = %q", result.SessionMod.VerboseLevel)
 	}
 }
 
@@ -56,18 +52,14 @@ func TestHandleDirectives_ModelWithCandidates(t *testing.T) {
 }
 
 func TestPersistDirectives(t *testing.T) {
-	session := &types.SessionState{}
+	sess := &types.SessionState{}
 	result := DirectiveHandlingResult{
 		SessionMod: &types.SessionModification{
-			ThinkLevel: types.ThinkHigh,
-			FastMode:   boolPtr(true),
+			FastMode: boolPtr(true),
 		},
 	}
-	PersistDirectives(session, result)
-	if session.ThinkLevel != types.ThinkHigh {
-		t.Errorf("think = %q", session.ThinkLevel)
-	}
-	if !session.FastMode {
+	PersistDirectives(sess, result)
+	if !sess.FastMode {
 		t.Error("expected fast mode on")
 	}
 }

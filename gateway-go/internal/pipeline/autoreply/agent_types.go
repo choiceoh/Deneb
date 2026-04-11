@@ -22,7 +22,6 @@ type AgentTurnConfig struct {
 	Model          string
 	Provider       string
 	Message        string
-	ThinkLevel     types.ThinkLevel
 	FastMode       bool
 	VerboseLevel   types.VerboseLevel
 	ReasoningLevel types.ReasoningLevel

@@ -6,7 +6,6 @@
        go go-run go-dev go-test go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary gateway-prod \
        test clean check check-go fmt generate generate-check \
        tool-schemas tool-schemas-check \
-       model-caps model-caps-check \
        data-gen data-gen-check \
        info
 
@@ -113,17 +112,15 @@ check/fast: go-fmt go-vet go-lint
 	@echo "Fast checks passed (fmt + vet + lint, no tests)"
 
 # Run all code generation pipelines in dependency order.
-generate: tool-schemas model-caps data-gen
+generate: tool-schemas data-gen
 	@echo "All code generation pipelines completed"
 
 # Verify generated sources are up to date.
 # Runs each generation domain independently so failures name the broken group.
 generate-check:
-	@echo "==> [1/3] tool schemas (tool_schemas.json -> tool_schemas_gen.go)"
+	@echo "==> [1/2] tool schemas (tool_schemas.json -> tool_schemas_gen.go)"
 	@$(MAKE) tool-schemas-check
-	@echo "==> [2/3] model capabilities (model_caps.json -> model_caps_gen.go)"
-	@$(MAKE) model-caps-check
-	@echo "==> [3/3] data tables (*.json -> *_gen.go)"
+	@echo "==> [2/2] data tables (*.json -> *_gen.go)"
 	@$(MAKE) data-gen-check
 	@echo "All generation checks passed"
 
@@ -146,19 +143,6 @@ tool-schemas-check:
 		-out  internal/pipeline/chat/toolreg/tool_schemas_gen.go \
 		-pkg  toolreg
 	@git diff --exit-code -- gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go
-
-# Regenerate gateway-go/internal/pipeline/autoreply/model_caps_gen.go from model_caps.json.
-model-caps:
-	cd gateway-go && go run cmd/model-caps-gen/main.go \
-		-json internal/pipeline/autoreply/thinking/model_caps.json \
-		-out  internal/pipeline/autoreply/thinking/model_caps_gen.go
-
-# Verify model_caps_gen.go is up to date (fails if json and Go are out of sync).
-model-caps-check:
-	cd gateway-go && go run cmd/model-caps-gen/main.go \
-		-json internal/pipeline/autoreply/thinking/model_caps.json \
-		-out  internal/pipeline/autoreply/thinking/model_caps_gen.go
-	@git diff --exit-code -- gateway-go/internal/pipeline/autoreply/thinking/model_caps_gen.go
 
 # --- Data table code generation ---
 #

@@ -4,8 +4,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
 
 func TestBuildStatusMessage_Basic(t *testing.T) {
@@ -13,7 +11,6 @@ func TestBuildStatusMessage_Basic(t *testing.T) {
 		SessionKey: "telegram:123",
 		Model:      "claude-sonnet-4-20250514",
 		Provider:   "anthropic",
-		ThinkLevel: types.ThinkHigh,
 		Channel:    "telegram",
 	}
 	msg := BuildStatusMessage(report)
@@ -22,9 +19,6 @@ func TestBuildStatusMessage_Basic(t *testing.T) {
 	}
 	if !strings.Contains(msg, "claude-sonnet") {
 		t.Error("missing model")
-	}
-	if !strings.Contains(msg, "Think: high") {
-		t.Error("missing think level")
 	}
 }
 

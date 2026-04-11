@@ -19,7 +19,6 @@ type StatusReport struct {
 	Provider       string
 	Channel        string
 	IsGroup        bool
-	ThinkLevel     types.ThinkLevel
 	FastMode       bool
 	VerboseLevel   types.VerboseLevel
 	ReasoningLevel types.ReasoningLevel
@@ -54,9 +53,6 @@ func BuildStatusMessage(report StatusReport) string {
 
 	// Mode settings.
 	var modes []string
-	if report.ThinkLevel != "" && report.ThinkLevel != types.ThinkOff {
-		modes = append(modes, fmt.Sprintf("Think: %s", report.ThinkLevel))
-	}
 	if report.FastMode {
 		modes = append(modes, "Fast: on")
 	}

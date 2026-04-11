@@ -13,10 +13,6 @@ var multiSpaceRe = regexp.MustCompile(`\s+`)
 type InlineDirectives struct {
 	Cleaned string // message body with all directives removed
 
-	HasThinkDirective bool
-	ThinkLevel        types.ThinkLevel
-	RawThinkLevel     string
-
 	HasVerboseDirective bool
 	VerboseLevel        types.VerboseLevel
 	RawVerboseLevel     string
@@ -38,7 +34,6 @@ type InlineDirectives struct {
 
 // Regex patterns for directive extraction.
 var (
-	thinkDirectiveRe     = regexp.MustCompile(`(?i)(?:^|\s)/think(?:\s+([a-zA-Z0-9_-]+))?\s*`)
 	verboseDirectiveRe   = regexp.MustCompile(`(?i)(?:^|\s)/verbose(?:\s+([a-zA-Z0-9_-]+))?\s*`)
 	fastDirectiveRe      = regexp.MustCompile(`(?i)(?:^|\s)/fast(?:\s+([a-zA-Z0-9_-]+))?\s*`)
 	reasoningDirectiveRe = regexp.MustCompile(`(?i)(?:^|\s)/reasoning(?:\s+([a-zA-Z0-9_-]+))?\s*`)
@@ -53,12 +48,6 @@ func ParseInlineDirectives(body string, opts *DirectiveParseOptions) InlineDirec
 	}
 	result := InlineDirectives{}
 	text := body
-
-	// Extract /think directive.
-	text, result.HasThinkDirective, result.ThinkLevel, result.RawThinkLevel = extractLevelDirective(
-		text, thinkDirectiveRe, func(raw string) (types.ThinkLevel, bool) { return types.NormalizeThinkLevel(raw) },
-		types.ThinkLow, // default when no arg: /think → low
-	)
 
 	// Extract /verbose directive.
 	text, result.HasVerboseDirective, result.VerboseLevel, result.RawVerboseLevel = extractLevelDirective(
@@ -108,8 +97,7 @@ type DirectiveParseOptions struct {
 
 // IsDirectiveOnly returns true if the message contains only directives (no user text).
 func IsDirectiveOnly(directives InlineDirectives) bool {
-	if !directives.HasThinkDirective &&
-		!directives.HasVerboseDirective &&
+	if !directives.HasVerboseDirective &&
 		!directives.HasFastDirective &&
 		!directives.HasReasoningDirective &&
 		!directives.HasModelDirective {

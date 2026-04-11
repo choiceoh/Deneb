@@ -15,7 +15,6 @@ type SessionState struct {
 	IsThread       bool
 	Model          string
 	Provider       string
-	ThinkLevel     ThinkLevel
 	FastMode       bool
 	VerboseLevel   VerboseLevel
 	ReasoningLevel ReasoningLevel
@@ -102,7 +101,6 @@ type SessionModification struct {
 	Reset          bool
 	Model          string
 	Provider       string
-	ThinkLevel     ThinkLevel
 	VerboseLevel   VerboseLevel
 	FastMode       *bool
 	ReasoningLevel ReasoningLevel

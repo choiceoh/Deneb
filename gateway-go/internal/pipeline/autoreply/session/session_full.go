@@ -12,7 +12,6 @@ import (
 type SessionUpdate struct {
 	Model          *string
 	Provider       *string
-	ThinkLevel     *types.ThinkLevel
 	FastMode       *bool
 	VerboseLevel   *types.VerboseLevel
 	ReasoningLevel *types.ReasoningLevel
@@ -28,9 +27,6 @@ func ApplySessionUpdate(sess *types.SessionState, update SessionUpdate) {
 	}
 	if update.Provider != nil {
 		sess.Provider = *update.Provider
-	}
-	if update.ThinkLevel != nil {
-		sess.ThinkLevel = *update.ThinkLevel
 	}
 	if update.FastMode != nil {
 		sess.FastMode = *update.FastMode
