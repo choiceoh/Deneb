@@ -60,21 +60,6 @@ func TestRegisterProcessTools_registersTools(t *testing.T) {
 	}
 }
 
-// ─── RegisterDataTools ────────────────────────────────────────────────────────
-
-func TestRegisterDataTools_registersTools(t *testing.T) {
-	reg := &mockRegistrar{}
-	RegisterDataTools(reg)
-
-	if len(reg.tools) == 0 {
-		t.Fatal("expected RegisterDataTools to register at least one tool")
-	}
-	names := reg.toolNames()
-	if !containsName(names, "kv") {
-		t.Error("missing expected tool 'kv'")
-	}
-}
-
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 func containsName(names []string, target string) bool {

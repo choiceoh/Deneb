@@ -743,32 +743,6 @@ func sendFileToolSchema() map[string]any {
 	}
 }
 
-func kvToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"description": "KV store action",
-				"enum":        []string{"get", "set", "delete", "list"},
-			},
-			"key": map[string]any{
-				"type":        "string",
-				"description": "Key name (dot-separated for namespaces, e.g., 'prefs.timezone')",
-			},
-			"prefix": map[string]any{
-				"type":        "string",
-				"description": "Key prefix filter (for list action)",
-			},
-			"value": map[string]any{
-				"type":        "string",
-				"description": "Value to store (for set action)",
-			},
-		},
-		"required": []string{"action"},
-	}
-}
-
 func gmailToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",

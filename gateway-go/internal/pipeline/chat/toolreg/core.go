@@ -23,7 +23,6 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
 	RegisterMediaTools(registry)
-	RegisterDataTools(registry)
 	var diaryDir string
 	if deps.Wiki.Store != nil {
 		diaryDir = deps.Wiki.Store.DiaryDir()
@@ -221,18 +220,6 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar) {
 		InputSchema: sendFileToolSchema(),
 		Fn:          tools.ToolSendFile(),
 		Deferred:    true,
-	})
-}
-
-// RegisterDataTools registers persistent storage tools.
-func RegisterDataTools(registry toolctx.ToolRegistrar) {
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "kv",
-		Description:     "Persistent key-value store (survives restarts). Actions: get, set, delete, list. Dot-separated keys for namespaces",
-		InputSchema:     kvToolSchema(),
-		Fn:              tools.ToolKV(),
-		Deferred:        true,
-		ConcurrencySafe: true,
 	})
 }
 

@@ -819,36 +819,6 @@
     ]
   },
   {
-    "name": "kv",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "KV store action",
-        "enum": [
-          "get",
-          "set",
-          "delete",
-          "list"
-        ]
-      },
-      "key": {
-        "type": "string",
-        "description": "Key name (dot-separated for namespaces, e.g., 'prefs.timezone')"
-      },
-      "value": {
-        "type": "string",
-        "description": "Value to store (for set action)"
-      },
-      "prefix": {
-        "type": "string",
-        "description": "Key prefix filter (for list action)"
-      }
-    },
-    "required": [
-      "action"
-    ]
-  },
-  {
     "name": "gmail",
     "properties": {
       "action": {
