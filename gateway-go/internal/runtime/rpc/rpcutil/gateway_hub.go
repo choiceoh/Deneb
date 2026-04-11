@@ -136,8 +136,8 @@ func (h *GatewayHub) Broadcaster() *events.Broadcaster               { return h.
 func (h *GatewayHub) GatewaySubs() *events.GatewayEventSubscriptions { return h.gatewaySubs }
 func (h *GatewayHub) Sessions() *session.Manager                     { return h.sessions }
 func (h *GatewayHub) Processes() *process.Manager                    { return h.processes }
-func (h *GatewayHub) Telegram() *telegram.Plugin { return h.telegram }
-func (h *GatewayHub) Chat() *chat.Handler        { return h.chat }
+func (h *GatewayHub) Telegram() *telegram.Plugin                     { return h.telegram }
+func (h *GatewayHub) Chat() *chat.Handler                            { return h.chat }
 func (h *GatewayHub) JobTracker() *agent.JobTracker                  { return h.jobTracker }
 func (h *GatewayHub) CronService() *cron.Service                     { return h.cronService }
 func (h *GatewayHub) CronPersistLog() *cron.PersistentRunLog         { return h.cronPersistLog }

@@ -84,10 +84,10 @@ type HandlerConfig struct {
 
 	// Fields below were previously Set*() after construction. They are all
 	// available at handler creation time and passed here to reduce late-binding.
-	ProviderRuntime      *provider.ProviderRuntimeResolver // optional; runtime auth
-	BroadcastRaw streaming.BroadcastRawFunc // optional; raw event relay
-	EmitAgentFn          func(kind, sessionKey, runID string, payload map[string]any)
-	EmitTranscriptFn     func(sessionKey string, message any, messageID string)
+	ProviderRuntime  *provider.ProviderRuntimeResolver // optional; runtime auth
+	BroadcastRaw     streaming.BroadcastRawFunc        // optional; raw event relay
+	EmitAgentFn      func(kind, sessionKey, runID string, payload map[string]any)
+	EmitTranscriptFn func(sessionKey string, message any, messageID string)
 }
 
 // DefaultHandlerConfig returns sensible defaults.
@@ -157,8 +157,8 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		subagentDefaultModel: cfg.SubagentDefaultModel,
 		defaultSystem:        cfg.DefaultSystem,
 		maxTokens:            cfg.MaxTokens,
-		providerRuntime: cfg.ProviderRuntime,
-		abort:           NewAbortTracker(),
+		providerRuntime:      cfg.ProviderRuntime,
+		abort:                NewAbortTracker(),
 		pending:              NewPendingQueue(),
 		maxHistoryBytes:      cfg.MaxHistoryBytes,
 		maxHistoryCount:      cfg.MaxHistoryCount,
