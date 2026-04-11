@@ -27,6 +27,10 @@ build/
 # Quality test result databases
 quality-results.db
 
+# Python bytecode cache
+__pycache__/
+*.pyc
+
 # Go build artifacts
 gateway-go/gateway
 gateway-go/cover.out
