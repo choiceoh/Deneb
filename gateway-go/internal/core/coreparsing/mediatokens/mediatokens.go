@@ -7,6 +7,8 @@ package mediatokens
 
 import (
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coremarkdown"
 )
 
 // Result of media token parsing.
@@ -33,9 +35,9 @@ func Parse(raw string) Result {
 	}
 
 	hasFenceMarkers := strings.Contains(trimmedRaw, "```") || strings.Contains(trimmedRaw, "~~~")
-	var fenceSpans []fenceSpan
+	var fenceSpans []coremarkdown.FenceSpan
 	if hasFenceMarkers {
-		fenceSpans = parseFenceSpans(trimmedRaw)
+		fenceSpans = coremarkdown.DetectFences(trimmedRaw)
 	}
 
 	lines := strings.Split(trimmedRaw, "\n")
@@ -177,85 +179,9 @@ func containsIgnoreCase(s, substr string) bool {
 	return false
 }
 
-// fenceSpan marks a fenced code block region.
-type fenceSpan struct {
-	start, end int
-}
-
-func parseFenceSpans(text string) []fenceSpan {
-	var spans []fenceSpan
-	lines := strings.Split(text, "\n")
-	inFence := false
-	var fenceChar byte
-	fenceLen := 0
-	fenceStart := 0
-	offset := 0
-
-	for _, line := range lines {
-		trimmed := strings.TrimLeft(line, " \t")
-		if !inFence {
-			if ch, n := detectFenceOpen(trimmed); n >= 3 {
-				inFence = true
-				fenceChar = ch
-				fenceLen = n
-				fenceStart = offset
-			}
-		} else if isFenceClose(trimmed, fenceChar, fenceLen) {
-			spans = append(spans, fenceSpan{start: fenceStart, end: offset + len(line)})
-			inFence = false
-		}
-		offset += len(line) + 1
-	}
-
-	// If fence was never closed, extend to end.
-	if inFence {
-		spans = append(spans, fenceSpan{start: fenceStart, end: len(text)})
-	}
-	return spans
-}
-
-func detectFenceOpen(trimmed string) (fenceChar byte, count int) {
-	if len(trimmed) < 3 {
-		return 0, 0
-	}
-	ch := trimmed[0]
-	if ch != '`' && ch != '~' {
-		return 0, 0
-	}
-	count = 0
-	for i := range len(trimmed) {
-		if trimmed[i] == ch {
-			count++
-		} else {
-			break
-		}
-	}
-	if count >= 3 {
-		return ch, count
-	}
-	return 0, 0
-}
-
-func isFenceClose(trimmed string, fenceChar byte, fenceLen int) bool {
-	if len(trimmed) < fenceLen {
-		return false
-	}
-	count := 0
-	for i := range len(trimmed) {
-		if trimmed[i] == fenceChar { //nolint:gocritic // ifElseChain — switch would change break semantics
-			count++
-		} else if trimmed[i] == ' ' || trimmed[i] == '\t' {
-			break
-		} else {
-			return false
-		}
-	}
-	return count >= fenceLen
-}
-
-func isInsideFence(spans []fenceSpan, offset int) bool {
+func isInsideFence(spans []coremarkdown.FenceSpan, offset int) bool {
 	for _, s := range spans {
-		if offset >= s.start && offset < s.end {
+		if offset >= s.Start && offset < s.End {
 			return true
 		}
 	}

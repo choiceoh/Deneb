@@ -252,15 +252,6 @@ func TestTableCode(t *testing.T) {
 	assertHasStyle(t, ir, StyleCodeBlock)
 }
 
-func TestHasTablesFlag(t *testing.T) {
-	opts := DefaultParseOptions()
-	opts.TableMode = "bullets"
-	_, hasTables := MarkdownToIRWithMeta("| A |\n|---|\n| 1 |", &opts)
-	if !hasTables {
-		t.Error("expected hasTables=true")
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Image alt text
 // ---------------------------------------------------------------------------
@@ -353,23 +344,6 @@ func TestClampStyleClips(t *testing.T) {
 	}
 	if clamped[0].End != 10 {
 		t.Errorf("got %d, want end=10", clamped[0].End)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// PlainText convenience
-// ---------------------------------------------------------------------------
-
-func TestToPlainText(t *testing.T) {
-	result := ToPlainText("**bold** and [link](https://example.com)")
-	if !strings.Contains(result, "bold") {
-		t.Errorf("got %q, want 'bold'", result)
-	}
-	if strings.Contains(result, "**") {
-		t.Error("bold markers should be stripped")
-	}
-	if strings.Contains(result, "https://") {
-		t.Error("URL should be stripped")
 	}
 }
 

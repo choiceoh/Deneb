@@ -4,9 +4,9 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf16"
-	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coremarkdown"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coresecurity"
 )
 
 // Telegram message limits.
@@ -74,7 +74,7 @@ func renderIRToTelegramHTML(ir coremarkdown.MarkdownIR) string {
 
 	for _, l := range ir.Links {
 		events = append(events,
-			spanEvent{pos: l.Start, isClose: false, tag: `<a href="` + escapeHTML(l.Href) + `">`, spanStart: l.Start, spanEnd: l.End},
+			spanEvent{pos: l.Start, isClose: false, tag: `<a href="` + coresecurity.SanitizeHTML(l.Href) + `">`, spanStart: l.Start, spanEnd: l.End},
 			spanEvent{pos: l.End, isClose: true, tag: "</a>", spanStart: l.Start, spanEnd: l.End},
 		)
 	}
@@ -96,16 +96,19 @@ func renderIRToTelegramHTML(ir coremarkdown.MarkdownIR) string {
 	var b strings.Builder
 	b.Grow(len(text) + len(text)/4)
 	eventIdx := 0
-	textBytes := []byte(text)
 
-	for i := 0; i < len(textBytes); {
+	for i := 0; i < len(text); {
 		for eventIdx < len(events) && events[eventIdx].pos == i {
 			b.WriteString(events[eventIdx].tag)
 			eventIdx++
 		}
-		r, size := utf8.DecodeRune(textBytes[i:])
-		b.WriteString(escapeHTMLRune(r))
-		i += size
+		// Write text up to the next event boundary as one escaped chunk.
+		end := len(text)
+		if eventIdx < len(events) {
+			end = events[eventIdx].pos
+		}
+		b.WriteString(coresecurity.SanitizeHTML(text[i:end]))
+		i = end
 	}
 	for eventIdx < len(events) {
 		b.WriteString(events[eventIdx].tag)
@@ -299,29 +302,6 @@ func SplitCaptionAndBody(text string, captionMax, bodyMax int) (caption string, 
 }
 
 // --- Helpers ---
-
-func escapeHTML(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		b.WriteString(escapeHTMLRune(r))
-	}
-	return b.String()
-}
-
-func escapeHTMLRune(r rune) string {
-	switch r {
-	case '<':
-		return "&lt;"
-	case '>':
-		return "&gt;"
-	case '&':
-		return "&amp;"
-	case '"':
-		return "&quot;"
-	default:
-		return string(r)
-	}
-}
 
 // unclosedCodeBlock scans html for an unmatched <pre><code...> tag.
 // Returns the opening tag (e.g. `<pre><code class="language-go">`) and its

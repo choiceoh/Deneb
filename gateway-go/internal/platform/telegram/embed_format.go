@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coresecurity"
 )
 
 // --- Embed color/status indicator constants ---
@@ -76,7 +78,7 @@ func FormatDashboard(d DashboardData) string {
 
 	// Branch info.
 	b.WriteString("\U0001F33F <b>\uBE0C\uB79C\uCE58:</b> <code>")
-	b.WriteString(escapeHTML(d.Branch))
+	b.WriteString(coresecurity.SanitizeHTML(d.Branch))
 	b.WriteString("</code>\n")
 
 	// Changed files.
@@ -121,7 +123,7 @@ func FormatDashboard(d DashboardData) string {
 			commit = commit[:117] + "..."
 		}
 		b.WriteString("<code>")
-		b.WriteString(escapeHTML(commit))
+		b.WriteString(coresecurity.SanitizeHTML(commit))
 		b.WriteString("</code>\n")
 	}
 
@@ -133,7 +135,7 @@ func FormatDashboard(d DashboardData) string {
 		if len(sessionDisplay) > 12 {
 			sessionDisplay = sessionDisplay[:12] + "..."
 		}
-		b.WriteString(escapeHTML(sessionDisplay))
+		b.WriteString(coresecurity.SanitizeHTML(sessionDisplay))
 		b.WriteString("</code>")
 	}
 
@@ -186,7 +188,7 @@ func FormatTestResult(r TestResult) string {
 		}
 		b.WriteString("<b>\uCD9C\uB825:</b>\n")
 		b.WriteString("<pre>")
-		b.WriteString(escapeHTML(output))
+		b.WriteString(coresecurity.SanitizeHTML(output))
 		b.WriteString("</pre>")
 	}
 
@@ -234,7 +236,7 @@ func FormatBuildResult(r BuildResult) string {
 					errText = errText[:197] + "..."
 				}
 				b.WriteString("\n<pre>")
-				b.WriteString(escapeHTML(errText))
+				b.WriteString(coresecurity.SanitizeHTML(errText))
 				b.WriteString("</pre>")
 			}
 			if len(r.Errors) > maxErrors {
@@ -247,7 +249,7 @@ func FormatBuildResult(r BuildResult) string {
 				b.WriteByte('\n')
 				b.WriteByte('\n')
 				b.WriteString("\U0001F4AC <b>\uC694\uC57D:</b> ")
-				b.WriteString(escapeHTML(translation))
+				b.WriteString(coresecurity.SanitizeHTML(translation))
 			}
 		}
 	}
@@ -264,7 +266,7 @@ func FormatError(title, detail, suggestion string) string {
 
 	b.WriteString(ColorError)
 	b.WriteString(" <b>")
-	b.WriteString(escapeHTML(title))
+	b.WriteString(coresecurity.SanitizeHTML(title))
 	b.WriteString("</b>\n")
 	b.WriteString("\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n")
 
@@ -276,7 +278,7 @@ func FormatError(title, detail, suggestion string) string {
 			truncated = truncated[:497] + "..."
 		}
 		b.WriteString("<pre>")
-		b.WriteString(escapeHTML(truncated))
+		b.WriteString(coresecurity.SanitizeHTML(truncated))
 		b.WriteString("</pre>\n")
 	}
 
@@ -284,14 +286,14 @@ func FormatError(title, detail, suggestion string) string {
 	if translation := TranslateErrorKorean(detail); translation != "" {
 		b.WriteByte('\n')
 		b.WriteString("\U0001F4AC <b>\uC6D0\uC778:</b> ")
-		b.WriteString(escapeHTML(translation))
+		b.WriteString(coresecurity.SanitizeHTML(translation))
 		b.WriteByte('\n')
 	}
 
 	if suggestion != "" {
 		b.WriteByte('\n')
 		b.WriteString("\U0001F4A1 <b>\uD574\uACB0 \uBC29\uBC95:</b> ")
-		b.WriteString(escapeHTML(suggestion))
+		b.WriteString(coresecurity.SanitizeHTML(suggestion))
 		b.WriteByte('\n')
 	}
 
@@ -352,12 +354,12 @@ func FormatCommit(c CommitInfo) string {
 		hash = hash[:7]
 	}
 	b.WriteString("\U0001F3F7\uFE0F <b>\uD574\uC2DC:</b> <code>")
-	b.WriteString(escapeHTML(hash))
+	b.WriteString(coresecurity.SanitizeHTML(hash))
 	b.WriteString("</code>\n")
 
 	// Branch.
 	b.WriteString("\U0001F33F <b>\uBE0C\uB79C\uCE58:</b> <code>")
-	b.WriteString(escapeHTML(c.Branch))
+	b.WriteString(coresecurity.SanitizeHTML(c.Branch))
 	b.WriteString("</code>\n")
 
 	// File count.
@@ -370,7 +372,7 @@ func FormatCommit(c CommitInfo) string {
 		msg = msg[:197] + "..."
 	}
 	b.WriteString("\U0001F4DD <b>\uBA54\uC2DC\uC9C0:</b>\n")
-	b.WriteString(escapeHTML(msg))
+	b.WriteString(coresecurity.SanitizeHTML(msg))
 	b.WriteByte('\n')
 
 	return b.String()
@@ -388,7 +390,7 @@ func FormatPush(p PushInfo) string {
 
 	// Branch.
 	b.WriteString("\U0001F33F <b>\uBE0C\uB79C\uCE58:</b> <code>")
-	b.WriteString(escapeHTML(p.Branch))
+	b.WriteString(coresecurity.SanitizeHTML(p.Branch))
 	b.WriteString("</code>\n")
 
 	// Remote.
@@ -397,7 +399,7 @@ func FormatPush(p PushInfo) string {
 	if remote == "" {
 		remote = "origin"
 	}
-	b.WriteString(escapeHTML(remote))
+	b.WriteString(coresecurity.SanitizeHTML(remote))
 	b.WriteString("</code>\n")
 
 	// Commits ahead.

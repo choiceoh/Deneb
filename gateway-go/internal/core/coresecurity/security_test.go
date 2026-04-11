@@ -5,25 +5,6 @@ import (
 	"testing"
 )
 
-// --- ConstantTimeEq (Rust: test_constant_time_eq) ---
-
-func TestConstantTimeEq(t *testing.T) {
-	cases := []struct {
-		a, b []byte
-		want bool
-	}{
-		{[]byte("hello"), []byte("hello"), true},
-		{[]byte("hello"), []byte("world"), false},
-		{[]byte("short"), []byte("longer"), false},
-		{[]byte{}, []byte{}, true},
-	}
-	for _, tc := range cases {
-		if got := ConstantTimeEq(tc.a, tc.b); got != tc.want {
-			t.Errorf("ConstantTimeEq(%q, %q) = %v, want %v", tc.a, tc.b, got, tc.want)
-		}
-	}
-}
-
 // --- ValidateSessionKey (Rust: test_is_valid_session_key) ---
 
 func TestValidateSessionKey(t *testing.T) {

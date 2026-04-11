@@ -109,7 +109,6 @@ func GrepResultSummarizer(_ context.Context, _, output string) string {
 	return fmt.Sprintf("%s\n\n[... %d more matches omitted (total: %d lines)]", kept, len(lines)-grepMaxMatches, len(lines))
 }
 
-
 // StructuredFormatter pretty-prints compact JSON outputs for readability.
 func StructuredFormatter(_ context.Context, _, output string) string {
 	trimmed := strings.TrimSpace(output)

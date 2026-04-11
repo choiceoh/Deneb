@@ -6,23 +6,6 @@ import (
 	"unicode/utf8"
 )
 
-func TestEscapeHTML(t *testing.T) {
-	tests := []struct {
-		in, want string
-	}{
-		{"hello", "hello"},
-		{"a < b & c > d", "a &lt; b &amp; c &gt; d"},
-		{"<script>alert('xss')</script>", "&lt;script&gt;alert('xss')&lt;/script&gt;"},
-		{"", ""},
-	}
-	for _, tt := range tests {
-		got := escapeHTML(tt.in)
-		if got != tt.want {
-			t.Errorf("escapeHTML(%q) = %q, want %q", tt.in, got, tt.want)
-		}
-	}
-}
-
 func TestFormatHTML_Bold(t *testing.T) {
 	got := FormatHTML("hello **world**")
 	if got != "hello <b>world</b>" {

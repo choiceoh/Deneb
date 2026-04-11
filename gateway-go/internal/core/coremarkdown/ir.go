@@ -2,8 +2,8 @@ package coremarkdown
 
 import "strings"
 
-// MarkdownToIRWithMeta parses markdown into IR plus a has_tables flag.
-func MarkdownToIRWithMeta(markdown string, opts *ParseOptions) (MarkdownIR, bool) {
+// MarkdownToIR parses markdown into IR.
+func MarkdownToIR(markdown string, opts *ParseOptions) MarkdownIR {
 	if opts == nil {
 		d := DefaultParseOptions()
 		opts = &d
@@ -43,11 +43,5 @@ func MarkdownToIRWithMeta(markdown string, opts *ParseOptions) (MarkdownIR, bool
 	styles := mergeStyleSpans(clampStyleSpans(rs.styles, finalLen))
 	links := clampLinkSpans(rs.links, finalLen)
 
-	return MarkdownIR{Text: fullText, Styles: styles, Links: links}, rs.hasTables
-}
-
-// MarkdownToIR parses markdown into IR (without the has_tables flag).
-func MarkdownToIR(markdown string, opts *ParseOptions) MarkdownIR {
-	ir, _ := MarkdownToIRWithMeta(markdown, opts)
-	return ir
+	return MarkdownIR{Text: fullText, Styles: styles, Links: links}
 }
