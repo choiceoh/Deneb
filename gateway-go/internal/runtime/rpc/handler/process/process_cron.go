@@ -10,6 +10,24 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+// resolveJobID returns the first non-empty of id or jobID, or an error.
+func resolveJobID(id, jobID string) (string, error) {
+	if id != "" {
+		return id, nil
+	}
+	if jobID != "" {
+		return jobID, nil
+	}
+	return "", rpcerr.New(protocol.ErrMissingParam, "id or jobId is required")
+}
+
+// emitCronChanged broadcasts a cron.changed event if a broadcaster is set.
+func emitCronChanged(b BroadcastFunc, action, id string) {
+	if b != nil {
+		b("cron.changed", map[string]any{"action": action, "id": id})
+	}
+}
+
 // CronAdvancedDeps holds the dependencies for advanced cron RPC methods.
 type CronAdvancedDeps struct {
 	Service     *cron.Service
@@ -107,9 +125,7 @@ func cronAdd(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			return nil, rpcerr.Wrap(protocol.ErrConflict, err)
 		}
 
-		if deps.Broadcaster != nil {
-			deps.Broadcaster("cron.changed", map[string]any{"action": "added", "id": id})
-		}
+		emitCronChanged(deps.Broadcaster, "added", id)
 
 		return map[string]any{
 			"id":       id,
@@ -128,15 +144,12 @@ func cronUpdate(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 		Patch map[string]any `json:"patch"`
 	}
 	return rpcutil.BindHandlerCtx[params](func(ctx context.Context, p params) (any, error) {
-		id := p.ID
-		if id == "" {
-			id = p.JobID
-		}
-		if id == "" {
-			return nil, rpcerr.New(protocol.ErrMissingParam, "id or jobId is required")
+		id, err := resolveJobID(p.ID, p.JobID)
+		if err != nil {
+			return nil, err
 		}
 
-		err := deps.Service.Update(ctx, id, func(job *cron.StoreJob) {
+		err = deps.Service.Update(ctx, id, func(job *cron.StoreJob) {
 			if name, ok := p.Patch["name"]; ok {
 				if s, ok := name.(string); ok {
 					job.Name = s
@@ -169,9 +182,7 @@ func cronUpdate(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 			return nil, rpcerr.Wrap(protocol.ErrNotFound, err)
 		}
 
-		if deps.Broadcaster != nil {
-			deps.Broadcaster("cron.changed", map[string]any{"action": "updated", "id": id})
-		}
+		emitCronChanged(deps.Broadcaster, "updated", id)
 
 		job := deps.Service.Job(id)
 		return job, nil
@@ -184,21 +195,15 @@ func cronRemove(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 		JobID string `json:"jobId,omitempty"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		id := p.ID
-		if id == "" {
-			id = p.JobID
-		}
-		if id == "" {
-			return nil, rpcerr.New(protocol.ErrMissingParam, "id or jobId is required")
+		id, err := resolveJobID(p.ID, p.JobID)
+		if err != nil {
+			return nil, err
 		}
 
-		err := deps.Service.Remove(id)
-		removed := err == nil
-
-		if deps.Broadcaster != nil && removed {
-			deps.Broadcaster("cron.changed", map[string]any{"action": "removed", "id": id})
+		removed := deps.Service.Remove(id) == nil
+		if removed {
+			emitCronChanged(deps.Broadcaster, "removed", id)
 		}
-
 		return map[string]bool{"removed": removed}, nil
 	})
 }
@@ -210,12 +215,9 @@ func cronRun(deps CronAdvancedDeps) rpcutil.HandlerFunc {
 		Mode  string `json:"mode,omitempty"`
 	}
 	return rpcutil.BindHandlerCtx[params](func(ctx context.Context, p params) (any, error) {
-		id := p.ID
-		if id == "" {
-			id = p.JobID
-		}
-		if id == "" {
-			return nil, rpcerr.New(protocol.ErrMissingParam, "id or jobId is required")
+		id, err := resolveJobID(p.ID, p.JobID)
+		if err != nil {
+			return nil, err
 		}
 
 		outcome, err := deps.Service.Run(ctx, id, p.Mode)
@@ -341,12 +343,9 @@ func cronGetJob(deps CronServiceDeps) rpcutil.HandlerFunc {
 		JobID string `json:"jobId,omitempty"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		id := p.ID
-		if id == "" {
-			id = p.JobID
-		}
-		if id == "" {
-			return nil, rpcerr.New(protocol.ErrMissingParam, "id or jobId is required")
+		id, err := resolveJobID(p.ID, p.JobID)
+		if err != nil {
+			return nil, err
 		}
 
 		job := deps.Service.Job(id)

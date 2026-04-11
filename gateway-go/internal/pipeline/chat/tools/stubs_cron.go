@@ -126,9 +126,6 @@ func cronStatus(svc *cron.Service) (string, error) {
 
 	// Show next due job.
 	if st.NextRunAtMs > 0 {
-		nextTime := time.UnixMilli(st.NextRunAtMs).Format("2006-01-02 15:04")
-		rel := cron.FormatRelativeTime(st.NextRunAtMs)
-		// Find which job is next.
 		nextJobName := ""
 		for _, j := range jobs {
 			if j.Enabled && j.State.NextRunAtMs == st.NextRunAtMs {
@@ -137,9 +134,9 @@ func cronStatus(svc *cron.Service) (string, error) {
 			}
 		}
 		if nextJobName != "" {
-			fmt.Fprintf(&sb, "- 다음 실행: %s — %s (%s)", nextJobName, nextTime, rel)
+			fmt.Fprintf(&sb, "- 다음 실행: %s — %s", nextJobName, cronNextRun(st.NextRunAtMs))
 		} else {
-			fmt.Fprintf(&sb, "- 다음 실행: %s (%s)", nextTime, rel)
+			fmt.Fprintf(&sb, "- 다음 실행: %s", cronNextRun(st.NextRunAtMs))
 		}
 	}
 	return sb.String(), nil
@@ -171,14 +168,7 @@ func cronList(svc *cron.Service) (string, error) {
 		if nextRun != "" {
 			fmt.Fprintf(&sb, "  다음 실행%s\n", nextRun)
 		}
-		cmd := j.Payload.Message
-		if cmd == "" {
-			cmd = j.Payload.Text
-		}
-		if cmd != "" {
-			if len(cmd) > 80 {
-				cmd = cmd[:77] + "..."
-			}
+		if cmd := truncateLine(cronPayloadMsg(j.Payload), 80); cmd != "" {
 			fmt.Fprintf(&sb, "  명령: %s\n", cmd)
 		}
 		if j.State.ConsecutiveErrors > 0 {
@@ -271,9 +261,7 @@ func cronAdd(ctx context.Context, d *toolctx.ChronoDeps, name, schedule, command
 		fmt.Fprintf(&sb, "✅ 크론 작업 **%s** 추가 완료\n", name)
 		fmt.Fprintf(&sb, "- 스케줄: %s\n", schedDesc)
 		if nextMs > 0 {
-			fmt.Fprintf(&sb, "- 다음 실행: %s (%s)\n",
-				time.UnixMilli(nextMs).Format("2006-01-02 15:04"),
-				cron.FormatRelativeTime(nextMs))
+			fmt.Fprintf(&sb, "- 다음 실행: %s\n", cronNextRun(nextMs))
 		}
 		if payload.RetryCount > 0 {
 			fmt.Fprintf(&sb, "- 재시도: 최대 %d회\n", payload.RetryCount)
@@ -338,9 +326,7 @@ func cronUpdate(ctx context.Context, d *toolctx.ChronoDeps, jobID, name, schedul
 		fmt.Fprintf(&sb, "- 스케줄: %s\n", schedDesc)
 		fmt.Fprintf(&sb, "- 상태: %s\n", status)
 		if job.State.NextRunAtMs > 0 {
-			fmt.Fprintf(&sb, "- 다음 실행: %s (%s)",
-				time.UnixMilli(job.State.NextRunAtMs).Format("2006-01-02 15:04"),
-				cron.FormatRelativeTime(job.State.NextRunAtMs))
+			fmt.Fprintf(&sb, "- 다음 실행: %s", cronNextRun(job.State.NextRunAtMs))
 		}
 		return sb.String(), nil
 	}
@@ -385,73 +371,63 @@ func cronGet(d *toolctx.ChronoDeps, jobID string) (string, error) {
 	if job == nil {
 		return fmt.Sprintf("크론 작업 %q을(를) 찾을 수 없습니다.", jobID), nil
 	}
-	{
-		var sb strings.Builder
-		fmt.Fprintf(&sb, "**크론 작업: %s** (id=%s)\n", job.Name, job.ID)
 
-		status := "✅ 활성"
-		if !job.Enabled {
-			status = "⏸️ 비활성"
-			if job.State.AutoDisabledAtMs > 0 {
-				status = "🚫 자동 비활성 (연속 오류)"
-			}
-		}
-		fmt.Fprintf(&sb, "- 상태: %s\n", status)
-		fmt.Fprintf(&sb, "- 스케줄: %s\n", cron.FormatHumanSchedule(job.Schedule))
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "**크론 작업: %s** (id=%s)\n", job.Name, job.ID)
 
-		cmd := job.Payload.Message
-		if cmd == "" {
-			cmd = job.Payload.Text
+	status := "✅ 활성"
+	if !job.Enabled {
+		status = "⏸️ 비활성"
+		if job.State.AutoDisabledAtMs > 0 {
+			status = "🚫 자동 비활성 (연속 오류)"
 		}
-		if cmd != "" {
-			if len(cmd) > 120 {
-				cmd = cmd[:117] + "..."
-			}
-			fmt.Fprintf(&sb, "- 명령: %s\n", cmd)
-		}
-
-		if job.Enabled && job.State.NextRunAtMs > 0 {
-			fmt.Fprintf(&sb, "- 다음 실행: %s (%s)\n",
-				time.UnixMilli(job.State.NextRunAtMs).Format("2006-01-02 15:04"),
-				cron.FormatRelativeTime(job.State.NextRunAtMs))
-		}
-
-		if job.State.LastSessionKey != "" {
-			fmt.Fprintf(&sb, "- 마지막 세션: %s\n", job.State.LastSessionKey)
-		}
-
-		if job.State.ConsecutiveErrors > 0 {
-			fmt.Fprintf(&sb, "- ⚠️ 연속 오류: %d회\n", job.State.ConsecutiveErrors)
-		}
-
-		// Delivery info.
-		if job.State.LastDeliveryStatus != "" {
-			deliveryIcon := "📤"
-			if job.State.LastDeliveryStatus == "not-delivered" {
-				deliveryIcon = "📤❌"
-			}
-			fmt.Fprintf(&sb, "- %s 배달: %s", deliveryIcon, job.State.LastDeliveryStatus)
-			if job.State.LastDeliveryError != "" {
-				fmt.Fprintf(&sb, " (%s)", job.State.LastDeliveryError)
-			}
-			sb.WriteString("\n")
-		}
-
-		// Retry config.
-		if job.Payload.RetryCount > 0 {
-			fmt.Fprintf(&sb, "- 재시도: 최대 %d회", job.Payload.RetryCount)
-			if job.Payload.RetryBackoffMs > 0 {
-				fmt.Fprintf(&sb, " (백오프 %s)", cron.FormatDurationKorean(job.Payload.RetryBackoffMs))
-			}
-			sb.WriteString("\n")
-		}
-
-		// Timestamps.
-		if job.CreatedAtMs > 0 {
-			fmt.Fprintf(&sb, "- 생성: %s", time.UnixMilli(job.CreatedAtMs).Format("2006-01-02 15:04"))
-		}
-		return sb.String(), nil
 	}
+	fmt.Fprintf(&sb, "- 상태: %s\n", status)
+	fmt.Fprintf(&sb, "- 스케줄: %s\n", cron.FormatHumanSchedule(job.Schedule))
+
+	if cmd := truncateLine(cronPayloadMsg(job.Payload), 120); cmd != "" {
+		fmt.Fprintf(&sb, "- 명령: %s\n", cmd)
+	}
+
+	if job.Enabled && job.State.NextRunAtMs > 0 {
+		fmt.Fprintf(&sb, "- 다음 실행: %s\n", cronNextRun(job.State.NextRunAtMs))
+	}
+
+	if job.State.LastSessionKey != "" {
+		fmt.Fprintf(&sb, "- 마지막 세션: %s\n", job.State.LastSessionKey)
+	}
+
+	if job.State.ConsecutiveErrors > 0 {
+		fmt.Fprintf(&sb, "- ⚠️ 연속 오류: %d회\n", job.State.ConsecutiveErrors)
+	}
+
+	// Delivery info.
+	if job.State.LastDeliveryStatus != "" {
+		deliveryIcon := "📤"
+		if job.State.LastDeliveryStatus == "not-delivered" {
+			deliveryIcon = "📤❌"
+		}
+		fmt.Fprintf(&sb, "- %s 배달: %s", deliveryIcon, job.State.LastDeliveryStatus)
+		if job.State.LastDeliveryError != "" {
+			fmt.Fprintf(&sb, " (%s)", job.State.LastDeliveryError)
+		}
+		sb.WriteString("\n")
+	}
+
+	// Retry config.
+	if job.Payload.RetryCount > 0 {
+		fmt.Fprintf(&sb, "- 재시도: 최대 %d회", job.Payload.RetryCount)
+		if job.Payload.RetryBackoffMs > 0 {
+			fmt.Fprintf(&sb, " (백오프 %s)", cron.FormatDurationKorean(job.Payload.RetryBackoffMs))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Timestamps.
+	if job.CreatedAtMs > 0 {
+		fmt.Fprintf(&sb, "- 생성: %s", time.UnixMilli(job.CreatedAtMs).Format("2006-01-02 15:04"))
+	}
+	return sb.String(), nil
 }
 
 func cronRuns(d *toolctx.ChronoDeps, jobID string, limit int) (string, error) {
@@ -514,20 +490,12 @@ func cronRuns(d *toolctx.ChronoDeps, jobID string, limit int) (string, error) {
 
 			errStr := ""
 			if e.Error != "" {
-				errShort := e.Error
-				if len(errShort) > 60 {
-					errShort = errShort[:57] + "..."
-				}
-				errStr = fmt.Sprintf(" — %s", errShort)
+				errStr = fmt.Sprintf(" — %s", truncateLine(e.Error, 60))
 			}
 
 			summary := ""
 			if e.Summary != "" && e.Error == "" {
-				s := e.Summary
-				if len(s) > 60 {
-					s = s[:57] + "..."
-				}
-				summary = fmt.Sprintf(" — %s", s)
+				summary = fmt.Sprintf(" — %s", truncateLine(e.Summary, 60))
 			}
 
 			fmt.Fprintf(&sb, "\n%s [%s] %s (%s%s%s%s)%s%s",
@@ -536,4 +504,17 @@ func cronRuns(d *toolctx.ChronoDeps, jobID string, limit int) (string, error) {
 		return sb.String(), nil
 	}
 	return "실행 이력을 사용할 수 없습니다.", nil
+}
+
+// cronNextRun formats a millisecond timestamp as "2006-01-02 15:04 (X 후/전)".
+func cronNextRun(ms int64) string {
+	return time.UnixMilli(ms).Format("2006-01-02 15:04") + " (" + cron.FormatRelativeTime(ms) + ")"
+}
+
+// cronPayloadMsg returns the message text from a cron payload (Message, falling back to Text).
+func cronPayloadMsg(p cron.StorePayload) string {
+	if p.Message != "" {
+		return p.Message
+	}
+	return p.Text
 }
