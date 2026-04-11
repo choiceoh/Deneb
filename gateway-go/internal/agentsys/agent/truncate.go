@@ -78,7 +78,7 @@ func CompactPriorToolResults(messages []llm.Message, lastTurnStartIdx int) int {
 			if len(blocks[j].Content) <= CompactedMaxOutput {
 				continue
 			}
-			blocks[j].Content = TruncateHeadTail(blocks[j].Content, CompactedMaxOutput, "")
+			blocks[j].Content = RankLines(blocks[j].Content, CompactedMaxOutput)
 			changed = true
 			compacted++
 		}
