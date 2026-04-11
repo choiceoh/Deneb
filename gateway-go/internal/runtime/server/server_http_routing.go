@@ -20,8 +20,6 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("/healthz", methodNotAllowed)
 	mux.HandleFunc("/ready", methodNotAllowed)
 	mux.HandleFunc("/readyz", methodNotAllowed)
-	mux.HandleFunc("GET /metrics", s.handleMetrics)
-
 	// Catch-all handler: root fallback.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// Root fallback for exact "/" GET.
