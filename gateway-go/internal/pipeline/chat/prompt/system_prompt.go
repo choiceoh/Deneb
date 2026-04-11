@@ -291,7 +291,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("## Web\n")
 		d.WriteString("- `web(query=...)`: web search. Google link list (Serper) or Brave/DDG fallback.\n")
 		d.WriteString("- `web(query=..., fetch=N)`: search + auto-fetch top N pages in one call.\n")
-		d.WriteString("- `web(url=...)`: fetch a URL (HTML noise-stripped, PDF/Office parsed, bot-block evasion).\n")
+		d.WriteString("- `web(url=...)`: fetch a URL (Serper scrape for HTML; PDF/Office via liteparse; bot-block evasion fallback).\n")
 		d.WriteString("- `web(mode=request, url=..., method=POST, json={...})`: raw HTTP for APIs needing custom headers/auth/body.\n")
 		d.WriteString("- `web(mode=research, question=...)`: deep multi-query research for complex questions.\n")
 		d.WriteString("- On fetch failure (403/block): try mode=request with custom headers, or search for cached versions.\n\n")

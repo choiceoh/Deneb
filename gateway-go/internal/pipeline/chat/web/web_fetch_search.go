@@ -1,10 +1,13 @@
-// web_fetch_search.go — Search provider implementations for the unified web tool.
+// web_fetch_search.go — Serper/Brave/DuckDuckGo providers for search + scrape.
 //
-// Provider priority: Serper (Google) → Brave Search → DuckDuckGo.
-// Serper returns fast, cheap Google organic results (title, link, snippet) plus
-// answer box and knowledge graph when available — ideal for AI agent consumption.
-// Brave returns traditional search results as a secondary provider.
-// DuckDuckGo is the zero-config fallback (no API key needed).
+// Search provider priority: Serper (Google) → Brave → DuckDuckGo.
+// Scrape provider: Serper's dedicated `scrape.serper.dev` endpoint (called by
+// web_fetch.go ahead of the raw HTTP fetcher when SERPER_API_KEY is set).
+//
+// Serper search returns Google organic results (title, link, snippet) plus an
+// answer box when available. Serper scrape returns clean text/markdown plus
+// head metadata for a single URL — cheaper and more reliable than stealth
+// browser fetching for normal HTML pages.
 package web
 
 import (
@@ -182,6 +185,120 @@ func pickAnswer(a serperAnswerBox) string {
 	default:
 		return ""
 	}
+}
+
+// --- Serper scrape (dedicated web-fetch endpoint) ---
+//
+// POST https://scrape.serper.dev with { "url": "...", "includeMarkdown": true }.
+// Auth: X-API-KEY header.
+// Response: { "text", "markdown", "metadata": { "title", "description", ...},
+//             "jsonld": {...}, "credits": N }.
+
+type serperScrapeRequest struct {
+	URL             string `json:"url"`
+	IncludeMarkdown bool   `json:"includeMarkdown"`
+}
+
+type serperScrapeResponse struct {
+	Text     string            `json:"text"`
+	Markdown string            `json:"markdown"`
+	Metadata map[string]string `json:"metadata"`
+	Credits  int               `json:"credits"`
+}
+
+// serperScrape calls Serper's scrape endpoint to extract clean text/markdown
+// for a single URL. Returns the parsed response, or an error if the key is
+// missing, the request fails, or the API returns non-200.
+func serperScrape(ctx context.Context, apiKey, targetURL string) (*serperScrapeResponse, error) {
+	reqBody := serperScrapeRequest{URL: targetURL, IncludeMarkdown: true}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("marshal serper scrape request: %w", err)
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost,
+		"https://scrape.serper.dev", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create serper scrape request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-KEY", apiKey)
+
+	resp, err := SharedClient(30 * time.Second).Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("serper scrape request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("serper scrape HTTP %d", resp.StatusCode)
+	}
+
+	var result serperScrapeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("parse serper scrape response: %w", err)
+	}
+	return &result, nil
+}
+
+// pickScrapeContent prefers markdown (structured), falls back to plain text.
+func pickScrapeContent(s *serperScrapeResponse) string {
+	if strings.TrimSpace(s.Markdown) != "" {
+		return s.Markdown
+	}
+	return s.Text
+}
+
+// populateScrapeMetadata maps Serper's head metadata keys onto webFetchMeta.
+// Keys follow common OpenGraph/HTML conventions (title, description, og:title, etc.).
+func populateScrapeMetadata(meta *webFetchMeta, md map[string]string) {
+	if len(md) == 0 {
+		return
+	}
+	firstNonEmpty := func(keys ...string) string {
+		for _, k := range keys {
+			if v := strings.TrimSpace(md[k]); v != "" {
+				return v
+			}
+		}
+		return ""
+	}
+	meta.Title = firstNonEmpty("title", "og:title", "twitter:title")
+	meta.Description = firstNonEmpty("description", "og:description", "twitter:description")
+	meta.SiteName = firstNonEmpty("og:site_name", "application-name")
+	meta.Language = firstNonEmpty("language", "og:locale")
+	meta.Author = firstNonEmpty("author", "article:author")
+	meta.Published = firstNonEmpty("article:published_time", "published_time", "date")
+	meta.CanonicalURL = firstNonEmpty("canonical", "og:url")
+	meta.OGType = firstNonEmpty("og:type")
+}
+
+// looksLikeBinaryURL returns true for URLs whose extension indicates a binary
+// asset (PDF, Office doc, image, archive). Serper's scraper is HTML-only, so
+// we skip it and fall through to the raw fetcher + liteparse path.
+func looksLikeBinaryURL(u string) bool {
+	lower := strings.ToLower(u)
+	if i := strings.Index(lower, "?"); i >= 0 {
+		lower = lower[:i]
+	}
+	if i := strings.Index(lower, "#"); i >= 0 {
+		lower = lower[:i]
+	}
+	for _, ext := range []string{
+		".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+		".zip", ".tar", ".gz", ".7z",
+		".mp3", ".wav", ".ogg", ".flac",
+		".mp4", ".mov", ".avi", ".webm",
+		".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
+	} {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 // --- Brave Search ---

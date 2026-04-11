@@ -115,6 +115,17 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 	// Singleflight: collapse concurrent fetches for the same URL into one request.
 	// The result is cached after the first fetch completes.
 	v, err := fetchGroup.do(targetURL, func() (any, error) {
+		// Prefer Serper's scrape endpoint when available: it returns clean
+		// markdown + head metadata, sidesteps bot-blocks, and is cheaper than
+		// rendering HTML through our own pipeline. Binary URLs (PDF, Office,
+		// archives, media) skip this and fall through to the raw fetcher so
+		// liteparse can handle them.
+		if key := serperAPIKey(); key != "" && !looksLikeBinaryURL(targetURL) {
+			if result, ok := webFetchViaSerper(ctx, cache, key, targetURL); ok {
+				return result, nil
+			}
+		}
+
 		maxBytes := int64(maxChars * 2)
 		if maxBytes > 5*1024*1024 {
 			maxBytes = 5 * 1024 * 1024
@@ -157,6 +168,43 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 	}
 
 	return applyTruncation(v.(string), maxChars), nil //nolint:errcheck // type guaranteed by preceding switch
+}
+
+// webFetchViaSerper extracts content for a single URL via Serper's dedicated
+// scrape endpoint (scrape.serper.dev). Returns (fullResult, true) on success,
+// or ("", false) to signal the caller should fall through to the raw HTTP
+// fetcher (e.g. non-HTML URL, empty response, or API error).
+//
+// The returned result is already cached; the caller does not need to re-cache.
+func webFetchViaSerper(ctx context.Context, cache *FetchCache, apiKey, targetURL string) (string, bool) {
+	fetchStart := time.Now()
+	scrape, err := serperScrape(ctx, apiKey, targetURL)
+	fetchMs := time.Since(fetchStart).Milliseconds()
+	if err != nil {
+		return "", false
+	}
+	content := pickScrapeContent(scrape)
+	if strings.TrimSpace(content) == "" {
+		return "", false
+	}
+
+	origChars := len(content)
+	meta := webFetchMeta{
+		URL:          targetURL,
+		ContentType:  "text/html",
+		StatusCode:   200,
+		FetchMs:      fetchMs,
+		OrigChars:    origChars,
+		ExtractChars: origChars,
+		Retention:    "100.0%",
+		WordCount:    estimateWordCount(content),
+		Signals:      []string{"serper_scrape"},
+	}
+	populateScrapeMetadata(&meta, scrape.Metadata)
+
+	fullResult := formatFetchResult(meta, content)
+	cache.Put(targetURL, fullResult)
+	return fullResult, true
 }
 
 // webParallelSearch runs multiple search queries concurrently and returns
