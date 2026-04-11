@@ -2,9 +2,10 @@
 """
 Deneb Gateway Live Reproduction Tool.
 
-AI agents use this to reproduce user-reported symptoms live via Telegram.
-Supports single/multi-turn chat with assertions, tool verification,
-and symptom-based diagnosis.
+AI agents use this to reproduce user-reported symptoms live through the
+mock Telegram server. Supports single/multi-turn chat with assertions,
+tool verification, and symptom-based diagnosis — no real Telegram bot
+credentials required.
 
 Usage:
     # Single chat with assertions
@@ -32,10 +33,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-# Add scripts dir to path for shared module.
+# Add scripts dir to path for shared modules (mock_telegram_client lives
+# under scripts/, this file under scripts/dev/).
+_SCRIPTS_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(Path(__file__).parent))
-from telegram_test_client import TelegramTestClient, ChatCapture, check_prerequisites
-from checks import (
+sys.path.insert(0, str(_SCRIPTS_ROOT))
+from mock_telegram_client import TelegramTestClient, ChatCapture, check_prerequisites  # noqa: E402
+from checks import (  # noqa: E402
     check_korean_response as _check_korean_core,
     check_no_leaked_markup as _check_no_leaked_markup_core,
     check_telegram_safe as _check_telegram_safe_core,
@@ -55,7 +59,7 @@ TIMEOUT_CHAT = 120
 
 # --- Data Structures ---
 
-# ChatCapture is imported from telegram_test_client.
+# ChatCapture is imported from mock_telegram_client.
 
 
 @dataclass
@@ -90,7 +94,7 @@ class TurnResult:
 # --- Telegram Client Wrapper ---
 
 class GatewayClient:
-    """Telegram-based test client (replaces former WebSocket client)."""
+    """Mock-Telegram-based test client (replaces former WebSocket client)."""
 
     def __init__(self, host: str, port: int, bot: str = ""):
         self.host = host
@@ -252,13 +256,13 @@ async def cmd_chat_check(args):
     """Send a chat message with configurable assertions."""
     ok, detail = check_prerequisites()
     if not ok:
-        print(f"Telegram prerequisites not met: {detail}")
+        print(f"Mock Telegram prerequisites not met: {detail}")
         return 1
 
     client = GatewayClient(HOST, args.port, bot=getattr(args, "bot", ""))
     try:
         bot_name = await client.connect()
-        print(f"Connected to {bot_name} via Telegram")
+        print(f"Connected to {bot_name} via mock Telegram")
 
         if args.session:
             await client.create_session(args.session)
@@ -306,13 +310,13 @@ async def cmd_multi_chat(args):
     """Multi-turn chat on the same session. Tests context carryover."""
     ok, detail = check_prerequisites()
     if not ok:
-        print(f"Telegram prerequisites not met: {detail}")
+        print(f"Mock Telegram prerequisites not met: {detail}")
         return 1
 
     client = GatewayClient(HOST, args.port, bot=getattr(args, "bot", ""))
     try:
         bot_name = await client.connect()
-        print(f"Connected to {bot_name} via Telegram")
+        print(f"Connected to {bot_name} via mock Telegram")
 
         session_key = await client.create_session()
         print(f"Session: {session_key}")
@@ -367,13 +371,13 @@ async def cmd_tool_check(args):
     """Send a message designed to trigger a specific tool, verify it completes."""
     ok, detail = check_prerequisites()
     if not ok:
-        print(f"Telegram prerequisites not met: {detail}")
+        print(f"Mock Telegram prerequisites not met: {detail}")
         return 1
 
     client = GatewayClient(HOST, args.port, bot=getattr(args, "bot", ""))
     try:
         bot_name = await client.connect()
-        print(f"Connected to {bot_name} via Telegram")
+        print(f"Connected to {bot_name} via mock Telegram")
 
         capture = await client.chat(args.message, timeout=args.timeout)
 
@@ -447,11 +451,11 @@ def print_turn_result(result: TurnResult) -> int:
 # --- Main ---
 
 def main():
-    parser = argparse.ArgumentParser(description="Deneb Live Reproduction Tool (Telegram)")
+    parser = argparse.ArgumentParser(description="Deneb Live Reproduction Tool (mock Telegram)")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT,
                         help="Gateway HTTP port for health checks")
     parser.add_argument("--bot", type=str, default="",
-                        help="Bot username (default: DENEB_DEV_BOT_USERNAME)")
+                        help="Ignored (mock identifies itself; kept for compat)")
     parser.add_argument("--timeout", type=float, default=TIMEOUT_CHAT)
     sub = parser.add_subparsers(dest="command")
 

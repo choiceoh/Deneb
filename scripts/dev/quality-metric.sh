@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Quality metric for constant optimization.
-# Sends a real chat message via Telegram, measures response quality, returns a numeric score.
+# Sends a chat message via the mock Telegram server, measures response
+# quality, and returns a numeric score.
 #
 # Usage:
-#   scripts/quality-metric.sh [--message MSG]
+#   scripts/quality-metric.sh [MSG]
 #
 # Output (last line):
 #   metric_value=85.5
@@ -18,15 +19,21 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 MESSAGE="${1:-안녕, 간단히 자기소개 해줘}"
 
-python3 -c "
-import re, sys, time
-sys.path.insert(0, '$SCRIPT_DIR')
-from telegram_test_client import TelegramTestClient, check_prerequisites
+MOCK_QUALITY_MESSAGE="$MESSAGE" \
+DENEB_SCRIPTS_DIR="$SCRIPTS_DIR" \
+python3 - <<'PYEOF'
 import asyncio
+import os
+import re
+import sys
 
-MESSAGE = '''$MESSAGE'''
+sys.path.insert(0, os.environ["DENEB_SCRIPTS_DIR"])
+from mock_telegram_client import TelegramTestClient, check_prerequisites
+
+MESSAGE = os.environ.get("MOCK_QUALITY_MESSAGE", "")
 
 def score_korean(text):
     korean = len(re.findall(r'[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]', text))
@@ -116,4 +123,4 @@ async def main():
         await client.disconnect()
 
 asyncio.run(main())
-"
+PYEOF

@@ -161,13 +161,22 @@ PHASE_OK[build]=true; PHASE_MS[build]=$BUILD_MS
 echo "ok (${BUILD_MS}ms)"
 
 # --- Step 2: Start gateway ---
-# Start gateway with production config (iterate-specific Telegram token).
+# Start gateway with production config pointed at the local mock Telegram
+# server. The iterate gateway and the live-test dev gateway share the same
+# mock instance; they should not be run concurrently (iterate.sh already
+# holds an flock for its own run).
 echo -n "start... "
 DEV_CONFIG="/tmp/deneb-iterate-config.json"
-devlib_gen_config "$DEV_CONFIG" "${DENEB_ITERATE_TELEGRAM_TOKEN:-${DENEB_DEV_TELEGRAM_TOKEN:-}}"
+MOCK_TOKEN="mock-dev-token"
+DENEB_DEV_TELEGRAM_TOKEN="$MOCK_TOKEN" devlib_gen_config "$DEV_CONFIG"
+
+# Ensure the mock Telegram server is up. Idempotent — no-op if a live-test
+# invocation already started it.
+devlib_start_mock_telegram "${DENEB_DEV_MOCK_TELEGRAM_PORT:-18792}" "$HOST" >/dev/null 2>&1 || true
 
 START_WAIT_BEGIN=$(date +%s%N)
-devlib_start_gateway "$BINARY" "$PORT" "$DEV_CONFIG" "$ITERATE_STATE_DIR" "$LOG"
+DENEB_DEV_TELEGRAM_TOKEN="$MOCK_TOKEN" \
+  devlib_start_gateway "$BINARY" "$PORT" "$DEV_CONFIG" "$ITERATE_STATE_DIR" "$LOG"
 GW_PID=$DEVLIB_PID
 
 HEALTHY=false

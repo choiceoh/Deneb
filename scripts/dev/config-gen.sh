@@ -41,8 +41,27 @@ if [[ ! -f "$PROD_CONFIG" ]]; then
     exit 1
   fi
   echo "WARN: production config not found at $PROD_CONFIG" >&2
-  echo "      falling back to empty config {}" >&2
-  echo '{}' > "$OUT"
+  echo "      generating minimal dev config with mock Telegram channel" >&2
+  # Write a minimal dev-safe config. We still wire the Telegram channel
+  # because live-test.sh points TELEGRAM_API_BASE at the local mock server,
+  # so the plugin needs *some* channels.telegram section to boot.
+  python3 -c "
+import json, os
+dev_token = os.environ.get('DENEB_DEV_TELEGRAM_TOKEN') or 'mock-dev-token'
+cfg = {
+    'channels': {
+        'telegram': {
+            'botToken': dev_token,
+            'chatID': 10000001,
+        }
+    },
+    'cron': {'enabled': False},
+    'gmailPoll': {'enabled': False},
+}
+with open('$OUT', 'w') as f:
+    json.dump(cfg, f, indent=2, ensure_ascii=False)
+    f.write('\n')
+"
   exit 0
 fi
 
@@ -103,15 +122,22 @@ import json, os, sys
 with open('$PROD_CONFIG') as f:
     cfg = json.load(f)
 
-dev_token = os.environ.get('DENEB_DEV_TELEGRAM_TOKEN', '')
+# live-test.sh always passes a mock token (via DENEB_DEV_TELEGRAM_TOKEN) so
+# the Telegram plugin has something to boot with. The real bot is never
+# contacted because TELEGRAM_API_BASE points at the local mock server.
+dev_token = os.environ.get('DENEB_DEV_TELEGRAM_TOKEN', '') or 'mock-dev-token'
 
-# Telegram bot token: replace with dev token (full parity) or strip (safe fallback).
-tg = cfg.get('channels', {}).get('telegram')
-if tg and isinstance(tg, dict):
-    if dev_token:
-        tg['botToken'] = dev_token
-    else:
-        tg['botToken'] = ''
+# Ensure channels.telegram exists so the plugin actually starts in dev mode.
+channels = cfg.setdefault('channels', {})
+tg = channels.get('telegram')
+if not isinstance(tg, dict):
+    tg = {}
+    channels['telegram'] = tg
+tg['botToken'] = dev_token
+# Seed a chat ID so the primary-DM path has a valid target. The value is
+# synthetic — messages flow through the mock, never a real chat.
+if not tg.get('chatID'):
+    tg['chatID'] = 10000001
 
 # Disable Gmail polling to avoid duplicate poll cycles.
 gp = cfg.get('gmailPoll')
