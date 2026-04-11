@@ -30,10 +30,8 @@ type ToolDef = toolctx.ToolDef
 
 // Compile-time interface compliance.
 var (
-	_ agent.ToolExecutor                 = (*ToolRegistry)(nil)
-	_ agent.ConcurrencyChecker           = (*ToolRegistry)(nil)
-	_ agent.InputAwareConcurrencyChecker = (*ToolRegistry)(nil)
-	_ toolctx.ToolRegistrar              = (*ToolRegistry)(nil)
+	_ agent.ToolExecutor    = (*ToolRegistry)(nil)
+	_ toolctx.ToolRegistrar = (*ToolRegistry)(nil)
 )
 
 // ToolRegistry maps tool names to tool definitions (executor + schema + description).
@@ -212,39 +210,6 @@ func (r *ToolRegistry) ApplyMaxOutputs(budgets map[string]int) {
 			r.tools[name] = def
 		}
 	}
-}
-
-// IsConcurrencySafe returns true if the named tool declared ConcurrencySafe
-// during registration, meaning it performs no shared-state mutations and is
-// safe for parallel execution.
-func (r *ToolRegistry) IsConcurrencySafe(name string) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if def, ok := r.tools[name]; ok {
-		return def.ConcurrencySafe
-	}
-	return false
-}
-
-// IsConcurrencySafeWithInput extends IsConcurrencySafe with input-aware
-// classification. For most tools, this delegates to the static ConcurrencySafe
-// flag. For "exec", it parses the command and checks whether it is read-only
-// (e.g., "go test", "git status", "ls") to allow concurrent execution.
-func (r *ToolRegistry) IsConcurrencySafeWithInput(name string, input json.RawMessage) bool {
-	r.mu.RLock()
-	def, ok := r.tools[name]
-	r.mu.RUnlock()
-	if !ok {
-		return false
-	}
-	if def.ConcurrencySafe {
-		return true
-	}
-	// Input-aware override: exec commands that are read-only can run concurrently.
-	if name == "exec" {
-		return agent.IsReadOnlyExecCommand(input)
-	}
-	return false
 }
 
 // extractFilePath extracts a "file_path" string from tool input JSON.

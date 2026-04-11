@@ -649,9 +649,8 @@ func buildAgentConfig(
 		ContinuationRequested: func() bool {
 			return contSignal != nil && contSignal.Requested()
 		},
-		SpawnDetected:          spawnFlag.IsSet,
-		StreamingToolExecution: true,
-		ToolLoopDetector:       agent.NewToolLoopDetector(agent.DefaultToolLoopConfig(), logger),
+		SpawnDetected:    spawnFlag.IsSet,
+		ToolLoopDetector: agent.NewToolLoopDetector(agent.DefaultToolLoopConfig(), logger),
 		// Per-turn message persistence: persist each assistant and tool_result
 		// message immediately to transcript so intermediate findings survive
 		// across runs (fixes the "short-term memory loss" bug).

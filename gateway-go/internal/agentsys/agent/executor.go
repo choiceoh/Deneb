@@ -13,8 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
@@ -56,10 +54,6 @@ func RunAgent(
 	defer cancel()
 
 	result := &AgentResult{}
-
-	// Build concurrency checker: uses ConcurrencyChecker interface if available,
-	// otherwise falls back to the hardcoded read-only tool set.
-	isConcurrencySafe := buildConcurrencyCheck(tools)
 
 	// Max-output-tokens recovery: tracks how many times we've auto-resumed
 	// after the LLM response was truncated by max_tokens.
@@ -130,51 +124,11 @@ func RunAgent(
 			return nil, fmt.Errorf("stream chat (turn %d): %w", turn, err)
 		}
 
-		// Allocate turnResult outside consumeStream so streaming tool dispatch
-		// callbacks can safely read contentBlocks (thinking blocks precede tool_use
-		// in stream order, so they are populated by the time OnToolBlockReady fires).
 		turnRes := &turnResult{}
-
-		// --- Streaming tool dispatch setup ---
-		// When enabled, tool execution starts as soon as each tool_use block
-		// finishes streaming, rather than waiting for the entire response.
-		var (
-			streamingDispatch bool
-			streamResultsCh   []chan llm.ContentBlock
-			streamMu          sync.Mutex
-			streamWg          sync.WaitGroup
-			turnReasonOnce    sync.Once
-			turnReason        string
-		)
-
-		dispatchHooks := hooks
-		if cfg.StreamingToolExecution && tools != nil {
-			streamingDispatch = true
-			dispatchHooks.OnToolBlockReady = func(tc llm.ContentBlock, idx int) {
-				// Compute turnReason once (thinking blocks precede tool_use in stream order).
-				turnReasonOnce.Do(func() {
-					turnReason = extractThinkingText(turnRes.contentBlocks)
-				})
-
-				ch := make(chan llm.ContentBlock, 1)
-				streamMu.Lock()
-				for len(streamResultsCh) <= idx {
-					streamResultsCh = append(streamResultsCh, nil)
-				}
-				streamResultsCh[idx] = ch
-				streamMu.Unlock()
-
-				streamWg.Add(1)
-				go func() {
-					defer streamWg.Done()
-					ch <- executeOneTool(ctx, tc, tools, hooks, turnReason, turn, logger, runLog, cfg.ToolLoopDetector)
-				}()
-			}
-		}
 
 		// Consume the stream for this turn. On idle stall, retry once —
 		// the LLM API sometimes stalls transiently but recovers on reconnect.
-		err = consumeStreamInto(ctx, events, dispatchHooks, turnRes, cfg.StreamIdleTimeout, logger)
+		err = consumeStreamInto(ctx, events, hooks, turnRes, cfg.StreamIdleTimeout, logger)
 		if errors.Is(err, ErrStreamIdle) && ctx.Err() == nil {
 			logger.Warn("stream idle stall detected, retrying turn",
 				"turn", turn,
@@ -182,7 +136,7 @@ func RunAgent(
 			turnRes = &turnResult{}
 			events, err = client.StreamChat(ctx, req)
 			if err == nil {
-				err = consumeStreamInto(ctx, events, dispatchHooks, turnRes, cfg.StreamIdleTimeout, logger)
+				err = consumeStreamInto(ctx, events, hooks, turnRes, cfg.StreamIdleTimeout, logger)
 			}
 		}
 		if err != nil {
@@ -360,109 +314,18 @@ func RunAgent(
 			result.TurnsPersisted++
 		}
 
-		// Execute tools and collect results.
+		// Execute tools sequentially in the order the LLM emitted them.
+		// Parallel tool execution has been removed — tools always run one at
+		// a time so cross-tool side effects are predictable.
 		var toolResults []llm.ContentBlock
-
-		if streamingDispatch && len(turnRes.toolCalls) > 0 {
-			// Streaming path: tools were dispatched during stream consumption.
-			// Wait for all dispatched goroutines to finish.
-			streamDone := make(chan struct{})
-			go func() { streamWg.Wait(); close(streamDone) }()
-			select {
-			case <-streamDone:
-			case <-ctx.Done():
-				result.StopReason = stopReasonFromCtx(ctx)
-				for _, tc := range turnRes.toolCalls {
-					result.InterruptedToolNames = append(result.InterruptedToolNames, tc.Name)
-				}
-				result.FinalMessages = messages
-				return result, nil
-			}
-
-			// Collect results in order from per-tool channels.
-			toolResults = make([]llm.ContentBlock, len(streamResultsCh))
-			for i, ch := range streamResultsCh {
-				toolResults[i] = <-ch
-			}
-		} else {
-			// Legacy path: execute all tools after stream ends.
-			// Smart batching: consecutive read-only tools run concurrently (max 10),
-			// write tools run serially. Sibling error cancellation stops remaining
-			// tools in a batch on failure.
-			if !streamingDispatch {
-				turnReason = extractThinkingText(turnRes.contentBlocks)
-			}
+		if len(turnRes.toolCalls) > 0 {
+			turnReason := extractThinkingText(turnRes.contentBlocks)
 			toolResults = make([]llm.ContentBlock, len(turnRes.toolCalls))
-
-			// Partition tool calls into concurrent/serial batches.
-			type toolBatch struct {
-				indices    []int
-				concurrent bool
-			}
-			var batches []toolBatch
-			{
-				var curBatch toolBatch
-				flush := func() {
-					if len(curBatch.indices) > 0 {
-						batches = append(batches, curBatch)
-						curBatch = toolBatch{}
-					}
-				}
-				for i, tc := range turnRes.toolCalls {
-					if isConcurrencySafe(tc.Name, tc.Input) {
-						if !curBatch.concurrent && len(curBatch.indices) > 0 {
-							flush()
-						}
-						curBatch.concurrent = true
-						curBatch.indices = append(curBatch.indices, i)
-					} else {
-						flush()
-						batches = append(batches, toolBatch{indices: []int{i}, concurrent: false})
-					}
-				}
-				flush()
-			}
-
-			// Execute batches: concurrent batches run in parallel with sibling
-			// error cancellation; serial batches run one at a time.
-			for _, batch := range batches {
+			for i, tc := range turnRes.toolCalls {
 				if ctx.Err() != nil {
 					break
 				}
-				if !batch.concurrent || len(batch.indices) == 1 {
-					for _, idx := range batch.indices {
-						if ctx.Err() != nil {
-							break
-						}
-						toolResults[idx] = executeOneTool(ctx, turnRes.toolCalls[idx], tools, hooks, turnReason, turn, logger, runLog, cfg.ToolLoopDetector)
-					}
-				} else {
-					var batchWg sync.WaitGroup
-					sem := make(chan struct{}, maxToolConcurrency)
-					var firstErr int32
-					for _, idx := range batch.indices {
-						batchWg.Add(1)
-						sem <- struct{}{}
-						go func(i int) {
-							defer batchWg.Done()
-							defer func() { <-sem }()
-							if atomic.LoadInt32(&firstErr) != 0 {
-								toolResults[i] = llm.ContentBlock{
-									Type:      "tool_result",
-									ToolUseID: turnRes.toolCalls[i].ID,
-									Content:   "skipped: sibling tool error",
-									IsError:   true,
-								}
-								return
-							}
-							toolResults[i] = executeOneTool(ctx, turnRes.toolCalls[i], tools, hooks, turnReason, turn, logger, runLog, cfg.ToolLoopDetector)
-							if toolResults[i].IsError {
-								atomic.StoreInt32(&firstErr, 1)
-							}
-						}(idx)
-					}
-					batchWg.Wait()
-				}
+				toolResults[i] = executeOneTool(ctx, tc, tools, hooks, turnReason, turn, logger, runLog, cfg.ToolLoopDetector)
 			}
 
 			// Check context cancellation after tool execution.
@@ -553,25 +416,6 @@ func buildTurnBudgetWarning(currentTurn, maxTurns int, spawnActive bool) string 
 		remaining, maxTurns)
 }
 
-// maxToolConcurrency is the maximum number of read-only tools that can
-// execute concurrently in a single batch.
-const maxToolConcurrency = 10
-
-// buildConcurrencyCheck returns a function that checks whether a tool is safe
-// for concurrent execution. Checks for InputAwareConcurrencyChecker first
-// (considers tool input, e.g., exec command text), then ConcurrencyChecker
-// (name-only), then falls back to the hardcoded set.
-func buildConcurrencyCheck(tools ToolExecutor) func(string, json.RawMessage) bool {
-	if iac, ok := tools.(InputAwareConcurrencyChecker); ok {
-		return iac.IsConcurrencySafeWithInput
-	}
-	if cc, ok := tools.(ConcurrencyChecker); ok {
-		check := cc.IsConcurrencySafe
-		return func(name string, _ json.RawMessage) bool { return check(name) }
-	}
-	return func(name string, _ json.RawMessage) bool { _, ok := readOnlyToolFallback[name]; return ok }
-}
-
 // appendUniqueTools appends extra tools to base, skipping any whose name
 // already exists in base. Used for dynamic tool injection (deferred tools).
 func appendUniqueTools(base, extra []llm.Tool) []llm.Tool {
@@ -606,12 +450,7 @@ const defaultStreamIdleTimeout = 90 * time.Second
 var ErrStreamIdle = fmt.Errorf("stream stalled: no event within idle timeout")
 
 // consumeStreamInto reads all events from a streaming LLM response and
-// populates the provided turnResult. The caller allocates result so that
-// streaming tool dispatch callbacks can safely read contentBlocks during
-// consumption (thinking blocks precede tool_use in Anthropic stream order).
-//
-// When hooks.OnToolBlockReady is set, it is called synchronously on each
-// content_block_stop for tool_use blocks, enabling streaming tool dispatch.
+// populates the provided turnResult.
 //
 // idleTimeout controls how long to wait for the next event before declaring
 // the stream stalled. Zero uses defaultStreamIdleTimeout; negative disables.
@@ -720,10 +559,6 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 					switch currentBlock.block.Type {
 					case "tool_use":
 						result.toolCalls = append(result.toolCalls, currentBlock.block)
-						// Streaming tool dispatch: notify caller this tool_use block is ready.
-						if hooks.OnToolBlockReady != nil {
-							hooks.OnToolBlockReady(currentBlock.block, len(result.toolCalls)-1)
-						}
 					case "text":
 						result.text += currentBlock.block.Text
 					case "thinking":

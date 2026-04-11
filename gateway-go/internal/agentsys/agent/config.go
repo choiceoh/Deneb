@@ -58,12 +58,6 @@ type AgentConfig struct {
 	// Savings: ~1600 tokens × image count per turn after turn 0.
 	StripImagesAfterFirstTurn bool
 
-	// StreamingToolExecution enables dispatching tool calls as soon as each
-	// tool_use block finishes streaming, rather than waiting for the entire
-	// LLM response to complete. Reduces latency when the LLM emits multiple
-	// tool_use blocks sequentially. Default: false (legacy behavior).
-	StreamingToolExecution bool
-
 	// NudgeBudget enables token-budget-based continuation: when the agent finishes
 	// with end_turn but the token budget is not yet exhausted, a nudge message is
 	// injected to prompt the LLM to check for remaining work. Nil = disabled.

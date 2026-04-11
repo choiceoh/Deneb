@@ -40,12 +40,11 @@ func RegisterPolarisTools(registry toolctx.ToolRegistrar, store *polaris.Store, 
 		return
 	}
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "polaris",
-		Description:     "압축된 대화 이력 관리. search (키워드 검색), describe (요약 구조 조회), expand (원본 복원)",
-		InputSchema:     polarisToolSchema(),
-		Fn:              tools.ToolPolaris(store, localAI),
-		Deferred:        true,
-		ConcurrencySafe: true,
+		Name:        "polaris",
+		Description: "압축된 대화 이력 관리. search (키워드 검색), describe (요약 구조 조회), expand (원본 복원)",
+		InputSchema: polarisToolSchema(),
+		Fn:          tools.ToolPolaris(store, localAI),
+		Deferred:    true,
 	})
 }
 
@@ -53,11 +52,10 @@ func RegisterPolarisTools(registry toolctx.ToolRegistrar, store *polaris.Store, 
 func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps) {
 	workspaceDir := deps.WorkspaceDir
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "read",
-		Description:     "Read file contents with line numbers for code review (default: 2000 lines). Use offset/limit for large files; equivalent to a clean bat/cat -n view",
-		InputSchema:     readToolSchema(),
-		Fn:              tools.ToolRead(workspaceDir),
-		ConcurrencySafe: true,
+		Name:        "read",
+		Description: "Read file contents with line numbers for code review (default: 2000 lines). Use offset/limit for large files; equivalent to a clean bat/cat -n view",
+		InputSchema: readToolSchema(),
+		Fn:          tools.ToolRead(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "write",
@@ -72,25 +70,22 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		Fn:          tools.ToolEdit(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "grep",
-		Description:     "Regex search across files (rg / ripgrep). Use include/fileType to narrow scope. Returns file:line:match format",
-		InputSchema:     grepToolSchema(),
-		Fn:              tools.ToolGrep(workspaceDir),
-		ConcurrencySafe: true,
+		Name:        "grep",
+		Description: "Regex search across files (rg / ripgrep). Use include/fileType to narrow scope. Returns file:line:match format",
+		InputSchema: grepToolSchema(),
+		Fn:          tools.ToolGrep(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "find",
-		Description:     "Fast file search by glob pattern (fd-backed when available; e.g. \"**/*.go\"). Use grep to search inside files instead",
-		InputSchema:     findToolSchema(),
-		Fn:              tools.ToolFind(workspaceDir),
-		ConcurrencySafe: true,
+		Name:        "find",
+		Description: "Fast file search by glob pattern (fd-backed when available; e.g. \"**/*.go\"). Use grep to search inside files instead",
+		InputSchema: findToolSchema(),
+		Fn:          tools.ToolFind(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "diff",
-		Description:     "Git diff and file comparison. Modes: staged, unstaged, all (vs HEAD), commit (show commit), branch (compare branches), files (compare two files). Options: stat_only, context_lines, path filter",
-		InputSchema:     diffToolSchema(),
-		Fn:              tools.ToolDiff(workspaceDir),
-		ConcurrencySafe: true,
+		Name:        "diff",
+		Description: "Git diff and file comparison. Modes: staged, unstaged, all (vs HEAD), commit (show commit), branch (compare branches), files (compare two files). Options: stat_only, context_lines, path filter",
+		InputSchema: diffToolSchema(),
+		Fn:          tools.ToolDiff(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "git",
@@ -115,11 +110,10 @@ func RegisterProcessTools(registry toolctx.ToolRegistrar, d *toolctx.ProcessDeps
 		Fn:          tools.ToolExec(d.Mgr, d.WorkspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "process",
-		Description:     "Manage background exec sessions: list running, poll/log output, kill by sessionId",
-		InputSchema:     processToolSchema(),
-		Fn:              tools.ToolProcess(d.Mgr),
-		ConcurrencySafe: true,
+		Name:        "process",
+		Description: "Manage background exec sessions: list running, poll/log output, kill by sessionId",
+		InputSchema: processToolSchema(),
+		Fn:          tools.ToolProcess(d.Mgr),
 	})
 }
 
@@ -129,23 +123,21 @@ func RegisterWebTools(registry toolctx.ToolRegistrar) {
 	localAI := web.NewLocalAIExtractor()
 
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "web",
-		Description:     "Web access: search the web or fetch page content. Use query for keyword search, url for direct fetch",
-		InputSchema:     webToolSchema(),
-		Fn:              web.MergedTool(webCache, localAI),
-		ConcurrencySafe: true,
+		Name:        "web",
+		Description: "Web access: search the web or fetch page content. Use query for keyword search, url for direct fetch",
+		InputSchema: webToolSchema(),
+		Fn:          web.MergedTool(webCache, localAI),
 	})
 }
 
 // RegisterSessionTools registers session management tools.
 func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps) {
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "sessions",
-		Description:     "Session management: list (active sessions), history (message log), search (transcript keyword search), send (cross-session message)",
-		InputSchema:     sessionsToolSchema(),
-		Fn:              tools.ToolSessions(d),
-		Deferred:        true,
-		ConcurrencySafe: true,
+		Name:        "sessions",
+		Description: "Session management: list (active sessions), history (message log), search (transcript keyword search), send (cross-session message)",
+		InputSchema: sessionsToolSchema(),
+		Fn:          tools.ToolSessions(d),
+		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "sessions_spawn",
@@ -205,10 +197,9 @@ func RegisterSkillsTools(registry toolctx.ToolRegistrar, getSnapshot tools.Skill
 		Name: "skills",
 		Description: "Skill management: list (browse/search), create, patch, read, delete, list_files. " +
 			"Use list when the current task might match a skill. Create reusable workflows from complex tasks.",
-		InputSchema:     skillsToolSchema(),
-		Fn:              tools.ToolSkills(getSnapshot, workspaceDir, invalidateCache),
-		Deferred:        true,
-		ConcurrencySafe: true,
+		InputSchema: skillsToolSchema(),
+		Fn:          tools.ToolSkills(getSnapshot, workspaceDir, invalidateCache),
+		Deferred:    true,
 	})
 }
 
@@ -230,11 +221,10 @@ func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDep
 	// Wiki: unified knowledge base tool (search, read, write, log, daily, index, status).
 	if wikiDeps.Store != nil {
 		registry.RegisterTool(toolctx.ToolDef{
-			Name:            "wiki",
-			Description:     "LLM 위키 지식베이스: search (검색), read (페이지 읽기), index (목차), write (작성/수정), log (일지), daily (최근 일지), status (통계). 과거 결정/맥락/인물/프로젝트 등 장기 지식을 마크다운 위키로 관리",
-			InputSchema:     wikiToolSchema(),
-			Fn:              tools.ToolWiki(wikiDeps, workspaceDir),
-			ConcurrencySafe: true,
+			Name:        "wiki",
+			Description: "LLM 위키 지식베이스: search (검색), read (페이지 읽기), index (목차), write (작성/수정), log (일지), daily (최근 일지), status (통계). 과거 결정/맥락/인물/프로젝트 등 장기 지식을 마크다운 위키로 관리",
+			InputSchema: wikiToolSchema(),
+			Fn:          tools.ToolWiki(wikiDeps, workspaceDir),
 		})
 	}
 }

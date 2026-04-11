@@ -12,21 +12,3 @@ import (
 type ToolExecutor interface {
 	Execute(ctx context.Context, name string, input json.RawMessage) (string, error)
 }
-
-// ConcurrencyChecker is an optional interface that ToolExecutor implementations
-// can satisfy to declare which tools are safe for parallel execution. When the
-// executor receives a ToolExecutor that implements this interface, it uses
-// IsConcurrencySafe instead of the built-in fallback set.
-type ConcurrencyChecker interface {
-	IsConcurrencySafe(name string) bool
-}
-
-// InputAwareConcurrencyChecker extends ConcurrencyChecker to consider the
-// tool's input when determining concurrency safety. For example, an "exec"
-// tool running "go test" is read-only and safe for concurrent execution,
-// while "rm -rf" is not. When the executor finds this interface, it uses
-// IsConcurrencySafeWithInput for batching decisions.
-type InputAwareConcurrencyChecker interface {
-	ConcurrencyChecker
-	IsConcurrencySafeWithInput(name string, input json.RawMessage) bool
-}
