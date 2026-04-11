@@ -370,7 +370,7 @@ func assembleMessages(
 	// Polaris compaction: tiered context compression.
 	// Applied after message assembly, before prompt finalization.
 	if len(messages) > 0 {
-		polarisCtx, polarisCancel := context.WithTimeout(ctx, 30*time.Second)
+		polarisCtx, polarisCancel := context.WithTimeout(ctx, 2*time.Minute)
 		var summarizer compact.Summarizer
 		if pilotHub := pilot.LocalAIHub(); pilotHub != nil {
 			summarizer = &localAISummarizer{}
