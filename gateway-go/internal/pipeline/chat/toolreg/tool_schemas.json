@@ -422,7 +422,7 @@
   },
   {
     "name": "exec",
-    "max_output": 51200,
+    "max_output": 32000,
     "properties": {
       "command": {
         "type": "string",
@@ -965,7 +965,7 @@
   },
   {
     "name": "wiki",
-    "max_output": 30000,
+    "max_output": 20000,
     "properties": {
       "action": {
         "type": "string",

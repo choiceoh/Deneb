@@ -1016,7 +1016,7 @@ func fetchToolsToolSchema() map[string]any {
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {
 	return map[string]int{
-		"exec": 51200,
-		"wiki": 30000,
+		"exec": 32000,
+		"wiki": 20000,
 	}
 }

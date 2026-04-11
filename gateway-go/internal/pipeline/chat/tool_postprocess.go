@@ -56,8 +56,8 @@ func (r *PostProcessRegistry) Apply(ctx context.Context, toolName, output string
 // --- Built-in post-processors ---
 
 const (
-	outputTrimMax     = 64000 // chars — hard cap for any tool output
-	outputTrimPreview = 2000  // chars preserved from head and tail when trimming
+	outputTrimMax     = 32000 // chars — safety net cap for any tool output
+	outputTrimPreview = 1500  // chars preserved from head and tail when trimming
 	grepMaxMatches    = 200   // max match lines before summarizing
 	findMaxEntries    = 500   // max find results before summarizing
 )
@@ -189,7 +189,7 @@ func RegisterDefaultPostProcessors(registry *ToolRegistry) {
 	pp := NewPostProcessRegistry()
 
 	// Global processors (run on all tools after per-tool processors).
-	// 1. Generic trimmer: caps any remaining large output at 64K chars.
+	// 1. Generic trimmer: caps any remaining large output at 32K chars.
 	pp.AddGlobal(OutputTrimmer)
 	// 2. Error enrichment: adds actionable hints to error patterns.
 	pp.AddGlobal(ErrorEnricher)
