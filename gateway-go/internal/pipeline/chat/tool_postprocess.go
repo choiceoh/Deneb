@@ -59,7 +59,6 @@ const (
 	outputTrimMax     = 32000 // chars — safety net cap for any tool output
 	outputTrimPreview = 1500  // chars preserved from head and tail when trimming
 	grepMaxMatches    = 200   // max match lines before summarizing
-	findMaxEntries    = 500   // max find results before summarizing
 )
 
 // OutputTrimmer caps output at outputTrimMax chars, preserving head and tail.
@@ -110,34 +109,6 @@ func GrepResultSummarizer(_ context.Context, _, output string) string {
 	return fmt.Sprintf("%s\n\n[... %d more matches omitted (total: %d lines)]", kept, len(lines)-grepMaxMatches, len(lines))
 }
 
-// FindResultSummarizer caps find output and groups by directory.
-// Registered as a per-tool processor for "find".
-func FindResultSummarizer(_ context.Context, _, output string) string {
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) <= findMaxEntries {
-		return output
-	}
-
-	// Group by top-level directory for a summary.
-	dirCounts := make(map[string]int)
-	for _, line := range lines {
-		parts := strings.SplitN(strings.TrimSpace(line), "/", 3)
-		dir := "."
-		if len(parts) >= 2 {
-			dir = parts[0] + "/" + parts[1]
-		}
-		dirCounts[dir]++
-	}
-
-	var sb strings.Builder
-	sb.WriteString(strings.Join(lines[:findMaxEntries], "\n"))
-	fmt.Fprintf(&sb, "\n\n[... %d more files omitted (total: %d)]", len(lines)-findMaxEntries, len(lines))
-	sb.WriteString("\n\nDirectory summary:")
-	for dir, count := range dirCounts {
-		fmt.Fprintf(&sb, "\n  %s: %d files", dir, count)
-	}
-	return sb.String()
-}
 
 // StructuredFormatter pretty-prints compact JSON outputs for readability.
 func StructuredFormatter(_ context.Context, _, output string) string {
@@ -199,7 +170,6 @@ func RegisterDefaultPostProcessors(registry *ToolRegistry) {
 	// avoiding unnecessary function calls across all 34+ tools every turn.
 	pp.Add("exec", ExecAnnotator)
 	pp.Add("grep", GrepResultSummarizer)
-	pp.Add("find", FindResultSummarizer)
 
 	// JSON formatting for structured tools.
 	for _, tool := range []string{"web", "kv", "sessions"} {

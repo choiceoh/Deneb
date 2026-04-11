@@ -43,11 +43,6 @@ var commandSemantics = map[string]commandSemantic{
 		isError: func(code int) bool { return code >= 2 },
 		hint:    func(int) string { return "(no matches found)" },
 	},
-	// diff: exit 1 = differences found, 2+ = error
-	"diff": {
-		isError: func(code int) bool { return code >= 2 },
-		hint:    func(int) string { return "(differences found)" },
-	},
 	// test/[: exit 1 = condition is false (not an error), 2+ = error
 	"test": {
 		isError: func(code int) bool { return code >= 2 },
@@ -56,11 +51,6 @@ var commandSemantics = map[string]commandSemantic{
 	"[": {
 		isError: func(code int) bool { return code >= 2 },
 		hint:    func(int) string { return "(condition evaluated to false)" },
-	},
-	// find: exit 1 = some files/dirs inaccessible (partial success)
-	"find": {
-		isError: func(code int) bool { return code >= 2 },
-		hint:    func(int) string { return "(partial: some paths inaccessible)" },
 	},
 }
 

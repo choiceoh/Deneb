@@ -81,18 +81,6 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		Fn:          tools.ToolGrep(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "find",
-		Description: "Fast file search by glob pattern (fd-backed when available; e.g. \"**/*.go\"). Use grep to search inside files instead",
-		InputSchema: findToolSchema(),
-		Fn:          tools.ToolFind(workspaceDir),
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "diff",
-		Description: "Git diff and file comparison. Modes: staged, unstaged, all (vs HEAD), commit (show commit), branch (compare branches), files (compare two files). Options: stat_only, context_lines, path filter",
-		InputSchema: diffToolSchema(),
-		Fn:          tools.ToolDiff(workspaceDir),
-	})
-	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "git",
 		Description: "Git operations: status, commit, log, branch, stash, blame, tag, merge, rebase, reset, remote, clean",
 		InputSchema: gitToolSchema(),

@@ -18,21 +18,21 @@ const (
 
 // researcherTools are read-only exploration tools for codebase investigation.
 var researcherTools = toSet(
-	"read", "grep", "find", "tree", "diff", "analyze",
+	"read", "grep", "tree", "analyze",
 	"web", "wiki", "fetch_tools",
 )
 
 // implementerTools include read + write + build tools for code changes.
 var implementerTools = toSet(
 	"read", "write", "edit", "multi_edit",
-	"grep", "find", "tree", "diff", "analyze",
+	"grep", "tree", "analyze",
 	"test", "exec", "process", "git",
 	"wiki", "fetch_tools",
 )
 
 // verifierTools include read + test + exec tools for verification.
 var verifierTools = toSet(
-	"read", "grep", "find", "tree", "diff",
+	"read", "grep", "tree",
 	"test", "exec", "process",
 	"wiki", "fetch_tools",
 )
@@ -40,7 +40,7 @@ var verifierTools = toSet(
 // coordinatorTools are orchestration-only tools for the coordinator agent.
 var coordinatorTools = toSet(
 	"sessions_spawn", "subagents", "sessions",
-	"read", "grep", "find", "kv",
+	"read", "grep", "kv",
 	"fetch_tools",
 )
 

@@ -117,14 +117,14 @@ func TestRunCache_invalidateByPath_unscopedEntriesRemoved(t *testing.T) {
 }
 
 func TestIsCacheableTool(t *testing.T) {
-	cacheable := []string{"find", "tree", "grep", "analyze"}
+	cacheable := []string{"tree", "grep", "analyze"}
 	for _, name := range cacheable {
 		if !IsCacheableTool(name) {
 			t.Errorf("IsCacheableTool(%q) = false, want true", name)
 		}
 	}
 
-	notCacheable := []string{"write", "exec", "edit", "git", "unknown"}
+	notCacheable := []string{"find", "write", "exec", "edit", "git", "unknown"}
 	for _, name := range notCacheable {
 		if IsCacheableTool(name) {
 			t.Errorf("IsCacheableTool(%q) = true, want false", name)

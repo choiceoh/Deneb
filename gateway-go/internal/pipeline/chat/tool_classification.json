@@ -34,11 +34,9 @@
     "_doc": "toolCompressSkipSet contains tools whose output should not be compressed.\nStructured-output tools are already handled by post-processors.\nInternal / already-small tools add no compression value.",
     "_values": {
       "grep": true,
-      "find": true,
       "tree": true,
       "git": true,
       "analyze": true,
-      "diff": true,
       "wiki": true,
       "kv": true,
       "sessions": true

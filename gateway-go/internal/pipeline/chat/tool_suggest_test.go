@@ -22,7 +22,7 @@ func newTestRegistryWithNames(names ...string) *ToolRegistry {
 }
 
 func TestSuggestToolNames_TypoSuggestions(t *testing.T) {
-	r := newTestRegistryWithNames("read", "write", "edit", "grep", "find", "exec", "tree", "diff")
+	r := newTestRegistryWithNames("read", "write", "edit", "grep", "exec", "tree")
 
 	cases := []struct {
 		typo string
@@ -31,7 +31,6 @@ func TestSuggestToolNames_TypoSuggestions(t *testing.T) {
 		{"grpe", "grep"},
 		{"reed", "read"},
 		{"wrte", "write"},
-		{"fnd", "find"},
 	}
 	for _, tc := range cases {
 		got := r.suggestToolNames(tc.typo, 3, dynamicMaxDistance(tc.typo))

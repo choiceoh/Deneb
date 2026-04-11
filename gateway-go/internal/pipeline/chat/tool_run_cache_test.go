@@ -179,14 +179,14 @@ func TestBuildCacheKey_DifferentTools(t *testing.T) {
 }
 
 func TestIsCacheableTool(t *testing.T) {
-	if !IsCacheableTool("find") {
-		t.Fatal("find should be cacheable")
-	}
 	if !IsCacheableTool("tree") {
 		t.Fatal("tree should be cacheable")
 	}
 	if !IsCacheableTool("grep") {
 		t.Fatal("grep should be cacheable")
+	}
+	if IsCacheableTool("find") {
+		t.Fatal("find should not be cacheable")
 	}
 	if IsCacheableTool("read") {
 		t.Fatal("read should not be cacheable")

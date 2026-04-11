@@ -167,69 +167,6 @@
     ]
   },
   {
-    "name": "find",
-    "properties": {
-      "pattern": {
-        "type": "string",
-        "description": "Glob pattern to match files (supports ** for recursive matching, e.g. \"**/*.go\")"
-      },
-      "path": {
-        "type": "string",
-        "description": "Directory to search in"
-      },
-      "showHidden": {
-        "type": "boolean",
-        "description": "Include hidden directories (starting with .) in search",
-        "default": false
-      }
-    },
-    "required": [
-      "pattern"
-    ]
-  },
-  {
-    "name": "diff",
-    "properties": {
-      "mode": {
-        "type": "string",
-        "description": "Diff mode: 'staged' (git diff --cached), 'unstaged' (git diff), 'all' (staged+unstaged vs HEAD), 'commit' (show a commit), 'branch' (compare branches), 'files' (compare two files)",
-        "enum": [
-          "staged",
-          "unstaged",
-          "all",
-          "commit",
-          "branch",
-          "files"
-        ],
-        "default": "unstaged"
-      },
-      "path": {
-        "type": "string",
-        "description": "Limit diff to a specific file or directory path"
-      },
-      "ref": {
-        "type": "string",
-        "description": "Git ref for 'commit' mode (e.g. HEAD~1, abc1234), or base ref for 'branch' mode"
-      },
-      "ref2": {
-        "type": "string",
-        "description": "Second ref for 'branch' mode (compared against ref). For 'files' mode: second file path"
-      },
-      "stat_only": {
-        "type": "boolean",
-        "description": "Show only file-level summary (--stat), not full diff content",
-        "default": false
-      },
-      "context_lines": {
-        "type": "number",
-        "description": "Number of context lines around changes (default: 3)",
-        "default": 3,
-        "minimum": 0,
-        "maximum": 20
-      }
-    }
-  },
-  {
     "name": "git",
     "properties": {
       "action": {

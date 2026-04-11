@@ -99,7 +99,6 @@ func (rc *RunCache) Len() int {
 }
 
 var cacheableTools = map[string]struct{}{
-	"find":    {},
 	"tree":    {},
 	"grep":    {},
 	"analyze": {},
