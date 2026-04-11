@@ -110,6 +110,33 @@ type Server struct {
 	OnListening func(addr net.Addr)
 }
 
+// sessionSnapshotProvider implements events.SessionSnapshotProvider by
+// reading from the session.Manager and mapping to the events wire type.
+type sessionSnapshotProvider struct {
+	sessions *session.Manager
+}
+
+func (p *sessionSnapshotProvider) SessionSnapshot(sessionKey string) *events.SessionSnapshot {
+	s := p.sessions.Get(sessionKey)
+	if s == nil {
+		return nil
+	}
+	return &events.SessionSnapshot{
+		SessionKey:     s.Key,
+		SessionID:      s.SessionID,
+		Kind:           string(s.Kind),
+		Channel:        s.Channel,
+		Label:          s.Label,
+		Status:         string(s.Status),
+		Model:          s.Model,
+		StartedAt:      s.StartedAt,
+		EndedAt:        s.EndedAt,
+		RuntimeMs:      s.RuntimeMs,
+		TotalTokens:    s.TotalTokens,
+		AbortedLastRun: s.AbortedLastRun,
+	}
+}
+
 // safeGo starts a goroutine with panic recovery that logs and continues.
 // The goroutine is tracked by bgWg so shutdown can wait for completion.
 func (s *Server) safeGo(name string, fn func()) {
@@ -155,7 +182,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		Broadcaster: s.broadcaster,
 		Logger:      s.logger,
 	})
-	s.publisher = events.NewPublisher(s.broadcaster, &sessionSnapshotAdapter{sessions: s.sessions}, s.logger)
+	s.publisher = events.NewPublisher(s.broadcaster, &sessionSnapshotProvider{sessions: s.sessions}, s.logger)
 	s.gatewaySubs.SetPublisher(s.publisher)
 	s.processes = process.NewManager(s.logger)
 	if homeDir, err := os.UserHomeDir(); err == nil {
