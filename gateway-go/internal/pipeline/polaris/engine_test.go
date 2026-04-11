@@ -145,9 +145,10 @@ func TestShouldCompact(t *testing.T) {
 		want            CompactUrgency
 	}{
 		{50_000, 150_000, CompactNone},  // 33%
-		{112_000, 150_000, CompactNone}, // 74.7% < 75%
-		{113_000, 150_000, CompactSoft}, // 75.3%
-		{135_000, 150_000, CompactHard}, // 90%
+		{119_000, 150_000, CompactNone}, // 79.3% < 80%
+		{121_000, 150_000, CompactSoft}, // 80.7%
+		{137_000, 150_000, CompactSoft}, // 91.3% < 92%
+		{138_000, 150_000, CompactHard}, // 92%
 		{150_000, 150_000, CompactHard}, // 100%
 		{0, 0, CompactNone},             // zero budget
 	}
