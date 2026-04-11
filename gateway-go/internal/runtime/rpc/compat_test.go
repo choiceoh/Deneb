@@ -10,7 +10,6 @@ import (
 	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/gateway"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
 	handlertelegram "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlertelegram"
-	handlerplatform "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/platform"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/provider"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/session"
@@ -42,7 +41,6 @@ type UsageDeps = handlersystem.UsageDeps
 type LogsDeps = handlersystem.LogsDeps
 type ConfigReloadDeps = handlersystem.ConfigReloadDeps
 type ConfigAdvancedDeps = handlersystem.ConfigAdvancedDeps
-type SecretDeps = handlerplatform.SecretDeps
 type ExtendedDeps = handleragent.ExtendedDeps
 type SessionDeps = handlersession.Deps
 type TelegramStatusDeps = handlertelegram.StatusDeps
@@ -132,9 +130,6 @@ func RegisterConfigAdvancedMethods(d *Dispatcher, deps ConfigAdvancedDeps) {
 }
 func RegisterIdentityMethods(d *Dispatcher, version string) {
 	d.RegisterDomain(handlersystem.IdentityMethods(version))
-}
-func RegisterSecretMethods(d *Dispatcher, deps SecretDeps) {
-	d.RegisterDomain(handlerplatform.SecretMethods(deps))
 }
 func RegisterGatewayRuntimeMethods(d *Dispatcher, deps GatewayRuntimeDeps) {
 	d.RegisterDomain(handlergateway.RuntimeMethods(deps))

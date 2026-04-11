@@ -15,7 +15,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
-	handlerbridge "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/bridge"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
 	handlertask "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlertask"
@@ -27,7 +26,6 @@ import (
 	handlersystem "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/system"
 	handlerwiki "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
 // registerEarlyMethods registers all RPC domains that don't depend on chatHandler.
@@ -94,15 +92,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			Skills:      hub.Skills(),
 			Broadcaster: hub.Broadcast,
 		}),
-
-		// --- Inter-agent bridge ---
-		handlerbridge.Methods(func() handlerbridge.Deps {
-			s.bridgeInjector = &handlerbridge.Injector{}
-			return handlerbridge.Deps{
-				Broadcaster: hub.Broadcast,
-				Injector:    s.bridgeInjector,
-			}
-		}()),
 
 		// --- Events (transport-agnostic) ---
 		handlerevents.BroadcastMethods(handlerevents.EventsDeps{
@@ -214,31 +203,6 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		if d != nil {
 			s.dispatcher.RegisterDomain(d)
 		}
-	}
-
-	// Wire bridge: send to the most recently active Telegram session.
-	// Only one session to avoid duplicate Aurora writes (shared conversationID).
-	if s.bridgeInjector != nil && s.chatHandler != nil {
-		sessions := hub.Sessions()
-		s.bridgeInjector.SetSend(
-			s.chatHandler.SendDirect,
-			func() []string {
-				var bestKey string
-				var bestUpdated int64
-				for _, sess := range sessions.List() {
-					if sess.Kind == session.KindDirect && sess.Channel == "telegram" {
-						if sess.UpdatedAt > bestUpdated {
-							bestUpdated = sess.UpdatedAt
-							bestKey = sess.Key
-						}
-					}
-				}
-				if bestKey == "" {
-					return nil
-				}
-				return []string{bestKey}
-			},
-		)
 	}
 
 	// Wire Telegram → chat pipeline now that both are ready.
