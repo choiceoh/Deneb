@@ -37,19 +37,6 @@ func readToolSchema() map[string]any {
 	}
 }
 
-func readSpilloverToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"spill_id": map[string]any{
-				"type":        "string",
-				"description": "The spillover reference ID (e.g., sp_abc123) from a previous large tool result",
-			},
-		},
-		"required": []string{"spill_id"},
-	}
-}
-
 func writeToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -191,77 +178,6 @@ func findToolSchema() map[string]any {
 	}
 }
 
-func multiEditToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"edits": map[string]any{
-				"type":        "array",
-				"description": "List of edits to apply. Each edit targets one file with one search-and-replace",
-				"minItems":    1,
-				"maxItems":    50,
-				"items": map[string]any{
-					"type":     "object",
-					"required": []string{"file_path", "old_string", "new_string"},
-					"properties": map[string]any{
-						"file_path": map[string]any{
-							"type":        "string",
-							"description": "Path to the file to edit",
-						},
-						"new_string": map[string]any{
-							"type":        "string",
-							"description": "Replacement text",
-						},
-						"old_string": map[string]any{
-							"type":        "string",
-							"description": "Text to find and replace",
-						},
-						"replace_all": map[string]any{
-							"type":        "boolean",
-							"description": "Replace all occurrences (default: false)",
-							"default":     false,
-						},
-					},
-				},
-			},
-		},
-		"required": []string{"edits"},
-	}
-}
-
-func treeToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"depth": map[string]any{
-				"type":        "number",
-				"description": "Max directory depth to display (default: 3, max: 6)",
-				"default":     3,
-				"minimum":     1,
-				"maximum":     6,
-			},
-			"dirs_only": map[string]any{
-				"type":        "boolean",
-				"description": "Show only directories, no files (default: false)",
-				"default":     false,
-			},
-			"path": map[string]any{
-				"type":        "string",
-				"description": "Directory to display (defaults to workspace root)",
-			},
-			"pattern": map[string]any{
-				"type":        "string",
-				"description": "Filter: only show entries matching this glob pattern (e.g. \"*.go\")",
-			},
-			"show_hidden": map[string]any{
-				"type":        "boolean",
-				"description": "Include hidden files/directories (default: false)",
-				"default":     false,
-			},
-		},
-	}
-}
-
 func diffToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -297,100 +213,6 @@ func diffToolSchema() map[string]any {
 				"default":     false,
 			},
 		},
-	}
-}
-
-func analyzeToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"description": "Analysis action",
-				"enum":        []string{"outline", "symbols", "references", "imports", "signature"},
-			},
-			"file": map[string]any{
-				"type":        "string",
-				"description": "File path for outline/imports/signature analysis",
-			},
-			"kind": map[string]any{
-				"type":        "string",
-				"description": "Filter symbols by kind",
-				"enum":        []string{"func", "type", "method", "const", "var", "interface", "struct"},
-			},
-			"path": map[string]any{
-				"type":        "string",
-				"description": "Directory path for symbols/references/imports search",
-			},
-			"query": map[string]any{
-				"type":        "string",
-				"description": "Symbol name to search for (symbols/references/signature)",
-			},
-			"reverse": map[string]any{
-				"type":        "boolean",
-				"description": "For imports: show who imports this package (reverse dependency)",
-				"default":     false,
-			},
-			"symbol": map[string]any{
-				"type":        "string",
-				"description": "Symbol name for references action",
-			},
-		},
-		"required": []string{"action"},
-	}
-}
-
-func testToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"description": "Action to perform",
-				"enum":        []string{"run", "build", "check"},
-			},
-			"coverage": map[string]any{
-				"type":        "boolean",
-				"description": "Enable coverage reporting (go only)",
-				"default":     false,
-			},
-			"filter": map[string]any{
-				"type":        "string",
-				"description": "Test name filter (go: -run, cargo: --test)",
-			},
-			"framework": map[string]any{
-				"type":        "string",
-				"description": "Build/test framework",
-				"default":     "go",
-				"enum":        []string{"go", "cargo", "make"},
-			},
-			"path": map[string]any{
-				"type":        "string",
-				"description": "Package path or directory (e.g. './internal/chat/...')",
-			},
-			"release": map[string]any{
-				"type":        "boolean",
-				"description": "Release build (cargo --release)",
-				"default":     false,
-			},
-			"target": map[string]any{
-				"type":        "string",
-				"description": "Build target (make: target name, cargo: --bin/--lib)",
-			},
-			"timeout": map[string]any{
-				"type":        "number",
-				"description": "Timeout in seconds (default: 120, max: 600)",
-				"default":     120,
-				"minimum":     10,
-				"maximum":     600,
-			},
-			"verbose": map[string]any{
-				"type":        "boolean",
-				"description": "Verbose output (show all test names)",
-				"default":     false,
-			},
-		},
-		"required": []string{"action"},
 	}
 }
 
@@ -629,82 +451,32 @@ func webToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"body": map[string]any{
-				"type":        "string",
-				"description": "Request body string (request mode only)",
-			},
 			"count": map[string]any{
 				"type":        "number",
-				"description": "Number of search results per query (search mode, default: 5)",
+				"description": "Number of search results per query (default: 5)",
 			},
 			"fetch": map[string]any{
 				"type":        "number",
-				"description": "Auto-fetch top N results per query (search mode, 1-3, default: 0)",
-			},
-			"fetchPerQuery": map[string]any{
-				"type":        "number",
-				"description": "Pages to auto-fetch per sub-query (research mode, default: 2, max: 3)",
-			},
-			"headers": map[string]any{
-				"type":                 "object",
-				"description":          "Request headers (request mode only)",
-				"additionalProperties": true,
-			},
-			"json": map[string]any{
-				"type":                 "object",
-				"description":          "JSON body, auto-sets Content-Type (request mode only)",
-				"additionalProperties": true,
+				"description": "Auto-fetch top N results per query (1-3, default: 0)",
 			},
 			"maxChars": map[string]any{
 				"type":        "number",
 				"description": "Maximum content characters total (default: 50000)",
 			},
-			"maxQueries": map[string]any{
-				"type":        "number",
-				"description": "Max sub-queries to generate (research mode, default: 5, max: 8)",
-			},
-			"max_response_chars": map[string]any{
-				"type":        "number",
-				"description": "Max response chars (request mode, default: 50000)",
-				"default":     50000,
-			},
-			"method": map[string]any{
-				"type":        "string",
-				"description": "HTTP method (request mode only)",
-				"default":     "GET",
-				"enum":        []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
-			},
-			"mode": map[string]any{
-				"type":        "string",
-				"description": "Mode: search (web search/fetch, default), request (raw HTTP for APIs), research (deep multi-query research)",
-				"default":     "search",
-				"enum":        []string{"search", "request", "research"},
-			},
 			"queries": map[string]any{
 				"type":        "array",
-				"description": "Multiple queries: parallel search (search mode, max 5) or pre-decomposed sub-queries (research mode)",
+				"description": "Multiple parallel search queries (max 5)",
 				"items": map[string]any{
 					"type": "string",
 				},
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Web search query (search mode). Perplexity Sonar > Brave > DuckDuckGo fallback",
-			},
-			"question": map[string]any{
-				"type":        "string",
-				"description": "Research question (research mode). Auto-decomposes into parallel sub-queries",
-			},
-			"timeout": map[string]any{
-				"type":        "number",
-				"description": "Timeout in seconds (request mode, default: 30)",
-				"default":     30,
-				"minimum":     1,
-				"maximum":     120,
+				"description": "Web search query. Perplexity Sonar > Brave > DuckDuckGo fallback",
 			},
 			"url": map[string]any{
 				"type":        "string",
-				"description": "URL to fetch (search mode: HTML extraction+bot evasion; request mode: raw HTTP)",
+				"description": "URL to fetch (HTML extraction + bot evasion)",
 			},
 		},
 	}
@@ -1067,44 +839,6 @@ func gmailToolSchema() map[string]any {
 	}
 }
 
-func continueRunToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"progress_summary": map[string]any{
-				"type":        "string",
-				"description": "Summary of what was accomplished in this run (sent to user as progress report)",
-			},
-			"reason": map[string]any{
-				"type":        "string",
-				"description": "Brief description of remaining work for the next continuation run",
-			},
-		},
-		"required": []string{"reason", "progress_summary"},
-	}
-}
-
-func fetchToolsToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"names": map[string]any{
-				"type":        "array",
-				"description": "Exact tool names to activate (from the deferred tools list)",
-				"minItems":    1,
-				"maxItems":    10,
-				"items": map[string]any{
-					"type": "string",
-				},
-			},
-			"query": map[string]any{
-				"type":        "string",
-				"description": "Keyword search to find matching deferred tools (alternative to names)",
-			},
-		},
-	}
-}
-
 func skillsToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -1148,24 +882,6 @@ func skillsToolSchema() map[string]any {
 			},
 		},
 		"required": []string{"action"},
-	}
-}
-
-func bridgeToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"message": map[string]any{
-				"type":        "string",
-				"description": "Message to send to the other agent",
-			},
-			"source": map[string]any{
-				"type":        "string",
-				"description": "Your identity (default: 'deneb')",
-				"default":     "deneb",
-			},
-		},
-		"required": []string{"message"},
 	}
 }
 

@@ -7,8 +7,6 @@
 package toolreg
 
 import (
-	"context"
-
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
@@ -21,7 +19,7 @@ import (
 func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps) {
 	RegisterFSTools(registry, deps)
 	RegisterProcessTools(registry, &deps.Process)
-	RegisterWebTools(registry, deps.LLMClient, deps.DefaultModel)
+	RegisterWebTools(registry)
 	RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
 	RegisterMediaTools(registry)
@@ -32,37 +30,8 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	}
 	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, diaryDir)
 
-	// Autonomous continuation: LLM calls this to request a new run after current completes.
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "continue_run",
-		Description: "Signal that you have more work to do and want to start a new autonomous run. Use when the current run's tool-call budget is nearly exhausted but the task is not yet complete.",
-		InputSchema: continueRunToolSchema(),
-		Fn:          tools.ToolContinueRun(),
-		Deferred:    true,
-	})
-
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
 	// because it depends on local AI hooks that live in the chat package.
-	// NOTE: fetch_tools is registered by chat.RegisterCoreTools because it
-	// needs a FetchToolsRegistry interface that chat.ToolRegistry implements.
-}
-
-// FetchToolsSchema returns the fetch_tools schema for external registration.
-func FetchToolsSchema() map[string]any { return fetchToolsToolSchema() }
-
-// RegisterBridgeTool registers the inter-agent bridge tool.
-// Called separately because Broadcaster is not part of CoreToolDeps.
-func RegisterBridgeTool(registry toolctx.ToolRegistrar, broadcaster tools.BroadcastFunc) {
-	if broadcaster == nil {
-		return
-	}
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "bridge",
-		Description:     "다른 AI 에이전트(Claude Code 등)에게 메시지를 보낸다. 같은 서버에서 작업 중인 에이전트와 실시간 통신.",
-		InputSchema:     bridgeToolSchema(),
-		Fn:              tools.ToolBridge(broadcaster),
-		ConcurrencySafe: true,
-	})
 }
 
 // RegisterPolarisTools registers the unified Polaris tool (search/describe/expand).
@@ -118,39 +87,11 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		ConcurrencySafe: true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "multi_edit",
-		Description: "Batch search-and-replace across multiple files in one call. Up to 50 edits. Essential for refactoring, renaming symbols, updating imports",
-		InputSchema: multiEditToolSchema(),
-		Fn:          tools.ToolMultiEdit(workspaceDir),
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "tree",
-		Description:     "Display directory tree with depth control. Uses eza/exa for fast default listings when available. Filters: dirs_only, pattern glob, show_hidden. Skips node_modules/.git/target etc",
-		InputSchema:     treeToolSchema(),
-		Fn:              tools.ToolTree(workspaceDir),
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "diff",
 		Description:     "Git diff and file comparison. Modes: staged, unstaged, all (vs HEAD), commit (show commit), branch (compare branches), files (compare two files). Options: stat_only, context_lines, path filter",
 		InputSchema:     diffToolSchema(),
 		Fn:              tools.ToolDiff(workspaceDir),
 		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:            "analyze",
-		Description:     "Code analysis: outline (file structure), symbols (find definitions), references (find usages), imports (dependency graph), signature (function signatures). Supports Go (AST) and Rust (regex)",
-		InputSchema:     analyzeToolSchema(),
-		Fn:              tools.ToolAnalyze(workspaceDir),
-		Deferred:        true,
-		ConcurrencySafe: true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "test",
-		Description: "Run tests/builds (go/cargo/make). Actions: run, build, check. Structured pass/fail/skip results",
-		InputSchema: testToolSchema(),
-		Fn:          tools.ToolTest(workspaceDir),
-		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "git",
@@ -164,19 +105,6 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		InputSchema: gatewayToolSchema(),
 		Fn:          tools.ToolGateway(workspaceDir),
 	})
-
-	// Spillover: read full content of a previously spilled large tool result.
-	if deps.SpilloverStore != nil {
-		registry.RegisterTool(toolctx.ToolDef{
-			Name:            "read_spillover",
-			Description:     "Read the full content of a previous large tool result by spill ID. Use when a tool result was too large and was replaced with a preview",
-			InputSchema:     readSpilloverToolSchema(),
-			Fn:              tools.ToolSpilloverRead(deps.SpilloverStore),
-			Deferred:        true,
-			ConcurrencySafe: true,
-		})
-	}
-
 }
 
 // RegisterProcessTools registers exec and process management tools.
@@ -196,39 +124,17 @@ func RegisterProcessTools(registry toolctx.ToolRegistrar, d *toolctx.ProcessDeps
 	})
 }
 
-// RegisterWebTools registers the unified web tool (search/request/research modes).
-func RegisterWebTools(registry toolctx.ToolRegistrar, llmClient *llm.Client, defaultModel string) {
+// RegisterWebTools registers the unified web tool (search mode only).
+func RegisterWebTools(registry toolctx.ToolRegistrar) {
 	webCache := web.NewFetchCache()
 	localAI := web.NewLocalAIExtractor()
 
-	var drLLM web.DeepResearchLLM
-	if llmClient != nil {
-		drLLM = &deepResearchLLMAdapter{client: llmClient}
-	}
-
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:            "web",
-		Description:     "Web access: search (web search/fetch, default), request (raw HTTP for APIs), research (deep multi-query research). Use mode parameter to select",
+		Description:     "Web access: search the web or fetch page content. Use query for keyword search, url for direct fetch",
 		InputSchema:     webToolSchema(),
-		Fn:              web.MergedTool(webCache, localAI, tools.ToolHTTP(), drLLM, defaultModel),
+		Fn:              web.MergedTool(webCache, localAI),
 		ConcurrencySafe: true,
-	})
-}
-
-// Compile-time interface compliance.
-var _ web.DeepResearchLLM = (*deepResearchLLMAdapter)(nil)
-
-// deepResearchLLMAdapter adapts llm.Client to web.DeepResearchLLM.
-type deepResearchLLMAdapter struct {
-	client *llm.Client
-}
-
-func (a *deepResearchLLMAdapter) Complete(ctx context.Context, model, system, user string, maxTokens int) (string, error) {
-	return a.client.Complete(ctx, llm.ChatRequest{
-		Model:     model,
-		System:    llm.SystemString(system),
-		Messages:  []llm.Message{llm.NewTextMessage("user", user)},
-		MaxTokens: maxTokens,
 	})
 }
 
