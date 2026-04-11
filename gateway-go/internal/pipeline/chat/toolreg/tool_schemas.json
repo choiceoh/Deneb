@@ -489,7 +489,7 @@
       },
       "query": {
         "type": "string",
-        "description": "Web search query. Perplexity Sonar > Brave > DuckDuckGo fallback"
+        "description": "Web search query. Serper (Google) > Brave > DuckDuckGo fallback"
       },
       "queries": {
         "type": "array",

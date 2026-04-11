@@ -472,7 +472,7 @@ func webToolSchema() map[string]any {
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Web search query. Perplexity Sonar > Brave > DuckDuckGo fallback",
+				"description": "Web search query. Serper (Google) > Brave > DuckDuckGo fallback",
 			},
 			"url": map[string]any{
 				"type":        "string",
