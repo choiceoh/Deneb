@@ -1,5 +1,5 @@
-// Gateway event subscriptions: wires session lifecycle, heartbeat, agent, and
-// transcript events to the broadcaster for delivery to WebSocket clients.
+// Gateway event subscriptions: wires session lifecycle, agent, and transcript
+// events to the broadcaster for delivery to WebSocket clients.
 //
 // Mirrors createGatewayEventSubscriptions from
 // src/gateway/server-event-subscriptions.ts.
@@ -19,12 +19,6 @@ type AgentEvent struct {
 	SessionKey string `json:"sessionKey,omitempty"`
 	RunID      string `json:"runId,omitempty"`
 	Payload    any    `json:"payload,omitempty"`
-}
-
-// HeartbeatEvent represents a periodic heartbeat from the agent runtime.
-type HeartbeatEvent struct {
-	SessionKey string `json:"sessionKey,omitempty"`
-	Ts         int64  `json:"ts"` //nolint:staticcheck // ST1003 — JSON field name
 }
 
 // TranscriptUpdate represents a session transcript message update.
@@ -50,7 +44,6 @@ type GatewayEventSubscriptions struct {
 	stopped bool
 
 	agentCh      chan AgentEvent
-	heartbeatCh  chan HeartbeatEvent
 	transcriptCh chan TranscriptUpdate
 	lifecycleCh  chan LifecycleChangeEvent
 	done         chan struct{}
@@ -60,7 +53,6 @@ type GatewayEventSubscriptions struct {
 
 	// Drop counters for observability (atomic, no lock needed).
 	agentDrops      atomic.Int64
-	heartbeatDrops  atomic.Int64
 	transcriptDrops atomic.Int64
 	lifecycleDrops  atomic.Int64
 }
@@ -76,14 +68,12 @@ type GatewaySubscriptionParams struct {
 func NewGatewayEventSubscriptions(params GatewaySubscriptionParams) *GatewayEventSubscriptions {
 	g := &GatewayEventSubscriptions{
 		agentCh:      make(chan AgentEvent, 256),
-		heartbeatCh:  make(chan HeartbeatEvent, 64),
 		transcriptCh: make(chan TranscriptUpdate, 256),
 		lifecycleCh:  make(chan LifecycleChangeEvent, 64),
 		done:         make(chan struct{}),
 	}
 
 	go g.runAgentLoop(params)
-	go g.runHeartbeatLoop(params)
 	go g.runTranscriptLoop(params)
 	go g.runLifecycleLoop(params)
 	go g.runDropLogger(params.Logger)
@@ -108,15 +98,6 @@ func (g *GatewayEventSubscriptions) EmitAgent(evt AgentEvent) {
 	case g.agentCh <- evt:
 	default:
 		g.agentDrops.Add(1)
-	}
-}
-
-// EmitHeartbeat sends a heartbeat event into the subscription pipeline.
-func (g *GatewayEventSubscriptions) EmitHeartbeat(evt HeartbeatEvent) {
-	select {
-	case g.heartbeatCh <- evt:
-	default:
-		g.heartbeatDrops.Add(1)
 	}
 }
 
@@ -162,17 +143,6 @@ func (g *GatewayEventSubscriptions) runAgentLoop(params GatewaySubscriptionParam
 			}
 			// Fallback: direct broadcast without sequencing.
 			params.Broadcaster.BroadcastWithOpts("agent", evt, BroadcastOpts{DropIfSlow: true})
-		}
-	}
-}
-
-func (g *GatewayEventSubscriptions) runHeartbeatLoop(params GatewaySubscriptionParams) {
-	for {
-		select {
-		case <-g.done:
-			return
-		case evt := <-g.heartbeatCh:
-			params.Broadcaster.BroadcastWithOpts("heartbeat", evt, BroadcastOpts{DropIfSlow: true})
 		}
 	}
 }
@@ -277,14 +247,12 @@ func (g *GatewayEventSubscriptions) runDropLogger(logger *slog.Logger) {
 			return
 		case <-ticker.C:
 			agent := g.agentDrops.Swap(0)
-			heartbeat := g.heartbeatDrops.Swap(0)
 			transcript := g.transcriptDrops.Swap(0)
 			lifecycle := g.lifecycleDrops.Swap(0)
-			total := agent + heartbeat + transcript + lifecycle
+			total := agent + transcript + lifecycle
 			if total > 0 {
 				logger.Warn("gateway event subscriptions dropped events",
 					"agent", agent,
-					"heartbeat", heartbeat,
 					"transcript", transcript,
 					"lifecycle", lifecycle,
 				)

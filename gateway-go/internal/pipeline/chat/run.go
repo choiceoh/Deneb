@@ -16,7 +16,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
@@ -97,8 +96,6 @@ type runDeps struct {
 	subagentDefaultModel string
 	defaultSystem        string
 	maxTokens            int
-	// internalHookRegistry fires programmatic internal hooks.
-	internalHookRegistry *hooks.InternalRegistry
 	// drainPendingFn drains the next queued message for a session after the
 	// current run completes. Set by the Handler; nil disables pending queue.
 	drainPendingFn func(sessionKey string) *RunParams

@@ -9,7 +9,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -24,10 +23,9 @@ type ExtendedDeps struct {
 	Sessions       *session.Manager
 	TelegramPlugin *telegram.Plugin
 	GatewaySubs    *events.GatewayEventSubscriptions
-	Processes      *process.Manager
-	CronService    *cron.Service
-	InternalHooks  *hooks.InternalRegistry
-	Broadcaster    rpcutil.BroadcastFunc
+	Processes   *process.Manager
+	CronService *cron.Service
+	Broadcaster rpcutil.BroadcastFunc
 }
 
 // ExtendedMethods returns the extended agent/session/process/cron/hooks handlers.
@@ -258,28 +256,6 @@ func sessionsLifecycle(deps ExtendedDeps) rpcutil.HandlerFunc {
 				SessionKey: p.Key,
 				Reason:     p.Phase,
 			})
-		}
-
-		// Fire session lifecycle internal hooks with panic recovery.
-		var hookEvent hooks.Event
-		switch session.LifecyclePhase(p.Phase) {
-		case session.PhaseStart:
-			hookEvent = hooks.EventSessionStart
-		case session.PhaseEnd, session.PhaseError:
-			hookEvent = hooks.EventSessionEnd
-		}
-		if hookEvent != "" && deps.InternalHooks != nil {
-			evt := hookEvent
-			key := p.Key
-			phase := p.Phase
-			env := map[string]string{
-				"DENEB_SESSION_KEY": key,
-				"DENEB_PHASE":       phase,
-			}
-			go func() { //nolint:gosec // G118 — intentionally detached from request context for fire-and-forget hook
-				defer func() { recover() }() //nolint:errcheck // fire-and-forget panic recovery
-				deps.InternalHooks.TriggerFromEvent(context.Background(), evt, key, env)
-			}()
 		}
 
 		return s, nil

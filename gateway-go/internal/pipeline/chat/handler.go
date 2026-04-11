@@ -14,7 +14,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
@@ -51,9 +50,6 @@ type Handler struct {
 	pending  *PendingQueue
 	subagent *SubagentNotifier
 
-	// internalHookRegistry fires programmatic internal hooks on message/tool events.
-	internalHookRegistry *hooks.InternalRegistry
-
 	// maxHistoryBytes caps the total JSON bytes returned by chat.history.
 	maxHistoryBytes int
 	// maxHistoryCount caps the number of messages returned.
@@ -89,8 +85,7 @@ type HandlerConfig struct {
 	// Fields below were previously Set*() after construction. They are all
 	// available at handler creation time and passed here to reduce late-binding.
 	ProviderRuntime      *provider.ProviderRuntimeResolver // optional; runtime auth
-	InternalHookRegistry *hooks.InternalRegistry           // optional; programmatic internal hooks
-	BroadcastRaw         streaming.BroadcastRawFunc        // optional; raw event relay
+	BroadcastRaw streaming.BroadcastRawFunc // optional; raw event relay
 	EmitAgentFn          func(kind, sessionKey, runID string, payload map[string]any)
 	EmitTranscriptFn     func(sessionKey string, message any, messageID string)
 }
@@ -162,9 +157,8 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		subagentDefaultModel: cfg.SubagentDefaultModel,
 		defaultSystem:        cfg.DefaultSystem,
 		maxTokens:            cfg.MaxTokens,
-		providerRuntime:      cfg.ProviderRuntime,
-		internalHookRegistry: cfg.InternalHookRegistry,
-		abort:                NewAbortTracker(),
+		providerRuntime: cfg.ProviderRuntime,
+		abort:           NewAbortTracker(),
 		pending:              NewPendingQueue(),
 		maxHistoryBytes:      cfg.MaxHistoryBytes,
 		maxHistoryCount:      cfg.MaxHistoryCount,

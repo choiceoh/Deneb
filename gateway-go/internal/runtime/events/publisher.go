@@ -171,11 +171,6 @@ func (p *Publisher) PublishAgentEvent(evt AgentEvent) {
 	p.broadcaster.BroadcastWithOpts("agent.event", payload, BroadcastOpts{DropIfSlow: true})
 }
 
-// PublishHeartbeat publishes a heartbeat event.
-func (p *Publisher) PublishHeartbeat(evt HeartbeatEvent) {
-	p.broadcaster.BroadcastWithOpts("heartbeat", evt, BroadcastOpts{DropIfSlow: true})
-}
-
 // PublishPresence broadcasts the system presence snapshot.
 func (p *Publisher) PublishPresence(snap PresenceSnapshot) {
 	snap.Ts = time.Now().UnixMilli()

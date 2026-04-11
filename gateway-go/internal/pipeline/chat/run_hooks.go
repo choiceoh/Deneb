@@ -1,20 +1,18 @@
 package chat
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
-	hookspkg "github.com/choiceoh/deneb/gateway-go/internal/runtime/hooks"
 )
 
 // wireStreamHooks registers all non-draft streaming hooks on the compositor:
-// WebSocket broadcaster, typing signaler, status reactions, gateway events,
-// and internal hook registry. The draft stream loop is wired separately in
-// executeAgentRun because it has defer-based cleanup tied to that scope.
+// WebSocket broadcaster, typing signaler, status reactions, and gateway events.
+// The draft stream loop is wired separately in executeAgentRun because it has
+// defer-based cleanup tied to that scope.
 func wireStreamHooks(
 	hc *agent.HookCompositor,
 	params RunParams,
@@ -76,16 +74,4 @@ func wireStreamHooks(
 		})
 	}
 
-	// Internal hook registry: fire tool.use event after each tool completes.
-	if deps.internalHookRegistry != nil {
-		hc.OnToolResult(func(name, toolUseID, _ string, isErr bool) {
-			env := map[string]string{
-				"DENEB_TOOL":        name,
-				"DENEB_TOOL_USE_ID": toolUseID,
-				"DENEB_IS_ERROR":    fmt.Sprintf("%t", isErr),
-				"DENEB_SESSION_KEY": params.SessionKey,
-			}
-			go deps.internalHookRegistry.TriggerFromEvent(deps.callbacks.shutdownCtx, hookspkg.EventToolUse, params.SessionKey, env)
-		})
-	}
 }

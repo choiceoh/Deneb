@@ -9,7 +9,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -197,16 +196,6 @@ func handleRunSuccess(
 					// formatting, chunking, etc.).
 					if err := deps.callbacks.replyFunc(replyCtx, params.Delivery, replyText); err != nil {
 						logger.Error("channel reply failed", "error", err, "channel", params.Delivery.Channel)
-					} else {
-						// Fire message.send internal hook after successful delivery.
-						if deps.internalHookRegistry != nil {
-							env := map[string]string{
-								"DENEB_CHANNEL":     params.Delivery.Channel,
-								"DENEB_TO":          params.Delivery.To,
-								"DENEB_SESSION_KEY": params.SessionKey,
-							}
-							go deps.internalHookRegistry.TriggerFromEvent(deps.callbacks.shutdownCtx, hooks.EventMessageSend, params.SessionKey, env)
-						}
 					}
 				}
 			}

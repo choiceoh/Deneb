@@ -24,7 +24,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -167,19 +166,6 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 
 	// Normalize inbound context (defaults for CommandBody, BodyForAgent, etc.).
 	inbound.FinalizeInboundContext(msgCtx)
-
-	// Fire message.receive internal hook after parsing, before dispatch.
-	if p.server.internalHooks != nil {
-		env := map[string]string{
-			"DENEB_CHANNEL":     "telegram",
-			"DENEB_CHAT_ID":     chatID,
-			"DENEB_MESSAGE":     msgText,
-			"DENEB_SESSION_KEY": sessionKey,
-		}
-		p.server.safeGo("internal-hooks:message.receive", func() {
-			p.server.internalHooks.TriggerFromEvent(context.Background(), hooks.EventMessageReceive, sessionKey, env)
-		})
-	}
 
 	// --- Part A: Ack reaction — send 👀 to acknowledge the incoming message.
 	var didAck bool
@@ -417,20 +403,6 @@ func (p *InboundProcessor) handleMediaGroup(messages []*telegram.Message) {
 	chatID := fmt.Sprintf("%d", first.Chat.ID)
 	sessionKey := "telegram:" + chatID
 
-	// Fire message.receive internal hook for the media group.
-	if p.server.internalHooks != nil {
-		caption := media.MessageText(first)
-		env := map[string]string{
-			"DENEB_CHANNEL":     "telegram",
-			"DENEB_CHAT_ID":     chatID,
-			"DENEB_MESSAGE":     caption,
-			"DENEB_SESSION_KEY": sessionKey,
-		}
-		p.server.safeGo("internal-hooks:message.receive", func() {
-			p.server.internalHooks.TriggerFromEvent(context.Background(), hooks.EventMessageReceive, sessionKey, env)
-		})
-	}
-
 	// Collect caption from whichever message has one (Telegram puts the caption
 	// on only one of the media group messages, usually the first).
 	var caption string
@@ -552,19 +524,6 @@ func (p *InboundProcessor) handleCallbackQuery(cb *telegram.CallbackQuery) {
 
 	chatID := fmt.Sprintf("%d", cb.Message.Chat.ID)
 	sessionKey := "telegram:" + chatID
-
-	// Fire message.receive internal hook for callback query.
-	if p.server.internalHooks != nil {
-		env := map[string]string{
-			"DENEB_CHANNEL":     "telegram",
-			"DENEB_CHAT_ID":     chatID,
-			"DENEB_MESSAGE":     cb.Data,
-			"DENEB_SESSION_KEY": sessionKey,
-		}
-		p.server.safeGo("internal-hooks:message.receive", func() {
-			p.server.internalHooks.TriggerFromEvent(context.Background(), hooks.EventMessageReceive, sessionKey, env)
-		})
-	}
 
 	// Intercept model quick-change callbacks — handle immediately without agent.
 	if action, payload := telegram.ParseCallbackData(cb.Data); action == telegram.ActionModelSwitch {

@@ -8,7 +8,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/hooks"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 )
@@ -21,7 +20,6 @@ import (
 // (telegram.start, telegram.stop, telegram.restart).
 type LifecycleDeps struct {
 	TelegramPlugin *telegram.Plugin
-	InternalHooks  *hooks.InternalRegistry
 	Broadcaster    *events.Broadcaster
 }
 
@@ -46,16 +44,8 @@ func LifecycleMethods(deps LifecycleDeps) map[string]rpcutil.HandlerFunc {
 // Telegram lifecycle handlers
 // ---------------------------------------------------------------------------
 
-// emitTelegramLifecycleEvent fires the internal hook and broadcasts a
-// telegram.changed event after a successful Telegram operation.
-func emitTelegramLifecycleEvent(deps LifecycleDeps, id string, hookEvent hooks.Event, action string) {
-	if deps.InternalHooks != nil {
-		env := map[string]string{"DENEB_CHANNEL_ID": id}
-		go func() {
-			defer func() { recover() }() //nolint:errcheck // fire-and-forget panic recovery
-			deps.InternalHooks.TriggerFromEvent(context.Background(), hookEvent, "", env)
-		}()
-	}
+// emitTelegramLifecycleEvent broadcasts a telegram.changed event after a successful Telegram operation.
+func emitTelegramLifecycleEvent(deps LifecycleDeps, id string, action string) {
 	if deps.Broadcaster != nil {
 		deps.Broadcaster.Broadcast("telegram.changed", map[string]any{
 			"channelId": id,
@@ -79,7 +69,7 @@ func telegramStart(deps LifecycleDeps) rpcutil.HandlerFunc {
 		if err := deps.TelegramPlugin.Start(ctx); err != nil {
 			return nil, rpcerr.WrapUnavailable("channel start failed", err).WithChannel(p.ID)
 		}
-		emitTelegramLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "started")
+		emitTelegramLifecycleEvent(deps, p.ID, "started")
 		return map[string]any{"started": true, "id": p.ID}, nil
 	})
 }
@@ -98,7 +88,7 @@ func telegramStop(deps LifecycleDeps) rpcutil.HandlerFunc {
 		if err := deps.TelegramPlugin.Stop(ctx); err != nil {
 			return nil, rpcerr.WrapUnavailable("channel stop failed", err).WithChannel(p.ID)
 		}
-		emitTelegramLifecycleEvent(deps, p.ID, hooks.EventChannelDisconnect, "stopped")
+		emitTelegramLifecycleEvent(deps, p.ID, "stopped")
 		return map[string]any{"stopped": true, "id": p.ID}, nil
 	})
 }
@@ -118,7 +108,7 @@ func telegramRestart(deps LifecycleDeps) rpcutil.HandlerFunc {
 		if err := deps.TelegramPlugin.Start(ctx); err != nil {
 			return nil, rpcerr.WrapUnavailable("channel restart failed", err).WithChannel(p.ID)
 		}
-		emitTelegramLifecycleEvent(deps, p.ID, hooks.EventChannelConnect, "restarted")
+		emitTelegramLifecycleEvent(deps, p.ID, "restarted")
 		return map[string]any{"restarted": true, "id": p.ID}, nil
 	})
 }

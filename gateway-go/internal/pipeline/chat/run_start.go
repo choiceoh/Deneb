@@ -135,9 +135,8 @@ func (h *Handler) buildRunDeps() runDeps {
 		contextCfg:           h.contextCfg,
 		subagentDefaultModel: h.subagentDefaultModel,
 		defaultSystem:        h.defaultSystem,
-		maxTokens:            h.maxTokens,
-		internalHookRegistry: h.internalHookRegistry,
-		drainPendingFn:       h.pending.Drain,
+		maxTokens:      h.maxTokens,
+		drainPendingFn: h.pending.Drain,
 		startRunFn: func(params RunParams) {
 			h.startAsyncRun("pending-"+params.ClientRunID, params, false)
 		},

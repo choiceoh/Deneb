@@ -199,8 +199,6 @@ func New(addr string, opts ...Option) (*Server, error) {
 			s.logger.Info("cron service disabled by config")
 		}
 	}
-	s.initHooksFromConfig()
-
 	s.snapshotStore = telegram.NewSnapshotStore()
 	s.activity = monitoring.NewActivityTracker()
 	s.channelEvents = monitoring.NewChannelEventTracker()

@@ -17,24 +17,6 @@ func newTestGatewaySubscriptions() (*Broadcaster, *GatewayEventSubscriptions) {
 	return b, gs
 }
 
-func TestGatewaySubscriptions_EmitHeartbeat(t *testing.T) {
-	b, gs := newTestGatewaySubscriptions()
-	defer gs.Stop()
-
-	sub := &mockSubscriber{id: "s1", authed: true}
-	b.Subscribe(sub, Filter{})
-
-	gs.EmitHeartbeat(HeartbeatEvent{Ts: time.Now().UnixMilli()})
-	time.Sleep(50 * time.Millisecond)
-
-	sub.mu.Lock()
-	count := len(sub.received)
-	sub.mu.Unlock()
-	if count != 1 {
-		t.Errorf("got %d, want 1 heartbeat event", count)
-	}
-}
-
 func TestGatewaySubscriptions_EmitAgent(t *testing.T) {
 	b, gs := newTestGatewaySubscriptions()
 	defer gs.Stop()
