@@ -16,7 +16,7 @@
 //   - web_html_preprocess.go — HTML noise stripping, metadata, signals, charset
 //   - web_content.go        — Content dispatch, metadata type, output formatting
 //   - web_fetch_stealth.go  — Browser profiles, bot-block evasion
-//   - web_fetch_search.go   — Search providers (Perplexity, Brave, DuckDuckGo)
+//   - web_fetch_search.go   — Search providers (Serper, Brave, DuckDuckGo)
 //   - fetch_cache.go        — In-memory result cache
 package web
 

@@ -1,8 +1,9 @@
 // web_fetch_search.go — Search provider implementations for the unified web tool.
 //
-// Provider priority: Perplexity Sonar → Brave Search → DuckDuckGo.
-// Perplexity returns AI-synthesized answers with citations — concise, no token bloat.
-// Brave returns traditional search results (title, URL, snippet).
+// Provider priority: Serper (Google) → Brave Search → DuckDuckGo.
+// Serper returns fast, cheap Google organic results (title, link, snippet) plus
+// answer box and knowledge graph when available — ideal for AI agent consumption.
+// Brave returns traditional search results as a secondary provider.
 // DuckDuckGo is the zero-config fallback (no API key needed).
 package web
 
@@ -11,7 +12,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -22,19 +22,13 @@ import (
 // --- Provider dispatch ---
 
 // webSearch dispatches to the best available search provider.
-// Priority: Perplexity → Brave → DuckDuckGo.
+// Priority: Serper → Brave → DuckDuckGo.
 func webSearch(ctx context.Context, query string, count int) (string, error) {
-	pplxKey := os.Getenv("PERPLEXITY_API_KEY")
-	if pplxKey != "" {
-		answer, citations, err := perplexitySearch(ctx, pplxKey, query)
-		if err != nil {
-			return "", err
-		}
-		return formatPerplexityResult(answer, citations), nil
+	if key := serperAPIKey(); key != "" {
+		return serperWebSearch(ctx, key, query, count)
 	}
-	braveKey := braveAPIKey()
-	if braveKey != "" {
-		return braveWebSearch(ctx, braveKey, query, count)
+	if key := braveAPIKey(); key != "" {
+		return braveWebSearch(ctx, key, query, count)
 	}
 	return duckDuckGoSearch(ctx, query)
 }
@@ -42,17 +36,19 @@ func webSearch(ctx context.Context, query string, count int) (string, error) {
 // webSearchWithURLs searches and returns both formatted output and fetchable URLs.
 // Used by search+fetch mode.
 func webSearchWithURLs(ctx context.Context, query string, count int) (output string, urls []string, err error) {
-	pplxKey := os.Getenv("PERPLEXITY_API_KEY")
-	if pplxKey != "" {
-		answer, citations, err := perplexitySearch(ctx, pplxKey, query)
+	if key := serperAPIKey(); key != "" {
+		results, answerBox, err := serperSearchRaw(ctx, key, query, count)
 		if err != nil {
 			return "", nil, err
 		}
-		return formatPerplexityResult(answer, citations), citations, nil
+		var resultURLs []string
+		for _, r := range results {
+			resultURLs = append(resultURLs, r.URL)
+		}
+		return formatSerperResults(results, answerBox), resultURLs, nil
 	}
-	braveKey := braveAPIKey()
-	if braveKey != "" {
-		results, err := braveSearchRaw(ctx, braveKey, query, count)
+	if key := braveAPIKey(); key != "" {
+		results, err := braveSearchRaw(ctx, key, query, count)
 		if err != nil {
 			return "", nil, err
 		}
@@ -75,93 +71,117 @@ func braveAPIKey() string {
 	return key
 }
 
-// --- Perplexity Sonar ---
-
-// perplexityRequest is the chat completion request for Perplexity Sonar API.
-type perplexityRequest struct {
-	Model    string              `json:"model"`
-	Messages []perplexityMessage `json:"messages"`
+func serperAPIKey() string {
+	return os.Getenv("SERPER_API_KEY")
 }
 
-type perplexityMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+// --- Serper (Google Search API) ---
+//
+// Serper (https://serper.dev) is a fast, cheap Google Search API.
+// POST https://google.serper.dev/search with { "q": "...", "num": N }
+// Auth: X-API-KEY header.
+// Response: { "organic": [{title, link, snippet}], "answerBox": {...}, "knowledgeGraph": {...} }.
+
+type serperRequest struct {
+	Q   string `json:"q"`
+	Num int    `json:"num,omitempty"`
 }
 
-// perplexityResponse is the parsed Perplexity Sonar API response.
-type perplexityResponse struct {
-	Choices []struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
-	} `json:"choices"`
-	Citations []string `json:"citations"`
+type serperAnswerBox struct {
+	Title   string `json:"title"`
+	Answer  string `json:"answer"`
+	Snippet string `json:"snippet"`
+	Link    string `json:"link"`
 }
 
-// perplexitySearch performs a search via the Perplexity Sonar API.
-// Returns an AI-synthesized answer and citation URLs.
-func perplexitySearch(ctx context.Context, apiKey, query string) (answer string, citations []string, err error) {
-	reqBody := perplexityRequest{
-		Model: "sonar",
-		Messages: []perplexityMessage{
-			{Role: "user", Content: query},
-		},
+type serperResponse struct {
+	Organic   []searchResult  `json:"organic"`
+	AnswerBox serperAnswerBox `json:"answerBox"`
+}
+
+// serperWebSearch performs a search via Serper and formats the output.
+func serperWebSearch(ctx context.Context, apiKey, query string, count int) (string, error) {
+	results, answerBox, err := serperSearchRaw(ctx, apiKey, query, count)
+	if err != nil {
+		//nolint:nilerr // tool returns user-facing error in result string
+		return formatFetchError(webFetchErr{
+			Code: "search_failed", Message: err.Error(), Retryable: true,
+		}), nil
 	}
+	return formatSerperResults(results, answerBox), nil
+}
+
+// serperSearchRaw performs a POST /search request against Serper and returns
+// the parsed organic results plus the answer box (which may be empty).
+func serperSearchRaw(ctx context.Context, apiKey, query string, count int) ([]searchResult, serperAnswerBox, error) {
+	if count <= 0 {
+		count = 5
+	}
+	reqBody := serperRequest{Q: query, Num: count}
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", nil, fmt.Errorf("marshal perplexity request: %w", err)
+		return nil, serperAnswerBox{}, fmt.Errorf("marshal serper request: %w", err)
 	}
 
-	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	reqCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost,
-		"https://api.perplexity.ai/chat/completions", bytes.NewReader(body))
+		"https://google.serper.dev/search", bytes.NewReader(body))
 	if err != nil {
-		return "", nil, fmt.Errorf("create perplexity request: %w", err)
+		return nil, serperAnswerBox{}, fmt.Errorf("create serper request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("X-API-KEY", apiKey)
 
-	resp, err := SharedClient(30 * time.Second).Do(req)
+	resp, err := SharedClient(20 * time.Second).Do(req)
 	if err != nil {
-		return "", nil, fmt.Errorf("perplexity request failed: %w", err)
+		return nil, serperAnswerBox{}, fmt.Errorf("serper request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", nil, fmt.Errorf("perplexity HTTP %d: %s", resp.StatusCode, string(respBody))
+		return nil, serperAnswerBox{}, fmt.Errorf("serper HTTP %d", resp.StatusCode)
 	}
 
-	var result perplexityResponse
+	var result serperResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", nil, fmt.Errorf("parse perplexity response: %w", err)
+		return nil, serperAnswerBox{}, fmt.Errorf("parse serper response: %w", err)
 	}
-
-	if len(result.Choices) == 0 {
-		return "", nil, fmt.Errorf("perplexity returned no choices")
-	}
-
-	return result.Choices[0].Message.Content, result.Citations, nil
+	return result.Organic, result.AnswerBox, nil
 }
 
-func formatPerplexityResult(answer string, citations []string) string {
+// formatSerperResults renders Serper output: optional answer box followed by
+// the organic result list. Format parallels formatSearchResults so downstream
+// consumers (AI agent, search+fetch) see consistent output across providers.
+func formatSerperResults(results []searchResult, answerBox serperAnswerBox) string {
 	var sb strings.Builder
-	if answer != "" {
-		sb.WriteString(answer)
+	if ans := pickAnswer(answerBox); ans != "" {
+		sb.WriteString("**Answer:** ")
+		sb.WriteString(ans)
+		if answerBox.Link != "" {
+			fmt.Fprintf(&sb, "\nSource: %s", answerBox.Link)
+		}
 		sb.WriteString("\n\n")
 	}
-	if len(citations) > 0 {
-		sb.WriteString("**Sources:**\n")
-		for i, u := range citations {
-			fmt.Fprintf(&sb, "%d. %s\n", i+1, u)
-		}
+	if len(results) == 0 && sb.Len() == 0 {
+		return "No results found."
 	}
-	if sb.Len() == 0 {
-		return "No results from Perplexity."
+	for i, r := range results {
+		fmt.Fprintf(&sb, "%d. **%s**\n   %s\n   %s\n\n", i+1, r.Title, r.URL, r.Description)
 	}
 	return sb.String()
+}
+
+func pickAnswer(a serperAnswerBox) string {
+	switch {
+	case a.Answer != "":
+		return a.Answer
+	case a.Snippet != "":
+		return a.Snippet
+	default:
+		return ""
+	}
 }
 
 // --- Brave Search ---
@@ -176,6 +196,31 @@ type searchResult struct {
 	Title       string `json:"title"`
 	URL         string `json:"url"`
 	Description string `json:"description"`
+}
+
+// UnmarshalJSON lets searchResult handle both Brave's {title,url,description}
+// and Serper's {title,link,snippet} shapes without a separate type.
+func (r *searchResult) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Title       string `json:"title"`
+		URL         string `json:"url"`
+		Link        string `json:"link"`
+		Description string `json:"description"`
+		Snippet     string `json:"snippet"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.Title = raw.Title
+	r.URL = raw.URL
+	if r.URL == "" {
+		r.URL = raw.Link
+	}
+	r.Description = raw.Description
+	if r.Description == "" {
+		r.Description = raw.Snippet
+	}
+	return nil
 }
 
 func braveWebSearch(ctx context.Context, apiKey, query string, count int) (string, error) {

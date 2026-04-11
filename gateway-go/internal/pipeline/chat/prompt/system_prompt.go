@@ -289,7 +289,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// Web tool guidance (conditional).
 	if _, hasWeb := toolSet["web"]; hasWeb {
 		d.WriteString("## Web\n")
-		d.WriteString("- `web(query=...)`: web search. Returns AI answer (Perplexity) or link list (Brave/DDG).\n")
+		d.WriteString("- `web(query=...)`: web search. Google link list (Serper) or Brave/DDG fallback.\n")
 		d.WriteString("- `web(query=..., fetch=N)`: search + auto-fetch top N pages in one call.\n")
 		d.WriteString("- `web(url=...)`: fetch a URL (HTML noise-stripped, PDF/Office parsed, bot-block evasion).\n")
 		d.WriteString("- `web(mode=request, url=..., method=POST, json={...})`: raw HTTP for APIs needing custom headers/auth/body.\n")

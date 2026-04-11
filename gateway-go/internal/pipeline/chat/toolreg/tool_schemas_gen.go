@@ -689,7 +689,7 @@ func webToolSchema() map[string]any {
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Web search query (search mode). Perplexity Sonar > Brave > DuckDuckGo fallback",
+				"description": "Web search query (search mode). Serper (Google) > Brave > DuckDuckGo fallback",
 			},
 			"question": map[string]any{
 				"type":        "string",
