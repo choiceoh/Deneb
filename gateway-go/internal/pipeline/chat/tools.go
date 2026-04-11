@@ -86,7 +86,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	def, ok := r.tools[name]
 	r.mu.RUnlock()
 	if !ok {
-		return "", fmt.Errorf("unknown tool: %q", name)
+		return "", r.unknownToolError(name)
 	}
 
 	// Enforce tool preset: reject tools not in the allowed set.

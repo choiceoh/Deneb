@@ -26,9 +26,14 @@ var contextFileNames = []string{
 
 const (
 	// maxContextFileChars is the maximum characters per context file.
-	maxContextFileChars = 20_000
+	// Sized for single-user DGX Spark: typical AGENTS.md/SOUL.md files
+	// fit comfortably under 8K chars (~2K tokens). Oversized files are
+	// head+tail truncated so core rules are preserved.
+	maxContextFileChars = 8_000
 	// maxContextTotalChars is the maximum total characters for all context files.
-	maxContextTotalChars = 150_000
+	// 5 file kinds x 8K = 40K chars (~10K tokens) worst case, leaving ample
+	// budget for conversation history and tool schemas.
+	maxContextTotalChars = 40_000
 	// ctxCacheRevalidateInterval forces a full re-scan after this duration
 	// to detect newly added or deleted context files.
 	// Extended for single-user DGX Spark: config files rarely change mid-session.
@@ -202,13 +207,15 @@ func loadContextFilesFromDisk(workspaceDir string) ([]ContextFile, map[string]ti
 }
 
 // collectSearchDirs returns the workspace dir plus its ancestors, stopping
-// at the user's home directory or filesystem root (max 10 levels).
+// at the user's home directory or filesystem root (max 6 levels).
+// Limit tightened for single-user DGX Spark deployment where deep ancestor
+// walks yield no additional context files but inflate the prompt budget.
 func collectSearchDirs(workspaceDir string) []string {
 	dirs := []string{workspaceDir}
 
 	home, _ := os.UserHomeDir()
 	current := workspaceDir
-	for range 10 {
+	for range 6 {
 		parent := filepath.Dir(current)
 		if parent == current {
 			break // reached filesystem root
