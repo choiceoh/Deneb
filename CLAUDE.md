@@ -121,12 +121,16 @@
 
 **필수 흐름** (코드 수정 완료 후):
 ```bash
-scripts/dev/live-test.sh restart    # 빌드 + dev 게이트웨이 재시작
+scripts/dev/live-test.sh restart    # 빌드 + dev 게이트웨이 + 목 텔레그램 재시작
 scripts/dev/live-test.sh smoke      # Health + Ready 확인
-scripts/dev/live-test.sh quality    # 전체 품질 테스트 (텔레그램 경유, 한국어/도구/포맷/에지)
+scripts/dev/live-test.sh quality    # 전체 품질 테스트 (목 텔레그램 경유, 한국어/도구/포맷/에지)
 scripts/dev/live-test.sh logs-errors  # 숨은 에러 확인
-scripts/dev/live-test.sh stop       # 정리
+scripts/dev/live-test.sh stop       # 정리 (게이트웨이 + 목 서버)
 ```
+
+라이브 테스트는 `scripts/mock_telegram_server.py`(stdlib HTTP 서버)가
+제공하는 로컬 Bot API 목 환경을 통해 실행된다. 게이트웨이는 `TELEGRAM_API_BASE`로
+이 목 서버를 바라보므로 `api.telegram.org`나 실제 봇 토큰/세션이 필요 없다.
 
 - **quality test 실패 시 "완료"라고 하지 마라** — 수정 → 재시작 → 재검증.
 - **로그에서 에러/경고 없는 것까지 확인**해야 진짜 완료.

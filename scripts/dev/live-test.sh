@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 # Live test helper for Claude Code development workflow.
 #
-# All chat/quality/reproduction tests use real Telegram (Telethon).
-# WebSocket test path has been removed — tests verify the actual user experience.
+# All chat/quality/reproduction tests run against a local mock Telegram Bot
+# API server (scripts/mock_telegram_server.py). The dev gateway's Telegram
+# plugin is pointed at the mock via TELEGRAM_API_BASE so the full chat
+# pipeline runs unchanged — polling, sending, editing — without touching
+# api.telegram.org or needing real bot credentials.
 #
 # Usage:
 #   scripts/live-test.sh build              Build gateway from current tree
-#   scripts/live-test.sh start              Start dev gateway on port 18790
-#   scripts/live-test.sh stop               Stop dev gateway
+#   scripts/live-test.sh start              Start dev gateway + mock telegram
+#   scripts/live-test.sh stop               Stop dev gateway + mock telegram
 #   scripts/live-test.sh restart            Rebuild + restart
 #   scripts/live-test.sh status             Check if dev gateway is running
 #   scripts/live-test.sh health             Hit /health endpoint
 #   scripts/live-test.sh smoke              Smoke test (health + ready)
-#   scripts/live-test.sh chat MESSAGE       Send chat via Telegram, wait for response
-#   scripts/live-test.sh quality [SCENARIO]  Run quality tests (165 cases, Telegram)
+#   scripts/live-test.sh chat MESSAGE       Send chat via mock Telegram, wait for response
+#   scripts/live-test.sh quality [SCENARIO]  Run quality tests (165 cases, mock Telegram)
 #   scripts/live-test.sh quality-custom MSG Quality test with custom message
 #   scripts/live-test.sh quality-list       List all available quality tests
 #   scripts/live-test.sh quality-history    Show past quality test runs
@@ -32,16 +35,18 @@
 #   scripts/live-test.sh logs-errors        Show only error/warning lines from logs
 #   scripts/live-test.sh logs-since SECS    Show logs from last N seconds
 #
-# Reproduction (AI agent reproduces user-reported symptoms via Telegram):
+# Reproduction (AI agent reproduces user-reported symptoms via mock Telegram):
 #   scripts/live-test.sh chat-check MSG [--expect PAT] [--expect-tool TOOL] ...
 #   scripts/live-test.sh multi-chat MSG1 MSG2 MSG3 [--expect-context PAT]
 #   scripts/live-test.sh tool-check TOOL_NAME MSG
 #
-# The dev instance runs on port 18790 (separate from production on 18789).
+# The dev gateway runs on port 18790 (separate from production on 18789) and
+# the mock Telegram server on port 18792 (override via DENEB_DEV_MOCK_TELEGRAM_URL).
 #
-# Config: always uses production config with dev bot token (via config-gen.sh).
-# This exercises the same code paths as production (providers, auth, hooks,
-# agents, sessions, logging) with a separate Telegram bot to avoid 409 conflicts.
+# Config: always uses production config (via config-gen.sh), with the bot
+# token replaced by a fake "mock-dev-token" so the plugin happily calls the
+# local mock server. Providers, auth, hooks, agents, sessions, and logging
+# all exercise the same code paths as production.
 
 set -euo pipefail
 
@@ -58,6 +63,13 @@ DEV_LOG="/tmp/deneb-gateway-live.log"
 DEV_HOST="$DEVLIB_HOST"
 DEV_STATE_DIR="/tmp/deneb-dev-state"
 DENEB_VERSION=$(devlib_version)
+
+# Mock Telegram server: any fake token works because /bot<TOKEN>/<method> is
+# only used for routing by the mock. A fixed placeholder keeps startup logs
+# stable and avoids accidentally shadowing a real credential from the env.
+MOCK_TELEGRAM_TOKEN="mock-dev-token"
+MOCK_TELEGRAM_PORT="${DENEB_DEV_MOCK_TELEGRAM_PORT:-18792}"
+export DENEB_DEV_MOCK_TELEGRAM_URL="${DENEB_DEV_MOCK_TELEGRAM_URL:-http://$DEV_HOST:$MOCK_TELEGRAM_PORT}"
 
 cmd_build() {
   echo "==> Building gateway from $(basename "$REPO_DIR")..."
@@ -76,16 +88,25 @@ cmd_start() {
     cmd_build
   fi
 
-  local dev_config="/tmp/deneb-dev-config.json"
-  devlib_gen_config "$dev_config"
-  if [[ -n "${DENEB_DEV_TELEGRAM_TOKEN:-}" ]]; then
-    echo "    Config: production (Telegram: dev bot active)"
+  # Start the mock Telegram server first so the gateway's getMe probe finds
+  # it immediately at startup. The mock is idempotent — no-op if a previous
+  # live-test or iterate run already left it up.
+  echo "==> Starting mock Telegram server on $DEV_HOST:$MOCK_TELEGRAM_PORT..."
+  if devlib_start_mock_telegram "$MOCK_TELEGRAM_PORT" "$DEV_HOST"; then
+    echo "    Mock ready ($DENEB_DEV_MOCK_TELEGRAM_URL)"
   else
-    echo "    Config: production (Telegram: disabled, set DENEB_DEV_TELEGRAM_TOKEN)"
+    echo "    FAIL: mock Telegram server did not start"
+    echo "    Check log: $DEVLIB_MOCK_LOG"
+    return 1
   fi
 
+  local dev_config="/tmp/deneb-dev-config.json"
+  DENEB_DEV_TELEGRAM_TOKEN="$MOCK_TELEGRAM_TOKEN" devlib_gen_config "$dev_config"
+  echo "    Config: production (Telegram: mock bot on port $MOCK_TELEGRAM_PORT)"
+
   echo "==> Starting dev gateway on $DEV_HOST:$DEV_PORT..."
-  devlib_start_gateway "$DEV_BINARY" "$DEV_PORT" "$dev_config" "$DEV_STATE_DIR" "$DEV_LOG" nohup
+  DENEB_DEV_TELEGRAM_TOKEN="$MOCK_TELEGRAM_TOKEN" \
+    devlib_start_gateway "$DEV_BINARY" "$DEV_PORT" "$dev_config" "$DEV_STATE_DIR" "$DEV_LOG" nohup
   echo "$DEVLIB_PID" > "$DEV_PID_FILE"
 
   if devlib_wait_healthy "$DEV_HOST" "$DEV_PORT" 25; then
@@ -99,21 +120,32 @@ cmd_start() {
 }
 
 cmd_stop() {
-  if ! _is_running; then
+  local had_gateway=false
+  if _is_running; then
+    had_gateway=true
+    local pid
+    pid=$(cat "$DEV_PID_FILE")
+    echo "==> Stopping dev gateway (PID $pid)..."
+    devlib_stop_pid "$pid"
+    rm -f "$DEV_PID_FILE"
+
+    if devlib_wait_port_free "$DEV_PORT"; then
+      echo "    Stopped"
+    else
+      echo "    WARN: Port $DEV_PORT still in use"
+    fi
+  else
     echo "Dev gateway not running"
-    return 0
   fi
 
-  local pid
-  pid=$(cat "$DEV_PID_FILE")
-  echo "==> Stopping dev gateway (PID $pid)..."
-  devlib_stop_pid "$pid"
-  rm -f "$DEV_PID_FILE"
-
-  if devlib_wait_port_free "$DEV_PORT"; then
+  # Stop the mock Telegram server last so in-flight getUpdates calls from
+  # the gateway unwind against a live socket instead of EOF'ing mid-shutdown.
+  if devlib_mock_telegram_running "$MOCK_TELEGRAM_PORT"; then
+    echo "==> Stopping mock Telegram server..."
+    devlib_stop_mock_telegram
     echo "    Stopped"
-  else
-    echo "    WARN: Port $DEV_PORT still in use"
+  elif [[ "$had_gateway" == "false" ]]; then
+    echo "Mock Telegram server not running"
   fi
 }
 
@@ -174,10 +206,10 @@ cmd_smoke() {
   echo "==> All smoke tests passed"
 
   # Brief parity note.
-  if [[ -n "${DENEB_DEV_TELEGRAM_TOKEN:-}" ]]; then
-    echo "    (config: production, Telegram: dev bot)"
+  if devlib_mock_telegram_running "$MOCK_TELEGRAM_PORT"; then
+    echo "    (config: production, Telegram: mock on port $MOCK_TELEGRAM_PORT)"
   else
-    echo "    (config: production, Telegram: disabled)"
+    echo "    (config: production, Telegram: mock not running)"
   fi
 }
 
@@ -204,20 +236,18 @@ cmd_parity() {
   echo "  [OK]   Pure Go (Rust core removed)"
   echo ""
 
-  # 3. Telegram parity.
-  echo "--- Telegram ---"
-  if [[ -n "${DENEB_DEV_TELEGRAM_TOKEN:-}" ]]; then
-    echo "  [OK]   DENEB_DEV_TELEGRAM_TOKEN: set (dev bot for port $DEV_PORT)"
+  # 3. Telegram parity (mock server).
+  echo "--- Telegram (mock) ---"
+  if devlib_mock_telegram_running "$MOCK_TELEGRAM_PORT"; then
+    echo "  [OK]   Mock Telegram server: running on $DEV_HOST:$MOCK_TELEGRAM_PORT"
+    echo "         Gateway talks to $DENEB_DEV_MOCK_TELEGRAM_URL/bot<token>"
   else
-    echo "  [GAP]  DENEB_DEV_TELEGRAM_TOKEN: not set (Telegram pipeline disabled in dev)"
-    echo "         Fix: create a test bot via @BotFather and set DENEB_DEV_TELEGRAM_TOKEN in ~/.deneb/.env"
+    echo "  [GAP]  Mock Telegram server: not running"
+    echo "         Fix: scripts/dev/live-test.sh start (starts the mock automatically)"
     issues=$((issues + 1))
   fi
-  if [[ -n "${DENEB_ITERATE_TELEGRAM_TOKEN:-}" ]]; then
-    echo "  [OK]   DENEB_ITERATE_TELEGRAM_TOKEN: set (iterate bot for port 18791)"
-  else
-    echo "  [INFO] DENEB_ITERATE_TELEGRAM_TOKEN: not set (iterate will share dev token or disable)"
-  fi
+  echo "  [INFO] Production and dev no longer share bot tokens — mock mode runs"
+  echo "         without real credentials and never reaches api.telegram.org."
   echo ""
 
   # 4. Environment variables.
@@ -258,7 +288,7 @@ cmd_parity() {
   fi
 }
 
-# Send a chat message via Telegram and show the response.
+# Send a chat message via the mock Telegram and show the response.
 # Usage: scripts/live-test.sh chat "hello, what can you do?"
 cmd_chat() {
   local message="${1:-}"
@@ -267,37 +297,46 @@ cmd_chat() {
     return 1
   fi
 
-  python3 -c "
-import asyncio, sys, time
-sys.path.insert(0, '$SCRIPT_DIR')
-from telegram_test_client import TelegramTestClient, check_prerequisites
+  # Pass the message + scripts dir via env to avoid shell-quoting footguns.
+  # The scripts/ module root is needed for the mock_telegram_client import.
+  MOCK_MESSAGE="$message" \
+  DENEB_SCRIPTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)" \
+  python3 - <<'PYEOF'
+import asyncio, os, sys
+
+scripts_dir = os.environ["DENEB_SCRIPTS_DIR"]
+sys.path.insert(0, scripts_dir)
+
+from mock_telegram_client import TelegramTestClient, check_prerequisites
 
 async def main():
     ok, detail = check_prerequisites()
     if not ok:
-        print(f'Telegram prerequisites not met: {detail}')
+        print(f"Mock Telegram prerequisites not met: {detail}")
         sys.exit(1)
 
     client = TelegramTestClient()
     bot = await client.connect()
-    print(f'Connected to {bot}')
-    print(f'==> Sending: $(echo "$message" | head -c 80)')
+    print(f"Connected to {bot} (mock)")
+    msg = os.environ.get("MOCK_MESSAGE", "")
+    print(f"==> Sending: {msg[:80]}")
 
-    capture = await client.chat('''$message''')
+    capture = await client.chat(msg)
     await client.disconnect()
 
     if capture.reply_text:
         print()
         print(capture.reply_text[:2000])
         print()
-        print(f'==> Done ({capture.latency_ms:.0f}ms, {len(capture.draft_edits)} edits)')
+        print(f"==> Done ({capture.latency_ms:.0f}ms, "
+              f"{len(capture.draft_edits)} edits)")
     elif capture.errors:
-        print(f'==> FAILED: {capture.errors}')
+        print(f"==> FAILED: {capture.errors}")
     else:
-        print('==> No response')
+        print("==> No response")
 
 asyncio.run(main())
-"
+PYEOF
 }
 
 # Quality tests: response quality, formatting, Korean, tool usage, latency.
@@ -532,37 +571,48 @@ case "${1:-help}" in
     MSG="${1:?Usage: bench-judge MESSAGE}"
     shift || true
     echo "==> LLM-as-Judge evaluation"
-    # Get response via Telegram, then score with LLM judge.
-    python3 -c "
-import sys, asyncio, importlib.util
-sys.path.insert(0, '$SCRIPT_DIR')
-from telegram_test_client import TelegramTestClient, check_prerequisites
+    # Get response via the mock Telegram, then score with LLM judge.
+    MOCK_MESSAGE="$MSG" \
+    DENEB_SCRIPTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)" \
+    DENEB_DEV_SCRIPT_DIR="$SCRIPT_DIR" \
+    python3 - <<'PYEOF'
+import asyncio, importlib.util, os, sys
+
+scripts_dir = os.environ["DENEB_SCRIPTS_DIR"]
+dev_dir = os.environ["DENEB_DEV_SCRIPT_DIR"]
+sys.path.insert(0, scripts_dir)
+sys.path.insert(0, dev_dir)
+from mock_telegram_client import TelegramTestClient, check_prerequisites
 
 async def main():
     ok, d = check_prerequisites()
     if not ok:
-        print(f'ERROR: {d}')
+        print(f"ERROR: {d}")
         sys.exit(1)
     c = TelegramTestClient()
     await c.connect()
-    cap = await c.chat(sys.argv[1])
+    msg = os.environ.get("MOCK_MESSAGE", "")
+    cap = await c.chat(msg)
     await c.disconnect()
     if not cap.reply_text:
-        print('ERROR: No response captured')
+        print("ERROR: No response captured")
         sys.exit(1)
-    # Load bench-judge module.
-    spec = importlib.util.spec_from_file_location('bench_judge', '$SCRIPT_DIR/bench-judge.py')
+    spec = importlib.util.spec_from_file_location(
+        "bench_judge", os.path.join(dev_dir, "bench-judge.py"),
+    )
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     if not mod.judge_available():
-        print('ERROR: No JUDGE_API_KEY or ANTHROPIC_API_KEY set')
+        print("ERROR: No JUDGE_API_KEY or ANTHROPIC_API_KEY set")
         sys.exit(1)
-    scores = mod.judge_absolute(sys.argv[1], cap.reply_text)
+    scores = mod.judge_absolute(msg, cap.reply_text)
     overall = sum(scores.values()) / len(scores) * 10
-    print(f'Overall: {overall:.0f}/100')
+    print(f"Overall: {overall:.0f}/100")
     for k, v in scores.items():
-        print(f'  {k}: {v}/10')
-" "$MSG"
+        print(f"  {k}: {v}/10")
+
+asyncio.run(main())
+PYEOF
     ;;
 
   # Baseline tracking.
@@ -586,11 +636,11 @@ async def main():
     echo "  restart         Rebuild + restart"
     echo "  status          Show dev gateway status + health"
     echo ""
-    echo "Testing (Telegram 기반 — 실제 유저 경험 경로 검증):"
+    echo "Testing (Mock Telegram 기반 — 목환경에서 실제 경로 검증):"
     echo "  health              GET /health (JSON)"
     echo "  smoke               Smoke test (health + ready)"
-    echo "  chat MSG            텔레그램으로 채팅 메시지 전송, 응답 확인"
-    echo "  quality [SCENARIO]  품질 테스트 (165 cases, Telegram)"
+    echo "  chat MSG            목 텔레그램으로 채팅 메시지 전송, 응답 확인"
+    echo "  quality [SCENARIO]  품질 테스트 (165 cases, mock Telegram)"
     echo "    Scenarios: all|core|health|daily|system|code|task|search|knowledge"
     echo "               format|context|edge|safety|korean|persona|reasoning"
     echo "               bench-challenge|bench-multiturn|bench-oolong|bench (all bench)"
@@ -602,7 +652,7 @@ async def main():
     echo "  quality-compare A B 두 실행 비교"
     echo "  quality-trend NAME  점수 추이"
     echo ""
-    echo "Reproduction (AI 에이전트 증상 재현, Telegram 기반):"
+    echo "Reproduction (AI 에이전트 증상 재현, mock Telegram):"
     echo "  chat-check MSG [--expect PAT] [--expect-not PAT] [--expect-tool TOOL]"
     echo "                      채팅 + assertion (Korean, latency, patterns, tools)"
     echo "  multi-chat M1 M2..  멀티턴 채팅 (컨텍스트 유지 확인)"
@@ -642,8 +692,12 @@ async def main():
     echo "Parity:"
     echo "  parity              Show dev vs production environment differences"
     echo ""
-    echo "Config: always uses production config (via config-gen.sh)."
-    echo "Telegram: set DENEB_DEV_TELEGRAM_TOKEN in ~/.deneb/.env to enable dev bot."
-    echo "테스트 전제조건: TELEGRAM_API_ID, TELEGRAM_API_HASH, ~/.deneb/telegram-test.session"
+    echo "Config: always uses production config (via config-gen.sh), but the"
+    echo "Telegram bot token is replaced with a fake mock token so the plugin"
+    echo "talks to the local mock Bot API server (default port 18792) instead"
+    echo "of api.telegram.org."
+    echo ""
+    echo "전제조건: 없음. 실제 텔레그램 자격증명, 세션 파일, Telethon 설치 모두"
+    echo "          필요 없다. 목 서버는 파이썬 stdlib만 사용한다."
     ;;
 esac
