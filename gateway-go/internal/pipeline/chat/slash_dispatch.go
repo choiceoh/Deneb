@@ -32,7 +32,7 @@ func (h *Handler) handleSlashCommand(
 				h.logger.Warn("failed to delete transcript on reset", "error", err)
 			}
 		}
-		// Clear tool preset so session exits coordinator/worker mode.
+		// Clear tool preset so session exits any preset mode (e.g. conversation).
 		if sess := h.sessions.Get(sessionKey); sess != nil && sess.ToolPreset != "" {
 			sess.ToolPreset = ""
 			_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
@@ -108,20 +108,6 @@ func (h *Handler) handleSlashCommand(
 		default:
 			h.deliverSlashResponse(delivery, "사용법: /mode [일반|대화] — 인자 없이 토글")
 		}
-
-	case "coordinator":
-		// Activate coordinator mode: set ToolPreset on the session, reset transcript.
-		h.InterruptActiveRun(sessionKey)
-		h.pending.Clear(sessionKey)
-		if h.transcript != nil {
-			_ = h.transcript.Delete(sessionKey) // best-effort: transcript cleanup is non-critical
-		}
-		sess := h.sessions.Get(sessionKey)
-		if sess != nil {
-			sess.ToolPreset = "coordinator"
-			_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
-		}
-		h.deliverSlashResponse(delivery, "코디네이터 모드가 활성화되었습니다. 워커 에이전트를 조율하여 작업을 수행합니다.")
 
 	case "mail":
 		go h.handleMailCommand(reqID, sessionKey, delivery)

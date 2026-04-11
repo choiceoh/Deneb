@@ -2,81 +2,25 @@ package toolpreset
 
 import "testing"
 
-func TestAllowedTools_Researcher(t *testing.T) {
-	allowed := AllowedTools(PresetResearcher)
+func TestAllowedTools_Conversation(t *testing.T) {
+	allowed := AllowedTools(PresetConversation)
 	if allowed == nil {
-		t.Fatal("researcher preset should return non-nil allowed set")
+		t.Fatal("conversation preset should return non-nil allowed set")
 	}
-	// Researcher should have read-only tools.
-	for _, name := range []string{"read", "grep", "tree", "analyze", "web"} {
+	for _, name := range []string{"read", "web", "wiki"} {
 		if _, ok := allowed[name]; !ok {
-			t.Errorf("researcher preset should include %q", name)
+			t.Errorf("conversation preset should include %q", name)
 		}
 	}
-	// Researcher should NOT have write tools.
-	for _, name := range []string{"write", "edit", "exec", "git", "multi_edit"} {
+	for _, name := range []string{"write", "edit", "exec", "git"} {
 		if _, ok := allowed[name]; ok {
-			t.Errorf("researcher preset should NOT include %q", name)
-		}
-	}
-}
-
-func TestAllowedTools_Implementer(t *testing.T) {
-	allowed := AllowedTools(PresetImplementer)
-	if allowed == nil {
-		t.Fatal("implementer preset should return non-nil allowed set")
-	}
-	for _, name := range []string{"read", "write", "edit", "multi_edit", "exec", "test", "git"} {
-		if _, ok := allowed[name]; !ok {
-			t.Errorf("implementer preset should include %q", name)
-		}
-	}
-	// Implementer should NOT have session/orchestration tools.
-	for _, name := range []string{"sessions_spawn", "subagents"} {
-		if _, ok := allowed[name]; ok {
-			t.Errorf("implementer preset should NOT include %q", name)
-		}
-	}
-}
-
-func TestAllowedTools_Verifier(t *testing.T) {
-	allowed := AllowedTools(PresetVerifier)
-	if allowed == nil {
-		t.Fatal("verifier preset should return non-nil allowed set")
-	}
-	for _, name := range []string{"read", "test", "exec"} {
-		if _, ok := allowed[name]; !ok {
-			t.Errorf("verifier preset should include %q", name)
-		}
-	}
-	// Verifier should NOT have write tools.
-	for _, name := range []string{"write", "edit", "git"} {
-		if _, ok := allowed[name]; ok {
-			t.Errorf("verifier preset should NOT include %q", name)
-		}
-	}
-}
-
-func TestAllowedTools_Coordinator(t *testing.T) {
-	allowed := AllowedTools(PresetCoordinator)
-	if allowed == nil {
-		t.Fatal("coordinator preset should return non-nil allowed set")
-	}
-	for _, name := range []string{"sessions_spawn", "subagents", "sessions", "read", "grep"} {
-		if _, ok := allowed[name]; !ok {
-			t.Errorf("coordinator preset should include %q", name)
-		}
-	}
-	// Coordinator should NOT have write/exec tools.
-	for _, name := range []string{"write", "edit", "exec", "git", "test"} {
-		if _, ok := allowed[name]; ok {
-			t.Errorf("coordinator preset should NOT include %q", name)
+			t.Errorf("conversation preset should NOT include %q", name)
 		}
 	}
 }
 
 func TestIsValid(t *testing.T) {
-	for _, p := range []Preset{PresetNone, PresetResearcher, PresetImplementer, PresetVerifier, PresetCoordinator, PresetConversation} {
+	for _, p := range []Preset{PresetNone, PresetConversation, PresetBoot} {
 		if !IsValid(p) {
 			t.Errorf("IsValid(%q) should be true", p)
 		}
@@ -88,7 +32,7 @@ func TestIsValid(t *testing.T) {
 
 func TestKnownPresets(t *testing.T) {
 	presets := KnownPresets()
-	if len(presets) != 6 {
-		t.Errorf("got %d, want 6 known presets", len(presets))
+	if len(presets) != 2 {
+		t.Errorf("got %d, want 2 known presets", len(presets))
 	}
 }

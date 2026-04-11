@@ -93,7 +93,7 @@ type AgentConfig struct {
 	SubagentControlScope string `json:"subagentControlScope,omitempty"`
 
 	// Tool restriction.
-	ToolPreset string `json:"toolPreset,omitempty"` // researcher, implementer, verifier, coordinator
+	ToolPreset string `json:"toolPreset,omitempty"` // tool preset restricting available tools (e.g. conversation, boot)
 
 	// Channel / messaging policy.
 }

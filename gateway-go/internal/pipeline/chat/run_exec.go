@@ -17,7 +17,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/coordinator"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
@@ -321,27 +320,7 @@ func prepareContextAndPrompt(
 			ToolPreset:    sessionToolPreset,
 		}
 
-		// Coordinator mode: use the coordinator-specific system prompt.
-		if sessionToolPreset == string(toolpreset.PresetCoordinator) {
-			scratchpadDir := coordinator.ResolveScratchpadDir(params.SessionKey)
-			result.SystemPrompt = llm.SystemString(prompt.BuildCoordinatorSystemPrompt(spp, scratchpadDir))
-			return
-		}
-
-		// Worker sessions with a tool preset: append role-specific instructions.
-		workerAddition := ""
-		if sessionToolPreset != "" {
-			scratchpadDir := coordinator.ResolveScratchpadDir(params.SessionKey)
-			workerAddition = prompt.WorkerPromptAddition(sessionToolPreset, scratchpadDir)
-		}
-
-		blocks := prompt.BuildSystemPromptBlocks(spp)
-		if workerAddition != "" {
-			// Append worker instructions to the last (dynamic) block.
-			last := &blocks[len(blocks)-1]
-			last.Text += "\n" + workerAddition
-		}
-		result.SystemPrompt = llm.SystemBlocks(blocks)
+		result.SystemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
 	}()
 
 	prepWg.Wait()
@@ -463,14 +442,6 @@ func finalizePrompt(
 		for _, f := range optimized {
 			systemPrompt = llm.AppendSystemText(systemPrompt, f.Content)
 		}
-	}
-
-	// Auto-suggest coordinator mode if the message looks like a multi-file task
-	// and the session is not already in coordinator mode.
-	if sessionToolPreset == "" && message != "" && coordinator.ShouldSuggestCoordinator(message) {
-		hint := "\n\n[System hint: this request appears to involve multiple files. " +
-			"Consider suggesting coordinator mode (/coordinator) for structured multi-agent orchestration.]\n"
-		systemPrompt = llm.AppendSystemText(systemPrompt, hint)
 	}
 
 	return systemPrompt
