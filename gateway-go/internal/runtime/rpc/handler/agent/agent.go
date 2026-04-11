@@ -23,9 +23,9 @@ type ExtendedDeps struct {
 	Sessions       *session.Manager
 	TelegramPlugin *telegram.Plugin
 	GatewaySubs    *events.GatewayEventSubscriptions
-	Processes   *process.Manager
-	CronService *cron.Service
-	Broadcaster rpcutil.BroadcastFunc
+	Processes      *process.Manager
+	CronService    *cron.Service
+	Broadcaster    rpcutil.BroadcastFunc
 }
 
 // ExtendedMethods returns the extended agent/session/process/cron/hooks handlers.
