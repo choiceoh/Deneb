@@ -1,7 +1,9 @@
 package chat
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolreg"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 )
 
 // RegisterCoreTools populates the tool registry with all core agent tools.
@@ -16,6 +18,16 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 
 	// Wiki knowledge base tools (always active when wiki is configured).
 	toolreg.RegisterWikiTools(registry, &deps.Wiki, deps.WorkspaceDir)
+
+	// Deferred tool activation: fetch_tools lets the LLM load schemas on demand.
+	// Registered here (not in toolreg/) because it needs the chat-side
+	// ToolRegistry to satisfy FetchToolsRegistry (DeferredToolDef / DeferredSummaries).
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "fetch_tools",
+		Description: "Load full schemas for deferred tools so you can call them. Use names (exact) or query (keyword search). The activated tools become available on the next turn",
+		InputSchema: toolreg.FetchToolsSchema(),
+		Fn:          tools.ToolFetchTools(registry),
+	})
 
 	RegisterDefaultPostProcessors(registry)
 

@@ -32,6 +32,18 @@
     ]
   },
   {
+    "name": "read_spillover",
+    "properties": {
+      "spill_id": {
+        "type": "string",
+        "description": "The spillover reference ID (e.g., sp_abc123) from a previous large tool result"
+      }
+    },
+    "required": [
+      "spill_id"
+    ]
+  },
+  {
     "name": "write",
     "properties": {
       "file_path": {
@@ -410,7 +422,7 @@
   },
   {
     "name": "exec",
-    "max_output": 51200,
+    "max_output": 32000,
     "properties": {
       "command": {
         "type": "string",
@@ -953,7 +965,7 @@
   },
   {
     "name": "wiki",
-    "max_output": 30000,
+    "max_output": 20000,
     "properties": {
       "action": {
         "type": "string",
@@ -1101,5 +1113,24 @@
     "required": [
       "action"
     ]
+  },
+  {
+    "name": "fetch_tools",
+    "properties": {
+      "names": {
+        "type": "array",
+        "description": "Exact tool names to activate (from the deferred tools list)",
+        "items": {
+          "type": "string"
+        },
+        "minItems": 1,
+        "maxItems": 10
+      },
+      "query": {
+        "type": "string",
+        "description": "Keyword search to find matching deferred tools (alternative to names)"
+      }
+    },
+    "required": []
   }
 ]

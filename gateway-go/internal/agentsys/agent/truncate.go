@@ -12,8 +12,9 @@ import (
 // When output exceeds this limit the middle is discarded and replaced with
 // a truncation marker — Claude Code style.  Both ends are preserved so the
 // LLM sees context (paths, invocations) at the top and errors/results at
-// the bottom.
-const DefaultMaxOutput = 32 * 1024 // 32K chars
+// the bottom. Spillover stores the full content so the agent can recover
+// via read_spillover.
+const DefaultMaxOutput = 24 * 1024 // 24K chars
 
 // CompactedMaxOutput is the reduced budget applied to tool results from
 // previous turns. The LLM already processed the full result on the turn it

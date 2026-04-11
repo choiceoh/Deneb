@@ -31,7 +31,12 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
 	// because it depends on local AI hooks that live in the chat package.
+	// NOTE: fetch_tools is registered by chat.RegisterCoreTools because it
+	// needs a FetchToolsRegistry interface that chat.ToolRegistry implements.
 }
+
+// FetchToolsSchema returns the fetch_tools schema for external registration.
+func FetchToolsSchema() map[string]any { return fetchToolsToolSchema() }
 
 // RegisterPolarisTools registers the unified Polaris tool (search/describe/expand).
 // Called separately because the store and localAI are not part of CoreToolDeps.
@@ -99,6 +104,19 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		InputSchema: gatewayToolSchema(),
 		Fn:          tools.ToolGateway(workspaceDir),
 	})
+
+	// Spillover: read full content of a previously spilled large tool result.
+	// Registered eagerly (not deferred) because fetch_tools — the only deferred
+	// activation trigger — no longer exists in main, and the trimmer embeds
+	// spill IDs directly in the truncated tool output as a recovery hint.
+	if deps.SpilloverStore != nil {
+		registry.RegisterTool(toolctx.ToolDef{
+			Name:        "read_spillover",
+			Description: "Read the full content of a previous large tool result by spill ID. Use when a tool result was too large and was replaced with a preview",
+			InputSchema: readSpilloverToolSchema(),
+			Fn:          tools.ToolSpilloverRead(deps.SpilloverStore),
+		})
+	}
 }
 
 // RegisterProcessTools registers exec and process management tools.
