@@ -109,14 +109,20 @@ func scanMemoryFiles(workspaceDir string) []string {
 
 	// Check MEMORY.md at workspace root.
 	memoryMd := filepath.Join(workspaceDir, "MEMORY.md")
-	if _, err := os.Stat(memoryMd); err == nil {
+	var upperInfo os.FileInfo
+	if info, err := os.Stat(memoryMd); err == nil {
 		files = append(files, memoryMd)
+		upperInfo = info
 	}
 
 	// Check memory.md (lowercase variant).
+	// Use os.SameFile to skip on case-insensitive filesystems (macOS) where
+	// MEMORY.md and memory.md resolve to the same inode.
 	memoryMdLower := filepath.Join(workspaceDir, "memory.md")
-	if _, err := os.Stat(memoryMdLower); err == nil {
-		files = append(files, memoryMdLower)
+	if lowerInfo, err := os.Stat(memoryMdLower); err == nil {
+		if upperInfo == nil || !os.SameFile(upperInfo, lowerInfo) {
+			files = append(files, memoryMdLower)
+		}
 	}
 
 	// Check memory/*.md directory.
