@@ -2,8 +2,12 @@
 """
 Deneb Gateway Quality Test Runner — 165 consolidated test cases.
 
-Loads test definitions from quality-tests.yaml and executes them
-against the dev gateway via Telegram (Telethon).
+Loads test definitions from quality-tests.yaml and executes them against
+the dev gateway through the local mock Telegram Bot API server
+(scripts/mock_telegram_server.py). No real Telegram credentials are
+required: the gateway is pointed at the mock via TELEGRAM_API_BASE, the
+mock injects synthetic user updates, and outbound sendMessage/edit/delete
+calls are captured as ChatCapture objects.
 
 Usage:
     python3 scripts/quality-test.py [--scenario all]
@@ -12,7 +16,6 @@ Usage:
     python3 scripts/quality-test.py --scenario core        # core quick tests
     python3 scripts/quality-test.py --custom "메시지"       # custom message
     python3 scripts/quality-test.py --list                 # list all tests
-    python3 scripts/quality-test.py --bot nebdev2bot       # specify bot
 """
 
 import json
@@ -30,10 +33,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-# Add scripts dir to path for shared module.
+# Add scripts dir to path for the shared mock client module.
+_SCRIPTS_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(Path(__file__).parent))
-from telegram_test_client import TelegramTestClient, ChatCapture, check_prerequisites
-from checks import (
+sys.path.insert(0, str(_SCRIPTS_ROOT))
+from mock_telegram_client import TelegramTestClient, ChatCapture, check_prerequisites  # noqa: E402
+from checks import (  # noqa: E402
     check_korean_response, check_no_leaked_markup, check_telegram_safe,
     check_response_substance, check_no_filler, check_latency,
 )
@@ -113,7 +118,7 @@ class QualityResult:
         return f"[{status}] {self.name} ({passed}/{total} checks, score={self.score:.0%}, {self.latency_ms:.0f}ms)"
 
 
-# ChatCapture is imported from telegram_test_client.
+# ChatCapture is imported from mock_telegram_client.
 
 
 # --- Result Store (SQLite) ---
@@ -417,15 +422,18 @@ def print_trend(store: ResultStore, test_name: str, limit: int = 20):
     print()
 
 
-# --- Telegram Client Wrapper ---
-# Uses the shared TelegramTestClient for sending messages via real Telegram.
-# GatewayClient is an alias so all existing runner code works unchanged.
+# --- Mock Telegram Client Wrapper ---
+# Uses the shared mock TelegramTestClient (scripts/mock_telegram_client.py)
+# for sending messages through the mock Bot API server. GatewayClient is kept
+# as an alias so existing runner code works unchanged.
 
 class GatewayClient:
-    """Telegram-based test client (replaces former WebSocket client).
+    """Mock-Telegram-based test client.
 
-    Wraps TelegramTestClient to match the interface expected by the
-    test runner: connect(), create_session(), chat(), rpc(), close().
+    Wraps the mock TelegramTestClient to match the interface expected by the
+    test runner: connect(), create_session(), chat(), rpc(), close(). The
+    `bot` constructor argument is kept for call-site compatibility but is
+    unused — the mock server identifies itself regardless.
     """
 
     def __init__(self, host: str = HOST, port: int = PORT, bot: str = ""):
@@ -444,7 +452,8 @@ class GatewayClient:
 
     async def chat(self, message: str, session_key: str = "",
                    timeout: float = TIMEOUT_CHAT) -> ChatCapture:
-        # session_key is ignored in Telegram mode (bot manages sessions).
+        # session_key is ignored in mock mode (the gateway derives it from
+        # the Telegram chat id of the injected update).
         return await self._tg.chat(message, timeout=timeout)
 
     async def rpc(self, method: str, params: dict = None, timeout: float = TIMEOUT_RPC) -> dict:
@@ -457,7 +466,7 @@ class GatewayClient:
                 return {"ok": True, "payload": data}
             except Exception as e:
                 return {"ok": False, "error": {"message": str(e)}}
-        return {"ok": False, "error": {"message": f"RPC not supported in Telegram mode: {method}"}}
+        return {"ok": False, "error": {"message": f"RPC not supported in mock mode: {method}"}}
 
     async def close(self):
         await self._tg.disconnect()
@@ -1274,10 +1283,10 @@ async def run(args):
     # Prerequisite check.
     ok, detail = check_prerequisites()
     if not ok:
-        print(f"Telegram prerequisites not met: {detail}")
+        print(f"Mock Telegram prerequisites not met: {detail}")
         return 1
 
-    # Connectivity check via Telegram.
+    # Connectivity check via the mock Telegram server.
     bot_name = args.bot or ""
     probe = GatewayClient(HOST, args.port, bot=bot_name)
     try:
@@ -1285,10 +1294,10 @@ async def run(args):
         count = len(tests) if not args.custom else 1
         conc = args.concurrency
         conc_label = f", concurrency={conc}" if conc > 1 else ""
-        print(f"Connected to {version} — running {count} tests via Telegram{conc_label}")
+        print(f"Connected to {version} — running {count} tests via mock Telegram{conc_label}")
     except Exception as e:
-        print(f"Failed to connect to Telegram: {e}")
-        print("Is the dev gateway running? Try: scripts/live-test.sh start")
+        print(f"Failed to connect to mock Telegram: {e}")
+        print("Is the dev gateway + mock running? Try: scripts/live-test.sh start")
         return 1
     finally:
         await probe.close()
@@ -1311,8 +1320,9 @@ async def run(args):
             finally:
                 await client.close()
         else:
-            # Sequential mode: one shared Telegram connection, reset per test.
-            # Telegram clients are expensive (Telethon session) so reuse one.
+            # Sequential mode: one shared mock-Telegram connection, reset per
+            # test. Mock connects are cheap (HTTP to localhost) but reusing
+            # the same capture cursor keeps the output stable.
             client = GatewayClient(HOST, args.port, bot=bot_name)
             await client.connect()
             try:
@@ -1383,11 +1393,11 @@ def main():
         "chat", "tools", "tools-deep",
     ]
 
-    parser = argparse.ArgumentParser(description="Deneb Gateway Quality Test (165 cases, Telegram)")
+    parser = argparse.ArgumentParser(description="Deneb Gateway Quality Test (165 cases, mock Telegram)")
     parser.add_argument("--port", type=int, default=PORT,
                         help=f"Gateway HTTP port for health checks (default: {PORT})")
     parser.add_argument("--bot", type=str, default="",
-                        help="Bot username (default: DENEB_DEV_BOT_USERNAME)")
+                        help="Ignored (mock identifies itself; kept for compat)")
     parser.add_argument("--scenario", default="all", choices=all_scenarios,
                         help="Test scenario/category to run")
     parser.add_argument("--custom", type=str,
@@ -1397,7 +1407,7 @@ def main():
     parser.add_argument("--json", action="store_true",
                         help="Output JSON report")
     parser.add_argument("--concurrency", type=int, default=1,
-                        help="Ignored (Telegram tests run sequentially)")
+                        help="Ignored (mock Telegram tests run sequentially)")
     parser.add_argument("--report", action="store_true",
                         help="Run full quality report (same as --scenario all)")
     # Recording & history.

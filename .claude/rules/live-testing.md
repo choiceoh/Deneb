@@ -8,14 +8,19 @@ globs: ["gateway-go/**/*.go", "proto/**/*.proto"]
 > **코드 완성도가 높아도 실제 작동 품질이 나쁘면 의미 없다.**
 > 단위 테스트 통과 ≠ 제품 품질. 반드시 실제 게이트웨이에서 작동 + 품질을 검증하라.
 
-> **모든 채팅/품질/재현 테스트는 실제 텔레그램 경로를 사용한다 (WebSocket 테스트 제거됨).**
+> **모든 채팅/품질/재현 테스트는 로컬 목 텔레그램 Bot API 서버를 통해 실행된다.**
+> 게이트웨이의 Telegram 플러그인은 `TELEGRAM_API_BASE` 환경변수로
+> `scripts/mock_telegram_server.py`를 바라보게 설정되어, 실제 `api.telegram.org`를
+> 한 번도 호출하지 않고도 플러그인·폴링·전송 코드 경로 전체가 그대로 실행된다.
 
-### Telegram 테스트 전제조건
+### 목 텔레그램 테스트 전제조건
 
-- `~/.deneb/.env`에 `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` 설정
-- `~/.deneb/telegram-test.session` 생성: `python3 scripts/telegram-session-init.py`
-- `DENEB_DEV_BOT_USERNAME` (기본: nebdev1bot)
-- dev 게이트웨이 실행 중 + `DENEB_DEV_TELEGRAM_TOKEN` 설정
+- **없음.** 실제 텔레그램 자격증명, 세션 파일, Telethon 설치, @BotFather 봇 등록이
+  모두 필요 없다.
+- 목 서버는 파이썬 stdlib(`http.server`)만 사용한다.
+- `scripts/dev/live-test.sh start`가 목 서버(기본 포트 18792)와 dev 게이트웨이(18790)를
+  함께 기동한다.
+- 포트/호스트 커스텀: `DENEB_DEV_MOCK_TELEGRAM_PORT`, `DENEB_DEV_MOCK_TELEGRAM_URL`
 
 ## 도구
 
@@ -35,10 +40,10 @@ dev 인스턴스는 항상 프로덕션 config를 기반으로 시작한다 (빈
 
 | 항목 | Dev | Production | 남은 차이 |
 |---|---|---|---|
-| Config | 프로덕션 config (dev-config-gen.sh) | `~/.deneb/deneb.json` | 없음 |
+| Config | 프로덕션 config (config-gen.sh) | `~/.deneb/deneb.json` | 없음 |
 | Providers/Auth | 로딩 | 로딩 | 없음 |
 | Hooks/Agents | 로딩 | 로딩 | 없음 |
-| Telegram | dev 봇 (DENEB_DEV_TELEGRAM_TOKEN) | 프로덕션 봇 | 별도 봇 (의도적) |
+| Telegram | 목 Bot API (TELEGRAM_API_BASE) | 실제 api.telegram.org | I/O 경로 (의도적) |
 | Bind | loopback | config-driven | 포트만 다름 (의도적) |
 
 **환경 차이 확인:**
@@ -46,22 +51,23 @@ dev 인스턴스는 항상 프로덕션 config를 기반으로 시작한다 (빈
 scripts/dev/live-test.sh parity    # dev vs prod 환경 비교 리포트
 ```
 
-**Telegram 설정:** `~/.deneb/.env`에 dev 전용 봇 토큰 필수:
-```bash
-# ~/.deneb/.env
-DENEB_DEV_TELEGRAM_TOKEN=<dev bot token>         # dev-live-test.sh (port 18790)
-DENEB_ITERATE_TELEGRAM_TOKEN=<iterate bot token>  # dev-iterate.sh (port 18791)
-```
-- 각 토큰은 @BotFather에서 별도 봇을 만들어서 획득
-- 프로덕션 봇과 다른 봇이므로 409 충돌 없이 동시 실행 가능
-- 토큰 미설정 시 텔레그램 비활성 (그 외 모든 코드 경로는 동일하게 실행)
+**목 서버 동작 원리:**
+- `scripts/mock_telegram_server.py`가 로컬 HTTP 서버로 Telegram Bot API
+  서브셋(`getMe`/`getUpdates`/`sendMessage`/`editMessageText`/`deleteMessage`/
+  `setMessageReaction`/`sendChatAction`/`sendPhoto` 등)을 구현.
+- 게이트웨이는 `TELEGRAM_API_BASE=http://127.0.0.1:18792/bot`로 시작하므로
+  모든 Telegram 플러그인 호출이 목 서버로 향한다.
+- 테스트 클라이언트(`scripts/mock_telegram_client.py`)는 목 서버의
+  `/_test/inject`에 가짜 유저 업데이트를 주입하고 `/_test/wait`로 outbound
+  이벤트(sendMessage/editMessageText/...)가 settle될 때까지 기다린다.
+- 외부 네트워크 접근 0, 로그인/세션 파일 0, 409 Conflict 위험 0.
 
 ### Functional Testing
 
 | Command | Description |
 |---|---|
 | `smoke` | Health + Ready smoke test |
-| `chat MESSAGE` | 텔레그램으로 채팅 메시지 전송 + 응답 수신 |
+| `chat MESSAGE` | 목 텔레그램으로 채팅 메시지 전송 + 응답 수신 |
 
 ### Quality Testing
 
