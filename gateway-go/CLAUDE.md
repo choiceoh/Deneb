@@ -45,7 +45,6 @@ Several files in this module are machine-generated. **Never edit them by hand.**
 | File | Source | Command |
 |------|--------|---------|
 | `internal/pipeline/chat/toolreg/tool_schemas_gen.go` | `internal/pipeline/chat/toolreg/tool_schemas.json` | `make tool-schemas` |
-| `internal/pipeline/autoreply/thinking/model_caps_gen.go` | `internal/pipeline/autoreply/thinking/model_caps.json` | `make model-caps` |
 | `internal/pipeline/chat/tool_classification_gen.go` | `internal/pipeline/chat/tool_classification.json` | `make data-gen` |
 
 To modify a generated file: edit the source or generator, run the `make` target, commit both together. CI will reject any PR where the generated output diverges from its source.

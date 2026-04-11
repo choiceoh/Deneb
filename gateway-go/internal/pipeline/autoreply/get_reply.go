@@ -12,7 +12,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/handlers"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/model"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/thinking"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/typing"
 )
@@ -71,20 +70,7 @@ func ReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.GetR
 	contextTokens := model.ResolveContextTokens(opts.ContextTokens, 0)
 	maxTokens := model.ResolveMaxTokens(opts.MaxTokens, 0)
 
-	// 7. Resolve model-aware thinking default if not set via directive.
-	if sess.ThinkLevel == "" || sess.ThinkLevel == types.ThinkOff {
-		if deps.ThinkingRuntime != nil {
-			catalog := buildThinkingCatalog(deps.ModelCandidates)
-			defaultThink := deps.ThinkingRuntime.ResolveThinkingDefaultForModel(
-				selection.Provider, selection.Model, catalog,
-			)
-			if defaultThink != types.ThinkOff {
-				sess.ThinkLevel = defaultThink
-			}
-		}
-	}
-
-	// 8. Build typing controller (if callbacks provided).
+	// 7. Build typing controller (if callbacks provided).
 	var typingCtrl *typing.TypingController
 	if !opts.SuppressTyping && opts.OnReplyStart != nil {
 		typingCtrl = typing.NewTypingController(typing.TypingControllerConfig{
@@ -96,14 +82,13 @@ func ReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.GetR
 		defer typingCtrl.Stop()
 	}
 
-	// 9. Run agent turn.
+	// 8. Run agent turn.
 	agentCfg := AgentTurnConfig{
 		SessionKey:     sess.SessionKey,
 		AgentID:        sess.AgentID,
 		Model:          selection.Model,
 		Provider:       selection.Provider,
 		Message:        cleanedBody,
-		ThinkLevel:     sess.ThinkLevel,
 		FastMode:       sess.FastMode,
 		VerboseLevel:   sess.VerboseLevel,
 		ReasoningLevel: sess.ReasoningLevel,
@@ -143,7 +128,6 @@ type ReplyDeps struct {
 	ModelCandidates []model.ModelCandidate
 	CommandDeps     *handlers.CommandDeps
 	OnSessionEvent  func(eventType, sessionKey, reason string)
-	ThinkingRuntime *thinking.ThinkingRuntime
 }
 
 // initSessionForReply initializes or retrieves session state for a reply.
@@ -185,16 +169,4 @@ func resolveModelForReply(sess *types.SessionState, dr directives.DirectiveHandl
 		IsFallback:  state.IsFallback,
 		AuthProfile: state.AuthProfile,
 	}
-}
-
-// buildThinkingCatalog converts model candidates to thinking catalog entries.
-func buildThinkingCatalog(candidates []model.ModelCandidate) []thinking.ThinkingCatalogEntry {
-	entries := make([]thinking.ThinkingCatalogEntry, len(candidates))
-	for i, c := range candidates {
-		entries[i] = thinking.ThinkingCatalogEntry{
-			Provider: c.Provider,
-			ID:       c.Model,
-		}
-	}
-	return entries
 }

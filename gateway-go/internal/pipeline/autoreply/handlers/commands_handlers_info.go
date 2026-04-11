@@ -13,7 +13,6 @@ func handleStatusCommand(ctx CommandContext) (*CommandResult, error) {
 		Provider:       s.Provider,
 		Channel:        s.Channel,
 		IsGroup:        s.IsGroup,
-		ThinkLevel:     s.ThinkLevel,
 		FastMode:       s.FastMode,
 		VerboseLevel:   s.VerboseLevel,
 		ReasoningLevel: s.ReasoningLevel,

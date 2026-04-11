@@ -9,34 +9,11 @@ import (
 func TestParseInlineDirectives(t *testing.T) {
 	t.Run("no directives", func(t *testing.T) {
 		d := ParseInlineDirectives("hello world", nil)
-		if d.HasThinkDirective || d.HasVerboseDirective || d.HasFastDirective {
+		if d.HasVerboseDirective || d.HasFastDirective {
 			t.Error("expected no directives")
 		}
 		if d.Cleaned != "hello world" {
 			t.Errorf("cleaned = %q, want 'hello world'", d.Cleaned)
-		}
-	})
-
-	t.Run("think directive", func(t *testing.T) {
-		d := ParseInlineDirectives("hello /think high world", nil)
-		if !d.HasThinkDirective {
-			t.Error("expected think directive")
-		}
-		if d.ThinkLevel != types.ThinkHigh {
-			t.Errorf("types.ThinkLevel = %q, want 'high'", d.ThinkLevel)
-		}
-		if d.Cleaned != "hello world" {
-			t.Errorf("cleaned = %q, want 'hello world'", d.Cleaned)
-		}
-	})
-
-	t.Run("think without arg defaults to low", func(t *testing.T) {
-		d := ParseInlineDirectives("/think", nil)
-		if !d.HasThinkDirective {
-			t.Error("expected think directive")
-		}
-		if d.ThinkLevel != types.ThinkLow {
-			t.Errorf("types.ThinkLevel = %q, want 'low'", d.ThinkLevel)
 		}
 	})
 
@@ -61,12 +38,9 @@ func TestParseInlineDirectives(t *testing.T) {
 	})
 
 	t.Run("multiple directives", func(t *testing.T) {
-		d := ParseInlineDirectives("hello /think medium /fast /verbose on", nil)
-		if !d.HasThinkDirective || !d.HasFastDirective || !d.HasVerboseDirective {
-			t.Error("expected all three directives")
-		}
-		if d.ThinkLevel != types.ThinkMedium {
-			t.Errorf("types.ThinkLevel = %q", d.ThinkLevel)
+		d := ParseInlineDirectives("hello /fast /verbose on", nil)
+		if !d.HasFastDirective || !d.HasVerboseDirective {
+			t.Error("expected both directives")
 		}
 		if !strings.Contains(d.Cleaned, "hello") {
 			t.Errorf("cleaned = %q, should contain 'hello'", d.Cleaned)
@@ -92,19 +66,18 @@ func TestParseInlineDirectives(t *testing.T) {
 			t.Errorf("types.ReasoningLevel = %q, want 'stream'", d.ReasoningLevel)
 		}
 	})
-
 }
 
 func TestIsDirectiveOnly(t *testing.T) {
 	t.Run("directive only", func(t *testing.T) {
-		d := ParseInlineDirectives("/think high", nil)
+		d := ParseInlineDirectives("/fast", nil)
 		if !IsDirectiveOnly(d) {
 			t.Error("expected directive-only")
 		}
 	})
 
 	t.Run("directive with text", func(t *testing.T) {
-		d := ParseInlineDirectives("/think high hello", nil)
+		d := ParseInlineDirectives("hello /fast", nil)
 		if IsDirectiveOnly(d) {
 			t.Error("expected not directive-only")
 		}

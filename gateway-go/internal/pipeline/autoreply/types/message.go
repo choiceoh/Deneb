@@ -76,7 +76,6 @@ type BlockReplyContext struct {
 type ModelSelectedContext struct {
 	Provider   string
 	Model      string
-	ThinkLevel ThinkLevel
 	FastMode   bool
 	IsOverride bool
 	IsFallback bool

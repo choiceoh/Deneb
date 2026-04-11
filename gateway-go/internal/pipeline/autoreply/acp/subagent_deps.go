@@ -33,7 +33,6 @@ type SpawnSubagentParams struct {
 	WorkspaceDir     string
 	Model            string
 	Provider         string
-	ThinkLevel       types.ThinkLevel
 	InitialMessage   string
 	MaxDepth         int
 	ToolPreset       string // tool preset restricting available tools (researcher, implementer, verifier)
@@ -124,7 +123,6 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 			AgentID:    agentID,
 			Model:      params.Model,
 			Provider:   params.Provider,
-			ThinkLevel: params.ThinkLevel,
 			ToolPreset: params.ToolPreset,
 		}
 		if err := d.SaveSession(sess); err != nil {
