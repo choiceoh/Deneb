@@ -86,6 +86,18 @@ func (e *Engine) CompactAndPersist(
 		e.persistSummary(sessionKey, capturedSummary, len(compacted))
 	}
 
+	// Safety-net: if compaction could not bring the context within budget
+	// (e.g. recent messages themselves are extremely large and LLM compaction
+	// preserved them), drop oldest messages as a last resort. This should be
+	// rare; the warn log helps diagnose when it fires.
+	if contextBudget > 0 && compact.EstimateMessagesTokens(compacted) > contextBudget {
+		before := compact.EstimateMessagesTokens(compacted)
+		compacted = trimLLMToTokenBudget(compacted, contextBudget)
+		after := compact.EstimateMessagesTokens(compacted)
+		e.logger.Warn("polaris: post-compaction safety trim fired",
+			"tokensBefore", before, "tokensAfter", after, "budget", contextBudget)
+	}
+
 	return compacted, result
 }
 
