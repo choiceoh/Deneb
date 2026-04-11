@@ -34,8 +34,6 @@ type InlineDirectives struct {
 	HasModelDirective bool
 	RawModelDirective string
 	RawModelProfile   string
-
-	HasDeepWorkDirective bool
 }
 
 // Regex patterns for directive extraction.
@@ -45,7 +43,6 @@ var (
 	fastDirectiveRe      = regexp.MustCompile(`(?i)(?:^|\s)/fast(?:\s+([a-zA-Z0-9_-]+))?\s*`)
 	reasoningDirectiveRe = regexp.MustCompile(`(?i)(?:^|\s)/reasoning(?:\s+([a-zA-Z0-9_-]+))?\s*`)
 	statusDirectiveRe    = regexp.MustCompile(`(?i)(?:^|\s)/status\s*$`)
-	deepworkDirectiveRe  = regexp.MustCompile(`(?i)(?:^|\s)/deepwork\s*`)
 )
 
 // ParseInlineDirectives extracts all inline directives from a message body.
@@ -99,12 +96,6 @@ func ParseInlineDirectives(body string, opts *DirectiveParseOptions) InlineDirec
 		text = modelResult.Cleaned
 	}
 
-	// Extract /deepwork directive.
-	if deepworkDirectiveRe.MatchString(text) {
-		result.HasDeepWorkDirective = true
-		text = deepworkDirectiveRe.ReplaceAllString(text, " ")
-	}
-
 	result.Cleaned = cleanDirectiveOutput(text)
 	return result
 }
@@ -121,8 +112,7 @@ func IsDirectiveOnly(directives InlineDirectives) bool {
 		!directives.HasVerboseDirective &&
 		!directives.HasFastDirective &&
 		!directives.HasReasoningDirective &&
-		!directives.HasModelDirective &&
-		!directives.HasDeepWorkDirective {
+		!directives.HasModelDirective {
 		return false
 	}
 	return strings.TrimSpace(directives.Cleaned) == ""

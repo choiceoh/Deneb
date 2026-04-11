@@ -89,7 +89,6 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 	}
 
 	deps := h.buildRunDeps()
-	deps.continuationEnabled = false // sync paths do not support autonomous continuation
 	if opts != nil && opts.MaxHistoryTokens > 0 {
 		deps.contextCfg.MemoryTokenBudget = uint64(opts.MaxHistoryTokens)
 	}

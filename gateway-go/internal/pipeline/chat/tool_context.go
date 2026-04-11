@@ -91,19 +91,6 @@ func WithToolPreset(ctx context.Context, preset string) context.Context {
 	return toolctx.WithToolPreset(ctx, preset)
 }
 
-// ContinuationSignal is a re-export of toolctx.ContinuationSignal.
-type ContinuationSignal = toolctx.ContinuationSignal
-
-// NewContinuationSignal creates a new (unset) ContinuationSignal.
-func NewContinuationSignal() *ContinuationSignal {
-	return toolctx.NewContinuationSignal()
-}
-
-// WithContinuationSignal attaches a ContinuationSignal to ctx.
-func WithContinuationSignal(ctx context.Context, sig *ContinuationSignal) context.Context {
-	return toolctx.WithContinuationSignal(ctx, sig)
-}
-
 // SpawnFlag is a re-export of toolctx.SpawnFlag.
 type SpawnFlag = toolctx.SpawnFlag
 

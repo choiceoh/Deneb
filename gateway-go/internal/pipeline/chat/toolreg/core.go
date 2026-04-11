@@ -32,15 +32,6 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	}
 	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, diaryDir)
 
-	// Autonomous continuation: LLM calls this to request a new run after current completes.
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "continue_run",
-		Description: "Signal that you have more work to do and want to start a new autonomous run. Use when the current run's tool-call budget is nearly exhausted but the task is not yet complete.",
-		InputSchema: continueRunToolSchema(),
-		Fn:          tools.ToolContinueRun(),
-		Deferred:    true,
-	})
-
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
 	// because it depends on local AI hooks that live in the chat package.
 	// NOTE: fetch_tools is registered by chat.RegisterCoreTools because it

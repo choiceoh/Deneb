@@ -294,7 +294,6 @@ func TestIntegration_ToolCallFlow(t *testing.T) {
 	}
 
 	// LLM should have been called at least twice (tool call + final response).
-	// Nudge continuations may add extra calls.
 	if callCount < 2 {
 		t.Errorf("LLM call count = %d, want >= 2", callCount)
 	}

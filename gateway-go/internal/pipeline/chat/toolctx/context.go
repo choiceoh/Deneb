@@ -2,7 +2,6 @@ package toolctx
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
@@ -21,7 +20,6 @@ const (
 	ctxKeyRunCache
 	ctxKeyFileCache
 	ctxKeyToolPreset
-	ctxKeyContinuationSignal
 	ctxKeyDeferredActivation
 	ctxKeySpawnFlag
 )
@@ -130,73 +128,11 @@ func ToolPresetFromContext(ctx context.Context) string {
 	return s
 }
 
-// --- ContinuationSignal ---
-
-// ContinuationSignal is a shared flag set by the continue_run tool to signal
-// that the LLM wants a new agent run to start after the current one completes.
-// Thread-safe; the tool sets it from a tool goroutine, the run orchestrator
-// reads it after the agent loop returns.
-//
-// Implemented as a close-once channel: Request() writes the reason then closes
-// the done channel (via sync.Once), establishing a happens-before guarantee
-// so any goroutine that observes the close also sees the reason value.
-type ContinuationSignal struct {
-	once   sync.Once
-	done   chan struct{}
-	reason string
-}
-
-// NewContinuationSignal creates a new (unset) ContinuationSignal.
-func NewContinuationSignal() *ContinuationSignal {
-	return &ContinuationSignal{done: make(chan struct{})}
-}
-
-// Request marks the signal as requested with the given reason.
-// Safe to call multiple times; only the first call takes effect.
-func (s *ContinuationSignal) Request(reason string) {
-	s.once.Do(func() {
-		s.reason = reason
-		close(s.done)
-	})
-}
-
-// Requested reports whether continue_run was called (non-blocking).
-func (s *ContinuationSignal) Requested() bool {
-	select {
-	case <-s.done:
-		return true
-	default:
-		return false
-	}
-}
-
-// Reason returns the continuation reason (empty if not requested).
-func (s *ContinuationSignal) Reason() string {
-	select {
-	case <-s.done:
-		return s.reason
-	default:
-		return ""
-	}
-}
-
-// WithContinuationSignal attaches a ContinuationSignal to the context.
-func WithContinuationSignal(ctx context.Context, sig *ContinuationSignal) context.Context {
-	return context.WithValue(ctx, ctxKeyContinuationSignal, sig)
-}
-
-// ContinuationSignalFromContext extracts the ContinuationSignal from a context.
-func ContinuationSignalFromContext(ctx context.Context) *ContinuationSignal {
-	s, _ := ctx.Value(ctxKeyContinuationSignal).(*ContinuationSignal)
-	return s
-}
-
 // --- SpawnFlag ---
 
 // SpawnFlag is an atomic flag set by sessions_spawn when a sub-agent is created.
-// The executor reads it to suppress turn-budget warnings that induce continue_run
-// after spawning, and the continuation logic uses it to change the continuation
-// message from "continue your work" to "synthesize subagent results".
+// The executor reads it to suppress turn-budget warnings after spawning so the
+// agent yields to the notification system instead of requesting more turns.
 type SpawnFlag struct {
 	val atomic.Bool
 }
