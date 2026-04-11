@@ -72,8 +72,8 @@ var toolCategories = []struct {
 	Label string
 	Names []string
 }{
-	{"File", []string{"read", "write", "edit", "grep", "find"}},
-	{"Edit", []string{"multi_edit", "tree", "diff", "analyze", "test", "git"}},
+	{"File", []string{"read", "write", "edit", "grep"}},
+	{"Edit", []string{"multi_edit", "tree", "analyze", "test", "git"}},
 	{"Exec", []string{"exec", "process"}},
 	{"Web", []string{"web"}},
 	{"Memory", []string{"wiki"}},

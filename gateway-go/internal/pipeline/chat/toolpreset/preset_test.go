@@ -8,7 +8,7 @@ func TestAllowedTools_Researcher(t *testing.T) {
 		t.Fatal("researcher preset should return non-nil allowed set")
 	}
 	// Researcher should have read-only tools.
-	for _, name := range []string{"read", "grep", "find", "tree", "diff", "analyze", "web"} {
+	for _, name := range []string{"read", "grep", "tree", "analyze", "web"} {
 		if _, ok := allowed[name]; !ok {
 			t.Errorf("researcher preset should include %q", name)
 		}
@@ -44,7 +44,7 @@ func TestAllowedTools_Verifier(t *testing.T) {
 	if allowed == nil {
 		t.Fatal("verifier preset should return non-nil allowed set")
 	}
-	for _, name := range []string{"read", "test", "exec", "diff"} {
+	for _, name := range []string{"read", "test", "exec"} {
 		if _, ok := allowed[name]; !ok {
 			t.Errorf("verifier preset should include %q", name)
 		}
@@ -62,7 +62,7 @@ func TestAllowedTools_Coordinator(t *testing.T) {
 	if allowed == nil {
 		t.Fatal("coordinator preset should return non-nil allowed set")
 	}
-	for _, name := range []string{"sessions_spawn", "subagents", "sessions", "read", "grep", "find"} {
+	for _, name := range []string{"sessions_spawn", "subagents", "sessions", "read", "grep"} {
 		if _, ok := allowed[name]; !ok {
 			t.Errorf("coordinator preset should include %q", name)
 		}

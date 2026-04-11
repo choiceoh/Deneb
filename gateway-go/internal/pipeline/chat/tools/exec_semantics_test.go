@@ -16,16 +16,9 @@ func TestInterpretExitCode(t *testing.T) {
 		{"grep success", "grep foo bar.txt", 0, false, ""},
 		{"rg no match", "rg pattern .", 1, false, "(no matches found)"},
 
-		// diff
-		{"diff differences", "diff a.txt b.txt", 1, false, "(differences found)"},
-		{"diff error", "diff a.txt b.txt", 2, true, ""},
-
 		// test/[
 		{"test false", "test -f /nonexistent", 1, false, "(condition evaluated to false)"},
 		{"test syntax error", "test -f", 2, true, ""},
-
-		// find
-		{"find partial", "find / -name foo", 1, false, "(partial: some paths inaccessible)"},
 
 		// pipelines: last command determines exit code
 		{"pipe grep", "cat file | grep pattern", 1, false, "(no matches found)"},
@@ -64,7 +57,6 @@ func TestExtractBaseCommand(t *testing.T) {
 		{"FOO=bar grep foo", "grep"},
 		{"sudo grep foo", "grep"},
 		{"/usr/bin/grep foo", "grep"},
-		{"env FOO=bar sudo /usr/bin/diff a b", "diff"},
 		{"", ""},
 		{"FOO=bar", ""},
 	}

@@ -13,7 +13,7 @@ func TestRegisterCoreTools(t *testing.T) {
 
 	// Verify expected tools are registered.
 	expectedTools := []string{
-		"read", "write", "edit", "grep", "find",
+		"read", "write", "edit", "grep",
 		"exec", "process", "web",
 		"message",
 		"cron", "gateway",

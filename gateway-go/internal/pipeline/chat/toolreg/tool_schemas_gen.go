@@ -169,66 +169,6 @@ func grepToolSchema() map[string]any {
 	}
 }
 
-func findToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"path": map[string]any{
-				"type":        "string",
-				"description": "Directory to search in",
-			},
-			"pattern": map[string]any{
-				"type":        "string",
-				"description": "Glob pattern to match files (supports ** for recursive matching, e.g. \"**/*.go\")",
-			},
-			"showHidden": map[string]any{
-				"type":        "boolean",
-				"description": "Include hidden directories (starting with .) in search",
-				"default":     false,
-			},
-		},
-		"required": []string{"pattern"},
-	}
-}
-
-func diffToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"context_lines": map[string]any{
-				"type":        "number",
-				"description": "Number of context lines around changes (default: 3)",
-				"default":     3,
-				"minimum":     0,
-				"maximum":     20,
-			},
-			"mode": map[string]any{
-				"type":        "string",
-				"description": "Diff mode: 'staged' (git diff --cached), 'unstaged' (git diff), 'all' (staged+unstaged vs HEAD), 'commit' (show a commit), 'branch' (compare branches), 'files' (compare two files)",
-				"default":     "unstaged",
-				"enum":        []string{"staged", "unstaged", "all", "commit", "branch", "files"},
-			},
-			"path": map[string]any{
-				"type":        "string",
-				"description": "Limit diff to a specific file or directory path",
-			},
-			"ref": map[string]any{
-				"type":        "string",
-				"description": "Git ref for 'commit' mode (e.g. HEAD~1, abc1234), or base ref for 'branch' mode",
-			},
-			"ref2": map[string]any{
-				"type":        "string",
-				"description": "Second ref for 'branch' mode (compared against ref). For 'files' mode: second file path",
-			},
-			"stat_only": map[string]any{
-				"type":        "boolean",
-				"description": "Show only file-level summary (--stat), not full diff content",
-				"default":     false,
-			},
-		},
-	}
-}
-
 func gitToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",

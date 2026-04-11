@@ -35,7 +35,7 @@ func TestRegisterFSTools_registersTools(t *testing.T) {
 	}
 	// Verify well-known FS tools are present.
 	names := reg.toolNames()
-	for _, want := range []string{"read", "write", "edit", "grep", "find"} {
+	for _, want := range []string{"read", "write", "edit", "grep"} {
 		if !containsName(names, want) {
 			t.Errorf("missing expected tool %q", want)
 		}
