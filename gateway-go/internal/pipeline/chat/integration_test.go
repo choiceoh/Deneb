@@ -131,8 +131,8 @@ func newIntegrationHandler(
 	cfg.DefaultSystem = "You are a test assistant."
 	cfg.MaxTokens = 1024
 
+	cfg.BroadcastRaw = rc.broadcastRaw
 	h := NewHandler(sm, bc.broadcast, nil, cfg)
-	h.SetBroadcastRaw(rc.broadcastRaw)
 	return h, sm, bc, rc
 }
 
@@ -263,8 +263,8 @@ func TestIntegration_ToolCallFlow(t *testing.T) {
 	cfg.DefaultSystem = "You are a test assistant."
 	cfg.MaxTokens = 1024
 
+	cfg.BroadcastRaw = rc.broadcastRaw
 	h := NewHandler(sm, bc.broadcast, nil, cfg)
-	h.SetBroadcastRaw(rc.broadcastRaw)
 	defer h.Close()
 
 	req := makeReq("1", "chat.send", map[string]any{

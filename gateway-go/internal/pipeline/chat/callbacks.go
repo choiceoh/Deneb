@@ -18,14 +18,13 @@ import (
 type ChannelCallbacks struct {
 	mu sync.RWMutex
 
-	replyFunc        ReplyFunc       // delivers response to originating channel
-	mediaSendFn      MediaSendFunc   // delivers files to originating channel
-	typingFn         TypingFunc      // sends typing indicator during agent run
-	reactionFn       ReactionFunc    // sets emoji reaction on triggering message
-	removeReactionFn ReactionFunc    // removes emoji reaction
-	draftEditFn      DraftEditFunc   // sends/edits streaming draft messages
-	draftDeleteFn    DraftDeleteFunc // deletes streaming draft messages
-	broadcastRaw     streaming.BroadcastRawFunc
+	replyFunc     ReplyFunc       // delivers response to originating channel
+	mediaSendFn   MediaSendFunc   // delivers files to originating channel
+	typingFn      TypingFunc      // sends typing indicator during agent run
+	reactionFn    ReactionFunc    // sets emoji reaction on triggering message
+	draftEditFn   DraftEditFunc   // sends/edits streaming draft messages
+	draftDeleteFn DraftDeleteFunc // deletes streaming draft messages
+	broadcastRaw  streaming.BroadcastRawFunc
 
 	// emitAgentFn sends agent lifecycle events to gateway event subscriptions.
 	emitAgentFn func(kind, sessionKey, runID string, payload map[string]any)
@@ -93,12 +92,6 @@ type CallbackSnapshot struct {
 
 // --- Setters (called during server initialization) ---
 
-func (cb *ChannelCallbacks) SetBroadcastRaw(fn streaming.BroadcastRawFunc) {
-	cb.mu.Lock()
-	cb.broadcastRaw = fn
-	cb.mu.Unlock()
-}
-
 func (cb *ChannelCallbacks) SetReplyFunc(fn ReplyFunc) {
 	cb.mu.Lock()
 	cb.replyFunc = fn
@@ -120,12 +113,6 @@ func (cb *ChannelCallbacks) SetTypingFunc(fn TypingFunc) {
 func (cb *ChannelCallbacks) SetReactionFunc(fn ReactionFunc) {
 	cb.mu.Lock()
 	cb.reactionFn = fn
-	cb.mu.Unlock()
-}
-
-func (cb *ChannelCallbacks) SetRemoveReactionFunc(fn ReactionFunc) {
-	cb.mu.Lock()
-	cb.removeReactionFn = fn
 	cb.mu.Unlock()
 }
 
@@ -178,13 +165,6 @@ func (cb *ChannelCallbacks) ChannelUploadLimit(channelID string) int64 {
 	n := cb.uploadLimits[channelID]
 	cb.mu.RUnlock()
 	return n
-}
-
-func (cb *ChannelCallbacks) RemoveReactionFunc() ReactionFunc {
-	cb.mu.RLock()
-	fn := cb.removeReactionFn
-	cb.mu.RUnlock()
-	return fn
 }
 
 func (cb *ChannelCallbacks) ReplyFn() ReplyFunc {

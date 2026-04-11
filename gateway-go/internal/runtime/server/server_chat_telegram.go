@@ -193,27 +193,6 @@ func (s *Server) wireTelegramChatHandler() {
 		return client.SetMessageReaction(ctx, chatID, msgID, emoji)
 	})
 
-	// Set remove-reaction function: clears the status emoji when transitioning
-	// between agent phases (Telegram replaces reactions, so passing "" removes).
-	s.chatHandler.SetRemoveReactionFunc(func(ctx context.Context, delivery *chat.DeliveryContext, emoji string) error {
-		if delivery == nil || delivery.Channel != "telegram" || delivery.MessageID == "" {
-			return nil
-		}
-		client := s.telegramPlug.Client()
-		if client == nil {
-			return nil
-		}
-		chatID, err := telegram.ParseChatID(delivery.To)
-		if err != nil {
-			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
-		}
-		msgID, err := strconv.ParseInt(delivery.MessageID, 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid message ID %q: %w", delivery.MessageID, err)
-		}
-		return client.SetMessageReaction(ctx, chatID, msgID, "")
-	})
-
 	// Set draft delete function: deletes a streaming draft message from Telegram.
 	// Called when the draft loop stops to clean up the partial message before
 	// the final reply is delivered, preventing duplicate messages.
