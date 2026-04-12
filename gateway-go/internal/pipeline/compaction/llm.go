@@ -41,33 +41,9 @@ func LLMCompact(
 	old := messages[:splitIdx]
 	recent := messages[splitIdx:]
 
-	// maxOutput: proportional to context budget, no arbitrary cap.
-	// Larger context deserves a proportionally larger summary budget.
-	maxOutput := int(float64(cfg.ContextBudget) * DefaultLLMTargetPct)
-
-	var summary string
-	if EstimateMessagesTokens(old) > chunkMaxTokens {
-		var ok bool
-		summary, ok = summarizeInChunks(ctx, old, summarizer, maxOutput, logger)
-		if !ok {
-			return messages, false
-		}
-	} else {
-		text := serializeMessages(old)
-		if EstimateTokens(text) < 500 {
-			return messages, false // too little to bother
-		}
-		var err error
-		summary, err = summarizer.Summarize(ctx, compactionSystemPrompt, text, maxOutput)
-		if err != nil {
-			if logger != nil {
-				logger.Warn("polaris: LLM compaction failed", "error", err)
-			}
-			return messages, false
-		}
-		if summary == "" {
-			return messages, false
-		}
+	summary := summarizeOldMessages(ctx, cfg, old, summarizer, logger)
+	if summary == "" {
+		return messages, false
 	}
 
 	// Rebuild: summary message + recent messages.
@@ -83,6 +59,42 @@ func LLMCompact(
 			"recentMessages", len(recent))
 	}
 	return compacted, true
+}
+
+// summarizeOldMessages produces a single LLM summary of the given messages.
+// maxOutput is cfg.ContextBudget × DefaultLLMTargetPct (no arbitrary cap).
+// When input exceeds chunkMaxTokens, chunks are summarized in parallel and
+// joined. Returns empty string when summarization was skipped (too little
+// content) or the summarizer failed.
+func summarizeOldMessages(
+	ctx context.Context,
+	cfg Config,
+	old []llm.Message,
+	summarizer Summarizer,
+	logger *slog.Logger,
+) string {
+	maxOutput := int(float64(cfg.ContextBudget) * DefaultLLMTargetPct)
+
+	if EstimateMessagesTokens(old) > chunkMaxTokens {
+		summary, ok := summarizeInChunks(ctx, old, summarizer, maxOutput, logger)
+		if !ok {
+			return ""
+		}
+		return summary
+	}
+
+	text := serializeMessages(old)
+	if EstimateTokens(text) < 500 {
+		return "" // too little to bother
+	}
+	summary, err := summarizer.Summarize(ctx, compactionSystemPrompt, text, maxOutput)
+	if err != nil {
+		if logger != nil {
+			logger.Warn("polaris: LLM compaction failed", "error", err)
+		}
+		return ""
+	}
+	return summary
 }
 
 // summarizeInChunks splits old messages into ≤chunkMaxTokens chunks,

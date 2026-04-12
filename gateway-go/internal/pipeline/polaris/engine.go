@@ -59,11 +59,13 @@ func (e *Engine) CompactAndPersist(
 	summarizer compact.Summarizer,
 	contextBudget int,
 ) ([]llm.Message, compact.Result) {
-	// Bootstrap: recover older messages dropped by freshTailCount.
-	messages = e.bootstrapIfNeeded(ctx, sessionKey, messages, summarizer)
-
 	polarisCfg := compact.NewConfig(contextBudget)
 	polarisCfg.Embedder = e.embedder
+
+	// Bootstrap: recover older messages dropped by freshTailCount.
+	// Shares polarisCfg so the bootstrap summarization path uses the same
+	// output budget / chunking / parallelism as regular LLM compaction.
+	messages = e.bootstrapIfNeeded(ctx, sessionKey, messages, summarizer, polarisCfg)
 
 	// Summary reuse: if context already has injected summaries (from
 	// AssembleContext or bootstrap), Polaris would re-summarize them. Detect and skip.
@@ -163,6 +165,7 @@ func (e *Engine) bootstrapIfNeeded(
 	sessionKey string,
 	messages []llm.Message,
 	summarizer compact.Summarizer,
+	cfg compact.Config,
 ) []llm.Message {
 	coverage, _ := e.store.LatestSummaryCoverage(sessionKey)
 	if coverage >= 0 {
@@ -210,7 +213,7 @@ func (e *Engine) bootstrapIfNeeded(
 		return messages
 	}
 
-	summary := compact.BootstrapCompact(ctx, olderLLM, summarizer, e.logger)
+	summary := compact.BootstrapCompact(ctx, cfg, olderLLM, summarizer, e.logger)
 	if summary == "" {
 		return messages
 	}
