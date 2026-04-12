@@ -7,18 +7,21 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
-const (
-	// BootstrapMaxOutput caps the LLM output tokens for bootstrap summaries.
-	// Higher than regular compaction (4096) because bootstrap summarizes a
-	// potentially very long conversation history (hundreds of messages).
-	BootstrapMaxOutput = 8192
-)
-
 // BootstrapCompact creates a summary of older messages for initial DAG bootstrap.
-// Used when no summaries exist yet and assembly truncated the context via freshTailCount.
-// Returns the summary text, or empty string if compaction was unnecessary or failed.
+// Used when no summaries exist yet and assembly truncated the context via
+// freshTailCount.
+//
+// The mechanism is identical to regular LLM compaction: same
+// cfg.ContextBudget × DefaultLLMTargetPct output budget, same chunkMaxTokens
+// threshold, and the same parallel chunked summarization path. Only the
+// trigger is bootstrap-specific (recovering messages the assembly dropped);
+// the summarization itself is shared with LLMCompact.
+//
+// Returns the summary text, or empty string if compaction was unnecessary
+// (no messages, no summarizer, too little content) or failed.
 func BootstrapCompact(
 	ctx context.Context,
+	cfg Config,
 	messages []llm.Message,
 	summarizer Summarizer,
 	logger *slog.Logger,
@@ -26,18 +29,5 @@ func BootstrapCompact(
 	if len(messages) == 0 || summarizer == nil {
 		return ""
 	}
-
-	text := serializeMessages(messages)
-	if EstimateTokens(text) < 500 {
-		return "" // too little to bother
-	}
-
-	summary, err := summarizer.Summarize(ctx, compactionSystemPrompt, text, BootstrapMaxOutput)
-	if err != nil {
-		if logger != nil {
-			logger.Warn("polaris: bootstrap compaction failed", "error", err)
-		}
-		return ""
-	}
-	return summary
+	return summarizeOldMessages(ctx, cfg, messages, summarizer, logger)
 }
