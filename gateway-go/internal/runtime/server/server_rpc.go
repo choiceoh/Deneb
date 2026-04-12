@@ -55,23 +55,6 @@ func (s *Server) registerBuiltinMethods() {
 			return s.activity.LastActivityAt()
 		},
 		Broadcast: s.broadcaster.Broadcast,
-		Models: func() any {
-			if s.providers == nil {
-				return []any{}
-			}
-			return s.providers.List()
-		},
-		RuntimeConfig: func() map[string]any {
-			if s.runtimeCfg == nil {
-				return nil
-			}
-			return map[string]any{
-				"bindHost":      s.runtimeCfg.BindHost,
-				"port":          s.runtimeCfg.Port,
-				"authMode":      s.runtimeCfg.AuthMode,
-				"tailscaleMode": s.runtimeCfg.TailscaleMode,
-			}
-		},
 		DaemonStatus: func() (any, bool) {
 			if s.daemon == nil {
 				return nil, false

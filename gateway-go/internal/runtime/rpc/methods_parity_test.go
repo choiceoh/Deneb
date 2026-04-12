@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/maintenance"
@@ -22,7 +21,6 @@ import (
 // Every method here must be registered in the Go dispatcher.
 var tsBaseMethods = []string{
 	"health",
-	"doctor.memory.status",
 	"logs.tail",
 	"telegram.status",
 	"telegram.logout",
@@ -35,11 +33,6 @@ var tsBaseMethods = []string{
 	"config.patch",
 	"config.schema",
 	"config.schema.lookup",
-	"exec.approvals.get",
-	"exec.approvals.set",
-	"exec.approval.request",
-	"exec.approval.waitDecision",
-	"exec.approval.resolve",
 	"models.list",
 	"tools.catalog",
 	"skills.status",
@@ -54,7 +47,6 @@ var tsBaseMethods = []string{
 	"sessions.messages.unsubscribe",
 	"sessions.tools.subscribe",
 	"sessions.tools.unsubscribe",
-	"sessions.preview",
 	"sessions.create",
 	"sessions.send",
 	"sessions.steer",
@@ -101,7 +93,6 @@ func fullDispatcher() *Dispatcher {
 
 	// Phase 3: Native workflow methods.
 	broadcastFn := func(event string, payload any) (int, []error) { return 0, nil }
-	RegisterApprovalMethods(d, ApprovalDeps{Store: approval.NewStore(), Broadcaster: broadcastFn})
 	RegisterCronAdvancedMethods(d, CronAdvancedDeps{Service: cron.NewService(cron.ServiceConfig{StorePath: "/tmp/deneb-cron-test-adv"}, nil, testLogger()), Broadcaster: broadcastFn})
 	RegisterCronServiceMethods(d, CronServiceDeps{Service: cron.NewService(cron.ServiceConfig{StorePath: "/tmp/deneb-cron-test"}, nil, testLogger())})
 	RegisterConfigAdvancedMethods(d, ConfigAdvancedDeps{Broadcaster: broadcastFn})
@@ -114,7 +105,6 @@ func fullDispatcher() *Dispatcher {
 	// Phase 4: Native system methods.
 	RegisterUsageMethods(d, UsageDeps{Tracker: usage.New()})
 	RegisterLogsMethods(d, LogsDeps{LogDir: "/tmp"})
-	RegisterDoctorMethods(d, DoctorDeps{})
 	RegisterMaintenanceMethods(d, MaintenanceDeps{Runner: maintenance.NewRunner("/tmp")})
 	RegisterUpdateMethods(d, UpdateDeps{})
 	// Phase 4: Native session execution / agent methods.
@@ -192,9 +182,9 @@ func TestTSBaseMethodParity(t *testing.T) {
 func TestMethodCount(t *testing.T) {
 	d := fullDispatcher()
 	methods := d.Methods()
-	// We expect at least 91 methods (TS BASE_METHODS minus removed agents CRUD/identity, plus Go-only methods).
-	if len(methods) < 91 {
-		t.Errorf("got %d, want at least 91 registered methods", len(methods))
+	// We expect at least 80 methods (after removing approval, doctor, monitoring.activity, inject, preview, resolve).
+	if len(methods) < 80 {
+		t.Errorf("got %d, want at least 80 registered methods", len(methods))
 	}
 	t.Logf("total registered methods: %d", len(methods))
 }

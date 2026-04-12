@@ -32,7 +32,6 @@ func (s *Server) registerSessionRPCMethods() {
 	sessionDeps := handlersession.Deps{
 		Sessions:    s.sessions,
 		GatewaySubs: s.gatewaySubs,
-		Transcripts: s.transcript,
 	}
 	s.dispatcher.RegisterDomain(handlersession.Methods(sessionDeps))
 

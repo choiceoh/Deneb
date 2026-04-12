@@ -16,8 +16,7 @@ import (
 // BroadcastFunc is the canonical broadcast type defined in rpcutil.
 type BroadcastFunc = rpcutil.BroadcastFunc
 
-// Deps holds the dependencies for standard chat RPC methods (send, history,
-// abort, inject).
+// Deps holds the dependencies for standard chat RPC methods (send, history, abort).
 type Deps struct {
 	Chat *chatpkg.Handler
 }
@@ -43,7 +42,6 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 		"chat.send":    handleSend(deps),
 		"chat.history": handleHistory(deps),
 		"chat.abort":   handleAbort(deps),
-		"chat.inject":  handleInject(deps),
 	}
 }
 
@@ -72,13 +70,6 @@ func handleHistory(deps Deps) rpcutil.HandlerFunc {
 func handleAbort(deps Deps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		return deps.Chat.Abort(ctx, req)
-	}
-}
-
-// handleInject delegates to the chat handler's Inject method.
-func handleInject(deps Deps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return deps.Chat.Inject(ctx, req)
 	}
 }
 

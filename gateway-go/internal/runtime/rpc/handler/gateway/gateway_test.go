@@ -24,13 +24,10 @@ func TestRuntimeMethods_registersAllHandlers(t *testing.T) {
 	expected := []string{
 		"health",
 		"status",
-		"gateway.identity.get",
 		"last-heartbeat",
 		"set-heartbeats",
 		"system-presence",
 		"system-event",
-		"models.list",
-		"config.get",
 		"daemon.status",
 	}
 	for _, name := range expected {
@@ -74,25 +71,6 @@ func TestStatus_withDeps(t *testing.T) {
 	}
 	if result["connections"].(float64) != 7 {
 		t.Errorf("expected 7 connections: %v", result)
-	}
-}
-
-// ─── gateway.identity.get ────────────────────────────────────────────────────
-
-func TestIdentity_fields(t *testing.T) {
-	deps := Deps{
-		Version:   "3.1.0",
-		StartedAt: time.Now().Add(-2 * time.Second),
-	}
-	m := RuntimeMethods(deps)
-	resp := callMethod(m, "gateway.identity.get", nil)
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-	if result["version"] != "3.1.0" {
-		t.Errorf("version mismatch: %v", result)
-	}
-	if result["runtime"] != "go" {
-		t.Errorf("expected runtime=go: %v", result)
 	}
 }
 
@@ -151,24 +129,6 @@ func TestSystemEvent_withBroadcast(t *testing.T) {
 		t.Errorf("got %q, want my.custom.event", capturedEvent)
 	}
 	_ = capturedPayload // verified event name is sufficient
-}
-
-// ─── models.list ─────────────────────────────────────────────────────────────
-// ─── config.get ──────────────────────────────────────────────────────────────
-
-func TestConfigGet_withConfig(t *testing.T) {
-	deps := Deps{
-		RuntimeConfig: func() map[string]any {
-			return map[string]any{"debug": true, "port": 8080}
-		},
-	}
-	m := RuntimeMethods(deps)
-	resp := callMethod(m, "config.get", nil)
-	mustOK(t, resp)
-	result := extractResult(t, resp)
-	if result["debug"] != true {
-		t.Errorf("expected debug=true: %v", result)
-	}
 }
 
 // ─── daemon.status ───────────────────────────────────────────────────────────
