@@ -187,14 +187,12 @@ func (h *Handler) SessionsAbort(_ context.Context, req *protocol.RequestFrame) *
 	return resp
 }
 
-// btwTimeout is the hard deadline for a side-question run.
-const btwTimeout = 30 * time.Second
-
-// btwSystemPrompt is a minimal system prompt for side questions.
-const btwSystemPrompt = "You are a helpful side-question assistant. Answer concisely in Korean unless the question is in another language."
-
-// btwTranscriptLimit is the number of recent turns cloned from the parent session.
-const btwTranscriptLimit = 20
+const (
+	btwTimeout         = 30 * time.Second
+	btwSystemPrompt    = "You are a helpful side-question assistant. Answer concisely in Korean unless the question is in another language."
+	btwTranscriptLimit = 20
+	btwResponseTag     = "\n\n— BTW"
+)
 
 // HandleBtw processes a side question without affecting the main session
 // context. It runs synchronously on an ephemeral session that carries a
@@ -240,10 +238,9 @@ func (h *Handler) HandleBtw(ctx context.Context, sessionKey, question string) (s
 		return "", fmt.Errorf("btw failed: %w", err)
 	}
 
-	// Tag the response so the user can distinguish side answers from main chat.
 	text := strings.TrimSpace(result.Text)
 	if text != "" {
-		text += "\n\n— BTW"
+		text += btwResponseTag
 	}
 	return text, nil
 }

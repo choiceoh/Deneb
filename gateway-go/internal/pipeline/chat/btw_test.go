@@ -24,7 +24,7 @@ func TestHandleBtw_SyncResponse(t *testing.T) {
 	defer h.Close()
 
 	text := testutil.Must(h.HandleBtw(context.Background(), "main-session", "what is 2+2?"))
-	want := "btw answer\n\n— BTW"
+	want := "btw answer" + btwResponseTag
 	if text != want {
 		t.Fatalf("Text = %q, want %q", text, want)
 	}
@@ -88,7 +88,7 @@ func TestHandleBtw_ClonesParentTranscript(t *testing.T) {
 	defer h.Close()
 
 	text := testutil.Must(h.HandleBtw(context.Background(), "parent-session", "what is my name?"))
-	want := "answer with context\n\n— BTW"
+	want := "answer with context" + btwResponseTag
 	if text != want {
 		t.Fatalf("Text = %q, want %q", text, want)
 	}
