@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
+	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
@@ -33,6 +34,7 @@ type Handler struct {
 	authManager     *provider.AuthManager
 	jobTracker      *agent.JobTracker
 	providerConfigs map[string]ProviderConfig
+	embeddingClient compact.Embedder                  // optional; BGE-M3 for MMR compaction fallback
 	wikiStore       *wiki.Store                       // optional; wiki knowledge base
 	dreamTurnFn     func(ctx context.Context)         // optional; increments dream turn via autonomous
 	agentLog        *agentlog.Writer                  // optional; agent detail logging
@@ -71,6 +73,7 @@ type HandlerConfig struct {
 	AuthManager          *provider.AuthManager
 	JobTracker           *agent.JobTracker
 	ProviderConfigs      map[string]ProviderConfig // provider ID → config
+	EmbeddingClient      compact.Embedder          // optional; BGE-M3 for MMR compaction fallback
 	WikiStore            *wiki.Store               // optional; wiki knowledge base
 	DreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
 	AgentLog             *agentlog.Writer          // optional; agent detail logging
@@ -149,6 +152,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		authManager:          cfg.AuthManager,
 		jobTracker:           cfg.JobTracker,
 		providerConfigs:      cfg.ProviderConfigs,
+		embeddingClient:      cfg.EmbeddingClient,
 		wikiStore:            cfg.WikiStore,
 		dreamTurnFn:          cfg.DreamTurnFn,
 		agentLog:             cfg.AgentLog,

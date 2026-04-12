@@ -54,6 +54,26 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		currentModel = s.modelRegistry.FullModelID(modelrole.RoleMain)
 	}
 
+	// Local AI subsystem health.
+	localAIStatus := "off"
+	if s.localAIHub != nil {
+		if s.localAIHub.IsHealthy() {
+			localAIStatus = "ok"
+		} else {
+			localAIStatus = "unhealthy"
+		}
+	}
+
+	// Embedding server health.
+	embeddingStatus := "off"
+	if s.embeddingClient != nil {
+		if s.embeddingClient.IsHealthy() {
+			embeddingStatus = "ok"
+		} else {
+			embeddingStatus = "unhealthy"
+		}
+	}
+
 	uptime := time.Since(s.startedAt)
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"status":    "ok",
@@ -62,7 +82,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"uptime":    formatUptimeHTTP(uptime),
 		"uptime_ms": uptime.Milliseconds(),
 		"subsystems": map[string]any{
-			"core": "go",
+			"core":      "go",
+			"local_ai":  localAIStatus,
+			"embedding": embeddingStatus,
 		},
 		"sessions": s.sessions.Count(),
 		"channels": channelHealthSummary,

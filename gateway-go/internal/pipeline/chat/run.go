@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
@@ -88,6 +89,7 @@ type runDeps struct {
 	providerConfigs      map[string]ProviderConfig    // optional; config-based provider credentials
 	logger               *slog.Logger                 // required (defaults to slog.Default)
 
+	embeddingClient      compact.Embedder          // optional; BGE-M3 for MMR compaction fallback
 	wikiStore            *wiki.Store               // optional; wiki knowledge base
 	dreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
 	agentLog             *agentlog.Writer          // optional; enables agent detail logging

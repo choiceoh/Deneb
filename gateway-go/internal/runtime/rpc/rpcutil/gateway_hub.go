@@ -16,6 +16,7 @@ import (
 	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
@@ -87,6 +88,9 @@ type GatewayHub struct {
 	// local AI hub — centralized local LLM request management.
 	localAIHub *localai.Hub
 
+	// embedding client — BGE-M3 for MMR-based compaction fallback.
+	embeddingClient *embedding.Client
+
 	// Scheduling.
 	cronService    *cron.Service
 	cronPersistLog *cron.PersistentRunLog
@@ -148,11 +152,15 @@ func (h *GatewayHub) WikiStore() *wiki.Store                         { return h.
 func (h *GatewayHub) Logger() *slog.Logger                           { return h.logger }
 func (h *GatewayHub) Version() string                                { return h.version }
 func (h *GatewayHub) LocalAIHub() *localai.Hub                       { return h.localAIHub }
+func (h *GatewayHub) EmbeddingClient() *embedding.Client             { return h.embeddingClient }
 
 // --- Late-binding setters ---
 
 // SetLocalAIHub sets the centralized local AI hub (created early, before method registration).
 func (h *GatewayHub) SetLocalAIHub(sh *localai.Hub) { h.localAIHub = sh }
+
+// SetEmbeddingClient sets the BGE-M3 embedding client for MMR compaction fallback.
+func (h *GatewayHub) SetEmbeddingClient(c *embedding.Client) { h.embeddingClient = c }
 
 // SetWikiStore sets the wiki knowledge base (optional, created during session phase).
 func (h *GatewayHub) SetWikiStore(s *wiki.Store) { h.wikiStore = s }

@@ -128,6 +128,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		channelUploadLimitFn: h.ChannelUploadLimit,
 		providerConfigs:      h.providerConfigs,
 		logger:               h.logger,
+		embeddingClient:      h.embeddingClient,
 		wikiStore:            h.wikiStore,
 		dreamTurnFn:          h.dreamTurnFn,
 		agentLog:             h.agentLog,

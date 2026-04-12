@@ -1,0 +1,29 @@
+[Unit]
+Description=BGE-M3 Embedding Server (Deneb compaction fallback)
+After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=choiceoh
+ExecStart=/home/choiceoh/sglang-env/bin/python3 /home/choiceoh/deneb/scripts/deploy/bge-m3-server.py --port 8001 --host 127.0.0.1
+WorkingDirectory=/home/choiceoh/deneb
+Restart=on-failure
+RestartSec=5
+
+# OOM protection: 2GB limit (model ~446MB + overhead).
+MemoryMax=2G
+MemoryHigh=1500M
+
+# Graceful shutdown.
+TimeoutStopSec=10
+KillSignal=SIGTERM
+
+# Logging.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bge-m3
+
+[Install]
+WantedBy=multi-user.target

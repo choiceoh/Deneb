@@ -209,6 +209,9 @@ func (s *Server) doShutdown() error {
 	if s.localAIHub != nil {
 		s.localAIHub.Shutdown()
 	}
+	if s.embeddingClient != nil {
+		s.embeddingClient.Shutdown()
+	}
 
 	// 7. Close task store.
 	if s.taskStore != nil {

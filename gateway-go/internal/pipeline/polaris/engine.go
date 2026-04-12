@@ -24,10 +24,11 @@ const (
 // Engine orchestrates Polaris compaction with DAG persistence and condensation.
 // Long-lived: stored on Bridge, shared across runs for the same session.
 type Engine struct {
-	store   *Store
-	logger  *slog.Logger
-	cfg     Config
-	circuit *CircuitBreaker
+	store    *Store
+	logger   *slog.Logger
+	cfg      Config
+	circuit  *CircuitBreaker
+	embedder compact.Embedder // optional; BGE-M3 for MMR compaction fallback
 }
 
 // NewEngine creates a Polaris engine backed by the given store.
@@ -39,6 +40,9 @@ func NewEngine(store *Store, logger *slog.Logger, cfg Config) *Engine {
 		circuit: NewCircuitBreaker(3),
 	}
 }
+
+// SetEmbedder sets the optional embedding client for MMR compaction fallback.
+func (e *Engine) SetEmbedder(emb compact.Embedder) { e.embedder = emb }
 
 // CompactAndPersist runs Polaris compaction and persists any LLM summary
 // into the DAG as a leaf node. Skips re-summarization when the context
@@ -59,6 +63,7 @@ func (e *Engine) CompactAndPersist(
 	messages = e.bootstrapIfNeeded(ctx, sessionKey, messages, summarizer)
 
 	polarisCfg := compact.NewConfig(contextBudget)
+	polarisCfg.Embedder = e.embedder
 
 	// Summary reuse: if context already has injected summaries (from
 	// AssembleContext or bootstrap), Polaris would re-summarize them. Detect and skip.
