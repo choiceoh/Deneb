@@ -187,43 +187,62 @@ func (h *Handler) SessionsAbort(_ context.Context, req *protocol.RequestFrame) *
 	return resp
 }
 
-// HandleBtw processes a side question (/btw) without affecting the main
-// session context. It dispatches a lightweight chat.send-style request
-// with the side question, using the fast model default.
-func (h *Handler) HandleBtw(_ context.Context, sessionKey, question string) (string, error) {
-	// Build a side-question request and dispatch through Send.
-	// The answer is returned directly without persisting to the main transcript.
-	req, err := protocol.NewRequestFrame("btw-internal", "chat.send", map[string]any{
-		"sessionKey": sessionKey,
-		"message":    question,
-		"btw":        true,
+const (
+	btwTimeout         = 30 * time.Second
+	btwSystemPrompt    = "You are a helpful side-question assistant. Answer concisely in Korean unless the question is in another language."
+	btwTranscriptLimit = 20
+	btwResponseTag     = "\n\n— BTW"
+)
+
+// HandleBtw processes a side question without affecting the main session
+// context. It runs synchronously on an ephemeral session that carries a
+// snapshot of the parent transcript, using the same model as the parent.
+func (h *Handler) HandleBtw(ctx context.Context, sessionKey, question string) (string, error) {
+	if h.sessions == nil {
+		return "", fmt.Errorf("chat handler not initialized")
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, btwTimeout)
+	defer cancel()
+
+	// Ephemeral session — isolates writes from the caller's session.
+	btwKey := "btw:" + shortid.New("btw")
+	defer func() {
+		h.sessions.Delete(btwKey)
+		if h.transcript != nil {
+			_ = h.transcript.Delete(btwKey)
+		}
+	}()
+
+	// Clone recent transcript so btw has conversation context.
+	if h.transcript != nil && sessionKey != "" {
+		_ = h.transcript.CloneRecent(sessionKey, btwKey, btwTranscriptLimit)
+	}
+
+	// Inherit the parent session's model (empty = use default).
+	var model string
+	if parent := h.sessions.Get(sessionKey); parent != nil {
+		model = parent.Model
+	}
+
+	maxTokens := 2048
+	result, err := h.SendSync(ctx, btwKey, question, model, &SyncOptions{
+		SystemPrompt: btwSystemPrompt,
+		ToolPreset:   "conversation",
+		MaxTokens:    &maxTokens,
 	})
 	if err != nil {
-		return "", fmt.Errorf("btw request build failed: %w", err)
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("btw timeout: no response within %s", btwTimeout)
+		}
+		return "", fmt.Errorf("btw failed: %w", err)
 	}
 
-	resp := h.Send(context.Background(), req)
-	if resp == nil {
-		return "", fmt.Errorf("btw returned nil response")
+	text := strings.TrimSpace(result.Text)
+	if text != "" {
+		text += btwResponseTag
 	}
-	if !resp.OK {
-		msg := "unknown error"
-		if resp.Error != nil {
-			msg = resp.Error.Message
-		}
-		return "", fmt.Errorf("btw failed: %s", msg)
-	}
-
-	// Extract text from response payload.
-	var result struct {
-		Text string `json:"text"`
-	}
-	if len(resp.Payload) > 0 {
-		if err := json.Unmarshal(resp.Payload, &result); err != nil {
-			return "", fmt.Errorf("btw response unmarshal failed: %w", err)
-		}
-	}
-	return result.Text, nil
+	return text, nil
 }
 
 // History handles "chat.history" — returns capped, sanitized transcript.

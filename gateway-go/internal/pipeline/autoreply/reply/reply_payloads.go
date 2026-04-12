@@ -7,17 +7,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
 
-// FormatBtwTextForExternalDelivery wraps BTW (side question) text for delivery.
-func FormatBtwTextForExternalDelivery(question, answer string) string {
-	if answer == "" {
-		return ""
-	}
-	if question != "" {
-		return "💬 " + question + "\n\n" + answer
-	}
-	return answer
-}
-
 // IsRenderablePayload returns true if the payload has content worth delivering.
 func IsRenderablePayload(p types.ReplyPayload) bool {
 	if strings.TrimSpace(p.Text) != "" {
