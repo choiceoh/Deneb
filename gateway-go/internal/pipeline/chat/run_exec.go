@@ -446,6 +446,9 @@ func assembleMessages(
 		var polarisResult compact.Result
 		if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
 			engine := bridge.Engine()
+			if deps.embeddingClient != nil {
+				engine.SetEmbedder(deps.embeddingClient)
+			}
 			messages, polarisResult = engine.CompactAndPersist(polarisCtx, params.SessionKey, messages, summarizer, contextBudget)
 
 			// Proactive condensation: when a new leaf summary was persisted,
@@ -455,7 +458,9 @@ func assembleMessages(
 				go engine.Condense(context.Background(), params.SessionKey, condSummarizer)
 			}
 		} else {
-			messages, polarisResult = compact.Compact(polarisCtx, compact.NewConfig(contextBudget), messages, summarizer, logger)
+			cfg := compact.NewConfig(contextBudget)
+			cfg.Embedder = deps.embeddingClient
+			messages, polarisResult = compact.Compact(polarisCtx, cfg, messages, summarizer, logger)
 		}
 		polarisCancel()
 
@@ -467,13 +472,17 @@ func assembleMessages(
 				"durationMs", time.Since(compactStart).Milliseconds())
 		}
 
-		if polarisResult.MicroPruned > 0 || polarisResult.LLMCompacted || polarisResult.EmergencyEvicted > 0 {
+		if polarisResult.MicroPruned > 0 || polarisResult.LLMCompacted || polarisResult.EmbeddingCompacted || polarisResult.RecencyCompacted || polarisResult.EmergencyEvicted > 0 {
 			var tier string
 			switch {
 			case polarisResult.EmergencyEvicted > 0:
 				tier = "emergency"
 			case polarisResult.LLMCompacted:
-				tier = "llm"
+				tier = "tier1-llm"
+			case polarisResult.EmbeddingCompacted:
+				tier = "tier2-embedding-mmr"
+			case polarisResult.RecencyCompacted:
+				tier = "tier3-recency"
 			default:
 				tier = "micro"
 			}

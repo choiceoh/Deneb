@@ -233,6 +233,9 @@ func New(addr string, opts ...Option) (*Server, error) {
 	if s.localAIHub != nil {
 		hub.SetLocalAIHub(s.localAIHub)
 	}
+	if s.embeddingClient != nil {
+		hub.SetEmbeddingClient(s.embeddingClient)
+	}
 	hub.AdvancePhase(rpcutil.PhaseSession) // mark chatHandler as available
 	s.initGenesisServices()                // create genesis deps (before late methods for Rule 1)
 	s.registerLateMethods(hub)             // Chat-dependent domains

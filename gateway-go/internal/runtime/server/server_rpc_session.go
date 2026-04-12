@@ -9,6 +9,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
@@ -102,6 +103,11 @@ func (s *Server) registerSessionRPCMethods() {
 	// Create centralized local AI hub now that the model registry is available.
 	s.localAIHub = localai.New(localai.Config{}, reg, s.logger)
 	chatCfg.LocalAIHub = s.localAIHub
+
+	// Create BGE-M3 embedding client for MMR compaction fallback.
+	// Starts background health probing; gracefully degrades if server is unavailable.
+	s.embeddingClient = embedding.New("", s.logger)
+	chatCfg.EmbeddingClient = s.embeddingClient
 
 	// Phase 2: Tool deps + registration (core, plugin).
 	s.initToolsAndDeps(&chatCfg, reg, transcriptStore, agentLogWriter)

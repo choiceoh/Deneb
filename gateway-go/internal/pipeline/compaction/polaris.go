@@ -27,6 +27,10 @@ const (
 type Config struct {
 	ContextBudget     int  // effective token budget (MemoryTokenBudget - SystemPromptBudget)
 	SkipLLMCompaction bool // skip LLM summarization tier (e.g. when summaries already injected)
+
+	// Embedder is an optional embedding client for MMR-based extractive
+	// compaction. Used as a fallback when LLM summarization fails.
+	Embedder Embedder
 }
 
 // NewConfig creates a compaction config for the given context budget.
@@ -37,11 +41,13 @@ func NewConfig(contextBudget int) Config {
 
 // Result reports what the pipeline did.
 type Result struct {
-	MicroPruned      int  // tool_result blocks that had code stripped
-	LLMCompacted     bool // whether LLM summarization was applied
-	EmergencyEvicted int  // messages evicted due to large input
-	TokensBefore     int
-	TokensAfter      int
+	MicroPruned        int  // tool_result blocks that had code stripped
+	LLMCompacted       bool // whether LLM summarization was applied
+	EmbeddingCompacted bool // whether embedding+MMR selection was applied (tier 2 fallback)
+	RecencyCompacted   bool // whether recency window was applied (tier 3 fallback)
+	EmergencyEvicted   int  // messages evicted due to large input
+	TokensBefore       int
+	TokensAfter        int
 }
 
 // Summarizer provides LLM-based summarization (typically local AI).
@@ -94,15 +100,37 @@ func Compact(
 		summarizeMessages = messages
 	}
 
-	// Tier 3: LLM — summarize old messages when over threshold.
+	// Tier 3: Compaction fallback chain (LLM → Embedding+MMR → Recency).
 	// Skipped when emergency already summarized (avoids double summarization / fact loss).
 	if !emergencyFired && !cfg.SkipLLMCompaction {
 		threshold := int(float64(cfg.ContextBudget) * DefaultLLMThresholdPct)
-		if EstimateMessagesTokens(summarizeMessages) > threshold && summarizer != nil {
-			compacted, ok := LLMCompact(ctx, cfg, summarizeMessages, summarizer, logger)
-			if ok {
-				messages = compacted
-				r.LLMCompacted = true
+		if EstimateMessagesTokens(summarizeMessages) > threshold {
+			compacted := false
+
+			// Tier 3a: LLM summarization (best quality).
+			if !compacted && summarizer != nil {
+				if result, ok := LLMCompact(ctx, cfg, summarizeMessages, summarizer, logger); ok {
+					messages = result
+					r.LLMCompacted = true
+					compacted = true
+				}
+			}
+
+			// Tier 3b: Embedding + MMR extractive selection (fallback).
+			if !compacted && cfg.Embedder != nil {
+				if result, ok := EmbeddingCompact(ctx, cfg, messages, cfg.Embedder, logger); ok {
+					messages = result
+					r.EmbeddingCompacted = true
+					compacted = true
+				}
+			}
+
+			// Tier 3c: Recency window (last resort).
+			if !compacted {
+				if result, ok := RecencyCompact(cfg, messages, logger); ok {
+					messages = result
+					r.RecencyCompacted = true
+				}
 			}
 		}
 	}
@@ -111,7 +139,7 @@ func Compact(
 	// so the agent retains access to files it was actively working on.
 	// Insert before the final user message so the LLM sees restored files
 	// as prior context, not after the user's current input.
-	if (r.LLMCompacted || r.EmergencyEvicted > 0) && len(fileReads) > 0 {
+	if (r.LLMCompacted || r.EmbeddingCompacted || r.RecencyCompacted || r.EmergencyEvicted > 0) && len(fileReads) > 0 {
 		if restored := BuildRestorationMessages(fileReads, restorationBudgetTokens); len(restored) > 0 {
 			// Find the last user message (current turn input) and insert before it.
 			insertIdx := len(messages)
