@@ -102,15 +102,6 @@ func TestChatAbort_NotFound(t *testing.T) {
 	}
 }
 
-func TestChatInject_MissingParams(t *testing.T) {
-	h := newTestHandler()
-	req := makeReq("1", "chat.inject", map[string]any{"sessionKey": "test"})
-	resp := h.Inject(context.Background(), req)
-	if resp.OK {
-		t.Error("expected error for missing content")
-	}
-}
-
 // --- Sessions.* method tests ---
 
 func TestSessionsSend_AsyncStart(t *testing.T) {

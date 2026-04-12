@@ -1,17 +1,14 @@
 // Package session provides RPC handlers for session management methods.
 //
-// Methods: sessions.patch, sessions.reset, sessions.preview, sessions.resolve,
-// sessions.repair, sessions.overflow_check, sessions.send,
+// Methods: sessions.patch, sessions.reset, sessions.overflow_check, sessions.send,
 // sessions.steer, sessions.abort, agent, agent.wait.
 package session
 
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
@@ -24,7 +21,6 @@ import (
 type Deps struct {
 	Sessions    *session.Manager
 	GatewaySubs *events.GatewayEventSubscriptions
-	Transcripts *transcript.Writer
 }
 
 // ExecDeps holds dependencies for native session execution and agent RPC methods.
@@ -38,8 +34,6 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
 		"sessions.patch":          sessionsPatch(deps),
 		"sessions.reset":          sessionsReset(deps),
-		"sessions.preview":        sessionsPreview(deps),
-		"sessions.resolve":        sessionsResolve(deps),
 		"sessions.overflow_check": sessionsOverflowCheck(deps),
 	}
 }
@@ -124,122 +118,6 @@ func sessionsReset(deps Deps) rpcutil.HandlerFunc {
 			"key":   key,
 			"entry": s,
 		}, nil
-	})
-}
-
-// ---------------------------------------------------------------------------
-// sessions.preview — loads transcript preview from JSONL files
-// ---------------------------------------------------------------------------
-
-func sessionsPreview(deps Deps) rpcutil.HandlerFunc {
-	const defaultMaxItems = 10
-
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var p struct {
-			Keys     []string `json:"keys"`
-			MaxItems int      `json:"maxItems,omitempty"`
-		}
-		if len(req.Params) > 0 {
-			_ = rpcutil.UnmarshalParams(req.Params, &p)
-		}
-
-		ts := time.Now().UnixMilli()
-		keys := normalizeKeys(p.Keys, 64)
-		maxItems := p.MaxItems
-		if maxItems <= 0 || maxItems > 50 {
-			maxItems = defaultMaxItems
-		}
-
-		if len(keys) == 0 {
-			resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
-				"ts":       ts,
-				"previews": []any{},
-			})
-			return resp
-		}
-
-		previews := make([]map[string]any, len(keys))
-		for i, k := range keys {
-			status := "missing"
-			var items any = []any{}
-
-			if deps.Transcripts != nil {
-				preview, err := deps.Transcripts.ReadPreview(k, maxItems)
-				if err == nil && preview != nil {
-					status = "ok"
-					items = preview
-				}
-			}
-
-			previews[i] = map[string]any{
-				"key":    k,
-				"status": status,
-				"items":  items,
-			}
-		}
-		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
-			"ts":       ts,
-			"previews": previews,
-		})
-		return resp
-	}
-}
-
-// ---------------------------------------------------------------------------
-// sessions.resolve
-// ---------------------------------------------------------------------------
-
-func sessionsResolve(deps Deps) rpcutil.HandlerFunc {
-	type params struct {
-		Key            string `json:"key"`
-		SessionID      string `json:"sessionId"`
-		Label          string `json:"label"`
-		AgentID        string `json:"agentId"`
-		SpawnedBy      string `json:"spawnedBy"`
-		IncludeGlobal  *bool  `json:"includeGlobal"`
-		IncludeUnknown *bool  `json:"includeUnknown"`
-	}
-	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		idCount := boolCount(p.Key != "", p.SessionID != "", p.Label != "")
-		if idCount == 0 {
-			return nil, rpcerr.MissingParam("key, sessionId, or label")
-		}
-		if idCount > 1 {
-			return nil, rpcerr.New(protocol.ErrInvalidRequest, "provide exactly one of key, sessionId, or label")
-		}
-
-		// TS behavior: key lookup is direct (no kind filter); sessionId and
-		// label lookups apply includeGlobal/includeUnknown filters (default false).
-		var found *session.Session
-		switch {
-		case p.Key != "":
-			found = deps.Sessions.Get(strings.TrimSpace(p.Key))
-		case p.SessionID != "":
-			if s := deps.Sessions.FindBySessionID(p.SessionID); s != nil {
-				if filtered := filterSessions([]*session.Session{s}, p.AgentID, p.SpawnedBy, p.IncludeGlobal, p.IncludeUnknown); len(filtered) == 1 {
-					found = filtered[0]
-				}
-			}
-		case p.Label != "":
-			matches := filterSessions(
-				deps.Sessions.FindByLabel(p.Label),
-				p.AgentID, p.SpawnedBy, p.IncludeGlobal, p.IncludeUnknown,
-			)
-			if len(matches) == 1 {
-				found = matches[0]
-			} else if len(matches) > 1 {
-				return nil, rpcerr.Conflict("ambiguous label: multiple sessions match")
-			}
-		}
-
-		if found != nil {
-			return map[string]any{
-				"ok":  true,
-				"key": found.Key,
-			}, nil
-		}
-
-		return nil, rpcerr.NotFound("session")
 	})
 }
 

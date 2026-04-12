@@ -118,17 +118,10 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// --- Background task control plane ---
 		handlertask.Methods(handlertask.Deps{Registry: hub.Tasks()}),
 
-		// --- Approvals ---
-		handlerprocess.ApprovalMethods(handlerprocess.ApprovalDeps{
-			Store:       hub.Approvals(),
-			Broadcaster: hub.Broadcast,
-		}),
-
 		// --- System ---
 		handlersystem.IdentityMethods(hub.Version()),
 		handlersystem.MonitoringMethods(handlersystem.MonitoringDeps{
 			ChannelHealth: s.channelHealth,
-			Activity:      s.activity,
 			Dispatcher:    s.dispatcher,
 		}),
 		handlersystem.ConfigAdvancedMethods(handlersystem.ConfigAdvancedDeps{
@@ -136,7 +129,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		}),
 		handlersystem.UsageMethods(handlersystem.UsageDeps{Tracker: s.usageTracker}),
 		handlersystem.LogsMethods(handlersystem.LogsDeps{LogDir: filepath.Join(denebDir, "logs")}),
-		handlersystem.DoctorMethods(handlersystem.DoctorDeps{}),
 		handlersystem.MaintenanceMethods(handlersystem.MaintenanceDeps{Runner: s.maintRunner}),
 		handlersystem.UpdateMethods(handlersystem.UpdateDeps{DenebDir: denebDir}),
 	}

@@ -25,7 +25,6 @@ type ChatBtwDeps = handlerchat.BtwDeps
 type SessionExecDeps = handlersession.ExecDeps
 type ChannelLifecycleDeps = handlertelegram.LifecycleDeps
 type EventsDeps = handlerevents.EventsDeps
-type ApprovalDeps = handlerprocess.ApprovalDeps
 type ACPDeps = handlerprocess.ACPDeps
 type CronAdvancedDeps = handlerprocess.CronAdvancedDeps
 type CronServiceDeps = handlerprocess.CronServiceDeps
@@ -34,7 +33,6 @@ type ModelsDeps = handlerprovider.ModelsDeps
 type ToolDeps = handlerskill.ToolDeps
 type SkillDeps = handlerskill.Deps
 type MonitoringDeps = handlersystem.MonitoringDeps
-type DoctorDeps = handlersystem.DoctorDeps
 type MaintenanceDeps = handlersystem.MaintenanceDeps
 type UpdateDeps = handlersystem.UpdateDeps
 type UsageDeps = handlersystem.UsageDeps
@@ -80,9 +78,6 @@ func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 func RegisterEventBroadcastMethods(d *Dispatcher, deps EventsDeps) {
 	d.RegisterDomain(handlerevents.BroadcastMethods(deps))
 }
-func RegisterApprovalMethods(d *Dispatcher, deps ApprovalDeps) {
-	d.RegisterDomain(handlerprocess.ApprovalMethods(deps))
-}
 func RegisterACPMethods(d *Dispatcher, deps *ACPDeps) {
 	d.RegisterDomain(handlerprocess.ACPMethods(deps))
 }
@@ -106,9 +101,6 @@ func RegisterSkillMethods(d *Dispatcher, deps SkillDeps) {
 }
 func RegisterMonitoringMethods(d *Dispatcher, deps MonitoringDeps) {
 	d.RegisterDomain(handlersystem.MonitoringMethods(deps))
-}
-func RegisterDoctorMethods(d *Dispatcher, deps DoctorDeps) {
-	d.RegisterDomain(handlersystem.DoctorMethods(deps))
 }
 func RegisterMaintenanceMethods(d *Dispatcher, deps MaintenanceDeps) {
 	d.RegisterDomain(handlersystem.MaintenanceMethods(deps))

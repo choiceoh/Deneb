@@ -21,8 +21,6 @@ type Deps struct {
 	ConnectionCount func() int64
 	LastHeartbeatMs func() int64
 	Broadcast       func(event string, payload any) (int, []error)
-	Models          func() any
-	RuntimeConfig   func() map[string]any
 	DaemonStatus    func() (any, bool)
 	AgentActiveRuns func() int
 	AgentCacheSize  func() int
@@ -30,23 +28,15 @@ type Deps struct {
 }
 
 // RuntimeMethods returns the health/status/runtime handler map.
-//
-// Note: Several methods here are intentionally overwritten by dedicated handler
-// packages registered later in registerEarlyMethods (presence, system, provider).
-// Only health, status, and daemon.status are unique to this handler; the rest
-// serve as safe fallbacks that fire before the dedicated handlers register.
 func RuntimeMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
-		"health":               health(deps),
-		"status":               status(deps),
-		"gateway.identity.get": identity(deps),
-		"last-heartbeat":       lastHeartbeat(deps),
-		"set-heartbeats":       setHeartbeats(),
-		"system-presence":      systemPresence(deps),
-		"system-event":         systemEvent(deps),
-		"models.list":          modelsList(deps),
-		"config.get":           configGet(deps),
-		"daemon.status":        daemonStatus(deps),
+		"health":          health(deps),
+		"status":          status(deps),
+		"last-heartbeat":  lastHeartbeat(deps),
+		"set-heartbeats":  setHeartbeats(),
+		"system-presence": systemPresence(deps),
+		"system-event":    systemEvent(deps),
+		"daemon.status":   daemonStatus(deps),
 	}
 }
 
@@ -93,16 +83,6 @@ func status(deps Deps) rpcutil.HandlerFunc {
 			"sessions":    sessions,
 			"connections": connections,
 			"agents":      agentStats,
-		})
-	}
-}
-
-func identity(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		return rpcutil.RespondOK(req.ID, map[string]any{
-			"version": deps.Version,
-			"runtime": "go",
-			"uptime":  time.Since(deps.StartedAt).Milliseconds(),
 		})
 	}
 }
@@ -165,31 +145,6 @@ func systemEvent(deps Deps) rpcutil.HandlerFunc {
 		}
 		sent, _ := deps.Broadcast(p.Event, p.Payload)
 		return rpcutil.RespondOK(req.ID, map[string]int{"sent": sent})
-	}
-}
-
-func modelsList(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		models := []any{}
-		if deps.Models != nil {
-			if provided := deps.Models(); provided != nil {
-				return rpcutil.RespondOK(req.ID, map[string]any{"models": provided})
-			}
-		}
-		return rpcutil.RespondOK(req.ID, map[string]any{"models": models})
-	}
-}
-
-func configGet(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if deps.RuntimeConfig == nil {
-			return rpcutil.RespondOK(req.ID, map[string]string{"status": "not_loaded"})
-		}
-		cfg := deps.RuntimeConfig()
-		if cfg == nil {
-			return rpcutil.RespondOK(req.ID, map[string]string{"status": "not_loaded"})
-		}
-		return rpcutil.RespondOK(req.ID, cfg)
 	}
 }
 

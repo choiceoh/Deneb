@@ -36,7 +36,6 @@ var requiredMethods = []string{
 	"chat.abort",
 	"chat.btw",
 	"chat.history",
-	"chat.inject",
 	"chat.send",
 
 	// Session.
@@ -44,9 +43,7 @@ var requiredMethods = []string{
 	"sessions.create",
 	"sessions.lifecycle",
 	"sessions.patch",
-	"sessions.preview",
 	"sessions.reset",
-	"sessions.resolve",
 	"sessions.send",
 	"sessions.steer",
 
@@ -78,11 +75,6 @@ var requiredMethods = []string{
 	"cron.status",
 	"cron.unregister",
 	"cron.update",
-	"exec.approval.request",
-	"exec.approval.resolve",
-	"exec.approval.waitDecision",
-	"exec.approvals.get",
-	"exec.approvals.set",
 	"process.exec",
 	"process.get",
 	"process.kill",
@@ -115,7 +107,6 @@ var requiredMethods = []string{
 	"maintenance.run",
 	"maintenance.status",
 	"maintenance.summary",
-	"monitoring.activity",
 	"monitoring.channel_health",
 	"monitoring.rpc_zero_calls",
 	"update.run",
