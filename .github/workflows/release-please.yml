@@ -60,7 +60,7 @@ jobs:
       - name: Generate SHA256 checksum
         run: sha256sum deneb-linux-arm64 > deneb-linux-arm64.sha256
       - name: Upload release assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.release-please.outputs.tag }}
           files: |
