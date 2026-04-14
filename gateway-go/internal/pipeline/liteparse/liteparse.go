@@ -20,9 +20,9 @@ import (
 	"time"
 )
 
-// maxOutputBytes caps the text output from a single parse to avoid flooding
+// MaxOutputBytes caps the text output from a single parse to avoid flooding
 // the LLM context window.
-const maxOutputBytes = 200 * 1024 // 200 KB
+const MaxOutputBytes = 200 * 1024 // 200 KB
 
 // maxDocumentSize is the largest file we'll attempt to parse (50 MB).
 const maxDocumentSize = 50 * 1024 * 1024
@@ -117,8 +117,8 @@ func Parse(ctx context.Context, data []byte, fileName string) (string, error) {
 		// that partially succeed before hitting an error.
 		partial := strings.TrimSpace(stdout.String())
 		if partial != "" {
-			if len(partial) > maxOutputBytes {
-				partial = partial[:maxOutputBytes] + "\n\n[... 텍스트가 너무 길어 잘렸습니다]"
+			if len(partial) > MaxOutputBytes {
+				partial = partial[:MaxOutputBytes] + "\n\n[... 텍스트가 너무 길어 잘렸습니다]"
 			}
 			return partial, nil
 		}
@@ -132,8 +132,8 @@ func Parse(ctx context.Context, data []byte, fileName string) (string, error) {
 	text := stdout.String()
 
 	// Truncate if too large.
-	if len(text) > maxOutputBytes {
-		text = text[:maxOutputBytes] + "\n\n[... 텍스트가 너무 길어 잘렸습니다]"
+	if len(text) > MaxOutputBytes {
+		text = text[:MaxOutputBytes] + "\n\n[... 텍스트가 너무 길어 잘렸습니다]"
 	}
 
 	return strings.TrimSpace(text), nil

@@ -161,7 +161,13 @@ func BuildRestorationMessages(records []FileReadRecord, budgetTokens int) []llm.
 		return nil
 	}
 
-	return []llm.Message{llm.NewTextMessage("user", sb.String())}
+	// Return as a user+assistant pair so that inserting these before the
+	// current user turn does not create two consecutive user messages, which
+	// violates the strict role-alternation requirement of most LLM APIs.
+	return []llm.Message{
+		llm.NewTextMessage("user", sb.String()),
+		llm.NewTextMessage("assistant", "파일 내용 복원 완료."),
+	}
 }
 
 // StripImageBlocks removes image and document content blocks from messages,

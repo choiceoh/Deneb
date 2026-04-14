@@ -115,6 +115,7 @@ func EmbeddingCompact(
 			len(selected), len(old))))
 	compacted = append(compacted, selected...)
 	compacted = append(compacted, recent...)
+	compacted = mergeConsecutiveSameRole(compacted)
 
 	if logger != nil {
 		logger.Info("polaris: embedding compaction applied",
@@ -247,4 +248,27 @@ func cosineSim(a, b []float32) float64 {
 func serializeSingleMessage(msg llm.Message) string {
 	// Reuse serializeMessages for a single-element slice.
 	return serializeMessages([]llm.Message{msg})
+}
+
+// mergeConsecutiveSameRole merges adjacent messages with the same role by
+// concatenating their text content. This repairs role-alternation violations
+// that can arise when extractive compaction (MMR) skips messages, leaving
+// two consecutive user or assistant turns in the result.
+func mergeConsecutiveSameRole(messages []llm.Message) []llm.Message {
+	if len(messages) <= 1 {
+		return messages
+	}
+	result := make([]llm.Message, 0, len(messages))
+	result = append(result, messages[0])
+	for _, msg := range messages[1:] {
+		last := result[len(result)-1]
+		if msg.Role != last.Role {
+			result = append(result, msg)
+			continue
+		}
+		// Same role: concatenate text content and replace the last entry.
+		merged := llm.ExtractSystemText(last.Content) + "\n\n" + llm.ExtractSystemText(msg.Content)
+		result[len(result)-1] = llm.NewTextMessage(msg.Role, merged)
+	}
+	return result
 }

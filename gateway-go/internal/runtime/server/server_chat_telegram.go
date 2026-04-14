@@ -40,22 +40,38 @@ func (s *Server) wireTelegramChatHandler() {
 		}
 
 		// Dedup: skip if the same text was sent to this chat recently.
+		// When a streaming draft exists and the dedup fires (e.g. the message
+		// tool already sent the same text), the draft must still be deleted so
+		// it does not linger in a half-finished state.
 		dedupKey := delivery.To + ":" + truncateForDedup(text, 200)
 		recentMu.Lock()
+		isDup := false
 		if sentAt, dup := recentSends[dedupKey]; dup && time.Since(sentAt) < recentTTL {
-			recentMu.Unlock()
+			isDup = true
+		}
+		if !isDup {
+			// Evict stale entries (cheap, single-user so map stays tiny).
+			for k, t := range recentSends {
+				if time.Since(t) >= recentTTL {
+					delete(recentSends, k)
+				}
+			}
+			recentSends[dedupKey] = time.Now()
+		}
+		recentMu.Unlock()
+		if isDup {
+			// Clean up an orphaned streaming draft so it does not linger.
+			if delivery.DraftMsgID != "" {
+				draftID := delivery.DraftMsgID
+				delivery.DraftMsgID = ""
+				if editMsgID, parseErr := strconv.ParseInt(draftID, 10, 64); parseErr == nil {
+					_ = client.DeleteMessage(ctx, chatID, editMsgID)
+				}
+			}
 			s.logger.Info("suppressed duplicate reply to telegram",
 				"chatId", delivery.To, "textLen", len(text))
 			return nil
 		}
-		// Evict stale entries (cheap, single-user so map stays tiny).
-		for k, t := range recentSends {
-			if time.Since(t) >= recentTTL {
-				delete(recentSends, k)
-			}
-		}
-		recentSends[dedupKey] = time.Now()
-		recentMu.Unlock()
 
 		// Parse optional button directive from agent reply.
 		cleanText, keyboard := parseReplyButtons(text)
