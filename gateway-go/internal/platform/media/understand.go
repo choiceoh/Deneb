@@ -10,6 +10,7 @@
 //
 // Document handling: PDFs, Office files (DOCX/XLSX/PPTX), and OpenDocument
 // formats are parsed via the LiteParse CLI (lit) to extract text content.
+// Plain text files (.txt, .md) are read directly without LiteParse.
 package media
 
 import (
@@ -18,6 +19,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coremedia"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/liteparse"
@@ -95,7 +97,7 @@ func ExtractAttachments(ctx context.Context, client *telegram.Client, msg *teleg
 		}
 	}
 
-	// 4. Document — image or parseable document (PDF, Office, etc.).
+	// 4. Document — image, plain text (.txt/.md), or parseable document (PDF, Office, etc.).
 	if msg.Document != nil {
 		d := msg.Document
 		switch {
@@ -110,6 +112,17 @@ func ExtractAttachments(ctx context.Context, client *telegram.Client, msg *teleg
 				att := downloadImage(ctx, client, d.FileID, mime, logger)
 				if att != nil {
 					att.Name = d.FileName
+					attachments = append(attachments, *att)
+				}
+			}
+
+		case isPlainTextMIME(d.MimeType):
+			// .txt and .md files are already plaintext — no LiteParse needed.
+			if d.FileSize > 0 && d.FileSize > liteparse.MaxOutputBytes {
+				logger.Warn("skipping oversized text file", "fileId", d.FileID, "size", d.FileSize)
+			} else {
+				att := readPlainText(ctx, client, d, logger)
+				if att != nil {
 					attachments = append(attachments, *att)
 				}
 			}
@@ -149,11 +162,54 @@ func HasMedia(msg *telegram.Message) bool {
 		if strings.HasPrefix(mime, "image/") {
 			return true
 		}
+		if isPlainTextMIME(mime) {
+			return true
+		}
 		if liteparse.Available() && liteparse.SupportedMIME(mime) {
 			return true
 		}
 	}
 	return false
+}
+
+// isPlainTextMIME returns true for MIME types that can be read directly as
+// UTF-8 text without any external parser (covers .txt and .md files).
+func isPlainTextMIME(mime string) bool {
+	mime = strings.ToLower(strings.TrimSpace(mime))
+	return mime == "text/plain" ||
+		mime == "text/markdown" ||
+		mime == "text/x-markdown"
+}
+
+// readPlainText downloads a .txt/.md file and returns its UTF-8 content
+// directly as a document_text attachment. No external tools required.
+func readPlainText(ctx context.Context, client *telegram.Client, d *telegram.Document, logger *slog.Logger) *Attachment {
+	data, _, err := client.DownloadFile(ctx, d.FileID)
+	if err != nil {
+		logger.Warn("failed to download text file", "fileId", d.FileID, "error", err)
+		return nil
+	}
+
+	text := string(data)
+	if strings.TrimSpace(text) == "" {
+		logger.Info("text file is empty", "fileName", d.FileName)
+		return nil
+	}
+	if len(text) > liteparse.MaxOutputBytes {
+		end := liteparse.MaxOutputBytes
+		for end > 0 && !utf8.RuneStart(text[end]) {
+			end--
+		}
+		text = text[:end] + "\n\n[... 텍스트가 너무 길어 잘렸습니다]"
+	}
+
+	return &Attachment{
+		Type:     "document_text",
+		MimeType: d.MimeType,
+		Data:     text,
+		Name:     d.FileName,
+		Size:     int64(len(data)),
+	}
 }
 
 // MessageText returns the effective text body of a Telegram message.

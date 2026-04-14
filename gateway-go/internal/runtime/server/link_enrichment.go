@@ -107,6 +107,14 @@ func EnrichMessageWithLinks(ctx context.Context, text string, fetchFn FetchFunc,
 
 // fetchAndConvert fetches a single URL and converts the content.
 func fetchAndConvert(ctx context.Context, url string, fetchFn FetchFunc, logger *slog.Logger) LinkContent {
+	// YouTube URLs are handled by the dedicated transcript extractor (inbound
+	// path) or the web_fetch tool (agent path). Plain HTTP fetches return
+	// JavaScript-heavy pages with no useful transcript content, so we skip
+	// them here to avoid a 10-second timeout and redundant/low-quality content.
+	if media.IsYouTubeURL(url) {
+		return LinkContent{URL: url, Err: "skipped (YouTube handled separately)"}
+	}
+
 	fetchCtx, fetchCancel := context.WithTimeout(ctx, linkFetchTimeout)
 	defer fetchCancel()
 
