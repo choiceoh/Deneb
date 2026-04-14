@@ -11,6 +11,8 @@
 // Document handling: PDFs, Office files (DOCX/XLSX/PPTX), and OpenDocument
 // formats are parsed via the LiteParse CLI (lit) to extract text content.
 // Plain text files (.txt, .md) are read directly without LiteParse.
+// ZIP archives are expanded in-memory and each inner file is classified
+// individually — see zip.go for the extraction pipeline and safety limits.
 package media
 
 import (
@@ -30,12 +32,20 @@ import (
 // avoid an import cycle. The caller (inbound processor) converts these to
 // chat.ChatAttachment before dispatching to chat.send.
 type Attachment struct {
-	Type     string // "image", "video", "document_text"
+	Type     string // one of AttachmentType* below
 	MimeType string
 	Data     string // base64-encoded for images; plain text for document_text
 	Name     string
 	Size     int64
 }
+
+// Attachment Type values. Kept as untyped string constants so they serialize
+// cleanly and match the on-wire chat.ChatAttachment contract.
+const (
+	AttachmentTypeImage        = "image"
+	AttachmentTypeVideo        = "video"
+	AttachmentTypeDocumentText = "document_text"
+)
 
 // maxImageDownloadSize is the maximum image size we'll download for vision (20 MB).
 const maxImageDownloadSize = 20 * 1024 * 1024
@@ -127,6 +137,11 @@ func ExtractAttachments(ctx context.Context, client *telegram.Client, msg *teleg
 				}
 			}
 
+		case isZipDocument(d):
+			// ZIP archives expand into multiple attachments: a tree summary
+			// plus one attachment per useful inner file (image / text / parsed doc).
+			attachments = append(attachments, extractZipAttachments(ctx, client, d, logger)...)
+
 		case liteparse.Available() && liteparse.SupportedMIME(d.MimeType):
 			if d.FileSize > 0 && d.FileSize > maxVideoDownloadSize {
 				logger.Warn("skipping oversized document", "fileId", d.FileID, "size", d.FileSize)
@@ -163,6 +178,9 @@ func HasMedia(msg *telegram.Message) bool {
 			return true
 		}
 		if isPlainTextMIME(mime) {
+			return true
+		}
+		if isZipDocument(msg.Document) {
 			return true
 		}
 		if liteparse.Available() && liteparse.SupportedMIME(mime) {
@@ -204,7 +222,7 @@ func readPlainText(ctx context.Context, client *telegram.Client, d *telegram.Doc
 	}
 
 	return &Attachment{
-		Type:     "document_text",
+		Type:     AttachmentTypeDocumentText,
 		MimeType: d.MimeType,
 		Data:     text,
 		Name:     d.FileName,
@@ -244,7 +262,7 @@ func downloadImage(ctx context.Context, client *telegram.Client, fileID, mimeTyp
 	}
 
 	return &Attachment{
-		Type:     "image",
+		Type:     AttachmentTypeImage,
 		MimeType: mimeType,
 		Data:     base64.StdEncoding.EncodeToString(data),
 		Name:     filePath,
@@ -272,7 +290,7 @@ func extractVideoAttachments(ctx context.Context, client *telegram.Client, v *te
 	var attachments []Attachment
 	for i, frame := range frames {
 		attachments = append(attachments, Attachment{
-			Type:     "image",
+			Type:     AttachmentTypeImage,
 			MimeType: "image/jpeg",
 			Data:     base64.StdEncoding.EncodeToString(frame),
 			Name:     fmt.Sprintf("video_frame_%d.jpg", i+1),
@@ -300,7 +318,7 @@ func extractAnimationAttachments(ctx context.Context, client *telegram.Client, a
 	var attachments []Attachment
 	for i, frame := range frames {
 		attachments = append(attachments, Attachment{
-			Type:     "image",
+			Type:     AttachmentTypeImage,
 			MimeType: "image/jpeg",
 			Data:     base64.StdEncoding.EncodeToString(frame),
 			Name:     fmt.Sprintf("animation_frame_%d.jpg", i+1),
@@ -331,7 +349,7 @@ func parseDocument(ctx context.Context, client *telegram.Client, d *telegram.Doc
 	}
 
 	return &Attachment{
-		Type:     "document_text",
+		Type:     AttachmentTypeDocumentText,
 		MimeType: d.MimeType,
 		Data:     text, // plain text, not base64
 		Name:     d.FileName,
