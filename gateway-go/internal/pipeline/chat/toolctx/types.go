@@ -60,10 +60,6 @@ type ReactionFunc func(ctx context.Context, delivery *DeliveryContext, emoji str
 // On subsequent calls, it edits the message with the given ID.
 type DraftEditFunc func(ctx context.Context, delivery *DeliveryContext, msgID string, text string) (newMsgID string, err error)
 
-// DraftDeleteFunc deletes a streaming draft message from the originating channel.
-// Used to clean up the partial draft before the final reply is delivered.
-type DraftDeleteFunc func(ctx context.Context, delivery *DeliveryContext, msgID string) error
-
 // ProviderConfig holds credentials and endpoint for an LLM provider.
 type ProviderConfig struct {
 	APIKey  string `json:"apiKey"`

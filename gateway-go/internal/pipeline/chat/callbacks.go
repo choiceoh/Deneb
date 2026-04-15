@@ -18,13 +18,12 @@ import (
 type ChannelCallbacks struct {
 	mu sync.RWMutex
 
-	replyFunc     ReplyFunc       // delivers response to originating channel
-	mediaSendFn   MediaSendFunc   // delivers files to originating channel
-	typingFn      TypingFunc      // sends typing indicator during agent run
-	reactionFn    ReactionFunc    // sets emoji reaction on triggering message
-	draftEditFn   DraftEditFunc   // sends/edits streaming draft messages
-	draftDeleteFn DraftDeleteFunc // deletes streaming draft messages
-	broadcastRaw  streaming.BroadcastRawFunc
+	replyFunc    ReplyFunc     // delivers response to originating channel
+	mediaSendFn  MediaSendFunc // delivers files to originating channel
+	typingFn     TypingFunc    // sends typing indicator during agent run
+	reactionFn   ReactionFunc  // sets emoji reaction on triggering message
+	draftEditFn  DraftEditFunc // sends/edits streaming draft messages
+	broadcastRaw streaming.BroadcastRawFunc
 
 	// emitAgentFn sends agent lifecycle events to gateway event subscriptions.
 	emitAgentFn func(kind, sessionKey, runID string, payload map[string]any)
@@ -66,7 +65,6 @@ func (cb *ChannelCallbacks) Snapshot() CallbackSnapshot {
 		typingFn:         cb.typingFn,
 		reactionFn:       cb.reactionFn,
 		draftEditFn:      cb.draftEditFn,
-		draftDeleteFn:    cb.draftDeleteFn,
 		broadcastRaw:     cb.broadcastRaw,
 		emitAgentFn:      cb.emitAgentFn,
 		emitTranscriptFn: cb.emitTranscriptFn,
@@ -82,7 +80,6 @@ type CallbackSnapshot struct {
 	typingFn         TypingFunc
 	reactionFn       ReactionFunc
 	draftEditFn      DraftEditFunc
-	draftDeleteFn    DraftDeleteFunc
 	broadcastRaw     streaming.BroadcastRawFunc
 	emitAgentFn      func(kind, sessionKey, runID string, payload map[string]any)
 	emitTranscriptFn func(sessionKey string, message any, messageID string)
@@ -119,12 +116,6 @@ func (cb *ChannelCallbacks) SetReactionFunc(fn ReactionFunc) {
 func (cb *ChannelCallbacks) SetDraftEditFunc(fn DraftEditFunc) {
 	cb.mu.Lock()
 	cb.draftEditFn = fn
-	cb.mu.Unlock()
-}
-
-func (cb *ChannelCallbacks) SetDraftDeleteFunc(fn DraftDeleteFunc) {
-	cb.mu.Lock()
-	cb.draftDeleteFn = fn
 	cb.mu.Unlock()
 }
 

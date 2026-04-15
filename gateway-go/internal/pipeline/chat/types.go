@@ -22,9 +22,6 @@ type ReactionFunc = toolctx.ReactionFunc
 // DraftEditFunc sends or edits a streaming draft message on the originating channel.
 type DraftEditFunc = toolctx.DraftEditFunc
 
-// DraftDeleteFunc deletes a streaming draft message from the originating channel.
-type DraftDeleteFunc = toolctx.DraftDeleteFunc
-
 // ProviderConfig holds credentials and endpoint for an LLM provider.
 type ProviderConfig = toolctx.ProviderConfig
 
