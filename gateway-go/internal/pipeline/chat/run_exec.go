@@ -269,20 +269,17 @@ func prepareContextAndPrompt(
 				result.ContextErr = err
 			} else {
 				result.Messages = ctxResult.Messages
-				// When messages were silently truncated (no summaries covering them),
-				// inject a notice so the AI knows its context is incomplete.
+				// Log-only telemetry for truncation. Do NOT inject a synthetic
+				// notice message here: bootstrapIfNeeded (inside CompactAndPersist)
+				// recovers dropped messages by computing olderEnd from len(messages),
+				// so any synthetic prepend inflates the count and orphans the
+				// fresh-tail boundary message, causing "right-after-compaction
+				// previous turn forgotten" regressions.
 				if !ctxResult.WasCompacted && ctxResult.TotalMessages > len(ctxResult.Messages) && len(ctxResult.Messages) > 0 {
-					dropped := ctxResult.TotalMessages - len(ctxResult.Messages)
-					notice := fmt.Sprintf(
-						"[컨텍스트 알림: 이 세션의 전체 대화 %d개 메시지 중 최근 %d개만 포함되어 있습니다. "+
-							"이전 %d개 메시지는 컨텍스트 제한으로 생략되었습니다. "+
-							"이전 대화 내용을 정확히 기억하지 못할 수 있으니 유저에게 솔직히 알려주세요.]",
-						ctxResult.TotalMessages, len(ctxResult.Messages), dropped)
-					result.Messages = append([]llm.Message{llm.NewTextMessage("user", notice)}, result.Messages...)
-					logger.Warn("context truncated without summaries",
+					logger.Warn("context truncated without summaries (bootstrap will recover)",
 						"total", ctxResult.TotalMessages,
 						"loaded", len(ctxResult.Messages),
-						"dropped", dropped,
+						"dropped", ctxResult.TotalMessages-len(ctxResult.Messages),
 						"session", params.SessionKey)
 				}
 			}

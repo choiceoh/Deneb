@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -67,6 +68,95 @@ func TestCompactAndPersist_NoLLMCompaction(t *testing.T) {
 	nodes := testutil.Must(s.LoadSummaries("s1", 0))
 	if len(nodes) != 0 {
 		t.Fatalf("got %d, want 0 summary nodes", len(nodes))
+	}
+}
+
+// TestCompactAndPersist_BootstrapNoGapAtFreshTailBoundary guards against a
+// regression where a synthetic message prepended by the caller (e.g. a
+// "context truncated" notice) inflates len(messages), causing
+// bootstrapIfNeeded to compute olderEnd one short and orphan the message
+// at the fresh-tail boundary. The caller must pass only real transcript
+// messages; this test documents and enforces that contract.
+func TestCompactAndPersist_BootstrapNoGapAtFreshTailBoundary(t *testing.T) {
+	e, s := testEngine(t)
+	sess := "s1"
+	const total = 30
+
+	// Seed 30 numbered messages in the store (indices 0..29).
+	for i := range total {
+		s.AppendMessage(sess, textMsg("user", "m"+strconv.Itoa(i), int64(i*1000)))
+	}
+
+	// Simulate assembly loading only the last freshTail=24 messages
+	// (no synthetic notice prepended — that was the source of the bug).
+	const freshTail = 24
+	fresh := make([]llm.Message, 0, freshTail)
+	for i := total - freshTail; i < total; i++ {
+		fresh = append(fresh, llmMsg("user", "m"+strconv.Itoa(i)))
+	}
+
+	compacted, _ := e.CompactAndPersist(context.Background(), sess, fresh, nil, 170_000)
+
+	// After bootstrap raw-inject (< 50K tokens), every transcript message
+	// 0..29 must appear exactly once in compacted — no gap at the fresh-tail
+	// boundary (msg at index total-freshTail-1 = index 5).
+	seen := make(map[string]int, total)
+	for _, m := range compacted {
+		var text string
+		if json.Unmarshal(m.Content, &text) == nil {
+			seen[text]++
+		}
+	}
+	for i := range total {
+		key := "m" + strconv.Itoa(i)
+		if seen[key] != 1 {
+			t.Fatalf("message %s appears %d times in compacted context (expected exactly 1 — fresh-tail boundary orphan bug)", key, seen[key])
+		}
+	}
+}
+
+// TestCompactAndPersist_BootstrapWithSyntheticPrependOrphans documents the
+// pre-fix failure mode: when a caller prepends a synthetic (non-transcript)
+// message, bootstrapIfNeeded's olderEnd := maxIdx - len(messages) calculation
+// is off by one, and the message at the fresh-tail boundary is permanently
+// lost. The fix lives in the caller (run_exec.go no longer injects a context
+// notice before compaction); this test pins the contract so a future
+// re-introduction of caller-side prepending surfaces as a loud failure.
+func TestCompactAndPersist_BootstrapWithSyntheticPrependOrphans(t *testing.T) {
+	e, s := testEngine(t)
+	sess := "s1"
+	const total = 30
+
+	for i := range total {
+		s.AppendMessage(sess, textMsg("user", "m"+strconv.Itoa(i), int64(i*1000)))
+	}
+
+	// Simulate the pre-fix caller: prepend a synthetic notice in front of
+	// the fresh tail so len(messages) = 25 when only 24 real transcript
+	// messages are present.
+	const freshTail = 24
+	msgs := make([]llm.Message, 0, freshTail+1)
+	msgs = append(msgs, llmMsg("user", "[context notice]"))
+	for i := total - freshTail; i < total; i++ {
+		msgs = append(msgs, llmMsg("user", "m"+strconv.Itoa(i)))
+	}
+
+	compacted, _ := e.CompactAndPersist(context.Background(), sess, msgs, nil, 170_000)
+
+	// With the synthetic prepend, bootstrap computes olderEnd = 29 - 25 = 4
+	// instead of 5, so "m5" is neither in older nor in fresh tail — orphan.
+	seen := make(map[string]bool, total)
+	for _, m := range compacted {
+		var text string
+		if json.Unmarshal(m.Content, &text) == nil {
+			seen[text] = true
+		}
+	}
+	if seen["m5"] {
+		t.Fatal("m5 unexpectedly present — did bootstrap become tolerant of synthetic prepend? update this test")
+	}
+	if !seen["m4"] || !seen["m6"] {
+		t.Fatalf("expected m4 and m6 to be present; got m4=%v m6=%v", seen["m4"], seen["m6"])
 	}
 }
 
