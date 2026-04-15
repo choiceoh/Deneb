@@ -24,6 +24,10 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		ClientRunID  string           `json:"clientRunId,omitempty"`
 		Model        string           `json:"model,omitempty"` // role name: "main","lightweight","fallback"
 		WorkspaceDir string           `json:"workspaceDir,omitempty"`
+		// SkipMerge opts this call out of the "merge consecutive messages"
+		// window. Used by synthetic dispatches (callback queries, button
+		// actions) that shouldn't cancel an in-flight user reply.
+		SkipMerge bool `json:"skipMerge,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
 		return rpcerr.WrapInvalidRequest("invalid chat.send params", err).Response(req.ID)
@@ -53,9 +57,24 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		WorkspaceDir: p.WorkspaceDir,
 	}
 
+	// Serialize the merge decision per session so that two concurrent
+	// chat.send calls for the same session cannot both observe "active run
+	// + inside window", both cancel, and both dispatch fresh runs. The
+	// lock is scoped to the synchronous decision phase only; startAsyncRun
+	// itself spawns a goroutine and returns fast.
+	sessLock := h.mergeWindow.SessionLock(p.SessionKey)
+	sessLock.Lock()
+	defer sessLock.Unlock()
+
 	// Record this message's arrival timestamp; prevTs is the previous
 	// arrival time for this session (zero if this is the first message).
-	prevTs := h.mergeWindow.Touch(p.SessionKey)
+	// SkipMerge callers (callback queries, synthetic button dispatches)
+	// neither touch the window nor consult it — they take whichever path
+	// the run state dictates without disturbing quick-fire merging.
+	var prevTs time.Time
+	if !p.SkipMerge {
+		prevTs = h.mergeWindow.Touch(p.SessionKey)
+	}
 
 	if h.abort.HasActiveRun(p.SessionKey) {
 		// Quick-fire merge: when the user sends a follow-up within
@@ -64,10 +83,11 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		// messages are answered together. The previous user message has
 		// already been persisted to the transcript by executeAgentRun, so
 		// the new run sees both turns and produces a single combined reply.
-		if !prevTs.IsZero() && time.Since(prevTs) <= mergeWindowDuration {
+		if !p.SkipMerge && !prevTs.IsZero() && time.Since(prevTs) <= mergeWindowDuration {
+			deltaMs := time.Since(prevTs).Milliseconds()
 			h.logger.Info("merging consecutive message into new run",
 				"sessionKey", p.SessionKey,
-				"deltaMs", time.Since(prevTs).Milliseconds(),
+				"deltaMs", deltaMs,
 			)
 			h.InterruptActiveRun(p.SessionKey)
 			// Fold any older queued message into this one so nothing is lost.
@@ -83,14 +103,25 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 					runParams.Attachments = append(pending.Attachments, runParams.Attachments...)
 				}
 			}
+			// Surface the merge on the session event bus so dashboards
+			// can distinguish it from normal "message_sent" starts.
+			if h.broadcast != nil {
+				h.broadcast("sessions.changed", map[string]any{
+					"sessionKey": p.SessionKey,
+					"reason":     "merged",
+					"status":     "running",
+					"deltaMs":    deltaMs,
+				})
+			}
 			return h.startAsyncRun(req.ID, runParams, false)
 		}
 
-		// Outside the merge window: queue the message instead of interrupting.
-		// The active run completes normally (preserving its full context),
-		// then the queued message is processed automatically. This prevents
-		// the "amnesia" bug where the assistant forgets in-progress work when
-		// the user sends a message mid-execution.
+		// Outside the merge window (or explicitly opted out): queue the
+		// message instead of interrupting. The active run completes
+		// normally (preserving its full context), then the queued message
+		// is processed automatically. This prevents the "amnesia" bug
+		// where the assistant forgets in-progress work when the user
+		// sends a message mid-execution.
 		h.pending.Enqueue(p.SessionKey, runParams)
 		h.logger.Info("queued message for active run",
 			"sessionKey", p.SessionKey)

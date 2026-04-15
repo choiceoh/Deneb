@@ -21,15 +21,20 @@ import (
 const mergeWindowDuration = 3 * time.Second
 
 // MergeWindowTracker remembers the wall-clock time of the most recent
-// chat.send per session key. Thread-safe.
+// chat.send per session key and hands out per-session decision mutexes so
+// the Touch→HasActiveRun→Cancel→Dispatch path is atomic. Thread-safe.
 type MergeWindowTracker struct {
-	mu sync.Mutex
-	ts map[string]time.Time
+	mu    sync.Mutex
+	ts    map[string]time.Time
+	locks map[string]*sync.Mutex
 }
 
 // NewMergeWindowTracker creates an empty tracker.
 func NewMergeWindowTracker() *MergeWindowTracker {
-	return &MergeWindowTracker{ts: make(map[string]time.Time)}
+	return &MergeWindowTracker{
+		ts:    make(map[string]time.Time),
+		locks: make(map[string]*sync.Mutex),
+	}
 }
 
 // Touch records that a chat.send was just observed for sessionKey and
@@ -49,9 +54,25 @@ func (m *MergeWindowTracker) Clear(sessionKey string) {
 	m.mu.Unlock()
 }
 
-// Reset clears all sessions' timestamps.
+// Reset clears all sessions' timestamps and locks.
 func (m *MergeWindowTracker) Reset() {
 	m.mu.Lock()
 	m.ts = make(map[string]time.Time)
+	m.locks = make(map[string]*sync.Mutex)
 	m.mu.Unlock()
+}
+
+// SessionLock returns the per-session mutex used to serialize the Send
+// merge decision so that two concurrent chat.send calls for the same
+// session cannot both pass the "active run + within window" check and
+// double-dispatch.
+func (m *MergeWindowTracker) SessionLock(sessionKey string) *sync.Mutex {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	l, ok := m.locks[sessionKey]
+	if !ok {
+		l = &sync.Mutex{}
+		m.locks[sessionKey] = l
+	}
+	return l
 }

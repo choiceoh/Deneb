@@ -3,6 +3,8 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -67,11 +69,22 @@ func TestMergeWindowTracker_ResetClearsAll(t *testing.T) {
 // newSendRequest builds a chat.send RequestFrame for tests.
 func newSendRequest(t *testing.T, sessionKey, message, runID string) *protocol.RequestFrame {
 	t.Helper()
-	params, err := json.Marshal(map[string]any{
+	return newSendRequestWithSkip(t, sessionKey, message, runID, false)
+}
+
+// newSendRequestWithSkip builds a chat.send RequestFrame with an optional
+// skipMerge flag.
+func newSendRequestWithSkip(t *testing.T, sessionKey, message, runID string, skipMerge bool) *protocol.RequestFrame {
+	t.Helper()
+	body := map[string]any{
 		"sessionKey":  sessionKey,
 		"message":     message,
 		"clientRunId": runID,
-	})
+	}
+	if skipMerge {
+		body["skipMerge"] = true
+	}
+	params, err := json.Marshal(body)
 	if err != nil {
 		t.Fatalf("marshal params: %v", err)
 	}
@@ -223,5 +236,140 @@ func TestSend_FirstMessageStartsRunNormally(t *testing.T) {
 	// And the merge window should now have a timestamp recorded.
 	if got := h.mergeWindow.Touch(key); got.IsZero() {
 		t.Error("merge window timestamp not recorded after first Send")
+	}
+}
+
+// TestSend_SkipMergeBypassesMergeWindow verifies that a chat.send with
+// skipMerge=true never cancels an active run, even inside the window —
+// the call falls through to the normal "queue" branch instead.
+func TestSend_SkipMergeBypassesMergeWindow(t *testing.T) {
+	sm := session.NewManager()
+	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
+	defer h.Close()
+
+	key := "test-skip-merge"
+
+	// Previous touch well within the merge window.
+	h.mergeWindow.Touch(key)
+
+	cancelled := false
+	h.abort.Register("active-run", &AbortEntry{
+		SessionKey: key,
+		ClientRun:  "active-run",
+		CancelFn:   func() { cancelled = true },
+		ExpiresAt:  time.Now().Add(time.Hour),
+	})
+
+	resp := h.Send(context.Background(), newSendRequestWithSkip(t, key, "button-click", "run-2", true))
+	if resp == nil || !resp.OK {
+		t.Fatalf("Send() failed: %+v", resp)
+	}
+
+	if cancelled {
+		t.Error("skipMerge=true still cancelled the active run")
+	}
+	if got := h.pending.Len(key); got != 1 {
+		t.Errorf("pending queue length = %d, want 1 (queued, not merged)", got)
+	}
+}
+
+// TestSend_MergeBroadcastsSessionsChanged verifies that a merge fires a
+// sessions.changed broadcast with reason=merged so dashboards can
+// distinguish it from normal run starts.
+func TestSend_MergeBroadcastsSessionsChanged(t *testing.T) {
+	sm := session.NewManager()
+	var mu sync.Mutex
+	var events []map[string]any
+	bc := func(event string, payload any) (int, []error) {
+		if event != "sessions.changed" {
+			return 0, nil
+		}
+		if m, ok := payload.(map[string]any); ok {
+			mu.Lock()
+			events = append(events, m)
+			mu.Unlock()
+		}
+		return 1, nil
+	}
+	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
+	defer h.Close()
+
+	key := "test-merge-broadcast"
+	h.mergeWindow.Touch(key)
+	h.abort.Register("active-run", &AbortEntry{
+		SessionKey: key,
+		ClientRun:  "active-run",
+		CancelFn:   func() {},
+		ExpiresAt:  time.Now().Add(time.Hour),
+	})
+
+	resp := h.Send(context.Background(), newSendRequest(t, key, "follow-up", "run-2"))
+	if resp == nil || !resp.OK {
+		t.Fatalf("Send() failed: %+v", resp)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	var sawMerged bool
+	for _, e := range events {
+		if e["reason"] == "merged" && e["sessionKey"] == key {
+			sawMerged = true
+			break
+		}
+	}
+	if !sawMerged {
+		t.Errorf("expected sessions.changed reason=merged broadcast; got %+v", events)
+	}
+}
+
+// TestSend_ConcurrentMergeRaceSafe verifies that when many concurrent
+// chat.send calls arrive for the same session — all within the merge
+// window and all seeing an active run — the per-session lock serializes
+// the decision so at most one run is dispatched per registered abort
+// entry (no double-cancel / double-dispatch).
+//
+// Setup: 50 goroutines race to Send() on the same session. Only one
+// abort entry is pre-registered. After the race, exactly one of the
+// goroutines should have observed the active-run-and-merge path (and
+// cancelled it); all other goroutines should have either queued or
+// started fresh runs — but the CancelFn must fire at most once.
+func TestSend_ConcurrentMergeRaceSafe(t *testing.T) {
+	sm := session.NewManager()
+	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
+	defer h.Close()
+
+	key := "test-race-safe"
+	// Seed a previous timestamp so every concurrent call is inside the
+	// merge window.
+	h.mergeWindow.Touch(key)
+
+	var cancelCount atomic.Int32
+	h.abort.Register("active-run", &AbortEntry{
+		SessionKey: key,
+		ClientRun:  "active-run",
+		CancelFn:   func() { cancelCount.Add(1) },
+		ExpiresAt:  time.Now().Add(time.Hour),
+	})
+
+	const goroutines = 50
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := range goroutines {
+		go func(i int) {
+			defer wg.Done()
+			runID := "r-" + time.Now().Format("150405.000") + "-" + string(rune('A'+i%26))
+			h.Send(context.Background(), newSendRequest(t, key, "msg", runID))
+		}(i)
+	}
+	wg.Wait()
+
+	// The single registered abort entry must be cancelled at most once —
+	// the per-session lock + map delete under InterruptSession guarantees
+	// idempotency. Without the lock, multiple goroutines could all pass
+	// the HasActiveRun check and all see the same entry.
+	if got := cancelCount.Load(); got > 1 {
+		t.Errorf("CancelFn fired %d times; want <= 1 (per-session lock should prevent double cancel)", got)
 	}
 }
