@@ -102,3 +102,41 @@ func TestStatusReactionController_DoneIsTerminal(t *testing.T) {
 		t.Errorf("last reaction = %q, want %q (done)", last, emojis.Done)
 	}
 }
+
+// TestStatusReactionController_ClearIsTerminal verifies that SetClear
+// removes any reaction (sets ""), is terminal (subsequent updates are
+// ignored), and can be used as a graceful "this run was superseded"
+// finisher — distinct from SetDone (👍) and SetError (😱).
+func TestStatusReactionController_ClearIsTerminal(t *testing.T) {
+	var mu sync.Mutex
+	var reactions []string
+
+	c := NewStatusReactionController(StatusReactionControllerParams{
+		Enabled:      true,
+		InitialEmoji: "👀",
+		SetReaction: func(emoji string) error {
+			mu.Lock()
+			reactions = append(reactions, emoji)
+			mu.Unlock()
+			return nil
+		},
+		Timing: &StatusReactionTiming{DebounceMs: 10, StallSoftMs: 100_000, StallHardMs: 200_000},
+	})
+	defer c.Close()
+
+	c.SetClear()
+	time.Sleep(50 * time.Millisecond)
+
+	// After clear, further updates must be ignored (terminal state).
+	c.SetThinking()
+	c.SetTool("exec")
+	time.Sleep(50 * time.Millisecond)
+
+	mu.Lock()
+	last := reactions[len(reactions)-1]
+	mu.Unlock()
+
+	if last != "" {
+		t.Errorf("last reaction = %q, want \"\" (cleared)", last)
+	}
+}

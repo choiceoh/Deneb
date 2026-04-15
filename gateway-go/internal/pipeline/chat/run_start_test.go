@@ -183,13 +183,13 @@ func TestInterruptActiveRun_cancelsMatchingSession(t *testing.T) {
 	h.abort.Register("run-1", &AbortEntry{
 		SessionKey: "sess-A",
 		ClientRun:  "run-1",
-		CancelFn:   func() { canceled = true },
+		CancelFn:   func(error) { canceled = true },
 		ExpiresAt:  time.Now().Add(time.Hour),
 	})
 	h.abort.Register("run-2", &AbortEntry{
 		SessionKey: "sess-B",
 		ClientRun:  "run-2",
-		CancelFn:   func() {},
+		CancelFn:   func(error) {},
 		ExpiresAt:  time.Now().Add(time.Hour),
 	})
 
@@ -229,9 +229,9 @@ func TestCountActiveRuns(t *testing.T) {
 		t.Errorf("got %d, want 0", got)
 	}
 
-	h.abort.Register("r1", &AbortEntry{SessionKey: "sess", CancelFn: func() {}, ExpiresAt: time.Now().Add(time.Hour)})
-	h.abort.Register("r2", &AbortEntry{SessionKey: "sess", CancelFn: func() {}, ExpiresAt: time.Now().Add(time.Hour)})
-	h.abort.Register("r3", &AbortEntry{SessionKey: "other", CancelFn: func() {}, ExpiresAt: time.Now().Add(time.Hour)})
+	h.abort.Register("r1", &AbortEntry{SessionKey: "sess", CancelFn: func(error) {}, ExpiresAt: time.Now().Add(time.Hour)})
+	h.abort.Register("r2", &AbortEntry{SessionKey: "sess", CancelFn: func(error) {}, ExpiresAt: time.Now().Add(time.Hour)})
+	h.abort.Register("r3", &AbortEntry{SessionKey: "other", CancelFn: func(error) {}, ExpiresAt: time.Now().Add(time.Hour)})
 
 	if got := h.abort.CountForSession("sess"); got != 2 {
 		t.Errorf("got %d, want 2", got)
@@ -249,7 +249,7 @@ func TestCleanupAbort_removesEntry(t *testing.T) {
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
-	h.abort.Register("run-x", &AbortEntry{SessionKey: "s", CancelFn: func() {}, ExpiresAt: time.Now().Add(time.Hour)})
+	h.abort.Register("run-x", &AbortEntry{SessionKey: "s", CancelFn: func(error) {}, ExpiresAt: time.Now().Add(time.Hour)})
 
 	h.abort.Cleanup("run-x")
 

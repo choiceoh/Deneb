@@ -118,7 +118,7 @@ func TestSend_QueuesWhenActiveRunOutsideMergeWindow(t *testing.T) {
 	h.abort.Register("active-run", &AbortEntry{
 		SessionKey: key,
 		ClientRun:  "active-run",
-		CancelFn:   func() { cancelled = true },
+		CancelFn:   func(error) { cancelled = true },
 		ExpiresAt:  time.Now().Add(time.Hour),
 	})
 
@@ -155,7 +155,7 @@ func TestSend_MergesWhenActiveRunInsideMergeWindow(t *testing.T) {
 	h.abort.Register("active-run", &AbortEntry{
 		SessionKey: key,
 		ClientRun:  "active-run",
-		CancelFn:   func() { cancelled = true },
+		CancelFn:   func(error) { cancelled = true },
 		ExpiresAt:  time.Now().Add(time.Hour),
 	})
 
@@ -198,7 +198,7 @@ func TestSend_MergeFoldsPendingMessage(t *testing.T) {
 	h.abort.Register("active-run", &AbortEntry{
 		SessionKey: key,
 		ClientRun:  "active-run",
-		CancelFn:   func() {},
+		CancelFn:   func(error) {},
 		ExpiresAt:  time.Now().Add(time.Hour),
 	})
 
@@ -257,7 +257,7 @@ func TestSend_SkipMergeBypassesMergeWindow(t *testing.T) {
 	h.abort.Register("active-run", &AbortEntry{
 		SessionKey: key,
 		ClientRun:  "active-run",
-		CancelFn:   func() { cancelled = true },
+		CancelFn:   func(error) { cancelled = true },
 		ExpiresAt:  time.Now().Add(time.Hour),
 	})
 
@@ -300,7 +300,7 @@ func TestSend_MergeBroadcastsSessionsChanged(t *testing.T) {
 	h.abort.Register("active-run", &AbortEntry{
 		SessionKey: key,
 		ClientRun:  "active-run",
-		CancelFn:   func() {},
+		CancelFn:   func(error) {},
 		ExpiresAt:  time.Now().Add(time.Hour),
 	})
 
@@ -320,6 +320,76 @@ func TestSend_MergeBroadcastsSessionsChanged(t *testing.T) {
 	}
 	if !sawMerged {
 		t.Errorf("expected sessions.changed reason=merged broadcast; got %+v", events)
+	}
+}
+
+// TestSend_MergeAttachesErrMergedIntoNewRunCause verifies that the
+// merge cancel path attaches ErrMergedIntoNewRun via WithCancelCause so
+// the cancelled run can distinguish a merge from a generic kill and
+// perform the right channel-side cleanup (clear emoji, delete draft).
+func TestSend_MergeAttachesErrMergedIntoNewRunCause(t *testing.T) {
+	sm := session.NewManager()
+	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
+	defer h.Close()
+
+	key := "test-merge-cause"
+	h.mergeWindow.Touch(key)
+
+	// Build a real cancelable context whose cause we can observe.
+	runCtx, runCancel := context.WithCancelCause(context.Background())
+	defer runCancel(nil)
+
+	h.abort.Register("active-run", &AbortEntry{
+		SessionKey: key,
+		ClientRun:  "active-run",
+		CancelFn:   runCancel,
+		ExpiresAt:  time.Now().Add(time.Hour),
+	})
+
+	resp := h.Send(context.Background(), newSendRequest(t, key, "follow-up", "run-2"))
+	if resp == nil || !resp.OK {
+		t.Fatalf("Send() failed: %+v", resp)
+	}
+
+	// The cancelled context's cause should be ErrMergedIntoNewRun.
+	cause := context.Cause(runCtx)
+	if cause == nil {
+		t.Fatal("expected context.Cause to be set; got nil")
+	}
+	if cause.Error() != ErrMergedIntoNewRun.Error() {
+		t.Errorf("cause = %v, want ErrMergedIntoNewRun", cause)
+	}
+}
+
+// TestInterruptActiveRunHasNoCause verifies that the legacy
+// InterruptActiveRun path (used by /reset, /kill, sessions.abort)
+// cancels with a nil cause — only the merge path attaches a sentinel.
+func TestInterruptActiveRunHasNoCause(t *testing.T) {
+	sm := session.NewManager()
+	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
+	defer h.Close()
+
+	key := "test-no-cause"
+	runCtx, runCancel := context.WithCancelCause(context.Background())
+	defer runCancel(nil)
+
+	h.abort.Register("active-run", &AbortEntry{
+		SessionKey: key,
+		ClientRun:  "active-run",
+		CancelFn:   runCancel,
+		ExpiresAt:  time.Now().Add(time.Hour),
+	})
+
+	h.InterruptActiveRun(key)
+
+	// Cause should be nil (or the default context.Canceled), NOT
+	// ErrMergedIntoNewRun. The merge-only sentinel is reserved for the
+	// quick-fire path so cleanup logic can safely branch on it.
+	cause := context.Cause(runCtx)
+	if cause != nil && cause.Error() == ErrMergedIntoNewRun.Error() {
+		t.Errorf("InterruptActiveRun must NOT attach ErrMergedIntoNewRun; got %v", cause)
 	}
 }
 
@@ -349,7 +419,7 @@ func TestSend_ConcurrentMergeRaceSafe(t *testing.T) {
 	h.abort.Register("active-run", &AbortEntry{
 		SessionKey: key,
 		ClientRun:  "active-run",
-		CancelFn:   func() { cancelCount.Add(1) },
+		CancelFn:   func(error) { cancelCount.Add(1) },
 		ExpiresAt:  time.Now().Add(time.Hour),
 	})
 

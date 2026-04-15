@@ -18,11 +18,12 @@ import (
 type ChannelCallbacks struct {
 	mu sync.RWMutex
 
-	replyFunc    ReplyFunc     // delivers response to originating channel
-	mediaSendFn  MediaSendFunc // delivers files to originating channel
-	typingFn     TypingFunc    // sends typing indicator during agent run
-	reactionFn   ReactionFunc  // sets emoji reaction on triggering message
-	draftEditFn  DraftEditFunc // sends/edits streaming draft messages
+	replyFunc    ReplyFunc      // delivers response to originating channel
+	mediaSendFn  MediaSendFunc  // delivers files to originating channel
+	typingFn     TypingFunc     // sends typing indicator during agent run
+	reactionFn   ReactionFunc   // sets emoji reaction on triggering message
+	draftEditFn  DraftEditFunc  // sends/edits streaming draft messages
+	deleteMsgFn  MessageDeleter // deletes a channel message (cancel-time draft cleanup)
 	broadcastRaw streaming.BroadcastRawFunc
 
 	// emitAgentFn sends agent lifecycle events to gateway event subscriptions.
@@ -65,6 +66,7 @@ func (cb *ChannelCallbacks) Snapshot() CallbackSnapshot {
 		typingFn:         cb.typingFn,
 		reactionFn:       cb.reactionFn,
 		draftEditFn:      cb.draftEditFn,
+		deleteMsgFn:      cb.deleteMsgFn,
 		broadcastRaw:     cb.broadcastRaw,
 		emitAgentFn:      cb.emitAgentFn,
 		emitTranscriptFn: cb.emitTranscriptFn,
@@ -80,6 +82,7 @@ type CallbackSnapshot struct {
 	typingFn         TypingFunc
 	reactionFn       ReactionFunc
 	draftEditFn      DraftEditFunc
+	deleteMsgFn      MessageDeleter
 	broadcastRaw     streaming.BroadcastRawFunc
 	emitAgentFn      func(kind, sessionKey, runID string, payload map[string]any)
 	emitTranscriptFn func(sessionKey string, message any, messageID string)
@@ -116,6 +119,12 @@ func (cb *ChannelCallbacks) SetReactionFunc(fn ReactionFunc) {
 func (cb *ChannelCallbacks) SetDraftEditFunc(fn DraftEditFunc) {
 	cb.mu.Lock()
 	cb.draftEditFn = fn
+	cb.mu.Unlock()
+}
+
+func (cb *ChannelCallbacks) SetMessageDeleter(fn MessageDeleter) {
+	cb.mu.Lock()
+	cb.deleteMsgFn = fn
 	cb.mu.Unlock()
 }
 

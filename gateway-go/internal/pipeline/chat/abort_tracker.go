@@ -80,7 +80,7 @@ func (at *AbortTracker) InterruptSession(sessionKey string) {
 	var toDelete []string
 	for id, entry := range at.entries {
 		if entry.SessionKey == sessionKey {
-			entry.CancelFn()
+			entry.CancelFn(nil)
 			toDelete = append(toDelete, id)
 		}
 	}
@@ -96,7 +96,7 @@ func (at *AbortTracker) CancelByRunID(runID string) (sessionKey, abortedRunID st
 	at.mu.Lock()
 	defer at.mu.Unlock()
 	if entry, ok := at.entries[runID]; ok {
-		entry.CancelFn()
+		entry.CancelFn(nil)
 		sessionKey = entry.SessionKey
 		abortedRunID = runID
 		delete(at.entries, runID)
@@ -107,11 +107,20 @@ func (at *AbortTracker) CancelByRunID(runID string) (sessionKey, abortedRunID st
 // CancelBySessionKey cancels the first matching run for a session.
 // Returns the cancelled run ID and session key, or empty strings if not found.
 func (at *AbortTracker) CancelBySessionKey(sessionKey string) (abortedRunID string) {
+	return at.CancelBySessionKeyWithCause(sessionKey, nil)
+}
+
+// CancelBySessionKeyWithCause cancels all active runs for a session and
+// attaches the given cause to each cancellation. The cause is observable
+// via context.Cause(ctx) inside the run goroutine, letting it choose
+// cleanup behavior (e.g. ErrMergedIntoNewRun → clear emoji and delete
+// draft instead of showing an error reaction).
+func (at *AbortTracker) CancelBySessionKeyWithCause(sessionKey string, cause error) (abortedRunID string) {
 	at.mu.Lock()
 	defer at.mu.Unlock()
 	for id, entry := range at.entries {
 		if entry.SessionKey == sessionKey {
-			entry.CancelFn()
+			entry.CancelFn(cause)
 			abortedRunID = id
 			delete(at.entries, id)
 		}
@@ -127,7 +136,7 @@ func (at *AbortTracker) Close() {
 		at.gcClosed = true
 	}
 	for _, entry := range at.entries {
-		entry.CancelFn()
+		entry.CancelFn(nil)
 	}
 	at.entries = make(map[string]*AbortEntry)
 	at.mu.Unlock()
@@ -146,7 +155,7 @@ func (at *AbortTracker) gcLoop() {
 			now := time.Now()
 			for id, entry := range at.entries {
 				if now.After(entry.ExpiresAt) {
-					entry.CancelFn()
+					entry.CancelFn(nil)
 					delete(at.entries, id)
 				}
 			}

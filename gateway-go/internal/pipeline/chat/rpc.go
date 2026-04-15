@@ -89,7 +89,10 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 				"sessionKey", p.SessionKey,
 				"deltaMs", deltaMs,
 			)
-			h.InterruptActiveRun(p.SessionKey)
+			// Cancel with ErrMergedIntoNewRun so the cancelled run's
+			// goroutine can do clean teardown (clear emoji, delete
+			// orphan draft) instead of the generic-error path.
+			h.abort.CancelBySessionKeyWithCause(p.SessionKey, ErrMergedIntoNewRun)
 			// Fold any older queued message into this one so nothing is lost.
 			if pending := h.pending.Drain(p.SessionKey); pending != nil {
 				if pending.Message != "" {

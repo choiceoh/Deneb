@@ -177,12 +177,32 @@ func executeAgentRun(
 	hooks := hc.Build()
 
 	// Defer cleanup so the draft is stopped on all exit paths.
+	//
+	// On a clean completion we stash the draft message ID into Delivery so
+	// SetReplyFunc can edit it in place with the final response (no
+	// flicker). On a cancellation — especially the quick-fire merge path
+	// — the draft is an orphan that would otherwise linger forever in the
+	// chat, so we delete it via the channel-side MessageDeleter callback.
+	// We use context.WithoutCancel because the run ctx is already dead.
 	if draftCtrl != nil {
 		defer func() {
 			draftCtrl.StopForClear()
-			if msgID := draftMsgIDFn(); msgID != "" && params.Delivery != nil {
-				params.Delivery.DraftMsgID = msgID
+			msgID := draftMsgIDFn()
+			if msgID == "" || params.Delivery == nil {
+				return
 			}
+			if ctx.Err() != nil {
+				if del := deps.callbacks.deleteMsgFn; del != nil {
+					cleanCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+					defer cancel()
+					if err := del(cleanCtx, params.Delivery, msgID); err != nil {
+						logger.Warn("draft cleanup on cancel failed",
+							"msgId", msgID, "error", err)
+					}
+				}
+				return
+			}
+			params.Delivery.DraftMsgID = msgID
 		}()
 	}
 

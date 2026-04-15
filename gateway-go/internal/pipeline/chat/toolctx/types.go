@@ -54,6 +54,11 @@ type TypingFunc func(ctx context.Context, delivery *DeliveryContext) error
 // ReactionFunc sets/removes an emoji reaction on the triggering message.
 type ReactionFunc func(ctx context.Context, delivery *DeliveryContext, emoji string) error
 
+// MessageDeleter removes a previously-sent message from the originating
+// channel. Used to clean up orphan streaming drafts left behind when a
+// run is cancelled mid-stream (e.g. via the chat-merge window).
+type MessageDeleter func(ctx context.Context, delivery *DeliveryContext, msgID string) error
+
 // DraftEditFunc sends or edits a streaming draft message on the originating channel.
 // Returns the message ID of the sent/edited message and an error.
 // On the first call (msgID == ""), it sends a new message and returns its ID.
@@ -171,10 +176,14 @@ type ChatAttachment struct {
 }
 
 // AbortEntry tracks an active abort controller for a running chat session.
+// CancelFn is a context.CancelCauseFunc so callers (e.g. the Send merge
+// path) can attach a sentinel error like ErrMergedIntoNewRun, letting the
+// run goroutine distinguish a clean merge cancel from a generic kill and
+// perform channel-side cleanup accordingly.
 type AbortEntry struct {
 	SessionKey string
 	ClientRun  string
-	CancelFn   context.CancelFunc
+	CancelFn   context.CancelCauseFunc
 	ExpiresAt  time.Time
 }
 

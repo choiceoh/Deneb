@@ -10,9 +10,18 @@
 package chat
 
 import (
+	"errors"
 	"sync"
 	"time"
 )
+
+// ErrMergedIntoNewRun is the cancellation cause attached when the Send
+// merge path cancels an in-flight run because the user sent a follow-up
+// message within mergeWindowDuration. Run goroutines observe it via
+// context.Cause(ctx) to choose a clean teardown — clear the user-message
+// emoji and delete the orphan streaming draft instead of showing the
+// generic "error" reaction that any other cancel would produce.
+var ErrMergedIntoNewRun = errors.New("merged into new run")
 
 // mergeWindowDuration is the cancel-and-merge window: if a new chat.send
 // arrives within this interval after the previous one *and* a run for the
