@@ -48,9 +48,10 @@ type Handler struct {
 	maxTokens            int
 
 	// Extracted components.
-	abort    *AbortTracker
-	pending  *PendingQueue
-	subagent *SubagentNotifier
+	abort       *AbortTracker
+	pending     *PendingQueue
+	mergeWindow *MergeWindowTracker
+	subagent    *SubagentNotifier
 
 	// maxHistoryBytes caps the total JSON bytes returned by chat.history.
 	maxHistoryBytes int
@@ -164,6 +165,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		providerRuntime:      cfg.ProviderRuntime,
 		abort:                NewAbortTracker(),
 		pending:              NewPendingQueue(),
+		mergeWindow:          NewMergeWindowTracker(),
 		maxHistoryBytes:      cfg.MaxHistoryBytes,
 		maxHistoryCount:      cfg.MaxHistoryCount,
 		maxMessageBytes:      cfg.MaxMessageBytes,
@@ -197,5 +199,6 @@ func (h *Handler) ModelRegistry() *modelrole.Registry {
 func (h *Handler) Close() {
 	h.abort.Close()
 	h.pending.Reset()
+	h.mergeWindow.Reset()
 	h.subagent.Reset()
 }

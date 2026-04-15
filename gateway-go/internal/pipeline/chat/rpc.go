@@ -43,11 +43,6 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		return h.handleSlashCommand(req.ID, p.SessionKey, p.Delivery, slashResult)
 	}
 
-	// When a run is already active for this session, queue the message
-	// instead of interrupting. The active run completes normally (preserving
-	// its full context), then the queued message is processed automatically.
-	// This prevents the "amnesia" bug where the assistant forgets in-progress
-	// work when the user sends a message mid-execution.
 	runParams := RunParams{
 		SessionKey:   p.SessionKey,
 		Message:      sanitizeInput(p.Message),
@@ -58,7 +53,44 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		WorkspaceDir: p.WorkspaceDir,
 	}
 
+	// Record this message's arrival timestamp; prevTs is the previous
+	// arrival time for this session (zero if this is the first message).
+	prevTs := h.mergeWindow.Touch(p.SessionKey)
+
 	if h.abort.HasActiveRun(p.SessionKey) {
+		// Quick-fire merge: when the user sends a follow-up within
+		// mergeWindowDuration of the previous message and the previous run
+		// is still in progress, cancel that run and start a new one so both
+		// messages are answered together. The previous user message has
+		// already been persisted to the transcript by executeAgentRun, so
+		// the new run sees both turns and produces a single combined reply.
+		if !prevTs.IsZero() && time.Since(prevTs) <= mergeWindowDuration {
+			h.logger.Info("merging consecutive message into new run",
+				"sessionKey", p.SessionKey,
+				"deltaMs", time.Since(prevTs).Milliseconds(),
+			)
+			h.InterruptActiveRun(p.SessionKey)
+			// Fold any older queued message into this one so nothing is lost.
+			if pending := h.pending.Drain(p.SessionKey); pending != nil {
+				if pending.Message != "" {
+					if runParams.Message != "" {
+						runParams.Message = pending.Message + "\n\n" + runParams.Message
+					} else {
+						runParams.Message = pending.Message
+					}
+				}
+				if len(pending.Attachments) > 0 {
+					runParams.Attachments = append(pending.Attachments, runParams.Attachments...)
+				}
+			}
+			return h.startAsyncRun(req.ID, runParams, false)
+		}
+
+		// Outside the merge window: queue the message instead of interrupting.
+		// The active run completes normally (preserving its full context),
+		// then the queued message is processed automatically. This prevents
+		// the "amnesia" bug where the assistant forgets in-progress work when
+		// the user sends a message mid-execution.
 		h.pending.Enqueue(p.SessionKey, runParams)
 		h.logger.Info("queued message for active run",
 			"sessionKey", p.SessionKey)

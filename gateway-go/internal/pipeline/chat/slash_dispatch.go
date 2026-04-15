@@ -26,6 +26,7 @@ func (h *Handler) handleSlashCommand(
 		// Abort any active run, clear transcript, and discard frozen context snapshot.
 		h.InterruptActiveRun(sessionKey)
 		h.pending.Clear(sessionKey)
+		h.mergeWindow.Clear(sessionKey)
 		prompt.ClearSessionSnapshot(sessionKey)
 		if h.transcript != nil {
 			if err := h.transcript.Delete(sessionKey); err != nil {
@@ -46,6 +47,7 @@ func (h *Handler) handleSlashCommand(
 	case "kill":
 		h.InterruptActiveRun(sessionKey)
 		h.pending.Clear(sessionKey)
+		h.mergeWindow.Clear(sessionKey)
 		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
 			Phase: session.PhaseEnd,
 			Ts:    time.Now().UnixMilli(),
