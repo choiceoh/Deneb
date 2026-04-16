@@ -323,6 +323,15 @@ func (c *StatusReactionController) SetError() {
 	c.finishWithEmoji(c.emojis.Error)
 }
 
+// SetClear removes any reaction emoji from the message (terminal state).
+// Used when a run is cancelled in a way that doesn't represent an error
+// to the user — for example, a quick-fire merge where the user typed a
+// follow-up message and the original run was superseded. Showing "😱
+// error" in that case would mislead the user.
+func (c *StatusReactionController) SetClear() {
+	c.finishWithEmoji("")
+}
+
 func (c *StatusReactionController) finishWithEmoji(emoji string) {
 	c.mu.Lock()
 	if !c.enabled {

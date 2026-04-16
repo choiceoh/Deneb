@@ -551,6 +551,11 @@ func (p *InboundProcessor) handleCallbackQuery(cb *telegram.CallbackQuery) {
 			"sessionKey":  sessionKey,
 			"message":     agentMessage,
 			"clientRunId": shortid.New("run"),
+			// Synthetic dispatch from an inline-button click — keep it
+			// out of the "merge consecutive messages" window so clicking
+			// a button within 3s of a typed message never cancels the
+			// in-flight reply.
+			"skipMerge": true,
 			"delivery": map[string]any{
 				"channel": "telegram",
 				"to":      chatID,

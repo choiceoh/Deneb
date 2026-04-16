@@ -266,6 +266,29 @@ func (s *Server) wireTelegramChatHandler() {
 		return msgID, nil
 	})
 
+	// Set message deleter: removes a previously-sent Telegram message.
+	// Used by the chat run goroutine on cancellation (e.g. quick-fire
+	// merge) to clean up an orphan streaming draft so the chat doesn't
+	// fill up with half-finished responses.
+	s.chatHandler.SetMessageDeleter(func(ctx context.Context, delivery *chat.DeliveryContext, msgID string) error {
+		if delivery == nil || delivery.Channel != "telegram" || msgID == "" {
+			return nil
+		}
+		client := s.telegramPlug.Client()
+		if client == nil {
+			return nil
+		}
+		chatID, err := telegram.ParseChatID(delivery.To)
+		if err != nil {
+			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
+		}
+		id, err := strconv.ParseInt(msgID, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid message ID %q: %w", msgID, err)
+		}
+		return client.DeleteMessage(ctx, chatID, id)
+	})
+
 	// Create the inbound processor that routes Telegram messages through
 	// the autoreply command/directive pipeline before dispatching to chat.send.
 	inbound := NewInboundProcessor(s)

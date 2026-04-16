@@ -38,7 +38,10 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 	})
 
 	// Create a background context (not tied to the RPC request lifetime).
-	runCtx, runCancel := context.WithCancel(context.Background())
+	// WithCancelCause lets callers attach a sentinel (e.g.
+	// ErrMergedIntoNewRun) so the run goroutine can choose targeted
+	// cleanup based on why it was cancelled.
+	runCtx, runCancel := context.WithCancelCause(context.Background())
 
 	h.abort.Register(params.ClientRunID, &AbortEntry{
 		SessionKey: params.SessionKey,
@@ -73,7 +76,7 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 			rsm.StartRun()
 			defer rsm.EndRun()
 		}
-		defer runCancel()
+		defer runCancel(nil)
 		defer h.abort.Cleanup(params.ClientRunID)
 		defer func() {
 			if r := recover(); r != nil {

@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"sync"
@@ -271,9 +272,23 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 
 	// Handle completion.
 	now := time.Now().UnixMilli()
+
+	// A run cancelled by a quick-fire merge can land on EITHER branch:
+	//   - error path: LLM call returned context.Canceled / DeadlineExceeded
+	//   - success path: agent loop saw ctx.Done() between turns and
+	//     returned cleanly with stopReason="aborted" (no error)
+	// In both cases the user's intent is "supersede with the next run",
+	// so we clear the emoji instead of finishing with 👍 (Done) or 😱
+	// (Error). The new run sets its own emoji on the new user message.
+	mergedCancel := errors.Is(context.Cause(ctx), ErrMergedIntoNewRun)
+
 	if err != nil {
 		if statusCtrl != nil {
-			statusCtrl.SetError()
+			if mergedCancel {
+				statusCtrl.SetClear()
+			} else {
+				statusCtrl.SetError()
+			}
 			statusCtrl.CloseAfterDrain()
 		}
 		handleRunError(ctx, params, deps, broadcaster, logger, err, now, runLog)
@@ -293,8 +308,20 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 
 	if statusCtrl != nil {
-		statusCtrl.SetDone()
+		if mergedCancel {
+			statusCtrl.SetClear()
+		} else {
+			statusCtrl.SetDone()
+		}
 		statusCtrl.CloseAfterDrain()
+	}
+
+	// Skip handleRunSuccess on a merge cancel: there's no real assistant
+	// response to deliver (the new run will produce one), and dispatching
+	// an empty/aborted reply would surface "agent produced empty response"
+	// noise to the channel layer.
+	if mergedCancel {
+		return
 	}
 	handleRunSuccess(ctx, params, deps, broadcaster, logger, chatResult.AgentResult, now, runLog)
 

@@ -22,6 +22,9 @@ type ReactionFunc = toolctx.ReactionFunc
 // DraftEditFunc sends or edits a streaming draft message on the originating channel.
 type DraftEditFunc = toolctx.DraftEditFunc
 
+// MessageDeleter removes a previously-sent message from the originating channel.
+type MessageDeleter = toolctx.MessageDeleter
+
 // ProviderConfig holds credentials and endpoint for an LLM provider.
 type ProviderConfig = toolctx.ProviderConfig
 
