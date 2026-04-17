@@ -19,6 +19,11 @@ func TestTruncateForBroadcast(t *testing.T) {
 		{"at limit", "hello", 5, "hello"},
 		{"over limit", "hello world", 5, "hello... [truncated]"},
 		{"empty string", "", 5, ""},
+		// Korean "안녕하세요" is 3 bytes per rune (UTF-8).
+		// maxLen=7 lands inside the 3rd rune; must retreat to byte 6
+		// to avoid leaving a mid-rune byte in the output.
+		{"utf8 mid-rune cut", "안녕하세요", 7, "안녕... [truncated]"},
+		{"utf8 rune boundary", "안녕하세요", 6, "안녕... [truncated]"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
