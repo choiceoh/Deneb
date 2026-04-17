@@ -125,10 +125,16 @@ func (sb *Broadcaster) emit(event string, payload map[string]any) {
 	sb.broadcastRaw(event, data)
 }
 
-// truncateForBroadcast caps a string to maxLen bytes to prevent oversized WS frames.
+// truncateForBroadcast caps a string to at most maxLen bytes to prevent
+// oversized WS frames. The cut is rounded back to a UTF-8 rune boundary so
+// multi-byte characters (notably Korean) never split across the truncation.
 func truncateForBroadcast(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
-	return s[:maxLen] + "... [truncated]"
+	cut := maxLen
+	for cut > 0 && s[cut]&0xC0 == 0x80 {
+		cut--
+	}
+	return s[:cut] + "... [truncated]"
 }
