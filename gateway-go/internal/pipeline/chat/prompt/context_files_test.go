@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestLoadContextFiles(t *testing.T) {
@@ -42,6 +43,84 @@ func TestTruncateContent(t *testing.T) {
 	}
 	if !strings.Contains(result, "[...truncated...]") {
 		t.Error("expected truncation marker")
+	}
+}
+
+// TestTruncateContent_UTF8Safe verifies that truncating Korean / multi-byte
+// content never splits a rune at the head or tail cut. An earlier bug used
+// byte indexing, which produced invalid UTF-8 in the system prompt for any
+// context file bigger than the per-file cap — a near-certain case for a
+// Korean-first project.
+func TestTruncateContent_UTF8Safe(t *testing.T) {
+	// "한" = 3 bytes (UTF-8). A 3000-rune string is ~9KB, well over a 4KB cap.
+	content := strings.Repeat("한", 3000)
+	result := truncateContent(content, 4000)
+
+	if !utf8.ValidString(result) {
+		t.Fatalf("truncated content is not valid UTF-8")
+	}
+	if !strings.Contains(result, "[...truncated...]") {
+		t.Error("expected truncation marker")
+	}
+	// Neither head nor tail should exceed their nominal byte budget (defensive:
+	// the whole point is we never grow past the cap to preserve a rune).
+	if len(result) > 4000+len("\n\n[...truncated...]\n\n") {
+		t.Errorf("truncated content too long: %d bytes", len(result))
+	}
+}
+
+func TestClipHeadUTF8(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		n    int
+		want string
+	}{
+		{"empty cap", "한글", 0, ""},
+		{"cap exceeds length", "abc", 10, "abc"},
+		{"ascii exact cut", "abcdef", 3, "abc"},
+		{"inside multibyte rune clips short", "한글", 2, ""},  // 2 lands inside first 3-byte rune
+		{"exactly one multibyte rune", "한글", 3, "한"},        // 3 = rune boundary
+		{"cut at rune boundary mid-string", "a한b", 4, "a한"}, // "a" + 3 bytes of "한" = 4
+		{"cut inside second rune", "a한b", 3, "a"},           // would split "한"
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := clipHeadUTF8(tc.s, tc.n)
+			if got != tc.want {
+				t.Errorf("clipHeadUTF8(%q, %d) = %q, want %q", tc.s, tc.n, got, tc.want)
+			}
+			if !utf8.ValidString(got) {
+				t.Errorf("result is not valid UTF-8")
+			}
+		})
+	}
+}
+
+func TestClipTailUTF8(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		n    int
+		want string
+	}{
+		{"empty cap", "한글", 0, ""},
+		{"cap exceeds length", "abc", 10, "abc"},
+		{"ascii exact cut", "abcdef", 3, "def"},
+		{"cut inside multibyte rune clips short", "한글", 2, ""}, // tail start lands inside "글"
+		{"cut at rune boundary", "한글", 3, "글"},
+		{"cut inside leading rune", "한b", 1, "b"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := clipTailUTF8(tc.s, tc.n)
+			if got != tc.want {
+				t.Errorf("clipTailUTF8(%q, %d) = %q, want %q", tc.s, tc.n, got, tc.want)
+			}
+			if !utf8.ValidString(got) {
+				t.Errorf("result is not valid UTF-8")
+			}
+		})
 	}
 }
 
