@@ -75,8 +75,10 @@ func ExtractRecentFileReads(messages []llm.Message) []FileReadRecord {
 		return nil
 	}
 
-	// Collect results: scan forward so later entries overwrite earlier (most recent wins).
-	seen := make(map[string]int) // path -> index in records
+	// Collect results: when the same path is re-read, drop the stale entry and
+	// re-append so append order reflects actual read recency. The final reverse
+	// then puts the most recently read file first.
+	seen := make(map[string]int) // path -> current index in records
 	var records []FileReadRecord
 
 	for _, msg := range messages {
@@ -105,11 +107,18 @@ func ExtractRecentFileReads(messages []llm.Message) []FileReadRecord {
 				Tokens:  EstimateTokens(content),
 			}
 			if idx, exists := seen[info.path]; exists {
-				records[idx] = rec // overwrite with more recent
-			} else {
-				seen[info.path] = len(records)
-				records = append(records, rec)
+				// Remove the stale record and fix up indices of everything
+				// that shifted left so `seen` stays consistent.
+				records = append(records[:idx], records[idx+1:]...)
+				for p, i := range seen {
+					if i > idx {
+						seen[p] = i - 1
+					}
+				}
+				delete(seen, info.path)
 			}
+			seen[info.path] = len(records)
+			records = append(records, rec)
 		}
 	}
 

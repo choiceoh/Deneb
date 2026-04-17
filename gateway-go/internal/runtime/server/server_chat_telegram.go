@@ -3,6 +3,8 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -16,6 +18,15 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
+
+// telegramDedupKey builds a dedup cache key from chat ID and the *full* reply
+// text. Using a content hash (instead of a byte prefix) avoids two different
+// long replies that happen to share an opening header from collapsing into one
+// dedup bucket — and sidesteps UTF-8 boundary issues of a byte-length cut.
+func telegramDedupKey(chatID, text string) string {
+	h := sha256.Sum256([]byte(text))
+	return chatID + ":" + hex.EncodeToString(h[:8])
+}
 
 func (s *Server) wireTelegramChatHandler() {
 	// Recent-send dedup cache: prevents the same text from being delivered
@@ -43,21 +54,10 @@ func (s *Server) wireTelegramChatHandler() {
 		// When a streaming draft exists and the dedup fires (e.g. the message
 		// tool already sent the same text), the draft must still be deleted so
 		// it does not linger in a half-finished state.
-		dedupKey := delivery.To + ":" + truncateForDedup(text, 200)
+		dedupKey := telegramDedupKey(delivery.To, text)
 		recentMu.Lock()
-		isDup := false
-		if sentAt, dup := recentSends[dedupKey]; dup && time.Since(sentAt) < recentTTL {
-			isDup = true
-		}
-		if !isDup {
-			// Evict stale entries (cheap, single-user so map stays tiny).
-			for k, t := range recentSends {
-				if time.Since(t) >= recentTTL {
-					delete(recentSends, k)
-				}
-			}
-			recentSends[dedupKey] = time.Now()
-		}
+		sentAt, isDup := recentSends[dedupKey]
+		isDup = isDup && time.Since(sentAt) < recentTTL
 		recentMu.Unlock()
 		if isDup {
 			// Clean up an orphaned streaming draft so it does not linger.
@@ -71,6 +71,20 @@ func (s *Server) wireTelegramChatHandler() {
 			s.logger.Info("suppressed duplicate reply to telegram",
 				"chatId", delivery.To, "textLen", len(text))
 			return nil
+		}
+
+		// recordSent commits a successful delivery to the dedup cache. Called
+		// only after Telegram confirms acceptance, so a transient API failure
+		// does not poison the cache and silently drop the user's next retry.
+		recordSent := func() {
+			recentMu.Lock()
+			for k, t := range recentSends {
+				if time.Since(t) >= recentTTL {
+					delete(recentSends, k)
+				}
+			}
+			recentSends[dedupKey] = time.Now()
+			recentMu.Unlock()
 		}
 
 		// Parse optional button directive from agent reply.
@@ -87,12 +101,14 @@ func (s *Server) wireTelegramChatHandler() {
 			if parseErr == nil {
 				_, editErr := telegram.EditMessageText(ctx, client, chatID, editMsgID, html, "HTML", keyboard)
 				if editErr == nil {
+					recordSent()
 					return nil
 				}
 				// "Message is not modified" means the draft already shows the
 				// correct content — treat as success to avoid the visible
 				// delete-then-resend flicker.
 				if telegram.IsMessageNotModifiedError(editErr) {
+					recordSent()
 					return nil
 				}
 				// Edit failed (e.g. message too long for single edit, or API error).
@@ -104,8 +120,11 @@ func (s *Server) wireTelegramChatHandler() {
 		}
 
 		opts := telegram.SendOptions{ParseMode: "HTML", Keyboard: keyboard}
-		_, err = telegram.SendText(ctx, client, chatID, html, opts)
-		return err
+		if _, err = telegram.SendText(ctx, client, chatID, html, opts); err != nil {
+			return err
+		}
+		recordSent()
+		return nil
 	})
 
 	// Set media send function: delivers files back to Telegram.

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // ContextFile represents a workspace context file embedded in the system prompt.
@@ -233,6 +234,9 @@ func collectSearchDirs(workspaceDir string) []string {
 }
 
 // truncateContent truncates content to maxChars using head (70%) + marker + tail (20%).
+// Cuts are aligned to UTF-8 rune boundaries so multi-byte characters (Korean,
+// emoji, CJK) are never split mid-rune — the caps are stated in bytes, but the
+// slicing must not emit invalid UTF-8 into the system prompt.
 func truncateContent(content string, maxChars int) string {
 	if len(content) <= maxChars {
 		return content
@@ -241,9 +245,43 @@ func truncateContent(content string, maxChars int) string {
 	tailSize := maxChars * 20 / 100
 	marker := "\n\n[...truncated...]\n\n"
 
-	head := content[:headSize]
-	tail := content[len(content)-tailSize:]
+	head := clipHeadUTF8(content, headSize)
+	tail := clipTailUTF8(content, tailSize)
 	return head + marker + tail
+}
+
+// clipHeadUTF8 returns a prefix of s no longer than n bytes, ending on a rune
+// boundary. If n lands inside a multi-byte rune, the returned prefix is
+// shortened rather than extended so the total never exceeds n.
+func clipHeadUTF8(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if len(s) <= n {
+		return s
+	}
+	end := n
+	for end > 0 && !utf8.RuneStart(s[end]) {
+		end--
+	}
+	return s[:end]
+}
+
+// clipTailUTF8 returns a suffix of s no longer than n bytes, starting on a
+// rune boundary. If n lands inside a multi-byte rune the suffix is shortened
+// (start moves forward) so the total stays within n.
+func clipTailUTF8(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if len(s) <= n {
+		return s
+	}
+	start := len(s) - n
+	for start < len(s) && !utf8.RuneStart(s[start]) {
+		start++
+	}
+	return s[start:]
 }
 
 // FormatContextFilesForPrompt formats loaded context files for inclusion
