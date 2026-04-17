@@ -1069,5 +1069,49 @@
       }
     },
     "required": []
+  },
+  {
+    "name": "graphify",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["query", "path", "explain"],
+        "description": "query: BFS/DFS traversal of the code knowledge graph for a natural-language question. explain: plain-language description of a node and its neighbors. path: shortest path between two nodes"
+      },
+      "question": {
+        "type": "string",
+        "description": "Required for action=query. Natural-language question about the codebase"
+      },
+      "node": {
+        "type": "string",
+        "description": "Required for action=explain. Node label (file path, symbol, or function name) to explain"
+      },
+      "from": {
+        "type": "string",
+        "description": "Required for action=path. Source node label"
+      },
+      "to": {
+        "type": "string",
+        "description": "Required for action=path. Target node label"
+      },
+      "budget": {
+        "type": "number",
+        "description": "Optional for action=query. Max output tokens (default: 2000)",
+        "minimum": 100,
+        "maximum": 20000
+      },
+      "dfs": {
+        "type": "boolean",
+        "description": "Optional for action=query. Use depth-first instead of breadth-first traversal (default: false)",
+        "default": false
+      },
+      "graph": {
+        "type": "string",
+        "description": "Optional path to graph.json (default: graphify-out/graph.json in workspace). Relative paths resolve from workspace"
+      }
+    },
+    "required": [
+      "action"
+    ]
   }
 ]

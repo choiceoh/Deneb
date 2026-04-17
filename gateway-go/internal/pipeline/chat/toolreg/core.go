@@ -105,6 +105,16 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 			Fn:          tools.ToolSpilloverRead(deps.SpilloverStore),
 		})
 	}
+
+	// Graphify: code knowledge-graph queries via the `graphify` CLI.
+	// Deferred because it needs a pre-built graphify-out/graph.json in the workspace.
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "graphify",
+		Description: "워크스페이스 코드 지식 그래프 질의. query (자연어 질문→관련 코드/노드), explain (파일·심볼 설명과 이웃), path (두 노드 사이 최단 경로). 선행 조건: 워크스페이스에 graphify-out/graph.json 존재 (`graphify update .`로 빌드)",
+		InputSchema: graphifyToolSchema(),
+		Fn:          tools.ToolGraphify(workspaceDir),
+		Deferred:    true,
+	})
 }
 
 // RegisterProcessTools registers exec and process management tools.
