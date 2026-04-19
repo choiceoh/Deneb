@@ -73,7 +73,7 @@ var toolCategories = []struct {
 	Names []string
 }{
 	{"File", []string{"read", "write", "edit", "grep"}},
-	{"Edit", []string{"multi_edit", "tree", "analyze", "test", "git"}},
+	{"Edit", []string{"git"}},
 	{"Exec", []string{"exec", "process"}},
 	{"Web", []string{"web"}},
 	{"Memory", []string{"wiki"}},
@@ -81,7 +81,6 @@ var toolCategories = []struct {
 	{"Routine", []string{"cron", "gmail"}},
 	{"Sessions", []string{"sessions", "sessions_spawn", "subagents"}},
 	{"Media", []string{"send_file"}},
-	{"Data", []string{"kv"}},
 }
 
 // buildStaticCacheKey returns a stable string key for the static prompt block
