@@ -952,51 +952,6 @@ func fetchToolsToolSchema() map[string]any {
 	}
 }
 
-func graphifyToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"action": map[string]any{
-				"type":        "string",
-				"description": "query: BFS/DFS traversal of the code knowledge graph for a natural-language question. explain: plain-language description of a node and its neighbors. path: shortest path between two nodes",
-				"enum":        []string{"query", "path", "explain"},
-			},
-			"budget": map[string]any{
-				"type":        "number",
-				"description": "Optional for action=query. Max output tokens (default: 2000)",
-				"minimum":     100,
-				"maximum":     20000,
-			},
-			"dfs": map[string]any{
-				"type":        "boolean",
-				"description": "Optional for action=query. Use depth-first instead of breadth-first traversal (default: false)",
-				"default":     false,
-			},
-			"from": map[string]any{
-				"type":        "string",
-				"description": "Required for action=path. Source node label",
-			},
-			"graph": map[string]any{
-				"type":        "string",
-				"description": "Optional path to graph.json (default: graphify-out/graph.json in workspace). Relative paths resolve from workspace",
-			},
-			"node": map[string]any{
-				"type":        "string",
-				"description": "Required for action=explain. Node label (file path, symbol, or function name) to explain",
-			},
-			"question": map[string]any{
-				"type":        "string",
-				"description": "Required for action=query. Natural-language question about the codebase",
-			},
-			"to": map[string]any{
-				"type":        "string",
-				"description": "Required for action=path. Target node label",
-			},
-		},
-		"required": []string{"action"},
-	}
-}
-
 // ToolMaxOutputs returns per-tool output character budgets from tool_schemas.json.
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {

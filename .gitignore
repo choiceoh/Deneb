@@ -62,8 +62,3 @@ projects.db
 
 # Local scripts
 scripts/deploy.sh
-
-# Graphify local state (interpreter path, transient flags)
-graphify-out/.graphify_python
-graphify-out/.needs_update
-graphify-out/.graphify_*.json
