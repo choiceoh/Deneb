@@ -280,7 +280,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("하나의 주제는 하나의 페이지. 같은 주제로 여러 페이지를 만들지 마라.\n\n")
 
 		d.WriteString("#### 기록 요령\n")
-		d.WriteString("- 기록은 응답과 함께 도구 호출로 수행. 사용자에게 별도 알림 불필요.\n")
+		d.WriteString("- **순서 엄수: 먼저 사용자에게 답변하고, 그 다음에 기록 도구(wiki log/write)를 호출한다.** 기록만 하고 응답 텍스트를 비우면 사용자는 아무것도 못 받는다 — 절대 금지.\n")
+		d.WriteString("- \"저장했습니다\" 같은 메타 고지는 불필요. 사용자는 답변을 원할 뿐 기록 여부를 알 필요 없다.\n")
 		d.WriteString("- 카테고리 판단이 어려우면 \"업무\"에 넣어라.\n")
 		d.WriteString("- 판단이 애매하면 기록한다. 안 남기는 것보다 남기는 게 낫다.\n\n")
 	}
@@ -316,13 +317,15 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 
 	// Messaging (merged: Reply Tags + Messaging + Silent Replies).
 	d.WriteString("## Messaging\n")
+	d.WriteString("- **턴 완결 원칙: 사용자 메시지에 대응하는 턴은 반드시 사용자용 텍스트 응답으로 끝낸다.** 도구 호출만 하고 텍스트를 비우면 사용자는 아무것도 못 받는다. \"도구 호출 = 답변했다\"가 아니다.\n")
+	fmt.Fprintf(&d, "- **이전 턴에서 도구만 호출했고 텍스트가 없었다면 사용자는 답을 못 받은 것이다.** 다음 턴에서 \"이미 답했다\"고 착각하지 말고, 지금 제대로 답해라. %s가 transcript에 남아있어도 마찬가지 — 그 턴은 사용자에게 전달되지 않았다.\n", SilentReplyToken)
 	d.WriteString("- Telegram 4096 char limit. Split with message tool if needed.\n")
 	d.WriteString("- Reply tags: [[reply_to_current]] replies to triggering message (stripped before sending).\n")
 	d.WriteString("- Current session replies auto-route to source channel. Cross-session: sessions(action=send, sessionKey=..., message=...).\n")
 	d.WriteString("- 마크다운 테이블(`| col | col |`) 사용 금지 — Telegram에서 코드 블록으로 렌더되어 보기 나쁘다. 대신 불릿 목록, 굵은 라벨(`**항목:** 값`), 또는 짧은 문장으로 정리하라.\n")
 	if _, ok := toolSet["message"]; ok {
 		fmt.Fprintf(&d, "- `message` for proactive sends + channel actions. If used for user-visible reply, respond with ONLY: %s.\n", SilentReplyToken)
-		fmt.Fprintf(&d, "- %s 규칙: 메시지 전체가 %s만이어야 한다. 다른 텍스트와 섞지 마라. 요청된 작업을 회피하는 데 쓰지 마라.\n", SilentReplyToken, SilentReplyToken)
+		fmt.Fprintf(&d, "- %s 규칙: 메시지 전체가 %s만이어야 한다. 다른 텍스트와 섞지 마라. **사용자가 방금 보낸 메시지에 대응할 때는 절대 사용 금지** — 오직 proactive/maintenance 전송(`message` 도구 사용) 후에만 허용.\n", SilentReplyToken, SilentReplyToken)
 	}
 	d.WriteString("\n")
 
