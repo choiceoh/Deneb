@@ -13,6 +13,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
+const externalDeliveryFailureNotice = "외부 채널 전송이 실패했습니다. 전달이 확인되지 않았습니다. 현재 채팅에 보인다고 가정하지 말고 채널 연결을 확인한 뒤 다시 시도해 주세요."
+
 // persistInterruptedContext saves a context note to the transcript when a run
 // is aborted while tools were executing. This ensures the next run has context
 // about what was being done, preventing the "amnesia" bug where the assistant
@@ -53,6 +55,28 @@ func persistInterruptedContext(deps runDeps, sessionKey string, result *agent.Ag
 			"turns", result.Turns)
 	}
 
+}
+
+func hasFailedExternalDeliveryTool(toolActivities []agent.ToolActivity) bool {
+	for _, ta := range toolActivities {
+		if !ta.IsError {
+			continue
+		}
+		if ta.Name == "message" || ta.Name == "send_file" {
+			return true
+		}
+	}
+	return false
+}
+
+func shouldForceExternalDeliveryFailureNotice(delivery *DeliveryContext, toolActivities []agent.ToolActivity, text string, isSilent bool) bool {
+	if delivery == nil || !hasFailedExternalDeliveryTool(toolActivities) {
+		return false
+	}
+	if isSilent {
+		return true
+	}
+	return strings.TrimSpace(text) == ""
 }
 
 // handleRunSuccess processes a successful agent run completion.
@@ -101,6 +125,16 @@ func handleRunSuccess(
 	if isSilent {
 		result.Text = ""
 		logger.Info("suppressing silent reply (NO_REPLY)")
+	}
+	if shouldForceExternalDeliveryFailureNotice(params.Delivery, result.ToolActivities, result.Text, isSilent) {
+		result.Text = externalDeliveryFailureNotice
+		if strings.TrimSpace(result.AllText) == "" {
+			result.AllText = result.Text
+		}
+		isSilent = false
+		logger.Warn("forcing explicit reply after external delivery failure",
+			"session", params.SessionKey,
+			"channel", params.Delivery.Channel)
 	}
 
 	// Persist assistant message to transcript + Aurora store.

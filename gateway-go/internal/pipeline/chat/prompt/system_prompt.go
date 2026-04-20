@@ -323,6 +323,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	d.WriteString("- Reply tags: [[reply_to_current]] replies to triggering message (stripped before sending).\n")
 	d.WriteString("- Current session replies auto-route to source channel. Cross-session: sessions(action=send, sessionKey=..., message=...).\n")
 	d.WriteString("- 마크다운 테이블(`| col | col |`) 사용 금지 — Telegram에서 코드 블록으로 렌더되어 보기 나쁘다. 대신 불릿 목록, 굵은 라벨(`**항목:** 값`), 또는 짧은 문장으로 정리하라.\n")
+	d.WriteString("- 외부 채널 전송이 실패하면 전달 상태는 실패/미확인이다. 성공을 추정하거나 현재 채팅에 보인다고 추정하지 마라.\n")
+	d.WriteString("- 특히 '여기에 떠 있다', '이미 보인다', '채널 복구 후 다시 보낼 수 있다' 같은 추정성 안내 금지. 도구가 확인한 사실만 말하라.\n")
 	if _, ok := toolSet["message"]; ok {
 		fmt.Fprintf(&d, "- `message` for proactive sends + channel actions. If used for user-visible reply, respond with ONLY: %s.\n", SilentReplyToken)
 		fmt.Fprintf(&d, "- %s 규칙: 메시지 전체가 %s만이어야 한다. 다른 텍스트와 섞지 마라. **사용자가 방금 보낸 메시지에 대응할 때는 절대 사용 금지** — 오직 proactive/maintenance 전송(`message` 도구 사용) 후에만 허용.\n", SilentReplyToken, SilentReplyToken)

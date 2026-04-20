@@ -59,19 +59,19 @@ func ToolSendFile() ToolFunc {
 		// Get media send function from context.
 		sendFn := toolctx.MediaSendFuncFromContext(ctx)
 		if sendFn == nil {
-			return "send_file: no media send function available (channel not connected).", nil
+			return "", fmt.Errorf("file delivery unavailable: channel not connected; do not claim the file is visible anywhere")
 		}
 
 		delivery := toolctx.DeliveryFromContext(ctx)
-		if delivery == nil {
-			return "send_file: no delivery context available.", nil
+		if delivery == nil || delivery.Channel == "" || delivery.To == "" {
+			return "", fmt.Errorf("file delivery unavailable: no active delivery target; do not claim the file was shown anywhere")
 		}
 
 		sendCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 
 		if err := sendFn(sendCtx, delivery, p.FilePath, mediaType, p.Caption, p.Silent); err != nil {
-			return fmt.Sprintf("Failed to send file: %s", err.Error()), nil
+			return "", fmt.Errorf("file delivery failed and was not confirmed; do not claim the file is visible anywhere: %w", err)
 		}
 
 		return fmt.Sprintf("File sent: %s (%s, %d bytes)", filepath.Base(p.FilePath), mediaType, info.Size()), nil
