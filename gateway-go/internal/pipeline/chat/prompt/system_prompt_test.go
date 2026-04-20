@@ -205,6 +205,9 @@ func TestBuildSystemPrompt_MessageToolSilentReply(t *testing.T) {
 	if !strings.Contains(prompt, SilentReplyToken) {
 		t.Error("expected SilentReplyToken in messaging section when message tool is available")
 	}
+	if !strings.Contains(prompt, "외부 채널 전송이 실패하면 전달 상태는 실패/미확인이다.") {
+		t.Error("expected explicit external-delivery failure guidance")
+	}
 }
 
 func TestBuildSystemPrompt_NoMessageTool(t *testing.T) {

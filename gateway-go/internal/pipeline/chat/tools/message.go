@@ -44,7 +44,7 @@ func ToolMessage() ToolFunc {
 			// Get reply function from context.
 			replyFn := toolctx.ReplyFuncFromContext(ctx)
 			if replyFn == nil {
-				return "Message tool: no reply function available (channel not connected).", nil
+				return "", fmt.Errorf("message delivery unavailable: channel not connected; do not claim the message is visible anywhere")
 			}
 
 			// Build delivery context: use explicit params or fall back to current session delivery.
@@ -66,12 +66,15 @@ func ToolMessage() ToolFunc {
 			if p.To != "" {
 				sendDelivery.To = p.To
 			}
+			if sendDelivery.Channel == "" || sendDelivery.To == "" {
+				return "", fmt.Errorf("message delivery unavailable: no active delivery target; do not claim the message was shown anywhere")
+			}
 
 			sendCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
 
 			if err := replyFn(sendCtx, sendDelivery, p.Message); err != nil {
-				return fmt.Sprintf("Failed to send message: %s", err.Error()), nil
+				return "", fmt.Errorf("message delivery failed and was not confirmed; do not claim the message is visible anywhere: %w", err)
 			}
 			return "Message sent successfully.", nil
 
@@ -85,12 +88,12 @@ func ToolMessage() ToolFunc {
 
 			replyFn := toolctx.ReplyFuncFromContext(ctx)
 			if replyFn == nil {
-				return "React: no reply function available (channel not connected).", nil
+				return "", fmt.Errorf("reaction delivery unavailable: channel not connected")
 			}
 
 			delivery := toolctx.DeliveryFromContext(ctx)
-			if delivery == nil {
-				delivery = &toolctx.DeliveryContext{}
+			if delivery == nil || delivery.Channel == "" || delivery.To == "" {
+				return "", fmt.Errorf("reaction delivery unavailable: no active delivery target")
 			}
 
 			// Send reaction as a special marker text that the channel adapter interprets.
@@ -99,7 +102,7 @@ func ToolMessage() ToolFunc {
 			defer cancel()
 
 			if err := replyFn(reactCtx, delivery, reactPayload); err != nil {
-				return fmt.Sprintf("Failed to send reaction: %s", err.Error()), nil
+				return "", fmt.Errorf("reaction delivery failed and was not confirmed: %w", err)
 			}
 			return fmt.Sprintf("Reaction %s sent to message %s.", p.Emoji, p.MessageID), nil
 
