@@ -891,6 +891,15 @@ func resolveThinkingConfig(level string) *llm.ThinkingConfig {
 // transcript store immediately. This ensures intermediate assistant text and
 // tool results survive across runs — fixing the "short-term memory loss" bug
 // where the agent forgot discoveries made in earlier turns.
+//
+// Assistant messages are sanitized via sanitizeAssistantForTranscript before
+// persistence: the silent-reply token (NO_REPLY) is stripped from text blocks,
+// and messages that end up with no substance (all empty text, no tool_use /
+// tool_result / thinking / image blocks) are dropped entirely. Without this,
+// an assistant turn whose only text was "NO_REPLY" would be persisted with
+// that literal token, and the model on the next turn would see it in history
+// and hallucinate that it had replied — the "대답 안 하고 대답했다고 생각하는
+// 경향" bug.
 func buildMessagePersister(
 	deps runDeps,
 	params RunParams,
@@ -900,15 +909,87 @@ func buildMessagePersister(
 		return nil
 	}
 	return func(msg llm.Message) {
+		content := msg.Content
+		if msg.Role == "assistant" {
+			sanitized, skip := sanitizeAssistantForTranscript(content)
+			if skip {
+				logger.Info("skipping persist of empty assistant turn",
+					"session", params.SessionKey,
+					"reason", "no user-visible content after silent-token strip")
+				return
+			}
+			content = sanitized
+		}
 		chatMsg := ChatMessage{
 			Role:      msg.Role,
-			Content:   msg.Content, // json.RawMessage — rich blocks preserved
+			Content:   content, // json.RawMessage — rich blocks preserved
 			Timestamp: time.Now().UnixMilli(),
 		}
 		if err := deps.transcript.Append(params.SessionKey, chatMsg); err != nil {
 			logger.Warn("per-turn message persist failed", "role", msg.Role, "error", err)
 		}
 	}
+}
+
+// sanitizeAssistantForTranscript strips NO_REPLY from assistant text blocks
+// and reports whether the resulting message has enough substance to persist.
+// Returns (content, skip). When skip=true, the caller must not persist the
+// message at all — it would only pollute transcript history and confuse the
+// model into thinking it replied when it did not.
+//
+// "Substance" = any non-text block (tool_use, tool_result, thinking, image),
+// or a text block with non-empty content after stripping.
+func sanitizeAssistantForTranscript(content json.RawMessage) (json.RawMessage, bool) {
+	// Text-form message: Content is a JSON-encoded string.
+	var text string
+	if err := json.Unmarshal(content, &text); err == nil {
+		stripped := StripSilentToken(text)
+		if stripped == "" {
+			return nil, true
+		}
+		if stripped == text {
+			return content, false
+		}
+		raw, err := json.Marshal(stripped)
+		if err != nil {
+			return content, false
+		}
+		return raw, false
+	}
+	// Block-form message: Content is a JSON array of ContentBlocks.
+	var blocks []llm.ContentBlock
+	if err := json.Unmarshal(content, &blocks); err != nil {
+		return content, false
+	}
+	changed := false
+	hasSubstance := false
+	for i := range blocks {
+		if blocks[i].Type == "text" {
+			stripped := StripSilentToken(blocks[i].Text)
+			if stripped != blocks[i].Text {
+				blocks[i].Text = stripped
+				changed = true
+			}
+			if stripped != "" {
+				hasSubstance = true
+			}
+			continue
+		}
+		// tool_use, tool_result, thinking, image — any non-text block counts
+		// as substance worth preserving in history.
+		hasSubstance = true
+	}
+	if !hasSubstance {
+		return nil, true
+	}
+	if !changed {
+		return content, false
+	}
+	raw, err := json.Marshal(blocks)
+	if err != nil {
+		return content, false
+	}
+	return raw, false
 }
 
 // Compile-time interface compliance.
