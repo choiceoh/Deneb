@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -88,13 +89,45 @@ func (w *Writer) pruneIfNeeded(path string) {
 	}
 
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(buf.String()), 0o600); err != nil {
+	// Clean up any leftover tmp from a previously interrupted rotate.
+	// Ignoring the error here is correct: if the file doesn't exist we're
+	// happy; if removal fails, the subsequent WriteFile will overwrite it.
+	_ = os.Remove(tmp)
+
+	// Retry the tmp write + rename once. Most rotate failures are brief
+	// filesystem hiccups; a single retry eliminates the vast majority of
+	// spurious Warn logs without masking persistent hardware problems.
+	const maxAttempts = 2
+	var writeErr error
+	for attempt := range maxAttempts {
+		writeErr = os.WriteFile(tmp, []byte(buf.String()), 0o600)
+		if writeErr == nil {
+			break
+		}
+		if attempt+1 < maxAttempts {
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	if writeErr != nil {
 		slog.Warn("agentlog: rotate write failed — log file not rotated",
-			"path", path, "error", err)
+			"path", path, "error", writeErr)
 		return
 	}
-	if err := os.Rename(tmp, path); err != nil {
+
+	var renameErr error
+	for attempt := range maxAttempts {
+		renameErr = os.Rename(tmp, path)
+		if renameErr == nil {
+			break
+		}
+		if attempt+1 < maxAttempts {
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	if renameErr != nil {
 		slog.Warn("agentlog: rotate rename failed — tmp file remains",
-			"tmp", tmp, "path", path, "error", err)
+			"tmp", tmp, "path", path, "error", renameErr)
+		// Best-effort tmp cleanup so the next rotate doesn't trip on it.
+		_ = os.Remove(tmp)
 	}
 }
