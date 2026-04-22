@@ -21,8 +21,8 @@ echo "==> git pull"
 git pull --ff-only origin main
 
 # Build
-echo "==> make gateway-dgx"
-make gateway-dgx
+echo "==> make gateway-prod"
+make gateway-prod
 
 if [[ "${1:-}" == "--build-only" ]]; then
     echo "==> build done (--build-only, skipping restart)"
@@ -33,7 +33,7 @@ fi
 echo "==> restarting gateway (port $PROD_PORT)"
 pkill -9 -f deneb-gateway || true
 sleep 1
-nohup ./gateway-go/deneb-gateway --bind loopback --port "$PROD_PORT" > "$LOG_FILE" 2>&1 &
+nohup ./dist/deneb-gateway --bind loopback --port "$PROD_PORT" > "$LOG_FILE" 2>&1 &
 
 # Verify
 sleep 2
