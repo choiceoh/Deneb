@@ -36,8 +36,11 @@ type Service struct {
 	timerCancel  context.CancelFunc
 	nextWakeAtMs int64
 
-	// Event listeners.
-	listeners []CronEventListener
+	// Event listeners. Guarded by listenersMu (separate from s.mu) so that
+	// emit() can run while callers hold s.mu without re-entering the main
+	// service mutex — otherwise Add/Remove/Wake deadlock on their own emit.
+	listenersMu sync.RWMutex
+	listeners   []CronEventListener
 
 	// Error backoff: minimum 2s between refire to prevent spin loops (#17821).
 	lastFireAtMs  int64
