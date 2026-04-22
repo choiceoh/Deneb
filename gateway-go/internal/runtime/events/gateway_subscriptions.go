@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 	"unsafe"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
 // AgentEvent represents an agent bus event (agent run lifecycle, tool use, etc.).
@@ -73,10 +75,10 @@ func NewGatewayEventSubscriptions(params GatewaySubscriptionParams) *GatewayEven
 		done:         make(chan struct{}),
 	}
 
-	go g.runAgentLoop(params)
-	go g.runTranscriptLoop(params)
-	go g.runLifecycleLoop(params)
-	go g.runDropLogger(params.Logger)
+	safego.GoWithSlog(params.Logger, "gateway-event-agent", func() { g.runAgentLoop(params) })
+	safego.GoWithSlog(params.Logger, "gateway-event-transcript", func() { g.runTranscriptLoop(params) })
+	safego.GoWithSlog(params.Logger, "gateway-event-lifecycle", func() { g.runLifecycleLoop(params) })
+	safego.GoWithSlog(params.Logger, "gateway-event-drop-logger", func() { g.runDropLogger(params.Logger) })
 
 	return g
 }

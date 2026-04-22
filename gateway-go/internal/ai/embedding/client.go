@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"sync/atomic"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
 const (
@@ -48,9 +50,10 @@ func New(baseURL string, logger *slog.Logger) *Client {
 		ctx:    ctx,
 		cancel: cancel,
 	}
-	// Initial probe (non-blocking).
-	go c.probe()
-	go c.healthLoop()
+	// Initial probe (non-blocking). Wrapped with panic recovery so a misbehaving
+	// HTTP response cannot take down the whole process.
+	safego.GoWithSlog(logger, "embedding-probe", c.probe)
+	safego.GoWithSlog(logger, "embedding-health-loop", c.healthLoop)
 	return c
 }
 

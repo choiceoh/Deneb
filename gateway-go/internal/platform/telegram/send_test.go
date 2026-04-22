@@ -90,8 +90,8 @@ func TestSendTextHTMLFallbackOnlyOnParseError(t *testing.T) {
 		t.Fatal("got nil, want error for forbidden")
 	}
 	// Should contain the original error, not a fallback attempt.
-	if !strings.Contains(err.Error(), "chunk 0") {
-		t.Errorf("expected chunk 0 error, got: %v", err)
+	if !strings.Contains(err.Error(), "chunks failed") || !strings.Contains(err.Error(), "[0]") {
+		t.Errorf("expected chunks-failed error with index 0, got: %v", err)
 	}
 }
 

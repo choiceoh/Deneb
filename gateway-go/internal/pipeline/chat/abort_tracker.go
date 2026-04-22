@@ -24,7 +24,12 @@ func NewAbortTracker() *AbortTracker {
 		entries: make(map[string]*AbortEntry),
 		done:    make(chan struct{}),
 	}
-	go at.gcLoop()
+	go func() {
+		// Panic in the GC loop must not take down the whole process — the tracker
+		// is long-lived and recovery here keeps abort handling alive.
+		defer func() { _ = recover() }()
+		at.gcLoop()
+	}()
 	return at
 }
 

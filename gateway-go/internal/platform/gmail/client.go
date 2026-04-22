@@ -141,7 +141,10 @@ func newClientFromDir(dir string) (*Client, error) {
 }
 
 // validToken returns the current access token, refreshing if needed.
-func (c *Client) validToken() (string, error) {
+// Uses the caller's context so a slow OAuth endpoint cannot outlive the
+// parent request deadline. A 10s floor is applied on top of the caller's
+// deadline to bound refresh latency.
+func (c *Client) validToken(ctx context.Context) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -149,11 +152,11 @@ func (c *Client) validToken() (string, error) {
 	if c.accessToken != "" && time.Until(c.expiry) > 60*time.Second {
 		return c.accessToken, nil
 	}
-	return c.refresh()
+	return c.refresh(ctx)
 }
 
 // refresh exchanges the refresh token for a new access token.
-func (c *Client) refresh() (string, error) {
+func (c *Client) refresh(ctx context.Context) (string, error) {
 	data := url.Values{
 		"client_id":     {c.clientID},
 		"client_secret": {c.clientSecret},
@@ -161,7 +164,9 @@ func (c *Client) refresh() (string, error) {
 		"grant_type":    {"refresh_token"},
 	}
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, tokenURL, strings.NewReader(data.Encode()))
+	refreshCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(refreshCtx, http.MethodPost, tokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return "", fmt.Errorf("토큰 갱신 요청 생성 실패: %w", err)
 	}
@@ -219,7 +224,7 @@ func (c *Client) persistToken() {
 
 // doAPI performs an authenticated HTTP request to the Gmail API.
 func (c *Client) doAPI(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
-	token, err := c.validToken()
+	token, err := c.validToken(ctx)
 	if err != nil {
 		return nil, err
 	}
