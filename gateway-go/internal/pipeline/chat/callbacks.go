@@ -7,6 +7,7 @@ package chat
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
@@ -88,6 +89,23 @@ type CallbackSnapshot struct {
 	emitTranscriptFn func(sessionKey string, message any, messageID string)
 	shutdownCtx      context.Context
 	defaultModel     string
+}
+
+// Validate reports whether required callbacks are wired. Call once after
+// all SetX calls on a channel-facing Handler; it returns an error if the
+// caller forgot to set replyFunc, which would otherwise cause every reply
+// to drop silently at runtime. Optional callbacks (media, typing, reaction,
+// draft, delete, broadcast, emit*) are not checked — their absence is
+// handled at the callsite via nil guards and documented as optional.
+func (cb *ChannelCallbacks) Validate() error {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+	if cb.replyFunc == nil {
+		return fmt.Errorf("ChannelCallbacks: replyFunc is required for channel-facing handlers " +
+			"(without it every agent reply would drop silently); " +
+			"call SetReplyFunc before the server starts accepting messages")
+	}
+	return nil
 }
 
 // --- Setters (called during server initialization) ---

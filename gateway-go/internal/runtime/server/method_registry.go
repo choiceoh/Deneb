@@ -198,6 +198,12 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 	// Wire Telegram → chat pipeline now that both are ready.
 	if s.telegramPlug != nil && s.chatHandler != nil {
 		s.wireTelegramChatHandler()
+		// Fail-fast: if wiring forgot replyFunc, every Telegram reply would
+		// drop silently. Better to refuse to start than to silently ignore users.
+		if err := s.chatHandler.Validate(); err != nil {
+			s.logger.Error("chat handler validation failed — refusing to serve", "error", err)
+			panic(fmt.Errorf("chat handler misconfigured: %w", err))
+		}
 	}
 
 	// Wire agent runner, Telegram plugin, and subagent poller to cron service.
