@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -29,15 +30,19 @@ func llmMsg(role, text string) llm.Message {
 }
 
 // mockSummarizer returns a fixed summary for testing.
+// summarizeInChunks spawns parallel goroutines so the called flag needs
+// atomic writes to keep -race happy.
 type mockSummarizer struct {
-	summary string
-	called  bool
+	summary    string
+	calledFlag atomic.Bool
 }
 
 func (m *mockSummarizer) Summarize(_ context.Context, _, _ string, _ int) (string, error) {
-	m.called = true
+	m.calledFlag.Store(true)
 	return m.summary, nil
 }
+
+func (m *mockSummarizer) called() bool { return m.calledFlag.Load() }
 
 func TestCompactAndPersist_NoLLMCompaction(t *testing.T) {
 	e, s := testEngine(t)
@@ -190,7 +195,7 @@ func TestCompactAndPersist_WithLLMCompaction(t *testing.T) {
 
 	compacted, result := e.CompactAndPersist(context.Background(), "s1", msgs, summarizer, 170_000)
 
-	if !summarizer.called {
+	if !summarizer.called() {
 		t.Fatal("summarizer was not called")
 	}
 	if !result.LLMCompacted {
