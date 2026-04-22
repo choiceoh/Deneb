@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"time"
 
 	"log/slog"
 
@@ -281,7 +280,7 @@ func (e *chatSendExecutor) RunTurn(ctx context.Context, cfg autoreply.AgentTurnC
 		return nil, fmt.Errorf("failed to build chat.send request: %w", err)
 	}
 
-	sendCtx, sendCancel := context.WithTimeout(ctx, 5*time.Minute)
+	sendCtx, sendCancel := context.WithTimeout(ctx, DefaultTurnDeadline)
 	defer sendCancel()
 	resp := e.chatHandler.Send(sendCtx, req)
 	if resp != nil && !resp.OK {
