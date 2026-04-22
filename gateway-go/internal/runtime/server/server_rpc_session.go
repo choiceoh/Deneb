@@ -305,8 +305,9 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 			homeDir:     homeDir,
 		})
 
-		// Register heartbeat task: every 2 minutes, checks ~/.deneb/HEARTBEAT.md
-		// for user-defined tasks and executes them autonomously.
+		// Register heartbeat task: every 5 minutes during active hours
+		// (08:00–23:00 Asia/Seoul), checks ~/.deneb/HEARTBEAT.md for
+		// user-defined tasks and executes them autonomously.
 		s.autonomousSvc.RegisterTask(&heartbeatTask{
 			chatHandler: s.chatHandler,
 			activity:    s.activity,

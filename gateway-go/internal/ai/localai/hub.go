@@ -22,17 +22,31 @@ var (
 )
 
 // NoThinking is the default ExtraBody merged into every hub request.
-// Qwen3 non-thinking mode is toggled via the model's `thinking` alias param
-// in deneb.json, not via this map. Kept as an extension point for models
-// that need template kwargs injected on every call.
+// Disables Qwen3 reasoning mode at the chat-template level — hub calls
+// (memory extraction, summaries, proactive context, pilot) need fast,
+// deterministic output and stable tool calls, not <think> traces.
 // Exported so pilot and memory packages can reference it without duplicating.
-var NoThinking = map[string]any{}
+var NoThinking = map[string]any{
+	"chat_template_kwargs": map[string]any{
+		"enable_thinking": false,
+	},
+}
 
 // modelSamplingDefaults returns vendor-recommended sampling parameters for
 // known local models. Returns nil pointers for unknown models (use server defaults).
-func modelSamplingDefaults(_ string) (temp, topP *float64, topK *int) {
-	return nil, nil, nil
+// Sources:
+//   - Qwen3 non-thinking: qwen.readthedocs.io — temp 0.7, top_p 0.8, top_k 20
+func modelSamplingDefaults(model string) (temp, topP *float64, topK *int) {
+	m := strings.ToLower(model)
+	switch {
+	case strings.Contains(m, "qwen3") || strings.Contains(m, "qwen36") || strings.Contains(m, "qwen35"):
+		return ptr(0.7), ptr(0.8), ptr(20)
+	default:
+		return nil, nil, nil
+	}
 }
+
+func ptr[T any](v T) *T { return &v }
 
 // Config controls hub behavior.
 type Config struct {
