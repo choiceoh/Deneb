@@ -13,6 +13,13 @@ import (
 // message was sent/edited successfully, false to retry with the same text.
 type SendOrEditFunc func(text string) (bool, error)
 
+// maxFloodStrikes bounds how many consecutive send/edit failures (e.g. 429
+// flood control, transient HTTP errors) we tolerate before permanently
+// disabling progressive streaming for this loop. Further updates no-op; the
+// caller still gets a single final send via Flush when the turn completes.
+// Inspired by NousResearch/hermes-agent stream_consumer._MAX_FLOOD_STRIKES.
+const maxFloodStrikes = 3
+
 // DraftStreamLoop provides throttled streaming message updates with lifecycle.
 type DraftStreamLoop struct {
 	mu          sync.Mutex
@@ -25,6 +32,13 @@ type DraftStreamLoop struct {
 	timer       *time.Timer
 	stopped     bool // marks loop as stopped (no new updates accepted)
 	finalized   bool // marks loop as finalized (flush then stop)
+
+	// Strike counter for consecutive send/edit failures. When reaching
+	// maxFloodStrikes, editDisabled flips true and subsequent Update() calls
+	// are dropped — this stops hammering the platform when we're clearly
+	// rate-limited and prevents a cascade of error logs.
+	strikeCount  int
+	editDisabled bool
 }
 
 // NewDraftStreamLoop creates a new throttled draft stream loop.
@@ -37,10 +51,11 @@ func NewDraftStreamLoop(throttleMs int, sendOrEdit SendOrEditFunc) *DraftStreamL
 
 // Update queues a text update. If enough time has passed since the last send,
 // it flushes immediately; otherwise it schedules a throttled send.
-// No-op if the loop is stopped or finalized.
+// No-op if the loop is stopped, finalized, or has been rate-limited too
+// many times in a row.
 func (l *DraftStreamLoop) Update(text string) {
 	l.mu.Lock()
-	if l.stopped || l.finalized {
+	if l.stopped || l.finalized || l.editDisabled {
 		l.mu.Unlock()
 		return
 	}
@@ -101,8 +116,18 @@ func (l *DraftStreamLoop) Flush() {
 		l.clearInFlightLocked()
 		if ok {
 			l.lastSentAt = time.Now()
+			l.strikeCount = 0 // success resets the strike counter
 		} else {
 			l.pendingText = text
+			l.strikeCount++
+			if l.strikeCount >= maxFloodStrikes && !l.editDisabled {
+				// Too many consecutive failures — stop progressive editing.
+				// The caller still gets a chance to send one final message
+				// via Flush when the turn completes. This prevents a tight
+				// retry loop under sustained rate limiting.
+				l.editDisabled = true
+				l.pendingText = "" // drop pending so Flush is a no-op too
+			}
 		}
 		pending := l.pendingText
 		l.mu.Unlock()
