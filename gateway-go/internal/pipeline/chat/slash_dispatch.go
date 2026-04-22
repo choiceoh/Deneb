@@ -112,7 +112,15 @@ func (h *Handler) handleSlashCommand(
 		}
 
 	case "mail":
-		go h.handleMailCommand(reqID, sessionKey, delivery)
+		mailLogger := h.logger
+		go func() {
+			defer func() {
+				if r := recover(); r != nil && mailLogger != nil {
+					mailLogger.Error("panic in /mail command handler", "panic", r)
+				}
+			}()
+			h.handleMailCommand(reqID, sessionKey, delivery)
+		}()
 
 	}
 

@@ -112,7 +112,16 @@ func NewManager(logger *slog.Logger) *Manager {
 		maxStdout: 1024 * 1024, // 1 MB default
 		stopPrune: make(chan struct{}),
 	}
-	go m.autoPrune()
+	go func() {
+		// Panic here must not kill the process manager: it's long-lived and
+		// recovery keeps pruning operational even if one sweep hits bad state.
+		defer func() {
+			if r := recover(); r != nil && logger != nil {
+				logger.Error("panic in process autoPrune", "panic", r)
+			}
+		}()
+		m.autoPrune()
+	}()
 	return m
 }
 
@@ -297,12 +306,23 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 
 	var drainWg sync.WaitGroup
 	drainWg.Add(2)
+	logger := m.logger
 	go func() {
 		defer drainWg.Done()
+		defer func() {
+			if r := recover(); r != nil && logger != nil {
+				logger.Error("panic in stdout drain", "id", req.ID, "panic", r)
+			}
+		}()
 		drainToBuffer(stdout, stdoutSB)
 	}()
 	go func() {
 		defer drainWg.Done()
+		defer func() {
+			if r := recover(); r != nil && logger != nil {
+				logger.Error("panic in stderr drain", "id", req.ID, "panic", r)
+			}
+		}()
 		drainToBuffer(stderr, stderrSB)
 	}()
 

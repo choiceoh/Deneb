@@ -252,6 +252,7 @@ func handleRunSuccess(
 			if deps.callbacks.mediaSendFn != nil && len(directives.MediaURLs) > 0 {
 				mediaCtx, mediaCancel := context.WithTimeout(context.Background(), 60*time.Second)
 				defer mediaCancel()
+				var failedURLs []string
 				for _, mediaURL := range directives.MediaURLs {
 					mediaType := ""
 					if directives.AudioAsVoice {
@@ -259,7 +260,17 @@ func handleRunSuccess(
 					}
 					if err := deps.callbacks.mediaSendFn(mediaCtx, params.Delivery, mediaURL, mediaType, "", false); err != nil {
 						logger.Warn("media delivery failed", "url", mediaURL, "error", err)
+						failedURLs = append(failedURLs, mediaURL)
 					}
+				}
+				if len(failedURLs) > 0 && deps.broadcast != nil {
+					deps.broadcast("chat.media_delivery_failed", map[string]any{
+						"session": params.SessionKey,
+						"channel": params.Delivery.Channel,
+						"count":   len(failedURLs),
+						"total":   len(directives.MediaURLs),
+						"urls":    failedURLs,
+					})
 				}
 			}
 		}
