@@ -15,6 +15,29 @@ import (
 
 const externalDeliveryFailureNotice = "외부 채널 전송이 실패했습니다. 전달이 확인되지 않았습니다. 현재 채팅에 보인다고 가정하지 말고 채널 연결을 확인한 뒤 다시 시도해 주세요."
 
+// persistReplyDeliveryFailure records a synthetic system note in the
+// transcript when the primary channel reply callback fails permanently.
+// Without this, the next turn's agent only sees its own (successful-looking)
+// assistant output and will hallucinate reasons to the user ("channel was
+// disconnected", "I already replied") when asked why they didn't see it.
+// The note gives the agent ground truth to work with.
+func persistReplyDeliveryFailure(deps runDeps, sessionKey, channel string, deliverErr error, logger *slog.Logger) {
+	if deps.transcript == nil {
+		return
+	}
+	text := "[SYSTEM: 직전 어시스턴트 응답은 " + channel + " 채널로 **전송이 확인되지 않았습니다**. " +
+		"유저가 그 응답을 봤다고 가정하지 마세요. 유저가 이유를 물으면 상황을 모른다고 말하고, " +
+		"채널 연결 같은 추측성 설명을 지어내지 마세요."
+	if deliverErr != nil {
+		text += " (원인 힌트: " + deliverErr.Error() + ")"
+	}
+	text += "]"
+	msg := NewTextChatMessage("user", text, time.Now().UnixMilli())
+	if err := deps.transcript.Append(sessionKey, msg); err != nil {
+		logger.Warn("failed to persist delivery-failure note", "error", err)
+	}
+}
+
 // fallbackForStopReason returns a user-visible Korean message for abnormal
 // terminations where the agent produced no text output. Empty string means
 // no fallback needed (e.g., end_turn is a normal termination — tool-only
@@ -259,6 +282,7 @@ func handleRunSuccess(
 							"reason":  "reply_func_nil",
 						})
 					}
+					persistReplyDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, nil, logger)
 				} else {
 					// Primary path: channel-specific reply function (handles dedup,
 					// formatting, chunking, etc.). Retry once on transient errors
@@ -282,6 +306,9 @@ func handleRunSuccess(
 								"error":   err.Error(),
 							})
 						}
+						// Record the failure in the transcript so the next turn's
+						// agent has ground truth instead of inventing reasons.
+						persistReplyDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, err, logger)
 					}
 				}
 			}
