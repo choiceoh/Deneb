@@ -35,7 +35,13 @@ fi
 # Matches the Hermes-style restart convention: long-running streams drain
 # in-flight work before exit.
 echo "==> restarting gateway (port $PROD_PORT)"
-existing_pid=$(pgrep -f 'dist/deneb-gateway' || true)
+# Prefer port-based detection so we catch both the built binary AND any
+# `go run` instance that was started manually (whose cmdline path lives
+# under /tmp/go-build... and does not contain "deneb-gateway").
+existing_pid=$(ss -ltnpH "sport = :$PROD_PORT" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1 || true)
+if [[ -z "$existing_pid" ]]; then
+    existing_pid=$(pgrep -f 'dist/deneb-gateway' || true)
+fi
 if [[ -n "$existing_pid" ]]; then
     echo "    graceful SIGTERM → pid $existing_pid (up to 10s drain)"
     kill -TERM "$existing_pid" 2>/dev/null || true
