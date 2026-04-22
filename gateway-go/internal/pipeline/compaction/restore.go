@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 const (
@@ -177,6 +178,45 @@ func BuildRestorationMessages(records []FileReadRecord, budgetTokens int) []llm.
 		llm.NewTextMessage("user", sb.String()),
 		llm.NewTextMessage("assistant", "파일 내용 복원 완료."),
 	}
+}
+
+// TruncateToolCallArgs shrinks oversized string leaves inside tool_use
+// blocks' Input JSON. Raw byte-level truncation historically produced
+// unterminated strings / missing braces, which providers reject as
+// "invalid function arguments json string" — the session then gets stuck
+// re-sending the same broken history every turn. Structural truncation
+// via jsonutil.TruncateStringLeaves preserves validity so the LLM always
+// sees well-formed JSON even after compaction shrinks long arguments.
+//
+// headChars bounds the maximum length of any single string value inside
+// tool_use input. Non-string values pass through unchanged.
+func TruncateToolCallArgs(messages []llm.Message, headChars int) []llm.Message {
+	out := make([]llm.Message, len(messages))
+	for i, msg := range messages {
+		var blocks []llm.ContentBlock
+		if json.Unmarshal(msg.Content, &blocks) != nil {
+			out[i] = msg
+			continue
+		}
+		modified := false
+		for bi, b := range blocks {
+			if b.Type != "tool_use" || len(b.Input) == 0 {
+				continue
+			}
+			shrunk := jsonutil.TruncateStringLeaves(string(b.Input), headChars)
+			if shrunk != string(b.Input) {
+				blocks[bi].Input = json.RawMessage(shrunk)
+				modified = true
+			}
+		}
+		if modified {
+			raw, _ := json.Marshal(blocks)
+			out[i] = llm.Message{Role: msg.Role, Content: raw}
+		} else {
+			out[i] = msg
+		}
+	}
+	return out
 }
 
 // StripImageBlocks removes image and document content blocks from messages,

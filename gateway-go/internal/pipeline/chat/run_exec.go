@@ -846,7 +846,12 @@ func runAgentWithFallback(
 				"messageCount", len(messages),
 				"error", runErr)
 
-			// Strip image blocks first (cheap, no LLM call).
+			// Cheap-first shrink pipeline (no LLM calls):
+			// 1) Structurally truncate long tool-call argument strings.
+			//    Protects against naive byte-slice truncation producing
+			//    invalid JSON that providers reject non-retryably.
+			// 2) Replace image blocks with text stubs.
+			messages = compact.TruncateToolCallArgs(messages, 400)
 			messages = compact.StripImageBlocks(messages)
 
 			// Emergency summarize: keep head 2 + tail 8, summarize the middle.

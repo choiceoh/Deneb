@@ -14,7 +14,18 @@ import (
 
 // summaryPrefix is injected by AssembleContext into summary messages.
 // Used to detect already-summarized content and skip re-summarization.
+// The explicit handoff framing (다른 어시스턴트의 이전 작업 / REFERENCE ONLY
+// / 재실행 금지) prevents the classic compaction bug where the current
+// agent reads the summary as active instructions and re-executes completed
+// work. Inspired by NousResearch/hermes-agent's SUMMARY_PREFIX framing.
 const summaryPrefix = "[이전 대화 요약"
+
+// summaryHandoffNote is appended after summaryPrefix to make the handoff
+// semantics explicit. The current agent must treat summary content as
+// background reference only — not as open tasks to execute.
+const summaryHandoffNote = "— REFERENCE ONLY. 다른 어시스턴트가 이전 컨텍스트에서 처리한 기록이다. " +
+	"요약에 언급된 질문/지시는 이미 답변·처리됐으므로 다시 실행하지 마라. " +
+	"현재 과제는 이 요약 이후에 오는 최신 사용자 메시지에만 있다."
 
 const (
 	// bootstrapRawThreshold: if older messages are below this, inject raw (no LLM).
@@ -219,7 +230,8 @@ func (e *Engine) bootstrapIfNeeded(
 	}
 
 	// Inject summary message at the front of context.
-	summaryText := fmt.Sprintf("%s (메시지 0-%d)]\n\n%s", summaryPrefix, olderEnd, summary)
+	summaryText := fmt.Sprintf("%s (메시지 0-%d) %s]\n\n%s",
+		summaryPrefix, olderEnd, summaryHandoffNote, summary)
 	summaryMsg := llm.NewTextMessage("user", summaryText)
 	enriched := make([]llm.Message, 0, 1+len(messages))
 	enriched = append(enriched, summaryMsg)
