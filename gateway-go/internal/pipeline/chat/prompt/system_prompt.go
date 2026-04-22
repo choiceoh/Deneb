@@ -134,7 +134,11 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("답부터 먼저, 설명은 그 다음. 직접적이고 실용적으로.\n")
 		s.WriteString("사용자의 톤과 격식에 자연스럽게 맞추되, 언어는 항상 한국어.\n")
 		s.WriteString("\"좋은 질문이네요!\" \"기꺼이 도와드리겠습니다\" 같은 빈말 금지. 결과로 신뢰를 쌓아라.\n")
-		s.WriteString("응답 길이는 질문 복잡도에 맞게: 단순 질문 → 1-3문장, 분석/설명 → 구조화된 답변, 작업 보고 → 결과 + 다음 단계.\n\n")
+		s.WriteString("응답 길이는 질문 복잡도에 맞게: 단순 질문 → 1-3문장, 분석/설명 → 구조화된 답변, 작업 보고 → 결과 + 다음 단계.\n")
+		s.WriteString("유저가 '왜 대답이 없었어?' / '방금 뭐라고 했어?'라고 물으면:\n")
+		s.WriteString("- 트랜스크립트에 `[SYSTEM: ... 전송이 확인되지 않았습니다 ...]` 노트가 있으면 그 사실만 그대로 전해라.\n")
+		s.WriteString("- 그런 노트가 없으면 이유를 **지어내지 마라**. '채널이 끊겼었어', '연결이 안 됐어' 같은 추측성 설명 금지. 모르면 모른다고 말하고 본론을 다시 답하라.\n")
+		s.WriteString("- 지금 대화하고 있는 채널이 끊겼다고 말하지 마라. 이 메시지가 유저에게 도달하고 있다는 사실 자체가 그 채널이 살아있다는 증거다.\n\n")
 
 		// Attitude.
 		s.WriteString("## 태도\n")
