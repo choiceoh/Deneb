@@ -132,6 +132,18 @@ func (p *sessionSnapshotProvider) SessionSnapshot(sessionKey string) *events.Ses
 	}
 }
 
+// ShutdownCtx returns the server's lifecycle context, which is cancelled
+// when doShutdown() runs. Background goroutines that outlive individual
+// requests should derive from this so graceful shutdown does not leak them.
+// Returns a non-nil context.Background before Run() has initialized the
+// lifecycle context, so callers need not nil-check.
+func (s *Server) ShutdownCtx() context.Context {
+	if s.lifecycleCtx == nil {
+		return context.Background()
+	}
+	return s.lifecycleCtx
+}
+
 // safeGo starts a goroutine with panic recovery that logs and continues.
 // The goroutine is tracked by bgWg so shutdown can wait for completion.
 func (s *Server) safeGo(name string, fn func()) {
