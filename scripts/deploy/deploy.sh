@@ -29,10 +29,28 @@ if [[ "${1:-}" == "--build-only" ]]; then
     exit 0
 fi
 
-# Restart
+# Restart — graceful first (SIGTERM, up to 10s), then SIGKILL as fallback.
+# This gives active agent runs a chance to finish instead of being killed
+# mid-turn, which otherwise leaves half-delivered replies in Telegram.
+# Matches the Hermes-style restart convention: long-running streams drain
+# in-flight work before exit.
 echo "==> restarting gateway (port $PROD_PORT)"
-pkill -9 -f deneb-gateway || true
-sleep 1
+existing_pid=$(pgrep -f 'dist/deneb-gateway' || true)
+if [[ -n "$existing_pid" ]]; then
+    echo "    graceful SIGTERM → pid $existing_pid (up to 10s drain)"
+    kill -TERM "$existing_pid" 2>/dev/null || true
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        if ! kill -0 "$existing_pid" 2>/dev/null; then
+            break
+        fi
+        sleep 1
+    done
+    if kill -0 "$existing_pid" 2>/dev/null; then
+        echo "    still alive after 10s → SIGKILL"
+        kill -KILL "$existing_pid" 2>/dev/null || true
+        sleep 1
+    fi
+fi
 nohup ./dist/deneb-gateway --bind loopback --port "$PROD_PORT" > "$LOG_FILE" 2>&1 &
 
 # Verify
