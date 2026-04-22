@@ -31,6 +31,14 @@ import (
 // mediaDownloadTimeout bounds how long we wait for Telegram CDN downloads.
 const mediaDownloadTimeout = 30 * time.Second
 
+// DefaultTurnDeadline is the default end-to-end budget for processing one
+// user-initiated message: from inbound receipt through the chat pipeline,
+// agent loop, tool calls, and final delivery. Individual tools and
+// downstream calls should derive from the request context so they never
+// outlive this budget; they may shorten their own sub-timeouts, but must
+// never replace the request ctx with context.Background().
+const DefaultTurnDeadline = 5 * time.Minute
+
 // InboundProcessor preprocesses incoming Telegram messages through the
 // autoreply pipeline before dispatching to the chat handler.
 type InboundProcessor struct {
@@ -457,7 +465,7 @@ func (p *InboundProcessor) handleMediaGroup(messages []*telegram.Message) {
 		return
 	}
 
-	sendCtx, sendCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	sendCtx, sendCancel := context.WithTimeout(context.Background(), DefaultTurnDeadline)
 	defer sendCancel()
 	resp := p.chatHandler.Send(sendCtx, req)
 	if resp != nil && !resp.OK {
@@ -567,7 +575,7 @@ func (p *InboundProcessor) handleCallbackQuery(cb *telegram.CallbackQuery) {
 		return
 	}
 
-	sendCtx, sendCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	sendCtx, sendCancel := context.WithTimeout(context.Background(), DefaultTurnDeadline)
 	defer sendCancel()
 	resp := p.chatHandler.Send(sendCtx, req)
 	if resp != nil && !resp.OK {
