@@ -237,8 +237,13 @@ func (s *Service) applyJobResult(job StoreJob, outcome RunOutcome, sessionKey st
 		state.ConsecutiveErrors++
 		if state.ConsecutiveErrors >= 10 {
 			state.ScheduleErrorCount++
-			// Auto-disable after 10 consecutive errors.
-			s.store.SetJobEnabled(job.ID, false) //nolint:errcheck // best-effort
+			// Auto-disable after 10 consecutive errors. If persistence fails,
+			// log loudly — otherwise the job would keep failing and re-triggering
+			// this branch forever without ever actually being disabled on disk.
+			if err := s.store.SetJobEnabled(job.ID, false); err != nil {
+				s.logger.Error("cron auto-disable persistence failed — job may re-fail",
+					"id", job.ID, "error", err)
+			}
 			state.AutoDisabledAtMs = time.Now().UnixMilli()
 			s.logger.Warn("cron job auto-disabled after consecutive errors",
 				"id", job.ID, "consecutiveErrors", state.ConsecutiveErrors)
@@ -259,7 +264,13 @@ func (s *Service) applyJobResult(job StoreJob, outcome RunOutcome, sessionKey st
 	nowMs := time.Now().UnixMilli()
 	state.NextRunAtMs = ComputeNextRunAtMs(job.Schedule, nowMs)
 
-	s.store.UpdateJobState(job.ID, state) //nolint:errcheck // best-effort
+	// Persist result state. If write fails, log — without this the next
+	// scheduler tick will reuse stale NextRunAtMs (potentially firing again
+	// immediately or far in the future).
+	if err := s.store.UpdateJobState(job.ID, state); err != nil {
+		s.logger.Error("cron job state persist failed — next schedule may be wrong",
+			"id", job.ID, "error", err)
+	}
 }
 
 // ShouldSendFailureAlert checks if a failure alert should be sent for a job.
@@ -312,10 +323,15 @@ func (s *Service) sendFailureAlert(ctx context.Context, job StoreJob, outcome Ru
 		s.logger.Warn("failure alert delivery failed", "jobID", job.ID, "error", dr.Error)
 	}
 
-	// Update last failure alert timestamp.
+	// Update last failure alert timestamp so the cooldown window works.
+	// Persist failure — if this write fails we'd spam the user with duplicate
+	// alerts on every subsequent failed run.
 	state := job.State
 	state.LastFailureAlertAtMs = time.Now().UnixMilli()
-	s.store.UpdateJobState(job.ID, state) //nolint:errcheck // best-effort
+	if err := s.store.UpdateJobState(job.ID, state); err != nil {
+		s.logger.Error("cron failure-alert timestamp persist failed — may duplicate alerts",
+			"id", job.ID, "error", err)
+	}
 }
 
 func resolveJobCommand(job StoreJob) string {

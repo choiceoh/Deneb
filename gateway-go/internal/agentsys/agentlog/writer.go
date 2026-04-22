@@ -3,6 +3,7 @@ package agentlog
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,7 +89,12 @@ func (w *Writer) pruneIfNeeded(path string) {
 
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, []byte(buf.String()), 0o600); err != nil {
+		slog.Warn("agentlog: rotate write failed — log file not rotated",
+			"path", path, "error", err)
 		return
 	}
-	os.Rename(tmp, path) //nolint:errcheck // best-effort
+	if err := os.Rename(tmp, path); err != nil {
+		slog.Warn("agentlog: rotate rename failed — tmp file remains",
+			"tmp", tmp, "path", path, "error", err)
+	}
 }

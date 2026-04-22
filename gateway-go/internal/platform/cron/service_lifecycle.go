@@ -33,7 +33,12 @@ func (s *Service) Start(ctx context.Context) error {
 		if job.State.NextRunAtMs <= 0 {
 			job.State.NextRunAtMs = ComputeNextRunAtMs(job.Schedule, nowMs)
 			if job.State.NextRunAtMs > 0 {
-				s.store.UpdateJobState(job.ID, job.State) //nolint:errcheck // best-effort
+				if err := s.store.UpdateJobState(job.ID, job.State); err != nil {
+					// Boot-time initialization failure — job still schedules in
+					// memory, but disk is stale. Log so the issue surfaces.
+					s.logger.Warn("cron boot state init persist failed",
+						"id", job.ID, "error", err)
+				}
 			}
 		}
 		scheduled++
