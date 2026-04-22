@@ -1,6 +1,7 @@
 package gmail
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -161,7 +162,7 @@ func TestValidToken_UsesCache(t *testing.T) {
 		expiry:      time.Now().Add(10 * time.Minute),
 	}
 
-	tok := testutil.Must(c.validToken())
+	tok := testutil.Must(c.validToken(context.Background()))
 	if tok != "cached-token" {
 		t.Errorf("token = %q, want cached-token", tok)
 	}
@@ -205,7 +206,7 @@ func TestValidToken_RefreshesExpired(t *testing.T) {
 		httpClient:   &http.Client{},
 	}
 
-	tok := testutil.Must(c.validToken())
+	tok := testutil.Must(c.validToken(context.Background()))
 	if tok != "ya29.refreshed" {
 		t.Errorf("token = %q, want ya29.refreshed", tok)
 	}
@@ -242,7 +243,7 @@ func TestValidToken_RefreshFailsOnBadResponse(t *testing.T) {
 		httpClient:   &http.Client{},
 	}
 
-	_, err := c.validToken()
+	_, err := c.validToken(context.Background())
 	if err == nil {
 		t.Fatal("expected error for bad refresh response")
 	}

@@ -68,7 +68,11 @@ func SendText(ctx context.Context, c *Client, chatID int64, text string, opts Se
 	// Track whether HTML parse failed so subsequent chunks skip HTML entirely.
 	parseMode := opts.ParseMode
 
-	var results []SendResult
+	var (
+		results      []SendResult
+		failedChunks []int
+		firstErr     chunkError
+	)
 	for i, chunk := range chunks {
 		params := map[string]any{
 			"chat_id": chatID,
@@ -107,7 +111,12 @@ func SendText(ctx context.Context, c *Client, chatID int64, text string, opts Se
 				result, err = c.Call(ctx, "sendMessage", params)
 			}
 			if err != nil {
-				return results, fmt.Errorf("sendMessage chunk %d: %w", i, err)
+				// Do NOT return early — remaining chunks may still be deliverable.
+				// Record the failure and try the rest so the user at least gets
+				// a partial reply instead of total silence.
+				failedChunks = append(failedChunks, i)
+				firstErr = firstErr.wrap(i, err)
+				continue
 			}
 		}
 
@@ -120,7 +129,25 @@ func SendText(ctx context.Context, c *Client, chatID int64, text string, opts Se
 		}
 	}
 
+	if len(failedChunks) > 0 {
+		return results, fmt.Errorf("sendMessage: %d/%d chunks failed (indices %v): %w",
+			len(failedChunks), len(chunks), failedChunks, firstErr.err)
+	}
 	return results, nil
+}
+
+// chunkError carries the first failure encountered while sending chunks, so
+// callers can unwrap it while SendText continues trying remaining chunks.
+type chunkError struct {
+	idx int
+	err error
+}
+
+func (c chunkError) wrap(i int, e error) chunkError {
+	if c.err != nil {
+		return c
+	}
+	return chunkError{idx: i, err: e}
 }
 
 // SendPhoto sends a photo by file_id or URL.

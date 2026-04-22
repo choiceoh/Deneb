@@ -115,6 +115,11 @@ func shouldMarkLost(t *TaskRecord, hasSession SessionChecker, now int64) bool {
 // StartMaintenanceLoop runs periodic maintenance sweeps in the background.
 func StartMaintenanceLoop(ctx context.Context, reg *Registry, hasSession SessionChecker, logger *slog.Logger) {
 	go func() {
+		defer func() {
+			if r := recover(); r != nil && logger != nil {
+				logger.Error("panic in tasks maintenance loop", "panic", r)
+			}
+		}()
 		// Wait before first sweep.
 		select {
 		case <-ctx.Done():

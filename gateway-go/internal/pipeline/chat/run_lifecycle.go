@@ -205,16 +205,42 @@ func handleRunSuccess(
 				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer replyCancel()
 				if deps.callbacks.replyFunc == nil {
-					logger.Warn("replyFunc is nil, response will not be delivered",
+					// Wiring bug: reply callback not registered. Escalate so
+					// operators notice — silent Warn was hiding broken deploys.
+					logger.Error("replyFunc is nil — response not delivered (wiring bug)",
 						"session", params.SessionKey,
 						"channel", params.Delivery.Channel,
 						"textLen", len(replyText))
-				}
-				if deps.callbacks.replyFunc != nil {
+					if deps.broadcast != nil {
+						deps.broadcast("chat.delivery_failed", map[string]any{
+							"session": params.SessionKey,
+							"channel": params.Delivery.Channel,
+							"reason":  "reply_func_nil",
+						})
+					}
+				} else {
 					// Primary path: channel-specific reply function (handles dedup,
-					// formatting, chunking, etc.).
-					if err := deps.callbacks.replyFunc(replyCtx, params.Delivery, replyText); err != nil {
-						logger.Error("channel reply failed", "error", err, "channel", params.Delivery.Channel)
+					// formatting, chunking, etc.). Retry once on transient errors
+					// so flaky networks don't silently drop the reply.
+					err := deps.callbacks.replyFunc(replyCtx, params.Delivery, replyText)
+					if err != nil {
+						logger.Warn("channel reply failed, retrying once",
+							"error", err, "channel", params.Delivery.Channel)
+						time.Sleep(500 * time.Millisecond)
+						err = deps.callbacks.replyFunc(replyCtx, params.Delivery, replyText)
+					}
+					if err != nil {
+						logger.Error("channel reply failed after retry",
+							"error", err, "channel", params.Delivery.Channel,
+							"session", params.SessionKey)
+						if deps.broadcast != nil {
+							deps.broadcast("chat.delivery_failed", map[string]any{
+								"session": params.SessionKey,
+								"channel": params.Delivery.Channel,
+								"reason":  "reply_func_error",
+								"error":   err.Error(),
+							})
+						}
 					}
 				}
 			}

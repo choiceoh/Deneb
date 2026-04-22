@@ -96,9 +96,17 @@ func OpenStore(cfg StoreConfig, logger *slog.Logger) (*Store, error) {
 		return nil, fmt.Errorf("tasks store: read snapshot: %w", err)
 	}
 
-	// Start background flush goroutine.
+	// Start background flush goroutine with panic recovery so a bad disk
+	// write cannot take down the whole process.
 	s.wg.Add(1)
-	go s.flushLoop()
+	go func() {
+		defer func() {
+			if r := recover(); r != nil && s.logger != nil {
+				s.logger.Error("panic in tasks flushLoop", "panic", r)
+			}
+		}()
+		s.flushLoop()
+	}()
 
 	return s, nil
 }

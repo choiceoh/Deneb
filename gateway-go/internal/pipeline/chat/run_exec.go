@@ -470,9 +470,27 @@ func assembleMessages(
 
 			// Proactive condensation: when a new leaf summary was persisted,
 			// trigger background condensation to merge leaves into higher-level nodes.
+			// Runs in its own goroutine with a bounded timeout so it cannot
+			// outlive sensible lifetime and cannot take down the process on panic.
 			if polarisResult.LLMCompacted && summarizer != nil {
 				condSummarizer := summarizer // capture for goroutine
-				go engine.Condense(context.Background(), params.SessionKey, condSummarizer)
+				sessionKey := params.SessionKey
+				condLogger := logger
+				// Intentionally decoupled from the request ctx: Condense is
+				// proactive background work that must outlive the agent turn.
+				go func() { //nolint:gosec // G118 — decoupled from request ctx on purpose; bounded timeout below
+					defer func() {
+						if r := recover(); r != nil {
+							condLogger.Error("panic in background condense", "session", sessionKey, "panic", r)
+						}
+					}()
+					// Bounded by a 5-minute timeout so it cannot leak forever.
+					condCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+					defer cancel()
+					if err := engine.Condense(condCtx, sessionKey, condSummarizer); err != nil {
+						condLogger.Warn("background condense failed", "session", sessionKey, "error", err)
+					}
+				}()
 			}
 		} else {
 			cfg := compact.NewConfig(contextBudget)
