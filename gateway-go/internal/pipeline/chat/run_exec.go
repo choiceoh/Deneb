@@ -482,8 +482,14 @@ func assembleMessages(
 				condSummarizer := summarizer // capture for goroutine
 				sessionKey := params.SessionKey
 				condLogger := logger
-				// Intentionally decoupled from the request ctx: Condense is
-				// proactive background work that must outlive the agent turn.
+				// Decouple from the request ctx so Condense outlives the agent turn,
+				// but derive from the server shutdown ctx so a graceful shutdown
+				// cancels it. Falls back to Background if shutdownCtx isn't wired
+				// yet (e.g. in tests) — still bounded by the timeout below.
+				parentCtx := deps.callbacks.shutdownCtx
+				if parentCtx == nil {
+					parentCtx = context.Background()
+				}
 				go func() { //nolint:gosec // G118 — decoupled from request ctx on purpose; bounded timeout below
 					defer func() {
 						if r := recover(); r != nil {
@@ -491,7 +497,7 @@ func assembleMessages(
 						}
 					}()
 					// Bounded by a 5-minute timeout so it cannot leak forever.
-					condCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+					condCtx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
 					defer cancel()
 					if err := engine.Condense(condCtx, sessionKey, condSummarizer); err != nil {
 						condLogger.Warn("background condense failed", "session", sessionKey, "error", err)
