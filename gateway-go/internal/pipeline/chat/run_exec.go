@@ -442,7 +442,13 @@ func assembleMessages(
 				if hooks.typingFn != nil {
 					compactTypingDone = make(chan struct{})
 					typingFn := hooks.typingFn
+					typingLogger := logger
 					go func() {
+						defer func() {
+							if r := recover(); r != nil {
+								typingLogger.Error("panic in compaction typing loop", "panic", r)
+							}
+						}()
 						ticker := time.NewTicker(5 * time.Second)
 						defer ticker.Stop()
 						for {

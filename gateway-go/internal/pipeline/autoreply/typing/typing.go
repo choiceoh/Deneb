@@ -21,6 +21,7 @@ type TypingController struct {
 	runComplete  bool
 	dispatchIdle bool
 	done         chan struct{}
+	closeOnce    sync.Once // guards close(done) from double-close panic
 	onStart      func()
 	onStop       func()
 	onCleanup    func()
@@ -214,11 +215,7 @@ func (tc *TypingController) Stop() {
 	tc.active = false
 	tc.mu.Unlock()
 
-	select {
-	case <-tc.done:
-	default:
-		close(tc.done)
-	}
+	tc.closeOnce.Do(func() { close(tc.done) })
 
 	if tc.onStop != nil {
 		tc.onStop()
@@ -231,11 +228,7 @@ func (tc *TypingController) Seal() {
 	tc.sealed = true
 	tc.active = false
 	tc.mu.Unlock()
-	select {
-	case <-tc.done:
-	default:
-		close(tc.done)
-	}
+	tc.closeOnce.Do(func() { close(tc.done) })
 }
 
 // IsStarted returns whether typing was started.
