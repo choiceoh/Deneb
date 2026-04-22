@@ -113,9 +113,18 @@ func (s *Server) wireTelegramChatHandler() {
 				}
 				// Edit failed (e.g. message too long for single edit, or API error).
 				// Delete the draft and fall through to send as new message.
+				// Draft ordering is guaranteed because DraftStreamLoop.StopForClear
+				// (called via run_exec.go deferred cleanup) blocks on any in-flight
+				// draft edit before this replyFunc is invoked — so we are never
+				// racing a pending draft edit with the final edit here.
 				s.logger.Warn("draft edit failed, falling back to new message",
 					"msgId", draftID, "error", editErr)
-				_ = client.DeleteMessage(ctx, chatID, editMsgID) // best-effort: draft cleanup is non-critical
+				if delErr := client.DeleteMessage(ctx, chatID, editMsgID); delErr != nil {
+					// User may briefly see both stale draft + new message.
+					// Log so operator knows why a duplicate appeared.
+					s.logger.Warn("draft cleanup after failed edit also failed",
+						"msgId", draftID, "error", delErr)
+				}
 			}
 		}
 
