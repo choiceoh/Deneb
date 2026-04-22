@@ -182,14 +182,14 @@ type Manager struct {
 	initOnce sync.Once // lazy initialization for sessions map and eventBus
 	gcOnce   sync.Once // ensures StartGC spawns at most one GC goroutine
 
-	// emitGate serializes state-mutation + event-emission as an atomic unit.
-	// Buffered channel (cap 1) acts as a gate: a goroutine sends to acquire,
-	// receives to release. This replaces a dedicated sync.Mutex and eliminates
-	// the manual lock-ordering constraint (emitGate → mu is automatic because
-	// mutateAndEmit always acquires in that order).
+	// emitGate serializes STATE MUTATIONS (the fn() in mutateAndEmit). Event
+	// dispatch happens OUTSIDE the gate so subscribers can safely call mutating
+	// Manager methods without deadlocking on gate re-entry.
 	//
-	// Event subscribers must NOT call mutating Manager methods (Set, Delete,
-	// Create, Patch, etc.) or they will deadlock on emitGate re-entry.
+	// Buffered channel (cap 1) acts as a gate: a goroutine sends to acquire,
+	// receives to release. Concurrent mutations are serialized; however,
+	// event ordering across distinct mutations is not guaranteed since
+	// dispatch runs after the gate is released.
 	emitGate chan struct{}
 }
 
@@ -286,15 +286,25 @@ func isTerminal(s RunStatus) bool {
 }
 
 // mutateAndEmit serializes a state mutation with its associated event emissions.
-// It acquires the emit gate, runs fn (which should lock/unlock mu internally),
-// then emits the returned events. All mutating Manager methods use this to
-// guarantee that state changes and their events are never interleaved.
+// Phase 1 (under gate): fn() runs while holding emitGate, which serializes
+// concurrent mutations and prevents them from interleaving.
+// Phase 2 (outside gate): events are dispatched to subscribers after the
+// gate is released so that subscribers can safely call mutating Manager
+// methods (Set, Delete, Create, Patch, etc.) without deadlocking.
 func (m *Manager) mutateAndEmit(fn func() []Event) {
-	m.emitGate <- struct{}{}
-	defer func() { <-m.emitGate }()
-	for _, e := range fn() {
+	events := m.runUnderGate(fn)
+	for _, e := range events {
 		m.eventBus.Emit(e)
 	}
+}
+
+// runUnderGate acquires the emit gate, runs fn, and releases the gate via
+// defer so the gate is always released — including on panic. Events are
+// returned so the caller can dispatch them without holding the gate.
+func (m *Manager) runUnderGate(fn func() []Event) []Event {
+	m.emitGate <- struct{}{}
+	defer func() { <-m.emitGate }()
+	return fn()
 }
 
 // EventBusRef returns the session event bus for subscribing to lifecycle events.
