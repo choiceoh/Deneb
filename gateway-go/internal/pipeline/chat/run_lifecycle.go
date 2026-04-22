@@ -15,6 +15,26 @@ import (
 
 const externalDeliveryFailureNotice = "외부 채널 전송이 실패했습니다. 전달이 확인되지 않았습니다. 현재 채팅에 보인다고 가정하지 말고 채널 연결을 확인한 뒤 다시 시도해 주세요."
 
+// fallbackForStopReason returns a user-visible Korean message for abnormal
+// terminations where the agent produced no text output. Empty string means
+// no fallback needed (e.g., end_turn is a normal termination — tool-only
+// turns legitimately produce no text and the caller already logged it).
+func fallbackForStopReason(stopReason string) string {
+	switch stopReason {
+	case "max_turns":
+		return "응답 생성이 반복 한도에 도달해 마무리되지 않았어요. 다시 한 번 말해 주세요 — 더 짧게 끊어서 요청하면 잘 끝납니다."
+	case "timeout":
+		return "응답 생성이 시간 초과로 중단됐어요. 잠시 후에 다시 시도해 주세요."
+	case "aborted":
+		return "작업이 중단됐어요. 이어서 진행하려면 다시 요청해 주세요."
+	case "error":
+		return "응답 생성 중 오류가 발생했어요. 다시 시도해 주세요."
+	default:
+		// end_turn, empty, or unknown — empty text is legitimate (tool-only turn).
+		return ""
+	}
+}
+
 // persistInterruptedContext saves a context note to the transcript when a run
 // is aborted while tools were executing. This ensures the next run has context
 // about what was being done, preventing the "amnesia" bug where the assistant
@@ -183,6 +203,28 @@ func handleRunSuccess(
 			"stopReason", result.StopReason,
 			"inputTokens", result.Usage.InputTokens,
 			"outputTokens", result.Usage.OutputTokens)
+
+		// Abnormal stop with empty output — tell the user something went
+		// wrong instead of leaving them staring at silence. end_turn with
+		// empty text can happen legitimately (tool-only turns) so we only
+		// surface for limit/error-like terminations.
+		if fallbackMsg := fallbackForStopReason(result.StopReason); fallbackMsg != "" && deps.callbacks.replyFunc != nil {
+			replyCtx, replyCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			if err := deps.callbacks.replyFunc(replyCtx, params.Delivery, fallbackMsg); err != nil {
+				logger.Error("fallback delivery failed",
+					"error", err, "stopReason", result.StopReason,
+					"session", params.SessionKey)
+				if deps.broadcast != nil {
+					deps.broadcast("chat.delivery_failed", map[string]any{
+						"session": params.SessionKey,
+						"channel": params.Delivery.Channel,
+						"reason":  "stop_fallback_error",
+						"error":   err.Error(),
+					})
+				}
+			}
+			replyCancel()
+		}
 	}
 	if params.Delivery != nil && result.Text != "" && deps.chatport.ParseReplyDirectives == nil {
 		logger.Warn("parseReplyDirectives is nil, channel delivery skipped",
@@ -192,12 +234,11 @@ func handleRunSuccess(
 	}
 	if params.Delivery != nil && result.Text != "" && deps.chatport.ParseReplyDirectives != nil {
 		directives := deps.chatport.ParseReplyDirectives(result.Text, params.Delivery.MessageID, "")
-		if directives.IsSilent {
-			logger.Info("suppressing silent reply (NO_REPLY); streamed draft preserved")
-			// Do not delete the draft: content already streamed to the user
-			// stays visible. NO_REPLY after streaming means "stop editing",
-			// not "retract what was shown".
-		} else {
+		// IsSilent suppresses TEXT delivery only. Media tokens represent
+		// explicit agent intent ("send this image/audio") and are delivered
+		// regardless — otherwise an agent reply of "NO_REPLY [[media:url]]"
+		// would silently drop the media the agent clearly wanted to send.
+		if !directives.IsSilent {
 			replyText := jsonutil.StripThinkingTags(directives.Text)
 			replyText = strings.TrimSpace(replyText)
 
@@ -245,33 +286,40 @@ func handleRunSuccess(
 				}
 			}
 
-			// Deliver MEDIA: tokens extracted by ParseReplyDirectives.
-			// Each media URL is sent via mediaSendFn (photo/document/audio
-			// auto-detected by the channel adapter). [[audio_as_voice]] tag
-			// forces voice mode for audio files.
-			if deps.callbacks.mediaSendFn != nil && len(directives.MediaURLs) > 0 {
-				mediaCtx, mediaCancel := context.WithTimeout(context.Background(), 60*time.Second)
-				defer mediaCancel()
-				var failedURLs []string
-				for _, mediaURL := range directives.MediaURLs {
-					mediaType := ""
-					if directives.AudioAsVoice {
-						mediaType = "voice"
-					}
-					if err := deps.callbacks.mediaSendFn(mediaCtx, params.Delivery, mediaURL, mediaType, "", false); err != nil {
-						logger.Warn("media delivery failed", "url", mediaURL, "error", err)
-						failedURLs = append(failedURLs, mediaURL)
-					}
+		} else {
+			logger.Info("suppressing silent reply (NO_REPLY); streamed draft preserved",
+				"hasMedia", len(directives.MediaURLs) > 0)
+			// Do not delete the draft: content already streamed to the user
+			// stays visible. NO_REPLY after streaming means "stop editing",
+			// not "retract what was shown".
+		}
+
+		// Deliver MEDIA: tokens extracted by ParseReplyDirectives. Always run
+		// whenever media tokens are present — including when IsSilent is true —
+		// because the agent explicitly included them as output intent.
+		// [[audio_as_voice]] tag forces voice mode for audio files.
+		if deps.callbacks.mediaSendFn != nil && len(directives.MediaURLs) > 0 {
+			mediaCtx, mediaCancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer mediaCancel()
+			var failedURLs []string
+			for _, mediaURL := range directives.MediaURLs {
+				mediaType := ""
+				if directives.AudioAsVoice {
+					mediaType = "voice"
 				}
-				if len(failedURLs) > 0 && deps.broadcast != nil {
-					deps.broadcast("chat.media_delivery_failed", map[string]any{
-						"session": params.SessionKey,
-						"channel": params.Delivery.Channel,
-						"count":   len(failedURLs),
-						"total":   len(directives.MediaURLs),
-						"urls":    failedURLs,
-					})
+				if err := deps.callbacks.mediaSendFn(mediaCtx, params.Delivery, mediaURL, mediaType, "", false); err != nil {
+					logger.Warn("media delivery failed", "url", mediaURL, "error", err)
+					failedURLs = append(failedURLs, mediaURL)
 				}
+			}
+			if len(failedURLs) > 0 && deps.broadcast != nil {
+				deps.broadcast("chat.media_delivery_failed", map[string]any{
+					"session": params.SessionKey,
+					"channel": params.Delivery.Channel,
+					"count":   len(failedURLs),
+					"total":   len(directives.MediaURLs),
+					"urls":    failedURLs,
+				})
 			}
 		}
 	}
