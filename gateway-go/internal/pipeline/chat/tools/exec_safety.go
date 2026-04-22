@@ -20,11 +20,28 @@ type DestructiveCheck struct {
 	Severity    string // "warning" or "danger"
 }
 
+// sensitiveWriteTargets matches paths that should never be written to casually.
+// Shell expansions ($HOME, ~) covered explicitly. Matches NousResearch/hermes-agent
+// tools/approval.py:_SENSITIVE_WRITE_TARGET pattern, adapted for Deneb paths.
+var sensitiveWriteTargets = regexp.MustCompile(
+	`(?i)(?:` +
+		`/etc/|` +
+		`/dev/(sd[a-z]|nvme|vd[a-z])|` +
+		`(?:~|\$home|\$\{home\})/\.ssh(?:/|$)|` +
+		`(?:~|\$home|\$\{home\})/\.deneb/\.env\b` +
+		`)`,
+)
+
 // destructivePatterns detects commands that could cause data loss.
 var destructivePatterns = []DestructiveCheck{
 	{
 		Pattern:     regexp.MustCompile(`\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|(-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*)|-[a-zA-Z]*r\s+-[a-zA-Z]*f|-[a-zA-Z]*f\s+-[a-zA-Z]*r)\b`),
 		Description: "recursive force delete (rm -rf)",
+		Severity:    "danger",
+	},
+	{
+		Pattern:     sensitiveWriteTargets,
+		Description: "touches sensitive path (~/.ssh, ~/.deneb/.env, /etc, /dev block devices)",
 		Severity:    "danger",
 	},
 	{
