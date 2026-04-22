@@ -1,6 +1,9 @@
 package server
 
-import "net/http"
+import (
+	"net/http"
+	"net/http/pprof"
+)
 
 // buildMux configures HTTP routing for health, RPC/WS, API, hooks, and plugin routes.
 func (s *Server) buildMux() *http.ServeMux {
@@ -9,6 +12,17 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /ready", s.handleReady)
 	mux.HandleFunc("GET /readyz", s.handleReady)
+
+	// /debug/pprof/* — runtime profiling + goroutine dumps for live diagnosis.
+	// Safe to expose because the gateway binds loopback by default in
+	// production; these endpoints are never reachable from outside the host.
+	// Visit /debug/pprof/goroutine?debug=2 when the gateway appears hung —
+	// it returns a full stack dump without killing the process.
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	// Explicit method-not-allowed for health/ready endpoints.
 	// Without these, non-GET requests fall through to the catch-all "/" handler
