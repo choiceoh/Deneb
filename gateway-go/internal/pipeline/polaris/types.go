@@ -19,9 +19,15 @@ const (
 
 // Config controls Polaris compaction and assembly behavior.
 type Config struct {
-	// SoftThresholdPct triggers async compaction between turns (default 0.80).
+	// SoftThresholdPct triggers async compaction between turns (default 0.70).
+	// Lower than the old 0.80 gives a bigger runway before a single large tool
+	// result can push us into the mid-loop emergency path — prevention is
+	// cheaper than recovery (mid-loop compaction adds ~30s to the user turn).
 	SoftThresholdPct float64
-	// HardThresholdPct triggers immediate compaction (default 0.92).
+	// HardThresholdPct triggers immediate compaction (default 0.85).
+	// Lower than the old 0.92 so we still have ~15% headroom after compaction
+	// even if the summary itself grows; this is what stops occasional
+	// "context_overflow_unrecoverable" broadcasts.
 	HardThresholdPct float64
 	// LeafChunkTokens is the target token size per leaf summary batch (default 20000).
 	LeafChunkTokens int
@@ -34,8 +40,8 @@ type Config struct {
 // DefaultConfig returns sensible defaults for single-user deployment.
 func DefaultConfig() Config {
 	return Config{
-		SoftThresholdPct:     0.80,
-		HardThresholdPct:     0.92,
+		SoftThresholdPct:     0.70,
+		HardThresholdPct:     0.85,
 		LeafChunkTokens:      20_000,
 		CondenseFanIn:        4,
 		MaxCondensationDepth: 3,

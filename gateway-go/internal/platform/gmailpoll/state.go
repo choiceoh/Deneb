@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const (
@@ -74,12 +75,37 @@ func (s *stateStore) Save(state *PollState) error {
 		return fmt.Errorf("create state dir: %w", err)
 	}
 
-	// Atomic write via temp file + rename.
+	// Atomic write via temp file + rename, with one retry on transient
+	// filesystem errors so brief hiccups don't surface as persist failures.
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return fmt.Errorf("write temp state: %w", err)
+	_ = os.Remove(tmp) // clean up any leftover tmp from a prior interrupted save
+	const maxAttempts = 2
+	var writeErr error
+	for attempt := range maxAttempts {
+		writeErr = os.WriteFile(tmp, data, 0o600)
+		if writeErr == nil {
+			break
+		}
+		if attempt+1 < maxAttempts {
+			time.Sleep(50 * time.Millisecond)
+		}
 	}
-	return os.Rename(tmp, s.path)
+	if writeErr != nil {
+		return fmt.Errorf("write temp state: %w", writeErr)
+	}
+
+	var renameErr error
+	for attempt := range maxAttempts {
+		renameErr = os.Rename(tmp, s.path)
+		if renameErr == nil {
+			return nil
+		}
+		if attempt+1 < maxAttempts {
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	_ = os.Remove(tmp) // best-effort cleanup on final rename failure
+	return renameErr
 }
 
 // hasSeen checks if a message ID has already been processed (O(1)).

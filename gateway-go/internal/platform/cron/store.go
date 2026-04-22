@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
@@ -126,7 +127,10 @@ func (s *Store) Load() (*CronStoreFile, error) {
 }
 
 // Save writes the cron store to disk atomically with a backup.
-// Skips write if the serialized content hasn't changed.
+// Skips write if the serialized content hasn't changed. Transient write
+// failures (disk hiccups, brief I/O errors) are retried twice with 50ms/100ms
+// backoff before surfacing — this prevents momentary disk stalls from being
+// reported as cron state-persist errors.
 func (s *Store) Save(store *CronStoreFile) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -142,13 +146,25 @@ func (s *Store) Save(store *CronStoreFile) error {
 		return nil
 	}
 
-	if err := atomicfile.WriteFile(s.path, serialized, &atomicfile.Options{
-		Perm:    0o600,
-		DirPerm: 0o700,
-		Fsync:   true,
-		Backup:  s.cachedJSON != "",
-	}); err != nil {
-		return fmt.Errorf("save cron store: %w", err)
+	const maxAttempts = 3
+	var writeErr error
+	for attempt := range maxAttempts {
+		writeErr = atomicfile.WriteFile(s.path, serialized, &atomicfile.Options{
+			Perm:    0o600,
+			DirPerm: 0o700,
+			Fsync:   true,
+			Backup:  s.cachedJSON != "",
+		})
+		if writeErr == nil {
+			break
+		}
+		if attempt+1 < maxAttempts {
+			// 50ms, 100ms
+			time.Sleep(time.Duration(50*(1<<attempt)) * time.Millisecond)
+		}
+	}
+	if writeErr != nil {
+		return fmt.Errorf("save cron store: %w", writeErr)
 	}
 
 	s.cached = store

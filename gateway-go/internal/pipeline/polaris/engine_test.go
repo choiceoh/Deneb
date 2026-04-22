@@ -230,15 +230,18 @@ func TestCapturingSummarizer(t *testing.T) {
 func TestShouldCompact(t *testing.T) {
 	e, _ := testEngine(t)
 
+	// Defaults are Soft=0.70, Hard=0.85 — chosen to keep headroom between
+	// compaction and the provider's hard context limit, so a single large
+	// tool result cannot push the turn into the mid-loop emergency path.
 	tests := []struct {
 		current, budget int
 		want            CompactUrgency
 	}{
 		{50_000, 150_000, CompactNone},  // 33%
-		{119_000, 150_000, CompactNone}, // 79.3% < 80%
-		{121_000, 150_000, CompactSoft}, // 80.7%
-		{137_000, 150_000, CompactSoft}, // 91.3% < 92%
-		{138_000, 150_000, CompactHard}, // 92%
+		{104_000, 150_000, CompactNone}, // 69.3% < 70%
+		{106_000, 150_000, CompactSoft}, // 70.7%
+		{127_000, 150_000, CompactSoft}, // 84.7% < 85%
+		{128_000, 150_000, CompactHard}, // 85.3%
 		{150_000, 150_000, CompactHard}, // 100%
 		{0, 0, CompactNone},             // zero budget
 	}
