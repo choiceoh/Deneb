@@ -86,6 +86,16 @@ type TrackedProcess struct {
 type ApprovalCallback func(req ExecRequest) bool
 
 // Manager manages subprocess lifecycle.
+//
+// Lock hierarchy (acquire in this order; never reverse):
+//
+//	Manager.mu  →  TrackedProcess.mu
+//
+// List/Get release Manager.mu BEFORE touching TrackedProcess.mu. Prune holds
+// Manager.mu while briefly acquiring each TrackedProcess.mu; this is safe
+// because TrackedProcess.mu is only ever held for short status snapshots
+// (never across I/O). Any new callsite that acquires TrackedProcess.mu
+// before Manager.mu would create a deadlock — review carefully.
 type Manager struct {
 	mu        sync.RWMutex
 	processes map[string]*TrackedProcess
