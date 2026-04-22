@@ -25,16 +25,28 @@ type Event struct {
 // EventHandler is a callback for session events.
 type EventHandler func(event Event)
 
-// subscription wraps a handler with a unique ID for safe unsubscribe.
+// subscriberQueueSize bounds each subscriber's per-handler mailbox. A slow
+// handler that falls behind by more than this many events starts dropping
+// (with a warning log) instead of blocking Emit and stalling other subscribers.
+const subscriberQueueSize = 64
+
+// subscription wraps a handler with a unique ID and its own async mailbox.
+// Each subscriber runs in its own goroutine so a slow handler cannot delay
+// event delivery to other subscribers. The goroutine exits when done is closed.
 type subscription struct {
 	id      uint64
 	handler EventHandler
+	queue   chan Event
+	done    chan struct{}
 }
 
 // EventBus provides pub/sub for session lifecycle events.
+// Dispatch is asynchronous: each subscriber has a buffered mailbox and a
+// dedicated goroutine. This isolates slow or panicking handlers so they
+// cannot stall other subscribers or the caller of Emit.
 type EventBus struct {
 	mu     sync.RWMutex
-	subs   []subscription
+	subs   []*subscription
 	nextID uint64
 }
 
@@ -43,55 +55,86 @@ func NewEventBus() *EventBus {
 	return &EventBus{}
 }
 
-// Subscribe registers a handler for all session events.
-// Returns an unsubscribe function that is safe to call concurrently.
+// Subscribe registers a handler and spawns a worker goroutine that drains
+// its mailbox sequentially. Returns an unsubscribe function that is safe
+// to call concurrently; it stops the worker and removes the subscription.
 func (b *EventBus) Subscribe(handler EventHandler) func() {
 	b.mu.Lock()
 	id := b.nextID
 	b.nextID++
-	b.subs = append(b.subs, subscription{id: id, handler: handler})
+	sub := &subscription{
+		id:      id,
+		handler: handler,
+		queue:   make(chan Event, subscriberQueueSize),
+		done:    make(chan struct{}),
+	}
+	b.subs = append(b.subs, sub)
 	b.mu.Unlock()
 
+	go runSubscriber(sub)
+
+	var once sync.Once
 	return func() {
-		b.mu.Lock()
-		defer b.mu.Unlock()
-		for i, s := range b.subs {
-			if s.id == id {
-				// Remove by swapping with last element.
-				b.subs[i] = b.subs[len(b.subs)-1]
-				b.subs = b.subs[:len(b.subs)-1]
-				return
+		once.Do(func() {
+			b.mu.Lock()
+			for i, s := range b.subs {
+				if s.id == id {
+					b.subs[i] = b.subs[len(b.subs)-1]
+					b.subs = b.subs[:len(b.subs)-1]
+					break
+				}
 			}
+			b.mu.Unlock()
+			close(sub.done)
+		})
+	}
+}
+
+// runSubscriber drains the subscription mailbox until done is closed.
+// Each handler invocation is protected by panic recovery.
+func runSubscriber(sub *subscription) {
+	for {
+		select {
+		case <-sub.done:
+			return
+		case event := <-sub.queue:
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						slog.Error("event bus: handler panicked",
+							"event", event.Kind, "key", event.Key, "panic", r)
+					}
+				}()
+				sub.handler(event)
+			}()
 		}
 	}
 }
 
-// Emit sends an event to all subscribers.
-// A panicking handler is recovered so it does not prevent other handlers from executing.
+// Emit enqueues an event to every subscriber's mailbox. Emission is
+// non-blocking: if a subscriber's mailbox is full (slow handler), the
+// event is dropped with a warning log rather than stalling the producer.
 func (b *EventBus) Emit(event Event) {
 	b.mu.RLock()
-	n := len(b.subs)
-	if n == 0 {
+	if len(b.subs) == 0 {
 		b.mu.RUnlock()
 		return
 	}
-	snapshot := make([]EventHandler, n)
-	for i, s := range b.subs {
-		snapshot[i] = s.handler
-	}
+	// Copy pointers out so we can release the read lock before any channel
+	// sends — the lock protects the subs slice, not the mailboxes.
+	snapshot := make([]*subscription, len(b.subs))
+	copy(snapshot, b.subs)
 	b.mu.RUnlock()
 
-	// Each handler is called in an isolated closure with panic recovery.
-	// Panics are logged and recovered so a buggy subscriber does not
-	// disrupt event delivery to other subscribers.
-	for _, h := range snapshot {
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("event bus: handler panicked", "event", event.Kind, "key", event.Key, "panic", r)
-				}
-			}()
-			h(event)
-		}()
+	for _, sub := range snapshot {
+		select {
+		case sub.queue <- event:
+		default:
+			// Slow subscriber: mailbox full. Drop to keep producer non-blocking.
+			// The underlying state change has already been applied; losing the
+			// notification is a lesser harm than stalling Emit.
+			slog.Warn("event bus: subscriber mailbox full, dropping event",
+				"event", event.Kind, "key", event.Key, "subscriberID", sub.id)
+		}
 	}
 }
