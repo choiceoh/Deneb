@@ -196,7 +196,12 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	if len(newMessages) == 0 {
 		s.log.Debug("새 메일 없음")
 		pollState.LastPollAt = time.Now().UnixMilli()
-		s.state.Save(pollState) //nolint:errcheck // best-effort
+		if err := s.state.Save(pollState); err != nil {
+			// LastPollAt not persisted — next poll will re-query the same
+			// window (wasted API call but no data loss). Log so repeated
+			// failures surface instead of silently piling up.
+			s.log.Warn("gmailpoll: state persist failed (no-messages branch)", "error", err)
+		}
 		return nil
 	}
 
