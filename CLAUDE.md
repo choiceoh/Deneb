@@ -41,6 +41,7 @@
 | `live-testing.md` | 라이브 테스트 필수 절차 | `gateway-go/**/*.go` |
 | `optimization.md` | 반복 최적화 전략 (오토리서치 방법론) | `gateway-go/**/*.go` |
 | `concurrency.md` | 뮤텍스/채널/goroutine 규칙 (데드락 방지) | `gateway-go/**/*.go` |
+| `logging.md` | slog 레벨 가이드 (사용자 무응답 Error 원칙) | `gateway-go/**/*.go` |
 
 ---
 
