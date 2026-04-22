@@ -17,7 +17,7 @@ func TestResolveModel(t *testing.T) {
 		// Role names resolve to full model IDs.
 		{"main", "zai/test-model", RoleMain, true},
 		{"lightweight", "vllm/" + DefaultVllmModel, RoleLightweight, true},
-		{"fallback", "google/" + DefaultFallbackModel, RoleFallback, true},
+		{"fallback", "vllm/" + DefaultVllmModel, RoleFallback, true},
 		// Actual model names pass through unchanged.
 		{"google/gemini-3.1-pro", "google/gemini-3.1-pro", "", false},
 		{"some-unknown-model", "some-unknown-model", "", false},
@@ -49,8 +49,9 @@ func TestRoleForModel(t *testing.T) {
 		wantFound   bool
 	}{
 		{"zai/test-model", RoleMain, true},
+		// Lightweight and Fallback both use vllm/qwen36; RoleForModel returns the
+		// first match (Lightweight) when iterating roles in order.
 		{"vllm/" + DefaultVllmModel, RoleLightweight, true},
-		{"google/" + DefaultFallbackModel, RoleFallback, true},
 		{"unknown/model", "", false},
 	}
 

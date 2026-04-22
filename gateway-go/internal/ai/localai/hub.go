@@ -22,26 +22,17 @@ var (
 )
 
 // NoThinking is the default ExtraBody merged into every hub request.
-// Previously disabled Qwen3.5 reasoning mode; currently empty (gemma4
-// does not require extra template kwargs).
+// Qwen3 non-thinking mode is toggled via the model's `thinking` alias param
+// in deneb.json, not via this map. Kept as an extension point for models
+// that need template kwargs injected on every call.
 // Exported so pilot and memory packages can reference it without duplicating.
 var NoThinking = map[string]any{}
 
 // modelSamplingDefaults returns vendor-recommended sampling parameters for
 // known local models. Returns nil pointers for unknown models (use server defaults).
-// Sources:
-//   - Gemma 4: Google model card (ai.google.dev/gemma/docs/core/model_card_4)
-func modelSamplingDefaults(model string) (temp, topP *float64, topK *int) {
-	m := strings.ToLower(model)
-	switch {
-	case strings.Contains(m, "gemma-4") || strings.Contains(m, "gemma4"):
-		return ptr(1.0), ptr(0.95), ptr(64)
-	default:
-		return nil, nil, nil
-	}
+func modelSamplingDefaults(_ string) (temp, topP *float64, topK *int) {
+	return nil, nil, nil
 }
-
-func ptr[T any](v T) *T { return &v }
 
 // Config controls hub behavior.
 type Config struct {
