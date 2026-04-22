@@ -18,8 +18,19 @@ import (
 // All schedule kinds (at/every/cron) use a single timer-based system.
 // Session GC for cron runs is handled by session.Manager's Kind-based retention
 // (KindCron → 24h), so no separate reaper is needed.
+//
+// Lock hierarchy (acquire in this order; never reverse):
+//
+//	Service.mu  →  Store.mu  →  TrackedJob/runLog.mu
+//	Service.listenersMu (independent — safe to hold under Service.mu)
+//
+// Any code that touches *Store directly must NOT call back into Service
+// methods that acquire Service.mu, or it will deadlock.
 type Service struct {
-	mu      sync.Mutex
+	mu sync.Mutex
+	// store has its own Store.mu; always acquired under Service.mu per the
+	// hierarchy above. Do not add callsites outside this package without
+	// reviewing the ordering invariant.
 	store   *Store
 	runLog  *PersistentRunLog
 	agent   AgentRunner
