@@ -542,6 +542,26 @@ func assembleMessages(
 			}
 			logger.Info("polaris "+tier+" compaction", attrs...)
 		}
+
+		// Compaction ran (triggered by tokens > budget) but did not bring
+		// tokens back within budget — degraded context state. Agent will
+		// likely hit provider-side overflow; surface to operator now so we
+		// know why a turn later fails, rather than blaming only the LLM.
+		if polarisResult.TokensBefore > contextBudget && polarisResult.TokensAfter > contextBudget {
+			logger.Warn("polaris: compaction failed to reduce below budget",
+				"session", params.SessionKey,
+				"tokensBefore", polarisResult.TokensBefore,
+				"tokensAfter", polarisResult.TokensAfter,
+				"budget", contextBudget)
+			if deps.broadcast != nil {
+				deps.broadcast("chat.compaction_degraded", map[string]any{
+					"session":      params.SessionKey,
+					"tokensBefore": polarisResult.TokensBefore,
+					"tokensAfter":  polarisResult.TokensAfter,
+					"budget":       contextBudget,
+				})
+			}
+		}
 	}
 
 	return messages
@@ -888,6 +908,23 @@ func runAgentWithFallback(
 		}
 
 		if runErr != nil {
+			// Surface unrecoverable context overflow so operators/UI see it.
+			// Without this the only signal was a Warn log in the retry loop
+			// and the final error return — easy to miss when diagnosing
+			// "why did the bot suddenly stop on long sessions".
+			if isContextOverflow(runErr) && deps.broadcast != nil {
+				deps.broadcast("chat.context_overflow_unrecoverable", map[string]any{
+					"model":        cfg.Model,
+					"messageCount": len(messages),
+					"attempts":     maxCompactionRetries + 1,
+					"error":        runErr.Error(),
+				})
+				logger.Error("context overflow: all compaction retries exhausted",
+					"model", cfg.Model,
+					"messageCount", len(messages),
+					"attempts", maxCompactionRetries+1,
+					"error", runErr)
+			}
 			return nil, runErr
 		}
 		break // success via transient retry or fallback
