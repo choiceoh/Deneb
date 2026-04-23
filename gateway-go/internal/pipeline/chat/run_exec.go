@@ -547,7 +547,9 @@ func assembleMessages(
 		// tokens back within budget — degraded context state. Agent will
 		// likely hit provider-side overflow; surface to operator now so we
 		// know why a turn later fails, rather than blaming only the LLM.
-		if polarisResult.TokensBefore > contextBudget && polarisResult.TokensAfter > contextBudget {
+		// Skip when budget is unset/zero (e.g. boot session, subagent) —
+		// the inequality is trivially true and the warning becomes noise.
+		if contextBudget > 0 && polarisResult.TokensBefore > contextBudget && polarisResult.TokensAfter > contextBudget {
 			logger.Warn("polaris: compaction failed to reduce below budget",
 				"session", params.SessionKey,
 				"tokensBefore", polarisResult.TokensBefore,
