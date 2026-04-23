@@ -187,6 +187,28 @@ class TelegramTestClient:
             return
         await self.chat("/reset", timeout=30.0)
 
+    def set_chat_id(self, chat_id: int) -> None:
+        """Rotate the active chat_id so subsequent chat()/inject calls use it.
+
+        Lets the test runner isolate each test into its own gateway session —
+        the gateway derives session key from chat_id, so a unique chat_id per
+        test means a fresh transcript without relying on /reset having
+        fully drained state between tests.
+
+        Also rebases ``_last_seq`` to the current mock server sequence so the
+        next /_test/wait call only observes events from THIS test, not any
+        residual outbound that landed while the previous chat_id was active.
+        """
+        self._chat_id = int(chat_id)
+        try:
+            stats = _http_get_json(f"{MOCK_URL}/_test/stats", timeout=2.0)
+            self._last_seq = int(stats.get("next_seq", 1)) - 1
+        except Exception:
+            # Best-effort: if stats probe fails we fall back to the old
+            # counter; subsequent /_test/wait will still time out rather
+            # than silently match wrong events.
+            pass
+
     async def create_session(self, key: str = "") -> str:
         """Reset the session. Returns a pseudo session key for compatibility."""
         await self.reset_session()
