@@ -436,25 +436,39 @@ def _message_record(
 
 
 def _infer_tools(capture: ChatCapture) -> None:
-    """Infer tool_starts/tool_results from draft edits.
+    """Infer tool_starts/tool_results from draft edits and reaction emoji.
 
-    Same heuristic as the legacy Telethon client — the Deneb bot shows tool
-    progress via message edits, so keywords in the edit stream imply tool
-    usage. This keeps the existing check evaluators happy without introducing
-    a new event format.
+    The gateway signals tool activity in two ways: (1) it edits a draft
+    message with narration text while the tool runs, and (2) it sets a
+    reaction emoji on the user's inbound message (🔥 tool, 👨‍💻 coding,
+    ⚡ web). We use BOTH signals because short-form replies often skip
+    narration entirely ("hello world 🐾") and reaction is the only
+    evidence the tool ran.
+
+    Emoji mapping mirrors gateway's
+    internal/platform/telegram/status_reactions.go ResolveToolEmoji.
     """
     tool_keywords = {
-        "exec": "exec", "명령어": "exec",
+        "exec": "exec", "명령어": "exec", "실행": "exec",
         "read": "read", "파일 읽": "read",
         "write": "write", "파일 작성": "write",
         "edit": "edit", "파일 수정": "edit",
-        "grep": "grep", "코드 검색": "grep",
+        "grep": "grep", "코드 검색": "grep", "검색": "grep",
         "health": "health", "상태": "health",
-        "vega": "vega", "검색": "vega",
+        "vega": "vega",
         "memory": "memory", "메모리": "memory",
         "kv": "kv",
-        "gmail": "gmail",
+        "gmail": "gmail", "메일": "gmail",
         "message": "message",
+        "web": "web_search", "웹": "web_search",
+    }
+    # Reaction emoji → tool category. Gateway uses these for tool progress
+    # display; for the mock we pick a representative tool name so the
+    # used_any / used_tool checks have a chance of matching.
+    reaction_emoji_to_tool = {
+        "👨‍💻": "exec",      # coding tools (exec, read, write, edit, bash)
+        "⚡": "web_search",   # web tools
+        "🔥": "exec",          # generic tool fallback; treat as coding
     }
 
     seen_tools: set[str] = set()
@@ -462,6 +476,23 @@ def _infer_tools(capture: ChatCapture) -> None:
         text = _strip_html(str(edit.get("text", ""))).lower()
         for keyword, tool_name in tool_keywords.items():
             if keyword in text and tool_name not in seen_tools:
+                seen_tools.add(tool_name)
+                capture.tool_starts.append({"name": tool_name, "ts": time.time()})
+                capture.tool_results.append({
+                    "name": tool_name,
+                    "isError": False,
+                    "ts": time.time(),
+                })
+    # Also infer tools from reaction emoji — a short-form reply may omit
+    # any narration so emoji is the only evidence of tool activity.
+    for reaction in capture.reactions:
+        reacts = reaction.get("reaction") or []
+        for r in reacts:
+            emoji = r.get("emoji") if isinstance(r, dict) else None
+            if not emoji:
+                continue
+            tool_name = reaction_emoji_to_tool.get(emoji)
+            if tool_name and tool_name not in seen_tools:
                 seen_tools.add(tool_name)
                 capture.tool_starts.append({"name": tool_name, "ts": time.time()})
                 capture.tool_results.append({
