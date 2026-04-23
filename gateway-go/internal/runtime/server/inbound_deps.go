@@ -249,6 +249,15 @@ type chatSendExecutor struct {
 }
 
 func (e *chatSendExecutor) RunTurn(ctx context.Context, cfg autoreply.AgentTurnConfig) (*autoreply.AgentTurnResult, error) {
+	// Guard: chat.send rejects empty message + no attachments. Catch this
+	// here instead of letting the RPC layer emit "message or attachments
+	// required" Warn logs — autoreply upstream occasionally produces empty
+	// configs (edit-only updates, stickers without caption) and those
+	// should be quietly skipped, not logged as chat.send failures.
+	if cfg.Message == "" && len(e.attachments) == 0 {
+		return &autoreply.AgentTurnResult{}, nil
+	}
+
 	// Build delivery context with triggering message ID for reply threading.
 	delivery := map[string]any{
 		"channel": "telegram",
