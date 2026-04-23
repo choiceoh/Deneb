@@ -516,8 +516,17 @@ func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session
 
 		cp := *existing
 		result = &cp
+		newStatus := existing.Status
 		m.mu.Unlock()
-		return []Event{{Kind: EventStatusChanged, Key: key, OldStatus: oldStatus, NewStatus: existing.Status}}
+
+		// Skip emit on no-op transitions (same status before and after).
+		// Set() already follows this convention; ApplyLifecycleEvent used to
+		// emit unconditionally, which spammed subscribers with redundant
+		// status events and could mask real transitions under event storm.
+		if oldStatus == newStatus {
+			return nil
+		}
+		return []Event{{Kind: EventStatusChanged, Key: key, OldStatus: oldStatus, NewStatus: newStatus}}
 	})
 	return result
 }
