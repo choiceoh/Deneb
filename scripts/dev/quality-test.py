@@ -450,6 +450,10 @@ class GatewayClient:
     async def create_session(self, key: str = "") -> str:
         return await self._tg.create_session(key)
 
+    def set_chat_id(self, chat_id: int) -> None:
+        """Rotate the underlying mock client's chat_id for session isolation."""
+        self._tg.set_chat_id(chat_id)
+
     async def chat(self, message: str, session_key: str = "",
                    timeout: float = TIMEOUT_CHAT) -> ChatCapture:
         # session_key is ignored in mock mode (the gateway derives it from

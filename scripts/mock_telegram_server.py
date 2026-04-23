@@ -69,6 +69,19 @@ DEFAULT_USER_FIRST_NAME = "Mock User"
 # gateway configures DefaultPollTimeout=30. Mirror that so timings feel normal.
 LONG_POLL_CAP_SECS = 25
 
+# Event kinds that represent actual content reaching the user. wait_for_outbound
+# uses this set to gate its settle timer: a setMessageReaction or sendChatAction
+# alone is not enough to conclude the turn is done.
+_REPLY_KINDS = frozenset({
+    "sendMessage",
+    "editMessageText",
+    "sendPhoto",
+    "sendDocument",
+    "sendVideo",
+    "sendAudio",
+    "sendVoice",
+})
+
 
 class MockState:
     """Thread-safe state for the mock Telegram server.
@@ -169,11 +182,15 @@ class MockState:
     ) -> list[dict[str, Any]]:
         """Block until outbound activity settles or timeout elapses.
 
-        Returns all events with seq > since_seq. The settle rule mirrors the
-        previous Telegram test client: once at least one event has arrived,
-        wait settle_secs of quiet (no new events) before returning. The
-        gateway edits its draft many times during a turn and we only want to
-        finalize once those edits stop flowing.
+        Returns all events with seq > since_seq. Settle rule: once a
+        reply-worthy event has arrived (sendMessage / editMessageText /
+        sendPhoto / etc.), wait settle_secs of quiet before returning.
+        Non-reply events alone (setMessageReaction, sendChatAction,
+        deleteMessage) do NOT start the settle timer — a gateway turn
+        typically sends a reaction and typing indicator within the first
+        second, but the actual reply text may not land for 5–15 seconds.
+        Settling on reactions alone made tests falsely report
+        "no response" when the real answer was still being generated.
         """
         deadline = time.monotonic() + max(timeout_secs, 0)
         last_activity = None
@@ -185,8 +202,11 @@ class MockState:
                         r for r in events
                         if _extract_chat_id(r.get("payload", {})) == chat_id
                     ]
-                if events:
-                    newest_ts = max(r["ts"] for r in events)
+                reply_events = [
+                    r for r in events if r.get("kind") in _REPLY_KINDS
+                ]
+                if reply_events:
+                    newest_ts = max(r["ts"] for r in reply_events)
                     if last_activity is None or newest_ts > last_activity:
                         last_activity = newest_ts
                     quiet_for = time.time() - last_activity
