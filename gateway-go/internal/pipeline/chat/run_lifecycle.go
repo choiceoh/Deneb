@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,6 +36,25 @@ func persistReplyDeliveryFailure(deps runDeps, sessionKey, channel string, deliv
 	msg := NewTextChatMessage("user", text, time.Now().UnixMilli())
 	if err := deps.transcript.Append(sessionKey, msg); err != nil {
 		logger.Warn("failed to persist delivery-failure note", "error", err)
+	}
+}
+
+// persistMediaDeliveryFailure records a synthetic system note when one or
+// more media attachments the agent sent failed to reach the channel.
+// Without this, the agent believes the image/audio was delivered and may
+// reference it in subsequent turns ("did you see the image I just sent?")
+// even though the user only saw the text.
+func persistMediaDeliveryFailure(deps runDeps, sessionKey, channel string, failedURLs []string, logger *slog.Logger) {
+	if deps.transcript == nil || len(failedURLs) == 0 {
+		return
+	}
+	text := "[SYSTEM: 직전 턴에서 시도한 미디어 첨부 " +
+		strconv.Itoa(len(failedURLs)) + "건이 " + channel + " 채널로 **전달되지 않았습니다**. " +
+		"유저는 그 미디어를 보지 못했습니다. 다음 턴에서 '아까 보낸 이미지/오디오'라고 언급하지 마세요."
+	text += " 실패한 URL: " + strings.Join(failedURLs, ", ") + "]"
+	msg := NewTextChatMessage("user", text, time.Now().UnixMilli())
+	if err := deps.transcript.Append(sessionKey, msg); err != nil {
+		logger.Warn("failed to persist media-failure note", "error", err)
 	}
 }
 
@@ -339,14 +359,17 @@ func handleRunSuccess(
 					failedURLs = append(failedURLs, mediaURL)
 				}
 			}
-			if len(failedURLs) > 0 && deps.broadcast != nil {
-				deps.broadcast("chat.media_delivery_failed", map[string]any{
-					"session": params.SessionKey,
-					"channel": params.Delivery.Channel,
-					"count":   len(failedURLs),
-					"total":   len(directives.MediaURLs),
-					"urls":    failedURLs,
-				})
+			if len(failedURLs) > 0 {
+				if deps.broadcast != nil {
+					deps.broadcast("chat.media_delivery_failed", map[string]any{
+						"session": params.SessionKey,
+						"channel": params.Delivery.Channel,
+						"count":   len(failedURLs),
+						"total":   len(directives.MediaURLs),
+						"urls":    failedURLs,
+					})
+				}
+				persistMediaDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, failedURLs, logger)
 			}
 		}
 	}

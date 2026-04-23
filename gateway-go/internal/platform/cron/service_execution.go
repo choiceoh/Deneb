@@ -169,8 +169,19 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 				}
 			}
 
+			// Promote to error status when a required delivery failed.
+			// Without this, consecutive delivery failures never trigger the
+			// auto-disable path (10 errors → job disabled) and the user
+			// keeps losing cron output silently.
+			status := "ok"
+			errMsg := ""
+			if deliveryResult != nil && !deliveryResult.Delivered && !isBestEffort(deliveryCfg) {
+				status = "error"
+				errMsg = "delivery failed: " + deliveryResult.Error
+			}
 			outcome = RunOutcome{
-				Status:     "ok",
+				Status:     status,
+				Error:      errMsg,
 				Output:     output,
 				Delivery:   deliveryResult,
 				Retries:    retriesUsed,
