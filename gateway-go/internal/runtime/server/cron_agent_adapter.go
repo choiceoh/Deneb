@@ -38,14 +38,20 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 	if err != nil {
 		return "", err
 	}
-	// Prefer the final turn's text (result.Text) but fall back to AllText when
-	// the agent produced the substantive body in an earlier turn and closed with
-	// NO_REPLY / a short acknowledgement. Without this fallback the cron delivery
-	// layer would send an empty or trivial string and the real content — generated
-	// mid-run — is lost. Strip NO_REPLY from AllText so the marker does not leak
-	// into Telegram.
+	// Prefer the final turn's text, but swap in the full transcript when:
+	//   (a) the final text is empty — agent ended with NO_REPLY / acknowledgement, or
+	//   (b) the run was cut short before a natural end_turn (max_turns, max_tokens,
+	//       etc.). When that happens the last turn is usually mid-stream planning
+	//       like "이제 위키 업데이트하고 텔레그램으로 전송할게" which is NOT the
+	//       deliverable the user wants — we saw exactly this in production when the
+	//       email-analysis-am cron hit the 25-turn limit and delivered a bare
+	//       planning sentence instead of the analysis.
+	// AllText concatenates every turn's text, so the earlier body the agent actually
+	// composed survives. NO_REPLY is stripped so the marker does not leak into
+	// Telegram.
 	output := result.Text
-	if strings.TrimSpace(output) == "" && result.AllText != "" {
+	truncated := result.StopReason != "" && result.StopReason != "end_turn"
+	if (strings.TrimSpace(output) == "" || truncated) && result.AllText != "" {
 		output = strings.TrimSpace(tokens.StripSilentToken(result.AllText, tokens.SilentReplyToken))
 	}
 	return output, nil
