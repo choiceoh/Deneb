@@ -108,7 +108,13 @@ func (s *Service) fireTimerLocked(ctx context.Context) {
 			if _, running := s.runningJobs.Load(job.ID); running {
 				continue
 			}
-			// Execute asynchronously.
+			// Eagerly advance NextRunAtMs in the store *before* spawning the
+			// executor. Without this, a second scheduler path (timer rearm,
+			// Wake, or recoverMissedJobs) can re-observe the same overdue
+			// NextRunAtMs and spawn a second executor for the same trigger.
+			// The executor's applyJobResult still recomputes NextRunAtMs based
+			// on the post-run time, so this pre-advance is idempotent.
+			preAdvanceNextRun(s, job, now)
 			jobCopy := job
 			go func() {
 				s.executeJobFull(ctx, jobCopy)
@@ -125,6 +131,12 @@ func (s *Service) recoverMissedJobsLocked(ctx context.Context, storeData *CronSt
 			continue
 		}
 		if job.State.NextRunAtMs > 0 && job.State.NextRunAtMs <= now {
+			if _, running := s.runningJobs.Load(job.ID); running {
+				continue
+			}
+			// Pre-advance NextRunAtMs so a subsequent timer fire (armed
+			// immediately after recover) won't treat this job as still due.
+			preAdvanceNextRun(s, job, now)
 			s.logger.Info("recovering missed cron job", "id", job.ID,
 				"scheduledAt", job.State.NextRunAtMs, "missedBy", now-job.State.NextRunAtMs)
 			jobCopy := job
@@ -132,5 +144,24 @@ func (s *Service) recoverMissedJobsLocked(ctx context.Context, storeData *CronSt
 				s.executeJobFull(ctx, jobCopy)
 			}()
 		}
+	}
+}
+
+// preAdvanceNextRun writes the next scheduled time to disk before the executor
+// starts, so a concurrent scheduler path sees the job as not-due and skips it.
+// Errors are logged only — the executor will still run and applyJobResult
+// overwrites with the definitive post-run NextRunAtMs.
+func preAdvanceNextRun(s *Service, job StoreJob, now int64) {
+	nextMs := ComputeNextRunAtMs(job.Schedule, now)
+	if nextMs <= now {
+		// Degenerate schedule (should not happen); fall back to +1 minute
+		// to at least keep the window closed for a tick.
+		nextMs = now + 60_000
+	}
+	updatedState := job.State
+	updatedState.NextRunAtMs = nextMs
+	if err := s.store.UpdateJobState(job.ID, updatedState); err != nil {
+		s.logger.Warn("cron pre-advance NextRunAtMs failed",
+			"id", job.ID, "error", err)
 	}
 }

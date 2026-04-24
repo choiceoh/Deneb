@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
@@ -20,11 +21,34 @@ type cronChatAdapter struct {
 var _ cron.AgentRunner = (*cronChatAdapter)(nil)
 
 func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTurnParams) (string, error) {
-	result, err := a.chat.SendSync(ctx, params.SessionKey, params.Command, "", nil)
+	// Inject delivery context so proactive tools (especially message.send) can
+	// route back to the cron job's configured channel. Without this, the tool
+	// returns "no active delivery target" and the agent tends to fabricate a
+	// "channel not connected" follow-up that actually does reach the user,
+	// producing the self-contradicting message we saw in production.
+	opts := &chat.SyncOptions{}
+	if params.Channel != "" && params.To != "" {
+		opts.Delivery = &chat.DeliveryContext{
+			Channel:   params.Channel,
+			To:        params.To,
+			AccountID: params.AccountID,
+		}
+	}
+	result, err := a.chat.SendSync(ctx, params.SessionKey, params.Command, "", opts)
 	if err != nil {
 		return "", err
 	}
-	return result.Text, nil
+	// Prefer the final turn's text (result.Text) but fall back to AllText when
+	// the agent produced the substantive body in an earlier turn and closed with
+	// NO_REPLY / a short acknowledgement. Without this fallback the cron delivery
+	// layer would send an empty or trivial string and the real content — generated
+	// mid-run — is lost. Strip NO_REPLY from AllText so the marker does not leak
+	// into Telegram.
+	output := result.Text
+	if strings.TrimSpace(output) == "" && result.AllText != "" {
+		output = strings.TrimSpace(tokens.StripSilentToken(result.AllText, tokens.SilentReplyToken))
+	}
+	return output, nil
 }
 
 // acpSubagentPoller implements cron.SubagentPoller using the ACP registry

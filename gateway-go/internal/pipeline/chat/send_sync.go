@@ -12,6 +12,7 @@ import (
 // SyncResult holds the outcome of a synchronous agent run.
 type SyncResult struct {
 	Text         string
+	AllText      string // accumulated text from all turns; used by cron delivery as a fallback when the final turn is NO_REPLY
 	Model        string
 	InputTokens  int
 	OutputTokens int
@@ -47,6 +48,12 @@ type SyncOptions struct {
 	// MaxHistoryTokens overrides the transcript history token budget.
 	// When set, assembleContext trims older messages to fit within this budget.
 	MaxHistoryTokens int
+
+	// Delivery carries channel routing for proactive tool sends (e.g. message.send).
+	// Required in cron / scheduled contexts: without it the message tool fails
+	// with "no active delivery target" and the agent falls back to text-only
+	// replies that the cron delivery layer may not route correctly.
+	Delivery *DeliveryContext
 }
 
 // prepareSyncRun builds RunParams and runDeps from the common sync arguments.
@@ -86,6 +93,9 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 		if opts.ToolPreset != "" {
 			sess.ToolPreset = opts.ToolPreset
 		}
+		if opts.Delivery != nil {
+			params.Delivery = opts.Delivery
+		}
 	}
 
 	deps := h.buildRunDeps()
@@ -113,6 +123,7 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 
 	return &SyncResult{
 		Text:         result.Text,
+		AllText:      result.AllText,
 		Model:        resolvedModel,
 		InputTokens:  result.Usage.InputTokens,
 		OutputTokens: result.Usage.OutputTokens,
