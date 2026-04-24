@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
@@ -15,7 +16,8 @@ import (
 // cronChatAdapter adapts chat.Handler to the cron.AgentRunner interface,
 // allowing cron jobs to execute agent turns via the chat pipeline.
 type cronChatAdapter struct {
-	chat *chat.Handler
+	chat   *chat.Handler
+	logger *slog.Logger
 }
 
 var _ cron.AgentRunner = (*cronChatAdapter)(nil)
@@ -58,12 +60,45 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 	allText := strings.TrimSpace(tokens.StripSilentToken(result.AllText, tokens.SilentReplyToken))
 	truncated := result.StopReason != "" && result.StopReason != "end_turn"
 	shortWrapUp := allText != "" && len(allText) >= 3*len(text)+200
+	source := "text"
+	output := text
 	if text == "" || truncated || shortWrapUp {
 		if allText != "" {
-			return allText, nil
+			source = "allText"
+			output = allText
+		} else if text == "" {
+			source = "empty"
 		}
 	}
-	return text, nil
+	// Log the delivery choice so postmortems can see (a) which bucket the run
+	// landed in and (b) whether the threshold heuristic fired. Without this,
+	// diagnosing "why did the user get a short wrap-up instead of the body"
+	// requires reconstructing from per-turn tokens alone.
+	logger := a.logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	reason := "default"
+	switch {
+	case text == "" && source == "allText":
+		reason = "empty-text"
+	case truncated:
+		reason = "truncated:" + result.StopReason
+	case shortWrapUp:
+		reason = "short-wrap-up"
+	case source == "empty":
+		reason = "both-empty"
+	}
+	logger.Info("cron agent output chosen",
+		"jobId", params.AgentID,
+		"sessionKey", params.SessionKey,
+		"source", source,
+		"reason", reason,
+		"textLen", len(text),
+		"allTextLen", len(allText),
+		"chosenLen", len(output),
+		"stopReason", result.StopReason)
+	return output, nil
 }
 
 // acpSubagentPoller implements cron.SubagentPoller using the ACP registry

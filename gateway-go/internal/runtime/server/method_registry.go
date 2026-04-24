@@ -226,7 +226,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 
 	// Wire agent runner, Telegram plugin, and subagent poller to cron service.
 	if s.cronService != nil {
-		s.cronService.SetAgentRunner(&cronChatAdapter{chat: s.chatHandler})
+		s.cronService.SetAgentRunner(&cronChatAdapter{chat: s.chatHandler, logger: s.logger})
 		if s.telegramPlug != nil {
 			s.cronService.SetTelegramPlugin(s.telegramPlug)
 		}
