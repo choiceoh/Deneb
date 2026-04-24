@@ -167,11 +167,20 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 		runID = shortid.New("run")
 	}
 
+	// Derive DeliveryContext from the session key ("telegram:<chatID>" →
+	// channel=telegram, to=<chatID>) so the reply pipeline routes the
+	// response to the originating channel. Without this, any caller of
+	// sessions.send that targets a channel-keyed session (the tool
+	// `sessions.send` / `chrono.send`, external RPC clients, other
+	// internal automation) produces a run with nil Delivery and the
+	// Telegram reply function drops the response. Keys without a channel
+	// prefix (e.g. "cron:<id>") yield nil, which preserves prior behavior.
 	return h.startAsyncRun(req.ID, RunParams{
 		SessionKey:  p.Key,
 		Message:     sanitizeInput(p.Message),
 		Attachments: p.Attachments,
 		ClientRunID: runID,
+		Delivery:    deliveryFromSessionKey(p.Key),
 	}, false)
 }
 
@@ -203,6 +212,7 @@ func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *
 		Model:       p.Model,
 		System:      p.SystemPrompt,
 		ClientRunID: runID,
+		Delivery:    deliveryFromSessionKey(p.Key),
 	}, true)
 }
 
