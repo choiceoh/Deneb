@@ -58,7 +58,12 @@ TIMEOUT_RPC = 10
 TIMEOUT_CHAT = 120
 
 SCRIPT_DIR = Path(__file__).parent
+# quality-tests.yaml lives under scripts/ (not scripts/dev/); fall back to the
+# sibling path if the dev-local copy is missing so `live-test.sh quality` works
+# after the yaml moved to the parent directory.
 TESTS_YAML = SCRIPT_DIR / "quality-tests.yaml"
+if not TESTS_YAML.exists():
+    TESTS_YAML = _SCRIPTS_ROOT / "quality-tests.yaml"
 
 # Legacy scenario aliases (old name -> list of new categories).
 SCENARIO_ALIASES = {
