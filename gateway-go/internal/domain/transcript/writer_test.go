@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
@@ -222,5 +223,97 @@ func TestWriter_DeleteSession(t *testing.T) {
 	// Delete again should not error (idempotent).
 	if err := w.DeleteSession("del-test"); err != nil {
 		t.Errorf("DeleteSession (idempotent): %v", err)
+	}
+}
+
+// TestWriter_AppendMessage_RedactsSecrets verifies that strings inside a
+// message body are passed through pkg/redact before persistence. Constructs a
+// synthetic OpenAI-style token at runtime so no literal secret appears in the
+// test source.
+func TestWriter_AppendMessage_RedactsSecrets(t *testing.T) {
+	dir := t.TempDir()
+	w := NewWriter(dir, nil)
+	_ = w.EnsureSession("redact-sess", SessionHeader{Version: 1, ID: "redact-sess"})
+
+	token := "sk-proj-" + strings.Repeat("Z", 40) // synthetic, never a real credential
+	payload, _ := json.Marshal(map[string]any{
+		"role":         "tool",
+		"tool_call_id": "call_123",
+		"timestamp":    int64(1700000000),
+		"content":      "OPENAI_API_KEY=" + token + " printed by cat .env",
+	})
+	if err := w.AppendMessage("redact-sess", payload); err != nil {
+		t.Fatalf("AppendMessage: %v", err)
+	}
+
+	path, _ := w.SessionPath("redact-sess")
+	data := testutil.Must(os.ReadFile(path))
+	body := string(data)
+	if strings.Contains(body, token) {
+		t.Fatalf("persisted transcript still contains raw token: %q", body)
+	}
+	// Structural fields must survive the redaction walk intact.
+	if !strings.Contains(body, `"role":"tool"`) {
+		t.Errorf("role field lost after redaction: %q", body)
+	}
+	if !strings.Contains(body, `"tool_call_id":"call_123"`) {
+		t.Errorf("tool_call_id lost after redaction: %q", body)
+	}
+	if !strings.Contains(body, `"timestamp":1700000000`) {
+		t.Errorf("timestamp lost after redaction: %q", body)
+	}
+}
+
+// TestWriter_AppendMessage_PreservesKorean ensures non-secret Korean text is
+// passed through verbatim (redact must not mangle user-visible Korean).
+func TestWriter_AppendMessage_PreservesKorean(t *testing.T) {
+	dir := t.TempDir()
+	w := NewWriter(dir, nil)
+	_ = w.EnsureSession("ko-sess", SessionHeader{Version: 1, ID: "ko-sess"})
+
+	const korean = "안녕하세요, 오늘 날씨가 정말 좋네요!"
+	payload, _ := json.Marshal(map[string]any{
+		"role":    "user",
+		"content": korean,
+	})
+	if err := w.AppendMessage("ko-sess", payload); err != nil {
+		t.Fatalf("AppendMessage: %v", err)
+	}
+
+	path, _ := w.SessionPath("ko-sess")
+	data := testutil.Must(os.ReadFile(path))
+	if !strings.Contains(string(data), korean) {
+		t.Fatalf("Korean text was mangled: %q", string(data))
+	}
+}
+
+// TestWriter_AppendMessage_RedactsNestedContent covers the ContentBlock-style
+// shape (array of {type, text} entries) used by rich messages.
+func TestWriter_AppendMessage_RedactsNestedContent(t *testing.T) {
+	dir := t.TempDir()
+	w := NewWriter(dir, nil)
+	_ = w.EnsureSession("nested", SessionHeader{Version: 1, ID: "nested"})
+
+	token := "ghp_" + strings.Repeat("Z", 36)
+	payload, _ := json.Marshal(map[string]any{
+		"role": "assistant",
+		"content": []map[string]any{
+			{"type": "text", "text": "Found token: " + token + " in config"},
+			{"type": "tool_use", "id": "t1", "name": "fs_read"},
+		},
+	})
+	if err := w.AppendMessage("nested", payload); err != nil {
+		t.Fatalf("AppendMessage: %v", err)
+	}
+
+	path, _ := w.SessionPath("nested")
+	data := testutil.Must(os.ReadFile(path))
+	body := string(data)
+	if strings.Contains(body, token) {
+		t.Fatalf("nested text block still contains raw token: %q", body)
+	}
+	// Structural tool_use fields (id/name) should remain for the LLM.
+	if !strings.Contains(body, `"name":"fs_read"`) || !strings.Contains(body, `"id":"t1"`) {
+		t.Errorf("tool_use structural fields lost: %q", body)
 	}
 }

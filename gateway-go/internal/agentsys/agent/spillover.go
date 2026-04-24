@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
 // Spillover thresholds.
@@ -59,6 +61,12 @@ func NewSpilloverStore(baseDir string) *SpilloverStore {
 }
 
 // Store writes content to disk and returns the spill ID.
+//
+// Content is passed through pkg/redact before persistence so large tool
+// outputs (e.g. `cat .env`, curl responses) never put raw secrets on disk.
+// The spill ID is hashed over the original content so retrieval works even if
+// a subsequent call sees different redaction results; only the file bytes are
+// masked. When redaction is disabled the content is stored verbatim.
 func (s *SpilloverStore) Store(sessionKey, toolName, content string) (string, error) {
 	if err := os.MkdirAll(s.baseDir, 0o755); err != nil {
 		return "", fmt.Errorf("spillover mkdir: %w", err)
@@ -73,7 +81,8 @@ func (s *SpilloverStore) Store(sessionKey, toolName, content string) (string, er
 	filename := fmt.Sprintf("%s_%d_%s_%s.txt", safeSess, now.UnixMilli(), safeTool, spillID)
 	path := filepath.Join(s.baseDir, filename)
 
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306 — world-readable is intentional
+	persisted := redact.String(content)
+	if err := os.WriteFile(path, []byte(persisted), 0o644); err != nil { //nolint:gosec // G306 — world-readable is intentional
 		return "", fmt.Errorf("spillover write: %w", err)
 	}
 
@@ -82,7 +91,7 @@ func (s *SpilloverStore) Store(sessionKey, toolName, content string) (string, er
 		Path:       path,
 		SessionKey: sessionKey,
 		ToolName:   toolName,
-		OrigLen:    len(content),
+		OrigLen:    len(persisted),
 		CreatedAt:  now,
 	}
 	s.mu.Unlock()
@@ -112,7 +121,13 @@ func (s *SpilloverStore) Load(spillID, sessionKey string) (string, error) {
 }
 
 // FormatPreview builds the compact preview string inserted into the LLM context.
+//
+// The preview text flows back into the model context and subsequently into
+// the transcript, so it is redacted here as well. Redaction is idempotent —
+// even if Store already masked the content, running it again on the head/tail
+// slices is safe and cheap thanks to the mightContainSecret prefilter.
 func FormatPreview(spillID, toolName, content string) string {
+	content = redact.String(content)
 	origLen := len(content)
 
 	head := content

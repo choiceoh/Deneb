@@ -16,6 +16,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
 // Dreaming configuration.
@@ -285,6 +286,16 @@ JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, diaryCo
 	var updates []wikiUpdate
 	if err := json.Unmarshal([]byte(text), &updates); err != nil {
 		return nil, fmt.Errorf("parse LLM response: %w (raw: %.200s)", err, text)
+	}
+
+	// Defense in depth: even if Site 1 (transcript) redacted raw tool output,
+	// the LLM may still paraphrase or quote a secret into its wiki synthesis
+	// ("the user's API key starts with sk-proj…"). Redact every free-text
+	// field on the proposed updates before they flow into the store.
+	for i := range updates {
+		updates[i].Title = redact.String(updates[i].Title)
+		updates[i].Summary = redact.String(updates[i].Summary)
+		updates[i].Content = redact.String(updates[i].Content)
 	}
 
 	return updates, nil

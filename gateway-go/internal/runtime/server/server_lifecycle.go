@@ -19,9 +19,23 @@ import (
 // background subsystems (tick broadcaster, monitoring, process pruner, hooks).
 // Shared by Run and StartAndListen to avoid duplicating the startup sequence.
 func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
-	// Derive a lifecycle context that doShutdown() cancels so background
-	// goroutines exit promptly even if the caller's ctx is still alive.
-	s.lifecycleCtx, s.lifecycleCancel = context.WithCancel(ctx)
+	// Lifecycle context was initialised in New() so that background
+	// goroutines launched before initAndListen runs (e.g. checkpoint GC
+	// in New) can read it race-free via ShutdownCtx(). Here we only need
+	// to propagate the caller's parent-ctx cancellation into the already-
+	// live lifecycle context. Running the forwarder on a detached goroutine
+	// keeps initAndListen lock-free and preserves the doShutdown() path.
+	if ctx != nil && ctx.Done() != nil {
+		s.safeGo("lifecycle-parent-cancel-forwarder", func() {
+			select {
+			case <-ctx.Done():
+				if s.lifecycleCancel != nil {
+					s.lifecycleCancel()
+				}
+			case <-s.lifecycleCtx.Done():
+			}
+		})
+	}
 	ctx = s.lifecycleCtx
 
 	mux := s.buildMux()
@@ -266,6 +280,9 @@ func (s *Server) doShutdown() error {
 	}
 	if s.snapshotLifecycleUnsub != nil {
 		s.snapshotLifecycleUnsub()
+	}
+	if s.checkpointLifecycleUnsub != nil {
+		s.checkpointLifecycleUnsub()
 	}
 
 	// 13. Cancel lifecycle context so remaining background goroutines exit,

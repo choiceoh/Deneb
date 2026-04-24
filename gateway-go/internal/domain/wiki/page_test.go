@@ -3,6 +3,7 @@ package wiki
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
@@ -162,5 +163,57 @@ func TestWritePageFile_Atomic(t *testing.T) {
 	parsed := testutil.Must(ParsePageFile(path))
 	if parsed.Meta.Title != "원자적 쓰기" {
 		t.Errorf("title = %q after write", parsed.Meta.Title)
+	}
+}
+
+// TestWritePageFile_RedactsBody ensures secret patterns in a wiki page body
+// are masked at the write boundary. Even if the Dreamer synthesizes a page
+// that quotes a secret, it must never reach disk unmasked.
+func TestWritePageFile_RedactsBody(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "redact-body.md")
+
+	token := "sk-proj-" + strings.Repeat("Z", 40) // synthetic, not a real credential
+	page := NewPage("세션 기록", "기술", []string{"NVIDIA"})
+	page.Body = "# 세션 기록\n\n## 핵심 사실\n\n- 토큰: " + token + " 를 확인했음"
+
+	if err := WritePageFile(path, page); err != nil {
+		t.Fatalf("WritePageFile: %v", err)
+	}
+
+	data := testutil.Must(os.ReadFile(path))
+	if strings.Contains(string(data), token) {
+		t.Fatalf("page body still contains raw token: %q", string(data))
+	}
+	// Korean surface text and structural frontmatter must survive intact.
+	if !strings.Contains(string(data), "핵심 사실") {
+		t.Errorf("Korean heading was altered: %q", string(data))
+	}
+	if !strings.Contains(string(data), "category: 기술") {
+		t.Errorf("category frontmatter was altered: %q", string(data))
+	}
+	if !strings.Contains(string(data), "title: 세션 기록") {
+		t.Errorf("Korean title was altered: %q", string(data))
+	}
+}
+
+// TestWritePageFile_RedactsSummary verifies the LLM-generated Summary field
+// is scrubbed along with the body.
+func TestWritePageFile_RedactsSummary(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "redact-summary.md")
+
+	token := "ghp_" + strings.Repeat("Z", 36) // synthetic
+	page := NewPage("정리", "기술", nil)
+	page.Meta.Summary = "사용자 GitHub 토큰 " + token + " 관련 변경"
+	page.Body = "# 정리"
+
+	if err := WritePageFile(path, page); err != nil {
+		t.Fatalf("WritePageFile: %v", err)
+	}
+
+	data := testutil.Must(os.ReadFile(path))
+	if strings.Contains(string(data), token) {
+		t.Fatalf("summary still contains raw token: %q", string(data))
 	}
 }

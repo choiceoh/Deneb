@@ -173,7 +173,11 @@ func (s *Server) registerSessionRPCMethods() {
 	// Passing empty string would disable snapshots; always enabled when the
 	// server has a resolved state dir.
 	if denebDir := s.denebDir; denebDir != "" {
-		s.chatHandler.SetCheckpointRoot(filepath.Join(denebDir, "checkpoints"))
+		cpRoot := filepath.Join(denebDir, "checkpoints")
+		s.chatHandler.SetCheckpointRoot(cpRoot)
+		// Release per-session checkpoint dirs immediately on terminal
+		// lifecycle events instead of waiting for the 30-day startup GC.
+		s.initCheckpointLifecycle(cpRoot)
 	}
 
 	// Wire /insights command — builds a MarkdownV2 usage report using the

@@ -13,7 +13,55 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
+	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
+
+// redactOutbound applies secret redaction to user-visible text just before
+// it leaves the gateway via a Telegram API call. This is the defense-in-depth
+// egress guard described in .claude/rules (Phase 3-D2) — any leak path that
+// bypassed the transcript/wiki layer still short-circuits here before
+// Telegram retains the message.
+//
+// Callers should never mutate their own copy of the text; redactOutbound
+// returns a fresh string and leaves the input alone.
+//
+// Redaction runs BEFORE any markup-specific escaping (HTML entity encoding,
+// coremarkdown sanitization, etc.) so that regex matchers see the raw token
+// shape. Masked output ("prefix6...suffix4") is plain ASCII safe for every
+// parse_mode Telegram supports.
+//
+// The operation is nil-safe and idempotent (pkg/redact guarantees
+// String(String(x)) == String(x)), so applying it twice by accident in a
+// layered pipeline is harmless.
+func redactOutbound(text string) string {
+	return redact.String(text)
+}
+
+// redactKeyboard returns a fresh copy of markup with each button's visible
+// Text redacted. custom_id (CallbackData) and URL targets are pure routing
+// keys / navigation primitives and are NEVER touched — mutating them would
+// break button dispatch in HandleTelegramInteraction.
+//
+// Returns nil when markup is nil so callers can pass through without
+// special-casing.
+func redactKeyboard(markup *InlineKeyboardMarkup) *InlineKeyboardMarkup {
+	if markup == nil {
+		return nil
+	}
+	rows := make([][]InlineKeyboardButton, len(markup.InlineKeyboard))
+	for i, row := range markup.InlineKeyboard {
+		cloned := make([]InlineKeyboardButton, len(row))
+		for j, btn := range row {
+			cloned[j] = InlineKeyboardButton{
+				Text:         redactOutbound(btn.Text),
+				CallbackData: btn.CallbackData, // routing key — DO NOT redact
+				URL:          btn.URL,          // nav target — DO NOT redact
+			}
+		}
+		rows[i] = cloned
+	}
+	return &InlineKeyboardMarkup{InlineKeyboard: rows}
+}
 
 // SendOptions configures message sending behavior.
 type SendOptions struct {
@@ -45,10 +93,21 @@ type SendResult struct {
 // Returns results for all chunks sent.
 // chunkLimit overrides the default max chunk size (0 = use MaxTextLength).
 // chunkMode controls splitting: "newline" splits on every newline, "length" (default) splits by size.
+//
+// Secret redaction runs BEFORE chunking so tokens that would otherwise split
+// across a chunk boundary (and escape per-chunk redaction) are collapsed to
+// their masked form first — this prevents the "half-token leak" edge case
+// when a key spans the 4000-char boundary.
 func SendText(ctx context.Context, c *Client, chatID int64, text string, opts SendOptions) ([]SendResult, error) {
 	if text == "" {
 		return nil, fmt.Errorf("empty text")
 	}
+
+	// Defense-in-depth egress guard: redact before chunking so split-across-
+	// boundary tokens collapse into their 13-char masked form first. The
+	// per-chunk redaction below is a second pass for idempotent safety.
+	text = redactOutbound(text)
+	keyboard := redactKeyboard(opts.Keyboard)
 
 	maxLen := TextChunkLimit
 	if opts.ChunkLimit > 0 && opts.ChunkLimit < maxLen {
@@ -74,6 +133,10 @@ func SendText(ctx context.Context, c *Client, chatID int64, text string, opts Se
 		firstErr     chunkError
 	)
 	for i, chunk := range chunks {
+		// Second pass: redact the individual chunk. pkg/redact is idempotent,
+		// so if the text was already fully masked above this is a no-op; any
+		// pattern that first becomes visible post-chunking still gets caught.
+		chunk = redactOutbound(chunk)
 		params := map[string]any{
 			"chat_id": chatID,
 			"text":    chunk,
@@ -97,8 +160,8 @@ func SendText(ctx context.Context, c *Client, chatID int64, text string, opts Se
 					"message_id": opts.ReplyToMessageID,
 				}
 			}
-			if opts.Keyboard != nil {
-				params["reply_markup"] = opts.Keyboard
+			if keyboard != nil {
+				params["reply_markup"] = keyboard
 			}
 		}
 
@@ -225,13 +288,13 @@ func SendVoice(ctx context.Context, c *Client, chatID int64, voice, caption stri
 	return parseSendResult(result)
 }
 
-// UploadDocument uploads a document file.
+// UploadDocument uploads a document file. Caption is redacted at egress.
 func UploadDocument(ctx context.Context, c *Client, chatID int64, fileName string, fileData io.Reader, caption string, opts SendOptions) (*SendResult, error) {
 	params := map[string]string{
 		"chat_id": strconv.FormatInt(chatID, 10),
 	}
 	if caption != "" {
-		params["caption"] = caption
+		params["caption"] = redactOutbound(caption)
 	}
 	if opts.ParseMode != "" {
 		params["parse_mode"] = opts.ParseMode
@@ -250,13 +313,13 @@ func UploadDocument(ctx context.Context, c *Client, chatID int64, fileName strin
 	return parseSendResult(result)
 }
 
-// UploadPhoto uploads a photo file.
+// UploadPhoto uploads a photo file. Caption is redacted at egress.
 func UploadPhoto(ctx context.Context, c *Client, chatID int64, fileName string, fileData io.Reader, caption string, opts SendOptions) (*SendResult, error) {
 	params := map[string]string{
 		"chat_id": strconv.FormatInt(chatID, 10),
 	}
 	if caption != "" {
-		params["caption"] = caption
+		params["caption"] = redactOutbound(caption)
 	}
 	if opts.ParseMode != "" {
 		params["parse_mode"] = opts.ParseMode
@@ -278,7 +341,14 @@ func UploadPhoto(ctx context.Context, c *Client, chatID int64, fileName string, 
 // EditMessageText edits the text of an existing message.
 // An optional keyboard can be attached (pass nil to omit).
 // Returns the edited message result.
+//
+// Secret redaction is applied to both the text body and any button labels
+// before the edit is sent. The caller's inputs are not mutated.
 func EditMessageText(ctx context.Context, c *Client, chatID, messageID int64, text, parseMode string, keyboard *InlineKeyboardMarkup) (*SendResult, error) {
+	// Egress redaction — see redactOutbound comment in SendText.
+	text = redactOutbound(text)
+	keyboard = redactKeyboard(keyboard)
+
 	params := map[string]any{
 		"chat_id":    chatID,
 		"message_id": messageID,
@@ -306,13 +376,15 @@ func EditMessageText(ctx context.Context, c *Client, chatID, messageID int64, te
 	return parseSendResult(result)
 }
 
-// AnswerCallbackQuery acknowledges a callback query.
+// AnswerCallbackQuery acknowledges a callback query. The optional text is
+// redacted before being shown to the user (it appears as a toast popup so
+// even short leaks are visible).
 func AnswerCallbackQuery(ctx context.Context, c *Client, queryID, text string) error {
 	params := map[string]any{
 		"callback_query_id": queryID,
 	}
 	if text != "" {
-		params["text"] = text
+		params["text"] = redactOutbound(text)
 	}
 	_, err := c.Call(ctx, "answerCallbackQuery", params)
 	return err
@@ -381,6 +453,8 @@ func isMessageNotModified(e *httpretry.APIError) bool {
 
 func applyMediaOpts(params map[string]any, caption string, opts SendOptions) {
 	if caption != "" {
+		// Egress redaction BEFORE truncation so masks don't get sliced in half.
+		caption = redactOutbound(caption)
 		// Truncate caption to Telegram limit (UTF-8 safe).
 		if len(caption) > MaxCaptionLength {
 			caption = truncateUTF8(caption, MaxCaptionLength)
@@ -401,8 +475,8 @@ func applyMediaOpts(params map[string]any, caption string, opts SendOptions) {
 			"message_id": opts.ReplyToMessageID,
 		}
 	}
-	if opts.Keyboard != nil {
-		params["reply_markup"] = opts.Keyboard
+	if kb := redactKeyboard(opts.Keyboard); kb != nil {
+		params["reply_markup"] = kb
 	}
 }
 
