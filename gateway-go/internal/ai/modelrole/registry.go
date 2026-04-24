@@ -58,7 +58,7 @@ const (
 	DefaultLocalAIBaseURL = "http://127.0.0.1:30000/v1"
 
 	DefaultVllmBaseURL = "http://127.0.0.1:8000/v1"
-	DefaultVllmModel   = "qwen36"
+	DefaultVllmModel   = "gemma4"
 
 	DefaultZaiBaseURL = "https://api.z.ai/api/coding/paas/v4"
 	DefaultZaiModel   = "glm-5-turbo"
@@ -66,15 +66,20 @@ const (
 
 // NewRegistry creates a registry with hardcoded defaults.
 // mainModel is the resolved default model from deneb.json (e.g., "zai/some-model").
-// If mainModel is empty, a sensible default is used.
-func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
+// localVllmModel is the resolved local vLLM model served on DefaultVllmBaseURL
+// (e.g., "gemma4"). Empty values fall back to the const DefaultVllmModel.
+func NewRegistry(logger *slog.Logger, mainModel, localVllmModel string) *Registry {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	// Fall back to local vLLM model when no model is configured.
+	if localVllmModel == "" {
+		localVllmModel = DefaultVllmModel
+	}
+
+	// Fall back to local vLLM model when no main model is configured.
 	if mainModel == "" {
-		mainModel = "vllm/" + DefaultVllmModel
+		mainModel = "vllm/" + localVllmModel
 	}
 
 	// Parse main model provider/name.
@@ -91,13 +96,13 @@ func NewRegistry(logger *slog.Logger, mainModel string) *Registry {
 		},
 		RoleLightweight: {
 			ProviderID: "vllm",
-			Model:      DefaultVllmModel,
+			Model:      localVllmModel,
 			BaseURL:    DefaultVllmBaseURL,
 			APIKey:     resolveVllmAPIKey(),
 		},
 		RoleFallback: {
 			ProviderID: "vllm",
-			Model:      DefaultVllmModel,
+			Model:      localVllmModel,
 			BaseURL:    DefaultVllmBaseURL,
 			APIKey:     resolveVllmAPIKey(),
 		},

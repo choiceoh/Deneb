@@ -137,6 +137,34 @@ func resolveDefaultModel(logger *slog.Logger) string {
 	return "" // empty: registry will provide the default
 }
 
+// resolveLocalVllmModel reads models.providers.vllm.models[0].id from deneb.json
+// to determine the model name the local vLLM server is serving. Returns empty
+// string if unconfigured — NewRegistry will fall back to the const default.
+func resolveLocalVllmModel(_ *slog.Logger) string {
+	snapshot, err := config.LoadConfigFromDefaultPath()
+	if err != nil || !snapshot.Valid || snapshot.Raw == "" {
+		return ""
+	}
+	var root struct {
+		Models struct {
+			Providers struct {
+				Vllm struct {
+					Models []struct {
+						ID string `json:"id"`
+					} `json:"models"`
+				} `json:"vllm"`
+			} `json:"providers"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
+		return ""
+	}
+	if len(root.Models.Providers.Vllm.Models) == 0 {
+		return ""
+	}
+	return root.Models.Providers.Vllm.Models[0].ID
+}
+
 // resolveSubagentDefaultModel reads agents.defaults.subagents.model from
 // deneb.json for separate sub-agent model configuration.
 func resolveSubagentDefaultModel(_ *slog.Logger) string {
