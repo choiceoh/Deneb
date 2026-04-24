@@ -46,6 +46,11 @@ type ChannelCallbacks struct {
 
 	// statusDepsFunc returns server-level status data for /status command.
 	statusDepsFunc StatusDepsFunc
+
+	// insightsProviderFunc generates a MarkdownV2 usage report for /insights.
+	// Optional — nil disables the command and the dispatcher replies with a
+	// "not available" notice.
+	insightsProviderFunc InsightsProviderFunc
 }
 
 // NewChannelCallbacks creates a ChannelCallbacks with default model.
@@ -176,6 +181,14 @@ func (cb *ChannelCallbacks) SetStatusDepsFunc(fn StatusDepsFunc) {
 	cb.mu.Unlock()
 }
 
+// SetInsightsProviderFunc installs the optional /insights report generator.
+// Passing nil disables the command.
+func (cb *ChannelCallbacks) SetInsightsProviderFunc(fn InsightsProviderFunc) {
+	cb.mu.Lock()
+	cb.insightsProviderFunc = fn
+	cb.mu.Unlock()
+}
+
 // --- Getters ---
 
 func (cb *ChannelCallbacks) ChannelUploadLimit(channelID string) int64 {
@@ -230,6 +243,14 @@ func (cb *ChannelCallbacks) RunStateMachine() *telegram.RunStateMachine {
 func (cb *ChannelCallbacks) StatusDeps() StatusDepsFunc {
 	cb.mu.RLock()
 	fn := cb.statusDepsFunc
+	cb.mu.RUnlock()
+	return fn
+}
+
+// InsightsProvider returns the currently installed /insights generator, or nil.
+func (cb *ChannelCallbacks) InsightsProvider() InsightsProviderFunc {
+	cb.mu.RLock()
+	fn := cb.insightsProviderFunc
 	cb.mu.RUnlock()
 	return fn
 }

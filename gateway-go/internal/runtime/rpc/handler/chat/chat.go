@@ -16,9 +16,10 @@ import (
 // BroadcastFunc is the canonical broadcast type defined in rpcutil.
 type BroadcastFunc = rpcutil.BroadcastFunc
 
-// Deps holds the dependencies for standard chat RPC methods (send, history, abort).
+// Deps holds the dependencies for standard chat RPC methods (send, history, abort, steer).
 type Deps struct {
-	Chat *chatpkg.Handler
+	Chat        *chatpkg.Handler
+	Broadcaster BroadcastFunc // optional; receives chat.steer_received events
 }
 
 // BtwDeps holds the dependencies for the chat.btw side-question RPC method.
@@ -42,6 +43,7 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 		"chat.send":    handleSend(deps),
 		"chat.history": handleHistory(deps),
 		"chat.abort":   handleAbort(deps),
+		"chat.steer":   handleSteer(deps),
 	}
 }
 
@@ -70,6 +72,53 @@ func handleHistory(deps Deps) rpcutil.HandlerFunc {
 func handleAbort(deps Deps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		return deps.Chat.Abort(ctx, req)
+	}
+}
+
+// handleSteer queues a /steer note for the main agent's next tool_result
+// without interrupting the active run.
+//
+// Params:
+//   - sessionKey (string, required): target session
+//   - note       (string, required): user nudge text (trimmed)
+//
+// On accept, broadcasts "chat.steer_received" so the UI can surface the
+// pending nudge. The note is drained and injected by the running agent
+// goroutine right before its next LLM call.
+func handleSteer(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		p, errResp := rpcutil.DecodeParams[struct {
+			SessionKey string `json:"sessionKey"`
+			Note       string `json:"note"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		if p.SessionKey == "" {
+			return rpcerr.MissingParam("sessionKey").Response(req.ID)
+		}
+		if p.Note == "" {
+			return rpcerr.MissingParam("note").Response(req.ID)
+		}
+		if deps.Chat == nil {
+			return rpcerr.Unavailable("chat handler not available").Response(req.ID)
+		}
+		accepted := deps.Chat.EnqueueSteer(p.SessionKey, p.Note)
+		if !accepted {
+			// Empty after trim, or queue unavailable. Surface as invalid
+			// rather than silently swallowing so the caller notices.
+			return rpcerr.InvalidRequest("steer note is empty").Response(req.ID)
+		}
+		if deps.Broadcaster != nil {
+			_, _ = deps.Broadcaster("chat.steer_received", map[string]any{
+				"sessionKey": p.SessionKey,
+				"note":       p.Note,
+			})
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"ok":         true,
+			"sessionKey": p.SessionKey,
+		})
 	}
 }
 

@@ -52,6 +52,14 @@ type Handler struct {
 	pending     *PendingQueue
 	mergeWindow *MergeWindowTracker
 	subagent    *SubagentNotifier
+	steer       *SteerQueue // mid-run /steer notes for the main agent
+
+	// checkpointRoot is the directory where per-session file-edit snapshots
+	// are stored (e.g. "~/.deneb/checkpoints"). When non-empty, each agent
+	// run lazily constructs a checkpoint.Manager scoped to its SessionKey
+	// and attaches it to the run context so fs tools can snapshot before
+	// mutating files. Empty string disables snapshotting (no-op on edits).
+	checkpointRoot string
 
 	// maxHistoryBytes caps the total JSON bytes returned by chat.history.
 	maxHistoryBytes int
@@ -104,6 +112,12 @@ func DefaultHandlerConfig() HandlerConfig {
 		MaxTokens:       defaultMaxTokens,
 	}
 }
+
+// InsightsProviderFunc returns a Telegram-safe MarkdownV2 report string for the
+// /insights command. `days` is the lookback window (defaulted upstream).
+// Returns an error if generation fails — the dispatcher surfaces the failure
+// to the user without leaking internals.
+type InsightsProviderFunc func(ctx context.Context, days int) (markdown string, err error)
 
 // StatusDepsFunc returns server-level status data for the /status command.
 // Called lazily so values are always fresh.
@@ -166,6 +180,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		abort:                NewAbortTracker(),
 		pending:              NewPendingQueue(),
 		mergeWindow:          NewMergeWindowTracker(),
+		steer:                NewSteerQueue(),
 		maxHistoryBytes:      cfg.MaxHistoryBytes,
 		maxHistoryCount:      cfg.MaxHistoryCount,
 		maxMessageBytes:      cfg.MaxMessageBytes,
@@ -201,4 +216,38 @@ func (h *Handler) Close() {
 	h.pending.Reset()
 	h.mergeWindow.Reset()
 	h.subagent.Reset()
+	h.steer.Reset()
+}
+
+// EnqueueSteer queues a /steer note for injection into the active (or next)
+// agent run for sessionKey. Returns true if the note was accepted.
+//
+// Used by the chat.steer RPC method and by the autoreply slash command
+// dispatcher (main-agent /steer). A separate entry point from the subagent
+// /steer path, which operates on a child-session run-id rather than on
+// the caller's own running turn.
+func (h *Handler) EnqueueSteer(sessionKey, note string) bool {
+	if h.steer == nil {
+		return false
+	}
+	return h.steer.Enqueue(sessionKey, note)
+}
+
+// SteerQueue returns the queue for internal wiring (used by runDeps to
+// give the agent run goroutine access without leaking the Handler).
+func (h *Handler) SteerQueue() *SteerQueue {
+	return h.steer
+}
+
+// SetCheckpointRoot configures the directory under which file-edit snapshots
+// are written (one subdirectory per SessionKey). Pass empty string to
+// disable snapshotting entirely. Safe to call at any time; new runs pick up
+// the latest value. Idempotent.
+func (h *Handler) SetCheckpointRoot(dir string) {
+	h.checkpointRoot = dir
+}
+
+// CheckpointRoot returns the configured snapshot root, or "" when disabled.
+func (h *Handler) CheckpointRoot() string {
+	return h.checkpointRoot
 }

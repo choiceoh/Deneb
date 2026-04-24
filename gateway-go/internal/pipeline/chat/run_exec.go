@@ -164,6 +164,17 @@ func executeAgentRun(
 	cfg, spawnFlag := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, logger)
 	cfg.Model = model // set the resolved model
 
+	// BeforeAPICall hook chain: composed via agent.ComposeBeforeAPICall so
+	// future features can register additional pre-LLM transforms without
+	// clobbering the steer hook. ComposeBeforeAPICall filters nil entries
+	// and returns nil when every slot is empty, so assignment is safe.
+	//
+	//  - steer: drains SteerQueue notes into the last tool_result before the
+	//    call. No-op when the queue is nil (sub-agents, tests).
+	cfg.BeforeAPICall = agent.ComposeBeforeAPICall(
+		buildSteerHookIfEnabled(deps.steerQueue, params.SessionKey, logger),
+	)
+
 	// Set up stream hooks via compositor: fan-out dispatch for each hook type.
 	var hc agent.HookCompositor
 	wireStreamHooks(&hc, params, deps, broadcaster, typingSignaler, statusCtrl)
@@ -884,6 +895,9 @@ func runAgentWithFallback(
 		}
 
 		// Transient HTTP retry: 502/503/521/429 → wait 2.5s, retry once.
+		// TODO(llmerr-migration): replace IsTransientError string match with
+		// llmerr.Classify + DefaultAction so backoff duration, rotation, and
+		// abort decisions share the same taxonomy as the rest of the pipeline.
 		if deps.chatport.IsTransientError != nil && deps.chatport.IsTransientError(runErr.Error()) && ctx.Err() == nil {
 			logger.Warn("transient HTTP error, retrying once", "error", runErr)
 			select {

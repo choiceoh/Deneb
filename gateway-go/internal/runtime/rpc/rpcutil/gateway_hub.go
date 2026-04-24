@@ -26,6 +26,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
@@ -105,6 +106,9 @@ type GatewayHub struct {
 	// Wiki knowledge base (optional, nil when wiki is disabled).
 	wikiStore *wiki.Store
 
+	// Insights engine — aggregates session/usage into usage reports.
+	insights *insights.Engine
+
 	// Metadata.
 	logger  *slog.Logger
 	version string
@@ -149,6 +153,7 @@ func (h *GatewayHub) Tasks() *tasks.Registry                         { return h.
 func (h *GatewayHub) Approvals() *approval.Store                     { return h.approvals }
 func (h *GatewayHub) Skills() *skills.Registry                       { return h.skills }
 func (h *GatewayHub) WikiStore() *wiki.Store                         { return h.wikiStore }
+func (h *GatewayHub) Insights() *insights.Engine                     { return h.insights }
 func (h *GatewayHub) Logger() *slog.Logger                           { return h.logger }
 func (h *GatewayHub) Version() string                                { return h.version }
 func (h *GatewayHub) LocalAIHub() *localai.Hub                       { return h.localAIHub }
@@ -164,6 +169,9 @@ func (h *GatewayHub) SetEmbeddingClient(c *embedding.Client) { h.embeddingClient
 
 // SetWikiStore sets the wiki knowledge base (optional, created during session phase).
 func (h *GatewayHub) SetWikiStore(s *wiki.Store) { h.wikiStore = s }
+
+// SetInsights sets the insights engine (created during early registration phase).
+func (h *GatewayHub) SetInsights(e *insights.Engine) { h.insights = e }
 
 // SetTelegram sets the Telegram plugin (created during early registration phase).
 func (h *GatewayHub) SetTelegram(p *telegram.Plugin) { h.telegram = p }

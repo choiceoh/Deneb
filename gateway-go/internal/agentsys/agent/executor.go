@@ -90,9 +90,22 @@ func RunAgent(
 			}
 		}
 
+		// BeforeAPICall hook: lets the caller produce a per-request copy of the
+		// messages (e.g. append a /steer nudge into the last tool_result block).
+		// The internal `messages` slice is intentionally NOT mutated so prompt
+		// cache keys remain stable on subsequent turns — only this one request
+		// carries the augmentation.
+		apiMessages := messages
+		if cfg.BeforeAPICall != nil {
+			apiMessages = cfg.BeforeAPICall(messages)
+			if apiMessages == nil {
+				apiMessages = messages
+			}
+		}
+
 		req := llm.ChatRequest{
 			Model:            cfg.Model,
-			Messages:         messages,
+			Messages:         apiMessages,
 			System:           cfg.System,
 			MaxTokens:        cfg.MaxTokens,
 			Tools:            cfg.Tools,

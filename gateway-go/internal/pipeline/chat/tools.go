@@ -63,11 +63,21 @@ func (r *ToolRegistry) Register(name string, fn ToolFunc) {
 }
 
 // RegisterTool adds a fully defined tool (name, description, schema, executor).
+//
+// Re-registering an existing name silently replaces the prior definition.
+// This is intentional (tests, hot-reload, and schema updates all rely on it)
+// but future plugin systems may accidentally claim core tool names. We log a
+// Warn so that collisions are at least visible in the operator log — see
+// docs/research/tool-interception-gap.md §7 for the rationale.
 func (r *ToolRegistry) RegisterTool(def ToolDef) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.tools[def.Name]; !exists {
 		r.order = append(r.order, def.Name)
+	} else {
+		slog.Warn("tool registration replaced existing entry",
+			"name", def.Name,
+			"hint", "if this is unexpected, a plugin may be shadowing a core tool")
 	}
 	r.tools[def.Name] = def
 	r.cachedLLMTools = nil // invalidate cache

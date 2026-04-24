@@ -111,6 +111,11 @@ type runDeps struct {
 	// notifications mid-run without polling. nil if not applicable.
 	subagentNotifyCh <-chan string
 
+	// steerQueue is the per-Handler /steer note queue. The agent run goroutine
+	// drains it via BeforeAPICall to inject notes into the next tool_result.
+	// nil disables the mid-run steer feature.
+	steerQueue *SteerQueue
+
 	// callbacks is an atomic snapshot of channel callbacks taken at run start.
 	// Contains reply, media, typing, reaction, draft, emit, shutdown, and model fields.
 	callbacks CallbackSnapshot

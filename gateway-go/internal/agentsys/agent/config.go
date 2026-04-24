@@ -101,6 +101,54 @@ type AgentConfig struct {
 	// each tool call against the detector and blocks execution on critical loops.
 	// Nil = disabled (default).
 	ToolLoopDetector *ToolLoopDetector
+
+	// BeforeAPICall is invoked right before each LLM request. The callback
+	// may mutate the returned slice (e.g. append user-steer text to the last
+	// tool_result block) and returns the adjusted messages to send. Returning
+	// the input unchanged is a no-op. Nil = skipped entirely.
+	//
+	// The executor re-reads cfg.Messages from the return value only for the
+	// current call; its own internal messages array is untouched by this
+	// hook so prompt-cache stability is preserved across turns.
+	//
+	// Single writer: callers that need multiple hooks must compose them
+	// explicitly via ComposeBeforeAPICall. Overwriting this field silently
+	// replaces any prior hook — prefer composing.
+	BeforeAPICall func(messages []llm.Message) []llm.Message
+}
+
+// ComposeBeforeAPICall returns a single BeforeAPICall hook that threads the
+// messages slice through each supplied hook in order. nil entries are skipped
+// (a common shape when features are conditionally enabled). Returns nil when
+// no non-nil hooks are supplied so callers can unconditionally assign the
+// result without worrying about wrapping an empty chain.
+//
+// Example:
+//
+//	cfg.BeforeAPICall = agent.ComposeBeforeAPICall(
+//	    buildSteerBeforeAPICall(...),
+//	    buildMetricsBeforeAPICall(...),
+//	)
+func ComposeBeforeAPICall(hooks ...func(messages []llm.Message) []llm.Message) func(messages []llm.Message) []llm.Message {
+	nonNil := make([]func([]llm.Message) []llm.Message, 0, len(hooks))
+	for _, h := range hooks {
+		if h != nil {
+			nonNil = append(nonNil, h)
+		}
+	}
+	switch len(nonNil) {
+	case 0:
+		return nil
+	case 1:
+		return nonNil[0]
+	default:
+		return func(msgs []llm.Message) []llm.Message {
+			for _, h := range nonNil {
+				msgs = h(msgs)
+			}
+			return msgs
+		}
+	}
 }
 
 // TurnCallback is called after each agent turn with accumulated token count.

@@ -22,6 +22,7 @@ const (
 	ctxKeyToolPreset
 	ctxKeyDeferredActivation
 	ctxKeySpawnFlag
+	ctxKeyCheckpointer
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
@@ -126,6 +127,36 @@ func WithToolPreset(ctx context.Context, preset string) context.Context {
 func ToolPresetFromContext(ctx context.Context) string {
 	s, _ := ctx.Value(ctxKeyToolPreset).(string)
 	return s
+}
+
+// --- Checkpointer ---
+
+// Checkpointer is a narrow interface for snapshotting a file prior to an
+// edit. Implemented by *pkg/checkpoint.CheckpointerAdapter (which wraps a
+// Manager). Defining it in toolctx/ avoids toolctx/ depending on pkg/checkpoint.
+//
+// Snapshot is invoked BEFORE the tool rewrites the target file; an error-free
+// return guarantees the agent can roll back the impending edit.
+type Checkpointer interface {
+	Snapshot(ctx context.Context, path string, reason string) error
+}
+
+// WithCheckpointer attaches a Checkpointer to the context. Tools like
+// write/edit call Snapshot before modifying the file so the user can
+// /rollback to the prior state within the session.
+func WithCheckpointer(ctx context.Context, cp Checkpointer) context.Context {
+	if cp == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, ctxKeyCheckpointer, cp)
+}
+
+// CheckpointerFromContext extracts the Checkpointer from a context.
+// Returns nil if none was attached (in which case tools should skip
+// snapshotting but still perform the write).
+func CheckpointerFromContext(ctx context.Context) Checkpointer {
+	cp, _ := ctx.Value(ctxKeyCheckpointer).(Checkpointer)
+	return cp
 }
 
 // --- SpawnFlag ---

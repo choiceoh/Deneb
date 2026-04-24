@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/pkg/llmerr"
 )
 
 // executeAgentRunWithDelta is a variant of executeAgentRun that accepts a direct
@@ -43,16 +44,27 @@ func executeAgentRunWithDelta(
 	return executeAgentRun(ctx, params, deps, broadcaster, nil, nil, logger, runLog)
 }
 
-// isContextOverflow checks if an error indicates a context window overflow.
+// isContextOverflow reports whether an error indicates a context window
+// overflow. Backed by the shared llmerr classifier, so it covers a much
+// wider pattern set (OpenAI, Anthropic, Gemini, vLLM, Ollama, llama.cpp,
+// AWS Bedrock) than the previous hand-rolled substring list, plus
+// structured error codes and large-session transport disconnects.
+//
+// Behavior is strictly more correct than the prior substring check — every
+// pattern the old implementation matched is also covered by
+// llmerr.ReasonContextOverflow.
+//
+// TODO(llmerr-migration): follow-up PR should replace the other ad-hoc
+// classifiers in this pipeline (transient HTTP, billing/auth routing in
+// autoreply) with llmerr.Classify and act on the returned Action so all
+// recovery decisions share a single taxonomy.
 func isContextOverflow(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
-	return strings.Contains(msg, "context_length_exceeded") ||
-		strings.Contains(msg, "context_too_long") ||
-		strings.Contains(msg, "prompt is too long") ||
-		strings.Contains(msg, "maximum context length")
+	// Zero status / empty body: the classifier still matches message
+	// patterns and error-code signals embedded in err.Error().
+	return llmerr.Classify(err, 0, nil).Reason == llmerr.ReasonContextOverflow
 }
 
 // resolveWorkspaceDirForPrompt returns the workspace directory for system prompt assembly.

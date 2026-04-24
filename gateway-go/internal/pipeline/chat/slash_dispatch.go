@@ -27,6 +27,9 @@ func (h *Handler) handleSlashCommand(
 		h.InterruptActiveRun(sessionKey)
 		h.pending.Clear(sessionKey)
 		h.mergeWindow.Clear(sessionKey)
+		if h.steer != nil {
+			h.steer.Clear(sessionKey)
+		}
 		prompt.ClearSessionSnapshot(sessionKey)
 		if h.transcript != nil {
 			if err := h.transcript.Delete(sessionKey); err != nil {
@@ -122,6 +125,17 @@ func (h *Handler) handleSlashCommand(
 			h.handleMailCommand(reqID, sessionKey, delivery)
 		}()
 
+	case "insights":
+		insightsLogger := h.logger
+		go func() {
+			defer func() {
+				if r := recover(); r != nil && insightsLogger != nil {
+					insightsLogger.Error("panic in /insights command handler", "panic", r)
+				}
+			}()
+			h.handleInsightsCommand(delivery, cmd.Args)
+		}()
+
 	}
 
 	return protocol.MustResponseOK(reqID, map[string]any{
@@ -141,6 +155,51 @@ func (h *Handler) deliverSlashResponse(delivery *DeliveryContext, text string) {
 	if err := fn(ctx, delivery, text); err != nil {
 		h.logger.Warn("slash command reply failed", "error", err)
 	}
+}
+
+// handleInsightsCommand renders a usage report and delivers it to the channel.
+// Takes an optional numeric argument for the lookback window in days (default 30).
+// Falls back to a friendly notice if the insights provider is not wired.
+func (h *Handler) handleInsightsCommand(delivery *DeliveryContext, args string) {
+	provider := h.InsightsProvider()
+	if provider == nil {
+		h.deliverSlashResponse(delivery, "사용량 리포트가 현재 비활성화되어 있습니다.")
+		return
+	}
+	days := 30
+	if trimmed := strings.TrimSpace(args); trimmed != "" {
+		if parsed, err := parseInsightsDays(trimmed); err == nil {
+			days = parsed
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	md, err := provider(ctx, days)
+	if err != nil {
+		h.logger.Error("insights report generation failed", "days", days, "error", err)
+		h.deliverSlashResponse(delivery, "사용량 리포트 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.")
+		return
+	}
+	h.deliverSlashResponse(delivery, md)
+}
+
+// parseInsightsDays parses and clamps the /insights day argument.
+// Accepts 1..365; otherwise returns an error so caller keeps default.
+func parseInsightsDays(s string) (int, error) {
+	// Strip a trailing "일" if present ("/insights 7일").
+	s = strings.TrimSuffix(s, "일")
+	s = strings.TrimSpace(s)
+	var n int
+	if _, err := fmt.Sscanf(s, "%d", &n); err != nil {
+		return 0, err
+	}
+	if n < 1 {
+		return 0, fmt.Errorf("days must be positive")
+	}
+	if n > 365 {
+		n = 365
+	}
+	return n, nil
 }
 
 // handleMailCommand fetches the Gmail inbox and either responds directly (no mail)

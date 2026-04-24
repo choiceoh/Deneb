@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"go/ast"
@@ -20,6 +21,20 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
+
+// snapshotBeforeWrite takes a pre-edit checkpoint if a Checkpointer is
+// attached to ctx. Never blocks the edit — snapshot failures are logged
+// at Error (the user loses ability to roll back) but the write proceeds.
+func snapshotBeforeWrite(ctx context.Context, path, reason string) {
+	cp := toolctx.CheckpointerFromContext(ctx)
+	if cp == nil {
+		return
+	}
+	if err := cp.Snapshot(ctx, path, reason); err != nil {
+		slog.Error("checkpoint snapshot failed; rollback unavailable for edit",
+			"path", path, "reason", reason, "error", err)
+	}
+}
 
 // --- Read tool ---
 
@@ -285,6 +300,9 @@ func ToolWrite(defaultDir string) ToolFunc {
 			defer fc.UpdateAfterWrite(path)
 		}
 
+		// Pre-edit checkpoint so the user can roll back this write.
+		snapshotBeforeWrite(ctx, path, "write")
+
 		if err := atomicfile.WriteFile(path, []byte(p.Content), nil); err != nil {
 			return "", fmt.Errorf("failed to write file: %w", err)
 		}
@@ -327,6 +345,12 @@ func ToolEdit(defaultDir string) ToolFunc {
 		if err != nil {
 			return "", fmt.Errorf("failed to read file: %w", err)
 		}
+
+		// Snapshot the current contents BEFORE any mutation path runs
+		// (regex / line-target / substring). Covers every write branch below
+		// — `snapshotBeforeWrite` is nil-safe and dedupes by SHA-256, so a
+		// no-op edit doesn't spam the index.
+		snapshotBeforeWrite(ctx, path, "edit")
 
 		content := string(data)
 
