@@ -670,11 +670,12 @@ func buildAgentConfig(
 
 	// Mode-aware agent config: Chat mode gets reduced limits for quick
 	// conversational replies; other modes use the default agent capabilities.
-	// Cron runs get a bigger turn budget so they can deliver the message AND
-	// still update wikis. With 25 turns the email-analysis cron reliably hit
-	// max_turns mid-wiki-write and clobbered the delivered body with a bare
-	// planning sentence; 40 turns leaves headroom for (analysis → message →
-	// wiki updates) without manual tuning per job.
+	// Cron runs get the most generous budget — they can (a) deliver the
+	// primary message, (b) post one or two short progress updates via
+	// message.send so the user is not silently waiting, and (c) still update
+	// wikis / projects without truncating. 50 turns is the current ceiling;
+	// keep this high only while the cron-side progress-reporting rule in the
+	// job prompts stays active, otherwise the user perceives the run as hung.
 	maxTurns := defaultMaxTurns         // 25
 	agentTimeout := defaultAgentTimeout // 60min
 	if cachedSession != nil {
@@ -683,7 +684,7 @@ func buildAgentConfig(
 			maxTurns = 10
 			agentTimeout = 10 * time.Minute
 		case cachedSession.Kind == session.KindCron:
-			maxTurns = 40
+			maxTurns = 50
 		}
 	}
 
