@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -207,6 +207,16 @@ func (s *Server) registerSessionRPCMethods() {
 	s.toolDeps.Sessions.SendFn = sendFn
 	s.toolDeps.Chrono.SendFn = sendFn
 
+	// Build the proactive-relay deps now that both dependencies
+	// (telegram plugin, transcript store) are available. Shared by the
+	// cron handoff below, wiki dreaming in registerWorkflowSideEffects,
+	// and gmail polling in initGmailPoll.
+	s.proactiveRelay = proactiveRelayDeps{
+		telegramPlug:    s.telegramPlug,
+		transcriptStore: transcriptStore,
+		logger:          s.logger,
+	}
+
 	// Wire transcript cloner for subagent cron session support.
 	// The cached store satisfies cron.TranscriptCloner (CloneRecent), avoiding
 	// a second uncached FileTranscriptStore that would bypass the TTL cache.
@@ -216,54 +226,39 @@ func (s *Server) registerSessionRPCMethods() {
 			"", // main session key resolved dynamically per-job
 		)
 
-		// Route cron output through the main user session instead of
-		// having cron deliver directly to Telegram. When the handoff is
-		// taken, the main agent runs a turn on the user's main session
-		// (e.g. "telegram:<chatID>"), relays the analysis as a proactive
-		// message, and the main session transcript records everything.
-		// That way the very next user reply is answered in a session that
-		// knows what "Neb" just said — fixing the class of bug where a
-		// proactive cron message was posted but the follow-up was answered
-		// with hallucinated context (incident: "박종원 부장 감포 공문 회신"
-		// proactive, then "요약만 해서 알려줘" answered about an unrelated
-		// topic).
+		// Deliver cron analysis to the user without routing through the
+		// LLM. The body is sent verbatim via the channel plugin and then
+		// appended to the session transcript as an assistant message, so
+		// a follow-up user turn ("더 자세히 알려줘") answers in a session
+		// that knows what was just relayed.
 		//
-		// Channels without a main-session mapping (or with an empty
-		// recipient) decline the handoff, and cron falls back to direct
-		// delivery so the user still receives the message.
+		// The previous implementation handed the body to the main agent
+		// as a "relay this verbatim" directive and relied on the LLM to
+		// comply. It didn't: the agent sometimes called wiki/memory tools
+		// and replied with a terse action report ("위키 업데이트 완료")
+		// instead of the body, leaving the user without the content.
+		// Moving delivery out of the LLM's control fixes this class of
+		// deviation structurally — no prompt-level instruction to obey.
+		//
+		// Channels without a wired plugin (non-telegram, plugin not yet
+		// connected) decline the handoff and cron falls back to its own
+		// direct delivery path so the user still receives the message.
 		s.cronService.SetMainSessionHandoff(func(ctx context.Context, channel, to, jobID, analysis string) (bool, error) {
 			if to == "" || strings.TrimSpace(analysis) == "" {
 				return false, nil
 			}
-			// Only Telegram is wired as a main-session channel today.
-			// Other channels (email, web, etc.) would need their own
-			// session-key derivation if added later.
-			if channel != "telegram" {
-				return false, nil
+			sessionKey := channel + ":" + to
+			delivered, err := s.proactiveRelay.relay(ctx, sessionKey, analysis)
+			if err != nil {
+				s.logger.Error("cron proactive relay failed",
+					"jobId", jobID, "sessionKey", sessionKey, "error", err)
+				return false, err
 			}
-			sessionKey := "telegram:" + to
-
-			// Directive asks the main agent to relay the cron analysis as
-			// a proactive message with the body intact. The main session
-			// reply pipeline handles Telegram delivery (chunking, reply
-			// metadata, dedup) automatically.
-			directive := fmt.Sprintf(
-				"[시스템 알림: cron 작업 `%s`가 분석을 완료했다. 아래 본문을 유저에게 proactive 메시지로 전달하라. 본문 내용을 바꾸거나 요약/축약하지 말고, 헤더나 서두 없이 자연스럽게 내보내라. 도구 호출 없이 본문만 한 번에 답변하라.]\n\n%s",
-				jobID,
-				analysis,
-			)
-
-			// SendDirect (not SessionsSend) because:
-			//   1. It derives DeliveryContext from the session key
-			//      (telegram:<chatID> → channel=telegram, to=<chatID>),
-			//      so the reply pipeline actually routes to Telegram.
-			//      SessionsSend leaves Delivery nil, which silently drops
-			//      replies inside wireTelegramChatHandler's SetReplyFunc.
-			//   2. It queues when a run is already active rather than
-			//      interrupting, so a user mid-conversation is not cut off
-			//      by a proactive cron relay.
-			s.chatHandler.SendDirect(sessionKey, directive)
-			return true, nil
+			if delivered {
+				s.logger.Info("cron proactive relay delivered",
+					"jobId", jobID, "sessionKey", sessionKey, "bytes", len(analysis))
+			}
+			return delivered, nil
 		})
 	}
 
@@ -355,16 +350,17 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		hub.Broadcast("dreaming.cycle", event)
 	})
 
-	// Wire Telegram notifier for dreaming events.
+	// Wire proactive relay as the dreaming notifier. Going through the
+	// relay (vs. a plain telegram send) mirrors the body into the user's
+	// session transcript, so a follow-up message after a dream
+	// completion ("방금 뭔 얘기야?") is answered in a session that knows
+	// what was just delivered.
 	if s.telegramPlug != nil {
-		tgCfg := s.telegramPlug.Config()
-		if tgCfg != nil && tgCfg.ChatID != 0 {
-			notifier := &telegramNotifier{
-				plugin: s.telegramPlug,
-				chatID: tgCfg.ChatID,
-				logger: s.logger,
+		if tgCfg := s.telegramPlug.Config(); tgCfg != nil && tgCfg.ChatID != 0 {
+			sessionKey := "telegram:" + strconv.FormatInt(tgCfg.ChatID, 10)
+			if n := s.proactiveRelay.notifierForSession(sessionKey); n != nil {
+				s.autonomousSvc.SetNotifier(n)
 			}
-			s.autonomousSvc.SetNotifier(notifier)
 		}
 	}
 

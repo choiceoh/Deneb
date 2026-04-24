@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
@@ -58,15 +59,16 @@ func (s *Server) initGmailPoll() {
 
 	s.gmailPollSvc = gmailpoll.NewService(cfg, s.logger)
 
-	// Wire Telegram notifier.
+	// Wire proactive relay as the gmail-poll notifier so email summaries
+	// are delivered verbatim AND mirrored into the main session
+	// transcript — follow-ups ("방금 그 메일 답장 초안 써줘") answer in a
+	// session that knows what arrived.
 	if s.telegramPlug != nil {
-		tgCfg := s.telegramPlug.Config()
-		if tgCfg != nil && tgCfg.ChatID != 0 {
-			s.gmailPollSvc.SetNotifier(&telegramNotifier{
-				plugin: s.telegramPlug,
-				chatID: tgCfg.ChatID,
-				logger: s.logger,
-			})
+		if tgCfg := s.telegramPlug.Config(); tgCfg != nil && tgCfg.ChatID != 0 {
+			sessionKey := "telegram:" + strconv.FormatInt(tgCfg.ChatID, 10)
+			if n := s.proactiveRelay.notifierForSession(sessionKey); n != nil {
+				s.gmailPollSvc.SetNotifier(n)
+			}
 		}
 	}
 
