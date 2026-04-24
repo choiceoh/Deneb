@@ -44,6 +44,27 @@ func (s *Service) Start(ctx context.Context) error {
 		scheduled++
 	}
 
+	// Boot diagnostic: log each enabled job's NextRunAtMs and whether recovery
+	// will pick it up. Without this line, a silently-skipped recovery (e.g., a
+	// stale storeData read or a bug in ComputeNextRunAtMs after a restart at
+	// the exact schedule boundary) leaves no trace — the operator sees
+	// "cron service started scheduled=N" and nothing else, even when a cron
+	// fire was missed. We saw this happen on 4/24 19:00 when a deploy landed
+	// at the schedule boundary.
+	for _, job := range storeData.Jobs {
+		if !job.Enabled {
+			continue
+		}
+		nrm := job.State.NextRunAtMs
+		overdue := nrm > 0 && nrm <= nowMs
+		s.logger.Info("cron boot job status",
+			"id", job.ID,
+			"nextRunAtMs", nrm,
+			"overdue", overdue,
+			"overdueMs", nowMs-nrm,
+		)
+	}
+
 	// Run jobs that should have fired during downtime.
 	s.recoverMissedJobsLocked(ctx, storeData)
 
