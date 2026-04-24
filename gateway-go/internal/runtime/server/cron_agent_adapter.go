@@ -38,23 +38,32 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 	if err != nil {
 		return "", err
 	}
-	// Prefer the final turn's text, but swap in the full transcript when:
-	//   (a) the final text is empty — agent ended with NO_REPLY / acknowledgement, or
-	//   (b) the run was cut short before a natural end_turn (max_turns, max_tokens,
-	//       etc.). When that happens the last turn is usually mid-stream planning
-	//       like "이제 위키 업데이트하고 텔레그램으로 전송할게" which is NOT the
-	//       deliverable the user wants — we saw exactly this in production when the
-	//       email-analysis-am cron hit the 25-turn limit and delivered a bare
-	//       planning sentence instead of the analysis.
-	// AllText concatenates every turn's text, so the earlier body the agent actually
-	// composed survives. NO_REPLY is stripped so the marker does not leak into
-	// Telegram.
-	output := result.Text
+	// Pick the deliverable:
+	//   - Default: the final turn's text (result.Text). This is what a natural
+	//     end_turn run is expected to produce.
+	//   - Fallback A (empty final text): the agent ended with NO_REPLY or a bare
+	//     acknowledgement. Use AllText so the earlier body survives.
+	//   - Fallback B (truncated): stopReason != end_turn (max_turns, max_tokens)
+	//     means the last turn is mid-stream planning like "이제 위키 업데이트하고
+	//     텔레그램으로 전송할게", not the deliverable. Use AllText.
+	//   - Fallback C (final text is much shorter than AllText): the agent
+	//     composed the body in an earlier turn and closed with a short status
+	//     line like "프로젝트 위키 4개 업데이트 완료" while turning an
+	//     end_turn stop. We saw exactly this in production (19:35
+	//     email-analysis-full delivered a 131-byte wiki-update status instead
+	//     of the 922-char analysis). Prefer AllText whenever it is meaningfully
+	//     larger — the 3× threshold keeps normal single-turn replies on Text.
+	// NO_REPLY is stripped so the marker does not leak into Telegram.
+	text := strings.TrimSpace(result.Text)
+	allText := strings.TrimSpace(tokens.StripSilentToken(result.AllText, tokens.SilentReplyToken))
 	truncated := result.StopReason != "" && result.StopReason != "end_turn"
-	if (strings.TrimSpace(output) == "" || truncated) && result.AllText != "" {
-		output = strings.TrimSpace(tokens.StripSilentToken(result.AllText, tokens.SilentReplyToken))
+	shortWrapUp := allText != "" && len(allText) >= 3*len(text)+200
+	if text == "" || truncated || shortWrapUp {
+		if allText != "" {
+			return allText, nil
+		}
 	}
-	return output, nil
+	return text, nil
 }
 
 // acpSubagentPoller implements cron.SubagentPoller using the ACP registry
