@@ -114,7 +114,7 @@ func (s *Service) fireTimerLocked(ctx context.Context) {
 			// NextRunAtMs and spawn a second executor for the same trigger.
 			// The executor's applyJobResult still recomputes NextRunAtMs based
 			// on the post-run time, so this pre-advance is idempotent.
-			preAdvanceNextRun(s, job, now)
+			preAdvanceNextRun(s, job, now, "fire")
 			jobCopy := job
 			go func() {
 				s.executeJobFull(ctx, jobCopy)
@@ -136,7 +136,7 @@ func (s *Service) recoverMissedJobsLocked(ctx context.Context, storeData *CronSt
 			}
 			// Pre-advance NextRunAtMs so a subsequent timer fire (armed
 			// immediately after recover) won't treat this job as still due.
-			preAdvanceNextRun(s, job, now)
+			preAdvanceNextRun(s, job, now, "recover")
 			s.logger.Info("recovering missed cron job", "id", job.ID,
 				"scheduledAt", job.State.NextRunAtMs, "missedBy", now-job.State.NextRunAtMs)
 			jobCopy := job
@@ -151,17 +151,45 @@ func (s *Service) recoverMissedJobsLocked(ctx context.Context, storeData *CronSt
 // starts, so a concurrent scheduler path sees the job as not-due and skips it.
 // Errors are logged only — the executor will still run and applyJobResult
 // overwrites with the definitive post-run NextRunAtMs.
-func preAdvanceNextRun(s *Service, job StoreJob, now int64) {
+//
+// reason is a short tag ("fire", "recover") identifying the caller so a
+// postmortem can tell which scheduler path decided to advance the clock.
+func preAdvanceNextRun(s *Service, job StoreJob, now int64, reason string) {
 	nextMs := ComputeNextRunAtMs(job.Schedule, now)
+	degenerate := false
 	if nextMs <= now {
 		// Degenerate schedule (should not happen); fall back to +1 minute
 		// to at least keep the window closed for a tick.
 		nextMs = now + 60_000
+		degenerate = true
 	}
 	updatedState := job.State
 	updatedState.NextRunAtMs = nextMs
-	if err := s.store.UpdateJobState(job.ID, updatedState); err != nil {
+	persistErr := s.store.UpdateJobState(job.ID, updatedState)
+	// One log per advance so the reader can grep `cron scheduler decision
+	// id=X` and see every NextRunAtMs mutation + who made it. This was the
+	// missing piece when diagnosing the 4/24 19:00 cron miss — scheduler
+	// state changed but the trail was empty.
+	s.logger.Info("cron scheduler decision",
+		"action", "preAdvanceNextRun",
+		"reason", reason,
+		"id", job.ID,
+		"beforeNextRunAtMs", job.State.NextRunAtMs,
+		"afterNextRunAtMs", nextMs,
+		"nowMs", now,
+		"degenerate", degenerate,
+		"persistErr", errStr(persistErr))
+	if persistErr != nil {
 		s.logger.Warn("cron pre-advance NextRunAtMs failed",
-			"id", job.ID, "error", err)
+			"id", job.ID, "error", persistErr)
 	}
+}
+
+// errStr renders an error as a string or empty — convenient for slog key-value
+// pairs where a nil error should render as "".
+func errStr(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }

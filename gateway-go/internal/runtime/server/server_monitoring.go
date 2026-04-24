@@ -3,6 +3,11 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
+	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
@@ -81,6 +86,14 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 		},
 	}, monitoring.DefaultChannelHealthConfig(), s.logger)
 	s.safeGo("channel-health-monitor", func() { s.channelHealth.Run(ctx) })
+
+	// Memory pressure monitor — tick every 30s, emit a compact snapshot when
+	// the Go heap is large or Linux PSI memory indicates host-level pressure.
+	// Motivation: diary 4/24 notes earlyoom SIGTERM-ing the gateway ~100 times
+	// in a day (host load avg 7+, memory 114/121GB). The gateway had zero
+	// warning before being killed — this monitor turns that surprise into a
+	// trailing breadcrumb the operator can correlate with the next OOM.
+	s.safeGo("memory-pressure-monitor", func() { runMemPressureMonitor(ctx, s.logger) })
 }
 
 // emitChannelEvent broadcasts a telegram.changed event to WebSocket clients.
@@ -113,6 +126,104 @@ func (s *Server) startProcessPruner(ctx context.Context) {
 			}
 		}
 	})
+}
+
+// runMemPressureMonitor ticks every 30s and emits a compact memory snapshot
+// when the Go heap is unusually large or Linux PSI reports stall time.
+//
+// Snapshot conditions (any one triggers a log line):
+//   - Go Alloc >= 6 GiB  — gateway's normal resident is < 1 GiB; 6× headroom
+//     avoids noise during transient spikes but catches the runaway case.
+//   - /proc/pressure/memory "some" 10s avg >= 1.0 %  — host is stalling on
+//     memory for this process or its peers; OOM killer is a short step away.
+//   - Heap grew > 2× since the last tick — detect the leak-in-progress curve
+//     before it hits the absolute threshold.
+//
+// At every tick we also Debug-log Go runtime stats so a future `--log-level
+// debug` restart can show the full curve without code changes.
+func runMemPressureMonitor(ctx context.Context, logger *slog.Logger) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	const (
+		tickEvery        = 30 * time.Second
+		heapWarnBytes    = uint64(6 * 1024 * 1024 * 1024) // 6 GiB
+		psiWarnPercent   = 1.0                            // 1 % stall
+		growthFactorWarn = 2.0
+	)
+	var prevAlloc uint64
+	ticker := time.NewTicker(tickEvery)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			psi := readPSIMemorySome()
+			// Debug line every tick for full-history trace when enabled.
+			logger.Debug("mem pressure tick",
+				"heapAlloc", m.HeapAlloc,
+				"heapSys", m.HeapSys,
+				"alloc", m.Alloc,
+				"numGoroutine", runtime.NumGoroutine(),
+				"psiSome10", psi)
+			shouldWarn := m.Alloc >= heapWarnBytes ||
+				psi >= psiWarnPercent ||
+				(prevAlloc > 0 && float64(m.Alloc) >= growthFactorWarn*float64(prevAlloc) && m.Alloc > 512*1024*1024)
+			if shouldWarn {
+				logger.Warn("mem pressure",
+					"alloc", m.Alloc,
+					"heapAlloc", m.HeapAlloc,
+					"heapInuse", m.HeapInuse,
+					"heapSys", m.HeapSys,
+					"gcPauseTotalNs", m.PauseTotalNs,
+					"numGC", m.NumGC,
+					"numGoroutine", runtime.NumGoroutine(),
+					"psiSome10Pct", psi,
+					"growthFactor", safeGrowth(prevAlloc, m.Alloc))
+			}
+			prevAlloc = m.Alloc
+		}
+	}
+}
+
+// readPSIMemorySome parses /proc/pressure/memory and returns the "some" 10s
+// average percent. Returns 0 when the file is unavailable (non-Linux, kernel
+// without PSI, or permission denied) — callers should treat 0 as "no signal".
+func readPSIMemorySome() float64 {
+	b, err := os.ReadFile("/proc/pressure/memory")
+	if err != nil {
+		return 0
+	}
+	// File format:
+	//   some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+	//   full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+	for _, line := range strings.Split(string(b), "\n") {
+		if !strings.HasPrefix(line, "some ") {
+			continue
+		}
+		for _, field := range strings.Fields(line) {
+			const key = "avg10="
+			if strings.HasPrefix(field, key) {
+				v, err := strconv.ParseFloat(field[len(key):], 64)
+				if err != nil {
+					return 0
+				}
+				return v
+			}
+		}
+	}
+	return 0
+}
+
+// safeGrowth guards against divide-by-zero for the first tick or a reset.
+func safeGrowth(prev, current uint64) float64 {
+	if prev == 0 {
+		return 0
+	}
+	return float64(current) / float64(prev)
 }
 
 // registerBuiltinMethods registers the core RPC methods handled natively in Go.
