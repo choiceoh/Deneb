@@ -54,6 +54,7 @@ type ServerRPC struct {
 	acpResultInjectionUnsub  func()
 	snapshotLifecycleUnsub   func()
 	checkpointLifecycleUnsub func()
+	spilloverLifecycleUnsub  func()
 }
 
 // ServerRuntime owns long-running runtime health/activity trackers.

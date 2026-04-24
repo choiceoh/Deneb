@@ -1,19 +1,19 @@
-// inbound_steer.go — Parse `/steer <note>` for main-agent mid-run nudges.
+// inbound_steer.go — Parse `/steer <note>` vs `/steer <id> <note>` by
+// consulting the live subagent registry instead of a syntactic heuristic.
 //
-// Main agent ported from Hermes' `/steer <note>` — queues a note for the
-// running agent's next tool_result. Distinct from the subagent
-// `/steer <id> <note>` form, which targets a child run.
+// Phase 1 used a purely syntactic rule — "first token looks like a short
+// numeric/hex id → subagent; otherwise main agent". That mis-routes in
+// edge cases: a subagent with a word-like label, or a user typing
+// `/steer abc123 please focus on X` where `abc123` happens to be prose.
 //
-// Distinguishing heuristic:
-//   - If the body starts with /steer and is followed by a note whose FIRST
-//     non-prefix token is NOT a plausible subagent id (short numeric, or
-//     a recognizable run-id/label prefix), treat as main-agent steer.
-//   - Otherwise, defer to the subagent dispatcher which owns the
-//     `/steer <id> <note>` flow.
+// Phase 2 replaces the heuristic with an unambiguous registry lookup:
+//   - if the first token matches a currently-active subagent for this
+//     session → SteerSubagent (note = body after first token),
+//   - otherwise → SteerMainAgent (note = full body).
 //
-// This parser is intentionally syntactic-only (no registry lookup); the
-// caller attempts main-agent enqueue first, and on failure the existing
-// subagent dispatcher takes over (which then consults live run state).
+// When the registry is nil (e.g. ACP not configured, early startup) we
+// degrade to the Phase 1 heuristic so an inbound /steer is never silently
+// dropped.
 package server
 
 import (
@@ -23,28 +23,83 @@ import (
 
 const mainAgentSteerPrefix = "/steer"
 
-// parseMainAgentSteerCommand inspects body for the `/steer <note>` form
-// used by the main agent. Returns (note, true) when the body is a
-// plausible main-agent steer, or ("", false) otherwise.
+// SteerKind classifies the outcome of parsing a /steer body.
+type SteerKind int
+
+const (
+	// SteerNone — body is empty or not a /steer command. Caller should no-op.
+	SteerNone SteerKind = iota
+	// SteerMainAgent — body targets the main agent; note is the full nudge.
+	SteerMainAgent
+	// SteerSubagent — body targets a specific subagent identified by subagentID.
+	SteerSubagent
+)
+
+// SubagentLookup is a minimal interface satisfied by any registry that can
+// answer "does session `sessionKey` currently have an active subagent
+// identified by `token`?". Implementations MUST be safe for concurrent use.
 //
-// Rules:
-//   - body must start with "/steer " (case-insensitive) followed by text.
-//   - the remainder must have length > 0 after trimming.
-//   - the FIRST token of the remainder must NOT look like a subagent id.
-//     A "plausible id" is either:
-//   - a 1-3 digit positive integer (index into the subagents list), or
-//   - a hex-looking prefix (all chars in [0-9a-fA-F], length >= 4)
-//     matching the run-id prefix heuristic.
+// A nil SubagentLookup is treated as "no registry available" — the parser
+// then falls back to the Phase 1 syntactic heuristic.
+type SubagentLookup interface {
+	// HasSubagent returns true when `subagentID` resolves to a live subagent
+	// owned by `sessionKey` (via index, run-id prefix, session key, or label
+	// — whatever the concrete registry accepts).
+	HasSubagent(sessionKey, subagentID string) bool
+}
+
+// parseSteerCommand decomposes a /steer body into either a main-agent nudge
+// or a subagent-targeted nudge.
 //
-// When the first token is a plain word (letters/Hangul/general text) we
-// route to the main agent; the subagent dispatcher still handles every
-// other form (/steer 1 go, /steer abc12345 go).
+// Routing rules (in order):
+//  1. empty / not /steer → SteerNone.
+//  2. if `registry` is non-nil AND registry.HasSubagent(sessionKey, firstToken)
+//     returns true → SteerSubagent (note = rest of body after firstToken).
+//  3. if `registry` is nil → Phase 1 syntactic heuristic
+//     (numeric/hex-looking first token → SteerNone so the subagent
+//     dispatcher can handle it; otherwise SteerMainAgent).
+//  4. else → SteerMainAgent (note = full body).
+//
+// sessionKey scopes the registry lookup — subagents are owned per session.
+// Returns (SteerNone, "", "") when the body is not a /steer at all.
+func parseSteerCommand(body, sessionKey string, registry SubagentLookup) (kind SteerKind, note, subagentID string) {
+	rest, ok := stripSteerPrefix(body)
+	if !ok {
+		return SteerNone, "", ""
+	}
+	firstToken, remainder := splitFirstToken(rest)
+	if firstToken == "" {
+		return SteerNone, "", ""
+	}
+
+	if registry != nil && registry.HasSubagent(sessionKey, firstToken) {
+		return SteerSubagent, remainder, firstToken
+	}
+
+	if registry == nil && looksLikeSubagentID(firstToken) {
+		return SteerNone, "", ""
+	}
+
+	return SteerMainAgent, rest, ""
+}
+
+// parseMainAgentSteerCommand preserves the Phase 1 signature for callers
+// that don't have a registry to consult. Deprecated: prefer parseSteerCommand.
 func parseMainAgentSteerCommand(body string) (string, bool) {
+	kind, note, _ := parseSteerCommand(body, "", nil)
+	if kind == SteerMainAgent {
+		return note, true
+	}
+	return "", false
+}
+
+// stripSteerPrefix returns the trimmed remainder of body after the
+// `/steer ` prefix (case-insensitive) plus required whitespace separator.
+func stripSteerPrefix(body string) (string, bool) {
 	trimmed := strings.TrimSpace(body)
 	if trimmed == "" {
 		return "", false
 	}
-	// Case-insensitive prefix check; the slash command itself is ascii.
 	if len(trimmed) < len(mainAgentSteerPrefix) {
 		return "", false
 	}
@@ -52,8 +107,6 @@ func parseMainAgentSteerCommand(body string) (string, bool) {
 		return "", false
 	}
 	rest := trimmed[len(mainAgentSteerPrefix):]
-	// Require at least one whitespace separator (avoid matching /steerage or
-	// /steer-at-target).
 	if rest == "" || !unicode.IsSpace(rune(rest[0])) {
 		return "", false
 	}
@@ -61,36 +114,33 @@ func parseMainAgentSteerCommand(body string) (string, bool) {
 	if rest == "" {
 		return "", false
 	}
-	// Inspect the first token — if it LOOKS like a subagent id, let the
-	// subagent path handle it.
-	firstEnd := 0
-	for firstEnd < len(rest) {
-		r := rune(rest[firstEnd])
-		if unicode.IsSpace(r) {
-			break
-		}
-		firstEnd++
-	}
-	firstToken := rest[:firstEnd]
-	if looksLikeSubagentID(firstToken) {
-		return "", false
-	}
-	// The whole rest — including the first token — is the note.
 	return rest, true
 }
 
-// looksLikeSubagentID returns true when token is structurally a subagent id
-// (numeric index or hex/runid prefix). Strings with mixed ASCII + Hangul,
-// punctuation, or any spaces are never ids.
+// splitFirstToken returns the first whitespace-delimited token of s and
+// the remainder (with leading whitespace trimmed).
+func splitFirstToken(s string) (firstToken, remainder string) {
+	end := 0
+	for end < len(s) {
+		if unicode.IsSpace(rune(s[end])) {
+			break
+		}
+		end++
+	}
+	firstToken = s[:end]
+	remainder = strings.TrimSpace(s[end:])
+	return firstToken, remainder
+}
+
+// looksLikeSubagentID returns true when token is structurally a subagent id.
+// Used only as a fallback when no registry is available.
 func looksLikeSubagentID(token string) bool {
 	if token == "" {
 		return false
 	}
-	// Numeric index (1-3 digits).
 	if len(token) <= 3 && isAllDigits(token) {
 		return true
 	}
-	// Hex-looking run-id prefix (>= 4 chars, all hex).
 	if len(token) >= 4 && isAllHex(token) {
 		return true
 	}

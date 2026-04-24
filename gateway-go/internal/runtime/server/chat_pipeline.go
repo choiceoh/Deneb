@@ -81,11 +81,14 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	}
 
 	// Spillover store: saves large tool results to disk, replaces with preview.
+	// Session-end events release per-session spill files immediately instead of
+	// waiting for the 30-minute TTL sweep (see server_spillover_lifecycle.go).
 	if home, err := os.UserHomeDir(); err == nil {
 		spillDir := filepath.Join(home, ".deneb", "spillover")
 		spillStore := agent.NewSpilloverStore(spillDir)
 		spillStore.StartCleanup(context.Background())
 		s.toolDeps.SpilloverStore = spillStore
+		s.initSpilloverLifecycle(spillStore)
 	}
 
 	// Core tools (file I/O, exec, process, sessions, gateway, cron, image).

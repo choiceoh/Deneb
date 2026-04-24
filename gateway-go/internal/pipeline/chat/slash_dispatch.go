@@ -136,6 +136,19 @@ func (h *Handler) handleSlashCommand(
 			h.handleInsightsCommand(delivery, cmd.Args)
 		}()
 
+	case "rollback":
+		// /rollback [list|목록] [N] | [diff|비교] <id> | [restore|복원] <id>
+		// Delegated to rollback_dispatch.go for parsing + rendering.
+		rollbackLogger := h.logger
+		go func() {
+			defer func() {
+				if r := recover(); r != nil && rollbackLogger != nil {
+					rollbackLogger.Error("panic in /rollback command handler", "panic", r)
+				}
+			}()
+			h.handleRollbackCommand(sessionKey, delivery, cmd.Args)
+		}()
+
 	}
 
 	return protocol.MustResponseOK(reqID, map[string]any{
