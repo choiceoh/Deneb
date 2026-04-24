@@ -133,7 +133,11 @@ func TestRunAgent_ToolCallLoop(t *testing.T) {
 }
 
 func TestRunAgent_MaxTurns(t *testing.T) {
-	// Model always requests a tool — should stop at MaxTurns.
+	// Model always requests a tool. After the grace-call port, the executor
+	// injects a one-shot wrap-up user message when MaxTurns is exhausted and
+	// runs ONE extra iteration before terminating with max_turns_graceful.
+	// Here the stub also returns a tool call on the grace iteration (ignoring
+	// the wrap-up ask), but the loop still exits after that single extra turn.
 	client := newTestLLMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -157,11 +161,14 @@ func TestRunAgent_MaxTurns(t *testing.T) {
 		client, reg, agent.StreamHooks{}, nil, nil,
 	)
 	testutil.NoError(t, err)
-	if result.StopReason != "max_turns" {
-		t.Errorf("StopReason = %q, want %q", result.StopReason, "max_turns")
+	if result.StopReason != agent.StopReasonMaxTurnsGraceful {
+		t.Errorf("StopReason = %q, want %q", result.StopReason, agent.StopReasonMaxTurnsGraceful)
 	}
-	if result.Turns != 3 {
-		t.Errorf("Turns = %d, want 3", result.Turns)
+	if !result.BudgetExhaustedInjected {
+		t.Error("BudgetExhaustedInjected = false, want true")
+	}
+	if result.Turns != 4 {
+		t.Errorf("Turns = %d, want 4 (MaxTurns 3 + 1 grace iteration)", result.Turns)
 	}
 }
 

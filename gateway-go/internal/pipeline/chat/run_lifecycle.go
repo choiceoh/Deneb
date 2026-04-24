@@ -66,6 +66,10 @@ func fallbackForStopReason(stopReason string) string {
 	switch stopReason {
 	case "max_turns":
 		return "응답 생성이 반복 한도에 도달해 마무리되지 않았어요. 다시 한 번 말해 주세요 — 더 짧게 끊어서 요청하면 잘 끝납니다."
+	case "max_turns_graceful":
+		// The grace call iteration normally produces a wrap-up text, so this
+		// fallback is only reached when even that turn yielded no output.
+		return "응답이 턴 예산 한도에 도달했지만 마무리 답변을 받지 못했어요. 다시 요청해 주세요."
 	case "timeout":
 		return "응답 생성이 시간 초과로 중단됐어요. 잠시 후에 다시 시도해 주세요."
 	case "aborted":

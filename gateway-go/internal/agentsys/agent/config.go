@@ -164,9 +164,19 @@ type ToolActivity struct {
 type AgentResult struct {
 	Text       string // last turn's text (for channel reply — avoids duplicating streamed content)
 	AllText    string // accumulated text from ALL turns (for transcript persistence + session memory)
-	StopReason string // "end_turn", "max_tokens", "timeout", "aborted", "max_turns"
+	StopReason string // "end_turn", "max_tokens", "timeout", "aborted", "max_turns", "max_turns_graceful"
 	Usage      llm.TokenUsage
 	Turns      int
+
+	// BudgetExhaustedInjected is true once the one-time grace-call user message
+	// has been appended to the history after MaxTurns exhaustion. Guards against
+	// double injection on the grace iteration itself.
+	BudgetExhaustedInjected bool
+
+	// BudgetGraceCall marks the in-flight grace iteration. Set immediately after
+	// injection, cleared after the grace turn finishes. Also extends the loop
+	// guard so one additional iteration runs past the normal MaxTurns cap.
+	BudgetGraceCall bool
 
 	// TurnsPersisted counts messages persisted via OnMessagePersist during
 	// the run. When > 0, handleRunSuccess skips aggregate transcript write.

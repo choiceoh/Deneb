@@ -60,7 +60,13 @@ func RunAgent(
 	var maxTokensRecoveryCount int
 	baseMaxTokens := cfg.MaxTokens // Original value before any recovery scaling.
 
-	for turn := range cfg.MaxTurns {
+	// Loop condition permits one extra iteration past MaxTurns when the grace
+	// flag is set — see grace.go. Normal runs behave identically to `range
+	// cfg.MaxTurns`; the grace branch only engages on budget exhaustion.
+	// BudgetGraceCall is armed at the bottom of the final budgeted turn (see
+	// the injection block at loop tail) and cleared there or on the early
+	// end_turn return path.
+	for turn := 0; turn < cfg.MaxTurns || result.BudgetGraceCall; turn++ {
 		result.Turns = turn + 1
 
 		// Per-turn context initialization (e.g., injecting a TurnContext for
@@ -244,9 +250,17 @@ func RunAgent(
 				result.TurnsPersisted++
 			}
 
-			result.StopReason = turnRes.stopReason
-			if result.StopReason == "" {
-				result.StopReason = "end_turn"
+			// Grace iteration produced its wrap-up reply — surface the graceful
+			// stop reason so callers can distinguish "budget forced the close"
+			// from a spontaneous end_turn.
+			if result.BudgetGraceCall {
+				result.StopReason = StopReasonMaxTurnsGraceful
+				result.BudgetGraceCall = false
+			} else {
+				result.StopReason = turnRes.stopReason
+				if result.StopReason == "" {
+					result.StopReason = "end_turn"
+				}
 			}
 			result.MaxTokensRecoveries = maxTokensRecoveryCount
 			result.FinalMessages = messages
@@ -338,9 +352,40 @@ func RunAgent(
 				"turn", turn,
 				"blocksCompacted", n)
 		}
+
+		switch {
+		case result.BudgetGraceCall:
+			// Grace iteration just completed (we extended past MaxTurns for a
+			// single wrap-up turn). Clear the flag so the loop guard fails
+			// next check — the terminal return below sets the graceful marker.
+			result.BudgetGraceCall = false
+
+		case turn+1 >= cfg.MaxTurns && !result.BudgetExhaustedInjected:
+			// This was the final budgeted turn AND the model chose to keep
+			// calling tools (if it had emitted end_turn / no tools, the
+			// early-exit branch above would already have returned). Inject
+			// ONE wrap-up user message now so the next iteration has it in
+			// history, and arm BudgetGraceCall to extend the loop by exactly
+			// one iteration. The injection is an append-only operation so
+			// prompt cache up through the just-recorded tool_result is
+			// preserved (no mutation of prior messages).
+			messages = append(messages, llm.NewTextMessage("user", GraceCallPrompt))
+			if cfg.OnMessagePersist != nil {
+				cfg.OnMessagePersist(messages[len(messages)-1])
+				result.TurnsPersisted++
+			}
+			result.BudgetExhaustedInjected = true
+			result.BudgetGraceCall = true
+			logger.Warn("agent turn budget exhausted; issuing grace wrap-up call",
+				"maxTurns", cfg.MaxTurns, "turn", turn)
+		}
 	}
 
-	result.StopReason = "max_turns"
+	if result.BudgetExhaustedInjected {
+		result.StopReason = StopReasonMaxTurnsGraceful
+	} else {
+		result.StopReason = "max_turns"
+	}
 	result.MaxTokensRecoveries = maxTokensRecoveryCount
 	result.FinalMessages = messages
 	return result, nil

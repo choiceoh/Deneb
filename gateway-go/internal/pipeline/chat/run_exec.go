@@ -894,11 +894,16 @@ func runAgentWithFallback(
 			continue
 		}
 
-		// Transient HTTP retry: 502/503/521/429 → wait 2.5s, retry once.
-		// TODO(llmerr-migration): replace IsTransientError string match with
-		// llmerr.Classify + DefaultAction so backoff duration, rotation, and
-		// abort decisions share the same taxonomy as the rest of the pipeline.
-		if deps.chatport.IsTransientError != nil && deps.chatport.IsTransientError(runErr.Error()) && ctx.Err() == nil {
+		// Transient HTTP retry: 500/502/503/521/529/429 → wait 2.5s, retry once.
+		//
+		// Classification is delegated to llmerr so the decision shares the
+		// same taxonomy as isContextOverflow above and the autoreply runner.
+		// We deliberately whitelist the narrow set of reasons the prior
+		// string-based IsTransientError matched (5xx server errors, overload,
+		// rate limits) plus transport timeouts — keeping ReasonUnknown and
+		// non-HTTP signals out so we don't over-retry on truly unknown
+		// failures or auth/billing issues.
+		if ctx.Err() == nil && isTransientLLMError(runErr) {
 			logger.Warn("transient HTTP error, retrying once", "error", runErr)
 			select {
 			case <-ctx.Done():

@@ -33,7 +33,3 @@ type ParseReplyDirectivesFunc func(raw, currentMessageID, silentToken string) Re
 // DraftSanitizerFunc cleans draft streaming text (strips leaked tool-call
 // markup, fenced code blocks, etc.).
 type DraftSanitizerFunc func(text string) string
-
-// IsTransientErrorFunc checks if an error message is a retryable transient
-// HTTP error (502, 503, 429, etc.).
-type IsTransientErrorFunc func(msg string) bool

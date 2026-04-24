@@ -7,7 +7,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/reply"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/typing"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
@@ -174,7 +173,6 @@ func (h *Handler) buildRunDeps() runDeps {
 			},
 			SanitizeDraft:        reply.SanitizeDraftText,
 			ParseReplyDirectives: reply.ParseReplyDirectives,
-			IsTransientError:     autoreply.IsTransientHTTPError,
 		},
 	}
 }
