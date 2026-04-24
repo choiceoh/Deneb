@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
@@ -166,12 +167,32 @@ func RunAgent(
 
 		// Per-turn token logging: surface per-turn cost so multi-turn runs
 		// are transparent (the accumulated total can be misleading).
+		// Also record text/tool split so post-hoc diagnosis can tell whether a
+		// turn produced deliverable prose or only tool calls — crucial when
+		// investigating "agent composed body as tool-call argument vs. as text"
+		// questions (the 4/24 19:35 email-analysis-full wrap-up postmortem had
+		// to guess this from token counts alone).
+		textChars := len(turnRes.text)
+		toolCount := len(turnRes.toolCalls)
+		toolNames := make([]string, 0, toolCount)
+		toolInputBytes := 0
+		for _, tc := range turnRes.toolCalls {
+			if tc.Name != "" {
+				toolNames = append(toolNames, tc.Name)
+			}
+			toolInputBytes += len(tc.Input)
+		}
 		logger.Info("agent turn complete",
 			"turn", turn,
 			"turnInputTokens", turnRes.usage.InputTokens,
 			"turnOutputTokens", turnRes.usage.OutputTokens,
 			"accInputTokens", result.Usage.InputTokens,
-			"messages", len(messages))
+			"messages", len(messages),
+			"textChars", textChars,
+			"toolCount", toolCount,
+			"toolNames", strings.Join(toolNames, ","),
+			"toolInputBytes", toolInputBytes,
+			"stopReason", turnRes.stopReason)
 
 		// Feed actual token usage back to the estimator for self-calibration.
 		if turnRes.usage.InputTokens > 0 {

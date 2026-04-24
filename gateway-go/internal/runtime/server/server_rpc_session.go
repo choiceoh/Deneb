@@ -259,8 +259,20 @@ func (s *Server) registerSessionRPCMethods() {
 				return false, err
 			}
 			if delivered {
+				// Include a preview head so a postmortem can tell at a glance
+				// whether the delivered body looks like the analysis (starts
+				// with 📬 / 🔴 markers) or a stray wrap-up ("위키 업데이트
+				// 완료"). 120 chars is enough to spot the difference without
+				// bloating the log.
+				preview := analysis
+				if len(preview) > 120 {
+					preview = preview[:120] + "…"
+				}
 				s.logger.Info("cron proactive relay delivered",
-					"jobId", jobID, "sessionKey", sessionKey, "bytes", len(analysis))
+					"jobId", jobID,
+					"sessionKey", sessionKey,
+					"bytes", len(analysis),
+					"preview", preview)
 			}
 			return delivered, nil
 		})
