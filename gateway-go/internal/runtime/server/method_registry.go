@@ -14,11 +14,13 @@ import (
 	"path/filepath"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
 	handlertask "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlertask"
 	handlertelegram "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlertelegram"
+	handlerinsights "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/insights"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/provider"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/session"
@@ -51,6 +53,13 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			hub.SetTelegram(s.telegramPlug)
 		}
 	}
+
+	// Create the insights engine. Read-only — aggregates session manager
+	// snapshots and usage tracker state. Stored on both the hub (for RPC
+	// handlers) and the server (so the chat dispatcher can wire /insights).
+	insightsEngine := insights.New(hub.Sessions(), s.usageTracker)
+	hub.SetInsights(insightsEngine)
+	s.insights = insightsEngine
 
 	// Table-driven domain registration: one slice, one loop.
 	// Deps assembled inline from hub accessors — no adapter layer.
@@ -129,6 +138,12 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		}),
 		handlersystem.UsageMethods(handlersystem.UsageDeps{Tracker: s.usageTracker}),
 		handlersystem.LogsMethods(handlersystem.LogsDeps{LogDir: filepath.Join(denebDir, "logs")}),
+
+		// --- Insights (usage reports) ---
+		handlerinsights.Methods(handlerinsights.Deps{
+			Engine: hub.Insights(),
+			Logger: hub.Logger(),
+		}),
 		handlersystem.MaintenanceMethods(handlersystem.MaintenanceDeps{Runner: s.maintRunner}),
 		handlersystem.UpdateMethods(handlersystem.UpdateDeps{DenebDir: denebDir}),
 	}
@@ -166,7 +181,10 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 	hub.SetWikiStore(s.wikiStore) // late-bound: created during session phase
 
 	domains := []map[string]rpcutil.HandlerFunc{
-		handlerchat.Methods(handlerchat.Deps{Chat: hub.Chat()}),
+		handlerchat.Methods(handlerchat.Deps{
+			Chat:        hub.Chat(),
+			Broadcaster: hub.Broadcast,
+		}),
 		handlerchat.BtwMethods(handlerchat.BtwDeps{
 			Chat:        hub.Chat(),
 			Broadcaster: hub.Broadcast,

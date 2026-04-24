@@ -275,6 +275,27 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	// Update msgCtx with the fully enriched message body for the dispatch pipeline.
 	msgCtx.BodyForAgent = agentMessage
 
+	// --- Main-agent /steer intercept ---
+	// Hermes-style mid-run nudge: `/steer <note>` (no subagent id) queues a
+	// note for the CURRENT main-agent turn. Distinct from subagent `/steer
+	// <id> <note>` which targets a child run. We intercept before the
+	// subagent dispatcher so the note-only form doesn't get swallowed by
+	// "Missing subagent id" error. The subagent dispatcher still handles
+	// the `/steer <id> <note>` form below.
+	if rawBody := strings.TrimSpace(msgCtx.BodyForCommands); rawBody != "" {
+		if note, ok := parseMainAgentSteerCommand(rawBody); ok {
+			if p.chatHandler != nil && p.chatHandler.EnqueueSteer(sessionKey, note) {
+				p.sendCommandReply(chatID, &handlers.CommandResult{
+					Reply: "✅ 메인 에이전트에게 조정 메모를 전달했어요. 다음 도구 결과에 포함됩니다.",
+				})
+				return
+			}
+			// Queue unavailable (handler nil or empty note after trim) — fall
+			// through so the existing subagent dispatcher can produce its usage
+			// message rather than silently swallowing the command.
+		}
+	}
+
 	// --- Subagent command intercept ---
 	// Check for /subagents, /kill (subagent), /steer, /tell, /focus, /unfocus,
 	// /agents commands and dispatch them through the subagent command handler

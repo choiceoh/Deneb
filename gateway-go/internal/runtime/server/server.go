@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,11 +27,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/pkg/checkpoint"
 )
 
 // ServerTransport owns HTTP lifecycle and connection state.
@@ -86,6 +89,16 @@ type Server struct {
 	logColor    bool // true when ANSI color output is enabled
 	logger      *slog.Logger
 
+	// insights aggregates session/usage data for /insights reports.
+	// Created during registerEarlyMethods; nil until then.
+	insights *insights.Engine
+
+	// denebDir holds the resolved state directory for the lifetime of the
+	// server (set in Run before registerSessionRPCMethods). Downstream
+	// wiring (checkpoint root, log dir, etc.) reads this instead of
+	// re-resolving — single source of truth.
+	denebDir string
+
 	// Session, chat, and hook subsystems — logically grouped to reduce God-Object growth.
 	*SessionManager // sessions, transcript
 	*ChatManager    // chatHandler, toolDeps, telegramPlug
@@ -137,6 +150,10 @@ func (p *sessionSnapshotProvider) SessionSnapshot(sessionKey string) *events.Ses
 // requests should derive from this so graceful shutdown does not leak them.
 // Returns a non-nil context.Background before Run() has initialized the
 // lifecycle context, so callers need not nil-check.
+// insightsEngine returns the server's active insights engine, or nil if one
+// has not been wired yet. Used by the /insights slash-command dispatcher.
+func (s *Server) insightsEngine() *insights.Engine { return s.insights }
+
 func (s *Server) ShutdownCtx() context.Context {
 	if s.lifecycleCtx == nil {
 		return context.Background()
@@ -223,6 +240,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 
 	// Subsystem construction: each independently testable.
 	denebDir := resolveDenebDir()
+	s.denebDir = denebDir
 	s.InfraSubsystem = NewInfraSubsystem(s.logger, denebDir)
 	s.WorkflowSubsystem = NewWorkflowSubsystem(s.logger)
 
@@ -252,6 +270,31 @@ func New(addr string, opts ...Option) (*Server, error) {
 	s.initGenesisServices()                // create genesis deps (before late methods for Rule 1)
 	s.registerLateMethods(hub)             // Chat-dependent domains
 	s.registerWorkflowSideEffects(hub)     // non-RPC: autonomous, dreaming, notifier
+
+	// One-shot GC of long-abandoned checkpoint sessions. Runs in the
+	// background so startup latency is unaffected, and cancels cleanly if
+	// the server shuts down mid-scan. 30-day cutoff keeps retention
+	// generous — per-file/per-session caps already handle the common case;
+	// this only reclaims directories belonging to sessions that will never
+	// be resumed.
+	s.safeGo("checkpoint-gc", func() {
+		cpRoot := filepath.Join(denebDir, "checkpoints")
+		res, err := checkpoint.CleanupStaleSessions(s.ShutdownCtx(), cpRoot, 30*24*time.Hour)
+		if err != nil {
+			s.logger.Warn("checkpoint gc failed", "root", cpRoot, "error", err)
+			return
+		}
+		if res.Removed > 0 {
+			s.logger.Info("checkpoint gc removed stale sessions",
+				"root", cpRoot,
+				"scanned", res.Scanned,
+				"removed", res.Removed,
+				"freedBytes", res.RemovedBytes)
+		}
+		for _, e := range res.Errors {
+			s.logger.Warn("checkpoint gc: per-session error", "error", e)
+		}
+	})
 
 	return s, nil
 }

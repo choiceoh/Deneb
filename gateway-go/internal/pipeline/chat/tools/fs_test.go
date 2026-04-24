@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -155,6 +156,46 @@ func TestToolWrite_basic(t *testing.T) {
 	data, _ := os.ReadFile(filepath.Join(tmp, "newfile.txt"))
 	if string(data) != "hello world" {
 		t.Errorf("file content mismatch: %q", string(data))
+	}
+}
+
+// fakeCheckpointer records the paths+reasons it saw so tests can assert the
+// pre-edit hook fired.
+type fakeCheckpointer struct {
+	calls []struct {
+		path   string
+		reason string
+	}
+}
+
+func (f *fakeCheckpointer) Snapshot(_ context.Context, path, reason string) error {
+	f.calls = append(f.calls, struct {
+		path   string
+		reason string
+	}{path, reason})
+	return nil
+}
+
+func TestToolWrite_callsCheckpointerBeforeWrite(t *testing.T) {
+	tmp := t.TempDir()
+	fc := &fakeCheckpointer{}
+	ctx := toolctx.WithCheckpointer(context.Background(), fc)
+
+	raw := testutil.Must(json.Marshal(map[string]any{
+		"file_path": "x/y.txt",
+		"content":   "hi",
+	}))
+	if _, err := ToolWrite(tmp)(ctx, json.RawMessage(raw)); err != nil {
+		t.Fatalf("ToolWrite error: %v", err)
+	}
+	if len(fc.calls) != 1 {
+		t.Fatalf("expected 1 checkpoint call, got %d", len(fc.calls))
+	}
+	if fc.calls[0].reason != "write" {
+		t.Errorf("reason = %q, want write", fc.calls[0].reason)
+	}
+	if !strings.HasSuffix(fc.calls[0].path, filepath.Join("x", "y.txt")) {
+		t.Errorf("path = %q, want suffix x/y.txt", fc.calls[0].path)
 	}
 }
 

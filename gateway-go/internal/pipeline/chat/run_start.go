@@ -10,8 +10,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/reply"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/typing"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/pkg/checkpoint"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -42,6 +44,18 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 	// ErrMergedIntoNewRun) so the run goroutine can choose targeted
 	// cleanup based on why it was cancelled.
 	runCtx, runCancel := context.WithCancelCause(context.Background())
+
+	// Attach a per-run checkpoint manager so file-editing tools can
+	// snapshot before mutating. Skipped entirely when SetCheckpointRoot
+	// was never called (checkpointRoot == "") — the tools will then see a
+	// nil Checkpointer and fall through to a direct write. Scoped to
+	// SessionKey; the Manager's sequence counter is seeded from the
+	// existing on-disk index so concurrent runs on the same session do
+	// not clobber one another.
+	if root := h.checkpointRoot; root != "" {
+		cpm := checkpoint.New(root, params.SessionKey)
+		runCtx = toolctx.WithCheckpointer(runCtx, checkpoint.NewToolAdapter(cpm))
+	}
 
 	h.abort.Register(params.ClientRunID, &AbortEntry{
 		SessionKey: params.SessionKey,
@@ -144,6 +158,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		startRunFn: func(params RunParams) {
 			h.startAsyncRun("pending-"+params.ClientRunID, params, false)
 		},
+		steerQueue: h.steer,
 
 		// Atomic snapshot of channel callbacks (reply, media, typing, etc.).
 		callbacks: h.Snapshot(),

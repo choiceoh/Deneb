@@ -37,6 +37,7 @@ var requiredMethods = []string{
 	"chat.btw",
 	"chat.history",
 	"chat.send",
+	"chat.steer",
 
 	// Session.
 	"sessions.abort",
@@ -94,6 +95,9 @@ var requiredMethods = []string{
 	"tools.invoke",
 	"tools.list",
 	"tools.status",
+
+	// Insights.
+	"insights.generate",
 
 	// System.
 	"config.apply",

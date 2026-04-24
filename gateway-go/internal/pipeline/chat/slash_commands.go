@@ -105,6 +105,14 @@ func ParseSlashCommand(text string) *SlashResult {
 			Response: "",
 			Command:  "mail",
 		}
+	case "insights", "사용량":
+		// Optional numeric arg (days). Default handled in dispatcher.
+		return &SlashResult{
+			Handled:  true,
+			Response: "",
+			Command:  "insights",
+			Args:     args,
+		}
 	default:
 		// Not a recognized slash command; pass through to LLM.
 		return nil

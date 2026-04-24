@@ -42,6 +42,7 @@
 | `optimization.md` | 반복 최적화 전략 (오토리서치 방법론) | `gateway-go/**/*.go` |
 | `concurrency.md` | 뮤텍스/채널/goroutine 규칙 (데드락 방지) | `gateway-go/**/*.go` |
 | `logging.md` | slog 레벨 가이드 (사용자 무응답 Error 원칙) | `gateway-go/**/*.go` |
+| `prompt-cache.md` | 프롬프트 캐시 불가침 원칙, 3계층 구조, cache-aware 슬래시 | `gateway-go/internal/pipeline/chat/prompt/**`, `gateway-go/internal/pipeline/chat/slash_commands.go` |
 
 ---
 

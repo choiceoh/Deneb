@@ -19,6 +19,11 @@ const (
 
 // ClassifyAgentError determines the error kind from a raw error message.
 // The message typically comes from an LLM API HTTP response.
+//
+// TODO(llmerr-migration): this classifier predates pkg/llmerr and duplicates
+// a subset of its taxonomy (auth/billing/rate_limit/server_down/context).
+// Follow-up: delegate to llmerr.Classify and map llmerr.Reason → AgentErrorKind
+// so the autoreply runner sees the same categorisation as chat.executeAgentRun.
 func ClassifyAgentError(msg string) AgentErrorKind {
 	lower := strings.ToLower(msg)
 

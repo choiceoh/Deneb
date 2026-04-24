@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
@@ -19,6 +20,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -162,6 +164,29 @@ func (s *Server) registerSessionRPCMethods() {
 		}
 		return sd
 	})
+
+	// Wire file-edit checkpoint snapshots. Rooted under `<stateDir>/checkpoints`
+	// so retention/disk-usage stays scoped to the Deneb state dir. Each run
+	// gets a per-session Manager attached to its runCtx (see run_start.go).
+	// Passing empty string would disable snapshots; always enabled when the
+	// server has a resolved state dir.
+	if denebDir := s.denebDir; denebDir != "" {
+		s.chatHandler.SetCheckpointRoot(filepath.Join(denebDir, "checkpoints"))
+	}
+
+	// Wire /insights command — builds a MarkdownV2 usage report using the
+	// insights engine (created during registerEarlyMethods via hub.SetInsights).
+	// Nil-safe: if the engine isn't available the dispatcher replies with a
+	// friendly disabled-notice.
+	if engine := s.insightsEngine(); engine != nil {
+		s.chatHandler.SetInsightsProviderFunc(func(ctx context.Context, days int) (string, error) {
+			rep, err := engine.Generate(ctx, days)
+			if err != nil {
+				return "", err
+			}
+			return insights.RenderMarkdownV2(rep), nil
+		})
+	}
 
 	// Wire SendFn after handler creation to avoid circular deps.
 	sendFn := func(sessionKey, message string) error {
