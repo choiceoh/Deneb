@@ -670,11 +670,21 @@ func buildAgentConfig(
 
 	// Mode-aware agent config: Chat mode gets reduced limits for quick
 	// conversational replies; other modes use the default agent capabilities.
+	// Cron runs get a bigger turn budget so they can deliver the message AND
+	// still update wikis. With 25 turns the email-analysis cron reliably hit
+	// max_turns mid-wiki-write and clobbered the delivered body with a bare
+	// planning sentence; 40 turns leaves headroom for (analysis → message →
+	// wiki updates) without manual tuning per job.
 	maxTurns := defaultMaxTurns         // 25
 	agentTimeout := defaultAgentTimeout // 60min
-	if cachedSession != nil && cachedSession.Mode == session.ModeChat {
-		maxTurns = 10
-		agentTimeout = 10 * time.Minute
+	if cachedSession != nil {
+		switch {
+		case cachedSession.Mode == session.ModeChat:
+			maxTurns = 10
+			agentTimeout = 10 * time.Minute
+		case cachedSession.Kind == session.KindCron:
+			maxTurns = 40
+		}
 	}
 
 	maxOutputRecovery := 1
