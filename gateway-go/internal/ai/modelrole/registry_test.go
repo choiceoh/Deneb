@@ -6,7 +6,7 @@ import (
 )
 
 func TestResolveModel(t *testing.T) {
-	reg := NewRegistry(slog.Default(), "zai/test-model")
+	reg := NewRegistry(slog.Default(), "zai/test-model", "")
 
 	tests := []struct {
 		input    string
@@ -41,7 +41,7 @@ func TestResolveModel(t *testing.T) {
 }
 
 func TestRoleForModel(t *testing.T) {
-	reg := NewRegistry(slog.Default(), "zai/test-model")
+	reg := NewRegistry(slog.Default(), "zai/test-model", "")
 
 	tests := []struct {
 		fullModelID string
@@ -69,7 +69,7 @@ func TestRoleForModel(t *testing.T) {
 }
 
 func TestEmptyMainModelDefaultsToVllm(t *testing.T) {
-	reg := NewRegistry(slog.Default(), "")
+	reg := NewRegistry(slog.Default(), "", "")
 	got := reg.FullModelID(RoleMain)
 	want := "vllm/" + DefaultVllmModel
 	if got != want {
@@ -78,7 +78,7 @@ func TestEmptyMainModelDefaultsToVllm(t *testing.T) {
 }
 
 func TestFallbackChain(t *testing.T) {
-	reg := NewRegistry(slog.Default(), "zai/test-model")
+	reg := NewRegistry(slog.Default(), "zai/test-model", "")
 
 	tests := []struct {
 		role Role
