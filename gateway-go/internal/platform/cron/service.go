@@ -99,6 +99,15 @@ func (s *Service) SetTranscriptCloner(cloner TranscriptCloner, mainSessionKey st
 	s.cfg.MainSessionKey = mainSessionKey
 }
 
+// SetMainSessionHandoff sets the callback that routes cron output through
+// the main user session instead of delivering directly to the channel.
+// See ServiceConfig.MainSessionHandoff for rationale and contract.
+func (s *Service) SetMainSessionHandoff(fn func(ctx context.Context, channel, to, jobID, analysis string) (handled bool, err error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cfg.MainSessionHandoff = fn
+}
+
 // NewService creates a new cron service.
 func NewService(cfg ServiceConfig, agent AgentRunner, logger *slog.Logger) *Service {
 	rl := NewPersistentRunLog(cfg.StorePath)

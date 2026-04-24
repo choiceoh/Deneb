@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
@@ -213,6 +215,56 @@ func (s *Server) registerSessionRPCMethods() {
 			transcriptStore,
 			"", // main session key resolved dynamically per-job
 		)
+
+		// Route cron output through the main user session instead of
+		// having cron deliver directly to Telegram. When the handoff is
+		// taken, the main agent runs a turn on the user's main session
+		// (e.g. "telegram:<chatID>"), relays the analysis as a proactive
+		// message, and the main session transcript records everything.
+		// That way the very next user reply is answered in a session that
+		// knows what "Neb" just said — fixing the class of bug where a
+		// proactive cron message was posted but the follow-up was answered
+		// with hallucinated context (incident: "박종원 부장 감포 공문 회신"
+		// proactive, then "요약만 해서 알려줘" answered about an unrelated
+		// topic).
+		//
+		// Channels without a main-session mapping (or with an empty
+		// recipient) decline the handoff, and cron falls back to direct
+		// delivery so the user still receives the message.
+		s.cronService.SetMainSessionHandoff(func(ctx context.Context, channel, to, jobID, analysis string) (bool, error) {
+			if to == "" || strings.TrimSpace(analysis) == "" {
+				return false, nil
+			}
+			// Only Telegram is wired as a main-session channel today.
+			// Other channels (email, web, etc.) would need their own
+			// session-key derivation if added later.
+			if channel != "telegram" {
+				return false, nil
+			}
+			sessionKey := "telegram:" + to
+
+			// Directive asks the main agent to relay the cron analysis as
+			// a proactive message with the body intact. The main session
+			// reply pipeline handles Telegram delivery (chunking, reply
+			// metadata, dedup) automatically.
+			directive := fmt.Sprintf(
+				"[시스템 알림: cron 작업 `%s`가 분석을 완료했다. 아래 본문을 유저에게 proactive 메시지로 전달하라. 본문 내용을 바꾸거나 요약/축약하지 말고, 헤더나 서두 없이 자연스럽게 내보내라. 도구 호출 없이 본문만 한 번에 답변하라.]\n\n%s",
+				jobID,
+				analysis,
+			)
+
+			// SendDirect (not SessionsSend) because:
+			//   1. It derives DeliveryContext from the session key
+			//      (telegram:<chatID> → channel=telegram, to=<chatID>),
+			//      so the reply pipeline actually routes to Telegram.
+			//      SessionsSend leaves Delivery nil, which silently drops
+			//      replies inside wireTelegramChatHandler's SetReplyFunc.
+			//   2. It queues when a run is already active rather than
+			//      interrupting, so a user mid-conversation is not cut off
+			//      by a proactive cron relay.
+			s.chatHandler.SendDirect(sessionKey, directive)
+			return true, nil
+		})
 	}
 
 	// Wire transcript loader for subagent /log command.
