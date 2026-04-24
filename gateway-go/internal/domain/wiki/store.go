@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
 // Categories are the top-level wiki directories.
@@ -343,10 +345,15 @@ func (s *Store) AppendDiary(content string) error {
 
 // AppendDiaryTo appends a timestamped entry to today's diary file in the given directory.
 // Standalone function usable without a Store instance.
+//
+// Diary content is the main input fed to the Wiki Dreamer, so any secret that
+// makes it in here will later be paraphrased into synthesized wiki pages.
+// Redacting at the write boundary closes that leak path at its source.
 func AppendDiaryTo(diaryDir, content string) error {
 	if content == "" || diaryDir == "" {
 		return nil
 	}
+	content = redact.String(content)
 	if err := os.MkdirAll(diaryDir, 0o755); err != nil {
 		return fmt.Errorf("diary mkdir: %w", err)
 	}
@@ -366,7 +373,12 @@ func AppendDiaryTo(diaryDir, content string) error {
 
 // AppendLog appends a timestamped operation entry to log.md in the wiki root.
 // Tracks all wiki mutations for temporal awareness (Karpathy wiki concept).
+//
+// The details string often echoes page titles or user-provided content, so it
+// is redacted before persistence for the same reason WritePageFile redacts the
+// page body.
 func (s *Store) AppendLog(operation, details string) error {
+	details = redact.String(details)
 	logPath := filepath.Join(s.dir, "log.md")
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {

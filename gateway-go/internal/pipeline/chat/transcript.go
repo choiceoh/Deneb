@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
 // Type aliases — canonical interface and result types are in toolctx/.
@@ -83,7 +84,14 @@ func (s *FileTranscriptStore) Load(sessionKey string, limit int) ([]ChatMessage,
 }
 
 // Append writes a message to the end of the JSONL file.
+//
+// The message content (text blocks, tool results, user text) is passed through
+// pkg/redact before persistence. Structural fields (role, timestamp, IDs,
+// attachment metadata) are preserved exactly. Redaction is write-time only;
+// read paths return the persisted bytes as-is, keeping the prompt cache stable.
 func (s *FileTranscriptStore) Append(sessionKey string, msg ChatMessage) error {
+	redactChatMessageContent(&msg)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -110,6 +118,68 @@ func (s *FileTranscriptStore) Append(sessionKey string, msg ChatMessage) error {
 		return fmt.Errorf("write transcript: %w", err)
 	}
 	return nil
+}
+
+// redactChatMessageContent masks secret patterns inside ChatMessage.Content.
+// Content is json.RawMessage holding either a quoted string (legacy) or an
+// array of {type, text} ContentBlocks (rich format). Both shapes have their
+// string leaves passed through redact.String. Non-string fields (numbers,
+// tool_use input blobs that are structured JSON) are preserved.
+//
+// No-op when redaction is disabled, Content is empty, or nothing matches.
+func redactChatMessageContent(msg *ChatMessage) {
+	if msg == nil || !redact.Enabled() || len(msg.Content) == 0 {
+		return
+	}
+	// Legacy text-only: Content is a JSON-encoded string.
+	var s string
+	if err := json.Unmarshal(msg.Content, &s); err == nil {
+		r := redact.String(s)
+		if r != s {
+			msg.Content = toolctx.MarshalJSONString(r)
+		}
+		return
+	}
+	// Rich format: array of ContentBlocks. Walk and redact string leaves
+	// generically so future block fields (e.g. tool_result nested text) are
+	// covered without per-type code.
+	var v any
+	if err := json.Unmarshal(msg.Content, &v); err != nil {
+		return // unparseable — leave as-is
+	}
+	changed := false
+	redacted := redactJSONValue(v, &changed)
+	if !changed {
+		return
+	}
+	if out, err := json.Marshal(redacted); err == nil {
+		msg.Content = out
+	}
+}
+
+// redactJSONValue recursively redacts string leaves in a decoded JSON value.
+// Shared helper for ChatMessage.Content (map/slice/scalar) traversal.
+func redactJSONValue(v any, changed *bool) any {
+	switch t := v.(type) {
+	case string:
+		r := redact.String(t)
+		if r != t {
+			*changed = true
+		}
+		return r
+	case map[string]any:
+		for k, elem := range t {
+			t[k] = redactJSONValue(elem, changed)
+		}
+		return t
+	case []any:
+		for i, elem := range t {
+			t[i] = redactJSONValue(elem, changed)
+		}
+		return t
+	default:
+		return v
+	}
 }
 
 // Delete removes the transcript file for a session.
@@ -267,7 +337,10 @@ func (s *MemoryTranscriptStore) Load(sessionKey string, limit int) ([]ChatMessag
 }
 
 // Append adds a message.
+// Mirrors FileTranscriptStore.Append by redacting secret patterns in Content
+// before storing, so in-memory test doubles match production behavior.
 func (s *MemoryTranscriptStore) Append(sessionKey string, msg ChatMessage) error {
+	redactChatMessageContent(&msg)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sessions[sessionKey] = append(s.sessions[sessionKey], msg)

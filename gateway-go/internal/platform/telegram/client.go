@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
+	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
 // uploadBufPool reduces allocation pressure for multipart upload buffers.
@@ -389,11 +390,12 @@ func (c *Client) SetMessageReaction(ctx context.Context, chatID, messageID int64
 	return err
 }
 
-// AnswerCallbackQuery sends a response to a callback query.
+// AnswerCallbackQuery sends a response to a callback query. The toast text
+// is redacted before sending (defense-in-depth egress guard).
 func (c *Client) AnswerCallbackQuery(ctx context.Context, callbackQueryID, text string) error {
 	_, err := c.CallIdempotent(ctx, "answerCallbackQuery", map[string]any{
 		"callback_query_id": callbackQueryID,
-		"text":              text,
+		"text":              redact.String(text),
 	})
 	return err
 }

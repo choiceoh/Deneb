@@ -55,13 +55,14 @@ func BuildLogger(cfg *config.DenebConfig, flagLevel, flagFormat string) LoggingR
 		opts.ReplaceAttr = redact.AttrReplacer(opts.ReplaceAttr)
 		handler = slog.NewJSONHandler(os.Stderr, opts)
 	default:
-		// NOTE: the ConsoleHandler (dev TTY) does not accept a ReplaceAttr
-		// hook today, so redaction is JSON-only for now. Dev-format logs
-		// are not captured for long-term storage or forwarding, limiting
-		// the blast radius. See follow-up below.
+		// Console (dev TTY) also gets the redaction pipeline. Dev logs are
+		// lower-risk than JSON (not forwarded to aggregation) but can still
+		// surface in screen-shares, terminal scrollback, tmux captures, etc.
+		// No-op when DENEB_REDACT_SECRETS=false was set at process start.
 		handler = logging.NewConsoleHandler(os.Stderr, &logging.ConsoleOptions{
-			Level: level,
-			Color: true,
+			Level:       level,
+			Color:       true,
+			ReplaceAttr: redact.AttrReplacer(nil),
 		})
 	}
 

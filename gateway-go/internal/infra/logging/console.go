@@ -48,16 +48,26 @@ type ConsoleOptions struct {
 	Level slog.Leveler
 	// Color enables ANSI color output. Defaults to true.
 	Color bool
+	// ReplaceAttr is called for every attribute before it is rendered, with
+	// the same semantics as slog.HandlerOptions.ReplaceAttr (see the stdlib
+	// doc for details):
+	//   - groups is the list of currently open group keys (empty for top-level).
+	//   - The Attr's Value is resolved before the callback runs.
+	//   - Returning a zero Attr (slog.Attr{}) drops the attribute.
+	//   - Group-kind Attrs are NOT passed; only their contents are.
+	// Nil means no replacement (pre-change behavior, byte-identical output).
+	ReplaceAttr func(groups []string, a slog.Attr) slog.Attr
 }
 
 // ConsoleHandler is a slog.Handler that writes human-readable log lines.
 type ConsoleHandler struct {
-	w        io.Writer
-	level    slog.Leveler
-	color    bool
-	mu       *sync.Mutex
-	preAttrs []slog.Attr
-	groups   []string
+	w           io.Writer
+	level       slog.Leveler
+	color       bool
+	mu          *sync.Mutex
+	preAttrs    []slog.Attr
+	groups      []string
+	replaceAttr func(groups []string, a slog.Attr) slog.Attr
 }
 
 var bufPool = sync.Pool{
@@ -80,6 +90,7 @@ func NewConsoleHandler(w io.Writer, opts *ConsoleOptions) *ConsoleHandler {
 			h.level = opts.Level
 		}
 		h.color = opts.Color
+		h.replaceAttr = opts.ReplaceAttr
 	}
 	return h
 }
@@ -102,7 +113,10 @@ func (h *ConsoleHandler) Handle(_ context.Context, r slog.Record) error {
 	barStyle := levelBarStyle(r.Level)
 	isErr := r.Level >= slog.LevelError
 
-	// Extract pkg tag from preAttrs and record attrs.
+	// Extract pkg tag from preAttrs and record attrs. The pkg tag is a visual
+	// hint (module/package name), not a secret-bearing attribute, so it is
+	// intentionally rendered before the ReplaceAttr pipeline — callers who
+	// inject `pkg` are trusted infrastructure code, never user input.
 	pkgVal := h.pkgValue()
 	if pkgVal == "" {
 		r.Attrs(func(a slog.Attr) bool {
@@ -222,10 +236,11 @@ func (h *ConsoleHandler) WithGroup(name string) slog.Handler {
 
 func (h *ConsoleHandler) clone() *ConsoleHandler {
 	h2 := &ConsoleHandler{
-		w:     h.w,
-		level: h.level,
-		color: h.color,
-		mu:    h.mu,
+		w:           h.w,
+		level:       h.level,
+		color:       h.color,
+		mu:          h.mu,
+		replaceAttr: h.replaceAttr,
 	}
 	h2.preAttrs = make([]slog.Attr, len(h.preAttrs))
 	copy(h2.preAttrs, h.preAttrs)
@@ -242,8 +257,20 @@ const continuationIndent = "           " // 11 spaces: 8 (time) + 1 + 1 (│) + 
 // If the key starts with "\n", the attr is rendered on a new indented line
 // (the "\n" prefix is stripped from the displayed key).
 // The "error" key gets special red highlighting for quick scanning.
+//
+// When the handler's ReplaceAttr is non-nil the attribute is passed through
+// it first (with resolved value, matching slog.JSONHandler semantics): a zero
+// return drops the attr, a modified return replaces it. Group-kind attrs are
+// not passed to ReplaceAttr; their contents are handled by appendGroupValue.
 func (h *ConsoleHandler) appendAttr(buf []byte, a slog.Attr, _ bool) []byte {
 	a.Value = a.Value.Resolve()
+	// ReplaceAttr hook — mirror slog.commonHandler.appendAttr: skip for
+	// KindGroup (the group's contents will be walked by appendGroupValue with
+	// per-content replacement applied).
+	if h.replaceAttr != nil && a.Value.Kind() != slog.KindGroup {
+		a = h.replaceAttr(h.groups, a)
+		a.Value = a.Value.Resolve()
+	}
 	if a.Equal(slog.Attr{}) {
 		return buf
 	}
@@ -268,18 +295,18 @@ func (h *ConsoleHandler) appendAttr(buf []byte, a slog.Attr, _ bool) []byte {
 			buf = h.appendKey(buf, a.Key)
 			buf = append(buf, ansiReset...)
 			buf = append(buf, ansiRed...)
-			buf = appendValue(buf, a.Value)
+			buf = h.appendValue(buf, a.Value, a.Key)
 			buf = append(buf, ansiReset...)
 		} else {
 			// Normal keys: dim key=, normal value.
 			buf = append(buf, ansiDim...)
 			buf = h.appendKey(buf, a.Key)
 			buf = append(buf, ansiReset...)
-			buf = appendValue(buf, a.Value)
+			buf = h.appendValue(buf, a.Value, a.Key)
 		}
 	} else {
 		buf = h.appendKey(buf, a.Key)
-		buf = appendValue(buf, a.Value)
+		buf = h.appendValue(buf, a.Value, a.Key)
 	}
 	return buf
 }
@@ -296,7 +323,12 @@ func (h *ConsoleHandler) appendKey(buf []byte, key string) []byte {
 }
 
 // appendValue formats an slog.Value, quoting strings that need it.
-func appendValue(buf []byte, v slog.Value) []byte {
+//
+// groupKey is the owning attribute's key (non-empty for a named Group value).
+// When the value is a KindGroup, the key is pushed onto the groups stack
+// that ReplaceAttr sees while the group's contents are walked — matching
+// slog.JSONHandler's behavior for nested groups.
+func (h *ConsoleHandler) appendValue(buf []byte, v slog.Value, groupKey string) []byte {
 	switch v.Kind() {
 	case slog.KindString:
 		s := v.String()
@@ -310,19 +342,65 @@ func appendValue(buf []byte, v slog.Value) []byte {
 	case slog.KindDuration:
 		buf = appendDuration(buf, v.Duration())
 	case slog.KindGroup:
-		attrs := v.Group()
-		for i, a := range attrs {
-			if i > 0 {
-				buf = append(buf, ' ')
-			}
-			buf = append(buf, a.Key...)
-			buf = append(buf, '=')
-			buf = appendValue(buf, a.Value.Resolve())
-		}
+		buf = h.appendGroupValue(buf, v.Group(), groupKey)
 	default:
 		buf = append(buf, v.String()...)
 	}
 	return buf
+}
+
+// appendGroupValue renders a KindGroup's contents inline as "k=v k=v", pushing
+// groupKey onto the replaceAttr groups stack (if non-empty) so any ReplaceAttr
+// hook sees the correct ancestry for each nested attribute.
+func (h *ConsoleHandler) appendGroupValue(buf []byte, attrs []slog.Attr, groupKey string) []byte {
+	// Build the groups slice visible to the replacer for this recursion only.
+	// Copy to avoid mutating the handler's shared slice.
+	var nested []string
+	if h.replaceAttr != nil {
+		if groupKey != "" {
+			nested = make([]string, 0, len(h.groups)+1)
+			nested = append(nested, h.groups...)
+			nested = append(nested, groupKey)
+		} else {
+			nested = h.groups
+		}
+	}
+
+	first := true
+	for _, a := range attrs {
+		a.Value = a.Value.Resolve()
+		if h.replaceAttr != nil && a.Value.Kind() != slog.KindGroup {
+			a = h.replaceAttr(nested, a)
+			a.Value = a.Value.Resolve()
+		}
+		if a.Equal(slog.Attr{}) {
+			continue
+		}
+		if !first {
+			buf = append(buf, ' ')
+		}
+		first = false
+		buf = append(buf, a.Key...)
+		buf = append(buf, '=')
+		// Recurse with a handler view that has the group stack advanced so
+		// deeper groups render correctly.
+		if a.Value.Kind() == slog.KindGroup {
+			h2 := h.withGroupsFrame(nested)
+			buf = h2.appendValue(buf, a.Value, a.Key)
+		} else {
+			buf = h.appendValue(buf, a.Value, a.Key)
+		}
+	}
+	return buf
+}
+
+// withGroupsFrame returns a shallow view of h with a different groups slice
+// for the duration of a nested group render. It is not a full clone — only
+// the groups field differs, and the returned value is not stored.
+func (h *ConsoleHandler) withGroupsFrame(groups []string) *ConsoleHandler {
+	h2 := *h
+	h2.groups = groups
+	return &h2
 }
 
 // needsQuote returns true if s should be double-quoted in the output.

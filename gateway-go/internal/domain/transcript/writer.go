@@ -3,6 +3,12 @@
 // Session transcripts are stored as newline-delimited JSON files, one message
 // per line. The first line is always a session header. This mirrors the
 // TypeScript SessionManager transcript format from src/config/sessions/transcript.ts.
+//
+// Secret redaction: AppendMessage runs every string value in the JSON payload
+// through pkg/redact at write time. This is a write-time transform (never
+// retroactive) so the prompt cache is preserved — once a transcript line is
+// persisted, read paths return it verbatim. The high-value leak vector closed
+// here is "tool output → transcript → wiki Dreamer → Telegram chat".
 package transcript
 
 import (
@@ -16,6 +22,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
 // SessionHeader is the first line of a session transcript file.
@@ -140,12 +148,23 @@ func (w *Writer) EnsureSession(sessionKey string, header SessionHeader) error {
 // AppendMessage appends a message to the session transcript.
 // The message is written as a single JSON line followed by a newline.
 // The session file must already exist (call EnsureSession first).
+//
+// String values inside the JSON payload are passed through pkg/redact before
+// persistence. Non-string fields (timestamps, IDs, numbers, booleans) are
+// untouched — only string leaves like assistant text, tool-result text, and
+// user message content get secret patterns masked.
 func (w *Writer) AppendMessage(sessionKey string, msg json.RawMessage) error {
 	if err := validateSessionKey(sessionKey); err != nil {
 		return err
 	}
 	if !json.Valid(msg) {
 		return fmt.Errorf("transcript: invalid JSON message")
+	}
+
+	// Redact secret patterns in every string leaf. Idempotent and nil-safe.
+	redacted, err := redactJSONMessage(msg)
+	if err != nil {
+		return fmt.Errorf("transcript: redact: %w", err)
 	}
 
 	w.mu.Lock()
@@ -160,18 +179,73 @@ func (w *Writer) AppendMessage(sessionKey string, msg json.RawMessage) error {
 	defer f.Close()
 
 	// Build the line as a new slice to avoid mutating the caller's msg.
-	line := make([]byte, len(msg)+1)
-	copy(line, msg)
-	line[len(msg)] = '\n'
+	line := make([]byte, len(redacted)+1)
+	copy(line, redacted)
+	line[len(redacted)] = '\n'
 
 	if _, err := f.Write(line); err != nil {
 		return fmt.Errorf("transcript: write: %w", err)
 	}
 
-	// Notify listeners of the new message.
-	w.notifyListeners(sessionKey, msg)
+	// Notify listeners with the already-redacted payload so downstream
+	// subscribers (wiki recorder, etc.) never see the raw secret either.
+	w.notifyListeners(sessionKey, redacted)
 
 	return nil
+}
+
+// redactJSONMessage walks a JSON message and returns a copy where every string
+// leaf has been passed through redact.String. Non-string kinds (numbers,
+// booleans, nulls, keys) are preserved exactly. When redaction is disabled or
+// no replacement occurs the original bytes are returned without re-marshaling.
+func redactJSONMessage(msg json.RawMessage) (json.RawMessage, error) {
+	if !redact.Enabled() || len(msg) == 0 {
+		return msg, nil
+	}
+	var v any
+	if err := json.Unmarshal(msg, &v); err != nil {
+		// Non-JSON input should have been rejected by json.Valid above; treat
+		// unexpected decode failures as "pass-through" rather than losing the
+		// message, and let the caller handle persistence as-is.
+		return msg, nil //nolint:nilerr // deliberate: redaction is best-effort, never drop data
+	}
+	changed := false
+	redacted := redactAny(v, &changed)
+	if !changed {
+		return msg, nil
+	}
+	out, err := json.Marshal(redacted)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// redactAny walks any JSON-decoded value and redacts string leaves in place.
+// Maps and slices are mutated; scalars are returned. `changed` is flipped
+// whenever redaction actually rewrote a string so callers can skip re-encoding
+// on the common no-match path.
+func redactAny(v any, changed *bool) any {
+	switch t := v.(type) {
+	case string:
+		r := redact.String(t)
+		if r != t {
+			*changed = true
+		}
+		return r
+	case map[string]any:
+		for k, elem := range t {
+			t[k] = redactAny(elem, changed)
+		}
+		return t
+	case []any:
+		for i, elem := range t {
+			t[i] = redactAny(elem, changed)
+		}
+		return t
+	default:
+		return v
+	}
 }
 
 // PreviewItem is a lightweight representation of a transcript message for previews.

@@ -12,6 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/llmerr"
 )
 
 const externalDeliveryFailureNotice = "외부 채널 전송이 실패했습니다. 전달이 확인되지 않았습니다. 현재 채팅에 보인다고 가정하지 말고 채널 연결을 확인한 뒤 다시 시도해 주세요."
@@ -448,7 +449,7 @@ func handleRunError(
 		if broadcaster != nil {
 			broadcaster.EmitError(err.Error())
 		}
-		finishRun(deps, params, session.PhaseError, "error", "failed", classifyRunFailureReason(err.Error()), now)
+		finishRun(deps, params, session.PhaseError, "error", "failed", classifyRunFailureReason(err), now)
 		emitJobEvent(deps, params.ClientRunID, "error", false, err.Error(), now)
 	}
 }
@@ -479,27 +480,78 @@ func finishRun(deps runDeps, params RunParams, phase session.LifecyclePhase, rea
 
 // classifyRunFailureReason returns a Korean-language description of a run error
 // for storage in Session.FailureReason. Returns "" for unrecognized errors.
-func classifyRunFailureReason(errMsg string) string {
+//
+// Classification delegates to pkg/llmerr so the surfaced Korean label shares
+// one taxonomy with isContextOverflow, isTransientLLMError, and the autoreply
+// runner. classifyLLMError lifts *httpretry.APIError status/body into the
+// structured pipeline so a wrapped "API error 429: ..." is matched by status,
+// not a bare digit substring.
+//
+// Behaviour deltas vs. the prior substring classifier:
+//   - Adds coverage for HTTP 402 (billing) and 413 (payload too large →
+//     context overflow family) via structured status classification.
+//   - Adds coverage for structured provider codes (insufficient_quota,
+//     context_length_exceeded, invalid_api_key, resource_exhausted, …).
+//   - Legacy "529" → 서버 일시 장애 is preserved via ReasonOverloaded.
+//   - Legacy "521" (Cloudflare web-server-down) has no direct llmerr status
+//     bucket, so the bare-digit fallback below keeps it mapped to
+//     서버 일시 장애.
+//   - A free-form "unauthorized" string with no HTTP status now still maps
+//     to 인증 실패 via the message-pattern pipeline (authPatterns).
+//
+// The final bare-digit fallback preserves behavior for raw strings that
+// mention "429"/"401"/"502"/"503"/"521"/"529" without any structured status,
+// exactly as the pre-migration implementation did.
+func classifyRunFailureReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	label := llmerrToFailureReason(classifyLLMError(err))
+	if label != "" {
+		return label
+	}
+	// Preserve the legacy bare-digit + keyword fallback so plain-string
+	// errors with an embedded HTTP status or the loose "billing"/"payment"
+	// keywords still produce a user-facing label. llmerr deliberately
+	// avoids matching these because bare digits and unqualified "billing"
+	// can produce false positives on structured inputs; here the risk is
+	// bounded because any structured input has already been consumed by
+	// the llmerr pipeline above.
+	errMsg := err.Error()
 	lower := strings.ToLower(errMsg)
 	switch {
 	case strings.Contains(errMsg, "429"):
 		return "API 요청 한도 초과 (429)"
-	case strings.Contains(errMsg, "401") ||
-		strings.Contains(lower, "unauthorized") ||
-		strings.Contains(lower, "invalid_api_key") ||
-		strings.Contains(lower, "authentication_error"):
+	case strings.Contains(errMsg, "401"):
 		return "API 인증 실패 (401)"
-	case strings.Contains(lower, "billing") ||
-		strings.Contains(lower, "payment") ||
-		strings.Contains(lower, "insufficient_quota"):
+	case strings.Contains(lower, "billing"),
+		strings.Contains(lower, "payment"):
 		return "결제 오류"
-	case strings.Contains(errMsg, "502") ||
-		strings.Contains(errMsg, "503") ||
-		strings.Contains(errMsg, "521") ||
+	case strings.Contains(errMsg, "502"),
+		strings.Contains(errMsg, "503"),
+		strings.Contains(errMsg, "521"),
 		strings.Contains(errMsg, "529"):
 		return "서버 일시 장애"
-	case strings.Contains(lower, "context") &&
-		(strings.Contains(lower, "overflow") || strings.Contains(lower, "too large") || strings.Contains(lower, "exceeded")):
+	}
+	return ""
+}
+
+// llmerrToFailureReason maps a Classified result to the legacy Korean label
+// set used by Session.FailureReason. Returns "" for reasons that the prior
+// implementation would not have labelled (keeps surface area identical for
+// reasons the caller never displayed, avoiding accidental new messages in
+// the UI for unmigrated edge cases).
+func llmerrToFailureReason(c llmerr.Classified) string {
+	switch c.Reason {
+	case llmerr.ReasonRateLimit, llmerr.ReasonLongContextTier:
+		return "API 요청 한도 초과 (429)"
+	case llmerr.ReasonAuth, llmerr.ReasonAuthPermanent:
+		return "API 인증 실패 (401)"
+	case llmerr.ReasonBilling:
+		return "결제 오류"
+	case llmerr.ReasonServerError, llmerr.ReasonOverloaded:
+		return "서버 일시 장애"
+	case llmerr.ReasonContextOverflow, llmerr.ReasonPayloadTooLarge:
 		return "컨텍스트 초과"
 	default:
 		return ""

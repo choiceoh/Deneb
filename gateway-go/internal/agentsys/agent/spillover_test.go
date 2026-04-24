@@ -205,3 +205,74 @@ func TestSanitizeToolName(t *testing.T) {
 		}
 	}
 }
+
+// TestSpilloverStore_RedactsOnStore verifies that a tool output containing a
+// secret (e.g. `cat .env`) is masked before hitting disk. The spill record is
+// loadable and Load returns the redacted bytes.
+func TestSpilloverStore_RedactsOnStore(t *testing.T) {
+	dir := t.TempDir()
+	store := NewSpilloverStore(dir)
+
+	token := "sk-proj-" + strings.Repeat("Z", 40) // synthetic
+	// Build content larger than MaxResultChars to exercise real spill path.
+	padding := strings.Repeat("padding ", MaxResultChars/8+10)
+	content := padding + "\nOPENAI_API_KEY=" + token + "\n" + padding
+
+	spillID := testutil.Must(store.Store("sess-redact", "exec", content))
+
+	// Read back the disk file and the in-memory Load result.
+	entries := testutil.Must(os.ReadDir(dir))
+	if len(entries) != 1 {
+		t.Fatalf("got %d files, want 1", len(entries))
+	}
+	data := testutil.Must(os.ReadFile(filepath.Join(dir, entries[0].Name())))
+	if strings.Contains(string(data), token) {
+		t.Fatalf("spilled file still contains raw token")
+	}
+
+	loaded := testutil.Must(store.Load(spillID, "sess-redact"))
+	if strings.Contains(loaded, token) {
+		t.Fatal("Load returned raw token after redact write")
+	}
+
+	// Padding (non-secret, Korean-safe ASCII) must remain.
+	if !strings.Contains(loaded, "padding") {
+		t.Errorf("non-secret padding content was lost")
+	}
+}
+
+// TestSpilloverStore_RedactsOnStore_Korean ensures Korean text passes through.
+func TestSpilloverStore_RedactsOnStore_Korean(t *testing.T) {
+	dir := t.TempDir()
+	store := NewSpilloverStore(dir)
+
+	const korean = "이것은 한국어 로그 메시지입니다. 시스템 상태 정상."
+	// Need at least hashInputLimit bytes to satisfy Store's hash input slice.
+	content := korean + strings.Repeat(" 로그", 400)
+
+	spillID, err := store.Store("sess-ko", "exec", content)
+	if err != nil {
+		t.Fatalf("Store: %v", err)
+	}
+	loaded, err := store.Load(spillID, "sess-ko")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !strings.Contains(loaded, korean) {
+		t.Fatalf("Korean content was mangled: %q", loaded[:min(200, len(loaded))])
+	}
+}
+
+// TestFormatPreview_RedactsSecret verifies that the preview text returned to
+// the LLM also scrubs secrets, not just the on-disk file.
+func TestFormatPreview_RedactsSecret(t *testing.T) {
+	token := "ghp_" + strings.Repeat("Z", 36) // synthetic
+	content := "leading text\n\nGITHUB_TOKEN=" + token + "\n\n" + strings.Repeat("x", 100)
+	preview := FormatPreview("sp_test", "read", content)
+	if strings.Contains(preview, token) {
+		t.Fatalf("preview still contains raw token: %q", preview)
+	}
+	if !strings.Contains(preview, "sp_test") {
+		t.Error("preview should still contain spill ID")
+	}
+}

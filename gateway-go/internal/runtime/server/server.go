@@ -45,14 +45,15 @@ type ServerTransport struct {
 
 // ServerRPC owns dispatcher construction and RPC wiring state.
 type ServerRPC struct {
-	dispatcher              *rpc.Dispatcher
-	providers               *provider.Registry
-	authManager             *provider.AuthManager
-	providerRuntime         *provider.ProviderRuntimeResolver
-	acpDeps                 *handlerprocess.ACPDeps
-	acpLifecycleUnsub       func()
-	acpResultInjectionUnsub func()
-	snapshotLifecycleUnsub  func()
+	dispatcher               *rpc.Dispatcher
+	providers                *provider.Registry
+	authManager              *provider.AuthManager
+	providerRuntime          *provider.ProviderRuntimeResolver
+	acpDeps                  *handlerprocess.ACPDeps
+	acpLifecycleUnsub        func()
+	acpResultInjectionUnsub  func()
+	snapshotLifecycleUnsub   func()
+	checkpointLifecycleUnsub func()
 }
 
 // ServerRuntime owns long-running runtime health/activity trackers.
@@ -199,6 +200,12 @@ func New(addr string, opts ...Option) (*Server, error) {
 	for _, opt := range opts {
 		opt(s)
 	}
+
+	// Initialise the lifecycle context up front so any background goroutine
+	// started during New() (e.g. checkpoint-gc) can read it race-free via
+	// ShutdownCtx(). initAndListen later wires caller-ctx cancellation in
+	// as a forwarder rather than replacing the context pointer.
+	s.lifecycleCtx, s.lifecycleCancel = context.WithCancel(context.Background())
 
 	s.broadcaster = events.NewBroadcaster()
 	s.broadcaster.SetLogger(s.logger)

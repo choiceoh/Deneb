@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
@@ -212,5 +213,56 @@ func TestStore_Stats(t *testing.T) {
 	}
 	if stats.CategoryCount["기술"] != 1 {
 		t.Errorf("CategoryCount[기술] = %d, want 1", stats.CategoryCount["기술"])
+	}
+}
+
+// TestAppendDiaryTo_RedactsSecret ensures diary entries are scrubbed before
+// they land on disk. Diary files are the primary input to the Wiki Dreamer;
+// redacting here stops secrets from entering the wiki synthesis pipeline.
+func TestAppendDiaryTo_RedactsSecret(t *testing.T) {
+	dir := t.TempDir()
+	diaryDir := filepath.Join(dir, "diary")
+
+	token := "sk-ant-" + strings.Repeat("Z", 40) // synthetic
+	entry := "사용자가 ANTHROPIC_API_KEY=" + token + " 를 설정함"
+	if err := AppendDiaryTo(diaryDir, entry); err != nil {
+		t.Fatalf("AppendDiaryTo: %v", err)
+	}
+
+	// Locate today's diary file.
+	entries, err := os.ReadDir(diaryDir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 diary file, got %d", len(entries))
+	}
+	data := testutil.Must(os.ReadFile(filepath.Join(diaryDir, entries[0].Name())))
+	body := string(data)
+	if strings.Contains(body, token) {
+		t.Fatalf("diary file contains raw token: %q", body)
+	}
+	// Korean surrounding text must survive.
+	if !strings.Contains(body, "사용자가") {
+		t.Errorf("Korean prose lost: %q", body)
+	}
+}
+
+// TestStore_AppendLog_RedactsSecret ensures the audit log does not persist
+// secret patterns (page titles / details can echo user content).
+func TestStore_AppendLog_RedactsSecret(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	token := "github_pat_11" + strings.Repeat("Z", 60)
+	if err := store.AppendLog("create", "페이지 본문에 "+token+" 포함됨"); err != nil {
+		t.Fatalf("AppendLog: %v", err)
+	}
+
+	data := testutil.Must(os.ReadFile(filepath.Join(dir, "wiki", "log.md")))
+	body := string(data)
+	if strings.Contains(body, token) {
+		t.Fatalf("log.md contains raw token: %q", body)
 	}
 }

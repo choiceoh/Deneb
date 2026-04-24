@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
 // Page represents a single wiki page with YAML frontmatter and markdown body.
@@ -99,7 +101,14 @@ func (p *Page) Render() []byte {
 }
 
 // WritePageFile writes a page to disk atomically (via temp file + rename).
+//
+// Free-text fields on the page (body, title, summary) pass through pkg/redact
+// before serialization so any secret that slipped into LLM-synthesized wiki
+// content never reaches disk. Structural metadata (category, tags, dates,
+// importance) is left alone — categories are from a fixed allow-list and tags
+// are keyword-sized.
 func WritePageFile(path string, page *Page) error {
+	redactPage(page)
 	data := page.Render()
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil { //nolint:gosec // G306 — world-readable is intentional
@@ -110,6 +119,20 @@ func WritePageFile(path string, page *Page) error {
 		return fmt.Errorf("wiki: rename: %w", err)
 	}
 	return nil
+}
+
+// redactPage masks secret patterns in a Page's free-text fields before write.
+// No-op when redaction is disabled. Title and Summary are user-visible strings
+// that the Dreamer populates from LLM output; Body is the main leak surface.
+// Other frontmatter fields (Category, Tags, dates, Importance, Archived, Type,
+// Confidence) are structural and unaffected.
+func redactPage(p *Page) {
+	if p == nil || !redact.Enabled() {
+		return
+	}
+	p.Body = redact.String(p.Body)
+	p.Meta.Title = redact.String(p.Meta.Title)
+	p.Meta.Summary = redact.String(p.Meta.Summary)
 }
 
 // NewPage creates a page with sensible defaults.
