@@ -149,23 +149,57 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 			output = pollSubagentOutputs(runCtx, s.cfg.SubagentPoller, sessionKey, output)
 
 			// Deliver output to target channel.
+			//
+			// Preferred path: hand the analysis off to the main user session
+			// so the main agent is the literal sender and the main session
+			// transcript records the proactive turn (see
+			// ServiceConfig.MainSessionHandoff). Falls back to direct
+			// delivery if no handoff is configured, the handoff declines
+			// (handled=false), or the handoff errors.
 			var deliveryResult *DeliveryResult
-			if output != "" && target != nil && s.cfg.TelegramPlugin != nil {
+			if output != "" && target != nil {
 				stripped := tokens.StripHeartbeatToken(output, tokens.StripModeHeartbeat, tokens.DefaultHeartbeatAckChars)
 				if !stripped.ShouldSkip {
 					deliveryText := output
 					if stripped.DidStrip && stripped.Text != "" {
 						deliveryText = stripped.Text
 					}
-					payloads := []types.ReplyPayload{{Text: deliveryText}}
-					bestEffort := isBestEffort(deliveryCfg)
-					dr := DeliverCronOutput(runCtx, s.cfg.TelegramPlugin, *target, payloads, DeliverOutputOptions{
-						ChunkLimit: chunk.DefaultLimit,
-						ChunkMode:  "length",
-						BestEffort: bestEffort,
-						Logger:     s.logger,
-					})
-					deliveryResult = &dr
+
+					handoffTaken := false
+					if s.cfg.MainSessionHandoff != nil {
+						handled, herr := s.cfg.MainSessionHandoff(runCtx, target.Channel, target.To, job.ID, deliveryText)
+						if herr != nil {
+							s.logger.Warn("cron main-session handoff failed, falling back to direct delivery",
+								"jobId", job.ID,
+								"channel", target.Channel,
+								"to", target.To,
+								"error", herr)
+						}
+						if handled {
+							handoffTaken = true
+							// Main session will deliver to the user. Record
+							// delivery as successful from cron's point of
+							// view — the main session owns retry/visibility
+							// from here.
+							deliveryResult = &DeliveryResult{
+								Delivered: true,
+								Channel:   target.Channel,
+								To:        target.To,
+							}
+						}
+					}
+
+					if !handoffTaken && s.cfg.TelegramPlugin != nil {
+						payloads := []types.ReplyPayload{{Text: deliveryText}}
+						bestEffort := isBestEffort(deliveryCfg)
+						dr := DeliverCronOutput(runCtx, s.cfg.TelegramPlugin, *target, payloads, DeliverOutputOptions{
+							ChunkLimit: chunk.DefaultLimit,
+							ChunkMode:  "length",
+							BestEffort: bestEffort,
+							Logger:     s.logger,
+						})
+						deliveryResult = &dr
+					}
 				}
 			}
 

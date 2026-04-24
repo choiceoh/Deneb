@@ -76,6 +76,32 @@ type ServiceConfig struct {
 	// When a cron job's agent produces an interim response (e.g., "확인 중"),
 	// the poller waits for descendant subagents to finish. Nil disables polling.
 	SubagentPoller SubagentPoller
+
+	// MainSessionHandoff, when set, routes cron output through the main user
+	// session instead of having cron deliver directly to the channel. The
+	// callback receives the resolved delivery target (channel/to), the cron
+	// job ID, and the cron agent's full analysis text. It is responsible for
+	// triggering a run on the main user session so that the main agent is
+	// the literal author of the Telegram message and the main session
+	// transcript records the proactive turn.
+	//
+	// Rationale: before this hook, cron jobs posted directly to Telegram
+	// via DeliverCronOutput. The main user session had no record of what
+	// "Neb" had said, so the very next user reply was answered with
+	// hallucinated or unrelated context (e.g. the "박종원 부장 감포 공문"
+	// incident where a follow-up "요약만 해서 알려줘" was answered about a
+	// completely different topic).
+	//
+	// Contract:
+	//   - Return (handled=true, nil)  → direct delivery is skipped; the
+	//     main session is responsible for reaching the user.
+	//   - Return (handled=false, nil) → handoff declined (e.g. channel not
+	//     supported, no main session for this chat). Direct delivery runs
+	//     as a fallback.
+	//   - Return (_, err)             → handoff attempted but failed.
+	//     Logged; direct delivery runs as a fallback so the user still
+	//     gets the message.
+	MainSessionHandoff func(ctx context.Context, channel, to, jobID, analysis string) (handled bool, err error)
 }
 
 // ServiceStatus is a snapshot of the cron service health and pending jobs.
