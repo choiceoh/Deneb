@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -231,13 +232,33 @@ func executeAgentRun(
 
 	agentMs := time.Since(agentStart).Milliseconds()
 	totalMs := time.Since(runStart).Milliseconds()
+	// Surface run-level aggregates so a postmortem gets the shape in one line:
+	// how many tool calls total, how they break down by name, how much text
+	// the agent produced vs. what ended up in result.Text, and a 200-char head
+	// of result.Text. Without textHead the operator had to query the transcript
+	// DB to know what was actually delivered.
+	finalTextHead := ""
+	if txt := strings.TrimSpace(agentResult.Text); txt != "" {
+		if len(txt) > 200 {
+			finalTextHead = txt[:200] + "…"
+		} else {
+			finalTextHead = txt
+		}
+	}
+	toolHist := formatToolHist(agentResult.ToolCounts)
 	logger.Info("pipeline: agent loop complete",
 		"agentMs", agentMs,
 		"totalMs", totalMs,
 		"turns", agentResult.Turns,
 		"inputTokens", agentResult.Usage.InputTokens,
 		"outputTokens", agentResult.Usage.OutputTokens,
-		"stopReason", agentResult.StopReason)
+		"stopReason", agentResult.StopReason,
+		"totalTextChars", agentResult.TotalTextChars,
+		"finalTextChars", len(agentResult.Text),
+		"allTextChars", len(agentResult.AllText),
+		"totalToolCalls", agentResult.TotalToolCalls,
+		"toolHist", toolHist,
+		"finalTextHead", finalTextHead)
 
 	// Emit agent run.end event to gateway subscriptions.
 	if deps.callbacks.emitAgentFn != nil {
@@ -1104,4 +1125,32 @@ type localAISummarizer struct{}
 
 func (s *localAISummarizer) Summarize(ctx context.Context, system, conversation string, maxOutputTokens int) (string, error) {
 	return pilot.CallLocalLLM(ctx, system, conversation, maxOutputTokens)
+}
+
+// formatToolHist renders a tool-count histogram as "name:count,name:count" in
+// descending count order so the busiest tool surfaces first in the log line.
+// Returns "" for an empty map — slog will drop empty string values cleanly.
+func formatToolHist(counts map[string]int) string {
+	if len(counts) == 0 {
+		return ""
+	}
+	type kv struct {
+		name  string
+		count int
+	}
+	pairs := make([]kv, 0, len(counts))
+	for k, v := range counts {
+		pairs = append(pairs, kv{k, v})
+	}
+	sort.Slice(pairs, func(i, j int) bool {
+		if pairs[i].count != pairs[j].count {
+			return pairs[i].count > pairs[j].count
+		}
+		return pairs[i].name < pairs[j].name
+	})
+	parts := make([]string, 0, len(pairs))
+	for _, p := range pairs {
+		parts = append(parts, fmt.Sprintf("%s:%d", p.name, p.count))
+	}
+	return strings.Join(parts, ",")
 }

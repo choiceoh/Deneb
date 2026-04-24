@@ -199,4 +199,11 @@ type AgentResult struct {
 
 	// FinalMessages is the message array at the end of the agent loop.
 	FinalMessages []llm.Message
+
+	// Run-level aggregates — surface whole-run shape for "agent loop complete"
+	// log + downstream diagnostics. Without these the caller has to grep every
+	// per-turn line and tally by hand. Set by the executor just before return.
+	TotalTextChars int            // sum of text bytes across every turn's prose
+	TotalToolCalls int            // sum of tool_use blocks across every turn
+	ToolCounts     map[string]int // histogram of tool name -> invocation count
 }

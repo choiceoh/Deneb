@@ -307,14 +307,29 @@ func (s *Service) applyJobResult(job StoreJob, outcome RunOutcome, sessionKey st
 	}
 
 	nowMs := time.Now().UnixMilli()
+	before := job.State.NextRunAtMs
 	state.NextRunAtMs = ComputeNextRunAtMs(job.Schedule, nowMs)
 
 	// Persist result state. If write fails, log — without this the next
 	// scheduler tick will reuse stale NextRunAtMs (potentially firing again
 	// immediately or far in the future).
-	if err := s.store.UpdateJobState(job.ID, state); err != nil {
+	persistErr := s.store.UpdateJobState(job.ID, state)
+	// Scheduler decision log — pairs with the same-shaped lines from
+	// fire/recover paths so a full NextRunAtMs timeline is greppable with
+	// `cron scheduler decision id=<jobId>`.
+	s.logger.Info("cron scheduler decision",
+		"action", "applyJobResult",
+		"reason", "executorFinish",
+		"id", job.ID,
+		"sessionKey", sessionKey,
+		"status", outcome.Status,
+		"beforeNextRunAtMs", before,
+		"afterNextRunAtMs", state.NextRunAtMs,
+		"nowMs", nowMs,
+		"persistErr", errStr(persistErr))
+	if persistErr != nil {
 		s.logger.Error("cron job state persist failed — next schedule may be wrong",
-			"id", job.ID, "error", err)
+			"id", job.ID, "error", persistErr)
 	}
 }
 

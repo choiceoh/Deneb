@@ -56,6 +56,33 @@ func RunAgent(
 
 	result := &AgentResult{}
 
+	// Run-level aggregates so `agent loop complete` can surface the whole-run
+	// shape at a glance. Without this the caller only sees the LAST turn's
+	// text/tool summary and has to grep per-turn lines to recover "how many
+	// of each tool was used" — tedious during a postmortem.
+	var (
+		totalTextChars int
+		totalToolCalls int
+		toolCounts     = map[string]int{}
+	)
+
+	// Defer the run-aggregate finalization so every return path (early errors,
+	// max_turns, end_turn) surfaces the same diagnostic shape without
+	// duplicating the assignment across six return statements.
+	defer func() {
+		result.TotalTextChars = totalTextChars
+		result.TotalToolCalls = totalToolCalls
+		if len(toolCounts) > 0 {
+			// Copy out so the caller reads a stable snapshot even if a
+			// future refactor ever moves the loop into a goroutine.
+			copied := make(map[string]int, len(toolCounts))
+			for k, v := range toolCounts {
+				copied[k] = v
+			}
+			result.ToolCounts = copied
+		}
+	}()
+
 	// Max-output-tokens recovery: tracks how many times we've auto-resumed
 	// after the LLM response was truncated by max_tokens.
 	var maxTokensRecoveryCount int
@@ -179,8 +206,25 @@ func RunAgent(
 		for _, tc := range turnRes.toolCalls {
 			if tc.Name != "" {
 				toolNames = append(toolNames, tc.Name)
+				toolCounts[tc.Name]++
 			}
 			toolInputBytes += len(tc.Input)
+		}
+		totalTextChars += textChars
+		totalToolCalls += toolCount
+		// textHead gives a 200-char window into the turn's prose output. This is
+		// the single most useful field for distinguishing "the agent composed
+		// the deliverable here" from "the agent only emitted a status line".
+		// The 19:35 wrap-up bug would have been a 5-second grep with this field:
+		// look for a turn where textChars is large AND textHead is not 'wiki
+		// 업데이트 완료'.
+		textHead := ""
+		if textChars > 0 {
+			if textChars > 200 {
+				textHead = turnRes.text[:200] + "…"
+			} else {
+				textHead = turnRes.text
+			}
 		}
 		logger.Info("agent turn complete",
 			"turn", turn,
@@ -189,6 +233,7 @@ func RunAgent(
 			"accInputTokens", result.Usage.InputTokens,
 			"messages", len(messages),
 			"textChars", textChars,
+			"textHead", textHead,
 			"toolCount", toolCount,
 			"toolNames", strings.Join(toolNames, ","),
 			"toolInputBytes", toolInputBytes,
@@ -721,6 +766,28 @@ func executeOneTool(
 			td.Error = block.Content
 		}
 		runLog.LogTurnTool(td)
+	}
+
+	// Gateway-log a compact "tool complete" entry — pairs with the existing
+	// "exec" start line so each tool call has a bracketed timing + outcome. On
+	// error, include the first 120 chars of the error message so the operator
+	// sees the cause without opening the agent detail jsonl.
+	logFields := []any{
+		"name", tc.Name,
+		"turn", turn,
+		"latencyMs", elapsed.Milliseconds(),
+		"outputBytes", len(block.Content),
+		"isError", block.IsError,
+	}
+	if block.IsError {
+		head := block.Content
+		if len(head) > 120 {
+			head = head[:120] + "…"
+		}
+		logFields = append(logFields, "errorHead", head)
+		logger.Warn("tool complete", logFields...)
+	} else {
+		logger.Info("tool complete", logFields...)
 	}
 	return block
 }
