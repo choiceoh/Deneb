@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
 const (
@@ -118,6 +120,10 @@ func BootstrapGatewayConfig(opts BootstrapOptions) (*BootstrapResult, error) {
 			logger.Warn("hooks.token should differ from gateway.auth.token for security isolation")
 		}
 	}
+
+	// Step 7: Propagate the configured IANA zone to pkg/dentime so subsequent
+	// dentime.Now() calls pick it up. DENEB_TIMEZONE env var still overrides.
+	dentime.SetConfigTimezone(cfg.Timezone)
 
 	return &BootstrapResult{
 		Config:                  cfg,

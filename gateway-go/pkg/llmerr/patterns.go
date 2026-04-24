@@ -86,6 +86,13 @@ var contextOverflowPatterns = []string{
 	"prompt exceeds max length",
 	"max_tokens",
 	"maximum number of tokens",
+	// Legacy autoreply classifier strings (preserved when that classifier
+	// was migrated to pkg/llmerr). These are loose operator-facing phrases
+	// that some providers emit without structured codes.
+	"context overflow",
+	"context too large",
+	"context exceeded",
+	"context too long",
 	// vLLM / local inference.
 	"exceeds the max_model_len",
 	"max_model_len",

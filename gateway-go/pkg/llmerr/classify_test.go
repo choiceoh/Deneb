@@ -181,16 +181,28 @@ func TestClassify_ByMessageOnly(t *testing.T) {
 }
 
 // TestClassify_LegacyContextOverflowStrings guards the migration of
-// chat/run_helpers.go:isContextOverflow from a hand-rolled substring list
-// to llmerr.Classify. Every string the old implementation matched must
-// still classify as ReasonContextOverflow.
+// chat/run_helpers.go:isContextOverflow and
+// autoreply/runner_errors.go:ClassifyAgentError from hand-rolled substring
+// lists to llmerr.Classify. Every string the old implementations matched
+// must still classify as ReasonContextOverflow.
 func TestClassify_LegacyContextOverflowStrings(t *testing.T) {
-	// Exact strings from the pre-migration substring check.
+	// Exact strings from the pre-migration substring checks in both
+	// chat/run_helpers.go and autoreply/runner_errors.go.
 	legacy := []string{
+		// chat/run_helpers.go:isContextOverflow (pre-migration).
 		"context_length_exceeded",
 		"context_too_long",
 		"prompt is too long",
 		"maximum context length",
+		// autoreply/runner_errors.go:isContextOverflow (pre-migration).
+		// Old predicate: contains("context") && contains(one of below),
+		// plus "max_tokens" / "token limit" unconditionally.
+		"context overflow",
+		"context too large",
+		"context exceeded",
+		"context too long",
+		"max_tokens",
+		"token limit",
 	}
 	for _, s := range legacy {
 		t.Run(s, func(t *testing.T) {

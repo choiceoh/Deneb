@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/pkg/llmerr"
@@ -44,6 +46,25 @@ func executeAgentRunWithDelta(
 	return executeAgentRun(ctx, params, deps, broadcaster, nil, nil, logger, runLog)
 }
 
+// classifyLLMError runs llmerr.Classify against an error, lifting the HTTP
+// status out of any wrapped *httpretry.APIError so the classifier's status
+// pipeline (not just its message patterns) is engaged. Without this,
+// errors like "API error 502: bad gateway" would fall through to
+// ReasonUnknown because llmerr.Classify intentionally does not match bare
+// digits inside a message.
+func classifyLLMError(err error) llmerr.Classified {
+	var apiErr *httpretry.APIError
+	status := 0
+	var body []byte
+	if errors.As(err, &apiErr) {
+		status = apiErr.StatusCode
+		if apiErr.Message != "" {
+			body = []byte(apiErr.Message)
+		}
+	}
+	return llmerr.Classify(err, status, body)
+}
+
 // isContextOverflow reports whether an error indicates a context window
 // overflow. Backed by the shared llmerr classifier, so it covers a much
 // wider pattern set (OpenAI, Anthropic, Gemini, vLLM, Ollama, llama.cpp,
@@ -53,18 +74,37 @@ func executeAgentRunWithDelta(
 // Behavior is strictly more correct than the prior substring check — every
 // pattern the old implementation matched is also covered by
 // llmerr.ReasonContextOverflow.
-//
-// TODO(llmerr-migration): follow-up PR should replace the other ad-hoc
-// classifiers in this pipeline (transient HTTP, billing/auth routing in
-// autoreply) with llmerr.Classify and act on the returned Action so all
-// recovery decisions share a single taxonomy.
 func isContextOverflow(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Zero status / empty body: the classifier still matches message
-	// patterns and error-code signals embedded in err.Error().
-	return llmerr.Classify(err, 0, nil).Reason == llmerr.ReasonContextOverflow
+	return classifyLLMError(err).Reason == llmerr.ReasonContextOverflow
+}
+
+// isTransientLLMError reports whether an error is a retryable transient
+// failure that a single short-backoff retry can plausibly recover from.
+//
+// Backed by llmerr.Classify so it shares one taxonomy with
+// isContextOverflow and the autoreply classifier. The set is intentionally
+// narrower than llmerr.Reason.Retryable(): we whitelist only the reasons
+// the pre-migration IsTransientError string match used to catch (HTTP
+// 500/502/503/521/529/429), plus transport-level timeouts which the old
+// code missed. ReasonUnknown is excluded so the caller doesn't burn a
+// retry on genuinely unclassifiable errors; ReasonContextOverflow is
+// handled by a separate compaction path upstream.
+func isTransientLLMError(err error) bool {
+	if err == nil {
+		return false
+	}
+	switch classifyLLMError(err).Reason {
+	case llmerr.ReasonServerError,
+		llmerr.ReasonOverloaded,
+		llmerr.ReasonRateLimit,
+		llmerr.ReasonTimeout:
+		return true
+	default:
+		return false
+	}
 }
 
 // resolveWorkspaceDirForPrompt returns the workspace directory for system prompt assembly.

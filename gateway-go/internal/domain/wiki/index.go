@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
 // Index is the master wiki index (index.md).
@@ -63,7 +65,7 @@ func (idx *Index) RemoveEntry(relPath string) {
 func (idx *Index) Render() string {
 	var sb strings.Builder
 	sb.WriteString("# 위키 인덱스\n\n")
-	sb.WriteString(fmt.Sprintf("_자동 생성: %s_\n\n", time.Now().Format("2006-01-02 15:04")))
+	fmt.Fprintf(&sb, "_자동 생성: %s_\n\n", dentime.Now().Format("2006-01-02 15:04"))
 
 	if idx.LastProcessed != "" {
 		sb.WriteString(fmt.Sprintf("마지막 일지 처리: %s\n\n", idx.LastProcessed))
@@ -141,7 +143,7 @@ func sanitizeTSV(s string) string {
 
 // Save writes the index to disk.
 func (idx *Index) Save(path string) error {
-	idx.GeneratedAt = time.Now().Format(time.RFC3339)
+	idx.GeneratedAt = dentime.Now().Format(time.RFC3339)
 	data := idx.Render()
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, []byte(data), 0o644); err != nil {
