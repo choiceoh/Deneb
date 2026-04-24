@@ -119,6 +119,10 @@ type runDeps struct {
 	// nil disables the mid-run steer feature.
 	steerQueue *SteerQueue
 
+	// skillNudger fires mid-session skill reviews every N tool calls.
+	// nil disables iteration-based nudging (session-end genesis still runs).
+	skillNudger SkillNudger
+
 	// callbacks is an atomic snapshot of channel callbacks taken at run start.
 	// Contains reply, media, typing, reaction, draft, emit, shutdown, and model fields.
 	callbacks CallbackSnapshot

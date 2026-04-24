@@ -88,7 +88,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "gateway",
-		Description: "Gateway self-management: config read/write, restart (SIGUSR1), git pull + rebuild",
+		Description: "Gateway self-management: status, config_get/config_set (dotted paths), update (git pull + rebuild + restart), restart. Destructive actions require approval — the first call returns a needs_approval envelope; relay the Korean summary to the user and call the .confirmed variant after approval.",
 		InputSchema: gatewayToolSchema(),
 		Fn:          tools.ToolGateway(workspaceDir),
 		Deferred:    true,
@@ -167,6 +167,12 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 		Description: "Send messages to the user's channel. Actions: send, reply, react, thread-reply. Use for proactive sends",
 		InputSchema: messageToolSchema(),
 		Fn:          tools.ToolMessage(),
+	})
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "clarify",
+		Description: "Ask the user to resolve ambiguity with a Telegram button-tap choice. Sends the question + 2-5 labeled buttons; the agent's turn ends, and the user's choice arrives as a new user message on the next turn. Use only for genuine ambiguity the agent cannot resolve itself",
+		InputSchema: clarifyToolSchema(),
+		Fn:          tools.ToolClarify(),
 	})
 }
 

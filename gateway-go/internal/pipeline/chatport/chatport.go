@@ -10,6 +10,11 @@ type TypingSignaler interface {
 	SignalTextDelta(text string)
 	SignalReasoningDelta()
 	SignalToolStart()
+	// SignalToolProgress refreshes the typing TTL while a single tool call
+	// is still executing. Fired periodically by the executor heartbeat so
+	// long (compile/test/network) tool calls don't let the surface indicator
+	// time out. elapsedSec is the tool-call elapsed time in seconds.
+	SignalToolProgress(elapsedSec int)
 	Stop()
 }
 

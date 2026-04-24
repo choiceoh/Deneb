@@ -67,6 +67,44 @@ type Handler struct {
 	maxHistoryCount int
 	// maxMessageBytes caps a single message body before truncation.
 	maxMessageBytes int
+
+	// skillNudger fires mid-session skill reviews every N tool calls.
+	// Optional — when nil, the tool-call accounting path short-circuits.
+	// Injected by the server via SetSkillNudger so chat doesn't depend
+	// on the domain/skills/genesis package directly.
+	skillNudger SkillNudger
+}
+
+// SkillNudger is the chat-side interface the server's genesis.Nudger
+// satisfies. Keeps chat free of any domain import.
+type SkillNudger interface {
+	// Enabled reports whether the nudger is configured to fire.
+	Enabled() bool
+	// OnToolCalls is called after each turn with the number of tool
+	// invocations that completed in that turn and a snapshot of the
+	// session state. Implementations must not block — the chat pipeline
+	// calls this synchronously on the run goroutine.
+	OnToolCalls(ctx context.Context, sessionKey string, delta int, snapshot SkillNudgeSnapshot)
+	// Reset clears the per-session counter; call on session end/abort.
+	Reset(sessionKey string)
+}
+
+// SkillNudgeSnapshot is the minimal projection of an agent run the
+// nudger needs to evaluate "is this skill-worthy?".
+type SkillNudgeSnapshot struct {
+	Turns          int
+	ToolActivities []SkillNudgeToolActivity
+	AllText        string
+	Label          string
+	Model          string
+}
+
+// SkillNudgeToolActivity mirrors the tool activity record the nudger
+// uses. Intentionally decoupled from agent.ToolActivity so chat doesn't
+// leak domain types outward.
+type SkillNudgeToolActivity struct {
+	Name    string
+	IsError bool
 }
 
 // HandlerConfig configures the chat handler.
@@ -250,4 +288,11 @@ func (h *Handler) SetCheckpointRoot(dir string) {
 // CheckpointRoot returns the configured snapshot root, or "" when disabled.
 func (h *Handler) CheckpointRoot() string {
 	return h.checkpointRoot
+}
+
+// SetSkillNudger installs the iteration-based skill nudger. Pass nil to
+// disable. Safe to call before the first run starts; not expected to
+// change at runtime.
+func (h *Handler) SetSkillNudger(n SkillNudger) {
+	h.skillNudger = n
 }

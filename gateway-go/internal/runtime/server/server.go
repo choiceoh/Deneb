@@ -67,6 +67,15 @@ type ServerRuntime struct {
 	channelEvents   *monitoring.ChannelEventTracker
 	snapshotStore   *telegram.SnapshotStore
 	runStateMachine *telegram.RunStateMachine
+
+	// Auto-resume state: the marker store persists "run active at T"
+	// records across gateway restarts. See auto_resume.go for the
+	// resume policy and file layout. resumeMu guards markerStore's
+	// lazy init, and runMarkerUnsub tears down the lifecycle listener
+	// on shutdown.
+	resumeMu       sync.Mutex
+	markerStore    *session.RunMarkerStore
+	runMarkerUnsub func()
 }
 
 // Server is the main gateway server.
@@ -303,6 +312,11 @@ func New(addr string, opts ...Option) (*Server, error) {
 			s.logger.Warn("checkpoint gc: per-session error", "error", e)
 		}
 	})
+
+	// Persist "run active" markers on session state transitions so the
+	// auto-resume subsystem can recover runs that a gateway crash or
+	// restart interrupted. See auto_resume.go for the resume policy.
+	s.runMarkerUnsub = s.initRunMarkerLifecycle()
 
 	return s, nil
 }

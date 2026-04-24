@@ -19,7 +19,16 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
+	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
+
+// toolHeartbeatInterval is how often OnToolProgress fires while a single
+// tool call is still executing. Chosen to comfortably fit under the 30s
+// Telegram typing-TTL (see autoreply/typing.TypingController) so long
+// (compile, test-suite, network fetch) tool calls do not let the surface
+// liveness indicator lapse. Exported as a var for tests that want to
+// shrink the interval.
+var toolHeartbeatInterval = 10 * time.Second
 
 // RunAgent executes the agent tool-call loop: call LLM → detect tool_use →
 // execute tool → feed result → repeat until the model stops or limits are hit.
@@ -381,12 +390,22 @@ func RunAgent(
 		}
 
 		// Record tool activities for context persistence.
+		var turnActivities []ToolActivity
+		if len(turnRes.toolCalls) > 0 {
+			turnActivities = make([]ToolActivity, 0, len(turnRes.toolCalls))
+		}
 		for i, tc := range turnRes.toolCalls {
 			isErr := i < len(toolResults) && toolResults[i].IsError
-			result.ToolActivities = append(result.ToolActivities, ToolActivity{
-				Name:    tc.Name,
-				IsError: isErr,
-			})
+			ta := ToolActivity{Name: tc.Name, IsError: isErr}
+			result.ToolActivities = append(result.ToolActivities, ta)
+			turnActivities = append(turnActivities, ta)
+		}
+
+		// Post-turn hook: skill nudger (and future accounting that needs
+		// the turn's tool activities). Fires even when the turn had no
+		// tool calls so subscribers can track turn progression.
+		if cfg.OnToolTurn != nil {
+			cfg.OnToolTurn(turn+1, turnActivities)
 		}
 
 		// When the turn budget is almost spent and sub-agents are running, nudge
@@ -715,6 +734,40 @@ func executeOneTool(
 	}
 
 	start := time.Now()
+
+	// Periodic tool-progress heartbeat: while this tool call is still running,
+	// fire OnToolProgress every toolHeartbeatInterval seconds so surface
+	// liveness indicators (Telegram typing "...") stay alive during long
+	// (compile/test-suite/network-fetch) calls that emit no streaming tokens.
+	// The goroutine stops as soon as tool execution returns (done is closed).
+	//
+	// interval is snapshot at call time (not read inside the goroutine) so
+	// tests that rewrite the global via t.Cleanup() can't race with a
+	// straggling heartbeat goroutine from the previous subtest.
+	var hbDone chan struct{}
+	if hooks.OnToolProgress != nil {
+		hbDone = make(chan struct{})
+		interval := toolHeartbeatInterval
+		safego.GoWithSlog(logger, "tool-heartbeat", func() {
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-hbDone:
+					return
+				case <-ctx.Done():
+					return
+				case t := <-ticker.C:
+					elapsedSec := int(t.Sub(start) / time.Second)
+					if elapsedSec <= 0 {
+						elapsedSec = 1
+					}
+					hooks.OnToolProgress(tc.Name, tc.ID, elapsedSec)
+				}
+			}
+		})
+	}
+
 	var toolOutput string
 	var toolErr error
 	func() {
@@ -730,6 +783,12 @@ func executeOneTool(
 			toolErr = fmt.Errorf("no tool executor configured")
 		}
 	}()
+
+	// Stop the heartbeat goroutine now that the tool returned.
+	if hbDone != nil {
+		close(hbDone)
+	}
+
 	elapsed := time.Since(start)
 
 	block := llm.ContentBlock{

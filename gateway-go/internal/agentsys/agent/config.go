@@ -32,6 +32,11 @@ type AgentConfig struct {
 	// Used for mid-conversation hooks (e.g., memory extraction).
 	OnTurn TurnCallback
 
+	// OnToolTurn is called after the per-turn ToolActivities have been
+	// recorded. Used by the iteration-based skill nudger and any future
+	// post-turn accounting that needs the tool-call count. Nil = disabled.
+	OnToolTurn ToolTurnCallback
+
 	// OnTurnInit is called at the start of each turn to decorate the context.
 	// Use this to inject per-turn state (e.g., a TurnContext for cross-tool sharing).
 	// Returning nil is a no-op; returning a modified ctx replaces the turn context.
@@ -153,6 +158,15 @@ func ComposeBeforeAPICall(hooks ...func(messages []llm.Message) []llm.Message) f
 
 // TurnCallback is called after each agent turn with accumulated token count.
 type TurnCallback func(turn int, accumulatedTokens int)
+
+// ToolTurnCallback is invoked after every turn whose tool executions
+// have been recorded into result.ToolActivities. It receives the
+// 1-based turn index and the per-turn tool activities (name + error
+// flag) in the order they executed. Called even when the turn had no
+// tool calls (empty slice) so subscribers can track turn progression.
+// Runs synchronously on the executor goroutine; the callback must
+// return quickly and delegate any long work to a background goroutine.
+type ToolTurnCallback func(turn int, activities []ToolActivity)
 
 // ToolActivity records a single tool invocation during an agent run.
 type ToolActivity struct {

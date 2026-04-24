@@ -157,6 +157,24 @@ func (s *FullTypingSignaler) SignalToolStart() {
 	s.controller.RefreshTypingTTL()
 }
 
+// SignalToolProgress refreshes the TTL during a long-running tool call.
+// Fired periodically by the executor so typing indicators stay alive past
+// the 30s TTL during multi-minute tools (compile, test-suite, network fetch).
+// elapsedSec is the tool-call elapsed time in seconds; unused here but
+// surfaced via the interface so future channels can show "45s elapsed"
+// style progress text.
+func (s *FullTypingSignaler) SignalToolProgress(elapsedSec int) {
+	_ = elapsedSec // reserved for future progress-text surfacing
+	if s.disabled || s.controller == nil {
+		return
+	}
+	// If the loop already stopped (TTL lapsed before this tick), restart it.
+	if !s.controller.IsActive() {
+		s.controller.StartTypingLoop()
+	}
+	s.controller.RefreshTypingTTL()
+}
+
 // Stop stops the underlying typing controller.
 func (s *FullTypingSignaler) Stop() {
 	if s.controller != nil {

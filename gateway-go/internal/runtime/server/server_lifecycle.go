@@ -111,9 +111,13 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	// Mark ready only after all channel plugins have had a chance to start.
 	s.ready.Store(true)
 
-	// Restore persisted Telegram sessions to the in-memory session manager.
+	// Restore persisted Telegram sessions to the in-memory session manager,
+	// then re-enqueue any runs that were interrupted by a crash or restart.
+	// Both phases run in one goroutine so the ordering is fixed — auto-resume
+	// reads the sessions that restoreAndWakeSessions just populated.
 	s.safeGo("session-restore", func() {
 		s.restoreAndWakeSessions(ctx)
+		s.autoResumeInterruptedRuns(ctx)
 	})
 
 	// Start autonomous service (dreaming lifecycle).
@@ -294,6 +298,9 @@ func (s *Server) doShutdown() error {
 	}
 	if s.spilloverLifecycleUnsub != nil {
 		s.spilloverLifecycleUnsub()
+	}
+	if s.runMarkerUnsub != nil {
+		s.runMarkerUnsub()
 	}
 
 	// 13. Cancel lifecycle context so remaining background goroutines exit,

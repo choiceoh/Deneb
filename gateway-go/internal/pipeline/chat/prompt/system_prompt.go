@@ -77,7 +77,7 @@ var toolCategories = []struct {
 	{"Exec", []string{"exec", "process"}},
 	{"Web", []string{"web"}},
 	{"Memory", []string{"wiki"}},
-	{"System", []string{"message", "gateway"}},
+	{"System", []string{"message", "clarify", "gateway"}},
 	{"Routine", []string{"cron", "gmail"}},
 	{"Sessions", []string{"sessions", "sessions_spawn", "subagents"}},
 	{"Media", []string{"send_file"}},
@@ -200,6 +200,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("- find/tree results are cached within a run. Avoid re-calling with the same pattern unless you've modified files.\n")
 		s.WriteString("- For future follow-ups or reminders, use cron. Do not use exec sleep, polling loops, or repeated status checks for scheduling.\n")
 		s.WriteString("- Deneb CLI: `deneb gateway {status|start|stop|restart}`. Do not invent subcommands.\n")
+		s.WriteString("- 유저가 '상태', '시스템 상태', '지금 뭐하고 있어' 등 **게이트웨이 자체 상태**를 물으면 먼저 `gateway(action=status)` 를 시도하라 (버전/PID/포트/업타임/세션 수를 한 번에 반환). `top`/`free`/`nvidia-smi` 같은 OS 레벨 세부는 유저가 명시적으로 요청하거나 gateway 응답이 부족할 때만 추가 호출.\n")
+		s.WriteString("- 유저가 '재시작', '업데이트', '설정 바꿔줘'라고 하면 `gateway` 툴을 사용하라 (action=status|config_get|config_set|update|restart). 파괴적 작업(restart/update/config_set)은 첫 호출이 `needs_approval` envelope을 돌려준다 — envelope의 한국어 summary를 유저에게 그대로 전달하고, 유저가 승인하면 같은 `action_token`으로 `.confirmed` variant를 호출해 실제 실행한다. 토큰/비밀번호/API 키는 절대 `config_set`으로 건드리지 말 것.\n")
 		s.WriteString("- **Never output tool call syntax or shell commands as text to the user.** Always use structured tool calls. Report results, not the commands you ran.\n\n")
 
 		built := s.String()
@@ -235,7 +237,14 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		ss.WriteString("재사용 가치가 높은 워크플로우를 발견하면:\n")
 		ss.WriteString("1. 반복 가능한 절차를 명확하게 구조화하세요 (When to Use → Procedure → Pitfalls → Verification).\n")
 		ss.WriteString("2. 스킬로 추출할 가치가 있다고 판단되면 skills.genesis RPC로 명시적 추출도 가능합니다.\n")
-		ss.WriteString("3. 기존 스킬이 부족하면 skills.evolve로 개선을 트리거할 수 있습니다.\n\n")
+		ss.WriteString("3. 기존 스킬이 부족하면 skills.evolve로 개선을 트리거할 수 있습니다.\n")
+		// S3: agent-facing save path. The agent itself may decide a
+		// workflow is worth keeping and persist it via skill_manage.
+		// apply=true is an explicit opt-in for mid-session visibility;
+		// the default defers the cache bust so the prompt-cache hit
+		// rate stays high.
+		ss.WriteString("4. 진짜 재사용 가능한 패턴을 방금 해결했다면 `skills`(action=create, ...) 로 직접 저장하세요. ")
+		ss.WriteString("기본은 다음 세션부터 로드되어 프롬프트 캐시를 해치지 않습니다. 이번 세션에서 즉시 쓰려면 apply=true 를 추가하세요.\n\n")
 	} else {
 		// No always-skills, but discoverable skills may still exist.
 		ss.WriteString("## 스킬 (전문 절차서)\n\n")
@@ -333,6 +342,9 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	if _, ok := toolSet["message"]; ok {
 		fmt.Fprintf(&d, "- `message` for proactive sends + channel actions. If used for user-visible reply, respond with ONLY: %s.\n", SilentReplyToken)
 		fmt.Fprintf(&d, "- %s 규칙: 메시지 전체가 %s만이어야 한다. 다른 텍스트와 섞지 마라. **사용자가 방금 보낸 메시지에 대응할 때는 절대 사용 금지** — 오직 proactive/maintenance 전송(`message` 도구 사용) 후에만 허용.\n", SilentReplyToken, SilentReplyToken)
+	}
+	if _, ok := toolSet["clarify"]; ok {
+		d.WriteString("- `clarify(question, options)` 로 진짜 모호성을 버튼 선택으로 해결하라: 파일·경로·이름이 여러 개 매치되어 사용자만이 선택할 수 있을 때. 평서문으로 되물어 답변 타이핑을 요구하지 말고 이 도구를 써라. 예/아니오 수준의 사소한 확인, 스스로 추론 가능한 질문에는 쓰지 마라. 호출 후에는 턴을 즉시 종료한다 — 선택 결과는 다음 턴에 `[유저 응답 (버튼): ...]` 형태로 도착한다.\n")
 	}
 	d.WriteString("\n")
 

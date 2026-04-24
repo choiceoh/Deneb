@@ -246,6 +246,12 @@ type SessionConfig struct {
 	Scope   string `json:"scope,omitempty"`
 	DMScope string `json:"dmScope,omitempty"`
 	MainKey string `json:"mainKey,omitempty"`
+
+	// AutoResume opts the gateway into re-injecting a resume message for
+	// sessions whose previous agent run was interrupted by a crash or
+	// restart. Default: enabled (nil or unset means true). See
+	// internal/runtime/server/auto_resume.go.
+	AutoResume *bool `json:"autoResume,omitempty"`
 }
 
 // AgentsConfig for agent runtime.
