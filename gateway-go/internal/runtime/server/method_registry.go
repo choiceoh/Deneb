@@ -17,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
+	handlercheckpoint "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/checkpoint"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
 	handlertask "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlertask"
 	handlertelegram "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlertelegram"
@@ -142,6 +143,14 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// --- Insights (usage reports) ---
 		handlerinsights.Methods(handlerinsights.Deps{
 			Engine: hub.Insights(),
+			Logger: hub.Logger(),
+		}),
+
+		// --- Checkpoint (list/restore/diff backing /rollback) ---
+		// Root is derived from the resolved state dir. When denebDir is
+		// empty the handler still registers but replies UNAVAILABLE.
+		handlercheckpoint.Methods(handlercheckpoint.Deps{
+			Root:   filepath.Join(denebDir, "checkpoints"),
 			Logger: hub.Logger(),
 		}),
 		handlersystem.MaintenanceMethods(handlersystem.MaintenanceDeps{Runner: s.maintRunner}),

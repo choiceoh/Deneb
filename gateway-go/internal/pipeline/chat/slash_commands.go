@@ -113,6 +113,15 @@ func ParseSlashCommand(text string) *SlashResult {
 			Command:  "insights",
 			Args:     args,
 		}
+	case "rollback", "롤백":
+		// Subcommand parsing (list/목록 | diff/비교 | restore/복원) happens in
+		// rollback_dispatch.go. Korean alias /롤백 routes to the same handler.
+		return &SlashResult{
+			Handled:  true,
+			Response: "",
+			Command:  "rollback",
+			Args:     args,
+		}
 	default:
 		// Not a recognized slash command; pass through to LLM.
 		return nil

@@ -5,7 +5,22 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
+
+// resetDentimeForTest ensures each test starts with a clean dentime state.
+// Sets the config to empty + resets cache. Registered via t.Cleanup so the
+// process-global dentime doesn't leak across tests.
+func resetDentimeForTest(t *testing.T) {
+	t.Helper()
+	t.Setenv("DENEB_TIMEZONE", "")
+	dentime.SetConfigTimezone("")
+	dentime.ResetCache()
+	t.Cleanup(func() {
+		dentime.SetConfigTimezone("")
+		dentime.ResetCache()
+	})
+}
 
 func TestComputeNextRunAtMs_Every(t *testing.T) {
 	now := int64(1000000)
@@ -298,5 +313,88 @@ func TestParseSmartSchedule(t *testing.T) {
 				t.Fatalf("got %q, want kind=%q", sched.Kind, tt.wantKind)
 			}
 		})
+	}
+}
+
+// --- resolveScheduleLocation / per-job TZ fallback ---------------------
+
+// TestResolveScheduleLocation_ExplicitJobTzWins verifies per-job Tz beats
+// both the dentime global and time.Local.
+func TestResolveScheduleLocation_ExplicitJobTzWins(t *testing.T) {
+	resetDentimeForTest(t)
+	dentime.SetConfigTimezone("Asia/Seoul")
+	dentime.ResetCache()
+
+	loc := resolveScheduleLocation("America/Los_Angeles")
+	if loc == nil || loc.String() != "America/Los_Angeles" {
+		t.Fatalf("per-job Tz lost: got %v, want America/Los_Angeles", loc)
+	}
+}
+
+// TestResolveScheduleLocation_InheritsDentime verifies empty per-job Tz
+// inherits the dentime global zone — the core bug fix.
+func TestResolveScheduleLocation_InheritsDentime(t *testing.T) {
+	resetDentimeForTest(t)
+	dentime.SetConfigTimezone("Asia/Seoul")
+	dentime.ResetCache()
+
+	loc := resolveScheduleLocation("")
+	if loc == nil || loc.String() != "Asia/Seoul" {
+		t.Fatalf("dentime fallback lost: got %v, want Asia/Seoul", loc)
+	}
+}
+
+// TestResolveScheduleLocation_InvalidTzUsesUTC verifies that a typo'd per-job
+// Tz resolves to UTC, not to the inherited global zone. Prevents schedule
+// drift from silent bad strings.
+func TestResolveScheduleLocation_InvalidTzUsesUTC(t *testing.T) {
+	resetDentimeForTest(t)
+	dentime.SetConfigTimezone("Asia/Seoul")
+	dentime.ResetCache()
+
+	loc := resolveScheduleLocation("Mars/Olympus_Mons")
+	if loc == nil || loc.String() != "UTC" {
+		t.Fatalf("invalid Tz should map to UTC, got %v", loc)
+	}
+}
+
+// TestResolveScheduleLocation_NoGlobalFallsBackToLocal verifies the final
+// fallback when neither per-job nor dentime provides a zone.
+func TestResolveScheduleLocation_NoGlobalFallsBackToLocal(t *testing.T) {
+	resetDentimeForTest(t)
+	// Intentionally leave dentime empty.
+
+	loc := resolveScheduleLocation("")
+	if loc == nil {
+		t.Fatal("expected time.Local fallback, got nil")
+	}
+	// time.Local may be UTC on CI or arbitrary locally; just assert non-nil.
+}
+
+// TestComputeNextCronMs_InheritsDentimeZone is the end-to-end behaviour
+// check: a "9am daily" cron with empty per-job Tz fires at 09:00 KST when
+// dentime is set to Asia/Seoul.
+func TestComputeNextCronMs_InheritsDentimeZone(t *testing.T) {
+	resetDentimeForTest(t)
+	dentime.SetConfigTimezone("Asia/Seoul")
+	dentime.ResetCache()
+
+	// Start at 2026-01-15 08:00 KST (=23:00 UTC prev day). A 9am daily
+	// should fire 1h later at 09:00 KST = 00:00 UTC.
+	kst, _ := time.LoadLocation("Asia/Seoul")
+	start := time.Date(2026, 1, 15, 8, 0, 0, 0, kst)
+
+	sched := StoreSchedule{Kind: "cron", Expr: "0 9 * * *"} // empty Tz
+	nextMs := computeNextCronMs(sched, start.UnixMilli())
+	if nextMs == 0 {
+		t.Fatal("computeNextCronMs returned 0 (parse or tz failure)")
+	}
+
+	next := time.UnixMilli(nextMs).In(kst)
+	if next.Hour() != 9 || next.Minute() != 0 {
+		t.Fatalf("next fire = %s, want 09:00 KST", next.Format(time.RFC3339))
+	}
+	if !next.After(start) {
+		t.Fatalf("next should be after start: next=%s start=%s", next, start)
 	}
 }

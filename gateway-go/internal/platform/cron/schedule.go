@@ -8,7 +8,37 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
+
+// resolveScheduleLocation implements the per-job > global > local fallback
+// chain for cron timezones. Shared by computeNextCronMs and the validation
+// path so "will this fire?" matches runtime behaviour.
+//
+// Fallback:
+//
+//  1. per-job explicit Tz (when non-empty and valid IANA)
+//  2. dentime.Location() — honours DENEB_TIMEZONE env / config.timezone
+//  3. time.Local — final server-local fallback
+//
+// Invalid per-job Tz strings resolve to UTC rather than silently leaking
+// into the inherited global zone, so a typo doesn't drift the schedule.
+// Returns nil when all paths are exhausted (caller substitutes time.Local).
+func resolveScheduleLocation(jobTz string) *time.Location {
+	tz := strings.TrimSpace(jobTz)
+	if tz != "" {
+		loc, err := time.LoadLocation(tz)
+		if err != nil {
+			return time.UTC
+		}
+		return loc
+	}
+	if loc := dentime.Location(); loc != nil {
+		return loc
+	}
+	return time.Local
+}
 
 // DefaultTopOfHourStaggerMs is the default stagger for top-of-hour cron jobs.
 const DefaultTopOfHourStaggerMs = 5 * 60 * 1000 // 5 minutes
@@ -89,16 +119,13 @@ func computeNextCronMs(schedule StoreSchedule, nowMs int64) int64 {
 		return 0
 	}
 
-	// Resolve timezone.
-	tz := strings.TrimSpace(schedule.Tz)
-	var loc *time.Location
-	if tz != "" {
-		var err error
-		loc, err = time.LoadLocation(tz)
-		if err != nil {
-			loc = time.UTC
-		}
-	} else {
+	// Resolve timezone via the documented fallback chain:
+	// per-job schedule.Tz > dentime global (DENEB_TIMEZONE/config) > time.Local.
+	// Previously empty Tz silently fell to time.Local, which produced
+	// "아침 9시" running at 09:00 UTC on UTC servers. The dentime hop
+	// keeps Korean-first expectations intact without per-job config.
+	loc := resolveScheduleLocation(schedule.Tz)
+	if loc == nil {
 		loc = time.Local
 	}
 

@@ -1,10 +1,14 @@
 // Package agent — SpilloverStore saves large tool results to disk and returns
 // compact previews for the LLM context window.
 //
-// When a tool result exceeds MaxResultChars the full content is written to
-// ~/.deneb/spillover/{session}_{ts}_{tool}_{hash}.txt and replaced with a
-// head+tail preview containing the spill ID.  The LLM can later retrieve the
-// full content via the read_spillover tool.
+// The actual spill threshold is DefaultMaxOutput (see truncate.go): any tool
+// result longer than that is written to
+// ~/.deneb/spillover/{session}_{ts}_{tool}_{hash}.txt by ToolRegistry.Execute
+// and the in-context text is replaced with a head+tail preview embedding the
+// spill ID. The LLM then retrieves the full content on demand via the
+// read_spillover tool. MaxResultChars below is the larger "hard cap" used in
+// tests to size fixtures and document the upper bound; it does not trigger
+// spills directly.
 package agent
 
 import (
@@ -167,7 +171,9 @@ func (s *SpilloverStore) SpillAndPreview(sessionKey, toolName, output string) st
 	return FormatPreview(spillID, toolName, output)
 }
 
-// CleanSession removes all spilled files belonging to sessionKey.
+// CleanSession removes all spilled files belonging to sessionKey that are
+// tracked in the in-memory index. Use RemoveSession for a stronger cleanup
+// that also sweeps orphan files left on disk (e.g. after a crash/restart).
 func (s *SpilloverStore) CleanSession(sessionKey string) {
 	s.mu.Lock()
 	var toDelete []string
@@ -182,6 +188,53 @@ func (s *SpilloverStore) CleanSession(sessionKey string) {
 		delete(s.index, id)
 	}
 	s.mu.Unlock()
+}
+
+// RemoveSession removes every spill file belonging to sessionKey, both the
+// entries tracked in the in-memory index and any orphan files on disk whose
+// filename prefix matches the sanitized session key (e.g. left over from a
+// previous process that crashed before index cleanup ran). Idempotent: no
+// error if the base directory does not exist yet.
+//
+// Called from the session lifecycle subscriber (see
+// server_spillover_lifecycle.go) on terminal/reset/delete events so abandoned
+// spillover files are reclaimed as soon as the session ends instead of
+// waiting for the 30-minute TTL sweep.
+func (s *SpilloverStore) RemoveSession(sessionKey string) error {
+	if sessionKey == "" {
+		return nil
+	}
+
+	// 1. Drop in-memory entries and delete their files.
+	s.CleanSession(sessionKey)
+
+	// 2. Sweep filesystem for any orphan files with this session prefix.
+	//    Filenames follow the pattern: <safeSess>_<ts>_<tool>_<id>.txt so an
+	//    exact prefix match on "<safeSess>_" is a safe lower bound; we still
+	//    guard against accidentally deleting a different session whose key
+	//    happens to start with the same sanitized bytes by requiring the
+	//    trailing underscore.
+	prefix := sanitizeSessionKey(sessionKey) + "_"
+	entries, err := os.ReadDir(s.baseDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("spillover readdir: %w", err)
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(s.baseDir, name)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("spillover remove %q: %w", name, err)
+		}
+	}
+	return nil
 }
 
 // StartCleanup runs a background goroutine that removes expired spill files

@@ -25,14 +25,22 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	// to propagate the caller's parent-ctx cancellation into the already-
 	// live lifecycle context. Running the forwarder on a detached goroutine
 	// keeps initAndListen lock-free and preserves the doShutdown() path.
-	if ctx != nil && ctx.Done() != nil {
+	//
+	// Capture parentCtx by value before the subsequent `ctx = s.lifecycleCtx`
+	// reassignment so the closure below reads the original caller context,
+	// not the reassigned local. Otherwise -race flags the closure's read
+	// against the local-var reassignment as a data race.
+	parentCtx := ctx
+	if parentCtx != nil && parentCtx.Done() != nil {
+		lifecycleDone := s.lifecycleCtx.Done()
+		cancelFn := s.lifecycleCancel
 		s.safeGo("lifecycle-parent-cancel-forwarder", func() {
 			select {
-			case <-ctx.Done():
-				if s.lifecycleCancel != nil {
-					s.lifecycleCancel()
+			case <-parentCtx.Done():
+				if cancelFn != nil {
+					cancelFn()
 				}
-			case <-s.lifecycleCtx.Done():
+			case <-lifecycleDone:
 			}
 		})
 	}
@@ -283,6 +291,9 @@ func (s *Server) doShutdown() error {
 	}
 	if s.checkpointLifecycleUnsub != nil {
 		s.checkpointLifecycleUnsub()
+	}
+	if s.spilloverLifecycleUnsub != nil {
+		s.spilloverLifecycleUnsub()
 	}
 
 	// 13. Cancel lifecycle context so remaining background goroutines exit,

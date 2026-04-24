@@ -276,14 +276,19 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	msgCtx.BodyForAgent = agentMessage
 
 	// --- Main-agent /steer intercept ---
-	// Hermes-style mid-run nudge: `/steer <note>` (no subagent id) queues a
-	// note for the CURRENT main-agent turn. Distinct from subagent `/steer
-	// <id> <note>` which targets a child run. We intercept before the
-	// subagent dispatcher so the note-only form doesn't get swallowed by
-	// "Missing subagent id" error. The subagent dispatcher still handles
-	// the `/steer <id> <note>` form below.
+	// Hermes-style mid-run nudge: `/steer <note>` vs subagent `/steer <id>
+	// <note>`. Routing is decided by parseSteerCommand, which consults the
+	// live ACP subagent registry: when the first token matches an active
+	// subagent for this session, we fall through to the subagent dispatcher;
+	// otherwise the whole body becomes a main-agent nudge. When the registry
+	// is nil (ACP not wired), we degrade to the Phase 1 syntactic heuristic.
 	if rawBody := strings.TrimSpace(msgCtx.BodyForCommands); rawBody != "" {
-		if note, ok := parseMainAgentSteerCommand(rawBody); ok {
+		var lookup SubagentLookup
+		if p.server.acpDeps != nil {
+			lookup = newACPSubagentLookup(p.server.acpDeps.Registry)
+		}
+		kind, note, _ := parseSteerCommand(rawBody, sessionKey, lookup)
+		if kind == SteerMainAgent {
 			if p.chatHandler != nil && p.chatHandler.EnqueueSteer(sessionKey, note) {
 				p.sendCommandReply(chatID, &handlers.CommandResult{
 					Reply: "✅ 메인 에이전트에게 조정 메모를 전달했어요. 다음 도구 결과에 포함됩니다.",

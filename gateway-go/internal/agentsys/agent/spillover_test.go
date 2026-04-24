@@ -276,3 +276,96 @@ func TestFormatPreview_RedactsSecret(t *testing.T) {
 		t.Error("preview should still contain spill ID")
 	}
 }
+
+// TestSpilloverStore_RemoveSession_TrackedAndOrphan verifies that
+// RemoveSession wipes both index-tracked files and orphan files on disk that
+// share the session's sanitized prefix. Files from a different session must
+// survive.
+func TestSpilloverStore_RemoveSession_TrackedAndOrphan(t *testing.T) {
+	dir := t.TempDir()
+	store := NewSpilloverStore(dir)
+
+	content := strings.Repeat("q", MaxResultChars+1)
+
+	// Two tracked entries for session-doomed; one tracked for session-keep.
+	_ = testutil.Must(store.Store("session-doomed", "read", content))
+	_ = testutil.Must(store.Store("session-doomed", "grep", content+"v2"))
+	keepID := testutil.Must(store.Store("session-keep", "exec", content+"keep"))
+
+	// Drop an orphan file on disk that matches the doomed session's prefix
+	// but isn't tracked in the in-memory index (e.g. leftover from a prior
+	// process that died before cleanup).
+	orphanName := sanitizeSessionKey("session-doomed") + "_1_readz_sp_deadbeef.txt"
+	orphanPath := filepath.Join(dir, orphanName)
+	if err := os.WriteFile(orphanPath, []byte("orphan"), 0o600); err != nil {
+		t.Fatalf("seed orphan: %v", err)
+	}
+
+	if err := store.RemoveSession("session-doomed"); err != nil {
+		t.Fatalf("RemoveSession: %v", err)
+	}
+
+	// session-doomed files must be gone — tracked and orphan.
+	entries := testutil.Must(os.ReadDir(dir))
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), sanitizeSessionKey("session-doomed")+"_") {
+			t.Errorf("session-doomed file should be removed: %s", e.Name())
+		}
+	}
+	if _, err := os.Stat(orphanPath); !os.IsNotExist(err) {
+		t.Errorf("orphan file should be removed, stat err=%v", err)
+	}
+
+	// session-keep must survive.
+	if _, err := store.Load(keepID, "session-keep"); err != nil {
+		t.Errorf("session-keep entry should survive: %v", err)
+	}
+}
+
+// TestSpilloverStore_RemoveSession_Idempotent calls RemoveSession twice and on
+// an unknown session key; neither must error.
+func TestSpilloverStore_RemoveSession_Idempotent(t *testing.T) {
+	dir := t.TempDir()
+	store := NewSpilloverStore(dir)
+
+	content := strings.Repeat("r", MaxResultChars+1)
+	_ = testutil.Must(store.Store("session-x", "read", content))
+
+	if err := store.RemoveSession("session-x"); err != nil {
+		t.Fatalf("first RemoveSession: %v", err)
+	}
+	if err := store.RemoveSession("session-x"); err != nil {
+		t.Fatalf("second RemoveSession (idempotent): %v", err)
+	}
+	if err := store.RemoveSession("never-existed"); err != nil {
+		t.Fatalf("RemoveSession on unknown key: %v", err)
+	}
+}
+
+// TestSpilloverStore_RemoveSession_BaseDirMissing ensures RemoveSession does
+// not error when the spillover base directory has not been created yet
+// (e.g. no Store call ever happened in this process).
+func TestSpilloverStore_RemoveSession_BaseDirMissing(t *testing.T) {
+	// Point the store at a non-existent path.
+	store := NewSpilloverStore(filepath.Join(t.TempDir(), "never_created"))
+	if err := store.RemoveSession("any"); err != nil {
+		t.Fatalf("RemoveSession on missing dir: %v", err)
+	}
+}
+
+// TestSpilloverStore_RemoveSession_EmptyKey is a defensive no-op check —
+// passing "" must not scan the whole directory and delete everything.
+func TestSpilloverStore_RemoveSession_EmptyKey(t *testing.T) {
+	dir := t.TempDir()
+	store := NewSpilloverStore(dir)
+	content := strings.Repeat("t", MaxResultChars+1)
+	id := testutil.Must(store.Store("session-live", "read", content))
+
+	if err := store.RemoveSession(""); err != nil {
+		t.Fatalf("RemoveSession(\"\"): %v", err)
+	}
+	// Entry must still load.
+	if _, err := store.Load(id, "session-live"); err != nil {
+		t.Errorf("RemoveSession(\"\") must not touch other sessions: %v", err)
+	}
+}
