@@ -316,7 +316,13 @@ func TestRunAgent_SingleToolCall(t *testing.T) {
 }
 
 func TestRunAgent_MaxTurns(t *testing.T) {
-	// LLM keeps calling tools indefinitely; should stop at MaxTurns.
+	// LLM keeps calling tools indefinitely. Post-grace-call: the executor
+	// injects a wrap-up user message after the final budgeted turn and runs
+	// one extra iteration. Since this test's streamer runs out of scripted
+	// events on the grace iteration, the empty stream resolves as end_turn —
+	// but the grace flag flips the terminal stop reason to max_turns_graceful.
+	// Tool count stays at maxTurns (the grace iteration produces no tool calls
+	// because the fake stream is empty).
 	const maxTurns = 3
 	turns := make([][]llm.StreamEvent, maxTurns)
 	for i := range turns {
@@ -337,14 +343,18 @@ func TestRunAgent_MaxTurns(t *testing.T) {
 	messages := []llm.Message{llm.NewTextMessage("user", "loop")}
 	result := testutil.Must(RunAgent(context.Background(), cfg, messages, streamer, tools, StreamHooks{}, nil, nil))
 
-	if result.StopReason != "max_turns" {
-		t.Errorf("StopReason = %q, want %q", result.StopReason, "max_turns")
+	if result.StopReason != StopReasonMaxTurnsGraceful {
+		t.Errorf("StopReason = %q, want %q", result.StopReason, StopReasonMaxTurnsGraceful)
 	}
-	if result.Turns != maxTurns {
-		t.Errorf("Turns = %d, want %d", result.Turns, maxTurns)
+	if !result.BudgetExhaustedInjected {
+		t.Error("BudgetExhaustedInjected = false, want true")
+	}
+	if result.Turns != maxTurns+1 {
+		t.Errorf("Turns = %d, want %d (MaxTurns + 1 grace iteration)", result.Turns, maxTurns+1)
 	}
 	if tools.callCount() != maxTurns {
-		t.Errorf("tool call count = %d, want %d", tools.callCount(), maxTurns)
+		t.Errorf("tool call count = %d, want %d (grace turn runs no tools here)",
+			tools.callCount(), maxTurns)
 	}
 }
 

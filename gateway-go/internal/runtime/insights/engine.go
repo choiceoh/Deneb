@@ -19,6 +19,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/usage"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
 // SessionLister is the narrow interface the engine needs from the session
@@ -52,11 +53,13 @@ type Engine struct {
 }
 
 // New constructs an Engine. `sessions` is required; `u` may be nil.
+// The clock defaults to dentime.Now so the report's GeneratedAt and window
+// boundaries are reported in the operator's configured zone.
 func New(sessions SessionLister, u UsageSource) *Engine {
 	return &Engine{
 		sessions: sessions,
 		usage:    u,
-		now:      time.Now,
+		now:      dentime.Now,
 	}
 }
 

@@ -85,6 +85,10 @@ type DenebConfig struct {
 	Agents    *AgentsConfig    `json:"agents,omitempty"`
 	GmailPoll *GmailPollConfig `json:"gmailPoll,omitempty"`
 	Cron      *CronConfig      `json:"cron,omitempty"`
+	// Timezone is an optional IANA zone name (e.g. "Asia/Seoul") used by
+	// pkg/dentime for Deneb's zone-aware clock. The DENEB_TIMEZONE env var
+	// still wins; an empty or invalid value falls back to server local.
+	Timezone string `json:"timezone,omitempty"`
 }
 
 // MetaConfig tracks config version metadata.

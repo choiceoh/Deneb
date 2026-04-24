@@ -6,6 +6,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/logging"
+	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
 // LoggingResult holds the resolved structured logger and formatting state.
@@ -46,8 +47,18 @@ func BuildLogger(cfg *config.DenebConfig, flagLevel, flagFormat string) LoggingR
 	var handler slog.Handler
 	switch logFormat {
 	case "json":
-		handler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+		// Wire secret redaction into every JSON log attribute. The JSON
+		// handler is what ships to /tmp/deneb-gateway.log and any downstream
+		// aggregation, so this is the primary leak surface. No-op when
+		// DENEB_REDACT_SECRETS=false was set at process start.
+		opts := &slog.HandlerOptions{Level: level}
+		opts.ReplaceAttr = redact.AttrReplacer(opts.ReplaceAttr)
+		handler = slog.NewJSONHandler(os.Stderr, opts)
 	default:
+		// NOTE: the ConsoleHandler (dev TTY) does not accept a ReplaceAttr
+		// hook today, so redaction is JSON-only for now. Dev-format logs
+		// are not captured for long-term storage or forwarding, limiting
+		// the blast radius. See follow-up below.
 		handler = logging.NewConsoleHandler(os.Stderr, &logging.ConsoleOptions{
 			Level: level,
 			Color: true,

@@ -65,11 +65,14 @@ const (
 
 // chatportAdapters holds injected implementations that decouple chat from autoreply.
 // When nil, the corresponding functionality is simply skipped.
+//
+// Transient HTTP retry classification used to live here via an injected
+// IsTransientError func; it now goes through the shared pkg/llmerr classifier
+// (see isTransientLLMError in run_helpers.go) so there is no plugin point.
 type chatportAdapters struct {
 	NewTypingSignaler    func(onStart func()) chatport.TypingSignaler // optional; creates phase-aware typing signaler
 	SanitizeDraft        chatport.DraftSanitizerFunc                  // optional; cleans streaming draft text
 	ParseReplyDirectives chatport.ParseReplyDirectivesFunc            // optional; parses reply directives
-	IsTransientError     chatport.IsTransientErrorFunc                // optional; checks transient HTTP errors
 }
 
 // runDeps holds the dependencies the async run needs from the Handler.
