@@ -7,7 +7,8 @@ import (
 )
 
 // GenesisSubsystem groups skill genesis services: the genesis service
-// (auto-creation from sessions), usage tracker, and skill evolver.
+// (auto-creation from sessions), usage tracker, skill evolver, and the
+// iteration-based Nudger that fires mid-session skill reviews.
 // Late-bound during registerWorkflowSideEffects() after the chat handler
 // and LLM clients are available.
 // Embedded in Server so fields are promoted.
@@ -15,6 +16,7 @@ type GenesisSubsystem struct {
 	genesisSvc         *genesis.Service
 	genesisTracker     *genesis.Tracker
 	genesisEvolver     *genesis.Evolver
+	genesisNudger      *genesis.Nudger
 	skillCatalog       *skills.Catalog
 	genesisTranscripts toolctx.TranscriptStore
 }

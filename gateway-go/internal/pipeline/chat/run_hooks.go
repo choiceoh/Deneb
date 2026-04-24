@@ -46,6 +46,14 @@ func wireStreamHooks(
 		hc.OnToolStart(func(_ string, _ string, _ []byte) {
 			typingSignaler.SignalToolStart()
 		})
+		// Long-running tool heartbeat: refresh typing TTL periodically while
+		// a single tool call is still executing. Without this, Telegram's
+		// 30s typing TTL expires during multi-minute compile/test/network
+		// tool calls that emit no streaming tokens, and the "typing..."
+		// indicator disappears from the chat while the agent is still busy.
+		hc.OnToolProgress(func(_ string, _ string, _ int) {
+			typingSignaler.SignalToolProgress(0)
+		})
 	}
 
 	// Status controller: Telegram emoji reactions.

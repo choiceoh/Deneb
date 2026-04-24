@@ -48,6 +48,14 @@ func ToolSkills(getSnapshot SkillsSnapshotProvider, workspaceDir string, invalid
 
 // toolSkillManage returns a tool that lets the LLM create, patch, read, and
 // delete skills at runtime.
+//
+// Prompt-cache doctrine: a skill write would normally force a rebuild of
+// the semi-static "skills prompt" block mid-conversation, which breaks
+// the static/semi-static cache marker. To preserve cache hit rate, the
+// default behavior is DEFERRED — the write hits disk and the registry
+// but the system prompt is NOT rebuilt until the next session starts.
+// Pass `apply: true` to opt into immediate invalidation when the agent
+// truly needs the change visible in the current turn (rare).
 func toolSkillManage(workspaceDir string, invalidate SkillManageInvalidateFn) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -59,6 +67,7 @@ func toolSkillManage(workspaceDir string, invalidate SkillManageInvalidateFn) To
 			NewText     string `json:"new_text"`
 			FilePath    string `json:"file_path"`
 			FileContent string `json:"file_content"`
+			Apply       bool   `json:"apply"`
 		}
 		if err := jsonutil.UnmarshalInto("skill_manage params", input, &p); err != nil {
 			return "", err
@@ -69,14 +78,19 @@ func toolSkillManage(workspaceDir string, invalidate SkillManageInvalidateFn) To
 
 		// Sanitize skill name: lowercase, hyphens only.
 		p.Name = sanitizeSkillName(p.Name)
+		effectiveInvalidate := cacheAwareInvalidate(invalidate, p.Apply)
 
+		var (
+			result string
+			err    error
+		)
 		switch p.Action {
 		case "create":
-			return skillCreate(workspaceDir, p.Name, p.Category, p.Content, invalidate)
+			result, err = skillCreate(workspaceDir, p.Name, p.Category, p.Content, effectiveInvalidate)
 		case "patch":
-			return skillPatch(workspaceDir, p.Name, p.OldText, p.NewText, invalidate)
+			result, err = skillPatch(workspaceDir, p.Name, p.OldText, p.NewText, effectiveInvalidate)
 		case "delete":
-			return skillDelete(workspaceDir, p.Name, invalidate)
+			result, err = skillDelete(workspaceDir, p.Name, effectiveInvalidate)
 		case "read":
 			return skillRead(workspaceDir, p.Name, p.FilePath)
 		case "list_files":
@@ -84,7 +98,32 @@ func toolSkillManage(workspaceDir string, invalidate SkillManageInvalidateFn) To
 		default:
 			return "", fmt.Errorf("unknown action %q: use create, patch, delete, read, or list_files", p.Action)
 		}
+		if err != nil {
+			return "", err
+		}
+		return result + cacheApplyNotice(p.Apply), nil
 	}
+}
+
+// cacheApplyNotice returns a short Korean notice the agent sees after
+// any mutating skill_manage action, making clear whether the change is
+// visible in the current session or deferred to the next.
+func cacheApplyNotice(apply bool) string {
+	if apply {
+		return " (apply=true: 이번 세션에 즉시 반영됩니다.)"
+	}
+	return " (변경은 저장됐고 다음 세션부터 반영됩니다. 지금 바로 반영하려면 apply=true 를 추가하세요.)"
+}
+
+// cacheAwareInvalidate returns the real invalidate function when apply=true
+// (immediate cache bust), or a no-op otherwise so the prompt cache is
+// preserved for the current session. A trailing notice in the tool
+// response tells the agent that the change is deferred.
+func cacheAwareInvalidate(inner SkillManageInvalidateFn, apply bool) SkillManageInvalidateFn {
+	if apply {
+		return inner
+	}
+	return func() { /* deferred: prompt cache stays warm until next session */ }
 }
 
 func skillCreate(workspaceDir, name, category, content string, invalidate SkillManageInvalidateFn) (string, error) {

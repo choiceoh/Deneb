@@ -575,8 +575,21 @@ func (p *InboundProcessor) handleCallbackQuery(cb *telegram.CallbackQuery) {
 		}
 	}
 
-	// Route callback data as a text message to the agent.
-	agentMessage := fmt.Sprintf("[Button: %s]", cb.Data)
+	// Intercept clarify callbacks to forward a cleaner user-visible message
+	// and strip the keyboard so the user can't double-tap. The agent-facing
+	// text uses the actual option text (recovered from the rendered message)
+	// so the agent sees the user's choice without having to re-index.
+	agentMessage := formatClarifyCallback(cb)
+	if agentMessage == "" {
+		// Fallback: generic button dispatch for any non-clarify callback.
+		agentMessage = fmt.Sprintf("[Button: %s]", cb.Data)
+	} else if client != nil {
+		// Strip the keyboard on the original clarify message by editing its
+		// text (append a "(선택됨: ...)" marker) so a second tap is
+		// impossible. Failures are non-fatal — the agent still receives
+		// the choice via chat.send below.
+		go p.stripClarifyKeyboard(client, cb)
+	}
 
 	req, err := protocol.NewRequestFrame(
 		fmt.Sprintf("tg-%s-cb-%s", chatID, cb.ID),

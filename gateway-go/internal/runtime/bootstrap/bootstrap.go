@@ -11,14 +11,17 @@ import (
 	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 // Run executes the full gateway startup sequence and returns an OS exit code.
 // It is the sole entry point called from main.
 func Run(compiledVersion string) int {
-	// Phase 0: set shared HTTP User-Agent before any outbound requests.
+	// Phase 0: set shared HTTP User-Agent before any outbound requests and
+	// publish the version so the `gateway` tool's status action can report it.
 	httputil.SetVersion(compiledVersion)
+	tools.GatewayVersion = compiledVersion
 
 	// Phase 1: config — parse flags, load .env, bootstrap config, resolve runtime settings.
 	flags := ParseFlags(compiledVersion)

@@ -9,6 +9,13 @@ type StreamHooks struct {
 	OnToolStart  func(name, reason string, input []byte)          // tool invocation about to execute; reason is thinking text, input is raw JSON args
 	OnToolEmit   func(name, toolUseID string)                     // tool start broadcast (name + ID for streaming)
 	OnToolResult func(name, toolUseID, result string, isErr bool) // tool result broadcast
+	// OnToolProgress fires periodically while a single tool call is still
+	// executing (e.g., long-running `exec` or network fetch). Intended to
+	// refresh surface liveness indicators (typing "..." in Telegram) so the
+	// channel TTL does not expire during multi-minute tool calls. elapsedSec
+	// is the number of seconds since the tool started (never zero — first
+	// fire is after at least one tick interval).
+	OnToolProgress func(name, toolUseID string, elapsedSec int)
 	// OnBeforeToolCall is called before each tool execution. Returns true to
 	// block the tool call (with blockReason as the tool output).
 	OnBeforeToolCall func(name, toolCallID string, input []byte) (block bool, blockReason string)
@@ -18,11 +25,12 @@ type StreamHooks struct {
 // with fan-out dispatch. Fan-out hooks fire in registration order.
 // Hooks that return a value (OnBeforeToolCall) are set directly via Set* methods.
 type HookCompositor struct {
-	textDelta  []func(string)
-	thinking   []func()
-	toolStart  []func(string, string, []byte)
-	toolEmit   []func(string, string)
-	toolResult []func(string, string, string, bool)
+	textDelta    []func(string)
+	thinking     []func()
+	toolStart    []func(string, string, []byte)
+	toolEmit     []func(string, string)
+	toolResult   []func(string, string, string, bool)
+	toolProgress []func(string, string, int)
 
 	beforeToolCall func(string, string, []byte) (bool, string)
 }
@@ -35,6 +43,9 @@ func (c *HookCompositor) OnToolStart(fn func(string, string, []byte)) {
 func (c *HookCompositor) OnToolEmit(fn func(string, string)) { c.toolEmit = append(c.toolEmit, fn) }
 func (c *HookCompositor) OnToolResult(fn func(string, string, string, bool)) {
 	c.toolResult = append(c.toolResult, fn)
+}
+func (c *HookCompositor) OnToolProgress(fn func(string, string, int)) {
+	c.toolProgress = append(c.toolProgress, fn)
 }
 
 func (c *HookCompositor) SetBeforeToolCall(fn func(string, string, []byte) (bool, string)) {
@@ -77,6 +88,13 @@ func (c *HookCompositor) Build() StreamHooks {
 		h.OnToolResult = func(name, toolUseID, result string, isErr bool) {
 			for _, fn := range fns {
 				fn(name, toolUseID, result, isErr)
+			}
+		}
+	}
+	if fns := c.toolProgress; len(fns) > 0 {
+		h.OnToolProgress = func(name, toolUseID string, elapsedSec int) {
+			for _, fn := range fns {
+				fn(name, toolUseID, elapsedSec)
 			}
 		}
 	}

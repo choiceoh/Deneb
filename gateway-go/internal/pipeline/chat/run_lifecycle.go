@@ -77,6 +77,12 @@ func fallbackForStopReason(stopReason string) string {
 		return "작업이 중단됐어요. 이어서 진행하려면 다시 요청해 주세요."
 	case "error":
 		return "응답 생성 중 오류가 발생했어요. 다시 시도해 주세요."
+	case stopReasonCompressionStuck:
+		// Mid-loop compaction can no longer reduce context (either the
+		// protected head+tail already exceed budget, or two consecutive
+		// retries produced byte-identical inputs). The session is
+		// unrecoverable without starting fresh.
+		return compactionKoreanError
 	default:
 		// end_turn, empty, or unknown — empty text is legitimate (tool-only turn).
 		return ""

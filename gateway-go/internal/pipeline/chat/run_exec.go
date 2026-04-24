@@ -161,6 +161,7 @@ func executeAgentRun(
 		SubagentNotifyCh: deps.subagentNotifyCh,
 		EmitAgentFn:      deps.callbacks.emitAgentFn,
 		Transcript:       deps.transcript,
+		SkillNudger:      deps.skillNudger,
 	}
 	cfg, spawnFlag := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, logger)
 	cfg.Model = model // set the resolved model
@@ -639,6 +640,9 @@ type agentConfigDeps struct {
 	SubagentNotifyCh <-chan string
 	EmitAgentFn      func(kind, sessionKey, runID string, payload map[string]any)
 	Transcript       TranscriptStore
+	// SkillNudger fires background skill reviews after every N tool
+	// invocations. Nil disables iteration-based nudging.
+	SkillNudger SkillNudger
 }
 
 // buildAgentConfig constructs the agent.AgentConfig, building tool lists and
@@ -723,6 +727,14 @@ func buildAgentConfig(
 	maxOutputRecovery := 1
 	maxOutputScaleFactors := []float64{1.5}
 
+	// Skill-nudger hook state: tracks per-run tool activity so we can
+	// hand a clean snapshot to the background review goroutine. Zero cost
+	// when acd.SkillNudger is nil or disabled.
+	skillNudgerEnabled := acd.SkillNudger != nil && acd.SkillNudger.Enabled()
+	var nudgerMu sync.Mutex
+	var nudgerActivities []SkillNudgeToolActivity
+	var nudgerTurns int
+
 	cfg = agent.AgentConfig{
 		MaxTurns:         maxTurns,
 		Timeout:          agentTimeout,
@@ -753,6 +765,33 @@ func buildAgentConfig(
 					"ts":     time.Now().UnixMilli(),
 				})
 			}
+		},
+		// Post-turn hook: feed the skill nudger. Kept intentionally cheap
+		// when the nudger is disabled — no allocation, no lock.
+		OnToolTurn: func(turn int, activities []agent.ToolActivity) {
+			if !skillNudgerEnabled {
+				return
+			}
+			nudgerMu.Lock()
+			nudgerTurns = turn
+			for _, a := range activities {
+				nudgerActivities = append(nudgerActivities, SkillNudgeToolActivity{
+					Name:    a.Name,
+					IsError: a.IsError,
+				})
+			}
+			if len(activities) == 0 {
+				nudgerMu.Unlock()
+				return
+			}
+			snapshot := SkillNudgeSnapshot{
+				Turns:          nudgerTurns,
+				ToolActivities: append([]SkillNudgeToolActivity(nil), nudgerActivities...),
+				Label:          params.SessionKey,
+				Model:          params.Model,
+			}
+			nudgerMu.Unlock()
+			acd.SkillNudger.OnToolCalls(context.Background(), params.SessionKey, len(activities), snapshot)
 		},
 		// Inject a fresh TurnContext at the start of each turn so that tools
 		// executing in parallel within the same turn can share results via $ref.
@@ -874,6 +913,21 @@ func runAgentWithFallback(
 ) (*agent.AgentResult, error) {
 	const maxCompactionRetries = 2
 
+	contextBudget := int(deps.contextCfg.MemoryTokenBudget - deps.contextCfg.SystemPromptBudget) //nolint:gosec // G115
+
+	// Anti-thrashing state (see compact_guard.go):
+	//   - lastCompactInputHash detects idempotent compaction — if the
+	//     prior attempt's input slice hashes to the same value, another
+	//     compact.Compact call will produce the same output and we'll
+	//     retry the same failure in a loop.
+	//   - protectedZoneExceedsBudget detects physically-impossible
+	//     sessions where even with a zero-byte middle, the head+tail
+	//     protected zones alone exceed budget.
+	// On either condition we bail with stopReasonCompressionStuck so the
+	// user sees a Korean "can't compress further, try /reset" message
+	// instead of another cryptic "context overflow" from the provider.
+	var lastCompactInputHash string
+
 	var agentResult *agent.AgentResult
 	var runErr error
 	for compactAttempt := 0; compactAttempt <= maxCompactionRetries; compactAttempt++ {
@@ -885,6 +939,53 @@ func runAgentWithFallback(
 		// Mid-loop compaction retry: on context overflow, strip images and
 		// emergency-summarize to reduce context before retrying.
 		if isContextOverflow(runErr) && compactAttempt < maxCompactionRetries && ctx.Err() == nil {
+			// Early-abort guard A: head + tail protected zone already
+			// exceeds budget. Compaction cannot reduce below budget even
+			// with a zero-byte middle, so skip straight to the user-visible
+			// stuck message.
+			if protectedZoneExceedsBudget(messages, contextBudget) {
+				logger.Warn("compaction skipped: protected zone exceeds budget",
+					"messageCount", len(messages),
+					"budget", contextBudget,
+					"attempt", compactAttempt+1)
+				if deps.broadcast != nil {
+					deps.broadcast("chat.compaction_stuck", map[string]any{
+						"reason":       "protected_zone_exceeds_budget",
+						"messageCount": len(messages),
+						"budget":       contextBudget,
+					})
+				}
+				return &agent.AgentResult{
+					StopReason:    stopReasonCompressionStuck,
+					FinalMessages: messages,
+				}, nil
+			}
+
+			// Early-abort guard B: input hash matches the prior attempt.
+			// The cheap-first shrink pipeline + LLM summarizer already ran
+			// and produced a slice that's byte-identical to what we fed in
+			// last time. Another compact.Compact call will not do anything
+			// new, so stop burning the retry budget.
+			inputHash := hashMessages(messages)
+			if lastCompactInputHash != "" && inputHash == lastCompactInputHash {
+				logger.Warn("compaction skipped: identical input as prior attempt",
+					"messageCount", len(messages),
+					"inputHash", inputHash,
+					"attempt", compactAttempt+1)
+				if deps.broadcast != nil {
+					deps.broadcast("chat.compaction_stuck", map[string]any{
+						"reason":       "idempotent_compaction",
+						"messageCount": len(messages),
+						"inputHash":    inputHash,
+					})
+				}
+				return &agent.AgentResult{
+					StopReason:    stopReasonCompressionStuck,
+					FinalMessages: messages,
+				}, nil
+			}
+			lastCompactInputHash = inputHash
+
 			logger.Warn("context overflow, attempting mid-loop compaction",
 				"attempt", compactAttempt+1,
 				"maxRetries", maxCompactionRetries,
@@ -906,7 +1007,6 @@ func runAgentWithFallback(
 					summarizer = &localAISummarizer{}
 				}
 				if summarizer != nil {
-					contextBudget := int(deps.contextCfg.MemoryTokenBudget - deps.contextCfg.SystemPromptBudget) //nolint:gosec // G115
 					compactCfg := compact.NewConfig(contextBudget)
 					compactCtx, compactCancel := context.WithTimeout(ctx, 30*time.Second)
 					messages, _ = compact.Compact(compactCtx, compactCfg, messages, summarizer, logger)

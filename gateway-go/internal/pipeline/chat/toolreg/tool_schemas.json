@@ -593,13 +593,42 @@
     ]
   },
   {
+    "name": "clarify",
+    "properties": {
+      "question": {
+        "type": "string",
+        "description": "Korean question asking the user to resolve an ambiguity. Example: '현재 3개의 config.yaml이 있습니다. 어느 것을 수정할까요?'"
+      },
+      "options": {
+        "type": "array",
+        "description": "2-5 selection options. Each must be Korean text, 40 characters or less (visible as a Telegram inline-keyboard button label).",
+        "minItems": 2,
+        "maxItems": 5,
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "question",
+      "options"
+    ]
+  },
+  {
     "name": "gateway",
     "properties": {
       "action": {
         "type": "string",
-        "description": "Gateway action",
+        "description": "Gateway action. Destructive actions (restart/update/config_set) require approval: the first call returns a needs_approval envelope; after the user confirms, call the .confirmed variant with the same action_token.",
         "enum": [
+          "status",
+          "config_get",
+          "config_set",
+          "config_set.confirmed",
+          "update",
+          "update.confirmed",
           "restart",
+          "restart.confirmed",
           "config.get",
           "config.schema.lookup",
           "config.apply",
@@ -609,7 +638,14 @@
       },
       "path": {
         "type": "string",
-        "description": "Config path for schema.lookup"
+        "description": "Dotted config path for config_get / config_set (e.g. \"model.main\"). Also used for config.schema.lookup."
+      },
+      "value": {
+        "description": "Leaf value to write (config_set only). Must be a scalar, array, or null — object replacement is rejected."
+      },
+      "action_token": {
+        "type": "string",
+        "description": "Token returned by a prior approval envelope; required when calling a .confirmed variant."
       },
       "raw": {
         "type": "string",
@@ -617,7 +653,7 @@
       },
       "reason": {
         "type": "string",
-        "description": "Reason for restart"
+        "description": "Reason for restart or update"
       }
     },
     "required": [
@@ -894,6 +930,11 @@
       "file_content": {
         "type": "string",
         "description": "Content for auxiliary file writes"
+      },
+      "apply": {
+        "type": "boolean",
+        "description": "Immediately invalidate the system prompt skills cache so the change is visible in the current session (default: false — changes load on next session to preserve prompt-cache hit rate).",
+        "default": false
       }
     },
     "required": [

@@ -549,18 +549,44 @@ func messageToolSchema() map[string]any {
 	}
 }
 
+func clarifyToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"options": map[string]any{
+				"type":        "array",
+				"description": "2-5 selection options. Each must be Korean text, 40 characters or less (visible as a Telegram inline-keyboard button label).",
+				"minItems":    2,
+				"maxItems":    5,
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+			"question": map[string]any{
+				"type":        "string",
+				"description": "Korean question asking the user to resolve an ambiguity. Example: '현재 3개의 config.yaml이 있습니다. 어느 것을 수정할까요?'",
+			},
+		},
+		"required": []string{"question", "options"},
+	}
+}
+
 func gatewayToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Gateway action",
-				"enum":        []string{"restart", "config.get", "config.schema.lookup", "config.apply", "config.patch", "update.run"},
+				"description": "Gateway action. Destructive actions (restart/update/config_set) require approval: the first call returns a needs_approval envelope; after the user confirms, call the .confirmed variant with the same action_token.",
+				"enum":        []string{"status", "config_get", "config_set", "config_set.confirmed", "update", "update.confirmed", "restart", "restart.confirmed", "config.get", "config.schema.lookup", "config.apply", "config.patch", "update.run"},
+			},
+			"action_token": map[string]any{
+				"type":        "string",
+				"description": "Token returned by a prior approval envelope; required when calling a .confirmed variant.",
 			},
 			"path": map[string]any{
 				"type":        "string",
-				"description": "Config path for schema.lookup",
+				"description": "Dotted config path for config_get / config_set (e.g. \"model.main\"). Also used for config.schema.lookup.",
 			},
 			"raw": map[string]any{
 				"type":        "string",
@@ -568,7 +594,10 @@ func gatewayToolSchema() map[string]any {
 			},
 			"reason": map[string]any{
 				"type":        "string",
-				"description": "Reason for restart",
+				"description": "Reason for restart or update",
+			},
+			"value": map[string]any{
+				"description": "Leaf value to write (config_set only). Must be a scalar, array, or null — object replacement is rejected.",
 			},
 		},
 		"required": []string{"action"},
@@ -774,6 +803,11 @@ func skillsToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Action: list (search/browse skills), create, patch, delete, read, list_files",
 				"enum":        []string{"list", "create", "patch", "delete", "read", "list_files"},
+			},
+			"apply": map[string]any{
+				"type":        "boolean",
+				"description": "Immediately invalidate the system prompt skills cache so the change is visible in the current session (default: false — changes load on next session to preserve prompt-cache hit rate).",
+				"default":     false,
 			},
 			"category": map[string]any{
 				"type":        "string",
