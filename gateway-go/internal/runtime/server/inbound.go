@@ -143,6 +143,10 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		sessionKey = fmt.Sprintf("telegram:%s:thread:%d", chatID, msg.MessageThreadID)
 	}
 
+	if p.server.activity != nil {
+		p.server.activity.TouchSession(sessionKey)
+	}
+
 	// Build autoreply MsgContext from the Telegram message.
 	var senderID string
 	var senderName string
@@ -437,6 +441,10 @@ func (p *InboundProcessor) handleMediaGroup(messages []*telegram.Message) {
 	chatID := fmt.Sprintf("%d", first.Chat.ID)
 	sessionKey := "telegram:" + chatID
 
+	if p.server.activity != nil {
+		p.server.activity.TouchSession(sessionKey)
+	}
+
 	// Collect caption from whichever message has one (Telegram puts the caption
 	// on only one of the media group messages, usually the first).
 	var caption string
@@ -558,6 +566,10 @@ func (p *InboundProcessor) handleCallbackQuery(cb *telegram.CallbackQuery) {
 
 	chatID := fmt.Sprintf("%d", cb.Message.Chat.ID)
 	sessionKey := "telegram:" + chatID
+
+	if p.server.activity != nil {
+		p.server.activity.TouchSession(sessionKey)
+	}
 
 	// Intercept model quick-change callbacks — handle immediately without agent.
 	if action, payload := telegram.ParseCallbackData(cb.Data); action == telegram.ActionModelSwitch {

@@ -220,14 +220,19 @@ func (m *ChannelHealthMonitor) HealthSnapshot() []ChannelHealthResult {
 
 // --- Activity Tracker ---
 
-// ActivityTracker records the timestamp of the last gateway activity.
+// ActivityTracker records the timestamp and session key of the last gateway
+// activity. Heartbeat uses LastSessionKey() to deliver autonomous turns into
+// the most recently active user session, so the agent shares context with the
+// user instead of running in an isolated stateless channel.
 type ActivityTracker struct {
-	lastActivityMs atomic.Int64
+	lastActivityMs  atomic.Int64
+	lastSessionKey  atomic.Value
 }
 
 // NewActivityTracker creates a new activity tracker.
 func NewActivityTracker() *ActivityTracker {
 	t := &ActivityTracker{}
+	t.lastSessionKey.Store("")
 	t.Touch()
 	return t
 }
@@ -237,9 +242,29 @@ func (t *ActivityTracker) Touch() {
 	t.lastActivityMs.Store(time.Now().UnixMilli())
 }
 
+// TouchSession updates both the timestamp and the last active session key.
+// Pass the session key associated with the activity (e.g. "telegram:1234567").
+func (t *ActivityTracker) TouchSession(sessionKey string) {
+	t.lastActivityMs.Store(time.Now().UnixMilli())
+	if sessionKey != "" {
+		t.lastSessionKey.Store(sessionKey)
+	}
+}
+
 // LastActivityAt returns the last activity timestamp in unix milliseconds.
 func (t *ActivityTracker) LastActivityAt() int64 {
 	return t.lastActivityMs.Load()
+}
+
+// LastSessionKey returns the session key of the most recent activity, or "" if
+// no session-tagged activity has been recorded.
+func (t *ActivityTracker) LastSessionKey() string {
+	v := t.lastSessionKey.Load()
+	if v == nil {
+		return ""
+	}
+	s, _ := v.(string)
+	return s
 }
 
 // --- Channel Event Tracker ---
