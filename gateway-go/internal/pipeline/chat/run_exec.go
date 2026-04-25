@@ -59,8 +59,11 @@ func executeAgentRun(
 		})
 	}
 
-	// 1. Persist user message to transcript + Aurora store.
-	if deps.transcript != nil && params.Message != "" {
+	// 1. Persist user message to transcript + Aurora store. Skipped when the
+	// turn is marked Ephemeral — autonomous self-triggers (heartbeat) share
+	// the user's session for context but must not crowd out the recent
+	// history window with their own trigger noise.
+	if deps.transcript != nil && params.Message != "" && !params.Ephemeral {
 		userMsg := NewTextChatMessage("user", params.Message, time.Now().UnixMilli())
 		if err := deps.transcript.Append(params.SessionKey, userMsg); err != nil {
 			logger.Error("failed to persist user message", "error", err)
@@ -1130,7 +1133,10 @@ func buildMessagePersister(
 	params RunParams,
 	logger *slog.Logger,
 ) func(msg llm.Message) {
-	if deps.transcript == nil {
+	// Ephemeral turns (e.g. heartbeat) must not pollute transcripts: returning
+	// nil here disables the executor's per-turn persist callback for both
+	// assistant and tool_result messages.
+	if deps.transcript == nil || params.Ephemeral {
 		return nil
 	}
 	return func(msg llm.Message) {

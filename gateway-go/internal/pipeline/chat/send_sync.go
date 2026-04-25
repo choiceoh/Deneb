@@ -54,6 +54,11 @@ type SyncOptions struct {
 	// with "no active delivery target" and the agent falls back to text-only
 	// replies that the cron delivery layer may not route correctly.
 	Delivery *DeliveryContext
+
+	// Ephemeral marks the turn as transient — see RunParams.Ephemeral. Set by
+	// autonomous triggers (heartbeat) that share a user session for context
+	// but must not persist their trigger / response into the transcript.
+	Ephemeral bool
 }
 
 // prepareSyncRun builds RunParams and runDeps from the common sync arguments.
@@ -96,6 +101,7 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 		if opts.Delivery != nil {
 			params.Delivery = opts.Delivery
 		}
+		params.Ephemeral = opts.Ephemeral
 	}
 
 	deps := h.buildRunDeps()
