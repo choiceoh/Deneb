@@ -11,6 +11,12 @@
 // transcript, instead of running in an isolated stateless channel. When no
 // telegram session has been seen yet, the task is a no-op.
 //
+// The turn is sent with SyncOptions.Ephemeral=true so the trigger user-role
+// message and the resulting assistant/tool messages are NOT persisted —
+// without this the recurring auto-trigger would crowd out the recent-history
+// window and bias the LLM into modeling the user as constantly asking for
+// system checks.
+//
 // Inspired by OpenClaw's heartbeat system.
 package server
 
@@ -26,6 +32,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 )
 
 // Compile-time interface compliance.
@@ -50,17 +57,15 @@ const (
 	heartbeatActiveEndHour   = 23
 )
 
-// heartbeatTriggerPrefix marks heartbeat-injected user-role messages so the
-// agent can distinguish them from real user input. The system prompt instructs
-// the agent to treat anything starting with this prefix as an autonomous
-// self-trigger rather than a user request.
-const heartbeatTriggerPrefix = "[시스템 하트비트]"
-
 // heartbeatTriggerTemplate is injected as a user-role message into the active
 // session. It carries HEARTBEAT.md verbatim and reminds the agent of the
 // reply-suppression contract. The agent is expected to consult prior session
 // context (commitments, user replies) when deciding what to do.
-const heartbeatTriggerTemplate = heartbeatTriggerPrefix + ` 30분 주기 자동 점검입니다. 사용자가 직접 보낸 메시지가 아닙니다.
+//
+// The leading prompt.HeartbeatTriggerPrefix matches a system-prompt rule that
+// teaches the LLM to treat such messages as self-triggers, not real user
+// input. Keep that constant the single source of truth.
+const heartbeatTriggerTemplate = prompt.HeartbeatTriggerPrefix + ` 30분 주기 자동 점검입니다. 사용자가 직접 보낸 메시지가 아닙니다.
 
 규칙:
 - 아래 HEARTBEAT.md 지시를 따르되, 같은 세션의 직전 대화(사용자 응답·이전 약속)를 반드시 반영하세요.
@@ -110,12 +115,16 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 		return nil
 	}
 
-	prompt := fmt.Sprintf(heartbeatTriggerTemplate, content)
+	triggerMsg := fmt.Sprintf(heartbeatTriggerTemplate, content)
 
 	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	result, err := t.chatHandler.SendSync(runCtx, sessionKey, prompt, "", nil)
+	// Ephemeral=true: skip transcript persistence for both the trigger
+	// user-role message and any assistant/tool messages produced. The agent
+	// still reads prior session context normally.
+	opts := &chat.SyncOptions{Ephemeral: true}
+	result, err := t.chatHandler.SendSync(runCtx, sessionKey, triggerMsg, "", opts)
 	if err != nil {
 		return fmt.Errorf("heartbeat: agent turn failed: %w", err)
 	}

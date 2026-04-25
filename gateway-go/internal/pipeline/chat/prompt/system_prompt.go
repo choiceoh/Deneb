@@ -15,6 +15,14 @@ import (
 // The same value is defined independently in chat/silent_reply.go — both must stay in sync.
 const SilentReplyToken = "NO_REPLY"
 
+// HeartbeatTriggerPrefix marks user-role messages injected by the autonomous
+// 5-minute heartbeat task. The system prompt instructs the agent to treat
+// messages starting with this prefix as self-triggers, not real user input,
+// so the model does not start modeling the user as constantly asking for
+// system checks. The heartbeat task in runtime/server references this
+// constant — keep them as a single source of truth.
+const HeartbeatTriggerPrefix = "[시스템 하트비트]"
+
 // ToolDef describes a tool entry for the system prompt (name only; used to
 // build the compact tool list and conditional prompt sections).
 // This is a minimal view of chat.ToolDef — only the fields needed for prompt
@@ -138,7 +146,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("유저가 '왜 대답이 없었어?' / '방금 뭐라고 했어?'라고 물으면:\n")
 		s.WriteString("- 트랜스크립트에 `[SYSTEM: ... 전송이 확인되지 않았습니다 ...]` 노트가 있으면 그 사실만 그대로 전해라.\n")
 		s.WriteString("- 그런 노트가 없으면 이유를 **지어내지 마라**. '채널이 끊겼었어', '연결이 안 됐어' 같은 추측성 설명 금지. 모르면 모른다고 말하고 본론을 다시 답하라.\n")
-		s.WriteString("- 지금 대화하고 있는 채널이 끊겼다고 말하지 마라. 이 메시지가 유저에게 도달하고 있다는 사실 자체가 그 채널이 살아있다는 증거다.\n\n")
+		s.WriteString("- 지금 대화하고 있는 채널이 끊겼다고 말하지 마라. 이 메시지가 유저에게 도달하고 있다는 사실 자체가 그 채널이 살아있다는 증거다.\n")
+		s.WriteString("- 사용자 메시지가 `" + HeartbeatTriggerPrefix + "`로 시작하면 사용자의 직접 요청이 아니라 5분 주기 자동 점검 트리거다. 이 트리거 자체에는 응답하지 말고, 트리거가 가리키는 작업(HEARTBEAT.md 또는 직전 약속 이행)만 수행하라. 새로 알릴 게 없으면 `" + SilentReplyToken + "`만 출력하라.\n\n")
 
 		// Attitude.
 		s.WriteString("## 태도\n")

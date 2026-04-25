@@ -225,8 +225,8 @@ func (m *ChannelHealthMonitor) HealthSnapshot() []ChannelHealthResult {
 // the most recently active user session, so the agent shares context with the
 // user instead of running in an isolated stateless channel.
 type ActivityTracker struct {
-	lastActivityMs  atomic.Int64
-	lastSessionKey  atomic.Value
+	lastActivityMs atomic.Int64
+	lastSessionKey atomic.Value
 }
 
 // NewActivityTracker creates a new activity tracker.

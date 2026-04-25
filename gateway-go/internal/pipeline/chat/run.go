@@ -54,6 +54,14 @@ type RunParams struct {
 	// assembly. Used by the OpenAI-compatible HTTP API to pass through the full
 	// conversation history from the client.
 	PrebuiltMessages []llm.Message
+
+	// Ephemeral marks this turn as transient: neither the input user message
+	// nor any assistant/tool_result messages produced during the run are
+	// persisted to the transcript. Context assembly still reads prior history
+	// normally. Used by autonomous self-triggers (heartbeat) so background
+	// pings do not crowd out the 24-message recent window with noise that
+	// would also confuse the LLM into modeling fake user requests.
+	Ephemeral bool
 }
 
 // Agent run defaults.
