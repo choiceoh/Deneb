@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -192,7 +193,12 @@ func (c *Client) refresh(ctx context.Context) (string, error) {
 
 	c.accessToken = tok.AccessToken
 	c.expiry = time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
-	if tok.RefreshToken != "" {
+	if tok.RefreshToken != "" && tok.RefreshToken != c.refreshToken {
+		// Google rotated the refresh token. The old one is now invalidated by
+		// Google, so persisting the new one is critical — failure here means
+		// the next gateway restart will load the stale (revoked) token and
+		// every Gmail call will fail with "unauthorized" until manual re-auth.
+		slog.Info("Gmail refresh token rotated by Google", "tokenPath", c.tokenPath)
 		c.refreshToken = tok.RefreshToken
 	}
 
@@ -203,6 +209,12 @@ func (c *Client) refresh(ctx context.Context) (string, error) {
 }
 
 // persistToken writes the current token state to disk atomically.
+//
+// Failures here are user-observable on the next gateway restart: if Google
+// has rotated the refresh token but the new one never reaches disk, the old
+// (revoked) token will be reloaded and every Gmail call will return
+// "unauthorized" until the user re-runs the OAuth flow. Surface every failure
+// at Error level so the operator can react before tokens drift.
 func (c *Client) persistToken() {
 	tok := tokenJSON{
 		AccessToken:  c.accessToken,
@@ -212,14 +224,22 @@ func (c *Client) persistToken() {
 	}
 	data, err := json.MarshalIndent(tok, "", "  ") //nolint:gosec // G117 false positive — not a secret
 	if err != nil {
+		slog.Error("Gmail token marshal failed — refresh token may be stale on restart",
+			"tokenPath", c.tokenPath, "error", err)
 		return
 	}
 	// Atomic write via temp file + rename to prevent corruption on crash.
 	tmp := c.tokenPath + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		slog.Error("Gmail token write failed — refresh token may be stale on restart",
+			"tmp", tmp, "tokenPath", c.tokenPath, "error", err)
 		return
 	}
-	_ = os.Rename(tmp, c.tokenPath) // best-effort: token persist failure is non-critical
+	if err := os.Rename(tmp, c.tokenPath); err != nil {
+		slog.Error("Gmail token rename failed — refresh token may be stale on restart",
+			"tmp", tmp, "tokenPath", c.tokenPath, "error", err)
+		_ = os.Remove(tmp)
+	}
 }
 
 // doAPI performs an authenticated HTTP request to the Gmail API.
