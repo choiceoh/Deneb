@@ -316,3 +316,71 @@ func TestPersistToken(t *testing.T) {
 		t.Errorf("token file perm = %o, want 0600", perm)
 	}
 }
+
+// TestRefresh_PersistsRotatedRefreshToken regression-tests the silent token-loss
+// bug: when Google rotates the refresh_token in a refresh response, the new
+// value MUST land on disk so the next gateway restart loads the live token
+// rather than the revoked one.
+func TestRefresh_PersistsRotatedRefreshToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"access_token":  "ya29.new-access",
+			"refresh_token": "1//rotated-refresh", // Google rotated the refresh token
+			"token_type":    "Bearer",
+			"expires_in":    3600,
+		})
+	}))
+	defer srv.Close()
+
+	origURL := tokenURL
+	defer func() { setTokenURL(origURL) }()
+	setTokenURL(srv.URL)
+
+	tokenPath := filepath.Join(t.TempDir(), "token.json")
+	c := &Client{
+		clientID:     "test-id",
+		clientSecret: "test-secret",
+		refreshToken: "1//old-refresh",
+		expiry:       time.Now().Add(-1 * time.Minute),
+		tokenPath:    tokenPath,
+		httpClient:   &http.Client{},
+	}
+
+	if _, err := c.validToken(context.Background()); err != nil {
+		t.Fatalf("validToken: %v", err)
+	}
+
+	if c.refreshToken != "1//rotated-refresh" {
+		t.Errorf("in-memory refreshToken = %q, want 1//rotated-refresh", c.refreshToken)
+	}
+
+	data := testutil.Must(os.ReadFile(tokenPath))
+	var persisted tokenJSON
+	if err := json.Unmarshal(data, &persisted); err != nil {
+		t.Fatalf("unmarshal persisted token: %v", err)
+	}
+	if persisted.RefreshToken != "1//rotated-refresh" {
+		t.Errorf("persisted refresh_token = %q, want 1//rotated-refresh — rotated token was not written to disk; next restart will reload the revoked token",
+			persisted.RefreshToken)
+	}
+}
+
+// TestPersistToken_DoesNotPanicOnUnwritablePath verifies that a broken token
+// path does not crash the gateway. The error is surfaced via slog.Error in
+// the real code path (asserted by inspection, not by capturing logs here).
+func TestPersistToken_DoesNotPanicOnUnwritablePath(t *testing.T) {
+	c := &Client{
+		accessToken:  "ya29.x",
+		refreshToken: "1//x",
+		expiry:       time.Now(),
+		tokenPath:    filepath.Join(t.TempDir(), "no-such-dir", "token.json"),
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("persistToken panicked on unwritable path: %v", r)
+		}
+	}()
+	c.persistToken()
+}
