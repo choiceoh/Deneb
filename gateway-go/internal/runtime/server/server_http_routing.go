@@ -5,6 +5,7 @@ import (
 	"net/http/pprof"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/openaiapi"
 )
 
@@ -25,7 +26,17 @@ func (s *Server) buildMux() *http.ServeMux {
 		Logger:        s.logger,
 		AuthToken:     authToken,
 		ModelRegistry: s.modelRegistry,
-		StartedAt:     func() time.Time { return s.startedAt },
+		ChatClient: func(role modelrole.Role) openaiapi.ChatStreamer {
+			if s.modelRegistry == nil {
+				return nil
+			}
+			c := s.modelRegistry.Client(role)
+			if c == nil {
+				return nil
+			}
+			return c
+		},
+		StartedAt: func() time.Time { return s.startedAt },
 	})
 
 	// /debug/pprof/* — runtime profiling + goroutine dumps for live diagnosis.

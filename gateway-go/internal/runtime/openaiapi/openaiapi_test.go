@@ -19,6 +19,19 @@ func (f *fakeRegistry) FullModelID(role modelrole.Role) string {
 	return f.models[role]
 }
 
+// Model returns the bare model name (no provider prefix) — for the
+// fake we strip the leading "<provider>/" if present, falling back to
+// the raw value.
+func (f *fakeRegistry) Model(role modelrole.Role) string {
+	full := f.models[role]
+	for i := range full {
+		if full[i] == '/' {
+			return full[i+1:]
+		}
+	}
+	return full
+}
+
 func newTestMux(deps Deps) *http.ServeMux {
 	mux := http.NewServeMux()
 	Mount(mux, deps)
