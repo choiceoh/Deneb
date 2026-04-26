@@ -3,6 +3,9 @@ package server
 import (
 	"net/http"
 	"net/http/pprof"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/openaiapi"
 )
 
 // buildMux configures HTTP routing for health, RPC/WS, API, hooks, and plugin routes.
@@ -12,6 +15,18 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /ready", s.handleReady)
 	mux.HandleFunc("GET /readyz", s.handleReady)
+
+	// /v1/* — OpenAI-compatible API for IDE clients (Zed, OpenCode) over Tailscale.
+	authToken := ""
+	if s.runtimeCfg != nil {
+		authToken = s.runtimeCfg.ResolvedAuth.Token
+	}
+	openaiapi.Mount(mux, openaiapi.Deps{
+		Logger:        s.logger,
+		AuthToken:     authToken,
+		ModelRegistry: s.modelRegistry,
+		StartedAt:     func() time.Time { return s.startedAt },
+	})
 
 	// /debug/pprof/* — runtime profiling + goroutine dumps for live diagnosis.
 	// Safe to expose because the gateway binds loopback by default in
