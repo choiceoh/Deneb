@@ -60,6 +60,39 @@ func TestResolveGatewayRuntimeConfigBindOverride(t *testing.T) {
 	}
 }
 
+// IP-form bind values must resolve identically to their canonical mode names.
+func TestResolveGatewayRuntimeConfigBindIPAliases(t *testing.T) {
+	dangerousFlag := true
+	cases := []struct {
+		bind     string
+		wantHost string
+	}{
+		{"0.0.0.0", "0.0.0.0"},
+		{"all", "0.0.0.0"},
+		{"127.0.0.1", "127.0.0.1"},
+		{"localhost", "127.0.0.1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.bind, func(t *testing.T) {
+			cfg := DenebConfig{}
+			applyDefaults(&cfg)
+			cfg.Gateway.ControlUI.DangerouslyAllowHostHeaderOriginFallback = &dangerousFlag
+
+			auth := ResolvedGatewayAuth{Mode: "token", Token: "test-token"}
+			rtCfg, err := ResolveGatewayRuntimeConfig(RuntimeConfigParams{
+				Config: &cfg,
+				Port:   18789,
+				Bind:   tc.bind,
+				Auth:   &auth,
+			})
+			testutil.NoError(t, err)
+			if rtCfg.BindHost != tc.wantHost {
+				t.Errorf("bind=%q: got host %q, want %q", tc.bind, rtCfg.BindHost, tc.wantHost)
+			}
+		})
+	}
+}
+
 func TestResolveGatewayRuntimeConfigNonLoopbackNoAuth(t *testing.T) {
 	cfg := DenebConfig{}
 	applyDefaults(&cfg)
