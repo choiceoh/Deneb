@@ -17,6 +17,21 @@ const (
 	BindTailnet  = "tailnet"
 )
 
+// NormalizeBindMode maps backwards-compatible IP-form bind values to their
+// canonical mode names. Older configs (and humans typing what they want)
+// often write "0.0.0.0" for LAN or "127.0.0.1" for loopback; honor those
+// as aliases instead of rejecting at validation time. Returns the input
+// unchanged when no alias matches.
+func NormalizeBindMode(s string) string {
+	switch s {
+	case "0.0.0.0", "all":
+		return BindLAN
+	case "127.0.0.1", "localhost":
+		return BindLoopback
+	}
+	return s
+}
+
 // Gateway auth modes.
 const (
 	AuthModeNone         = "none"

@@ -234,10 +234,10 @@ func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeCon
 
 // resolveBindHost maps a bind mode to an IP address.
 func resolveBindHost(mode, customHost string, logger *slog.Logger) (string, error) {
-	switch mode {
+	switch NormalizeBindMode(mode) {
 	case BindLoopback, "":
 		return "127.0.0.1", nil
-	case BindLAN, "all":
+	case BindLAN:
 		return "0.0.0.0", nil
 	case BindAuto:
 		// Prefer loopback; this simplified version always returns loopback.

@@ -147,6 +147,51 @@ func TestLoadConfigInvalidBindMode(t *testing.T) {
 	}
 }
 
+// Backwards-compatible IP-form bind values must validate. Older configs
+// (and humans typing what they mean) often write "0.0.0.0" / "127.0.0.1"
+// instead of the canonical mode names.
+func TestLoadConfigBindIPAliases(t *testing.T) {
+	cases := []string{"0.0.0.0", "127.0.0.1", "all", "localhost"}
+	for _, alias := range cases {
+		t.Run(alias, func(t *testing.T) {
+			tmp := t.TempDir()
+			cfgPath := filepath.Join(tmp, "deneb.json")
+			cfg := map[string]any{
+				"gateway": map[string]any{"bind": alias},
+			}
+			data, _ := json.Marshal(cfg)
+			if err := os.WriteFile(cfgPath, data, 0644); err != nil {
+				t.Fatal(err)
+			}
+			snap := testutil.Must(LoadConfig(cfgPath))
+			if !snap.Valid {
+				t.Errorf("expected Valid=true for bind=%q, issues=%v", alias, snap.Issues)
+			}
+		})
+	}
+}
+
+func TestNormalizeBindMode(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"0.0.0.0", BindLAN},
+		{"all", BindLAN},
+		{"127.0.0.1", BindLoopback},
+		{"localhost", BindLoopback},
+		{"lan", "lan"},
+		{"loopback", "loopback"},
+		{"tailnet", "tailnet"},
+		{"custom", "custom"},
+		{"", ""},
+		{"unknown", "unknown"},
+	}
+	for _, tc := range cases {
+		got := NormalizeBindMode(tc.in)
+		if got != tc.want {
+			t.Errorf("NormalizeBindMode(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestResolveGatewayPort(t *testing.T) {
 	// Default.
 	port := ResolveGatewayPort(nil)

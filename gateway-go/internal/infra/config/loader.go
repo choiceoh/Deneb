@@ -93,7 +93,7 @@ func validateConfig(cfg *DenebConfig) (issues []ConfigIssue, warnings []string) 
 
 		// Validate bind mode.
 		if gw.Bind != "" {
-			switch gw.Bind {
+			switch NormalizeBindMode(gw.Bind) {
 			case BindAuto, BindLAN, BindLoopback, BindCustom, BindTailnet:
 				// Valid.
 			default:
