@@ -10,6 +10,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
@@ -43,8 +44,19 @@ type Service struct {
 	// Key = job ID, value = true while executing. Uses LoadOrStore for atomicity.
 	runningJobs sync.Map
 
-	// Timer state: single timer wakes at the earliest NextRunAtMs across all jobs.
-	timerCancel  context.CancelFunc
+	// Scheduler loop coordination.
+	//
+	// wakeCh is a buffered (cap=1) channel used by Add/Update/Remove/Run/Wake
+	// /applyJobResult to nudge the worker goroutine when state changes.
+	// Sends are non-blocking; duplicate wakes coalesce. See signalWake.
+	//
+	// loopDone closes when the worker goroutine exits. Used by Stop to wait
+	// for clean shutdown.
+	//
+	// nextWakeAtMs is the timestamp the worker plans to wake at next.
+	// Updated by computeSleep; read by Status. Guarded by s.mu.
+	wakeCh       chan struct{}
+	loopDone     chan struct{}
 	nextWakeAtMs int64
 
 	// Event listeners. Guarded by listenersMu (separate from s.mu) so that
@@ -53,10 +65,10 @@ type Service struct {
 	listenersMu sync.RWMutex
 	listeners   []CronEventListener
 
-	// Error backoff: minimum 2s between refire to prevent spin loops (#17821).
-	lastFireAtMs  int64
-	minRefireGap  int64 // milliseconds (default 2000)
-	maxTimerDelay int64 // milliseconds (default 60000)
+	// Loop tunables; see service_scheduler.go for semantics.
+	idleInterval time.Duration
+	errBackoff   time.Duration
+	minLoopGap   time.Duration
 }
 
 // SetAgentRunner sets the agent runner after construction.
@@ -113,13 +125,15 @@ func NewService(cfg ServiceConfig, agent AgentRunner, logger *slog.Logger) *Serv
 	rl := NewPersistentRunLog(cfg.StorePath)
 	rl.SetLogger(logger)
 	return &Service{
-		store:         NewStore(cfg.StorePath),
-		runLog:        rl,
-		agent:         agent,
-		logger:        logger,
-		cfg:           cfg,
-		stopCh:        make(chan struct{}),
-		minRefireGap:  2000,
-		maxTimerDelay: 60000,
+		store:        NewStore(cfg.StorePath),
+		runLog:       rl,
+		agent:        agent,
+		logger:       logger,
+		cfg:          cfg,
+		stopCh:       make(chan struct{}),
+		wakeCh:       make(chan struct{}, 1),
+		idleInterval: defaultIdleInterval,
+		errBackoff:   defaultErrBackoff,
+		minLoopGap:   defaultMinLoopGap,
 	}
 }

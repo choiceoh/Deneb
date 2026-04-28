@@ -13,7 +13,26 @@ import (
 
 // --- Job execution (mirrors execute-job.ts, job-result.ts) ---
 
+// triggerSource identifies which path requested a job execution. The
+// scheduler loop ("scheduler") and missed-job recovery ("recover") always
+// advance NextRunAtMs to the next match. Manual operator runs ("manual")
+// preserve a future NextRunAtMs so a manual nudge doesn't accidentally
+// skip the next scheduled fire (the bug seen on 2026-04-28 morning-letter).
+type triggerSource string
+
+const (
+	triggerScheduler triggerSource = "scheduler"
+	triggerRecover   triggerSource = "recover"
+	triggerManual    triggerSource = "manual"
+)
+
+// executeJobFull is the back-compat entry point for callers that don't
+// distinguish trigger sources. It treats the run as scheduler-driven.
 func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
+	return s.executeJobFullWithTrigger(ctx, job, triggerScheduler)
+}
+
+func (s *Service) executeJobFullWithTrigger(ctx context.Context, job StoreJob, trigger triggerSource) RunOutcome {
 	// Per-job execution guard: skip if this job is already running.
 	if _, loaded := s.runningJobs.LoadOrStore(job.ID, true); loaded {
 		s.logger.Info("cron job already running, skipping", "id", job.ID)
@@ -235,7 +254,7 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 	}
 
 	// Apply result to job state; run-level details live in the session.
-	s.applyJobResult(job, outcome, sessionKey)
+	s.applyJobResult(job, outcome, sessionKey, trigger)
 
 	// Send failure alert if configured and conditions are met.
 	if s.cfg.TelegramPlugin != nil && ShouldSendFailureAlert(job.State, job.FailureAlert, outcome.Status, time.Now().UnixMilli()) {
@@ -272,7 +291,17 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 // applyJobResult updates the job state after execution.
 // Run-level details (status, error, duration) are stored in the session via session.Manager;
 // only cron-specific bookkeeping (consecutive errors, delivery, scheduling) is persisted here.
-func (s *Service) applyJobResult(job StoreJob, outcome RunOutcome, sessionKey string) {
+//
+// NextRunAtMs policy by trigger:
+//   - scheduler / recover: always advance to next match (job was due now).
+//   - manual: preserve a future NextRunAtMs (operator nudge shouldn't skip
+//     the next scheduled fire); only advance if the existing NextRunAtMs
+//     is in the past or zero.
+//
+// At the end, signalWake() nudges the scheduler loop so the new
+// NextRunAtMs is picked up immediately rather than waiting for the
+// loop's next idle tick.
+func (s *Service) applyJobResult(job StoreJob, outcome RunOutcome, sessionKey string, trigger triggerSource) {
 	state := job.State
 	state.LastSessionKey = sessionKey
 
@@ -282,9 +311,6 @@ func (s *Service) applyJobResult(job StoreJob, outcome RunOutcome, sessionKey st
 		state.ConsecutiveErrors++
 		if state.ConsecutiveErrors >= 10 {
 			state.ScheduleErrorCount++
-			// Auto-disable after 10 consecutive errors. If persistence fails,
-			// log loudly — otherwise the job would keep failing and re-triggering
-			// this branch forever without ever actually being disabled on disk.
 			if err := s.store.SetJobEnabled(job.ID, false); err != nil {
 				s.logger.Error("cron auto-disable persistence failed — job may re-fail",
 					"id", job.ID, "error", err)
@@ -308,18 +334,23 @@ func (s *Service) applyJobResult(job StoreJob, outcome RunOutcome, sessionKey st
 
 	nowMs := time.Now().UnixMilli()
 	before := job.State.NextRunAtMs
-	state.NextRunAtMs = ComputeNextRunAtMs(job.Schedule, nowMs)
 
-	// Persist result state. If write fails, log — without this the next
-	// scheduler tick will reuse stale NextRunAtMs (potentially firing again
-	// immediately or far in the future).
+	// Trigger-aware NextRunAtMs policy. For manual runs, preserve a future
+	// NextRunAtMs so the next scheduled fire isn't accidentally skipped.
+	preserved := false
+	if trigger == triggerManual && before > nowMs {
+		state.NextRunAtMs = before
+		preserved = true
+	} else {
+		state.NextRunAtMs = ComputeNextRunAtMs(job.Schedule, nowMs)
+	}
+
 	persistErr := s.store.UpdateJobState(job.ID, state)
-	// Scheduler decision log — pairs with the same-shaped lines from
-	// fire/recover paths so a full NextRunAtMs timeline is greppable with
-	// `cron scheduler decision id=<jobId>`.
 	s.logger.Info("cron scheduler decision",
 		"action", "applyJobResult",
 		"reason", "executorFinish",
+		"trigger", string(trigger),
+		"preservedNextRun", preserved,
 		"id", job.ID,
 		"sessionKey", sessionKey,
 		"status", outcome.Status,
@@ -331,6 +362,12 @@ func (s *Service) applyJobResult(job StoreJob, outcome RunOutcome, sessionKey st
 		s.logger.Error("cron job state persist failed — next schedule may be wrong",
 			"id", job.ID, "error", persistErr)
 	}
+
+	// Wake the scheduler loop so it re-evaluates with the new NextRunAtMs.
+	// Without this, a job whose new NextRunAtMs is sooner than the loop's
+	// current sleep target wouldn't fire on time. signalWake is non-blocking
+	// and safe to call even when the loop isn't running yet.
+	s.signalWake()
 }
 
 // ShouldSendFailureAlert checks if a failure alert should be sent for a job.

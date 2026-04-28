@@ -4,21 +4,27 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
-// Start loads jobs from the store and arms the timer for all enabled jobs.
-// One-shot "at" jobs, recurring "every" jobs, and "cron" expression jobs
-// all go through the same timer-based system via NextRunAtMs.
+// Start loads jobs from the store, runs missed-job recovery, and spawns
+// the long-lived scheduler worker goroutine. Idempotent — calling Start
+// twice is a no-op after the first.
+//
+// One-shot "at", recurring "every", and "cron" expression jobs all use
+// the same NextRunAtMs-driven worker.
 func (s *Service) Start(ctx context.Context) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if s.running {
+		s.mu.Unlock()
 		return nil
 	}
 
 	storeData, err := s.store.Load()
 	if err != nil {
+		s.mu.Unlock()
 		return fmt.Errorf("load cron store: %w", err)
 	}
 
@@ -34,8 +40,6 @@ func (s *Service) Start(ctx context.Context) error {
 			job.State.NextRunAtMs = ComputeNextRunAtMs(job.Schedule, nowMs)
 			if job.State.NextRunAtMs > 0 {
 				if err := s.store.UpdateJobState(job.ID, job.State); err != nil {
-					// Boot-time initialization failure — job still schedules in
-					// memory, but disk is stale. Log so the issue surfaces.
 					s.logger.Warn("cron boot state init persist failed",
 						"id", job.ID, "error", err)
 				}
@@ -44,13 +48,6 @@ func (s *Service) Start(ctx context.Context) error {
 		scheduled++
 	}
 
-	// Boot diagnostic: log each enabled job's NextRunAtMs and whether recovery
-	// will pick it up. Without this line, a silently-skipped recovery (e.g., a
-	// stale storeData read or a bug in ComputeNextRunAtMs after a restart at
-	// the exact schedule boundary) leaves no trace — the operator sees
-	// "cron service started scheduled=N" and nothing else, even when a cron
-	// fire was missed. We saw this happen on 4/24 19:00 when a deploy landed
-	// at the schedule boundary.
 	for _, job := range storeData.Jobs {
 		if !job.Enabled {
 			continue
@@ -65,32 +62,59 @@ func (s *Service) Start(ctx context.Context) error {
 		)
 	}
 
-	// Run jobs that should have fired during downtime.
-	s.recoverMissedJobsLocked(ctx, storeData)
+	// Collect jobs that should have fired during downtime (pre-advance their
+	// NextRunAtMs while still under s.mu). Executors are spawned AFTER
+	// the lock is released, so they never race with code holding s.mu.
+	toRecover := s.collectMissedJobsLocked(storeData)
 
-	// Arm the single timer for the earliest due job.
-	s.armTimerLocked(ctx)
-
+	// Reset stopCh so a second Start after Stop works. loopDone is fresh
+	// per-loop so Stop can wait on it.
+	s.stopCh = make(chan struct{})
+	s.loopDone = make(chan struct{})
 	s.running = true
+	s.mu.Unlock()
+
+	// Now safe to spawn recovery executors.
+	s.spawnRecoverExecutors(ctx, toRecover)
+
+	// Spawn the panic-recovered worker goroutine. It runs until ctx is
+	// cancelled or Stop closes stopCh. signalWake() nudges it when state
+	// changes (Add/Update/Remove/Run/applyJobResult).
+	safego.GoWithSlog(s.logger, "cron-scheduler-loop", func() {
+		s.runSchedulerLoop(ctx)
+	})
+
 	if scheduled > 0 {
 		s.logger.Info("cron service started", "scheduled", scheduled)
 	}
 	return nil
 }
 
-// Stop cancels the timer and marks the service as stopped.
+// Stop signals the scheduler loop to exit and waits for it to finish.
+// In-flight executor goroutines are not awaited — they run to completion
+// independently. Idempotent.
 func (s *Service) Stop() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if !s.running {
+		s.mu.Unlock()
 		return
 	}
-	s.disarmTimerLocked()
 	s.running = false
 	select {
 	case <-s.stopCh:
 	default:
 		close(s.stopCh)
+	}
+	loopDone := s.loopDone
+	s.mu.Unlock()
+
+	// Wait for the loop to exit so a subsequent Start sees a clean slate.
+	if loopDone != nil {
+		select {
+		case <-loopDone:
+		case <-time.After(5 * time.Second):
+			s.logger.Warn("cron scheduler loop did not exit within 5s")
+		}
 	}
 	s.logger.Info("cron service stopped")
 }
