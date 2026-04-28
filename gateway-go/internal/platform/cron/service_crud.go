@@ -129,7 +129,7 @@ func (s *Service) Add(ctx context.Context, job StoreJob) error {
 	}
 
 	if job.Enabled && s.running {
-		s.armTimerLocked(ctx)
+		s.signalWake()
 	}
 
 	s.emit(CronEvent{Type: "job_added", JobID: job.ID})
@@ -155,9 +155,9 @@ func (s *Service) Update(ctx context.Context, id string, patch func(*StoreJob)) 
 		return err
 	}
 
-	// Re-arm the timer with the updated schedule.
+	// Nudge the scheduler loop to pick up the updated schedule.
 	if job.Enabled && s.running {
-		s.armTimerLocked(ctx)
+		s.signalWake()
 	}
 	return nil
 }
@@ -170,11 +170,22 @@ func (s *Service) Remove(id string) error {
 	if err := s.store.RemoveJob(id); err != nil {
 		return err
 	}
+	if s.running {
+		s.signalWake()
+	}
 	s.emit(CronEvent{Type: "job_removed", JobID: id})
 	return nil
 }
 
 // Run executes a job immediately (or only if due, depending on mode).
+//
+// "manual" trigger semantics: when invoked outside the scheduler loop
+// (e.g. via cron.run RPC or operator nudge), applyJobResult preserves
+// a future NextRunAtMs rather than advancing it. This avoids the bug
+// where running morning-letter at 22:00 yesterday pushed today's 08:00
+// fire to tomorrow. If the job was overdue at the moment of manual
+// run, NextRunAtMs is still recomputed forward (no point keeping a
+// stale past timestamp). See applyJobResult for the policy.
 func (s *Service) Run(ctx context.Context, id string, mode string) (*RunOutcome, error) {
 	job := s.store.Job(id)
 	if job == nil {
@@ -189,7 +200,7 @@ func (s *Service) Run(ctx context.Context, id string, mode string) (*RunOutcome,
 	}
 
 	s.emit(CronEvent{Type: "job_started", JobID: id})
-	outcome := s.executeJobFull(ctx, *job)
+	outcome := s.executeJobFullWithTrigger(ctx, *job, triggerManual)
 	return &outcome, nil
 }
 
@@ -208,12 +219,15 @@ func (s *Service) EnqueueRun(ctx context.Context, id string, mode string) error 
 	return nil
 }
 
-// Wake triggers immediate processing of due jobs.
+// Wake nudges the scheduler loop to re-evaluate immediately. Used by
+// external triggers that want due jobs picked up without waiting for the
+// loop's current sleep to elapse.
 func (s *Service) Wake(ctx context.Context, mode string, text string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if mode == "now" {
-		s.fireTimerLocked(ctx)
+	running := s.running
+	s.mu.Unlock()
+	if running && mode == "now" {
+		s.signalWake()
 	}
 	s.emit(CronEvent{Type: "wake", Status: mode})
 }
