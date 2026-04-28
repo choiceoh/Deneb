@@ -73,6 +73,13 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	if s.notify != nil {
 		s.broadcaster.RegisterTap(s.notify.tap)
 		s.notify.start(s.ShutdownCtx())
+		// Install the slog forwarder by swapping the swappable handler's
+		// inner. Captured s.logger references in subsystems transparently
+		// route through the new wrapping handler. Skipped silently when
+		// the swappable wasn't created (logger==nil at startup).
+		if s.logSwap != nil {
+			s.logSwap.Swap(newNotifySlogHandler(s.logSwap.currentInner(), s.notify))
+		}
 	}
 
 	// Table-driven domain registration: one slice, one loop.

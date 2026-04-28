@@ -110,6 +110,11 @@ type Server struct {
 	// telegram.notify_status RPC is not registered in that case).
 	notify *notifyService
 
+	// logSwap wraps the gateway logger so the notify service can install
+	// an ERROR-mirroring handler after creation. Set once in New(); never
+	// nil if logger is non-nil.
+	logSwap *swappableHandler
+
 	// denebDir holds the resolved state directory for the lifetime of the
 	// server (set in Run before registerSessionRPCMethods). Downstream
 	// wiring (checkpoint root, log dir, etc.) reads this instead of
@@ -215,6 +220,18 @@ func New(addr string, opts ...Option) (*Server, error) {
 	}
 	for _, opt := range opts {
 		opt(s)
+	}
+
+	// Wrap s.logger with a swappable handler so the notify service can
+	// later install a forwarding handler without subsystems needing to
+	// re-capture the logger. Installed BEFORE the first downstream
+	// capture (broadcaster, gatewaySubs, ...) so every subsystem that
+	// reads s.logger sees the swappable indirection.
+	if s.logger != nil {
+		s.logSwap = newSwappableHandler(s.logger.Handler())
+		if s.logSwap != nil {
+			s.logger = slog.New(s.logSwap)
+		}
 	}
 
 	// Initialise the lifecycle context up front so any background goroutine
