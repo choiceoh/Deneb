@@ -267,11 +267,13 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// Wiki knowledge base (takes priority when enabled).
 	if _, ok := toolSet["wiki"]; ok {
 		d.WriteString("## 위키 — 너의 외부 메모리\n")
-		d.WriteString("위키에 없으면 다음 대화에서 모른다. 위키가 너의 장기 기억이다.\n\n")
+		d.WriteString("위키에 없으면 다음 대화에서 모른다. 위키가 너의 장기 기억이다.\n")
+		d.WriteString("**중요: wiki write/log에 쓰는 내용은 사용자에게 보이지 않는다.** 미래의 네 자신만 본다. 사용자에게 전달하려면 응답 텍스트에 써야 한다.\n\n")
 
 		d.WriteString("### 핵심 원칙: Compile at Ingest Time\n")
 		d.WriteString("정보를 받을 때 정리하라. 질문 시점에 정리하려 하지 마라.\n")
-		d.WriteString("가치 있는 답변은 위키 페이지로 저장하라 — 같은 질문에 다시 처리할 필요가 없도록.\n\n")
+		d.WriteString("가치 있는 지식은 위키 페이지로 저장하라 — 같은 질문에 다시 처리할 필요가 없도록.\n")
+		d.WriteString("**단, 위키 저장은 응답이 아니다.** 사용자가 분석/비교/코멘트/의견을 요청했으면 그 본문을 **응답 텍스트에 직접 써라.** 분석은 위키 write 페이로드에 넣고 응답은 \"정리해뒀어\"로 끝내는 행동은 사용자 입장에서 완전한 무응답이다.\n\n")
 
 		d.WriteString("### 3가지 연산\n")
 		d.WriteString("1. **Ingest** — 대화에서 지식을 추출하여 위키에 기록 (create/update)\n")
@@ -303,8 +305,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("하나의 주제는 하나의 페이지. 같은 주제로 여러 페이지를 만들지 마라.\n\n")
 
 		d.WriteString("#### 기록 요령\n")
-		d.WriteString("- **순서 엄수: 먼저 사용자에게 답변하고, 그 다음에 기록 도구(wiki log/write)를 호출한다.** 기록만 하고 응답 텍스트를 비우면 사용자는 아무것도 못 받는다 — 절대 금지.\n")
-		d.WriteString("- \"저장했습니다\" 같은 메타 고지는 불필요. 사용자는 답변을 원할 뿐 기록 여부를 알 필요 없다.\n")
+		d.WriteString("- **순서 엄수: 먼저 사용자에게 답변(분석 본문 포함)을 완성하고, 그 다음에 기록 도구(wiki log/write)를 호출한다.** 기록만 하고 응답 텍스트를 비우면 사용자는 아무것도 못 받는다 — 절대 금지.\n")
+		d.WriteString("- **\"위키에 정리해뒀어\" / \"저장했어\" 만으로 응답을 끝내지 마라.** 사용자가 비교·분석·코멘트를 요청했는데 응답이 저장 알림뿐이면, 사용자는 요청한 내용을 못 받은 것이다. 저장 사실 자체는 메타 정보이지 응답이 아니다.\n")
 		d.WriteString("- 카테고리 판단이 어려우면 \"업무\"에 넣어라.\n")
 		d.WriteString("- 판단이 애매하면 기록한다. 안 남기는 것보다 남기는 게 낫다.\n\n")
 	}
