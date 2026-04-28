@@ -24,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"runtime"
 	"sort"
 	"strings"
@@ -57,6 +58,23 @@ const heartbeatInterval = 5 * time.Minute
 // every subsystem is logging its own initialization noise.
 const heartbeatWarmup = 30 * time.Second
 
+// selfPollTimeout caps each /health probe so a hung HTTP mux is detected
+// quickly. Three seconds is well above normal /health latency (single-digit
+// ms) and short enough that operators get the alert on the same heartbeat
+// cycle as the hang.
+const selfPollTimeout = 3 * time.Second
+
+// goroutineWarnAbsolute is the absolute-count threshold for goroutine
+// leak detection. The gateway's steady state runs ~50–200 goroutines;
+// 2000 is a clear leak signal. Threshold-based alerts coalesce via the
+// same 30s debounce as broadcast events.
+const goroutineWarnAbsolute = 2000
+
+// allocWarnBytes triggers a memory-pressure alert. 2 GiB is well above
+// healthy alloc on a single-user gateway and below typical OOM thresholds,
+// giving the operator advance warning rather than a postmortem from logs.
+const allocWarnBytes = 2 * 1024 * 1024 * 1024
+
 // mirroredEvents enumerates the broadcast event names that the notifier
 // mirrors to the secondary chat. Limited to events that signal an actual
 // user-observable problem (delivery dropped, context broken, compaction
@@ -86,9 +104,9 @@ type activityEntry struct {
 }
 
 // notifyService composes the status-snapshot, error-mirror, in-flight
-// activity tracking, and operator log forwarding behaviors against a
-// single Telegram plugin. Constructed once during early registration;
-// lifecycle bound to the server's ShutdownCtx.
+// activity tracking, operator log forwarding, and self-health probing
+// behaviors against a single Telegram plugin. Constructed once during
+// early registration; lifecycle bound to the server's ShutdownCtx.
 //
 // Lock hierarchy (acquire in this order; never reverse):
 //
@@ -100,6 +118,18 @@ type notifyService struct {
 	plugin   *telegram.Plugin
 	sessions *session.Manager
 	logger   *slog.Logger
+
+	// boundAddr returns the gateway's resolved listen address for the
+	// self-poll probe (e.g. "127.0.0.1:18789"). Returns "" before the
+	// HTTP listener has bound; the heartbeat skips self-poll in that
+	// case. Function-typed (not a value) so notifyService can be
+	// constructed before the listener starts.
+	boundAddr func() string
+
+	// httpClient is the dedicated client for self-poll. Has its own
+	// short timeout independent of any per-request context so a hung
+	// roundtripper can't outlive the heartbeat tick.
+	httpClient *http.Client
 
 	queue chan notifyEvent
 
@@ -123,14 +153,22 @@ type notifyEvent struct {
 // newNotifyService builds the service. Returns nil when the plugin has no
 // configured notification chat ID — disables monitoring entirely without
 // allocating a worker goroutine. Callers must nil-check before use.
-func newNotifyService(plug *telegram.Plugin, sessions *session.Manager, logger *slog.Logger) *notifyService {
+//
+// boundAddr is invoked on each heartbeat tick to resolve the gateway's
+// own /health URL. May be nil to disable self-poll entirely (useful for
+// tests).
+func newNotifyService(plug *telegram.Plugin, sessions *session.Manager, logger *slog.Logger, boundAddr func() string) *notifyService {
 	if plug == nil || plug.NotificationChatID() == 0 {
 		return nil
 	}
 	return &notifyService{
-		plugin:   plug,
-		sessions: sessions,
-		logger:   logger,
+		plugin:    plug,
+		sessions:  sessions,
+		logger:    logger,
+		boundAddr: boundAddr,
+		httpClient: &http.Client{
+			Timeout: selfPollTimeout,
+		},
 		queue:    make(chan notifyEvent, notifyEventQueueSize),
 		lastSent: make(map[string]time.Time),
 		activity: make(map[string]*activityEntry),
@@ -246,8 +284,23 @@ func (n *notifyService) runHeartbeat(ctx context.Context) {
 // onto the worker queue. Drops silently on overflow — heartbeats are
 // best-effort. Uses the same per-event debounce key so a manual force
 // (future) can't double-fire within the interval.
+//
+// Before queueing, runs a self-poll against the gateway's own /health
+// endpoint. A failed self-poll means the HTTP mux is hung even though
+// this goroutine is alive — exactly the case the basic "💓 alive" line
+// would mislead about. The self-poll result is woven into the heartbeat
+// body as a 🚨 prefix on failure.
 func (n *notifyService) enqueueHeartbeat(startTime time.Time) {
-	body := n.buildHeartbeatLine(startTime, time.Now())
+	now := time.Now()
+	pollOK, pollLatency, pollErr := n.selfPoll(context.Background())
+
+	body := n.buildHeartbeatLine(startTime, now)
+	if !pollOK {
+		body = n.composeHangAlert(pollErr) + "\n" + body
+	} else if pollLatency > 0 {
+		body += fmt.Sprintf(" — /health %s", humanLatency(pollLatency))
+	}
+
 	if !n.checkDebounce("_heartbeat") {
 		return
 	}
@@ -260,24 +313,109 @@ func (n *notifyService) enqueueHeartbeat(startTime time.Time) {
 	}
 }
 
+// selfPoll issues a short-deadline GET to the gateway's own /health
+// endpoint. Returns (ok=true, latency, nil) when the response is 2xx
+// within selfPollTimeout. Returns (ok=false, _, err) on timeout, network
+// error, or non-2xx — these are all "the gateway can't answer its own
+// health probe" which the operator should be alerted to.
+//
+// Returns (ok=true, 0, nil) when boundAddr is unavailable (listener not
+// yet bound, e.g. during the warmup tick). The first beat after listener
+// bind will report a real status.
+func (n *notifyService) selfPoll(ctx context.Context) (ok bool, latency time.Duration, err error) {
+	if n.boundAddr == nil {
+		return true, 0, nil
+	}
+	addr := n.boundAddr()
+	if addr == "" {
+		return true, 0, nil
+	}
+	if n.httpClient == nil {
+		return true, 0, nil
+	}
+
+	url := "http://" + addr + "/health"
+	pollCtx, cancel := context.WithTimeout(ctx, selfPollTimeout)
+	defer cancel()
+	req, reqErr := http.NewRequestWithContext(pollCtx, http.MethodGet, url, http.NoBody)
+	if reqErr != nil {
+		return false, 0, reqErr
+	}
+
+	start := time.Now()
+	resp, doErr := n.httpClient.Do(req)
+	latency = time.Since(start)
+	if doErr != nil {
+		return false, latency, doErr
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return false, latency, fmt.Errorf("self-poll status %d", resp.StatusCode)
+	}
+	return true, latency, nil
+}
+
+// composeHangAlert formats the leading 🚨 line for a heartbeat where the
+// self-poll failed. Includes the underlying error truncated for chat.
+// Kept short on purpose — the operator's first action is "is the box
+// reachable", not "what's the stack trace".
+func (n *notifyService) composeHangAlert(pollErr error) string {
+	msg := "(unknown error)"
+	if pollErr != nil {
+		msg = truncate(pollErr.Error(), 200)
+	}
+	return "🚨 게이트웨이 응답 없음 — self-poll 실패: " + msg
+}
+
+// humanLatency formats a duration as a coarse Korean shorthand suitable
+// for the heartbeat line. Granularity matches operator expectation:
+// "/health 2ms", "/health 134ms", "/health 1.2s".
+func humanLatency(d time.Duration) string {
+	switch {
+	case d < time.Millisecond:
+		return fmt.Sprintf("%dµs", d.Microseconds())
+	case d < time.Second:
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	default:
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	}
+}
+
 // buildHeartbeatLine composes the "I'm alive" message. Includes uptime,
 // goroutine count, allocated memory, active session count. Numbers come
 // from runtime stats; a single beat reads them once for consistency.
+//
+// When goroutine count or memory alloc cross the warning thresholds,
+// the prefix flips from "💓 정상" to "⚠️ 부하" so the operator notices
+// at a glance without having to compare numbers across messages.
 func (n *notifyService) buildHeartbeatLine(startTime, now time.Time) string {
 	uptime := humanDuration(now.Sub(startTime))
 	goroutines := runtime.NumGoroutine()
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
-	allocMB := ms.Alloc / (1024 * 1024)
+	allocBytes := ms.Alloc
+	allocMB := allocBytes / (1024 * 1024)
 
 	sessionCount := 0
 	if n.sessions != nil {
 		sessionCount = n.sessions.Count()
 	}
 
+	prefix := "💓 게이트웨이 정상"
+	var warnings []string
+	if goroutines >= goroutineWarnAbsolute {
+		warnings = append(warnings, fmt.Sprintf("goroutine %d (>%d)", goroutines, goroutineWarnAbsolute))
+	}
+	if allocBytes >= allocWarnBytes {
+		warnings = append(warnings, fmt.Sprintf("mem %dMB (>%dMB)", allocMB, allocWarnBytes/(1024*1024)))
+	}
+	if len(warnings) > 0 {
+		prefix = "⚠️ 게이트웨이 부하 — " + strings.Join(warnings, ", ")
+	}
+
 	return fmt.Sprintf(
-		"💓 게이트웨이 정상 — uptime %s, 세션 %d, goroutine %d, mem %dMB",
-		uptime, sessionCount, goroutines, allocMB,
+		"%s — uptime %s, 세션 %d, goroutine %d, mem %dMB",
+		prefix, uptime, sessionCount, goroutines, allocMB,
 	)
 }
 

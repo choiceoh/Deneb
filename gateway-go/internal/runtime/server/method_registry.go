@@ -69,7 +69,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	// a status-snapshot sender that the telegram.notify_status RPC drives.
 	// When nil (no Telegram plugin or no monitoring chat configured), the
 	// telegram.notify_status method is not registered.
-	s.notify = newNotifyService(hub.Telegram(), hub.Sessions(), hub.Logger())
+	s.notify = newNotifyService(hub.Telegram(), hub.Sessions(), hub.Logger(), s.BoundAddr)
 	if s.notify != nil {
 		s.broadcaster.RegisterTap(s.notify.tap)
 		s.notify.start(s.ShutdownCtx())

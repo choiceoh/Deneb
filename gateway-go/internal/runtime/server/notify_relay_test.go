@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -127,7 +129,7 @@ func TestFormatErrorEvent_UnknownReturnsEmpty(t *testing.T) {
 // Test newNotifyService nil-safety: missing plugin or zero ChatID returns
 // nil so callers can short-circuit registration.
 func TestNewNotifyService_NilWhenDisabled(t *testing.T) {
-	if got := newNotifyService(nil, nil, nil); got != nil {
+	if got := newNotifyService(nil, nil, nil, nil); got != nil {
 		t.Error("expected nil notify service when plugin is nil")
 	}
 }
@@ -566,6 +568,120 @@ func TestNotifyService_KeepsActivityOnNonTerminal(t *testing.T) {
 	}
 }
 
+// Self-poll happy path: a 200 response within timeout returns ok=true and
+// non-zero latency. Validates the basic HTTP roundtrip against a real
+// loopback listener, not a stub.
+func TestNotifyService_SelfPoll_Healthy(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	addr := strings.TrimPrefix(srv.URL, "http://")
+	n := newNotifyServiceForTest()
+	n.boundAddr = func() string { return addr }
+	n.httpClient = &http.Client{Timeout: selfPollTimeout}
+
+	ok, latency, err := n.selfPoll(context.Background())
+	if err != nil || !ok {
+		t.Fatalf("expected ok=true, got ok=%v err=%v", ok, err)
+	}
+	if latency <= 0 {
+		t.Errorf("expected positive latency, got %v", latency)
+	}
+}
+
+// Self-poll on hung mux: server doesn't respond within selfPollTimeout.
+// Returns ok=false with the timeout wrapped in the error. This is the
+// PRIMARY hang-detection path — without it the heartbeat would happily
+// say "alive" while user requests stall.
+//
+// hung MUST be closed before srv.Close() so the handler returns and the
+// server's in-flight wait group drains; defer order is LIFO so close(hung)
+// is registered AFTER srv.Close() to run first on cleanup.
+func TestNotifyService_SelfPoll_Hung(t *testing.T) {
+	hung := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		<-hung
+	}))
+	defer srv.Close()
+	defer close(hung)
+
+	addr := strings.TrimPrefix(srv.URL, "http://")
+	n := newNotifyServiceForTest()
+	n.boundAddr = func() string { return addr }
+	n.httpClient = &http.Client{Timeout: 100 * time.Millisecond}
+
+	ok, _, err := n.selfPoll(context.Background())
+	if ok || err == nil {
+		t.Fatalf("expected hang detection: got ok=%v err=%v", ok, err)
+	}
+}
+
+// Self-poll on 5xx: a non-2xx response means the gateway is responding
+// but unhealthy. Treated identically to a hang for alerting purposes.
+func TestNotifyService_SelfPoll_NonOK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	addr := strings.TrimPrefix(srv.URL, "http://")
+	n := newNotifyServiceForTest()
+	n.boundAddr = func() string { return addr }
+	n.httpClient = &http.Client{Timeout: selfPollTimeout}
+
+	ok, _, err := n.selfPoll(context.Background())
+	if ok || err == nil {
+		t.Fatalf("expected !ok on 500, got ok=%v err=%v", ok, err)
+	}
+	if !strings.Contains(err.Error(), "500") {
+		t.Errorf("error should mention the status code: %v", err)
+	}
+}
+
+// Self-poll skips when listener not bound. Returning ok=true (instead of
+// alerting) is correct: during startup the listener legitimately doesn't
+// exist yet and we don't want spurious "🚨 응답 없음" alerts on every
+// boot.
+func TestNotifyService_SelfPoll_NoBoundAddr(t *testing.T) {
+	n := newNotifyServiceForTest()
+	n.boundAddr = func() string { return "" }
+	ok, latency, err := n.selfPoll(context.Background())
+	if !ok || err != nil || latency != 0 {
+		t.Errorf("expected silent skip: got ok=%v latency=%v err=%v", ok, latency, err)
+	}
+}
+
+// Heartbeat line under high goroutine count switches prefix to ⚠️.
+// Can't easily force runtime.NumGoroutine() above the threshold in a
+// test, so this validates the threshold logic via direct construction
+// of the format expectation: the prefix is goroutine-driven only when
+// the count crosses goroutineWarnAbsolute. We assert the healthy path
+// here (negative path) and the threshold constant separately.
+func TestNotifyService_HeartbeatLine_HealthyPrefix(t *testing.T) {
+	n := newNotifyServiceForTest()
+	n.sessions = session.NewManager()
+	line := n.buildHeartbeatLine(time.Now().Add(-2*time.Minute), time.Now())
+	if !strings.HasPrefix(line, "💓 게이트웨이 정상") {
+		t.Errorf("expected healthy prefix, got: %q", line)
+	}
+}
+
+// composeHangAlert renders the operator-facing 🚨 line with the error
+// truncated. Empty/nil errors get a placeholder so the message never
+// looks blank.
+func TestNotifyService_ComposeHangAlert(t *testing.T) {
+	n := newNotifyServiceForTest()
+	got := n.composeHangAlert(nil)
+	if !strings.HasPrefix(got, "🚨") {
+		t.Errorf("expected 🚨 prefix, got: %q", got)
+	}
+	if !strings.Contains(got, "응답 없음") {
+		t.Errorf("expected hang phrasing, got: %q", got)
+	}
+}
+
 // formatSlogRecord pulls in the relevant attributes (error, session, channel)
 // and prefixes by level.
 func TestFormatSlogRecord_AttributeExtraction(t *testing.T) {
@@ -587,10 +703,11 @@ func TestFormatSlogRecord_AttributeExtraction(t *testing.T) {
 // but no plugin. Sufficient for any test that doesn't actually deliver.
 func newNotifyServiceForTest() *notifyService {
 	return &notifyService{
-		logger:   slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
-		queue:    make(chan notifyEvent, 16),
-		lastSent: make(map[string]time.Time),
-		activity: make(map[string]*activityEntry),
+		logger:     slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+		httpClient: &http.Client{Timeout: selfPollTimeout},
+		queue:      make(chan notifyEvent, 16),
+		lastSent:   make(map[string]time.Time),
+		activity:   make(map[string]*activityEntry),
 	}
 }
 

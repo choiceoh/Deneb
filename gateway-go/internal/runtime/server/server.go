@@ -41,6 +41,26 @@ type ServerTransport struct {
 	addr       string
 	httpServer *http.Server
 	startedAt  time.Time
+
+	// boundAddr holds the resolved listen address (host:port) once the
+	// HTTP listener binds. Set in Run(); read by background tasks like
+	// the notify service self-poll. atomic.Pointer keeps reads lock-free
+	// and safe across goroutines.
+	boundAddr atomic.Pointer[string]
+}
+
+// BoundAddr returns the resolved listen address (e.g. "127.0.0.1:18789")
+// once Run() has bound the listener, or "" before. Callers that depend
+// on the address must tolerate the empty case during startup.
+func (s *Server) BoundAddr() string {
+	if s == nil || s.ServerTransport == nil {
+		return ""
+	}
+	p := s.boundAddr.Load()
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 // ServerRPC owns dispatcher construction and RPC wiring state.
