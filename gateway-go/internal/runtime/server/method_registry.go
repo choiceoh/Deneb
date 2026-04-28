@@ -62,6 +62,19 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	hub.SetInsights(insightsEngine)
 	s.insights = insightsEngine
 
+	// Create the secondary-chat notify service when the Telegram plugin
+	// has a notificationChatID configured. The service registers a tap
+	// on the broadcaster so user-impacting events (delivery failures,
+	// compaction stuck) are mirrored to the monitoring chat, and exposes
+	// a status-snapshot sender that the telegram.notify_status RPC drives.
+	// When nil (no Telegram plugin or no monitoring chat configured), the
+	// telegram.notify_status method is not registered.
+	s.notify = newNotifyService(hub.Telegram(), hub.Sessions(), hub.Logger())
+	if s.notify != nil {
+		s.broadcaster.RegisterTap(s.notify.tap)
+		s.notify.start(s.ShutdownCtx())
+	}
+
 	// Table-driven domain registration: one slice, one loop.
 	// Deps assembled inline from hub accessors — no adapter layer.
 	domains := []map[string]rpcutil.HandlerFunc{
@@ -116,6 +129,9 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlertelegram.LifecycleMethods(handlertelegram.LifecycleDeps{
 			TelegramPlugin: hub.Telegram(),
 			Broadcaster:    hub.Broadcaster(),
+		}),
+		handlertelegram.NotifyMethods(handlertelegram.NotifyDeps{
+			SendStatusSnapshot: notifyStatusSnapshotFunc(s.notify),
 		}),
 		// --- Scheduling ---
 		handlerprocess.CronAdvancedMethods(handlerprocess.CronAdvancedDeps{

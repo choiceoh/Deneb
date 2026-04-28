@@ -225,6 +225,45 @@ func (p *Plugin) PrimaryChatID() string {
 	return fmt.Sprintf("%d", p.config.ChatID)
 }
 
+// NotificationChatID returns the secondary monitoring chat ID, or 0 if not
+// configured or if it duplicates ChatID. The duplicate guard prevents
+// monitoring messages from leaking into the main conversation thread.
+func (p *Plugin) NotificationChatID() int64 {
+	if p.config == nil {
+		return 0
+	}
+	id := p.config.NotificationChatID
+	if id == 0 || id == p.config.ChatID {
+		return 0
+	}
+	return id
+}
+
+// SendNotification delivers text to the secondary monitoring chat.
+// Returns (false, nil) when monitoring is disabled (no NotificationChatID
+// configured, plugin not yet started, or duplicate of ChatID) so callers can
+// silently skip without surfacing a misconfiguration error on every event.
+// Returns (true, nil) on successful send, or (false, err) on send failure.
+func (p *Plugin) SendNotification(ctx context.Context, text string) (bool, error) {
+	if text == "" {
+		return false, nil
+	}
+	chatID := p.NotificationChatID()
+	if chatID == 0 {
+		return false, nil
+	}
+	p.mu.Lock()
+	c := p.client
+	p.mu.Unlock()
+	if c == nil {
+		return false, nil
+	}
+	if _, err := SendText(ctx, c, chatID, text, SendOptions{}); err != nil {
+		return false, fmt.Errorf("notification send: %w", err)
+	}
+	return true, nil
+}
+
 // BotUserID returns the bot's user ID, or 0 if not yet verified.
 func (p *Plugin) BotUserID() int64 {
 	p.mu.Lock()

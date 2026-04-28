@@ -55,12 +55,25 @@ type BroadcastOpts struct {
 // Subscribers exceeding this are dropped when DropIfSlow is set.
 const maxBufferedBytes int64 = 50 * 1024 * 1024 // 50 MB
 
+// Tap is a synchronous in-process listener that observes every Broadcast call.
+// Unlike Subscriber, taps run inside the gateway process — no WebSocket frame
+// is built for them — so they can react to events without authentication or
+// network state. Taps are invoked AFTER WS fan-out, with no locks held, so
+// they may safely call back into the broadcaster.
+type Tap func(event string, payload any)
+
 // Broadcaster distributes events to subscribed WebSocket clients.
 type Broadcaster struct {
 	mu          sync.RWMutex
 	subscribers map[string]subscriberEntry
 	seq         uint64
 	logger      *slog.Logger
+
+	// In-process tap listeners. Held under tapMu to allow registration without
+	// blocking broadcast fan-out, and so callbacks run with no broadcaster
+	// lock held (concurrency.md rule 3).
+	tapMu sync.RWMutex
+	taps  []Tap
 
 	// Session event subscriptions: connID -> subscribed.
 	sessionSubMu   sync.RWMutex
@@ -134,6 +147,43 @@ func (b *Broadcaster) Count() int {
 	return len(b.subscribers)
 }
 
+// RegisterTap appends an in-process listener. Each registered tap is invoked
+// once per Broadcast call after WebSocket fan-out completes. Panics in a tap
+// are recovered and logged; one misbehaving tap cannot break broadcast.
+func (b *Broadcaster) RegisterTap(t Tap) {
+	if t == nil {
+		return
+	}
+	b.tapMu.Lock()
+	b.taps = append(b.taps, t)
+	b.tapMu.Unlock()
+}
+
+// dispatchTaps invokes all registered taps with the given event/payload.
+// Snapshots the slice under tapMu, then releases the lock before invoking
+// callbacks so a tap may safely call back into the broadcaster.
+func (b *Broadcaster) dispatchTaps(event string, payload any) {
+	b.tapMu.RLock()
+	if len(b.taps) == 0 {
+		b.tapMu.RUnlock()
+		return
+	}
+	snapshot := make([]Tap, len(b.taps))
+	copy(snapshot, b.taps)
+	b.tapMu.RUnlock()
+
+	for _, t := range snapshot {
+		func() {
+			defer func() {
+				if r := recover(); r != nil && b.logger != nil {
+					b.logger.Error("panic in broadcast tap", "event", event, "panic", r)
+				}
+			}()
+			t(event, payload)
+		}()
+	}
+}
+
 // Broadcast sends an event to all matching subscribers.
 // Returns the number of subscribers that received the event and any send errors.
 func (b *Broadcaster) Broadcast(event string, payload any) (sent int, errs []error) {
@@ -195,6 +245,7 @@ func (b *Broadcaster) BroadcastWithOpts(event string, payload any, opts Broadcas
 		}
 	}
 
+	b.dispatchTaps(event, payload)
 	return sent, errs
 }
 

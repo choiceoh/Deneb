@@ -104,6 +104,12 @@ type Server struct {
 	// Created during registerEarlyMethods; nil until then.
 	insights *insights.Engine
 
+	// notify pushes status snapshots and user-impacting error mirrors to a
+	// secondary "monitoring" Telegram chat. Created during registerEarlyMethods
+	// only when telegram.notificationChatID is configured; nil otherwise (the
+	// telegram.notify_status RPC is not registered in that case).
+	notify *notifyService
+
 	// denebDir holds the resolved state directory for the lifetime of the
 	// server (set in Run before registerSessionRPCMethods). Downstream
 	// wiring (checkpoint root, log dir, etc.) reads this instead of

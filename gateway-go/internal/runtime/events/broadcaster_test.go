@@ -31,6 +31,59 @@ type sendError struct{}
 
 func (e *sendError) Error() string { return "send failed" }
 
+func TestBroadcast_TapInvoked(t *testing.T) {
+	b := NewBroadcaster()
+	var (
+		mu    sync.Mutex
+		seen  []string
+		seenP []any
+	)
+	b.RegisterTap(func(event string, payload any) {
+		mu.Lock()
+		defer mu.Unlock()
+		seen = append(seen, event)
+		seenP = append(seenP, payload)
+	})
+
+	if _, errs := b.Broadcast("evt.one", map[string]string{"k": "v"}); len(errs) != 0 {
+		t.Fatalf("broadcast errs: %v", errs)
+	}
+	if _, errs := b.Broadcast("evt.two", nil); len(errs) != 0 {
+		t.Fatalf("broadcast errs: %v", errs)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) != 2 || seen[0] != "evt.one" || seen[1] != "evt.two" {
+		t.Errorf("tap saw %v, want [evt.one evt.two]", seen)
+	}
+	if seenP[0] == nil {
+		t.Errorf("tap should receive payload, got nil")
+	}
+}
+
+// Tap panics must not break broadcast for other taps or subscribers.
+// Without the panic recovery a single misbehaving listener would take down
+// the whole event bus.
+func TestBroadcast_TapPanicRecovered(t *testing.T) {
+	b := NewBroadcaster()
+	b.RegisterTap(func(_ string, _ any) {
+		panic("intentional tap panic")
+	})
+	var ok bool
+	b.RegisterTap(func(_ string, _ any) {
+		ok = true
+	})
+
+	// Should not panic.
+	if _, errs := b.Broadcast("evt", nil); len(errs) != 0 {
+		t.Fatalf("broadcast errs: %v", errs)
+	}
+	if !ok {
+		t.Error("second tap should still run after first tap panicked")
+	}
+}
+
 func TestBroadcast_AllSubscribers(t *testing.T) {
 	b := NewBroadcaster()
 	s1 := &mockSubscriber{id: "s1", authed: true}
