@@ -385,6 +385,98 @@ func TestNotifySlogHandler_IgnoresBelowError(t *testing.T) {
 	}
 }
 
+// Critical regression: a logger derived via With() BEFORE the swap must
+// also forward ERROR records after the swap. Subsystems do this:
+//
+//	cronLogger := s.logger.With("subsystem", "cron")
+//	... later ...
+//	cronLogger.Error("boom")  // must reach the monitoring chat
+//
+// Before the lazy-attr tee, this case bypassed the wrap entirely.
+func TestSwappableHandler_PreSwapWithDerivedLogger(t *testing.T) {
+	var buf bytes.Buffer
+	base := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	swap := newSwappableHandler(base)
+	rootLogger := slog.New(swap)
+
+	// Subsystem captures derived logger BEFORE notify is wired.
+	subsystem := rootLogger.With("subsystem", "cron")
+
+	// Notify wires up later — this is the swap moment.
+	n := newNotifyServiceForTest()
+	swap.Swap(newNotifySlogHandler(swap.currentInner(), n))
+
+	// Subsystem ERROR after swap must reach the notify queue.
+	subsystem.Error("cron job failed", "error", "permission denied")
+
+	select {
+	case ev := <-n.queue:
+		body, _ := ev.payload.(string)
+		if !strings.Contains(body, "cron job failed") {
+			t.Errorf("forwarded body missing message: %q", body)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("derived logger ERROR did not forward — lazy-attr tee broken")
+	}
+
+	// Delegate also got the record (with attrs preserved).
+	if !strings.Contains(buf.String(), "subsystem=cron") {
+		t.Errorf("delegate output missing subsystem attr: %q", buf.String())
+	}
+}
+
+// Same regression for WithGroup: a group-derived logger must also forward.
+func TestSwappableHandler_PreSwapWithGroupDerivedLogger(t *testing.T) {
+	var buf bytes.Buffer
+	base := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	swap := newSwappableHandler(base)
+	rootLogger := slog.New(swap)
+
+	grouped := rootLogger.WithGroup("svc")
+
+	n := newNotifyServiceForTest()
+	swap.Swap(newNotifySlogHandler(swap.currentInner(), n))
+
+	grouped.Error("grouped failure")
+	select {
+	case ev := <-n.queue:
+		body, _ := ev.payload.(string)
+		if !strings.Contains(body, "grouped failure") {
+			t.Errorf("forwarded body missing message: %q", body)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("WithGroup-derived ERROR did not forward")
+	}
+}
+
+// Chained With: each link must keep its attrs visible in the delegate
+// AND each link's ERROR records must forward.
+func TestSwappableHandler_ChainedWithForwardsAndPreservesAttrs(t *testing.T) {
+	var buf bytes.Buffer
+	base := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	swap := newSwappableHandler(base)
+	rootLogger := slog.New(swap)
+
+	// Two layers of With, like: subsystem → component
+	chain := rootLogger.With("subsystem", "cron").With("component", "scheduler")
+
+	n := newNotifyServiceForTest()
+	swap.Swap(newNotifySlogHandler(swap.currentInner(), n))
+
+	chain.Error("multi-attr failure")
+
+	select {
+	case <-n.queue:
+		// forwarded
+	case <-time.After(time.Second):
+		t.Fatal("chained With did not forward")
+	}
+	out := buf.String()
+	if !strings.Contains(out, "subsystem=cron") || !strings.Contains(out, "component=scheduler") {
+		t.Errorf("delegate missing chained attrs: %q", out)
+	}
+}
+
 // swappableHandler: swap atomically updates the inner handler and
 // captured loggers see the new handler immediately.
 func TestSwappableHandler_Swap(t *testing.T) {
@@ -403,6 +495,74 @@ func TestSwappableHandler_Swap(t *testing.T) {
 	}
 	if !strings.Contains(buf2.String(), "after-swap") || strings.Contains(buf2.String(), "before-swap") {
 		t.Errorf("h2 saw wrong messages: %q", buf2.String())
+	}
+}
+
+// Activity cleanup: terminal session transitions must clear the activity
+// entry. Without this, a tool.start without a paired tool.end (panic / kill)
+// would leave the activity "running" indefinitely until LRU evicts.
+func TestNotifyService_ClearsActivityOnSessionTerminate(t *testing.T) {
+	mgr := session.NewManager()
+	n := newNotifyServiceForTest()
+	n.sessions = mgr
+	n.subscribeSessionEvents()
+
+	// Seed an active running session + activity.
+	if err := mgr.Set(&session.Session{Key: "telegram:1", Status: session.StatusRunning}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	n.activity["telegram:1"] = &activityEntry{tool: "exec", running: true, updated: time.Now()}
+
+	// Now transition the session to FAILED — should fire the bus event.
+	mgr.ApplyLifecycleEvent("telegram:1", session.LifecycleEvent{
+		Phase:         session.PhaseError,
+		FailureReason: "panic",
+	})
+
+	// Bus is async — poll briefly for the activity entry to disappear.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		n.activityMu.Lock()
+		_, present := n.activity["telegram:1"]
+		n.activityMu.Unlock()
+		if !present {
+			return // pass
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("activity entry not cleared after session terminal transition")
+}
+
+// Activity cleanup: non-terminal status changes must NOT clear the entry.
+// Otherwise a brief running→running re-emit would erase live state.
+func TestNotifyService_KeepsActivityOnNonTerminal(t *testing.T) {
+	mgr := session.NewManager()
+	n := newNotifyServiceForTest()
+	n.sessions = mgr
+	n.subscribeSessionEvents()
+
+	if err := mgr.Set(&session.Session{Key: "telegram:1", Status: session.StatusRunning}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	n.activity["telegram:1"] = &activityEntry{tool: "exec", running: true, updated: time.Now()}
+
+	// Re-emit running (no-op transition by design; we exercise the
+	// guard rather than the manager's allowance).
+	bus := mgr.EventBusRef()
+	bus.Emit(session.Event{
+		Kind:      session.EventStatusChanged,
+		Key:       "telegram:1",
+		OldStatus: session.StatusRunning,
+		NewStatus: session.StatusRunning,
+	})
+
+	time.Sleep(50 * time.Millisecond) // let the bus drain
+
+	n.activityMu.Lock()
+	_, present := n.activity["telegram:1"]
+	n.activityMu.Unlock()
+	if !present {
+		t.Error("activity entry was cleared on non-terminal transition")
 	}
 }
 

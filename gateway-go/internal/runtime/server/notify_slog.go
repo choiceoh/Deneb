@@ -81,22 +81,92 @@ func (s *swappableHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (s *swappableHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	// Swappable wrapping does NOT propagate attrs to the inner handler's
-	// future swap. Subsystems that call With() before the swap capture a
-	// chained handler that won't see the wrap. Acceptable: the gateway
-	// rarely chains With() at startup, and ERROR records still reach the
-	// inner via the unchained path used by most call sites.
-	s.mu.RLock()
-	h := s.inner
-	s.mu.RUnlock()
-	return h.WithAttrs(attrs)
+	if len(attrs) == 0 {
+		return s
+	}
+	cp := append([]slog.Attr(nil), attrs...)
+	return &lazyAttrHandler{root: s, attrs: cp}
 }
 
 func (s *swappableHandler) WithGroup(name string) slog.Handler {
-	s.mu.RLock()
-	h := s.inner
-	s.mu.RUnlock()
-	return h.WithGroup(name)
+	if name == "" {
+		return s
+	}
+	return &lazyAttrHandler{root: s, group: name}
+}
+
+// lazyAttrHandler is the result of WithAttrs / WithGroup on a swappable
+// handler. It records the attributes/group at construction time but defers
+// applying them to the underlying handler until each Handle call. That way
+// a Swap() on the root remains visible to every derived logger — including
+// loggers built BEFORE the swap via `s.logger.With("subsystem", "cron")`.
+//
+// Allocates one handler per log call (the inner WithAttrs/WithGroup chain)
+// — acceptable for the gateway's mostly Info/Warn/Error workload. If a
+// hot path later wants attribute logging, cache the resolved handler with
+// a generation counter from the root.
+type lazyAttrHandler struct {
+	root   *swappableHandler
+	attrs  []slog.Attr
+	group  string
+	parent *lazyAttrHandler // outer chain (older With()), nil for direct children
+}
+
+func (l *lazyAttrHandler) resolve() slog.Handler {
+	h := l.root.currentInner()
+	// Walk the parent chain from outermost in so attrs/groups apply in
+	// the same order the user wrote them.
+	for chain := l.flatten(); len(chain) > 0; chain = chain[1:] {
+		seg := chain[0]
+		if seg.group != "" {
+			h = h.WithGroup(seg.group)
+		}
+		if len(seg.attrs) > 0 {
+			h = h.WithAttrs(seg.attrs)
+		}
+	}
+	return h
+}
+
+// flatten walks parent links and returns the chain in
+// outermost-first order. The walk is bounded by chain depth, which is
+// the number of With/WithGroup calls the application made — typically
+// one or two.
+func (l *lazyAttrHandler) flatten() []*lazyAttrHandler {
+	depth := 0
+	for cur := l; cur != nil; cur = cur.parent {
+		depth++
+	}
+	out := make([]*lazyAttrHandler, depth)
+	cur := l
+	for i := depth - 1; i >= 0; i-- {
+		out[i] = cur
+		cur = cur.parent
+	}
+	return out
+}
+
+func (l *lazyAttrHandler) Handle(ctx context.Context, r slog.Record) error {
+	return l.resolve().Handle(ctx, r)
+}
+
+func (l *lazyAttrHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return l.root.currentInner().Enabled(ctx, level)
+}
+
+func (l *lazyAttrHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	if len(attrs) == 0 {
+		return l
+	}
+	cp := append([]slog.Attr(nil), attrs...)
+	return &lazyAttrHandler{root: l.root, attrs: cp, parent: l}
+}
+
+func (l *lazyAttrHandler) WithGroup(name string) slog.Handler {
+	if name == "" {
+		return l
+	}
+	return &lazyAttrHandler{root: l.root, group: name, parent: l}
 }
 
 // slogForwardMinLevel gates which records are forwarded. ERROR-and-above

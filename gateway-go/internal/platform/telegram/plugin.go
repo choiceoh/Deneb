@@ -239,11 +239,22 @@ func (p *Plugin) NotificationChatID() int64 {
 	return id
 }
 
+// notificationRetryDelay is the backoff between the first attempt and the
+// retry on transient API failures. Matches the chat reply path's 500ms
+// guard — long enough to skip a single dropped TCP packet, short enough
+// that an alert isn't visibly delayed.
+const notificationRetryDelay = 500 * time.Millisecond
+
 // SendNotification delivers text to the secondary monitoring chat.
 // Returns (false, nil) when monitoring is disabled (no NotificationChatID
 // configured, plugin not yet started, or duplicate of ChatID) so callers can
 // silently skip without surfacing a misconfiguration error on every event.
 // Returns (true, nil) on successful send, or (false, err) on send failure.
+//
+// Retries the API call once on error so a single transient blip
+// (network hiccup, momentary 5xx) doesn't lose an alert. The monitoring
+// channel is the operator's lifeline; weaker delivery guarantees here
+// than the user reply path would be backwards.
 func (p *Plugin) SendNotification(ctx context.Context, text string) (bool, error) {
 	if text == "" {
 		return false, nil
@@ -258,8 +269,19 @@ func (p *Plugin) SendNotification(ctx context.Context, text string) (bool, error
 	if c == nil {
 		return false, nil
 	}
-	if _, err := SendText(ctx, c, chatID, text, SendOptions{}); err != nil {
+	_, err := SendText(ctx, c, chatID, text, SendOptions{})
+	if err == nil {
+		return true, nil
+	}
+	// Retry path: brief sleep then one more attempt. Aborts early if the
+	// caller's ctx was cancelled during the gap.
+	select {
+	case <-ctx.Done():
 		return false, fmt.Errorf("notification send: %w", err)
+	case <-time.After(notificationRetryDelay):
+	}
+	if _, retryErr := SendText(ctx, c, chatID, text, SendOptions{}); retryErr != nil {
+		return false, fmt.Errorf("notification send (after retry): %w", retryErr)
 	}
 	return true, nil
 }

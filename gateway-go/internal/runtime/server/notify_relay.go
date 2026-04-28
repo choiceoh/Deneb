@@ -83,7 +83,6 @@ type activityEntry struct {
 	running bool      // true between tool.start and tool.end / run.end
 	isError bool      // last tool's error flag (post-result)
 	updated time.Time // wall-clock time of the last update
-	runID   string    // current run identifier; stable across a single turn
 }
 
 // notifyService composes the status-snapshot, error-mirror, in-flight
@@ -138,12 +137,49 @@ func newNotifyService(plug *telegram.Plugin, sessions *session.Manager, logger *
 	}
 }
 
+// subscribeSessionEvents wires the activity cache to the session manager's
+// event bus so terminal transitions (DONE/FAILED/KILLED/TIMEOUT) clear
+// stale entries. Without this, a tool.start without a paired tool.end
+// (panic, kill, abort) leaves the activity entry "running" until LRU
+// eviction — which would lie to the operator about the session's state.
+//
+// The subscribe runs in its own goroutine inside the EventBus; cleanup
+// only fires for terminal transitions, so non-terminal noise (CREATED,
+// running→running) costs ~1 nanosecond per event.
+func (n *notifyService) subscribeSessionEvents() {
+	if n.sessions == nil {
+		return
+	}
+	n.sessions.EventBusRef().Subscribe(func(e session.Event) {
+		if e.Kind != session.EventStatusChanged && e.Kind != session.EventDeleted {
+			return
+		}
+		// Terminal: DONE / FAILED / KILLED / TIMEOUT — anything that
+		// isn't running anymore. Also clear on Deleted (GC) so a
+		// re-created session under the same key starts clean.
+		if e.Kind == session.EventStatusChanged && !session.IsTerminal(e.NewStatus) {
+			return
+		}
+		n.clearActivity(e.Key)
+	})
+}
+
+// clearActivity removes the activity entry for a session key. Safe to
+// call when the entry doesn't exist — used by the lifecycle subscriber
+// without nil-checking.
+func (n *notifyService) clearActivity(sessionKey string) {
+	n.activityMu.Lock()
+	delete(n.activity, sessionKey)
+	n.activityMu.Unlock()
+}
+
 // start spawns the worker goroutine and the heartbeat ticker. Both exit
 // when ctx is cancelled (typically server shutdown). Idempotent: caller
 // drives lifecycle, so passing a never-cancelled context simply leaks the
 // goroutines until process exit, which is acceptable for the gateway's
 // single-binary deployment.
 func (n *notifyService) start(ctx context.Context) {
+	n.subscribeSessionEvents()
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -170,12 +206,18 @@ func (n *notifyService) start(ctx context.Context) {
 // because nothing's happening" vs "gateway is hung and even broadcasts
 // stopped". Without this, an operator can't distinguish the two from the
 // monitoring chat alone.
+//
+// startTime is captured BEFORE the warmup delay so the reported uptime
+// matches the operator's intuition ("gateway started at ...") instead of
+// "time since the heartbeat goroutine began ticking".
 func (n *notifyService) runHeartbeat(ctx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {
 			n.logger.Error("panic in heartbeat loop", "panic", r)
 		}
 	}()
+	startTime := time.Now()
+
 	// Warmup delay so boot-time noise doesn't trigger the first beat.
 	select {
 	case <-ctx.Done():
@@ -186,7 +228,6 @@ func (n *notifyService) runHeartbeat(ctx context.Context) {
 	t := time.NewTicker(heartbeatInterval)
 	defer t.Stop()
 
-	startTime := time.Now()
 	// Send one beat immediately after warmup so the operator gets a
 	// "monitoring channel is wired" confirmation without waiting 5 min.
 	n.enqueueHeartbeat(startTime)
@@ -308,7 +349,7 @@ func agentEventFields(payload any) (kind, sessionKey, runID string, sub any, ok 
 }
 
 func (n *notifyService) recordAgentActivity(payload any) {
-	kind, sessionKey, runID, sub, ok := agentEventFields(payload)
+	kind, sessionKey, _, sub, ok := agentEventFields(payload)
 	if !ok {
 		return
 	}
@@ -321,7 +362,6 @@ func (n *notifyService) recordAgentActivity(payload any) {
 		n.activity[sessionKey] = entry
 	}
 	entry.updated = time.Now()
-	entry.runID = runID
 	switch kind {
 	case "tool.start":
 		entry.tool = stringFromAgentPayload(sub, "tool")
