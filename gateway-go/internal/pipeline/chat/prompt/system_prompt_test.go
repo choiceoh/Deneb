@@ -282,6 +282,29 @@ func TestBuildSystemPromptBlocksMatchesString(t *testing.T) {
 	}
 }
 
+func TestBuildSystemPrompt_WikiSavingIsNotResponse(t *testing.T) {
+	params := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs: []ToolDef{
+			{Name: "wiki"},
+		},
+	}
+
+	prompt := BuildSystemPrompt(params)
+
+	invariants := []string{
+		"wiki write/log에 쓰는 내용은 사용자에게 보이지 않는다",
+		"위키 저장은 응답이 아니다",
+		"응답 텍스트에 직접 써라",
+		"\"위키에 정리해뒀어\" / \"저장했어\" 만으로 응답을 끝내지 마라",
+	}
+	for _, s := range invariants {
+		if !strings.Contains(prompt, s) {
+			t.Errorf("wiki guidance missing invariant: %q", s)
+		}
+	}
+}
+
 func TestBuildSystemPromptConversationMode(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
