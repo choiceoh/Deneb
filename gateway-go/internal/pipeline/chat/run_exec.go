@@ -107,8 +107,9 @@ func executeAgentRun(
 		return nil, fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
 	}
 
-	// Memory recall is now agent-driven: the agent calls memory(action=recall)
-	// as a tool when it needs past context. No parallel goroutine needed.
+	// Recall preflight runs during context preparation: when the current
+	// message hints at prior context, server-side search injects compact
+	// evidence before the first LLM call instead of relying only on tool use.
 
 	// Resolve session tool preset early (needed for both system prompt and tool list).
 	var sessionToolPreset string
@@ -118,7 +119,7 @@ func executeAgentRun(
 
 	// Stage 1: Parallel context + prompt preparation.
 	prepStart := time.Now()
-	prep := prepareContextAndPrompt(params, deps, workspaceDir, sessionToolPreset, logger)
+	prep := prepareContextAndPrompt(ctx, params, deps, workspaceDir, sessionToolPreset, logger)
 	logger.Info("pipeline: parallel prep done (context+sysprompt)", "ms", time.Since(prepStart).Milliseconds())
 
 	if prep.ContextErr != nil {
@@ -146,7 +147,7 @@ func executeAgentRun(
 	messages := assembleMessages(ctx, params, deps, prep, logger, cHooks)
 
 	// Stage 3: Finalize system prompt (budget optimization, coordinator suggestion, tier-1 injection).
-	systemPrompt := finalizePrompt(prep.SystemPrompt, prep.Tier1Wiki, deps.contextCfg, sessionToolPreset, params.Message)
+	systemPrompt := finalizePrompt(prep.SystemPrompt, prep.RecallMemory, prep.Tier1Wiki, deps.contextCfg, sessionToolPreset, params.Message)
 
 	logger.Info("pipeline: system prompt finalized",
 		"chars", len(systemPrompt))
@@ -288,6 +289,7 @@ func executeAgentRun(
 type prepResult struct {
 	Messages     []llm.Message
 	SystemPrompt json.RawMessage
+	RecallMemory string
 	Tier1Wiki    string
 	ContextErr   error
 }
@@ -295,6 +297,7 @@ type prepResult struct {
 // prepareContextAndPrompt runs wiki injection, context assembly, and system prompt
 // build in parallel. Returns the combined results.
 func prepareContextAndPrompt(
+	ctx context.Context,
 	params RunParams,
 	deps runDeps,
 	workspaceDir string,
@@ -302,16 +305,32 @@ func prepareContextAndPrompt(
 	logger *slog.Logger,
 ) prepResult {
 	var result prepResult
+	var resultMu sync.Mutex
 	var prepWg sync.WaitGroup
 
 	// Tier-1 wiki auto-injection (parallel).
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
+		var tier1 string
 		if deps.wikiStore != nil {
 			cfg := wiki.ConfigFromEnv()
-			result.Tier1Wiki = knowledge.FormatTier1(deps.wikiStore, cfg.Tier1MinImportance)
+			tier1 = knowledge.FormatTier1(deps.wikiStore, cfg.Tier1MinImportance)
 		}
+		resultMu.Lock()
+		result.Tier1Wiki = tier1
+		resultMu.Unlock()
+	}()
+
+	// Recall preflight (parallel): inject focused memory only when the user
+	// message asks for or implies past context.
+	prepWg.Add(1)
+	go func() {
+		defer prepWg.Done()
+		recallMemory := buildRecallPreflight(ctx, params, deps, logger)
+		resultMu.Lock()
+		result.RecallMemory = recallMemory
+		resultMu.Unlock()
 	}()
 
 	// Context assembly (parallel).
@@ -319,12 +338,14 @@ func prepareContextAndPrompt(
 	go func() {
 		defer prepWg.Done()
 
+		var messages []llm.Message
+		var contextErr error
 		if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
 			ctxResult, err := assembleContext(bridge, params.SessionKey, deps.contextCfg, logger)
 			if err != nil {
-				result.ContextErr = err
+				contextErr = err
 			} else {
-				result.Messages = ctxResult.Messages
+				messages = ctxResult.Messages
 				// Log-only telemetry for truncation. Do NOT inject a synthetic
 				// notice message here: bootstrapIfNeeded (inside CompactAndPersist)
 				// recovers dropped messages by computing olderEnd from len(messages),
@@ -340,18 +361,29 @@ func prepareContextAndPrompt(
 				}
 			}
 		}
+		resultMu.Lock()
+		result.Messages = messages
+		result.ContextErr = contextErr
+		resultMu.Unlock()
 	}()
 
 	// System prompt build (parallel).
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
+		var systemPrompt json.RawMessage
 		if params.System != "" {
-			result.SystemPrompt = llm.SystemString(params.System)
+			systemPrompt = llm.SystemString(params.System)
+			resultMu.Lock()
+			result.SystemPrompt = systemPrompt
+			resultMu.Unlock()
 			return
 		}
 		if deps.defaultSystem != "" {
-			result.SystemPrompt = llm.SystemString(deps.defaultSystem)
+			systemPrompt = llm.SystemString(deps.defaultSystem)
+			resultMu.Lock()
+			result.SystemPrompt = systemPrompt
+			resultMu.Unlock()
 			return
 		}
 		if deps.tools == nil {
@@ -389,7 +421,10 @@ func prepareContextAndPrompt(
 			ToolPreset:    sessionToolPreset,
 		}
 
-		result.SystemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
+		systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
+		resultMu.Lock()
+		result.SystemPrompt = systemPrompt
+		resultMu.Unlock()
 	}()
 
 	prepWg.Wait()
@@ -609,12 +644,20 @@ func assembleMessages(
 // coordinator suggestion to the system prompt.
 func finalizePrompt(
 	systemPrompt json.RawMessage,
+	recallAddition string,
 	tier1Addition string,
 	contextCfg ContextConfig,
 	sessionToolPreset string,
 	message string,
 ) json.RawMessage {
 	// Budget-optimize variable prompt additions before appending.
+	if recallAddition != "" {
+		// Current-turn recall evidence is compact and more relevant than
+		// always-on tier-1 memory, so keep it even when the static prompt is
+		// already at its nominal budget.
+		systemPrompt = llm.AppendSystemText(systemPrompt, recallAddition)
+	}
+
 	if tier1Addition != "" {
 		promptBudget := prompt.PromptBudget{Total: contextCfg.SystemPromptBudget}
 		baseTokens := uint64(tokenest.Estimate(string(systemPrompt)))
@@ -622,11 +665,12 @@ func finalizePrompt(
 		if promptBudget.Total > baseTokens {
 			remainingBudget = promptBudget.Total - baseTokens
 		}
+		if promptBudget.Total > 0 && remainingBudget == 0 {
+			return systemPrompt
+		}
 		additionBudget := prompt.PromptBudget{Total: remainingBudget}
 
-		additionFragments := []prompt.PromptFragment{
-			prompt.NewFragment("tier1", tier1Addition),
-		}
+		additionFragments := []prompt.PromptFragment{prompt.NewFragment("memory", tier1Addition)}
 		optimized := additionBudget.Optimize(additionFragments)
 		for _, f := range optimized {
 			systemPrompt = llm.AppendSystemText(systemPrompt, f.Content)

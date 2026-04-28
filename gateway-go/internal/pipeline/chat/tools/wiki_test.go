@@ -114,6 +114,19 @@ func TestWikiSearch_KoreanPrefixMatch(t *testing.T) {
 	}
 }
 
+// TestWikiSearch_Metadata verifies recall can find pages through structured
+// frontmatter, not only title/body text.
+func TestWikiSearch_Metadata(t *testing.T) {
+	store := newTestWikiStore(t)
+	out, err := wikiSearch(context.Background(), store, "overview", 5)
+	if err != nil {
+		t.Fatalf("wikiSearch: %v", err)
+	}
+	if !strings.Contains(out, "deneb-architecture") {
+		t.Errorf("expected deneb-architecture via tag metadata, got: %q", out)
+	}
+}
+
 // TestWikiSearch_SpecialCharactersSafe verifies that FTS-boolean-shaped or
 // SQL-injection-shaped queries pass through the tokenizer without error.
 // Pure-Go textsearch strips non-letter/non-digit runes; these should not

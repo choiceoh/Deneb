@@ -172,7 +172,6 @@ func (idx *Index) search(queryTokens []string, andMode bool, limit int) []Hit {
 
 		text := strings.Join(doc.fields, " ")
 		docTokens := tokenize(text)
-		tf := termFrequencies(docTokens)
 		dl := float64(doc.tokens)
 
 		var score float64
@@ -185,7 +184,10 @@ func (idx *Index) search(queryTokens []string, andMode bool, limit int) []Hit {
 			// BM25+ IDF (always positive, even for very common terms)
 			idf := math.Log(1 + (n-df+0.5)/(df+0.5))
 			// BM25 TF component (k1=1.2, b=0.75)
-			termTF := float64(tf[qt])
+			termTF := float64(matchedTermFrequency(docTokens, qt))
+			if termTF == 0 {
+				continue
+			}
 			tfScore := (termTF * 2.2) / (termTF + 1.2*(1-0.75+0.75*(dl/avgdl)))
 			score += idf * tfScore
 		}
@@ -320,6 +322,19 @@ func termFrequencies(tokens []string) map[string]int {
 		tf[t]++
 	}
 	return tf
+}
+
+func matchedTermFrequency(tokens []string, queryToken string) int {
+	if !containsHangul(queryToken) {
+		return termFrequencies(tokens)[queryToken]
+	}
+	count := 0
+	for _, tok := range tokens {
+		if strings.HasPrefix(tok, queryToken) {
+			count++
+		}
+	}
+	return count
 }
 
 // extractSnippet finds the best matching window in the document fields
