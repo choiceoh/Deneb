@@ -145,6 +145,9 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
+	addrStr := ln.Addr().String()
+	s.boundAddr.Store(&addrStr)
+
 	if s.OnListening != nil {
 		s.OnListening(ln.Addr())
 	}

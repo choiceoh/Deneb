@@ -41,6 +41,26 @@ type ServerTransport struct {
 	addr       string
 	httpServer *http.Server
 	startedAt  time.Time
+
+	// boundAddr holds the resolved listen address (host:port) once the
+	// HTTP listener binds. Set in Run(); read by background tasks like
+	// the notify service self-poll. atomic.Pointer keeps reads lock-free
+	// and safe across goroutines.
+	boundAddr atomic.Pointer[string]
+}
+
+// BoundAddr returns the resolved listen address (e.g. "127.0.0.1:18789")
+// once Run() has bound the listener, or "" before. Callers that depend
+// on the address must tolerate the empty case during startup.
+func (s *Server) BoundAddr() string {
+	if s == nil || s.ServerTransport == nil {
+		return ""
+	}
+	p := s.boundAddr.Load()
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 // ServerRPC owns dispatcher construction and RPC wiring state.
@@ -103,6 +123,17 @@ type Server struct {
 	// insights aggregates session/usage data for /insights reports.
 	// Created during registerEarlyMethods; nil until then.
 	insights *insights.Engine
+
+	// notify pushes status snapshots and user-impacting error mirrors to a
+	// secondary "monitoring" Telegram chat. Created during registerEarlyMethods
+	// only when telegram.notificationChatID is configured; nil otherwise (the
+	// telegram.notify_status RPC is not registered in that case).
+	notify *notifyService
+
+	// logSwap wraps the gateway logger so the notify service can install
+	// an ERROR-mirroring handler after creation. Set once in New(); never
+	// nil if logger is non-nil.
+	logSwap *swappableHandler
 
 	// denebDir holds the resolved state directory for the lifetime of the
 	// server (set in Run before registerSessionRPCMethods). Downstream
@@ -209,6 +240,18 @@ func New(addr string, opts ...Option) (*Server, error) {
 	}
 	for _, opt := range opts {
 		opt(s)
+	}
+
+	// Wrap s.logger with a swappable handler so the notify service can
+	// later install a forwarding handler without subsystems needing to
+	// re-capture the logger. Installed BEFORE the first downstream
+	// capture (broadcaster, gatewaySubs, ...) so every subsystem that
+	// reads s.logger sees the swappable indirection.
+	if s.logger != nil {
+		s.logSwap = newSwappableHandler(s.logger.Handler())
+		if s.logSwap != nil {
+			s.logger = slog.New(s.logSwap)
+		}
 	}
 
 	// Initialise the lifecycle context up front so any background goroutine

@@ -28,6 +28,15 @@ type Config struct {
 	// (cron output, gmail notifications, dreaming events, etc.).
 	ChatID int64 `json:"chatID,omitempty"`
 
+	// NotificationChatID is an optional secondary chat where the gateway
+	// pushes monitoring messages: status snapshots (on demand) and
+	// user-impacting error mirrors (delivery failures, compaction stuck,
+	// context overflow). When zero, monitoring is disabled and the main
+	// chat (ChatID) is unaffected. Must be different from ChatID; otherwise
+	// the field is ignored to avoid duplicating messages into the
+	// conversation thread.
+	NotificationChatID int64 `json:"notificationChatID,omitempty"`
+
 	// Enabled controls whether this Telegram account is active. Default: true.
 	Enabled *bool `json:"enabled,omitempty"`
 
