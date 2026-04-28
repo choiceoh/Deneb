@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/textsearch"
@@ -33,7 +34,7 @@ func newSearchDB() *searchDB {
 func (s *searchDB) indexPage(relPath string, page *Page) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.idx.Upsert(relPath, page.Meta.Title, page.Body)
+	s.idx.Upsert(relPath, searchablePageFields(page)...)
 }
 
 // removePage removes a page from the search index.
@@ -83,9 +84,24 @@ func (s *searchDB) rebuildIndex(dir string) error {
 		if err != nil {
 			return nil //nolint:nilerr // skip unparseable files
 		}
-		s.idx.Upsert(rel, page.Meta.Title, page.Body)
+		s.idx.Upsert(rel, searchablePageFields(page)...)
 		return nil
 	})
+}
+
+func searchablePageFields(page *Page) []string {
+	if page == nil {
+		return nil
+	}
+	return []string{
+		page.Meta.Title,
+		page.Meta.Summary,
+		page.Meta.ID,
+		page.Meta.Category,
+		strings.Join(page.Meta.Tags, " "),
+		strings.Join(page.Meta.Related, " "),
+		page.Body,
+	}
 }
 
 // close is a no-op (in-memory index, nothing to close).

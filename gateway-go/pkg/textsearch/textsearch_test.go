@@ -56,6 +56,22 @@ func TestHangulSearch(t *testing.T) {
 	}
 }
 
+func TestHangulPrefixScoresCandidate(t *testing.T) {
+	idx := New()
+	idx.Upsert("page1", "라면 레시피", "계란을 넣고 3분 끓입니다")
+
+	hits := idx.Search("레시", 10)
+	if len(hits) != 1 {
+		t.Fatalf("expected 1 Hangul prefix hit, got %d", len(hits))
+	}
+	if hits[0].ID != "page1" {
+		t.Fatalf("expected page1, got %s", hits[0].ID)
+	}
+	if hits[0].Score <= 0 {
+		t.Fatalf("expected positive score, got %f", hits[0].Score)
+	}
+}
+
 func TestUpsertReplace(t *testing.T) {
 	idx := New()
 	idx.Upsert("doc1", "old content here")
