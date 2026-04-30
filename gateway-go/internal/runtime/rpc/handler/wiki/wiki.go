@@ -6,12 +6,15 @@ package wiki
 
 import (
 	"context"
+	"os"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
+
+func homeDir() (string, error) { return os.UserHomeDir() }
 
 // Deps holds dependencies for wiki.* RPC methods.
 type Deps struct {
@@ -25,13 +28,14 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
-		"wiki.search": wikiSearch(deps),
-		"wiki.read":   wikiRead(deps),
-		"wiki.write":  wikiWrite(deps),
-		"wiki.delete": wikiDelete(deps),
-		"wiki.list":   wikiList(deps),
-		"wiki.index":  wikiIndex(deps),
-		"wiki.stats":  wikiStats(deps),
+		"wiki.search":         wikiSearch(deps),
+		"wiki.read":           wikiRead(deps),
+		"wiki.write":          wikiWrite(deps),
+		"wiki.delete":         wikiDelete(deps),
+		"wiki.list":           wikiList(deps),
+		"wiki.index":          wikiIndex(deps),
+		"wiki.stats":          wikiStats(deps),
+		"wiki.snapshot_graph": wikiSnapshotGraph(deps),
 	}
 }
 
@@ -172,4 +176,44 @@ func wikiStats(deps Deps) rpcutil.HandlerFunc {
 	return rpcutil.BindHandler[struct{}](func(_ struct{}) (any, error) {
 		return deps.Store.Stats(), nil
 	})
+}
+
+// wikiSnapshotGraph rebuilds the wiki knowledge graph (~/.deneb/wiki-graph/
+// graph.json) on demand. The same projection runs automatically at the end
+// of every dream cycle; this RPC is for manual rebuilds and PoC checks.
+func wikiSnapshotGraph(deps Deps) rpcutil.HandlerFunc {
+	type params struct {
+		OutDir  string `json:"outDir,omitempty"`  // override output directory; defaults to ~/.deneb/wiki-graph
+		Cluster *bool  `json:"cluster,omitempty"` // run `graphify cluster-only`; defaults to true
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		p, errResp := rpcutil.DecodeParams[params](req)
+		if errResp != nil {
+			return errResp
+		}
+		outDir := p.OutDir
+		if outDir == "" {
+			home, err := homeDir()
+			if err != nil {
+				return rpcerr.Wrap(protocol.ErrUnavailable, err).Response(req.ID)
+			}
+			outDir = home + "/.deneb/wiki-graph"
+		}
+		runCluster := true
+		if p.Cluster != nil {
+			runCluster = *p.Cluster
+		}
+		res, err := wiki.BuildGraphSnapshot(ctx, deps.Store, outDir, runCluster)
+		if err != nil {
+			return rpcerr.Wrap(protocol.ErrUnavailable, err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"graphPath":    res.GraphPath,
+			"outDir":       res.OutDir,
+			"nodes":        res.Nodes,
+			"edges":        res.Edges,
+			"clustered":    res.Clustered,
+			"clusterError": res.ClusterError,
+		})
+	}
 }

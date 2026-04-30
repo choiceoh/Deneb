@@ -136,6 +136,27 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 		wd.logger.Info("wiki-dream: verification findings", "count", len(findings))
 	}
 
+	// Phase 6: Project the wiki into a graphify-compatible graph.json so the
+	// `graphify` tool can query, traverse, and cluster wiki concepts. No LLM
+	// call here — synthesize() already curates Related[], we just serialize.
+	if outDir, ok := graphSnapshotOutDir(); ok {
+		snap, snapErr := BuildGraphSnapshot(ctx, wd.store, outDir, true)
+		if snapErr != nil {
+			phaseErrors = append(phaseErrors, fmt.Sprintf("graph-snapshot: %v", snapErr))
+		} else {
+			report.WikiGraphNodes = snap.Nodes
+			report.WikiGraphEdges = snap.Edges
+			report.WikiGraphClustered = snap.Clustered
+			if snap.ClusterError != "" {
+				wd.logger.Warn("wiki-dream: graph cluster step failed",
+					"error", snap.ClusterError)
+			}
+			wd.logger.Info("wiki-dream: graph snapshot",
+				"nodes", snap.Nodes, "edges", snap.Edges,
+				"clustered", snap.Clustered, "out", snap.GraphPath)
+		}
+	}
+
 	// Update last-processed diary date in index.
 	idx := wd.store.Index()
 	idx.LastProcessed = time.Now().Format("2006-01-02")
