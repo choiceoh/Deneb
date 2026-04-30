@@ -146,6 +146,47 @@ func TestNormalizeForTelegram_NoFalsePositiveOnPipes(t *testing.T) {
 	}
 }
 
+func TestNormalizeForTelegram_EntityEscapedHTML(t *testing.T) {
+	// 모델이 raw <b> 대신 entity-encoded &lt;b&gt;로 출력하는 케이스.
+	// UnescapeString이 정규식 앞에서 도는지 회귀 보호.
+	in := `값은 &lt;b&gt;42&lt;/b&gt; 이고 &lt;i&gt;정확함&lt;/i&gt;.`
+	got := normalizeForTelegram(in)
+	if strings.Contains(got, "&lt;") || strings.Contains(got, "&gt;") {
+		t.Errorf("expected entities to be decoded and rewritten, got: %s", got)
+	}
+	if !strings.Contains(got, "**42**") {
+		t.Errorf("expected **42** in output, got: %s", got)
+	}
+	if !strings.Contains(got, "*정확함*") {
+		t.Errorf("expected *정확함* in output, got: %s", got)
+	}
+}
+
+func TestNormalizeForTelegram_UserBugReport(t *testing.T) {
+	// 실제 사용자 텔레그램에서 raw HTML이 노출된 응답 sample.
+	in := `같다"는 인상은 <b>데이터 해석의 차이</b>에서 비롯되었을 가능성이 큽니다.
+
+• <b>화웨이</b>:
+  • <b>결과</b>: 운영자가 &quot;고장&quot;이라고 신고하지 않아도 시스템이 스스로 복구하므로, <b>전산상 &#x27;고장 건수&#x27;가 낮게 기록</b>될 수 있습니다.
+
+<blockquote><b>핵심</b>: <b>화웨이는 &quot;잘못 고장 안 난 척&quot; 하지만, 썬그로우는 &quot;고장 나면 확실하게 잡아서 고친다&quot;</b>는 차이가 있습니다.</blockquote>
+
+• <b>하드웨어 고장률</b>: <b>썬그로우 &lt; 화웨이</b>`
+	got := normalizeForTelegram(in)
+	mustNot := []string{"<b>", "</b>", "<blockquote>", "&quot;", "&#x27;", "&lt;", "&gt;", "&amp;"}
+	for _, n := range mustNot {
+		if strings.Contains(got, n) {
+			t.Errorf("expected %q to be normalized away, got:\n%s", n, got)
+		}
+	}
+	mustHave := []string{"**데이터 해석의 차이**", "**화웨이**", "**썬그로우 < 화웨이**", `"잘못 고장 안 난 척"`, "'고장 건수'"}
+	for _, m := range mustHave {
+		if !strings.Contains(got, m) {
+			t.Errorf("expected %q in output, got:\n%s", m, got)
+		}
+	}
+}
+
 func TestMarkdownToTelegramHTML_NormalizesBeforeRender(t *testing.T) {
 	// End-to-end: model emits raw <b> in markdown text, MarkdownToTelegramHTML
 	// should produce the proper Telegram <b> tag (not literal "&lt;b&gt;").

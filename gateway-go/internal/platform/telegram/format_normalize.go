@@ -54,6 +54,12 @@ var (
 // Existing markdown code regions are stashed behind NUL-bracketed placeholders
 // before rewriting and restored afterward, so code examples that show literal
 // HTML are preserved.
+//
+// Order matters: entity decoding (&lt;b&gt; → <b>) must run BEFORE the tag
+// regexes, otherwise an entity-escaped tag like &lt;b&gt;X&lt;/b&gt; passes
+// through every tag rule (no '<' to match), gets decoded to raw <b> at the
+// very end, and lands in the markdown parser which then re-escapes it →
+// Telegram displays literal "<b>".
 func htmlToTelegramMarkdown(s string) string {
 	if s == "" || !strings.ContainsAny(s, "<&") {
 		return s
@@ -67,6 +73,9 @@ func htmlToTelegramMarkdown(s string) string {
 	s = rxFmtMDFence.ReplaceAllStringFunc(s, stash)
 	s = rxFmtMDInlineCode.ReplaceAllStringFunc(s, stash)
 
+	// Decode HTML entities first so &lt;b&gt; becomes <b> for the tag rules.
+	s = stdhtml.UnescapeString(s)
+
 	s = rxFmtHTMLPreCode.ReplaceAllString(s, "```\n$1\n```")
 	s = rxFmtHTMLPre.ReplaceAllString(s, "```\n$1\n```")
 	s = rxFmtHTMLCode.ReplaceAllString(s, "`$1`")
@@ -78,7 +87,6 @@ func htmlToTelegramMarkdown(s string) string {
 	s = rxFmtHTMLBr.ReplaceAllString(s, "\n")
 	s = rxFmtHTMLPara.ReplaceAllString(s, "\n\n")
 	s = rxFmtHTMLLeftover.ReplaceAllString(s, "")
-	s = stdhtml.UnescapeString(s)
 
 	for i, body := range saved {
 		s = strings.ReplaceAll(s, fmt.Sprintf("\x00C%d\x00", i), body)
