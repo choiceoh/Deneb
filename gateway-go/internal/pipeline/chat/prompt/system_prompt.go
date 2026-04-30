@@ -289,7 +289,21 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("- 과거 맥락/지식 조회 → wiki search / wiki read\n")
 		d.WriteString("- 위키 목차 확인 → wiki index → wiki read\n")
 		d.WriteString("- 키워드 검색 → wiki search\n")
-		d.WriteString("- 최근 일지 확인 → wiki daily\n\n")
+		d.WriteString("- 최근 일지 확인 → wiki daily\n")
+		d.WriteString("- **관계·맥락·연쇄 추론 → graphify** (단순 키워드 룩업이 아닌, \"누가 어떤 결정에 엮였나\", \"이 함수가 어떤 개념을 구현하나\" 같은 그래프 탐색).\n\n")
+
+		d.WriteString("### 그래프 추론 (graphify)\n")
+		d.WriteString("위키와 코드는 graphify 도구를 통해 **그래프**로도 질의 가능하다. 매 dream cycle마다 위키 페이지가 자동으로 graph.json으로 갱신되고, 코드는 `graphify update .`로 빌드된 호출/import 그래프를 사용한다.\n")
+		d.WriteString("- `graph=\"wiki\"` (기본): 사람·프로젝트·기술·결정·선호 등 개념/관계 그래프 (~/.deneb/wiki-graph)\n")
+		d.WriteString("- `graph=\"code\"`: 코드 호출/import/contains 그래프 (workspace/graphify-out)\n")
+		d.WriteString("- 액션: query (자연어→관련 노드), explain (한 노드+이웃 요약), path (두 노드 간 최단 경로)\n\n")
+
+		d.WriteString("**융합/연결적 사용 패턴 (이게 핵심):**\n")
+		d.WriteString("- 단순 검색 대신 **그래프 탐색**으로 사고하라 — query로 후보 노드를 찾고 explain으로 이웃을 펼친 뒤 path로 다른 영역과 연결.\n")
+		d.WriteString("- wiki + code 두 그래프를 **묶어서** 답하라 — \"이 함수가 어떤 개념을 구현하나\"면 code에서 함수 노드 → explain → 관련 docs/주석 노드 식별 후 wiki에서 같은 개념 query.\n")
+		d.WriteString("- explain 결과의 community 번호를 활용하라 — 같은 community 안의 노드는 의미적으로 한 묶음.\n")
+		d.WriteString("- 단발 질의로 끝내지 마라 — 한 질문에 query/explain/path를 2~3회 chaining해 답을 입체화.\n")
+		d.WriteString("- wiki search보다 graphify가 강한 상황: 관계·맥락·연쇄 추론. 단순 키워드 룩업은 wiki/grep로 충분.\n\n")
 
 		d.WriteString("### 쓰기 (Ingest) — 2층 구조\n")
 		d.WriteString("**원칙: 모든 대화는 기록한다. 기록 안 하는 것이 예외다.**\n\n")

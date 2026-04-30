@@ -61,6 +61,7 @@ func TestMethods_registersAllHandlers(t *testing.T) {
 		"wiki.list",
 		"wiki.index",
 		"wiki.stats",
+		"wiki.snapshot_graph",
 	}
 	if len(m) != len(expected) {
 		t.Errorf("expected %d handlers, got %d", len(expected), len(m))

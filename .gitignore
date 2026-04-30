@@ -62,3 +62,8 @@ projects.db
 
 # Local scripts
 scripts/deploy.sh
+
+# graphify CLI output (knowledge graph artifacts; rebuilt locally)
+graphify-out/
+.graphify_python
+.graphify_*.json

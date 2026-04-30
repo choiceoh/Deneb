@@ -26,6 +26,9 @@ type DreamReport struct {
 	WikiPagesCreated  int      `json:"wikiPagesCreated,omitempty"`
 	WikiPagesUpdated  int      `json:"wikiPagesUpdated,omitempty"`
 	VerifyFindings    []string `json:"verifyFindings,omitempty"`
+	WikiGraphNodes    int      `json:"wikiGraphNodes,omitempty"`
+	WikiGraphEdges    int      `json:"wikiGraphEdges,omitempty"`
+	WikiGraphClustered bool    `json:"wikiGraphClustered,omitempty"`
 	DurationMs        int64    `json:"durationMs"`
 	PhaseErrors       []string `json:"phaseErrors,omitempty"`
 }
