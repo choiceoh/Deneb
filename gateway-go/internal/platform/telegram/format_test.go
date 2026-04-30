@@ -75,11 +75,16 @@ func TestMarkdownToTelegramHTML_Mixed(t *testing.T) {
 func TestMarkdownToTelegramHTML_Table(t *testing.T) {
 	md := "| Name | Age |\n| --- | --- |\n| Alice | 30 |\n| Bob | 25 |"
 	got := MarkdownToTelegramHTML(md)
-	// coremarkdown renders tables as aligned code blocks.
-	if !strings.Contains(got, "<pre><code>") {
-		t.Errorf("expected <pre><code> wrapper, got %q", got)
+	// Tables are flattened to bullet lines for Telegram readability — the
+	// previous <pre><code> wrapper rendered as a hard-to-read mobile blob.
+	// See format_normalize.go (flattenTablesToBullets).
+	if strings.Contains(got, "<pre><code>") {
+		t.Errorf("table should be flattened to bullets, not wrapped in code: %q", got)
 	}
-	if !strings.Contains(got, "Name") || !strings.Contains(got, "Alice") || !strings.Contains(got, "Bob") {
+	if !strings.Contains(got, "<b>Name</b>") {
+		t.Errorf("expected bold header in flattened bullets, got %q", got)
+	}
+	if !strings.Contains(got, "Alice") || !strings.Contains(got, "Bob") {
 		t.Errorf("missing table content: %q", got)
 	}
 }

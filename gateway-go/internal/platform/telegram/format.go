@@ -35,10 +35,15 @@ func FormatHTML(text string) string {
 
 // MarkdownToTelegramHTML converts multiline markdown to Telegram HTML.
 // Parses markdown via coremarkdown IR, then renders style/link spans as HTML.
+//
+// Pre-pass: normalizeForTelegram rewrites raw HTML tags/entities the model
+// emits into markdown and flattens markdown tables into bullet lines, so the
+// downstream pipeline never has to deal with them. See format_normalize.go.
 func MarkdownToTelegramHTML(markdown string) string {
 	if markdown == "" {
 		return ""
 	}
+	markdown = normalizeForTelegram(markdown)
 	ir := coremarkdown.MarkdownToIR(markdown, telegramParseOpts)
 	return renderIRToTelegramHTML(ir)
 }
