@@ -77,7 +77,7 @@ func (h *Handler) handleSlashCommand(
 		}
 
 	case "think":
-		h.deliverSlashResponse(delivery, "사고 모드가 토글되었습니다.")
+		h.deliverSlashResponse(delivery, applyThinkSlashCommand(h.sessions, sessionKey, cmd.Args))
 
 	case "mode":
 		sess := h.sessions.Get(sessionKey)

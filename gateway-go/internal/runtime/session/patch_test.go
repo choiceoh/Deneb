@@ -52,6 +52,31 @@ func TestSessionApplyPatch(t *testing.T) {
 		}
 	})
 
+	t.Run("interleaved thinking patch", func(t *testing.T) {
+		s := &Session{Key: "k1"}
+		on := true
+		if !s.ApplyPatch(PatchFields{InterleavedThinking: &on}) {
+			t.Fatal("expected change")
+		}
+		if s.InterleavedThinking == nil || !*s.InterleavedThinking {
+			t.Errorf("InterleavedThinking = %v, want true", s.InterleavedThinking)
+		}
+
+		// Toggling to false flips the stored pointer.
+		off := false
+		if !s.ApplyPatch(PatchFields{InterleavedThinking: &off}) {
+			t.Fatal("expected change for true→false")
+		}
+		if s.InterleavedThinking == nil || *s.InterleavedThinking {
+			t.Errorf("InterleavedThinking = %v, want false", s.InterleavedThinking)
+		}
+
+		// Re-applying the same value is a no-op.
+		if s.ApplyPatch(PatchFields{InterleavedThinking: &off}) {
+			t.Error("expected no change for same value")
+		}
+	})
+
 	t.Run("unchanged fields not modified", func(t *testing.T) {
 		s := &Session{Key: "k1", Label: "keep", Model: "keep-model"}
 		label := "keep" // same as existing

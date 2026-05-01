@@ -47,6 +47,12 @@ type openAIMessage struct {
 	Content    any              `json:"content"`                // string, []openAIContentPart, or nil (→ null)
 	ToolCalls  []openAIToolCall `json:"tool_calls,omitempty"`   // assistant tool calls
 	ToolCallID string           `json:"tool_call_id,omitempty"` // tool result reference
+
+	// ReasoningContent echoes prior assistant reasoning back to the API.
+	// Used for interleaved thinking on OpenRouter / Z.AI / Anthropic-compatible
+	// proxies that accept the symmetric form of the streamed reasoning_content
+	// delta. Empty string is omitted from the wire payload.
+	ReasoningContent string `json:"reasoning_content,omitempty"`
 }
 
 // openAIContentPart is a single part in a multipart content array (text or image_url).

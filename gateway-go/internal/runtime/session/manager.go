@@ -60,12 +60,13 @@ func (k Kind) IsInternal() bool {
 // Fields are embedded into Session and serialize as flat JSON keys.
 type ModelConfig struct {
 	// Inference mode controls.
-	ThinkingLevel  string `json:"thinkingLevel,omitempty"`
-	FastMode       *bool  `json:"fastMode,omitempty"`
-	VerboseLevel   string `json:"verboseLevel,omitempty"`
-	ReasoningLevel string `json:"reasoningLevel,omitempty"`
-	ElevatedLevel  string `json:"elevatedLevel,omitempty"`
-	ResponseUsage  string `json:"responseUsage,omitempty"`
+	ThinkingLevel       string `json:"thinkingLevel,omitempty"`
+	InterleavedThinking *bool  `json:"interleavedThinking,omitempty"`
+	FastMode            *bool  `json:"fastMode,omitempty"`
+	VerboseLevel        string `json:"verboseLevel,omitempty"`
+	ReasoningLevel      string `json:"reasoningLevel,omitempty"`
+	ElevatedLevel       string `json:"elevatedLevel,omitempty"`
+	ResponseUsage       string `json:"responseUsage,omitempty"`
 
 	// Per-mode model overrides (empty → use session default).
 	ThinkingModel  string `json:"thinkingModel,omitempty"`

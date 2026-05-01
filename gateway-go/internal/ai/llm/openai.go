@@ -58,7 +58,7 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 			Role: "system", Content: systemText,
 		})
 	}
-	oaiReq.Messages = append(oaiReq.Messages, c.convertMessagesToOpenAI(req.Messages)...)
+	oaiReq.Messages = append(oaiReq.Messages, c.convertMessagesToOpenAI(req.Messages, interleavedEnabled(&req))...)
 
 	applySamplingParams(&oaiReq, &req)
 
@@ -84,6 +84,7 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
 	setOpenAIBearerAuth(httpReq, c.apiKey)
+	setBetaHeaders(httpReq, &req)
 
 	respBody, err := c.DoStream(ctx, httpReq)
 	if err != nil {
@@ -120,7 +121,12 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 
 // convertMessagesToOpenAI translates Anthropic-format messages into OpenAI chat messages.
 // Handles plain text, tool_use, tool_result, and image content blocks.
-func (c *Client) convertMessagesToOpenAI(msgs []Message) []openAIMessage {
+//
+// preserveThinking controls whether prior assistant `thinking` blocks are
+// echoed back to the API on the `reasoning_content` field. Required for
+// Anthropic interleaved thinking and for OpenRouter-proxied reasoning that
+// must round-trip across tool boundaries within a single turn.
+func (c *Client) convertMessagesToOpenAI(msgs []Message, preserveThinking bool) []openAIMessage {
 	var out []openAIMessage
 	for _, m := range msgs {
 		// Try plain text string first.
@@ -141,6 +147,7 @@ func (c *Client) convertMessagesToOpenAI(msgs []Message) []openAIMessage {
 
 		// Classify blocks in this message.
 		var textParts string
+		var thinkingParts string
 		var toolCalls []openAIToolCall
 		var toolResults []ContentBlock
 		var imageParts []openAIContentPart
@@ -148,6 +155,10 @@ func (c *Client) convertMessagesToOpenAI(msgs []Message) []openAIMessage {
 			switch b.Type {
 			case "text":
 				textParts += b.Text
+			case "thinking":
+				if preserveThinking && m.Role == "assistant" {
+					thinkingParts += b.Thinking
+				}
 			case "tool_use":
 				args := "{}"
 				if len(b.Input) > 0 {
@@ -194,6 +205,9 @@ func (c *Client) convertMessagesToOpenAI(msgs []Message) []openAIMessage {
 			}
 			if len(toolCalls) > 0 {
 				msg.ToolCalls = toolCalls
+			}
+			if thinkingParts != "" {
+				msg.ReasoningContent = thinkingParts
 			}
 			out = append(out, msg)
 			continue
@@ -563,6 +577,50 @@ func setOpenAIBearerAuth(req *http.Request, apiKey string) {
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
+}
+
+// interleavedEnabled reports whether the request opts into Anthropic's
+// interleaved thinking beta. Centralised so message conversion and header
+// emission stay in lock-step.
+func interleavedEnabled(req *ChatRequest) bool {
+	return req != nil && req.Thinking != nil && req.Thinking.Type == "enabled" && req.Thinking.Interleaved
+}
+
+// betaHeaderInterleavedThinking is the Anthropic beta flag enabling
+// thinking blocks between tool calls within a single turn.
+const betaHeaderInterleavedThinking = "interleaved-thinking-2025-05-14"
+
+// setBetaHeaders attaches `anthropic-beta` to the outgoing HTTP request,
+// merging caller-supplied flags with auto-derived ones (currently:
+// interleaved thinking). De-duplicated; empty when no flags apply so
+// non-Anthropic providers see no extra header.
+func setBetaHeaders(httpReq *http.Request, req *ChatRequest) {
+	if req == nil {
+		return
+	}
+	flags := make([]string, 0, len(req.BetaHeaders)+1)
+	seen := make(map[string]struct{}, len(req.BetaHeaders)+1)
+	add := func(v string) {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return
+		}
+		if _, ok := seen[v]; ok {
+			return
+		}
+		seen[v] = struct{}{}
+		flags = append(flags, v)
+	}
+	for _, v := range req.BetaHeaders {
+		add(v)
+	}
+	if interleavedEnabled(req) {
+		add(betaHeaderInterleavedThinking)
+	}
+	if len(flags) == 0 {
+		return
+	}
+	httpReq.Header.Set("anthropic-beta", strings.Join(flags, ","))
 }
 
 // Complete sends a non-streaming request to an OpenAI-compatible
