@@ -37,6 +37,12 @@ type ChatRequest struct {
 	// request body. Used for provider-specific parameters (e.g., timeout,
 	// logit_bias for CJK blocking).
 	ExtraBody map[string]any `json:"-"`
+
+	// BetaHeaders are values to send via the `anthropic-beta` HTTP header
+	// (comma-joined). Used by Anthropic-direct and OpenRouter-proxied
+	// providers to opt in to beta features such as interleaved thinking.
+	// Other providers ignore the header.
+	BetaHeaders []string `json:"-"`
 }
 
 // ResponseFormat controls the output format for OpenAI-compatible endpoints.
@@ -201,6 +207,15 @@ func AppendSystemTexts(system json.RawMessage, additions ...string) json.RawMess
 type ThinkingConfig struct {
 	Type         string `json:"type"`          // "enabled" or "disabled"
 	BudgetTokens int    `json:"budget_tokens"` // max tokens for thinking
+
+	// Interleaved enables Anthropic's interleaved-thinking-2025-05-14 beta:
+	// the model may emit thinking blocks BETWEEN tool calls in the same
+	// turn, and prior thinking blocks are echoed back to the API on
+	// subsequent turns so reasoning context persists across tool boundaries.
+	// On non-Anthropic providers the beta header is a no-op; the message
+	// preservation still allows OpenRouter-proxied reasoning to round-trip
+	// via the `reasoning_content` field on assistant messages.
+	Interleaved bool `json:"interleaved,omitempty"`
 }
 
 // Message represents a single message in a conversation.

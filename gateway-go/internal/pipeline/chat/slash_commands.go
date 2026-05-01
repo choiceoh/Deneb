@@ -87,10 +87,13 @@ func ParseSlashCommand(text string) *SlashResult {
 			Command:  "models",
 		}
 	case "think":
+		// Args may carry a subcommand (e.g. "interleaved", "interleaved off").
+		// Response is filled by the dispatcher based on the resolved action so
+		// the user gets the actual new state, not a placeholder.
 		return &SlashResult{
-			Handled:  true,
-			Response: "사고 모드가 토글되었습니다.",
-			Command:  "think",
+			Handled: true,
+			Command: "think",
+			Args:    args,
 		}
 	case "mode", "모드":
 		return &SlashResult{

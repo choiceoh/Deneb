@@ -745,6 +745,12 @@ func buildAgentConfig(
 	if cachedSession != nil && cachedSession.ThinkingLevel != "" {
 		thinkingCfg = resolveThinkingConfig(cachedSession.ThinkingLevel)
 	}
+	// Interleaved thinking is an additive flag: it requires extended thinking
+	// to be enabled (otherwise there's nothing to interleave). When
+	// thinkingCfg is nil the interleaved bit has no effect.
+	if thinkingCfg != nil && cachedSession != nil && cachedSession.InterleavedThinking != nil && *cachedSession.InterleavedThinking {
+		thinkingCfg.Interleaved = true
+	}
 
 	// Override max tokens if the caller (e.g., OpenAI HTTP endpoint) specified one.
 	if params.MaxTokens != nil && *params.MaxTokens > 0 {
