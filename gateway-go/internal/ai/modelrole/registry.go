@@ -32,10 +32,11 @@ const (
 
 // ModelConfig holds the provider and endpoint settings for a single model role.
 type ModelConfig struct {
-	ProviderID string // e.g., "zai", "localai", "google"
-	Model      string // model name sent to the API
-	BaseURL    string // API endpoint URL
-	APIKey     string // empty for keyless providers (e.g., local AI)
+	ProviderID string      // e.g., "zai", "zai-anthropic", "localai", "google"
+	Model      string      // model name sent to the API
+	BaseURL    string      // API endpoint URL
+	APIKey     string      // empty for keyless providers (e.g., local AI)
+	APIType    llm.APIType // wire format ("openai" default, "anthropic" for native Messages API)
 }
 
 // clientEntry caches a lazily-initialized LLM client per role.
@@ -62,6 +63,12 @@ const (
 
 	DefaultZaiBaseURL = "https://api.z.ai/api/coding/paas/v4"
 	DefaultZaiModel   = "glm-5-turbo"
+
+	// DefaultZaiAnthropicBaseURL is Z.AI's Anthropic Messages API mirror.
+	// Same API key as the OpenAI-compatible endpoint, but native Anthropic
+	// wire format — required for true interleaved-thinking round-trip
+	// (thinking blocks with signatures echoed back to the API).
+	DefaultZaiAnthropicBaseURL = "https://api.z.ai/api/anthropic"
 )
 
 // NewRegistry creates a registry with hardcoded defaults.
@@ -93,6 +100,7 @@ func NewRegistry(logger *slog.Logger, mainModel, localVllmModel string) *Registr
 			Model:      mainModelName,
 			BaseURL:    mainBaseURL,
 			APIKey:     mainAPIKey,
+			APIType:    resolveAPIType(mainProvider),
 		},
 		RoleLightweight: {
 			ProviderID: "vllm",
@@ -167,7 +175,11 @@ func (r *Registry) Client(role Role) *llm.Client {
 	}
 
 	entry.once.Do(func() {
-		entry.client = llm.NewClient(cfg.BaseURL, cfg.APIKey, llm.WithLogger(r.logger))
+		opts := []llm.ClientOption{llm.WithLogger(r.logger)}
+		if cfg.APIType != "" {
+			opts = append(opts, llm.WithAPIType(cfg.APIType))
+		}
+		entry.client = llm.NewClient(cfg.BaseURL, cfg.APIKey, opts...)
 	})
 	return entry.client
 }
@@ -261,12 +273,25 @@ func resolveBaseURL(providerID string) string {
 	switch providerID {
 	case "zai":
 		return DefaultZaiBaseURL
+	case "zai-anthropic":
+		return DefaultZaiAnthropicBaseURL
 	case "localai":
 		return DefaultLocalAIBaseURL
 	case "vllm":
 		return DefaultVllmBaseURL
 	default:
 		return DefaultZaiBaseURL // assume zai for unknown
+	}
+}
+
+// resolveAPIType returns the wire format the provider speaks. Defaults to
+// OpenAI-compatible; the zai-anthropic mirror speaks Anthropic-native.
+func resolveAPIType(providerID string) llm.APIType {
+	switch providerID {
+	case "zai-anthropic":
+		return llm.APITypeAnthropic
+	default:
+		return llm.APITypeOpenAI
 	}
 }
 
@@ -299,7 +324,7 @@ func resolveAPIKey(providerID string) string {
 		return resolveLocalAIAPIKey()
 	case "vllm":
 		return resolveVllmAPIKey()
-	case "zai":
+	case "zai", "zai-anthropic":
 		return os.Getenv("ZAI_API_KEY")
 	default:
 		return ""

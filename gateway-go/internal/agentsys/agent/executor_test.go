@@ -122,22 +122,14 @@ func TestConsumeStreamInto_DeltaIndexMismatch(t *testing.T) {
 		// Valid delta for index 0.
 		cbd0, _ := json.Marshal(llm.ContentBlockDelta{
 			Index: 0,
-			Delta: struct {
-				Type        string `json:"type"`
-				Text        string `json:"text,omitempty"`
-				PartialJSON string `json:"partial_json,omitempty"`
-			}{Type: "text_delta", Text: "hello"},
+			Delta: llm.ContentBlockDeltaInner{Type: "text_delta", Text: "hello"},
 		})
 		events <- llm.StreamEvent{Type: "content_block_delta", Payload: cbd0}
 
 		// Mismatched delta for index 5 — should be dropped.
 		cbd5, _ := json.Marshal(llm.ContentBlockDelta{
 			Index: 5,
-			Delta: struct {
-				Type        string `json:"type"`
-				Text        string `json:"text,omitempty"`
-				PartialJSON string `json:"partial_json,omitempty"`
-			}{Type: "text_delta", Text: " SHOULD NOT APPEAR"},
+			Delta: llm.ContentBlockDeltaInner{Type: "text_delta", Text: " SHOULD NOT APPEAR"},
 		})
 		events <- llm.StreamEvent{Type: "content_block_delta", Payload: cbd5}
 

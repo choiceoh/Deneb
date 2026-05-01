@@ -13,7 +13,17 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// StreamChat sends a streaming chat request to an OpenAI-compatible
+// StreamChat dispatches to the appropriate provider-specific streaming
+// implementation based on the client's APIType. OpenAI-compatible is the
+// default; "anthropic" speaks Anthropic's /v1/messages format natively.
+func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan StreamEvent, error) {
+	if c.apiType == APITypeAnthropic {
+		return c.streamChatAnthropic(ctx, req)
+	}
+	return c.streamChatOpenAI(ctx, req)
+}
+
+// streamChatOpenAI sends a streaming chat request to an OpenAI-compatible
 // /chat/completions endpoint and translates the response into the same
 // StreamEvent types that consumeStream expects (message_start,
 // content_block_start, content_block_delta, content_block_stop,
@@ -21,7 +31,7 @@ import (
 //
 // This enables RunAgent to work with any OpenAI-compatible provider
 // (z.ai, localai, vLLM, etc.) without changes to the agent loop.
-func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan StreamEvent, error) {
+func (c *Client) streamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan StreamEvent, error) {
 	req.Stream = true
 
 	// Normalize messages: merge consecutive same-role messages that may
@@ -350,14 +360,12 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 	}
 
 	emitDelta := func(idx int, deltaType, text, partialJSON string) {
-		p, _ := json.Marshal(ContentBlockDelta{
-			Index: idx,
-			Delta: struct {
-				Type        string `json:"type"`
-				Text        string `json:"text,omitempty"`
-				PartialJSON string `json:"partial_json,omitempty"`
-			}{Type: deltaType, Text: text, PartialJSON: partialJSON},
-		})
+		var d ContentBlockDelta
+		d.Index = idx
+		d.Delta.Type = deltaType
+		d.Delta.Text = text
+		d.Delta.PartialJSON = partialJSON
+		p, _ := json.Marshal(d)
 		emit(ctx, out, StreamEvent{Type: "content_block_delta", Payload: p})
 	}
 

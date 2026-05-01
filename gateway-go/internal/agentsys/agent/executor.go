@@ -621,10 +621,21 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 						}
 					case "thinking_delta":
 						// Extended thinking content — accumulate but don't emit to user.
-						currentBlock.block.Text += cbd.Delta.Text
+						// Anthropic-native carries the chunk on delta.thinking;
+						// OpenAI-translated streams reuse delta.text. Accept both.
+						chunk := cbd.Delta.Thinking
+						if chunk == "" {
+							chunk = cbd.Delta.Text
+						}
+						currentBlock.block.Text += chunk
 						if hooks.OnThinking != nil {
 							hooks.OnThinking()
 						}
+					case "signature_delta":
+						// Closes an Anthropic thinking block; preserves the
+						// opaque signature required for interleaved-thinking
+						// round-trip validation.
+						currentBlock.block.Signature += cbd.Delta.Signature
 					case "input_json_delta":
 						currentBlock.jsonBuf = append(currentBlock.jsonBuf, cbd.Delta.PartialJSON...)
 					}
@@ -632,9 +643,20 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 
 			case "content_block_stop":
 				if currentBlock != nil {
-					// Finalize the block.
+					// Finalize the block BEFORE appending so the stored copy in
+					// result.contentBlocks reflects the post-finalize fields.
+					// Mutating currentBlock.block after the append is a no-op
+					// because append copies the struct value.
 					if currentBlock.block.Type == "tool_use" && len(currentBlock.jsonBuf) > 0 {
 						currentBlock.block.Input = json.RawMessage(currentBlock.jsonBuf)
+					}
+					if currentBlock.block.Type == "thinking" {
+						// Thinking blocks accumulate into Text during streaming;
+						// promote into Thinking so downstream code (Anthropic
+						// roundtrip, extractThinkingText) reads it from the
+						// canonical field.
+						currentBlock.block.Thinking = currentBlock.block.Text
+						currentBlock.block.Text = ""
 					}
 					result.contentBlocks = append(result.contentBlocks, currentBlock.block)
 					switch currentBlock.block.Type {
@@ -642,11 +664,6 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 						result.toolCalls = append(result.toolCalls, currentBlock.block)
 					case "text":
 						result.text += currentBlock.block.Text
-					case "thinking":
-						// Thinking blocks are part of extended thinking; preserve
-						// in contentBlocks but don't include in user-visible text.
-						currentBlock.block.Thinking = currentBlock.block.Text
-						currentBlock.block.Text = ""
 					}
 					currentBlock = nil
 				}
