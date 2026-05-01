@@ -263,6 +263,11 @@ type ContentBlock struct {
 	// thinking block (extended thinking / reasoning content)
 	Thinking string `json:"thinking,omitempty"`
 
+	// Signature is the cryptographic signature attached to thinking blocks
+	// by Anthropic-compatible endpoints. Required when echoing prior
+	// thinking blocks back to the API on subsequent turns.
+	Signature string `json:"signature,omitempty"`
+
 	// Cache control for prompt caching.
 	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
@@ -339,9 +344,13 @@ type ContentBlockStart struct {
 type ContentBlockDelta struct {
 	Index int `json:"index"`
 	Delta struct {
-		Type        string `json:"type"` // "text_delta" or "input_json_delta"
+		Type        string `json:"type"` // "text_delta", "input_json_delta", "thinking_delta", "signature_delta"
 		Text        string `json:"text,omitempty"`
 		PartialJSON string `json:"partial_json,omitempty"`
+		// Anthropic-native fields. For thinking_delta the text is in
+		// `thinking` (not `text`); for signature_delta it is in `signature`.
+		Thinking  string `json:"thinking,omitempty"`
+		Signature string `json:"signature,omitempty"`
 	} `json:"delta"`
 }
 

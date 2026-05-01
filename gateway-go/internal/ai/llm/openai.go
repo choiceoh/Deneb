@@ -13,14 +13,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// StreamChat sends a streaming chat request to an OpenAI-compatible
-// /chat/completions endpoint and translates the response into the same
-// StreamEvent types that consumeStream expects (message_start,
-// content_block_start, content_block_delta, content_block_stop,
-// message_delta, message_stop).
+// StreamChat dispatches a streaming chat request to the wire protocol the
+// client was configured for. The returned channel emits Anthropic-style
+// StreamEvents (message_start, content_block_*, message_delta, message_stop)
+// regardless of provider — translation happens inside the per-mode helper.
 //
-// This enables RunAgent to work with any OpenAI-compatible provider
-// (z.ai, localai, vLLM, etc.) without changes to the agent loop.
+// This enables RunAgent to work with any provider (z.ai, localai, vLLM,
+// Anthropic-compatible endpoints, etc.) without changes to the agent loop.
 func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan StreamEvent, error) {
 	req.Stream = true
 
@@ -29,6 +28,16 @@ func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan Stream
 	// Applied right before the API call so callers' slices stay untouched.
 	req.Messages = NormalizeMessages(req.Messages)
 
+	if c.apiMode == APIModeAnthropic {
+		return c.streamChatAnthropic(ctx, req)
+	}
+	return c.streamChatOpenAI(ctx, req)
+}
+
+// streamChatOpenAI sends the request to an OpenAI-compatible
+// /chat/completions endpoint and translates the SSE response into
+// Anthropic-style StreamEvents.
+func (c *Client) streamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan StreamEvent, error) {
 	// Build OpenAI-format request body.
 	oaiReq := openAIRequest{
 		Model:         req.Model,
@@ -350,14 +359,12 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 	}
 
 	emitDelta := func(idx int, deltaType, text, partialJSON string) {
-		p, _ := json.Marshal(ContentBlockDelta{
-			Index: idx,
-			Delta: struct {
-				Type        string `json:"type"`
-				Text        string `json:"text,omitempty"`
-				PartialJSON string `json:"partial_json,omitempty"`
-			}{Type: deltaType, Text: text, PartialJSON: partialJSON},
-		})
+		var cbd ContentBlockDelta
+		cbd.Index = idx
+		cbd.Delta.Type = deltaType
+		cbd.Delta.Text = text
+		cbd.Delta.PartialJSON = partialJSON
+		p, _ := json.Marshal(cbd)
 		emit(ctx, out, StreamEvent{Type: "content_block_delta", Payload: p})
 	}
 
@@ -623,10 +630,52 @@ func setBetaHeaders(httpReq *http.Request, req *ChatRequest) {
 	httpReq.Header.Set("anthropic-beta", strings.Join(flags, ","))
 }
 
-// Complete sends a non-streaming request to an OpenAI-compatible
-// /chat/completions endpoint and returns the full response text.
-// Intended for lightweight single-turn tasks (e.g. thread title generation).
+// Complete sends a single-turn request and returns the assistant text.
+// Intended for lightweight tasks (thread titles, classifiers).
+//
+// Dispatches by client API mode:
+//   - openai: non-streaming POST /chat/completions
+//   - anthropic: streaming POST /v1/messages, concatenated text deltas
+//
+// The streaming reuse for anthropic keeps a single wire path; the upstream
+// HTTP cost is the same and the caller still sees a synchronous string.
 func (c *Client) Complete(ctx context.Context, req ChatRequest) (string, error) {
+	if c.apiMode == APIModeAnthropic {
+		return c.completeViaStream(ctx, req)
+	}
+	return c.completeOpenAI(ctx, req)
+}
+
+// completeViaStream consumes the streaming chat as a one-shot Complete,
+// concatenating text deltas. Used for Anthropic-mode clients where
+// /v1/messages does not have a non-streaming sibling endpoint.
+func (c *Client) completeViaStream(ctx context.Context, req ChatRequest) (string, error) {
+	events, err := c.StreamChat(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	var sb strings.Builder
+	for ev := range events {
+		if ev.Type != "content_block_delta" {
+			continue
+		}
+		var cbd ContentBlockDelta
+		if json.Unmarshal(ev.Payload, &cbd) != nil {
+			continue
+		}
+		if cbd.Delta.Type == "text_delta" {
+			sb.WriteString(cbd.Delta.Text)
+		}
+	}
+	out := strings.TrimSpace(sb.String())
+	out = jsonutil.StripThinkingTags(out)
+	out = jsonutil.StripThinkingPreamble(out)
+	return strings.TrimSpace(out), nil
+}
+
+// completeOpenAI sends a non-streaming request to an OpenAI-compatible
+// /chat/completions endpoint and returns the full response text.
+func (c *Client) completeOpenAI(ctx context.Context, req ChatRequest) (string, error) {
 	oaiReq := openAIRequest{
 		Model:     req.Model,
 		Stream:    false,

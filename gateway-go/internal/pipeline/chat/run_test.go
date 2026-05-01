@@ -57,6 +57,33 @@ func TestDeliveryChannel(t *testing.T) {
 	})
 }
 
+func TestApiModeFor(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		config   string
+		want     string
+	}{
+		{"zai default → anthropic", "zai", "", llm.APIModeAnthropic},
+		{"zai-subagent default → anthropic", "zai-subagent", "", llm.APIModeAnthropic},
+		{"explicit openai overrides zai default", "zai", "openai", llm.APIModeOpenAI},
+		{"explicit openai-completions overrides", "zai", "openai-completions", llm.APIModeOpenAI},
+		{"explicit anthropic-messages on non-zai provider", "vllm", "anthropic-messages", llm.APIModeAnthropic},
+		{"vllm defaults to no override", "vllm", "", ""},
+		{"unknown provider with no config", "google", "", ""},
+		{"unknown api value falls through", "google", "weird", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := apiModeFor(tt.provider, tt.config)
+			if got != tt.want {
+				t.Errorf("apiModeFor(%q, %q) = %q, want %q",
+					tt.provider, tt.config, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestResolveDefaultBaseURL(t *testing.T) {
 	tests := []struct {
 		provider string
