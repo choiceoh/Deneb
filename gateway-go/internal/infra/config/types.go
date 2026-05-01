@@ -282,8 +282,22 @@ type AgentsConfig struct {
 // AgentsDefaultsConfig holds nested agents.defaults.* fields.
 // Model accepts string or {primary, fallbacks} — kept as raw JSON to avoid parse errors.
 type AgentsDefaultsConfig struct {
-	Model     json.RawMessage `json:"model,omitempty"`
-	Workspace string          `json:"workspace,omitempty"`
+	Model     json.RawMessage         `json:"model,omitempty"`
+	Workspace string                  `json:"workspace,omitempty"`
+	Thinking  *AgentsThinkingDefaults `json:"thinking,omitempty"`
+}
+
+// AgentsThinkingDefaults seeds new sessions with extended-thinking settings
+// so operators don't have to toggle them with /think on every fresh session.
+//
+// Level: one of minimal / low / medium / high / xhigh / adaptive (mapped to
+// budget tokens by resolveThinkingConfig). Empty / "off" disables.
+// Interleaved: when true, sessions opt into Anthropic's interleaved-thinking
+// beta (thinking blocks between tool calls within a turn). Pointer so the
+// "unset" state is distinguishable from explicit false.
+type AgentsThinkingDefaults struct {
+	Level       string `json:"level,omitempty"`
+	Interleaved *bool  `json:"interleaved,omitempty"`
 }
 
 // AgentEntryConfig represents a single agent in agents.list[].

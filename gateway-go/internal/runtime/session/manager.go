@@ -174,6 +174,15 @@ func gcMaxAgeForKind(k Kind) time.Duration {
 	}
 }
 
+// SessionDefaults seeds new sessions with operator-configured baseline
+// settings (e.g. extended thinking level). Each call to Create copies these
+// onto the new Session before it is published. Existing sessions are not
+// retroactively modified.
+type SessionDefaults struct {
+	ThinkingLevel       string
+	InterleavedThinking *bool
+}
+
 // Manager tracks active sessions in memory.
 // The zero value is ready to use; NewManager is a convenience constructor.
 type Manager struct {
@@ -182,6 +191,11 @@ type Manager struct {
 	eventBus *EventBus
 	initOnce sync.Once // lazy initialization for sessions map and eventBus
 	gcOnce   sync.Once // ensures StartGC spawns at most one GC goroutine
+
+	// defaultsMu guards sessionDefaults so SetSessionDefaults can be invoked
+	// after construction without racing with concurrent Create calls.
+	defaultsMu      sync.RWMutex
+	sessionDefaults SessionDefaults
 
 	// emitGate serializes STATE MUTATIONS (the fn() in mutateAndEmit). Event
 	// dispatch happens OUTSIDE the gate so subscribers can safely call mutating
@@ -209,6 +223,37 @@ func NewManager() *Manager {
 	m := &Manager{}
 	m.lazyInit()
 	return m
+}
+
+// SetSessionDefaults installs the baseline values that Create copies onto
+// each new Session. Replaces any prior defaults. Safe to call concurrently
+// with Create — the next Create reads the new defaults atomically.
+func (m *Manager) SetSessionDefaults(d SessionDefaults) {
+	m.defaultsMu.Lock()
+	m.sessionDefaults = d
+	m.defaultsMu.Unlock()
+}
+
+// SessionDefaults returns the currently installed session defaults.
+// Returned struct is a copy; mutating it does not affect Manager state.
+func (m *Manager) SessionDefaults() SessionDefaults {
+	m.defaultsMu.RLock()
+	defer m.defaultsMu.RUnlock()
+	return m.sessionDefaults
+}
+
+// applySessionDefaults seeds a freshly-created Session with the operator's
+// configured defaults. Caller must hold the same critical section that
+// inserted the Session into the map. Safe to call with the zero defaults.
+func (m *Manager) applySessionDefaults(s *Session) {
+	d := m.SessionDefaults()
+	if d.ThinkingLevel != "" {
+		s.ThinkingLevel = d.ThinkingLevel
+	}
+	if d.InterleavedThinking != nil {
+		v := *d.InterleavedThinking
+		s.InterleavedThinking = &v
+	}
 }
 
 // StartGC starts a background goroutine that periodically evicts terminal
@@ -443,6 +488,7 @@ func (m *Manager) Create(key string, kind Kind) *Session {
 			UpdatedAt: now.UnixMilli(),
 			CreatedAt: now,
 		}
+		m.applySessionDefaults(s)
 		m.sessions[key] = s
 		cp = *s
 		m.mu.Unlock()
@@ -487,6 +533,7 @@ func (m *Manager) ApplyLifecycleEvent(key string, event LifecycleEvent) *Session
 
 		if existing == nil {
 			existing = &Session{Key: key, Kind: KindUnknown, CreatedAt: time.Now()}
+			m.applySessionDefaults(existing)
 			m.sessions[key] = existing
 		}
 

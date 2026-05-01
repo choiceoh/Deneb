@@ -8,11 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
 func (s *Server) initGmailPoll() {
@@ -231,6 +233,53 @@ func extractModelFromDefaults(raw json.RawMessage) string {
 		return obj.Primary
 	}
 	return ""
+}
+
+// resolveSessionThinkingDefaults reads agents.defaults.thinking from
+// deneb.json and returns the values used to seed new sessions. The level
+// is normalized (lowercased / "off" → ""); interleaved is forwarded as a
+// pointer so callers can distinguish "unset" from "false".
+//
+// Returns the zero value when the config is missing, unparseable, or has
+// no thinking section — equivalent to "no defaults installed".
+func resolveSessionThinkingDefaults(logger *slog.Logger) session.SessionDefaults {
+	snapshot, err := config.LoadConfigFromDefaultPath()
+	if err != nil || !snapshot.Valid || snapshot.Raw == "" {
+		return session.SessionDefaults{}
+	}
+	var root struct {
+		Agents struct {
+			Defaults json.RawMessage `json:"defaults"`
+		} `json:"agents"`
+	}
+	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
+		logger.Warn("failed to parse agents config for thinking defaults", "error", err)
+		return session.SessionDefaults{}
+	}
+	if len(root.Agents.Defaults) == 0 {
+		return session.SessionDefaults{}
+	}
+	var defaults struct {
+		Thinking *struct {
+			Level       string `json:"level"`
+			Interleaved *bool  `json:"interleaved"`
+		} `json:"thinking"`
+	}
+	if err := json.Unmarshal(root.Agents.Defaults, &defaults); err != nil {
+		logger.Warn("failed to parse agents.defaults.thinking", "error", err)
+		return session.SessionDefaults{}
+	}
+	if defaults.Thinking == nil {
+		return session.SessionDefaults{}
+	}
+	level := strings.ToLower(strings.TrimSpace(defaults.Thinking.Level))
+	if level == "off" {
+		level = ""
+	}
+	return session.SessionDefaults{
+		ThinkingLevel:       level,
+		InterleavedThinking: defaults.Thinking.Interleaved,
+	}
 }
 
 // resolveWorkspaceDir determines the workspace directory for file tool operations.

@@ -31,6 +31,19 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 	chatCfg.Registry = reg
 	s.modelRegistry = reg
 
+	// Seed new sessions with operator-configured thinking defaults so the
+	// model can use extended thinking from the first turn without /think.
+	if defaults := resolveSessionThinkingDefaults(s.logger); defaults.ThinkingLevel != "" || defaults.InterleavedThinking != nil {
+		s.sessions.SetSessionDefaults(defaults)
+		interleaved := false
+		if defaults.InterleavedThinking != nil {
+			interleaved = *defaults.InterleavedThinking
+		}
+		s.logger.Info("session thinking defaults",
+			"level", defaults.ThinkingLevel,
+			"interleaved", interleaved)
+	}
+
 	// Wiki knowledge base.
 	if wikiCfg := wiki.ConfigFromEnv(); wikiCfg.Enabled {
 		wikiStore, err := wiki.NewStore(wikiCfg.Dir, wikiCfg.DiaryDir)

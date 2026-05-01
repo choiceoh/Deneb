@@ -97,6 +97,7 @@ func (m *Manager) Patch(key string, patch PatchFields) *Session {
 		s := m.sessions[key]
 		if s == nil {
 			s = &Session{Key: key, Kind: KindUnknown, CreatedAt: time.Now()}
+			m.applySessionDefaults(s)
 			m.sessions[key] = s
 		}
 		changed := s.ApplyPatch(patch)
