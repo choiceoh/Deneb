@@ -111,6 +111,16 @@ func NewRegistry(logger *slog.Logger, mainModel, localVllmModel string) *Registr
 		},
 	}
 
+	// Auto-discover the actual model name the local vLLM is serving and
+	// substitute it in when config drifts (e.g. operator typed `qwen3.6`
+	// but vLLM advertises `qwen3.6-35b-a3b`). One probe is enough — both
+	// vllm roles share the same baseURL.
+	for _, role := range []Role{RoleMain, RoleLightweight, RoleFallback} {
+		cfg := models[role]
+		reconcileVllmModel(logger, &cfg)
+		models[role] = cfg
+	}
+
 	r := &Registry{
 		models:  models,
 		clients: make(map[Role]*clientEntry),
