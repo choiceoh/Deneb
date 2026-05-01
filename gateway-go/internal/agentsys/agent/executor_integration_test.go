@@ -167,11 +167,7 @@ func contentBlockStartEvent(index int, blockType, id string) llm.StreamEvent {
 func textDeltaEvent(index int, text string) llm.StreamEvent {
 	payload, _ := json.Marshal(llm.ContentBlockDelta{
 		Index: index,
-		Delta: struct {
-			Type        string `json:"type"`
-			Text        string `json:"text,omitempty"`
-			PartialJSON string `json:"partial_json,omitempty"`
-		}{Type: "text_delta", Text: text},
+		Delta: llm.ContentBlockDeltaInner{Type: "text_delta", Text: text},
 	})
 	return llm.StreamEvent{Type: "content_block_delta", Payload: payload}
 }
@@ -182,11 +178,7 @@ func toolInputDeltaEvent(index int, name, inputJSON string) llm.StreamEvent {
 	// Actually, the name is set in content_block_start; the delta carries partial_json.
 	payload, _ := json.Marshal(llm.ContentBlockDelta{
 		Index: index,
-		Delta: struct {
-			Type        string `json:"type"`
-			Text        string `json:"text,omitempty"`
-			PartialJSON string `json:"partial_json,omitempty"`
-		}{Type: "input_json_delta", PartialJSON: inputJSON},
+		Delta: llm.ContentBlockDeltaInner{Type: "input_json_delta", PartialJSON: inputJSON},
 	})
 	return llm.StreamEvent{Type: "content_block_delta", Payload: payload}
 }

@@ -30,11 +30,23 @@ var sharedTransport = &http.Transport{
 	ForceAttemptHTTP2:   true,
 }
 
+// APIType selects the wire format StreamChat speaks. The default is
+// OpenAI-compatible /chat/completions; "anthropic" speaks Anthropic's
+// /v1/messages natively (used for Z.AI's Anthropic-compatible endpoint
+// and any direct Anthropic provider).
+type APIType string
+
+const (
+	APITypeOpenAI    APIType = "openai"
+	APITypeAnthropic APIType = "anthropic"
+)
+
 // Client is an HTTP client for LLM provider APIs.
 type Client struct {
 	httpClient *http.Client
 	baseURL    string
 	apiKey     string
+	apiType    APIType
 	logger     *slog.Logger
 
 	// Retry configuration.
@@ -79,12 +91,18 @@ func WithMinRequestTimeout(d time.Duration) ClientOption {
 	return func(cl *Client) { cl.minRequestTimeout = d }
 }
 
+// WithAPIType selects the wire format StreamChat speaks. Default OpenAI.
+func WithAPIType(t APIType) ClientOption {
+	return func(cl *Client) { cl.apiType = t }
+}
+
 // NewClient creates a new LLM API client.
 func NewClient(baseURL, apiKey string, opts ...ClientOption) *Client {
 	c := &Client{
 		httpClient:        &http.Client{Timeout: 10 * time.Minute, Transport: sharedTransport},
 		baseURL:           baseURL,
 		apiKey:            apiKey,
+		apiType:           APITypeOpenAI,
 		logger:            slog.Default(),
 		maxRetries:        6,
 		baseDelay:         1 * time.Second,

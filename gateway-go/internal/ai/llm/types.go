@@ -263,6 +263,12 @@ type ContentBlock struct {
 	// thinking block (extended thinking / reasoning content)
 	Thinking string `json:"thinking,omitempty"`
 
+	// Signature opaquely identifies a thinking block so Anthropic can verify
+	// the round-trip. Required by interleaved-thinking-2025-05-14 — without
+	// it, replaying prior reasoning fails server-side validation. Empty for
+	// non-Anthropic providers.
+	Signature string `json:"signature,omitempty"`
+
 	// Cache control for prompt caching.
 	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
@@ -337,12 +343,19 @@ type ContentBlockStart struct {
 
 // ContentBlockDelta is the payload for "content_block_delta" events.
 type ContentBlockDelta struct {
-	Index int `json:"index"`
-	Delta struct {
-		Type        string `json:"type"` // "text_delta" or "input_json_delta"
-		Text        string `json:"text,omitempty"`
-		PartialJSON string `json:"partial_json,omitempty"`
-	} `json:"delta"`
+	Index int                    `json:"index"`
+	Delta ContentBlockDeltaInner `json:"delta"`
+}
+
+// ContentBlockDeltaInner is the inner delta payload. Named (rather than
+// anonymous) so callers can construct values without repeating the field
+// list — adding new delta variants stays backwards-compatible.
+type ContentBlockDeltaInner struct {
+	Type        string `json:"type"` // "text_delta", "input_json_delta", "thinking_delta", "signature_delta"
+	Text        string `json:"text,omitempty"`
+	PartialJSON string `json:"partial_json,omitempty"`
+	Thinking    string `json:"thinking,omitempty"`  // for thinking_delta on Anthropic native
+	Signature   string `json:"signature,omitempty"` // for signature_delta closing a thinking block
 }
 
 // ContentBlockStop is the payload for "content_block_stop" events.

@@ -46,7 +46,7 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 			if baseURL == "" {
 				logger.Warn("provider config missing base URL", "provider", providerID)
 			} else {
-				client := llm.NewClient(baseURL, apiKey, llm.WithLogger(logger))
+				client := llm.NewClient(baseURL, apiKey, clientOptionsForProvider(providerID, logger)...)
 				logger.Info("using provider from config", "provider", providerID)
 				return client
 			}
@@ -88,7 +88,7 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 				}
 			}
 
-			return llm.NewClient(base, apiKey, llm.WithLogger(logger))
+			return llm.NewClient(base, apiKey, clientOptionsForProvider(target, logger)...)
 		}
 	}
 
@@ -125,6 +125,8 @@ func resolveDefaultBaseURL(providerID string) string {
 	switch providerID {
 	case "zai", "zai-subagent":
 		return defaultZaiBaseURL
+	case "zai-anthropic":
+		return modelrole.DefaultZaiAnthropicBaseURL
 	case "google":
 		return "https://generativelanguage.googleapis.com/v1beta/openai"
 	case "localai":
@@ -134,4 +136,15 @@ func resolveDefaultBaseURL(providerID string) string {
 	default:
 		return ""
 	}
+}
+
+// clientOptionsForProvider returns the Client options that pin provider-
+// specific behavior (e.g., Anthropic-native wire format for zai-anthropic).
+// Always includes the logger so existing callers stay one-liners.
+func clientOptionsForProvider(providerID string, logger *slog.Logger) []llm.ClientOption {
+	opts := []llm.ClientOption{llm.WithLogger(logger)}
+	if providerID == "zai-anthropic" {
+		opts = append(opts, llm.WithAPIType(llm.APITypeAnthropic))
+	}
+	return opts
 }
