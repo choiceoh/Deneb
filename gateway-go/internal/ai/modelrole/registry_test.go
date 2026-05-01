@@ -1,9 +1,33 @@
 package modelrole
 
 import (
+	"context"
+	"errors"
 	"log/slog"
+	"net"
+	"net/http"
+	"os"
 	"testing"
+	"time"
 )
+
+// TestMain forces the vLLM discovery probe to fail fast so registry tests
+// stay independent of any vLLM server that happens to be running on the
+// test machine. Reconcile leaves the configured model untouched on probe
+// failure, which is what these tests assert. The discovery-specific tests
+// in vllm_discovery_test.go install their own client per-case via
+// httptest.NewServer so they are unaffected.
+func TestMain(m *testing.M) {
+	vllmDiscoveryClient = &http.Client{
+		Timeout: 50 * time.Millisecond,
+		Transport: &http.Transport{
+			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+				return nil, errors.New("vllm probe disabled in registry_test")
+			},
+		},
+	}
+	os.Exit(m.Run())
+}
 
 func TestResolveModel(t *testing.T) {
 	reg := NewRegistry(slog.Default(), "zai/test-model", "")
