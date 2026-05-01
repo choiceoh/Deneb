@@ -36,6 +36,7 @@ type ModelConfig struct {
 	Model      string // model name sent to the API
 	BaseURL    string // API endpoint URL
 	APIKey     string // empty for keyless providers (e.g., local AI)
+	APIMode    string // "openai" (default) or "anthropic"; routes to the matching LLM client
 }
 
 // clientEntry caches a lazily-initialized LLM client per role.
@@ -60,7 +61,7 @@ const (
 	DefaultVllmBaseURL = "http://127.0.0.1:8000/v1"
 	DefaultVllmModel   = "gemma4"
 
-	DefaultZaiBaseURL = "https://api.z.ai/api/coding/paas/v4"
+	DefaultZaiBaseURL = "https://api.z.ai/api/anthropic"
 	DefaultZaiModel   = "glm-5-turbo"
 )
 
@@ -86,6 +87,7 @@ func NewRegistry(logger *slog.Logger, mainModel, localVllmModel string) *Registr
 	mainProvider, mainModelName := ParseModelID(mainModel)
 	mainBaseURL := resolveBaseURL(mainProvider)
 	mainAPIKey := resolveAPIKey(mainProvider)
+	mainAPIMode := resolveAPIMode(mainProvider)
 
 	models := map[Role]ModelConfig{
 		RoleMain: {
@@ -93,6 +95,7 @@ func NewRegistry(logger *slog.Logger, mainModel, localVllmModel string) *Registr
 			Model:      mainModelName,
 			BaseURL:    mainBaseURL,
 			APIKey:     mainAPIKey,
+			APIMode:    mainAPIMode,
 		},
 		RoleLightweight: {
 			ProviderID: "vllm",
@@ -167,7 +170,11 @@ func (r *Registry) Client(role Role) *llm.Client {
 	}
 
 	entry.once.Do(func() {
-		entry.client = llm.NewClient(cfg.BaseURL, cfg.APIKey, llm.WithLogger(r.logger))
+		opts := []llm.ClientOption{llm.WithLogger(r.logger)}
+		if cfg.APIMode != "" {
+			opts = append(opts, llm.WithAPIMode(cfg.APIMode))
+		}
+		entry.client = llm.NewClient(cfg.BaseURL, cfg.APIKey, opts...)
 	})
 	return entry.client
 }
@@ -301,6 +308,18 @@ func resolveAPIKey(providerID string) string {
 		return resolveVllmAPIKey()
 	case "zai":
 		return os.Getenv("ZAI_API_KEY")
+	default:
+		return ""
+	}
+}
+
+// resolveAPIMode returns the LLM client API mode for built-in providers.
+// Z.ai's default endpoint is the Anthropic Messages API; other built-in
+// providers (vllm, localai) speak OpenAI-compatible /chat/completions.
+func resolveAPIMode(providerID string) string {
+	switch providerID {
+	case "zai", "zai-subagent":
+		return llm.APIModeAnthropic
 	default:
 		return ""
 	}

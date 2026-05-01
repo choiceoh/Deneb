@@ -46,8 +46,13 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 			if baseURL == "" {
 				logger.Warn("provider config missing base URL", "provider", providerID)
 			} else {
-				client := llm.NewClient(baseURL, apiKey, llm.WithLogger(logger))
-				logger.Info("using provider from config", "provider", providerID)
+				opts := []llm.ClientOption{llm.WithLogger(logger)}
+				if mode := apiModeFor(providerID, cfg.API); mode != "" {
+					opts = append(opts, llm.WithAPIMode(mode))
+				}
+				client := llm.NewClient(baseURL, apiKey, opts...)
+				logger.Info("using provider from config",
+					"provider", providerID, "apiMode", apiModeFor(providerID, cfg.API))
 				return client
 			}
 		}
@@ -88,7 +93,11 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 				}
 			}
 
-			return llm.NewClient(base, apiKey, llm.WithLogger(logger))
+			opts := []llm.ClientOption{llm.WithLogger(logger)}
+			if mode := apiModeFor(target, ""); mode != "" {
+				opts = append(opts, llm.WithAPIMode(mode))
+			}
+			return llm.NewClient(base, apiKey, opts...)
 		}
 	}
 
@@ -114,9 +123,12 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 
 // Default base URLs for known providers (used when config doesn't specify one).
 const (
-	// Z.ai Coding Plan global endpoint (OpenAI-compatible).
-	// Matches ZAI_CODING_GLOBAL_BASE_URL in src/plugins/provider-model-definitions.ts.
-	defaultZaiBaseURL = "https://api.z.ai/api/coding/paas/v4"
+	// Z.ai Coding Plan Anthropic-compatible endpoint. The gateway speaks the
+	// Anthropic Messages API to z.ai so beta features (interleaved thinking,
+	// extended thinking, prompt caching) work end-to-end. Operators that
+	// explicitly want the OpenAI-compatible coding endpoint can override
+	// `baseUrl` and `api` in deneb.json.
+	defaultZaiBaseURL = "https://api.z.ai/api/anthropic"
 )
 
 // resolveDefaultBaseURL returns the default API base URL for a known provider
@@ -134,4 +146,23 @@ func resolveDefaultBaseURL(providerID string) string {
 	default:
 		return ""
 	}
+}
+
+// apiModeFor returns the LLM client API mode for a provider. Explicit
+// configValue (the `api` field on the provider config) wins; otherwise
+// providers known to default to Anthropic-compatible endpoints (z.ai)
+// are routed through the Anthropic Messages client. Unknown values fall
+// back to OpenAI-compatible (empty string lets the caller skip the option).
+func apiModeFor(providerID, configValue string) string {
+	switch strings.ToLower(strings.TrimSpace(configValue)) {
+	case "anthropic", "anthropic-messages":
+		return llm.APIModeAnthropic
+	case "openai", "openai-chat", "openai-completions":
+		return llm.APIModeOpenAI
+	}
+	switch providerID {
+	case "zai", "zai-subagent":
+		return llm.APIModeAnthropic
+	}
+	return ""
 }

@@ -621,10 +621,20 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 						}
 					case "thinking_delta":
 						// Extended thinking content — accumulate but don't emit to user.
-						currentBlock.block.Text += cbd.Delta.Text
+						// Anthropic-native sends the chunk in `thinking`; OpenAI-translated
+						// SSE puts it in `text`. Accept whichever is non-empty.
+						chunk := cbd.Delta.Thinking
+						if chunk == "" {
+							chunk = cbd.Delta.Text
+						}
+						currentBlock.block.Text += chunk
 						if hooks.OnThinking != nil {
 							hooks.OnThinking()
 						}
+					case "signature_delta":
+						// Anthropic attaches a cryptographic signature at the end of a
+						// thinking block. Accumulate so it can round-trip on later turns.
+						currentBlock.block.Signature += cbd.Delta.Signature
 					case "input_json_delta":
 						currentBlock.jsonBuf = append(currentBlock.jsonBuf, cbd.Delta.PartialJSON...)
 					}

@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
@@ -30,12 +31,22 @@ var sharedTransport = &http.Transport{
 	ForceAttemptHTTP2:   true,
 }
 
+// API mode constants for Client. Controls request/response wire format.
+//
+// APIModeOpenAI: POST /chat/completions with OpenAI JSON, OpenAI SSE.
+// APIModeAnthropic: POST /v1/messages with Anthropic JSON, Anthropic SSE.
+const (
+	APIModeOpenAI    = "openai"
+	APIModeAnthropic = "anthropic"
+)
+
 // Client is an HTTP client for LLM provider APIs.
 type Client struct {
 	httpClient *http.Client
 	baseURL    string
 	apiKey     string
 	logger     *slog.Logger
+	apiMode    string // "openai" (default) or "anthropic"
 
 	// Retry configuration.
 	maxRetries int
@@ -79,6 +90,21 @@ func WithMinRequestTimeout(d time.Duration) ClientOption {
 	return func(cl *Client) { cl.minRequestTimeout = d }
 }
 
+// WithAPIMode selects the wire protocol the client speaks. Accepts
+// "openai" (default — POST /chat/completions) or "anthropic" (POST
+// /v1/messages with Anthropic Messages JSON). Unknown values are
+// treated as "openai".
+func WithAPIMode(mode string) ClientOption {
+	return func(cl *Client) {
+		switch strings.ToLower(strings.TrimSpace(mode)) {
+		case APIModeAnthropic, "anthropic-messages":
+			cl.apiMode = APIModeAnthropic
+		default:
+			cl.apiMode = APIModeOpenAI
+		}
+	}
+}
+
 // NewClient creates a new LLM API client.
 func NewClient(baseURL, apiKey string, opts ...ClientOption) *Client {
 	c := &Client{
@@ -86,6 +112,7 @@ func NewClient(baseURL, apiKey string, opts ...ClientOption) *Client {
 		baseURL:           baseURL,
 		apiKey:            apiKey,
 		logger:            slog.Default(),
+		apiMode:           APIModeOpenAI,
 		maxRetries:        6,
 		baseDelay:         1 * time.Second,
 		maxDelay:          60 * time.Second,
