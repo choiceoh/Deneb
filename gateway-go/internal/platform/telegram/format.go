@@ -55,6 +55,13 @@ type spanEvent struct {
 	tag       string
 	spanStart int // original span Start (for close ordering)
 	spanEnd   int // original span End (for open ordering)
+	id        int // pair id — same value on open and close so the sort
+	//                comparator can tiebreak when two spans cover identical
+	//                ranges (e.g. bold around an inline code with no
+	//                non-marker text between them). Without a stable
+	//                tiebreaker the output can come out cross-nested
+	//                (e.g. "<b><code>X</b></code>") and Telegram rejects
+	//                the message with a 400.
 }
 
 // renderIRToTelegramHTML renders a coremarkdown IR to Telegram HTML.
@@ -65,26 +72,34 @@ func renderIRToTelegramHTML(ir coremarkdown.MarkdownIR) string {
 	}
 
 	var events []spanEvent
+	nextID := 0
 
 	for _, s := range ir.Styles {
 		open, close := styleTags(s.Style)
 		if open == "" {
 			continue
 		}
+		id := nextID
+		nextID++
 		events = append(events,
-			spanEvent{pos: s.Start, isClose: false, tag: open, spanStart: s.Start, spanEnd: s.End},
-			spanEvent{pos: s.End, isClose: true, tag: close, spanStart: s.Start, spanEnd: s.End},
+			spanEvent{pos: s.Start, isClose: false, tag: open, spanStart: s.Start, spanEnd: s.End, id: id},
+			spanEvent{pos: s.End, isClose: true, tag: close, spanStart: s.Start, spanEnd: s.End, id: id},
 		)
 	}
 
 	for _, l := range ir.Links {
+		id := nextID
+		nextID++
 		events = append(events,
-			spanEvent{pos: l.Start, isClose: false, tag: `<a href="` + coresecurity.SanitizeHTML(l.Href) + `">`, spanStart: l.Start, spanEnd: l.End},
-			spanEvent{pos: l.End, isClose: true, tag: "</a>", spanStart: l.Start, spanEnd: l.End},
+			spanEvent{pos: l.Start, isClose: false, tag: `<a href="` + coresecurity.SanitizeHTML(l.Href) + `">`, spanStart: l.Start, spanEnd: l.End, id: id},
+			spanEvent{pos: l.End, isClose: true, tag: "</a>", spanStart: l.Start, spanEnd: l.End, id: id},
 		)
 	}
 
-	// Sort: by position, closes before opens, then LIFO for closes / outer-first for opens.
+	// Sort: by position, closes before opens, then LIFO for closes / outer-first
+	// for opens. The pair id provides a deterministic tiebreaker when two spans
+	// cover identical ranges — opens emitted in id-ascending order, closes in
+	// id-descending order, so each pair nests cleanly.
 	sort.Slice(events, func(i, j int) bool {
 		if events[i].pos != events[j].pos {
 			return events[i].pos < events[j].pos
@@ -93,9 +108,15 @@ func renderIRToTelegramHTML(ir coremarkdown.MarkdownIR) string {
 			return events[i].isClose // closes before opens
 		}
 		if events[i].isClose {
-			return events[i].spanStart > events[j].spanStart // LIFO: inner closes first
+			if events[i].spanStart != events[j].spanStart {
+				return events[i].spanStart > events[j].spanStart // LIFO: inner closes first
+			}
+			return events[i].id > events[j].id // most-recently opened closes first
 		}
-		return events[i].spanEnd > events[j].spanEnd // outer opens first
+		if events[i].spanEnd != events[j].spanEnd {
+			return events[i].spanEnd > events[j].spanEnd // outer opens first
+		}
+		return events[i].id < events[j].id // earliest-added opens first
 	})
 
 	var b strings.Builder
