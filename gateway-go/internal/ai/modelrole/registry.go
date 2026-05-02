@@ -282,6 +282,8 @@ func resolveBaseURL(providerID string) string {
 		return DefaultLocalAIBaseURL
 	case "vllm":
 		return DefaultVllmBaseURL
+	case "openrouter":
+		return "https://openrouter.ai/api/v1"
 	default:
 		return DefaultZaiBaseURL // assume zai for unknown
 	}
@@ -318,6 +320,8 @@ func resolveAPIKey(providerID string) string {
 		return resolveVllmAPIKey()
 	case "zai":
 		return os.Getenv("ZAI_API_KEY")
+	case "openrouter":
+		return os.Getenv("OPENROUTER_API_KEY")
 	default:
 		return ""
 	}
