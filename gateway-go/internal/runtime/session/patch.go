@@ -9,6 +9,7 @@ type PatchFields struct {
 	Model                *string `json:"model,omitempty"`
 	ThinkingLevel        *string `json:"thinkingLevel,omitempty"`
 	InterleavedThinking  *bool   `json:"interleavedThinking,omitempty"`
+	ShowThinkingInChat   *bool   `json:"showThinkingInChat,omitempty"`
 	FastMode             *bool   `json:"fastMode,omitempty"`
 	VerboseLevel         *string `json:"verboseLevel,omitempty"`
 	ReasoningLevel       *string `json:"reasoningLevel,omitempty"`
@@ -67,6 +68,7 @@ func (s *Session) ApplyPatch(p PatchFields) bool {
 	changed = patchStr(&s.Model, p.Model) || changed
 	changed = patchStr(&s.ThinkingLevel, p.ThinkingLevel) || changed
 	changed = patchBool(&s.InterleavedThinking, p.InterleavedThinking) || changed
+	changed = patchBool(&s.ShowThinkingInChat, p.ShowThinkingInChat) || changed
 	changed = patchBool(&s.FastMode, p.FastMode) || changed
 	changed = patchStr(&s.VerboseLevel, p.VerboseLevel) || changed
 	changed = patchStr(&s.ReasoningLevel, p.ReasoningLevel) || changed

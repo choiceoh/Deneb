@@ -296,6 +296,19 @@ func handleRunSuccess(
 			replyText := jsonutil.StripThinkingTags(directives.Text)
 			replyText = strings.TrimSpace(replyText)
 
+			// Optionally surface extended-thinking text to the channel reply.
+			// Gated by the session flag so the noise stays opt-in. Telegram
+			// receives an HTML expandable blockquote that collapses by default.
+			if showThinkingInChat(deps, params.SessionKey) && result.Thinking != "" {
+				if formatted := formatThinkingForChannel(params.Delivery.Channel, result.Thinking); formatted != "" {
+					if replyText != "" {
+						replyText = formatted + "\n\n" + replyText
+					} else {
+						replyText = formatted
+					}
+				}
+			}
+
 			if replyText != "" {
 				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer replyCancel()
