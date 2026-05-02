@@ -63,7 +63,7 @@ func executeAgentRun(
 	// turn is marked Ephemeral — autonomous self-triggers (heartbeat) share
 	// the user's session for context but must not crowd out the recent
 	// history window with their own trigger noise.
-	if deps.transcript != nil && params.Message != "" && !params.Ephemeral {
+	if deps.transcript != nil && params.Message != "" && !params.EphemeralUser {
 		userMsg := NewTextChatMessage("user", params.Message, time.Now().UnixMilli())
 		if err := deps.transcript.Append(params.SessionKey, userMsg); err != nil {
 			logger.Error("failed to persist user message", "error", err)
@@ -1183,10 +1183,12 @@ func buildMessagePersister(
 	params RunParams,
 	logger *slog.Logger,
 ) func(msg llm.Message) {
-	// Ephemeral turns (e.g. heartbeat) must not pollute transcripts: returning
-	// nil here disables the executor's per-turn persist callback for both
-	// assistant and tool_result messages.
-	if deps.transcript == nil || params.Ephemeral {
+	// EphemeralAssistant turns suppress assistant + tool_result persistence:
+	// returning nil here disables the executor's per-turn persist callback.
+	// Heartbeat keeps this false so the assistant's reply is persisted (the
+	// next heartbeat needs to see prior outputs to avoid duplicate reports);
+	// only the inbound trigger is suppressed via EphemeralUser.
+	if deps.transcript == nil || params.EphemeralAssistant {
 		return nil
 	}
 	return func(msg llm.Message) {

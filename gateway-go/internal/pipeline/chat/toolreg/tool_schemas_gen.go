@@ -1031,6 +1031,19 @@ func graphifyToolSchema() map[string]any {
 	}
 }
 
+func heartbeatUpdateToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"content": map[string]any{
+				"type":        "string",
+				"description": "Full new contents of ~/.deneb/HEARTBEAT.md. Pass empty string to clear the file. The autonomous heartbeat loop reads this file every 30 minutes; remove completed/cancelled items, update progress on ongoing items, and use a '## archive' section for items that have stalled.",
+			},
+		},
+		"required": []string{"content"},
+	}
+}
+
 // ToolMaxOutputs returns per-tool output character budgets from tool_schemas.json.
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {

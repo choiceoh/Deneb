@@ -55,10 +55,16 @@ type SyncOptions struct {
 	// replies that the cron delivery layer may not route correctly.
 	Delivery *DeliveryContext
 
-	// Ephemeral marks the turn as transient — see RunParams.Ephemeral. Set by
-	// autonomous triggers (heartbeat) that share a user session for context
-	// but must not persist their trigger / response into the transcript.
-	Ephemeral bool
+	// EphemeralUser suppresses persistence of the inbound user-role message —
+	// see RunParams.EphemeralUser. Set by autonomous triggers (heartbeat) so
+	// recurring self-triggers do not crowd out the recent-history window.
+	EphemeralUser bool
+
+	// EphemeralAssistant suppresses persistence of assistant/tool_result
+	// messages produced during the run — see RunParams.EphemeralAssistant.
+	// Heartbeat leaves this false so the next iteration can see prior
+	// reports and avoid duplicate output.
+	EphemeralAssistant bool
 }
 
 // prepareSyncRun builds RunParams and runDeps from the common sync arguments.
@@ -101,7 +107,8 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 		if opts.Delivery != nil {
 			params.Delivery = opts.Delivery
 		}
-		params.Ephemeral = opts.Ephemeral
+		params.EphemeralUser = opts.EphemeralUser
+		params.EphemeralAssistant = opts.EphemeralAssistant
 	}
 
 	deps := h.buildRunDeps()
