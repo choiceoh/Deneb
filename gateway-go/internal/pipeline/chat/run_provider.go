@@ -143,6 +143,8 @@ func resolveDefaultBaseURL(providerID string) string {
 		return modelrole.DefaultLocalAIBaseURL
 	case "vllm":
 		return modelrole.DefaultVllmBaseURL
+	case "openrouter":
+		return "https://openrouter.ai/api/v1"
 	default:
 		return ""
 	}
