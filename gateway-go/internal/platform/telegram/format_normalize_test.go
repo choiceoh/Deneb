@@ -187,6 +187,137 @@ func TestNormalizeForTelegram_UserBugReport(t *testing.T) {
 	}
 }
 
+func TestNormalizeForTelegram_CrossNestedTags(t *testing.T) {
+	// The original regression: model emits <b><code>X</b></code> with the
+	// closing tags in the wrong order. The old regex rewriter produced
+	// malformed markdown ("**`X**`") that broke Telegram's HTML parser and
+	// caused the whole message to render as plain text — exposing the
+	// original tags to users. The stack-based rewriter closes the
+	// intermediate frame first to keep the markdown well-formed.
+	cases := []struct {
+		name     string
+		in       string
+		mustHave []string
+		mustNot  []string
+	}{
+		{
+			name: "b around code, b closes first",
+			in:   `<b><code>status: completed</b></code> — 성공!`,
+			// Stack pops the code frame when it sees </b>, so the code
+			// frame's marker (`) is emitted before the b frame's (**).
+			// The trailing </code> has no matching open frame and is dropped.
+			mustHave: []string{"**`status: completed`**", "성공!"},
+			mustNot:  []string{"<b>", "<code>", "</b>", "</code>"},
+		},
+		{
+			name:     "i around b, i closes first",
+			in:       `<i><b>text</i></b>`,
+			mustHave: []string{"***text***"},
+			mustNot:  []string{"<i>", "<b>", "</i>", "</b>"},
+		},
+		{
+			name:     "stray close with no matching open is dropped",
+			in:       `plain text </b> stays clean`,
+			mustHave: []string{"plain text  stays clean"},
+			mustNot:  []string{"</b>"},
+		},
+		{
+			name:     "unclosed tags get auto-closed at EOF",
+			in:       `<b>중요 메시지`,
+			mustHave: []string{"**중요 메시지**"},
+			mustNot:  []string{"<b>"},
+		},
+		{
+			name:     "unknown tag dropped, content kept",
+			in:       `<custom-widget id="x">payload</custom-widget>`,
+			mustHave: []string{"payload"},
+			mustNot:  []string{"<custom-widget", "</custom-widget>"},
+		},
+		{
+			name:     "mismatched tag aliases (strong closes b)",
+			in:       `<b>강조</strong>`,
+			mustHave: []string{"**강조**"},
+			mustNot:  []string{"<b>", "</strong>"},
+		},
+	}
+	for _, c := range cases {
+		got := normalizeForTelegram(c.in)
+		for _, must := range c.mustHave {
+			if !strings.Contains(got, must) {
+				t.Errorf("[%s] expected %q in output, got %q", c.name, must, got)
+			}
+		}
+		for _, not := range c.mustNot {
+			if strings.Contains(got, not) {
+				t.Errorf("[%s] did not expect %q in output, got %q", c.name, not, got)
+			}
+		}
+	}
+}
+
+func TestNormalizeForTelegram_DoesNotMunchArithmetic(t *testing.T) {
+	// "<3" and "x < y" should NOT be parsed as tags — the tokenizer requires
+	// '<' followed by an alphabetic char (or '/') to start a tag.
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{`a < b and c > d`, `a < b and c > d`},
+		{`heart <3 emoji`, `heart <3 emoji`},
+		{`x<y && y>z`, `x<y && y>z`},
+	}
+	for _, c := range cases {
+		got := normalizeForTelegram(c.in)
+		if got != c.want {
+			t.Errorf("input %q: got %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestNormalizeForTelegram_NestedAnchor(t *testing.T) {
+	// Anchor with bold inside: should produce "[**text**](url)".
+	in := `<a href="https://example.com"><b>예시</b></a>`
+	got := normalizeForTelegram(in)
+	if !strings.Contains(got, "[**예시**](https://example.com)") {
+		t.Errorf("expected nested anchor markdown, got: %s", got)
+	}
+}
+
+func TestNormalizeForTelegram_PreCodeBlock(t *testing.T) {
+	// <pre><code>...</code></pre> should produce a single fenced block,
+	// NOT a fence with an inner inline-code span.
+	in := `<pre><code>fn main() {}</code></pre>`
+	got := normalizeForTelegram(in)
+	if !strings.Contains(got, "```\nfn main() {}\n```") {
+		t.Errorf("expected fenced code block, got: %s", got)
+	}
+	if strings.Contains(got, "`fn main() {}`") {
+		t.Errorf("inline code markers leaked inside <pre>: %s", got)
+	}
+}
+
+// TestMarkdownToTelegramHTML_CrossNestedEndToEnd asserts the user-reported
+// bug case produces well-formed Telegram HTML (no literal "<b>"/"<code>"
+// tags, no bare "<" that Telegram would 400 on).
+func TestMarkdownToTelegramHTML_CrossNestedEndToEnd(t *testing.T) {
+	in := `<b><code>status: completed</b></code> — 성공! 중간에 <code>developer</code>가 들어가도 에러 안 나고 정상 응답.`
+	out := MarkdownToTelegramHTML(in)
+
+	// The user saw cross-nested "<b><code>X</b></code>" go out as plain
+	// text after Telegram rejected the malformed parse_mode=HTML payload.
+	// After the fix, the renderer must produce well-nested HTML
+	// ("<b><code>X</code></b>") so the message ships under HTML mode.
+	if strings.Contains(out, "</b></code>") {
+		t.Errorf("cross-nested </b></code> survived in output: %s", out)
+	}
+	// Substantive content preserved.
+	for _, want := range []string{"<b><code>status: completed</code></b>", "<code>developer</code>", "정상 응답"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in output, got: %s", want, out)
+		}
+	}
+}
+
 func TestMarkdownToTelegramHTML_NormalizesBeforeRender(t *testing.T) {
 	// End-to-end: model emits raw <b> in markdown text, MarkdownToTelegramHTML
 	// should produce the proper Telegram <b> tag (not literal "&lt;b&gt;").
