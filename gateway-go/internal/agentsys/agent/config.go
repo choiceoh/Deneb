@@ -178,6 +178,7 @@ type ToolActivity struct {
 type AgentResult struct {
 	Text       string // last turn's text (for channel reply — avoids duplicating streamed content)
 	AllText    string // accumulated text from ALL turns (for transcript persistence + session memory)
+	Thinking   string // accumulated thinking text from ALL turns (interleaved + final). Empty when extended thinking is disabled.
 	StopReason string // "end_turn", "max_tokens", "timeout", "aborted", "max_turns", "max_turns_graceful"
 	Usage      llm.TokenUsage
 	Turns      int

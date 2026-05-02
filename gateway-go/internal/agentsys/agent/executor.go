@@ -288,6 +288,16 @@ func RunAgent(
 			result.AllText += turnRes.text
 		}
 
+		// Accumulate thinking text from every turn (interleaved + final) so the
+		// channel adapter can optionally surface it. Joined across turns to
+		// preserve the full reasoning trail across tool boundaries.
+		if turnThinking := joinAllThinkingTexts(turnRes.contentBlocks); turnThinking != "" {
+			if result.Thinking != "" {
+				result.Thinking += "\n\n"
+			}
+			result.Thinking += turnThinking
+		}
+
 		// --- Max-output-tokens recovery ---
 		// When the LLM response is truncated by max_tokens (not a clean end_turn),
 		// inject a "resume" message and retry. This prevents losing partially
@@ -859,6 +869,22 @@ func executeOneTool(
 		logger.Info("tool complete", logFields...)
 	}
 	return block
+}
+
+// joinAllThinkingTexts concatenates every thinking block in the turn in order.
+// Empty when no thinking blocks are present (extended thinking disabled).
+func joinAllThinkingTexts(blocks []llm.ContentBlock) string {
+	var b strings.Builder
+	for i := range blocks {
+		if blocks[i].Thinking == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString(blocks[i].Thinking)
+	}
+	return b.String()
 }
 
 // extractThinkingText returns the raw reasoning text from a turn's content
