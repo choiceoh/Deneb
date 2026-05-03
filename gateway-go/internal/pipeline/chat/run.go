@@ -55,13 +55,18 @@ type RunParams struct {
 	// conversation history from the client.
 	PrebuiltMessages []llm.Message
 
-	// Ephemeral marks this turn as transient: neither the input user message
-	// nor any assistant/tool_result messages produced during the run are
-	// persisted to the transcript. Context assembly still reads prior history
-	// normally. Used by autonomous self-triggers (heartbeat) so background
-	// pings do not crowd out the 24-message recent window with noise that
-	// would also confuse the LLM into modeling fake user requests.
-	Ephemeral bool
+	// EphemeralUser, when true, suppresses persistence of the inbound user
+	// message. Used by autonomous self-triggers (heartbeat) so the recurring
+	// trigger text does not crowd out the recent-history window or bias the
+	// LLM into modeling fake user requests.
+	EphemeralUser bool
+
+	// EphemeralAssistant, when true, suppresses persistence of the assistant
+	// and tool_result messages produced during the run. When false, the
+	// assistant's reply IS persisted — required for self-triggers that must
+	// see their own prior outputs ("did I already report this 30 minutes
+	// ago?") on the next iteration.
+	EphemeralAssistant bool
 }
 
 // Agent run defaults.

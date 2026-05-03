@@ -11,11 +11,16 @@
 // transcript, instead of running in an isolated stateless channel. When no
 // telegram session has been seen yet, the task is a no-op.
 //
-// The turn is sent with SyncOptions.Ephemeral=true so the trigger user-role
-// message and the resulting assistant/tool messages are NOT persisted —
-// without this the recurring auto-trigger would crowd out the recent-history
-// window and bias the LLM into modeling the user as constantly asking for
-// system checks.
+// Persistence is asymmetric:
+//   - EphemeralUser=true   → the trigger user-role message is NOT persisted
+//     (recurring noise must not crowd out the 24-message recent window or
+//     bias the LLM into modeling fake user requests).
+//   - EphemeralAssistant=false → the assistant's reply IS persisted, so the
+//     next iteration can see "did I already report this 30 minutes ago?" and
+//     avoid duplicate broadcasts. Combined with the trigger template's
+//     instruction to update HEARTBEAT.md when work concludes, this gives the
+//     agent both context (prior reports + user replies) and an action
+//     (file edit) for breaking the repeat-loop.
 //
 // Inspired by OpenClaw's heartbeat system.
 package server
@@ -70,7 +75,17 @@ const heartbeatTriggerTemplate = prompt.HeartbeatTriggerPrefix + ` 30분 주기 
 규칙:
 - 아래 HEARTBEAT.md 지시를 따르되, 같은 세션의 직전 대화(사용자 응답·이전 약속)를 반드시 반영하세요.
 - 이미 사용자가 답해서 처리된 항목은 다시 묻지 말고 곧장 실행하세요.
-- 점검 결과 새로 알릴 것이 없으면 본문에 정확히 ` + "`NO_REPLY`" + ` 한 단어만 출력하세요(다른 텍스트 금지).
+- 직전 하트비트에서 이미 같은 보고를 했고 새 진전이 없으면 본문에 정확히 ` + "`NO_REPLY`" + ` 한 단어만 출력하세요(다른 텍스트 금지). 사용자가 같은 응답을 두 번 받지 않도록 매우 엄격히 지키세요.
+- 사용자가 "그만"·"중단"·"하지 마"·"꺼" 같은 중단 의사를 표현했다면, 해당 항목을 HEARTBEAT.md에서 제거하고 NO_REPLY를 출력하세요.
+
+작업 종료 시 HEARTBEAT.md 갱신(필수, heartbeat_update 도구만 사용):
+- 일반 fs.write/edit는 workspace 밖이라 통하지 않습니다. 반드시 heartbeat_update 도구로 ~/.deneb/HEARTBEAT.md를 통째로 새 내용으로 덮어쓰세요.
+- 완료된 항목은 새 content에서 빼서 호출하세요. 사용자가 중단을 요청한 항목도 즉시 빼세요.
+- 진행 중인 항목은 마지막 보고 시각·상태를 같은 줄에 갱신하세요
+  (예: "[진행중 18:21 — pull 95%%, 다음 점검에서 결과 확인]").
+- 동일 항목이 3회 연속 진전 없이 반복되면 파일 하단의 "## archive" 섹션으로 이동하고 본문에서는 제거하세요.
+- 모든 항목이 종료되면 content="" 로 호출해 파일을 비우세요. 다음 점검은 자동 skip 됩니다.
+- heartbeat_update는 직전 내용을 HEARTBEAT.md.prev로 자동 백업하므로 잘못 지웠을 때 사용자가 복구할 수 있습니다.
 
 ---
 HEARTBEAT.md:
@@ -120,10 +135,15 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	// Ephemeral=true: skip transcript persistence for both the trigger
-	// user-role message and any assistant/tool messages produced. The agent
-	// still reads prior session context normally.
-	opts := &chat.SyncOptions{Ephemeral: true}
+	// Asymmetric persistence: drop the recurring trigger so it can't bias
+	// the model into modeling fake user requests, but KEEP the assistant's
+	// reply. Persisting the response lets the next heartbeat see prior
+	// reports + the user's responses to them, which is how the agent
+	// decides whether to NO_REPLY versus repeat itself.
+	opts := &chat.SyncOptions{
+		EphemeralUser:      true,
+		EphemeralAssistant: false,
+	}
 	result, err := t.chatHandler.SendSync(runCtx, sessionKey, triggerMsg, "", opts)
 	if err != nil {
 		return fmt.Errorf("heartbeat: agent turn failed: %w", err)
