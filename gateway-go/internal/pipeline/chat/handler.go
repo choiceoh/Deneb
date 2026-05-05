@@ -296,3 +296,14 @@ func (h *Handler) CheckpointRoot() string {
 func (h *Handler) SetSkillNudger(n SkillNudger) {
 	h.skillNudger = n
 }
+
+// RegisterTool installs a runtime-bound tool after handler construction.
+// Used for subsystems, such as skill genesis, whose dependencies are created
+// after the core chat tool registry is initialized.
+func (h *Handler) RegisterTool(def ToolDef) bool {
+	if h == nil || h.tools == nil || def.Name == "" || def.Fn == nil {
+		return false
+	}
+	h.tools.RegisterTool(def)
+	return true
+}

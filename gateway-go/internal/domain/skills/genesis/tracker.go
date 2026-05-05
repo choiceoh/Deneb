@@ -183,6 +183,21 @@ type genesisLogEntry struct {
 	Description string `json:"description,omitempty"`
 }
 
+// EvolutionProposalRecord records an agent decision about whether recent
+// experience should become a new skill, evolve an existing skill, or be skipped.
+type EvolutionProposalRecord struct {
+	Type       string `json:"type"`
+	Candidate  string `json:"candidate"`
+	Route      string `json:"route"`
+	SessionKey string `json:"sessionKey,omitempty"`
+	SkillName  string `json:"skillName,omitempty"`
+	Evidence   string `json:"evidence,omitempty"`
+	Reason     string `json:"reason,omitempty"`
+	Executed   bool   `json:"executed,omitempty"`
+	Result     string `json:"result,omitempty"`
+	CreatedAt  int64  `json:"createdAt"`
+}
+
 // LogGenesis records that a skill was auto-generated.
 func (t *Tracker) LogGenesis(skillName, source, sessionKey, category, description string) error {
 	t.mu.Lock()
@@ -196,6 +211,20 @@ func (t *Tracker) LogGenesis(skillName, source, sessionKey, category, descriptio
 		Category:    category,
 		Description: description,
 	})
+}
+
+// LogEvolutionProposal records a self-evolution routing decision.
+func (t *Tracker) LogEvolutionProposal(record EvolutionProposalRecord) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if record.Type == "" {
+		record.Type = "evolution_proposal"
+	}
+	if record.CreatedAt == 0 {
+		record.CreatedAt = time.Now().UnixMilli()
+	}
+	return jsonlstore.Append(t.logPath, record)
 }
 
 // SkillsNeedingEvolution returns skills with high failure rates.

@@ -167,12 +167,12 @@ Use `requires_tools` for skills that depend on specific agent capabilities.
 The skill system supports a closed learning loop:
 
 ```
-Experience → Factory → Creation → Use → Evolution → Improved Skill
+Experience → Proposal → Genesis/Create → Use → Evolution → Improved Skill
 ```
 
 | Phase | Skill | Description |
 |---|---|---|
-| **Proposal** | `evolution-proposal` | Decide whether recent work should route to genesis, creation, evolution, or no-op |
+| **Proposal** | `evolution-proposal` + `skill_lifecycle` | Decide, record, and execute genesis/evolution/no-op routes |
 | **Creation** | `skill-factory` | Extract reusable patterns from complex workflows |
 | **Authoring** | `skill-creator` | Create/edit/audit SKILL.md files |
 | **Evolution** | `skill-evolution` | Optimize skills via autoresearch methodology |

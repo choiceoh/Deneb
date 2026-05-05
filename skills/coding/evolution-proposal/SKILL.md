@@ -2,7 +2,7 @@
 name: evolution-proposal
 version: "1.0.0"
 category: coding
-description: "Propose and route self-evolution after a meaningful workflow. Use when: (1) a completed task may deserve a reusable skill, (2) the user asks for skill genesis, self-evolution, or an evolution proposal, (3) an existing skill should be evolved instead of creating a new one. NOT for: ordinary coding work, one-off notes, or directly authoring a SKILL.md without first deciding the route."
+description: "Propose, record, and execute self-evolution after a meaningful workflow via the skill_lifecycle tool. Use when: (1) a completed task may deserve a reusable skill, (2) the user asks for skill genesis, self-evolution, or an evolution proposal, (3) an existing skill should be evolved instead of creating a new one. NOT for: ordinary coding work, one-off notes, or directly authoring a SKILL.md without first deciding the route."
 metadata:
   {
     "deneb":
@@ -39,24 +39,26 @@ Choose exactly one route:
 | Route | Use when | Action |
 |---|---|---|
 | No-op | The workflow is one-off or already covered | Say no skill change is needed |
-| Genesis | A complete recent session has a reusable pattern | Trigger `skills.genesis` if RPC access is available |
+| Genesis | A complete recent session has a reusable pattern | Call `skill_lifecycle` action `genesis` |
 | Create | RPC is unavailable, but the pattern is clear now | Use `skill-factory`, then `skills` action `create` |
-| Evolve | An existing skill almost covers the workflow | Use `skill-evolution`, then patch that skill |
+| Evolve | An existing skill almost covers the workflow | Call `skill_lifecycle` action `evolve` or use `skill-evolution` for a manual patch |
 
-Prefer `Genesis` when the runtime exposes `skills.genesis`; it preserves the
-engine's cooldowns, duplicate checks, daily cap, and generated-skill metadata.
-If the current agent surface cannot call that RPC directly, be explicit and
-fall back to `Create` or `Evolve` rather than pretending genesis ran.
+Prefer `Genesis` through `skill_lifecycle` when available; it preserves the
+engine's cooldowns, duplicate checks, daily cap, generated-skill metadata, and
+proposal logs. If the current agent surface cannot call that tool directly, be
+explicit and fall back to `Create` or `Evolve` rather than pretending genesis ran.
 
 ## Procedure
 
 1. State the candidate pattern in one sentence.
 2. Check existing skills with `skills` action `list`; read the closest match if any.
 3. Decide the route using the table above.
-4. If route is `Genesis`, call `skills.genesis` with the current `sessionKey` or a concise `dreamSummary` when that RPC is available.
-5. If route is `Create`, load `skill-factory` and create a concise `SKILL.md` with `skills` action `create`.
-6. If route is `Evolve`, load `skill-evolution` and patch only the smallest useful section.
-7. Report what changed, or why no change was made.
+4. Load `skill_lifecycle` with `fetch_tools` if the schema is not visible.
+5. Record the decision with `skill_lifecycle` action `propose`.
+6. If route is `Genesis`, pass `execute=true` or call action `genesis`; omit `sessionKey` to use the current session, or pass a concise `dreamSummary`.
+7. If route is `Evolve`, pass `execute=true` with `skillName` or call action `evolve`.
+8. If route is `Create`, load `skill-factory` and create a concise `SKILL.md` with `skills` action `create`.
+9. Report what changed, or why no change was made.
 
 ## Proposal Template
 
@@ -70,6 +72,18 @@ Route: <No-op | Genesis | Create | Evolve>
 Next action: <specific tool/RPC/patch or none>
 ```
 
+Typical execution call after deciding `Genesis`:
+
+```json
+{
+  "action": "propose",
+  "candidate": "Reusable workflow pattern",
+  "evidence": "5+ tool calls, repeated pitfall, user asked to keep it",
+  "route": "genesis",
+  "execute": true
+}
+```
+
 ## Pitfalls
 
 - Do not create a skill just because a task was long. The workflow must be reusable.
@@ -81,4 +95,5 @@ Next action: <specific tool/RPC/patch or none>
 
 - New skill: `skills` action `list` can discover it, and its description has concrete triggers.
 - Evolved skill: the patch is narrow, version is bumped when appropriate, and the original purpose remains intact.
-- Genesis route: the RPC response reports either a created skill, a skip reason, or a clear error.
+- Genesis route: `skill_lifecycle` reports either a created skill, a skip reason, or a clear error.
+- Proposal route: the result includes `route` and `executed`, so the loop is auditable.

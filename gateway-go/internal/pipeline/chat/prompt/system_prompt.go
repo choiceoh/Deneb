@@ -252,8 +252,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		ss.WriteString("재사용 가치가 높은 워크플로우를 발견하면:\n")
 		ss.WriteString("1. `evolution-proposal` 스킬로 genesis/create/evolve/no-op 중 하나를 먼저 결정하세요.\n")
 		ss.WriteString("2. 반복 가능한 절차를 명확하게 구조화하세요 (When to Use → Procedure → Pitfalls → Verification).\n")
-		ss.WriteString("3. 스킬로 추출할 가치가 있다고 판단되면 skills.genesis RPC로 명시적 추출도 가능합니다.\n")
-		ss.WriteString("4. 기존 스킬이 부족하면 skills.evolve로 개선을 트리거할 수 있습니다.\n")
+		ss.WriteString("3. 제안·생성·진화 실행은 `skill_lifecycle` 도구(propose/genesis/evolve)로 닫으세요.\n")
+		ss.WriteString("4. 기존 스킬이 부족하면 evolve route로 개선을 트리거할 수 있습니다.\n")
 		// S3: agent-facing save path. The agent itself may decide a
 		// workflow is worth keeping and persist it via skill_manage.
 		// apply=true is an explicit opt-in for mid-session visibility;
