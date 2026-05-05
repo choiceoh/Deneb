@@ -11,11 +11,23 @@ set -euo pipefail
 
 PORT="${BGE_M3_PORT:-8001}"
 HOST="${BGE_M3_HOST:-127.0.0.1}"
-DEVICE="${BGE_M3_DEVICE:-cuda}"
+# bge-m3-server.py exposes --gpu-layers (llama.cpp parameter) rather than a
+# CUDA/CPU --device toggle. Default to full offload (99 = all layers on GPU);
+# override with BGE_M3_GPU_LAYERS=0 for CPU-only fallback.
+GPU_LAYERS="${BGE_M3_GPU_LAYERS:-99}"
 LOG_FILE="/tmp/bge-m3-server.log"
 PID_FILE="/tmp/bge-m3-server.pid"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVER_SCRIPT="$SCRIPT_DIR/bge-m3-server.py"
+
+# Pick a Python with uvicorn / fastapi / llama_cpp installed. The deploy
+# venv at ~/venv carries them; the system python3 typically does not.
+# Override with BGE_M3_PYTHON to point at a different interpreter.
+PYTHON="${BGE_M3_PYTHON:-/home/choiceoh/venv/bin/python3}"
+if [[ ! -x "$PYTHON" ]]; then
+    echo "WARNING: $PYTHON not executable, falling back to system python3" >&2
+    PYTHON=python3
+fi
 
 start() {
     if [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
@@ -23,9 +35,9 @@ start() {
         return 0
     fi
 
-    echo "starting BGE-M3 server on $HOST:$PORT (device=$DEVICE)..."
-    nohup python3 "$SERVER_SCRIPT" \
-        --port "$PORT" --host "$HOST" --device "$DEVICE" \
+    echo "starting BGE-M3 server on $HOST:$PORT (gpu_layers=$GPU_LAYERS) via $PYTHON..."
+    nohup "$PYTHON" "$SERVER_SCRIPT" \
+        --port "$PORT" --host "$HOST" --gpu-layers "$GPU_LAYERS" \
         > "$LOG_FILE" 2>&1 &
 
     local pid=$!
