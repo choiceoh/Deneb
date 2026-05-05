@@ -24,7 +24,8 @@ import (
 // skills prompt cache so changes take effect on the next turn.
 type SkillManageInvalidateFn func()
 
-// ToolSkills creates the unified skills tool with action dispatch (list/create/patch/delete/read/list_files).
+// ToolSkills creates the unified skills tool with action dispatch
+// (list/create/patch/delete/read/list_files/write_file/remove_file).
 func ToolSkills(getSnapshot SkillsSnapshotProvider, workspaceDir string, invalidate SkillManageInvalidateFn) ToolFunc {
 	listFn := toolSkillsList(getSnapshot)
 	manageFn := toolSkillManage(workspaceDir, invalidate)
@@ -38,10 +39,10 @@ func ToolSkills(getSnapshot SkillsSnapshotProvider, workspaceDir string, invalid
 		switch p.Action {
 		case "list":
 			return listFn(ctx, input)
-		case "create", "patch", "delete", "read", "list_files":
+		case "create", "patch", "delete", "read", "list_files", "write_file", "remove_file":
 			return manageFn(ctx, input)
 		default:
-			return "action은 list, create, patch, delete, read, list_files 중 하나를 지정하세요.", nil
+			return "action은 list, create, patch, delete, read, list_files, write_file, remove_file 중 하나를 지정하세요.", nil
 		}
 	}
 }
@@ -95,8 +96,12 @@ func toolSkillManage(workspaceDir string, invalidate SkillManageInvalidateFn) To
 			return skillRead(workspaceDir, p.Name, p.FilePath)
 		case "list_files":
 			return skillListFiles(workspaceDir, p.Name)
+		case "write_file":
+			result, err = skillWriteFile(workspaceDir, p.Name, p.FilePath, p.FileContent, effectiveInvalidate)
+		case "remove_file":
+			result, err = skillRemoveFile(workspaceDir, p.Name, p.FilePath, effectiveInvalidate)
 		default:
-			return "", fmt.Errorf("unknown action %q: use create, patch, delete, read, or list_files", p.Action)
+			return "", fmt.Errorf("unknown action %q: use create, patch, delete, read, list_files, write_file, or remove_file", p.Action)
 		}
 		if err != nil {
 			return "", err
@@ -164,7 +169,10 @@ func skillCreate(workspaceDir, name, category, content string, invalidate SkillM
 	}
 
 	invalidate()
-	return fmt.Sprintf("Created skill %q at skills/%s/%s/SKILL.md", name, category, name), nil
+	return appendSkillSafetyWarnings(
+		fmt.Sprintf("Created skill %q at skills/%s/%s/SKILL.md", name, category, name),
+		skillSafetyWarnings(content),
+	), nil
 }
 
 func skillPatch(workspaceDir, name, oldText, newText string, invalidate SkillManageInvalidateFn) (string, error) {
@@ -293,7 +301,102 @@ func skillListFiles(workspaceDir, name string) (string, error) {
 	return strings.Join(files, "\n"), nil
 }
 
+func skillWriteFile(workspaceDir, name, filePath, fileContent string, invalidate SkillManageInvalidateFn) (string, error) {
+	if filePath == "" {
+		return "", fmt.Errorf("file_path is required for write_file")
+	}
+	baseSkillPath, err := findSkillPath(workspaceDir, name)
+	if err != nil {
+		return "", err
+	}
+	skillDir := filepath.Dir(baseSkillPath)
+	rel, err := cleanSupportFilePath(filePath)
+	if err != nil {
+		return "", err
+	}
+	targetPath := filepath.Join(skillDir, rel)
+	if !isWithinDir(targetPath, skillDir) {
+		return "", fmt.Errorf("file_path escapes skill directory")
+	}
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+		return "", fmt.Errorf("failed to create support file directory: %w", err)
+	}
+	perm := os.FileMode(0o644)
+	if strings.HasPrefix(filepath.ToSlash(rel), "scripts/") && strings.HasPrefix(fileContent, "#!") {
+		perm = 0o755
+	}
+	if err := atomicfile.WriteFile(targetPath, []byte(fileContent), &atomicfile.Options{Perm: perm}); err != nil {
+		return "", fmt.Errorf("failed to write support file: %w", err)
+	}
+	invalidate()
+	return appendSkillSafetyWarnings(
+		fmt.Sprintf("Wrote support file %q for skill %q", rel, name),
+		skillSafetyWarnings(fileContent),
+	), nil
+}
+
+func skillRemoveFile(workspaceDir, name, filePath string, invalidate SkillManageInvalidateFn) (string, error) {
+	if filePath == "" {
+		return "", fmt.Errorf("file_path is required for remove_file")
+	}
+	baseSkillPath, err := findSkillPath(workspaceDir, name)
+	if err != nil {
+		return "", err
+	}
+	skillDir := filepath.Dir(baseSkillPath)
+	rel, err := cleanSupportFilePath(filePath)
+	if err != nil {
+		return "", err
+	}
+	targetPath := filepath.Join(skillDir, rel)
+	if !isWithinDir(targetPath, skillDir) {
+		return "", fmt.Errorf("file_path escapes skill directory")
+	}
+	info, err := os.Stat(targetPath)
+	if err != nil {
+		return "", fmt.Errorf("support file not found: %w", err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("remove_file only removes files, not directories")
+	}
+	if err := os.Remove(targetPath); err != nil {
+		return "", fmt.Errorf("failed to remove support file: %w", err)
+	}
+	invalidate()
+	return fmt.Sprintf("Removed support file %q for skill %q", rel, name), nil
+}
+
 // --- helpers ---
+
+var allowedSkillSupportDirs = map[string]struct{}{
+	"assets":     {},
+	"references": {},
+	"scripts":    {},
+	"templates":  {},
+}
+
+func cleanSupportFilePath(filePath string) (string, error) {
+	raw := strings.TrimSpace(filePath)
+	if raw == "" {
+		return "", fmt.Errorf("file_path is required")
+	}
+	if filepath.IsAbs(raw) {
+		return "", fmt.Errorf("file_path must be relative to the skill directory")
+	}
+	clean := filepath.Clean(raw)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("file_path escapes skill directory")
+	}
+	slash := filepath.ToSlash(clean)
+	parts := strings.Split(slash, "/")
+	if len(parts) < 2 || parts[1] == "" {
+		return "", fmt.Errorf("support files must live under references/, templates/, scripts/, or assets/")
+	}
+	if _, ok := allowedSkillSupportDirs[parts[0]]; !ok {
+		return "", fmt.Errorf("support files must live under references/, templates/, scripts/, or assets/")
+	}
+	return clean, nil
+}
 
 func findSkillPath(workspaceDir, name string) (string, error) {
 	skillsRoot := filepath.Join(workspaceDir, "skills")
@@ -398,4 +501,36 @@ func isWithinDir(path, dir string) bool {
 		return false
 	}
 	return strings.HasPrefix(absPath, absDir+string(filepath.Separator)) || absPath == absDir
+}
+
+func skillSafetyWarnings(content string) []string {
+	lower := strings.ToLower(content)
+	var warnings []string
+	checks := []struct {
+		needle string
+		msg    string
+	}{
+		{"-----begin private key-----", "contains text that looks like a private key"},
+		{"api_key=", "contains text that looks like an inline API key"},
+		{"apikey=", "contains text that looks like an inline API key"},
+		{"password=", "contains text that looks like an inline password"},
+		{"token=", "contains text that looks like an inline token"},
+		{"rm -rf /", "contains a destructive shell pattern"},
+		{"curl ", "contains curl; review pipe-to-shell patterns before reuse"},
+		{"| sh", "contains pipe-to-shell pattern"},
+		{"| bash", "contains pipe-to-shell pattern"},
+	}
+	for _, check := range checks {
+		if strings.Contains(lower, check.needle) {
+			warnings = append(warnings, check.msg)
+		}
+	}
+	return warnings
+}
+
+func appendSkillSafetyWarnings(result string, warnings []string) string {
+	if len(warnings) == 0 {
+		return result
+	}
+	return result + "\nSafety warnings:\n- " + strings.Join(warnings, "\n- ")
 }

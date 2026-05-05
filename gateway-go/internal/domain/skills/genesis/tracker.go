@@ -34,10 +34,11 @@ type UsageStats struct {
 
 // Tracker records and queries skill usage for evolution decisions.
 type Tracker struct {
-	logger    *slog.Logger
-	mu        sync.Mutex
-	usagePath string
-	logPath   string
+	logger      *slog.Logger
+	mu          sync.Mutex
+	usagePath   string
+	logPath     string
+	curatorPath string
 
 	// In-memory aggregated stats, rebuilt from JSONL on startup.
 	stats        map[string]*usageAgg
@@ -71,6 +72,7 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 		logger:       logger,
 		usagePath:    filepath.Join(dir, "skill_usage.jsonl"),
 		logPath:      filepath.Join(dir, "skill_genesis_log.jsonl"),
+		curatorPath:  filepath.Join(dir, "skill_curator_state.json"),
 		stats:        make(map[string]*usageAgg),
 		recentErrors: make(map[string][]string),
 	}
@@ -127,6 +129,9 @@ func (t *Tracker) RecordUsage(record UsageRecord) error {
 		return fmt.Errorf("genesis-tracker: append usage: %w", err)
 	}
 	t.ingest(record)
+	if err := t.touchCuratorUsageLocked(record.SkillName, record.UsedAt); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -173,8 +178,28 @@ func (t *Tracker) ListAllStats() ([]UsageStats, error) {
 	return result, nil
 }
 
+// LifecycleLogEntry is the combined JSONL view for genesis and evolution
+// proposal events. Older genesis entries may not have Type populated; readers
+// normalize those to "genesis".
+type LifecycleLogEntry struct {
+	Type        string `json:"type,omitempty"`
+	SkillName   string `json:"skillName,omitempty"`
+	Source      string `json:"source,omitempty"`
+	SessionKey  string `json:"sessionKey,omitempty"`
+	CreatedAt   int64  `json:"createdAt,omitempty"`
+	Category    string `json:"category,omitempty"`
+	Description string `json:"description,omitempty"`
+	Candidate   string `json:"candidate,omitempty"`
+	Route       string `json:"route,omitempty"`
+	Evidence    string `json:"evidence,omitempty"`
+	Reason      string `json:"reason,omitempty"`
+	Executed    bool   `json:"executed,omitempty"`
+	Result      string `json:"result,omitempty"`
+}
+
 // genesisLogEntry is the JSONL format for genesis log events.
 type genesisLogEntry struct {
+	Type        string `json:"type"`
 	SkillName   string `json:"skillName"`
 	Source      string `json:"source"`
 	SessionKey  string `json:"sessionKey,omitempty"`
@@ -183,19 +208,82 @@ type genesisLogEntry struct {
 	Description string `json:"description,omitempty"`
 }
 
+// EvolutionProposalRecord records an agent decision about whether recent
+// experience should become a new skill, evolve an existing skill, or be skipped.
+type EvolutionProposalRecord struct {
+	Type       string `json:"type"`
+	Candidate  string `json:"candidate"`
+	Route      string `json:"route"`
+	SessionKey string `json:"sessionKey,omitempty"`
+	SkillName  string `json:"skillName,omitempty"`
+	Evidence   string `json:"evidence,omitempty"`
+	Reason     string `json:"reason,omitempty"`
+	Executed   bool   `json:"executed,omitempty"`
+	Result     string `json:"result,omitempty"`
+	CreatedAt  int64  `json:"createdAt"`
+}
+
 // LogGenesis records that a skill was auto-generated.
 func (t *Tracker) LogGenesis(skillName, source, sessionKey, category, description string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	return jsonlstore.Append(t.logPath, genesisLogEntry{
+	createdAt := time.Now().UnixMilli()
+	if err := jsonlstore.Append(t.logPath, genesisLogEntry{
+		Type:        "genesis",
 		SkillName:   skillName,
 		Source:      source,
 		SessionKey:  sessionKey,
-		CreatedAt:   time.Now().UnixMilli(),
+		CreatedAt:   createdAt,
 		Category:    category,
 		Description: description,
-	})
+	}); err != nil {
+		return err
+	}
+	return t.markSkillAgentCreatedLocked(skillName, createdAt)
+}
+
+// LogEvolutionProposal records a self-evolution routing decision.
+func (t *Tracker) LogEvolutionProposal(record EvolutionProposalRecord) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if record.Type == "" {
+		record.Type = "evolution_proposal"
+	}
+	if record.CreatedAt == 0 {
+		record.CreatedAt = time.Now().UnixMilli()
+	}
+	if err := jsonlstore.Append(t.logPath, record); err != nil {
+		return err
+	}
+	return nil
+}
+
+// RecentLifecycleLog returns recent genesis/proposal events, newest first.
+func (t *Tracker) RecentLifecycleLog(limit int) ([]LifecycleLogEntry, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if limit <= 0 {
+		limit = 20
+	}
+	entries, err := jsonlstore.Load[LifecycleLogEntry](t.logPath)
+	if err != nil {
+		return nil, fmt.Errorf("genesis-tracker: load lifecycle log: %w", err)
+	}
+	for i := range entries {
+		if entries[i].Type == "" {
+			entries[i].Type = "genesis"
+		}
+	}
+	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
+		entries[i], entries[j] = entries[j], entries[i]
+	}
+	if len(entries) > limit {
+		entries = entries[:limit]
+	}
+	return entries, nil
 }
 
 // SkillsNeedingEvolution returns skills with high failure rates.

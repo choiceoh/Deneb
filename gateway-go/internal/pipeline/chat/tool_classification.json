@@ -25,7 +25,8 @@
         "subagents",
         "kv",
         "bridge",
-        "skills"
+        "skills",
+        "skill_lifecycle"
       ]
     }
   },
@@ -39,7 +40,8 @@
       "analyze": true,
       "wiki": true,
       "kv": true,
-      "sessions": true
+      "sessions": true,
+      "skill_lifecycle": true
     }
   }
 }

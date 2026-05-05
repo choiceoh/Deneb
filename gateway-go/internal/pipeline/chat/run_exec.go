@@ -783,7 +783,7 @@ func buildAgentConfig(
 	// Skill-nudger hook state: tracks per-run tool activity so we can
 	// hand a clean snapshot to the background review goroutine. Zero cost
 	// when acd.SkillNudger is nil or disabled.
-	skillNudgerEnabled := acd.SkillNudger != nil && acd.SkillNudger.Enabled()
+	skillNudgerEnabled := shouldEnableSkillNudger(acd.SkillNudger, params, sessionToolPreset)
 	var nudgerMu sync.Mutex
 	var nudgerActivities []SkillNudgeToolActivity
 	var nudgerTurns int
@@ -875,6 +875,19 @@ func buildAgentConfig(
 	}
 
 	return cfg, spawnFlag
+}
+
+func shouldEnableSkillNudger(nudger SkillNudger, params RunParams, sessionToolPreset string) bool {
+	if nudger == nil || !nudger.Enabled() {
+		return false
+	}
+	if params.EphemeralUser || params.EphemeralAssistant {
+		return false
+	}
+	if sessionToolPreset == string(toolpreset.PresetSelfReview) {
+		return false
+	}
+	return !strings.HasPrefix(params.SessionKey, "system:")
 }
 
 // wireDraftStreamHook sets up the draft stream loop on the compositor and returns

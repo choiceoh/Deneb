@@ -29,7 +29,7 @@ description: One-line description of what skills belong in this category.
 
 | Category | Description | Skills |
 |---|---|---|
-| `coding` | Software development, code generation, version control, CI/CD | autoresearch, github, skill-creator, skill-evolution, skill-factory |
+| `coding` | Software development, code generation, version control, CI/CD | autoresearch, github, evolution-proposal, skill-creator, skill-evolution, skill-factory |
 | `productivity` | Daily workflows, documents, summarization, personal automation | morning-letter, session-logs, summarize |
 | `devops` | System monitoring, terminal management, infrastructure | healthcheck, tmux |
 | `integration` | External service connectivity, API bridges | mcporter |
@@ -162,16 +162,33 @@ metadata:
 Use `fallback_for_tools` for free/CLI alternatives to premium tools.
 Use `requires_tools` for skills that depend on specific agent capabilities.
 
+## Support Files
+
+Hermes-style support files keep dense commands, config snippets, code templates,
+and assets out of the main `SKILL.md` while preserving exact operational detail.
+
+| Directory | Use for |
+|---|---|
+| `references/` | Long notes, command matrices, API quirks, troubleshooting tables |
+| `templates/` | Reusable config, prompts, manifests, document skeletons |
+| `scripts/` | Verification helpers or repeatable command wrappers |
+| `assets/` | Images, fixtures, small binary or text assets |
+
+The `skills` tool supports `write_file` and `remove_file` only under those four
+directories. Use `read`/`list_files` to inspect them. Scripts with a shebang are
+written executable.
+
 ## Skill Lifecycle (Hermes-Agent Patterns)
 
 The skill system supports a closed learning loop:
 
 ```
-Experience → Factory → Creation → Use → Evolution → Improved Skill
+Experience → Proposal → Genesis/Create → Use → Evolution → Improved Skill
 ```
 
 | Phase | Skill | Description |
 |---|---|---|
+| **Proposal** | `evolution-proposal` + `skill_lifecycle` | Decide, record, and execute genesis/evolution/no-op routes |
 | **Creation** | `skill-factory` | Extract reusable patterns from complex workflows |
 | **Authoring** | `skill-creator` | Create/edit/audit SKILL.md files |
 | **Evolution** | `skill-evolution` | Optimize skills via autoresearch methodology |
@@ -181,7 +198,49 @@ Experience → Factory → Creation → Use → Evolution → Improved Skill
 After completing complex multi-step tasks (5+ tool calls), the agent should consider:
 > "이 작업은 스킬로 만들 가치가 있는가?"
 
-If the pattern is reusable, offer to create a skill using `skill-factory`.
+If the pattern is reusable, start with `evolution-proposal`, then route to
+`skill_lifecycle`, `skill-factory`, or `skill-evolution` as appropriate.
+
+Deneb follows the Hermes mainline route order:
+
+1. Evolve the loaded/closest existing skill.
+2. Add guidance to an existing umbrella skill.
+3. Add detailed support material under `references/`, `templates/`, `scripts/`, or `assets/`.
+4. Create/genesis a new class-level skill only when no existing skill owns the pattern.
+
+User corrections about scope, formatting, validation order, and workflow
+preferences are first-class skill signals when they describe how future agents
+should perform a task class. Personal facts still belong in memory/wiki, not
+skills.
+
+### Background Review Fencing
+
+Iteration-based background review runs through a narrow `self-review` preset:
+
+| Preset | Allowed tools | Explicitly excluded |
+|---|---|---|
+| `self-review` | `fetch_tools`, `skills`, `skill_lifecycle` | shell/git/file writes outside skills, message sends, wiki/memory writes, cron/heartbeat, subagents |
+
+The review turn is ephemeral, uses a `system:skill-review:<session>` session key,
+and must record exactly one lifecycle proposal. This prevents self-improvement
+from polluting short-term chat context or recursively spawning more reviews.
+
+### Curator State
+
+Agent-created skills are tracked in `~/.deneb/data/skill_curator_state.json`.
+The default cadence mirrors Hermes:
+
+| Setting | Default | Env override |
+|---|---:|---|
+| Review interval | 168 hours | `DENEB_SKILL_CURATOR_INTERVAL_HOURS` |
+| Minimum idle before transition | 2 hours | `DENEB_SKILL_CURATOR_MIN_IDLE_HOURS` |
+| Stale threshold | 30 days | `DENEB_SKILL_CURATOR_STALE_DAYS` |
+| Archive threshold | 90 days | `DENEB_SKILL_CURATOR_ARCHIVE_DAYS` |
+
+Only skills marked `createdBy: "agent"` are curator-managed. Pinned skills are
+never transitioned, and archive is state-only; files are not deleted by the
+curator task. Manual `skill_lifecycle` actions are available for `pin`, `unpin`,
+`archive`, and `restore`.
 
 ### Self-Evolution
 

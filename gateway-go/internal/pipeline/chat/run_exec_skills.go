@@ -1,6 +1,9 @@
 package chat
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
@@ -20,8 +23,9 @@ var skillsCache struct {
 // the watcher version changes or on first call.
 // availableToolNames is used for conditional activation (requires_tools/fallback_for_tools).
 func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) string {
+	curatorVersion := skillCuratorStateVersion()
 	skillsCache.mu.RLock()
-	if skillsCache.built {
+	if skillsCache.built && skillsCache.version == curatorVersion {
 		prompt := skillsCache.prompt
 		skillsCache.mu.RUnlock()
 		return prompt
@@ -32,7 +36,7 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 	defer skillsCache.mu.Unlock()
 
 	// Double-check after acquiring write lock.
-	if skillsCache.built {
+	if skillsCache.built && skillsCache.version == curatorVersion {
 		return skillsCache.prompt
 	}
 
@@ -51,9 +55,11 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 			SkillConfigs:   make(map[string]skills.SkillConfig),
 			AvailableTools: availableTools,
 		},
+		ExcludedSkills: loadArchivedCuratorSkillNames(),
 	}
 	// Discover entries first so we can cache them for slash command routing.
 	allEntries := skills.DiscoverWorkspaceSkills(cfg.DiscoverConfig)
+	allEntries = skills.FilterExcludedSkills(allEntries, cfg.ExcludedSkills)
 	SetCachedSkillEntries(allEntries, 0)
 
 	snapshot := skills.BuildWorkspaceSkillSnapshot(cfg)
@@ -65,6 +71,7 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 		skillsCache.snapshot = nil
 	}
 	skillsCache.built = true
+	skillsCache.version = curatorVersion
 	return skillsCache.prompt
 }
 
@@ -79,6 +86,7 @@ func CachedSkillsSnapshot() *skills.FullSkillSnapshot {
 func InvalidateSkillsCache() {
 	skillsCache.mu.Lock()
 	skillsCache.built = false
+	skillsCache.version = 0
 	skillsCache.mu.Unlock()
 }
 
@@ -88,4 +96,53 @@ func availableToolNames(tools *ToolRegistry) []string {
 		return nil
 	}
 	return tools.SortedNames()
+}
+
+func skillCuratorStatePath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".deneb", "data", "skill_curator_state.json")
+}
+
+func skillCuratorStateVersion() int64 {
+	path := skillCuratorStatePath()
+	if path == "" {
+		return 0
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+	return info.ModTime().UnixNano()
+}
+
+func loadArchivedCuratorSkillNames() map[string]struct{} {
+	path := skillCuratorStatePath()
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var state struct {
+		Skills map[string]struct {
+			State string `json:"state"`
+		} `json:"skills"`
+	}
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil
+	}
+	archived := make(map[string]struct{})
+	for name, rec := range state.Skills {
+		if rec.State == "archived" {
+			archived[name] = struct{}{}
+		}
+	}
+	if len(archived) == 0 {
+		return nil
+	}
+	return archived
 }

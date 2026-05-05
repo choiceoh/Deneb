@@ -41,6 +41,8 @@ const nudgeGenerationTimeout = 90 * time.Second
 // keyed by session key. All public methods are safe for concurrent use.
 type Nudger struct {
 	svc      *Service
+	tracker  *Tracker
+	reviewer SkillReviewRunner
 	logger   *slog.Logger
 	interval int
 
@@ -53,6 +55,18 @@ type Nudger struct {
 type NudgerConfig struct {
 	// Interval is the tool-call threshold. <=0 disables nudging.
 	Interval int
+	// Tracker records created skills into the lifecycle/curator sidecar.
+	// Nil keeps nudging functional but unaudited.
+	Tracker *Tracker
+	// Reviewer runs a fenced background review instead of direct generation.
+	// Nil uses the legacy Service.Generate/Persist path.
+	Reviewer SkillReviewRunner
+}
+
+// SkillReviewRunner is implemented by the runtime layer, which can run a
+// separate agent turn with a narrow self-review tool preset.
+type SkillReviewRunner interface {
+	RunSkillReview(ctx context.Context, sessionKey string, snapshot SessionContext) error
 }
 
 // NewNudger creates a Nudger bound to an existing genesis Service.
@@ -71,6 +85,8 @@ func NewNudger(svc *Service, cfg NudgerConfig, logger *slog.Logger) *Nudger {
 	}
 	return &Nudger{
 		svc:      svc,
+		tracker:  cfg.Tracker,
+		reviewer: cfg.Reviewer,
 		logger:   logger,
 		interval: interval,
 		counts:   make(map[string]int),
@@ -81,13 +97,33 @@ func NewNudger(svc *Service, cfg NudgerConfig, logger *slog.Logger) *Nudger {
 // NewNudgerFromEnv reads DENEB_SKILL_NUDGE_INTERVAL and falls back to
 // DefaultNudgeInterval when the env var is unset or invalid.
 func NewNudgerFromEnv(svc *Service, logger *slog.Logger) *Nudger {
+	return NewNudgerFromEnvWithTracker(svc, nil, logger)
+}
+
+// NewNudgerFromEnvWithTracker is NewNudgerFromEnv plus lifecycle logging.
+func NewNudgerFromEnvWithTracker(svc *Service, tracker *Tracker, logger *slog.Logger) *Nudger {
+	return NewNudgerFromEnvWithTrackerAndReviewer(svc, tracker, nil, logger)
+}
+
+// NewNudgerFromEnvWithTrackerAndReviewer wires both lifecycle logging and the
+// Hermes-style fenced review runner.
+func NewNudgerFromEnvWithTrackerAndReviewer(
+	svc *Service,
+	tracker *Tracker,
+	reviewer SkillReviewRunner,
+	logger *slog.Logger,
+) *Nudger {
 	interval := DefaultNudgeInterval
 	if v := os.Getenv("DENEB_SKILL_NUDGE_INTERVAL"); v != "" {
 		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 0 {
 			interval = parsed
 		}
 	}
-	return NewNudger(svc, NudgerConfig{Interval: interval}, logger)
+	return NewNudger(svc, NudgerConfig{
+		Interval: interval,
+		Tracker:  tracker,
+		Reviewer: reviewer,
+	}, logger)
 }
 
 // Enabled reports whether the nudger is configured to fire. Used by the
@@ -191,8 +227,32 @@ func (n *Nudger) fire(parent context.Context, sessionKey string, snapshot Sessio
 		defer n.clearInflight(sessionKey)
 		// Errors are intentionally swallowed — Nudger never propagates to
 		// the user turn.
+		if n.reviewer != nil {
+			_, _ = n.runReviewOnce(sessionKey, snapshot)
+			return
+		}
 		_, _ = n.runOnce(sessionKey, snapshot)
 	})
+}
+
+func (n *Nudger) runReviewOnce(sessionKey string, snapshot SessionContext) (bool, error) {
+	if !n.Enabled() || n.reviewer == nil {
+		return false, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), nudgeGenerationTimeout)
+	defer cancel()
+	if !n.svc.Evaluate(snapshot) {
+		n.logger.Debug("skill nudger: review evaluate rejected session",
+			"session", sessionKey, "turns", snapshot.Turns,
+			"tools", len(snapshot.ToolActivities))
+		return false, nil
+	}
+	if err := n.reviewer.RunSkillReview(ctx, sessionKey, snapshot); err != nil {
+		n.logger.Warn("skill nudger: fenced review failed",
+			"session", sessionKey, "error", err)
+		return false, err
+	}
+	return true, nil
 }
 
 // runOnce performs one evaluation + generate + persist cycle. Returns
@@ -228,6 +288,9 @@ func (n *Nudger) runOnce(sessionKey string, snapshot SessionContext) (bool, erro
 		n.logger.Error("skill nudger: persist failed",
 			"session", sessionKey, "skill", skill.Name, "error", err)
 		return false, err
+	}
+	if n.tracker != nil {
+		_ = n.tracker.LogGenesis(sanitizeSkillName(skill.Name), "nudge", sessionKey, skill.Category, skill.Description)
 	}
 	n.logger.Info("skill nudger: created mid-session skill",
 		"session", sessionKey, "skill", skill.Name, "category", skill.Category)

@@ -35,12 +35,14 @@ type SnapshotConfig struct {
 	Eligibility     EligibilityContext
 	SnapshotVersion int64
 	RemoteNote      string // optional note from remote eligibility
+	ExcludedSkills  map[string]struct{}
 }
 
 // BuildWorkspaceSkillSnapshot discovers, filters, and builds a complete snapshot.
 func BuildWorkspaceSkillSnapshot(cfg SnapshotConfig) *FullSkillSnapshot {
 	// Discover all skills.
 	allEntries := DiscoverWorkspaceSkills(cfg.DiscoverConfig)
+	allEntries = FilterExcludedSkills(allEntries, cfg.ExcludedSkills)
 
 	// Filter by eligibility.
 	eligible := FilterEligibleSkills(allEntries, cfg.Eligibility)
@@ -121,6 +123,20 @@ func BuildWorkspaceSkillSnapshot(cfg SnapshotConfig) *FullSkillSnapshot {
 		DiscoverableSkills: discoverableSkills,
 		Version:            cfg.SnapshotVersion,
 	}
+}
+
+func FilterExcludedSkills(entries []SkillEntry, excluded map[string]struct{}) []SkillEntry {
+	if len(excluded) == 0 || len(entries) == 0 {
+		return entries
+	}
+	filtered := make([]SkillEntry, 0, len(entries))
+	for _, entry := range entries {
+		if _, ok := excluded[entry.Skill.Name]; ok {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	return filtered
 }
 
 func entriesToPromptSkills(entries []SkillEntry) []PromptSkill {

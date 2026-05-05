@@ -102,6 +102,13 @@ func skillsGenesis(deps GenesisDeps) rpcutil.HandlerFunc {
 				"error": err.Error(),
 			})
 		}
+		if deps.Tracker != nil {
+			source := "session"
+			if p.DreamSummary != "" {
+				source = "dream"
+			}
+			_ = deps.Tracker.LogGenesis(skill.Name, source, p.SessionKey, skill.Category, skill.Description)
+		}
 
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":    true,

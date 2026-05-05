@@ -7,6 +7,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 )
 
@@ -31,6 +33,7 @@ func (s *Server) initGenesisServices() {
 
 	// Shared catalog so genesis can register generated skills and evolver can look them up.
 	s.skillCatalog = skills.NewCatalog(s.logger)
+	s.seedSkillCatalog()
 
 	s.genesisSvc = genesis.NewService(cfg, lwClient, s.skillCatalog, s.logger)
 
@@ -46,17 +49,71 @@ func (s *Server) initGenesisServices() {
 	// Iteration-based nudger (Hermes-style): fires a mid-session skill
 	// review every N tool calls. Env var DENEB_SKILL_NUDGE_INTERVAL
 	// overrides the default (10); 0 disables.
-	s.genesisNudger = genesis.NewNudgerFromEnv(s.genesisSvc, s.logger)
+	reviewFork := newSkillReviewFork(s.chatHandler, s.genesisTranscripts, lwModel, s.logger)
+	s.genesisNudger = genesis.NewNudgerFromEnvWithTrackerAndReviewer(
+		s.genesisSvc,
+		s.genesisTracker,
+		reviewFork,
+		s.logger,
+	)
 
 	// Install an adapter so the chat handler can invoke the nudger
 	// without importing the genesis package (dependency inversion).
 	if s.chatHandler != nil && s.genesisNudger.Enabled() {
 		s.chatHandler.SetSkillNudger(newChatNudgerAdapter(s.genesisNudger))
 	}
+	s.registerSkillLifecycleTool()
 
 	s.logger.Info("genesis: services initialized",
 		"model", lwModel, "outputDir", cfg.OutputDir,
 		"nudgeInterval", s.genesisNudger.Interval())
+}
+
+func (s *Server) seedSkillCatalog() {
+	if s.skillCatalog == nil {
+		return
+	}
+	workspaceDir := ""
+	if s.toolDeps != nil {
+		workspaceDir = s.toolDeps.WorkspaceDir
+	}
+	if workspaceDir == "" {
+		workspaceDir = resolveWorkspaceDir()
+	}
+	entries := skills.DiscoverWorkspaceSkills(skills.DiscoverConfig{
+		WorkspaceDir: workspaceDir,
+		Logger:       s.logger,
+	})
+	for _, entry := range entries {
+		s.skillCatalog.Register(entry)
+	}
+	if len(entries) > 0 {
+		s.logger.Info("genesis: seeded skill catalog", "skills", len(entries), "workspace", workspaceDir)
+	}
+}
+
+func (s *Server) registerSkillLifecycleTool() {
+	if s.chatHandler == nil || s.genesisSvc == nil {
+		return
+	}
+	backend := &skillLifecycleBackend{
+		genesis:     s.genesisSvc,
+		evolver:     s.genesisEvolver,
+		tracker:     s.genesisTracker,
+		transcripts: s.genesisTranscripts,
+		logger:      s.logger,
+	}
+	s.chatHandler.RegisterTool(toolctx.ToolDef{
+		Name: "skill_lifecycle",
+		Description: "Closed-loop skill self-evolution: propose (record/route reusable workflow decisions), " +
+			"genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), " +
+			"status (inspect recent lifecycle logs, usage stats, and curator state), " +
+			"pin/unpin/archive/restore (manual state for agent-created skills). " +
+			"Use through the evolution-proposal skill after meaningful workflows.",
+		InputSchema: chattools.SkillLifecycleToolSchema(),
+		Fn:          chattools.ToolSkillLifecycle(backend),
+		Deferred:    true,
+	})
 }
 
 // chatNudgerAdapter adapts *genesis.Nudger to chat.SkillNudger. It lives
@@ -102,6 +159,11 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 		s.autonomousSvc.RegisterTask(&genesis.EvolutionTask{
 			Evolver: s.genesisEvolver,
 			Logger:  s.logger,
+		})
+		s.autonomousSvc.RegisterTask(&genesis.SkillCuratorTask{
+			Tracker: s.genesisTracker,
+			Logger:  s.logger,
+			Config:  genesis.SkillCuratorConfigFromEnv(),
 		})
 	}
 

@@ -10,7 +10,7 @@ package chat
 // output is silenced. Only purely internal tools (session management,
 // bridge, kv) should be listed here — user-facing tools must respond.
 var channelSilentTools = map[string][]string{
-	"telegram": []string{"gateway", "message", "sessions", "sessions_spawn", "subagents", "kv", "bridge", "skills"},
+	"telegram": []string{"gateway", "message", "sessions", "sessions_spawn", "subagents", "kv", "bridge", "skills", "skill_lifecycle"},
 }
 
 // mutatingTools are tools that change the filesystem or run commands.
@@ -27,11 +27,12 @@ var mutatingTools = map[string]struct{}{
 // Structured-output tools are already handled by post-processors.
 // Internal / already-small tools add no compression value.
 var toolCompressSkipSet = map[string]struct{}{
-	"analyze":  {},
-	"git":      {},
-	"grep":     {},
-	"kv":       {},
-	"sessions": {},
-	"tree":     {},
-	"wiki":     {},
+	"analyze":         {},
+	"git":             {},
+	"grep":            {},
+	"kv":              {},
+	"sessions":        {},
+	"skill_lifecycle": {},
+	"tree":            {},
+	"wiki":            {},
 }
