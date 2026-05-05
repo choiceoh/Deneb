@@ -14,9 +14,11 @@ import (
 // Algorithm:
 //  1. Query latest summary coverage and total message count.
 //  2. Recent window: messages not covered by any summary → raw messages.
-//  3. Summary window: highest-level summaries covering older messages.
-//  4. Pack into token budget: protected tail (freshTailCount) + summaries newest-first.
-//  5. If still over budget, drop oldest summaries (deterministic truncation).
+//  3. When no summaries exist yet, keep only freshTailCount raw messages here;
+//     CompactAndPersist bootstrap recovers the dropped prefix before the LLM call.
+//  4. Summary window: highest-level summaries covering older messages.
+//  5. Pack into token budget: uncovered recent + summaries newest-first.
+//  6. If still over budget, drop oldest summaries (deterministic truncation).
 func assembleContextFull(
 	store *Store,
 	sessionKey string,
@@ -43,14 +45,17 @@ func assembleContextFull(
 	// Convert recent ChatMessages to llm.Messages.
 	recent := chatToLLM(recentMsgs)
 
-	// Enforce fresh tail count: keep only the most recent N messages.
-	if freshTailCount > 0 && len(recent) > freshTailCount {
-		recent = recent[len(recent)-freshTailCount:]
-	}
-
 	// If no summaries exist, return recent messages as-is.
 	// Compaction will handle overflow (summarize first, truncate only as last resort).
 	if summaryCoverage < 0 {
+		// Initial bootstrap is the only case where fresh-tail trimming is safe:
+		// CompactAndPersist can infer the dropped prefix from total transcript
+		// count and recover it before the first LLM call. Once a summary exists,
+		// every message after summaryCoverage is uncovered and must stay raw
+		// until compaction summarizes it.
+		if freshTailCount > 0 && len(recent) > freshTailCount {
+			recent = recent[len(recent)-freshTailCount:]
+		}
 		tokens := compact.EstimateMessagesTokens(recent)
 		return &AssemblyResult{
 			Messages:        recent,

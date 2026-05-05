@@ -65,6 +65,10 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 		}
 	}()
 
+	if params.EphemeralUser {
+		return ""
+	}
+
 	message := strings.TrimSpace(params.Message)
 	if !shouldRunRecallPreflight(message) {
 		return ""
