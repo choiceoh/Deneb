@@ -9,7 +9,7 @@ metadata:
       {
         "emoji": "🏭",
         "tags": ["automation", "extraction", "pattern", "procedural-memory"],
-        "related_skills": ["skill-creator", "skill-evolution"],
+        "related_skills": ["evolution-proposal", "skill-creator", "skill-evolution"],
       },
   }
 ---

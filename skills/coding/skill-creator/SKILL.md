@@ -8,7 +8,7 @@ metadata:
     "deneb":
       {
         "tags": ["skill", "authoring", "meta", "SKILL.md"],
-        "related_skills": ["skill-factory", "skill-evolution"],
+        "related_skills": ["evolution-proposal", "skill-factory", "skill-evolution"],
       },
   }
 ---

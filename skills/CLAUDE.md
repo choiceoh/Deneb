@@ -29,7 +29,7 @@ description: One-line description of what skills belong in this category.
 
 | Category | Description | Skills |
 |---|---|---|
-| `coding` | Software development, code generation, version control, CI/CD | autoresearch, github, skill-creator, skill-evolution, skill-factory |
+| `coding` | Software development, code generation, version control, CI/CD | autoresearch, github, evolution-proposal, skill-creator, skill-evolution, skill-factory |
 | `productivity` | Daily workflows, documents, summarization, personal automation | morning-letter, session-logs, summarize |
 | `devops` | System monitoring, terminal management, infrastructure | healthcheck, tmux |
 | `integration` | External service connectivity, API bridges | mcporter |
@@ -172,6 +172,7 @@ Experience → Factory → Creation → Use → Evolution → Improved Skill
 
 | Phase | Skill | Description |
 |---|---|---|
+| **Proposal** | `evolution-proposal` | Decide whether recent work should route to genesis, creation, evolution, or no-op |
 | **Creation** | `skill-factory` | Extract reusable patterns from complex workflows |
 | **Authoring** | `skill-creator` | Create/edit/audit SKILL.md files |
 | **Evolution** | `skill-evolution` | Optimize skills via autoresearch methodology |
@@ -181,7 +182,8 @@ Experience → Factory → Creation → Use → Evolution → Improved Skill
 After completing complex multi-step tasks (5+ tool calls), the agent should consider:
 > "이 작업은 스킬로 만들 가치가 있는가?"
 
-If the pattern is reusable, offer to create a skill using `skill-factory`.
+If the pattern is reusable, start with `evolution-proposal`, then route to
+`skills.genesis`, `skill-factory`, or `skill-evolution` as appropriate.
 
 ### Self-Evolution
 
