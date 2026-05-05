@@ -183,7 +183,7 @@ After completing complex multi-step tasks (5+ tool calls), the agent should cons
 > "이 작업은 스킬로 만들 가치가 있는가?"
 
 If the pattern is reusable, start with `evolution-proposal`, then route to
-`skills.genesis`, `skill-factory`, or `skill-evolution` as appropriate.
+`skill_lifecycle`, `skill-factory`, or `skill-evolution` as appropriate.
 
 ### Self-Evolution
 

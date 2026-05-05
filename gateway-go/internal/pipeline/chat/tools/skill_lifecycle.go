@@ -16,6 +16,7 @@ type SkillLifecycleBackend interface {
 	ProposeSkillEvolution(context.Context, SkillEvolutionProposalRequest) (any, error)
 	RunSkillGenesis(context.Context, SkillGenesisRequest) (any, error)
 	RunSkillEvolution(context.Context, SkillEvolutionRequest) (any, error)
+	SkillLifecycleStatus(context.Context, SkillLifecycleStatusRequest) (any, error)
 }
 
 // SkillEvolutionProposalRequest records the agent's routing decision after a
@@ -44,7 +45,14 @@ type SkillEvolutionRequest struct {
 	SkillName string `json:"skillName"`
 }
 
-// ToolSkillLifecycle exposes propose/genesis/evolve as one agent-facing tool.
+// SkillLifecycleStatusRequest queries recent lifecycle decisions and usage
+// stats so future agents can audit what happened.
+type SkillLifecycleStatusRequest struct {
+	SkillName string `json:"skillName,omitempty"`
+	Limit     int    `json:"limit,omitempty"`
+}
+
+// ToolSkillLifecycle exposes propose/genesis/evolve/status as one agent-facing tool.
 func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		if backend == nil {
@@ -61,6 +69,7 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 			DreamSummary string `json:"dreamSummary"`
 			SkillName    string `json:"skillName"`
 			Execute      bool   `json:"execute"`
+			Limit        int    `json:"limit"`
 		}
 		if err := jsonutil.UnmarshalInto("skill_lifecycle params", input, &p); err != nil {
 			return "", err
@@ -91,8 +100,13 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 			result, err = backend.RunSkillEvolution(ctx, SkillEvolutionRequest{
 				SkillName: p.SkillName,
 			})
+		case "status":
+			result, err = backend.SkillLifecycleStatus(ctx, SkillLifecycleStatusRequest{
+				SkillName: p.SkillName,
+				Limit:     p.Limit,
+			})
 		default:
-			return "action은 propose, genesis, evolve 중 하나를 지정하세요.", nil
+			return "action은 propose, genesis, evolve, status 중 하나를 지정하세요.", nil
 		}
 		if err != nil {
 			return "", err
@@ -113,8 +127,8 @@ func SkillLifecycleToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: propose (record/route a self-evolution proposal), genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill)",
-				"enum":        []string{"propose", "genesis", "evolve"},
+				"description": "Action: propose (record/route a self-evolution proposal), genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), status (inspect recent lifecycle logs and usage stats)",
+				"enum":        []string{"propose", "genesis", "evolve", "status"},
 			},
 			"candidate": map[string]any{
 				"type":        "string",
@@ -132,6 +146,12 @@ func SkillLifecycleToolSchema() map[string]any {
 				"type":        "boolean",
 				"description": "For propose: immediately execute the selected route when possible (default false)",
 				"default":     false,
+			},
+			"limit": map[string]any{
+				"type":        "integer",
+				"description": "For status: maximum recent lifecycle log entries to return (default 20, max 50)",
+				"minimum":     1,
+				"maximum":     50,
 			},
 			"reason": map[string]any{
 				"type":        "string",

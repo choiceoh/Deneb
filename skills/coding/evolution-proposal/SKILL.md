@@ -47,6 +47,8 @@ Prefer `Genesis` through `skill_lifecycle` when available; it preserves the
 engine's cooldowns, duplicate checks, daily cap, generated-skill metadata, and
 proposal logs. If the current agent surface cannot call that tool directly, be
 explicit and fall back to `Create` or `Evolve` rather than pretending genesis ran.
+Use `status` when you need to check recent proposal/genesis history before
+deciding, or to verify that an executed proposal was recorded.
 
 ## Procedure
 
@@ -54,11 +56,13 @@ explicit and fall back to `Create` or `Evolve` rather than pretending genesis ra
 2. Check existing skills with `skills` action `list`; read the closest match if any.
 3. Decide the route using the table above.
 4. Load `skill_lifecycle` with `fetch_tools` if the schema is not visible.
-5. Record the decision with `skill_lifecycle` action `propose`.
-6. If route is `Genesis`, pass `execute=true` or call action `genesis`; omit `sessionKey` to use the current session, or pass a concise `dreamSummary`.
-7. If route is `Evolve`, pass `execute=true` with `skillName` or call action `evolve`.
-8. If route is `Create`, load `skill-factory` and create a concise `SKILL.md` with `skills` action `create`.
-9. Report what changed, or why no change was made.
+5. If the session history is unclear, call `skill_lifecycle` action `status` first and review recent lifecycle records.
+6. Record the decision with `skill_lifecycle` action `propose`.
+7. If route is `Genesis`, pass `execute=true` or call action `genesis`; omit `sessionKey` to use the current session, or pass a concise `dreamSummary`.
+8. If route is `Evolve`, pass `execute=true` with `skillName` or call action `evolve`.
+9. If route is `Create`, load `skill-factory` and create a concise `SKILL.md` with `skills` action `create`.
+10. For executed `Genesis`/`Evolve` routes, call `skill_lifecycle` action `status` with `limit: 5` when you need an audit trail.
+11. Report what changed, or why no change was made.
 
 ## Proposal Template
 
@@ -90,6 +94,7 @@ Typical execution call after deciding `Genesis`:
 - Do not duplicate `skill-factory`, `skill-creator`, or `skill-evolution`; route to them.
 - Do not store secrets, private contact data, or single-session context in a skill.
 - Do not mutate a skill and invalidate prompt cache mid-session unless immediate use is necessary; prefer deferred application.
+- Do not widen narrow chat presets just to expose lifecycle tools; if the current surface lacks `skill_lifecycle`, state the intended proposal route and stop there.
 
 ## Verification
 
@@ -97,3 +102,4 @@ Typical execution call after deciding `Genesis`:
 - Evolved skill: the patch is narrow, version is bumped when appropriate, and the original purpose remains intact.
 - Genesis route: `skill_lifecycle` reports either a created skill, a skip reason, or a clear error.
 - Proposal route: the result includes `route` and `executed`, so the loop is auditable.
+- Audit route: `skill_lifecycle` action `status` shows recent proposal/genesis records and usage stats.

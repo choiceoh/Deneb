@@ -14,6 +14,8 @@ import (
 )
 
 const skillLifecycleTimeout = 90 * time.Second
+const skillLifecycleMaxStatusLogEntries = 50
+const skillLifecycleMaxProposalResultBytes = 4096
 
 type skillLifecycleBackend struct {
 	genesis     *genesis.Service
@@ -148,14 +150,56 @@ func (b *skillLifecycleBackend) RunSkillEvolution(ctx context.Context, req chatt
 	}, nil
 }
 
+func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chattools.SkillLifecycleStatusRequest) (any, error) {
+	if b.tracker == nil {
+		return map[string]any{
+			"ok":     false,
+			"reason": "skill tracker is not configured",
+		}, nil
+	}
+
+	limit := normalizeSkillLifecycleStatusLimit(req.Limit)
+	recent, err := b.tracker.RecentLifecycleLog(limit)
+	if err != nil {
+		return nil, err
+	}
+	skillName := strings.TrimSpace(req.SkillName)
+	if skillName != "" {
+		recent = filterSkillLifecycleLog(recent, skillName)
+		stats, err := b.tracker.Stats(skillName)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"ok":        true,
+			"skillName": skillName,
+			"limit":     limit,
+			"recent":    recent,
+			"stats":     stats,
+		}, nil
+	}
+
+	stats, err := b.tracker.ListAllStats()
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"ok":     true,
+		"limit":  limit,
+		"recent": recent,
+		"stats":  stats,
+	}, nil
+}
+
 func (b *skillLifecycleBackend) logProposal(req chattools.SkillEvolutionProposalRequest, route string, result map[string]any) {
 	if b.tracker == nil {
 		return
 	}
 	resultText := ""
 	if data, err := json.Marshal(result); err == nil {
-		resultText = string(data)
+		resultText = truncateSkillLifecycleProposalResult(string(data))
 	}
+	executed, _ := result["executed"].(bool)
 	if err := b.tracker.LogEvolutionProposal(genesis.EvolutionProposalRecord{
 		Candidate:  req.Candidate,
 		Route:      route,
@@ -163,11 +207,38 @@ func (b *skillLifecycleBackend) logProposal(req chattools.SkillEvolutionProposal
 		SkillName:  req.SkillName,
 		Evidence:   req.Evidence,
 		Reason:     req.Reason,
-		Executed:   req.Execute,
+		Executed:   executed,
 		Result:     resultText,
 	}); err != nil && b.logger != nil {
 		b.logger.Warn("skill lifecycle: proposal log failed", "error", err)
 	}
+}
+
+func normalizeSkillLifecycleStatusLimit(limit int) int {
+	if limit <= 0 {
+		return 20
+	}
+	if limit > skillLifecycleMaxStatusLogEntries {
+		return skillLifecycleMaxStatusLogEntries
+	}
+	return limit
+}
+
+func filterSkillLifecycleLog(entries []genesis.LifecycleLogEntry, skillName string) []genesis.LifecycleLogEntry {
+	filtered := make([]genesis.LifecycleLogEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.SkillName == skillName {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
+func truncateSkillLifecycleProposalResult(result string) string {
+	if len(result) <= skillLifecycleMaxProposalResultBytes {
+		return result
+	}
+	return result[:skillLifecycleMaxProposalResultBytes] + "...[truncated]"
 }
 
 func normalizeSkillLifecycleRoute(route string) string {

@@ -100,7 +100,8 @@ func (s *Server) registerSkillLifecycleTool() {
 	s.chatHandler.RegisterTool(toolctx.ToolDef{
 		Name: "skill_lifecycle",
 		Description: "Closed-loop skill self-evolution: propose (record/route reusable workflow decisions), " +
-			"genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill). " +
+			"genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), " +
+			"status (inspect recent lifecycle logs and usage stats). " +
 			"Use through the evolution-proposal skill after meaningful workflows.",
 		InputSchema: chattools.SkillLifecycleToolSchema(),
 		Fn:          chattools.ToolSkillLifecycle(backend),

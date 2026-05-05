@@ -11,6 +11,7 @@ type fakeSkillLifecycleBackend struct {
 	proposal SkillEvolutionProposalRequest
 	genesis  SkillGenesisRequest
 	evolve   SkillEvolutionRequest
+	status   SkillLifecycleStatusRequest
 }
 
 func (f *fakeSkillLifecycleBackend) ProposeSkillEvolution(_ context.Context, req SkillEvolutionProposalRequest) (any, error) {
@@ -26,6 +27,11 @@ func (f *fakeSkillLifecycleBackend) RunSkillGenesis(_ context.Context, req Skill
 func (f *fakeSkillLifecycleBackend) RunSkillEvolution(_ context.Context, req SkillEvolutionRequest) (any, error) {
 	f.evolve = req
 	return map[string]any{"ok": true, "skillName": req.SkillName}, nil
+}
+
+func (f *fakeSkillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req SkillLifecycleStatusRequest) (any, error) {
+	f.status = req
+	return map[string]any{"ok": true, "limit": req.Limit, "skillName": req.SkillName}, nil
 }
 
 func TestToolSkillLifecyclePropose(t *testing.T) {
@@ -77,6 +83,26 @@ func TestToolSkillLifecycleEvolve(t *testing.T) {
 	}
 	if backend.evolve.SkillName != "skill-factory" {
 		t.Fatalf("unexpected evolve request: %+v", backend.evolve)
+	}
+}
+
+func TestToolSkillLifecycleStatus(t *testing.T) {
+	backend := &fakeSkillLifecycleBackend{}
+	fn := ToolSkillLifecycle(backend)
+
+	out, err := fn(context.Background(), mustJSONSkillLifecycle(t, map[string]any{
+		"action":    "status",
+		"skillName": "skill-factory",
+		"limit":     3,
+	}))
+	if err != nil {
+		t.Fatalf("ToolSkillLifecycle: %v", err)
+	}
+	if !strings.Contains(out, `"limit": 3`) {
+		t.Fatalf("expected status result, got %s", out)
+	}
+	if backend.status.SkillName != "skill-factory" || backend.status.Limit != 3 {
+		t.Fatalf("unexpected status request: %+v", backend.status)
 	}
 }
 

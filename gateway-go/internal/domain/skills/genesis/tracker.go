@@ -173,8 +173,28 @@ func (t *Tracker) ListAllStats() ([]UsageStats, error) {
 	return result, nil
 }
 
+// LifecycleLogEntry is the combined JSONL view for genesis and evolution
+// proposal events. Older genesis entries may not have Type populated; readers
+// normalize those to "genesis".
+type LifecycleLogEntry struct {
+	Type        string `json:"type,omitempty"`
+	SkillName   string `json:"skillName,omitempty"`
+	Source      string `json:"source,omitempty"`
+	SessionKey  string `json:"sessionKey,omitempty"`
+	CreatedAt   int64  `json:"createdAt,omitempty"`
+	Category    string `json:"category,omitempty"`
+	Description string `json:"description,omitempty"`
+	Candidate   string `json:"candidate,omitempty"`
+	Route       string `json:"route,omitempty"`
+	Evidence    string `json:"evidence,omitempty"`
+	Reason      string `json:"reason,omitempty"`
+	Executed    bool   `json:"executed,omitempty"`
+	Result      string `json:"result,omitempty"`
+}
+
 // genesisLogEntry is the JSONL format for genesis log events.
 type genesisLogEntry struct {
+	Type        string `json:"type"`
 	SkillName   string `json:"skillName"`
 	Source      string `json:"source"`
 	SessionKey  string `json:"sessionKey,omitempty"`
@@ -204,6 +224,7 @@ func (t *Tracker) LogGenesis(skillName, source, sessionKey, category, descriptio
 	defer t.mu.Unlock()
 
 	return jsonlstore.Append(t.logPath, genesisLogEntry{
+		Type:        "genesis",
 		SkillName:   skillName,
 		Source:      source,
 		SessionKey:  sessionKey,
@@ -225,6 +246,32 @@ func (t *Tracker) LogEvolutionProposal(record EvolutionProposalRecord) error {
 		record.CreatedAt = time.Now().UnixMilli()
 	}
 	return jsonlstore.Append(t.logPath, record)
+}
+
+// RecentLifecycleLog returns recent genesis/proposal events, newest first.
+func (t *Tracker) RecentLifecycleLog(limit int) ([]LifecycleLogEntry, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if limit <= 0 {
+		limit = 20
+	}
+	entries, err := jsonlstore.Load[LifecycleLogEntry](t.logPath)
+	if err != nil {
+		return nil, fmt.Errorf("genesis-tracker: load lifecycle log: %w", err)
+	}
+	for i := range entries {
+		if entries[i].Type == "" {
+			entries[i].Type = "genesis"
+		}
+	}
+	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
+		entries[i], entries[j] = entries[j], entries[i]
+	}
+	if len(entries) > limit {
+		entries = entries[:limit]
+	}
+	return entries, nil
 }
 
 // SkillsNeedingEvolution returns skills with high failure rates.
