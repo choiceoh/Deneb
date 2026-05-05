@@ -49,7 +49,13 @@ func (s *Server) initGenesisServices() {
 	// Iteration-based nudger (Hermes-style): fires a mid-session skill
 	// review every N tool calls. Env var DENEB_SKILL_NUDGE_INTERVAL
 	// overrides the default (10); 0 disables.
-	s.genesisNudger = genesis.NewNudgerFromEnv(s.genesisSvc, s.logger)
+	reviewFork := newSkillReviewFork(s.chatHandler, s.genesisTranscripts, lwModel, s.logger)
+	s.genesisNudger = genesis.NewNudgerFromEnvWithTrackerAndReviewer(
+		s.genesisSvc,
+		s.genesisTracker,
+		reviewFork,
+		s.logger,
+	)
 
 	// Install an adapter so the chat handler can invoke the nudger
 	// without importing the genesis package (dependency inversion).
@@ -101,7 +107,8 @@ func (s *Server) registerSkillLifecycleTool() {
 		Name: "skill_lifecycle",
 		Description: "Closed-loop skill self-evolution: propose (record/route reusable workflow decisions), " +
 			"genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), " +
-			"status (inspect recent lifecycle logs and usage stats). " +
+			"status (inspect recent lifecycle logs, usage stats, and curator state), " +
+			"pin/unpin/archive/restore (manual state for agent-created skills). " +
 			"Use through the evolution-proposal skill after meaningful workflows.",
 		InputSchema: chattools.SkillLifecycleToolSchema(),
 		Fn:          chattools.ToolSkillLifecycle(backend),
@@ -152,6 +159,11 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 		s.autonomousSvc.RegisterTask(&genesis.EvolutionTask{
 			Evolver: s.genesisEvolver,
 			Logger:  s.logger,
+		})
+		s.autonomousSvc.RegisterTask(&genesis.SkillCuratorTask{
+			Tracker: s.genesisTracker,
+			Logger:  s.logger,
+			Config:  genesis.SkillCuratorConfigFromEnv(),
 		})
 	}
 

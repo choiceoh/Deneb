@@ -223,6 +223,143 @@ func TestSkillManage_Delete_NotFound(t *testing.T) {
 	}
 }
 
+func TestSkillManage_WriteReadAndRemoveSupportFile(t *testing.T) {
+	fn, workspace, invalidateCount := newSkillManageHarness(t)
+	_, err := callSkillTool(t, fn, map[string]any{
+		"action":   "create",
+		"name":     "supportful",
+		"category": "coding",
+		"content":  validSkillContent("supportful"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	out, err := callSkillTool(t, fn, map[string]any{
+		"action":       "write_file",
+		"name":         "supportful",
+		"file_path":    "references/config.md",
+		"file_content": "provider = local\n",
+		"apply":        true,
+	})
+	if err != nil {
+		t.Fatalf("write_file: %v", err)
+	}
+	if !strings.Contains(out, "Wrote support file") {
+		t.Fatalf("unexpected write output: %s", out)
+	}
+	if got := atomic.LoadInt32(invalidateCount); got != 1 {
+		t.Fatalf("expected only write_file apply to invalidate, got %d", got)
+	}
+
+	read, err := callSkillTool(t, fn, map[string]any{
+		"action":    "read",
+		"name":      "supportful",
+		"file_path": "references/config.md",
+	})
+	if err != nil {
+		t.Fatalf("read support file: %v", err)
+	}
+	if !strings.Contains(read, "provider = local") {
+		t.Fatalf("unexpected support file content: %s", read)
+	}
+
+	listed, err := callSkillTool(t, fn, map[string]any{
+		"action": "list_files",
+		"name":   "supportful",
+	})
+	if err != nil {
+		t.Fatalf("list_files: %v", err)
+	}
+	if !strings.Contains(listed, "references/config.md") {
+		t.Fatalf("support file missing from list:\n%s", listed)
+	}
+
+	if _, err := callSkillTool(t, fn, map[string]any{
+		"action":    "remove_file",
+		"name":      "supportful",
+		"file_path": "references/config.md",
+		"apply":     true,
+	}); err != nil {
+		t.Fatalf("remove_file: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "skills", "coding", "supportful", "references", "config.md")); !os.IsNotExist(err) {
+		t.Fatalf("support file should be removed, stat err=%v", err)
+	}
+}
+
+func TestSkillManage_WriteSupportFileRejectsUnsafePaths(t *testing.T) {
+	fn, _, _ := newSkillManageHarness(t)
+	_, err := callSkillTool(t, fn, map[string]any{
+		"action":   "create",
+		"name":     "safe-paths",
+		"category": "coding",
+		"content":  validSkillContent("safe-paths"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	for _, filePath := range []string{"../outside.md", "/tmp/outside.md", "SKILL.md", "notes/config.md"} {
+		t.Run(filePath, func(t *testing.T) {
+			_, err := callSkillTool(t, fn, map[string]any{
+				"action":       "write_file",
+				"name":         "safe-paths",
+				"file_path":    filePath,
+				"file_content": "x",
+			})
+			if err == nil {
+				t.Fatalf("expected %q to be rejected", filePath)
+			}
+		})
+	}
+}
+
+func TestSkillManage_WriteScriptPreservesExecutableShebang(t *testing.T) {
+	fn, workspace, _ := newSkillManageHarness(t)
+	_, err := callSkillTool(t, fn, map[string]any{
+		"action":   "create",
+		"name":     "scripted",
+		"category": "coding",
+		"content":  validSkillContent("scripted"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := callSkillTool(t, fn, map[string]any{
+		"action":       "write_file",
+		"name":         "scripted",
+		"file_path":    "scripts/check.sh",
+		"file_content": "#!/usr/bin/env bash\necho ok\n",
+	}); err != nil {
+		t.Fatalf("write_file script: %v", err)
+	}
+	info, err := os.Stat(filepath.Join(workspace, "skills", "coding", "scripted", "scripts", "check.sh"))
+	if err != nil {
+		t.Fatalf("stat script: %v", err)
+	}
+	if info.Mode().Perm()&0o111 == 0 {
+		t.Fatalf("script should be executable, mode=%v", info.Mode().Perm())
+	}
+}
+
+func TestSkillManage_CreateReportsSafetyWarnings(t *testing.T) {
+	fn, _, _ := newSkillManageHarness(t)
+	content := validSkillContent("risky") + "\nUse TOKEN=abc only as a placeholder.\n"
+	out, err := callSkillTool(t, fn, map[string]any{
+		"action":   "create",
+		"name":     "risky",
+		"category": "coding",
+		"content":  content,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if !strings.Contains(out, "Safety warnings") {
+		t.Fatalf("expected safety warnings, got: %s", out)
+	}
+}
+
 func TestSkillManage_Patch(t *testing.T) {
 	fn, _, invalidateCount := newSkillManageHarness(t)
 	_, err := callSkillTool(t, fn, map[string]any{

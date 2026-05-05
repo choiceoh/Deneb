@@ -27,12 +27,20 @@ Use this skill after a non-trivial workflow, especially when one of these is tru
 - The task used 5+ tool calls or 3+ agent turns.
 - The user says "skill genesis", "self-evolution", "evolution proposal", "자기진화", "스킬화", or asks whether Deneb should learn from the workflow.
 - The workflow exposed a repeated pitfall, missing procedure, or reusable command sequence.
+- The user corrected scope, response format, validation order, or "how agents should work" in a way future agents should follow.
 - A generated/managed skill exists, but its instructions are stale or incomplete.
 
 Do not use this for one-off facts, durable user preferences, secrets, or simple
 commands. Those belong in wiki/memory or nowhere, not in a skill.
 
 ## Decision Route
+
+Use the Hermes mainline decision order, not a "new skill first" bias:
+
+1. Patch or evolve the currently loaded/closest existing skill.
+2. Add the rule to an existing umbrella skill.
+3. Add a support artifact under an existing skill (`references`, `templates`, `scripts`, or `assets`) when detailed commands/config are the durable knowledge. Use `skills` action `write_file`; do not bury long command matrices in the main SKILL.md if a reference file is cleaner.
+4. Create/genesis a new class-level skill only when no existing skill owns the pattern.
 
 Choose exactly one route:
 
@@ -48,21 +56,26 @@ engine's cooldowns, duplicate checks, daily cap, generated-skill metadata, and
 proposal logs. If the current agent surface cannot call that tool directly, be
 explicit and fall back to `Create` or `Evolve` rather than pretending genesis ran.
 Use `status` when you need to check recent proposal/genesis history before
-deciding, or to verify that an executed proposal was recorded.
+deciding, to inspect usage stats, or to see curator state for agent-created
+skills before evolving/duplicating one. Use `pin`, `unpin`, `archive`, or
+`restore` only for agent-created skills whose curator state needs explicit
+operator control.
 
 ## Procedure
 
 1. State the candidate pattern in one sentence.
 2. Check existing skills with `skills` action `list`; read the closest match if any.
-3. Decide the route using the table above.
-4. Load `skill_lifecycle` with `fetch_tools` if the schema is not visible.
-5. If the session history is unclear, call `skill_lifecycle` action `status` first and review recent lifecycle records.
-6. Record the decision with `skill_lifecycle` action `propose`.
-7. If route is `Genesis`, pass `execute=true` or call action `genesis`; omit `sessionKey` to use the current session, or pass a concise `dreamSummary`.
-8. If route is `Evolve`, pass `execute=true` with `skillName` or call action `evolve`.
-9. If route is `Create`, load `skill-factory` and create a concise `SKILL.md` with `skills` action `create`.
-10. For executed `Genesis`/`Evolve` routes, call `skill_lifecycle` action `status` with `limit: 5` when you need an audit trail.
-11. Report what changed, or why no change was made.
+3. If a close match exists, prefer `Evolve`; if detailed config/code snippets are the reusable part, preserve them inside the existing skill or a support file.
+4. Decide the route using the table above.
+5. Load `skill_lifecycle` with `fetch_tools` if the schema is not visible.
+6. If the session history is unclear, call `skill_lifecycle` action `status` first and review recent lifecycle records.
+7. Record the decision with `skill_lifecycle` action `propose`.
+8. If route is `Genesis`, pass `execute=true` or call action `genesis`; omit `sessionKey` to use the current session, or pass a concise `dreamSummary`.
+9. If route is `Evolve`, pass `execute=true` with `skillName` or call action `evolve`.
+10. If route is `Create`, load `skill-factory` and create a concise `SKILL.md` with `skills` action `create`.
+11. If the durable detail is a command/config/code reference, add it with `skills` action `write_file` under `references/`, `templates/`, `scripts/`, or `assets/`.
+12. For executed `Genesis`/`Evolve` routes, call `skill_lifecycle` action `status` with `limit: 5` when you need an audit trail.
+13. Report what changed, or why no change was made.
 
 ## Proposal Template
 
@@ -93,8 +106,11 @@ Typical execution call after deciding `Genesis`:
 - Do not create a skill just because a task was long. The workflow must be reusable.
 - Do not duplicate `skill-factory`, `skill-creator`, or `skill-evolution`; route to them.
 - Do not store secrets, private contact data, or single-session context in a skill.
+- Do not name new skills after PR numbers, exact errors, codenames, or one session's artifact; make the name class-level.
 - Do not mutate a skill and invalidate prompt cache mid-session unless immediate use is necessary; prefer deferred application.
 - Do not widen narrow chat presets just to expose lifecycle tools; if the current surface lacks `skill_lifecycle`, state the intended proposal route and stop there.
+- Do not confuse skills with memory/wiki: skills are reusable procedures; memory/wiki stores durable facts or personal context.
+- Do not put support files outside `references/`, `templates/`, `scripts/`, or `assets/`; those directories are the safe support-file surface.
 
 ## Verification
 
@@ -102,4 +118,4 @@ Typical execution call after deciding `Genesis`:
 - Evolved skill: the patch is narrow, version is bumped when appropriate, and the original purpose remains intact.
 - Genesis route: `skill_lifecycle` reports either a created skill, a skip reason, or a clear error.
 - Proposal route: the result includes `route` and `executed`, so the loop is auditable.
-- Audit route: `skill_lifecycle` action `status` shows recent proposal/genesis records and usage stats.
+- Audit route: `skill_lifecycle` action `status` shows recent proposal/genesis records, usage stats, and curator state for agent-created skills.

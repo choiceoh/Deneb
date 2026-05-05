@@ -801,8 +801,8 @@ func skillsToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: list (search/browse skills), create, patch, delete, read, list_files",
-				"enum":        []string{"list", "create", "patch", "delete", "read", "list_files"},
+				"description": "Action: list (search/browse skills), create, patch, delete, read, list_files, write_file, remove_file",
+				"enum":        []string{"list", "create", "patch", "delete", "read", "list_files", "write_file", "remove_file"},
 			},
 			"apply": map[string]any{
 				"type":        "boolean",
@@ -819,15 +819,15 @@ func skillsToolSchema() map[string]any {
 			},
 			"file_content": map[string]any{
 				"type":        "string",
-				"description": "Content for auxiliary file writes",
+				"description": "Content for write_file support file writes",
 			},
 			"file_path": map[string]any{
 				"type":        "string",
-				"description": "Relative path within skill dir for auxiliary files",
+				"description": "Relative path within skill dir for read/write_file/remove_file. Writes/removes must stay under references/, templates/, scripts/, or assets/",
 			},
 			"name": map[string]any{
 				"type":        "string",
-				"description": "Skill name (lowercase, hyphens). Required for create/patch/delete/read/list_files",
+				"description": "Skill name (lowercase, hyphens). Required for create/patch/delete/read/list_files/write_file/remove_file",
 			},
 			"new_text": map[string]any{
 				"type":        "string",

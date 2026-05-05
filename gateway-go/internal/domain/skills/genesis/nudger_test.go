@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+type fakeReviewRunner struct {
+	calls int
+}
+
+func (f *fakeReviewRunner) RunSkillReview(context.Context, string, SessionContext) error {
+	f.calls++
+	return nil
+}
+
 // newTestNudger creates a Nudger with a throwaway Service that short-
 // circuits LLM calls. The underlying Service is created with zero deps;
 // callers that need the evaluator path can supply their own config.
@@ -132,6 +141,27 @@ func TestNudger_RunOnce_RespectsEvaluateRejection(t *testing.T) {
 	}
 	if persisted {
 		t.Errorf("expected not persisted when Evaluate rejects")
+	}
+}
+
+func TestNudger_RunReviewOnce_UsesFencedReviewerAfterEvaluate(t *testing.T) {
+	reviewer := &fakeReviewRunner{}
+	n := newTestNudger(t, 10)
+	n.reviewer = reviewer
+
+	sctx := SessionContext{
+		Turns: 3,
+		ToolActivities: []ToolActivity{
+			{Name: "read"}, {Name: "exec"}, {Name: "write"},
+			{Name: "web"}, {Name: "skills"},
+		},
+	}
+	ran, err := n.runReviewOnce("s", sctx)
+	if err != nil {
+		t.Fatalf("runReviewOnce: %v", err)
+	}
+	if !ran || reviewer.calls != 1 {
+		t.Fatalf("expected reviewer to run once, ran=%v calls=%d", ran, reviewer.calls)
 	}
 }
 

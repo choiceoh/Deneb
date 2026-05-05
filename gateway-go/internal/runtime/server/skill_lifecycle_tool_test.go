@@ -62,6 +62,10 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 	if stats.SkillName != "deploy-helper" || stats.TotalUses != 1 || stats.SuccessRate != 0 {
 		t.Fatalf("unexpected stats: %+v", stats)
 	}
+	curator := got["curator"].([]genesis.SkillCuratorRecord)
+	if len(curator) != 1 || curator[0].SkillName != "deploy-helper" {
+		t.Fatalf("unexpected curator report: %+v", curator)
+	}
 }
 
 func TestSkillLifecycleLogProposalStoresActualExecutionAndTruncates(t *testing.T) {
@@ -90,5 +94,53 @@ func TestSkillLifecycleLogProposalStoresActualExecutionAndTruncates(t *testing.T
 	}
 	if !strings.HasSuffix(entries[0].Result, "...[truncated]") {
 		t.Fatalf("expected truncated result, got length %d", len(entries[0].Result))
+	}
+}
+
+func TestSkillLifecycleCuratorActionsPinArchiveRestore(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	if err := tracker.LogGenesis("generated-helper", "session", "telegram:1", "coding", "Generated helper"); err != nil {
+		t.Fatalf("LogGenesis: %v", err)
+	}
+	backend := &skillLifecycleBackend{tracker: tracker}
+
+	if _, err := backend.RunSkillCuratorAction(context.Background(), chattools.SkillCuratorActionRequest{
+		Action:    "pin",
+		SkillName: "generated-helper",
+	}); err != nil {
+		t.Fatalf("pin: %v", err)
+	}
+	report, err := tracker.SkillCuratorReport("generated-helper")
+	if err != nil {
+		t.Fatalf("SkillCuratorReport: %v", err)
+	}
+	if len(report) != 1 || !report[0].Pinned {
+		t.Fatalf("expected pinned curator record, got %+v", report)
+	}
+
+	gotAny, err := backend.RunSkillCuratorAction(context.Background(), chattools.SkillCuratorActionRequest{
+		Action:    "archive",
+		SkillName: "generated-helper",
+	})
+	if err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	got := gotAny.(map[string]any)
+	rec := got["curator"].(genesis.SkillCuratorRecord)
+	if rec.State != genesis.SkillCuratorStateArchived || rec.ArchivedAt == 0 {
+		t.Fatalf("expected archived record, got %+v", rec)
+	}
+
+	gotAny, err = backend.RunSkillCuratorAction(context.Background(), chattools.SkillCuratorActionRequest{
+		Action:    "restore",
+		SkillName: "generated-helper",
+	})
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	got = gotAny.(map[string]any)
+	rec = got["curator"].(genesis.SkillCuratorRecord)
+	if rec.State != genesis.SkillCuratorStateActive || rec.ArchivedAt != 0 {
+		t.Fatalf("expected restored active record, got %+v", rec)
 	}
 }

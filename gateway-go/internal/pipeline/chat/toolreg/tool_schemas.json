@@ -889,14 +889,16 @@
     "properties": {
       "action": {
         "type": "string",
-        "description": "Action: list (search/browse skills), create, patch, delete, read, list_files",
+        "description": "Action: list (search/browse skills), create, patch, delete, read, list_files, write_file, remove_file",
         "enum": [
           "list",
           "create",
           "patch",
           "delete",
           "read",
-          "list_files"
+          "list_files",
+          "write_file",
+          "remove_file"
         ]
       },
       "query": {
@@ -909,7 +911,7 @@
       },
       "name": {
         "type": "string",
-        "description": "Skill name (lowercase, hyphens). Required for create/patch/delete/read/list_files"
+        "description": "Skill name (lowercase, hyphens). Required for create/patch/delete/read/list_files/write_file/remove_file"
       },
       "content": {
         "type": "string",
@@ -925,11 +927,11 @@
       },
       "file_path": {
         "type": "string",
-        "description": "Relative path within skill dir for auxiliary files"
+        "description": "Relative path within skill dir for read/write_file/remove_file. Writes/removes must stay under references/, templates/, scripts/, or assets/"
       },
       "file_content": {
         "type": "string",
-        "description": "Content for auxiliary file writes"
+        "description": "Content for write_file support file writes"
       },
       "apply": {
         "type": "boolean",

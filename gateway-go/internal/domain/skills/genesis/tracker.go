@@ -34,10 +34,11 @@ type UsageStats struct {
 
 // Tracker records and queries skill usage for evolution decisions.
 type Tracker struct {
-	logger    *slog.Logger
-	mu        sync.Mutex
-	usagePath string
-	logPath   string
+	logger      *slog.Logger
+	mu          sync.Mutex
+	usagePath   string
+	logPath     string
+	curatorPath string
 
 	// In-memory aggregated stats, rebuilt from JSONL on startup.
 	stats        map[string]*usageAgg
@@ -71,6 +72,7 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 		logger:       logger,
 		usagePath:    filepath.Join(dir, "skill_usage.jsonl"),
 		logPath:      filepath.Join(dir, "skill_genesis_log.jsonl"),
+		curatorPath:  filepath.Join(dir, "skill_curator_state.json"),
 		stats:        make(map[string]*usageAgg),
 		recentErrors: make(map[string][]string),
 	}
@@ -127,6 +129,9 @@ func (t *Tracker) RecordUsage(record UsageRecord) error {
 		return fmt.Errorf("genesis-tracker: append usage: %w", err)
 	}
 	t.ingest(record)
+	if err := t.touchCuratorUsageLocked(record.SkillName, record.UsedAt); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -223,15 +228,19 @@ func (t *Tracker) LogGenesis(skillName, source, sessionKey, category, descriptio
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	return jsonlstore.Append(t.logPath, genesisLogEntry{
+	createdAt := time.Now().UnixMilli()
+	if err := jsonlstore.Append(t.logPath, genesisLogEntry{
 		Type:        "genesis",
 		SkillName:   skillName,
 		Source:      source,
 		SessionKey:  sessionKey,
-		CreatedAt:   time.Now().UnixMilli(),
+		CreatedAt:   createdAt,
 		Category:    category,
 		Description: description,
-	})
+	}); err != nil {
+		return err
+	}
+	return t.markSkillAgentCreatedLocked(skillName, createdAt)
 }
 
 // LogEvolutionProposal records a self-evolution routing decision.
@@ -245,7 +254,10 @@ func (t *Tracker) LogEvolutionProposal(record EvolutionProposalRecord) error {
 	if record.CreatedAt == 0 {
 		record.CreatedAt = time.Now().UnixMilli()
 	}
-	return jsonlstore.Append(t.logPath, record)
+	if err := jsonlstore.Append(t.logPath, record); err != nil {
+		return err
+	}
+	return nil
 }
 
 // RecentLifecycleLog returns recent genesis/proposal events, newest first.

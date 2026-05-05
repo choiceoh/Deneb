@@ -251,15 +251,18 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		ss.WriteString("복합 워크플로우(5+ 도구, 3+ 턴)를 완료하면 시스템이 자동으로 스킬 추출을 평가합니다.\n")
 		ss.WriteString("재사용 가치가 높은 워크플로우를 발견하면:\n")
 		ss.WriteString("1. `evolution-proposal` 스킬로 genesis/create/evolve/no-op 중 하나를 먼저 결정하세요.\n")
-		ss.WriteString("2. 반복 가능한 절차를 명확하게 구조화하세요 (When to Use → Procedure → Pitfalls → Verification).\n")
-		ss.WriteString("3. 제안·생성·진화 실행은 `skill_lifecycle` 도구(propose/genesis/evolve)로 닫으세요.\n")
-		ss.WriteString("4. 기존 스킬이 부족하면 evolve route로 개선을 트리거할 수 있습니다.\n")
+		ss.WriteString("2. 기존 스킬 개선 → 기존 umbrella 보강 → 보조 파일 추가 → 새 class-level 스킬 순서로 보수적으로 판단하세요.\n")
+		ss.WriteString("3. 반복 가능한 절차를 명확하게 구조화하세요 (When to Use → Procedure → Pitfalls → Verification).\n")
+		ss.WriteString("4. 제안·생성·진화 실행은 `skill_lifecycle` 도구(propose/genesis/evolve/status)로 닫으세요.\n")
+		ss.WriteString("5. 자세한 config/명령/템플릿은 `skills` action=write_file 로 references/templates/scripts/assets 아래 보존하세요.\n")
+		ss.WriteString("6. agent-created 스킬 상태 조정은 `skill_lifecycle` action=pin/unpin/archive/restore 를 사용하세요.\n")
+		ss.WriteString("7. 사용자 교정(형식, 범위, 검증, 작업 순서)은 memory가 아니라 스킬 개선 신호일 수 있습니다.\n")
 		// S3: agent-facing save path. The agent itself may decide a
 		// workflow is worth keeping and persist it via skill_manage.
 		// apply=true is an explicit opt-in for mid-session visibility;
 		// the default defers the cache bust so the prompt-cache hit
 		// rate stays high.
-		ss.WriteString("5. 진짜 재사용 가능한 패턴을 방금 해결했다면 `skills`(action=create, ...) 로 직접 저장하세요. ")
+		ss.WriteString("8. 진짜 재사용 가능한 패턴을 방금 해결했다면 `skills`(action=create, ...) 로 직접 저장하세요. ")
 		ss.WriteString("기본은 다음 세션부터 로드되어 프롬프트 캐시를 해치지 않습니다. 이번 세션에서 즉시 쓰려면 apply=true 를 추가하세요.\n\n")
 	} else {
 		// No always-skills, but discoverable skills may still exist.

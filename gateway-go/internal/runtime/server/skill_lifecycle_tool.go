@@ -144,6 +144,9 @@ func (b *skillLifecycleBackend) RunSkillEvolution(ctx context.Context, req chatt
 	if err != nil {
 		return nil, err
 	}
+	if b.tracker != nil && result != nil && result.Evolved {
+		_ = b.tracker.MarkSkillPatched(req.SkillName)
+	}
 	return map[string]any{
 		"ok":     true,
 		"result": result,
@@ -170,12 +173,17 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 		if err != nil {
 			return nil, err
 		}
+		curator, err := b.tracker.SkillCuratorReport(skillName)
+		if err != nil {
+			return nil, err
+		}
 		return map[string]any{
 			"ok":        true,
 			"skillName": skillName,
 			"limit":     limit,
 			"recent":    recent,
 			"stats":     stats,
+			"curator":   curator,
 		}, nil
 	}
 
@@ -183,11 +191,63 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 	if err != nil {
 		return nil, err
 	}
+	curator, err := b.tracker.SkillCuratorReport("")
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
-		"ok":     true,
-		"limit":  limit,
-		"recent": recent,
-		"stats":  stats,
+		"ok":      true,
+		"limit":   limit,
+		"recent":  recent,
+		"stats":   stats,
+		"curator": curator,
+	}, nil
+}
+
+func (b *skillLifecycleBackend) RunSkillCuratorAction(_ context.Context, req chattools.SkillCuratorActionRequest) (any, error) {
+	if b.tracker == nil {
+		return map[string]any{
+			"ok":     false,
+			"reason": "skill tracker is not configured",
+		}, nil
+	}
+	skillName := strings.TrimSpace(req.SkillName)
+	if skillName == "" {
+		return nil, fmt.Errorf("skillName is required")
+	}
+	switch req.Action {
+	case "pin":
+		if err := b.tracker.SetSkillPinned(skillName, true); err != nil {
+			return nil, err
+		}
+	case "unpin":
+		if err := b.tracker.SetSkillPinned(skillName, false); err != nil {
+			return nil, err
+		}
+	case "archive":
+		rec, err := b.tracker.SetSkillCuratorState(skillName, genesis.SkillCuratorStateArchived)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"ok": true, "action": req.Action, "skillName": skillName, "curator": rec}, nil
+	case "restore":
+		rec, err := b.tracker.SetSkillCuratorState(skillName, genesis.SkillCuratorStateActive)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"ok": true, "action": req.Action, "skillName": skillName, "curator": rec}, nil
+	default:
+		return nil, fmt.Errorf("unsupported curator action %q", req.Action)
+	}
+	curator, err := b.tracker.SkillCuratorReport(skillName)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"ok":        true,
+		"action":    req.Action,
+		"skillName": skillName,
+		"curator":   curator,
 	}, nil
 }
 

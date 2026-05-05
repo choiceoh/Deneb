@@ -8,6 +8,7 @@ const (
 	PresetNone         Preset = ""             // no restriction — all tools available
 	PresetConversation Preset = "conversation" // chat + web tools only (대화모드)
 	PresetBoot         Preset = "boot"         // minimal tools for startup/daily check
+	PresetSelfReview   Preset = "self-review"  // background skill review / self-evolution only
 )
 
 // conversationTools are minimal tools for conversation mode (대화모드).
@@ -23,6 +24,16 @@ var bootTools = toSet(
 	"kv",
 )
 
+// selfReviewTools are the Hermes-style allow-list for autonomous skill review.
+// Keep this narrow: background self-improvement can inspect and mutate skills
+// through the lifecycle surface, but it cannot send messages, run commands,
+// touch memory/wiki, spawn agents, or schedule heartbeats.
+var selfReviewTools = toSet(
+	"fetch_tools",
+	"skills",
+	"skill_lifecycle",
+)
+
 // AllowedTools returns the set of tool names permitted for a given preset.
 // Returns nil when preset is empty or unknown (meaning no restriction).
 func AllowedTools(preset Preset) map[string]struct{} {
@@ -31,6 +42,8 @@ func AllowedTools(preset Preset) map[string]struct{} {
 		return conversationTools
 	case PresetBoot:
 		return bootTools
+	case PresetSelfReview:
+		return selfReviewTools
 	default:
 		return nil
 	}
@@ -39,7 +52,7 @@ func AllowedTools(preset Preset) map[string]struct{} {
 // IsValid returns true if the preset is a recognized value (including empty).
 func IsValid(preset Preset) bool {
 	switch preset {
-	case PresetNone, PresetConversation, PresetBoot:
+	case PresetNone, PresetConversation, PresetBoot, PresetSelfReview:
 		return true
 	default:
 		return false
@@ -48,7 +61,7 @@ func IsValid(preset Preset) bool {
 
 // KnownPresets returns all non-empty preset values.
 func KnownPresets() []Preset {
-	return []Preset{PresetConversation, PresetBoot}
+	return []Preset{PresetConversation, PresetBoot, PresetSelfReview}
 }
 
 func toSet(names ...string) map[string]struct{} {

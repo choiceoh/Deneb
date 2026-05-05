@@ -17,6 +17,7 @@ type SkillLifecycleBackend interface {
 	RunSkillGenesis(context.Context, SkillGenesisRequest) (any, error)
 	RunSkillEvolution(context.Context, SkillEvolutionRequest) (any, error)
 	SkillLifecycleStatus(context.Context, SkillLifecycleStatusRequest) (any, error)
+	RunSkillCuratorAction(context.Context, SkillCuratorActionRequest) (any, error)
 }
 
 // SkillEvolutionProposalRequest records the agent's routing decision after a
@@ -45,11 +46,18 @@ type SkillEvolutionRequest struct {
 	SkillName string `json:"skillName"`
 }
 
-// SkillLifecycleStatusRequest queries recent lifecycle decisions and usage
-// stats so future agents can audit what happened.
+// SkillLifecycleStatusRequest queries recent lifecycle decisions, usage stats,
+// and curator state so future agents can audit what happened.
 type SkillLifecycleStatusRequest struct {
 	SkillName string `json:"skillName,omitempty"`
 	Limit     int    `json:"limit,omitempty"`
+}
+
+// SkillCuratorActionRequest manually updates curator state for agent-created
+// skills without touching user-authored skills or deleting files.
+type SkillCuratorActionRequest struct {
+	Action    string `json:"action"`
+	SkillName string `json:"skillName"`
 }
 
 // ToolSkillLifecycle exposes propose/genesis/evolve/status as one agent-facing tool.
@@ -105,8 +113,13 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 				SkillName: p.SkillName,
 				Limit:     p.Limit,
 			})
+		case "pin", "unpin", "archive", "restore":
+			result, err = backend.RunSkillCuratorAction(ctx, SkillCuratorActionRequest{
+				Action:    p.Action,
+				SkillName: p.SkillName,
+			})
 		default:
-			return "action은 propose, genesis, evolve, status 중 하나를 지정하세요.", nil
+			return "action은 propose, genesis, evolve, status, pin, unpin, archive, restore 중 하나를 지정하세요.", nil
 		}
 		if err != nil {
 			return "", err
@@ -127,8 +140,8 @@ func SkillLifecycleToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: propose (record/route a self-evolution proposal), genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), status (inspect recent lifecycle logs and usage stats)",
-				"enum":        []string{"propose", "genesis", "evolve", "status"},
+				"description": "Action: propose (record/route a self-evolution proposal), genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), status (inspect recent lifecycle logs, usage stats, and curator state), pin/unpin/archive/restore (manual curator state for agent-created skills)",
+				"enum":        []string{"propose", "genesis", "evolve", "status", "pin", "unpin", "archive", "restore"},
 			},
 			"candidate": map[string]any{
 				"type":        "string",

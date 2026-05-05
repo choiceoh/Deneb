@@ -12,6 +12,7 @@ type fakeSkillLifecycleBackend struct {
 	genesis  SkillGenesisRequest
 	evolve   SkillEvolutionRequest
 	status   SkillLifecycleStatusRequest
+	curator  SkillCuratorActionRequest
 }
 
 func (f *fakeSkillLifecycleBackend) ProposeSkillEvolution(_ context.Context, req SkillEvolutionProposalRequest) (any, error) {
@@ -32,6 +33,11 @@ func (f *fakeSkillLifecycleBackend) RunSkillEvolution(_ context.Context, req Ski
 func (f *fakeSkillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req SkillLifecycleStatusRequest) (any, error) {
 	f.status = req
 	return map[string]any{"ok": true, "limit": req.Limit, "skillName": req.SkillName}, nil
+}
+
+func (f *fakeSkillLifecycleBackend) RunSkillCuratorAction(_ context.Context, req SkillCuratorActionRequest) (any, error) {
+	f.curator = req
+	return map[string]any{"ok": true, "action": req.Action, "skillName": req.SkillName}, nil
 }
 
 func TestToolSkillLifecyclePropose(t *testing.T) {
@@ -103,6 +109,25 @@ func TestToolSkillLifecycleStatus(t *testing.T) {
 	}
 	if backend.status.SkillName != "skill-factory" || backend.status.Limit != 3 {
 		t.Fatalf("unexpected status request: %+v", backend.status)
+	}
+}
+
+func TestToolSkillLifecycleCuratorAction(t *testing.T) {
+	backend := &fakeSkillLifecycleBackend{}
+	fn := ToolSkillLifecycle(backend)
+
+	out, err := fn(context.Background(), mustJSONSkillLifecycle(t, map[string]any{
+		"action":    "archive",
+		"skillName": "generated-helper",
+	}))
+	if err != nil {
+		t.Fatalf("ToolSkillLifecycle: %v", err)
+	}
+	if !strings.Contains(out, `"action": "archive"`) {
+		t.Fatalf("expected archive result, got %s", out)
+	}
+	if backend.curator.Action != "archive" || backend.curator.SkillName != "generated-helper" {
+		t.Fatalf("unexpected curator request: %+v", backend.curator)
 	}
 }
 
