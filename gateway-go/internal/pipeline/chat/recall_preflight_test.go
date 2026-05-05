@@ -135,6 +135,17 @@ func TestBuildRecallPreflightNoTrigger(t *testing.T) {
 	}
 }
 
+func TestBuildRecallPreflightSkipsEphemeralUser(t *testing.T) {
+	out := buildRecallPreflight(context.Background(),
+		RunParams{SessionKey: "telegram:1", Message: "전에 alpha 결정 기억나?", EphemeralUser: true},
+		runDeps{},
+		nil,
+	)
+	if out != "" {
+		t.Fatalf("expected ephemeral self-trigger to skip recall preflight, got %q", out)
+	}
+}
+
 func TestFormatRecallEvidenceScrubsFenceTags(t *testing.T) {
 	out := formatRecallEvidence([]recallEvidence{{
 		Kind:   "wiki",

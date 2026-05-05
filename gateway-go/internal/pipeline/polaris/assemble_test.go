@@ -1,8 +1,10 @@
 package polaris
 
 import (
+	"encoding/json"
 	"log/slog"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
@@ -104,6 +106,46 @@ func TestAssembleContextFull_MultiLevelSummaries(t *testing.T) {
 	// Should prefer the level-2 condensed summary (1 msg) + 10 recent (index 20-29).
 	if len(result.Messages) != 11 {
 		t.Fatalf("got %d, want 11 messages (1 condensed + 10 recent)", len(result.Messages))
+	}
+}
+
+func TestAssembleContextFull_DoesNotDropUncoveredRecentAfterSummary(t *testing.T) {
+	store := testAssembleStore(t)
+
+	const total = 60
+	for i := range total {
+		store.AppendMessage("s1", textMsg("user", "m"+strconv.Itoa(i), int64(i*1000)))
+	}
+
+	// Existing summary covers only 0-9. Messages 10-59 are not summarized yet,
+	// so assembly must keep them raw even though freshTailCount is much smaller.
+	store.InsertSummary(SummaryNode{
+		SessionKey: "s1",
+		Level:      1,
+		Content:    "summary 0-9",
+		TokenEst:   30,
+		CreatedAt:  1000,
+		MsgStart:   0,
+		MsgEnd:     9,
+	})
+
+	result := testutil.Must(assembleContextFull(store, "s1", 30_000, 24, slog.Default()))
+	if len(result.Messages) != 51 {
+		t.Fatalf("got %d, want 51 messages (1 summary + all 50 uncovered recent)", len(result.Messages))
+	}
+
+	seen := make(map[string]bool, total)
+	for _, msg := range result.Messages {
+		var text string
+		if json.Unmarshal(msg.Content, &text) == nil {
+			seen[text] = true
+		}
+	}
+	for i := 10; i < total; i++ {
+		key := "m" + strconv.Itoa(i)
+		if !seen[key] {
+			t.Fatalf("uncovered message %s was dropped from assembled context", key)
+		}
 	}
 }
 
