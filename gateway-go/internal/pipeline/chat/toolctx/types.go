@@ -67,9 +67,10 @@ type DraftEditFunc func(ctx context.Context, delivery *DeliveryContext, msgID st
 
 // ProviderConfig holds credentials and endpoint for an LLM provider.
 type ProviderConfig struct {
-	APIKey  string `json:"apiKey"`
-	BaseURL string `json:"baseUrl"`
-	API     string `json:"api"` // "openai" (default)
+	APIKey    string `json:"apiKey"`
+	APIKeyRef string `json:"apiKeyRef,omitempty"` // e.g. op://Vault/Item/field
+	BaseURL   string `json:"baseUrl"`
+	API       string `json:"api"` // "openai" (default)
 }
 
 // DeliveryContext carries channel routing information for a chat message.

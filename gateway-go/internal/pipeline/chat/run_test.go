@@ -7,6 +7,9 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -174,6 +177,57 @@ func TestResolveClient_ExpandsProviderConfigEnvVars(t *testing.T) {
 	testutil.NoError(t, err)
 	if got != "expanded" {
 		t.Fatalf("CompleteOpenAI = %q, want %q", got, "expanded")
+	}
+}
+
+func TestResolveClient_ResolvesProviderConfigAPIKeyRef(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake op script uses POSIX shell syntax")
+	}
+	binDir := t.TempDir()
+	opPath := filepath.Join(binDir, "op")
+	script := "#!/bin/sh\n" +
+		"if [ \"$1\" = \"read\" ] && [ \"$2\" = \"op://Deneb/OpenRouter/api_key\" ]; then\n" +
+		"  printf 'ref-test-key\\n'\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"exit 2\n"
+	if err := os.WriteFile(opPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake op: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer ref-test-key" {
+			t.Fatalf("Authorization header = %q, want %q", got, "Bearer ref-test-key")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ref"}}]}`))
+	}))
+	defer server.Close()
+
+	deps := runDeps{
+		providerConfigs: map[string]ProviderConfig{
+			"openrouter": {
+				BaseURL:   server.URL,
+				APIKeyRef: "op://Deneb/OpenRouter/api_key",
+			},
+		},
+	}
+
+	client := resolveClient(deps, "openrouter", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if client == nil {
+		t.Fatal("expected client from provider config")
+	}
+
+	got, err := client.Complete(context.Background(), llm.ChatRequest{
+		Model:     "test-model",
+		Messages:  []llm.Message{llm.NewTextMessage("user", "hello")},
+		MaxTokens: 32,
+	})
+	testutil.NoError(t, err)
+	if got != "ref" {
+		t.Fatalf("CompleteOpenAI = %q, want %q", got, "ref")
 	}
 }
 
