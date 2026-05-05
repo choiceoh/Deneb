@@ -23,6 +23,9 @@ type SessionThreadBindingsConfig struct {
 type Config struct {
 	// BotToken is the Telegram Bot API token.
 	BotToken string `json:"botToken"`
+	// BotTokenRef is an external secret reference for BotToken.
+	// If set, it wins over BotToken.
+	BotTokenRef string `json:"botTokenRef,omitempty"`
 
 	// ChatID is the operator's Telegram chat ID for message delivery
 	// (cron output, gmail notifications, dreaming events, etc.).

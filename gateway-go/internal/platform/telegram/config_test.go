@@ -8,6 +8,7 @@ import (
 func TestConfig_UnmarshalJSON(t *testing.T) {
 	input := `{
 		"botToken": "123:ABC",
+		"botTokenRef": "op://Deneb/Telegram/bot_token",
 		"chatID": 42,
 		"timeoutSeconds": 60
 	}`
@@ -19,6 +20,9 @@ func TestConfig_UnmarshalJSON(t *testing.T) {
 
 	if c.BotToken != "123:ABC" {
 		t.Errorf("botToken: got %q", c.BotToken)
+	}
+	if c.BotTokenRef != "op://Deneb/Telegram/bot_token" {
+		t.Errorf("botTokenRef: got %q", c.BotTokenRef)
 	}
 	if c.ChatID != 42 {
 		t.Errorf("chatID: got %d", c.ChatID)

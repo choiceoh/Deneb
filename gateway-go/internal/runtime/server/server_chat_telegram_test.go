@@ -1,8 +1,13 @@
 package server
 
 import (
+	"context"
+	"io"
+	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
 
 // TestTelegramDedupKey_DifferentLongMessagesCollide covers the regression
@@ -38,5 +43,26 @@ func TestTelegramDedupKey_ChatScoped(t *testing.T) {
 	text := "동일 메시지"
 	if telegramDedupKey("chat-1", text) == telegramDedupKey("chat-2", text) {
 		t.Fatalf("dedup key should be scoped by chat ID")
+	}
+}
+
+func TestResolveTelegramSecretRefs_BotTokenRefWins(t *testing.T) {
+	cfg := &telegram.Config{
+		BotToken:    "plaintext-token",
+		BotTokenRef: "op://Deneb/Telegram/bot_token",
+	}
+	got := resolveTelegramSecretRefsWith(
+		context.Background(),
+		cfg,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		func(_ context.Context, ref string) (string, error) {
+			if ref != "op://Deneb/Telegram/bot_token" {
+				t.Fatalf("ref = %q", ref)
+			}
+			return "resolved-token\n", nil
+		},
+	)
+	if got.BotToken != "resolved-token" {
+		t.Fatalf("BotToken = %q, want resolved-token", got.BotToken)
 	}
 }

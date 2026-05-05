@@ -11,10 +11,12 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/secretref"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
@@ -363,5 +365,31 @@ func loadTelegramConfig(_ *config.GatewayRuntimeConfig) *telegram.Config {
 	if root.Channels.Telegram == nil {
 		slog.Warn("telegram config: channels.telegram section not found in config")
 	}
-	return root.Channels.Telegram
+	return resolveTelegramSecretRefs(context.Background(), root.Channels.Telegram, slog.Default())
+}
+
+func resolveTelegramSecretRefs(ctx context.Context, cfg *telegram.Config, logger *slog.Logger) *telegram.Config {
+	return resolveTelegramSecretRefsWith(ctx, cfg, logger, secretref.ResolveRequired)
+}
+
+func resolveTelegramSecretRefsWith(ctx context.Context, cfg *telegram.Config, logger *slog.Logger, resolve func(context.Context, string) (string, error)) *telegram.Config {
+	if cfg == nil {
+		return nil
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+	ref := strings.TrimSpace(os.ExpandEnv(cfg.BotTokenRef))
+	if ref == "" {
+		return cfg
+	}
+	token, err := resolve(ctx, ref)
+	if err != nil {
+		logger.Warn("telegram bot token reference resolution failed", "error", err)
+		cfg.BotToken = ""
+		return cfg
+	}
+	cfg.BotToken = strings.TrimSpace(token)
+	logger.Info("resolved telegram bot token reference")
+	return cfg
 }
