@@ -144,6 +144,11 @@ func (s *Server) registerSessionRPCMethods() {
 			})
 		}
 	}
+	chatCfg.DreamTurnFn = func(ctx context.Context) {
+		if s.autonomousSvc != nil {
+			s.autonomousSvc.IncrementDreamTurn(ctx)
+		}
+	}
 
 	s.chatHandler = chat.NewHandler(
 		s.sessions,

@@ -16,19 +16,21 @@ type Dreamer interface {
 
 // DreamReport summarizes the results of a dreaming cycle.
 type DreamReport struct {
-	FactsVerified     int      `json:"factsVerified"`
-	FactsMerged       int      `json:"factsMerged"`
-	FactsExpired      int      `json:"factsExpired"`
-	FactsPruned       int      `json:"factsPruned"`
-	PatternsExtracted int      `json:"patternsExtracted"`
-	UserModelUpdated  int      `json:"userModelUpdated"`
-	MutualUpdated     int      `json:"mutualUpdated"`
-	WikiPagesCreated  int      `json:"wikiPagesCreated,omitempty"`
-	WikiPagesUpdated  int      `json:"wikiPagesUpdated,omitempty"`
-	VerifyFindings    []string `json:"verifyFindings,omitempty"`
-	WikiGraphNodes    int      `json:"wikiGraphNodes,omitempty"`
-	WikiGraphEdges    int      `json:"wikiGraphEdges,omitempty"`
-	WikiGraphClustered bool    `json:"wikiGraphClustered,omitempty"`
-	DurationMs        int64    `json:"durationMs"`
-	PhaseErrors       []string `json:"phaseErrors,omitempty"`
+	FactsVerified       int      `json:"factsVerified"`
+	FactsMerged         int      `json:"factsMerged"`
+	FactsExpired        int      `json:"factsExpired"`
+	FactsPruned         int      `json:"factsPruned"`
+	PatternsExtracted   int      `json:"patternsExtracted"`
+	UserModelUpdated    int      `json:"userModelUpdated"`
+	MutualUpdated       int      `json:"mutualUpdated"`
+	WikiPagesCreated    int      `json:"wikiPagesCreated,omitempty"`
+	WikiPagesUpdated    int      `json:"wikiPagesUpdated,omitempty"`
+	WikiUpdatesProposed int      `json:"wikiUpdatesProposed,omitempty"`
+	WikiProposalPath    string   `json:"wikiProposalPath,omitempty"`
+	VerifyFindings      []string `json:"verifyFindings,omitempty"`
+	WikiGraphNodes      int      `json:"wikiGraphNodes,omitempty"`
+	WikiGraphEdges      int      `json:"wikiGraphEdges,omitempty"`
+	WikiGraphClustered  bool     `json:"wikiGraphClustered,omitempty"`
+	DurationMs          int64    `json:"durationMs"`
+	PhaseErrors         []string `json:"phaseErrors,omitempty"`
 }

@@ -71,8 +71,12 @@ func EmergencyCompact(
 		if err == nil && summary != "" {
 			result := make([]llm.Message, 0, 1+len(recent))
 			result = append(result, llm.NewTextMessage("user",
-				fmt.Sprintf("[Emergency compaction: %d messages evicted, %d messages summarized]\n\n%s",
-					evicted, len(nonEvicted), summary)))
+				FormatContextFence(
+					"polaris-emergency",
+					"conversation-summary",
+					fmt.Sprintf("Emergency compaction: %d messages evicted, %d messages summarized", evicted, len(nonEvicted)),
+					summary,
+				)))
 			result = append(result, recent...)
 
 			if logger != nil {

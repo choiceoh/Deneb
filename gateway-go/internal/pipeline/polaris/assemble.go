@@ -73,8 +73,12 @@ func assembleContextFull(
 	// Build summary messages (newest-first ordering for LLM context).
 	var summaryMsgs []llm.Message
 	for _, node := range selected {
-		text := fmt.Sprintf("[이전 대화 요약 (메시지 %d-%d) %s]\n\n%s",
-			node.MsgStart, node.MsgEnd, summaryHandoffNote, node.Content)
+		text := compact.FormatContextFence(
+			"polaris-dag-summary",
+			"conversation-summary",
+			fmt.Sprintf("이전 대화 요약 (메시지 %d-%d)", node.MsgStart, node.MsgEnd),
+			node.Content,
+		)
 		summaryMsgs = append(summaryMsgs, llm.NewTextMessage("user", text))
 	}
 

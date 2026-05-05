@@ -25,10 +25,69 @@ const (
 	wikiDreamTimeIntervalH = 8
 	wikiDreamTimeout       = 10 * time.Minute
 	wikiDreamMaxTokens     = 4096
+	diaryProcessStateFile  = ".diary-process-state.json"
+	dreamProposalFile      = ".dream-last-proposal.json"
+	processedCapsuleLimit  = 12
 )
 
 // Compile-time interface compliance.
 var _ autonomous.Dreamer = (*WikiDreamer)(nil)
+
+type diaryScanResult struct {
+	Content    string
+	State      diaryProcessState
+	LatestDate string
+}
+
+type diaryProcessState struct {
+	Version   int                       `json:"version"`
+	Files     map[string]diaryFileState `json:"files"`
+	Recent    []processedDiaryCapsule   `json:"recent,omitempty"`
+	UpdatedAt string                    `json:"updatedAt,omitempty"`
+}
+
+type diaryFileState struct {
+	Offset  int64 `json:"offset"`
+	Size    int64 `json:"size,omitempty"`
+	ModUnix int64 `json:"modUnix,omitempty"`
+}
+
+type processedDiaryCapsule struct {
+	At        string   `json:"at"`
+	DiaryDate string   `json:"diaryDate,omitempty"`
+	Proposed  int      `json:"proposed"`
+	Created   int      `json:"created"`
+	Updated   int      `json:"updated"`
+	Paths     []string `json:"paths,omitempty"`
+}
+
+type dreamProposalReport struct {
+	GeneratedAt     string               `json:"generatedAt"`
+	LatestDiaryDate string               `json:"latestDiaryDate,omitempty"`
+	DiaryBytes      int                  `json:"diaryBytes"`
+	Proposed        []dreamUpdatePreview `json:"proposed"`
+	Applied         dreamApplySummary    `json:"applied,omitempty"`
+	PhaseErrors     []string             `json:"phaseErrors,omitempty"`
+	DurationMs      int64                `json:"durationMs,omitempty"`
+}
+
+type dreamUpdatePreview struct {
+	Action      string   `json:"action"`
+	Path        string   `json:"path"`
+	Title       string   `json:"title,omitempty"`
+	Summary     string   `json:"summary,omitempty"`
+	Category    string   `json:"category,omitempty"`
+	Type        string   `json:"type,omitempty"`
+	Confidence  string   `json:"confidence,omitempty"`
+	Importance  float64  `json:"importance,omitempty"`
+	Related     []string `json:"related,omitempty"`
+	ContentHint string   `json:"contentHint,omitempty"`
+}
+
+type dreamApplySummary struct {
+	Created int `json:"created"`
+	Updated int `json:"updated"`
+}
 
 // WikiDreamer implements autonomous.Dreamer for wiki-based knowledge consolidation.
 // Phases:
@@ -86,9 +145,13 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	var phaseErrors []string
 
 	// Phase 1: Scan unprocessed diary entries.
-	diaryContent, err := wd.scanDiaries(ctx)
+	scan, err := wd.scanDiaries(ctx)
 	if err != nil {
 		phaseErrors = append(phaseErrors, fmt.Sprintf("diary-scan: %v", err))
+	}
+	diaryContent := ""
+	if scan != nil {
+		diaryContent = scan.Content
 	}
 
 	if diaryContent == "" {
@@ -106,12 +169,19 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 		return report, nil
 	}
 
-	updates, err := wd.synthesize(ctx, diaryContent)
+	updates, err := wd.synthesize(ctx, diaryContent, scan.State)
 	if err != nil {
 		phaseErrors = append(phaseErrors, fmt.Sprintf("synthesis: %v", err))
 		report.PhaseErrors = phaseErrors
 		report.DurationMs = time.Since(start).Milliseconds()
 		return report, nil
+	}
+	report.WikiUpdatesProposed = len(updates)
+	proposal := buildDreamProposalReport(scan, updates)
+	proposalPath := wd.dreamProposalPath()
+	report.WikiProposalPath = proposalPath
+	if err := wd.saveDreamProposalReport(proposal); err != nil {
+		phaseErrors = append(phaseErrors, fmt.Sprintf("proposal-save: %v", err))
 	}
 
 	// Phase 3: Apply page updates.
@@ -157,17 +227,42 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 		}
 	}
 
-	// Update last-processed diary date in index.
+	// Persist diary high-water state only after synthesis/apply/index work has
+	// completed. LastProcessed remains for display and legacy migration, but
+	// scanDiaries uses per-file offsets as the primary source of truth.
 	idx := wd.store.Index()
-	idx.LastProcessed = time.Now().Format("2006-01-02")
+	if scan != nil && scan.LatestDate != "" {
+		idx.LastProcessed = scan.LatestDate
+	} else {
+		idx.LastProcessed = time.Now().Format("2006-01-02")
+	}
 	indexPath := filepath.Join(wd.store.Dir(), "index.md")
 	if err := idx.Save(indexPath); err != nil {
 		phaseErrors = append(phaseErrors, fmt.Sprintf("index-save: %v", err))
+	}
+	if scan != nil {
+		scan.State.Recent = appendProcessedDiaryCapsule(scan.State.Recent, processedDiaryCapsule{
+			At:        time.Now().Format(time.RFC3339),
+			DiaryDate: scan.LatestDate,
+			Proposed:  len(updates),
+			Created:   created,
+			Updated:   updated,
+			Paths:     updatePaths(updates),
+		})
+		if err := wd.saveDiaryProcessState(scan.State); err != nil {
+			phaseErrors = append(phaseErrors, fmt.Sprintf("diary-state-save: %v", err))
+		}
 	}
 
 	wd.resetCounters()
 	report.PhaseErrors = phaseErrors
 	report.DurationMs = time.Since(start).Milliseconds()
+	proposal.Applied = dreamApplySummary{Created: created, Updated: updated}
+	proposal.PhaseErrors = phaseErrors
+	proposal.DurationMs = report.DurationMs
+	if err := wd.saveDreamProposalReport(proposal); err != nil {
+		report.PhaseErrors = append(report.PhaseErrors, fmt.Sprintf("proposal-save-final: %v", err))
+	}
 
 	wd.logger.Info("wiki-dream: cycle complete",
 		"created", created, "updated", updated,
@@ -176,62 +271,301 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	return report, nil
 }
 
-// scanDiaries reads diary entries since the last processed date.
-func (wd *WikiDreamer) scanDiaries(_ context.Context) (string, error) {
+// scanDiaries reads diary bytes that have not yet been consolidated. The
+// primary cursor is a per-file byte offset; index.LastProcessed is only a
+// legacy migration hint for old diaries that predate the cursor file.
+func (wd *WikiDreamer) scanDiaries(_ context.Context) (*diaryScanResult, error) {
 	diaryDir := wd.store.DiaryDir()
 	if diaryDir == "" {
-		return "", nil
+		return nil, nil
 	}
 
 	entries, err := os.ReadDir(diaryDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", nil
+			return nil, nil
 		}
-		return "", fmt.Errorf("read diary dir: %w", err)
+		return nil, fmt.Errorf("read diary dir: %w", err)
 	}
 
-	// Determine cutoff date from index.
-	idx := wd.store.Index()
-	cutoff := idx.LastProcessed
-
-	var diaryFiles []string
+	state := wd.loadDiaryProcessState()
+	legacyCutoff := wd.store.Index().LastProcessed
+	var diaryFiles []os.DirEntry
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasPrefix(e.Name(), "diary-") || !strings.HasSuffix(e.Name(), ".md") {
 			continue
 		}
-		// Extract date from filename: diary-YYYY-MM-DD.md
-		date := strings.TrimPrefix(e.Name(), "diary-")
-		date = strings.TrimSuffix(date, ".md")
-		if cutoff != "" && date <= cutoff {
-			continue
-		}
-		diaryFiles = append(diaryFiles, e.Name())
+		diaryFiles = append(diaryFiles, e)
 	}
 
 	if len(diaryFiles) == 0 {
-		return "", nil
+		return nil, nil
 	}
 
-	sort.Strings(diaryFiles)
+	sort.Slice(diaryFiles, func(i, j int) bool {
+		return diaryFiles[i].Name() < diaryFiles[j].Name()
+	})
 
-	// Read and concatenate diary content (cap at 30K chars).
 	var sb strings.Builder
-	const maxChars = 30000
-	for _, name := range diaryFiles {
+	const maxBytes = 30000
+	latestDate := ""
+	for _, entry := range diaryFiles {
+		name := entry.Name()
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		date := diaryDateFromName(name)
+
+		fileState, hasState := state.Files[name]
+		if !hasState && legacyCutoff != "" && date != "" && date < legacyCutoff {
+			state.Files[name] = diaryFileState{
+				Offset:  info.Size(),
+				Size:    info.Size(),
+				ModUnix: info.ModTime().Unix(),
+			}
+			continue
+		}
+
+		offset := fileState.Offset
+		if offset < 0 || offset > info.Size() {
+			offset = 0
+		}
+		if offset == info.Size() {
+			continue
+		}
+
 		data, err := os.ReadFile(filepath.Join(diaryDir, name))
 		if err != nil {
 			continue
 		}
-		fmt.Fprintf(&sb, "--- %s ---\n", name)
-		sb.Write(data)
+		if offset > int64(len(data)) {
+			offset = 0
+		}
+		remaining := maxBytes - sb.Len()
+		if remaining <= 0 {
+			break
+		}
+		chunk := data[offset:]
+		nextOffset := info.Size()
+		if len(chunk) > remaining {
+			chunk = chunk[:remaining]
+			nextOffset = offset + int64(len(chunk))
+		}
+		if len(chunk) == 0 {
+			state.Files[name] = diaryFileState{
+				Offset:  nextOffset,
+				Size:    info.Size(),
+				ModUnix: info.ModTime().Unix(),
+			}
+			continue
+		}
+
+		fmt.Fprintf(&sb, "--- %s @%d ---\n", name, offset)
+		sb.Write(chunk)
 		sb.WriteByte('\n')
-		if sb.Len() > maxChars {
+		state.Files[name] = diaryFileState{
+			Offset:  nextOffset,
+			Size:    info.Size(),
+			ModUnix: info.ModTime().Unix(),
+		}
+		if date > latestDate {
+			latestDate = date
+		}
+		if sb.Len() >= maxBytes {
 			break
 		}
 	}
 
-	return sb.String(), nil
+	if sb.Len() == 0 {
+		return nil, nil
+	}
+	return &diaryScanResult{
+		Content:    sb.String(),
+		State:      state,
+		LatestDate: latestDate,
+	}, nil
+}
+
+func diaryDateFromName(name string) string {
+	date := strings.TrimPrefix(name, "diary-")
+	return strings.TrimSuffix(date, ".md")
+}
+
+func (wd *WikiDreamer) diaryProcessStatePath() string {
+	return filepath.Join(wd.store.Dir(), diaryProcessStateFile)
+}
+
+func (wd *WikiDreamer) loadDiaryProcessState() diaryProcessState {
+	state := diaryProcessState{
+		Version: 1,
+		Files:   make(map[string]diaryFileState),
+	}
+	data, err := os.ReadFile(wd.diaryProcessStatePath())
+	if err != nil {
+		return state
+	}
+	if err := json.Unmarshal(data, &state); err != nil && wd.logger != nil {
+		wd.logger.Warn("wiki-dream: diary state parse failed", "error", err)
+	}
+	if state.Version == 0 {
+		state.Version = 1
+	}
+	if state.Files == nil {
+		state.Files = make(map[string]diaryFileState)
+	}
+	return state
+}
+
+func (wd *WikiDreamer) saveDiaryProcessState(state diaryProcessState) error {
+	if state.Files == nil {
+		state.Files = make(map[string]diaryFileState)
+	}
+	state.Version = 1
+	state.UpdatedAt = time.Now().Format(time.RFC3339)
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal diary state: %w", err)
+	}
+	path := wd.diaryProcessStatePath()
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
+		return fmt.Errorf("write diary state: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("replace diary state: %w", err)
+	}
+	return nil
+}
+
+func formatProcessedDiaryCapsules(capsules []processedDiaryCapsule) string {
+	if len(capsules) == 0 {
+		return "최근 처리 이력 없음."
+	}
+	var sb strings.Builder
+	start := len(capsules) - processedCapsuleLimit
+	if start < 0 {
+		start = 0
+	}
+	for _, c := range capsules[start:] {
+		fmt.Fprintf(&sb, "- date=%s proposed=%d created=%d updated=%d",
+			c.DiaryDate, c.Proposed, c.Created, c.Updated)
+		if len(c.Paths) > 0 {
+			sb.WriteString(" paths=")
+			sb.WriteString(strings.Join(c.Paths, ", "))
+		}
+		if c.At != "" {
+			sb.WriteString(" at=")
+			sb.WriteString(c.At)
+		}
+		sb.WriteByte('\n')
+	}
+	return strings.TrimSpace(sb.String())
+}
+
+func appendProcessedDiaryCapsule(capsules []processedDiaryCapsule, next processedDiaryCapsule) []processedDiaryCapsule {
+	if next.At == "" && next.DiaryDate == "" && next.Proposed == 0 && next.Created == 0 && next.Updated == 0 && len(next.Paths) == 0 {
+		return capProcessedDiaryCapsules(capsules)
+	}
+	next.Paths = dedupeStringList(next.Paths, 16)
+	capsules = append(capsules, next)
+	return capProcessedDiaryCapsules(capsules)
+}
+
+func capProcessedDiaryCapsules(capsules []processedDiaryCapsule) []processedDiaryCapsule {
+	if len(capsules) <= processedCapsuleLimit {
+		return capsules
+	}
+	out := make([]processedDiaryCapsule, processedCapsuleLimit)
+	copy(out, capsules[len(capsules)-processedCapsuleLimit:])
+	return out
+}
+
+func updatePaths(updates []wikiUpdate) []string {
+	paths := make([]string, 0, len(updates))
+	for _, u := range updates {
+		if strings.TrimSpace(u.Path) == "" {
+			continue
+		}
+		paths = append(paths, u.Path)
+	}
+	return dedupeStringList(paths, 16)
+}
+
+func dedupeStringList(values []string, max int) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+		if max > 0 && len(out) >= max {
+			break
+		}
+	}
+	return out
+}
+
+func (wd *WikiDreamer) dreamProposalPath() string {
+	return filepath.Join(wd.store.Dir(), dreamProposalFile)
+}
+
+func buildDreamProposalReport(scan *diaryScanResult, updates []wikiUpdate) dreamProposalReport {
+	report := dreamProposalReport{
+		GeneratedAt: time.Now().Format(time.RFC3339),
+		Proposed:    make([]dreamUpdatePreview, 0, len(updates)),
+	}
+	if scan != nil {
+		report.LatestDiaryDate = scan.LatestDate
+		report.DiaryBytes = len(scan.Content)
+	}
+	for _, update := range updates {
+		report.Proposed = append(report.Proposed, dreamUpdatePreview{
+			Action:      update.Action,
+			Path:        update.Path,
+			Title:       update.Title,
+			Summary:     update.Summary,
+			Category:    update.Category,
+			Type:        update.Type,
+			Confidence:  update.Confidence,
+			Importance:  update.Importance,
+			Related:     dedupeStringList(update.Related, 12),
+			ContentHint: truncateDreamReportText(update.Content, 320),
+		})
+	}
+	return report
+}
+
+func (wd *WikiDreamer) saveDreamProposalReport(report dreamProposalReport) error {
+	path := wd.dreamProposalPath()
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal proposal: %w", err)
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
+		return fmt.Errorf("write proposal: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("replace proposal: %w", err)
+	}
+	return nil
+}
+
+func truncateDreamReportText(text string, maxRunes int) string {
+	text = strings.TrimSpace(strings.ReplaceAll(text, "\x00", ""))
+	text = redact.String(text)
+	runes := []rune(text)
+	if len(runes) <= maxRunes {
+		return text
+	}
+	return string(runes[:maxRunes]) + "..."
 }
 
 // wikiUpdate represents a single page update instruction from the LLM.
@@ -251,14 +585,18 @@ type wikiUpdate struct {
 }
 
 // synthesize calls the LLM to determine which wiki pages should be updated.
-func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string) ([]wikiUpdate, error) {
+func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, state diaryProcessState) ([]wikiUpdate, error) {
 	// Build existing wiki context.
 	idx := wd.store.Index()
 	indexContent := idx.Render()
+	processedHistory := formatProcessedDiaryCapsules(state.Recent)
 
 	prompt := fmt.Sprintf(`당신은 위키 지식베이스 관리자입니다. 아래 일지 내용을 분석하여 위키 페이지를 생성하거나 업데이트할 지시사항을 JSON 배열로 반환하세요.
 
 ## 현재 위키 인덱스
+%s
+
+## 최근 처리 이력
 %s
 
 ## 새 일지 내용
@@ -268,6 +606,7 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string) ([]w
 - 일시적인 내용(인사, 잡담)은 무시
 - 중요한 결정, 새로운 사실, 인물 정보, 프로젝트 진행 등만 위키에 반영
 - 기존 페이지가 있으면 action:"update", 없으면 action:"create"
+- 최근 처리 이력에 이미 반영된 주제/경로는 새 사실이 추가된 경우에만 update하고, 같은 내용을 반복 생성하지 마라
 - 카테고리: 사람, 프로젝트, 기술, 업무, 결정, 선호
 - content는 마크다운 형식. create 시 전체 본문, update 시 추가할 섹션/내용
 - importance: 0.5(일반) ~ 0.9(핵심 결정)
@@ -278,7 +617,7 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string) ([]w
 - related: 의미적으로 관련된 기존 위키 페이지 경로 목록 (인덱스에서 선택)
 - 업데이트가 불필요하면 빈 배열 [] 반환
 
-JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, diaryContent)
+JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, processedHistory, diaryContent)
 
 	systemJSON, _ := json.Marshal("You are a wiki knowledge base maintainer. Respond only with a JSON array.")
 	resp, err := wd.client.Complete(ctx, llm.ChatRequest{

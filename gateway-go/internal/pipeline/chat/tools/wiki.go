@@ -241,28 +241,13 @@ func wikiLog(_, diaryDir, content string) (string, error) {
 		return "content에 일지 내용을 입력하세요.", nil
 	}
 
-	// Ensure diary directory exists.
-	if err := os.MkdirAll(diaryDir, 0o755); err != nil {
-		return fmt.Sprintf("일지 디렉토리 생성 실패: %v", err), nil
-	}
-
-	today := time.Now().Format("2006-01-02")
-	path := filepath.Join(diaryDir, "diary-"+today+".md")
-
-	// Append to today's diary file.
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return fmt.Sprintf("일지 파일 열기 실패: %v", err), nil
-	}
-	defer f.Close()
-
-	now := time.Now().Format("15:04")
-	entry := fmt.Sprintf("\n## %s\n\n%s\n", now, content)
-	if _, err := f.WriteString(entry); err != nil {
+	now := time.Now()
+	if err := wiki.AppendDiaryTo(diaryDir, content); err != nil {
 		return fmt.Sprintf("일지 쓰기 실패: %v", err), nil
 	}
 
-	return fmt.Sprintf("일지 기록 완료: %s (%s)", path, now), nil
+	path := filepath.Join(diaryDir, "diary-"+now.Format("2006-01-02")+".md")
+	return fmt.Sprintf("일지 기록 완료: %s (%s)", path, now.Format("15:04")), nil
 }
 
 func wikiDaily(diaryDir string, limit int) (string, error) {
