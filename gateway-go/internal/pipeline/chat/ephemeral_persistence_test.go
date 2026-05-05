@@ -26,10 +26,10 @@ func TestBuildMessagePersister_EphemeralAssistantSuppressesAssistant(t *testing.
 	}
 }
 
-// TestBuildMessagePersister_EphemeralUserDoesNotBlockAssistant is the
-// asymmetric guarantee that fixes the heartbeat repeat-loop bug: the
-// trigger is dropped, but the assistant reply IS persisted so the next
-// heartbeat can see "I already reported this 30 minutes ago".
+// TestBuildMessagePersister_EphemeralUserDoesNotBlockAssistant preserves the
+// generic contract: suppressing the inbound self-trigger alone does not
+// implicitly suppress assistant persistence. Callers that need full isolation
+// must also set EphemeralAssistant.
 func TestBuildMessagePersister_EphemeralUserDoesNotBlockAssistant(t *testing.T) {
 	transcript := NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript}

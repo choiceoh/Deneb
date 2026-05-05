@@ -255,6 +255,8 @@ func (s *Service) runDreamingAsync() {
 			"patterns", report.PatternsExtracted,
 			"user_model", report.UserModelUpdated,
 			"mutual", report.MutualUpdated,
+			"wikiProposed", report.WikiUpdatesProposed,
+			"wikiProposalPath", report.WikiProposalPath,
 			"durationMs", report.DurationMs,
 		)
 		s.notifyDreaming(report, nil)
@@ -285,10 +287,10 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 		switch {
 		case total == 0:
 			msg = fmt.Sprintf("🌙 Aurora Dream 완료: 변경 없음 (%.1fs)", float64(report.DurationMs)/1000)
-		case report.WikiPagesCreated > 0 || report.WikiPagesUpdated > 0:
+		case report.WikiPagesCreated > 0 || report.WikiPagesUpdated > 0 || report.WikiUpdatesProposed > 0:
 			// Wiki dreaming report.
-			msg = fmt.Sprintf("📖 Wiki Dream 완료: 생성 %d, 수정 %d (%.1fs)",
-				report.WikiPagesCreated, report.WikiPagesUpdated,
+			msg = fmt.Sprintf("📖 Wiki Dream 완료: 제안 %d, 생성 %d, 수정 %d (%.1fs)",
+				report.WikiUpdatesProposed, report.WikiPagesCreated, report.WikiPagesUpdated,
 				float64(report.DurationMs)/1000)
 		default:
 			msg = fmt.Sprintf("🌙 Aurora Dream 완료: 검증 %d, 병합 %d, 만료 %d, 정리 %d, 패턴 %d, 프로필 %d, 관계 %d (%.1fs)",

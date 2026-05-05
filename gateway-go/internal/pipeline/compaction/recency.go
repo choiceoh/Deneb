@@ -48,7 +48,12 @@ func RecencyCompact(
 
 	compacted := make([]llm.Message, 0, 1+len(remaining))
 	compacted = append(compacted, llm.NewTextMessage("user",
-		fmt.Sprintf("[Polaris recency compaction: %d oldest messages dropped]", evicted)))
+		FormatContextFence(
+			"polaris-recency",
+			"drop-notice",
+			fmt.Sprintf("Polaris recency compaction: %d oldest messages dropped", evicted),
+			"### 불확실한 메모 (Uncertain Notes)\n- [오래됨] 일부 오래된 메시지는 요약 없이 제거되었다. 남은 최신 원문 메시지를 우선하고, 누락된 과거 맥락은 확신하지 마라.",
+		)))
 	compacted = append(compacted, remaining...)
 
 	if logger != nil {

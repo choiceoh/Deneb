@@ -81,14 +81,15 @@ func TestHeartbeatTriggerTemplate_invariants(t *testing.T) {
 	got := fmt.Sprintf(heartbeatTriggerTemplate, "<<HEARTBEAT_BODY>>")
 
 	mustContain := map[string]string{
-		"NO_REPLY":         "must instruct silent reply",
-		"그만":               "must enumerate user-stop expressions",
-		"중단":               "must enumerate user-stop expressions",
-		"hartbeat_update":  "", // placeholder — see actual checks below
+		"NO_REPLY":              "must instruct silent reply",
+		"그만":                    "must enumerate user-stop expressions",
+		"중단":                    "must enumerate user-stop expressions",
+		"hartbeat_update":       "", // placeholder — see actual checks below
 		"~/.deneb/HEARTBEAT.md": "must reference the canonical path",
-		"archive":          "must instruct stalled-item archival",
-		"진행중":              "must show progress-update example format",
-		"<<HEARTBEAT_BODY>>": "%s placeholder must render the file contents",
+		"archive":               "must instruct stalled-item archival",
+		"진행중":                   "must show progress-update example format",
+		"대화 transcript가 아니라":    "must keep repeat-loop state out of short-term transcript",
+		"<<HEARTBEAT_BODY>>":    "%s placeholder must render the file contents",
 	}
 	delete(mustContain, "hartbeat_update")
 	mustContain["heartbeat_update"] = "must name the dedicated update tool, not fs.write"
@@ -104,6 +105,19 @@ func TestHeartbeatTriggerTemplate_invariants(t *testing.T) {
 	// during the initial port; this test pins it down.
 	if strings.Contains(got, "%!") {
 		t.Errorf("trigger template has Sprintf format error markers: %q", got)
+	}
+}
+
+func TestHeartbeatSyncOptionsAreTranscriptIsolated(t *testing.T) {
+	opts := heartbeatSyncOptions()
+	if opts == nil {
+		t.Fatal("heartbeatSyncOptions returned nil")
+	}
+	if !opts.EphemeralUser {
+		t.Fatal("heartbeat trigger must not persist as a user message")
+	}
+	if !opts.EphemeralAssistant {
+		t.Fatal("heartbeat assistant/tool output must not persist into short-term chat context")
 	}
 }
 

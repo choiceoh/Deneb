@@ -1185,9 +1185,8 @@ func buildMessagePersister(
 ) func(msg llm.Message) {
 	// EphemeralAssistant turns suppress assistant + tool_result persistence:
 	// returning nil here disables the executor's per-turn persist callback.
-	// Heartbeat keeps this false so the assistant's reply is persisted (the
-	// next heartbeat needs to see prior outputs to avoid duplicate reports);
-	// only the inbound trigger is suppressed via EphemeralUser.
+	// Heartbeat sets this true so autonomous progress ticks do not pollute the
+	// user's short-term transcript; heartbeat state is kept in HEARTBEAT.md.
 	if deps.transcript == nil || params.EphemeralAssistant {
 		return nil
 	}

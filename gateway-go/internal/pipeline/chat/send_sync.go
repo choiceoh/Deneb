@@ -62,8 +62,9 @@ type SyncOptions struct {
 
 	// EphemeralAssistant suppresses persistence of assistant/tool_result
 	// messages produced during the run — see RunParams.EphemeralAssistant.
-	// Heartbeat leaves this false so the next iteration can see prior
-	// reports and avoid duplicate output.
+	// Heartbeat sets this true so autonomous ticks do not crowd out the
+	// user's short-term conversation context; heartbeat state belongs in
+	// HEARTBEAT.md instead.
 	EphemeralAssistant bool
 }
 

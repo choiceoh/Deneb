@@ -111,8 +111,12 @@ func EmbeddingCompact(
 	// Rebuild: marker + selected old (original order) + recent.
 	compacted := make([]llm.Message, 0, 1+len(selected)+len(recent))
 	compacted = append(compacted, llm.NewTextMessage("user",
-		fmt.Sprintf("[Polaris embedding compaction (MMR): %d/%d messages selected]",
-			len(selected), len(old))))
+		FormatContextFence(
+			"polaris-embedding",
+			"extractive-selection",
+			fmt.Sprintf("Polaris embedding compaction (MMR): %d/%d messages selected", len(selected), len(old)),
+			"### 도구 결과 (Tool Outcomes)\n- [embedding] 오래된 메시지 중 최신 맥락과 의미적으로 가까운 일부 원문 메시지만 선택되었다. 선택된 원문은 이 알림 뒤에 이어진다.",
+		)))
 	compacted = append(compacted, selected...)
 	compacted = append(compacted, recent...)
 	compacted = mergeConsecutiveSameRole(compacted)

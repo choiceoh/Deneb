@@ -11,16 +11,15 @@
 // transcript, instead of running in an isolated stateless channel. When no
 // telegram session has been seen yet, the task is a no-op.
 //
-// Persistence is asymmetric:
+// Persistence is isolated from the chat transcript:
 //   - EphemeralUser=true   → the trigger user-role message is NOT persisted
 //     (recurring noise must not crowd out the 24-message recent window or
 //     bias the LLM into modeling fake user requests).
-//   - EphemeralAssistant=false → the assistant's reply IS persisted, so the
-//     next iteration can see "did I already report this 30 minutes ago?" and
-//     avoid duplicate broadcasts. Combined with the trigger template's
-//     instruction to update HEARTBEAT.md when work concludes, this gives the
-//     agent both context (prior reports + user replies) and an action
-//     (file edit) for breaking the repeat-loop.
+//   - EphemeralAssistant=true → assistant/tool_result messages are NOT
+//     persisted either. Heartbeat progress state must live in HEARTBEAT.md
+//     (last report time/status/archive), not in the user's short-term chat
+//     window. This prevents autonomous ticks from resetting or crowding out
+//     the user's active conversation context.
 //
 // Inspired by OpenClaw's heartbeat system.
 package server
@@ -77,6 +76,7 @@ const heartbeatTriggerTemplate = prompt.HeartbeatTriggerPrefix + ` 30분 주기 
 - 이미 사용자가 답해서 처리된 항목은 다시 묻지 말고 곧장 실행하세요.
 - 직전 하트비트에서 이미 같은 보고를 했고 새 진전이 없으면 본문에 정확히 ` + "`NO_REPLY`" + ` 한 단어만 출력하세요(다른 텍스트 금지). 사용자가 같은 응답을 두 번 받지 않도록 매우 엄격히 지키세요.
 - 사용자가 "그만"·"중단"·"하지 마"·"꺼" 같은 중단 의사를 표현했다면, 해당 항목을 HEARTBEAT.md에서 제거하고 NO_REPLY를 출력하세요.
+- 직전 보고 여부와 진행 상태는 대화 transcript가 아니라 HEARTBEAT.md의 마지막 보고 시각·상태 줄을 기준으로 판단하세요. 하트비트 턴의 응답은 단기 대화 컨텍스트에 저장되지 않을 수 있습니다.
 
 작업 종료 시 HEARTBEAT.md 갱신(필수, heartbeat_update 도구만 사용):
 - 일반 fs.write/edit는 workspace 밖이라 통하지 않습니다. 반드시 heartbeat_update 도구로 ~/.deneb/HEARTBEAT.md를 통째로 새 내용으로 덮어쓰세요.
@@ -135,15 +135,7 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	// Asymmetric persistence: drop the recurring trigger so it can't bias
-	// the model into modeling fake user requests, but KEEP the assistant's
-	// reply. Persisting the response lets the next heartbeat see prior
-	// reports + the user's responses to them, which is how the agent
-	// decides whether to NO_REPLY versus repeat itself.
-	opts := &chat.SyncOptions{
-		EphemeralUser:      true,
-		EphemeralAssistant: false,
-	}
+	opts := heartbeatSyncOptions()
 	result, err := t.chatHandler.SendSync(runCtx, sessionKey, triggerMsg, "", opts)
 	if err != nil {
 		return fmt.Errorf("heartbeat: agent turn failed: %w", err)
@@ -154,6 +146,13 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 		"session", sessionKey,
 	)
 	return nil
+}
+
+func heartbeatSyncOptions() *chat.SyncOptions {
+	return &chat.SyncOptions{
+		EphemeralUser:      true,
+		EphemeralAssistant: true,
+	}
 }
 
 // withinActiveHours reports whether the given instant falls inside the

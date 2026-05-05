@@ -417,12 +417,35 @@ func handleRunSuccess(
 
 	// Diary recording: append raw conversation turn to today's diary.
 	// Wiki page curation is handled by the main LLM via system prompt.
-	if deps.wikiStore != nil && params.Message != "" {
+	if deps.wikiStore != nil && shouldRecordRunDiary(params) {
 		toolNames := make([]string, 0, len(result.ToolActivities))
 		for _, ta := range result.ToolActivities {
-			toolNames = append(toolNames, ta.Name)
+			if ta.Name == "" {
+				continue
+			}
+			name := ta.Name
+			if ta.IsError {
+				name += "!"
+			}
+			toolNames = append(toolNames, name)
+			if len(toolNames) >= 16 {
+				toolNames = append(toolNames, "...")
+				break
+			}
 		}
-		go recordDiary(deps.wikiStore, logger, params.Message, toolNames)
+		assistantText := result.AllText
+		if assistantText == "" {
+			assistantText = result.Text
+		}
+		assistantText = strings.TrimSpace(StripSilentToken(jsonutil.StripThinkingTags(assistantText)))
+		dreamTurnFn := deps.dreamTurnFn
+		shouldIncrementDream := dreamTurnFn != nil
+		go func() {
+			recorded := recordDiary(deps.wikiStore, logger, params.Message, toolNames, assistantText, result.StopReason, result.Turns)
+			if recorded && shouldIncrementDream {
+				dreamTurnFn(context.Background())
+			}
+		}()
 	}
 
 	logger.Info("agent run completed",
