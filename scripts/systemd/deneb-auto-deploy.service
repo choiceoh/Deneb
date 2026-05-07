@@ -1,0 +1,11 @@
+[Unit]
+Description=Deneb auto-deploy merged main to gateway
+After=network-online.target deneb-gateway.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/deneb
+ExecStart=%h/deneb/scripts/deploy/auto-deploy.sh
+Nice=5
+TimeoutStartSec=15min
