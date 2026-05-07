@@ -46,6 +46,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor) func(context.Context, js
 			Fetch    int      `json:"fetch"`
 			MaxChars int      `json:"maxChars"`
 			Count    int      `json:"count"`
+			Type     string   `json:"type"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			//nolint:nilerr // tool returns user-facing error in result string
@@ -68,6 +69,14 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor) func(context.Context, js
 			if p.Count <= 0 {
 				p.Count = 5
 			}
+			if p.Type != "" && p.Type != "search" && p.Fetch > 0 {
+				return formatFetchError(webFetchErr{
+					Code: "invalid_params", Message: "type (news/scholar/autocomplete) is not compatible with fetch; use query + type without fetch", Retryable: false,
+				}), nil
+			}
+			if p.Type != "" && p.Type != "search" {
+				return webParallelSearchWithType(ctx, p.Queries, p.Type, p.Count)
+			}
 			fetch := p.Fetch
 			if fetch > 3 {
 				fetch = 3
@@ -77,6 +86,15 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor) func(context.Context, js
 		case p.Query != "":
 			if p.Count <= 0 {
 				p.Count = 5
+			}
+			// Typed search (news/scholar/autocomplete) — Serper only, no fetch.
+			if p.Type != "" && p.Type != "search" {
+				if p.Fetch > 0 {
+					return formatFetchError(webFetchErr{
+						Code: "invalid_params", Message: "type (news/scholar/autocomplete) is not compatible with fetch; use query + type without fetch", Retryable: false,
+					}), nil
+				}
+				return webSearchWithType(ctx, p.Type, p.Query, p.Count)
 			}
 			if p.Fetch > 0 {
 				// Search+fetch mode: search then auto-fetch top N.

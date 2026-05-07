@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -434,4 +435,218 @@ func duckDuckGoSearch(ctx context.Context, query string) (string, error) {
 		return "No results found for this query.", nil
 	}
 	return sb.String(), nil
+}
+
+// --- Typed search (Serper-specific endpoints) ---
+
+// serperTypedEndpoints maps search types to Serper endpoint URLs.
+var serperTypedEndpoints = map[string]string{
+	"news":        "https://google.serper.dev/news",
+	"scholar":     "https://google.serper.dev/scholar",
+	"autocomplete": "https://google.serper.dev/autocomplete",
+}
+
+// webSearchWithType dispatches to Serper's specialised search endpoints.
+// Supported types: news, scholar, autocomplete.
+// Falls back to regular webSearch for unknown types.
+func webSearchWithType(ctx context.Context, searchType, query string, count int) (string, error) {
+	endpoint, ok := serperTypedEndpoints[searchType]
+	if !ok {
+		return webSearch(ctx, query, count)
+	}
+	key := serperAPIKey()
+	if key == "" {
+		//nolint:nilerr
+		return formatFetchError(webFetchErr{
+			Code: "no_serper_key", Message: "news/scholar/autocomplete search requires SERPER_API_KEY", Retryable: false,
+		}), nil
+	}
+	return serperTypedSearch(ctx, key, endpoint, searchType, query, count)
+}
+
+// webParallelSearchWithType runs typed search for multiple queries in parallel.
+func webParallelSearchWithType(ctx context.Context, queries []string, searchType string, count int) (string, error) {
+	if len(queries) == 1 {
+		return webSearchWithType(ctx, searchType, queries[0], count)
+	}
+	if count <= 0 {
+		count = 5
+	}
+
+	type queryResult struct {
+		index   int
+		query   string
+		content string
+		err     error
+	}
+	results := make([]queryResult, len(queries))
+	var wg sync.WaitGroup
+	for i, q := range queries {
+		wg.Add(1)
+		go func(i int, q string) {
+			defer wg.Done()
+			content, err := webSearchWithType(ctx, searchType, q, count)
+			results[i] = queryResult{index: i, query: q, content: content, err: err}
+		}(i, q)
+	}
+	wg.Wait()
+
+	var sb strings.Builder
+	for _, r := range results {
+		fmt.Fprintf(&sb, "<query index=\"%d\" q=\"%s\">\n", r.index+1, r.query)
+		if r.err != nil {
+			fmt.Fprintf(&sb, "Search failed: %s\n", r.err.Error())
+		} else {
+			sb.WriteString(r.content)
+		}
+		sb.WriteString("</query>\n\n")
+	}
+	return sb.String(), nil
+}
+
+// serperTypedSearch calls a Serper specialised endpoint and formats the response.
+func serperTypedSearch(ctx context.Context, apiKey, endpoint, searchType, query string, count int) (string, error) {
+	if count <= 0 {
+		count = 5
+	}
+	reqBody := map[string]any{
+		"q":   query,
+		"num": count,
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("marshal serper %s request: %w", searchType, err)
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create serper %s request: %w", searchType, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-KEY", apiKey)
+
+	resp, err := SharedClient(20 * time.Second).Do(req)
+	if err != nil {
+		return "", fmt.Errorf("serper %s request failed: %w", searchType, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("serper %s HTTP %d", searchType, resp.StatusCode)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return "", fmt.Errorf("parse serper %s response: %w", searchType, err)
+	}
+
+	return formatSerperTypedResults(searchType, raw), nil
+}
+
+// formatSerperTypedResults formats typed Serper responses by type.
+func formatSerperTypedResults(searchType string, raw map[string]json.RawMessage) string {
+	var sb strings.Builder
+
+	switch searchType {
+	case "news":
+		type newsItem struct {
+			Title   string `json:"title"`
+			Link    string `json:"link"`
+			Snippet string `json:"snippet"`
+			Date    string `json:"date"`
+			Source  string `json:"source"`
+		}
+		// knowledgeGraph
+		if kg, ok := raw["knowledgeGraph"]; ok {
+			var kgs struct {
+				Title       string `json:"title"`
+				Description string `json:"description"`
+			}
+			if json.Unmarshal(kg, &kgs) == nil && kgs.Title != "" {
+				fmt.Fprintf(&sb, "**%s**: %s\n\n", kgs.Title, kgs.Description)
+			}
+		}
+		var items []newsItem
+		if data, ok := raw["news"]; ok {
+			_ = json.Unmarshal(data, &items)
+		}
+		for i, item := range items {
+			fmt.Fprintf(&sb, "%d. **%s**\n", i+1, item.Title)
+			if item.Source != "" {
+				fmt.Fprintf(&sb, "   Source: %s", item.Source)
+			}
+			if item.Date != "" {
+				fmt.Fprintf(&sb, " | %s", item.Date)
+			}
+			sb.WriteString("\n")
+			if item.Snippet != "" {
+				fmt.Fprintf(&sb, "   %s\n", item.Snippet)
+			}
+			fmt.Fprintf(&sb, "   %s\n\n", item.Link)
+		}
+
+	case "scholar":
+		type scholarItem struct {
+			Title       string `json:"title"`
+			Link        string `json:"link"`
+			Snippet     string `json:"snippet"`
+			Publication string `json:"publication"`
+			Authors     string `json:"authors"`
+			Year        string `json:"year"`
+			CitedBy     struct {
+				Total int    `json:"total"`
+				Link  string `json:"link"`
+			} `json:"citedBy"`
+		}
+		var items []scholarItem
+		if data, ok := raw["organic"]; ok {
+			_ = json.Unmarshal(data, &items)
+		}
+		for i, item := range items {
+			fmt.Fprintf(&sb, "%d. **%s**\n", i+1, item.Title)
+			if item.Authors != "" {
+				fmt.Fprintf(&sb, "   Authors: %s\n", item.Authors)
+			}
+			if item.Publication != "" {
+				fmt.Fprintf(&sb, "   Publication: %s", item.Publication)
+			}
+			if item.Year != "" {
+				fmt.Fprintf(&sb, " (%s)", item.Year)
+			}
+			if item.CitedBy.Total > 0 {
+				fmt.Fprintf(&sb, " | Cited by: %d", item.CitedBy.Total)
+			}
+			sb.WriteString("\n")
+			if item.Snippet != "" {
+				fmt.Fprintf(&sb, "   %s\n", item.Snippet)
+			}
+			fmt.Fprintf(&sb, "   %s\n\n", item.Link)
+		}
+
+	case "autocomplete":
+		var suggestions []string
+		if data, ok := raw["1"]; ok {
+			_ = json.Unmarshal(data, &suggestions)
+		}
+		for i, s := range suggestions {
+			fmt.Fprintf(&sb, "%d. %s\n", i+1, s)
+		}
+		if paa, ok := raw["peopleAlsoAsk"]; ok {
+			var questions []string
+			if json.Unmarshal(paa, &questions) == nil && len(questions) > 0 {
+				sb.WriteString("\n**Related questions:**\n")
+				for _, q := range questions {
+					fmt.Fprintf(&sb, "- %s\n", q)
+				}
+			}
+		}
+	}
+
+	if sb.Len() == 0 {
+		return "No results found."
+	}
+	return sb.String()
 }

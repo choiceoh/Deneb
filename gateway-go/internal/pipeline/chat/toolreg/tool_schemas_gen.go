@@ -427,6 +427,11 @@ func webToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Web search query. Serper (Google) > Brave > DuckDuckGo fallback",
 			},
+			"type": map[string]any{
+				"type":        "string",
+				"description": "Serper search type: news (Google News), scholar (Google Scholar), autocomplete (search suggestions). Default: regular web search.",
+				"enum":        []string{"news", "scholar", "autocomplete"},
+			},
 			"url": map[string]any{
 				"type":        "string",
 				"description": "URL to fetch (HTML extraction + bot evasion)",
