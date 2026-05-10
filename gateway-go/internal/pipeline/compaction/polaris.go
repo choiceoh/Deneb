@@ -20,7 +20,13 @@ const (
 	DefaultLLMThresholdPct         = 0.90
 	DefaultLLMTargetPct            = 0.20
 	DefaultEmergencyInputThreshold = 30_000
-	runesPerToken                  = 2
+	// DefaultStubMinChars is the rune threshold above which an old
+	// tool_result block's content is replaced with a short placeholder by
+	// TruncateOldToolResults (Tier 2b cheap pruning). 256 runes ≈ 128
+	// tokens for CJK content; below this stubbing yields little gain
+	// while losing the entire result.
+	DefaultStubMinChars = 256
+	runesPerToken       = 2
 )
 
 // Config holds Polaris compaction parameters.
@@ -41,13 +47,14 @@ func NewConfig(contextBudget int) Config {
 
 // Result reports what the pipeline did.
 type Result struct {
-	MicroPruned        int  // tool_result blocks that had code stripped
-	LLMCompacted       bool // whether LLM summarization was applied
-	EmbeddingCompacted bool // whether embedding+MMR selection was applied (tier 2 fallback)
-	RecencyCompacted   bool // whether recency window was applied (tier 3 fallback)
-	EmergencyEvicted   int  // messages evicted due to large input
-	TokensBefore       int
-	TokensAfter        int
+	MicroPruned           int  // tool_result blocks that had code stripped (Tier 2)
+	OldToolResultsStubbed int  // tool_result blocks whose content was replaced with a placeholder (Tier 2b)
+	LLMCompacted          bool // whether LLM summarization was applied
+	EmbeddingCompacted    bool // whether embedding+MMR selection was applied (tier 2 fallback)
+	RecencyCompacted      bool // whether recency window was applied (tier 3 fallback)
+	EmergencyEvicted      int  // messages evicted due to large input
+	TokensBefore          int
+	TokensAfter           int
 }
 
 // Summarizer provides LLM-based summarization (typically local AI).
@@ -96,6 +103,18 @@ func Compact(
 	var pruned int
 	messages, pruned = MicroCompact(messages, DefaultMicroTurnThreshold)
 	r.MicroPruned = pruned
+
+	// Tier 2b: Stub bulky old tool_result content (Hermes Agent Phase 1
+	// cheap pruning). Runs after MicroCompact so blocks already shrunk by
+	// fence-stripping fall under DefaultStubMinChars and are skipped here.
+	// Still zero-cost: no LLM call.
+	var stubbed int
+	messages, stubbed = TruncateOldToolResults(messages, DefaultMicroTurnThreshold, DefaultStubMinChars)
+	r.OldToolResultsStubbed = stubbed
+	if stubbed > 0 && logger != nil {
+		logger.Info("polaris: stubbed old tool results", "count", stubbed)
+	}
+
 	if !emergencyFired {
 		summarizeMessages = messages
 	}

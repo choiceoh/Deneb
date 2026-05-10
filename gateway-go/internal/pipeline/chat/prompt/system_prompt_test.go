@@ -282,6 +282,38 @@ func TestBuildSystemPromptBlocksMatchesString(t *testing.T) {
 	}
 }
 
+// TestBuildSystemPromptBlocks_CacheControlPlacement asserts the cache_control
+// allocation: Static + Semi-static carry ephemeral markers; Dynamic does NOT.
+// This invariant matters because Anthropic limits a request to 4 cache_control
+// breakpoints. The 2 system markers leave room for 2 trailing message markers
+// added by chat/buildTrailingCacheHook (Hermes Agent's "system_and_3" pattern).
+// If the dynamic block ever regains a marker, trailing markers would push the
+// request past the 4-breakpoint limit and the dynamic content (recall memory,
+// timestamp, runtime info) would still cache-miss every turn.
+func TestBuildSystemPromptBlocks_CacheControlPlacement(t *testing.T) {
+	params := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs:     []ToolDef{{Name: "read"}},
+		SkillsPrompt: `<available_skills><skill><name>x</name></skill></available_skills>`,
+	}
+	blocks := BuildSystemPromptBlocks(params)
+	if len(blocks) < 2 {
+		t.Fatalf("expected at least 2 blocks (static + dynamic), got %d", len(blocks))
+	}
+	if blocks[0].CacheControl == nil || blocks[0].CacheControl.Type != "ephemeral" {
+		t.Errorf("static block missing ephemeral cache_control: %+v", blocks[0].CacheControl)
+	}
+	last := blocks[len(blocks)-1]
+	if last.CacheControl != nil {
+		t.Errorf("dynamic block must NOT carry cache_control (would consume a breakpoint without reuse)")
+	}
+	if len(blocks) == 3 {
+		if blocks[1].CacheControl == nil || blocks[1].CacheControl.Type != "ephemeral" {
+			t.Errorf("semi-static (skills) block missing ephemeral cache_control: %+v", blocks[1].CacheControl)
+		}
+	}
+}
+
 func TestBuildSystemPrompt_WikiSavingIsNotResponse(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",

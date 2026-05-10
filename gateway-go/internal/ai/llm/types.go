@@ -322,14 +322,18 @@ type StreamEvent struct {
 
 // --- Streaming event payload types ---
 
-// MessageStart is the payload for "message_start" events.
+// MessageStart is the payload for "message_start" events. The cache fields
+// are reported by Anthropic-compatible endpoints that participate in prompt
+// caching; absent fields decode to zero so non-cache providers are safe.
 type MessageStart struct {
 	Message struct {
 		ID    string `json:"id"`
 		Model string `json:"model"`
 		Usage struct {
-			InputTokens  int `json:"input_tokens"`
-			OutputTokens int `json:"output_tokens"`
+			InputTokens              int `json:"input_tokens"`
+			OutputTokens             int `json:"output_tokens"`
+			CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+			CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 		} `json:"usage"`
 	} `json:"message"`
 }
@@ -359,18 +363,32 @@ type ContentBlockStop struct {
 	Index int `json:"index"`
 }
 
-// MessageDelta is the payload for "message_delta" events.
+// MessageDelta is the payload for "message_delta" events. Some Anthropic
+// endpoints report final cache totals here instead of (or in addition to)
+// message_start; we accept them in either place and only overwrite when
+// non-zero so an early message_start total is not clobbered by a missing
+// message_delta value.
 type MessageDelta struct {
 	Delta struct {
 		StopReason string `json:"stop_reason"`
 	} `json:"delta"`
 	Usage struct {
-		OutputTokens int `json:"output_tokens"`
+		OutputTokens             int `json:"output_tokens"`
+		CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+		CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 	} `json:"usage"`
 }
 
-// TokenUsage tracks token consumption for a request.
+// TokenUsage tracks token consumption for a request. The cache fields are
+// populated for Anthropic-compatible providers that report prompt-cache hits
+// in their `usage` block (cache_read_input_tokens, cache_creation_input_tokens).
+// Non-Anthropic providers leave them at zero. These are the single source of
+// truth for proving the system_and_3 cache strategy works end-to-end — they
+// surface in the per-turn and per-run logs so a tail of the gateway log
+// directly answers "are we hitting the prompt cache?".
 type TokenUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 }

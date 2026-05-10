@@ -405,7 +405,11 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	} else if loc, err := time.LoadLocation(tz); err == nil {
 		now = now.In(loc)
 	}
-	fmt.Fprintf(&d, "%s (timezone: %s)\n", now.Format("Monday, January 2, 2006 — 15:04"), tz)
+	// Day-only precision keeps the system prompt byte-stable across the day
+	// so trailing message cache markers (chat/cache_breakpoints.go) and the
+	// system block markers retain prefix-match identity across turns.
+	// Models that need the exact wall-clock time can call exec("date").
+	fmt.Fprintf(&d, "%s (timezone: %s)\n", now.Format("Monday, January 2, 2006"), tz)
 	contextPrompt := FormatContextFilesForPrompt(params.ContextFiles)
 	if contextPrompt != "" {
 		d.WriteString(contextPrompt)
@@ -424,13 +428,17 @@ func BuildSystemPrompt(params SystemPromptParams) string {
 
 // BuildSystemPromptBlocks returns the system prompt as Anthropic ContentBlocks
 // with cache_control breakpoints. The prompt is split into three blocks:
-//   - Static: identity, communication, attitude, tooling (rarely changes)
-//   - Semi-static: skills prompt (changes only when skills are added/removed)
-//   - Dynamic: memory, messaging, context (changes per request)
+//   - Static: identity, communication, attitude, tooling (rarely changes) — cached
+//   - Semi-static: skills prompt (changes only when skills are added/removed) — cached
+//   - Dynamic: memory, messaging, context (changes per request) — NOT cached
 //
-// Each block gets an ephemeral cache_control marker so Anthropic can cache the
-// static and semi-static prefixes across requests. Skills are typically 10-15K
-// tokens, so caching them separately yields meaningful input token savings.
+// Anthropic limits a single request to 4 cache_control breakpoints. We spend
+// 2 here on the system blocks (Static + Semi-static) and reserve the remaining
+// 2 for trailing message markers attached at LLM-call time by chat's
+// buildTrailingCacheHook (Hermes Agent's "system_and_3" pattern, scaled down
+// to fit the budget). The Dynamic block intentionally has no marker because
+// its contents (recall memory, timestamp, runtime info) change every turn —
+// caching them would consume one of the 4 breakpoints without delivering reuse.
 func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 	staticText, semiStaticText, dynamicText := buildPromptSections(params)
 	ephemeral := &llm.CacheControl{Type: "ephemeral"}
@@ -440,7 +448,7 @@ func BuildSystemPromptBlocks(params SystemPromptParams) []llm.ContentBlock {
 	if semiStaticText != "" {
 		blocks = append(blocks, llm.ContentBlock{Type: "text", Text: semiStaticText, CacheControl: ephemeral})
 	}
-	blocks = append(blocks, llm.ContentBlock{Type: "text", Text: dynamicText, CacheControl: ephemeral})
+	blocks = append(blocks, llm.ContentBlock{Type: "text", Text: dynamicText})
 	return blocks
 }
 

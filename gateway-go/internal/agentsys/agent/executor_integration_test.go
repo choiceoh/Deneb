@@ -137,15 +137,19 @@ func messageStartEvent(inputTokens int) llm.StreamEvent {
 			ID    string `json:"id"`
 			Model string `json:"model"`
 			Usage struct {
-				InputTokens  int `json:"input_tokens"`
-				OutputTokens int `json:"output_tokens"`
+				InputTokens              int `json:"input_tokens"`
+				OutputTokens             int `json:"output_tokens"`
+				CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+				CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 			} `json:"usage"`
 		}{
 			ID:    "msg_test",
 			Model: "test-model",
 			Usage: struct {
-				InputTokens  int `json:"input_tokens"`
-				OutputTokens int `json:"output_tokens"`
+				InputTokens              int `json:"input_tokens"`
+				OutputTokens             int `json:"output_tokens"`
+				CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+				CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 			}{InputTokens: inputTokens},
 		},
 	})
@@ -196,7 +200,9 @@ func messageDeltaEvent(stopReason string, outputTokens int) llm.StreamEvent {
 			StopReason string `json:"stop_reason"`
 		}{StopReason: stopReason},
 		Usage: struct {
-			OutputTokens int `json:"output_tokens"`
+			OutputTokens             int `json:"output_tokens"`
+			CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+			CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 		}{OutputTokens: outputTokens},
 	})
 	return llm.StreamEvent{Type: "message_delta", Payload: payload}

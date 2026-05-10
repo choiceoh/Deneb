@@ -171,14 +171,19 @@ func executeAgentRun(
 	cfg.Model = model // set the resolved model
 
 	// BeforeAPICall hook chain: composed via agent.ComposeBeforeAPICall so
-	// future features can register additional pre-LLM transforms without
-	// clobbering the steer hook. ComposeBeforeAPICall filters nil entries
-	// and returns nil when every slot is empty, so assignment is safe.
+	// features can register additional pre-LLM transforms without clobbering
+	// each other. ComposeBeforeAPICall filters nil entries and returns nil
+	// when every slot is empty, so assignment is safe.
 	//
 	//  - steer: drains SteerQueue notes into the last tool_result before the
 	//    call. No-op when the queue is nil (sub-agents, tests).
+	//  - trailingCache: attaches ephemeral cache_control to the last 2
+	//    non-system messages (Hermes Agent's "system_and_3" pattern, scaled
+	//    to fit Anthropic's 4-breakpoint limit alongside our 2 system
+	//    markers). No-op for non-Anthropic providers.
 	cfg.BeforeAPICall = agent.ComposeBeforeAPICall(
 		buildSteerHookIfEnabled(deps.steerQueue, params.SessionKey, logger),
+		buildTrailingCacheHook(resolveAPIMode(deps, providerID)),
 	)
 
 	// Set up stream hooks via compositor: fan-out dispatch for each hook type.
@@ -257,6 +262,8 @@ func executeAgentRun(
 		"turns", agentResult.Turns,
 		"inputTokens", agentResult.Usage.InputTokens,
 		"outputTokens", agentResult.Usage.OutputTokens,
+		"cacheReadTokens", agentResult.Usage.CacheReadInputTokens,
+		"cacheCreationTokens", agentResult.Usage.CacheCreationInputTokens,
 		"stopReason", agentResult.StopReason,
 		"totalTextChars", agentResult.TotalTextChars,
 		"finalTextChars", len(agentResult.Text),
@@ -324,10 +331,26 @@ func prepareContextAndPrompt(
 
 	// Recall preflight (parallel): inject focused memory only when the user
 	// message asks for or implies past context.
+	//
+	// Lazy session-frozen snapshot (P1 / Hermes-inspired): the first
+	// evidence-bearing result for a session is cached and reused for the
+	// rest of the session. Subsequent turns short-circuit the wiki/diary/
+	// transcript/polaris searches (each with a 1.5s timeout) and the agent
+	// pulls fresh context via the wiki tool when it needs more. The /reset
+	// slash handler clears the snapshot. See chat/recall_cache.go.
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
+		if cached, ok := cachedRecallMemory(params.SessionKey); ok {
+			resultMu.Lock()
+			result.RecallMemory = cached
+			resultMu.Unlock()
+			return
+		}
 		recallMemory := buildRecallPreflight(ctx, params, deps, logger)
+		if recallMemoryHasEvidence(recallMemory) {
+			storeRecallMemory(params.SessionKey, recallMemory)
+		}
 		resultMu.Lock()
 		result.RecallMemory = recallMemory
 		resultMu.Unlock()

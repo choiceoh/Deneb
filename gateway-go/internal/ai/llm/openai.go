@@ -305,15 +305,19 @@ func marshalMessageStart(id, model string, inputTokens int) json.RawMessage {
 			ID    string `json:"id"`
 			Model string `json:"model"`
 			Usage struct {
-				InputTokens  int `json:"input_tokens"`
-				OutputTokens int `json:"output_tokens"`
+				InputTokens              int `json:"input_tokens"`
+				OutputTokens             int `json:"output_tokens"`
+				CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+				CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 			} `json:"usage"`
 		}{
 			ID:    id,
 			Model: model,
 			Usage: struct {
-				InputTokens  int `json:"input_tokens"`
-				OutputTokens int `json:"output_tokens"`
+				InputTokens              int `json:"input_tokens"`
+				OutputTokens             int `json:"output_tokens"`
+				CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+				CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 			}{
 				InputTokens: inputTokens,
 			},
@@ -430,7 +434,9 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 				// Emitting "end_turn" here would overwrite a prior "tool_use".
 				mdPayload, _ := json.Marshal(MessageDelta{
 					Usage: struct {
-						OutputTokens int `json:"output_tokens"`
+						OutputTokens             int `json:"output_tokens"`
+						CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+						CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 					}{OutputTokens: chunk.Usage.CompletionTokens},
 				})
 				emit(ctx, out, StreamEvent{Type: "message_delta", Payload: mdPayload})
@@ -561,7 +567,9 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 					StopReason string `json:"stop_reason"`
 				}{StopReason: mapFinishReason(*choice.FinishReason)},
 				Usage: struct {
-					OutputTokens int `json:"output_tokens"`
+					OutputTokens             int `json:"output_tokens"`
+					CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+					CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 				}{OutputTokens: outputTokens},
 			})
 			emit(ctx, out, StreamEvent{Type: "message_delta", Payload: mdPayload})
