@@ -130,6 +130,16 @@ type Session struct {
 	OutputTokens *int64 `json:"outputTokens,omitempty"`
 	TotalTokens  *int64 `json:"totalTokens,omitempty"`
 
+	// CompactionFired is true once any summary-producing compaction tier
+	// (LLM, Embedding, Recency, or Emergency eviction) has run on this
+	// session's transcript. Sticky for session lifetime; cleared by
+	// session deletion (e.g. /reset). Cheap-pruning tiers (Micro fence-
+	// strip, TruncateOldToolResults stub) do NOT set this — they don't
+	// insert summary placeholders that the model needs to be aware of.
+	// Used by the system prompt builder to inject a one-time reminder
+	// (see prompt.SystemPromptParams.CompactionFired).
+	CompactionFired bool `json:"compactionFired,omitempty"`
+
 	// TimeoutAt is the absolute timestamp (UnixMilli) when a running session
 	// should be forcibly transitioned to StatusTimeout. Used for subagent
 	// sessions to prevent indefinitely hung agents. Zero means no timeout.
