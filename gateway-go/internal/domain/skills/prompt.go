@@ -185,6 +185,117 @@ func formatSkillsCompact(skills []PromptSkill) string {
 	return b.String()
 }
 
+// formatSkillsIndex renders a "compact index" of skills: name + description
+// + location only (no category, tags, or related_skills). This is the P5
+// format the chat pipeline injects into the semi-static block of the
+// system prompt: the agent only needs identity + one-line purpose to
+// decide which skill matches; full SKILL.md body is loaded on demand via
+// the skills tool's read action or the read tool against <location>.
+//
+// Roughly half the size of formatSkillsFull for a typical catalog and
+// keeps semi-static cache turnover lower (fewer fields → fewer reasons
+// for the byte sequence to drift).
+func formatSkillsIndex(skills []PromptSkill) string {
+	if len(skills) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("\n\n<available_skills>")
+
+	for _, s := range skills {
+		b.WriteString("\n  <skill>")
+		b.WriteString("\n    <name>")
+		b.WriteString(escapeXML(s.Name))
+		b.WriteString("</name>")
+		if s.Description != "" {
+			b.WriteString("\n    <description>")
+			b.WriteString(escapeXML(s.Description))
+			b.WriteString("</description>")
+		}
+		b.WriteString("\n    <location>")
+		b.WriteString(escapeXML(s.FilePath))
+		b.WriteString("</location>")
+		b.WriteString("\n  </skill>")
+	}
+
+	b.WriteString("\n</available_skills>")
+	return b.String()
+}
+
+// BuildSkillsIndex is the P5 builder: full index (name+description+location)
+// → compact (name+location only) → binary-search prefix shrink. Mirrors the
+// budget-enforcement shape of BuildSkillsPrompt so the chat pipeline can
+// swap one for the other without changing the surrounding caching logic.
+//
+// The result.Prompt drops in directly where snapshot.Prompt used to go in
+// chat/run_exec_skills.go (loadCachedSkillsPrompt). The agent loads full
+// SKILL.md body on demand — see system_prompt.go's skills instructions.
+func BuildSkillsIndex(skills []PromptSkill, limits SkillsLimits) PromptResult {
+	var visible []PromptSkill
+	for _, s := range skills {
+		if !s.DisableModelInvocation {
+			visible = append(visible, s)
+		}
+	}
+
+	if len(visible) == 0 {
+		return PromptResult{}
+	}
+
+	maxCount := limits.MaxSkillsInPrompt
+	if maxCount <= 0 {
+		maxCount = 150
+	}
+	maxChars := limits.MaxSkillsPromptChars
+	if maxChars <= 0 {
+		maxChars = 30_000
+	}
+
+	truncated := len(visible) > maxCount
+	if len(visible) > maxCount {
+		visible = visible[:maxCount]
+	}
+
+	if len(formatSkillsIndex(visible)) <= maxChars {
+		return PromptResult{
+			Prompt:    formatSkillsIndex(visible),
+			Truncated: truncated,
+			Compact:   false,
+			Count:     len(visible),
+		}
+	}
+
+	compactBudget := maxChars - compactWarningOverhead
+	if len(formatSkillsCompact(visible)) <= compactBudget {
+		return PromptResult{
+			Prompt:    formatSkillsCompact(visible),
+			Truncated: truncated,
+			Compact:   true,
+			Count:     len(visible),
+		}
+	}
+
+	lo, hi := 0, len(visible)
+	for lo < hi {
+		mid := (lo + hi + 1) / 2
+		if len(formatSkillsCompact(visible[:mid])) <= compactBudget {
+			lo = mid
+		} else {
+			hi = mid - 1
+		}
+	}
+	visible = visible[:lo]
+	truncated = true
+
+	return PromptResult{
+		Prompt:    formatSkillsCompact(visible),
+		Truncated: truncated,
+		Compact:   true,
+		Count:     len(visible),
+	}
+}
+
 func escapeXML(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")
 	s = strings.ReplaceAll(s, "<", "&lt;")

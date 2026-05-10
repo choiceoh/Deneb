@@ -64,7 +64,17 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 
 	snapshot := skills.BuildWorkspaceSkillSnapshot(cfg)
 	if snapshot != nil {
-		skillsCache.prompt = snapshot.Prompt
+		// P5 — compact-index format for the semi-static prompt block.
+		// snapshot.Prompt embeds the full XML (name + category + tags +
+		// related_skills + description + location); for in-prompt
+		// scanning the agent only uses name + description + location.
+		// We rebuild from snapshot.ResolvedSkills with BuildSkillsIndex
+		// so the semi-static block is roughly half the size and keeps
+		// drifting less when peripheral metadata changes (tags edits,
+		// category renames). Full body is loaded on demand via the
+		// skills tool's read action or the read tool against <location>.
+		indexResult := skills.BuildSkillsIndex(snapshot.ResolvedSkills, skills.DefaultSkillsLimits())
+		skillsCache.prompt = indexResult.Prompt
 		skillsCache.snapshot = snapshot
 	} else {
 		skillsCache.prompt = ""
