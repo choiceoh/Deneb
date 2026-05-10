@@ -64,7 +64,17 @@ func executeAgentRun(
 	// the user's session for context but must not crowd out the recent
 	// history window with their own trigger noise.
 	if deps.transcript != nil && params.Message != "" && !params.EphemeralUser {
-		userMsg := NewTextChatMessage("user", params.Message, time.Now().UnixMilli())
+		// Prepend an ISO 8601 timestamp to the user message text. The model
+		// gets the wall-clock time per-turn without relying on the system
+		// prompt (whose date field is day-only precision so the dynamic
+		// block stays byte-stable for trailing-message cache markers; see
+		// prompt-cache.md § 1). The timestamp is baked into the transcript
+		// so subsequent turns load a consistent history prefix — flipping
+		// to per-request hook injection would desync transcript history
+		// from what the LLM saw on prior turns and miss the cache.
+		now := time.Now()
+		formattedMessage := "[" + now.Format(time.RFC3339) + "] " + params.Message
+		userMsg := NewTextChatMessage("user", formattedMessage, now.UnixMilli())
 		if err := deps.transcript.Append(params.SessionKey, userMsg); err != nil {
 			logger.Error("failed to persist user message", "error", err)
 		}

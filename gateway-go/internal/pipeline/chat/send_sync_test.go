@@ -60,7 +60,9 @@ func TestSendSync_UsesDefaultModelWhenRequestModelEmpty(t *testing.T) {
 	if total < 1 {
 		t.Fatalf("transcript total = %d, want >= 1", total)
 	}
-	if msgs[0].Role != "user" || msgs[0].TextContent() != "hello sync" {
+	// Transcript user messages carry a leading "[<RFC3339 ts>] " prefix
+	// (see executeAgentRun); strip when comparing to raw input.
+	if msgs[0].Role != "user" || StripUserMessageTimestamp(msgs[0].TextContent()) != "hello sync" {
 		t.Fatalf("first user content = %q, want sanitized input", msgs[0].TextContent())
 	}
 }
