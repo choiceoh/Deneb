@@ -174,8 +174,10 @@ func TestIntegration_SimpleTextResponse(t *testing.T) {
 		t.Fatalf("transcript total = %d, want >= 2", total)
 	}
 
-	// First message should be user.
-	if msgs[0].Role != "user" || msgs[0].TextContent() != "hello" {
+	// First message should be user. Transcript user messages carry a leading
+	// "[<RFC3339 ts>] " prefix (see executeAgentRun); strip it to compare
+	// against the raw input.
+	if msgs[0].Role != "user" || StripUserMessageTimestamp(msgs[0].TextContent()) != "hello" {
 		t.Errorf("msgs[0] = {%s, %q}, want {user, hello}", msgs[0].Role, msgs[0].TextContent())
 	}
 	// Last message should be assistant.
@@ -409,13 +411,15 @@ func TestIntegration_MultipleMessagesHistory(t *testing.T) {
 	if total != 4 {
 		t.Fatalf("total = %d, want 4", total)
 	}
-	if msgs[0].Role != "user" || msgs[0].TextContent() != "first message" {
+	// Transcript user messages carry a leading "[<RFC3339 ts>] " prefix
+	// (see executeAgentRun); strip when comparing to raw input.
+	if msgs[0].Role != "user" || StripUserMessageTimestamp(msgs[0].TextContent()) != "first message" {
 		t.Errorf("msgs[0] = {%s, %q}", msgs[0].Role, msgs[0].TextContent())
 	}
 	if msgs[1].Role != "assistant" || msgs[1].TextContent() != "First reply" {
 		t.Errorf("msgs[1] = {%s, %q}", msgs[1].Role, msgs[1].TextContent())
 	}
-	if msgs[2].Role != "user" || msgs[2].TextContent() != "second message" {
+	if msgs[2].Role != "user" || StripUserMessageTimestamp(msgs[2].TextContent()) != "second message" {
 		t.Errorf("msgs[2] = {%s, %q}", msgs[2].Role, msgs[2].TextContent())
 	}
 	if msgs[3].Role != "assistant" || msgs[3].TextContent() != "Second reply" {
