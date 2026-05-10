@@ -432,16 +432,28 @@ func prepareContextAndPrompt(
 			})
 		}
 
+		// P4: read CompactionFired from session right before assembly so
+		// the system prompt's one-time compaction reminder appears from
+		// the turn after first compaction onward. Sticky flag — once set
+		// it stays set, keeping the dynamic block byte-stable for the
+		// trailing message cache markers' prefix matching.
+		compactionFired := false
+		if deps.sessions != nil {
+			if sess := deps.sessions.Get(params.SessionKey); sess != nil {
+				compactionFired = sess.CompactionFired
+			}
+		}
 		spp := prompt.SystemPromptParams{
-			WorkspaceDir:  workspaceDir,
-			ToolDefs:      toolDefs,
-			DeferredTools: deferredToolInfos,
-			UserTimezone:  tz,
-			ContextFiles:  prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey)),
-			RuntimeInfo:   prompt.BuildDefaultRuntimeInfo(params.Model, deps.callbacks.defaultModel),
-			Channel:       ch,
-			SkillsPrompt:  loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
-			ToolPreset:    sessionToolPreset,
+			WorkspaceDir:    workspaceDir,
+			ToolDefs:        toolDefs,
+			DeferredTools:   deferredToolInfos,
+			UserTimezone:    tz,
+			ContextFiles:    prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey)),
+			RuntimeInfo:     prompt.BuildDefaultRuntimeInfo(params.Model, deps.callbacks.defaultModel),
+			Channel:         ch,
+			SkillsPrompt:    loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
+			ToolPreset:      sessionToolPreset,
+			CompactionFired: compactionFired,
 		}
 
 		systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
@@ -636,6 +648,13 @@ func assembleMessages(
 			}
 			logger.Info("polaris "+tier+" compaction", attrs...)
 		}
+
+		// P4: mark the session so the next turn's system prompt includes
+		// a one-time reminder that summaries are present in history.
+		// Cheap-pruning-only results (Micro, TruncateOldToolResults) do
+		// not trigger this — see compactionProducedSummary in
+		// chat/compaction_marker.go.
+		markCompactionFired(deps, params.SessionKey, polarisResult)
 
 		// Compaction ran (triggered by tokens > budget) but did not bring
 		// tokens back within budget — degraded context state. Agent will

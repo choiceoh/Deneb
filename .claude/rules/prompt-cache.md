@@ -158,6 +158,26 @@ Role alternation 유지 + content prefix 보존 → cache breakpoint까지의 pr
 - Head protect (최소 3 메시지: system, 첫 user, 첫 assistant) + Tail protect (최근 N 메시지) + Middle summarize
 - **재압축 시 요약을 업데이트**(replace)하지 말고 이전 요약에 추가하거나 갱신
 - Hermes 권장: 첫 압축 때만 system 끝에 `"[Note: Some earlier conversation turns have been compacted...]"` 한 줄 append, 이후 압축은 system 미터치 → static cache 영구 생존
+- **우리 구현 (P4)**: `Session.CompactionFired` flag 가 sticky. summary-producing tier (LLM/Embedding/Recency/Emergency) 가 발화하면 set, 다음 turn 부터 system prompt 의 dynamic block 끝에 한국어 reminder 추가 (`[알림: 이 세션의 일부 이전 메시지는 자동 요약으로 압축되었습니다... [컨텍스트 요약 — 참고 전용] 표식이 붙은 메시지...]`). 첫 set 시 trailing message marker 의 prefix 1회 깨짐 (한 cache miss), 그 후 dynamic block byte-stable. cheap pruning (Micro/Tier 2b) 는 set X — summary 없으니 모델 알림 불필요. `chat/compaction_marker.go:markCompactionFired` 가 진입점, `assembleMessages` 의 polaris result 검사 후 호출. mid-loop retry 의 압축은 mark X (rare path; 다음 turn 의 assembleMessages 압축이 또 fire 하면 그때 mark).
+
+### 압축 trigger thresholds — 우리 환경의 정당화 (P3)
+
+`gateway-go/internal/pipeline/compaction/polaris.go` 의 상수:
+
+| 상수 | 값 | 역할 |
+|---|---|---|
+| `DefaultEmergencyInputThreshold` | 30,000 tokens | 단일 user input 이 이 값을 넘으면 Emergency tier 발화 (오래된 message evict + summary) |
+| `DefaultLLMThresholdPct` | 0.90 | 전체 messages 토큰이 컨텍스트 budget 의 90% 초과 시 LLM 요약 발화 |
+| `DefaultLLMTargetPct` | 0.20 | 압축 후 목표 토큰 비율 (budget 의 20%) |
+| `DefaultMicroTurnThreshold` | 4 turns | Tier 2 / Tier 2b cheap pruning 이 적용되는 cutoff (마지막 4 assistant turn 보호) |
+| `DefaultStubMinChars` | 256 runes | Tier 2b 가 stub 으로 교체할 tool_result content 임계값 |
+
+**Hermes Agent 권장 (50% primary + 85% safety net) 보다 보수적인 90% 단일 threshold 채택.** 이유:
+
+- **단일 사용자 + DGX Spark 환경**. LLM 요약은 비용 이슈가 아니라 latency 자원. 너무 자주 압축하면 매 turn 에 추가 STW (Stop-The-World) latency.
+- **Cheap pruning 이 매 turn 발화** (Tier 2 + Tier 2b). 토큰 누적이 천천히 — 90% 까지는 cheap pass 가 흡수. LLM 요약은 정말 큰 누적에서만 발화.
+- **Safety net 역할**: `gateway-go/internal/pipeline/chat/compact_guard.go` 의 anti-thrashing guard 가 budget 초과 + 압축 불가능 상황에서 `compression_stuck` 으로 fallback. Hermes 의 85% safety net 과 같은 의도 (지속 LLM 호출 방지) 를 다른 위치에서 실현.
+- **Tier 1 LLM → Tier 3a Embedding+MMR → Tier 3b Recency** 의 fallback 체인이 LLM 호출 실패 시 더 cheap 한 방식으로 graceful degradation. 즉 90% 도달 후에도 비싼 호출 강제 X.
 
 ### Cheap pruning (LLM 호출 전 단계, P2)
 

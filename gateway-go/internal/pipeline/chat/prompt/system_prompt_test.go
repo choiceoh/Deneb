@@ -314,6 +314,35 @@ func TestBuildSystemPromptBlocks_CacheControlPlacement(t *testing.T) {
 	}
 }
 
+// TestBuildSystemPromptBlocks_CompactionFiredInjectsNote asserts the P4
+// invariant: when CompactionFired=true, the dynamic block carries a one-
+// time reminder that summaries are present in history. The reminder
+// references the SUMMARY_PREFIX marker so the model bridges the two
+// signals (system note + per-message prefix).
+func TestBuildSystemPromptBlocks_CompactionFiredInjectsNote(t *testing.T) {
+	base := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs:     []ToolDef{{Name: "read"}},
+	}
+
+	noFlag := BuildSystemPromptBlocks(base)
+	dynNoFlag := noFlag[len(noFlag)-1].Text
+	if strings.Contains(dynNoFlag, "압축되었") {
+		t.Errorf("compaction note must NOT appear when CompactionFired=false; dynamic=%q", dynNoFlag)
+	}
+
+	withFlag := base
+	withFlag.CompactionFired = true
+	flagged := BuildSystemPromptBlocks(withFlag)
+	dynFlagged := flagged[len(flagged)-1].Text
+	if !strings.Contains(dynFlagged, "압축되었") {
+		t.Errorf("compaction note missing when CompactionFired=true; dynamic=%q", dynFlagged)
+	}
+	if !strings.Contains(dynFlagged, "[컨텍스트 요약 — 참고 전용]") {
+		t.Errorf("compaction note must reference summary marker so the model bridges the two signals; dynamic=%q", dynFlagged)
+	}
+}
+
 func TestBuildSystemPrompt_WikiSavingIsNotResponse(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",

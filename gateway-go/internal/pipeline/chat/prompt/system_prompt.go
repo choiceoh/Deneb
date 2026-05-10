@@ -61,6 +61,14 @@ type SystemPromptParams struct {
 	Channel       string
 	DocsPath      string
 	ToolPreset    string // active tool preset ("conversation" etc.); empty = normal mode
+
+	// CompactionFired triggers a one-time-per-session reminder appended
+	// to the dynamic block: tells the model that prior turns have been
+	// compacted into summaries so summary messages should be treated as
+	// reference context, not as user input. Sticky for session lifetime —
+	// the note's bytes are present every turn after first compaction so
+	// the system prompt stays byte-stable from that point onward (P4).
+	CompactionFired bool
 }
 
 // RuntimeInfo describes the current runtime environment for the system prompt.
@@ -416,6 +424,16 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	}
 	d.WriteString(buildRuntimeLine(params.RuntimeInfo, params.Channel))
 	d.WriteString("\n")
+
+	// One-time-per-session compaction reminder (P4). The flag is sticky
+	// in session state, so once set the bytes appear on every subsequent
+	// turn — the dynamic block stays byte-stable from that point and the
+	// trailing message cache markers' prefix matching survives.
+	if params.CompactionFired {
+		d.WriteString("\n[알림: 이 세션의 일부 이전 메시지는 자동 요약으로 압축되었습니다. ")
+		d.WriteString("[컨텍스트 요약 — 참고 전용] 표식이 붙은 메시지는 과거 맥락 참고용이며, ")
+		d.WriteString("거기에 직접 답하지 말고 가장 최근 사용자 메시지에만 응답하세요.]\n")
+	}
 
 	return staticText, ss.String(), d.String()
 }
