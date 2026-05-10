@@ -188,3 +188,16 @@ func apiModeFor(providerID, configValue string) string {
 	}
 	return ""
 }
+
+// resolveAPIMode resolves the wire protocol (openai/anthropic) for the given
+// providerID, factoring in any explicit `api` override in deneb.json's
+// provider config. Falls back to the provider default (zai → anthropic) when
+// no config entry exists.
+func resolveAPIMode(deps runDeps, providerID string) string {
+	if deps.providerConfigs != nil {
+		if cfg, ok := deps.providerConfigs[providerID]; ok {
+			return apiModeFor(providerID, cfg.API)
+		}
+	}
+	return apiModeFor(providerID, "")
+}

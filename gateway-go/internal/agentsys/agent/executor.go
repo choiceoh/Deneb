@@ -197,9 +197,14 @@ func RunAgent(
 			return nil, fmt.Errorf("consume stream (turn %d): %w", turn, err)
 		}
 
-		// Accumulate usage.
+		// Accumulate usage. Cache fields aggregate per-turn so the run-level
+		// total answers "of all input tokens this run, how many were cache
+		// hits vs. fresh writes" — the proof point for the system_and_3
+		// caching strategy (see prompt-cache.md § 1).
 		result.Usage.InputTokens += turnRes.usage.InputTokens
 		result.Usage.OutputTokens += turnRes.usage.OutputTokens
+		result.Usage.CacheReadInputTokens += turnRes.usage.CacheReadInputTokens
+		result.Usage.CacheCreationInputTokens += turnRes.usage.CacheCreationInputTokens
 
 		// Per-turn token logging: surface per-turn cost so multi-turn runs
 		// are transparent (the accumulated total can be misleading).
@@ -239,6 +244,8 @@ func RunAgent(
 			"turn", turn,
 			"turnInputTokens", turnRes.usage.InputTokens,
 			"turnOutputTokens", turnRes.usage.OutputTokens,
+			"turnCacheReadTokens", turnRes.usage.CacheReadInputTokens,
+			"turnCacheCreationTokens", turnRes.usage.CacheCreationInputTokens,
 			"accInputTokens", result.Usage.InputTokens,
 			"messages", len(messages),
 			"textChars", textChars,
@@ -602,6 +609,8 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 					logger.Warn("unmarshal message_start failed", "error", err)
 				} else {
 					result.usage.InputTokens = ms.Message.Usage.InputTokens
+					result.usage.CacheReadInputTokens = ms.Message.Usage.CacheReadInputTokens
+					result.usage.CacheCreationInputTokens = ms.Message.Usage.CacheCreationInputTokens
 				}
 
 			case "content_block_start":
@@ -678,6 +687,15 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 				} else {
 					result.stopReason = md.Delta.StopReason
 					result.usage.OutputTokens = md.Usage.OutputTokens
+					// Some Anthropic endpoints report final cache totals only
+					// on message_delta. Accept them, but do not clobber a
+					// non-zero message_start value with a missing one.
+					if md.Usage.CacheReadInputTokens > 0 {
+						result.usage.CacheReadInputTokens = md.Usage.CacheReadInputTokens
+					}
+					if md.Usage.CacheCreationInputTokens > 0 {
+						result.usage.CacheCreationInputTokens = md.Usage.CacheCreationInputTokens
+					}
 				}
 
 			case "message_stop":

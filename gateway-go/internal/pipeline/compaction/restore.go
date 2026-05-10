@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
@@ -263,6 +264,67 @@ func StripImageBlocks(messages []llm.Message) []llm.Message {
 		}
 	}
 	return out
+}
+
+// TruncateOldToolResults replaces the content of old tool_result blocks
+// with a short placeholder when the content exceeds minChars runes.
+// Operates on tool_result blocks older than turnThreshold assistant turns
+// (the same boundary as MicroCompact). Zero-cost: no LLM call.
+//
+// This is Phase 1 cheap pruning in the Hermes Agent compaction model:
+// before invoking an LLM summarizer, drop bulky old tool_result content
+// that the agent rarely re-references. MicroCompact (which only strips
+// code fences) typically runs first — blocks it shrinks below minChars
+// fall through this pass unchanged.
+//
+// Returns modified messages and the count of tool_result blocks that
+// were stubbed.
+func TruncateOldToolResults(messages []llm.Message, turnThreshold, minChars int) ([]llm.Message, int) {
+	if len(messages) == 0 || turnThreshold <= 0 || minChars <= 0 {
+		return messages, 0
+	}
+
+	var assistantIdx []int
+	for i, m := range messages {
+		if m.Role == "assistant" {
+			assistantIdx = append(assistantIdx, i)
+		}
+	}
+	if len(assistantIdx) <= turnThreshold {
+		return messages, 0
+	}
+	cutoff := assistantIdx[len(assistantIdx)-turnThreshold]
+
+	const placeholder = "[older tool output cleared to save context]"
+
+	stubbed := 0
+	result := make([]llm.Message, len(messages))
+	copy(result, messages)
+
+	for i := 0; i < cutoff; i++ {
+		var blocks []llm.ContentBlock
+		if err := json.Unmarshal(messages[i].Content, &blocks); err != nil {
+			continue
+		}
+		changed := false
+		for j := range blocks {
+			if blocks[j].Type != "tool_result" {
+				continue
+			}
+			if utf8.RuneCountInString(blocks[j].Content) <= minChars {
+				continue
+			}
+			blocks[j].Content = placeholder
+			changed = true
+			stubbed++
+		}
+		if changed {
+			if raw, err := json.Marshal(blocks); err == nil {
+				result[i] = llm.Message{Role: messages[i].Role, Content: raw}
+			}
+		}
+	}
+	return result, stubbed
 }
 
 // extractPathFromInput parses the file path from a tool_use input JSON.
