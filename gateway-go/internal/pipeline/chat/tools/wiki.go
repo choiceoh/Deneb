@@ -51,7 +51,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 		case "write":
 			return wikiWrite(d.Store, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Importance, p.Type, p.Confidence)
 		case "log":
-			return wikiLog(workspaceDir, d.Store.DiaryDir(), p.Content)
+			return wikiLog(workspaceDir, d.Store, p.Content)
 		case "daily":
 			return wikiDaily(d.Store.DiaryDir(), p.Limit)
 		case "status":
@@ -236,17 +236,20 @@ func wikiWrite(store *wiki.Store, path, title, id, summary, category, content st
 	return fmt.Sprintf("위키 페이지 %s: %s (%s)", action, path, title), nil
 }
 
-func wikiLog(_, diaryDir, content string) (string, error) {
+func wikiLog(_ string, store *wiki.Store, content string) (string, error) {
 	if content == "" {
 		return "content에 일지 내용을 입력하세요.", nil
 	}
 
 	now := time.Now()
-	if err := wiki.AppendDiaryTo(diaryDir, content); err != nil {
+	// Route through Store.AppendDiary so the diary FTS index sees the new
+	// entry immediately — otherwise the agent's just-written entry would
+	// only be recallable after the next gateway restart.
+	if err := store.AppendDiary(content); err != nil {
 		return fmt.Sprintf("일지 쓰기 실패: %v", err), nil
 	}
 
-	path := filepath.Join(diaryDir, "diary-"+now.Format("2006-01-02")+".md")
+	path := filepath.Join(store.DiaryDir(), "diary-"+now.Format("2006-01-02")+".md")
 	return fmt.Sprintf("일지 기록 완료: %s (%s)", path, now.Format("15:04")), nil
 }
 

@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -80,12 +78,11 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	defer cancel()
 
 	queries := recallSearchQueries(message)
-	terms := recallSignalTerms(message)
 	var evidence []recallEvidence
 
 	if deps.wikiStore != nil {
 		evidence = append(evidence, recallWikiEvidence(ctx, deps.wikiStore, queries)...)
-		evidence = append(evidence, recallDiaryEvidence(deps.wikiStore.DiaryDir(), terms, false)...)
+		evidence = append(evidence, recallDiaryEvidence(ctx, deps.wikiStore, queries, false)...)
 	}
 	_, hasPolarisBridge := deps.transcript.(*polaris.Bridge)
 	if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
@@ -95,7 +92,7 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 		evidence = append(evidence, recallTranscriptEvidence(ctx, deps.transcript, params.SessionKey, message, queries)...)
 	}
 	if len(evidence) == 0 && deps.wikiStore != nil {
-		evidence = append(evidence, recallDiaryEvidence(deps.wikiStore.DiaryDir(), terms, true)...)
+		evidence = append(evidence, recallDiaryEvidence(ctx, deps.wikiStore, queries, true)...)
 	}
 
 	if len(evidence) == 0 {
@@ -302,37 +299,69 @@ func formatRecallWikiNote(store *wiki.Store, result wiki.SearchResult) string {
 	return truncateRecallText(strings.Join(parts, " | "), 420)
 }
 
-func recallDiaryEvidence(diaryDir string, terms []string, includeRecentFallback bool) []recallEvidence {
-	entries := loadRecentDiaryEntries(diaryDir, 3, 12)
-	if len(entries) == 0 {
+// recallDiaryEvidence runs each query against the diary BM25 index, dedups
+// hits across queries, and converts the top results into recallEvidence
+// rows. When includeRecentFallback is true and BM25 finds nothing, it
+// returns the two most recent diary entries — the right behavior for
+// vague cues like "그거 뭐였지?" where the user expects *some* context.
+func recallDiaryEvidence(ctx context.Context, store *wiki.Store, queries []string, includeRecentFallback bool) []recallEvidence {
+	if store == nil {
 		return nil
 	}
-	if len(terms) == 0 {
-		if !includeRecentFallback {
-			return nil
+	seen := make(map[string]struct{})
+	var hits []wiki.DiaryHit
+	for _, q := range queries {
+		if ctx != nil {
+			if err := ctx.Err(); err != nil {
+				break
+			}
 		}
-		var recent []recallEvidence
-		for i := 0; i < minInt(2, len(entries)); i++ {
-			recent = append(recent, diaryEntryEvidence(entries[i], terms))
-		}
-		return recent
-	}
-	var evidence []recallEvidence
-	for _, entry := range entries {
-		if !containsAnyTerm(entry.Content, terms) {
+		results, err := store.SearchDiary(ctx, q, 4)
+		if err != nil {
 			continue
 		}
-		evidence = append(evidence, diaryEntryEvidence(entry, terms))
-		if len(evidence) >= 4 {
-			return evidence
+		for _, h := range results {
+			key := h.File + "#" + h.Header
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			hits = append(hits, h)
+			if len(hits) >= 4 {
+				break
+			}
+		}
+		if len(hits) >= 4 {
+			break
 		}
 	}
-	if len(evidence) == 0 && includeRecentFallback {
-		for i := 0; i < minInt(2, len(entries)); i++ {
-			evidence = append(evidence, diaryEntryEvidence(entries[i], terms))
-		}
+	if len(hits) == 0 && includeRecentFallback {
+		hits = store.RecentDiaryEntries(2)
+	}
+
+	var evidence []recallEvidence
+	for _, h := range hits {
+		evidence = append(evidence, diaryHitEvidence(h))
 	}
 	return evidence
+}
+
+// diaryHitEvidence converts a diary search hit into a recallEvidence row.
+// Search-derived hits keep their BM25-weighted score; recent-fallback hits
+// arrive with Score == 0 so we substitute the legacy "no-terms" baseline
+// so the evidence still passes confidence ranking downstream.
+func diaryHitEvidence(h wiki.DiaryHit) recallEvidence {
+	score := h.Score
+	if score <= 0 {
+		score = 0.55
+	}
+	return recallEvidence{
+		Kind:   "diary",
+		Source: h.File + "#" + h.Header,
+		Note:   truncateRecallText(h.Content, 320),
+		Score:  score,
+		At:     h.At,
+	}
 }
 
 func recallTranscriptEvidence(ctx context.Context, transcript TranscriptStore, sessionKey, currentMessage string, queries []string) []recallEvidence {
@@ -435,108 +464,6 @@ func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionK
 		}
 	}
 	return evidence
-}
-
-type diaryEntry struct {
-	File    string
-	Header  string
-	Content string
-	At      int64
-}
-
-func loadRecentDiaryEntries(diaryDir string, maxFiles, maxEntries int) []diaryEntry {
-	if diaryDir == "" {
-		return nil
-	}
-	files, err := os.ReadDir(diaryDir)
-	if err != nil {
-		return nil
-	}
-	var names []string
-	for _, f := range files {
-		name := f.Name()
-		if f.IsDir() || !strings.HasPrefix(name, "diary-") || !strings.HasSuffix(name, ".md") {
-			continue
-		}
-		names = append(names, name)
-	}
-	sort.Slice(names, func(i, j int) bool { return names[i] > names[j] })
-	if len(names) > maxFiles {
-		names = names[:maxFiles]
-	}
-
-	var entries []diaryEntry
-	for _, name := range names {
-		data, err := os.ReadFile(filepath.Join(diaryDir, name))
-		if err != nil {
-			continue
-		}
-		parsed := parseDiaryEntries(name, string(data))
-		for i, j := 0, len(parsed)-1; i < j; i, j = i+1, j-1 {
-			parsed[i], parsed[j] = parsed[j], parsed[i]
-		}
-		entries = append(entries, parsed...)
-		if len(entries) >= maxEntries {
-			return entries[:maxEntries]
-		}
-	}
-	return entries
-}
-
-func parseDiaryEntries(fileName, content string) []diaryEntry {
-	chunks := strings.Split("\n"+content, "\n## ")
-	var entries []diaryEntry
-	for _, chunk := range chunks[1:] {
-		chunk = strings.TrimSpace(chunk)
-		if chunk == "" {
-			continue
-		}
-		header, body, _ := strings.Cut(chunk, "\n")
-		body = strings.TrimSpace(body)
-		if body == "" {
-			continue
-		}
-		entries = append(entries, diaryEntry{
-			File:    fileName,
-			Header:  strings.TrimSpace(header),
-			Content: body,
-			At:      diaryEntryUnix(fileName, header),
-		})
-	}
-	return entries
-}
-
-func diaryEntryUnix(fileName, header string) int64 {
-	date := strings.TrimSuffix(strings.TrimPrefix(fileName, "diary-"), ".md")
-	ts, err := time.ParseInLocation("2006-01-02 15:04", date+" "+strings.TrimSpace(header), time.Local)
-	if err != nil {
-		return 0
-	}
-	return ts.UnixMilli()
-}
-
-func diaryEntryEvidence(entry diaryEntry, terms []string) recallEvidence {
-	score := 0.70
-	if len(terms) == 0 {
-		score = 0.55
-	}
-	return recallEvidence{
-		Kind:   "diary",
-		Source: entry.File + "#" + entry.Header,
-		Note:   truncateRecallText(entry.Content, 320),
-		Score:  score,
-		At:     entry.At,
-	}
-}
-
-func containsAnyTerm(text string, terms []string) bool {
-	lower := strings.ToLower(text)
-	for _, term := range terms {
-		if strings.Contains(lower, term) {
-			return true
-		}
-	}
-	return false
 }
 
 func formatRecallEvidence(evidence []recallEvidence) string {
