@@ -1,6 +1,7 @@
 package wiki
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -37,9 +38,10 @@ type Store struct {
 	dir      string
 	diaryDir string
 
-	mu    sync.RWMutex
-	index *Index // cached master index
-	fts   *searchDB
+	mu       sync.RWMutex
+	index    *Index // cached master index
+	fts      *searchDB
+	diaryFTS *diarySearchDB
 }
 
 // NewStore creates a wiki store rooted at dir.
@@ -63,6 +65,14 @@ func NewStore(dir, diaryDir string) (*Store, error) {
 	s.fts = fts
 	if err := fts.rebuildIndex(dir); err != nil {
 		return nil, fmt.Errorf("wiki: rebuild search index: %w", err)
+	}
+
+	// Initialize in-memory diary search index from the diary directory.
+	// Missing or empty diary dir is fine — search will simply return zero hits.
+	diaryFTS := newDiarySearchDB()
+	s.diaryFTS = diaryFTS
+	if err := diaryFTS.rebuildFromDir(diaryDir); err != nil {
+		return nil, fmt.Errorf("wiki: rebuild diary index: %w", err)
 	}
 
 	return s, nil
@@ -337,10 +347,49 @@ type StoreStats struct {
 	CategoryCount map[string]int
 }
 
-// AppendDiary appends a timestamped entry to today's diary file.
-// Safe to call from any goroutine. Creates the diary directory and file if needed.
+// AppendDiary appends a timestamped entry to today's diary file and updates
+// the in-memory diary search index so the new entry is immediately recallable.
+// Safe to call from any goroutine.
+//
+// Callers that go through the package-level AppendDiaryTo (gmailpoll,
+// morning_letter, etc.) bypass this indexing — their entries will only be
+// searchable after the next gateway restart, when rebuildFromDir picks them
+// up. Prefer Store.AppendDiary whenever a Store handle is available.
 func (s *Store) AppendDiary(content string) error {
-	return AppendDiaryTo(s.diaryDir, content)
+	if err := AppendDiaryTo(s.diaryDir, content); err != nil {
+		return err
+	}
+	if s.diaryFTS != nil && content != "" {
+		// Recreate the same (file, header, redacted-content, timestamp)
+		// AppendDiaryTo just persisted, then push it into the index. Using
+		// time.Now() once here can drift a microsecond from AppendDiaryTo,
+		// but both round to the same HH:MM doc ID so the index is correct.
+		now := time.Now()
+		file := "diary-" + now.Format("2006-01-02") + ".md"
+		header := now.Format("15:04")
+		s.diaryFTS.upsertEntry(file, header, redact.String(content), now.UnixMilli())
+	}
+	return nil
+}
+
+// SearchDiary runs a full-text query over indexed diary entries, returning
+// recency-weighted hits sorted best-first. Returns nil if no diary store is
+// configured or the query is empty.
+func (s *Store) SearchDiary(ctx context.Context, query string, limit int) ([]DiaryHit, error) {
+	if s.diaryFTS == nil {
+		return nil, nil
+	}
+	return s.diaryFTS.search(ctx, query, limit)
+}
+
+// RecentDiaryEntries returns the N most recent diary entries regardless of
+// any query. Used as a fallback when the user's recall cue has no specific
+// signal terms.
+func (s *Store) RecentDiaryEntries(limit int) []DiaryHit {
+	if s.diaryFTS == nil {
+		return nil
+	}
+	return s.diaryFTS.recentEntries(limit)
 }
 
 // AppendDiaryTo appends a timestamped entry to today's diary file in the given directory.
