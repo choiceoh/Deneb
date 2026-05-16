@@ -23,6 +23,7 @@ var contextFileNames = []string{
 	"TOOLS.md",
 	"IDENTITY.md",
 	"USER.md",
+	"MEMORY.md",
 }
 
 const (
