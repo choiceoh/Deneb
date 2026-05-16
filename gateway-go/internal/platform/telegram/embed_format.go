@@ -321,6 +321,11 @@ func FormatHelp() string {
 	b.WriteString("\U0001F680 <code>/push</code>\n")
 	b.WriteString("  \uCEE4\uBC0B\uC744 \uC6D0\uACA9 \uC800\uC7A5\uC18C\uC5D0 \uC804\uC1A1\n\n")
 
+	// /btw \u2014 side question, never touches the main conversation context
+	b.WriteString("\U0001F4AC <code>/btw &lt;\uC9C8\uBB38&gt;</code>\n")
+	b.WriteString("  \uBA54\uC778 \uB300\uD654\uC5D0 \uC601\uD5A5 \uC5C6\uC774 \uC606\uC5D0\uC11C \uBE60\uB974\uAC8C \uB2F5\n")
+	b.WriteString("  \uC608: <code>/btw \uC9C0\uAE08 \uD658\uC728 \uC5BC\uB9C8\uC57C?</code>\n\n")
+
 	b.WriteString("\u2753 <code>/help</code>\n")
 	b.WriteString("  \uC774 \uB3C4\uC6C0\uB9D0 \uD45C\uC2DC\n\n")
 

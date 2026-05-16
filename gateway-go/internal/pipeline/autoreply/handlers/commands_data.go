@@ -33,5 +33,8 @@ func BuiltinChatCommands() []ChatCommandDefinition {
 
 		// Routine shortcuts (rewrite → agent passthrough)
 		{Key: "morning", NativeName: "morning", Description: "모닝레터 발송", TextAliases: []string{"/morning"}, Scope: ScopeBoth, Category: CategoryTools},
+
+		// Side question — answer without touching the main session
+		{Key: "btw", NativeName: "btw", Description: "옆질문(메인 대화 영향 없이 즉답)", TextAliases: []string{"/btw"}, AcceptsArgs: true, Args: []CommandArgDefinition{{Name: "question", Description: "질문 내용", Type: "string"}}, Scope: ScopeBoth, Category: CategoryTools},
 	}
 }
