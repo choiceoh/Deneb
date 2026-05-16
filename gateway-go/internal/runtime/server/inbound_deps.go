@@ -105,11 +105,20 @@ func (p *InboundProcessor) buildCommandDeps(sessionKey string) *handlers.Command
 		}
 	}
 
+	var btwFn func(ctx context.Context, sessionKey, question string) (string, error)
+	if p.server.chatHandler != nil {
+		ch := p.server.chatHandler
+		btwFn = func(ctx context.Context, sessionKey, question string) (string, error) {
+			return ch.HandleBtw(ctx, sessionKey, question)
+		}
+	}
+
 	return &handlers.CommandDeps{
 		Status:              sd,
 		SubagentRuns:        subagentRunsFn,
 		ZeroCallsFn:         zeroCallsFn,
 		MorningLetterDataFn: p.buildMorningLetterDataFn(),
+		BtwFn:               btwFn,
 	}
 }
 

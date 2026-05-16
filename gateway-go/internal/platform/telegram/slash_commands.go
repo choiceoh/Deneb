@@ -59,6 +59,11 @@ func VibeCoderCommands() []SlashCommand {
 			Aliases:     nil,
 		},
 		{
+			Command:     "btw",
+			Description: "옆질문 (메인 대화 영향 X)",
+			Aliases:     nil,
+		},
+		{
 			Command:     "help",
 			Description: "도움말",
 			Aliases:     nil,

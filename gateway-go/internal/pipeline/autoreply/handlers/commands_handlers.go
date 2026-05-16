@@ -44,10 +44,11 @@ type RPCZeroCallsReport struct {
 
 // CommandDeps holds dependencies available to command handlers.
 type CommandDeps struct {
-	SubagentRuns        func() []subagentpkg.SubagentRunRecord    // for /agents
-	Status              *StatusDeps                               // Server-level data for /status command.
-	ZeroCallsFn         func() *RPCZeroCallsReport                // for /zerocalls
-	MorningLetterDataFn func(ctx context.Context) (string, error) // for /morning — collects raw JSON data
+	SubagentRuns        func() []subagentpkg.SubagentRunRecord                   // for /agents
+	Status              *StatusDeps                                              // Server-level data for /status command.
+	ZeroCallsFn         func() *RPCZeroCallsReport                               // for /zerocalls
+	MorningLetterDataFn func(ctx context.Context) (string, error)                // for /morning — collects raw JSON data
+	BtwFn               func(ctx context.Context, sessionKey, q string) (string, error) // for /btw — side question without touching main session
 }
 
 // StatusDeps holds server-level data for the /status command.
@@ -138,6 +139,9 @@ func (r *CommandRouter) registerBuiltinHandlers() {
 
 	// Routine shortcuts (rewrite → agent passthrough)
 	r.Handle("morning", handleMorningCommand)
+
+	// Side question (chat.btw passthrough, never touches main session)
+	r.Handle("btw", handleBtwCommand)
 }
 
 func (r *CommandRouter) handleHelpCommand(ctx CommandContext) (*CommandResult, error) {
