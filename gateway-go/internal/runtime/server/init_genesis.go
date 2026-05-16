@@ -28,7 +28,7 @@ func (s *Server) initGenesisServices() {
 		return
 	}
 
-	cfg := genesis.DefaultConfig()
+	cfg := genesis.DefaultConfigFromEnv()
 	cfg.Model = lwModel
 
 	// Shared catalog so genesis can register generated skills and evolver can look them up.
@@ -66,7 +66,10 @@ func (s *Server) initGenesisServices() {
 
 	s.logger.Info("genesis: services initialized",
 		"model", lwModel, "outputDir", cfg.OutputDir,
-		"nudgeInterval", s.genesisNudger.Interval())
+		"nudgeInterval", s.genesisNudger.Interval(),
+		"minToolCalls", cfg.MinToolCalls,
+		"minTurns", cfg.MinTurns,
+		"maxSkillsPerDay", cfg.MaxSkillsPerDay)
 }
 
 func (s *Server) seedSkillCatalog() {

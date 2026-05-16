@@ -27,8 +27,11 @@ import (
 )
 
 // DefaultNudgeInterval is the default number of tool invocations between
-// background skill-review fires. Modeled on Hermes' _skill_nudge_interval=10.
-const DefaultNudgeInterval = 10
+// background skill-review fires. Hermes uses 10, but Deneb's primary I/O
+// surface (Telegram) typically ends sessions at 5-7 tool calls before
+// the threshold is ever crossed, so we use a tighter default so the
+// system actually fires on real conversations.
+const DefaultNudgeInterval = 5
 
 // nudgeGenerationTimeout caps a single background review so a stuck LLM
 // call cannot leak goroutines indefinitely.

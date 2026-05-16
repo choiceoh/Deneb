@@ -32,9 +32,9 @@ import (
 // Config configures the genesis service.
 type Config struct {
 	// MinToolCalls is the minimum number of tool calls in a session to
-	// consider it for skill extraction. Default: 5.
+	// consider it for skill extraction. Default: 3.
 	MinToolCalls int
-	// MinTurns is the minimum number of agent turns. Default: 3.
+	// MinTurns is the minimum number of agent turns. Default: 2.
 	MinTurns int
 	// OutputDir is the directory to write generated SKILL.md files.
 	// Default: ~/.deneb/skills/genesis.
@@ -45,22 +45,35 @@ type Config struct {
 	// Default: 24h.
 	CooldownPerSkill time.Duration
 	// MaxSkillsPerDay caps daily skill generation to avoid runaway creation.
+	// Default: 10. Deneb is single-user, so the cap protects against LLM
+	// thrashing rather than billing — we can afford a generous ceiling.
 	MaxSkillsPerDay int
 }
 
-// DefaultConfig returns production defaults.
+// DefaultConfig returns production defaults. Pure: no env reads.
 func DefaultConfig() Config {
 	outputDir := ""
 	if home, err := os.UserHomeDir(); err == nil {
 		outputDir = filepath.Join(home, ".deneb", "skills", "genesis")
 	}
 	return Config{
-		MinToolCalls:     5,
-		MinTurns:         3,
+		MinToolCalls:     3,
+		MinTurns:         2,
 		OutputDir:        outputDir,
 		CooldownPerSkill: 24 * time.Hour,
-		MaxSkillsPerDay:  3,
+		MaxSkillsPerDay:  10,
 	}
+}
+
+// DefaultConfigFromEnv returns DefaultConfig with DENEB_SKILL_GENESIS_*
+// overrides applied. Mirrors the SkillCuratorConfigFromEnv pattern so the
+// operator can tune thresholds without rebuilding.
+func DefaultConfigFromEnv() Config {
+	cfg := DefaultConfig()
+	cfg.MaxSkillsPerDay = envInt("DENEB_SKILL_GENESIS_MAX_PER_DAY", cfg.MaxSkillsPerDay)
+	cfg.MinToolCalls = envInt("DENEB_SKILL_GENESIS_MIN_TOOL_CALLS", cfg.MinToolCalls)
+	cfg.MinTurns = envInt("DENEB_SKILL_GENESIS_MIN_TURNS", cfg.MinTurns)
+	return cfg
 }
 
 // SessionContext captures the data needed to evaluate and generate a skill
@@ -111,13 +124,13 @@ func NewService(cfg Config, llmClient *llm.Client, catalog *skills.Catalog, logg
 		logger = slog.Default()
 	}
 	if cfg.MinToolCalls == 0 {
-		cfg.MinToolCalls = 5
+		cfg.MinToolCalls = 3
 	}
 	if cfg.MinTurns == 0 {
-		cfg.MinTurns = 3
+		cfg.MinTurns = 2
 	}
 	if cfg.MaxSkillsPerDay == 0 {
-		cfg.MaxSkillsPerDay = 3
+		cfg.MaxSkillsPerDay = 10
 	}
 	if cfg.CooldownPerSkill == 0 {
 		cfg.CooldownPerSkill = 24 * time.Hour
