@@ -10,8 +10,15 @@ import (
 )
 
 // StatusReactionEmojis configures the emoji for each agent phase.
+//
+// Phase ordering (typical run): Queued → Preparing → Recalling? → Thinking →
+// Tool/Coding/Web → Done. Preparing covers context assembly + system prompt
+// build; Recalling fires only when memory recall preflight actually runs
+// (cue present + cache miss), so quick replies skip it entirely.
 type StatusReactionEmojis struct {
 	Queued     string
+	Preparing  string
+	Recalling  string
 	Thinking   string
 	Tool       string
 	Coding     string
@@ -27,6 +34,8 @@ type StatusReactionEmojis struct {
 func DefaultStatusEmojis() StatusReactionEmojis {
 	return StatusReactionEmojis{
 		Queued:     "👀",
+		Preparing:  "📚",
+		Recalling:  "🧠",
 		Thinking:   "🤔",
 		Tool:       "🔥",
 		Coding:     "👨‍💻",
@@ -136,8 +145,9 @@ func NewStatusReactionController(params StatusReactionControllerParams) *StatusR
 
 	known := make(map[string]struct{})
 	for _, e := range []string{
-		params.InitialEmoji, emojis.Queued, emojis.Thinking, emojis.Tool,
-		emojis.Coding, emojis.Web, emojis.Done, emojis.Error,
+		params.InitialEmoji, emojis.Queued, emojis.Preparing, emojis.Recalling,
+		emojis.Thinking, emojis.Tool, emojis.Coding, emojis.Web,
+		emojis.Done, emojis.Error,
 		emojis.StallSoft, emojis.StallHard, emojis.Compacting,
 	} {
 		if e != "" {
@@ -296,6 +306,22 @@ func (c *StatusReactionController) SetQueued() {
 	c.scheduleEmoji(c.emojis.Queued, true, false)
 }
 
+// SetPreparing sets the preparing reaction (debounced). Fires while the
+// gateway is assembling context, building the system prompt, and running
+// parallel preflight work — i.e. the gap between "queued" and the first
+// LLM call. Debounced so a fast prep (<700ms) doesn't flicker past the
+// queued emoji.
+func (c *StatusReactionController) SetPreparing() {
+	c.scheduleEmoji(c.emojis.Preparing, false, false)
+}
+
+// SetRecalling sets the recalling reaction (debounced). Fires only when
+// memory recall preflight actually does work (wiki/diary/transcript/polaris
+// search on cache miss). Turns without a recall cue skip this entirely.
+func (c *StatusReactionController) SetRecalling() {
+	c.scheduleEmoji(c.emojis.Recalling, false, false)
+}
+
 // SetThinking sets the thinking reaction (debounced).
 func (c *StatusReactionController) SetThinking() {
 	c.scheduleEmoji(c.emojis.Thinking, false, false)
@@ -379,6 +405,12 @@ func (c *StatusReactionController) Close() {
 func mergeEmojis(base, override StatusReactionEmojis) StatusReactionEmojis {
 	if override.Queued != "" {
 		base.Queued = override.Queued
+	}
+	if override.Preparing != "" {
+		base.Preparing = override.Preparing
+	}
+	if override.Recalling != "" {
+		base.Recalling = override.Recalling
 	}
 	if override.Thinking != "" {
 		base.Thinking = override.Thinking
