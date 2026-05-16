@@ -245,12 +245,14 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 
 	// Set up status reaction controller for phase-aware emoji on the user's message.
-	// Shows: 👀 queued → 🤔 thinking → 🔥 tool → ⚡ web → 👍 done.
+	// Shows: 👀 queued → 📚 preparing → 🧠 recalling? → 🤔 thinking → 🔥/⚡ tool → 👍 done.
 	var statusCtrl *telegram.StatusReactionController
 	if deps.callbacks.reactionFn != nil && params.Delivery != nil && params.Delivery.MessageID != "" {
 		delivery := params.Delivery
 		phaseEmojis := telegram.StatusReactionEmojis{
 			Queued:     "👀",
+			Preparing:  "📚",
+			Recalling:  "🧠",
 			Thinking:   "🤔",
 			Tool:       "🔥",
 			Coding:     "🔥",

@@ -140,3 +140,91 @@ func TestStatusReactionController_ClearIsTerminal(t *testing.T) {
 		t.Errorf("last reaction = %q, want \"\" (cleared)", last)
 	}
 }
+
+// TestStatusReactionController_PreparingRecallingProgression verifies the
+// new prep-phase emoji sequence (Queued → Preparing → Recalling → Thinking)
+// transitions through every state when given enough time to flush the
+// debounce timer between calls. This is the visibility win the prep phase
+// emits exist for: the user must see distinct emojis for "loading context"
+// and "searching memory", not just 👀 frozen for two seconds.
+func TestStatusReactionController_PreparingRecallingProgression(t *testing.T) {
+	var mu sync.Mutex
+	var reactions []string
+
+	c := NewStatusReactionController(StatusReactionControllerParams{
+		Enabled:      true,
+		InitialEmoji: "👀",
+		SetReaction: func(emoji string) error {
+			mu.Lock()
+			reactions = append(reactions, emoji)
+			mu.Unlock()
+			return nil
+		},
+		// DebounceMs is short enough that successive calls with 30ms gaps
+		// each flush before the next; in real runs prep takes hundreds of
+		// ms so the same effect happens with the default 700ms debounce.
+		Timing: &StatusReactionTiming{DebounceMs: 10, StallSoftMs: 100_000, StallHardMs: 200_000},
+	})
+	defer c.Close()
+
+	c.SetQueued()
+	time.Sleep(30 * time.Millisecond)
+	c.SetPreparing()
+	time.Sleep(30 * time.Millisecond)
+	c.SetRecalling()
+	time.Sleep(30 * time.Millisecond)
+	c.SetThinking()
+	time.Sleep(30 * time.Millisecond)
+
+	emojis := DefaultStatusEmojis()
+	mu.Lock()
+	got := append([]string(nil), reactions...)
+	mu.Unlock()
+
+	want := []string{emojis.Queued, emojis.Preparing, emojis.Recalling, emojis.Thinking}
+	if len(got) != len(want) {
+		t.Fatalf("reaction count = %d (%v), want %d (%v)", len(got), got, len(want), want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("reactions[%d] = %q, want %q", i, got[i], w)
+		}
+	}
+}
+
+// TestStatusReactionController_PreparingIsNotTerminal verifies that
+// SetPreparing/SetRecalling are non-terminal: subsequent SetThinking/SetDone
+// must still apply. Without this, an over-eager debounce or finished flag
+// would freeze the controller on the prep emoji and the user would never
+// see done/error.
+func TestStatusReactionController_PreparingIsNotTerminal(t *testing.T) {
+	var mu sync.Mutex
+	var reactions []string
+
+	c := NewStatusReactionController(StatusReactionControllerParams{
+		Enabled:      true,
+		InitialEmoji: "👀",
+		SetReaction: func(emoji string) error {
+			mu.Lock()
+			reactions = append(reactions, emoji)
+			mu.Unlock()
+			return nil
+		},
+		Timing: &StatusReactionTiming{DebounceMs: 10, StallSoftMs: 100_000, StallHardMs: 200_000},
+	})
+	defer c.Close()
+
+	c.SetPreparing()
+	time.Sleep(30 * time.Millisecond)
+	c.SetDone()
+	time.Sleep(30 * time.Millisecond)
+
+	emojis := DefaultStatusEmojis()
+	mu.Lock()
+	last := reactions[len(reactions)-1]
+	mu.Unlock()
+
+	if last != emojis.Done {
+		t.Errorf("last reaction = %q, want %q (done after preparing)", last, emojis.Done)
+	}
+}
