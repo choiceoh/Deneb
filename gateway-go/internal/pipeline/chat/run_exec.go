@@ -342,16 +342,21 @@ func prepareContextAndPrompt(
 	// Recall preflight (parallel): inject focused memory only when the user
 	// message asks for or implies past context.
 	//
-	// Lazy session-frozen snapshot (P1 / Hermes-inspired): the first
-	// evidence-bearing result for a session is cached and reused for the
-	// rest of the session. Subsequent turns short-circuit the wiki/diary/
-	// transcript/polaris searches (each with a 1.5s timeout) and the agent
-	// pulls fresh context via the wiki tool when it needs more. The /reset
-	// slash handler clears the snapshot. See chat/recall_cache.go.
+	// Per-(session, cue-fingerprint) cache: repeat questions on the same
+	// topic reuse the wiki/diary/transcript/polaris search result (saving
+	// ~6s of parallel timeouts), while a turn that shifts to a different
+	// topic gets a fresh search. Turns with no recall cue get no recall
+	// injection at all — preventing earlier turns' snapshots from polluting
+	// unrelated questions. /reset clears every slot for the session. See
+	// chat/recall_cache.go.
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
-		if cached, ok := cachedRecallMemory(params.SessionKey); ok {
+		fingerprint := recallCueFingerprint(params.Message)
+		if fingerprint == "" {
+			return
+		}
+		if cached, ok := cachedRecallMemory(params.SessionKey, fingerprint); ok {
 			resultMu.Lock()
 			result.RecallMemory = cached
 			resultMu.Unlock()
@@ -359,7 +364,7 @@ func prepareContextAndPrompt(
 		}
 		recallMemory := buildRecallPreflight(ctx, params, deps, logger)
 		if recallMemoryHasEvidence(recallMemory) {
-			storeRecallMemory(params.SessionKey, recallMemory)
+			storeRecallMemory(params.SessionKey, fingerprint, recallMemory)
 		}
 		resultMu.Lock()
 		result.RecallMemory = recallMemory

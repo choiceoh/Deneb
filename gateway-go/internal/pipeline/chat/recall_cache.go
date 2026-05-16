@@ -1,86 +1,94 @@
-// recall_cache.go implements P1 of the Hermes-inspired prompt-cache work:
-// a lazy, session-frozen snapshot of buildRecallPreflight's output.
+// recall_cache.go implements the recall snapshot cache.
 //
 // Why this exists:
 //   - buildRecallPreflight runs wiki/diary/transcript/polaris searches every
 //     turn whenever a recall cue is detected. Each search has a 1.5s timeout
 //     and the combined latency is real.
-//   - Because the result is interpolated into the system prompt's Dynamic
-//     block (see prompt/system_prompt.go), per-turn variation also forecloses
-//     any future opportunity to cache the dynamic block (the P0 work removed
-//     its cache_control marker for exactly this reason — once recall is
-//     stable enough to share a marker, it can be re-added).
+//   - Repeated user questions about the same topic should reuse that work
+//     instead of re-running every dependency.
 //
-// Lazy semantics:
-//   - "First evidence-bearing recall" wins, not "first turn". A cold session
-//     where the opening message has no cue contributes nothing to the cache;
-//     the next turn that produces real evidence becomes the snapshot.
-//   - formatRecallNoEvidence stub responses are not cached so the session can
-//     still graduate to a real snapshot once a meaningful cue arrives.
-//   - Once the snapshot is set it is frozen for the remainder of the session.
-//     A later cue that would have produced different evidence is intentionally
-//     ignored — the agent can still pull fresh context via the wiki tool.
+// Cache key: (sessionKey, cueFingerprint).
+//
+//   - cueFingerprint is derived from the recall cue + sorted signal terms of
+//     the user message (see recallCueFingerprint). Two turns asking about the
+//     same topic share a slot; two turns asking about different topics get
+//     independent slots. This kills the "first turn's recall freezes the
+//     entire session" failure mode where a turn-1 recall about topic A would
+//     remain injected into the system prompt for every subsequent turn,
+//     including turns about unrelated topics.
+//
+//   - An empty fingerprint means the current turn has no recall cue. The
+//     caller (run_exec.go) treats that as "do not inject any recall this
+//     turn" — so cue-less turns are never polluted by a stale snapshot.
+//
+// First-write-wins is preserved per (session, fingerprint) so concurrent
+// turns racing to fill the same slot cannot clobber an earlier store.
 //
 // Reset:
-//   - The /reset slash handler (slash_dispatch.go) clears the snapshot.
+//   - The /reset slash handler clears every entry for the session.
 //   - Session deletion via other paths (timeout, abort) does NOT currently
-//     clear the snapshot; the cache simply lingers until /reset or process
-//     restart. This is acceptable for the single-operator deployment but is
-//     a candidate for a future PhaseEnd lifecycle hook.
+//     clear entries; cache simply lingers until /reset or process restart.
+//     Acceptable for the single-operator deployment.
 package chat
 
 import (
+	"sort"
 	"strings"
 	"sync"
 )
 
-// recallSnapshotStore holds the frozen recall preflight per session.
+// recallSnapshotKey identifies one recall cache entry.
+type recallSnapshotKey struct {
+	SessionKey  string
+	Fingerprint string
+}
+
 var recallSnapshotStore = struct {
 	mu    sync.RWMutex
-	store map[string]string
-}{store: make(map[string]string)}
+	store map[recallSnapshotKey]string
+}{store: make(map[recallSnapshotKey]string)}
 
-// cachedRecallMemory returns the frozen recall snapshot for sessionKey if one
-// has been recorded, plus a hit/miss flag.
-func cachedRecallMemory(sessionKey string) (string, bool) {
+// cachedRecallMemory returns the frozen recall snapshot for (sessionKey,
+// fingerprint) if one has been recorded, plus a hit/miss flag.
+func cachedRecallMemory(sessionKey, fingerprint string) (string, bool) {
 	if sessionKey == "" {
 		return "", false
 	}
 	recallSnapshotStore.mu.RLock()
 	defer recallSnapshotStore.mu.RUnlock()
-	v, ok := recallSnapshotStore.store[sessionKey]
+	v, ok := recallSnapshotStore.store[recallSnapshotKey{sessionKey, fingerprint}]
 	return v, ok
 }
 
-// storeRecallMemory records value as the frozen snapshot for sessionKey.
-// First-write-wins: if a snapshot already exists, the call is a no-op so
-// concurrent turns racing to build recall cannot clobber an earlier store.
-// This makes the lazy-frozen invariant atomic — once a session has a
-// snapshot it stays that snapshot until clearRecallMemory.
-//
-// Empty values are ignored so a no-cue / no-evidence turn does not poison
-// the cache for the rest of the session.
-func storeRecallMemory(sessionKey, value string) {
+// storeRecallMemory records value as the snapshot for (sessionKey,
+// fingerprint). First-write-wins per slot. Empty session or value is a no-op.
+func storeRecallMemory(sessionKey, fingerprint, value string) {
 	if sessionKey == "" || value == "" {
 		return
 	}
 	recallSnapshotStore.mu.Lock()
 	defer recallSnapshotStore.mu.Unlock()
-	if _, ok := recallSnapshotStore.store[sessionKey]; ok {
+	key := recallSnapshotKey{sessionKey, fingerprint}
+	if _, ok := recallSnapshotStore.store[key]; ok {
 		return
 	}
-	recallSnapshotStore.store[sessionKey] = value
+	recallSnapshotStore.store[key] = value
 }
 
-// clearRecallMemory drops the snapshot for sessionKey. Called by /reset and
-// safe to invoke for sessions that never had a snapshot.
+// clearRecallMemory drops every snapshot belonging to sessionKey across all
+// fingerprints. Called by /reset and safe to invoke for sessions that never
+// had a snapshot.
 func clearRecallMemory(sessionKey string) {
 	if sessionKey == "" {
 		return
 	}
 	recallSnapshotStore.mu.Lock()
 	defer recallSnapshotStore.mu.Unlock()
-	delete(recallSnapshotStore.store, sessionKey)
+	for k := range recallSnapshotStore.store {
+		if k.SessionKey == sessionKey {
+			delete(recallSnapshotStore.store, k)
+		}
+	}
 }
 
 // recallMemoryHasEvidence reports whether a buildRecallPreflight string carries
@@ -93,4 +101,29 @@ func recallMemoryHasEvidence(s string) bool {
 		return false
 	}
 	return !strings.Contains(s, "source=none")
+}
+
+// recallCueFingerprint returns a stable identifier for the user's current
+// recall intent based on the message's cue + signal terms.
+//
+//   - Empty string when the message has no recall cue — caller skips recall
+//     injection for that turn entirely.
+//   - "cue-only" when there is a cue phrase but no specific signal terms
+//     (e.g., "그거 뭐였지?"). All such turns share one slot because the
+//     recall search falls back to the same recent-diary entries.
+//   - Otherwise the sorted, pipe-joined signal terms.
+//
+// Two messages on the same topic produce the same fingerprint and share a
+// cache slot; different topics get different fingerprints.
+func recallCueFingerprint(message string) string {
+	if !shouldRunRecallPreflight(message) {
+		return ""
+	}
+	terms := recallSignalTerms(message)
+	if len(terms) == 0 {
+		return "cue-only"
+	}
+	sorted := append([]string(nil), terms...)
+	sort.Strings(sorted)
+	return strings.Join(sorted, "|")
 }

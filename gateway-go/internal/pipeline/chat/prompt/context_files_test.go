@@ -35,6 +35,29 @@ func TestLoadContextFiles(t *testing.T) {
 	}
 }
 
+// TestLoadContextFiles_IncludesMemoryMd guards against MEMORY.md silently
+// dropping out of contextFileNames. Personal memory notes are a primary input
+// the agent relies on for "기억력"-style requests; if the loader stops
+// picking it up the UX degrades silently because everything still builds.
+func TestLoadContextFiles_IncludesMemoryMd(t *testing.T) {
+	ResetContextFileCacheForTest()
+	dir := t.TempDir()
+	memContent := "# Memory\n\n- prefers korean\n- works on deneb gateway"
+	if err := os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte(memContent), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	files := LoadContextFiles(dir)
+	for _, f := range files {
+		if f.Path == "MEMORY.md" {
+			if f.Content != memContent {
+				t.Errorf("MEMORY.md content mismatch: got %q, want %q", f.Content, memContent)
+			}
+			return
+		}
+	}
+	t.Errorf("MEMORY.md not in loaded context files: %+v", files)
+}
+
 func TestTruncateContent(t *testing.T) {
 	content := strings.Repeat("a", 100)
 	result := truncateContent(content, 50)
