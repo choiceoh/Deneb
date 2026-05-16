@@ -59,6 +59,16 @@ func executeAgentRun(
 		})
 	}
 
+	// Signal "preparing" phase — covers parallel context assembly, system prompt
+	// build, and recall preflight setup. The status controller debounces this
+	// against the prior Queued state so very fast preps (<700ms) keep showing
+	// 👀 instead of flickering to 📚 and back. WebSocket clients receive a
+	// structured phase.changed event for the same transition.
+	emitPhase(deps, params, "preparing", runStart)
+	if statusCtrl != nil {
+		statusCtrl.SetPreparing()
+	}
+
 	// 1. Persist user message to transcript + Aurora store. Skipped when the
 	// turn is marked Ephemeral — autonomous self-triggers (heartbeat) share
 	// the user's session for context but must not crowd out the recent
@@ -129,7 +139,7 @@ func executeAgentRun(
 
 	// Stage 1: Parallel context + prompt preparation.
 	prepStart := time.Now()
-	prep := prepareContextAndPrompt(ctx, params, deps, workspaceDir, sessionToolPreset, logger)
+	prep := prepareContextAndPrompt(ctx, params, deps, workspaceDir, sessionToolPreset, statusCtrl, logger)
 	logger.Info("pipeline: parallel prep done (context+sysprompt)", "ms", time.Since(prepStart).Milliseconds())
 
 	if prep.ContextErr != nil {
@@ -297,6 +307,20 @@ func executeAgentRun(
 	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag}, nil
 }
 
+// emitPhase publishes a phase.changed lifecycle event so WebSocket
+// subscribers can render the same phase progression the Telegram status
+// controller does. Silently no-ops when the agent emit callback is unset
+// (sub-agents, tests).
+func emitPhase(deps runDeps, params RunParams, phase string, at time.Time) {
+	if deps.callbacks.emitAgentFn == nil {
+		return
+	}
+	deps.callbacks.emitAgentFn("phase.changed", params.SessionKey, params.ClientRunID, map[string]any{
+		"phase": phase,
+		"ts":    at.UnixMilli(),
+	})
+}
+
 // ---------------------------------------------------------------------------
 // Extracted stages: prepareContextAndPrompt, assembleMessages, finalizePrompt,
 // buildAgentConfig. These are called sequentially from executeAgentRun.
@@ -313,12 +337,18 @@ type prepResult struct {
 
 // prepareContextAndPrompt runs wiki injection, context assembly, and system prompt
 // build in parallel. Returns the combined results.
+//
+// statusCtrl is optional: when non-nil, the recall goroutine signals
+// SetRecalling on a true cache miss (cue present + no cached evidence) so
+// the user sees 🧠 only when memory search is actually happening, not for
+// every prep call.
 func prepareContextAndPrompt(
 	ctx context.Context,
 	params RunParams,
 	deps runDeps,
 	workspaceDir string,
 	sessionToolPreset string,
+	statusCtrl *telegram.StatusReactionController,
 	logger *slog.Logger,
 ) prepResult {
 	var result prepResult
@@ -352,6 +382,12 @@ func prepareContextAndPrompt(
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
+		// Mirror buildRecallPreflight's early-out: ephemeral turns (autonomous
+		// heartbeat self-triggers) never run recall, so emitting 🧠 here would
+		// lie to the user about what the agent is doing.
+		if params.EphemeralUser {
+			return
+		}
 		fingerprint := recallCueFingerprint(params.Message)
 		if fingerprint == "" {
 			return
@@ -361,6 +397,13 @@ func prepareContextAndPrompt(
 			result.RecallMemory = cached
 			resultMu.Unlock()
 			return
+		}
+		// Real recall work coming up (wiki/diary/transcript/polaris search,
+		// up to ~1.5s timeout each). Surface the phase so the user sees
+		// 🧠 instead of 📚 staying frozen during the wait.
+		emitPhase(deps, params, "recalling", time.Now())
+		if statusCtrl != nil {
+			statusCtrl.SetRecalling()
 		}
 		recallMemory := buildRecallPreflight(ctx, params, deps, logger)
 		if recallMemoryHasEvidence(recallMemory) {
