@@ -382,6 +382,12 @@ func prepareContextAndPrompt(
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
+		// Mirror buildRecallPreflight's early-out: ephemeral turns (autonomous
+		// heartbeat self-triggers) never run recall, so emitting 🧠 here would
+		// lie to the user about what the agent is doing.
+		if params.EphemeralUser {
+			return
+		}
 		fingerprint := recallCueFingerprint(params.Message)
 		if fingerprint == "" {
 			return
