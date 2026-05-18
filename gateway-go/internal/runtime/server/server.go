@@ -292,7 +292,14 @@ func New(addr string, opts ...Option) (*Server, error) {
 			if snap.Config.Cron != nil && snap.Config.Cron.Enabled != nil && !*snap.Config.Cron.Enabled {
 				cronEnabled = false
 			}
-			defaultTo = extractCronDefaultTo(snap.Raw)
+			// Mirror loadTelegramConfig: a snapshot that failed validation
+			// will not produce a Telegram plugin, so seeding DefaultTo from
+			// it would leave cron resolving a target with no actual delivery
+			// path — runs would skip delivery silently and still be recorded
+			// as ok. Only seed when the snapshot is also Valid.
+			if snap.Valid {
+				defaultTo = extractCronDefaultTo(snap.Raw)
+			}
 		}
 		storePath := cron.DefaultCronStorePath(homeDir)
 		s.cronRunLog = cron.NewPersistentRunLog(storePath)
