@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -67,15 +66,13 @@ func (s *Server) handleCronRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fire-and-forget on a background context so the job survives the HTTP
-	// request's cancellation. Errors are logged inside the cron service.
-	if err := s.cronService.EnqueueRun(context.Background(), job.ID, req.Mode); err != nil {
-		s.writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error": err.Error(),
-			"jobId": job.ID,
-		})
-		return
-	}
+	// Fire-and-forget on the server's lifecycle context so the job survives
+	// the HTTP request's cancellation but is still cancelled on graceful
+	// shutdown. Service.EnqueueRun currently never returns a non-nil error
+	// (failures are logged asynchronously inside the run loop) — the return
+	// value is intentionally ignored here so a future signature change can't
+	// silently leak internal error text to a localhost-only client.
+	_ = s.cronService.EnqueueRun(s.ShutdownCtx(), job.ID, req.Mode)
 
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"status": "ok",

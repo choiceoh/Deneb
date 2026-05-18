@@ -97,7 +97,13 @@ func NewStore(storePath string) *Store {
 func (s *Store) Load() (*CronStoreFile, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.loadLocked()
+}
 
+// loadLocked is the lock-holding implementation of Load. Callers must hold
+// s.mu. Used by both Load (public) and lookup paths that need to populate the
+// cache before searching (e.g. JobByName called before Service.Start).
+func (s *Store) loadLocked() (*CronStoreFile, error) {
 	data, err := os.ReadFile(s.path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -190,11 +196,21 @@ func (s *Store) Job(id string) *StoreJob {
 
 // JobByName returns the first job whose Name matches, or nil if not found.
 // Name is not constrained to be unique; first match wins.
+//
+// Lazy-loads the store from disk when the in-memory cache hasn't been
+// populated yet. Without this, callers that hit lookup paths before
+// Service.Start runs (e.g. POST /api/cron/run during the startup window)
+// would see false 404s for jobs that exist on disk.
 func (s *Store) JobByName(name string) *StoreJob {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.cached == nil || name == "" {
+	if name == "" {
 		return nil
+	}
+	if s.cached == nil {
+		if _, err := s.loadLocked(); err != nil {
+			return nil
+		}
 	}
 	for i := range s.cached.Jobs {
 		if s.cached.Jobs[i].Name == name {

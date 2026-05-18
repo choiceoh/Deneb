@@ -5,11 +5,28 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
+
+// installCleanCronService attaches a fresh cron.Service backed by a temp
+// store path, so HTTP handler tests don't depend on whether os.UserHomeDir
+// was set in the test environment.
+func installCleanCronService(t *testing.T, srv *Server) *cron.Service {
+	t.Helper()
+	storePath := filepath.Join(t.TempDir(), "jobs.json")
+	svc := cron.NewService(cron.ServiceConfig{
+		StorePath:      storePath,
+		DefaultChannel: "telegram",
+		Enabled:        true,
+	}, nil, srv.logger)
+	srv.cronService = svc
+	return svc
+}
 
 func newCronRunRequest(body string) *http.Request {
 	req := httptest.NewRequestWithContext(
@@ -46,9 +63,7 @@ func TestHandleCronRun_InvalidJSON(t *testing.T) {
 
 func TestHandleCronRun_UnknownName(t *testing.T) {
 	srv := testutil.Must(New(":0"))
-	if srv.cronService == nil {
-		t.Skip("cron service not initialized in this environment")
-	}
+	installCleanCronService(t, srv)
 	mux := srv.buildMux()
 
 	w := httptest.NewRecorder()
@@ -63,6 +78,58 @@ func TestHandleCronRun_UnknownName(t *testing.T) {
 	}
 	if body["error"] != "job not found" {
 		t.Errorf("expected 'job not found', got %v", body["error"])
+	}
+}
+
+func TestHandleCronRun_Success(t *testing.T) {
+	srv := testutil.Must(New(":0"))
+	svc := installCleanCronService(t, srv)
+	if err := svc.Add(context.Background(), cron.StoreJob{
+		ID:       "job-success",
+		Name:     "happy-path",
+		Enabled:  true,
+		Schedule: cron.StoreSchedule{Kind: "every", EveryMs: 60_000},
+		Payload:  cron.StorePayload{Kind: "agentTurn", Message: "hi"},
+	}); err != nil {
+		t.Fatalf("svc.Add: %v", err)
+	}
+	mux := srv.buildMux()
+
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, newCronRunRequest(`{"name":"happy-path"}`))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("got %d, want %d (body: %s)", w.Code, http.StatusOK, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body["status"] != "ok" {
+		t.Errorf("status = %v, want \"ok\"", body["status"])
+	}
+	if body["jobId"] != "job-success" {
+		t.Errorf("jobId = %v, want \"job-success\"", body["jobId"])
+	}
+}
+
+func TestHandleCronRun_ServiceUnavailable(t *testing.T) {
+	srv := testutil.Must(New(":0"))
+	srv.cronService = nil
+	mux := srv.buildMux()
+
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, newCronRunRequest(`{"name":"anything"}`))
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("got %d, want %d (body: %s)", w.Code, http.StatusServiceUnavailable, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body["error"] != "cron service unavailable" {
+		t.Errorf("error = %v, want \"cron service unavailable\"", body["error"])
 	}
 }
 
