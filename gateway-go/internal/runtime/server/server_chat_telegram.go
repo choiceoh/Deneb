@@ -19,6 +19,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/secretref"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
+	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
 // telegramDedupKey builds a dedup cache key from chat ID and the *full* reply
@@ -93,13 +94,28 @@ func (s *Server) wireTelegramChatHandler() {
 		cleanText, keyboard := parseReplyButtons(text)
 		html := telegram.MarkdownToTelegramHTML(cleanText)
 
+		// Egress redaction runs BEFORE chunking. SendText/EditMessageText each
+		// redact internally, but our ChunkHTML below splits the HTML up-front
+		// and feeds chunks to SendHTMLChunks which only redacts per chunk — a
+		// secret straddling a chunk boundary would otherwise leave the gateway
+		// in raw form. Redacting here first collapses any matched token into
+		// its masked shape so no boundary leak is possible. The per-chunk pass
+		// inside SendHTMLChunks is idempotent and acts as defense in depth.
+		html = redact.String(html)
+
 		// Pre-chunk so the draft edit can never fail purely from length. When
 		// the reply fits in a single Telegram message we keep the original
 		// one-edit fast path (no flicker, no extra messages). When it exceeds
-		// 4096 chars the draft edits to chunk[0] and the remainder appends as
+		// the limit the draft edits to chunk[0] and the remainder appends as
 		// new messages — also flicker-free, replacing the old delete-then-
 		// resend path that the user observed as "answer disappeared, different
 		// answer reappeared".
+		//
+		// Length check is byte-based via len(). Telegram's 4096 hard limit is
+		// nominally UTF-16 code units; len() is conservative for non-ASCII
+		// (e.g. Korean text uses 3 bytes per BMP character), so we may chunk
+		// slightly more eagerly than strictly required — matching how
+		// SendText/ChunkHTML have always sized outbound messages.
 		var chunks []string
 		if len(html) <= telegram.MaxTextLength {
 			chunks = []string{html}
@@ -123,20 +139,35 @@ func (s *Server) wireTelegramChatHandler() {
 			delivery.DraftMsgID = "" // consumed
 			editMsgID, parseErr := strconv.ParseInt(draftID, 10, 64)
 			if parseErr == nil {
-				_, editErr := telegram.EditMessageText(ctx, client, chatID, editMsgID, chunks[0], "HTML", editKeyboard)
+				_, finalMode, editErr := telegram.EditMessageTextResolved(ctx, client, chatID, editMsgID, chunks[0], "HTML", editKeyboard)
 				if editErr == nil || telegram.IsMessageNotModifiedError(editErr) {
 					// Draft now shows chunks[0]; append the rest (if any).
+					// finalMode tracks whether the edit fell back to plain so
+					// the tail chunks render in the same mode as the head.
 					if len(chunks) > 1 {
-						if _, sendErr := telegram.SendHTMLChunks(ctx, client, chatID, chunks[1:], tailKeyboard); sendErr != nil {
-							return sendErr
+						if _, sendErr := telegram.SendHTMLChunks(ctx, client, chatID, chunks[1:], tailKeyboard, finalMode); sendErr != nil {
+							// Partial delivery: chunks[0] is already on the
+							// draft message, some tail chunks reached
+							// Telegram, some did not. Returning the error
+							// would bubble up to the caller's retry which —
+							// because DraftMsgID is already consumed — would
+							// fall through to SendText and resend the FULL
+							// reply, leaving the edited draft plus a
+							// duplicate copy. Log + treat as delivered so
+							// the user keeps the partial reply intact; the
+							// recordSent below also blocks a same-text
+							// retry from re-entering the dedup window.
+							s.logger.Error("partial reply: tail chunks failed",
+								"msgId", draftID, "totalChunks", len(chunks),
+								"error", sendErr)
 						}
 					}
 					recordSent()
 					return nil
 				}
 				// Edit failed for a non-length reason (HTML parse fallback
-				// already attempted inside EditMessageText, transient API
-				// error, etc.). Delete the draft and fall through to the
+				// already attempted inside EditMessageTextResolved, transient
+				// API error, etc.). Delete the draft and fall through to the
 				// full SendText path so the user still gets the reply.
 				// Draft ordering is guaranteed because DraftStreamLoop.StopForClear
 				// (called via run_exec.go deferred cleanup) blocks on any in-flight
