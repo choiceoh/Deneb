@@ -59,6 +59,21 @@ type Service struct {
 	loopDone     chan struct{}
 	nextWakeAtMs int64
 
+	// runCtx is a service-owned context derived from the ctx passed to
+	// Start. All executor goroutines (scheduler, recovery, async EnqueueRun)
+	// receive this context so a single runCancel call propagates cancellation
+	// to every in-flight run on shutdown. Nil before Start; reset on each
+	// Start so a Start-Stop-Start cycle works.
+	//
+	// inFlight tracks every spawned executor (scheduler, recovery, async).
+	// Stop waits on it (bounded by the caller's deadline) so the gateway
+	// shutdown sequence doesn't tear down dependencies while a cron run is
+	// still touching them. Synchronous Run callers (e.g. cron.run RPC) are
+	// bounded by the caller's request context and are NOT tracked here.
+	runCtx    context.Context
+	runCancel context.CancelFunc
+	inFlight  sync.WaitGroup
+
 	// Event listeners. Guarded by listenersMu (separate from s.mu) so that
 	// emit() can run while callers hold s.mu without re-entering the main
 	// service mutex — otherwise Add/Remove/Wake deadlock on their own emit.
