@@ -108,3 +108,37 @@ func TestStorePersistence(t *testing.T) {
 		t.Error("expected persisted job")
 	}
 }
+
+// TestStoreJobByNameLazyLoad guards against the regression flagged on
+// PR #1628: JobByName must populate the cache from disk when it has not
+// been Loaded yet, so name-based lookups (e.g. POST /api/cron/run) do not
+// return false 404s during the startup window before Service.Start runs.
+func TestStoreJobByNameLazyLoad(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "jobs.json")
+
+	writer := NewStore(storePath)
+	if err := writer.AddJob(StoreJob{
+		ID:      "job-1",
+		Name:    "email-analysis",
+		Enabled: true,
+		Payload: StorePayload{Kind: "agentTurn", Message: "analyze"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Fresh store instance — cache is nil until something forces a Load.
+	reader := NewStore(storePath)
+	got := reader.JobByName("email-analysis")
+	if got == nil {
+		t.Fatal("JobByName returned nil for an on-disk job before explicit Load")
+	}
+	if got.ID != "job-1" {
+		t.Errorf("ID = %q, want %q", got.ID, "job-1")
+	}
+
+	// Unknown name on a fresh store still returns nil (does not error).
+	if reader2 := NewStore(storePath); reader2.JobByName("does-not-exist") != nil {
+		t.Error("JobByName(unknown) = non-nil; want nil")
+	}
+}
