@@ -194,31 +194,37 @@ func (s *Store) Job(id string) *StoreJob {
 	return nil
 }
 
-// JobByName returns the first job whose Name matches, or nil if not found.
-// Name is not constrained to be unique; first match wins.
+// JobByName returns the first job whose Name matches.
+// Name is not constrained to be unique; first match wins. Returns (nil, nil)
+// when no job matches and the load was clean.
 //
 // Lazy-loads the store from disk when the in-memory cache hasn't been
 // populated yet. Without this, callers that hit lookup paths before
 // Service.Start runs (e.g. POST /api/cron/run during the startup window)
 // would see false 404s for jobs that exist on disk.
-func (s *Store) JobByName(name string) *StoreJob {
+//
+// A non-nil error indicates the store file could not be read or parsed —
+// callers should surface this as an operational failure (e.g. 500), not
+// translate it into "job not found", so that a corrupt jobs.json doesn't
+// look like a missing job to operators.
+func (s *Store) JobByName(name string) (*StoreJob, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if name == "" {
-		return nil
+		return nil, nil
 	}
 	if s.cached == nil {
 		if _, err := s.loadLocked(); err != nil {
-			return nil
+			return nil, err
 		}
 	}
 	for i := range s.cached.Jobs {
 		if s.cached.Jobs[i].Name == name {
 			cp := s.cached.Jobs[i]
-			return &cp
+			return &cp, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // AddJob adds a job to the store and saves to disk.

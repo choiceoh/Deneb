@@ -129,7 +129,10 @@ func TestStoreJobByNameLazyLoad(t *testing.T) {
 
 	// Fresh store instance — cache is nil until something forces a Load.
 	reader := NewStore(storePath)
-	got := reader.JobByName("email-analysis")
+	got, err := reader.JobByName("email-analysis")
+	if err != nil {
+		t.Fatalf("JobByName returned error: %v", err)
+	}
 	if got == nil {
 		t.Fatal("JobByName returned nil for an on-disk job before explicit Load")
 	}
@@ -137,8 +140,31 @@ func TestStoreJobByNameLazyLoad(t *testing.T) {
 		t.Errorf("ID = %q, want %q", got.ID, "job-1")
 	}
 
-	// Unknown name on a fresh store still returns nil (does not error).
-	if reader2 := NewStore(storePath); reader2.JobByName("does-not-exist") != nil {
-		t.Error("JobByName(unknown) = non-nil; want nil")
+	// Unknown name on a fresh store returns (nil, nil) — not error.
+	reader2 := NewStore(storePath)
+	if got, err := reader2.JobByName("does-not-exist"); err != nil || got != nil {
+		t.Errorf("JobByName(unknown) = (%v, %v); want (nil, nil)", got, err)
+	}
+}
+
+// TestStoreJobByNameSurfacesParseError guards against PR #1630 review
+// finding: lazy-load must propagate parse/read failures so callers can
+// distinguish a corrupt jobs.json from a missing job. Returning nil would
+// make the REST endpoint reply 404 for an operational fault.
+func TestStoreJobByNameSurfacesParseError(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "jobs.json")
+
+	if err := os.WriteFile(storePath, []byte("{not valid json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := NewStore(storePath)
+	got, err := reader.JobByName("any")
+	if err == nil {
+		t.Fatalf("JobByName on corrupt store returned (%v, nil); want non-nil error", got)
+	}
+	if got != nil {
+		t.Errorf("JobByName on error returned non-nil job: %v", got)
 	}
 }

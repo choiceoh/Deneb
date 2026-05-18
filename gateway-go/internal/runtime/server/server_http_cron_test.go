@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -130,6 +131,37 @@ func TestHandleCronRun_ServiceUnavailable(t *testing.T) {
 	}
 	if body["error"] != "cron service unavailable" {
 		t.Errorf("error = %v, want \"cron service unavailable\"", body["error"])
+	}
+}
+
+// TestHandleCronRun_CorruptStore guards PR #1630 review feedback: when
+// the cron store cannot be parsed, the handler must surface 500 rather
+// than translating the load failure into a misleading 404 "job not found".
+func TestHandleCronRun_CorruptStore(t *testing.T) {
+	srv := testutil.Must(New(":0"))
+	storePath := filepath.Join(t.TempDir(), "jobs.json")
+	if err := os.WriteFile(storePath, []byte("{not valid json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	srv.cronService = cron.NewService(cron.ServiceConfig{
+		StorePath:      storePath,
+		DefaultChannel: "telegram",
+		Enabled:        true,
+	}, nil, srv.logger)
+	mux := srv.buildMux()
+
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, newCronRunRequest(`{"name":"anything"}`))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("got %d, want %d (body: %s)", w.Code, http.StatusInternalServerError, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body["error"] != "cron store unavailable" {
+		t.Errorf("error = %v, want \"cron store unavailable\"", body["error"])
 	}
 }
 
