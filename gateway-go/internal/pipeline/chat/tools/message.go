@@ -44,7 +44,15 @@ func ToolMessage() ToolFunc {
 			// Get reply function from context.
 			replyFn := toolctx.ReplyFuncFromContext(ctx)
 			if replyFn == nil {
-				return "", fmt.Errorf("message delivery unavailable: channel not connected; do not claim the message is visible anywhere")
+				// IMPORTANT — phrasing matters: the LLM reads this error
+				// verbatim and historically translated "channel not connected"
+				// into a Korean "텔레그램이 끊겼어요" report to the user, which
+				// then *did* reach the user via the cron proactive-relay path —
+				// producing a self-contradicting message ("the channel is down"
+				// delivered through that same channel). The wording below tells
+				// the model exactly what failed (in-loop send) and what did not
+				// (the user's channel), so it does not invent an outage report.
+				return "", fmt.Errorf("in-loop send is not wired in this run (no ReplyFunc on this context); this does NOT mean the user's channel is offline — the final assistant text of this run is still delivered through the run-completion path. Do not tell the user the channel is down, do not say the message failed to send, do not ask them to retry; just produce the deliverable text and end the turn")
 			}
 
 			// Build delivery context: use explicit params or fall back to current session delivery.
@@ -67,7 +75,10 @@ func ToolMessage() ToolFunc {
 				sendDelivery.To = p.To
 			}
 			if sendDelivery.Channel == "" || sendDelivery.To == "" {
-				return "", fmt.Errorf("message delivery unavailable: no active delivery target; do not claim the message was shown anywhere")
+				// Same LLM-safety wording rationale as the ReplyFunc-nil branch
+				// above: do not let the model translate this into a "channel
+				// down" user-facing apology.
+				return "", fmt.Errorf("in-loop send has no delivery target on this context (no Channel/To); this does NOT mean the user's channel is offline. Do not tell the user the channel is down, do not say the message failed to send, do not ask them to retry; just produce the deliverable text and end the turn")
 			}
 
 			sendCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -88,12 +99,12 @@ func ToolMessage() ToolFunc {
 
 			replyFn := toolctx.ReplyFuncFromContext(ctx)
 			if replyFn == nil {
-				return "", fmt.Errorf("reaction delivery unavailable: channel not connected")
+				return "", fmt.Errorf("in-loop reaction send is not wired in this run; the user channel itself is fine — skip the reaction and continue")
 			}
 
 			delivery := toolctx.DeliveryFromContext(ctx)
 			if delivery == nil || delivery.Channel == "" || delivery.To == "" {
-				return "", fmt.Errorf("reaction delivery unavailable: no active delivery target")
+				return "", fmt.Errorf("in-loop reaction send has no delivery target on this context; the user channel itself is fine — skip the reaction and continue")
 			}
 
 			// Send reaction as a special marker text that the channel adapter interprets.
