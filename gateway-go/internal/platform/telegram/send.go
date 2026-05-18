@@ -199,6 +199,70 @@ func SendText(ctx context.Context, c *Client, chatID int64, text string, opts Se
 	return results, nil
 }
 
+// SendHTMLChunks sends a pre-chunked HTML reply as one sendMessage per chunk.
+// Unlike SendText, the chunks are taken as-is — no further splitting — so the
+// caller controls boundary placement (e.g. when continuing after a draft edit
+// that already consumed the first chunk).
+//
+// The keyboard, when non-nil, attaches only to the final chunk so buttons
+// appear at the end of the reply. On HTML parse error the chunk and all
+// subsequent chunks fall back to plain text, matching SendText behavior.
+// Redaction is applied per chunk (idempotent).
+func SendHTMLChunks(ctx context.Context, c *Client, chatID int64, chunks []string, keyboard *InlineKeyboardMarkup) ([]SendResult, error) {
+	if len(chunks) == 0 {
+		return nil, nil
+	}
+	keyboard = redactKeyboard(keyboard)
+
+	parseMode := "HTML"
+	var (
+		results      []SendResult
+		failedChunks []int
+		firstErr     chunkError
+	)
+	for i, chunk := range chunks {
+		chunk = redactOutbound(chunk)
+		params := map[string]any{
+			"chat_id": chatID,
+			"text":    chunk,
+		}
+		if parseMode != "" {
+			params["parse_mode"] = parseMode
+		}
+		if i == len(chunks)-1 && keyboard != nil {
+			params["reply_markup"] = keyboard
+		}
+
+		result, err := c.Call(ctx, "sendMessage", params)
+		if err != nil {
+			if parseMode == "HTML" && isHTMLParseError(err) {
+				delete(params, "parse_mode")
+				parseMode = ""
+				result, err = c.Call(ctx, "sendMessage", params)
+			}
+			if err != nil {
+				failedChunks = append(failedChunks, i)
+				firstErr = firstErr.wrap(i, err)
+				continue
+			}
+		}
+
+		var msg Message
+		if err := json.Unmarshal(result, &msg); err == nil {
+			results = append(results, SendResult{
+				MessageID: msg.MessageID,
+				ChatID:    msg.Chat.ID,
+			})
+		}
+	}
+
+	if len(failedChunks) > 0 {
+		return results, fmt.Errorf("sendMessage: %d/%d chunks failed (indices %v): %w",
+			len(failedChunks), len(chunks), failedChunks, firstErr.err)
+	}
+	return results, nil
+}
+
 // chunkError carries the first failure encountered while sending chunks, so
 // callers can unwrap it while SendText continues trying remaining chunks.
 type chunkError struct {

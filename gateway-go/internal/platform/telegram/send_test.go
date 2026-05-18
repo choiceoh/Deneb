@@ -95,6 +95,103 @@ func TestSendTextHTMLFallbackOnlyOnParseError(t *testing.T) {
 	}
 }
 
+// TestSendHTMLChunks_KeyboardOnLastChunk verifies that when a reply is split
+// across multiple sendMessage calls, the inline keyboard attaches to the
+// final chunk only. This is what the draft-edit-then-append flow relies on
+// to keep buttons at the end of the visible reply.
+func TestSendHTMLChunks_KeyboardOnLastChunk(t *testing.T) {
+	type captured struct {
+		text      string
+		hasMarkup bool
+		hasHTMLPM bool
+	}
+	var calls []captured
+
+	c, srv := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		json.NewDecoder(r.Body).Decode(&req)
+		txt, _ := req["text"].(string)
+		_, hasMarkup := req["reply_markup"]
+		pm, _ := req["parse_mode"].(string)
+		calls = append(calls, captured{text: txt, hasMarkup: hasMarkup, hasHTMLPM: pm == "HTML"})
+
+		resp := APIResponse{
+			OK:     true,
+			Result: json.RawMessage(`{"message_id":1,"chat":{"id":123,"type":"private"}}`),
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+	defer srv.Close()
+
+	chunks := []string{"first", "middle", "last"}
+	kb := &InlineKeyboardMarkup{
+		InlineKeyboard: [][]InlineKeyboardButton{{{Text: "Go", CallbackData: "go"}}},
+	}
+
+	_, err := SendHTMLChunks(context.Background(), c, 123, chunks, kb)
+	if err != nil {
+		t.Fatalf("SendHTMLChunks returned error: %v", err)
+	}
+	if len(calls) != 3 {
+		t.Fatalf("got %d sendMessage calls, want 3", len(calls))
+	}
+	for i, call := range calls {
+		wantMarkup := i == len(calls)-1
+		if call.hasMarkup != wantMarkup {
+			t.Errorf("chunk %d: hasMarkup=%v, want %v", i, call.hasMarkup, wantMarkup)
+		}
+		if !call.hasHTMLPM {
+			t.Errorf("chunk %d: expected parse_mode=HTML, got plain", i)
+		}
+	}
+	if calls[0].text != "first" || calls[2].text != "last" {
+		t.Errorf("chunk order/text wrong: %+v", calls)
+	}
+}
+
+// TestSendHTMLChunks_HTMLFallbackPropagates verifies that when the first
+// chunk hits an HTML parse error, the retry path fires AND subsequent chunks
+// also drop parse_mode — matching SendText's contract.
+func TestSendHTMLChunks_HTMLFallbackPropagates(t *testing.T) {
+	var htmlAttempts, plainAttempts atomic.Int32
+
+	c, srv := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		json.NewDecoder(r.Body).Decode(&req)
+		if pm, _ := req["parse_mode"].(string); pm == "HTML" {
+			htmlAttempts.Add(1)
+			resp := APIResponse{
+				OK:          false,
+				ErrorCode:   400,
+				Description: "Bad Request: can't parse entities",
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		plainAttempts.Add(1)
+		resp := APIResponse{
+			OK:     true,
+			Result: json.RawMessage(`{"message_id":1,"chat":{"id":123,"type":"private"}}`),
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+	defer srv.Close()
+
+	chunks := []string{"<bad>a</bad>", "b", "c"}
+	_, err := SendHTMLChunks(context.Background(), c, 123, chunks, nil)
+	if err != nil {
+		t.Fatalf("SendHTMLChunks returned error after fallback: %v", err)
+	}
+	// First chunk: one HTML attempt + one plain retry. Remaining chunks: plain only.
+	if htmlAttempts.Load() != 1 {
+		t.Errorf("htmlAttempts=%d, want 1 (only first chunk retries)", htmlAttempts.Load())
+	}
+	if plainAttempts.Load() != 3 {
+		t.Errorf("plainAttempts=%d, want 3 (fallback + 2 remaining)", plainAttempts.Load())
+	}
+}
+
 func TestIsHTMLParseError(t *testing.T) {
 	tests := []struct {
 		name string
