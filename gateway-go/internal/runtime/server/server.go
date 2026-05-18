@@ -276,11 +276,24 @@ func New(addr string, opts ...Option) (*Server, error) {
 				cronEnabled = false
 			}
 		}
+		// Seed DefaultTo from the Telegram operator chat ID at construction time so
+		// that jobs without a per-job Delivery.To still resolve to a valid target.
+		// Without this, the cron subagent's message.send tool hits "no active
+		// delivery target", the agent fabricates a Korean "텔레그램 채널이
+		// 연결되지 않아" apology, and the cron output layer then delivers that
+		// apology to Telegram — producing the self-contradicting message we saw
+		// in production. SetTelegramPlugin still fills DefaultTo as a late-bind
+		// backup, but only if the plugin is non-nil and config.ChatID != 0.
+		defaultTo := ""
+		if tgCfg := loadTelegramConfig(nil); tgCfg != nil && tgCfg.ChatID != 0 {
+			defaultTo = fmt.Sprintf("%d", tgCfg.ChatID)
+		}
 		storePath := cron.DefaultCronStorePath(homeDir)
 		s.cronRunLog = cron.NewPersistentRunLog(storePath)
 		s.cronService = cron.NewService(cron.ServiceConfig{
 			StorePath:      storePath,
 			DefaultChannel: "telegram",
+			DefaultTo:      defaultTo,
 			Enabled:        cronEnabled,
 			Sessions:       s.sessions,
 		}, nil, s.logger) // agent runner wired later during chat handler setup
