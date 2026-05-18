@@ -58,7 +58,17 @@ func (s *Server) handleCronRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job := s.cronService.JobByName(req.Name)
+	job, lookupErr := s.cronService.JobByName(req.Name)
+	if lookupErr != nil {
+		// Surface store I/O or parse failures as 500 so a corrupt/unreadable
+		// jobs.json doesn't look like a missing job to operators. The full
+		// error is logged server-side; the client only sees a generic notice.
+		s.logger.Error("cron job lookup failed", "name", req.Name, "error", lookupErr)
+		s.writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "cron store unavailable",
+		})
+		return
+	}
 	if job == nil {
 		s.writeJSON(w, http.StatusNotFound, map[string]any{
 			"error": "job not found",

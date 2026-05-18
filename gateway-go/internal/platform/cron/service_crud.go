@@ -100,8 +100,10 @@ func (s *Service) Job(id string) *StoreJob {
 	return s.store.Job(id)
 }
 
-// JobByName returns the first job whose Name matches, or nil if not found.
-func (s *Service) JobByName(name string) *StoreJob {
+// JobByName returns the first job whose Name matches, or (nil, nil) when
+// no job matches. A non-nil error indicates the underlying store could
+// not be read; callers must distinguish this from a missing job.
+func (s *Service) JobByName(name string) (*StoreJob, error) {
 	return s.store.JobByName(name)
 }
 
