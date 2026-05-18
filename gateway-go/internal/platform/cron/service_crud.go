@@ -100,6 +100,11 @@ func (s *Service) Job(id string) *StoreJob {
 	return s.store.Job(id)
 }
 
+// JobByName returns the first job whose Name matches, or nil if not found.
+func (s *Service) JobByName(name string) *StoreJob {
+	return s.store.JobByName(name)
+}
+
 // Add creates a new cron job, saves it, and schedules it.
 // Validates "at" schedule timestamps and infers a name if not provided.
 func (s *Service) Add(ctx context.Context, job StoreJob) error {
