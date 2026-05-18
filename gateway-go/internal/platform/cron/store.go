@@ -188,6 +188,23 @@ func (s *Store) Job(id string) *StoreJob {
 	return nil
 }
 
+// JobByName returns the first job whose Name matches, or nil if not found.
+// Name is not constrained to be unique; first match wins.
+func (s *Store) JobByName(name string) *StoreJob {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cached == nil || name == "" {
+		return nil
+	}
+	for i := range s.cached.Jobs {
+		if s.cached.Jobs[i].Name == name {
+			cp := s.cached.Jobs[i]
+			return &cp
+		}
+	}
+	return nil
+}
+
 // AddJob adds a job to the store and saves to disk.
 func (s *Store) AddJob(job StoreJob) error {
 	store, err := s.Load()

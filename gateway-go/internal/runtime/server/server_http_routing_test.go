@@ -32,6 +32,8 @@ func TestBuildMux_RegistersExpectedRoutes(t *testing.T) {
 		{http.MethodGet, "/nonexistent-path-xyz", http.StatusNotFound},
 		// POST on GET-only routes → 405.
 		{http.MethodPost, "/health", http.StatusMethodNotAllowed},
+		// GET on POST-only cron run → 405.
+		{http.MethodGet, "/api/cron/run", http.StatusMethodNotAllowed},
 	}
 
 	for _, tt := range tests {
