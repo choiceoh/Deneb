@@ -10,6 +10,19 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
+// llmSafetySendGuidance is the shared trailing instruction appended to every
+// in-loop send-failure error returned by the message tool. Centralising it
+// here keeps the four guard branches consistent and prevents drift when the
+// LLM-facing wording evolves — the substring assertions in message_test.go
+// pin only the *prefix* of each branch ("in-loop send is not wired" /
+// "in-loop send has no delivery target"), so tweaking this suffix does not
+// break tests.
+//
+// react branches use their own short "skip the reaction and continue"
+// suffix — they do not produce a user-visible deliverable and do not need
+// the longer "do not say the message failed to send" framing.
+const llmSafetySendGuidance = " Do not tell the user the channel is down, do not say the message failed to send, do not ask them to retry; just produce the deliverable text and end the turn."
+
 // messageToolSchema returns the JSON Schema for the message tool.
 // This is a flattened schema with per-action runtime validation, matching
 // the Node.js message-tool.ts approach.
@@ -52,7 +65,7 @@ func ToolMessage() ToolFunc {
 				// delivered through that same channel). The wording below tells
 				// the model exactly what failed (in-loop send) and what did not
 				// (the user's channel), so it does not invent an outage report.
-				return "", fmt.Errorf("in-loop send is not wired in this run (no ReplyFunc on this context); this does NOT mean the user's channel is offline — the final assistant text of this run is still delivered through the run-completion path. Do not tell the user the channel is down, do not say the message failed to send, do not ask them to retry; just produce the deliverable text and end the turn")
+				return "", fmt.Errorf("in-loop send is not wired in this run (no ReplyFunc on this context); this does NOT mean the user's channel is offline — the final assistant text of this run may still be delivered through the run-completion path if one is configured." + llmSafetySendGuidance)
 			}
 
 			// Build delivery context: use explicit params or fall back to current session delivery.
@@ -78,7 +91,7 @@ func ToolMessage() ToolFunc {
 				// Same LLM-safety wording rationale as the ReplyFunc-nil branch
 				// above: do not let the model translate this into a "channel
 				// down" user-facing apology.
-				return "", fmt.Errorf("in-loop send has no delivery target on this context (no Channel/To); this does NOT mean the user's channel is offline. Do not tell the user the channel is down, do not say the message failed to send, do not ask them to retry; just produce the deliverable text and end the turn")
+				return "", fmt.Errorf("in-loop send has no delivery target on this context (no Channel/To); this does NOT mean the user's channel is offline." + llmSafetySendGuidance)
 			}
 
 			sendCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
