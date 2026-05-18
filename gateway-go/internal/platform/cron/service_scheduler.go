@@ -178,10 +178,14 @@ func (s *Service) tickLocked(ctx context.Context) {
 
 	for _, job := range toRun {
 		jobCopy := job
-		// Each executor runs in its own panic-recovered goroutine.
+		// Each executor runs in its own panic-recovered goroutine and is
+		// tracked on s.inFlight so Stop can wait for clean exit before
+		// the gateway tears down dependencies.
 		// applyJobResult will signalWake() when it finishes so the
 		// loop re-evaluates the next-wake without waiting for sleep.
+		s.inFlight.Add(1)
 		safego.GoWithSlog(s.logger, "cron-executor", func() {
+			defer s.inFlight.Done()
 			s.executeJobFull(ctx, jobCopy)
 		})
 	}
@@ -215,11 +219,14 @@ func (s *Service) collectMissedJobsLocked(storeData *CronStoreFile) []StoreJob {
 }
 
 // spawnRecoverExecutors spawns one panic-recovered executor goroutine per
-// missed job. Must be called WITHOUT s.mu held.
+// missed job and tracks each one on s.inFlight so Stop can wait for them.
+// Must be called WITHOUT s.mu held.
 func (s *Service) spawnRecoverExecutors(ctx context.Context, jobs []StoreJob) {
 	for _, job := range jobs {
 		jobCopy := job
+		s.inFlight.Add(1)
 		safego.GoWithSlog(s.logger, "cron-executor-recover", func() {
+			defer s.inFlight.Done()
 			s.executeJobFullWithTrigger(ctx, jobCopy, triggerRecover)
 		})
 	}

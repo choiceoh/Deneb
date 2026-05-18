@@ -210,14 +210,35 @@ func (s *Service) Run(ctx context.Context, id string, mode string) (*RunOutcome,
 }
 
 // EnqueueRun queues a job for async execution.
-func (s *Service) EnqueueRun(ctx context.Context, id string, mode string) error {
+//
+// The provided ctx is intentionally ignored for the inner Run call —
+// async runs receive the service-owned runCtx instead, so a single
+// StopCtx cancel propagates to every in-flight job (issue #1633). The
+// caller's ctx is typically a request scope (e.g. an HTTP request that
+// returns long before the agent turn finishes) and using it would let
+// HTTP cancellation kill a job that is still wanted, or fail to cancel
+// at shutdown when the caller passes context.Background.
+//
+// Spawned goroutines are tracked on s.inFlight so Stop can wait for
+// them before downstream subsystems tear down.
+func (s *Service) EnqueueRun(_ context.Context, id string, mode string) error {
+	s.mu.Lock()
+	runCtx := s.runCtx
+	s.mu.Unlock()
+	if runCtx == nil {
+		// Service hasn't been Started — fall back to background so the
+		// run still executes. Stop has nothing to wait for in this state.
+		runCtx = context.Background()
+	}
+	s.inFlight.Add(1)
 	go func() {
+		defer s.inFlight.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				s.logger.Error("panic in async cron run", "job", id, "panic", r)
 			}
 		}()
-		if _, err := s.Run(ctx, id, mode); err != nil {
+		if _, err := s.Run(runCtx, id, mode); err != nil {
 			s.logger.Warn("async cron run failed", "job", id, "error", err)
 		}
 	}()

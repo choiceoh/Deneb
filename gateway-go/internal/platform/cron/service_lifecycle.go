@@ -68,20 +68,26 @@ func (s *Service) Start(ctx context.Context) error {
 	toRecover := s.collectMissedJobsLocked(storeData)
 
 	// Reset stopCh so a second Start after Stop works. loopDone is fresh
-	// per-loop so Stop can wait on it.
+	// per-loop so Stop can wait on it. runCtx is derived from the caller
+	// ctx so cancellation still flows through the parent, but Stop also
+	// has its own cancel handle so it can abort in-flight executors even
+	// when the caller's ctx is still alive.
 	s.stopCh = make(chan struct{})
 	s.loopDone = make(chan struct{})
+	s.runCtx, s.runCancel = context.WithCancel(ctx)
 	s.running = true
+	runCtx := s.runCtx
 	s.mu.Unlock()
 
-	// Now safe to spawn recovery executors.
-	s.spawnRecoverExecutors(ctx, toRecover)
+	// Now safe to spawn recovery executors against the service-owned ctx.
+	s.spawnRecoverExecutors(runCtx, toRecover)
 
-	// Spawn the panic-recovered worker goroutine. It runs until ctx is
-	// cancelled or Stop closes stopCh. signalWake() nudges it when state
-	// changes (Add/Update/Remove/Run/applyJobResult).
+	// Spawn the panic-recovered worker goroutine. It runs until runCtx is
+	// cancelled (either by the parent ctx finishing or by Stop closing it)
+	// or Stop closes stopCh. signalWake() nudges it when state changes
+	// (Add/Update/Remove/Run/applyJobResult).
 	safego.GoWithSlog(s.logger, "cron-scheduler-loop", func() {
-		s.runSchedulerLoop(ctx)
+		s.runSchedulerLoop(runCtx)
 	})
 
 	if scheduled > 0 {
@@ -90,10 +96,27 @@ func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop signals the scheduler loop to exit and waits for it to finish.
-// In-flight executor goroutines are not awaited — they run to completion
-// independently. Idempotent.
+// Stop signals the scheduler loop to exit, cancels in-flight executor
+// contexts, and waits for them with a built-in 10s deadline. Equivalent
+// to calling StopCtx with a 10s timeout — kept for callers (mostly tests)
+// that don't need a custom deadline. Idempotent.
 func (s *Service) Stop() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	s.StopCtx(ctx)
+}
+
+// StopCtx signals the scheduler loop to exit, cancels every in-flight
+// executor goroutine (scheduled, recovery, and async EnqueueRun), and
+// waits for them up to ctx.Done(). The caller is expected to pass a
+// bounded context so a stuck agent turn cannot block shutdown forever.
+//
+// Synchronous Run callers (e.g. the cron.run RPC handler) are not
+// tracked here — they own their own request context and are bounded by
+// the caller's lifetime.
+//
+// Idempotent: calling on a stopped service returns immediately.
+func (s *Service) StopCtx(ctx context.Context) {
 	s.mu.Lock()
 	if !s.running {
 		s.mu.Unlock()
@@ -106,16 +129,45 @@ func (s *Service) Stop() {
 		close(s.stopCh)
 	}
 	loopDone := s.loopDone
+	runCancel := s.runCancel
+	s.runCancel = nil
 	s.mu.Unlock()
 
-	// Wait for the loop to exit so a subsequent Start sees a clean slate.
+	// Signal in-flight executors to exit. They observe ctx.Done() on the
+	// service-owned runCtx; goroutines that propagate it (agent turn, HTTP
+	// calls, etc.) get woken up immediately.
+	if runCancel != nil {
+		runCancel()
+	}
+
+	// Wait for the scheduler loop to exit so a subsequent Start sees a
+	// clean slate. The loop's own 5s budget guards against caller-supplied
+	// deadlines that are longer than the loop should ever take.
 	if loopDone != nil {
 		select {
 		case <-loopDone:
+		case <-ctx.Done():
+			s.logger.Warn("cron scheduler loop did not exit before deadline", "error", ctx.Err())
 		case <-time.After(5 * time.Second):
 			s.logger.Warn("cron scheduler loop did not exit within 5s")
 		}
 	}
+
+	// Wait for in-flight executors to finish, bounded by the caller's
+	// deadline. Without this, doShutdown could tear down dependencies
+	// (Telegram plugin, chat handler, etc.) while a cron run is still
+	// using them — see issue #1633.
+	waitDone := make(chan struct{})
+	go func() {
+		s.inFlight.Wait()
+		close(waitDone)
+	}()
+	select {
+	case <-waitDone:
+	case <-ctx.Done():
+		s.logger.Warn("cron in-flight executors did not finish before deadline", "error", ctx.Err())
+	}
+
 	s.logger.Info("cron service stopped")
 }
 
