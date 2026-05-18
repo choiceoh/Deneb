@@ -93,32 +93,54 @@ func (s *Server) wireTelegramChatHandler() {
 		cleanText, keyboard := parseReplyButtons(text)
 		html := telegram.MarkdownToTelegramHTML(cleanText)
 
-		// If a draft streaming message exists, edit it in-place with the final
-		// formatted text instead of deleting and sending a new message. This
-		// prevents the "disappear then reappear" flicker on completion.
+		// Pre-chunk so the draft edit can never fail purely from length. When
+		// the reply fits in a single Telegram message we keep the original
+		// one-edit fast path (no flicker, no extra messages). When it exceeds
+		// 4096 chars the draft edits to chunk[0] and the remainder appends as
+		// new messages — also flicker-free, replacing the old delete-then-
+		// resend path that the user observed as "answer disappeared, different
+		// answer reappeared".
+		var chunks []string
+		if len(html) <= telegram.MaxTextLength {
+			chunks = []string{html}
+		} else {
+			chunks = telegram.ChunkHTML(html, telegram.TextChunkLimit)
+		}
+
+		// Keyboard always rides the final visible message. For single-chunk
+		// replies that's the draft edit; for multi-chunk it's the last append.
+		var editKeyboard, tailKeyboard *telegram.InlineKeyboardMarkup
+		if len(chunks) == 1 {
+			editKeyboard = keyboard
+		} else {
+			tailKeyboard = keyboard
+		}
+
+		// If a draft streaming message exists, edit it in-place with the
+		// first chunk instead of deleting and sending a new message.
 		if delivery.DraftMsgID != "" {
 			draftID := delivery.DraftMsgID
 			delivery.DraftMsgID = "" // consumed
 			editMsgID, parseErr := strconv.ParseInt(draftID, 10, 64)
 			if parseErr == nil {
-				_, editErr := telegram.EditMessageText(ctx, client, chatID, editMsgID, html, "HTML", keyboard)
-				if editErr == nil {
+				_, editErr := telegram.EditMessageText(ctx, client, chatID, editMsgID, chunks[0], "HTML", editKeyboard)
+				if editErr == nil || telegram.IsMessageNotModifiedError(editErr) {
+					// Draft now shows chunks[0]; append the rest (if any).
+					if len(chunks) > 1 {
+						if _, sendErr := telegram.SendHTMLChunks(ctx, client, chatID, chunks[1:], tailKeyboard); sendErr != nil {
+							return sendErr
+						}
+					}
 					recordSent()
 					return nil
 				}
-				// "Message is not modified" means the draft already shows the
-				// correct content — treat as success to avoid the visible
-				// delete-then-resend flicker.
-				if telegram.IsMessageNotModifiedError(editErr) {
-					recordSent()
-					return nil
-				}
-				// Edit failed (e.g. message too long for single edit, or API error).
-				// Delete the draft and fall through to send as new message.
+				// Edit failed for a non-length reason (HTML parse fallback
+				// already attempted inside EditMessageText, transient API
+				// error, etc.). Delete the draft and fall through to the
+				// full SendText path so the user still gets the reply.
 				// Draft ordering is guaranteed because DraftStreamLoop.StopForClear
 				// (called via run_exec.go deferred cleanup) blocks on any in-flight
-				// draft edit before this replyFunc is invoked — so we are never
-				// racing a pending draft edit with the final edit here.
+				// draft edit before this replyFunc is invoked.
 				s.logger.Warn("draft edit failed, falling back to new message",
 					"msgId", draftID, "error", editErr)
 				if delErr := client.DeleteMessage(ctx, chatID, editMsgID); delErr != nil {
