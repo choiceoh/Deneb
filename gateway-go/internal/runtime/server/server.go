@@ -271,11 +271,6 @@ func New(addr string, opts ...Option) (*Server, error) {
 	s.processes = process.NewManager(s.logger)
 	if homeDir, err := os.UserHomeDir(); err == nil {
 		cronEnabled := true
-		if snap, err := config.LoadConfigFromDefaultPath(); err == nil && snap != nil {
-			if snap.Config.Cron != nil && snap.Config.Cron.Enabled != nil && !*snap.Config.Cron.Enabled {
-				cronEnabled = false
-			}
-		}
 		// Seed DefaultTo from the Telegram operator chat ID at construction time so
 		// that jobs without a per-job Delivery.To still resolve to a valid target.
 		// Without this, the cron subagent's message.send tool hits "no active
@@ -284,9 +279,20 @@ func New(addr string, opts ...Option) (*Server, error) {
 		// apology to Telegram — producing the self-contradicting message we saw
 		// in production. SetTelegramPlugin still fills DefaultTo as a late-bind
 		// backup, but only if the plugin is non-nil and config.ChatID != 0.
+		//
+		// Gate the seed on a usable Telegram bot token (raw or secretref) so we
+		// don't synthesize a target for environments where the plugin will not
+		// actually be created — otherwise cron runs without per-job Delivery.To
+		// would resolve a target, skip delivery silently, and be recorded as ok.
+		// Parse directly off snap.Raw to avoid 1Password resolution on the
+		// startup path; the real secret resolve still happens later in
+		// registerEarlyMethods when the plugin is constructed.
 		defaultTo := ""
-		if tgCfg := loadTelegramConfig(nil); tgCfg != nil && tgCfg.ChatID != 0 {
-			defaultTo = fmt.Sprintf("%d", tgCfg.ChatID)
+		if snap, err := config.LoadConfigFromDefaultPath(); err == nil && snap != nil {
+			if snap.Config.Cron != nil && snap.Config.Cron.Enabled != nil && !*snap.Config.Cron.Enabled {
+				cronEnabled = false
+			}
+			defaultTo = extractCronDefaultTo(snap.Raw)
 		}
 		storePath := cron.DefaultCronStorePath(homeDir)
 		s.cronRunLog = cron.NewPersistentRunLog(storePath)
