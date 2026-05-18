@@ -128,7 +128,7 @@ func TestSendHTMLChunks_KeyboardOnLastChunk(t *testing.T) {
 		InlineKeyboard: [][]InlineKeyboardButton{{{Text: "Go", CallbackData: "go"}}},
 	}
 
-	_, err := SendHTMLChunks(context.Background(), c, 123, chunks, kb)
+	_, err := SendHTMLChunks(context.Background(), c, 123, chunks, kb, "HTML")
 	if err != nil {
 		t.Fatalf("SendHTMLChunks returned error: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestSendHTMLChunks_HTMLFallbackPropagates(t *testing.T) {
 	defer srv.Close()
 
 	chunks := []string{"<bad>a</bad>", "b", "c"}
-	_, err := SendHTMLChunks(context.Background(), c, 123, chunks, nil)
+	_, err := SendHTMLChunks(context.Background(), c, 123, chunks, nil, "HTML")
 	if err != nil {
 		t.Fatalf("SendHTMLChunks returned error after fallback: %v", err)
 	}
@@ -189,6 +189,110 @@ func TestSendHTMLChunks_HTMLFallbackPropagates(t *testing.T) {
 	}
 	if plainAttempts.Load() != 3 {
 		t.Errorf("plainAttempts=%d, want 3 (fallback + 2 remaining)", plainAttempts.Load())
+	}
+}
+
+// TestSendHTMLChunks_InitialPlainStaysPlain verifies that passing "" as the
+// initial parse mode skips the HTML attempt entirely — the caller's contract
+// is "this reply already settled on plain text, do not try HTML again". This
+// is what the draft-edit path uses when EditMessageTextResolved fell back to
+// plain, so the tail chunks render in the same mode as the head.
+func TestSendHTMLChunks_InitialPlainStaysPlain(t *testing.T) {
+	var htmlAttempts, plainAttempts atomic.Int32
+
+	c, srv := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		json.NewDecoder(r.Body).Decode(&req)
+		if pm, _ := req["parse_mode"].(string); pm == "HTML" {
+			htmlAttempts.Add(1)
+		} else {
+			plainAttempts.Add(1)
+		}
+		resp := APIResponse{
+			OK:     true,
+			Result: json.RawMessage(`{"message_id":1,"chat":{"id":123,"type":"private"}}`),
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+	defer srv.Close()
+
+	chunks := []string{"a", "b"}
+	_, err := SendHTMLChunks(context.Background(), c, 123, chunks, nil, "")
+	if err != nil {
+		t.Fatalf("SendHTMLChunks returned error: %v", err)
+	}
+	if htmlAttempts.Load() != 0 {
+		t.Errorf("htmlAttempts=%d, want 0 (caller asked for plain)", htmlAttempts.Load())
+	}
+	if plainAttempts.Load() != 2 {
+		t.Errorf("plainAttempts=%d, want 2", plainAttempts.Load())
+	}
+}
+
+// TestEditMessageTextResolved_ReportsFallback verifies that when the server
+// rejects the HTML attempt with a parse error and the helper retries as
+// plain, the returned parseMode reflects the actual mode used. This is the
+// signal the finalization path needs to keep tail chunks in the same mode.
+func TestEditMessageTextResolved_ReportsFallback(t *testing.T) {
+	var attempts atomic.Int32
+
+	c, srv := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		n := attempts.Add(1)
+		var req map[string]any
+		json.NewDecoder(r.Body).Decode(&req)
+		if n == 1 {
+			// First attempt is HTML — reject as parse error.
+			resp := APIResponse{
+				OK:          false,
+				ErrorCode:   400,
+				Description: "Bad Request: can't parse entities",
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		// Retry must be plain.
+		if pm, ok := req["parse_mode"]; ok && pm != "" {
+			t.Errorf("retry should drop parse_mode, got %v", pm)
+		}
+		resp := APIResponse{
+			OK:     true,
+			Result: json.RawMessage(`{"message_id":42,"chat":{"id":123,"type":"private"}}`),
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+	defer srv.Close()
+
+	_, finalMode, err := EditMessageTextResolved(context.Background(), c, 123, 7, "<bad>", "HTML", nil)
+	if err != nil {
+		t.Fatalf("EditMessageTextResolved error: %v", err)
+	}
+	if finalMode != "" {
+		t.Errorf("finalMode=%q, want \"\" (fell back to plain)", finalMode)
+	}
+	if attempts.Load() != 2 {
+		t.Errorf("attempts=%d, want 2 (HTML + plain retry)", attempts.Load())
+	}
+}
+
+// TestEditMessageTextResolved_ReportsHTMLOnSuccess verifies that when the
+// HTML attempt succeeds on the first try, the returned mode stays "HTML".
+func TestEditMessageTextResolved_ReportsHTMLOnSuccess(t *testing.T) {
+	c, srv := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		resp := APIResponse{
+			OK:     true,
+			Result: json.RawMessage(`{"message_id":42,"chat":{"id":123,"type":"private"}}`),
+		}
+		json.NewEncoder(w).Encode(resp)
+	})
+	defer srv.Close()
+
+	_, finalMode, err := EditMessageTextResolved(context.Background(), c, 123, 7, "<b>ok</b>", "HTML", nil)
+	if err != nil {
+		t.Fatalf("EditMessageTextResolved error: %v", err)
+	}
+	if finalMode != "HTML" {
+		t.Errorf("finalMode=%q, want \"HTML\"", finalMode)
 	}
 }
 

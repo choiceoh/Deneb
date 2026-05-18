@@ -199,22 +199,32 @@ func SendText(ctx context.Context, c *Client, chatID int64, text string, opts Se
 	return results, nil
 }
 
-// SendHTMLChunks sends a pre-chunked HTML reply as one sendMessage per chunk.
+// SendHTMLChunks sends a pre-chunked reply as one sendMessage per chunk.
 // Unlike SendText, the chunks are taken as-is — no further splitting — so the
 // caller controls boundary placement (e.g. when continuing after a draft edit
 // that already consumed the first chunk).
 //
+// initialParseMode controls the parse mode for the first chunk: pass "HTML"
+// for HTML rendering with plain-text fallback on parse error, or "" to send
+// plain text from the start (useful when a prior related send already fell
+// back to plain so the whole reply stays in one mode). On HTML parse error
+// the chunk retries as plain and all subsequent chunks also drop parse_mode,
+// matching SendText behavior.
+//
 // The keyboard, when non-nil, attaches only to the final chunk so buttons
-// appear at the end of the reply. On HTML parse error the chunk and all
-// subsequent chunks fall back to plain text, matching SendText behavior.
-// Redaction is applied per chunk (idempotent).
-func SendHTMLChunks(ctx context.Context, c *Client, chatID int64, chunks []string, keyboard *InlineKeyboardMarkup) ([]SendResult, error) {
+// appear at the end of the reply. link_preview_options is always disabled
+// to match SendText/EditMessageText behavior for streamed/chunked replies.
+//
+// Redaction is applied per chunk; callers that own the full pre-chunk text
+// should also redact it before splitting so secrets cannot straddle a chunk
+// boundary and escape the per-chunk pass.
+func SendHTMLChunks(ctx context.Context, c *Client, chatID int64, chunks []string, keyboard *InlineKeyboardMarkup, initialParseMode string) ([]SendResult, error) {
 	if len(chunks) == 0 {
 		return nil, nil
 	}
 	keyboard = redactKeyboard(keyboard)
 
-	parseMode := "HTML"
+	parseMode := initialParseMode
 	var (
 		results      []SendResult
 		failedChunks []int
@@ -229,6 +239,7 @@ func SendHTMLChunks(ctx context.Context, c *Client, chatID int64, chunks []strin
 		if parseMode != "" {
 			params["parse_mode"] = parseMode
 		}
+		params["link_preview_options"] = LinkPreviewOptions{IsDisabled: true}
 		if i == len(chunks)-1 && keyboard != nil {
 			params["reply_markup"] = keyboard
 		}
@@ -409,6 +420,17 @@ func UploadPhoto(ctx context.Context, c *Client, chatID int64, fileName string, 
 // Secret redaction is applied to both the text body and any button labels
 // before the edit is sent. The caller's inputs are not mutated.
 func EditMessageText(ctx context.Context, c *Client, chatID, messageID int64, text, parseMode string, keyboard *InlineKeyboardMarkup) (*SendResult, error) {
+	sr, _, err := EditMessageTextResolved(ctx, c, chatID, messageID, text, parseMode, keyboard)
+	return sr, err
+}
+
+// EditMessageTextResolved is EditMessageText that also reports the parse mode
+// the message was finally sent with. When parseMode is "HTML" and the server
+// rejects the HTML, this returns "" along with a successful result so callers
+// continuing the same reply with follow-up sendMessage calls can stay in the
+// same mode (avoiding the case where the edited message is plain but tail
+// chunks are still rendered as HTML).
+func EditMessageTextResolved(ctx context.Context, c *Client, chatID, messageID int64, text, parseMode string, keyboard *InlineKeyboardMarkup) (*SendResult, string, error) {
 	// Egress redaction — see redactOutbound comment in SendText.
 	text = redactOutbound(text)
 	keyboard = redactKeyboard(keyboard)
@@ -426,18 +448,20 @@ func EditMessageText(ctx context.Context, c *Client, chatID, messageID int64, te
 	}
 	params["link_preview_options"] = LinkPreviewOptions{IsDisabled: true}
 
+	finalMode := parseMode
 	result, err := c.Call(ctx, "editMessageText", params)
 	if err != nil {
-		// If HTML parse fails, retry as plain text.
 		if parseMode == "HTML" && isHTMLParseError(err) {
 			delete(params, "parse_mode")
+			finalMode = ""
 			result, err = c.Call(ctx, "editMessageText", params)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("editMessageText: %w", err)
+			return nil, parseMode, fmt.Errorf("editMessageText: %w", err)
 		}
 	}
-	return parseSendResult(result)
+	sr, parseErr := parseSendResult(result)
+	return sr, finalMode, parseErr
 }
 
 // AnswerCallbackQuery acknowledges a callback query. The optional text is
