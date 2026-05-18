@@ -16,7 +16,7 @@ func TestToolMessageSendRequiresConnectedChannel(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when reply function is unavailable")
 	}
-	if !strings.Contains(err.Error(), "channel not connected") {
+	if !strings.Contains(err.Error(), "in-loop send is not wired") {
 		t.Fatalf("got %q, want channel-not-connected error", err)
 	}
 }
@@ -32,7 +32,7 @@ func TestToolMessageSendRequiresDeliveryTarget(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when delivery target is missing")
 	}
-	if !strings.Contains(err.Error(), "no active delivery target") {
+	if !strings.Contains(err.Error(), "in-loop send has no delivery target") {
 		t.Fatalf("got %q, want missing-target error", err)
 	}
 }

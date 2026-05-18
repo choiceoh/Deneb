@@ -221,6 +221,27 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 	if deps.callbacks.replyFunc != nil {
 		ctx = WithReplyFunc(ctx, deps.callbacks.replyFunc)
+	} else if deps.logger != nil {
+		// Diagnostic for the self-contradicting "텔레그램이 끊겼어요" cron
+		// incident class: when this branch fires, the in-loop message tool
+		// will trip its replyFn-nil guard and (without the new wording in
+		// tools/message.go) the LLM has historically translated that into a
+		// user-facing "channel down" report that itself gets delivered via
+		// the cron proactive-relay path. Capture the sessionKey/delivery so
+		// the next occurrence is debuggable from logs alone — wiring-order
+		// audits of New() / registerLateMethods() did not reproduce it
+		// statically, so we need runtime evidence to localise the regression.
+		var deliveryChannel, deliveryTo string
+		if params.Delivery != nil {
+			deliveryChannel = params.Delivery.Channel
+			deliveryTo = params.Delivery.To
+		}
+		deps.logger.Warn("run started without ReplyFunc in callbacks; in-loop message tool will fail with replyFn=nil",
+			"sessionKey", params.SessionKey,
+			"runID", params.ClientRunID,
+			"deliveryChannel", deliveryChannel,
+			"deliveryTo", deliveryTo,
+			"hasDelivery", params.Delivery != nil)
 	}
 	if deps.callbacks.mediaSendFn != nil {
 		ctx = WithMediaSendFunc(ctx, deps.callbacks.mediaSendFn)
