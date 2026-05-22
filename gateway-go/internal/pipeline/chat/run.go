@@ -82,7 +82,7 @@ type RunParams struct {
 
 // Agent run defaults.
 const (
-	defaultMaxTokens    = 8192
+	defaultMaxTokens    = 32768
 	defaultMaxTurns     = 25
 	defaultAgentTimeout = 60 * time.Minute
 )
