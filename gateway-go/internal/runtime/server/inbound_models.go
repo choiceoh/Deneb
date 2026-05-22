@@ -112,30 +112,42 @@ func providerDisplayName(name string) string {
 	return name
 }
 
-// builtinSubscriptionProviders lists the coding-subscription providers that
-// work without a deneb.json models.providers entry — base URL and
-// credentials resolve from built-in defaults — so they are always offered
-// in the /models keyboard.
-func builtinSubscriptionProviders() []providerSpec {
+// builtinProviders lists the well-known providers Deneb ships with. They are
+// always offered in /models — base URL and credentials resolve from built-in
+// defaults — so the keyboard never goes empty (or silently drops a provider)
+// when deneb.json omits a models.providers entry. Cloud providers carry a
+// small curated model set; local providers (vllm, localai) leave models empty
+// and rely on /models discovery. An operator's explicit deneb.json entry
+// always overrides the matching built-in.
+func builtinProviders() []providerSpec {
 	return []providerSpec{
+		{name: "zai", models: []string{"glm-5-turbo", "glm-5.1"}},
+		{name: "openrouter", models: []string{
+			"anthropic/claude-opus-4.7",
+			"anthropic/claude-sonnet-4.6",
+			"google/gemini-3.1-pro",
+		}},
+		{name: "vllm"},    // local — models resolved via /models discovery
+		{name: "localai"}, // local — models resolved via /models discovery
 		{name: "kimi", models: []string{"kimi-for-coding"}},
 		{name: "mimo-plan", models: []string{"mimo-v2.5-pro"}},
 	}
 }
 
-// appendBuiltinSubscriptionProviders adds the built-in coding-subscription
-// providers, skipping any the operator already declared in deneb.json so
-// their explicit config wins.
-func appendBuiltinSubscriptionProviders(configured []providerSpec) []providerSpec {
+// appendBuiltinProviders adds the built-in providers the operator has not
+// already declared in deneb.json (explicit config wins), then sorts the
+// merged list by name so the keyboard layout stays stable.
+func appendBuiltinProviders(configured []providerSpec) []providerSpec {
 	have := make(map[string]struct{}, len(configured))
 	for _, pv := range configured {
 		have[pv.name] = struct{}{}
 	}
-	for _, b := range builtinSubscriptionProviders() {
+	for _, b := range builtinProviders() {
 		if _, ok := have[b.name]; !ok {
 			configured = append(configured, b)
 		}
 	}
+	sort.Slice(configured, func(i, j int) bool { return configured[i].name < configured[j].name })
 	return configured
 }
 
@@ -382,7 +394,7 @@ func (p *InboundProcessor) discoverLocalModels(providers []providerSpec) map[str
 // quickChangeModels returns the ordered sections for the /models keyboard.
 func (p *InboundProcessor) quickChangeModels() []modelSection {
 	roles := registryRoleEntries(p.server.modelRegistry)
-	providers := appendBuiltinSubscriptionProviders(loadConfiguredProviders())
+	providers := appendBuiltinProviders(loadConfiguredProviders())
 	discovered := p.discoverLocalModels(providers)
 	for i := range providers {
 		providers[i].models = mergeModels(providers[i].models, discovered[providers[i].name])
