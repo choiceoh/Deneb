@@ -71,6 +71,12 @@ type ProviderConfig struct {
 	APIKeyRef string `json:"apiKeyRef,omitempty"` // e.g. op://Vault/Item/field
 	BaseURL   string `json:"baseUrl"`
 	API       string `json:"api"` // "openai" (default)
+
+	// Headers are extra HTTP headers sent on every request to this
+	// provider. Use this to set a custom User-Agent or other headers an
+	// endpoint requires (some coding-subscription endpoints key access
+	// off the client identifier). Values override the client defaults.
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 // DeliveryContext carries channel routing information for a chat message.

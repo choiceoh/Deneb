@@ -94,6 +94,7 @@ func (c *Client) streamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 	httpReq.Header.Set("Accept", "text/event-stream")
 	setOpenAIBearerAuth(httpReq, c.apiKey)
 	setBetaHeaders(httpReq, &req)
+	c.applyHeaders(httpReq)
 
 	respBody, err := c.DoStream(ctx, httpReq)
 	if err != nil {
@@ -729,6 +730,7 @@ func (c *Client) completeOpenAI(ctx context.Context, req ChatRequest) (string, e
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	setOpenAIBearerAuth(httpReq, c.apiKey)
+	c.applyHeaders(httpReq)
 
 	respBody, err := c.DoStream(ctx, httpReq)
 	if err != nil {

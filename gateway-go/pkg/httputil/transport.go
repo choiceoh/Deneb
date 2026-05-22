@@ -27,6 +27,17 @@ var version string
 // Call once from main/bootstrap before any HTTP requests.
 func SetVersion(v string) { version = v }
 
+// UserAgent returns the gateway's default User-Agent — "Deneb-Gateway",
+// or "Deneb-Gateway/<version>" once SetVersion has run. Modules that keep
+// their own transport (e.g. the LLM client) use this for a consistent
+// honest client identifier across all outbound requests.
+func UserAgent() string {
+	if version != "" {
+		return defaultUserAgent + "/" + version
+	}
+	return defaultUserAgent
+}
+
 // sharedTransport is a connection-pooled HTTP transport shared across all
 // standard (non-SSRF, non-Telegram) HTTP clients in the gateway.
 var sharedTransport = &http.Transport{
@@ -52,11 +63,7 @@ type uaTransport struct {
 
 func (t *uaTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.Header.Get("User-Agent") == "" {
-		ua := defaultUserAgent
-		if version != "" {
-			ua += "/" + version
-		}
-		req.Header.Set("User-Agent", ua)
+		req.Header.Set("User-Agent", UserAgent())
 	}
 	return t.base.RoundTrip(req)
 }

@@ -51,6 +51,9 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 				if mode := apiModeFor(providerID, cfg.API); mode != "" {
 					opts = append(opts, llm.WithAPIMode(mode))
 				}
+				if len(cfg.Headers) > 0 {
+					opts = append(opts, llm.WithHeaders(cfg.Headers))
+				}
 				client := llm.NewClient(baseURL, apiKey, opts...)
 				logger.Info("using provider from config",
 					"provider", providerID, "apiMode", apiModeFor(providerID, cfg.API))

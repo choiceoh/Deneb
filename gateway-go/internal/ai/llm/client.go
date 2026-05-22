@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 // sharedTransport is a connection-pooled HTTP transport shared across all
@@ -47,6 +48,10 @@ type Client struct {
 	apiKey     string
 	logger     *slog.Logger
 	apiMode    string // "openai" (default) or "anthropic"
+
+	// extraHeaders are applied to every outgoing request (from a provider
+	// config). Used for endpoint-required headers like a custom User-Agent.
+	extraHeaders map[string]string
 
 	// Retry configuration.
 	maxRetries int
@@ -102,6 +107,33 @@ func WithAPIMode(mode string) ClientOption {
 		default:
 			cl.apiMode = APIModeOpenAI
 		}
+	}
+}
+
+// WithHeaders sets extra HTTP headers applied to every request this
+// client makes. Provider configs use this for endpoint-required headers
+// (e.g. a custom User-Agent). Values overwrite client defaults, so a
+// header here can replace the default User-Agent. The map is copied.
+func WithHeaders(h map[string]string) ClientOption {
+	return func(cl *Client) {
+		if len(h) == 0 {
+			return
+		}
+		cl.extraHeaders = make(map[string]string, len(h))
+		for k, v := range h {
+			cl.extraHeaders[k] = v
+		}
+	}
+}
+
+// applyHeaders sets the honest default User-Agent and any client-configured
+// extra headers on req. Extra headers are applied last so a provider config
+// can override any default, including the User-Agent — required by some
+// coding-subscription endpoints that gate access on the client identifier.
+func (c *Client) applyHeaders(req *http.Request) {
+	req.Header.Set("User-Agent", httputil.UserAgent())
+	for k, v := range c.extraHeaders {
+		req.Header.Set(k, v)
 	}
 }
 

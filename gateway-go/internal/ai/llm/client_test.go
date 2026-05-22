@@ -10,7 +10,55 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
+
+// TestClientAppliesUserAgent verifies that LLM requests carry the honest
+// gateway User-Agent by default, and that a provider config can override
+// it (and add extra headers) for endpoints that gate on the client
+// identifier.
+func TestClientAppliesUserAgent(t *testing.T) {
+	var gotUA, gotXApp string
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		gotXApp = r.Header.Get("X-App")
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"))
+	}
+	drain := func(c *Client) {
+		events, err := c.StreamChat(context.Background(), ChatRequest{
+			Model:     "m",
+			MaxTokens: 16,
+			Messages:  []Message{NewTextMessage("user", "hi")},
+		})
+		if err != nil {
+			t.Fatalf("StreamChat: %v", err)
+		}
+		for range events { //nolint:revive // drain the channel
+		}
+	}
+
+	// Default: honest gateway User-Agent, no extra headers.
+	c1, _ := newTestClient(t, handler, WithAPIMode(APIModeAnthropic))
+	drain(c1)
+	if gotUA != httputil.UserAgent() {
+		t.Errorf("default User-Agent = %q, want %q", gotUA, httputil.UserAgent())
+	}
+	if gotXApp != "" {
+		t.Errorf("unexpected X-App header %q", gotXApp)
+	}
+
+	// A provider config can override the User-Agent and add headers.
+	c2, _ := newTestClient(t, handler, WithAPIMode(APIModeAnthropic),
+		WithHeaders(map[string]string{"User-Agent": "claude-cli/1.0", "X-App": "cli"}))
+	drain(c2)
+	if gotUA != "claude-cli/1.0" {
+		t.Errorf("overridden User-Agent = %q, want claude-cli/1.0", gotUA)
+	}
+	if gotXApp != "cli" {
+		t.Errorf("X-App = %q, want cli", gotXApp)
+	}
+}
 
 // newTestClient creates an httptest server and LLM client for testing.
 func newTestClient(t *testing.T, handler http.HandlerFunc, opts ...ClientOption) (*Client, *httptest.Server) {

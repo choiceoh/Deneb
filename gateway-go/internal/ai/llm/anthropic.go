@@ -35,6 +35,7 @@ func (c *Client) streamChatAnthropic(ctx context.Context, req ChatRequest) (<-ch
 	httpReq.Header.Set("anthropic-version", anthropicAPIVersion)
 	setAnthropicAuth(httpReq, c.apiKey)
 	setBetaHeaders(httpReq, &req)
+	c.applyHeaders(httpReq)
 
 	respBody, err := c.DoStream(ctx, httpReq)
 	if err != nil {
