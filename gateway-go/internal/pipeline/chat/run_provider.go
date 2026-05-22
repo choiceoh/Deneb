@@ -137,6 +137,14 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 				}
 			}
 		}
+
+		// No role matches — build a client for the known provider on
+		// demand. Covers /model switches (e.g. the quick-change keyboard)
+		// to a built-in provider outside the three configured roles.
+		if client := deps.registry.ClientForProvider(providerID); client != nil {
+			logger.Info("using built-in provider", "provider", providerID)
+			return client
+		}
 	}
 
 	// 4. Fall back to pre-configured client.

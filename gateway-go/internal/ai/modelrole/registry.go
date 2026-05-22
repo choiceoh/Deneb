@@ -209,24 +209,64 @@ func (r *Registry) Client(role Role) *llm.Client {
 	}
 
 	entry.once.Do(func() {
-		opts := []llm.ClientOption{llm.WithLogger(r.logger)}
-		if cfg.APIMode != "" {
-			opts = append(opts, llm.WithAPIMode(cfg.APIMode))
-		}
-		if h := DefaultHeaders(cfg.ProviderID); len(h) > 0 {
-			opts = append(opts, llm.WithHeaders(h))
-		}
-		if scheme := ResolveAuthScheme(cfg.ProviderID); scheme != "" {
-			opts = append(opts, llm.WithAuthScheme(scheme))
-		}
-		// Kimi Code authenticates with the official Kimi CLI's OAuth token
-		// cache; read it per request so a re-login is picked up live.
-		if cfg.ProviderID == "kimi" {
-			opts = append(opts, llm.WithAPIKeyFunc(kimiToken))
-		}
-		entry.client = llm.NewClient(cfg.BaseURL, cfg.APIKey, opts...)
+		entry.client = buildClient(r.logger, cfg)
 	})
 	return entry.client
+}
+
+// buildClient assembles an LLM client from a resolved ModelConfig,
+// applying provider-specific headers, auth scheme, and (for Kimi Code)
+// the per-request token callback. Shared by role clients and on-demand
+// provider clients so both stay consistent.
+func buildClient(logger *slog.Logger, cfg ModelConfig) *llm.Client {
+	opts := []llm.ClientOption{llm.WithLogger(logger)}
+	if cfg.APIMode != "" {
+		opts = append(opts, llm.WithAPIMode(cfg.APIMode))
+	}
+	if h := DefaultHeaders(cfg.ProviderID); len(h) > 0 {
+		opts = append(opts, llm.WithHeaders(h))
+	}
+	if scheme := ResolveAuthScheme(cfg.ProviderID); scheme != "" {
+		opts = append(opts, llm.WithAuthScheme(scheme))
+	}
+	// Kimi Code authenticates with the official Kimi CLI's OAuth token
+	// cache; read it per request so a re-login is picked up live.
+	if cfg.ProviderID == "kimi" {
+		opts = append(opts, llm.WithAPIKeyFunc(kimiToken))
+	}
+	return llm.NewClient(cfg.BaseURL, cfg.APIKey, opts...)
+}
+
+// isBuiltinProvider reports whether providerID is one resolveBaseURL maps
+// to a dedicated endpoint (as opposed to the zai fallback for unknown IDs).
+func isBuiltinProvider(providerID string) bool {
+	switch providerID {
+	case "zai", "localai", "vllm", "openrouter", "mimo", "mimo-plan", "kimi":
+		return true
+	default:
+		return false
+	}
+}
+
+// ClientForProvider builds an LLM client for a known built-in provider,
+// resolving its base URL, credential, API mode, auth scheme, and headers
+// exactly as the role clients are built. Returns nil for an unknown
+// provider.
+//
+// This satisfies /model switches to a provider that is not one of the
+// three configured roles and has no deneb.json provider entry — e.g.
+// switching to kimi from the quick-change keyboard when the startup main
+// model is zai.
+func (r *Registry) ClientForProvider(providerID string) *llm.Client {
+	if !isBuiltinProvider(providerID) {
+		return nil
+	}
+	return buildClient(r.logger, ModelConfig{
+		ProviderID: providerID,
+		BaseURL:    resolveBaseURL(providerID),
+		APIKey:     resolveAPIKey(providerID),
+		APIMode:    resolveAPIMode(providerID),
+	})
 }
 
 // ResolveModel resolves a model string that may be a role name ("main", "lightweight",
