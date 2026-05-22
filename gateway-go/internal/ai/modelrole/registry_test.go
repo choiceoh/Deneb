@@ -192,6 +192,29 @@ func TestKimiProviderResolution(t *testing.T) {
 	}
 }
 
+func TestDefaultHeaders(t *testing.T) {
+	// Coding-subscription providers get a coding-agent User-Agent.
+	for _, providerID := range []string{"kimi", "mimo-plan"} {
+		h := DefaultHeaders(providerID)
+		if h["User-Agent"] != codingAgentUserAgent {
+			t.Errorf("DefaultHeaders(%q)[User-Agent] = %q, want %q",
+				providerID, h["User-Agent"], codingAgentUserAgent)
+		}
+	}
+	// Non-subscription providers (incl. the MiMo global API) get nothing.
+	for _, providerID := range []string{"mimo", "zai", "vllm", "openrouter"} {
+		if h := DefaultHeaders(providerID); h != nil {
+			t.Errorf("DefaultHeaders(%q) = %v, want nil", providerID, h)
+		}
+	}
+	// The returned map is a fresh copy — mutating it must not affect the
+	// next call.
+	DefaultHeaders("kimi")["User-Agent"] = "tampered"
+	if got := DefaultHeaders("kimi")["User-Agent"]; got != codingAgentUserAgent {
+		t.Errorf("DefaultHeaders not isolated: got %q after mutation", got)
+	}
+}
+
 func TestLogModelAlias(t *testing.T) {
 	tests := []struct {
 		name string

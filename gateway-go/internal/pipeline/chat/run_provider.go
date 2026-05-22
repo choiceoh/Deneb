@@ -51,8 +51,17 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 				if mode := apiModeFor(providerID, cfg.API); mode != "" {
 					opts = append(opts, llm.WithAPIMode(mode))
 				}
-				if len(cfg.Headers) > 0 {
-					opts = append(opts, llm.WithHeaders(cfg.Headers))
+				// Built-in coding-agent headers for subscription providers,
+				// with explicit `headers` from the config taking precedence.
+				headers := modelrole.DefaultHeaders(providerID)
+				for k, v := range cfg.Headers {
+					if headers == nil {
+						headers = make(map[string]string, len(cfg.Headers))
+					}
+					headers[k] = v
+				}
+				if len(headers) > 0 {
+					opts = append(opts, llm.WithHeaders(headers))
 				}
 				client := llm.NewClient(baseURL, apiKey, opts...)
 				logger.Info("using provider from config",
@@ -100,6 +109,9 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 			opts := []llm.ClientOption{llm.WithLogger(logger)}
 			if mode := apiModeFor(target, ""); mode != "" {
 				opts = append(opts, llm.WithAPIMode(mode))
+			}
+			if h := modelrole.DefaultHeaders(target); len(h) > 0 {
+				opts = append(opts, llm.WithHeaders(h))
 			}
 			return llm.NewClient(base, apiKey, opts...)
 		}

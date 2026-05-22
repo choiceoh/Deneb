@@ -80,6 +80,15 @@ const (
 	// endpoint so prompt caching and extended thinking work end-to-end. The
 	// Token Plan model ID is `kimi-for-coding`.
 	DefaultKimiBaseURL = "https://api.moonshot.ai/anthropic"
+
+	// codingAgentUserAgent is the default User-Agent for coding-subscription
+	// providers (Kimi Code, MiMo Token Plan). Their endpoints only serve
+	// recognized coding agents and reject the gateway's own identifier, so
+	// these providers need a coding-agent User-Agent to function at all.
+	// The version segment is matched loosely (by prefix) upstream; if the
+	// expected value ever drifts, override it per provider via `headers` in
+	// deneb.json without a rebuild.
+	codingAgentUserAgent = "claude-code/2.1.142"
 )
 
 // NewRegistry creates a registry with hardcoded defaults.
@@ -200,6 +209,9 @@ func (r *Registry) Client(role Role) *llm.Client {
 		opts := []llm.ClientOption{llm.WithLogger(r.logger)}
 		if cfg.APIMode != "" {
 			opts = append(opts, llm.WithAPIMode(cfg.APIMode))
+		}
+		if h := DefaultHeaders(cfg.ProviderID); len(h) > 0 {
+			opts = append(opts, llm.WithHeaders(h))
 		}
 		entry.client = llm.NewClient(cfg.BaseURL, cfg.APIKey, opts...)
 	})
@@ -351,6 +363,22 @@ func resolveAPIKey(providerID string) string {
 		return os.Getenv("KIMI_API_KEY")
 	default:
 		return ""
+	}
+}
+
+// DefaultHeaders returns built-in HTTP headers for a provider. The
+// coding-subscription providers (Kimi Code, MiMo Token Plan) gate access
+// on the client identifier, so they get a coding-agent User-Agent — they
+// would otherwise be rejected outright. A `headers` entry in deneb.json
+// overrides these per provider. Returns nil for providers with no
+// built-in headers. Each call returns a fresh map, safe for the caller
+// to mutate (e.g. to merge config overrides).
+func DefaultHeaders(providerID string) map[string]string {
+	switch providerID {
+	case "kimi", "mimo-plan":
+		return map[string]string{"User-Agent": codingAgentUserAgent}
+	default:
+		return nil
 	}
 }
 
