@@ -1,6 +1,10 @@
 package chat
 
 import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -67,6 +71,79 @@ func TestTruncateUpdateOutput(t *testing.T) {
 	}
 	if !strings.Contains(got, "생략") {
 		t.Error("truncateUpdateOutput should mark that the head was dropped")
+	}
+}
+
+func TestUpdatePrechecks(t *testing.T) {
+	root := t.TempDir()
+	ctx := context.Background()
+
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Dir = root
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	git("init")
+	git("config", "user.email", "test@example.com")
+	git("config", "user.name", "Test")
+	git("checkout", "-b", "feature")
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("hi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", "a.txt")
+	git("commit", "-m", "initial")
+
+	// On a non-main branch → hard block.
+	if block, _ := updatePrechecks(ctx, root); block != updateBlockHard {
+		t.Errorf("feature branch: block = %d, want updateBlockHard (%d)", block, updateBlockHard)
+	}
+
+	// On main with a clean worktree → proceed.
+	git("branch", "-m", "main")
+	if block, info := updatePrechecks(ctx, root); block != updateBlockNone {
+		t.Errorf("clean main: block = %d info = %q, want updateBlockNone (%d)", block, info, updateBlockNone)
+	}
+
+	// On main with an uncommitted change → dirty hand-off, status carried.
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	block, info := updatePrechecks(ctx, root)
+	if block != updateBlockDirty {
+		t.Fatalf("dirty main: block = %d, want updateBlockDirty (%d)", block, updateBlockDirty)
+	}
+	if !strings.Contains(info, "a.txt") {
+		t.Errorf("dirty main: info = %q, want it to name the changed file", info)
+	}
+}
+
+func TestParsePRNumber(t *testing.T) {
+	tests := []struct {
+		subject string
+		want    string
+	}{
+		{"feat(telegram): add /update slash command for in-app updates (#1643)", "1643"},
+		{"feat(provider): add Xiaomi MiMo Token Plan and Kimi Code providers (#1638)", "1638"},
+		{"feat(telegram): add /update (slash) command (#1644)", "1644"},
+		{"chore(main): release 4.22.3 (#42)", "42"},
+		{"fix: a plain commit with no PR ref", ""},
+		{"refactor: trailing parens (not a pr)", ""},
+		{"feat: weird empty ref (#)", ""},
+		{"feat: missing close paren (#1643", ""},
+		{"feat: non-numeric ref (#abc)", ""},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.subject, func(t *testing.T) {
+			if got := parsePRNumber(tt.subject); got != tt.want {
+				t.Errorf("parsePRNumber(%q) = %q, want %q", tt.subject, got, tt.want)
+			}
+		})
 	}
 }
 
