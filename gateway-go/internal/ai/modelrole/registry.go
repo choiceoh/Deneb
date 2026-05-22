@@ -63,6 +63,13 @@ const (
 
 	DefaultZaiBaseURL = "https://api.z.ai/api/anthropic"
 	DefaultZaiModel   = "glm-5-turbo"
+
+	// Xiaomi MiMo Token Plan — Anthropic-compatible endpoint. MiMo exposes
+	// both an OpenAI-compatible (/v1) and an Anthropic Messages (/anthropic)
+	// API; the gateway speaks Anthropic so prompt caching and extended
+	// thinking work end-to-end. Region-specific Token Plan endpoints
+	// (token-plan-ams / -cn / -sgp) can be set via `baseUrl` in deneb.json.
+	DefaultMimoBaseURL = "https://api.xiaomimimo.com/anthropic"
 )
 
 // NewRegistry creates a registry with hardcoded defaults.
@@ -284,6 +291,8 @@ func resolveBaseURL(providerID string) string {
 		return DefaultVllmBaseURL
 	case "openrouter":
 		return "https://openrouter.ai/api/v1"
+	case "mimo", "mimo-plan":
+		return DefaultMimoBaseURL
 	default:
 		return DefaultZaiBaseURL // assume zai for unknown
 	}
@@ -322,17 +331,20 @@ func resolveAPIKey(providerID string) string {
 		return os.Getenv("ZAI_API_KEY")
 	case "openrouter":
 		return os.Getenv("OPENROUTER_API_KEY")
+	case "mimo", "mimo-plan":
+		return os.Getenv("XIAOMI_MIMO_API_KEY")
 	default:
 		return ""
 	}
 }
 
 // resolveAPIMode returns the LLM client API mode for built-in providers.
-// Z.ai's default endpoint is the Anthropic Messages API; other built-in
-// providers (vllm, localai) speak OpenAI-compatible /chat/completions.
+// Z.ai and Xiaomi MiMo default to the Anthropic Messages API; other
+// built-in providers (vllm, localai) speak OpenAI-compatible
+// /chat/completions.
 func resolveAPIMode(providerID string) string {
 	switch providerID {
-	case "zai", "zai-subagent":
+	case "zai", "zai-subagent", "mimo", "mimo-plan":
 		return llm.APIModeAnthropic
 	default:
 		return ""

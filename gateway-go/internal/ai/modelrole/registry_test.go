@@ -143,6 +143,28 @@ func TestResolveLocalAIAPIKey(t *testing.T) {
 	}
 }
 
+func TestMimoProviderResolution(t *testing.T) {
+	// Both the base provider and the Token Plan variant resolve to the
+	// Anthropic-compatible MiMo endpoint and share one API key env var.
+	for _, providerID := range []string{"mimo", "mimo-plan"} {
+		if got := resolveBaseURL(providerID); got != DefaultMimoBaseURL {
+			t.Errorf("resolveBaseURL(%q) = %q, want %q", providerID, got, DefaultMimoBaseURL)
+		}
+		if got := resolveAPIMode(providerID); got != "anthropic" {
+			t.Errorf("resolveAPIMode(%q) = %q, want %q", providerID, got, "anthropic")
+		}
+
+		t.Setenv("XIAOMI_MIMO_API_KEY", "")
+		if got := resolveAPIKey(providerID); got != "" {
+			t.Errorf("resolveAPIKey(%q) without env = %q, want empty", providerID, got)
+		}
+		t.Setenv("XIAOMI_MIMO_API_KEY", "tp-secret")
+		if got := resolveAPIKey(providerID); got != "tp-secret" {
+			t.Errorf("resolveAPIKey(%q) = %q, want %q", providerID, got, "tp-secret")
+		}
+	}
+}
+
 func TestLogModelAlias(t *testing.T) {
 	tests := []struct {
 		name string
