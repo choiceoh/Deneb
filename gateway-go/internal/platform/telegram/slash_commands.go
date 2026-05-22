@@ -23,61 +23,20 @@ type BotCommand struct {
 	Description string `json:"description"`
 }
 
-// VibeCoderCommands returns the slash commands available for the vibe coder workflow.
-// Only 4 commands exist — developer-focused commands (file, grep, run, etc.) were
-// intentionally removed because the user is a vibe coder who does not read code.
+// VibeCoderCommands returns the slash commands registered in Telegram's command
+// menu (the "/" autocomplete list). Every entry here is backed by a live handler —
+// definition-only commands (e.g. /commit, /push, /chart) are intentionally excluded
+// so the menu never advertises a command that does nothing.
 func VibeCoderCommands() []SlashCommand {
 	return []SlashCommand{
-		{
-			Command:     "dashboard",
-			Description: "프로젝트 상태 대시보드",
-			Aliases:     []string{"d", "status", "ws"},
-		},
-		{
-			Command:     "commit",
-			Description: "변경사항 커밋",
-			Aliases:     nil,
-		},
-		{
-			Command:     "push",
-			Description: "원격 저장소에 푸시",
-			Aliases:     nil,
-		},
-		{
-			Command:     "chart",
-			Description: "실험 차트 보기",
-			Aliases:     nil,
-		},
-		{
-			Command:     "models",
-			Description: "모델 퀵체인지",
-			Aliases:     nil,
-		},
-		{
-			Command:     "morning",
-			Description: "모닝레터",
-			Aliases:     nil,
-		},
-		{
-			Command:     "btw",
-			Description: "옆질문 (메인 대화 영향 X)",
-			Aliases:     nil,
-		},
-		{
-			Command:     "update",
-			Description: "Deneb 업데이트 (최신 코드 받고 재시작)",
-			Aliases:     nil,
-		},
-		{
-			Command:     "restart",
-			Description: "게이트웨이 재시작",
-			Aliases:     nil,
-		},
-		{
-			Command:     "help",
-			Description: "도움말",
-			Aliases:     nil,
-		},
+		{Command: "btw", Description: "옆질문 — 메인 대화에 영향 없이 즉답"},
+		{Command: "mode", Description: "모드 전환 (일반 ↔ 대화)"},
+		{Command: "model", Description: "모델 설정 또는 조회"},
+		{Command: "models", Description: "모델 퀵체인지"},
+		{Command: "restart", Description: "게이트웨이 재시작"},
+		{Command: "status", Description: "세션 상태 대시보드"},
+		{Command: "steer", Description: "실행 중 에이전트에 조정 메모 전달"},
+		{Command: "update", Description: "Deneb 업데이트 — 최신 코드 받고 재시작"},
 	}
 }
 
