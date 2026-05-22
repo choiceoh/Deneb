@@ -24,6 +24,13 @@ func TestNormalizeProviderID(t *testing.T) {
 		{"Bedrock", "amazon-bedrock"},
 		{"bytedance", "volcengine"},
 		{"doubao", "volcengine"},
+		{"xiaomi", "mimo"},
+		{"xiaomi-mimo", "mimo"},
+		{"Xiaomi-MiMo", "mimo"},
+		{"mimo", "mimo"},
+		{"mimo-token-plan", "mimo-plan"},
+		{"xiaomi-mimo-plan", "mimo-plan"},
+		{"mimo-plan", "mimo-plan"},
 		{"openai", "openai"},
 		{"anthropic", "anthropic"},
 		{"  OpenAI  ", "openai"},
@@ -44,6 +51,9 @@ func TestNormalizeProviderIDForAuth(t *testing.T) {
 	}{
 		{"volcengine-plan", "volcengine"},
 		{"byteplus-plan", "byteplus"},
+		{"mimo-plan", "mimo"},
+		{"mimo-token-plan", "mimo"},
+		{"mimo", "mimo"},
 		{"openai", "openai"},
 		{"bedrock", "amazon-bedrock"},
 	}

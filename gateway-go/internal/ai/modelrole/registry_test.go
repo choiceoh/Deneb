@@ -143,6 +143,93 @@ func TestResolveLocalAIAPIKey(t *testing.T) {
 	}
 }
 
+func TestMimoProviderResolution(t *testing.T) {
+	// The base provider uses the global API; the Token Plan variant uses
+	// the Singapore subscription endpoint. Both speak Anthropic and share
+	// one API key env var.
+	tests := []struct {
+		providerID string
+		baseURL    string
+	}{
+		{"mimo", DefaultMimoBaseURL},
+		{"mimo-plan", DefaultMimoPlanBaseURL},
+	}
+	for _, tt := range tests {
+		if got := resolveBaseURL(tt.providerID); got != tt.baseURL {
+			t.Errorf("resolveBaseURL(%q) = %q, want %q", tt.providerID, got, tt.baseURL)
+		}
+		if got := resolveAPIMode(tt.providerID); got != "anthropic" {
+			t.Errorf("resolveAPIMode(%q) = %q, want %q", tt.providerID, got, "anthropic")
+		}
+
+		t.Setenv("XIAOMI_MIMO_API_KEY", "")
+		if got := resolveAPIKey(tt.providerID); got != "" {
+			t.Errorf("resolveAPIKey(%q) without env = %q, want empty", tt.providerID, got)
+		}
+		t.Setenv("XIAOMI_MIMO_API_KEY", "tp-secret")
+		if got := resolveAPIKey(tt.providerID); got != "tp-secret" {
+			t.Errorf("resolveAPIKey(%q) = %q, want %q", tt.providerID, got, "tp-secret")
+		}
+	}
+}
+
+func TestKimiProviderResolution(t *testing.T) {
+	// Kimi Code resolves to Moonshot's Anthropic-compatible endpoint.
+	if got := resolveBaseURL("kimi"); got != DefaultKimiBaseURL {
+		t.Errorf("resolveBaseURL(kimi) = %q, want %q", got, DefaultKimiBaseURL)
+	}
+	if got := resolveAPIMode("kimi"); got != "anthropic" {
+		t.Errorf("resolveAPIMode(kimi) = %q, want %q", got, "anthropic")
+	}
+
+	t.Setenv("KIMI_API_KEY", "")
+	if got := resolveAPIKey("kimi"); got != "" {
+		t.Errorf("resolveAPIKey(kimi) without env = %q, want empty", got)
+	}
+	t.Setenv("KIMI_API_KEY", "sk-kimi")
+	if got := resolveAPIKey("kimi"); got != "sk-kimi" {
+		t.Errorf("resolveAPIKey(kimi) = %q, want %q", got, "sk-kimi")
+	}
+}
+
+func TestDefaultHeaders(t *testing.T) {
+	// Coding-subscription providers get a coding-agent User-Agent.
+	for _, providerID := range []string{"kimi", "mimo-plan"} {
+		h := DefaultHeaders(providerID)
+		if h["User-Agent"] != codingAgentUserAgent {
+			t.Errorf("DefaultHeaders(%q)[User-Agent] = %q, want %q",
+				providerID, h["User-Agent"], codingAgentUserAgent)
+		}
+	}
+	// Non-subscription providers (incl. the MiMo global API) get nothing.
+	for _, providerID := range []string{"mimo", "zai", "vllm", "openrouter"} {
+		if h := DefaultHeaders(providerID); h != nil {
+			t.Errorf("DefaultHeaders(%q) = %v, want nil", providerID, h)
+		}
+	}
+	// The returned map is a fresh copy — mutating it must not affect the
+	// next call.
+	DefaultHeaders("kimi")["User-Agent"] = "tampered"
+	if got := DefaultHeaders("kimi")["User-Agent"]; got != codingAgentUserAgent {
+		t.Errorf("DefaultHeaders not isolated: got %q after mutation", got)
+	}
+}
+
+func TestResolveAuthScheme(t *testing.T) {
+	// Coding-subscription providers authenticate with Bearer tokens.
+	for _, providerID := range []string{"kimi", "mimo", "mimo-plan"} {
+		if got := ResolveAuthScheme(providerID); got != "bearer" {
+			t.Errorf("ResolveAuthScheme(%q) = %q, want bearer", providerID, got)
+		}
+	}
+	// Other Anthropic-mode providers keep the default x-api-key scheme.
+	for _, providerID := range []string{"zai", "vllm", "openrouter", "localai"} {
+		if got := ResolveAuthScheme(providerID); got != "" {
+			t.Errorf("ResolveAuthScheme(%q) = %q, want empty", providerID, got)
+		}
+	}
+}
+
 func TestLogModelAlias(t *testing.T) {
 	tests := []struct {
 		name string

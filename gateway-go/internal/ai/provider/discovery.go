@@ -23,6 +23,10 @@ func NormalizeProviderID(id string) string {
 		return "amazon-bedrock"
 	case "bytedance", "doubao":
 		return "volcengine"
+	case "xiaomi", "xiaomi-mimo":
+		return "mimo"
+	case "mimo-token-plan", "xiaomi-mimo-plan":
+		return "mimo-plan"
 	}
 	return normalized
 }
@@ -36,6 +40,8 @@ func NormalizeProviderIDForAuth(id string) string {
 		return "volcengine"
 	case "byteplus-plan":
 		return "byteplus"
+	case "mimo-plan":
+		return "mimo"
 	}
 	return normalized
 }

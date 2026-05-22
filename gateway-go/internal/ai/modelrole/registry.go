@@ -63,6 +63,35 @@ const (
 
 	DefaultZaiBaseURL = "https://api.z.ai/api/anthropic"
 	DefaultZaiModel   = "glm-5-turbo"
+
+	// Xiaomi MiMo — Anthropic-compatible endpoints. MiMo exposes both an
+	// OpenAI-compatible (/v1) and an Anthropic Messages (/anthropic) API;
+	// the gateway speaks Anthropic so prompt caching and extended thinking
+	// work end-to-end.
+	//
+	// DefaultMimoBaseURL is the global standard API. DefaultMimoPlanBaseURL
+	// is the Token Plan subscription endpoint, which is region-specific
+	// (token-plan-sgp / -cn / -ams) — Singapore is the default. Operators
+	// in another region override `baseUrl` in deneb.json.
+	DefaultMimoBaseURL     = "https://api.xiaomimimo.com/anthropic"
+	DefaultMimoPlanBaseURL = "https://token-plan-sgp.xiaomimimo.com/anthropic"
+
+	// Kimi Code — Moonshot AI's coding subscription, served from its
+	// dedicated coding endpoint (distinct from the general api.moonshot.ai
+	// API). Anthropic-compatible so prompt caching and extended thinking
+	// work end-to-end. The subscription authenticates with an OAuth token
+	// (the official Kimi CLI caches it after `/login`) sent as a Bearer
+	// credential. Token Plan model ID: `kimi-for-coding`.
+	DefaultKimiBaseURL = "https://api.kimi.com/coding"
+
+	// codingAgentUserAgent is the default User-Agent for coding-subscription
+	// providers (Kimi Code, MiMo Token Plan). Their endpoints only serve
+	// recognized coding agents and reject the gateway's own identifier, so
+	// these providers need a coding-agent User-Agent to function at all.
+	// The version segment is matched loosely (by prefix) upstream; if the
+	// expected value ever drifts, override it per provider via `headers` in
+	// deneb.json without a rebuild.
+	codingAgentUserAgent = "claude-code/2.1.142"
 )
 
 // NewRegistry creates a registry with hardcoded defaults.
@@ -184,6 +213,17 @@ func (r *Registry) Client(role Role) *llm.Client {
 		if cfg.APIMode != "" {
 			opts = append(opts, llm.WithAPIMode(cfg.APIMode))
 		}
+		if h := DefaultHeaders(cfg.ProviderID); len(h) > 0 {
+			opts = append(opts, llm.WithHeaders(h))
+		}
+		if scheme := ResolveAuthScheme(cfg.ProviderID); scheme != "" {
+			opts = append(opts, llm.WithAuthScheme(scheme))
+		}
+		// Kimi Code authenticates with the official Kimi CLI's OAuth token
+		// cache; read it per request so a re-login is picked up live.
+		if cfg.ProviderID == "kimi" {
+			opts = append(opts, llm.WithAPIKeyFunc(kimiToken))
+		}
 		entry.client = llm.NewClient(cfg.BaseURL, cfg.APIKey, opts...)
 	})
 	return entry.client
@@ -284,6 +324,12 @@ func resolveBaseURL(providerID string) string {
 		return DefaultVllmBaseURL
 	case "openrouter":
 		return "https://openrouter.ai/api/v1"
+	case "mimo":
+		return DefaultMimoBaseURL
+	case "mimo-plan":
+		return DefaultMimoPlanBaseURL
+	case "kimi":
+		return DefaultKimiBaseURL
 	default:
 		return DefaultZaiBaseURL // assume zai for unknown
 	}
@@ -322,17 +368,52 @@ func resolveAPIKey(providerID string) string {
 		return os.Getenv("ZAI_API_KEY")
 	case "openrouter":
 		return os.Getenv("OPENROUTER_API_KEY")
+	case "mimo", "mimo-plan":
+		return os.Getenv("XIAOMI_MIMO_API_KEY")
+	case "kimi":
+		return os.Getenv("KIMI_API_KEY")
+	default:
+		return ""
+	}
+}
+
+// DefaultHeaders returns built-in HTTP headers for a provider. The
+// coding-subscription providers (Kimi Code, MiMo Token Plan) gate access
+// on the client identifier, so they get a coding-agent User-Agent — they
+// would otherwise be rejected outright. A `headers` entry in deneb.json
+// overrides these per provider. Returns nil for providers with no
+// built-in headers. Each call returns a fresh map, safe for the caller
+// to mutate (e.g. to merge config overrides).
+func DefaultHeaders(providerID string) map[string]string {
+	switch providerID {
+	case "kimi", "mimo-plan":
+		return map[string]string{"User-Agent": codingAgentUserAgent}
+	default:
+		return nil
+	}
+}
+
+// ResolveAuthScheme returns the credential scheme for a provider's
+// Anthropic Messages requests. The coding-subscription providers (Kimi
+// Code, MiMo, MiMo Token Plan) authenticate with OAuth-style Bearer
+// tokens; other Anthropic-mode providers (Z.ai) use the default
+// x-api-key header. Returns "" to leave the client default.
+func ResolveAuthScheme(providerID string) string {
+	switch providerID {
+	case "kimi", "mimo", "mimo-plan":
+		return llm.AuthSchemeBearer
 	default:
 		return ""
 	}
 }
 
 // resolveAPIMode returns the LLM client API mode for built-in providers.
-// Z.ai's default endpoint is the Anthropic Messages API; other built-in
-// providers (vllm, localai) speak OpenAI-compatible /chat/completions.
+// Z.ai, Xiaomi MiMo, and Kimi Code default to the Anthropic Messages API;
+// other built-in providers (vllm, localai) speak OpenAI-compatible
+// /chat/completions.
 func resolveAPIMode(providerID string) string {
 	switch providerID {
-	case "zai", "zai-subagent":
+	case "zai", "zai-subagent", "mimo", "mimo-plan", "kimi":
 		return llm.APIModeAnthropic
 	default:
 		return ""

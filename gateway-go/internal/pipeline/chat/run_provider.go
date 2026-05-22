@@ -51,6 +51,21 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 				if mode := apiModeFor(providerID, cfg.API); mode != "" {
 					opts = append(opts, llm.WithAPIMode(mode))
 				}
+				if scheme := modelrole.ResolveAuthScheme(providerID); scheme != "" {
+					opts = append(opts, llm.WithAuthScheme(scheme))
+				}
+				// Built-in coding-agent headers for subscription providers,
+				// with explicit `headers` from the config taking precedence.
+				headers := modelrole.DefaultHeaders(providerID)
+				for k, v := range cfg.Headers {
+					if headers == nil {
+						headers = make(map[string]string, len(cfg.Headers))
+					}
+					headers[k] = v
+				}
+				if len(headers) > 0 {
+					opts = append(opts, llm.WithHeaders(headers))
+				}
 				client := llm.NewClient(baseURL, apiKey, opts...)
 				logger.Info("using provider from config",
 					"provider", providerID, "apiMode", apiModeFor(providerID, cfg.API))
@@ -97,6 +112,12 @@ func resolveClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Cl
 			opts := []llm.ClientOption{llm.WithLogger(logger)}
 			if mode := apiModeFor(target, ""); mode != "" {
 				opts = append(opts, llm.WithAPIMode(mode))
+			}
+			if scheme := modelrole.ResolveAuthScheme(target); scheme != "" {
+				opts = append(opts, llm.WithAuthScheme(scheme))
+			}
+			if h := modelrole.DefaultHeaders(target); len(h) > 0 {
+				opts = append(opts, llm.WithHeaders(h))
 			}
 			return llm.NewClient(base, apiKey, opts...)
 		}
@@ -165,6 +186,12 @@ func resolveDefaultBaseURL(providerID string) string {
 		return modelrole.DefaultVllmBaseURL
 	case "openrouter":
 		return "https://openrouter.ai/api/v1"
+	case "mimo":
+		return modelrole.DefaultMimoBaseURL
+	case "mimo-plan":
+		return modelrole.DefaultMimoPlanBaseURL
+	case "kimi":
+		return modelrole.DefaultKimiBaseURL
 	default:
 		return ""
 	}
@@ -172,9 +199,10 @@ func resolveDefaultBaseURL(providerID string) string {
 
 // apiModeFor returns the LLM client API mode for a provider. Explicit
 // configValue (the `api` field on the provider config) wins; otherwise
-// providers known to default to Anthropic-compatible endpoints (z.ai)
-// are routed through the Anthropic Messages client. Unknown values fall
-// back to OpenAI-compatible (empty string lets the caller skip the option).
+// providers known to default to Anthropic-compatible endpoints (z.ai,
+// Xiaomi MiMo, Kimi Code) are routed through the Anthropic Messages
+// client. Unknown values fall back to OpenAI-compatible (empty string
+// lets the caller skip the option).
 func apiModeFor(providerID, configValue string) string {
 	switch strings.ToLower(strings.TrimSpace(configValue)) {
 	case "anthropic", "anthropic-messages":
@@ -183,7 +211,7 @@ func apiModeFor(providerID, configValue string) string {
 		return llm.APIModeOpenAI
 	}
 	switch providerID {
-	case "zai", "zai-subagent":
+	case "zai", "zai-subagent", "mimo", "mimo-plan", "kimi":
 		return llm.APIModeAnthropic
 	}
 	return ""

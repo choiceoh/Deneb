@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 // sharedTransport is a connection-pooled HTTP transport shared across all
@@ -40,6 +41,17 @@ const (
 	APIModeAnthropic = "anthropic"
 )
 
+// Auth scheme constants for Anthropic Messages requests. Controls how the
+// credential is presented.
+//
+// AuthSchemeXAPIKey: the `x-api-key` header (Anthropic / Z.ai default).
+// AuthSchemeBearer:  the `Authorization: Bearer` header — used by
+// OAuth-token endpoints (Kimi Code, MiMo Token Plan).
+const (
+	AuthSchemeXAPIKey = "x-api-key"
+	AuthSchemeBearer  = "bearer"
+)
+
 // Client is an HTTP client for LLM provider APIs.
 type Client struct {
 	httpClient *http.Client
@@ -47,6 +59,19 @@ type Client struct {
 	apiKey     string
 	logger     *slog.Logger
 	apiMode    string // "openai" (default) or "anthropic"
+
+	// authScheme controls how the credential is sent on Anthropic Messages
+	// requests: "" / "x-api-key" (default) or "bearer".
+	authScheme string
+
+	// apiKeyFunc, when set, supplies the API key per request, overriding
+	// the static apiKey when it returns a non-empty value. Used for
+	// credentials that rotate on disk (e.g. the Kimi CLI's token cache).
+	apiKeyFunc func() string
+
+	// extraHeaders are applied to every outgoing request (from a provider
+	// config). Used for endpoint-required headers like a custom User-Agent.
+	extraHeaders map[string]string
 
 	// Retry configuration.
 	maxRetries int
@@ -102,6 +127,67 @@ func WithAPIMode(mode string) ClientOption {
 		default:
 			cl.apiMode = APIModeOpenAI
 		}
+	}
+}
+
+// WithHeaders sets extra HTTP headers applied to every request this
+// client makes. Provider configs use this for endpoint-required headers
+// (e.g. a custom User-Agent). Values overwrite client defaults, so a
+// header here can replace the default User-Agent. The map is copied.
+func WithHeaders(h map[string]string) ClientOption {
+	return func(cl *Client) {
+		if len(h) == 0 {
+			return
+		}
+		cl.extraHeaders = make(map[string]string, len(h))
+		for k, v := range h {
+			cl.extraHeaders[k] = v
+		}
+	}
+}
+
+// WithAuthScheme selects how the credential is sent on Anthropic Messages
+// requests: "x-api-key" (default) or "bearer" (Authorization: Bearer, for
+// OAuth-token providers). Ignored for OpenAI-mode clients, which always
+// use a Bearer Authorization header.
+func WithAuthScheme(scheme string) ClientOption {
+	return func(cl *Client) {
+		switch strings.ToLower(strings.TrimSpace(scheme)) {
+		case AuthSchemeBearer:
+			cl.authScheme = AuthSchemeBearer
+		case AuthSchemeXAPIKey:
+			cl.authScheme = AuthSchemeXAPIKey
+		}
+	}
+}
+
+// WithAPIKeyFunc sets a callback that supplies the API key per request,
+// overriding the static key whenever it returns a non-empty value. Used
+// for credentials that rotate on disk (e.g. the Kimi CLI's OAuth token
+// cache) so a refreshed token is picked up without restarting the gateway.
+func WithAPIKeyFunc(fn func() string) ClientOption {
+	return func(cl *Client) { cl.apiKeyFunc = fn }
+}
+
+// resolveAPIKey returns the credential for the next request, preferring
+// the dynamic apiKeyFunc (when set and non-empty) over the static key.
+func (c *Client) resolveAPIKey() string {
+	if c.apiKeyFunc != nil {
+		if k := strings.TrimSpace(c.apiKeyFunc()); k != "" {
+			return k
+		}
+	}
+	return strings.TrimSpace(c.apiKey)
+}
+
+// applyHeaders sets the honest default User-Agent and any client-configured
+// extra headers on req. Extra headers are applied last so a provider config
+// can override any default, including the User-Agent — required by some
+// coding-subscription endpoints that gate access on the client identifier.
+func (c *Client) applyHeaders(req *http.Request) {
+	req.Header.Set("User-Agent", httputil.UserAgent())
+	for k, v := range c.extraHeaders {
+		req.Header.Set(k, v)
 	}
 }
 
