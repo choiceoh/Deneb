@@ -76,10 +76,13 @@ const (
 	DefaultMimoBaseURL     = "https://api.xiaomimimo.com/anthropic"
 	DefaultMimoPlanBaseURL = "https://token-plan-sgp.xiaomimimo.com/anthropic"
 
-	// Kimi Code — Moonshot AI's coding subscription plan. Anthropic-compatible
-	// endpoint so prompt caching and extended thinking work end-to-end. The
-	// Token Plan model ID is `kimi-for-coding`.
-	DefaultKimiBaseURL = "https://api.moonshot.ai/anthropic"
+	// Kimi Code — Moonshot AI's coding subscription, served from its
+	// dedicated coding endpoint (distinct from the general api.moonshot.ai
+	// API). Anthropic-compatible so prompt caching and extended thinking
+	// work end-to-end. The subscription authenticates with an OAuth token
+	// (the official Kimi CLI caches it after `/login`) sent as a Bearer
+	// credential. Token Plan model ID: `kimi-for-coding`.
+	DefaultKimiBaseURL = "https://api.kimi.com/coding"
 
 	// codingAgentUserAgent is the default User-Agent for coding-subscription
 	// providers (Kimi Code, MiMo Token Plan). Their endpoints only serve
@@ -212,6 +215,14 @@ func (r *Registry) Client(role Role) *llm.Client {
 		}
 		if h := DefaultHeaders(cfg.ProviderID); len(h) > 0 {
 			opts = append(opts, llm.WithHeaders(h))
+		}
+		if scheme := ResolveAuthScheme(cfg.ProviderID); scheme != "" {
+			opts = append(opts, llm.WithAuthScheme(scheme))
+		}
+		// Kimi Code authenticates with the official Kimi CLI's OAuth token
+		// cache; read it per request so a re-login is picked up live.
+		if cfg.ProviderID == "kimi" {
+			opts = append(opts, llm.WithAPIKeyFunc(kimiToken))
 		}
 		entry.client = llm.NewClient(cfg.BaseURL, cfg.APIKey, opts...)
 	})
@@ -379,6 +390,20 @@ func DefaultHeaders(providerID string) map[string]string {
 		return map[string]string{"User-Agent": codingAgentUserAgent}
 	default:
 		return nil
+	}
+}
+
+// ResolveAuthScheme returns the credential scheme for a provider's
+// Anthropic Messages requests. The coding-subscription providers (Kimi
+// Code, MiMo, MiMo Token Plan) authenticate with OAuth-style Bearer
+// tokens; other Anthropic-mode providers (Z.ai) use the default
+// x-api-key header. Returns "" to leave the client default.
+func ResolveAuthScheme(providerID string) string {
+	switch providerID {
+	case "kimi", "mimo", "mimo-plan":
+		return llm.AuthSchemeBearer
+	default:
+		return ""
 	}
 }
 

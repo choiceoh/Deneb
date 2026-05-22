@@ -215,6 +215,21 @@ func TestDefaultHeaders(t *testing.T) {
 	}
 }
 
+func TestResolveAuthScheme(t *testing.T) {
+	// Coding-subscription providers authenticate with Bearer tokens.
+	for _, providerID := range []string{"kimi", "mimo", "mimo-plan"} {
+		if got := ResolveAuthScheme(providerID); got != "bearer" {
+			t.Errorf("ResolveAuthScheme(%q) = %q, want bearer", providerID, got)
+		}
+	}
+	// Other Anthropic-mode providers keep the default x-api-key scheme.
+	for _, providerID := range []string{"zai", "vllm", "openrouter", "localai"} {
+		if got := ResolveAuthScheme(providerID); got != "" {
+			t.Errorf("ResolveAuthScheme(%q) = %q, want empty", providerID, got)
+		}
+	}
+}
+
 func TestLogModelAlias(t *testing.T) {
 	tests := []struct {
 		name string

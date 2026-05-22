@@ -60,6 +60,84 @@ func TestClientAppliesUserAgent(t *testing.T) {
 	}
 }
 
+// streamStopHandler responds with a minimal Anthropic SSE stream and
+// records the credential headers it received.
+func streamStopHandler(xAPIKey, auth *string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		*xAPIKey = r.Header.Get("x-api-key")
+		*auth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"))
+	}
+}
+
+func drainChat(t *testing.T, c *Client) {
+	t.Helper()
+	events, err := c.StreamChat(context.Background(), ChatRequest{
+		Model:     "m",
+		MaxTokens: 16,
+		Messages:  []Message{NewTextMessage("user", "hi")},
+	})
+	if err != nil {
+		t.Fatalf("StreamChat: %v", err)
+	}
+	for range events { //nolint:revive // drain the channel
+	}
+}
+
+// TestClientAuthScheme verifies the credential goes out as x-api-key by
+// default and as Authorization: Bearer when the Bearer scheme is set —
+// required by OAuth-token endpoints like Kimi Code.
+func TestClientAuthScheme(t *testing.T) {
+	var xAPIKey, auth string
+	handler := streamStopHandler(&xAPIKey, &auth)
+
+	// Default: x-api-key header, no Authorization.
+	xAPIKey, auth = "", ""
+	c1, _ := newTestClient(t, handler, WithAPIMode(APIModeAnthropic))
+	drainChat(t, c1)
+	if xAPIKey != "test-key" {
+		t.Errorf("default scheme: x-api-key = %q, want test-key", xAPIKey)
+	}
+	if auth != "" {
+		t.Errorf("default scheme: unexpected Authorization %q", auth)
+	}
+
+	// Bearer scheme: Authorization header, no x-api-key.
+	xAPIKey, auth = "", ""
+	c2, _ := newTestClient(t, handler, WithAPIMode(APIModeAnthropic), WithAuthScheme(AuthSchemeBearer))
+	drainChat(t, c2)
+	if auth != "Bearer test-key" {
+		t.Errorf("bearer scheme: Authorization = %q, want \"Bearer test-key\"", auth)
+	}
+	if xAPIKey != "" {
+		t.Errorf("bearer scheme: unexpected x-api-key %q", xAPIKey)
+	}
+}
+
+// TestClientAPIKeyFunc verifies the dynamic key callback overrides the
+// static key and is re-read per request, so a rotated token is picked up.
+func TestClientAPIKeyFunc(t *testing.T) {
+	var xAPIKey, auth string
+	handler := streamStopHandler(&xAPIKey, &auth)
+
+	token := "dynamic-1"
+	c, _ := newTestClient(t, handler, WithAPIMode(APIModeAnthropic),
+		WithAPIKeyFunc(func() string { return token }))
+
+	drainChat(t, c)
+	if xAPIKey != "dynamic-1" {
+		t.Errorf("apiKeyFunc: x-api-key = %q, want dynamic-1", xAPIKey)
+	}
+
+	// A rotated token is picked up on the next request.
+	token = "dynamic-2"
+	drainChat(t, c)
+	if xAPIKey != "dynamic-2" {
+		t.Errorf("apiKeyFunc rotation: x-api-key = %q, want dynamic-2", xAPIKey)
+	}
+}
+
 // newTestClient creates an httptest server and LLM client for testing.
 func newTestClient(t *testing.T, handler http.HandlerFunc, opts ...ClientOption) (*Client, *httptest.Server) {
 	t.Helper()

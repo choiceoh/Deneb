@@ -33,7 +33,7 @@ func (c *Client) streamChatAnthropic(ctx context.Context, req ChatRequest) (<-ch
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
 	httpReq.Header.Set("anthropic-version", anthropicAPIVersion)
-	setAnthropicAuth(httpReq, c.apiKey)
+	c.setAnthropicAuth(httpReq)
 	setBetaHeaders(httpReq, &req)
 	c.applyHeaders(httpReq)
 
@@ -235,12 +235,19 @@ func marshalAnthropicBlocks(blocks []ContentBlock) (json.RawMessage, error) {
 	return json.Marshal(out)
 }
 
-// setAnthropicAuth attaches Anthropic's `x-api-key` header (which Z.ai's
-// Anthropic-compatible endpoint also expects). Empty keys are skipped so
-// unit tests can hit a local mock without auth.
-func setAnthropicAuth(req *http.Request, apiKey string) {
-	apiKey = strings.TrimSpace(apiKey)
+// setAnthropicAuth attaches the credential to an Anthropic Messages
+// request. By default it uses the `x-api-key` header (which Anthropic and
+// Z.ai expect); clients configured with the Bearer scheme — OAuth-token
+// endpoints like Kimi Code and MiMo Token Plan — get an
+// `Authorization: Bearer` header instead. Empty keys are skipped so unit
+// tests can hit a local mock without auth.
+func (c *Client) setAnthropicAuth(req *http.Request) {
+	apiKey := c.resolveAPIKey()
 	if apiKey == "" {
+		return
+	}
+	if c.authScheme == AuthSchemeBearer {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
 		return
 	}
 	req.Header.Set("x-api-key", apiKey)
