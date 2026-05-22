@@ -21,6 +21,7 @@ type GmailParams struct {
 	MessageID   string  `json:"message_id"`
 	ThreadID    string  `json:"thread_id"`
 	Attachment  string  `json:"attachment"`
+	Download    bool    `json:"download"`
 	To          string  `json:"to"`
 	CC          string  `json:"cc"`
 	BCC         string  `json:"bcc"`
@@ -372,6 +373,10 @@ func gmailAnalyze(ctx context.Context, client *gmail.Client, deps GmailPipelineD
 			fmt.Fprintf(&sb, "⚠️ 메일 조회 실패 (ID: %s): %s\n\n", summary.ID, err)
 			continue
 		}
+
+		// Fold attachment content (contracts, invoices) into the body so the
+		// analysis pipeline sees the substance, not just the cover note.
+		appendAttachmentText(ctx, client, detail)
 
 		analysis, err := gmailpoll.AnalyzeEmailPipeline(ctx, pipeDeps, detail)
 		if err != nil {
