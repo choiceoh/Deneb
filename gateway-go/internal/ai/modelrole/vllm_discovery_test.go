@@ -33,11 +33,11 @@ func newDiscoverySrv(t *testing.T, body string, status int) *httptest.Server {
 
 func TestDiscoverServedVllmModels(t *testing.T) {
 	cases := []struct {
-		name     string
-		body     string
-		status   int
-		wantIDs  []string
-		wantErr  bool
+		name    string
+		body    string
+		status  int
+		wantIDs []string
+		wantErr bool
 	}{
 		{
 			name:    "single served model",

@@ -68,11 +68,11 @@ type ModelConfig struct {
 	// ShowThinkingInChat enabled and InterleavedThinking disabled, only the
 	// final-turn reasoning is shown.
 	ShowThinkingInChat *bool  `json:"showThinkingInChat,omitempty"`
-	FastMode            *bool  `json:"fastMode,omitempty"`
-	VerboseLevel        string `json:"verboseLevel,omitempty"`
-	ReasoningLevel      string `json:"reasoningLevel,omitempty"`
-	ElevatedLevel       string `json:"elevatedLevel,omitempty"`
-	ResponseUsage       string `json:"responseUsage,omitempty"`
+	FastMode           *bool  `json:"fastMode,omitempty"`
+	VerboseLevel       string `json:"verboseLevel,omitempty"`
+	ReasoningLevel     string `json:"reasoningLevel,omitempty"`
+	ElevatedLevel      string `json:"elevatedLevel,omitempty"`
+	ResponseUsage      string `json:"responseUsage,omitempty"`
 
 	// Per-mode model overrides (empty → use session default).
 	ThinkingModel  string `json:"thinkingModel,omitempty"`

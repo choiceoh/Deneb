@@ -13,9 +13,9 @@ import (
 // SessionDefaults the manager can install.
 func TestResolveSessionThinkingDefaults_ParsesAgentDefaults(t *testing.T) {
 	cases := []struct {
-		name           string
-		body           string
-		wantLevel      string
+		name               string
+		body               string
+		wantLevel          string
 		wantInterleavedNil bool
 		wantInterleaved    bool
 	}{
