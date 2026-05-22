@@ -91,6 +91,9 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	if !hasPolarisBridge {
 		evidence = append(evidence, recallTranscriptEvidence(ctx, deps.transcript, params.SessionKey, message, queries)...)
 	}
+	if deps.hindsightClient != nil {
+		evidence = append(evidence, recallHindsightEvidence(ctx, deps.hindsightClient, message, logger)...)
+	}
 	if len(evidence) == 0 && deps.wikiStore != nil {
 		evidence = append(evidence, recallDiaryEvidence(ctx, deps.wikiStore, queries, true)...)
 	}
@@ -525,6 +528,11 @@ func recallConfidence(ev recallEvidence) string {
 			return "medium"
 		}
 		return "low"
+	case "hindsight":
+		if ev.Score >= 0.85 {
+			return "high"
+		}
+		return "medium"
 	default:
 		if ev.Score >= 0.90 {
 			return "medium"

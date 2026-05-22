@@ -11,6 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/hindsight"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolreg"
@@ -62,6 +63,15 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 				s.logger.Info("wiki-dream: enabled")
 			}
 		}
+	}
+
+	// Hindsight memory provider (self-hosted memory bank on the DGX Spark).
+	// Dormant unless DENEB_HINDSIGHT_URL is configured.
+	if hsCfg := hindsight.ConfigFromEnv(); hsCfg.Enabled() {
+		chatCfg.HindsightClient = hindsight.NewClient(hsCfg)
+		s.logger.Info("hindsight memory provider enabled",
+			"url", hsCfg.BaseURL, "bank", hsCfg.BankID,
+			"retain", hsCfg.Retain, "budget", hsCfg.Budget)
 	}
 }
 

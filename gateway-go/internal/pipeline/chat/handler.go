@@ -11,6 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/hindsight"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
@@ -36,6 +37,7 @@ type Handler struct {
 	providerConfigs map[string]ProviderConfig
 	embeddingClient compact.Embedder                  // optional; BGE-M3 for MMR compaction fallback
 	wikiStore       *wiki.Store                       // optional; wiki knowledge base
+	hindsightClient *hindsight.Client                 // optional; self-hosted Hindsight memory bank
 	dreamTurnFn     func(ctx context.Context)         // optional; increments dream turn via autonomous
 	agentLog        *agentlog.Writer                  // optional; agent detail logging
 	registry        *modelrole.Registry               // centralized model role registry
@@ -122,6 +124,7 @@ type HandlerConfig struct {
 	ProviderConfigs      map[string]ProviderConfig // provider ID → config
 	EmbeddingClient      compact.Embedder          // optional; BGE-M3 for MMR compaction fallback
 	WikiStore            *wiki.Store               // optional; wiki knowledge base
+	HindsightClient      *hindsight.Client         // optional; self-hosted Hindsight memory bank
 	DreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
 	AgentLog             *agentlog.Writer          // optional; agent detail logging
 	Registry             *modelrole.Registry       // centralized model role registry
@@ -207,6 +210,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		providerConfigs:      cfg.ProviderConfigs,
 		embeddingClient:      cfg.EmbeddingClient,
 		wikiStore:            cfg.WikiStore,
+		hindsightClient:      cfg.HindsightClient,
 		dreamTurnFn:          cfg.DreamTurnFn,
 		agentLog:             cfg.AgentLog,
 		registry:             cfg.Registry,
