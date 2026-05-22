@@ -572,8 +572,20 @@ func (p *InboundProcessor) handleCallbackQuery(cb *telegram.CallbackQuery) {
 	}
 
 	// Intercept model quick-change callbacks — handle immediately without agent.
-	if action, payload := telegram.ParseCallbackData(cb.Data); action == telegram.ActionModelSwitch {
+	switch action, payload := telegram.ParseCallbackData(cb.Data); action {
+	case telegram.ActionModelSwitch:
 		p.handleModelSwitchCallback(cb, chatID, payload)
+		return
+	case telegram.ActionNoop:
+		// Section header button (e.g. /models keyboard) — acknowledge
+		// silently so the loading spinner stops, but take no action.
+		if client := p.server.telegramPlug.Client(); client != nil {
+			ackCtx, ackCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := telegram.AnswerCallbackQuery(ackCtx, client, cb.ID, ""); err != nil {
+				p.logger.Warn("failed to answer header callback", "error", err)
+			}
+			ackCancel()
+		}
 		return
 	}
 
