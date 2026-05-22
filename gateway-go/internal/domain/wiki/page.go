@@ -28,6 +28,7 @@ type Frontmatter struct {
 	Related    []string
 	Created    string  // YYYY-MM-DD
 	Updated    string  // YYYY-MM-DD
+	Due        string  // YYYY-MM-DD — upcoming deadline (payment due, delivery, milestone); empty if none
 	Importance float64 // 0.0-1.0
 	Archived   bool
 	Type       string // concept, entity, source, comparison, log
@@ -81,6 +82,9 @@ func (p *Page) Render() []byte {
 	}
 	if p.Meta.Updated != "" {
 		buf.WriteString("updated: " + p.Meta.Updated + "\n")
+	}
+	if p.Meta.Due != "" {
+		buf.WriteString("due: " + p.Meta.Due + "\n")
 	}
 	if p.Meta.Importance > 0 {
 		fmt.Fprintf(&buf, "importance: %.2f\n", p.Meta.Importance)
@@ -302,6 +306,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Created = val
 		case "updated":
 			fm.Updated = val
+		case "due":
+			fm.Due = val
 		case "importance":
 			fm.Importance, _ = strconv.ParseFloat(val, 64) // best-effort: defaults to zero
 		case "archived":

@@ -737,7 +737,7 @@ func gmailToolSchema() map[string]any {
 			"action": map[string]any{
 				"type":        "string",
 				"description": "Gmail action to perform",
-				"enum":        []string{"inbox", "search", "read", "send", "reply", "label", "analyze"},
+				"enum":        []string{"inbox", "search", "read", "thread", "send", "reply", "label", "analyze"},
 			},
 			"bcc": map[string]any{
 				"type":        "string",
@@ -767,14 +767,14 @@ func gmailToolSchema() map[string]any {
 			},
 			"max": map[string]any{
 				"type":        "number",
-				"description": "Maximum results (for inbox/search, default: 10, max: 50)",
+				"description": "Maximum results (for inbox/search, or messages kept for thread; default: 10, max: 50)",
 				"default":     10,
 				"minimum":     1,
 				"maximum":     50,
 			},
 			"message_id": map[string]any{
 				"type":        "string",
-				"description": "Email message or thread ID (for read, reply, label actions)",
+				"description": "Email message ID (for read, reply, label actions; for thread action, resolves the containing thread)",
 			},
 			"query": map[string]any{
 				"type":        "string",
@@ -783,6 +783,10 @@ func gmailToolSchema() map[string]any {
 			"subject": map[string]any{
 				"type":        "string",
 				"description": "Email subject line",
+			},
+			"thread_id": map[string]any{
+				"type":        "string",
+				"description": "Gmail thread ID (for thread action; if omitted, message_id resolves the thread)",
 			},
 			"timeout": map[string]any{
 				"type":        "number",
@@ -863,7 +867,7 @@ func wikiToolSchema() map[string]any {
 			"category": map[string]any{
 				"type":        "string",
 				"description": "Wiki category for write action or index filter",
-				"enum":        []string{"사람", "프로젝트", "기술", "업무", "결정", "선호"},
+				"enum":        []string{"사람", "프로젝트", "거래", "기술", "업무", "결정", "선호"},
 			},
 			"confidence": map[string]any{
 				"type":        "string",
@@ -873,6 +877,10 @@ func wikiToolSchema() map[string]any {
 			"content": map[string]any{
 				"type":        "string",
 				"description": "Page body content in markdown (write action) or diary entry body (log action)",
+			},
+			"due": map[string]any{
+				"type":        "string",
+				"description": "Upcoming deadline in YYYY-MM-DD (write action, 거래 category): payment due, delivery, or milestone date. Surfaced by the morning letter deadline scan.",
 			},
 			"id": map[string]any{
 				"type":        "string",

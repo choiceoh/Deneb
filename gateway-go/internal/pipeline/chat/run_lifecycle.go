@@ -448,6 +448,18 @@ func handleRunSuccess(
 		}()
 	}
 
+	// Hindsight memory: retain the completed turn into the self-hosted memory
+	// bank so future sessions can recall it. Fire-and-forget; no-op unless the
+	// operator configured Hindsight with the write path enabled.
+	if deps.hindsightClient.RetainEnabled() && shouldRecordRunDiary(params) {
+		assistantText := result.AllText
+		if assistantText == "" {
+			assistantText = result.Text
+		}
+		assistantText = strings.TrimSpace(StripSilentToken(jsonutil.StripThinkingTags(assistantText)))
+		retainTurnToHindsight(deps.hindsightClient, params, assistantText, logger)
+	}
+
 	logger.Info("agent run completed",
 		"stopReason", result.StopReason,
 		"turns", result.Turns,

@@ -19,6 +19,7 @@ type GmailParams struct {
 	Action      string  `json:"action"`
 	Query       string  `json:"query"`
 	MessageID   string  `json:"message_id"`
+	ThreadID    string  `json:"thread_id"`
 	To          string  `json:"to"`
 	CC          string  `json:"cc"`
 	BCC         string  `json:"bcc"`
@@ -57,6 +58,8 @@ func ToolGmail(deps GmailPipelineDeps) ToolFunc {
 			return gmailSearch(ctx, client, p)
 		case "read":
 			return gmailRead(ctx, client, p)
+		case "thread":
+			return gmailThread(ctx, client, p)
 		case "send":
 			return gmailSend(ctx, client, p)
 		case "reply":
@@ -66,7 +69,7 @@ func ToolGmail(deps GmailPipelineDeps) ToolFunc {
 		case "analyze":
 			return gmailAnalyze(ctx, client, deps, p)
 		default:
-			return fmt.Sprintf("알 수 없는 gmail 액션: %q. 지원: inbox, search, read, send, reply, label, analyze", p.Action), nil
+			return fmt.Sprintf("알 수 없는 gmail 액션: %q. 지원: inbox, search, read, thread, send, reply, label, analyze", p.Action), nil
 		}
 	}
 }
@@ -162,6 +165,62 @@ func gmailRead(ctx context.Context, client *gmail.Client, p GmailParams) (string
 	}
 
 	return gmail.FormatMessage(msg), nil
+}
+
+// --- thread: full conversation thread for timeline reconstruction ---
+
+func gmailThread(ctx context.Context, client *gmail.Client, p GmailParams) (string, error) {
+	threadID := p.ThreadID
+	if threadID == "" {
+		if p.MessageID == "" {
+			return "", fmt.Errorf("message_id 또는 thread_id는 thread 액션에 필수입니다")
+		}
+		// Resolve the thread that contains the given message.
+		msg, err := client.GetMessage(ctx, p.MessageID)
+		if err != nil {
+			return "", err
+		}
+		threadID = msg.ThreadID
+	}
+
+	msgs, err := client.GetThread(ctx, threadID)
+	if err != nil {
+		return "", err
+	}
+	if len(msgs) == 0 {
+		return "스레드에 메시지가 없습니다.", nil
+	}
+
+	// Keep the most recent N messages to bound context size.
+	limit := clampGmailMax(p.Max, 10)
+	if len(msgs) > limit {
+		msgs = msgs[len(msgs)-limit:]
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "## 🧵 스레드 (%d개 메시지, 오래된 순)\n\n", len(msgs))
+	for i, m := range msgs {
+		if i > 0 {
+			sb.WriteString("\n---\n\n")
+		}
+		fmt.Fprintf(&sb, "**[%d] From:** %s\n", i+1, m.From)
+		fmt.Fprintf(&sb, "**Date:** %s\n", m.Date)
+		fmt.Fprintf(&sb, "**Subject:** %s\n\n", m.Subject)
+		sb.WriteString(truncateBody(m.Body, 1500))
+		sb.WriteString("\n")
+	}
+	return sb.String(), nil
+}
+
+// truncateBody caps a message body to maxRunes for thread display,
+// staying on a rune boundary so Korean text is never split mid-character.
+func truncateBody(body string, maxRunes int) string {
+	body = strings.TrimSpace(body)
+	r := []rune(body)
+	if len(r) <= maxRunes {
+		return body
+	}
+	return string(r[:maxRunes]) + "\n... (본문 생략)"
 }
 
 // --- send: email with contact alias resolution ---

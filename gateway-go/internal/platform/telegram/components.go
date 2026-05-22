@@ -22,6 +22,9 @@ const (
 	ActionDetails     = "details"
 	ActionRetry       = "retry"
 	ActionModelSwitch = "model"
+	// ActionNoop marks a non-actionable button (e.g. a section header in the
+	// /models keyboard). Callbacks are acknowledged silently with no effect.
+	ActionNoop = "noop"
 )
 
 // buttonDef is an internal helper for declaring button templates.

@@ -68,7 +68,15 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	}
 
 	message := strings.TrimSpace(params.Message)
-	if !shouldRunRecallPreflight(message) {
+	if message == "" {
+		return ""
+	}
+	// Cue-gated sources run on explicit recall intent; Hindsight auto-recalls
+	// every turn (the Hermes auto_recall model). With neither applicable there
+	// is nothing to search.
+	hasCue := shouldRunRecallPreflight(message)
+	hasHindsight := deps.hindsightClient != nil
+	if !hasCue && !hasHindsight {
 		return ""
 	}
 	if ctx == nil {
@@ -77,25 +85,37 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	ctx, cancel := context.WithTimeout(ctx, recallPreflightTimeout)
 	defer cancel()
 
-	queries := recallSearchQueries(message)
 	var evidence []recallEvidence
+	var queries []string
 
-	if deps.wikiStore != nil {
-		evidence = append(evidence, recallWikiEvidence(ctx, deps.wikiStore, queries)...)
-		evidence = append(evidence, recallDiaryEvidence(ctx, deps.wikiStore, queries, false)...)
+	if hasCue {
+		queries = recallSearchQueries(message)
+		if deps.wikiStore != nil {
+			evidence = append(evidence, recallWikiEvidence(ctx, deps.wikiStore, queries)...)
+			evidence = append(evidence, recallDiaryEvidence(ctx, deps.wikiStore, queries, false)...)
+		}
+		_, hasPolarisBridge := deps.transcript.(*polaris.Bridge)
+		if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
+			evidence = append(evidence, recallPolarisEvidence(ctx, bridge, params.SessionKey, queries)...)
+		}
+		if !hasPolarisBridge {
+			evidence = append(evidence, recallTranscriptEvidence(ctx, deps.transcript, params.SessionKey, message, queries)...)
+		}
 	}
-	_, hasPolarisBridge := deps.transcript.(*polaris.Bridge)
-	if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
-		evidence = append(evidence, recallPolarisEvidence(ctx, bridge, params.SessionKey, queries)...)
+	if hasHindsight {
+		evidence = append(evidence, recallHindsightEvidence(ctx, deps.hindsightClient, message, logger)...)
 	}
-	if !hasPolarisBridge {
-		evidence = append(evidence, recallTranscriptEvidence(ctx, deps.transcript, params.SessionKey, message, queries)...)
-	}
-	if len(evidence) == 0 && deps.wikiStore != nil {
+	if hasCue && len(evidence) == 0 && deps.wikiStore != nil {
 		evidence = append(evidence, recallDiaryEvidence(ctx, deps.wikiStore, queries, true)...)
 	}
 
 	if len(evidence) == 0 {
+		// A cue turn that found nothing still injects the stub so the model is
+		// told not to invent past context. A no-cue auto-recall turn that
+		// found nothing injects nothing — there was no recall expectation.
+		if !hasCue {
+			return ""
+		}
 		if logger != nil {
 			logger.Info("recall preflight: no evidence", "session", params.SessionKey)
 		}
@@ -525,6 +545,11 @@ func recallConfidence(ev recallEvidence) string {
 			return "medium"
 		}
 		return "low"
+	case "hindsight":
+		if ev.Score >= 0.85 {
+			return "high"
+		}
+		return "medium"
 	default:
 		if ev.Score >= 0.90 {
 			return "medium"

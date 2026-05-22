@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -21,19 +23,22 @@ import (
 // MorningLetterOpts holds optional configuration for the morning letter tool.
 type MorningLetterOpts struct {
 	DiaryDir string // wiki diary directory; empty = no diary logging
+	WikiDir  string // wiki root directory; empty = no deadline scan
 }
 
-// ToolMorningLetter returns the morning_letter tool — collects 5 data sections
+// ToolMorningLetter returns the morning_letter tool — collects 6 data sections
 // in parallel and returns structured JSON for the LLM to compose the final letter.
 //
 // The LLM receives raw data and is responsible for formatting, tone, and
 // contextual interpretation (e.g. "우산 챙기세요" for rain, email importance ranking).
 //
-// Sections: weather (Gwangju), exchange rates, copper price, calendar, email.
+// Sections: weather (Gwangju), exchange rates, copper price, calendar, email,
+// deadlines (upcoming due dates scanned from wiki pages).
 func ToolMorningLetter(_ toolctx.ToolExecutor, opts ...MorningLetterOpts) ToolFunc {
-	var diaryDir string
+	var diaryDir, wikiDir string
 	if len(opts) > 0 {
 		diaryDir = opts[0].DiaryDir
+		wikiDir = opts[0].WikiDir
 	}
 
 	return func(ctx context.Context, _ json.RawMessage) (string, error) {
@@ -41,7 +46,7 @@ func ToolMorningLetter(_ toolctx.ToolExecutor, opts ...MorningLetterOpts) ToolFu
 
 		var (
 			mu      sync.Mutex
-			results = make([]any, 5)
+			results = make([]any, 6)
 		)
 
 		type collector struct {
@@ -54,6 +59,7 @@ func ToolMorningLetter(_ toolctx.ToolExecutor, opts ...MorningLetterOpts) ToolFu
 			{2, func(ctx context.Context) any { return fetchCopper(ctx) }},
 			{3, func(ctx context.Context) any { return fetchCalendar(ctx) }},
 			{4, func(ctx context.Context) any { return fetchEmail(ctx) }},
+			{5, func(_ context.Context) any { return fetchDeadlines(wikiDir, now) }},
 		}
 
 		var wg sync.WaitGroup
@@ -77,11 +83,12 @@ func ToolMorningLetter(_ toolctx.ToolExecutor, opts ...MorningLetterOpts) ToolFu
 			"date":      dateStr,
 			"timestamp": now.Format(time.RFC3339),
 			"sections": map[string]any{
-				"weather":  results[0],
-				"exchange": results[1],
-				"copper":   results[2],
-				"calendar": results[3],
-				"email":    results[4],
+				"weather":   results[0],
+				"exchange":  results[1],
+				"copper":    results[2],
+				"calendar":  results[3],
+				"email":     results[4],
+				"deadlines": results[5],
 			},
 		}
 
@@ -131,6 +138,10 @@ func formatMorningDiarySummary(dateStr string, results []any) string {
 
 	if em, ok := results[4].(emailData); ok && em.OK && len(em.Messages) > 0 {
 		fmt.Fprintf(&sb, "- 메일: %d건\n", len(em.Messages))
+	}
+
+	if dl, ok := results[5].(deadlineData); ok && dl.OK && len(dl.Items) > 0 {
+		fmt.Fprintf(&sb, "- 임박 마감: %d건\n", len(dl.Items))
 	}
 
 	return sb.String()
@@ -192,6 +203,19 @@ type emailEntry struct {
 	Subject string `json:"subject"`
 	Date    string `json:"date,omitempty"`
 	Snippet string `json:"snippet,omitempty"`
+}
+
+type deadlineData struct {
+	OK    bool            `json:"ok"`
+	Items []deadlineEntry `json:"items,omitempty"`
+}
+
+type deadlineEntry struct {
+	Title    string `json:"title"`
+	Category string `json:"category,omitempty"`
+	Due      string `json:"due"`       // YYYY-MM-DD
+	DaysLeft int    `json:"days_left"` // negative = overdue
+	Path     string `json:"path,omitempty"`
 }
 
 // --- Section collectors (return structured data for LLM to format) ---
@@ -414,6 +438,58 @@ func fetchEmail(ctx context.Context) any {
 		}
 	}
 	return emailData{OK: true, Messages: entries}
+}
+
+// fetchDeadlines scans wiki pages for upcoming `due` dates and returns those
+// within the alert window (up to 7 days overdue through 14 days ahead),
+// nearest-first. Surfaces payment deadlines and milestones the operator must
+// not miss. Returns an empty (but OK) result when wiki is disabled.
+func fetchDeadlines(wikiDir string, now time.Time) any {
+	if wikiDir == "" {
+		return deadlineData{OK: true}
+	}
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+
+	var items []deadlineEntry
+	_ = filepath.Walk(wikiDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil //nolint:nilerr // skip inaccessible entries in walk
+		}
+		if info.IsDir() || filepath.Ext(path) != ".md" {
+			return nil
+		}
+		switch filepath.Base(path) {
+		case "index.md", "_index.md", "log.md":
+			return nil
+		}
+		page, parseErr := wiki.ParsePageFile(path)
+		if parseErr != nil {
+			return nil //nolint:nilerr // unreadable page — skip
+		}
+		if page.Meta.Due == "" || page.Meta.Archived {
+			return nil
+		}
+		due, parseErr := time.ParseInLocation("2006-01-02", page.Meta.Due, now.Location())
+		if parseErr != nil {
+			return nil //nolint:nilerr // malformed due date — skip
+		}
+		days := int(due.Sub(today).Hours() / 24)
+		if days < -7 || days > 14 {
+			return nil
+		}
+		rel, _ := filepath.Rel(wikiDir, path)
+		items = append(items, deadlineEntry{
+			Title:    page.Meta.Title,
+			Category: page.Meta.Category,
+			Due:      page.Meta.Due,
+			DaysLeft: days,
+			Path:     rel,
+		})
+		return nil
+	})
+
+	sort.Slice(items, func(i, j int) bool { return items[i].DaysLeft < items[j].DaysLeft })
+	return deadlineData{OK: true, Items: items}
 }
 
 // normalizeWttrTime converts wttr.in time format ("600", "1200") to "06:00", "12:00".

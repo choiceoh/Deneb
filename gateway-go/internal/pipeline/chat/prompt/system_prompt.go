@@ -79,6 +79,12 @@ type SystemPromptParams struct {
 	// wiring detail, not a user-facing outage. Lives in the dynamic
 	// (uncached) block, so it has no prompt-cache impact.
 	AutoDeliveredOutput bool
+
+	// HindsightEnabled adds a short dynamic-block note telling the model it
+	// has a cross-session Hindsight memory bank: past turns are retained
+	// automatically and relevant memories arrive via <recall-context>.
+	// Dynamic (uncached) block — no prompt-cache impact.
+	HindsightEnabled bool
 }
 
 // RuntimeInfo describes the current runtime environment for the system prompt.
@@ -322,7 +328,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 
 		d.WriteString("### 그래프 추론 (graphify)\n")
 		d.WriteString("위키와 코드는 graphify 도구를 통해 **그래프**로도 질의 가능하다. 매 dream cycle마다 위키 페이지가 자동으로 graph.json으로 갱신되고, 코드는 `graphify update .`로 빌드된 호출/import 그래프를 사용한다.\n")
-		d.WriteString("- `graph=\"wiki\"` (기본): 사람·프로젝트·기술·결정·선호 등 개념/관계 그래프 (~/.deneb/wiki-graph)\n")
+		d.WriteString("- `graph=\"wiki\"` (기본): 사람·프로젝트·거래·기술·결정·선호 등 개념/관계 그래프 (~/.deneb/wiki-graph)\n")
 		d.WriteString("- `graph=\"code\"`: 코드 호출/import/contains 그래프 (workspace/graphify-out)\n")
 		d.WriteString("- 액션: query (자연어→관련 노드), explain (한 노드+이웃 요약), path (두 노드 간 최단 경로)\n\n")
 
@@ -348,6 +354,14 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("- **\"위키에 정리해뒀어\" / \"저장했어\" 만으로 응답을 끝내지 마라.** 사용자가 비교·분석·코멘트를 요청했는데 응답이 저장 알림뿐이면, 사용자는 요청한 내용을 못 받은 것이다. 저장 사실 자체는 메타 정보이지 응답이 아니다.\n")
 		d.WriteString("- 카테고리 판단이 어려우면 \"업무\"에 넣어라.\n")
 		d.WriteString("- 장기 보존 가치가 애매하면 자동 일지에 맡기고, 위키 페이지는 반복해서 쓸 사실·선호·결정·프로젝트 맥락만 남겨라.\n\n")
+	}
+
+	// Hindsight cross-session memory (conditional).
+	if params.HindsightEnabled {
+		d.WriteString("## 장기 기억 (Hindsight)\n")
+		d.WriteString("이전 세션을 포함한 대화가 Hindsight 메모리 뱅크에 자동 저장된다. 매 턴 관련 기억이 자동으로 검색되어 위 `<recall-context>` 블록으로 주입된다.\n")
+		d.WriteString("- 저장·회상 모두 서버가 자동 처리한다 — 이를 위한 별도 도구 호출은 필요 없다.\n")
+		d.WriteString("- 세션이 바뀌어도 사용자가 예전에 말한 내용을 기억할 수 있다. 단, `<recall-context>`에 근거가 있을 때만 확신하고, 근거가 없으면 모른다고 말하라.\n\n")
 	}
 
 	// Web tool guidance (conditional).

@@ -369,44 +369,48 @@ func prepareContextAndPrompt(
 		resultMu.Unlock()
 	}()
 
-	// Recall preflight (parallel): inject focused memory only when the user
-	// message asks for or implies past context.
+	// Recall preflight (parallel): inject focused memory before the LLM call.
 	//
-	// Per-(session, cue-fingerprint) cache: repeat questions on the same
-	// topic reuse the wiki/diary/transcript/polaris search result (saving
-	// ~6s of parallel timeouts), while a turn that shifts to a different
-	// topic gets a fresh search. Turns with no recall cue get no recall
-	// injection at all — preventing earlier turns' snapshots from polluting
-	// unrelated questions. /reset clears every slot for the session. See
-	// chat/recall_cache.go.
+	// Two modes feed one <recall-context> block:
+	//   - Cue-gated sources (wiki/diary/transcript/polaris) run only when the
+	//     user message implies past context. Their result is cached per
+	//     (session, cue-fingerprint) so repeat questions on the same topic
+	//     reuse the ~6s of parallel search timeouts.
+	//   - Hindsight auto-recall runs every turn when configured (the Hermes
+	//     auto_recall model): the memory bank is queried with the current
+	//     message regardless of cue. No-cue turns are not cached — each
+	//     turn's message is a distinct query the "" fingerprint cannot
+	//     disambiguate. /reset clears every slot. See chat/recall_cache.go.
 	prepWg.Add(1)
 	go func() {
 		defer prepWg.Done()
-		// Mirror buildRecallPreflight's early-out: ephemeral turns (autonomous
-		// heartbeat self-triggers) never run recall, so emitting 🧠 here would
-		// lie to the user about what the agent is doing.
+		// Ephemeral turns (autonomous heartbeat self-triggers) never run
+		// recall — there is no real user message to recall against.
 		if params.EphemeralUser {
 			return
 		}
 		fingerprint := recallCueFingerprint(params.Message)
-		if fingerprint == "" {
+		hasCue := fingerprint != ""
+		if !hasCue && deps.hindsightClient == nil {
 			return
 		}
-		if cached, ok := cachedRecallMemory(params.SessionKey, fingerprint); ok {
-			resultMu.Lock()
-			result.RecallMemory = cached
-			resultMu.Unlock()
-			return
-		}
-		// Real recall work coming up (wiki/diary/transcript/polaris search,
-		// up to ~1.5s timeout each). Surface the phase so the user sees
-		// 🧠 instead of 📚 staying frozen during the wait.
-		emitPhase(deps, params, "recalling", time.Now())
-		if statusCtrl != nil {
-			statusCtrl.SetRecalling()
+		if hasCue {
+			if cached, ok := cachedRecallMemory(params.SessionKey, fingerprint); ok {
+				resultMu.Lock()
+				result.RecallMemory = cached
+				resultMu.Unlock()
+				return
+			}
+			// Explicit recall: surface the 🧠 phase so the user sees the
+			// wiki/diary/transcript search instead of a frozen 📚. Silent
+			// auto-recall on no-cue turns stays invisible.
+			emitPhase(deps, params, "recalling", time.Now())
+			if statusCtrl != nil {
+				statusCtrl.SetRecalling()
+			}
 		}
 		recallMemory := buildRecallPreflight(ctx, params, deps, logger)
-		if recallMemoryHasEvidence(recallMemory) {
+		if hasCue && recallMemoryHasEvidence(recallMemory) {
 			storeRecallMemory(params.SessionKey, fingerprint, recallMemory)
 		}
 		resultMu.Lock()
@@ -513,6 +517,7 @@ func prepareContextAndPrompt(
 			ToolPreset:          sessionToolPreset,
 			CompactionFired:     compactionFired,
 			AutoDeliveredOutput: params.AutoDeliveredOutput,
+			HindsightEnabled:    deps.hindsightClient != nil,
 		}
 
 		systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))

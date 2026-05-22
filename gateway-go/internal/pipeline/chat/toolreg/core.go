@@ -116,7 +116,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 	registry.RegisterTool(toolctx.ToolDef{
 		Name: "graphify",
 		Description: "지식 그래프 질의 (위키 개념 그래프 + 코드 호출 그래프). " +
-			"graph=\"wiki\" (기본, 사람·프로젝트·기술·결정·선호 등 개념/관계 그래프, dreamer가 매 사이클 갱신) | " +
+			"graph=\"wiki\" (기본, 사람·프로젝트·거래·기술·결정·선호 등 개념/관계 그래프, dreamer가 매 사이클 갱신) | " +
 			"graph=\"code\" (코드 호출/import/contains 그래프, `graphify update .`로 빌드). " +
 			"액션: query (자연어 질문→관련 노드 탐색), explain (한 노드와 이웃 요약), path (두 노드 간 최단 경로). " +
 			"**융합적 사용 패턴 (필수 숙지):** " +
@@ -233,7 +233,7 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 	}
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "gmail",
-		Description: "Gmail (native OAuth2): inbox, search, read, send, reply, labels, analyze (LLM 이메일 분석, multi-stage pipeline). Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
+		Description: "Gmail (native OAuth2): inbox, search, read, thread (대화 전체를 시간순으로), send, reply, labels, analyze (LLM 이메일 분석, multi-stage pipeline). Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
 		InputSchema: gmailToolSchema(),
 		Fn:          tools.ToolGmail(gmailPipelineDeps),
 		Deferred:    true,

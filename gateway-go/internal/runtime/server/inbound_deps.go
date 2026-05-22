@@ -123,17 +123,18 @@ func (p *InboundProcessor) buildCommandDeps(sessionKey string) *handlers.Command
 }
 
 // buildMorningLetterDataFn returns a data collection function that includes
-// diary logging when wiki is enabled.
+// diary logging and the wiki deadline scan when wiki is enabled.
 func (p *InboundProcessor) buildMorningLetterDataFn() func(ctx context.Context) (string, error) {
-	var diaryDir string
+	var opts tools.MorningLetterOpts
 	if p.server.wikiStore != nil {
-		diaryDir = p.server.wikiStore.DiaryDir()
+		opts.DiaryDir = p.server.wikiStore.DiaryDir()
+		opts.WikiDir = p.server.wikiStore.Dir()
 	}
-	if diaryDir == "" {
+	if opts.DiaryDir == "" && opts.WikiDir == "" {
 		return tools.CollectMorningLetterData
 	}
 	return func(ctx context.Context) (string, error) {
-		return tools.CollectMorningLetterDataWithOpts(ctx, tools.MorningLetterOpts{DiaryDir: diaryDir})
+		return tools.CollectMorningLetterDataWithOpts(ctx, opts)
 	}
 }
 
