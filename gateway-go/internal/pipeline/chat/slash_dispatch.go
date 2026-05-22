@@ -164,6 +164,20 @@ func (h *Handler) handleSlashCommand(
 			h.handleUpdateCommand(delivery, cmd.Args)
 		}()
 
+	case "restart":
+		// /restart — guidance; /restart 확인 — restart the gateway.
+		// Delegated to restart_dispatch.go. Runs in a goroutine so the
+		// reply is delivered before graceful shutdown begins.
+		restartLogger := h.logger
+		go func() {
+			defer func() {
+				if r := recover(); r != nil && restartLogger != nil {
+					restartLogger.Error("panic in /restart command handler", "panic", r)
+				}
+			}()
+			h.handleRestartCommand(delivery, cmd.Args)
+		}()
+
 	}
 
 	return protocol.MustResponseOK(reqID, map[string]any{

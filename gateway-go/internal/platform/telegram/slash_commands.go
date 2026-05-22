@@ -69,6 +69,11 @@ func VibeCoderCommands() []SlashCommand {
 			Aliases:     nil,
 		},
 		{
+			Command:     "restart",
+			Description: "게이트웨이 재시작",
+			Aliases:     nil,
+		},
+		{
 			Command:     "help",
 			Description: "도움말",
 			Aliases:     nil,

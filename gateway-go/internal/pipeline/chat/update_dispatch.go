@@ -48,27 +48,28 @@ const updatePreviewCommitCap = 20
 // machine — a process-wide flag is sufficient.
 var updateInFlight atomic.Bool
 
-// updateIntent classifies the /update argument.
-type updateIntent int
+// confirmIntent classifies the argument of a confirm-gated lifecycle command
+// (/update, /restart): a bare command shows guidance, a confirm word runs it.
+type confirmIntent int
 
 const (
-	updateIntentUnknown updateIntent = iota
-	updateIntentPreview              // bare /update — show what is available
-	updateIntentConfirm              // /update 확인 — actually run it
+	confirmIntentUnknown confirmIntent = iota
+	confirmIntentBare                  // no argument — show guidance/preview
+	confirmIntentYes                   // confirm word — proceed
 )
 
-// normalizeUpdateArg maps the raw argument to an intent. Bare /update is a
-// preview; a confirm word (Korean or English) triggers execution.
-func normalizeUpdateArg(raw string) updateIntent {
+// normalizeConfirmArg maps a raw command argument to a confirmIntent. Accepts
+// both Korean and English confirm words. Shared by /update and /restart.
+func normalizeConfirmArg(raw string) confirmIntent {
 	s := strings.ToLower(strings.TrimSpace(raw))
 	if s == "" {
-		return updateIntentPreview
+		return confirmIntentBare
 	}
 	switch s {
 	case "확인", "실행", "진행", "응", "네", "ㅇㅇ", "confirm", "yes", "y", "ok", "go":
-		return updateIntentConfirm
+		return confirmIntentYes
 	default:
-		return updateIntentUnknown
+		return confirmIntentUnknown
 	}
 }
 
@@ -83,10 +84,10 @@ func (h *Handler) handleUpdateCommand(delivery *DeliveryContext, rawArgs string)
 		}
 	}()
 
-	switch normalizeUpdateArg(rawArgs) {
-	case updateIntentPreview:
+	switch normalizeConfirmArg(rawArgs) {
+	case confirmIntentBare:
 		h.updatePreview(delivery)
-	case updateIntentConfirm:
+	case confirmIntentYes:
 		h.updateExecute(delivery)
 	default:
 		h.deliverSlashResponse(delivery, strings.Join([]string{
@@ -210,7 +211,7 @@ func (h *Handler) updateExecute(delivery *DeliveryContext) {
 
 	// Step 3 — restart. SIGUSR1 → bootstrap.ExitCodeRestart (75) → the
 	// supervising wrapper relaunches the freshly built binary.
-	if err := signalUpdateRestart(); err != nil {
+	if err := signalGatewayRestart(); err != nil {
 		h.logger.Error("update: restart signal failed", "error", err)
 		h.deliverSlashResponse(delivery, "⚠️ 빌드는 끝났지만 재시작 신호 전송에 실패했습니다. 게이트웨이를 수동으로 재시작해 주세요.")
 	}
@@ -286,10 +287,11 @@ func runUpdateMake(ctx context.Context, root string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-// signalUpdateRestart sends SIGUSR1 to this process. bootstrap.RunWithSignals
+// signalGatewayRestart sends SIGUSR1 to this process. bootstrap.RunWithSignals
 // catches it, shuts the gateway down gracefully, and exits with
-// ExitCodeRestart (75) so the supervising wrapper relaunches it.
-func signalUpdateRestart() error {
+// ExitCodeRestart (75) so the supervising wrapper relaunches it. Shared by the
+// /update execute path and the /restart command.
+func signalGatewayRestart() error {
 	proc, err := os.FindProcess(os.Getpid())
 	if err != nil {
 		return err
