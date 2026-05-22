@@ -322,7 +322,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 
 		d.WriteString("### 그래프 추론 (graphify)\n")
 		d.WriteString("위키와 코드는 graphify 도구를 통해 **그래프**로도 질의 가능하다. 매 dream cycle마다 위키 페이지가 자동으로 graph.json으로 갱신되고, 코드는 `graphify update .`로 빌드된 호출/import 그래프를 사용한다.\n")
-		d.WriteString("- `graph=\"wiki\"` (기본): 사람·프로젝트·기술·결정·선호 등 개념/관계 그래프 (~/.deneb/wiki-graph)\n")
+		d.WriteString("- `graph=\"wiki\"` (기본): 사람·프로젝트·거래·기술·결정·선호 등 개념/관계 그래프 (~/.deneb/wiki-graph)\n")
 		d.WriteString("- `graph=\"code\"`: 코드 호출/import/contains 그래프 (workspace/graphify-out)\n")
 		d.WriteString("- 액션: query (자연어→관련 노드), explain (한 노드+이웃 요약), path (두 노드 간 최단 경로)\n\n")
 

@@ -17,6 +17,7 @@ import (
 var Categories = []string{
 	"사람",
 	"프로젝트",
+	"거래",
 	"기술",
 	"업무",
 	"결정",
