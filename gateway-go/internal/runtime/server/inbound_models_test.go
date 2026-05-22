@@ -186,3 +186,36 @@ func TestBuildModelKeyboard_EmptyReturnsNil(t *testing.T) {
 		t.Error("empty sections should yield a nil keyboard")
 	}
 }
+
+func TestAppendBuiltinSubscriptionProviders(t *testing.T) {
+	// From an empty config, both built-in coding-subscription providers
+	// are offered.
+	got := appendBuiltinSubscriptionProviders(nil)
+	names := make(map[string]int)
+	for _, pv := range got {
+		names[pv.name]++
+	}
+	if names["kimi"] != 1 {
+		t.Errorf("kimi appears %d times, want 1", names["kimi"])
+	}
+	if names["mimo-plan"] != 1 {
+		t.Errorf("mimo-plan appears %d times, want 1", names["mimo-plan"])
+	}
+
+	// A provider the operator already declared is not duplicated, and its
+	// explicit config is preserved (the built-in does not overwrite it).
+	configured := []providerSpec{{name: "kimi", models: []string{"custom-model"}}}
+	got = appendBuiltinSubscriptionProviders(configured)
+	kimiCount := 0
+	for _, pv := range got {
+		if pv.name == "kimi" {
+			kimiCount++
+			if len(pv.models) != 1 || pv.models[0] != "custom-model" {
+				t.Errorf("configured kimi spec was overwritten: %+v", pv)
+			}
+		}
+	}
+	if kimiCount != 1 {
+		t.Errorf("kimi appears %d times after merge, want 1 (no duplicate)", kimiCount)
+	}
+}

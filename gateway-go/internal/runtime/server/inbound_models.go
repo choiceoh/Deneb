@@ -102,8 +102,41 @@ func providerDisplayName(name string) string {
 		return "OpenAI"
 	case "google":
 		return "Google"
+	case "kimi":
+		return "Kimi Code"
+	case "mimo":
+		return "MiMo"
+	case "mimo-plan":
+		return "MiMo Token Plan"
 	}
 	return name
+}
+
+// builtinSubscriptionProviders lists the coding-subscription providers that
+// work without a deneb.json models.providers entry — base URL and
+// credentials resolve from built-in defaults — so they are always offered
+// in the /models keyboard.
+func builtinSubscriptionProviders() []providerSpec {
+	return []providerSpec{
+		{name: "kimi", models: []string{"kimi-for-coding"}},
+		{name: "mimo-plan", models: []string{"mimo-v2.5-pro"}},
+	}
+}
+
+// appendBuiltinSubscriptionProviders adds the built-in coding-subscription
+// providers, skipping any the operator already declared in deneb.json so
+// their explicit config wins.
+func appendBuiltinSubscriptionProviders(configured []providerSpec) []providerSpec {
+	have := make(map[string]struct{}, len(configured))
+	for _, pv := range configured {
+		have[pv.name] = struct{}{}
+	}
+	for _, b := range builtinSubscriptionProviders() {
+		if _, ok := have[b.name]; !ok {
+			configured = append(configured, b)
+		}
+	}
+	return configured
 }
 
 // isLocalURL reports whether a base URL points at a loopback host, i.e. a
@@ -349,7 +382,7 @@ func (p *InboundProcessor) discoverLocalModels(providers []providerSpec) map[str
 // quickChangeModels returns the ordered sections for the /models keyboard.
 func (p *InboundProcessor) quickChangeModels() []modelSection {
 	roles := registryRoleEntries(p.server.modelRegistry)
-	providers := loadConfiguredProviders()
+	providers := appendBuiltinSubscriptionProviders(loadConfiguredProviders())
 	discovered := p.discoverLocalModels(providers)
 	for i := range providers {
 		providers[i].models = mergeModels(providers[i].models, discovered[providers[i].name])
