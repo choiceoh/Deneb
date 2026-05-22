@@ -38,6 +38,7 @@ type apiPayload struct {
 	Body     *apiBody     `json:"body"`
 	Parts    []apiPayload `json:"parts"`
 	MimeType string       `json:"mimeType"`
+	Filename string       `json:"filename"`
 }
 
 type apiHeader struct {
@@ -46,8 +47,9 @@ type apiHeader struct {
 }
 
 type apiBody struct {
-	Size int    `json:"size"`
-	Data string `json:"data"`
+	Size         int    `json:"size"`
+	Data         string `json:"data"`
+	AttachmentID string `json:"attachmentId"`
 }
 
 type apiLabelList struct {
@@ -194,8 +196,50 @@ func messageToDetail(msg *apiMessage) *MessageDetail {
 			}
 		}
 		detail.Body = extractBody(msg.Payload)
+		collectAttachments(msg.Payload, &detail.Attachments)
 	}
 	return detail
+}
+
+// collectAttachments walks a message payload and records every part that has a
+// filename (i.e. a real attachment), recursing into multipart containers.
+func collectAttachments(p *apiPayload, out *[]AttachmentInfo) {
+	if p == nil {
+		return
+	}
+	if p.Filename != "" {
+		info := AttachmentInfo{
+			Filename: p.Filename,
+			MimeType: p.MimeType,
+		}
+		if p.Body != nil {
+			info.AttachmentID = p.Body.AttachmentID
+			info.Size = p.Body.Size
+		}
+		*out = append(*out, info)
+	}
+	for i := range p.Parts {
+		collectAttachments(&p.Parts[i], out)
+	}
+}
+
+// GetAttachment fetches and decodes a single message attachment by its ID.
+func (c *Client) GetAttachment(ctx context.Context, messageID, attachmentID string) ([]byte, error) {
+	path := "/messages/" + messageID + "/attachments/" + attachmentID
+
+	var att struct {
+		Size int    `json:"size"`
+		Data string `json:"data"`
+	}
+	if err := c.readJSON(ctx, path, &att); err != nil {
+		return nil, err
+	}
+
+	data, ok := decodeBase64URLBytes(att.Data)
+	if !ok {
+		return nil, fmt.Errorf("첨부파일 base64 디코딩 실패")
+	}
+	return data, nil
 }
 
 // extractBody extracts the text body from a message payload,
@@ -234,11 +278,34 @@ func findBody(p *apiPayload, plain, html *string) {
 }
 
 func decodeBase64URL(s string) string {
-	data, err := base64.URLEncoding.WithPadding(base64.NoPadding).DecodeString(s)
-	if err != nil {
-		return s
+	if data, ok := decodeBase64URLBytes(s); ok {
+		return string(data)
 	}
-	return string(data)
+	return s
+}
+
+// decodeBase64URLBytes decodes Gmail web-safe base64 into raw bytes. Gmail may
+// send it with or without "=" padding, using the url-safe (-_) or standard
+// (+/) alphabet, and MIME parts can wrap it across lines — the old strict
+// decoder (URLEncoding + NoPadding) rejected padded or wrapped input and
+// silently returned the raw base64. Normalize whitespace and padding, then try
+// each alphabet. Returns ok=false only when the input is genuinely not base64.
+func decodeBase64URLBytes(s string) ([]byte, bool) {
+	s = strings.Map(func(r rune) rune {
+		switch r {
+		case '\n', '\r', ' ', '\t':
+			return -1
+		}
+		return r
+	}, s)
+	s = strings.TrimRight(s, "=")
+	if data, err := base64.RawURLEncoding.DecodeString(s); err == nil {
+		return data, true
+	}
+	if data, err := base64.RawStdEncoding.DecodeString(s); err == nil {
+		return data, true
+	}
+	return nil, false
 }
 
 // Send composes and sends an email. Returns the sent message ID.
@@ -440,7 +507,15 @@ func FormatMessage(m *MessageDetail) string {
 	}
 	fmt.Fprintf(&sb, "**Subject:** %s\n", m.Subject)
 	fmt.Fprintf(&sb, "**Date:** %s\n", m.Date)
-	fmt.Fprintf(&sb, "**ID:** %s\n\n", m.ID)
+	fmt.Fprintf(&sb, "**ID:** %s\n", m.ID)
+	if len(m.Attachments) > 0 {
+		names := make([]string, len(m.Attachments))
+		for i, a := range m.Attachments {
+			names[i] = a.Filename
+		}
+		fmt.Fprintf(&sb, "**첨부:** %s  (gmail attachment 액션으로 내용 확인)\n", strings.Join(names, ", "))
+	}
+	sb.WriteString("\n")
 	sb.WriteString(m.Body)
 	return sb.String()
 }
