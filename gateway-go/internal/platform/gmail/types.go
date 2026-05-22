@@ -15,15 +15,25 @@ type MessageSummary struct {
 
 // MessageDetail holds the full content of a single message.
 type MessageDetail struct {
-	ID       string
-	ThreadID string
-	From     string
-	To       string
-	CC       string
-	Subject  string
-	Date     string
-	Body     string
-	Labels   []string
+	ID          string
+	ThreadID    string
+	From        string
+	To          string
+	CC          string
+	Subject     string
+	Date        string
+	Body        string
+	Labels      []string
+	Attachments []AttachmentInfo
+}
+
+// AttachmentInfo describes a single message attachment. The raw bytes are
+// fetched on demand via Client.GetAttachment using AttachmentID.
+type AttachmentInfo struct {
+	Filename     string
+	MimeType     string
+	AttachmentID string
+	Size         int
 }
 
 // LabelInfo describes a Gmail label.

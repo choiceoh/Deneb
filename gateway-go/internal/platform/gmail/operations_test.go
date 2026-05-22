@@ -72,6 +72,39 @@ func TestDecodeBase64URL_Invalid(t *testing.T) {
 	}
 }
 
+func TestDecodeBase64URL_Padded(t *testing.T) {
+	// "Hello, World!" with "=" padding — the old strict decoder rejected this
+	// and silently returned the raw base64.
+	if got := decodeBase64URL("SGVsbG8sIFdvcmxkIQ=="); got != "Hello, World!" {
+		t.Errorf("padded decode = %q, want %q", got, "Hello, World!")
+	}
+}
+
+func TestDecodeBase64URL_Wrapped(t *testing.T) {
+	// MIME part data can arrive wrapped across lines.
+	if got := decodeBase64URL("SGVsbG8s\r\nIFdvcmxk\nIQ"); got != "Hello, World!" {
+		t.Errorf("wrapped decode = %q, want %q", got, "Hello, World!")
+	}
+}
+
+func TestCollectAttachments(t *testing.T) {
+	payload := &apiPayload{
+		MimeType: "multipart/mixed",
+		Parts: []apiPayload{
+			{MimeType: "text/plain", Body: &apiBody{Data: "SGk"}},
+			{MimeType: "application/pdf", Filename: "contract.pdf", Body: &apiBody{AttachmentID: "att-1", Size: 2048}},
+		},
+	}
+	var atts []AttachmentInfo
+	collectAttachments(payload, &atts)
+	if len(atts) != 1 {
+		t.Fatalf("got %d attachments, want 1", len(atts))
+	}
+	if atts[0].Filename != "contract.pdf" || atts[0].AttachmentID != "att-1" || atts[0].Size != 2048 {
+		t.Errorf("attachment = %+v", atts[0])
+	}
+}
+
 func TestExtractBody_SinglePart(t *testing.T) {
 	p := &apiPayload{
 		MimeType: "text/plain",

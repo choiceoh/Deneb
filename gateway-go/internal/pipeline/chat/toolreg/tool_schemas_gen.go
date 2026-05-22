@@ -737,7 +737,11 @@ func gmailToolSchema() map[string]any {
 			"action": map[string]any{
 				"type":        "string",
 				"description": "Gmail action to perform",
-				"enum":        []string{"inbox", "search", "read", "thread", "send", "reply", "label", "analyze"},
+				"enum":        []string{"inbox", "search", "read", "thread", "attachment", "send", "reply", "label", "analyze"},
+			},
+			"attachment": map[string]any{
+				"type":        "string",
+				"description": "Attachment selector for the attachment action: a filename (or substring) or 1-based index. Omit to list all attachments of the message. PDF attachments are extracted to text via pdftotext; text files are returned directly.",
 			},
 			"bcc": map[string]any{
 				"type":        "string",
@@ -774,7 +778,7 @@ func gmailToolSchema() map[string]any {
 			},
 			"message_id": map[string]any{
 				"type":        "string",
-				"description": "Email message ID (for read, reply, label actions; for thread action, resolves the containing thread)",
+				"description": "Email message ID (for read, reply, label, attachment actions; for thread action, resolves the containing thread)",
 			},
 			"query": map[string]any{
 				"type":        "string",
