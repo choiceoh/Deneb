@@ -823,6 +823,7 @@
           "search",
           "read",
           "thread",
+          "attachment",
           "send",
           "reply",
           "label",
@@ -835,11 +836,15 @@
       },
       "message_id": {
         "type": "string",
-        "description": "Email message ID (for read, reply, label actions; for thread action, resolves the containing thread)"
+        "description": "Email message ID (for read, reply, label, attachment actions; for thread action, resolves the containing thread)"
       },
       "thread_id": {
         "type": "string",
         "description": "Gmail thread ID (for thread action; if omitted, message_id resolves the thread)"
+      },
+      "attachment": {
+        "type": "string",
+        "description": "Attachment selector for the attachment action: a filename (or substring) or 1-based index. Omit to list all attachments of the message. PDF attachments are extracted to text via pdftotext; text files are returned directly."
       },
       "to": {
         "type": "string",
