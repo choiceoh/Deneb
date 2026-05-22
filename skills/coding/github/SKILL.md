@@ -10,7 +10,7 @@ metadata:
         "emoji": "🐙",
         "requires": { "bins": ["gh"] },
         "tags": ["git", "PR", "issues", "CI", "review"],
-        "related_skills": ["coding-agent"],
+        "related_skills": [],
         "install":
           [
             {

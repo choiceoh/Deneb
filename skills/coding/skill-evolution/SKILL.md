@@ -9,7 +9,7 @@ metadata:
       {
         "emoji": "🧬",
         "tags": ["evolution", "optimization", "improvement", "GEPA", "autoresearch"],
-        "related_skills": ["autoresearch", "evolution-proposal", "skill-factory", "skill-creator"],
+        "related_skills": ["evolution-proposal", "skill-factory", "skill-creator"],
       },
   }
 ---
