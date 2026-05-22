@@ -5,31 +5,31 @@ import (
 	"testing"
 )
 
-func TestNormalizeUpdateArg(t *testing.T) {
+func TestNormalizeConfirmArg(t *testing.T) {
 	tests := []struct {
 		raw  string
-		want updateIntent
+		want confirmIntent
 	}{
-		{"", updateIntentPreview},
-		{"   ", updateIntentPreview},
-		{"확인", updateIntentConfirm},
-		{"실행", updateIntentConfirm},
-		{"진행", updateIntentConfirm},
-		{"응", updateIntentConfirm},
-		{"네", updateIntentConfirm},
-		{"ㅇㅇ", updateIntentConfirm},
-		{"confirm", updateIntentConfirm},
-		{"YES", updateIntentConfirm},
-		{" Y ", updateIntentConfirm},
-		{"ok", updateIntentConfirm},
-		{"go", updateIntentConfirm},
-		{"maybe", updateIntentUnknown},
-		{"취소", updateIntentUnknown},
+		{"", confirmIntentBare},
+		{"   ", confirmIntentBare},
+		{"확인", confirmIntentYes},
+		{"실행", confirmIntentYes},
+		{"진행", confirmIntentYes},
+		{"응", confirmIntentYes},
+		{"네", confirmIntentYes},
+		{"ㅇㅇ", confirmIntentYes},
+		{"confirm", confirmIntentYes},
+		{"YES", confirmIntentYes},
+		{" Y ", confirmIntentYes},
+		{"ok", confirmIntentYes},
+		{"go", confirmIntentYes},
+		{"maybe", confirmIntentUnknown},
+		{"취소", confirmIntentUnknown},
 	}
 	for _, tt := range tests {
 		t.Run(tt.raw, func(t *testing.T) {
-			if got := normalizeUpdateArg(tt.raw); got != tt.want {
-				t.Errorf("normalizeUpdateArg(%q) = %d, want %d", tt.raw, got, tt.want)
+			if got := normalizeConfirmArg(tt.raw); got != tt.want {
+				t.Errorf("normalizeConfirmArg(%q) = %d, want %d", tt.raw, got, tt.want)
 			}
 		})
 	}

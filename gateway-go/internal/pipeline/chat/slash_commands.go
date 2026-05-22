@@ -135,6 +135,16 @@ func ParseSlashCommand(text string) *SlashResult {
 			Command:  "update",
 			Args:     args,
 		}
+	case "restart", "재시작":
+		// Bare /restart explains the restart; /restart 확인 restarts the
+		// gateway. Parsed in restart_dispatch.go. Korean alias /재시작
+		// routes to the same handler.
+		return &SlashResult{
+			Handled:  true,
+			Response: "",
+			Command:  "restart",
+			Args:     args,
+		}
 	default:
 		// Not a recognized slash command; pass through to LLM.
 		return nil
