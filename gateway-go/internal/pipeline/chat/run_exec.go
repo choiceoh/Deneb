@@ -517,6 +517,7 @@ func prepareContextAndPrompt(
 			ToolPreset:          sessionToolPreset,
 			CompactionFired:     compactionFired,
 			AutoDeliveredOutput: params.AutoDeliveredOutput,
+			HindsightEnabled:    deps.hindsightClient != nil,
 		}
 
 		systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
