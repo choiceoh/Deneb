@@ -150,6 +150,20 @@ func (h *Handler) handleSlashCommand(
 			h.handleRollbackCommand(sessionKey, delivery, cmd.Args)
 		}()
 
+	case "update":
+		// /update — preview pending commits; /update 확인 — pull + build +
+		// restart. Delegated to update_dispatch.go. Runs in a goroutine
+		// because the build step can take a couple of minutes.
+		updateLogger := h.logger
+		go func() {
+			defer func() {
+				if r := recover(); r != nil && updateLogger != nil {
+					updateLogger.Error("panic in /update command handler", "panic", r)
+				}
+			}()
+			h.handleUpdateCommand(delivery, cmd.Args)
+		}()
+
 	}
 
 	return protocol.MustResponseOK(reqID, map[string]any{
