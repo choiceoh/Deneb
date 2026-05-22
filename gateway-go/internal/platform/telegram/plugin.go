@@ -140,6 +140,13 @@ func (p *Plugin) Start(ctx context.Context) error {
 	}
 	p.botUser = me
 
+	// Register the slash command menu so commands show up in Telegram's "/"
+	// autocomplete. Best-effort — a failure only means the menu is missing,
+	// the bot itself still works.
+	if err := RegisterCommands(ctx, p.client, VibeCoderCommands()); err != nil {
+		p.logger.Warn("telegram setMyCommands failed", "error", err)
+	}
+
 	// Start polling in background.
 	// Use a detached context so polling survives beyond the RPC request that triggered Start.
 	p.bot = NewBot(p.client, p.config, p.handler, p.logger)
