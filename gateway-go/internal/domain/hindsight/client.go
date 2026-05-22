@@ -71,6 +71,40 @@ func (c *Client) BankID() string {
 	return c.bankID
 }
 
+// Health probes the Hindsight server's /version endpoint as a reachability
+// check. Returns the reported version string on success. Used at startup so
+// the operator learns immediately if the configured URL is wrong.
+func (c *Client) Health(ctx context.Context) (string, error) {
+	if c == nil {
+		return "", nil
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/version", http.NoBody)
+	if err != nil {
+		return "", fmt.Errorf("hindsight: build request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("hindsight: request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("hindsight: /version returned %d", resp.StatusCode)
+	}
+	var v struct {
+		Version    string `json:"version"`
+		APIVersion string `json:"api_version"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&v)
+	if v.Version != "" {
+		return v.Version, nil
+	}
+	return v.APIVersion, nil
+}
+
 // Memory is a single recalled memory item.
 type Memory struct {
 	ID          string

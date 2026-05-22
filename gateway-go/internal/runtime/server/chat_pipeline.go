@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
@@ -68,10 +69,24 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 	// Hindsight memory provider (self-hosted memory bank on the DGX Spark).
 	// Dormant unless DENEB_HINDSIGHT_URL is configured.
 	if hsCfg := hindsight.ConfigFromEnv(); hsCfg.Enabled() {
-		chatCfg.HindsightClient = hindsight.NewClient(hsCfg)
+		client := hindsight.NewClient(hsCfg)
+		chatCfg.HindsightClient = client
 		s.logger.Info("hindsight memory provider enabled",
 			"url", hsCfg.BaseURL, "bank", hsCfg.BankID,
 			"retain", hsCfg.Retain, "budget", hsCfg.Budget)
+		// Startup reachability probe: recall/retain degrade silently when the
+		// bank is unreachable, so verify the configured URL up front and make
+		// a misconfiguration loud instead of invisible.
+		s.safeGo("hindsight-probe", func() {
+			ctx, cancel := context.WithTimeout(s.ShutdownCtx(), 5*time.Second)
+			defer cancel()
+			if version, err := client.Health(ctx); err != nil {
+				s.logger.Warn("hindsight memory provider unreachable; recall/retain will be skipped",
+					"url", hsCfg.BaseURL, "error", err)
+			} else {
+				s.logger.Info("hindsight memory provider connected", "version", version)
+			}
+		})
 	}
 }
 

@@ -120,6 +120,37 @@ func TestClientRetainDisabledMakesNoCall(t *testing.T) {
 	}
 }
 
+func TestClientHealth(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/version" {
+			t.Errorf("unexpected health path: %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"version":"0.6.2"}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient(Config{BaseURL: srv.URL})
+	version, err := c.Health(context.Background())
+	if err != nil {
+		t.Fatalf("Health: %v", err)
+	}
+	if version != "0.6.2" {
+		t.Fatalf("unexpected version: %q", version)
+	}
+}
+
+func TestClientHealthUnreachable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "nope", http.StatusServiceUnavailable)
+	}))
+	c := NewClient(Config{BaseURL: srv.URL})
+	srv.Close() // force a connection failure
+	if _, err := c.Health(context.Background()); err == nil {
+		t.Fatal("expected an error when the server is unreachable")
+	}
+}
+
 func TestClientBankURLEscapesBankID(t *testing.T) {
 	c := NewClient(Config{BaseURL: "http://h:8888", BankID: "a b/c"})
 	got := c.bankURL("/memories")
