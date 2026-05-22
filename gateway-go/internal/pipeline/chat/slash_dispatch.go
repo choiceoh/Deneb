@@ -161,7 +161,7 @@ func (h *Handler) handleSlashCommand(
 					updateLogger.Error("panic in /update command handler", "panic", r)
 				}
 			}()
-			h.handleUpdateCommand(delivery, cmd.Args)
+			h.handleUpdateCommand(reqID, sessionKey, delivery, cmd.Args)
 		}()
 
 	case "restart":

@@ -76,8 +76,9 @@ func normalizeConfirmArg(raw string) confirmIntent {
 // handleUpdateCommand parses the /update argument and runs either the
 // read-only preview or the pull + build + restart. Runs in a goroutine
 // spawned by the dispatcher so the slow git/make I/O never blocks the RPC
-// ack for the slash command itself.
-func (h *Handler) handleUpdateCommand(delivery *DeliveryContext, rawArgs string) {
+// ack for the slash command itself. reqID/sessionKey are threaded through so
+// a dirty worktree can be handed off to the agent.
+func (h *Handler) handleUpdateCommand(reqID, sessionKey string, delivery *DeliveryContext, rawArgs string) {
 	defer func() {
 		if r := recover(); r != nil && h.logger != nil {
 			h.logger.Error("panic in /update command handler", "panic", r)
@@ -86,9 +87,9 @@ func (h *Handler) handleUpdateCommand(delivery *DeliveryContext, rawArgs string)
 
 	switch normalizeConfirmArg(rawArgs) {
 	case confirmIntentBare:
-		h.updatePreview(delivery)
+		h.updatePreview(reqID, sessionKey, delivery)
 	case confirmIntentYes:
-		h.updateExecute(delivery)
+		h.updateExecute(reqID, sessionKey, delivery)
 	default:
 		h.deliverSlashResponse(delivery, strings.Join([]string{
 			"사용법:",
@@ -102,7 +103,7 @@ func (h *Handler) handleUpdateCommand(delivery *DeliveryContext, rawArgs string)
 
 // updatePreview reports how far behind origin/main the running checkout is,
 // without changing anything. Read-only and safe to run any time.
-func (h *Handler) updatePreview(delivery *DeliveryContext) {
+func (h *Handler) updatePreview(reqID, sessionKey string, delivery *DeliveryContext) {
 	// Detached background task: the slash RPC has already returned, so there
 	// is no request context to inherit. Bounded timeout keeps it from hanging.
 	ctx, cancel := context.WithTimeout(context.Background(), updateFetchTimeout)
@@ -113,8 +114,7 @@ func (h *Handler) updatePreview(delivery *DeliveryContext) {
 		h.deliverSlashResponse(delivery, err.Error())
 		return
 	}
-	if msg, ok := h.updatePrechecks(ctx, root); !ok {
-		h.deliverSlashResponse(delivery, msg)
+	if !h.runUpdatePrechecks(ctx, reqID, sessionKey, delivery, root) {
 		return
 	}
 
@@ -147,7 +147,7 @@ func (h *Handler) updatePreview(delivery *DeliveryContext) {
 
 // updateExecute pulls origin/main, rebuilds the production binary, and
 // restarts the gateway. Progress is reported to the user step by step.
-func (h *Handler) updateExecute(delivery *DeliveryContext) {
+func (h *Handler) updateExecute(reqID, sessionKey string, delivery *DeliveryContext) {
 	if !updateInFlight.CompareAndSwap(false, true) {
 		h.deliverSlashResponse(delivery, "이미 업데이트가 진행 중입니다. 잠시만 기다려 주세요.")
 		return
@@ -163,8 +163,7 @@ func (h *Handler) updateExecute(delivery *DeliveryContext) {
 		h.deliverSlashResponse(delivery, err.Error())
 		return
 	}
-	if msg, ok := h.updatePrechecks(ctx, root); !ok {
-		h.deliverSlashResponse(delivery, msg)
+	if !h.runUpdatePrechecks(ctx, reqID, sessionKey, delivery, root) {
 		return
 	}
 
@@ -234,24 +233,81 @@ func updateRepoRoot(ctx context.Context) (string, error) {
 	return root, nil
 }
 
-// updatePrechecks verifies the worktree is on main and clean. Returns a
-// Korean explanation + false when the update must not proceed.
-func (h *Handler) updatePrechecks(ctx context.Context, root string) (string, bool) {
+// updateBlock classifies the outcome of the /update prechecks.
+type updateBlock int
+
+const (
+	updateBlockNone  updateBlock = iota // clear to proceed
+	updateBlockHard                     // refuse — deliver the message and stop
+	updateBlockDirty                    // uncommitted changes — hand to the agent
+)
+
+// runUpdatePrechecks runs the branch/clean checks and handles a blocked
+// outcome: a hard failure is delivered as a message; a dirty worktree is
+// handed off to the agent to resolve. Returns true only when /update may
+// proceed.
+func (h *Handler) runUpdatePrechecks(ctx context.Context, reqID, sessionKey string, delivery *DeliveryContext, root string) bool {
+	switch block, info := updatePrechecks(ctx, root); block {
+	case updateBlockHard:
+		h.deliverSlashResponse(delivery, info)
+		return false
+	case updateBlockDirty:
+		h.deliverSlashResponse(delivery, "커밋되지 않은 변경이 있어 먼저 확인하고 정리하겠습니다.")
+		h.dispatchUncommittedHandoff(reqID, sessionKey, delivery, info)
+		return false
+	default:
+		return true
+	}
+}
+
+// updatePrechecks verifies the worktree is on main and clean.
+//   - (updateBlockNone, "")       → proceed
+//   - (updateBlockHard, msg)      → refuse: deliver msg and stop
+//   - (updateBlockDirty, status)  → uncommitted changes; status carries the
+//     `git status --porcelain` output for the agent hand-off
+func updatePrechecks(ctx context.Context, root string) (block updateBlock, info string) {
 	branch, err := runUpdateGit(ctx, root, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
-		return "현재 브랜치를 확인하지 못했습니다.", false
+		return updateBlockHard, "현재 브랜치를 확인하지 못했습니다."
 	}
 	if branch != "main" {
-		return fmt.Sprintf("업데이트는 main 브랜치에서만 할 수 있습니다 (현재: %s).", branch), false
+		return updateBlockHard, fmt.Sprintf("업데이트는 main 브랜치에서만 할 수 있습니다 (현재: %s).", branch)
 	}
 	status, err := runUpdateGit(ctx, root, "status", "--porcelain")
 	if err != nil {
-		return "작업 디렉토리 상태를 확인하지 못했습니다.", false
+		return updateBlockHard, "작업 디렉토리 상태를 확인하지 못했습니다."
 	}
 	if status != "" {
-		return "커밋되지 않은 변경이 있어 업데이트할 수 없습니다. 먼저 변경 사항을 정리해 주세요.", false
+		return updateBlockDirty, status
 	}
-	return "", true
+	return updateBlockNone, ""
+}
+
+// dispatchUncommittedHandoff hands a dirty-worktree /update over to the agent.
+// The operator does not read code, so rather than dead-ending on "commit your
+// changes first", the agent inspects the pending changes, resolves them
+// (commit with a sensible message, or ask the user when unsure), and points
+// the user back at /update.
+func (h *Handler) dispatchUncommittedHandoff(reqID, sessionKey string, delivery *DeliveryContext, status string) {
+	var prompt strings.Builder
+	prompt.WriteString("사용자가 게이트웨이 업데이트(/update)를 요청했지만, 코드 작업 폴더에 ")
+	prompt.WriteString("아직 커밋되지 않은 변경이 있어 업데이트를 진행할 수 없습니다. 대신 이 상황을 정리해 주세요.\n\n")
+	prompt.WriteString("해야 할 일:\n")
+	prompt.WriteString("1. git status와 git diff로 어떤 변경이 있는지 직접 확인하세요.\n")
+	prompt.WriteString("2. 변경 내용을 한국어로 사용자에게 간단히 설명하세요.\n")
+	prompt.WriteString("3. 변경이 사소하고 의도가 분명하면 알맞은 커밋 메시지로 커밋하세요. ")
+	prompt.WriteString("의도가 불분명하거나 중요해 보이면 어떻게 처리할지 사용자에게 먼저 물어보세요.\n")
+	prompt.WriteString("4. 변경 내용을 임의로 삭제하거나 폐기하지 마세요.\n")
+	prompt.WriteString("5. 정리가 끝나면 사용자에게 `/update 확인`으로 업데이트를 다시 시작하라고 안내하세요.\n\n")
+	prompt.WriteString("커밋되지 않은 파일 목록 (git status --porcelain):\n```\n")
+	prompt.WriteString(truncateUpdateOutput(status))
+	prompt.WriteString("\n```")
+
+	h.startAsyncRun(reqID, RunParams{
+		SessionKey: sessionKey,
+		Message:    prompt.String(),
+		Delivery:   delivery,
+	}, false)
 }
 
 // updatePendingCommits fetches origin/main and returns the one-line log of

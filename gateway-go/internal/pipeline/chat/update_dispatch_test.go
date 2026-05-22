@@ -1,6 +1,10 @@
 package chat
 
 import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -67,6 +71,54 @@ func TestTruncateUpdateOutput(t *testing.T) {
 	}
 	if !strings.Contains(got, "생략") {
 		t.Error("truncateUpdateOutput should mark that the head was dropped")
+	}
+}
+
+func TestUpdatePrechecks(t *testing.T) {
+	root := t.TempDir()
+	ctx := context.Background()
+
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Dir = root
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	git("init")
+	git("config", "user.email", "test@example.com")
+	git("config", "user.name", "Test")
+	git("checkout", "-b", "feature")
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("hi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", "a.txt")
+	git("commit", "-m", "initial")
+
+	// On a non-main branch → hard block.
+	if block, _ := updatePrechecks(ctx, root); block != updateBlockHard {
+		t.Errorf("feature branch: block = %d, want updateBlockHard (%d)", block, updateBlockHard)
+	}
+
+	// On main with a clean worktree → proceed.
+	git("branch", "-m", "main")
+	if block, info := updatePrechecks(ctx, root); block != updateBlockNone {
+		t.Errorf("clean main: block = %d info = %q, want updateBlockNone (%d)", block, info, updateBlockNone)
+	}
+
+	// On main with an uncommitted change → dirty hand-off, status carried.
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	block, info := updatePrechecks(ctx, root)
+	if block != updateBlockDirty {
+		t.Fatalf("dirty main: block = %d, want updateBlockDirty (%d)", block, updateBlockDirty)
+	}
+	if !strings.Contains(info, "a.txt") {
+		t.Errorf("dirty main: info = %q, want it to name the changed file", info)
 	}
 }
 
