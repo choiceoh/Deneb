@@ -64,6 +64,51 @@ func TestBuildRecallPreflightInjectsHindsightEvidence(t *testing.T) {
 	}
 }
 
+func TestBuildRecallPreflightAutoRecallsHindsightWithoutCue(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"results":[
+			{"id":"m1","text":"Peter는 저녁으로 김치찌개를 자주 먹는다","type":"world"}
+		]}`)
+	}))
+	defer srv.Close()
+
+	client := hindsight.NewClient(hindsight.Config{BaseURL: srv.URL, BankID: "deneb"})
+	// "오늘 저녁 뭐 먹지?" carries no recall cue, so cue-gated sources stay
+	// idle — but Hindsight auto-recall must still run every turn.
+	out := buildRecallPreflight(context.Background(),
+		RunParams{SessionKey: "telegram:1", Message: "오늘 저녁 뭐 먹지?"},
+		runDeps{hindsightClient: client},
+		nil,
+	)
+	if !strings.Contains(out, "source=hindsight") {
+		t.Fatalf("expected hindsight auto-recall on a no-cue turn, got %q", out)
+	}
+	if !strings.Contains(out, "김치찌개") {
+		t.Fatalf("expected hindsight memory text, got %q", out)
+	}
+}
+
+func TestBuildRecallPreflightNoCueEmptyHindsightInjectsNothing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"results":[]}`)
+	}))
+	defer srv.Close()
+
+	client := hindsight.NewClient(hindsight.Config{BaseURL: srv.URL, BankID: "deneb"})
+	// No cue and no bank hits: a no-cue turn must inject nothing rather than
+	// the "no evidence" stub, which would falsely claim the user asked to recall.
+	out := buildRecallPreflight(context.Background(),
+		RunParams{SessionKey: "telegram:1", Message: "오늘 날씨 좋네"},
+		runDeps{hindsightClient: client},
+		nil,
+	)
+	if out != "" {
+		t.Fatalf("no-cue turn with no hindsight hits should inject nothing, got %q", out)
+	}
+}
+
 func TestBuildRecallPreflightSurvivesHindsightFailure(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "down", http.StatusBadGateway)

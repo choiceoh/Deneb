@@ -1,8 +1,9 @@
 // recall_hindsight.go is the read path for the Hindsight memory provider.
-// It contributes one more evidence source to buildRecallPreflight: when the
-// user's message implies past context, the self-hosted Hindsight bank is
-// queried alongside wiki/diary/transcript/session search and its hits are
-// merged into the same <recall-context> block.
+// It contributes one more evidence source to buildRecallPreflight. Unlike the
+// cue-gated wiki/diary/transcript/session sources, Hindsight auto-recalls on
+// every turn (the Hermes auto_recall model): the self-hosted bank is queried
+// with the current message regardless of cue, and its hits are merged into
+// the same <recall-context> block.
 package chat
 
 import (
