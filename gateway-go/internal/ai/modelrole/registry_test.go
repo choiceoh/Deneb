@@ -230,6 +230,24 @@ func TestResolveAuthScheme(t *testing.T) {
 	}
 }
 
+func TestClientForProvider(t *testing.T) {
+	reg := NewRegistry(nil, "zai/glm-5-turbo", "")
+
+	// Known built-in providers build a client on demand.
+	for _, providerID := range []string{"zai", "vllm", "openrouter", "mimo", "mimo-plan", "kimi"} {
+		if reg.ClientForProvider(providerID) == nil {
+			t.Errorf("ClientForProvider(%q) = nil, want a client", providerID)
+		}
+	}
+
+	// Unknown providers and the empty string return nil.
+	for _, providerID := range []string{"nonexistent", ""} {
+		if reg.ClientForProvider(providerID) != nil {
+			t.Errorf("ClientForProvider(%q) != nil, want nil", providerID)
+		}
+	}
+}
+
 func TestLogModelAlias(t *testing.T) {
 	tests := []struct {
 		name string
