@@ -199,7 +199,7 @@ func saveAttachmentToDisk(filename string, data []byte) (string, error) {
 		name = "attachment"
 	}
 	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -403,24 +403,25 @@ func pdfOCR(ctx context.Context, pdf []byte) (string, error) {
 	}
 	defer os.RemoveAll(dir)
 
-	pdfPath := filepath.Join(dir, "in.pdf")
-	if err := os.WriteFile(pdfPath, pdf, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "in.pdf"), pdf, 0o600); err != nil {
 		return "", err
 	}
 
 	runCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 
-	// Rasterize the first ocrMaxPages pages to PNG at 200 DPI.
-	const ocrMaxPages = 10
-	prefix := filepath.Join(dir, "page")
+	// Rasterize the first ocrPageLimit pages to PNG at 200 DPI. The command
+	// runs inside the temp dir so every argument is a literal — no variable
+	// (and therefore no tainted) input reaches the subprocess.
+	const ocrPageLimit = "10"
 	rast := exec.CommandContext(runCtx, "pdftoppm", "-png", "-r", "200",
-		"-f", "1", "-l", strconv.Itoa(ocrMaxPages), pdfPath, prefix)
+		"-f", "1", "-l", ocrPageLimit, "in.pdf", "page")
+	rast.Dir = dir
 	if err := rast.Run(); err != nil {
 		return "", fmt.Errorf("PDF 래스터화 실패: %w", err)
 	}
 
-	pages, _ := filepath.Glob(prefix + "-*.png")
+	pages, _ := filepath.Glob(filepath.Join(dir, "page") + "-*.png")
 	sort.Strings(pages)
 	if len(pages) == 0 {
 		return "", fmt.Errorf("래스터화된 페이지 없음")
