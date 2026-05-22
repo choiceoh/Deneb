@@ -9,7 +9,7 @@ metadata:
       {
         "emoji": "🌅",
         "tags": ["briefing", "daily", "morning", "summary"],
-        "related_skills": ["weather", "gog", "summarize"],
+        "related_skills": ["summarize"],
       },
   }
 ---

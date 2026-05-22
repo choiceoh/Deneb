@@ -10,7 +10,7 @@ metadata:
         "emoji": "🧵",
         "requires": { "bins": ["tmux"] },
         "tags": ["terminal", "session", "multiplexer", "remote"],
-        "related_skills": ["coding-agent"],
+        "related_skills": [],
       },
   }
 ---
