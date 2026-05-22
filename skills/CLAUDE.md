@@ -29,11 +29,11 @@ description: One-line description of what skills belong in this category.
 
 | Category | Description | Skills |
 |---|---|---|
-| `coding` | Software development, code generation, version control, CI/CD | autoresearch, github, evolution-proposal, skill-creator, skill-evolution, skill-factory |
-| `productivity` | Daily workflows, documents, summarization, personal automation | morning-letter, session-logs, summarize |
+| `coding` | Software development, code generation, version control, CI/CD | evolution-proposal, github, skill-creator, skill-evolution, skill-factory |
+| `productivity` | Daily workflows, documents, summarization, personal automation | email-analysis, morning-letter, session-logs, summarize |
 | `devops` | System monitoring, terminal management, infrastructure | healthcheck, tmux |
 | `security` | Security, secrets management, and credential handling | 1password |
-| `integration` | External service connectivity, API bridges | mcporter |
+| `integration` | External service connectivity, API bridges | (none) |
 
 ## Skill vs Tool Decision
 
