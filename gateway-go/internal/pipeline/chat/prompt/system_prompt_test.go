@@ -53,6 +53,28 @@ func TestBuildSystemPromptContainsSections(t *testing.T) {
 	}
 }
 
+func TestBuildSystemPromptHindsightSection(t *testing.T) {
+	base := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs:     []ToolDef{{Name: "read"}},
+	}
+
+	// Disabled: no Hindsight memory section.
+	if got := BuildSystemPrompt(base); strings.Contains(got, "장기 기억 (Hindsight)") {
+		t.Error("Hindsight section should be absent when HindsightEnabled is false")
+	}
+
+	// Enabled: the model is told it has a cross-session memory bank.
+	base.HindsightEnabled = true
+	got := BuildSystemPrompt(base)
+	if !strings.Contains(got, "## 장기 기억 (Hindsight)") {
+		t.Error("expected Hindsight memory section when HindsightEnabled is true")
+	}
+	if !strings.Contains(got, "<recall-context>") {
+		t.Error("Hindsight section should reference the recall-context block")
+	}
+}
+
 func TestBuildSystemPromptCompactToolList(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",

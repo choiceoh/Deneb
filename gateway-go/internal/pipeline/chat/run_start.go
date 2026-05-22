@@ -146,6 +146,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		logger:               h.logger,
 		embeddingClient:      h.embeddingClient,
 		wikiStore:            h.wikiStore,
+		hindsightClient:      h.hindsightClient,
 		dreamTurnFn:          h.dreamTurnFn,
 		agentLog:             h.agentLog,
 		registry:             h.registry,
