@@ -28,6 +28,11 @@ type apiMessage struct {
 	Payload  *apiPayload `json:"payload"`
 }
 
+type apiThread struct {
+	ID       string       `json:"id"`
+	Messages []apiMessage `json:"messages"`
+}
+
 type apiPayload struct {
 	Headers  []apiHeader  `json:"headers"`
 	Body     *apiBody     `json:"body"`
@@ -147,13 +152,32 @@ func (c *Client) GetMessage(ctx context.Context, messageID string) (*MessageDeta
 	if err := c.readJSON(ctx, path, &msg); err != nil {
 		return nil, err
 	}
+	return messageToDetail(&msg), nil
+}
 
+// GetThread fetches every message in a conversation thread, oldest first.
+func (c *Client) GetThread(ctx context.Context, threadID string) ([]*MessageDetail, error) {
+	path := "/threads/" + threadID + "?format=full"
+
+	var thread apiThread
+	if err := c.readJSON(ctx, path, &thread); err != nil {
+		return nil, err
+	}
+
+	details := make([]*MessageDetail, 0, len(thread.Messages))
+	for i := range thread.Messages {
+		details = append(details, messageToDetail(&thread.Messages[i]))
+	}
+	return details, nil
+}
+
+// messageToDetail maps a full-format API message into a MessageDetail.
+func messageToDetail(msg *apiMessage) *MessageDetail {
 	detail := &MessageDetail{
 		ID:       msg.ID,
 		ThreadID: msg.ThreadID,
 		Labels:   msg.LabelIDs,
 	}
-
 	if msg.Payload != nil {
 		for _, h := range msg.Payload.Headers {
 			switch strings.ToLower(h.Name) {
@@ -171,8 +195,7 @@ func (c *Client) GetMessage(ctx context.Context, messageID string) (*MessageDeta
 		}
 		detail.Body = extractBody(msg.Payload)
 	}
-
-	return detail, nil
+	return detail
 }
 
 // extractBody extracts the text body from a message payload,
