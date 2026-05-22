@@ -144,24 +144,51 @@ func TestResolveLocalAIAPIKey(t *testing.T) {
 }
 
 func TestMimoProviderResolution(t *testing.T) {
-	// Both the base provider and the Token Plan variant resolve to the
-	// Anthropic-compatible MiMo endpoint and share one API key env var.
-	for _, providerID := range []string{"mimo", "mimo-plan"} {
-		if got := resolveBaseURL(providerID); got != DefaultMimoBaseURL {
-			t.Errorf("resolveBaseURL(%q) = %q, want %q", providerID, got, DefaultMimoBaseURL)
+	// The base provider uses the global API; the Token Plan variant uses
+	// the Singapore subscription endpoint. Both speak Anthropic and share
+	// one API key env var.
+	tests := []struct {
+		providerID string
+		baseURL    string
+	}{
+		{"mimo", DefaultMimoBaseURL},
+		{"mimo-plan", DefaultMimoPlanBaseURL},
+	}
+	for _, tt := range tests {
+		if got := resolveBaseURL(tt.providerID); got != tt.baseURL {
+			t.Errorf("resolveBaseURL(%q) = %q, want %q", tt.providerID, got, tt.baseURL)
 		}
-		if got := resolveAPIMode(providerID); got != "anthropic" {
-			t.Errorf("resolveAPIMode(%q) = %q, want %q", providerID, got, "anthropic")
+		if got := resolveAPIMode(tt.providerID); got != "anthropic" {
+			t.Errorf("resolveAPIMode(%q) = %q, want %q", tt.providerID, got, "anthropic")
 		}
 
 		t.Setenv("XIAOMI_MIMO_API_KEY", "")
-		if got := resolveAPIKey(providerID); got != "" {
-			t.Errorf("resolveAPIKey(%q) without env = %q, want empty", providerID, got)
+		if got := resolveAPIKey(tt.providerID); got != "" {
+			t.Errorf("resolveAPIKey(%q) without env = %q, want empty", tt.providerID, got)
 		}
 		t.Setenv("XIAOMI_MIMO_API_KEY", "tp-secret")
-		if got := resolveAPIKey(providerID); got != "tp-secret" {
-			t.Errorf("resolveAPIKey(%q) = %q, want %q", providerID, got, "tp-secret")
+		if got := resolveAPIKey(tt.providerID); got != "tp-secret" {
+			t.Errorf("resolveAPIKey(%q) = %q, want %q", tt.providerID, got, "tp-secret")
 		}
+	}
+}
+
+func TestKimiProviderResolution(t *testing.T) {
+	// Kimi Code resolves to Moonshot's Anthropic-compatible endpoint.
+	if got := resolveBaseURL("kimi"); got != DefaultKimiBaseURL {
+		t.Errorf("resolveBaseURL(kimi) = %q, want %q", got, DefaultKimiBaseURL)
+	}
+	if got := resolveAPIMode("kimi"); got != "anthropic" {
+		t.Errorf("resolveAPIMode(kimi) = %q, want %q", got, "anthropic")
+	}
+
+	t.Setenv("KIMI_API_KEY", "")
+	if got := resolveAPIKey("kimi"); got != "" {
+		t.Errorf("resolveAPIKey(kimi) without env = %q, want empty", got)
+	}
+	t.Setenv("KIMI_API_KEY", "sk-kimi")
+	if got := resolveAPIKey("kimi"); got != "sk-kimi" {
+		t.Errorf("resolveAPIKey(kimi) = %q, want %q", got, "sk-kimi")
 	}
 }
 

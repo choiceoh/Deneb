@@ -64,12 +64,22 @@ const (
 	DefaultZaiBaseURL = "https://api.z.ai/api/anthropic"
 	DefaultZaiModel   = "glm-5-turbo"
 
-	// Xiaomi MiMo Token Plan — Anthropic-compatible endpoint. MiMo exposes
-	// both an OpenAI-compatible (/v1) and an Anthropic Messages (/anthropic)
-	// API; the gateway speaks Anthropic so prompt caching and extended
-	// thinking work end-to-end. Region-specific Token Plan endpoints
-	// (token-plan-ams / -cn / -sgp) can be set via `baseUrl` in deneb.json.
-	DefaultMimoBaseURL = "https://api.xiaomimimo.com/anthropic"
+	// Xiaomi MiMo — Anthropic-compatible endpoints. MiMo exposes both an
+	// OpenAI-compatible (/v1) and an Anthropic Messages (/anthropic) API;
+	// the gateway speaks Anthropic so prompt caching and extended thinking
+	// work end-to-end.
+	//
+	// DefaultMimoBaseURL is the global standard API. DefaultMimoPlanBaseURL
+	// is the Token Plan subscription endpoint, which is region-specific
+	// (token-plan-sgp / -cn / -ams) — Singapore is the default. Operators
+	// in another region override `baseUrl` in deneb.json.
+	DefaultMimoBaseURL     = "https://api.xiaomimimo.com/anthropic"
+	DefaultMimoPlanBaseURL = "https://token-plan-sgp.xiaomimimo.com/anthropic"
+
+	// Kimi Code — Moonshot AI's coding subscription plan. Anthropic-compatible
+	// endpoint so prompt caching and extended thinking work end-to-end. The
+	// Token Plan model ID is `kimi-for-coding`.
+	DefaultKimiBaseURL = "https://api.moonshot.ai/anthropic"
 )
 
 // NewRegistry creates a registry with hardcoded defaults.
@@ -291,8 +301,12 @@ func resolveBaseURL(providerID string) string {
 		return DefaultVllmBaseURL
 	case "openrouter":
 		return "https://openrouter.ai/api/v1"
-	case "mimo", "mimo-plan":
+	case "mimo":
 		return DefaultMimoBaseURL
+	case "mimo-plan":
+		return DefaultMimoPlanBaseURL
+	case "kimi":
+		return DefaultKimiBaseURL
 	default:
 		return DefaultZaiBaseURL // assume zai for unknown
 	}
@@ -333,18 +347,20 @@ func resolveAPIKey(providerID string) string {
 		return os.Getenv("OPENROUTER_API_KEY")
 	case "mimo", "mimo-plan":
 		return os.Getenv("XIAOMI_MIMO_API_KEY")
+	case "kimi":
+		return os.Getenv("KIMI_API_KEY")
 	default:
 		return ""
 	}
 }
 
 // resolveAPIMode returns the LLM client API mode for built-in providers.
-// Z.ai and Xiaomi MiMo default to the Anthropic Messages API; other
-// built-in providers (vllm, localai) speak OpenAI-compatible
+// Z.ai, Xiaomi MiMo, and Kimi Code default to the Anthropic Messages API;
+// other built-in providers (vllm, localai) speak OpenAI-compatible
 // /chat/completions.
 func resolveAPIMode(providerID string) string {
 	switch providerID {
-	case "zai", "zai-subagent", "mimo", "mimo-plan":
+	case "zai", "zai-subagent", "mimo", "mimo-plan", "kimi":
 		return llm.APIModeAnthropic
 	default:
 		return ""
