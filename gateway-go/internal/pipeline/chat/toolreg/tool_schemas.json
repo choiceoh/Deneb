@@ -458,6 +458,15 @@
       "count": {
         "type": "number",
         "description": "Number of search results per query (default: 5)"
+      },
+      "type": {
+        "type": "string",
+        "description": "Serper search type: news (Google News), scholar (Google Scholar), autocomplete (search suggestions). Default: regular web search.",
+        "enum": [
+          "news",
+          "scholar",
+          "autocomplete"
+        ]
       }
     }
   },
