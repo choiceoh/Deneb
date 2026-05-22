@@ -23,6 +23,7 @@ const (
 	ctxKeyDeferredActivation
 	ctxKeySpawnFlag
 	ctxKeyCheckpointer
+	ctxKeyAutoDelivery
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
@@ -45,6 +46,22 @@ func WithReplyFunc(ctx context.Context, fn ReplyFunc) context.Context {
 func ReplyFuncFromContext(ctx context.Context) ReplyFunc {
 	fn, _ := ctx.Value(ctxKeyReplyFunc).(ReplyFunc)
 	return fn
+}
+
+// WithAutoDelivery marks the context of a run whose final reply text is
+// delivered to the user's channel by the run-completion layer (e.g. the cron
+// delivery layer), not by the agent's own in-loop message tool. The message
+// tool reads this flag to turn a send-guard failure into a benign no-op
+// instead of an error — see ToolMessage.
+func WithAutoDelivery(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ctxKeyAutoDelivery, true)
+}
+
+// AutoDeliveryFromContext reports whether this run's output is auto-delivered
+// by the run-completion layer. Defaults to false.
+func AutoDeliveryFromContext(ctx context.Context) bool {
+	v, _ := ctx.Value(ctxKeyAutoDelivery).(bool)
+	return v
 }
 
 // WithSessionKey attaches the session key to the context.

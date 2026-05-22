@@ -69,6 +69,16 @@ type SystemPromptParams struct {
 	// the note's bytes are present every turn after first compaction so
 	// the system prompt stays byte-stable from that point onward (P4).
 	CompactionFired bool
+
+	// AutoDeliveredOutput marks a scheduled/cron run whose final reply text
+	// is delivered to the user's channel by the run-completion layer (cron
+	// relay / main-session handoff), not by the agent's own `message` tool.
+	// When set, the Messaging section tells the model not to deliver its
+	// result via the `message` tool and not to editorialize about channel
+	// connectivity — an in-loop send failure in such a run is an internal
+	// wiring detail, not a user-facing outage. Lives in the dynamic
+	// (uncached) block, so it has no prompt-cache impact.
+	AutoDeliveredOutput bool
 }
 
 // RuntimeInfo describes the current runtime environment for the system prompt.
@@ -385,6 +395,10 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	}
 	if _, ok := toolSet["clarify"]; ok {
 		d.WriteString("- `clarify(question, options)` 로 진짜 모호성을 버튼 선택으로 해결하라: 파일·경로·이름이 여러 개 매치되어 사용자만이 선택할 수 있을 때. 평서문으로 되물어 답변 타이핑을 요구하지 말고 이 도구를 써라. 예/아니오 수준의 사소한 확인, 스스로 추론 가능한 질문에는 쓰지 마라. 호출 후에는 턴을 즉시 종료한다 — 선택 결과는 다음 턴에 `[유저 응답 (버튼): ...]` 형태로 도착한다.\n")
+	}
+	if params.AutoDeliveredOutput {
+		d.WriteString("- **이 실행은 예약된 자동 실행이다.** 최종 응답 텍스트는 시스템이 자동으로 사용자 채널에 전달한다. 결과를 전달하려고 `message` 도구를 호출하지 마라 — 그냥 최종 결과 텍스트를 작성하고 턴을 끝내라.\n")
+		d.WriteString("- 내부 전송 도구가 실패하더라도 그것은 채널 장애가 아니다. \"채널이 끊겼다 / 연결되지 않았다 / 복구되면 보내겠다 / 여기 직접 전달한다\" 같은 안내를 절대 하지 마라 — 채널은 정상이고 너의 결과물은 그대로 전달된다.\n")
 	}
 	d.WriteString("\n")
 

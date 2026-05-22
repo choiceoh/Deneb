@@ -66,6 +66,12 @@ type SyncOptions struct {
 	// user's short-term conversation context; heartbeat state belongs in
 	// HEARTBEAT.md instead.
 	EphemeralAssistant bool
+
+	// AutoDeliveredOutput marks a run whose final reply text is delivered by
+	// the caller's run-completion path (e.g. the cron delivery layer) rather
+	// than by the agent's in-loop `message` tool. Propagated to RunParams;
+	// see RunParams.AutoDeliveredOutput.
+	AutoDeliveredOutput bool
 }
 
 // prepareSyncRun builds RunParams and runDeps from the common sync arguments.
@@ -110,6 +116,7 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 		}
 		params.EphemeralUser = opts.EphemeralUser
 		params.EphemeralAssistant = opts.EphemeralAssistant
+		params.AutoDeliveredOutput = opts.AutoDeliveredOutput
 	}
 
 	deps := h.buildRunDeps()

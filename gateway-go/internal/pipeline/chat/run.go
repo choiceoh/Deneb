@@ -67,6 +67,16 @@ type RunParams struct {
 	// see their own prior outputs ("did I already report this 30 minutes
 	// ago?") on the next iteration.
 	EphemeralAssistant bool
+
+	// AutoDeliveredOutput marks a run whose final reply text is delivered to
+	// the user's channel by the run-completion layer (cron relay / main-session
+	// handoff) rather than by the agent itself. Set by the cron adapter. It
+	// (a) adds a Messaging directive telling the model not to deliver via the
+	// `message` tool and not to report channel status, and (b) flips an
+	// in-loop `message` send-guard failure from an error into a benign no-op
+	// so the LLM does not translate it into a self-contradicting "channel
+	// down" report delivered through that very channel.
+	AutoDeliveredOutput bool
 }
 
 // Agent run defaults.
@@ -242,6 +252,12 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			"deliveryChannel", deliveryChannel,
 			"deliveryTo", deliveryTo,
 			"hasDelivery", params.Delivery != nil)
+	}
+	// Scheduled/cron runs deliver their final text via the run-completion
+	// layer, so an in-loop message-tool send failure is a benign no-op rather
+	// than an outage the model should report. The message tool reads this flag.
+	if params.AutoDeliveredOutput {
+		ctx = WithAutoDelivery(ctx)
 	}
 	if deps.callbacks.mediaSendFn != nil {
 		ctx = WithMediaSendFunc(ctx, deps.callbacks.mediaSendFn)
