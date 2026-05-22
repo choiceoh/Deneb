@@ -49,12 +49,12 @@ type graphifyEdge struct {
 
 // graphifyGraph is the top-level node_link_data envelope.
 type graphifyGraph struct {
-	Directed   bool                   `json:"directed"`
-	Multigraph bool                   `json:"multigraph"`
-	Graph      map[string]any         `json:"graph"`
-	Nodes      []graphifyNode         `json:"nodes"`
-	Links      []graphifyEdge         `json:"links"`
-	Hyperedges []map[string]any       `json:"hyperedges"`
+	Directed   bool             `json:"directed"`
+	Multigraph bool             `json:"multigraph"`
+	Graph      map[string]any   `json:"graph"`
+	Nodes      []graphifyNode   `json:"nodes"`
+	Links      []graphifyEdge   `json:"links"`
+	Hyperedges []map[string]any `json:"hyperedges"`
 }
 
 // SnapshotResult summarizes a graph snapshot run.

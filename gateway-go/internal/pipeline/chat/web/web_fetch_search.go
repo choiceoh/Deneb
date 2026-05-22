@@ -441,8 +441,8 @@ func duckDuckGoSearch(ctx context.Context, query string) (string, error) {
 
 // serperTypedEndpoints maps search types to Serper endpoint URLs.
 var serperTypedEndpoints = map[string]string{
-	"news":        "https://google.serper.dev/news",
-	"scholar":     "https://google.serper.dev/scholar",
+	"news":         "https://google.serper.dev/news",
+	"scholar":      "https://google.serper.dev/scholar",
 	"autocomplete": "https://google.serper.dev/autocomplete",
 }
 
