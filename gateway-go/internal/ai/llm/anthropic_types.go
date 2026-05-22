@@ -14,7 +14,7 @@ type anthropicRequest struct {
 	Messages      []anthropicMessage `json:"messages"`
 	MaxTokens     int                `json:"max_tokens"`
 	Stream        bool               `json:"stream"`
-	System        json.RawMessage    `json:"system,omitempty"`         // string or []ContentBlock
+	System        json.RawMessage    `json:"system,omitempty"` // string or []ContentBlock
 	Temperature   *float64           `json:"temperature,omitempty"`
 	TopP          *float64           `json:"top_p,omitempty"`
 	TopK          *int               `json:"top_k,omitempty"`

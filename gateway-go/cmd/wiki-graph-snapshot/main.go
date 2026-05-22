@@ -4,9 +4,10 @@
 // gives you a way to trigger it without waiting.
 //
 // Usage:
-//   wiki-graph-snapshot                 # default in/out: ~/.deneb/wiki → ~/.deneb/wiki-graph
-//   wiki-graph-snapshot --no-cluster    # skip the graphify cluster-only step
-//   wiki-graph-snapshot --in <dir> --out <dir>
+//
+//	wiki-graph-snapshot                 # default in/out: ~/.deneb/wiki → ~/.deneb/wiki-graph
+//	wiki-graph-snapshot --no-cluster    # skip the graphify cluster-only step
+//	wiki-graph-snapshot --in <dir> --out <dir>
 package main
 
 import (

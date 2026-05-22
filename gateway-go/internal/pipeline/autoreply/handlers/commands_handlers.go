@@ -44,10 +44,10 @@ type RPCZeroCallsReport struct {
 
 // CommandDeps holds dependencies available to command handlers.
 type CommandDeps struct {
-	SubagentRuns        func() []subagentpkg.SubagentRunRecord                   // for /agents
-	Status              *StatusDeps                                              // Server-level data for /status command.
-	ZeroCallsFn         func() *RPCZeroCallsReport                               // for /zerocalls
-	MorningLetterDataFn func(ctx context.Context) (string, error)                // for /morning — collects raw JSON data
+	SubagentRuns        func() []subagentpkg.SubagentRunRecord                          // for /agents
+	Status              *StatusDeps                                                     // Server-level data for /status command.
+	ZeroCallsFn         func() *RPCZeroCallsReport                                      // for /zerocalls
+	MorningLetterDataFn func(ctx context.Context) (string, error)                       // for /morning — collects raw JSON data
 	BtwFn               func(ctx context.Context, sessionKey, q string) (string, error) // for /btw — side question without touching main session
 }
 
