@@ -64,6 +64,11 @@ func VibeCoderCommands() []SlashCommand {
 			Aliases:     nil,
 		},
 		{
+			Command:     "update",
+			Description: "Deneb 업데이트 (최신 코드 받고 재시작)",
+			Aliases:     nil,
+		},
+		{
 			Command:     "help",
 			Description: "도움말",
 			Aliases:     nil,

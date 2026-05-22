@@ -125,6 +125,16 @@ func ParseSlashCommand(text string) *SlashResult {
 			Command:  "rollback",
 			Args:     args,
 		}
+	case "update", "업데이트":
+		// Bare /update previews available commits; /update 확인 runs the
+		// pull + build + restart. Parsed in update_dispatch.go. Korean alias
+		// /업데이트 routes to the same handler.
+		return &SlashResult{
+			Handled:  true,
+			Response: "",
+			Command:  "update",
+			Args:     args,
+		}
 	default:
 		// Not a recognized slash command; pass through to LLM.
 		return nil
