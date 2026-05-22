@@ -23,6 +23,20 @@ import (
 // the longer "do not say the message failed to send" framing.
 const llmSafetySendGuidance = " Do not tell the user the channel is down, do not say the message failed to send, do not ask them to retry; just produce the deliverable text and end the turn."
 
+// autoDeliverySkipNotice is returned (with a nil error) instead of a
+// send-failure error when the run is a scheduled/cron run whose final reply
+// text is delivered to the user's channel automatically by the run-completion
+// layer (toolctx.AutoDeliveryFromContext is true).
+//
+// Returning a non-error result is deliberate. A tool *error* makes the LLM
+// treat the situation as a problem to surface, and it has historically
+// translated an in-loop send guard failure into a user-facing "텔레그램 채널이
+// 연결되지 않았다" apology — which then reached the user through that very
+// channel via the cron relay, producing a self-contradicting message. By
+// reporting a benign no-op, the model simply writes the final result text and
+// the run-completion layer delivers it.
+const autoDeliverySkipNotice = "Skipped (scheduled run): the final reply text of this run is delivered to the user's channel automatically by the run-completion path — you do not need to send it yourself. The user's channel is NOT down. Just write the final result text and end the turn."
+
 // messageToolSchema returns the JSON Schema for the message tool.
 // This is a flattened schema with per-action runtime validation, matching
 // the Node.js message-tool.ts approach.
@@ -57,6 +71,13 @@ func ToolMessage() ToolFunc {
 			// Get reply function from context.
 			replyFn := toolctx.ReplyFuncFromContext(ctx)
 			if replyFn == nil {
+				// Scheduled/cron run: the deliverable is auto-delivered by the
+				// run-completion layer, so an unwired in-loop send is a no-op,
+				// not a failure. Report it benignly (nil error) so the model
+				// does not invent an outage report. See autoDeliverySkipNotice.
+				if toolctx.AutoDeliveryFromContext(ctx) {
+					return autoDeliverySkipNotice, nil
+				}
 				// IMPORTANT — phrasing matters: the LLM reads this error
 				// verbatim and historically translated "channel not connected"
 				// into a Korean "텔레그램이 끊겼어요" report to the user, which
@@ -88,6 +109,13 @@ func ToolMessage() ToolFunc {
 				sendDelivery.To = p.To
 			}
 			if sendDelivery.Channel == "" || sendDelivery.To == "" {
+				// Scheduled/cron run: same benign-no-op handling as the
+				// ReplyFunc-nil branch above — the run-completion layer
+				// delivers the final text, so a missing in-loop target is
+				// not an outage.
+				if toolctx.AutoDeliveryFromContext(ctx) {
+					return autoDeliverySkipNotice, nil
+				}
 				// Same LLM-safety wording rationale as the ReplyFunc-nil branch
 				// above: do not let the model translate this into a "channel
 				// down" user-facing apology.

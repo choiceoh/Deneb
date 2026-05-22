@@ -37,6 +37,36 @@ func TestToolMessageSendRequiresDeliveryTarget(t *testing.T) {
 	}
 }
 
+func TestToolMessageSendAutoDeliveryNoReplyFuncIsBenign(t *testing.T) {
+	tool := ToolMessage()
+	ctx := toolctx.WithAutoDelivery(context.Background())
+
+	out, err := tool(ctx, []byte(`{"action":"send","message":"hello"}`))
+	if err != nil {
+		t.Fatalf("auto-delivery run must not error on unwired in-loop send: %v", err)
+	}
+	if !strings.Contains(out, "scheduled run") {
+		t.Fatalf("got %q, want benign scheduled-run skip notice", out)
+	}
+}
+
+func TestToolMessageSendAutoDeliveryNoDeliveryTargetIsBenign(t *testing.T) {
+	tool := ToolMessage()
+	ctx := toolctx.WithAutoDelivery(context.Background())
+	ctx = toolctx.WithReplyFunc(ctx, func(ctx context.Context, delivery *toolctx.DeliveryContext, text string) error {
+		t.Fatalf("replyFn should not be called without a delivery target")
+		return nil
+	})
+
+	out, err := tool(ctx, []byte(`{"action":"send","message":"hello"}`))
+	if err != nil {
+		t.Fatalf("auto-delivery run must not error on missing in-loop target: %v", err)
+	}
+	if !strings.Contains(out, "scheduled run") {
+		t.Fatalf("got %q, want benign scheduled-run skip notice", out)
+	}
+}
+
 func TestToolMessageSendPropagatesDeliveryFailure(t *testing.T) {
 	tool := ToolMessage()
 	wantErr := errors.New("telegram client not connected")

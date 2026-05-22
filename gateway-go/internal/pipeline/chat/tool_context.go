@@ -30,6 +30,12 @@ func ReplyFuncFromContext(ctx context.Context) ReplyFunc {
 	return toolctx.ReplyFuncFromContext(ctx)
 }
 
+// WithAutoDelivery marks a run whose final reply text is delivered by the
+// run-completion layer rather than the agent's in-loop message tool.
+func WithAutoDelivery(ctx context.Context) context.Context {
+	return toolctx.WithAutoDelivery(ctx)
+}
+
 // WithSessionKey attaches the session key to ctx.
 func WithSessionKey(ctx context.Context, key string) context.Context {
 	return toolctx.WithSessionKey(ctx, key)

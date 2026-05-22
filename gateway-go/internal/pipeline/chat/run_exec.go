@@ -502,16 +502,17 @@ func prepareContextAndPrompt(
 			}
 		}
 		spp := prompt.SystemPromptParams{
-			WorkspaceDir:    workspaceDir,
-			ToolDefs:        toolDefs,
-			DeferredTools:   deferredToolInfos,
-			UserTimezone:    tz,
-			ContextFiles:    prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey)),
-			RuntimeInfo:     prompt.BuildDefaultRuntimeInfo(params.Model, deps.callbacks.defaultModel),
-			Channel:         ch,
-			SkillsPrompt:    loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
-			ToolPreset:      sessionToolPreset,
-			CompactionFired: compactionFired,
+			WorkspaceDir:        workspaceDir,
+			ToolDefs:            toolDefs,
+			DeferredTools:       deferredToolInfos,
+			UserTimezone:        tz,
+			ContextFiles:        prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey)),
+			RuntimeInfo:         prompt.BuildDefaultRuntimeInfo(params.Model, deps.callbacks.defaultModel),
+			Channel:             ch,
+			SkillsPrompt:        loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
+			ToolPreset:          sessionToolPreset,
+			CompactionFired:     compactionFired,
+			AutoDeliveredOutput: params.AutoDeliveredOutput,
 		}
 
 		systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))

@@ -28,7 +28,15 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 	// returns "no active delivery target" and the agent tends to fabricate a
 	// "channel not connected" follow-up that actually does reach the user,
 	// producing the self-contradicting message we saw in production.
-	opts := &chat.SyncOptions{}
+	//
+	// AutoDeliveredOutput marks every cron run: the agent's final text is
+	// delivered to the user's channel by the cron delivery layer (proactive
+	// relay / main-session handoff / DeliverCronOutput), so the agent must
+	// not deliver it via the message tool, and an in-loop send-guard failure
+	// is a benign no-op rather than an outage to report. This stops the LLM
+	// from translating a tool error into a "텔레그램 채널이 연결되지 않았다"
+	// apology that itself gets delivered through that very channel.
+	opts := &chat.SyncOptions{AutoDeliveredOutput: true}
 	if params.Channel != "" && params.To != "" {
 		opts.Delivery = &chat.DeliveryContext{
 			Channel:   params.Channel,
