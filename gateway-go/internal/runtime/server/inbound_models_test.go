@@ -187,35 +187,41 @@ func TestBuildModelKeyboard_EmptyReturnsNil(t *testing.T) {
 	}
 }
 
-func TestAppendBuiltinSubscriptionProviders(t *testing.T) {
-	// From an empty config, both built-in coding-subscription providers
-	// are offered.
-	got := appendBuiltinSubscriptionProviders(nil)
+func TestAppendBuiltinProviders(t *testing.T) {
+	// From an empty config, every built-in provider is offered — including
+	// zai, which must never silently disappear from the keyboard.
+	got := appendBuiltinProviders(nil)
 	names := make(map[string]int)
 	for _, pv := range got {
 		names[pv.name]++
 	}
-	if names["kimi"] != 1 {
-		t.Errorf("kimi appears %d times, want 1", names["kimi"])
+	for _, want := range []string{"zai", "openrouter", "vllm", "localai", "kimi", "mimo-plan"} {
+		if names[want] != 1 {
+			t.Errorf("builtin provider %q appears %d times, want 1", want, names[want])
+		}
 	}
-	if names["mimo-plan"] != 1 {
-		t.Errorf("mimo-plan appears %d times, want 1", names["mimo-plan"])
+
+	// The merged list is sorted by name for a stable keyboard layout.
+	for i := 1; i < len(got); i++ {
+		if got[i-1].name > got[i].name {
+			t.Errorf("providers not sorted: %q before %q", got[i-1].name, got[i].name)
+		}
 	}
 
 	// A provider the operator already declared is not duplicated, and its
 	// explicit config is preserved (the built-in does not overwrite it).
-	configured := []providerSpec{{name: "kimi", models: []string{"custom-model"}}}
-	got = appendBuiltinSubscriptionProviders(configured)
-	kimiCount := 0
+	configured := []providerSpec{{name: "zai", models: []string{"custom-model"}}}
+	got = appendBuiltinProviders(configured)
+	zaiCount := 0
 	for _, pv := range got {
-		if pv.name == "kimi" {
-			kimiCount++
+		if pv.name == "zai" {
+			zaiCount++
 			if len(pv.models) != 1 || pv.models[0] != "custom-model" {
-				t.Errorf("configured kimi spec was overwritten: %+v", pv)
+				t.Errorf("configured zai spec was overwritten: %+v", pv)
 			}
 		}
 	}
-	if kimiCount != 1 {
-		t.Errorf("kimi appears %d times after merge, want 1 (no duplicate)", kimiCount)
+	if zaiCount != 1 {
+		t.Errorf("zai appears %d times after merge, want 1 (no duplicate)", zaiCount)
 	}
 }
