@@ -233,7 +233,7 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 	}
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "gmail",
-		Description: "Gmail (native OAuth2): inbox, search, read, thread (대화 전체를 시간순으로), attachment (첨부파일 추출 — PDF 텍스트 등), send, reply, labels, analyze (LLM 이메일 분석, multi-stage pipeline). Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
+		Description: "Gmail (native OAuth2): inbox, search, read, thread (대화 전체를 시간순으로), attachment (첨부파일 추출 — PDF/Excel/이미지 OCR, 또는 download로 파일 저장), send, reply, labels, analyze (LLM 이메일 분석, 첨부 내용 자동 포함). Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
 		InputSchema: gmailToolSchema(),
 		Fn:          tools.ToolGmail(gmailPipelineDeps),
 		Deferred:    true,
