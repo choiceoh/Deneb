@@ -1,22 +1,22 @@
 // Package server — model quick-change UI for the Telegram inline keyboard.
 //
 // The /models command renders a provider-grouped inline keyboard so the
-// operator can switch the default model with one tap. Sections cover:
+// operator can switch the default model with one tap. The provider list is
+// driven by deneb.json's models.providers map — every provider the operator
+// has configured is "connected" and gets its own section. Each section lists
+// the models declared in config, augmented (for providers on a loopback host)
+// by whatever the local server actually serves via its /models endpoint.
 //
-//   - 역할      role-based models from the registry (main/lightweight/fallback)
-//   - Z.ai      curated cloud GLM models
-//   - 로컬 vLLM  models auto-discovered from the local vLLM server
-//   - 로컬 AI    models auto-discovered from the local AI server
-//   - OpenRouter curated cloud models (shown only when an API key is set)
-//
-// Local sections reflect what each server actually serves (auto-discovered),
-// so the keyboard never offers a model that would 404. Discovery results are
-// cached briefly so re-rendering the keyboard on every button tap stays fast.
+// A leading 역할 section surfaces the registry's role-based models
+// (main/lightweight/fallback) as semantic shortcuts. Local discovery results
+// are cached briefly so re-rendering the keyboard on every button tap is fast.
 package server
 
 import (
 	"context"
-	"os"
+	"encoding/json"
+	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,8 +30,9 @@ import (
 )
 
 const (
-	// maxModelsPerProvider caps how many discovered models one provider
-	// section may show, keeping the keyboard scannable.
+	// maxModelsPerProvider caps how many models one provider section may
+	// show, keeping the keyboard scannable. Config-declared models come
+	// first (operator priority), then auto-discovered extras.
 	maxModelsPerProvider = 6
 	// localDiscoveryTimeout bounds a single local /models probe.
 	localDiscoveryTimeout = 3 * time.Second
@@ -40,20 +41,9 @@ const (
 	localModelCacheTTL = 5 * time.Minute
 )
 
-// zaiQuickModels is the curated Z.ai model set offered in /models.
-var zaiQuickModels = []string{"glm-5-turbo", "glm-5.1"}
-
-// openrouterQuickModels is the curated OpenRouter model set offered in /models.
-// Shown only when OPENROUTER_API_KEY is configured.
-var openrouterQuickModels = []string{
-	"anthropic/claude-opus-4.7",
-	"anthropic/claude-sonnet-4.6",
-	"google/gemini-3.1-pro",
-}
-
 // modelEntry describes a single model button in the /models keyboard.
 type modelEntry struct {
-	provider string // provider ID (zai, vllm, localai, openrouter)
+	provider string // provider ID (zai, vllm, openrouter, ...)
 	label    string // button label
 	fullID   string // full model ID sent to the LLM + callback (provider/model)
 	display  string // short display name (no provider prefix)
@@ -63,6 +53,13 @@ type modelEntry struct {
 type modelSection struct {
 	title   string
 	entries []modelEntry
+}
+
+// providerSpec is one provider configured in deneb.json's models.providers.
+type providerSpec struct {
+	name    string   // provider key (zai, vllm, openrouter, ...)
+	baseURL string   // OpenAI-compatible endpoint, may be empty
+	models  []string // model ids declared in config (+ discovered, after merge)
 }
 
 // localModelCache memoizes auto-discovered local provider models so the
@@ -88,19 +85,126 @@ func callbackFits(fullID string) bool {
 	return len(telegram.ActionModelSwitch)+1+len(fullID) <= telegram.MaxCallbackData
 }
 
-// curatedEntries builds model entries for a fixed provider/model list.
-func curatedEntries(provider string, models []string) []modelEntry {
-	entries := make([]modelEntry, 0, len(models))
-	for _, m := range models {
-		m = strings.TrimSpace(m)
-		if m == "" {
-			continue
+// providerDisplayName returns a human-friendly label for a provider key.
+func providerDisplayName(name string) string {
+	switch name {
+	case "zai":
+		return "Z.ai"
+	case "vllm":
+		return "vLLM"
+	case "localai":
+		return "LocalAI"
+	case "openrouter":
+		return "OpenRouter"
+	case "anthropic":
+		return "Anthropic"
+	case "openai":
+		return "OpenAI"
+	case "google":
+		return "Google"
+	}
+	return name
+}
+
+// isLocalURL reports whether a base URL points at a loopback host, i.e. a
+// local model server that is worth probing for auto-discovery.
+func isLocalURL(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	switch host {
+	case "localhost", "127.0.0.1", "0.0.0.0", "::1":
+		return true
+	}
+	return strings.HasPrefix(host, "127.")
+}
+
+// effectiveBaseURL returns the provider's base URL, falling back to the known
+// default for local providers when config omits it.
+func effectiveBaseURL(spec providerSpec) string {
+	if spec.baseURL != "" {
+		return spec.baseURL
+	}
+	switch spec.name {
+	case "vllm":
+		return modelrole.DefaultVllmBaseURL
+	case "localai":
+		return modelrole.DefaultLocalAIBaseURL
+	}
+	return ""
+}
+
+// loadConfiguredProviders reads models.providers from deneb.json. Every
+// configured provider is treated as "connected" and surfaced in /models.
+// Providers are returned sorted by name for a stable keyboard layout.
+func loadConfiguredProviders() []providerSpec {
+	snapshot, err := config.LoadConfigFromDefaultPath()
+	if err != nil || snapshot == nil || !snapshot.Valid || snapshot.Raw == "" {
+		return nil
+	}
+	var root struct {
+		Models struct {
+			Providers map[string]struct {
+				BaseURL string `json:"baseUrl"`
+				Models  []struct {
+					ID string `json:"id"`
+				} `json:"models"`
+			} `json:"providers"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
+		return nil
+	}
+	specs := make([]providerSpec, 0, len(root.Models.Providers))
+	for name, pc := range root.Models.Providers {
+		spec := providerSpec{name: name, baseURL: strings.TrimSpace(pc.BaseURL)}
+		for _, m := range pc.Models {
+			if id := strings.TrimSpace(m.ID); id != "" {
+				spec.models = append(spec.models, id)
+			}
 		}
+		specs = append(specs, spec)
+	}
+	sort.Slice(specs, func(i, j int) bool { return specs[i].name < specs[j].name })
+	return specs
+}
+
+// mergeModels concatenates configured + discovered model ids, de-duplicating
+// while preserving order (config-declared models first).
+func mergeModels(configured, discovered []string) []string {
+	seen := make(map[string]struct{}, len(configured)+len(discovered))
+	var out []string
+	for _, group := range [][]string{configured, discovered} {
+		for _, m := range group {
+			m = strings.TrimSpace(m)
+			if m == "" {
+				continue
+			}
+			if _, dup := seen[m]; dup {
+				continue
+			}
+			seen[m] = struct{}{}
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// providerEntries builds the model buttons for one provider section.
+func providerEntries(spec providerSpec) []modelEntry {
+	entries := make([]modelEntry, 0, len(spec.models))
+	for _, m := range spec.models {
 		short := shortModelName(m)
 		entries = append(entries, modelEntry{
-			provider: provider,
+			provider: spec.name,
 			label:    short,
-			fullID:   provider + "/" + m,
+			fullID:   spec.name + "/" + m,
 			display:  short,
 		})
 	}
@@ -136,15 +240,12 @@ func registryRoleEntries(reg *modelrole.Registry) []modelEntry {
 	return entries
 }
 
-// assembleModelSections builds the ordered /models keyboard sections. Pure —
-// all IO (local discovery, env lookup) is resolved by the caller and passed in.
-// Entries are de-duplicated globally by full model ID (first occurrence wins),
-// so a model surfaced as a role does not repeat in its provider section.
-func assembleModelSections(
-	roles []modelEntry,
-	discovered map[string][]string,
-	openrouterEnabled bool,
-) []modelSection {
+// assembleModelSections builds the ordered /models keyboard sections: a 역할
+// section followed by one section per configured provider. Pure — all IO
+// (config load, local discovery) is resolved by the caller. Entries are
+// de-duplicated globally by full model ID (first occurrence wins), so a model
+// surfaced as a role does not repeat in its provider section.
+func assembleModelSections(roles []modelEntry, providers []providerSpec) []modelSection {
 	seen := make(map[string]struct{})
 	var sections []modelSection
 
@@ -166,18 +267,15 @@ func assembleModelSections(
 	}
 
 	add("역할", roles)
-	add("Z.ai", curatedEntries("zai", zaiQuickModels))
-	add("로컬 vLLM", curatedEntries("vllm", discovered["vllm"]))
-	add("로컬 AI", curatedEntries("localai", discovered["localai"]))
-	if openrouterEnabled {
-		add("OpenRouter", curatedEntries("openrouter", openrouterQuickModels))
+	for _, pv := range providers {
+		add(providerDisplayName(pv.name), providerEntries(pv))
 	}
 	return sections
 }
 
 // discoverProviderModels probes an OpenAI-compatible /models endpoint and
 // returns up to maxModelsPerProvider served model ids. Returns nil on any
-// failure so the provider section is simply omitted from the keyboard.
+// failure so the provider section falls back to config-declared models only.
 func discoverProviderModels(ctx context.Context, baseURL string) []string {
 	if strings.TrimSpace(baseURL) == "" {
 		return nil
@@ -192,9 +290,10 @@ func discoverProviderModels(ctx context.Context, baseURL string) []string {
 	return ids
 }
 
-// discoverLocalModels probes the local vLLM and AI servers concurrently and
-// returns provider→served-models. Results are cached for localModelCacheTTL.
-func (p *InboundProcessor) discoverLocalModels() map[string][]string {
+// discoverLocalModels probes the /models endpoint of every configured provider
+// on a loopback host, concurrently, and returns provider→served-models.
+// Results are cached for localModelCacheTTL.
+func (p *InboundProcessor) discoverLocalModels(providers []providerSpec) map[string][]string {
 	localModelCache.mu.Lock()
 	if localModelCache.models != nil && time.Since(localModelCache.builtAt) < localModelCacheTTL {
 		cached := localModelCache.models
@@ -203,42 +302,40 @@ func (p *InboundProcessor) discoverLocalModels() map[string][]string {
 	}
 	localModelCache.mu.Unlock()
 
-	vllmURL := modelrole.DefaultVllmBaseURL
-	if reg := p.server.modelRegistry; reg != nil {
-		if u := reg.BaseURL(modelrole.RoleLightweight); u != "" {
-			vllmURL = u
+	type target struct {
+		name    string
+		baseURL string
+	}
+	var targets []target
+	for _, pv := range providers {
+		if base := effectiveBaseURL(pv); isLocalURL(base) {
+			targets = append(targets, target{name: pv.name, baseURL: base})
 		}
 	}
-	targets := []struct {
-		provider string
-		baseURL  string
-	}{
-		{"vllm", vllmURL},
-		{"localai", modelrole.DefaultLocalAIBaseURL},
-	}
 
-	results := make([][]string, len(targets))
-	var wg sync.WaitGroup
-	for i, t := range targets {
-		wg.Add(1)
-		go func(idx int, provider, baseURL string) {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					p.logger.Error("panic in model discovery probe", "provider", provider, "panic", r)
-				}
-			}()
-			ctx, cancel := context.WithTimeout(p.server.ShutdownCtx(), localDiscoveryTimeout)
-			defer cancel()
-			results[idx] = discoverProviderModels(ctx, baseURL)
-		}(i, t.provider, t.baseURL)
-	}
-	wg.Wait()
-
-	out := make(map[string][]string, len(targets))
-	for i, t := range targets {
-		if len(results[i]) > 0 {
-			out[t.provider] = results[i]
+	out := make(map[string][]string)
+	if len(targets) > 0 {
+		results := make([][]string, len(targets))
+		var wg sync.WaitGroup
+		for i, t := range targets {
+			wg.Add(1)
+			go func(idx int, name, baseURL string) {
+				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						p.logger.Error("panic in model discovery probe", "provider", name, "panic", r)
+					}
+				}()
+				ctx, cancel := context.WithTimeout(p.server.ShutdownCtx(), localDiscoveryTimeout)
+				defer cancel()
+				results[idx] = discoverProviderModels(ctx, baseURL)
+			}(i, t.name, t.baseURL)
+		}
+		wg.Wait()
+		for i, t := range targets {
+			if len(results[i]) > 0 {
+				out[t.name] = results[i]
+			}
 		}
 	}
 
@@ -252,9 +349,15 @@ func (p *InboundProcessor) discoverLocalModels() map[string][]string {
 // quickChangeModels returns the ordered sections for the /models keyboard.
 func (p *InboundProcessor) quickChangeModels() []modelSection {
 	roles := registryRoleEntries(p.server.modelRegistry)
-	discovered := p.discoverLocalModels()
-	openrouter := strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY")) != ""
-	return assembleModelSections(roles, discovered, openrouter)
+	providers := loadConfiguredProviders()
+	discovered := p.discoverLocalModels(providers)
+	for i := range providers {
+		providers[i].models = mergeModels(providers[i].models, discovered[providers[i].name])
+		if len(providers[i].models) > maxModelsPerProvider {
+			providers[i].models = providers[i].models[:maxModelsPerProvider]
+		}
+	}
+	return assembleModelSections(roles, providers)
 }
 
 // currentModel resolves the model ID currently in effect for new runs.

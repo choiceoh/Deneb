@@ -32,32 +32,68 @@ func TestCallbackFits(t *testing.T) {
 	}
 }
 
-func TestCuratedEntries(t *testing.T) {
-	entries := curatedEntries("zai", []string{"glm-5-turbo", "  ", "glm-5.1"})
+func TestIsLocalURL(t *testing.T) {
+	local := []string{
+		"http://127.0.0.1:8000/v1",
+		"http://localhost:30000/v1",
+		"http://0.0.0.0:8000",
+		"http://[::1]:8000/v1",
+	}
+	for _, u := range local {
+		if !isLocalURL(u) {
+			t.Errorf("isLocalURL(%q) = false, want true", u)
+		}
+	}
+	remote := []string{
+		"https://api.z.ai/api/anthropic",
+		"https://openrouter.ai/api/v1",
+		"",
+	}
+	for _, u := range remote {
+		if isLocalURL(u) {
+			t.Errorf("isLocalURL(%q) = true, want false", u)
+		}
+	}
+}
+
+func TestMergeModels(t *testing.T) {
+	got := mergeModels([]string{"a", "b"}, []string{"b", "c", "  "})
+	want := []string{"a", "b", "c"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("mergeModels = %v, want %v", got, want)
+	}
+}
+
+func TestProviderEntries(t *testing.T) {
+	entries := providerEntries(providerSpec{
+		name:   "zai",
+		models: []string{"glm-5-turbo", "anthropic/claude-x"},
+	})
 	if len(entries) != 2 {
-		t.Fatalf("expected 2 entries (blank dropped), got %d", len(entries))
+		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
 	if entries[0].fullID != "zai/glm-5-turbo" || entries[0].display != "glm-5-turbo" {
 		t.Errorf("unexpected first entry: %+v", entries[0])
 	}
-	if entries[1].fullID != "zai/glm-5.1" {
-		t.Errorf("unexpected second entry fullID: %q", entries[1].fullID)
+	// shortModelName strips the inner provider prefix for the label.
+	if entries[1].fullID != "zai/anthropic/claude-x" || entries[1].display != "claude-x" {
+		t.Errorf("unexpected second entry: %+v", entries[1])
 	}
 }
 
 func TestAssembleModelSections_OrderAndDedup(t *testing.T) {
 	roles := []modelEntry{
 		{provider: "zai", label: "main: glm-5-turbo", fullID: "zai/glm-5-turbo", display: "glm-5-turbo"},
-		{provider: "vllm", label: "lightweight: gemma4", fullID: "vllm/gemma4", display: "gemma4"},
 	}
-	discovered := map[string][]string{
-		"vllm":    {"gemma4", "qwen3-32b"},
-		"localai": {"phi-5"},
+	// Providers arrive pre-sorted (loadConfiguredProviders sorts by name).
+	providers := []providerSpec{
+		{name: "vllm", models: []string{"gemma4", "qwen3-32b"}},
+		{name: "zai", models: []string{"glm-5-turbo", "glm-5.1"}},
 	}
 
-	sections := assembleModelSections(roles, discovered, true)
+	sections := assembleModelSections(roles, providers)
 
-	wantTitles := []string{"역할", "Z.ai", "로컬 vLLM", "로컬 AI", "OpenRouter"}
+	wantTitles := []string{"역할", "vLLM", "Z.ai"}
 	if len(sections) != len(wantTitles) {
 		t.Fatalf("expected %d sections, got %d", len(wantTitles), len(sections))
 	}
@@ -68,44 +104,36 @@ func TestAssembleModelSections_OrderAndDedup(t *testing.T) {
 	}
 
 	// glm-5-turbo appears as a role → must not repeat in the Z.ai section.
-	for _, e := range sections[1].entries {
-		if e.fullID == "zai/glm-5-turbo" {
-			t.Error("zai/glm-5-turbo duplicated in Z.ai section despite role entry")
-		}
-	}
-	// gemma4 appears as a role → vLLM section should only carry the rest.
-	if len(sections[2].entries) != 1 || sections[2].entries[0].fullID != "vllm/qwen3-32b" {
-		t.Errorf("vLLM section after dedup = %+v, want only vllm/qwen3-32b", sections[2].entries)
+	zai := sections[2]
+	if len(zai.entries) != 1 || zai.entries[0].fullID != "zai/glm-5.1" {
+		t.Errorf("Z.ai section after dedup = %+v, want only zai/glm-5.1", zai.entries)
 	}
 }
 
-func TestAssembleModelSections_OpenRouterGated(t *testing.T) {
-	roles := []modelEntry{
-		{provider: "zai", label: "main", fullID: "zai/glm-5-turbo", display: "glm-5-turbo"},
+func TestAssembleModelSections_EmptyProviderOmitted(t *testing.T) {
+	providers := []providerSpec{
+		{name: "vllm", models: []string{"gemma4"}},
+		{name: "empty", models: nil},
 	}
-	sections := assembleModelSections(roles, nil, false)
+	sections := assembleModelSections(nil, providers)
 	for _, s := range sections {
-		if s.title == "OpenRouter" {
-			t.Error("OpenRouter section should be omitted when key is absent")
+		if s.title == "empty" {
+			t.Error("a provider with no models should not produce a section")
 		}
 	}
-	// No local discovery → no local sections.
-	for _, s := range sections {
-		if s.title == "로컬 vLLM" || s.title == "로컬 AI" {
-			t.Errorf("local section %q present without discovery results", s.title)
-		}
+	if len(sections) != 1 || sections[0].title != "vLLM" {
+		t.Errorf("expected only the vLLM section, got %+v", sections)
 	}
 }
 
 func TestAssembleModelSections_DropsOversizedCallback(t *testing.T) {
 	huge := strings.Repeat("y", 70)
-	roles := []modelEntry{
-		{provider: "zai", label: "ok", fullID: "zai/glm-5-turbo", display: "glm-5-turbo"},
-		{provider: "zai", label: "huge", fullID: "zai/" + huge, display: huge},
+	providers := []providerSpec{
+		{name: "zai", models: []string{"glm-5-turbo", huge}},
 	}
-	sections := assembleModelSections(roles, nil, false)
-	if len(sections) == 0 || sections[0].title != "역할" {
-		t.Fatal("expected a 역할 section")
+	sections := assembleModelSections(nil, providers)
+	if len(sections) != 1 || sections[0].title != "Z.ai" {
+		t.Fatalf("expected a Z.ai section, got %+v", sections)
 	}
 	if len(sections[0].entries) != 1 {
 		t.Errorf("oversized callback entry should be dropped, got %d entries", len(sections[0].entries))
