@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
@@ -31,10 +32,18 @@ func (p *InboundProcessor) handleStatusDashboardCommand(chatID, sessionKey strin
 	b.WriteString("<b>📊 상태 대시보드</b>\n")
 	b.WriteString("──────────────────\n\n")
 
-	// Gateway info.
+	// Gateway info. Prefer the most recently applied PR (parsed from the
+	// deployed checkout's HEAD) over the build version tag — it tells the
+	// operator exactly which change is live. Falls back to the version tag
+	// when git is unavailable or HEAD is not a squash-merge commit.
 	if p.server.version != "" {
-		b.WriteString("🖥️ <b>Gateway:</b> v")
-		b.WriteString(html.EscapeString(p.server.version))
+		b.WriteString("🖥️ <b>Gateway:</b> ")
+		if ref := chat.LatestAppliedRef(); ref != "" {
+			b.WriteString(html.EscapeString(ref))
+		} else {
+			b.WriteByte('v')
+			b.WriteString(html.EscapeString(p.server.version))
+		}
 		if !p.server.startedAt.IsZero() {
 			b.WriteString(" | Uptime: ")
 			b.WriteString(formatDashboardUptime(time.Since(p.server.startedAt)))

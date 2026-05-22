@@ -70,6 +70,31 @@ func TestTruncateUpdateOutput(t *testing.T) {
 	}
 }
 
+func TestParsePRNumber(t *testing.T) {
+	tests := []struct {
+		subject string
+		want    string
+	}{
+		{"feat(telegram): add /update slash command for in-app updates (#1643)", "1643"},
+		{"feat(provider): add Xiaomi MiMo Token Plan and Kimi Code providers (#1638)", "1638"},
+		{"feat(telegram): add /update (slash) command (#1644)", "1644"},
+		{"chore(main): release 4.22.3 (#42)", "42"},
+		{"fix: a plain commit with no PR ref", ""},
+		{"refactor: trailing parens (not a pr)", ""},
+		{"feat: weird empty ref (#)", ""},
+		{"feat: missing close paren (#1643", ""},
+		{"feat: non-numeric ref (#abc)", ""},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.subject, func(t *testing.T) {
+			if got := parsePRNumber(tt.subject); got != tt.want {
+				t.Errorf("parsePRNumber(%q) = %q, want %q", tt.subject, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseSlashCommand_Update(t *testing.T) {
 	tests := []struct {
 		input   string
