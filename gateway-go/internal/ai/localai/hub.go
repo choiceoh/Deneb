@@ -2,6 +2,7 @@ package localai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -21,15 +22,38 @@ var (
 	ErrUnhealthy   = errors.New("localai hub: model unhealthy")
 )
 
-// NoThinking is the default ExtraBody merged into every hub request.
-// Disables Qwen3 reasoning mode at the chat-template level — hub calls
-// (memory extraction, summaries, proactive context, pilot) need fast,
+// NoThinking disables Qwen3 reasoning mode at the chat-template level — hub
+// calls (memory extraction, summaries, proactive context, pilot) need fast,
 // deterministic output and stable tool calls, not <think> traces.
-// Exported so pilot and memory packages can reference it without duplicating.
+// It is merged into non-reasoning-model requests by mergeRequestBody;
+// reasoning models omit it (the flag is ignored or rejected — see
+// mergeRequestBody). Exported so pilot and memory packages can reference it
+// without duplicating.
 var NoThinking = map[string]any{
 	"chat_template_kwargs": map[string]any{
 		"enable_thinking": false,
 	},
+}
+
+// mergeRequestBody builds the OpenAI-compatible ExtraBody for a hub request.
+//
+// NoThinking (chat_template_kwargs.enable_thinking=false) is applied only to
+// non-reasoning models. A reasoning model gains nothing from it — vLLM exposes
+// the reasoning channel through --reasoning-parser no matter what the flag says
+// — and a thinking-only chat template that lacks the parameter rejects the
+// kwarg outright with a 400 at render time. Omitting it keeps reasoning-model
+// requests valid. callerExtra is merged last so explicit fields win.
+func mergeRequestBody(model string, callerExtra map[string]any) map[string]any {
+	merged := make(map[string]any, len(NoThinking)+len(callerExtra))
+	if !modelrole.IsReasoningModel(model) {
+		for k, v := range NoThinking {
+			merged[k] = v
+		}
+	}
+	for k, v := range callerExtra {
+		merged[k] = v
+	}
+	return merged
 }
 
 // modelSamplingDefaults returns vendor-recommended sampling parameters for
@@ -279,24 +303,51 @@ func (h *Hub) CallLocalLLM(ctx context.Context, system, userMessage string, maxT
 		req.ExtraBody = extraBody[0]
 	}
 	resp, err := h.Submit(ctx, req)
-	if err != nil {
-		// Fallback chain: try other model roles if local AI fails.
-		if h.registry != nil {
-			chain := h.registry.FallbackChain(modelrole.RoleLightweight)
-			for _, role := range chain[1:] {
-				fbClient := h.registry.Client(role)
-				if fbClient == nil {
-					continue
-				}
-				text, fbErr := h.callDirect(ctx, fbClient, h.registry.Model(role), system, userMessage, maxTokens, extraBody...)
-				if fbErr == nil {
-					return text, nil
-				}
-			}
-		}
+	if err == nil {
+		return resp.Text, nil
+	}
+	if h.registry == nil {
 		return "", err
 	}
-	return resp.Text, nil
+
+	// Fallback chain: try other model roles. Non-reasoning models are tried
+	// first — a reasoning model's separate thinking channel makes it a slower,
+	// less reliable summarizer — and reasoning models are kept only as a last
+	// resort so a fully-reasoning chain still produces output.
+	chain := h.registry.FallbackChain(modelrole.RoleLightweight)
+	var deferredReasoning []modelrole.Role
+	for _, role := range chain[1:] {
+		if h.registry.RoleIsReasoning(role) {
+			deferredReasoning = append(deferredReasoning, role)
+			continue
+		}
+		if text, ok := h.callFallbackRole(ctx, role, system, userMessage, maxTokens, extraBody...); ok {
+			return text, nil
+		}
+	}
+	for _, role := range deferredReasoning {
+		if text, ok := h.callFallbackRole(ctx, role, system, userMessage, maxTokens, extraBody...); ok {
+			return text, nil
+		}
+	}
+	return "", err
+}
+
+// callFallbackRole runs callDirect for a single fallback role. It returns
+// (text, true) on success and ("", false) when the role is unconfigured
+// (nil client) or the call failed.
+func (h *Hub) callFallbackRole(ctx context.Context, role modelrole.Role, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, bool) {
+	client := h.registry.Client(role)
+	if client == nil {
+		return "", false
+	}
+	text, err := h.callDirect(ctx, client, h.registry.Model(role), system, userMessage, maxTokens, extraBody...)
+	if err != nil {
+		h.logger.Debug("localai hub: fallback role failed",
+			"role", role, "reasoning", h.registry.RoleIsReasoning(role), "error", err)
+		return "", false
+	}
+	return text, true
 }
 
 // --- dispatch loop ---
@@ -362,14 +413,9 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 	h.activeReqs.Store(id, ar)
 	defer h.activeReqs.Delete(id)
 
-	// Build the LLM request.
-	merged := make(map[string]any, len(NoThinking)+len(req.ExtraBody))
-	for k, v := range NoThinking {
-		merged[k] = v
-	}
-	for k, v := range req.ExtraBody {
-		merged[k] = v
-	}
+	// Build the LLM request. Reasoning models omit the enable_thinking flag
+	// (see mergeRequestBody).
+	merged := mergeRequestBody(h.model, req.ExtraBody)
 
 	// Inject server-side timeout to prevent zombie generation.
 	if deadline, ok := reqCtx.Deadline(); ok {
@@ -438,15 +484,11 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 
 // callDirect is a raw local AI call for fallback chains (bypasses queue/budget).
 func (h *Hub) callDirect(ctx context.Context, client *llm.Client, model, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
-	merged := make(map[string]any, len(NoThinking))
-	for k, v := range NoThinking {
-		merged[k] = v
+	var callerExtra map[string]any
+	if len(extraBody) > 0 {
+		callerExtra = extraBody[0]
 	}
-	if len(extraBody) > 0 && extraBody[0] != nil {
-		for k, v := range extraBody[0] {
-			merged[k] = v
-		}
-	}
+	merged := mergeRequestBody(model, callerExtra)
 
 	fbTemp, fbTopP, fbTopK := modelSamplingDefaults(model)
 	req := llm.ChatRequest{
@@ -468,7 +510,11 @@ func (h *Hub) callDirect(ctx context.Context, client *llm.Client, model, system,
 	return collectStream(ctx, events)
 }
 
-// collectStream gathers all text deltas from a streaming response.
+// collectStream gathers the assistant text from a streaming response. Only
+// text_delta blocks are collected — reasoning models additionally stream
+// thinking_delta blocks (the translated reasoning_content channel) carrying
+// private chain-of-thought, which must never leak into hub output such as
+// compaction summaries.
 func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, error) {
 	if events == nil {
 		return "", fmt.Errorf("localai: nil event channel")
@@ -486,38 +532,24 @@ func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, 
 				return strings.TrimSpace(sb.String()), nil
 			}
 			if ev.Type == "content_block_delta" {
-				if text := extractDeltaText(ev.Payload); text != "" {
-					sb.WriteString(text)
-				}
+				sb.WriteString(extractTextDelta(ev.Payload))
 			}
 		}
 	}
 }
 
-// extractDeltaText extracts text from {"delta":{"text":"..."}} payloads.
-func extractDeltaText(payload []byte) string {
-	// Fast path: scan for "text":" pattern.
-	const needle = `"text":"`
-	idx := strings.Index(string(payload), needle)
-	if idx < 0 {
+// extractTextDelta returns the text of a content_block_delta payload, but only
+// when the delta is a text_delta. thinking_delta and signature_delta payloads
+// (emitted for reasoning models) yield "" so reasoning content is discarded.
+func extractTextDelta(payload []byte) string {
+	var cbd llm.ContentBlockDelta
+	if err := json.Unmarshal(payload, &cbd); err != nil {
 		return ""
 	}
-	start := idx + len(needle)
-	end := start
-	for end < len(payload) {
-		if payload[end] == '\\' {
-			end += 2
-			continue
-		}
-		if payload[end] == '"' {
-			break
-		}
-		end++
+	if cbd.Delta.Type != "text_delta" {
+		return ""
 	}
-	if end > len(payload) {
-		end = len(payload)
-	}
-	return string(payload[start:end])
+	return cbd.Delta.Text
 }
 
 func (h *Hub) cacheJanitor() {
