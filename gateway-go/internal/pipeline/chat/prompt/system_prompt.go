@@ -223,6 +223,10 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("- `polaris(action=\"expand\", summary_id=N)` — 특정 구간 원문 복원. `question`을 더하면 LLM이 원문 기반으로 답한다.\n")
 		s.WriteString("자동 `<recall-context>`는 cue 기반 preflight라 턴 시작에 한 번 주입될 뿐이다 — 대화 도중 새 회상이 필요해지면 이 도구를 직접 사용하라.\n\n")
 
+		// Analysis → wiki write-back loop (SOUL.md continuity contract).
+		s.WriteString("## 분석 → 위키 갱신\n")
+		s.WriteString("메일·거래·인물·프로젝트 분석에서 **새로 알게 된 사실**(역할 변경, 진행률, 거래 조건, 금액·기한, 결정 사항)은 같은 응답 안에서 즉시 `wiki(action=\"write\")` 또는 `wiki(action=\"log\")`로 기록한다. \"기록할까요?\" 같은 확인 금지 — 묻지 말고 실행하라. SOUL.md '연속성 확보' 원칙. 오늘 분석한 사실 위에 다음 분석이 쌓이려면 위키가 기억의 끝점이어야 한다.\n\n")
+
 		// Tooling: compact categorized list (descriptions are in tool schemas).
 		s.WriteString("## Tooling\n")
 		s.WriteString("Available tools (see tool schemas for details). Names are case-sensitive.\n")
@@ -249,6 +253,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("- Deneb CLI: `deneb gateway {status|start|stop|restart}`. Do not invent subcommands.\n")
 		s.WriteString("- 유저가 '상태', '시스템 상태', '지금 뭐하고 있어' 등 **게이트웨이 자체 상태**를 물으면 먼저 `gateway(action=status)` 를 시도하라 (버전/PID/포트/업타임/세션 수를 한 번에 반환). `top`/`free`/`nvidia-smi` 같은 OS 레벨 세부는 유저가 명시적으로 요청하거나 gateway 응답이 부족할 때만 추가 호출.\n")
 		s.WriteString("- 유저가 '재시작', '업데이트', '설정 바꿔줘'라고 하면 `gateway` 툴을 사용하라 (action=status|config_get|config_set|update|restart). 파괴적 작업(restart/update/config_set)은 첫 호출이 `needs_approval` envelope을 돌려준다 — envelope의 한국어 summary를 유저에게 그대로 전달하고, 유저가 승인하면 같은 `action_token`으로 `.confirmed` variant를 호출해 실제 실행한다. 토큰/비밀번호/API 키는 절대 `config_set`으로 건드리지 말 것.\n")
+		s.WriteString("- 첨부 파일을 사용자에게 전달하라는 요청(\"그 PDF 보내줘\", \"계약서 파일 줘\")이면 두 단계로 chain하라: ① `gmail(action=\"attachment\", message_id=..., attachment=\"파일명 또는 번호\", download=true)`로 디스크에 저장 → 반환된 경로 확보, ② 그 경로를 `send_file(file_path=...)`에 넘긴다. 한 턴에서 끝내고 사용자에게 \"전송했습니다\"만 답하라.\n")
 		s.WriteString("- **Never output tool call syntax or shell commands as text to the user.** Always use structured tool calls. Report results, not the commands you ran.\n\n")
 
 		built := s.String()
