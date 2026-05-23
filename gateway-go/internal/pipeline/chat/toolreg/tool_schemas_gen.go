@@ -948,7 +948,7 @@ func polarisToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: search (keyword search), describe (summary structure overview), expand (restore original messages from summary node)",
+				"description": "search: 현재 세션의 과거 메시지에서 키워드 검색 (모든 메시지가 SQLite FTS에 무손실 저장). describe: 압축된 요약 구간 ID 목록 (time_range 필터). expand: 특정 summary_id의 원문 메시지 복원, question 추가 시 LLM이 원문 기반 답변.",
 				"enum":        []string{"search", "describe", "expand"},
 			},
 			"max_results": map[string]any{
