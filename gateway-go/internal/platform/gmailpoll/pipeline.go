@@ -1,10 +1,14 @@
 package gmailpoll
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -113,23 +117,42 @@ const finalAnalysisPrompt = `다음 이메일을 종합적으로 분석해주세
 %s%s`
 
 // AnalyzeEmailPipeline runs a 2-stage multi-LLM analysis pipeline.
-// Stage 1: extract thread context via local LLM.
-// Stage 2: final analysis combining email + thread context via main LLM.
+// Stage 1: extract thread context via local LLM and query the wiki knowledge
+//
+//	graph for the sender (parallel, both best-effort).
+//
+// Stage 2: final analysis combining email + thread context + memory via main LLM.
 // Falls back to single-LLM analysis if pipeline deps are insufficient.
 func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail) (string, error) {
 	if !deps.canRunPipeline() {
 		return AnalyzeEmail(ctx, deps.LLMClient, deps.MainModel, DefaultPrompt, msg)
 	}
 
-	// Stage 1: extract thread context.
+	// Stage 1: extract thread context + wiki-graph context in parallel.
 	stage1Ctx, stage1Cancel := context.WithTimeout(ctx, stage1Timeout)
 	defer stage1Cancel()
-	threadCtx, _ := extractThreadContext(stage1Ctx, deps, msg) // best-effort
+
+	var (
+		threadCtx ThreadContext
+		memCtx    MemoryContext
+		wg        sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		tc, _ := extractThreadContext(stage1Ctx, deps, msg) // best-effort
+		threadCtx = tc
+	}()
+	go func() {
+		defer wg.Done()
+		memCtx = extractWikiGraphContext(stage1Ctx, msg) // best-effort
+	}()
+	wg.Wait()
 
 	// Stage 2: final analysis combining all context.
 	stage2Ctx, cancel := context.WithTimeout(ctx, stage2Timeout)
 	defer cancel()
-	return synthesizeAnalysis(stage2Ctx, deps, msg, threadCtx, MemoryContext{})
+	return synthesizeAnalysis(stage2Ctx, deps, msg, threadCtx, memCtx)
 }
 
 // --- batch analysis ---
@@ -354,6 +377,84 @@ func extractThreadContext(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 		return zero, fmt.Errorf("thread context extraction failed: %w", err)
 	}
 	return result, nil
+}
+
+// graphifyQueryTimeout caps how long the wiki-graph subprocess may run before
+// the pipeline gives up and proceeds without graph context.
+const graphifyQueryTimeout = 10 * time.Second
+
+// maxSenderFactsChars bounds graphify output so the analyze prompt stays small.
+const maxSenderFactsChars = 2000
+
+// extractWikiGraphContext queries the wiki knowledge graph (built by the wiki
+// dreamer at ~/.deneb/wiki-graph/graphify-out/graph.json) for the sender's
+// identity and related context. The result populates MemoryContext.SenderFacts
+// so final synthesis can answer "who is this person to us" without the agent
+// having to call graphify mid-turn.
+//
+// Best-effort: returns an empty MemoryContext on any failure (binary not
+// installed, graph not yet built, query timeout, empty result). Never blocks
+// the pipeline.
+func extractWikiGraphContext(ctx context.Context, msg *gmail.MessageDetail) MemoryContext {
+	var zero MemoryContext
+
+	name := extractDisplayName(msg.From)
+	if name == "" {
+		return zero
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return zero
+	}
+	graphPath := filepath.Join(home, ".deneb", "wiki-graph", "graphify-out", "graph.json")
+	if _, err := os.Stat(graphPath); err != nil {
+		return zero // wiki graph not built yet
+	}
+	if _, err := exec.LookPath("graphify"); err != nil {
+		return zero // graphify CLI not installed
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, graphifyQueryTimeout)
+	defer cancel()
+
+	question := fmt.Sprintf("%s에 대해 알려진 정보, 관련 프로젝트·거래·결정·인물 관계", name)
+	cmd := exec.CommandContext(queryCtx, "graphify", "query", question, "--graph", graphPath)
+	var out, errBuf bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &errBuf
+	if err := cmd.Run(); err != nil {
+		return zero
+	}
+
+	facts := strings.TrimSpace(out.String())
+	if facts == "" {
+		return zero
+	}
+	if len(facts) > maxSenderFactsChars {
+		facts = facts[:maxSenderFactsChars] + "\n...(생략)"
+	}
+	return MemoryContext{SenderFacts: facts}
+}
+
+// extractDisplayName returns the display name portion of "Name <email>",
+// stripping surrounding quotes; falls back to the email address if no name is
+// present. Used to seed wiki-graph queries with whatever the human typically
+// writes (a person's name finds richer graph context than an email address).
+func extractDisplayName(from string) string {
+	s := strings.TrimSpace(from)
+	if s == "" {
+		return ""
+	}
+	if idx := strings.LastIndex(s, "<"); idx >= 0 {
+		name := strings.TrimSpace(s[:idx])
+		name = strings.Trim(name, `"`)
+		if name != "" {
+			return name
+		}
+		return extractEmailAddr(s)
+	}
+	return s
 }
 
 // synthesizeAnalysis combines the email with extracted contexts for final LLM analysis.
