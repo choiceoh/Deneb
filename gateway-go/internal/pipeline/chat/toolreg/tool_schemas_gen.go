@@ -741,7 +741,7 @@ func gmailToolSchema() map[string]any {
 			},
 			"attachment": map[string]any{
 				"type":        "string",
-				"description": "Attachment selector for the attachment action: a filename (or substring) or 1-based index. Omit to list all attachments of the message. PDFs are extracted to text (OCR fallback for scans), Excel (.xlsx) sheets and image attachments (OCR) are extracted too, text files returned directly.",
+				"description": "Attachment selector for the attachment action: a filename (or substring) or 1-based index. Omit to list all attachments of the message. PDFs are extracted to text (OCR fallback for scans). Office docs are extracted via stdlib OOXML readers: Excel (.xlsx), Word (.docx), PowerPoint (.pptx). Image attachments go through OCR. Text files returned directly.",
 			},
 			"bcc": map[string]any{
 				"type":        "string",
