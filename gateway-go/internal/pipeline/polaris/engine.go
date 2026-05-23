@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -290,7 +291,12 @@ func hasSummaryMessages(messages []llm.Message) bool {
 var _ compact.Summarizer = (*capturingSummarizer)(nil)
 
 // capturingSummarizer wraps a Summarizer to capture the last summary output.
+// The mutex guards *captured because compaction.summarizeInChunks fans out
+// multiple goroutines that each call Summarize on the shared summarizer; without
+// the lock the concurrent writes to the captured pointer race (last-writer-wins
+// semantics are preserved — the test confirms only that *something* was captured).
 type capturingSummarizer struct {
+	mu       sync.Mutex
 	inner    compact.Summarizer
 	captured *string
 }
@@ -298,7 +304,9 @@ type capturingSummarizer struct {
 func (c *capturingSummarizer) Summarize(ctx context.Context, system, conversation string, maxOutputTokens int) (string, error) {
 	result, err := c.inner.Summarize(ctx, system, conversation, maxOutputTokens)
 	if err == nil && result != "" {
+		c.mu.Lock()
 		*c.captured = result
+		c.mu.Unlock()
 	}
 	return result, err
 }
