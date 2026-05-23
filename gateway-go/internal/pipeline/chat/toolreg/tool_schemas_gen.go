@@ -741,7 +741,7 @@ func gmailToolSchema() map[string]any {
 			},
 			"attachment": map[string]any{
 				"type":        "string",
-				"description": "Attachment selector for the attachment action: a filename (or substring) or 1-based index. Omit to list all attachments of the message. PDF attachments are extracted to text via pdftotext; text files are returned directly.",
+				"description": "Attachment selector for the attachment action: a filename (or substring) or 1-based index. Omit to list all attachments of the message. PDFs are extracted to text (OCR fallback for scans), Excel (.xlsx) sheets and image attachments (OCR) are extracted too, text files returned directly.",
 			},
 			"bcc": map[string]any{
 				"type":        "string",
@@ -754,6 +754,10 @@ func gmailToolSchema() map[string]any {
 			"cc": map[string]any{
 				"type":        "string",
 				"description": "CC recipient(s), comma-separated",
+			},
+			"download": map[string]any{
+				"type":        "boolean",
+				"description": "For the attachment action: when true, save the selected attachment to a local file and return its path instead of extracting text. Pass that path to the send_file tool to forward the file to the user.",
 			},
 			"html": map[string]any{
 				"type":        "boolean",
