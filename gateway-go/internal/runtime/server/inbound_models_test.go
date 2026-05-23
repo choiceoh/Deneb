@@ -93,7 +93,7 @@ func TestAssembleModelSections_OrderAndDedup(t *testing.T) {
 
 	sections := assembleModelSections(roles, providers)
 
-	wantTitles := []string{"역할", "vLLM", "Z.ai"}
+	wantTitles := []string{"역할", "vLLM", "Z.ai 코딩플랜"}
 	if len(sections) != len(wantTitles) {
 		t.Fatalf("expected %d sections, got %d", len(wantTitles), len(sections))
 	}
@@ -132,8 +132,8 @@ func TestAssembleModelSections_DropsOversizedCallback(t *testing.T) {
 		{name: "zai", models: []string{"glm-5-turbo", huge}},
 	}
 	sections := assembleModelSections(nil, providers)
-	if len(sections) != 1 || sections[0].title != "Z.ai" {
-		t.Fatalf("expected a Z.ai section, got %+v", sections)
+	if len(sections) != 1 || sections[0].title != "Z.ai 코딩플랜" {
+		t.Fatalf("expected a Z.ai 코딩플랜 section, got %+v", sections)
 	}
 	if len(sections[0].entries) != 1 {
 		t.Errorf("oversized callback entry should be dropped, got %d entries", len(sections[0].entries))

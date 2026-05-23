@@ -89,7 +89,7 @@ func callbackFits(fullID string) bool {
 func providerDisplayName(name string) string {
 	switch name {
 	case "zai":
-		return "Z.ai"
+		return "Z.ai 코딩플랜"
 	case "vllm":
 		return "vLLM"
 	case "localai":
