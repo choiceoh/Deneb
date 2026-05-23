@@ -136,13 +136,28 @@ func builtinProviders() []providerSpec {
 
 // appendBuiltinProviders adds the built-in providers the operator has not
 // already declared in deneb.json (explicit config wins), then sorts the
-// merged list by name so the keyboard layout stays stable.
+// merged list by name so the keyboard layout stays stable. When the
+// operator declared a built-in provider but left its models list empty
+// (e.g. only baseUrl/credentials, expecting /models discovery to fill in),
+// the built-in model list is grafted on so the /models keyboard section
+// is not silently dropped — this is what kept the Z.ai Coding Plan
+// (glm-5.1) from appearing alongside Kimi Code / MiMo Token Plan.
 func appendBuiltinProviders(configured []providerSpec) []providerSpec {
-	have := make(map[string]struct{}, len(configured))
-	for _, pv := range configured {
-		have[pv.name] = struct{}{}
+	builtin := builtinProviders()
+	builtinByName := make(map[string]providerSpec, len(builtin))
+	for _, b := range builtin {
+		builtinByName[b.name] = b
 	}
-	for _, b := range builtinProviders() {
+	have := make(map[string]struct{}, len(configured))
+	for i := range configured {
+		have[configured[i].name] = struct{}{}
+		if len(configured[i].models) == 0 {
+			if b, ok := builtinByName[configured[i].name]; ok && len(b.models) > 0 {
+				configured[i].models = append([]string(nil), b.models...)
+			}
+		}
+	}
+	for _, b := range builtin {
 		if _, ok := have[b.name]; !ok {
 			configured = append(configured, b)
 		}
