@@ -67,3 +67,7 @@ scripts/deploy.sh
 graphify-out/
 .graphify_python
 .graphify_*.json
+core-rs/
+gateway-go/dream-once
+gateway-go/internal/memory/
+target/
