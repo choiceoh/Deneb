@@ -75,6 +75,73 @@ func TestResolveAttachment(t *testing.T) {
 	}
 }
 
+func TestDOCXToText(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.Create("word/document.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Write([]byte(`<?xml version="1.0"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p><w:r><w:t>비밀유지계약서</w:t></w:r></w:p>
+<w:p><w:r><w:t>계약금액: 5천만원</w:t></w:r></w:p>
+</w:body>
+</w:document>`))
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	text, err := docxToText(buf.Bytes())
+	if err != nil {
+		t.Fatalf("docxToText: %v", err)
+	}
+	for _, want := range []string{"비밀유지계약서", "5천만원"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+}
+
+func TestPPTXToText(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	addSlide := func(name, body string) {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Write([]byte(body))
+	}
+	addSlide("ppt/slides/slide1.xml", `<?xml version="1.0"?>
+<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<p:cSld><p:spTree><p:sp><p:txBody>
+<a:p><a:r><a:t>2026 사업계획</a:t></a:r></a:p>
+</p:txBody></p:sp></p:spTree></p:cSld>
+</p:sld>`)
+	addSlide("ppt/slides/slide2.xml", `<?xml version="1.0"?>
+<p:sld xmlns:p="..." xmlns:a="...">
+<p:cSld><p:spTree><p:sp><p:txBody>
+<a:p><a:r><a:t>매출 목표: 100억</a:t></a:r></a:p>
+</p:txBody></p:sp></p:spTree></p:cSld>
+</p:sld>`)
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	text, err := pptxToText(buf.Bytes())
+	if err != nil {
+		t.Fatalf("pptxToText: %v", err)
+	}
+	for _, want := range []string{"Slide 1", "2026 사업계획", "Slide 2", "매출 목표: 100억"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+}
+
 func TestSaveAttachmentToDisk(t *testing.T) {
 	// A traversal-style filename must be sanitized to its base component.
 	path, err := saveAttachmentToDisk("../../etc/evil.pdf", []byte("hello"))
