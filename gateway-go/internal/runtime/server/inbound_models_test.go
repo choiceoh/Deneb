@@ -224,4 +224,43 @@ func TestAppendBuiltinProviders(t *testing.T) {
 	if zaiCount != 1 {
 		t.Errorf("zai appears %d times after merge, want 1 (no duplicate)", zaiCount)
 	}
+
+	// When the operator declared the provider but left models empty
+	// (baseUrl/credentials only), the built-in model list grafts on so
+	// the /models keyboard section is not silently dropped.
+	configured = []providerSpec{{name: "zai", baseURL: "https://api.z.ai/v1"}}
+	got = appendBuiltinProviders(configured)
+	var zaiSpec providerSpec
+	for _, pv := range got {
+		if pv.name == "zai" {
+			zaiSpec = pv
+		}
+	}
+	if zaiSpec.baseURL != "https://api.z.ai/v1" {
+		t.Errorf("operator baseURL lost: %q", zaiSpec.baseURL)
+	}
+	if len(zaiSpec.models) == 0 {
+		t.Fatal("empty zai models list was not grafted from built-in")
+	}
+	has515 := false
+	for _, m := range zaiSpec.models {
+		if m == "glm-5.1" {
+			has515 = true
+		}
+	}
+	if !has515 {
+		t.Errorf("grafted zai models missing glm-5.1: %v", zaiSpec.models)
+	}
+
+	// vllm / localai built-ins ship with empty model lists (they rely on
+	// /v1/models discovery). An operator-declared empty-models entry for
+	// those providers must stay empty — there is nothing to graft, and we
+	// must not invent models that the local server does not actually serve.
+	configured = []providerSpec{{name: "vllm", baseURL: "http://127.0.0.1:8000"}}
+	got = appendBuiltinProviders(configured)
+	for _, pv := range got {
+		if pv.name == "vllm" && len(pv.models) != 0 {
+			t.Errorf("vllm models should stay empty (discovery-driven), got %v", pv.models)
+		}
+	}
 }
