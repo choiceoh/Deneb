@@ -45,11 +45,15 @@ func RegisterPolarisTools(registry toolctx.ToolRegistrar, store *polaris.Store, 
 		return
 	}
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "polaris",
-		Description: "압축된 대화 이력 관리. search (키워드 검색), describe (요약 구조 조회), expand (원본 복원)",
+		Name: "polaris",
+		Description: "현재 세션의 압축된 과거 대화 회상 (모든 메시지가 SQLite FTS에 무손실 저장). " +
+			"사용자가 컨텍스트에 없는 합의·숫자·인물·결정 또는 '아까 그거'·'지난번에' 같은 참조를 언급하면 " +
+			"짐작하지 말고 먼저 호출하라. " +
+			"action=search(키워드 검색) → describe(압축 요약 구간 ID 목록, time_range로 today/this_week/all) → " +
+			"expand(특정 summary_id 원문 복원, question 추가 시 LLM이 원문 기반 답변). " +
+			"`<recall-context>` 자동 주입은 첫 턴 cue 기반 preflight 한 번뿐이므로, 턴 도중 새 회상이 필요하면 이 도구를 직접 호출하라.",
 		InputSchema: polarisToolSchema(),
 		Fn:          tools.ToolPolaris(store, localAI),
-		Deferred:    true,
 	})
 }
 
