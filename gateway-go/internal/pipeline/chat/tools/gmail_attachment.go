@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,7 +18,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
 
-// --- attachment: fetch + extract email attachments (PDF/Excel/image/text) ---
+// --- attachment: fetch + extract email attachments (PDF/Excel/Word/PowerPoint/image/text) ---
 
 // attachmentTextLimit caps extracted attachment text (runes) so a large
 // document never blows the model's context budget.
@@ -95,14 +96,17 @@ func resolveAttachment(atts []gmail.AttachmentInfo, sel string) *gmail.Attachmen
 }
 
 // extractAttachmentText turns raw attachment bytes into text the model can
-// read: PDFs via pdftotext (OCR fallback for scans), Excel via the .xlsx
-// reader, images via OCR, text files directly, everything else metadata only.
+// read: PDFs via pdftotext (OCR fallback for scans), Excel/Word/PowerPoint
+// via stdlib OOXML readers, images via OCR, text files directly, everything
+// else metadata only.
 func extractAttachmentText(ctx context.Context, att *gmail.AttachmentInfo, data []byte) string {
 	lower := strings.ToLower(att.Filename)
 	mime := strings.ToLower(att.MimeType)
 	isPDF := strings.Contains(mime, "pdf") || strings.HasSuffix(lower, ".pdf")
 	isXLSX := strings.Contains(mime, "spreadsheetml") ||
 		strings.HasSuffix(lower, ".xlsx") || strings.HasSuffix(lower, ".xlsm")
+	isDOCX := strings.Contains(mime, "wordprocessingml") || strings.HasSuffix(lower, ".docx")
+	isPPTX := strings.Contains(mime, "presentationml") || strings.HasSuffix(lower, ".pptx")
 	isImage := strings.HasPrefix(mime, "image/") || hasImageExt(lower)
 
 	switch {
@@ -122,6 +126,18 @@ func extractAttachmentText(ctx context.Context, att *gmail.AttachmentInfo, data 
 			return fmt.Sprintf("📎 %s (Excel, %s)\n\n⚠️ 엑셀 읽기 실패: %s", att.Filename, formatBytes(int64(att.Size)), err)
 		}
 		return fmt.Sprintf("## 📎 %s (Excel)\n\n%s", att.Filename, truncate(text, attachmentTextLimit))
+	case isDOCX:
+		text, err := docxToText(data)
+		if err != nil {
+			return fmt.Sprintf("📎 %s (Word, %s)\n\n⚠️ Word 읽기 실패: %s", att.Filename, formatBytes(int64(att.Size)), err)
+		}
+		return fmt.Sprintf("## 📎 %s (Word)\n\n%s", att.Filename, truncate(text, attachmentTextLimit))
+	case isPPTX:
+		text, err := pptxToText(data)
+		if err != nil {
+			return fmt.Sprintf("📎 %s (PowerPoint, %s)\n\n⚠️ PowerPoint 읽기 실패: %s", att.Filename, formatBytes(int64(att.Size)), err)
+		}
+		return fmt.Sprintf("## 📎 %s (PowerPoint)\n\n%s", att.Filename, truncate(text, attachmentTextLimit))
 	case isImage:
 		text, err := imageOCR(ctx, data)
 		if err != nil {
@@ -374,6 +390,117 @@ func unmarshalZipXML(f *zip.File, v any) error {
 	}
 	defer rc.Close()
 	return xml.NewDecoder(rc).Decode(v)
+}
+
+// --- Word (.docx) and PowerPoint (.pptx) extraction ---
+//
+// Both formats are Office Open XML — a zip of XML parts. Body text lives in
+// `<w:t>` (docx) / `<a:t>` (pptx) elements grouped by `<w:p>` / `<a:p>`
+// paragraphs. Go's xml decoder matches local names regardless of namespace
+// prefix, so a single streaming extractor (`extractOOXMLText`) handles both.
+
+// extractOOXMLText streams an Office Open XML part and concatenates the text
+// inside every <t> element, separating paragraphs (<p>) with newlines.
+func extractOOXMLText(r io.Reader) string {
+	decoder := xml.NewDecoder(r)
+	var sb strings.Builder
+	var inT, paragraphOpen bool
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "p":
+				paragraphOpen = true
+			case "t":
+				inT = true
+			}
+		case xml.EndElement:
+			switch t.Name.Local {
+			case "p":
+				if paragraphOpen {
+					sb.WriteString("\n")
+					paragraphOpen = false
+				}
+			case "t":
+				inT = false
+			}
+		case xml.CharData:
+			if inT {
+				sb.Write(t)
+			}
+		}
+	}
+	return sb.String()
+}
+
+// docxToText extracts body text from a .docx file (word/document.xml).
+func docxToText(data []byte) (string, error) {
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return "", fmt.Errorf("docx 압축 해제 실패: %w", err)
+	}
+	for _, f := range zr.File {
+		if f.Name != "word/document.xml" {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return "", err
+		}
+		text := strings.TrimSpace(extractOOXMLText(rc))
+		rc.Close()
+		if text == "" {
+			return "", fmt.Errorf("빈 문서")
+		}
+		return text, nil
+	}
+	return "", fmt.Errorf("word/document.xml을 찾을 수 없습니다")
+}
+
+// pptxToText extracts text from every slide of a .pptx file (ppt/slides/slideN.xml).
+func pptxToText(data []byte) (string, error) {
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return "", fmt.Errorf("pptx 압축 해제 실패: %w", err)
+	}
+
+	var slideFiles []*zip.File
+	for _, f := range zr.File {
+		if strings.HasPrefix(f.Name, "ppt/slides/slide") && strings.HasSuffix(f.Name, ".xml") {
+			slideFiles = append(slideFiles, f)
+		}
+	}
+	if len(slideFiles) == 0 {
+		return "", fmt.Errorf("슬라이드를 찾을 수 없습니다")
+	}
+	sort.Slice(slideFiles, func(i, j int) bool { return slideFiles[i].Name < slideFiles[j].Name })
+
+	var sb strings.Builder
+	for i, f := range slideFiles {
+		rc, err := f.Open()
+		if err != nil {
+			continue
+		}
+		slideText := strings.TrimSpace(extractOOXMLText(rc))
+		rc.Close()
+		if slideText == "" {
+			continue
+		}
+		if sb.Len() > 0 {
+			sb.WriteString("\n")
+		}
+		fmt.Fprintf(&sb, "### Slide %d\n\n%s\n", i+1, slideText)
+	}
+
+	out := strings.TrimSpace(sb.String())
+	if out == "" {
+		return "", fmt.Errorf("빈 프레젠테이션")
+	}
+	return out, nil
 }
 
 // --- OCR (scanned PDFs and image attachments) ---
