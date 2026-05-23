@@ -1,6 +1,6 @@
 # Deneb
 
-Personal AI gateway for NVIDIA DGX Spark. Telegram bot interface and Go gateway server — single-user, single-machine deployment.
+Personal AI gateway for NVIDIA DGX Spark. Korean-first, single-user, Telegram-on-Android I/O. Specializes in business analysis (mail, projects, deals) on top of general assistant capabilities.
 
 ## Architecture
 
@@ -11,7 +11,7 @@ Telegram (Android) ──> Go Gateway (HTTP/WS)
                        Session management
                        Chat/LLM pipeline
                        Telegram bot plugin
-                       Vega semantic search
+                       Wiki knowledge base + Polaris session memory
 ```
 
 | Module | Language | Description |
