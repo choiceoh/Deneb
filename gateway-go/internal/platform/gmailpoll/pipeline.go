@@ -512,7 +512,112 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 		return "", fmt.Errorf("final analysis LLM call failed: %w", err)
 	}
 
-	return collectStreamText(ctx, events)
+	analysis, err := collectStreamText(ctx, events)
+	if err != nil {
+		return "", err
+	}
+
+	// Local-AI fact extraction for wiki write-back. The system prompt's
+	// "분석 → 위키 갱신" section asks the agent to record new facts after
+	// analyzing; this attaches a structured proposal block so the agent has
+	// concrete `wiki(action="write")` inputs rather than having to derive
+	// them from prose. Best-effort — empty when local AI is unavailable or
+	// yields nothing to record.
+	if factsBlock := extractFactsForWiki(ctx, deps, analysis); factsBlock != "" {
+		analysis = analysis + "\n\n" + factsBlock
+	}
+	return analysis, nil
+}
+
+// --- wiki fact extraction (local AI) ---
+
+const factExtractorSystem = `당신은 이메일 분석에서 위키에 기록할 만한 사실을 추출하는 추출기입니다.
+사람·조직·거래·프로젝트·결정·기한·금액 등 "다음에 이 분석을 다시 볼 때 알고 싶을 사실"만 뽑습니다.
+잡담·인사·일반론은 제외합니다.
+반드시 JSON으로만 응답하세요.`
+
+const factExtractorPrompt = `다음 이메일 분석에서 위키에 기록할 만한 사실을 추출해주세요.
+
+JSON 응답 형식:
+{
+  "facts": [
+    {"entity": "엔티티 이름 (인물·회사·프로젝트·거래)", "type": "person|org|project|deal|decision|deadline", "fact": "기록할 사실 한 문장"}
+  ]
+}
+
+추출 기준:
+- 새로 알게 된 구체적 사실만 (자명한 일반 정보는 제외)
+- 이름·숫자·날짜 포함
+- 최대 6개
+- 기록할 사실이 없으면 facts 배열을 비워서 응답
+
+## 분석 결과
+%s`
+
+// WikiFactProposal is a single fact suggested for wiki write-back.
+type WikiFactProposal struct {
+	Entity string `json:"entity"`
+	Type   string `json:"type"`
+	Fact   string `json:"fact"`
+}
+
+// wikiFactsBundle is the JSON-mode response wrapper. Local LLM JSON mode
+// requires an object root; this carries the fact array.
+type wikiFactsBundle struct {
+	Facts []WikiFactProposal `json:"facts"`
+}
+
+// extractFactsForWiki runs a local-AI extractor over the final analysis text
+// and returns a pre-formatted Markdown block ready to append to the analyze
+// output. The agent then writes each fact to wiki per the "분석 → 위키 갱신"
+// system-prompt nudge.
+//
+// Best-effort: empty string when local AI is unavailable, extraction fails,
+// or no qualifying facts are found.
+func extractFactsForWiki(ctx context.Context, deps PipelineDeps, analysisText string) string {
+	if deps.LocalClient == nil || deps.LocalModel == "" {
+		return ""
+	}
+	if strings.TrimSpace(analysisText) == "" {
+		return ""
+	}
+
+	extractCtx, cancel := context.WithTimeout(ctx, stage1Timeout)
+	defer cancel()
+
+	prompt := fmt.Sprintf(factExtractorPrompt, analysisText)
+	bundle, err := callLocalLLMJSON[wikiFactsBundle](extractCtx, deps.LocalClient, deps.LocalModel, factExtractorSystem, prompt, stage1MaxTokens)
+	if err != nil || len(bundle.Facts) == 0 {
+		return ""
+	}
+	return renderFactsBlock(bundle.Facts)
+}
+
+// renderFactsBlock formats a slice of WikiFactProposal as the Markdown block
+// appended to the analyze output. Returns "" when no fact has both an entity
+// and a fact (so the analyze output stays clean if extraction yields noise).
+func renderFactsBlock(facts []WikiFactProposal) string {
+	var sb strings.Builder
+	sb.WriteString("📝 위키 갱신 제안 (자동 추출):\n")
+	rendered := 0
+	for _, f := range facts {
+		entity := strings.TrimSpace(f.Entity)
+		fact := strings.TrimSpace(f.Fact)
+		if entity == "" || fact == "" {
+			continue
+		}
+		typ := strings.TrimSpace(f.Type)
+		if typ != "" {
+			fmt.Fprintf(&sb, "- **%s** (%s): %s\n", entity, typ, fact)
+		} else {
+			fmt.Fprintf(&sb, "- **%s**: %s\n", entity, fact)
+		}
+		rendered++
+	}
+	if rendered == 0 {
+		return ""
+	}
+	return strings.TrimSpace(sb.String())
 }
 
 // --- helpers ---
