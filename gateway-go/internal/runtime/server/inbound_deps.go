@@ -20,6 +20,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/model"
 	subagentpkg "github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/subagent"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -282,6 +283,8 @@ func (e *chatSendExecutor) RunTurn(ctx context.Context, cfg autoreply.AgentTurnC
 		"message":     cfg.Message,
 		"delivery":    delivery,
 		"clientRunId": shortid.New("run"),
+		// Telegram user sessions default to the business tool preset.
+		"tool_preset": string(toolpreset.PresetBusiness),
 	}
 	if cfg.Model != "" {
 		sendParams["model"] = cfg.Model

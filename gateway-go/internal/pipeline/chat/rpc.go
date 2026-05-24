@@ -28,6 +28,11 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		// window. Used by synthetic dispatches (callback queries, button
 		// actions) that shouldn't cancel an in-flight user reply.
 		SkipMerge bool `json:"skipMerge,omitempty"`
+		// ToolPreset, when non-empty, is persisted onto the session so the
+		// run loop's tool filter (run_exec.go:480) sees it. The Telegram
+		// inbound dispatch defaults this to "business"; slash commands like
+		// /reset clear it (slash_dispatch.go).
+		ToolPreset string `json:"tool_preset,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
 		return rpcerr.WrapInvalidRequest("invalid chat.send params", err).Response(req.ID)
@@ -55,6 +60,7 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		ClientRunID:  p.ClientRunID,
 		Model:        p.Model,
 		WorkspaceDir: p.WorkspaceDir,
+		ToolPreset:   p.ToolPreset,
 	}
 
 	// Serialize the merge decision per session so that two concurrent
