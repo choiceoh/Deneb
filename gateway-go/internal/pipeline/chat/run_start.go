@@ -25,6 +25,16 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 		sess = h.sessions.Create(params.SessionKey, session.KindDirect)
 	}
 
+	// Apply the request-supplied tool preset to the session before the run
+	// loop reads it. The chat.send RPC propagates `tool_preset` from the
+	// dispatch site (Telegram inbound defaults to "business"); slash commands
+	// like /reset may have cleared the session preset between turns, so this
+	// reapplies on every dispatch.
+	if params.ToolPreset != "" && sess.ToolPreset != params.ToolPreset {
+		sess.ToolPreset = params.ToolPreset
+		_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
+	}
+
 	// Inherit model from session state when RunParams doesn't specify one.
 	// Skip for sub-agents — their default model is resolved separately in
 	// executeAgentRun (subagentDefaultModel takes priority over session.Model).

@@ -22,6 +22,7 @@ import (
 	subagentpkg "github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/subagent"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
@@ -481,6 +482,8 @@ func (p *InboundProcessor) handleMediaGroup(messages []*telegram.Message) {
 		"message":     agentMessage,
 		"delivery":    delivery,
 		"clientRunId": shortid.New("run"),
+		// Telegram user sessions default to the business tool preset.
+		"tool_preset": string(toolpreset.PresetBusiness),
 	}
 	if len(allAttachments) > 0 {
 		sendParams["attachments"] = allAttachments

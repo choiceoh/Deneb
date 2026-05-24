@@ -38,6 +38,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
@@ -442,6 +443,8 @@ func (s *Server) dispatchResumeMessage(ctx context.Context, sessionKey, channel,
 		"message":     resumeSystemNote,
 		"clientRunId": shortid.New("resume"),
 		"skipMerge":   true, // synthetic dispatch — do not collapse with real user input
+		// Telegram user sessions default to the business tool preset.
+		"tool_preset": string(toolpreset.PresetBusiness),
 	}
 	if channel == "telegram" && chatID != "" {
 		params["delivery"] = map[string]any{

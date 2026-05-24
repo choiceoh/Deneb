@@ -78,6 +78,14 @@ type RunParams struct {
 	// so the LLM does not translate it into a self-contradicting "channel
 	// down" report delivered through that very channel.
 	AutoDeliveredOutput bool
+
+	// ToolPreset, when non-empty, is persisted onto the session inside
+	// startAsyncRun so the run loop's tool filter (run_exec.go) sees it.
+	// SendSync sets `sess.ToolPreset` directly via SyncOptions; the chat.send
+	// RPC path uses this field as the equivalent hook. Slash commands like
+	// /reset clear the session's preset, so this default reapplies each turn
+	// from the inbound dispatch site.
+	ToolPreset string
 }
 
 // Agent run defaults.
