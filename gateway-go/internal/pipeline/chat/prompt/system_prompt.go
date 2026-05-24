@@ -105,7 +105,6 @@ var toolCategories = []struct {
 	Names []string
 }{
 	{"File", []string{"read", "write", "edit", "grep"}},
-	{"Edit", []string{"git"}},
 	{"Exec", []string{"exec", "process"}},
 	{"Web", []string{"web"}},
 	{"Memory", []string{"wiki", "polaris"}},

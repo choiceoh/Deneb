@@ -23,17 +23,6 @@ const (
 
 // --- Data types for embed builders ---
 
-// DashboardData holds project health info for the /dashboard response.
-type DashboardData struct {
-	Branch       string
-	ChangedFiles int
-	Uncommitted  int
-	BuildStatus  string // "pass", "fail", "unknown"
-	TestStatus   string // "pass", "fail", "unknown"
-	LastCommit   string
-	SessionKey   string
-}
-
 // TestResult holds test execution results for the test result embed.
 type TestResult struct {
 	Passed  int
@@ -66,81 +55,6 @@ type PushInfo struct {
 }
 
 // --- Format functions ---
-
-// FormatDashboard builds the /dashboard response showing project health.
-// Renders a visual status panel with branch, changes, build, and test info.
-func FormatDashboard(d DashboardData) string {
-	var b strings.Builder
-	b.Grow(512)
-
-	b.WriteString("<b>\U0001F4CA \uD504\uB85C\uC81D\uD2B8 \uB300\uC2DC\uBCF4\uB4DC</b>\n")
-	b.WriteString("\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n")
-
-	// Branch info.
-	b.WriteString("\U0001F33F <b>\uBE0C\uB79C\uCE58:</b> <code>")
-	b.WriteString(coresecurity.SanitizeHTML(d.Branch))
-	b.WriteString("</code>\n")
-
-	// Changed files.
-	b.WriteString("\U0001F4C1 <b>\uBCC0\uACBD\uB41C \uD30C\uC77C:</b> ")
-	fmt.Fprintf(&b, "%d\uAC1C", d.ChangedFiles)
-	b.WriteByte('\n')
-
-	// Uncommitted changes.
-	if d.Uncommitted > 0 {
-		b.WriteString(ColorWarning)
-		b.WriteString(" <b>\uBBF8\uCEE4\uBC0B:</b> ")
-		fmt.Fprintf(&b, "%d\uAC1C", d.Uncommitted)
-		b.WriteByte('\n')
-	} else {
-		b.WriteString(ColorSuccess)
-		b.WriteString(" <b>\uBBF8\uCEE4\uBC0B:</b> \uC5C6\uC74C\n")
-	}
-
-	b.WriteByte('\n')
-
-	// Build status.
-	buildIcon := statusIcon(d.BuildStatus)
-	b.WriteString(buildIcon)
-	b.WriteString(" <b>\uBE4C\uB4DC:</b> ")
-	b.WriteString(statusLabel(d.BuildStatus))
-	b.WriteByte('\n')
-
-	// Test status.
-	testIcon := statusIcon(d.TestStatus)
-	b.WriteString(testIcon)
-	b.WriteString(" <b>\uD14C\uC2A4\uD2B8:</b> ")
-	b.WriteString(statusLabel(d.TestStatus))
-	b.WriteByte('\n')
-
-	b.WriteByte('\n')
-
-	// Last commit (truncated for mobile readability).
-	if d.LastCommit != "" {
-		b.WriteString("\U0001F4DD <b>\uCD5C\uADFC \uCEE4\uBC0B:</b>\n")
-		commit := d.LastCommit
-		if len(commit) > 120 {
-			commit = commit[:117] + "..."
-		}
-		b.WriteString("<code>")
-		b.WriteString(coresecurity.SanitizeHTML(commit))
-		b.WriteString("</code>\n")
-	}
-
-	// Session key (compact).
-	if d.SessionKey != "" {
-		b.WriteByte('\n')
-		b.WriteString("\U0001F511 <b>\uC138\uC158:</b> <code>")
-		sessionDisplay := d.SessionKey
-		if len(sessionDisplay) > 12 {
-			sessionDisplay = sessionDisplay[:12] + "..."
-		}
-		b.WriteString(coresecurity.SanitizeHTML(sessionDisplay))
-		b.WriteString("</code>")
-	}
-
-	return b.String()
-}
 
 // FormatTestResult formats test execution results as a Telegram HTML message.
 // Displays pass/fail/skip counts, runtime, and a truncated output excerpt.
@@ -310,21 +224,14 @@ func FormatHelp() string {
 	b.WriteString("\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n")
 
 	b.WriteString("<b>\uBA85\uB839\uC5B4</b>\n\n")
-	b.WriteString("\U0001F4CA <code>/dashboard</code>\n")
-	b.WriteString("  \uD504\uB85C\uC81D\uD2B8 \uC0C1\uD0DC \uD655\uC778\n")
-	b.WriteString("  \uBE0C\uB79C\uCE58, \uBCC0\uACBD\uC0AC\uD56D, \uBE4C\uB4DC/\uD14C\uC2A4\uD2B8 \uACB0\uACFC\n\n")
-
-	b.WriteString("\U0001F4E6 <code>/commit [\uBA54\uC2DC\uC9C0]</code>\n")
-	b.WriteString("  \uBCC0\uACBD\uC0AC\uD56D \uCEE4\uBC0B\n")
-	b.WriteString("  \uBA54\uC2DC\uC9C0 \uC5C6\uC73C\uBA74 \uC790\uB3D9 \uC0DD\uC131\n\n")
-
-	b.WriteString("\U0001F680 <code>/push</code>\n")
-	b.WriteString("  \uCEE4\uBC0B\uC744 \uC6D0\uACA9 \uC800\uC7A5\uC18C\uC5D0 \uC804\uC1A1\n\n")
 
 	// /btw \u2014 side question, never touches the main conversation context
 	b.WriteString("\U0001F4AC <code>/btw &lt;\uC9C8\uBB38&gt;</code>\n")
 	b.WriteString("  \uBA54\uC778 \uB300\uD654\uC5D0 \uC601\uD5A5 \uC5C6\uC774 \uC606\uC5D0\uC11C \uBE60\uB974\uAC8C \uB2F5\n")
 	b.WriteString("  \uC608: <code>/btw \uC9C0\uAE08 \uD658\uC728 \uC5BC\uB9C8\uC57C?</code>\n\n")
+
+	b.WriteString("\U0001F916 <code>/models</code>\n")
+	b.WriteString("  \uC0AC\uC6A9\uD560 \uBAA8\uB378 \uC120\uD0DD\n\n")
 
 	b.WriteString("\u2753 <code>/help</code>\n")
 	b.WriteString("  \uC774 \uB3C4\uC6C0\uB9D0 \uD45C\uC2DC\n\n")
@@ -332,13 +239,12 @@ func FormatHelp() string {
 	b.WriteString("\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n")
 
 	b.WriteString("<b>\uC0AC\uC6A9 \uBC29\uBC95</b>\n\n")
-	b.WriteString("\uD558\uACE0 \uC2F6\uC740 \uAC83\uC744 \uD55C\uAD6D\uC5B4\uB85C \uC790\uC5F0\uC2A4\uB7FD\uAC8C \uB9D0\uC529\uD574 \uC8FC\uC138\uC694.\n")
-	b.WriteString("\uCF54\uB4DC\uB97C \uC9C1\uC811 \uC791\uC131\uD560 \uD544\uC694 \uC5C6\uC2B5\uB2C8\uB2E4.\n\n")
+	b.WriteString("\uD558\uACE0 \uC2F6\uC740 \uAC83\uC744 \uD55C\uAD6D\uC5B4\uB85C \uC790\uC5F0\uC2A4\uB7FD\uAC8C \uB9D0\uC500\uD574 \uC8FC\uC138\uC694.\n\n")
 
 	b.WriteString("<i>\uC608\uC2DC:</i>\n")
-	b.WriteString("  \u201C\uB85C\uADF8\uC778 \uD398\uC774\uC9C0 \uB9CC\uB4E4\uC5B4 \uC918\u201D\n")
-	b.WriteString("  \u201C\uD14C\uC2A4\uD2B8 \uC2E4\uD589\uD574 \uC918\u201D\n")
-	b.WriteString("  \u201C\uBC84\uADF8 \uACE0\uCCD0 \uC918\u201D\n")
+	b.WriteString("  \u201C\uC624\uB298 \uBC1B\uC740 \uBA54\uC77C \uC815\uB9AC\uD574 \uC918\u201D\n")
+	b.WriteString("  \u201CABC\uC0C1\uC0AC \uAC70\uB798 \uC9C4\uD589 \uC0C1\uD669 \uC54C\uB824 \uC918\u201D\n")
+	b.WriteString("  \u201C\uB2E4\uC74C\uC8FC \uC77C\uC815 \uBCF4\uC5EC \uC918\u201D\n")
 
 	return b.String()
 }
@@ -419,30 +325,6 @@ func FormatPush(p PushInfo) string {
 }
 
 // --- Helpers ---
-
-// statusIcon returns the emoji indicator for a status string.
-func statusIcon(status string) string {
-	switch status {
-	case "pass":
-		return ColorSuccess
-	case "fail":
-		return ColorError
-	default:
-		return "\u2753" // ❓
-	}
-}
-
-// statusLabel returns the Korean label for a status string.
-func statusLabel(status string) string {
-	switch status {
-	case "pass":
-		return "\uD1B5\uACFC"
-	case "fail":
-		return "\uC2E4\uD328"
-	default:
-		return "\uBBF8\uD655\uC778"
-	}
-}
 
 // formatDuration renders a time.Duration as a human-readable Korean string.
 // Optimized for short durations typical of build/test runs.

@@ -85,12 +85,6 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		Fn:          tools.ToolGrep(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "git",
-		Description: "Git operations: status, commit, log, branch, stash, blame, tag, merge, rebase, reset, remote, clean",
-		InputSchema: gitToolSchema(),
-		Fn:          tools.ToolGit(workspaceDir),
-	})
-	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "gateway",
 		Description: "Gateway self-management: status, config_get/config_set (dotted paths), update (git pull + rebuild + restart), restart. Destructive actions require approval — the first call returns a needs_approval envelope; relay the Korean summary to the user and call the .confirmed variant after approval.",
 		InputSchema: gatewayToolSchema(),
@@ -110,31 +104,19 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		})
 	}
 
-	// Graphify: knowledge-graph queries via the `graphify` CLI. Two graphs
-	// are addressable via the `graph` arg: "wiki" (default; built each wiki
-	// dream cycle) and "code" (built by `graphify update .` in the workspace).
-	//
-	// Description encourages **fused / connected** use: chain query → explain
-	// → path across both graphs to answer "어떤 개념이 어느 코드로 구현되나"
-	// or "이 함수가 어떤 결정/사람과 엮여 있나"-style questions.
+	// Graphify: knowledge-graph queries over the wiki concept graph (people,
+	// projects, deals, decisions, etc.) built by the wiki dreamer each cycle.
 	registry.RegisterTool(toolctx.ToolDef{
 		Name: "graphify",
-		Description: "지식 그래프 질의 (위키 개념 그래프 + 코드 호출 그래프). " +
-			"graph=\"wiki\" (기본, 사람·프로젝트·거래·기술·결정·선호 등 개념/관계 그래프, dreamer가 매 사이클 갱신) | " +
-			"graph=\"code\" (코드 호출/import/contains 그래프, `graphify update .`로 빌드). " +
-			"액션: query (자연어 질문→관련 노드 탐색), explain (한 노드와 이웃 요약), path (두 노드 간 최단 경로). " +
-			"**융합적 사용 패턴 (필수 숙지):** " +
+		Description: "위키 지식 그래프 질의 (사람·프로젝트·거래·결정·선호 등 개념/관계 그래프, dreamer가 매 사이클 갱신). " +
+			"액션: query (자연어 질문 → 관련 노드 탐색), explain (한 노드와 이웃 요약), path (두 노드 간 최단 경로). " +
+			"**사용 패턴:** " +
 			"(a) 단순 검색이 아니라 **그래프 탐색**으로 사고하라 — query로 후보 노드를 찾고 explain으로 이웃을 펼친 뒤 path로 다른 영역과 연결. " +
-			"(b) wiki+code 두 그래프를 **묶어서** 답하라 — '이 함수가 어떤 개념을 구현하나'면 code에서 함수 노드 → explain → 관련 docs/주석 노드 식별 후 wiki에서 같은 개념 query. " +
-			"(c) explain 결과의 community 번호를 활용하라 — 같은 community 안의 노드는 의미적으로 한 묶음. " +
-			"(d) 단발 질의로 끝내지 마라 — 한 질문에 query/explain/path를 2~3회 chaining해 답을 입체화. " +
-			"(e) wiki search보다 graphify가 강한 상황: 관계·맥락·연쇄 추론이 필요할 때 (단순 키워드 룩업은 wiki/grep로 충분).",
+			"(b) explain 결과의 community 번호를 활용하라 — 같은 community 안의 노드는 의미적으로 한 묶음. " +
+			"(c) 단발 질의로 끝내지 마라 — 한 질문에 query/explain/path를 2~3회 chaining해 답을 입체화. " +
+			"(d) wiki search보다 graphify가 강한 상황: 관계·맥락·연쇄 추론이 필요할 때 (단순 키워드 룩업은 wiki/grep로 충분).",
 		InputSchema: graphifyToolSchema(),
 		Fn:          tools.ToolGraphify(workspaceDir),
-		// Eager registration: this tool is core to the agent's
-		// fused/connected reasoning over wiki + code, so we want it visible
-		// in the default prompt rather than gated behind fetch_tools.
-		Deferred: false,
 	})
 }
 
