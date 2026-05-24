@@ -16,10 +16,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// ToolGraphify wraps the `graphify` CLI so the agent can query knowledge
-// graphs at graphify-out/graph.json (code) or ~/.deneb/wiki-graph/graph.json
-// (wiki, built by the wiki dreamer). Build/update with `graphify update .`
-// for code; the wiki graph rebuilds automatically each dream cycle.
+// ToolGraphify wraps the `graphify` CLI so the agent can query the wiki
+// knowledge graph at ~/.deneb/wiki-graph/graph.json (built by the wiki
+// dreamer each cycle). A custom graph path may also be passed.
 func ToolGraphify(workspaceDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -41,7 +40,7 @@ func ToolGraphify(workspaceDir string) ToolFunc {
 			return "", err
 		}
 		if _, err := os.Stat(graphPath); errors.Is(err, fs.ErrNotExist) {
-			return "", fmt.Errorf("graph not found at %s — for the code graph run `graphify update .` in the workspace; the wiki graph rebuilds automatically each wiki-dream cycle", graphPath)
+			return "", fmt.Errorf("graph not found at %s — the wiki graph rebuilds automatically each wiki-dream cycle", graphPath)
 		}
 
 		var args []string
@@ -92,9 +91,9 @@ func ToolGraphify(workspaceDir string) ToolFunc {
 }
 
 // resolveGraphifyPath resolves the user-supplied graph hint to an absolute path.
-// Accepts: "" (defaults to wiki), "wiki", "code", a relative path (resolved
-// from workspaceDir), or an absolute path. Both built-in graphs follow the
-// graphify CLI convention of <root>/graphify-out/graph.json.
+// Accepts: "" (defaults to wiki), "wiki", a relative path (resolved from
+// workspaceDir), or an absolute path. The wiki graph follows the graphify CLI
+// convention of <root>/graphify-out/graph.json.
 func resolveGraphifyPath(hint, workspaceDir string) (string, error) {
 	switch hint {
 	case "", "wiki":
@@ -103,8 +102,6 @@ func resolveGraphifyPath(hint, workspaceDir string) (string, error) {
 			return "", fmt.Errorf("resolve home for wiki graph: %w", err)
 		}
 		return filepath.Join(home, ".deneb", "wiki-graph", "graphify-out", "graph.json"), nil
-	case "code":
-		return filepath.Join(workspaceDir, "graphify-out", "graph.json"), nil
 	}
 	if filepath.IsAbs(hint) {
 		return hint, nil

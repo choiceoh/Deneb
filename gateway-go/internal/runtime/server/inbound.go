@@ -218,9 +218,6 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		case "/models":
 			p.handleModelsCommand(chatID)
 			return
-		case "/status", "/dashboard", "/d", "/ws":
-			p.handleStatusDashboardCommand(chatID, sessionKey)
-			return
 		}
 	}
 
