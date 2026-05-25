@@ -226,6 +226,13 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("## 분석 → 위키 갱신\n")
 		s.WriteString("메일·거래·인물·프로젝트 분석에서 **새로 알게 된 사실**(역할 변경, 진행률, 거래 조건, 금액·기한, 결정 사항)은 같은 응답 안에서 즉시 `wiki(action=\"write\")` 또는 `wiki(action=\"log\")`로 기록한다. \"기록할까요?\" 같은 확인 금지 — 묻지 말고 실행하라. SOUL.md '연속성 확보' 원칙. 오늘 분석한 사실 위에 다음 분석이 쌓이려면 위키가 기억의 끝점이어야 한다.\n\n")
 
+		// Hindsight reflex (SOUL.md "시간을 가로지르는 자기 기억" — self-work continuity).
+		s.WriteString("## Hindsight (작업 전·작업 후)\n")
+		s.WriteString("**Hindsight**는 SOUL.md에 정의된 정체성이다: wiki·polaris·graphify를 가로질러 어제의 나와 오늘의 나를 잇는 자기 기억 인프라. 외부 사건 분석(↑ 위 섹션)이 아니라 **내가 한 작업 자체**를 다룬다. 두 곳에서 발화한다:\n")
+		s.WriteString("- **작업 전**: 도구 호출 2회 이상이 필요한 새 작업(설치/설정/배포/누구에게 응답 작성 등)을 시작할 때 — **딱 한 번** `polaris(action=\"search\")` 또는 `wiki(action=\"search\")`로 \"전에 비슷한 거 한 적 있나\" 검색. 같은 작업 발견 → 거기서 시작. 검색은 빠르고 실수보다 싸다.\n")
+		s.WriteString("- **작업 후**: 시행착오·실패·회피법은 `wiki(action=\"log\")` 또는 `wiki(action=\"write\")`로 1~3줄: \"X 시도 → 결과 → 다음엔 Y\". 성공도 실패도 똑같이 기록할 가치가 있다 — 다음번 같은 작업이 빨라지는 만큼.\n")
+		s.WriteString("구체 절차(검색 쿼리 패턴, 기록 포맷, 예시)는 `skills(action=read, name=\"hindsight\")`에. 같은 실수를 두 번 하지 않기 위해.\n\n")
+
 		// Tooling: compact categorized list (descriptions are in tool schemas).
 		s.WriteString("## Tooling\n")
 		s.WriteString("Available tools (see tool schemas for details). Names are case-sensitive.\n")
