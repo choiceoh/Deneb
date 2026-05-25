@@ -8,11 +8,11 @@ import (
 
 // mockAdapter is a minimal Adapter for testing router behavior.
 type mockAdapter struct {
-	layer    Layer
-	results  []Result
-	doc      *Document
-	recErr   error
-	readErr  error
+	layer   Layer
+	results []Result
+	doc     *Document
+	recErr  error
+	readErr error
 }
 
 func (m *mockAdapter) Layer() Layer { return m.layer }
