@@ -80,8 +80,10 @@ func summarizeOldMessages(
 ) string {
 	maxOutput := int(float64(cfg.ContextBudget) * DefaultLLMTargetPct)
 
+	systemPrompt := augmentWithAnchors(compactionSystemPrompt, cfg.AnchorKeywords)
+
 	if EstimateMessagesTokens(old) > chunkMaxTokens {
-		summary, ok := summarizeInChunks(ctx, old, summarizer, maxOutput, logger)
+		summary, ok := summarizeInChunks(ctx, old, summarizer, maxOutput, systemPrompt, logger)
 		if !ok {
 			return ""
 		}
@@ -92,7 +94,7 @@ func summarizeOldMessages(
 	if EstimateTokens(text) < 500 {
 		return "" // too little to bother
 	}
-	summary, err := summarizer.Summarize(ctx, compactionSystemPrompt, text, maxOutput)
+	summary, err := summarizer.Summarize(ctx, systemPrompt, text, maxOutput)
 	if err != nil {
 		if logger != nil {
 			logger.Warn("polaris: LLM compaction failed", "error", err)
@@ -100,6 +102,16 @@ func summarizeOldMessages(
 		return ""
 	}
 	return summary
+}
+
+// augmentWithAnchors appends an anchor preservation instruction to the base
+// summarization prompt when keywords are present. Soft hint — the summarizer
+// is asked to preserve facts related to these keywords as inevictable.
+func augmentWithAnchors(base string, anchors []string) string {
+	if len(anchors) == 0 {
+		return base
+	}
+	return base + "\n\n## 필수 보존 키워드 (Anchor)\n다음 키워드와 관련된 사실은 절대 누락하지 말고 보존하라:\n- " + strings.Join(anchors, "\n- ")
 }
 
 // summarizeInChunks splits old messages into ≤chunkMaxTokens chunks,
@@ -110,6 +122,7 @@ func summarizeInChunks(
 	old []llm.Message,
 	summarizer Summarizer,
 	maxOutput int,
+	systemPrompt string,
 	logger *slog.Logger,
 ) (string, bool) {
 	chunks := splitIntoChunks(old, chunkMaxTokens)
@@ -132,7 +145,7 @@ func summarizeInChunks(
 				resultCh <- chunkResult{idx: idx}
 				return
 			}
-			s, err := summarizer.Summarize(ctx, compactionSystemPrompt, text, perChunkOutput)
+			s, err := summarizer.Summarize(ctx, systemPrompt, text, perChunkOutput)
 			resultCh <- chunkResult{idx: idx, summary: s, err: err}
 		}(i, chunk)
 	}
