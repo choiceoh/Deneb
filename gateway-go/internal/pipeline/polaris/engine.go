@@ -25,11 +25,13 @@ const (
 // Engine orchestrates Polaris compaction with DAG persistence and condensation.
 // Long-lived: stored on Bridge, shared across runs for the same session.
 type Engine struct {
-	store    *Store
-	logger   *slog.Logger
-	cfg      Config
-	circuit  *CircuitBreaker
-	embedder compact.Embedder // optional; BGE-M3 for MMR compaction fallback
+	store          *Store
+	logger         *slog.Logger
+	cfg            Config
+	circuit        *CircuitBreaker
+	embedder       compact.Embedder // optional; BGE-M3 for MMR compaction fallback
+	anchorMu       sync.RWMutex
+	anchorKeywords []string // wiki Tier1 page titles to preserve through summarization
 }
 
 // NewEngine creates a Polaris engine backed by the given store.
@@ -44,6 +46,15 @@ func NewEngine(store *Store, logger *slog.Logger, cfg Config) *Engine {
 
 // SetEmbedder sets the optional embedding client for MMR compaction fallback.
 func (e *Engine) SetEmbedder(emb compact.Embedder) { e.embedder = emb }
+
+// SetAnchorKeywords sets wiki Tier1 page titles whose facts MUST be preserved
+// through summarization. Safe to call concurrently — the keyword list is
+// snapshotted into the per-call compaction config.
+func (e *Engine) SetAnchorKeywords(keywords []string) {
+	e.anchorMu.Lock()
+	defer e.anchorMu.Unlock()
+	e.anchorKeywords = append(e.anchorKeywords[:0], keywords...)
+}
 
 // CompactAndPersist runs Polaris compaction and persists any LLM summary
 // into the DAG as a leaf node. Skips re-summarization when the context
@@ -62,6 +73,9 @@ func (e *Engine) CompactAndPersist(
 ) ([]llm.Message, compact.Result) {
 	polarisCfg := compact.NewConfig(contextBudget)
 	polarisCfg.Embedder = e.embedder
+	e.anchorMu.RLock()
+	polarisCfg.AnchorKeywords = append([]string(nil), e.anchorKeywords...)
+	e.anchorMu.RUnlock()
 
 	// Bootstrap: recover older messages dropped by freshTailCount.
 	// Shares polarisCfg so the bootstrap summarization path uses the same

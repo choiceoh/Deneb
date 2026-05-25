@@ -37,6 +37,11 @@ type Config struct {
 	// Embedder is an optional embedding client for MMR-based extractive
 	// compaction. Used as a fallback when LLM summarization fails.
 	Embedder Embedder
+
+	// AnchorKeywords are wiki Tier1 page titles whose facts MUST be preserved
+	// through summarization. Passed as a soft hint to the summarizer's system
+	// prompt so the LLM emphasizes related facts as inevictable.
+	AnchorKeywords []string
 }
 
 // NewConfig creates a compaction config for the given context budget.

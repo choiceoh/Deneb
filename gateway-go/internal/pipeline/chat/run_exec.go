@@ -642,6 +642,7 @@ func assembleMessages(
 			if deps.embeddingClient != nil {
 				engine.SetEmbedder(deps.embeddingClient)
 			}
+			engine.SetAnchorKeywords(buildAnchorKeywords(deps.wikiStore))
 			messages, polarisResult = engine.CompactAndPersist(polarisCtx, params.SessionKey, messages, summarizer, contextBudget)
 
 			// Proactive condensation: when a new leaf summary was persisted,

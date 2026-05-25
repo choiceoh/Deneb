@@ -67,7 +67,7 @@ func EmergencyCompact(
 		if maxOutput > 2048 {
 			maxOutput = 2048
 		}
-		summary, err := summarizer.Summarize(ctx, compactionSystemPrompt, text, maxOutput)
+		summary, err := summarizer.Summarize(ctx, augmentWithAnchors(compactionSystemPrompt, cfg.AnchorKeywords), text, maxOutput)
 		if err == nil && summary != "" {
 			result := make([]llm.Message, 0, 1+len(recent))
 			result = append(result, llm.NewTextMessage("user",

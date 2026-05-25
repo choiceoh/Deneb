@@ -104,6 +104,12 @@ type WikiDreamer struct {
 
 	turnCount int
 	lastDream time.Time
+
+	// polarisContextFn optionally returns formatted recent polaris compression
+	// summaries to inject into the synthesis prompt as a higher-density fact
+	// source alongside raw diary entries. Wired by the chat pipeline; the wiki
+	// package does not import polaris directly.
+	polarisContextFn func() string
 }
 
 // NewWikiDreamer creates a new wiki dreamer.
@@ -120,6 +126,12 @@ func NewWikiDreamer(store *Store, client *llm.Client, model string, cfg Config, 
 // IncrementTurn records a conversation turn for threshold tracking.
 func (wd *WikiDreamer) IncrementTurn(_ context.Context) {
 	wd.turnCount++
+}
+
+// SetPolarisContextFn wires a closure that returns formatted recent polaris
+// compression summaries. nil-safe; passing nil disables polaris injection.
+func (wd *WikiDreamer) SetPolarisContextFn(fn func() string) {
+	wd.polarisContextFn = fn
 }
 
 // ShouldDream checks if dreaming conditions are met.
@@ -592,6 +604,13 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 	indexContent := idx.Render()
 	processedHistory := formatProcessedDiaryCapsules(state.Recent)
 
+	polarisSection := ""
+	if wd.polarisContextFn != nil {
+		if ctx := wd.polarisContextFn(); ctx != "" {
+			polarisSection = "\n## 최근 Polaris 압축 요약 (사전 추출된 사실)\n" + ctx + "\n"
+		}
+	}
+
 	prompt := fmt.Sprintf(`당신은 위키 지식베이스 관리자입니다. 아래 일지 내용을 분석하여 위키 페이지를 생성하거나 업데이트할 지시사항을 JSON 배열로 반환하세요.
 
 ## 현재 위키 인덱스
@@ -599,7 +618,7 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 
 ## 최근 처리 이력
 %s
-
+%s
 ## 새 일지 내용
 %s
 
@@ -620,7 +639,7 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 - related: 의미적으로 관련된 기존 위키 페이지 경로 목록 (인덱스에서 선택)
 - 업데이트가 불필요하면 빈 배열 [] 반환
 
-JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, processedHistory, diaryContent)
+JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, processedHistory, polarisSection, diaryContent)
 
 	systemJSON, _ := json.Marshal("You are a wiki knowledge base maintainer. Respond only with a JSON array.")
 	resp, err := wd.client.Complete(ctx, llm.ChatRequest{

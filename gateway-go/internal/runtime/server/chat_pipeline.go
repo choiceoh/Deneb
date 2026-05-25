@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
@@ -141,5 +142,31 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			}
 		}
 		toolreg.RegisterPolarisTools(chatCfg.Tools, bridge.Store(), localAI)
+
+		// Wire dreamer to read recent polaris summaries as a higher-density
+		// fact source alongside raw diary entries.
+		if s.wikiDreamer != nil {
+			polarisStore := bridge.Store()
+			s.wikiDreamer.SetPolarisContextFn(func() string {
+				return formatRecentPolarisSummaries(polarisStore.RecentSummariesAcrossSessions(dreamerPolarisSummaryLimit))
+			})
+		}
 	}
+}
+
+const dreamerPolarisSummaryLimit = 8
+
+// formatRecentPolarisSummaries renders polaris summary nodes as bullet text for
+// the wiki dreamer's synthesis prompt.
+func formatRecentPolarisSummaries(nodes []polaris.SummaryNode) string {
+	if len(nodes) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	for _, n := range nodes {
+		sb.WriteString("- ")
+		sb.WriteString(n.Content)
+		sb.WriteString("\n")
+	}
+	return sb.String()
 }
