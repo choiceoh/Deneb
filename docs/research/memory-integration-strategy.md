@@ -34,10 +34,15 @@ Polaris = 현 세션 staging (아직 wiki 로 안 들어간 fact)
 
 ### 2. Recall = wiki + 현 세션 polaris 만
 
-Hindsight 직접 회상 제거. 세션 시작 시 1회 hindsight → wiki prime (background).
+Hindsight 직접 회상 제거. **Retain 경로는 유지** (백업 목적).
 
 - `recall_preflight.go` 에서 hindsight Recall 호출 제거
-- `run_start.go` (또는 session-init 경로) 에 hindsight prime 추가 — async, recall path 차단 안 함
+- `recall_hindsight.go` + 테스트 파일 삭제
+- `hindsight_recorder.go` (retain) 는 그대로 — wiki 의 외부 백업 역할
+
+세션 시작 시 hindsight → wiki prime 은 단일 사용자 환경에서 불필요 (wiki 가
+이미 영구 truth). 향후 cross-machine 동기화 또는 wiki 손실 복구 시점에 별도
+검토.
 
 ### 3. Wiki Tier1 = Polaris anchor
 
