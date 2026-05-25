@@ -317,6 +317,24 @@ func (s *Store) SearchMessages(sessionKey, query string, maxResults int) ([]Sear
 	return results, nil
 }
 
+// RecentSummariesAcrossSessions returns up to limit most recent summary nodes
+// across all sessions, sorted by CreatedAt descending. Used by wiki dreamer
+// to seed fact synthesis with polaris-compressed conversation history.
+func (s *Store) RecentSummariesAcrossSessions(limit int) []SummaryNode {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var all []SummaryNode
+	for _, sd := range s.sessions {
+		all = append(all, sd.summaries...)
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].CreatedAt > all[j].CreatedAt })
+	if limit > 0 && len(all) > limit {
+		all = all[:limit]
+	}
+	return all
+}
+
 // SummaryByID loads a single summary node by its ID.
 func (s *Store) SummaryByID(id int64) (*SummaryNode, error) {
 	s.mu.Lock()
