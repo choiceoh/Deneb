@@ -66,6 +66,39 @@ func TestPing_WithInitData(t *testing.T) {
 	}
 }
 
+func TestPing_IncludesModelWhenResolvable(t *testing.T) {
+	h := ping(Deps{
+		Version:      "4.22.3",
+		CurrentModel: func() string { return "vllm/gemma4" },
+	})
+	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+
+	got := decodePayload(t, h(ctx, newReq(t, "miniapp.ping")))
+	if got["model"] != "vllm/gemma4" {
+		t.Errorf("model = %v, want vllm/gemma4", got["model"])
+	}
+}
+
+func TestPing_OmitsModelWhenUnresolved(t *testing.T) {
+	cases := []struct {
+		name string
+		deps Deps
+	}{
+		{"nil accessor", Deps{Version: "x"}},
+		{"empty result", Deps{Version: "x", CurrentModel: func() string { return "" }}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := ping(tc.deps)
+			ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+			got := decodePayload(t, h(ctx, newReq(t, "miniapp.ping")))
+			if _, ok := got["model"]; ok {
+				t.Errorf("model key present in payload, want absent: %#v", got)
+			}
+		})
+	}
+}
+
 func TestPing_NoInitData(t *testing.T) {
 	h := ping(Deps{Version: "4.22.3"})
 	resp := h(context.Background(), newReq(t, "miniapp.ping"))

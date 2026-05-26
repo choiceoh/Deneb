@@ -89,6 +89,7 @@ export interface PingResult {
   ok: boolean;
   version: string;
   tsMs: number;
+  model?: string;
 }
 
 export interface WhoamiResult {

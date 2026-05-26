@@ -35,30 +35,15 @@ function paint(
   h1.textContent = 'Deneb';
   root.appendChild(h1);
 
-  const auth = document.createElement('div');
-  auth.className = 'card';
-  auth.innerHTML = `
-    <div class="row"><span class="label">Authenticated</span><span class="value ok">✓</span></div>
-    <div class="row"><span class="label">Name</span><span class="value"></span></div>
-    <div class="row"><span class="label">Username</span><span class="value"></span></div>
-  `;
-  const valueCells = auth.querySelectorAll('.value');
-  (valueCells[1] as HTMLElement).textContent =
-    [user.firstName, user.lastName].filter(Boolean).join(' ') || `id=${user.id}`;
-  (valueCells[2] as HTMLElement).textContent = user.username ? `@${user.username}` : '—';
-  root.appendChild(auth);
-
-  const backend = document.createElement('div');
-  backend.className = 'card';
-  backend.innerHTML = `
-    <div class="row"><span class="label">Backend</span><span class="value ok">ok</span></div>
-    <div class="row"><span class="label">Version</span><span class="value"></span></div>
-    <div class="row"><span class="label">Latency</span><span class="value"></span></div>
-  `;
-  const backendCells = backend.querySelectorAll('.value');
-  (backendCells[1] as HTMLElement).textContent = pingResult.version || '(none)';
-  (backendCells[2] as HTMLElement).textContent = `${latencyMs} ms`;
-  root.appendChild(backend);
+  // Status: just the current model. Auth/version/latency stay in the
+  // muted footer below so they're available for diagnostics without
+  // dominating the screen.
+  const status = document.createElement('div');
+  status.className = 'card';
+  status.innerHTML = `<div class="row"><span class="label">모델</span><span class="value"></span></div>`;
+  const modelCell = status.querySelector('.value') as HTMLElement;
+  modelCell.textContent = pingResult.model || '—';
+  root.appendChild(status);
 
   // Domain entry cards. Order matters — fastest-cadence at the top.
   root.appendChild(
@@ -85,9 +70,13 @@ function paint(
   });
   root.appendChild(refresh);
 
+  // Diagnostics live in the muted footer so the visible status stays minimal.
   const muted = document.createElement('div');
   muted.className = 'muted';
-  muted.textContent = `query=${initData.length}B · 인증=${new Date(user.authDateMs).toLocaleString('ko-KR')}`;
+  const userLabel =
+    [user.firstName, user.lastName].filter(Boolean).join(' ') ||
+    (user.username ? `@${user.username}` : `id=${user.id}`);
+  muted.textContent = `${userLabel} · v${pingResult.version || '?'} · ${latencyMs}ms`;
   root.appendChild(muted);
 }
 

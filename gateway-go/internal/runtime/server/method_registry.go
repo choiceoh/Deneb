@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
@@ -193,7 +194,22 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// server_http_miniapp.go before the dispatcher is reached. The
 		// methods read the authenticated user from context via
 		// telegram.InitDataFromContext.
-		handlerminiapp.Methods(handlerminiapp.Deps{Version: hub.Version()}),
+		handlerminiapp.Methods(handlerminiapp.Deps{
+			Version: hub.Version(),
+			CurrentModel: func() string {
+				// Lazy: chatHandler / modelRegistry are populated after this
+				// registration phase. Resolve at request time.
+				if s.chatHandler != nil {
+					if m := s.chatHandler.DefaultModel(); m != "" {
+						return m
+					}
+				}
+				if s.modelRegistry != nil {
+					return s.modelRegistry.FullModelID(modelrole.RoleMain)
+				}
+				return ""
+			},
+		}),
 
 		// Mini App Gmail domain (miniapp.gmail.list_recent / get /
 		// mark_read / archive). Lazy factory around gmail.DefaultClient

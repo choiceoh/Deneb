@@ -23,6 +23,11 @@ type Deps struct {
 	// Version is the gateway build version reported back by miniapp.ping so the
 	// client can show "Backend: 4.22.3 (12ms)" without an extra RPC round-trip.
 	Version string
+	// CurrentModel resolves the model ID currently in effect for new runs.
+	// Called lazily at request time because chatHandler / modelRegistry are
+	// created after early-phase registration. May be nil; returns "" when
+	// no model is resolvable.
+	CurrentModel func() string
 }
 
 // Methods returns the miniapp.* handler map. All methods require initData
@@ -42,11 +47,17 @@ func ping(deps Deps) rpcutil.HandlerFunc {
 		if telegram.InitDataFromContext(ctx) == nil {
 			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.ping requires initData context").Response(req.ID)
 		}
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		payload := map[string]any{
 			"ok":      true,
 			"version": deps.Version,
 			"tsMs":    time.Now().UnixMilli(),
-		})
+		}
+		if deps.CurrentModel != nil {
+			if m := deps.CurrentModel(); m != "" {
+				payload["model"] = m
+			}
+		}
+		return rpcutil.RespondOK(req.ID, payload)
 	}
 }
 
