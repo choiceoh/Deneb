@@ -126,6 +126,10 @@ var requiredMethods = []string{
 	"miniapp.gmail.get",
 	"miniapp.gmail.mark_read",
 	"miniapp.gmail.archive",
+	"miniapp.sessions.recent",
+	// miniapp.memory.search is conditional on wiki being enabled
+	// (DENEB_WIKI_ENABLED) — not in the required list, matching the
+	// existing wiki.* exclusion above.
 
 	// Gateway builtins.
 	"status",

@@ -10,6 +10,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -32,6 +33,12 @@ import (
 	handlerwiki "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 )
+
+// errWikiDisabled surfaces from the miniapp memory factory when the wiki
+// knowledge base is not configured. Returning a real error (rather than
+// nil store) keeps the rpc handler's UNAVAILABLE branch typed and lets
+// the operator see a meaningful message in the response.
+var errWikiDisabled = errors.New("wiki knowledge base not configured")
 
 // registerEarlyMethods registers all RPC domains that don't depend on chatHandler.
 // Called after buildHub() but before registerSessionRPCMethods().
@@ -197,6 +204,26 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			Client: func() (handlerminiapp.GmailClient, error) {
 				return gmail.DefaultClient()
 			},
+		}),
+
+		// Mini App memory search (miniapp.memory.search). Lazy factory
+		// around hub.WikiStore() — wiki is created in the late phase
+		// (registerLateMethods) so the factory is what defers the lookup
+		// to per-request, by which time the store is wired. When wiki
+		// is disabled by config the factory surfaces UNAVAILABLE.
+		handlerminiapp.MemoryMethods(handlerminiapp.MemoryDeps{
+			Store: func() (handlerminiapp.MemorySearcher, error) {
+				store := hub.WikiStore()
+				if store == nil {
+					return nil, errWikiDisabled
+				}
+				return store, nil
+			},
+		}),
+
+		// Mini App sessions recent (miniapp.sessions.recent).
+		handlerminiapp.SessionsMethods(handlerminiapp.SessionsDeps{
+			Manager: hub.Sessions(),
 		}),
 	}
 
