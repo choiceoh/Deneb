@@ -34,18 +34,26 @@ function paint(
 ): void {
   root.innerHTML = '';
 
-  const h1 = document.createElement('h1');
-  h1.textContent = 'Deneb';
-  root.appendChild(h1);
+  const header = document.createElement('div');
+  header.className = 'brand-header';
+  header.innerHTML = `
+    <span class="brand-name">Deneb</span>
+    <span class="brand-badge" title="비서실장형 단일 에이전트">✓</span>
+  `;
+  root.appendChild(header);
 
-  // Status: just the current model. Auth/version/latency stay in the
-  // muted footer below so they're available for diagnostics without
-  // dominating the screen.
+  // Status: just the current model. Version/latency stay in the muted
+  // footer so the visible status stays minimal.
+  const statusLabel = document.createElement('div');
+  statusLabel.className = 'section-label';
+  statusLabel.textContent = '상태';
+  root.appendChild(statusLabel);
+
   const status = document.createElement('div');
-  status.className = 'card';
-  status.innerHTML = `<div class="row"><span class="label">모델</span><span class="value"></span></div>`;
-  const modelCell = status.querySelector('.value') as HTMLElement;
-  modelCell.textContent = pingResult.model || '—';
+  status.className = 'section-card';
+  status.appendChild(
+    buildInfoRow('icon-tile-pink', '🧠', '모델', pingResult.model || '—'),
+  );
   root.appendChild(status);
 
   // Domain entry cards. Order is intentional, by product priority:
@@ -53,31 +61,39 @@ function paint(
   //   2) calendar — time-pressured (D-15 pushes need immediate eyeballs)
   //   3) Gmail — steady-state triage
   //   4) memory + sessions — reference
-  root.appendChild(
-    buildEntryCard('💬', 'Deneb 채팅', '메시지 입력 → 응답', () =>
+  const shortcutsLabel = document.createElement('div');
+  shortcutsLabel.className = 'section-label';
+  shortcutsLabel.textContent = '바로가기';
+  root.appendChild(shortcutsLabel);
+
+  const shortcuts = document.createElement('div');
+  shortcuts.className = 'section-card';
+  shortcuts.appendChild(
+    buildNavRow('icon-tile-violet', '💬', 'Deneb 채팅', '메시지 입력 → 응답', () =>
       navigate({ name: 'chat' }),
     ),
   );
-  root.appendChild(
-    buildEntryCard('📅', '일정', '다가오는 회의 · D-15분 알림', () =>
+  shortcuts.appendChild(
+    buildNavRow('icon-tile-blue', '📅', '일정', '다가오는 회의 · D-15분 알림', () =>
       navigate({ name: 'calendar' }),
     ),
   );
-  root.appendChild(
-    buildEntryCard('📧', 'Gmail 트리아지', '최근 미처리 메일 · 읽음/보관', () =>
+  shortcuts.appendChild(
+    buildNavRow('icon-tile-red', '📧', 'Gmail 트리아지', '최근 미처리 메일', () =>
       navigate({ name: 'inbox' }),
     ),
   );
-  root.appendChild(
-    buildEntryCard('🧠', '메모리 검색', '위키 / 메모리에서 빠른 검색', () =>
+  shortcuts.appendChild(
+    buildNavRow('icon-tile-amber', '🧩', '메모리 검색', '위키 / 메모리 빠른 검색', () =>
       navigate({ name: 'memory' }),
     ),
   );
-  root.appendChild(
-    buildEntryCard('🗂', '최근 세션', '실행 중 / 완료된 에이전트 세션', () =>
+  shortcuts.appendChild(
+    buildNavRow('icon-tile-teal', '🗂', '최근 세션', '실행 중 / 완료', () =>
       navigate({ name: 'sessions' }),
     ),
   );
+  root.appendChild(shortcuts);
 
   const refresh = document.createElement('button');
   refresh.className = 'primary';
@@ -97,27 +113,48 @@ function paint(
   root.appendChild(muted);
 }
 
-function buildEntryCard(
+function buildInfoRow(
+  tileClass: string,
   emoji: string,
-  title: string,
+  label: string,
+  value: string,
+): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'profile-row';
+  row.innerHTML = `
+    <span class="icon-tile ${tileClass}"></span>
+    <span class="profile-row-label"></span>
+    <span class="profile-row-value"></span>
+  `;
+  (row.querySelector('.icon-tile') as HTMLElement).textContent = emoji;
+  (row.querySelector('.profile-row-label') as HTMLElement).textContent = label;
+  (row.querySelector('.profile-row-value') as HTMLElement).textContent = value;
+  return row;
+}
+
+function buildNavRow(
+  tileClass: string,
+  emoji: string,
+  label: string,
   sub: string,
   onClick: () => void,
 ): HTMLButtonElement {
-  const card = document.createElement('button');
-  card.className = 'entry-card';
-  card.innerHTML = `
-    <span class="entry-emoji"></span>
-    <span class="entry-text">
-      <span class="entry-title"></span>
-      <span class="entry-sub"></span>
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'profile-row profile-row-nav';
+  btn.innerHTML = `
+    <span class="icon-tile ${tileClass}"></span>
+    <span class="profile-row-text">
+      <span class="profile-row-label"></span>
+      <span class="profile-row-sub"></span>
     </span>
-    <span class="entry-chevron">›</span>
+    <span class="profile-row-chevron">›</span>
   `;
-  (card.querySelector('.entry-emoji') as HTMLElement).textContent = emoji;
-  (card.querySelector('.entry-title') as HTMLElement).textContent = title;
-  (card.querySelector('.entry-sub') as HTMLElement).textContent = sub;
-  card.addEventListener('click', onClick);
-  return card;
+  (btn.querySelector('.icon-tile') as HTMLElement).textContent = emoji;
+  (btn.querySelector('.profile-row-label') as HTMLElement).textContent = label;
+  (btn.querySelector('.profile-row-sub') as HTMLElement).textContent = sub;
+  btn.addEventListener('click', onClick);
+  return btn;
 }
 
 function renderHomeError(root: HTMLElement, message: string): void {

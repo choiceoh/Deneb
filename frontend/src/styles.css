@@ -1003,3 +1003,228 @@ pre.transcript-body {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ---- Brand header (home + more) ---- */
+
+.brand-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 18px;
+}
+
+.brand-name {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.brand-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--tg-link);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* ---- Section labels (Mira-inspired blue caps above each card) ---- */
+
+.section-label {
+  color: var(--tg-link);
+  font-size: 13px;
+  font-weight: 600;
+  margin: 16px 4px 8px;
+  letter-spacing: 0.01em;
+}
+
+.section-label:first-of-type {
+  margin-top: 4px;
+}
+
+/* ---- Section card (a list container) + profile rows ---- */
+
+.section-card {
+  background: var(--tg-secondary-bg);
+  border-radius: 14px;
+  padding: 4px 0;
+  margin-bottom: 4px;
+  overflow: hidden;
+}
+
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  color: var(--tg-text);
+  text-align: left;
+  font: inherit;
+}
+
+button.profile-row-nav {
+  cursor: pointer;
+}
+
+button.profile-row-nav:active {
+  opacity: 0.7;
+}
+
+.profile-row + .profile-row {
+  border-top: 1px solid color-mix(in srgb, var(--tg-hint) 18%, transparent);
+}
+
+.profile-row-label {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.profile-row-value {
+  color: var(--tg-hint);
+  font-size: 14px;
+  text-align: right;
+  word-break: break-all;
+}
+
+.profile-row-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.profile-row-text .profile-row-label {
+  flex: none;
+}
+
+.profile-row-sub {
+  color: var(--tg-hint);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-row-chevron {
+  color: var(--tg-hint);
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* ---- Icon tiles (rounded color-tinted squares) ---- */
+
+.icon-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  font-size: 17px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.icon-tile-violet {
+  background: #6c5ce7;
+  color: #ffffff;
+}
+.icon-tile-pink {
+  background: #ff6fa8;
+  color: #ffffff;
+}
+.icon-tile-purple {
+  background: #a679f0;
+  color: #ffffff;
+}
+.icon-tile-blue {
+  background: #4a8ef0;
+  color: #ffffff;
+}
+.icon-tile-red {
+  background: #ef5a5a;
+  color: #ffffff;
+}
+.icon-tile-amber {
+  background: #f0a23a;
+  color: #ffffff;
+}
+.icon-tile-teal {
+  background: #2eb8a0;
+  color: #ffffff;
+}
+.icon-tile-slate {
+  background: #6e7787;
+  color: #ffffff;
+}
+.icon-tile-green {
+  background: #34a853;
+  color: #ffffff;
+}
+
+/* ---- Bottom tab bar (persistent on top-level routes) ---- */
+
+#tab-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  background: var(--tg-bg);
+  border-top: 1px solid color-mix(in srgb, var(--tg-hint) 20%, transparent);
+  padding: 6px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+  z-index: 100;
+}
+
+#tab-bar.tab-bar-visible {
+  display: flex;
+  justify-content: space-around;
+}
+
+.tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--tg-hint);
+  font: inherit;
+  padding: 6px 4px;
+  cursor: pointer;
+  border-radius: 10px;
+}
+
+.tab-item:active {
+  background: var(--tg-secondary-bg);
+}
+
+.tab-item-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.tab-item-label {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.tab-item-active {
+  color: var(--tg-link);
+}
+
+/* Reserve room above the tab bar so content isn't covered. */
+body.has-tab-bar #app {
+  padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+}
