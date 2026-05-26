@@ -133,7 +133,7 @@ async function dispatch(route: Route): Promise<void> {
       await renderSessionTranscript(root, cachedInitData, route.sessionKey);
       return;
     case 'chat':
-      renderChat(root, cachedInitData);
+      renderChat(root, cachedInitData, route.ctx);
       return;
     case 'calendar':
       await renderCalendar(root, cachedInitData);
