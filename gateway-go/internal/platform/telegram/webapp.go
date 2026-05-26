@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// MenuButton kinds supported by setMenuButton.
+// MenuButton kinds supported by setChatMenuButton.
 const (
 	MenuButtonKindDefault  = "default"
 	MenuButtonKindCommands = "commands"
@@ -47,7 +47,10 @@ func (c *Client) SetMenuButtonWebApp(ctx context.Context, chatID int64, text, we
 		params["chat_id"] = chatID
 	}
 
-	_, err := c.CallIdempotent(ctx, "setMenuButton", params)
+	// Bot API method is "setChatMenuButton". The undocumented "setMenuButton"
+	// alias returns 404 against api.telegram.org even though some third-party
+	// clients still ship it — caused PR #1672 to log a Warn on every restart.
+	_, err := c.CallIdempotent(ctx, "setChatMenuButton", params)
 	return err
 }
 
@@ -63,7 +66,7 @@ func (c *Client) SetMenuButtonDefault(ctx context.Context, chatID int64) error {
 	if chatID != 0 {
 		params["chat_id"] = chatID
 	}
-	_, err := c.CallIdempotent(ctx, "setMenuButton", params)
+	_, err := c.CallIdempotent(ctx, "setChatMenuButton", params)
 	return err
 }
 
