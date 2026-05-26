@@ -84,7 +84,14 @@ go-binary:
 
 
 # Build production gateway binary to dist/.
-gateway-prod: go-binary
+#
+# Runs embed-frontend before go-binary so the Mini App bundle that
+# scripts/deploy/deploy.sh ships is always rebuilt from the current
+# frontend/ tree. Recipe-level sequencing (not a prerequisite list)
+# guarantees ordering under `make -j`.
+gateway-prod:
+	$(MAKE) embed-frontend
+	$(MAKE) go-binary
 	@echo "Production gateway ready: dist/deneb-gateway"
 
 go-clean:
