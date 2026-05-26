@@ -68,6 +68,10 @@ export function archive(initData: string, id: string): Promise<ActionResult> {
   return call<ActionResult>('miniapp.gmail.archive', { id }, initData);
 }
 
+export function trash(initData: string, id: string): Promise<{ ok: boolean }> {
+  return call<{ ok: boolean }>('miniapp.gmail.trash', { id }, initData);
+}
+
 // --- Sender context (miniapp.gmail.sender_context) ---
 
 export interface SenderWikiHit {

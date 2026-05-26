@@ -493,6 +493,13 @@ func (c *Client) ListLabels(ctx context.Context) ([]LabelInfo, error) {
 	return labels, nil
 }
 
+// Trash moves a message to Gmail's Trash folder. Recoverable from the
+// user's Trash UI for ~30 days; uses the dedicated /trash endpoint so
+// we don't have to resolve the TRASH label ID via ListLabels.
+func (c *Client) Trash(ctx context.Context, messageID string) error {
+	return c.postJSON(ctx, "/messages/"+messageID+"/trash", struct{}{}, nil)
+}
+
 // ModifyLabels adds and/or removes labels on a message.
 // Label names are resolved to IDs automatically.
 func (c *Client) ModifyLabels(ctx context.Context, messageID string, addNames, removeNames []string) error {

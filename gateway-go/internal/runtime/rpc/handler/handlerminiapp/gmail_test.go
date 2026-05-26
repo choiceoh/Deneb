@@ -18,6 +18,7 @@ type fakeGmailClient struct {
 	searchFn       func(ctx context.Context, query string, maxResults int) ([]gmail.MessageSummary, error)
 	getMessageFn   func(ctx context.Context, id string) (*gmail.MessageDetail, error)
 	modifyLabelsFn func(ctx context.Context, id string, add, remove []string) error
+	trashFn        func(ctx context.Context, id string) error
 }
 
 func (f *fakeGmailClient) Search(ctx context.Context, q string, n int) ([]gmail.MessageSummary, error) {
@@ -39,6 +40,13 @@ func (f *fakeGmailClient) ModifyLabels(ctx context.Context, id string, add, remo
 		return errors.New("ModifyLabels not stubbed")
 	}
 	return f.modifyLabelsFn(ctx, id, add, remove)
+}
+
+func (f *fakeGmailClient) Trash(ctx context.Context, id string) error {
+	if f.trashFn == nil {
+		return errors.New("Trash not stubbed")
+	}
+	return f.trashFn(ctx, id)
 }
 
 func depsFor(client GmailClient) GmailDeps {
@@ -336,6 +344,67 @@ func TestGmailArchive_ModifyFails(t *testing.T) {
 	}
 }
 
+// --- trash ---------------------------------------------------------------
+
+func TestGmailTrash_CallsClientTrash(t *testing.T) {
+	var seenID string
+	client := &fakeGmailClient{
+		trashFn: func(_ context.Context, id string) error {
+			seenID = id
+			return nil
+		},
+	}
+	h := gmailTrash(depsFor(client))
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.trash", map[string]any{"id": "m1"}))
+
+	var got map[string]any
+	decode(t, resp, &got)
+	if seenID != "m1" {
+		t.Errorf("id = %q, want m1", seenID)
+	}
+	if got["ok"] != true {
+		t.Errorf("ok = %v, want true", got["ok"])
+	}
+}
+
+func TestGmailTrash_MissingID(t *testing.T) {
+	h := gmailTrash(depsFor(&fakeGmailClient{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.trash", map[string]any{}))
+	if resp.OK {
+		t.Fatalf("expected error, got OK")
+	}
+	if resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("code = %s, want %s", resp.Error.Code, protocol.ErrMissingParam)
+	}
+}
+
+func TestGmailTrash_RequiresAuth(t *testing.T) {
+	h := gmailTrash(depsFor(&fakeGmailClient{}))
+	resp := h(context.Background(), reqWith(t, "miniapp.gmail.trash", map[string]any{"id": "m1"}))
+	if resp.OK {
+		t.Fatalf("expected unauthorized, got OK")
+	}
+	if resp.Error.Code != protocol.ErrUnauthorized {
+		t.Errorf("code = %s, want %s", resp.Error.Code, protocol.ErrUnauthorized)
+	}
+}
+
+func TestGmailTrash_ClientError(t *testing.T) {
+	client := &fakeGmailClient{
+		trashFn: func(_ context.Context, _ string) error {
+			return errors.New("HTTP 404: Not Found")
+		},
+	}
+	h := gmailTrash(depsFor(client))
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.trash", map[string]any{"id": "missing"}))
+	if resp.OK {
+		t.Fatalf("expected error, got OK")
+	}
+	if resp.Error.Code != protocol.ErrNotFound {
+		t.Errorf("code = %s, want %s", resp.Error.Code, protocol.ErrNotFound)
+	}
+}
+
 // --- helpers --------------------------------------------------------------
 
 func TestNormalizeDate_RFC2822ToISO8601(t *testing.T) {
@@ -377,13 +446,14 @@ func TestGmailMethods_NilClientReturnsNil(t *testing.T) {
 	}
 }
 
-func TestGmailMethods_RegistersAllFour(t *testing.T) {
+func TestGmailMethods_RegistersAll(t *testing.T) {
 	got := GmailMethods(depsFor(&fakeGmailClient{}))
 	for _, name := range []string{
 		"miniapp.gmail.list_recent",
 		"miniapp.gmail.get",
 		"miniapp.gmail.mark_read",
 		"miniapp.gmail.archive",
+		"miniapp.gmail.trash",
 	} {
 		if _, ok := got[name]; !ok {
 			t.Errorf("missing method %q", name)
