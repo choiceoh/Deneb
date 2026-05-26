@@ -364,7 +364,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			Sender: func() (handlerminiapp.ChatSender, error) {
 				ch := hub.Chat()
 				if ch == nil {
-					return nil, handlerminiapp.ErrChatUnavailable()
+					return nil, handlerminiapp.ErrChatUnavailable
 				}
 				return ch, nil
 			},

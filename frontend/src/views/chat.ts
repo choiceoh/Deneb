@@ -4,28 +4,47 @@
 // lives in a module variable so navigating away and back preserves the
 // thread. Pressing the "새 대화" button clears the history and resets the
 // session key (the backend then derives a fresh miniapp:<userId> key).
+//
+// Mount-token guard: `renderChat` bumps `mountToken` on every call (and so
+// does the "새 대화" reset). `submit()` captures the token at entry and
+// bails out of any post-await DOM/state mutation when the token has moved
+// — that closes two races at once. (a) The user navigates away mid-RPC
+// and back; `isCurrentHash` would return true again but the captured
+// `list` element is detached. (b) The user hits "새 대화" mid-RPC; the
+// late response would otherwise re-populate `history` and overwrite
+// `activeSessionKey` with the old session's key.
 
 import { sendChat, type ChatResult } from '../chat';
 import { RpcError } from '../rpc';
-import { isCurrentHash } from '../router';
 import { renderMarkdown } from '../markdown';
 
 interface Turn {
   role: 'user' | 'assistant' | 'error';
   text: string;
   meta?: string;
+  // Cached rendered HTML for assistant turns so re-mounts (navigate-away
+  // and back) skip the markdown parse.
+  html?: string;
 }
 
+const maxHistoryTurns = 200;
 let history: Turn[] = [];
 let activeSessionKey: string | undefined;
+let mountToken = 0;
 
 export function renderChat(root: HTMLElement, initData: string): void {
+  mountToken += 1;
   root.innerHTML = '';
-  root.appendChild(buildHeader(() => {
-    history = [];
-    activeSessionKey = undefined;
-    renderChat(root, initData);
-  }));
+  root.appendChild(
+    buildHeader(() => {
+      // Reset bumps the token so any in-flight RPC's late resolution
+      // skips both DOM and state mutation.
+      mountToken += 1;
+      history = [];
+      activeSessionKey = undefined;
+      renderChat(root, initData);
+    }),
+  );
 
   const list = document.createElement('div');
   list.className = 'chat-list';
@@ -42,11 +61,8 @@ export function renderChat(root: HTMLElement, initData: string): void {
     }
   }
 
-  const composer = buildComposer(root, list, initData);
-  root.appendChild(composer);
-
-  // Auto-scroll on initial paint so the latest turn is visible.
-  requestAnimationFrame(() => list.scrollTop = list.scrollHeight);
+  root.appendChild(buildComposer(list, initData));
+  scrollToBottom(list);
 }
 
 function buildHeader(onReset: () => void): HTMLElement {
@@ -54,7 +70,7 @@ function buildHeader(onReset: () => void): HTMLElement {
   wrap.className = 'view-header';
   wrap.innerHTML = `
     <span class="view-title">Deneb 채팅</span>
-    <button class="link-button">새 대화</button>
+    <button class="link-button" type="button">새 대화</button>
   `;
   wrap.querySelector('button')!.addEventListener('click', onReset);
   return wrap;
@@ -67,7 +83,10 @@ function buildBubble(turn: Turn): HTMLElement {
   if (turn.role === 'assistant') {
     const body = document.createElement('div');
     body.className = 'chat-bubble-body markdown';
-    body.innerHTML = renderMarkdown(turn.text || '(빈 응답)');
+    if (turn.html === undefined) {
+      turn.html = renderMarkdown(turn.text || '(빈 응답)');
+    }
+    body.innerHTML = turn.html;
     wrap.appendChild(body);
   } else {
     const body = document.createElement('div');
@@ -85,11 +104,7 @@ function buildBubble(turn: Turn): HTMLElement {
   return wrap;
 }
 
-function buildComposer(
-  root: HTMLElement,
-  list: HTMLElement,
-  initData: string,
-): HTMLElement {
+function buildComposer(list: HTMLElement, initData: string): HTMLElement {
   const form = document.createElement('form');
   form.className = 'chat-composer';
   form.innerHTML = `
@@ -99,7 +114,8 @@ function buildComposer(
   const input = form.querySelector('textarea') as HTMLTextAreaElement;
   const sendBtn = form.querySelector('button') as HTMLButtonElement;
 
-  // Enter to submit, Shift+Enter for newline — standard chat UX.
+  // Enter to submit, Shift+Enter for newline. `isComposing` is required
+  // for Korean IME so Hangul composition keystrokes don't trigger a send.
   input.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) {
       ev.preventDefault();
@@ -113,10 +129,10 @@ function buildComposer(
     if (!msg) return;
     input.value = '';
     input.style.height = '';
-    void submit(root, list, initData, msg, sendBtn);
+    void submit(list, initData, msg, sendBtn);
   });
 
-  // Auto-resize textarea up to 6 rows.
+  // Auto-resize textarea up to 6 lines of content.
   input.addEventListener('input', () => {
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 6 * 22) + 'px';
@@ -126,13 +142,12 @@ function buildComposer(
 }
 
 async function submit(
-  _root: HTMLElement,
   list: HTMLElement,
   initData: string,
   message: string,
   sendBtn: HTMLButtonElement,
 ): Promise<void> {
-  const expectedHash = location.hash;
+  const myToken = mountToken;
 
   // Empty-state placeholder goes away on first turn.
   list.querySelector('.empty-state')?.remove();
@@ -140,6 +155,7 @@ async function submit(
   // User bubble.
   const userTurn: Turn = { role: 'user', text: message };
   history.push(userTurn);
+  trimHistory();
   list.appendChild(buildBubble(userTurn));
 
   // Loading bubble (replaced when response arrives or error occurs).
@@ -154,7 +170,7 @@ async function submit(
     <div class="chat-bubble-meta chat-elapsed">0s</div>
   `;
   list.appendChild(loading);
-  list.scrollTop = list.scrollHeight;
+  scrollToBottom(list);
 
   const start = performance.now();
   const elapsedEl = loading.querySelector('.chat-elapsed') as HTMLElement;
@@ -169,20 +185,19 @@ async function submit(
       sessionKey: activeSessionKey,
     });
     window.clearInterval(tick);
-    if (!isCurrentHash(expectedHash)) {
-      // User navigated away; keep history updated but skip DOM mutation.
-      activeSessionKey = result.sessionKey;
-      pushAssistant(result);
-      return;
-    }
+    // mountToken differs when the user reset the conversation or
+    // re-entered the view. The captured `list`, `loading`, and `sendBtn`
+    // refer to detached / stale DOM in that case; silently drop the
+    // response rather than corrupt the live view's state.
+    if (myToken !== mountToken) return;
     loading.remove();
     activeSessionKey = result.sessionKey;
     const assistant = pushAssistant(result);
     list.appendChild(buildBubble(assistant));
-    list.scrollTop = list.scrollHeight;
+    scrollToBottom(list);
   } catch (err) {
     window.clearInterval(tick);
-    if (!isCurrentHash(expectedHash)) return;
+    if (myToken !== mountToken) return;
     loading.remove();
     const msgText =
       err instanceof RpcError
@@ -192,8 +207,11 @@ async function submit(
           : '알 수 없는 오류';
     const errTurn: Turn = { role: 'error', text: `전송 실패: ${msgText}` };
     history.push(errTurn);
+    trimHistory();
     list.appendChild(buildBubble(errTurn));
   } finally {
+    // sendBtn comes from the same closure as `list`; if the view was
+    // reset, this button is detached so the assignment is a no-op.
     sendBtn.disabled = false;
   }
 }
@@ -210,5 +228,20 @@ function pushAssistant(result: ChatResult): Turn {
     meta: parts.join(' · '),
   };
   history.push(turn);
+  trimHistory();
   return turn;
+}
+
+function trimHistory(): void {
+  if (history.length > maxHistoryTurns) {
+    history = history.slice(history.length - maxHistoryTurns);
+  }
+}
+
+function scrollToBottom(list: HTMLElement): void {
+  // rAF ensures the just-appended child has been laid out so
+  // scrollHeight reflects the new content.
+  requestAnimationFrame(() => {
+    list.scrollTop = list.scrollHeight;
+  });
 }

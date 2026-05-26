@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
@@ -35,10 +36,10 @@ type ChatSender interface {
 	SendSync(ctx context.Context, sessionKey, message, model string, opts *chat.SyncOptions) (*chat.SyncResult, error)
 }
 
-// ChatDeps groups the dependencies. Sender is lazy because chat.Handler is
-// created during session-phase init (between early and late phase) — a
-// factory lets us register in the early phase while the underlying handler
-// is wired later.
+// ChatDeps groups the dependencies. Sender is lazy because hub.Chat() is
+// populated during the session phase right before late-phase registration;
+// the factory defers the lookup so the gateway boots cleanly even on the
+// brief window where chat.Handler is still nil.
 type ChatDeps struct {
 	Sender func() (ChatSender, error)
 }
@@ -47,15 +48,11 @@ const (
 	maxChatMessageRunes = 8000
 )
 
-// errChatUnavailable surfaces from the sender factory before chat init has
-// completed. Handler maps it to UNAVAILABLE so the Mini App can show a
-// "백엔드 준비 중" banner instead of a generic failure.
-var errChatUnavailable = errors.New("chat handler not yet initialized")
-
-// ErrChatUnavailable is the exported helper for method_registry wiring,
-// which returns this sentinel from a factory before chat init populates
-// hub.Chat().
-func ErrChatUnavailable() error { return errChatUnavailable }
+// ErrChatUnavailable is the sentinel callers (method_registry) return from
+// the Sender factory when chat init has not populated hub.Chat() yet.
+// Handler maps it to UNAVAILABLE so the Mini App can show a "백엔드 준비 중"
+// banner instead of a generic failure.
+var ErrChatUnavailable = errors.New("chat handler not yet initialized")
 
 // ChatMethods returns the miniapp.chat.* handler map. Returns nil when no
 // sender factory is provided so method_registry can register conditionally.
@@ -100,9 +97,9 @@ func chatSend(deps ChatDeps) rpcutil.HandlerFunc {
 		// Rune-aware cap so a Korean essay doesn't get cut mid-character
 		// upstream. The cap is generous (~8K characters) but bounded so a
 		// runaway paste doesn't blow up the agent context.
-		if r := []rune(message); len(r) > maxChatMessageRunes {
+		if count := utf8.RuneCountInString(message); count > maxChatMessageRunes {
 			return rpcerr.InvalidRequest(fmt.Sprintf(
-				"message exceeds %d characters (got %d)", maxChatMessageRunes, len(r),
+				"message exceeds %d characters (got %d)", maxChatMessageRunes, count,
 			)).Response(req.ID)
 		}
 
