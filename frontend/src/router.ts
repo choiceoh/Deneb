@@ -11,13 +11,15 @@ export type Route =
   | { name: 'memory' }
   | { name: 'sessions' }
   | { name: 'wikiPage'; path: string }
-  | { name: 'sessionTranscript'; sessionKey: string };
+  | { name: 'sessionTranscript'; sessionKey: string }
+  | { name: 'chat' };
 
 export function parseRoute(hash: string): Route {
   if (hash === '' || hash === '#' || hash === '#/') return { name: 'home' };
   if (hash === '#/inbox') return { name: 'inbox' };
   if (hash === '#/memory') return { name: 'memory' };
   if (hash === '#/sessions') return { name: 'sessions' };
+  if (hash === '#/chat') return { name: 'chat' };
   const match = hash.match(/^#\/m\/(.+)$/);
   if (match) {
     // decodeURIComponent throws URIError on malformed percent-encoding
@@ -69,6 +71,7 @@ export function navigate(target: Route): void {
   if (target.name === 'inbox') hash = '#/inbox';
   else if (target.name === 'memory') hash = '#/memory';
   else if (target.name === 'sessions') hash = '#/sessions';
+  else if (target.name === 'chat') hash = '#/chat';
   else if (target.name === 'detail') hash = `#/m/${encodeURIComponent(target.messageId)}`;
   else if (target.name === 'wikiPage') hash = `#/wiki/${encodeURIComponent(target.path)}`;
   else if (target.name === 'sessionTranscript')
