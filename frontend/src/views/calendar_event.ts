@@ -1,10 +1,8 @@
 // views/calendar_event.ts — Calendar event detail.
 //
-// Shows the full event metadata (time, location, description, attendees,
-// conference link) and a "Gmail에서 관련 메일 보기" link that searches
-// Gmail by counterpart email so the user can pull recent context with
-// one tap. Person-card join and unresolved-promise extraction land in
-// a follow-up PR once Phase 0 (structured analysis storage) is in.
+// Shows event metadata (time, location, description, attendees, Meet
+// link). Person-card join, related-mail enrichment, and unresolved-
+// promise extraction land in follow-up PRs.
 
 import { calendarGet, type CalendarEventDetail, RpcError } from '../rpc';
 import { isCurrentHash, navigate } from '../router';
@@ -45,10 +43,13 @@ function paint(root: HTMLElement, _initData: string, ev: CalendarEventDetail): v
   root.appendChild(h1);
 
   // Time block — when does this happen?
+  // Google Calendar all-day events use an EXCLUSIVE end date (a one-
+  // day event has end = start + 1day); subtract one day when rendering
+  // so a "May 26" event shows "끝: 5월 26일" instead of "5월 27일".
   const meta = document.createElement('div');
   meta.className = 'card';
   appendRow(meta, '시작', formatFull(ev.start, ev.allDay));
-  appendRow(meta, '끝', formatFull(ev.end, ev.allDay));
+  appendRow(meta, '끝', formatFull(ev.end, ev.allDay, /* allDayEndExclusive */ true));
   if (ev.location) appendRow(meta, '장소', ev.location);
   if (ev.status && ev.status !== 'confirmed') appendRow(meta, '상태', ev.status);
   root.appendChild(meta);
@@ -162,11 +163,17 @@ function formatRSVP(s?: string): string {
   }
 }
 
-function formatFull(iso: string, allDay?: boolean): string {
+function formatFull(iso: string, allDay?: boolean, allDayEndExclusive?: boolean): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  if (allDay) return d.toLocaleDateString('ko-KR');
+  if (allDay) {
+    // Google Calendar all-day ends are exclusive (point to the day
+    // AFTER the last covered day); for display, subtract one day so
+    // a one-day event shows the same start and end date.
+    const display = allDayEndExclusive ? new Date(d.getTime() - 24 * 60 * 60 * 1000) : d;
+    return display.toLocaleDateString('ko-KR');
+  }
   return d.toLocaleString('ko-KR', {
     year: 'numeric',
     month: 'long',

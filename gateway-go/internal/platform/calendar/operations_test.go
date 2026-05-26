@@ -254,6 +254,29 @@ func TestGet_HappyPath(t *testing.T) {
 	}
 }
 
+// Regression: Google clients sometimes emit dateTime without an
+// offset suffix when timeZone is set ("2026-05-26T14:00:00" +
+// timeZone "Asia/Seoul"). RFC3339 parse fails, so we fall back to
+// parsing the wall-clock value in the declared timezone — otherwise
+// the event silently disappears from list and briefing pipelines.
+func TestParseEventTime_DateTimeWithoutOffsetUsesTimeZone(t *testing.T) {
+	tm, allDay := parseEventTime(apiEventDateTime{
+		DateTime: "2026-05-26T14:00:00",
+		TimeZone: "Asia/Seoul",
+	})
+	if allDay {
+		t.Error("dateTime should not be allDay")
+	}
+	if tm.IsZero() {
+		t.Fatal("expected non-zero time")
+	}
+	loc, _ := time.LoadLocation("Asia/Seoul")
+	want := time.Date(2026, 5, 26, 14, 0, 0, 0, loc)
+	if !tm.Equal(want) {
+		t.Errorf("got %v, want %v", tm, want)
+	}
+}
+
 func TestParseEventTime_Fallbacks(t *testing.T) {
 	// Empty input → zero time, allDay false.
 	tm, allDay := parseEventTime(apiEventDateTime{})

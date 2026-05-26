@@ -228,11 +228,17 @@ func projectAttendeeOut(a calendar.Attendee) calendarAttendeeOut {
 
 // formatTime returns RFC3339 or empty string for zero time. We surface
 // zero times as "" to keep the JSON shape predictable for the client.
+//
+// We deliberately DO NOT coerce to UTC: doing so loses the event's own
+// timezone, and for all-day events anchored at midnight in their event
+// tz, a UTC shift can move the rendered date by ±1 day in non-UTC
+// locales. Emitting RFC3339 with the original offset lets the client
+// render correctly without further timezone math.
 func formatTime(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return t.UTC().Format(time.RFC3339)
+	return t.Format(time.RFC3339)
 }
 
 // mapCalendarError classifies a Calendar client error via the typed

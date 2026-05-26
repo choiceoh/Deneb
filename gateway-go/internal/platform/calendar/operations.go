@@ -180,11 +180,27 @@ func projectConference(c apiConferenceData) *ConferenceInfo {
 
 // parseEventTime maps Google's union of (dateTime|date) into time.Time
 // plus an all-day flag. dateTime wins when both present.
+//
+// dateTime parsing has two paths:
+//  1. RFC3339 (the common case — Google always sends offset for events
+//     with a non-default tz, e.g. "2026-05-26T14:00:00+09:00").
+//  2. Wall-clock + timeZone (some Google clients send dateTime without
+//     a numeric offset when timeZone is set, e.g. "2026-05-26T14:00:00"
+//     with timeZone "Asia/Seoul"). Without this fallback those events
+//     fall to zero time and are silently dropped from list and
+//     briefing pipelines.
 func parseEventTime(dt apiEventDateTime) (parsed time.Time, allDay bool) {
 	if dt.DateTime != "" {
-		t, err := time.Parse(time.RFC3339, dt.DateTime)
-		if err == nil {
+		if t, err := time.Parse(time.RFC3339, dt.DateTime); err == nil {
 			return t, false
+		}
+		// Fallback: wall-clock in declared timeZone (no offset).
+		if dt.TimeZone != "" {
+			if loc, err := time.LoadLocation(dt.TimeZone); err == nil {
+				if t, err := time.ParseInLocation("2006-01-02T15:04:05", dt.DateTime, loc); err == nil {
+					return t, false
+				}
+			}
 		}
 	}
 	if dt.Date != "" {

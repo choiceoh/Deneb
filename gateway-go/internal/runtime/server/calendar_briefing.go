@@ -41,6 +41,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"log/slog"
 	"strings"
 	"sync"
@@ -289,6 +290,13 @@ func (s *calendarBriefingService) sendBriefing(ctx context.Context, chatID strin
 
 // formatBriefing builds the Telegram message body. Korean-first per
 // project convention; time rendered in the cached displayLoc.
+//
+// telegram.Plugin.SendMessage uses ParseMode: "HTML", so every field
+// that comes from Calendar data (summary, location, conference URI,
+// attendee names) MUST go through html.EscapeString before being
+// concatenated — otherwise a meeting title containing '<', '>' or '&'
+// (e.g. "Q&A with team") triggers a Telegram "can't parse entities"
+// 400 and the entire briefing is dropped.
 func (s *calendarBriefingService) formatBriefing(ev calendar.Event) string {
 	start := ev.Start.In(s.displayLoc).Format("15:04")
 
@@ -298,16 +306,18 @@ func (s *calendarBriefingService) formatBriefing(ev calendar.Event) string {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "🕒 D-%d분  %s\n", int(s.leadTime.Minutes()), title)
-	fmt.Fprintf(&b, "시작: %s", start)
+	fmt.Fprintf(&b, "🕒 D-%d분  %s\n", int(s.leadTime.Minutes()), html.EscapeString(title))
+	fmt.Fprintf(&b, "시작: %s", start) // start is "HH:MM", safe by construction
 	if location := strings.TrimSpace(ev.Location); location != "" {
-		fmt.Fprintf(&b, "\n📍 %s", location)
+		fmt.Fprintf(&b, "\n📍 %s", html.EscapeString(location))
 	}
 	if ev.Conference != nil && ev.Conference.URI != "" {
-		fmt.Fprintf(&b, "\n🔗 %s", ev.Conference.URI)
+		// URIs can legitimately contain '&' (query params); escape so
+		// Telegram doesn't reject the message.
+		fmt.Fprintf(&b, "\n🔗 %s", html.EscapeString(ev.Conference.URI))
 	}
 	if names := attendeeNames(ev.Attendees, 4); names != "" {
-		fmt.Fprintf(&b, "\n👤 %s", names)
+		fmt.Fprintf(&b, "\n👤 %s", html.EscapeString(names))
 	}
 	return b.String()
 }

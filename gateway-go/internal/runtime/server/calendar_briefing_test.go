@@ -201,6 +201,37 @@ func TestFormatBriefing_FiltersDeclinedAttendees(t *testing.T) {
 	}
 }
 
+// Telegram is configured with ParseMode: "HTML"; any '<', '>' or '&'
+// in calendar fields must be escaped or the message is rejected with
+// "can't parse entities" and the briefing is silently dropped.
+func TestFormatBriefing_EscapesHTMLChars(t *testing.T) {
+	s := makeService(t)
+	ev := calendar.Event{
+		Summary:  "Q&A <with> team",
+		Location: "B&B <Main>",
+		Start:    time.Date(2026, 5, 26, 14, 0, 0, 0, s.displayLoc),
+		Conference: &calendar.ConferenceInfo{
+			URI: "https://meet.google.com/x?utm_source=cal&id=1",
+		},
+		Attendees: []calendar.Attendee{
+			{DisplayName: "박YY <CEO>", ResponseStatus: "accepted"},
+		},
+	}
+	body := s.formatBriefing(ev)
+	// Source chars must NOT appear unescaped.
+	for _, raw := range []string{"Q&A <with>", "B&B <Main>", "박YY <CEO>"} {
+		if strings.Contains(body, raw) {
+			t.Errorf("unescaped %q leaked into briefing:\n%s", raw, body)
+		}
+	}
+	// Escaped forms must appear.
+	for _, esc := range []string{"&lt;", "&gt;", "&amp;"} {
+		if !strings.Contains(body, esc) {
+			t.Errorf("expected escape %q in briefing:\n%s", esc, body)
+		}
+	}
+}
+
 func TestFormatBriefing_HandlesMissingTitle(t *testing.T) {
 	s := makeService(t)
 	body := s.formatBriefing(calendar.Event{Start: time.Now()})
