@@ -19,6 +19,7 @@ import { RpcError } from '../rpc';
 import { isCurrentHash, navigate } from '../router';
 import { humanSize, relativeTime } from '../format';
 import { renderMarkdown } from '../markdown';
+import { confirmAction } from '../dialog';
 
 export async function renderDetail(
   root: HTMLElement,
@@ -168,34 +169,31 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
   actions.appendChild(archBtn);
 
   const trashBtn = makeAction('🗑 삭제', 'danger', async () => {
-    const ok = await confirmDelete('이 메일을 휴지통으로 옮길까요?');
-    if (!ok) return;
+    // Disable BEFORE awaiting confirm: prevents a double-tap from
+    // queueing a second confirm dialog + second trash RPC.
+    if (trashBtn.disabled) return;
     trashBtn.disabled = true;
+    let navigated = false;
     try {
+      const ok = await confirmAction('이 메일을 휴지통으로 옮길까요?');
+      if (!ok) return;
       await trash(initData, msg.id);
       navigate({ name: 'inbox' });
+      navigated = true;
     } catch (err) {
       flash(actions, `삭제 실패: ${err instanceof Error ? err.message : err}`);
-      trashBtn.disabled = false;
+    } finally {
+      // Re-enable on every exit except a successful navigate (where
+      // the view is about to be torn down anyway); otherwise a
+      // user-cancelled confirm or a navigate that fails silently
+      // would leave the button permanently disabled with no feedback.
+      if (!navigated) trashBtn.disabled = false;
     }
   });
   actions.appendChild(trashBtn);
 
   const closeBtn = makeAction('← 닫기', 'primary', () => navigate({ name: 'inbox' }));
   actions.appendChild(closeBtn);
-}
-
-// confirmDelete prefers Telegram's native confirm dialog so the user sees
-// a familiar OS-styled prompt; falls back to window.confirm when running
-// outside Telegram (e.g. local browser dev).
-function confirmDelete(message: string): Promise<boolean> {
-  const tg = window.Telegram?.WebApp;
-  if (tg && typeof tg.showConfirm === 'function') {
-    return new Promise((resolve) => {
-      tg.showConfirm(message, (ok: boolean) => resolve(ok));
-    });
-  }
-  return Promise.resolve(window.confirm(message));
 }
 
 async function runAnalysis(

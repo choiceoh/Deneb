@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/mail"
 	"strings"
 	"time"
@@ -40,6 +41,7 @@ import (
 // OAuth client.
 type GmailClient interface {
 	Search(ctx context.Context, query string, maxResults int) ([]gmail.MessageSummary, error)
+	SearchPage(ctx context.Context, query, pageToken string, maxResults int) ([]gmail.MessageSummary, string, error)
 	GetMessage(ctx context.Context, messageID string) (*gmail.MessageDetail, error)
 	ModifyLabels(ctx context.Context, messageID string, addNames, removeNames []string) error
 	Trash(ctx context.Context, messageID string) error
@@ -55,16 +57,24 @@ type GmailDeps struct {
 }
 
 // Default list query and limit applied when the Mini App omits them.
-// Tuned for triage: everything received in the last week (read or
-// unread), single screenful.
+// Tuned for triage: everything in the inbox OR still unread (the latter
+// captures auto-archived-yet-unread mail from filter workflows), in
+// the last week, single screenful. Gmail uses {} as a logical OR group.
 const (
-	defaultGmailQuery    = "in:inbox newer_than:7d"
+	defaultGmailQuery    = "{in:inbox is:unread} newer_than:7d"
 	defaultGmailLimit    = 20
 	maxGmailLimit        = 100
 	maxGmailBodyChars    = 3000
 	labelUnread          = "UNREAD"
 	labelInbox           = "INBOX"
 	bodyTruncationSuffix = "\n\n...[truncated, total=%d chars]"
+	// maxEmptyPageHops bounds the server-side absorption loop for the
+	// "Gmail returns 0 messages with a non-empty nextPageToken" case
+	// (legitimate response from filter-heavy queries) so the Mini App
+	// never sees an empty page that secretly has more results behind
+	// it. 5 is enough for plausible filter shapes without blowing
+	// out the request budget.
+	maxEmptyPageHops = 5
 )
 
 // GmailMethods returns the miniapp.gmail.* handler map. Returns nil if deps
@@ -107,8 +117,9 @@ func gmailClientOrErr(deps GmailDeps, reqID string) (GmailClient, *protocol.Resp
 
 func gmailListRecent(deps GmailDeps) rpcutil.HandlerFunc {
 	type params struct {
-		Query string `json:"query,omitempty"`
-		Limit int    `json:"limit,omitempty"`
+		Query     string `json:"query,omitempty"`
+		Limit     int    `json:"limit,omitempty"`
+		PageToken string `json:"pageToken,omitempty"`
 	}
 	type rowOut struct {
 		ID       string   `json:"id"`
@@ -146,13 +157,25 @@ func gmailListRecent(deps GmailDeps) rpcutil.HandlerFunc {
 		if errResp != nil {
 			return errResp
 		}
-		results, err := client.Search(ctx, query, limit)
+		results, nextPageToken, err := client.SearchPage(ctx, query, p.PageToken, limit)
 		if err != nil {
 			// Route through mapGmailError so 403 (Gmail OAuth scope
 			// missing) and 404 stay distinguishable from transient
 			// outages — the client can surface different remediation
 			// hints. Matches get/mark_read/archive's behavior.
 			return mapGmailError(req.ID, "gmail search failed", err)
+		}
+		// Absorb the "empty page + token" case server-side: Gmail can
+		// legitimately return 0 messages with a non-empty
+		// nextPageToken when server-side filtering eats a chunk, and
+		// the Mini App can't tell the difference between that and a
+		// truly empty inbox. Hop forward up to maxEmptyPageHops times
+		// until we get at least one message or run out of pages.
+		for hops := 0; hops < maxEmptyPageHops && len(results) == 0 && nextPageToken != ""; hops++ {
+			results, nextPageToken, err = client.SearchPage(ctx, query, nextPageToken, limit)
+			if err != nil {
+				return mapGmailError(req.ID, "gmail search failed", err)
+			}
 		}
 
 		out := make([]rowOut, 0, len(results))
@@ -168,7 +191,10 @@ func gmailListRecent(deps GmailDeps) rpcutil.HandlerFunc {
 				Labels:   m.Labels,
 			})
 		}
-		return rpcutil.RespondOK(req.ID, map[string]any{"messages": out})
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"messages":      out,
+			"nextPageToken": nextPageToken,
+		})
 	}
 }
 
@@ -411,6 +437,11 @@ func mapGmailError(reqID, msg string, err error) *protocol.ResponseFrame {
 		return rpcerr.NotFound(msg).Response(reqID)
 	case strings.Contains(text, "403") || strings.Contains(strings.ToLower(text), "forbidden"):
 		return rpcerr.New(protocol.ErrForbidden, msg+": "+text).Response(reqID)
+	case strings.Contains(text, "400") || strings.Contains(strings.ToLower(text), "invalid"):
+		// Most commonly: a stale or malformed pageToken sent by the
+		// Mini App. Map to INVALID_REQUEST so the client surfaces
+		// "reset to first page" instead of looping on "retry".
+		return rpcerr.InvalidParams(fmt.Errorf("%s: %s", msg, text)).Response(reqID)
 	default:
 		return rpcerr.WrapUnavailable(msg, err).Response(reqID)
 	}

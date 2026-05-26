@@ -64,8 +64,25 @@ type apiLabel struct {
 	Type string `json:"type"`
 }
 
-// Search lists messages matching a Gmail query.
+// Search lists messages matching a Gmail query. Equivalent to
+// SearchPage with an empty pageToken; the next page token is discarded.
+// Callers that want pagination (the Mini App inbox view) should use
+// SearchPage directly.
 func (c *Client) Search(ctx context.Context, query string, maxResults int) ([]MessageSummary, error) {
+	summaries, _, err := c.SearchPage(ctx, query, "", maxResults)
+	return summaries, err
+}
+
+// SearchPage lists messages matching a Gmail query and returns the
+// next-page token alongside. An empty pageToken starts from the most
+// recent message; an empty returned nextPageToken means no more pages.
+//
+// Per-message metadata fetches are capped at maxMetadataConcurrency
+// in-flight goroutines (semaphore on a buffered channel) to stay under
+// Gmail's per-user-per-second quota even for the max limit=100 case;
+// without this a single burst of 100 metadata.get calls (~5 quota units
+// each) can trip 429 RESOURCE_EXHAUSTED.
+func (c *Client) SearchPage(ctx context.Context, query, pageToken string, maxResults int) ([]MessageSummary, string, error) {
 	if maxResults <= 0 {
 		maxResults = 10
 	}
@@ -74,18 +91,23 @@ func (c *Client) Search(ctx context.Context, query string, maxResults int) ([]Me
 		"q":          {query},
 		"maxResults": {fmt.Sprintf("%d", maxResults)},
 	}
+	if pageToken != "" {
+		params.Set("pageToken", pageToken)
+	}
 	path := "/messages?" + params.Encode()
 
 	var list apiMessageList
 	if err := c.readJSON(ctx, path, &list); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	if len(list.Messages) == 0 {
-		return nil, nil
+		return nil, list.NextPageToken, nil
 	}
 
-	// Fetch metadata for each message in parallel.
+	// Fetch metadata for each message in parallel, capped by a
+	// semaphore. fetchMessageMetadata threads ctx through readJSON, so
+	// a cancelled ctx short-circuits each in-flight call quickly.
 	type indexedResult struct {
 		idx int
 		msg MessageSummary
@@ -93,12 +115,15 @@ func (c *Client) Search(ctx context.Context, query string, maxResults int) ([]Me
 	}
 	results := make([]MessageSummary, len(list.Messages))
 	ch := make(chan indexedResult, len(list.Messages))
+	sem := make(chan struct{}, maxMetadataConcurrency)
 	var wg sync.WaitGroup
 
 	for i, m := range list.Messages {
 		wg.Add(1)
 		go func(idx int, id, threadID string) {
 			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 			summary, err := c.fetchMessageMetadata(ctx, id, threadID)
 			ch <- indexedResult{idx, summary, err}
 		}(i, m.ID, m.ThreadID)
@@ -115,8 +140,14 @@ func (c *Client) Search(ctx context.Context, query string, maxResults int) ([]Me
 		results[r.idx] = r.msg
 	}
 
-	return results, nil
+	return results, list.NextPageToken, nil
 }
+
+// maxMetadataConcurrency caps the parallel metadata.get fan-out in
+// SearchPage. 8 keeps a limit=100 page well under Gmail's per-user
+// quota (~250 units/sec; metadata.get = 5 units) while still
+// completing a typical inbox refresh in well under a second.
+const maxMetadataConcurrency = 8
 
 // fetchMessageMetadata fetches a single message with metadata format.
 func (c *Client) fetchMessageMetadata(ctx context.Context, id, _ string) (MessageSummary, error) {
