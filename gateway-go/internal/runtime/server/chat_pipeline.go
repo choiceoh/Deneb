@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/hindsight"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolreg"
@@ -132,6 +133,18 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 
 	// Core tools (file I/O, exec, process, sessions, gateway, cron, image).
 	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
+
+	// Knowledge: unified surface federating wiki (curated, writable) and
+	// hindsight (auto-retained cross-session) under one agent tool. Polaris
+	// (session-bound) and graphify (graph-traversal) stay separate because
+	// they have different paradigms. Skipped entirely when neither backend
+	// is configured. HindsightClient was set earlier in this function when
+	// DENEB_HINDSIGHT_URL is configured; reuse it here.
+	knowledgeRouter := knowledge.New(
+		knowledge.NewWikiAdapter(s.wikiStore),
+		knowledge.NewHindsightAdapter(chatCfg.HindsightClient),
+	)
+	toolreg.RegisterKnowledgeTool(chatCfg.Tools, knowledgeRouter)
 
 	// Polaris: retrieval tools for compressed conversation history.
 	if bridge, ok := transcriptStore.(*polaris.Bridge); ok {

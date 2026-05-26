@@ -822,6 +822,75 @@ func polarisToolSchema() map[string]any {
 	}
 }
 
+func knowledgeToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"body": map[string]any{
+				"type":        "string",
+				"description": "페이지 본문 markdown (op=record). 비어 있으면 새 페이지에 기본 골격 자동 삽입",
+			},
+			"category": map[string]any{
+				"type":        "string",
+				"description": "프론트매터 카테고리 (op=record) — 인물·거래·프로젝트·기술·결정·업무 등",
+			},
+			"importance": map[string]any{
+				"type":        "number",
+				"description": "Tier1 surfacing 가중치 0.0~1.0 (op=record, 0.85↑은 시스템 프롬프트에 자동 노출)",
+				"minimum":     0,
+				"maximum":     1,
+			},
+			"limit": map[string]any{
+				"type":        "integer",
+				"description": "결과 개수 상한 (op=recall, 기본 10, max 50)",
+				"default":     10,
+				"minimum":     1,
+				"maximum":     50,
+			},
+			"op": map[string]any{
+				"type":        "string",
+				"description": "recall: wiki + hindsight 병렬 검색 (federated). read: ref로 단건 fetch — `w:인물/박부장` 같이 prefix가 layer 라우팅. record: wiki에 큐레이션 페이지 작성·갱신 (hindsight는 자동이라 명시 record 없음).",
+				"enum":        []string{"recall", "read", "record"},
+			},
+			"page": map[string]any{
+				"type":        "string",
+				"description": "wiki 페이지 상대 경로 (op=record). 카테고리/이름 형식 — 예: `인물/박부장`, `거래/ABC상사-NDA`",
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "검색 키워드 (op=recall)",
+			},
+			"ref": map[string]any{
+				"type":        "string",
+				"description": "단건 ref (op=read). 형식 `<layer>:<id>` — 예: `w:인물/박부장`, `h:mem-7K9L`",
+			},
+			"related": map[string]any{
+				"type":        "array",
+				"description": "관련 페이지 경로들 (op=record)",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+			"summary": map[string]any{
+				"type":        "string",
+				"description": "인덱스용 한 줄 요약 (op=record, ~80자)",
+			},
+			"tags": map[string]any{
+				"type":        "array",
+				"description": "검색 태그 (op=record)",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+			"title": map[string]any{
+				"type":        "string",
+				"description": "페이지 제목 (op=record, 미지정 시 page의 마지막 segment 사용)",
+			},
+		},
+		"required": []string{"op"},
+	}
+}
+
 func fetchToolsToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
