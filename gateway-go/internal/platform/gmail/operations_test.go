@@ -215,6 +215,61 @@ func TestHTMLToText(t *testing.T) {
 			in:   "<p>A</p><p></p><p></p><p>B</p>",
 			want: "A\n\nB",
 		},
+		{
+			name: "anchor keeps text and href",
+			in:   `Visit <a href="https://example.com/path">our site</a> today`,
+			want: "Visit our site (https://example.com/path) today",
+		},
+		{
+			name: "anchor with text equal to href emits one copy",
+			in:   `<a href="https://example.com">https://example.com</a>`,
+			want: "https://example.com",
+		},
+		{
+			name: "anchor with empty text falls back to href",
+			in:   `<a href="https://example.com"></a>`,
+			want: "https://example.com",
+		},
+		{
+			name: "javascript anchor drops href, keeps text",
+			in:   `<a href="javascript:void(0)">click me</a>`,
+			want: "click me",
+		},
+		{
+			name: "fragment-only anchor drops href, keeps text",
+			in:   `<a href="#section">Jump</a>`,
+			want: "Jump",
+		},
+		{
+			name: "mailto anchor keeps scheme",
+			in:   `<a href="mailto:a@b.com">Contact us</a>`,
+			want: "Contact us (mailto:a@b.com)",
+		},
+		{
+			name: "anchor with inner span keeps visible label",
+			in:   `<a href="https://x.com"><span>Click</span></a>`,
+			want: "Click (https://x.com)",
+		},
+		{
+			name: "img with alt becomes marker",
+			in:   `<img src="https://x.com/logo.png" alt="Company Logo">`,
+			want: "[이미지: Company Logo]",
+		},
+		{
+			name: "img without alt is dropped (likely tracking pixel)",
+			in:   `Hello<img src="https://t.example.com/p.gif" width="1" height="1">World`,
+			want: "HelloWorld",
+		},
+		{
+			name: "img inside anchor: alt becomes link label",
+			in:   `<a href="https://x.com"><img src="x.png" alt="Logo"></a>`,
+			want: "[이미지: Logo] (https://x.com)",
+		},
+		{
+			name: "single quote href",
+			in:   `<a href='https://x.com/q'>q</a>`,
+			want: "q (https://x.com/q)",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
