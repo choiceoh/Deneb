@@ -110,6 +110,18 @@
                 ]
               }
             ]
+          },
+          {
+            "tab": "Operations",
+            "groups": [
+              {
+                "group": "Mini App",
+                "pages": [
+                  "operations/index",
+                  "operations/cloudflare-tunnel-setup"
+                ]
+              }
+            ]
           }
         ]
       }
