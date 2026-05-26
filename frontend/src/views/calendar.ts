@@ -72,9 +72,12 @@ interface DayGroup {
   events: CalendarEventSummary[];
 }
 
-// groupByDay buckets events into local-day groups for visual rhythm.
-// Events without a valid start time fall into a "(시간 미상)" bucket at
-// the end so the user still sees them.
+// groupByDay buckets events into LOCAL-day groups (not UTC) so the
+// label and the key agree. Earlier versions used toISOString().slice
+// for the key which produced a UTC date — events between 00:00–09:00
+// KST landed in yesterday's bucket while their visible header read
+// today's local M/D, and same-local-day events that crossed UTC
+// midnight split into two groups.
 function groupByDay(events: CalendarEventSummary[]): DayGroup[] {
   const buckets = new Map<string, DayGroup>();
   const unknown: DayGroup = { dayLabel: '(시간 미상)', events: [] };
@@ -89,7 +92,7 @@ function groupByDay(events: CalendarEventSummary[]): DayGroup[] {
       unknown.events.push(ev);
       continue;
     }
-    const key = d.toISOString().slice(0, 10);
+    const key = localDateKey(d);
     const label = formatDayLabel(d);
     if (!buckets.has(key)) buckets.set(key, { dayLabel: label, events: [] });
     buckets.get(key)!.events.push(ev);
@@ -104,12 +107,22 @@ function groupByDay(events: CalendarEventSummary[]): DayGroup[] {
 
 const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
 
+// localDateKey produces a YYYY-MM-DD string in the BROWSER's local
+// timezone — matches what formatDayLabel renders. Must be used for any
+// "is this today/tomorrow?" comparison.
+function localDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function formatDayLabel(d: Date): string {
   const today = new Date();
-  const todayKey = today.toISOString().slice(0, 10);
+  const todayKey = localDateKey(today);
   const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-  const tomorrowKey = tomorrow.toISOString().slice(0, 10);
-  const key = d.toISOString().slice(0, 10);
+  const tomorrowKey = localDateKey(tomorrow);
+  const key = localDateKey(d);
 
   const prefix = key === todayKey ? '오늘' : key === tomorrowKey ? '내일' : '';
   const date = `${d.getMonth() + 1}월 ${d.getDate()}일 (${DAY_NAMES[d.getDay()]})`;

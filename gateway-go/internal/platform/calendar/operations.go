@@ -2,7 +2,9 @@ package calendar
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -91,16 +93,24 @@ func (c *Client) ListUpcoming(ctx context.Context, from, to time.Time, maxResult
 }
 
 // Get returns a single event by ID from the primary calendar. Returns
-// nil if Google responded with 404 (not found).
+// (nil, nil) when Google responds with HTTP 404 so callers can map the
+// missing-event case to NOT_FOUND without inspecting error text.
 func (c *Client) Get(ctx context.Context, eventID string) (*Event, error) {
 	if strings.TrimSpace(eventID) == "" {
 		return nil, fmt.Errorf("event ID is required")
 	}
-	path := "/calendars/primary/events/" + url.PathEscape(eventID)
+	// url.PathEscape doesn't escape '/' (PathEscape is for path
+	// SEGMENTS, but '/' is the segment separator and stays literal).
+	// Imported iCal UIDs occasionally contain '/', so escape it
+	// manually or the request lands on the wrong Calendar resource.
+	encoded := strings.ReplaceAll(url.PathEscape(eventID), "/", "%2F")
+	path := "/calendars/primary/events/" + encoded
 	var item apiEvent
 	if err := c.readJSON(ctx, path, &item); err != nil {
-		// Standard pattern: NOT_FOUND surfaces through the error text;
-		// callers (handler/calendar.go) classify and remap.
+		var apiErr *APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+			return nil, nil
+		}
 		return nil, err
 	}
 	if item.ID == "" {

@@ -255,9 +255,24 @@ func (c *Client) readJSON(ctx context.Context, path string, dest any) error {
 		return fmt.Errorf("Calendar API 응답 읽기 실패: %w", err) //nolint:staticcheck // ST1005 — Korean error message
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Calendar API 오류 (HTTP %d): %s", resp.StatusCode, truncate(string(body), 500)) //nolint:staticcheck // ST1005 — Korean error message
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Body:       truncate(string(body), 500),
+		}
 	}
 	return json.Unmarshal(body, dest)
+}
+
+// APIError carries Calendar API HTTP failures so callers can branch on
+// the status code (e.g. 404 → NOT_FOUND) instead of substring-matching
+// the message body. Implements error so wrapped through errors.As.
+type APIError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("Calendar API 오류 (HTTP %d): %s", e.StatusCode, e.Body) //nolint:staticcheck // ST1005 — Korean error message
 }
 
 func truncate(s string, maxLen int) string {

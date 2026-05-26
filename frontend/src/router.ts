@@ -22,7 +22,10 @@ export function parseRoute(hash: string): Route {
   if (hash === '#/memory') return { name: 'memory' };
   if (hash === '#/sessions') return { name: 'sessions' };
   if (hash === '#/chat') return { name: 'chat' };
-  if (hash === '#/calendar') return { name: 'calendar' };
+  // Accept '#/calendar', '#/calendar/' (trailing slash), and
+  // '#/calendar/<id>' — the trailing-slash variant falls back to the
+  // list view instead of the catch-all home.
+  if (hash === '#/calendar' || hash === '#/calendar/') return { name: 'calendar' };
   const cal = hash.match(/^#\/calendar\/(.+)$/);
   if (cal) {
     try {

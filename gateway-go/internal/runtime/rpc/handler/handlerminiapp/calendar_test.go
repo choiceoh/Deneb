@@ -147,7 +147,7 @@ func TestCalendarListUpcoming_ClampsExcessivelyLargeRequests(t *testing.T) {
 func TestCalendarListUpcoming_PropagatesError(t *testing.T) {
 	client := &fakeCalendarClient{
 		listFn: func(context.Context, time.Time, time.Time, int) ([]calendar.Event, error) {
-			return nil, errors.New("API 오류 (HTTP 403): forbidden")
+			return nil, &calendar.APIError{StatusCode: 403, Body: "forbidden"}
 		},
 	}
 	h := calendarListUpcoming(calDepsFor(client))
@@ -157,6 +157,45 @@ func TestCalendarListUpcoming_PropagatesError(t *testing.T) {
 	}
 	if resp.Error.Code != protocol.ErrForbidden {
 		t.Errorf("error code = %s, want %s", resp.Error.Code, protocol.ErrForbidden)
+	}
+}
+
+// Regression: a non-404 response whose body contains the substring
+// "not found" must NOT be mapped to NOT_FOUND. The old substring-match
+// classifier would have misrouted this; the typed APIError path keeps
+// it as UNAVAILABLE.
+func TestCalendarListUpcoming_500WithMisleadingBodyStaysUnavailable(t *testing.T) {
+	client := &fakeCalendarClient{
+		listFn: func(context.Context, time.Time, time.Time, int) ([]calendar.Event, error) {
+			return nil, &calendar.APIError{
+				StatusCode: 500,
+				Body:       "internal error: no calendar entry found in cache, retrying",
+			}
+		},
+	}
+	h := calendarListUpcoming(calDepsFor(client))
+	resp := h(authedCtx(), reqWith(t, "miniapp.calendar.list_upcoming", nil))
+	if resp.OK {
+		t.Fatal("expected error response")
+	}
+	if resp.Error.Code == protocol.ErrNotFound {
+		t.Errorf("500 body containing 'not found' must not map to NOT_FOUND, got %s", resp.Error.Code)
+	}
+}
+
+func TestCalendarGet_404MapsToNotFound(t *testing.T) {
+	client := &fakeCalendarClient{
+		getFn: func(context.Context, string) (*calendar.Event, error) {
+			return nil, &calendar.APIError{StatusCode: 404, Body: "not found"}
+		},
+	}
+	h := calendarGet(calDepsFor(client))
+	resp := h(authedCtx(), reqWith(t, "miniapp.calendar.get", map[string]string{"id": "missing"}))
+	if resp.OK {
+		t.Fatal("expected error response")
+	}
+	if resp.Error.Code != protocol.ErrNotFound {
+		t.Errorf("404 should map to NOT_FOUND, got %s", resp.Error.Code)
 	}
 }
 
@@ -183,6 +222,9 @@ func TestCalendarGet_HappyPath(t *testing.T) {
 	decode(t, resp, &got)
 	if got.ID != "e1" || got.Description != "상세 내용" {
 		t.Errorf("event = %+v", got)
+	}
+	if got.HasMeet {
+		t.Errorf("HasMeet should be omitted on detail (use Conference instead): %+v", got)
 	}
 	if got.Conference == nil || got.Conference.URI != "https://meet.google.com/x" {
 		t.Errorf("conference object missing on detail: %+v", got.Conference)

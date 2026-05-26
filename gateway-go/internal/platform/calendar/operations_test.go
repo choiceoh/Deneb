@@ -3,6 +3,7 @@ package calendar
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,8 +16,14 @@ import (
 
 // fixtureClient stands up an httptest server that mimics Calendar's
 // /calendars/primary/events surface plus the OAuth token endpoint. The
-// caller controls the events JSON returned.
+// caller controls the events JSON returned (status 200).
 func fixtureClient(t *testing.T, eventsJSON string) *Client {
+	return fixtureClientWithStatus(t, http.StatusOK, eventsJSON)
+}
+
+// fixtureClientWithStatus is fixtureClient with explicit response code,
+// used by tests that need to drive non-200 paths (e.g. 404 → nil,nil).
+func fixtureClientWithStatus(t *testing.T, status int, body string) *Client {
 	t.Helper()
 	dir := t.TempDir()
 	writeJSON(t, filepath.Join(dir, "calendar_client.json"), map[string]any{
@@ -34,7 +41,8 @@ func fixtureClient(t *testing.T, eventsJSON string) *Client {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(eventsJSON))
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -160,6 +168,75 @@ func TestGet_MissingIDFails(t *testing.T) {
 	c := fixtureClient(t, "{}")
 	if _, err := c.Get(context.Background(), "  "); err == nil {
 		t.Fatal("expected error for empty event ID")
+	}
+}
+
+func TestGet_404ReturnsNilNoError(t *testing.T) {
+	c := fixtureClientWithStatus(t, http.StatusNotFound, `{"error":{"code":404}}`)
+	ev, err := c.Get(context.Background(), "missing")
+	if err != nil {
+		t.Fatalf("404 should be nil err, got %v", err)
+	}
+	if ev != nil {
+		t.Fatalf("404 should be nil event, got %+v", ev)
+	}
+}
+
+// Imported iCal events sometimes have UIDs containing '/'. PathEscape
+// alone leaves '/' literal (since it's a path-segment helper, and '/'
+// is the segment separator), so we ReplaceAll it after PathEscape.
+// This test verifies the slash in the event ID does not break the
+// URL path.
+func TestGet_PathEscapesSlashInEventID(t *testing.T) {
+	dir := t.TempDir()
+	writeJSON(t, filepath.Join(dir, "calendar_client.json"), map[string]any{
+		"installed": map[string]string{"client_id": "id", "client_secret": "secret"},
+	})
+	writeJSON(t, filepath.Join(dir, "calendar_token.json"), map[string]string{
+		"access_token":  "ya29.fixture",
+		"refresh_token": "1//refresh",
+		"expiry":        time.Now().Add(1 * time.Hour).Format(time.RFC3339),
+	})
+
+	var seenPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPath = r.URL.EscapedPath()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"e1","status":"confirmed",
+			"start":{"dateTime":"2026-05-26T14:00:00+09:00"},
+			"end":{"dateTime":"2026-05-26T15:00:00+09:00"}}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	c, err := newClientFromDir(dir)
+	if err != nil {
+		t.Fatalf("newClientFromDir: %v", err)
+	}
+	c.httpClient.Transport = &rewriteTransport{base: srv.URL, inner: http.DefaultTransport}
+
+	if _, err := c.Get(context.Background(), "ical/2026/05/26@host"); err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !strings.Contains(seenPath, "%2F") {
+		t.Errorf("path should have %%2F-encoded slashes, got: %s", seenPath)
+	}
+	if strings.Contains(seenPath, "/2026/") {
+		t.Errorf("literal slash leaked into path segment: %s", seenPath)
+	}
+}
+
+func TestGet_500BubblesAPIError(t *testing.T) {
+	c := fixtureClientWithStatus(t, http.StatusInternalServerError, "internal")
+	_, err := c.Get(context.Background(), "x")
+	if err == nil {
+		t.Fatal("expected error from 500")
+	}
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *APIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != http.StatusInternalServerError {
+		t.Errorf("StatusCode = %d", apiErr.StatusCode)
 	}
 }
 

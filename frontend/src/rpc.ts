@@ -115,7 +115,11 @@ export interface CalendarAttendee {
   organizer?: boolean;
 }
 
-export interface CalendarEventSummary {
+// Shared shape: fields the backend emits in BOTH list and detail
+// responses. List adds `hasMeet`; detail adds `description` and
+// `conference`. Splitting them prevents readers from relying on a
+// field that doesn't exist in their response path.
+interface CalendarEventBase {
   id: string;
   summary: string;
   location?: string;
@@ -126,10 +130,13 @@ export interface CalendarEventSummary {
   htmlLink?: string;
   organizer?: CalendarAttendee;
   attendees?: CalendarAttendee[];
+}
+
+export interface CalendarEventSummary extends CalendarEventBase {
   hasMeet?: boolean;
 }
 
-export interface CalendarEventDetail extends CalendarEventSummary {
+export interface CalendarEventDetail extends CalendarEventBase {
   description?: string;
   conference?: { solution?: string; uri?: string };
 }

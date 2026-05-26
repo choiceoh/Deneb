@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 	"time"
 
@@ -178,9 +179,11 @@ func calendarGet(deps CalendarDeps) rpcutil.HandlerFunc {
 
 // --- helpers --------------------------------------------------------------
 
-// projectEventOut maps a domain Event to the wire shape. includeDetail
-// pulls in description + conference data; the list view doesn't need
-// either and skipping them keeps the payload light.
+// projectEventOut maps a domain Event to the wire shape. List view
+// gets HasMeet (a boolean badge) but no full conference object; detail
+// gets the conference object instead. Detail intentionally omits
+// HasMeet so clients have exactly one signal — the conference field —
+// and cannot drift between two booleans that should always agree.
 func projectEventOut(e calendar.Event, includeDetail bool) calendarEventOut {
 	row := calendarEventOut{
 		ID:       e.ID,
@@ -191,10 +194,17 @@ func projectEventOut(e calendar.Event, includeDetail bool) calendarEventOut {
 		AllDay:   e.AllDay,
 		Status:   e.Status,
 		HTMLLink: e.HTMLLink,
-		HasMeet:  e.Conference != nil && e.Conference.URI != "",
 	}
 	if includeDetail {
 		row.Description = e.Description
+		if e.Conference != nil {
+			row.Conference = &calendarConferenceOut{
+				Solution: e.Conference.Solution,
+				URI:      e.Conference.URI,
+			}
+		}
+	} else {
+		row.HasMeet = e.Conference != nil && e.Conference.URI != ""
 	}
 	if e.Organizer.Email != "" || e.Organizer.DisplayName != "" {
 		a := projectAttendeeOut(e.Organizer)
@@ -202,12 +212,6 @@ func projectEventOut(e calendar.Event, includeDetail bool) calendarEventOut {
 	}
 	for _, att := range e.Attendees {
 		row.Attendees = append(row.Attendees, projectAttendeeOut(att))
-	}
-	if includeDetail && e.Conference != nil {
-		row.Conference = &calendarConferenceOut{
-			Solution: e.Conference.Solution,
-			URI:      e.Conference.URI,
-		}
 	}
 	return row
 }
@@ -231,24 +235,28 @@ func formatTime(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
 }
 
-// mapCalendarError mirrors mapGmailError: NOT_FOUND for 404, FORBIDDEN
-// for 403, UNAVAILABLE for everything else.
+// mapCalendarError classifies a Calendar client error via the typed
+// *calendar.APIError so a 500 response whose body happens to contain
+// "not found" never collapses into NOT_FOUND.
 func mapCalendarError(reqID, msg string, err error) *protocol.ResponseFrame {
 	if err == nil {
 		return rpcerr.Unavailable(msg).Response(reqID)
 	}
-	text := err.Error()
-	switch {
-	case errors.Is(err, errCalendarNotFound) ||
-		strings.Contains(text, "404") ||
-		strings.Contains(strings.ToLower(text), "not found"):
+	if errors.Is(err, errCalendarNotFound) {
 		return rpcerr.NotFound(msg).Response(reqID)
-	case strings.Contains(text, "403") || strings.Contains(strings.ToLower(text), "forbidden"):
-		return rpcerr.New(protocol.ErrForbidden, msg+": "+text).Response(reqID)
-	default:
-		return rpcerr.WrapUnavailable(msg, err).Response(reqID)
 	}
+	var apiErr *calendar.APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.StatusCode {
+		case http.StatusNotFound:
+			return rpcerr.NotFound(msg).Response(reqID)
+		case http.StatusForbidden:
+			return rpcerr.New(protocol.ErrForbidden, msg+": "+apiErr.Error()).Response(reqID)
+		}
+	}
+	return rpcerr.WrapUnavailable(msg, err).Response(reqID)
 }
 
-// errCalendarNotFound is the test-only sentinel callers can wrap.
+// errCalendarNotFound is a sentinel callers can wrap; primarily kept
+// for tests that don't want to construct a full *calendar.APIError.
 var errCalendarNotFound = errors.New("calendar: event not found")
