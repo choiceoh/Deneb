@@ -96,3 +96,18 @@ export interface SenderContext {
 export function senderContext(initData: string, sender: string): Promise<SenderContext> {
   return call<SenderContext>('miniapp.gmail.sender_context', { sender }, initData);
 }
+
+// --- Analyze (miniapp.gmail.analyze) ---
+
+export interface AnalyzeResult {
+  id: string;
+  subject?: string;
+  from?: string;
+  date?: string;
+  analysis: string;
+  durationMs: number;
+}
+
+export function analyzeMessage(initData: string, id: string): Promise<AnalyzeResult> {
+  return call<AnalyzeResult>('miniapp.gmail.analyze', { id }, initData);
+}
