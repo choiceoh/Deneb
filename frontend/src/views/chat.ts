@@ -26,6 +26,7 @@ import { getPage } from '../memory';
 import { formatRpcError } from '../format';
 import type { ChatContext } from '../router';
 import { renderMarkdown } from '../markdown';
+import { readAppSettings } from '../app_settings';
 import { buildViewHeader } from './ui';
 
 interface Turn {
@@ -170,17 +171,26 @@ function buildComposer(
 ): HTMLElement {
   const form = document.createElement('form');
   form.className = 'chat-composer';
+  const settings = readAppSettings();
+  const placeholder = settings.enterToSend
+    ? '메시지를 입력하세요 (Enter 로 전송, Shift+Enter 로 줄바꿈)'
+    : '메시지를 입력하세요 (Ctrl/⌘+Enter 로 전송)';
   form.innerHTML = `
-    <textarea class="chat-input" rows="2" placeholder="메시지를 입력하세요 (Enter 로 전송, Shift+Enter 로 줄바꿈)"></textarea>
+    <textarea class="chat-input" rows="2" enterkeyhint="send"></textarea>
     <button type="submit" class="primary chat-send">전송</button>
   `;
   const input = form.querySelector('textarea') as HTMLTextAreaElement;
   const sendBtn = form.querySelector('button') as HTMLButtonElement;
+  input.placeholder = placeholder;
 
-  // Enter to submit, Shift+Enter for newline. `isComposing` is required
-  // for Korean IME so Hangul composition keystrokes don't trigger a send.
+  // `isComposing` is required for Korean IME so Hangul composition
+  // keystrokes don't trigger a send.
   input.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) {
+    if (ev.key !== 'Enter' || ev.isComposing) return;
+    const current = readAppSettings();
+    const enterSends = current.enterToSend && !ev.shiftKey;
+    const shortcutSends = !current.enterToSend && (ev.metaKey || ev.ctrlKey);
+    if (enterSends || shortcutSends) {
       ev.preventDefault();
       form.requestSubmit();
     }

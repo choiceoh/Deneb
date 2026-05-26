@@ -18,6 +18,14 @@ real-flow testing, expose the dev gateway via Cloudflare Tunnel (see
 `docs/operations/cloudflare-tunnel-setup.md` in PR-D) and open the bot's menu
 button on a real Telegram client.
 
+For local UI-only checks, append `?mockTelegram=1` on localhost:
+
+```text
+http://localhost:5173/app/?mockTelegram=1#/settings
+```
+
+The mock is ignored outside localhost/127.0.0.1/[::1].
+
 ## Build
 
 ```bash
@@ -36,6 +44,6 @@ pnpm build
 
 ## Why Vanilla TS
 
-This PoC is single-screen. React/Solid would balloon the bundle (50 KB →
-200 KB+) without changing the user-visible behavior. Revisit if we add 5+
-screens or complex client-side state.
+The Mini App intentionally stays Vanilla TS while its state remains small and
+WebView-focused. Revisit React/Solid only if client-side state grows beyond
+the current tab/list/detail/chat surfaces.

@@ -1,4 +1,4 @@
-// views/more.ts — Profile / settings hub.
+// views/more.ts — Profile / workspace hub.
 //
 // Mira's bottom-tab Profile page inspired this view: a stack of titled
 // card sections, each containing icon-prefixed rows that either show a
@@ -12,6 +12,7 @@
 import { ping, whoami, type PingResult, type WhoamiResult } from '../rpc';
 import { formatRpcError } from '../format';
 import { isCurrentHash, navigate, type Route } from '../router';
+import { readAppSettings } from '../app_settings';
 import { buildErrorBanner } from './ui';
 
 export async function renderMore(root: HTMLElement, initData: string): Promise<void> {
@@ -97,21 +98,23 @@ function paint(
   );
   root.appendChild(workspace);
 
-  // Status / about — diagnostics + branding.
-  const aboutLabel = document.createElement('div');
-  aboutLabel.className = 'section-label';
-  aboutLabel.textContent = '상태';
-  root.appendChild(aboutLabel);
+  if (readAppSettings().showDiagnostics) {
+    // Status / about — diagnostics + branding.
+    const aboutLabel = document.createElement('div');
+    aboutLabel.className = 'section-label';
+    aboutLabel.textContent = '상태';
+    root.appendChild(aboutLabel);
 
-  const about = document.createElement('div');
-  about.className = 'section-card';
-  about.appendChild(
-    buildInfoRow('icon-tile-slate', '⚙️', '버전', `v${pingResult.version || '?'}`),
-  );
-  about.appendChild(
-    buildInfoRow('icon-tile-green', '📡', '응답 시간', `${latencyMs}ms`),
-  );
-  root.appendChild(about);
+    const about = document.createElement('div');
+    about.className = 'section-card';
+    about.appendChild(
+      buildInfoRow('icon-tile-slate', '⚙️', '버전', `v${pingResult.version || '?'}`),
+    );
+    about.appendChild(
+      buildInfoRow('icon-tile-green', '📡', '응답 시간', `${latencyMs}ms`),
+    );
+    root.appendChild(about);
+  }
 }
 
 function buildInfoRow(

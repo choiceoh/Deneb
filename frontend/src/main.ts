@@ -21,10 +21,15 @@ import { renderChat } from './views/chat';
 import { renderCalendar } from './views/calendar';
 import { renderCalendarEvent } from './views/calendar_event';
 import { renderMore } from './views/more';
+import { renderSettings } from './views/settings';
+import { applyAppSettings, triggerSelectionHaptic } from './app_settings';
 
 const root = document.getElementById('app')!;
 const tabBarRoot = document.getElementById('tab-bar')!;
 let cachedInitData: string | null = null;
+let activeWebApp: WebApp | null = null;
+
+const LOCAL_MOCK_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 
 function applyThemeFromTelegram(tg: WebApp): void {
   const params = tg.themeParams;
@@ -64,7 +69,7 @@ function showsTabBar(route: Route): boolean {
 }
 
 function syncBackButton(route: Route): void {
-  const back = window.Telegram?.WebApp?.BackButton;
+  const back = activeWebApp?.BackButton;
   if (!back) return;
   if (showsTabBar(route)) {
     back.hide();
@@ -77,6 +82,7 @@ const TAB_DEFS: ReadonlyArray<{ name: TabRouteName; icon: string; label: string 
   { name: 'home', icon: '🏠', label: '홈' },
   { name: 'chat', icon: '💬', label: '채팅' },
   { name: 'more', icon: '☰', label: '더보기' },
+  { name: 'settings', icon: '⚙️', label: '설정' },
 ];
 
 function renderTabBar(route: Route): void {
@@ -100,6 +106,7 @@ function renderTabBar(route: Route): void {
     (btn.querySelector('.tab-item-label') as HTMLElement).textContent = def.label;
     btn.addEventListener('click', () => {
       if (def.name === route.name) return;
+      triggerSelectionHaptic();
       navigate({ name: def.name });
     });
     tabBarRoot.appendChild(btn);
@@ -144,6 +151,9 @@ async function dispatch(route: Route): Promise<void> {
     case 'more':
       await renderMore(root, cachedInitData);
       return;
+    case 'settings':
+      renderSettings(root);
+      return;
   }
 }
 
@@ -153,7 +163,7 @@ function handleHashChange(): void {
 }
 
 function boot(): void {
-  const tg = window.Telegram?.WebApp;
+  const tg = resolveWebApp();
   if (!tg) {
     renderError(
       '이 페이지는 Telegram 클라이언트 안에서 열어야 합니다. 봇 메뉴 버튼을 눌러주세요.',
@@ -171,6 +181,8 @@ function boot(): void {
     return;
   }
   cachedInitData = initData;
+  activeWebApp = tg;
+  applyAppSettings();
 
   // Wire Telegram's BackButton to the router. Detail views pop to their
   // list, list views pop to home, and everything else (including home
@@ -208,3 +220,37 @@ function boot(): void {
 }
 
 boot();
+
+function resolveWebApp(): WebApp | undefined {
+  const tg = window.Telegram?.WebApp;
+  if (tg?.initData || !shouldUseLocalTelegramMock()) return tg;
+
+  return {
+    ...(tg ?? {}),
+    initData: 'mock-init-data',
+    themeParams: {
+      bg_color: '#ffffff',
+      text_color: '#111111',
+      hint_color: '#707579',
+      link_color: '#2481cc',
+      button_color: '#2481cc',
+      button_text_color: '#ffffff',
+      secondary_bg_color: '#f4f4f5',
+      ...(tg?.themeParams ?? {}),
+    },
+    ready: tg?.ready?.bind(tg) ?? (() => undefined),
+    BackButton: tg?.BackButton ?? {
+      show: () => undefined,
+      hide: () => undefined,
+      onClick: () => undefined,
+    },
+    HapticFeedback: tg?.HapticFeedback ?? {
+      selectionChanged: () => undefined,
+    },
+  } as WebApp;
+}
+
+function shouldUseLocalTelegramMock(): boolean {
+  if (!LOCAL_MOCK_HOSTS.has(location.hostname)) return false;
+  return new URLSearchParams(location.search).has('mockTelegram');
+}
