@@ -9,7 +9,7 @@
 //   4. Manages Telegram's BackButton so it mirrors browser history.
 
 import './styles.css';
-import { parseRoute, navigate, type Route } from './router';
+import { parseRoute, navigate, isTabRoute, type Route, type TabRouteName } from './router';
 import { renderHome } from './views/home';
 import { renderList } from './views/list';
 import { renderDetail } from './views/detail';
@@ -20,8 +20,10 @@ import { renderSessionTranscript } from './views/session_transcript';
 import { renderChat } from './views/chat';
 import { renderCalendar } from './views/calendar';
 import { renderCalendarEvent } from './views/calendar_event';
+import { renderMore } from './views/more';
 
 const root = document.getElementById('app')!;
+const tabBarRoot = document.getElementById('tab-bar')!;
 let cachedInitData: string | null = null;
 
 function applyThemeFromTelegram(tg: WebApp): void {
@@ -53,19 +55,61 @@ function renderError(message: string): void {
   root.appendChild(muted);
 }
 
+// Tab bar visibility = exactly the routes that should NOT show the
+// Telegram BackButton. Chat is a tab destination, but its composer
+// needs the bottom edge, so we hide the bar there and fall back to the
+// BackButton to navigate out.
+function showsTabBar(route: Route): boolean {
+  return isTabRoute(route) && route.name !== 'chat';
+}
+
 function syncBackButton(route: Route): void {
   const back = window.Telegram?.WebApp?.BackButton;
   if (!back) return;
-  if (route.name === 'home') {
+  if (showsTabBar(route)) {
     back.hide();
   } else {
     back.show();
   }
 }
 
+const TAB_DEFS: ReadonlyArray<{ name: TabRouteName; icon: string; label: string }> = [
+  { name: 'home', icon: '🏠', label: '홈' },
+  { name: 'chat', icon: '💬', label: '채팅' },
+  { name: 'more', icon: '☰', label: '더보기' },
+];
+
+function renderTabBar(route: Route): void {
+  const visible = showsTabBar(route);
+  tabBarRoot.classList.toggle('tab-bar-visible', visible);
+  document.body.classList.toggle('has-tab-bar', visible);
+  if (!visible) {
+    tabBarRoot.innerHTML = '';
+    return;
+  }
+  tabBarRoot.innerHTML = '';
+  for (const def of TAB_DEFS) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tab-item' + (def.name === route.name ? ' tab-item-active' : '');
+    btn.innerHTML = `
+      <span class="tab-item-icon"></span>
+      <span class="tab-item-label"></span>
+    `;
+    (btn.querySelector('.tab-item-icon') as HTMLElement).textContent = def.icon;
+    (btn.querySelector('.tab-item-label') as HTMLElement).textContent = def.label;
+    btn.addEventListener('click', () => {
+      if (def.name === route.name) return;
+      navigate({ name: def.name });
+    });
+    tabBarRoot.appendChild(btn);
+  }
+}
+
 async function dispatch(route: Route): Promise<void> {
   if (!cachedInitData) return;
   syncBackButton(route);
+  renderTabBar(route);
   switch (route.name) {
     case 'home':
       await renderHome(root, cachedInitData);
@@ -96,6 +140,9 @@ async function dispatch(route: Route): Promise<void> {
       return;
     case 'calendarEvent':
       await renderCalendarEvent(root, cachedInitData, route.eventId);
+      return;
+    case 'more':
+      await renderMore(root, cachedInitData);
       return;
   }
 }
@@ -142,6 +189,14 @@ function boot(): void {
         return;
       case 'calendarEvent':
         navigate({ name: 'calendar' });
+        return;
+      // List-level destinations now live under 더보기, so back pops
+      // there (not home) — matches the path the user took to get in.
+      case 'inbox':
+      case 'memory':
+      case 'sessions':
+      case 'calendar':
+        navigate({ name: 'more' });
         return;
       default:
         navigate({ name: 'home' });
