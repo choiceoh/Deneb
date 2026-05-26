@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -145,6 +146,22 @@ func (p *Plugin) Start(ctx context.Context) error {
 	// the bot itself still works.
 	if err := RegisterCommands(ctx, p.client, VibeCoderCommands()); err != nil {
 		p.logger.Warn("telegram setMyCommands failed", "error", err)
+	}
+
+	// Install the WebApp chat menu button when configured. Best-effort —
+	// a failure leaves the default menu in place and does not block startup.
+	// Telegram requires the WebApp domain to be registered with @BotFather
+	// (/setdomain); a wrong URL produces a 400 here, which we surface as Warn.
+	if url := strings.TrimSpace(p.config.WebAppURL); url != "" {
+		label := strings.TrimSpace(p.config.WebAppMenuLabel)
+		if label == "" {
+			label = "Deneb"
+		}
+		if err := p.client.SetMenuButtonWebApp(ctx, 0, label, url); err != nil {
+			p.logger.Warn("telegram setMenuButton failed", "error", err, "url", url)
+		} else {
+			p.logger.Info("telegram WebApp menu button installed", "url", url, "label", label)
+		}
 	}
 
 	// Start polling in background.

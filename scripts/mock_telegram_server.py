@@ -15,8 +15,9 @@ Layout:
 Telegram API methods implemented (subset that the gateway uses):
     getMe, getUpdates (long-poll), sendMessage, editMessageText,
     deleteMessage, sendChatAction, setMessageReaction, answerCallbackQuery,
-    setMyCommands, getMyCommands, sendPhoto, sendDocument, sendVideo,
-    sendAudio, sendVoice, getFile.
+    setMyCommands, getMyCommands, setChatMenuButton (alias: setMenuButton),
+    getChatMenuButton, answerWebAppQuery, sendPhoto, sendDocument,
+    sendVideo, sendAudio, sendVoice, getFile.
 
 Test control plane:
     POST /_test/inject        — queue a user message update so getUpdates
@@ -398,6 +399,26 @@ class MockTelegramHandler(BaseHTTPRequestHandler):
     def _handle_get_my_commands(self, _params: dict[str, Any]) -> None:
         self._ok([])
 
+    def _handle_set_menu_button(self, params: dict[str, Any]) -> None:
+        # setMenuButton is fire-and-forget for the bot. Capture the payload
+        # so live tests can assert that the gateway installed a WebApp
+        # launcher (or reset to default) at startup.
+        self.state.record_outbound("setMenuButton", params)
+        self._ok(True)
+
+    def _handle_get_menu_button(self, _params: dict[str, Any]) -> None:
+        # Return the documented default so the gateway never has to special-case
+        # the mock. Live tests that need a specific menu button state should
+        # inspect outbound capture instead of round-tripping through this API.
+        self._ok({"type": "default"})
+
+    def _handle_answer_web_app_query(self, params: dict[str, Any]) -> None:
+        # answerWebAppQuery is how the bot delivers an inline result back to
+        # the WebApp that submitted a query (e.g. "share to chat" flows).
+        # Capture the payload; Telegram normally returns an inline_message_id.
+        self.state.record_outbound("answerWebAppQuery", params)
+        self._ok({"inline_message_id": f"mock-iq-{int(time.time() * 1000)}"})
+
     def _handle_send_media(self, kind: str, params: dict[str, Any]) -> None:
         record = self.state.record_outbound(kind, params)
         self._ok(self._fake_message_result(params, record["message_id"]))
@@ -547,6 +568,10 @@ _BOT_METHODS: dict[str, Any] = {
     "answerCallbackQuery": MockTelegramHandler._handle_answer_callback,
     "setMyCommands":       MockTelegramHandler._handle_set_my_commands,
     "getMyCommands":       MockTelegramHandler._handle_get_my_commands,
+    "setChatMenuButton":   MockTelegramHandler._handle_set_menu_button,
+    "setMenuButton":       MockTelegramHandler._handle_set_menu_button,
+    "getChatMenuButton":   MockTelegramHandler._handle_get_menu_button,
+    "answerWebAppQuery":   MockTelegramHandler._handle_answer_web_app_query,
     "getFile":             MockTelegramHandler._handle_get_file,
     "sendPhoto":           lambda h, p: h._handle_send_media("sendPhoto", p),
     "sendDocument":        lambda h, p: h._handle_send_media("sendDocument", p),
