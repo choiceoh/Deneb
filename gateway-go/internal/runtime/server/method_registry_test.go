@@ -119,6 +119,10 @@ var requiredMethods = []string{
 
 	// Wiki: feature-flagged (DENEB_WIKI_ENABLED), not in required list.
 
+	// Mini App (Telegram).
+	"miniapp.ping",
+	"miniapp.whoami",
+
 	// Gateway builtins.
 	"status",
 }

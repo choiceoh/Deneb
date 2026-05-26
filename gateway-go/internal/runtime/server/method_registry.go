@@ -19,6 +19,7 @@ import (
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
 	handlercheckpoint "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/checkpoint"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
+	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 	handlertask "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlertask"
 	handlertelegram "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlertelegram"
 	handlerinsights "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/insights"
@@ -178,6 +179,13 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		}),
 		handlersystem.MaintenanceMethods(handlersystem.MaintenanceDeps{Runner: s.maintRunner}),
 		handlersystem.UpdateMethods(handlersystem.UpdateDeps{DenebDir: denebDir}),
+
+		// --- Telegram Mini App (HTTP-exposed via /api/v1/miniapp/rpc) ---
+		// Requires initData verification, enforced by the HTTP bridge in
+		// server_http_miniapp.go before the dispatcher is reached. The
+		// methods read the authenticated user from context via
+		// telegram.InitDataFromContext.
+		handlerminiapp.Methods(handlerminiapp.Deps{Version: hub.Version()}),
 	}
 
 	// Conditional: provider methods.

@@ -13,6 +13,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /ready", s.handleReady)
 	mux.HandleFunc("GET /readyz", s.handleReady)
 	mux.HandleFunc("POST /api/cron/run", s.handleCronRun)
+	mux.HandleFunc("POST /api/v1/miniapp/rpc", s.handleMiniappRPC)
 
 	// /debug/pprof/* — runtime profiling + goroutine dumps for live diagnosis.
 	// Safe to expose because the gateway binds loopback by default in
@@ -36,6 +37,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("/ready", methodNotAllowed)
 	mux.HandleFunc("/readyz", methodNotAllowed)
 	mux.HandleFunc("/api/cron/run", methodNotAllowed)
+	mux.HandleFunc("/api/v1/miniapp/rpc", methodNotAllowed)
 	// Catch-all handler: root fallback.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// Root fallback for exact "/" GET.
