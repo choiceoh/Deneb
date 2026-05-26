@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"html"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 )
@@ -243,7 +245,10 @@ func (c *Client) GetAttachment(ctx context.Context, messageID, attachmentID stri
 }
 
 // extractBody extracts the text body from a message payload,
-// preferring text/plain over text/html.
+// preferring text/plain over text/html. HTML bodies are flattened to a
+// plain-text approximation so the Mini App (which renders the body as
+// text inside a <pre>) doesn't end up showing raw <table>/<div> markup
+// on HTML-only newsletters.
 func extractBody(p *apiPayload) string {
 	if p == nil {
 		return ""
@@ -252,6 +257,9 @@ func extractBody(p *apiPayload) string {
 	// Single-part message.
 	if p.Body != nil && p.Body.Data != "" && len(p.Parts) == 0 {
 		decoded := decodeBase64URL(p.Body.Data)
+		if strings.EqualFold(p.MimeType, "text/html") {
+			return htmlToText(decoded)
+		}
 		return decoded
 	}
 
@@ -262,7 +270,10 @@ func extractBody(p *apiPayload) string {
 	if plainText != "" {
 		return plainText
 	}
-	return htmlText
+	if htmlText != "" {
+		return htmlToText(htmlText)
+	}
+	return ""
 }
 
 func findBody(p *apiPayload, plain, html *string) {
@@ -275,6 +286,62 @@ func findBody(p *apiPayload, plain, html *string) {
 	for i := range p.Parts {
 		findBody(&p.Parts[i], plain, html)
 	}
+}
+
+// HTML cleanup regexes (compiled once).
+//
+//	htmlDropREs  — <script>/<style>/<head> blocks including their content.
+//	               RE2 has no backreferences, so each tag gets its own pattern.
+//	htmlParaRE   — paragraph-level boundaries that become a blank line so
+//	               paragraphs stay visually separated.
+//	htmlLineRE   — line-level boundaries that become a single newline.
+//	htmlAnyTagRE — any remaining tag (stripped without leaving artifacts).
+//	htmlBlankRE  — collapse runs of 3+ newlines into a single blank line.
+var (
+	htmlDropREs = []*regexp.Regexp{
+		regexp.MustCompile(`(?is)<script\b[^>]*>.*?</script\s*>`),
+		regexp.MustCompile(`(?is)<style\b[^>]*>.*?</style\s*>`),
+		regexp.MustCompile(`(?is)<head\b[^>]*>.*?</head\s*>`),
+	}
+	htmlParaRE   = regexp.MustCompile(`(?i)</(?:p|div|h[1-6]|blockquote)\s*>`)
+	htmlLineRE   = regexp.MustCompile(`(?i)<(?:br\s*/?|hr\s*/?|/li|/tr)\s*[^>]*>`)
+	htmlAnyTagRE = regexp.MustCompile(`(?s)<[^>]+>`)
+	htmlBlankRE  = regexp.MustCompile(`\n{3,}`)
+)
+
+// htmlToText turns an HTML email body into a readable plain-text
+// approximation for the Mini App's <pre>-based body view. It is regex-
+// based on purpose: Gmail HTML is usually well-formed enough, and a
+// perfect HTML→text render isn't the goal — we just need to keep
+// raw <table>/<div style="..."> markup from leaking into the UI.
+func htmlToText(s string) string {
+	if s == "" {
+		return s
+	}
+	for _, re := range htmlDropREs {
+		s = re.ReplaceAllString(s, "")
+	}
+	s = htmlParaRE.ReplaceAllString(s, "\n\n")
+	s = htmlLineRE.ReplaceAllString(s, "\n")
+	s = htmlAnyTagRE.ReplaceAllString(s, "")
+	s = html.UnescapeString(s)
+	// &nbsp; decodes to U+00A0 which renders as a space but trips up any
+	// downstream splitter that expects ASCII whitespace. Normalize.
+	s = strings.ReplaceAll(s, " ", " ")
+
+	// Trim trailing whitespace per line, then collapse runs of blank
+	// lines so newsletter templates don't render as a tall column of
+	// empty lines.
+	var b strings.Builder
+	b.Grow(len(s))
+	for i, line := range strings.Split(s, "\n") {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(strings.TrimRight(line, " \t\r"))
+	}
+	out := htmlBlankRE.ReplaceAllString(b.String(), "\n\n")
+	return strings.TrimSpace(out)
 }
 
 func decodeBase64URL(s string) string {

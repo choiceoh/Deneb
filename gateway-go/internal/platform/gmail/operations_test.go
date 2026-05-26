@@ -158,6 +158,74 @@ func TestExtractBody_Nil(t *testing.T) {
 	}
 }
 
+// HTML-only newsletters used to leak raw markup into the Mini App's <pre>
+// body view. extractBody should flatten the HTML on both the single-part
+// and the multipart fallback paths.
+func TestExtractBody_SinglePart_HTML_FlattenedToText(t *testing.T) {
+	// "<html><body><p>Hello <b>world</b></p><br><div>Line two</div><script>alert(1)</script></body></html>"
+	p := &apiPayload{
+		MimeType: "text/html",
+		Body:     &apiBody{Data: "PGh0bWw-PGJvZHk-PHA-SGVsbG8gPGI-d29ybGQ8L2I-PC9wPjxicj48ZGl2PkxpbmUgdHdvPC9kaXY-PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0PjwvYm9keT48L2h0bWw-"},
+	}
+	body := extractBody(p)
+	if strings.Contains(body, "<") || strings.Contains(body, ">") {
+		t.Errorf("body still contains HTML markup: %q", body)
+	}
+	if !strings.Contains(body, "Hello world") {
+		t.Errorf("body lost visible text: %q", body)
+	}
+	if strings.Contains(body, "alert(1)") {
+		t.Errorf("<script> content leaked into body: %q", body)
+	}
+}
+
+func TestHTMLToText(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "empty",
+			in:   "",
+			want: "",
+		},
+		{
+			name: "tags stripped, paragraphs broken on block boundaries",
+			in:   "<p>Hello <b>world</b></p><p>Second</p>",
+			want: "Hello world\n\nSecond",
+		},
+		{
+			name: "br becomes newline",
+			in:   "Line one<br>Line two<br/>Line three",
+			want: "Line one\nLine two\nLine three",
+		},
+		{
+			name: "entities decoded",
+			in:   "Tom &amp; Jerry &lt;3 &nbsp;spaces",
+			want: "Tom & Jerry <3  spaces",
+		},
+		{
+			name: "script and style dropped including content",
+			in:   "<style>.x{color:red}</style>Visible<script>alert(1)</script>",
+			want: "Visible",
+		},
+		{
+			name: "blank line runs collapse",
+			in:   "<p>A</p><p></p><p></p><p>B</p>",
+			want: "A\n\nB",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := htmlToText(tc.in)
+			if got != tc.want {
+				t.Errorf("htmlToText(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestFormatSearchResults(t *testing.T) {
 	msgs := []MessageSummary{
 		{ID: "abc123", From: "Alice <alice@example.com>", Subject: "Hello", Date: "Mon, 1 Jan 2026", Snippet: "Hi there"},
