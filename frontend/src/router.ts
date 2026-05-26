@@ -7,11 +7,15 @@
 export type Route =
   | { name: 'home' }
   | { name: 'inbox' }
-  | { name: 'detail'; messageId: string };
+  | { name: 'detail'; messageId: string }
+  | { name: 'memory' }
+  | { name: 'sessions' };
 
 export function parseRoute(hash: string): Route {
   if (hash === '' || hash === '#' || hash === '#/') return { name: 'home' };
   if (hash === '#/inbox') return { name: 'inbox' };
+  if (hash === '#/memory') return { name: 'memory' };
+  if (hash === '#/sessions') return { name: 'sessions' };
   const match = hash.match(/^#\/m\/(.+)$/);
   if (match) return { name: 'detail', messageId: decodeURIComponent(match[1]) };
   return { name: 'home' };
@@ -20,7 +24,9 @@ export function parseRoute(hash: string): Route {
 export function navigate(target: Route): void {
   let hash = '#/';
   if (target.name === 'inbox') hash = '#/inbox';
-  if (target.name === 'detail') hash = `#/m/${encodeURIComponent(target.messageId)}`;
+  else if (target.name === 'memory') hash = '#/memory';
+  else if (target.name === 'sessions') hash = '#/sessions';
+  else if (target.name === 'detail') hash = `#/m/${encodeURIComponent(target.messageId)}`;
   if (location.hash === hash) {
     // hashchange would not fire; force re-render by dispatching ourselves.
     window.dispatchEvent(new HashChangeEvent('hashchange'));

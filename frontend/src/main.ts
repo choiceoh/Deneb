@@ -13,6 +13,8 @@ import { parseRoute, navigate, type Route } from './router';
 import { renderHome } from './views/home';
 import { renderList } from './views/list';
 import { renderDetail } from './views/detail';
+import { renderMemory } from './views/memory';
+import { renderSessions } from './views/sessions';
 
 const root = document.getElementById('app')!;
 let cachedInitData: string | null = null;
@@ -69,6 +71,12 @@ async function dispatch(route: Route): Promise<void> {
     case 'detail':
       await renderDetail(root, cachedInitData, route.messageId);
       return;
+    case 'memory':
+      renderMemory(root, cachedInitData);
+      return;
+    case 'sessions':
+      await renderSessions(root, cachedInitData);
+      return;
   }
 }
 
@@ -102,7 +110,7 @@ function boot(): void {
   tg.BackButton?.onClick(() => {
     const route = parseRoute(location.hash);
     if (route.name === 'detail') navigate({ name: 'inbox' });
-    else if (route.name === 'inbox') navigate({ name: 'home' });
+    else navigate({ name: 'home' });
   });
 
   window.addEventListener('hashchange', handleHashChange);
