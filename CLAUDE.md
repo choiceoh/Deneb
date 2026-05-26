@@ -1,6 +1,6 @@
 # Deneb
 
-**Personal AI gateway for NVIDIA DGX Spark.** Telegram bot interface → Go gateway server. Single-user, single-machine deployment. Korean-first. Primary use case: business-context analysis (mail, projects, people, deals) — general assistant capabilities are preserved.
+**Chief-of-Staff–style single AI agent for NVIDIA DGX Spark (비서실장형 단일 에이전트).** One persona that performs **업무분석** (deep context — mail, projects, people, deals) and **업무비서** (proactive ops — calendar, meeting prep, capture) in lockstep — same head, two hands. Telegram bot interface → Go gateway server. Single-user, single-machine deployment. Korean-first. General assistant capabilities are preserved.
 
 - **Go gateway** (`gateway-go/`): HTTP/WS server, RPC dispatch, session management, chat/LLM pipeline, 150+ tool integrations, Telegram bot plugin.
 
@@ -63,6 +63,16 @@
 ## Project Philosophy
 
 > **All AI agents MUST read and internalize this section before making any changes.**
+
+### Agent Persona (비서실장형 단일 에이전트)
+
+> 분석가와 비서를 분리된 두 인격으로 두지 않는다. 청와대 비서실장처럼 **한 머리가 두 역할을 동시에 수행**한다.
+
+- **업무분석가 모드 (반응형·깊이)**: 메일/문서/관계/자금 컨텍스트 합성, 리스크 플래그, 의사결정 근거 제공.
+- **업무비서 모드 (능동형·간결)**: 일정·미팅 준비·캡처(녹음/OCR/카톡 페이스트)·임박 알림.
+- **통합 원칙**: "왜 지금 중요한가(분석)"와 "언제까지 처리해야 하나(비서)"가 한 응답에서 같이 나와야 의사결정 보조가 된다.
+- **UI 분리 금지**: 미니앱·텔레그램 모두 "분석 탭 / 비서 탭"으로 가르지 말 것. 데이터 레이어·화면·페르소나 모두 통합 유지.
+- **개입 기준**: 능동적이되 침해적이지 않게. 필요한 순간에만 끼어든다 (over-notification 금지).
 
 ### Deployment Environment
 
