@@ -5,7 +5,7 @@
 // can show a contextual card instead of treating each email as an anonymous
 // arrival.
 //
-// Two sources combined:
+// Three sources combined:
 //
 //   1. Gmail itself — `from:<email> newer_than:30d` to count recent
 //      messages and grab the timestamp of the last one. Fast (single API
@@ -17,12 +17,9 @@
 //      (frontmatter title/summary/category). Empty when the person isn't
 //      in memory yet, which is itself useful information ("새로운 연락처").
 //
-// The graphify CLI integration (`extractWikiGraphContext` in
-// `gmailpoll/pipeline.go`) is intentionally **not** included here — it
-// shells out to an external binary that may not be present, has a 10s
-// timeout that would dominate the response, and the two sources above
-// already cover the high-frequency triage need. Folding it in is a clean
-// follow-up.
+//   3. Wiki graph — `graphify` relationship/context facts, but with a
+//      short Mini App budget so a slow graph traversal never holds back
+//      the fast Gmail/wiki card.
 
 package handlerminiapp
 
@@ -32,6 +29,7 @@ import (
 	"fmt"
 	"net/mail"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -45,17 +43,20 @@ import (
 //
 // SenderFacts is the wiki-graph traversal injected from
 // gmailpoll.ExtractSenderFacts. It runs an external `graphify` CLI with
-// a 10s timeout, so it intentionally lives behind a function pointer:
-// the handler stays testable, and a deployment without graphify just
-// hands in a stub that returns "" (or omits the field entirely).
+// a longer pipeline timeout, so this handler wraps it in a shorter Mini
+// App budget: the handler stays testable, and slow/missing graphify only
+// omits wikiFacts instead of delaying the whole sender card.
 type GmailContextDeps struct {
-	Client      func() (GmailClient, error)
-	WikiStore   func() (MemorySearcher, error)
-	SenderFacts func(ctx context.Context, from string) string
-	RecentDays  int // Lookback window for "from:<email> newer_than:..."; 0 → 30.
-	MaxRecent   int // Cap on Gmail.Search results; 0 → 50.
-	MaxWikiHits int // Cap on wiki search results; 0 → 5.
+	Client             func() (GmailClient, error)
+	WikiStore          func() (MemorySearcher, error)
+	SenderFacts        func(ctx context.Context, from string) string
+	SenderFactsTimeout time.Duration
+	RecentDays         int // Lookback window for "from:<email> newer_than:..."; 0 → 30.
+	MaxRecent          int // Cap on Gmail.Search results; 0 → 50.
+	MaxWikiHits        int // Cap on wiki search results; 0 → 5.
 }
+
+const defaultSenderFactsTimeout = 750 * time.Millisecond
 
 // GmailContextMethods returns the miniapp.gmail.sender_context handler.
 // Returns nil if no source is wired — the gateway then skips registration
@@ -205,16 +206,47 @@ func senderContext(deps GmailContextDeps) rpcutil.HandlerFunc {
 		}
 
 		// --- Wiki-graph traversal (graphify CLI) ---
-		// Best-effort, ~10s budget. The factory function itself swallows
-		// failures and returns "" so no notice is generated for the
-		// common "graphify not installed" case; missing facts just
-		// don't render. Skipped entirely when there's no factory or
-		// the sender input was unparseable.
+		// Best-effort with a short UI budget. The underlying extractor
+		// still owns graphify's longer subprocess timeout for analyze
+		// pipelines, but this Mini App path should not make fast
+		// Gmail/wiki context wait on graph traversal.
 		if deps.SenderFacts != nil && raw != "" {
-			resp.WikiFacts = deps.SenderFacts(ctx, raw)
+			resp.WikiFacts = senderFactsWithin(ctx, deps.SenderFacts, raw, deps.SenderFactsTimeout)
 		}
 
 		return rpcutil.RespondOK(req.ID, resp)
+	}
+}
+
+func senderFactsWithin(
+	ctx context.Context,
+	fn func(context.Context, string) string,
+	raw string,
+	timeout time.Duration,
+) string {
+	if fn == nil || strings.TrimSpace(raw) == "" {
+		return ""
+	}
+	if timeout <= 0 {
+		timeout = defaultSenderFactsTimeout
+	}
+
+	factsCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ch := make(chan string, 1)
+	go func() {
+		ch <- strings.TrimSpace(fn(factsCtx, raw))
+	}()
+
+	select {
+	case facts := <-ch:
+		if factsCtx.Err() != nil {
+			return ""
+		}
+		return facts
+	case <-factsCtx.Done():
+		return ""
 	}
 }
 
