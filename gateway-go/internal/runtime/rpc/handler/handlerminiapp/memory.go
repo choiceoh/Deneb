@@ -9,6 +9,9 @@ package handlerminiapp
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io/fs"
+	"path"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
@@ -85,10 +88,14 @@ func memoryGetPage(deps MemoryDeps) rpcutil.HandlerFunc {
 		if rel == "" {
 			return rpcerr.MissingParam("path").Response(req.ID)
 		}
-		// Reject path traversal — Store.ReadPage joins with the wiki
-		// dir but a "../" prefix would still let callers escape it.
-		if strings.Contains(rel, "..") {
-			return rpcerr.InvalidRequest("path must not contain ..").Response(req.ID)
+		// Reject anything that could let the caller escape the wiki
+		// root. Substring ".." alone is too weak — Store.ReadPage
+		// does filepath.Join(s.dir, rel) so absolute paths and "../"
+		// segments both need explicit guards. Backslash normalized to
+		// forward slash before cleaning so Windows-style traversal
+		// can't sneak past path.Clean.
+		if err := validateWikiPath(rel); err != nil {
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
 		}
 
 		store, err := deps.Store()
@@ -97,7 +104,13 @@ func memoryGetPage(deps MemoryDeps) rpcutil.HandlerFunc {
 		}
 		page, err := store.ReadPage(rel)
 		if err != nil {
-			return rpcerr.NotFound("wiki page " + rpcutil.TruncateForError(rel)).Response(req.ID)
+			// Distinguish "missing" from "unreadable" so the Mini App
+			// surfaces the right banner — permission/IO errors used to
+			// be misreported as NOT_FOUND and the client gave up.
+			if errors.Is(err, fs.ErrNotExist) {
+				return rpcerr.NotFound("wiki page " + rpcutil.TruncateForError(rel)).Response(req.ID)
+			}
+			return rpcerr.WrapUnavailable("wiki page read failed", err).Response(req.ID)
 		}
 		if page == nil {
 			return rpcerr.NotFound("wiki page " + rpcutil.TruncateForError(rel)).Response(req.ID)
@@ -191,4 +204,28 @@ func truncateRunes(s string, maxChars int) string {
 		return s
 	}
 	return string(runes[:maxChars]) + "…"
+}
+
+// validateWikiPath rejects any rel value that could let a caller of
+// miniapp.memory.get_page read outside the wiki directory. The wiki
+// store does filepath.Join(dir, rel) which preserves an embedded
+// absolute path on some platforms and joins relative paths normally —
+// so we (a) reject absolute forms outright, (b) normalize backslashes
+// to forward slashes, (c) Clean the result, and (d) ensure the cleaned
+// path stays under the root.
+func validateWikiPath(rel string) error {
+	if strings.HasPrefix(rel, "/") || strings.HasPrefix(rel, "\\") {
+		return errors.New("path must be relative to the wiki root")
+	}
+	// Windows-style C:\foo or D:\bar — reject up front so path.Clean
+	// can't normalize the drive letter away.
+	if len(rel) >= 2 && rel[1] == ':' {
+		return errors.New("path must be relative to the wiki root")
+	}
+	normalized := strings.ReplaceAll(rel, "\\", "/")
+	cleaned := path.Clean(normalized)
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return errors.New("path must stay within the wiki root")
+	}
+	return nil
 }
