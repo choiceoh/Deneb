@@ -12,7 +12,9 @@ export type Route =
   | { name: 'sessions' }
   | { name: 'wikiPage'; path: string }
   | { name: 'sessionTranscript'; sessionKey: string }
-  | { name: 'chat' };
+  | { name: 'chat' }
+  | { name: 'calendar' }
+  | { name: 'calendarEvent'; eventId: string };
 
 export function parseRoute(hash: string): Route {
   if (hash === '' || hash === '#' || hash === '#/') return { name: 'home' };
@@ -20,6 +22,15 @@ export function parseRoute(hash: string): Route {
   if (hash === '#/memory') return { name: 'memory' };
   if (hash === '#/sessions') return { name: 'sessions' };
   if (hash === '#/chat') return { name: 'chat' };
+  if (hash === '#/calendar') return { name: 'calendar' };
+  const cal = hash.match(/^#\/calendar\/(.+)$/);
+  if (cal) {
+    try {
+      return { name: 'calendarEvent', eventId: decodeURIComponent(cal[1]) };
+    } catch {
+      return { name: 'calendar' };
+    }
+  }
   const match = hash.match(/^#\/m\/(.+)$/);
   if (match) {
     // decodeURIComponent throws URIError on malformed percent-encoding
@@ -76,6 +87,9 @@ export function navigate(target: Route): void {
   else if (target.name === 'wikiPage') hash = `#/wiki/${encodeURIComponent(target.path)}`;
   else if (target.name === 'sessionTranscript')
     hash = `#/session/${encodeURIComponent(target.sessionKey)}`;
+  else if (target.name === 'calendar') hash = '#/calendar';
+  else if (target.name === 'calendarEvent')
+    hash = `#/calendar/${encodeURIComponent(target.eventId)}`;
   if (location.hash === hash) {
     // hashchange would not fire; force re-render by dispatching ourselves.
     window.dispatchEvent(new HashChangeEvent('hashchange'));

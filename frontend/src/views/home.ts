@@ -57,6 +57,11 @@ function paint(
     ),
   );
   root.appendChild(
+    buildEntryCard('📅', '일정', '다가오는 회의 · D-15분 알림', () =>
+      navigate({ name: 'calendar' }),
+    ),
+  );
+  root.appendChild(
     buildEntryCard('📧', 'Gmail 트리아지', '최근 미처리 메일 · 읽음/보관', () =>
       navigate({ name: 'inbox' }),
     ),

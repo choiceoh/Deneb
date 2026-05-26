@@ -18,6 +18,8 @@ import { renderSessions } from './views/sessions';
 import { renderWikiPage } from './views/wiki_page';
 import { renderSessionTranscript } from './views/session_transcript';
 import { renderChat } from './views/chat';
+import { renderCalendar } from './views/calendar';
+import { renderCalendarEvent } from './views/calendar_event';
 
 const root = document.getElementById('app')!;
 let cachedInitData: string | null = null;
@@ -89,6 +91,12 @@ async function dispatch(route: Route): Promise<void> {
     case 'chat':
       renderChat(root, cachedInitData);
       return;
+    case 'calendar':
+      await renderCalendar(root, cachedInitData);
+      return;
+    case 'calendarEvent':
+      await renderCalendarEvent(root, cachedInitData, route.eventId);
+      return;
   }
 }
 
@@ -131,6 +139,9 @@ function boot(): void {
         return;
       case 'sessionTranscript':
         navigate({ name: 'sessions' });
+        return;
+      case 'calendarEvent':
+        navigate({ name: 'calendar' });
         return;
       default:
         navigate({ name: 'home' });
