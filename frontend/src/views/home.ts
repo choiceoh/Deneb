@@ -4,6 +4,7 @@
 import { ping, whoami, type PingResult, type WhoamiResult } from '../rpc';
 import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
+import { readAppSettings } from '../app_settings';
 import { buildErrorBanner } from './ui';
 
 export async function renderHome(root: HTMLElement, initData: string): Promise<void> {
@@ -99,14 +100,16 @@ function paint(
   });
   root.appendChild(refresh);
 
-  // Diagnostics live in the muted footer so the visible status stays minimal.
-  const muted = document.createElement('div');
-  muted.className = 'muted';
-  const userLabel =
-    [user.firstName, user.lastName].filter(Boolean).join(' ') ||
-    (user.username ? `@${user.username}` : `id=${user.id}`);
-  muted.textContent = `${userLabel} · v${pingResult.version || '?'} · ${latencyMs}ms`;
-  root.appendChild(muted);
+  if (readAppSettings().showDiagnostics) {
+    // Diagnostics live in the muted footer so the visible status stays minimal.
+    const muted = document.createElement('div');
+    muted.className = 'muted';
+    const userLabel =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') ||
+      (user.username ? `@${user.username}` : `id=${user.id}`);
+    muted.textContent = `${userLabel} · v${pingResult.version || '?'} · ${latencyMs}ms`;
+    root.appendChild(muted);
+  }
 }
 
 function buildInfoRow(

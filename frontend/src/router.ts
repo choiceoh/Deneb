@@ -34,13 +34,14 @@ export type Route =
   | { name: 'chat'; ctx?: ChatContext }
   | { name: 'calendar' }
   | { name: 'calendarEvent'; eventId: string }
-  | { name: 'more' };
+  | { name: 'more' }
+  | { name: 'settings' };
 
 // Top-level tab destinations — these show the persistent bottom tab bar
 // and Telegram's BackButton stays hidden. Drill-down views (detail,
 // wikiPage, calendarEvent, sessionTranscript, etc.) hide the tab bar so
 // the BackButton can take over.
-export const TAB_ROUTES = ['home', 'chat', 'more'] as const;
+export const TAB_ROUTES = ['home', 'chat', 'more', 'settings'] as const;
 export type TabRouteName = (typeof TAB_ROUTES)[number];
 export function isTabRoute(route: Route): route is { name: TabRouteName } {
   return (TAB_ROUTES as readonly string[]).includes(route.name);
@@ -60,6 +61,7 @@ export function parseRoute(hash: string): Route {
     return { name: 'chat' };
   }
   if (hash === '#/more') return { name: 'more' };
+  if (hash === '#/settings') return { name: 'settings' };
   // Accept '#/calendar', '#/calendar/' (trailing slash), and
   // '#/calendar/<id>' — the trailing-slash variant falls back to the
   // list view instead of the catch-all home.
@@ -162,6 +164,7 @@ export function navigate(target: Route): void {
     }
   }
   else if (target.name === 'more') hash = '#/more';
+  else if (target.name === 'settings') hash = '#/settings';
   else if (target.name === 'detail') hash = `#/m/${encodeURIComponent(target.messageId)}`;
   else if (target.name === 'wikiPage') hash = `#/wiki/${encodeURIComponent(target.path)}`;
   else if (target.name === 'sessionTranscript')
