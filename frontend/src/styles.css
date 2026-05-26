@@ -496,3 +496,69 @@ button.session-row:active {
   color: var(--tg-hint);
   margin-top: 4px;
 }
+
+/* ---- Sender context card (email detail view) ---- */
+
+.sender-context {
+  border-left: 3px solid var(--tg-link);
+  padding-left: 13px;
+}
+
+.sender-context-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tg-hint);
+  margin-bottom: 8px;
+}
+
+.sender-context-row {
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.sender-context-wiki {
+  margin-top: 6px;
+}
+
+.sender-context-wiki-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tg-hint);
+  margin-bottom: 6px;
+}
+
+.sender-context-chip {
+  background: var(--tg-bg);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.sender-context-chip-title {
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.sender-context-chip-cat {
+  font-size: 11px;
+  color: var(--tg-hint);
+}
+
+.sender-context-chip-sub {
+  font-size: 12px;
+  color: var(--tg-hint);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.sender-context-notice {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--tg-hint);
+  font-style: italic;
+}
