@@ -32,12 +32,18 @@ func (f *fakeGmailClient) Search(ctx context.Context, q string, n int) ([]gmail.
 // SearchPage delegates to searchPageFn when set; otherwise it falls back
 // to searchFn with the pageToken ignored, which lets the existing
 // list_recent tests (which only stub searchFn) continue to exercise the
-// handler without each having to plumb an empty nextPageToken.
+// handler without each having to plumb an empty nextPageToken. The
+// fallback panics on a non-empty pageToken so a future regression where
+// the handler stops forwarding p.PageToken can't silently slip past
+// tests stubbing only searchFn.
 func (f *fakeGmailClient) SearchPage(ctx context.Context, q, pageToken string, n int) ([]gmail.MessageSummary, string, error) {
 	if f.searchPageFn != nil {
 		return f.searchPageFn(ctx, q, pageToken, n)
 	}
 	if f.searchFn != nil {
+		if pageToken != "" {
+			panic("fakeGmailClient: searchFn fallback called with non-empty pageToken; stub searchPageFn explicitly to test pagination")
+		}
 		out, err := f.searchFn(ctx, q, n)
 		return out, "", err
 	}
@@ -163,6 +169,89 @@ func TestGmailListRecent_RespectsCustomParams(t *testing.T) {
 	}
 	if seenLimit != 5 {
 		t.Errorf("limit = %d, want 5", seenLimit)
+	}
+}
+
+func TestGmailListRecent_AbsorbsEmptyPages(t *testing.T) {
+	// Gmail can return empty pages with a continuation token (filter
+	// pruned the chunk). The handler should hop forward until it gets
+	// at least one message, otherwise the Mini App sees an empty
+	// state with hidden mail behind it.
+	var calls int
+	tokens := []string{"", "tok1", "tok2"}
+	client := &fakeGmailClient{
+		searchPageFn: func(_ context.Context, _, pageToken string, _ int) ([]gmail.MessageSummary, string, error) {
+			if calls >= len(tokens) {
+				t.Fatalf("unexpected call %d with token %q", calls, pageToken)
+			}
+			if pageToken != tokens[calls] {
+				t.Errorf("call %d: pageToken = %q, want %q", calls, pageToken, tokens[calls])
+			}
+			calls++
+			switch calls {
+			case 1: // first call: empty + tok1
+				return nil, "tok1", nil
+			case 2: // second call: empty + tok2
+				return nil, "tok2", nil
+			case 3: // third call: non-empty + ""
+				return []gmail.MessageSummary{{ID: "m1"}}, "", nil
+			}
+			return nil, "", nil
+		},
+	}
+	h := gmailListRecent(depsFor(client))
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+
+	var got struct {
+		Messages      []map[string]any `json:"messages"`
+		NextPageToken string           `json:"nextPageToken"`
+	}
+	decode(t, resp, &got)
+
+	if calls != 3 {
+		t.Errorf("calls = %d, want 3 (initial + 2 empty-page hops)", calls)
+	}
+	if len(got.Messages) != 1 || got.Messages[0]["id"] != "m1" {
+		t.Errorf("messages = %v, want [{id: m1}]", got.Messages)
+	}
+	if got.NextPageToken != "" {
+		t.Errorf("nextPageToken = %q, want empty", got.NextPageToken)
+	}
+}
+
+func TestGmailListRecent_EmptyPageHopBudget(t *testing.T) {
+	// If Gmail keeps returning empty pages with tokens past the loop
+	// budget, the handler should give up gracefully (no infinite
+	// loop) and return whatever's at the cutoff.
+	var calls int
+	client := &fakeGmailClient{
+		searchPageFn: func(_ context.Context, _, _ string, _ int) ([]gmail.MessageSummary, string, error) {
+			calls++
+			return nil, "always-more", nil
+		},
+	}
+	h := gmailListRecent(depsFor(client))
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	if !resp.OK {
+		t.Fatalf("expected OK, got %+v", resp.Error)
+	}
+	// Budget: initial call + maxEmptyPageHops follow-ups.
+	wantCalls := 1 + maxEmptyPageHops
+	if calls != wantCalls {
+		t.Errorf("calls = %d, want %d (initial + %d hops)", calls, wantCalls, maxEmptyPageHops)
+	}
+}
+
+func TestMapGmailError_400MapsToInvalidParams(t *testing.T) {
+	// A stale/garbled pageToken makes Gmail return 400 — we want the
+	// Mini App to see INVALID_REQUEST (reset-to-first-page) rather
+	// than UNAVAILABLE (retry, which would loop on the bad token).
+	resp := mapGmailError("rid-1", "gmail search failed", errors.New("Gmail API 오류 (HTTP 400): invalid pageToken"))
+	if resp.OK {
+		t.Fatalf("expected error, got OK")
+	}
+	if resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Errorf("code = %s, want %s", resp.Error.Code, protocol.ErrInvalidRequest)
 	}
 }
 
