@@ -9,8 +9,10 @@
 // Layout matches `home.ts` so the user can hop between the two tabs and
 // the visual grammar stays consistent.
 
-import { ping, whoami, RpcError, type PingResult, type WhoamiResult } from '../rpc';
+import { ping, whoami, type PingResult, type WhoamiResult } from '../rpc';
+import { formatRpcError } from '../format';
 import { isCurrentHash, navigate, type Route } from '../router';
+import { buildErrorBanner } from './ui';
 
 export async function renderMore(root: HTMLElement, initData: string): Promise<void> {
   const expectedHash = location.hash;
@@ -23,13 +25,7 @@ export async function renderMore(root: HTMLElement, initData: string): Promise<v
     paint(root, user, pingResult, latencyMs);
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
-    const msg =
-      err instanceof RpcError
-        ? `${err.code} — ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : '알 수 없는 오류';
-    paintError(root, `백엔드 호출 실패: ${msg}`);
+    paintError(root, `백엔드 호출 실패: ${formatRpcError(err)}`);
   }
 }
 
@@ -164,8 +160,5 @@ function buildNavRow(
 
 function paintError(root: HTMLElement, message: string): void {
   root.innerHTML = '';
-  const banner = document.createElement('div');
-  banner.className = 'error';
-  banner.textContent = message;
-  root.appendChild(banner);
+  root.appendChild(buildErrorBanner(message));
 }

@@ -5,8 +5,9 @@
 // tool). No interaction yet — open-and-continue lives in chat, not Mini App.
 
 import { getTranscript, type TranscriptMessage } from '../sessions';
-import { RpcError } from '../rpc';
+import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
+import { buildErrorBanner, buildLoadingNode, buildViewHeader } from './ui';
 
 export async function renderSessionTranscript(
   root: HTMLElement,
@@ -16,21 +17,14 @@ export async function renderSessionTranscript(
   const expectedHash = location.hash;
   root.innerHTML = '';
 
-  const header = document.createElement('div');
-  header.className = 'view-header';
-  header.innerHTML = `
-    <button class="link-button">← 세션 목록</button>
-    <span class="view-title">대화 기록</span>
-    <span></span>
-  `;
-  header.querySelector('button')!.addEventListener('click', () =>
-    navigate({ name: 'sessions' }),
+  root.appendChild(
+    buildViewHeader({
+      title: '대화 기록',
+      left: { label: '← 세션 목록', onClick: () => navigate({ name: 'sessions' }) },
+    }),
   );
-  root.appendChild(header);
 
-  const status = document.createElement('div');
-  status.className = 'loading';
-  status.textContent = '대화 불러오는 중…';
+  const status = buildLoadingNode('대화 불러오는 중…');
   root.appendChild(status);
 
   try {
@@ -41,16 +35,7 @@ export async function renderSessionTranscript(
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
     status.remove();
-    const msgText =
-      err instanceof RpcError
-        ? `${err.code} — ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : '알 수 없는 오류';
-    const banner = document.createElement('div');
-    banner.className = 'error';
-    banner.textContent = `대화 로드 실패: ${msgText}`;
-    root.appendChild(banner);
+    root.appendChild(buildErrorBanner(`대화 로드 실패: ${formatRpcError(err)}`));
   }
 }
 

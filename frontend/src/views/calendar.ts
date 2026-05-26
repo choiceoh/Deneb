@@ -5,7 +5,9 @@
 // opens the event detail view.
 
 import { calendarListUpcoming, type CalendarEventSummary, RpcError } from '../rpc';
+import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
+import { buildErrorBanner, buildLoadingNode, buildViewHeader } from './ui';
 
 const HOURS_AHEAD = 24 * 7;
 
@@ -13,20 +15,14 @@ export async function renderCalendar(root: HTMLElement, initData: string): Promi
   const expectedHash = location.hash;
   root.innerHTML = '';
 
-  const header = document.createElement('div');
-  header.className = 'view-header';
-  header.innerHTML = `
-    <span class="view-title">📅 일정</span>
-    <button class="link-button">새로고침</button>
-  `;
-  header.querySelector('button')!.addEventListener('click', () => {
-    void renderCalendar(root, initData);
-  });
-  root.appendChild(header);
+  root.appendChild(
+    buildViewHeader({
+      title: '📅 일정',
+      right: { label: '새로고침', onClick: () => void renderCalendar(root, initData) },
+    }),
+  );
 
-  const status = document.createElement('div');
-  status.className = 'loading';
-  status.textContent = '일정 불러오는 중…';
+  const status = buildLoadingNode('일정 불러오는 중…');
   root.appendChild(status);
 
   try {
@@ -51,18 +47,14 @@ export async function renderCalendar(root: HTMLElement, initData: string): Promi
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
     status.remove();
-    const msg =
-      err instanceof RpcError
-        ? `${err.code} — ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : '알 수 없는 오류';
-    const banner = document.createElement('div');
-    banner.className = 'error';
-    banner.textContent =
+    // UNAVAILABLE = the calendar provider isn't connected yet; phrase
+    // it as a setup hint rather than a load failure.
+    const msg = formatRpcError(err);
+    const banner = buildErrorBanner(
       err instanceof RpcError && err.code === 'UNAVAILABLE'
         ? `캘린더가 아직 연결되지 않았습니다 (${msg})`
-        : `일정 로드 실패: ${msg}`;
+        : `일정 로드 실패: ${msg}`,
+    );
     root.appendChild(banner);
   }
 }

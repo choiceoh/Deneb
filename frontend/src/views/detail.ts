@@ -15,11 +15,11 @@ import {
   type GmailMessageDetail,
   type SenderContext,
 } from '../gmail';
-import { RpcError } from '../rpc';
 import { isCurrentHash, navigate } from '../router';
-import { humanSize, relativeTime } from '../format';
+import { errorMessage, formatRpcError, humanSize, relativeTime } from '../format';
 import { renderMarkdown } from '../markdown';
 import { confirmAction } from '../dialog';
+import { buildErrorBanner, buildViewHeader, renderErrorView } from './ui';
 
 export async function renderDetail(
   root: HTMLElement,
@@ -44,37 +44,22 @@ export async function renderDetail(
     void hydrateSenderContext(root, initData, msg.from, expectedHash);
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
-    const msgText =
-      err instanceof RpcError
-        ? `${err.code} — ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : '알 수 없는 오류';
-    root.innerHTML = '';
-    const banner = document.createElement('div');
-    banner.className = 'error';
-    banner.textContent = `메일 로드 실패: ${msgText}`;
-    root.appendChild(banner);
-    const back = document.createElement('button');
-    back.className = 'primary';
-    back.textContent = '← 받은 편지함으로';
-    back.addEventListener('click', () => navigate({ name: 'inbox' }));
-    root.appendChild(back);
+    renderErrorView(root, `메일 로드 실패: ${formatRpcError(err)}`, {
+      label: '← 받은 편지함으로',
+      onClick: () => navigate({ name: 'inbox' }),
+    });
   }
 }
 
 function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): void {
   root.innerHTML = '';
 
-  const header = document.createElement('div');
-  header.className = 'view-header';
-  header.innerHTML = `
-    <button class="link-button">← 받은 편지함</button>
-    <span class="view-title">메일</span>
-    <span></span>
-  `;
-  header.querySelector('button')!.addEventListener('click', () => navigate({ name: 'inbox' }));
-  root.appendChild(header);
+  root.appendChild(
+    buildViewHeader({
+      title: '메일',
+      left: { label: '← 받은 편지함', onClick: () => navigate({ name: 'inbox' }) },
+    }),
+  );
 
   const meta = document.createElement('div');
   meta.className = 'card email-meta';
@@ -150,7 +135,7 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
       await markRead(initData, msg.id);
       flash(actions, '✓ 읽음 처리');
     } catch (err) {
-      flash(actions, `읽음 실패: ${err instanceof Error ? err.message : err}`);
+      flash(actions, `읽음 실패: ${errorMessage(err)}`);
       readBtn.disabled = false;
     }
   });
@@ -162,7 +147,7 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
       await archive(initData, msg.id);
       navigate({ name: 'inbox' });
     } catch (err) {
-      flash(actions, `보관 실패: ${err instanceof Error ? err.message : err}`);
+      flash(actions, `보관 실패: ${errorMessage(err)}`);
       archBtn.disabled = false;
     }
   });
@@ -181,7 +166,7 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
       navigate({ name: 'inbox' });
       navigated = true;
     } catch (err) {
-      flash(actions, `삭제 실패: ${err instanceof Error ? err.message : err}`);
+      flash(actions, `삭제 실패: ${errorMessage(err)}`);
     } finally {
       // Re-enable on every exit except a successful navigate (where
       // the view is about to be torn down anyway); otherwise a
@@ -290,16 +275,7 @@ async function runAnalysis(
     window.clearInterval(tick);
     if (!isCurrentHash(expectedHash)) return;
     slot.innerHTML = '';
-    const banner = document.createElement('div');
-    banner.className = 'error';
-    const msgText =
-      err instanceof RpcError
-        ? `${err.code} — ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : '알 수 없는 오류';
-    banner.textContent = `분석 실패: ${msgText}`;
-    slot.appendChild(banner);
+    slot.appendChild(buildErrorBanner(`분석 실패: ${formatRpcError(err)}`));
     button.disabled = false;
     button.textContent = originalLabel ?? '🔍 분석';
   }

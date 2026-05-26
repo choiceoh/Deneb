@@ -19,10 +19,10 @@
 // the hash identical but replaces rowsContainer.
 
 import { archive, listRecent, markRead, trash, type GmailMessageRow } from '../gmail';
-import { RpcError } from '../rpc';
 import { isCurrentHash, navigate } from '../router';
 import { confirmAction } from '../dialog';
-import { relativeTime, shortFrom } from '../format';
+import { errorMessage, formatRpcError, relativeTime, shortFrom } from '../format';
+import { buildErrorBanner, buildLoadingNode, buildViewHeader } from './ui';
 
 export async function renderList(root: HTMLElement, initData: string): Promise<void> {
   const expectedHash = location.hash;
@@ -37,9 +37,7 @@ export async function renderList(root: HTMLElement, initData: string): Promise<v
   rowsContainer.className = 'email-list';
   root.appendChild(rowsContainer);
 
-  const status = document.createElement('div');
-  status.className = 'loading';
-  status.textContent = '메일 불러오는 중…';
+  const status = buildLoadingNode('메일 불러오는 중…');
   rowsContainer.appendChild(status);
 
   try {
@@ -62,28 +60,17 @@ export async function renderList(root: HTMLElement, initData: string): Promise<v
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
     status.remove();
-    const msg =
-      err instanceof RpcError
-        ? `${err.code} — ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : '알 수 없는 오류';
-    const banner = document.createElement('div');
-    banner.className = 'error';
-    banner.textContent = `메일 목록 로드 실패: ${msg}`;
-    rowsContainer.appendChild(banner);
+    rowsContainer.appendChild(
+      buildErrorBanner(`메일 목록 로드 실패: ${formatRpcError(err)}`),
+    );
   }
 }
 
 function buildHeader(onRefresh: () => void): HTMLElement {
-  const wrap = document.createElement('div');
-  wrap.className = 'view-header';
-  wrap.innerHTML = `
-    <span class="view-title">받은 편지함</span>
-    <button class="link-button" aria-label="새로고침">새로고침</button>
-  `;
-  wrap.querySelector('button')!.addEventListener('click', onRefresh);
-  return wrap;
+  return buildViewHeader({
+    title: '받은 편지함',
+    right: { label: '새로고침', onClick: onRefresh },
+  });
 }
 
 function buildRow(row: GmailMessageRow, initData: string, expectedHash: string): HTMLElement {
@@ -212,8 +199,7 @@ async function handleRowMarkRead(
     row.isUnread = false;
   } catch (err) {
     button.disabled = false;
-    const msg = err instanceof RpcError ? err.message : err instanceof Error ? err.message : err;
-    flashNear(wrap, `읽음 처리 실패: ${msg}`);
+    flashNear(wrap, `읽음 처리 실패: ${errorMessage(err)}`);
   }
 }
 
@@ -240,8 +226,7 @@ async function handleRowArchive(
     wrap.remove();
   } catch (err) {
     button.disabled = false;
-    const msg = err instanceof RpcError ? err.message : err instanceof Error ? err.message : err;
-    flashNear(wrap, `보관 실패: ${msg}`);
+    flashNear(wrap, `보관 실패: ${errorMessage(err)}`);
   }
 }
 
@@ -281,8 +266,7 @@ async function handleRowDelete(
     wrap.remove();
   } catch (err) {
     button.disabled = false;
-    const msg = err instanceof RpcError ? err.message : err instanceof Error ? err.message : err;
-    flashNear(wrap, `삭제 실패: ${msg}`);
+    flashNear(wrap, `삭제 실패: ${errorMessage(err)}`);
   }
 }
 
@@ -323,13 +307,7 @@ function mountLoadMore(
       if (!isCurrentHash(expectedHash) || !container.isConnected) return;
       btn.disabled = false;
       btn.textContent = originalLabel ?? '더 보기';
-      const msg =
-        err instanceof RpcError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : '알 수 없는 오류';
-      flashNear(btn, `더 불러오기 실패: ${msg}`);
+      flashNear(btn, `더 불러오기 실패: ${errorMessage(err)}`);
     }
   });
   container.appendChild(btn);

@@ -1,5 +1,33 @@
 // format.ts — small UI formatters shared by views.
 
+import { RpcError } from './rpc';
+
+/**
+ * formatRpcError stringifies an error caught from an RPC call for a
+ * user-facing banner. RpcError → "<CODE> — <message>" so the operator
+ * sees the gRPC-ish code (UNAVAILABLE, NOT_FOUND, …); generic Error →
+ * its `.message`; everything else → the fallback. Use this for
+ * full-view error states. For inline / row-level flash messages prefer
+ * `errorMessage(err)` which omits the code prefix.
+ */
+export function formatRpcError(err: unknown, fallback = '알 수 없는 오류'): string {
+  if (err instanceof RpcError) return `${err.code} — ${err.message}`;
+  if (err instanceof Error) return err.message;
+  return fallback;
+}
+
+/**
+ * errorMessage returns the bare `.message` of an error — without the
+ * RPC code prefix. Used by inline row-level flashes (보관 실패, 읽음
+ * 처리 실패) where the surrounding label already gives context and the
+ * extra code noise would compete with it visually.
+ */
+export function errorMessage(err: unknown, fallback = '알 수 없는 오류'): string {
+  if (err instanceof RpcError) return err.message;
+  if (err instanceof Error) return err.message;
+  return fallback;
+}
+
 /**
  * relativeTime returns a Korean human-readable "N분 전" style string for
  * dates within ~30 days, falling back to YYYY-MM-DD HH:mm otherwise.

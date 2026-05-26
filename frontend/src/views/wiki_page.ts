@@ -5,9 +5,10 @@
 // body via the in-house renderer.
 
 import { getPage, type MemoryPage } from '../memory';
-import { RpcError } from '../rpc';
+import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
 import { renderMarkdown } from '../markdown';
+import { buildViewHeader, renderErrorView } from './ui';
 
 export async function renderWikiPage(
   root: HTMLElement,
@@ -23,37 +24,22 @@ export async function renderWikiPage(
     paint(root, page);
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
-    const msgText =
-      err instanceof RpcError
-        ? `${err.code} — ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : '알 수 없는 오류';
-    root.innerHTML = '';
-    const banner = document.createElement('div');
-    banner.className = 'error';
-    banner.textContent = `위키 페이지 로드 실패: ${msgText}`;
-    root.appendChild(banner);
-    const back = document.createElement('button');
-    back.className = 'primary';
-    back.textContent = '← 메모리 검색으로';
-    back.addEventListener('click', () => navigate({ name: 'memory' }));
-    root.appendChild(back);
+    renderErrorView(root, `위키 페이지 로드 실패: ${formatRpcError(err)}`, {
+      label: '← 메모리 검색으로',
+      onClick: () => navigate({ name: 'memory' }),
+    });
   }
 }
 
 function paint(root: HTMLElement, page: MemoryPage): void {
   root.innerHTML = '';
 
-  const header = document.createElement('div');
-  header.className = 'view-header';
-  header.innerHTML = `
-    <button class="link-button">← 검색</button>
-    <span class="view-title">위키</span>
-    <span></span>
-  `;
-  header.querySelector('button')!.addEventListener('click', () => navigate({ name: 'memory' }));
-  root.appendChild(header);
+  root.appendChild(
+    buildViewHeader({
+      title: '위키',
+      left: { label: '← 검색', onClick: () => navigate({ name: 'memory' }) },
+    }),
+  );
 
   const meta = document.createElement('div');
   meta.className = 'card wiki-meta';

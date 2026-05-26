@@ -6,8 +6,10 @@
 // one tap. Person-card join and unresolved-promise extraction land in
 // a follow-up PR once Phase 0 (structured analysis storage) is in.
 
-import { calendarGet, type CalendarEventDetail, RpcError } from '../rpc';
+import { calendarGet, type CalendarEventDetail } from '../rpc';
+import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
+import { buildErrorBanner } from './ui';
 
 export async function renderCalendarEvent(
   root: HTMLElement,
@@ -23,17 +25,8 @@ export async function renderCalendarEvent(
     paint(root, initData, ev);
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
-    const msg =
-      err instanceof RpcError
-        ? `${err.code} — ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : '알 수 없는 오류';
     root.innerHTML = '';
-    const banner = document.createElement('div');
-    banner.className = 'error';
-    banner.textContent = `일정 로드 실패: ${msg}`;
-    root.appendChild(banner);
+    root.appendChild(buildErrorBanner(`일정 로드 실패: ${formatRpcError(err)}`));
   }
 }
 

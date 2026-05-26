@@ -23,9 +23,10 @@
 import { sendChat, type ChatResult } from '../chat';
 import { getMessage } from '../gmail';
 import { getPage } from '../memory';
-import { RpcError } from '../rpc';
+import { formatRpcError } from '../format';
 import type { ChatContext } from '../router';
 import { renderMarkdown } from '../markdown';
+import { buildViewHeader } from './ui';
 
 interface Turn {
   role: 'user' | 'assistant' | 'error';
@@ -117,16 +118,10 @@ export function renderChat(root: HTMLElement, initData: string, ctx?: ChatContex
 }
 
 function buildHeader(ctx: ChatContext | undefined, onReset: () => void): HTMLElement {
-  const wrap = document.createElement('div');
-  wrap.className = 'view-header';
-  const title = ctx ? contextTitle(ctx) : 'Deneb 채팅';
-  wrap.innerHTML = `
-    <span class="view-title"></span>
-    <button class="link-button" type="button">새 대화</button>
-  `;
-  (wrap.querySelector('.view-title') as HTMLElement).textContent = title;
-  wrap.querySelector('button')!.addEventListener('click', onReset);
-  return wrap;
+  return buildViewHeader({
+    title: ctx ? contextTitle(ctx) : 'Deneb 채팅',
+    right: { label: '새 대화', onClick: onReset },
+  });
 }
 
 function contextTitle(ctx: ChatContext): string {
@@ -275,13 +270,7 @@ async function hydrateContext(
     if (empty) empty.textContent = '컨텍스트가 준비됐어요. 질문을 추가하고 전송하세요.';
   } catch (err) {
     if (myToken !== mountToken) return;
-    const msgText =
-      err instanceof RpcError
-        ? `${err.code} — ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : '알 수 없는 오류';
-    renderEmptyContextCard(contextSlot, '컨텍스트 로드 실패', msgText);
+    renderEmptyContextCard(contextSlot, '컨텍스트 로드 실패', formatRpcError(err));
     const empty = list.querySelector('.empty-state') as HTMLElement | null;
     if (empty) {
       empty.textContent = '컨텍스트 없이 일반 채팅으로 진행합니다.';
@@ -384,13 +373,7 @@ async function submit(
     window.clearInterval(tick);
     if (myToken !== mountToken) return;
     loading.remove();
-    const msgText =
-      err instanceof RpcError
-        ? `${err.code} — ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : '알 수 없는 오류';
-    const errTurn: Turn = { role: 'error', text: `전송 실패: ${msgText}` };
+    const errTurn: Turn = { role: 'error', text: `전송 실패: ${formatRpcError(err)}` };
     thread.history.push(errTurn);
     trimHistory(thread);
     list.appendChild(buildBubble(errTurn));
