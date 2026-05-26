@@ -7,7 +7,7 @@
        test clean check check-go fmt generate generate-check \
        tool-schemas tool-schemas-check \
        data-gen data-gen-check \
-       build-frontend frontend-clean \
+       build-frontend embed-frontend frontend-clean miniapp \
        info
 
 # Version from git tags (release-please format: deneb-vX.Y.Z), injected via ldflags.
@@ -91,11 +91,25 @@ go-clean:
 	cd gateway-go && go clean ./...
 
 # --- Mini App frontend (Vite + Vanilla TS) ---
-# Outputs to frontend/dist/. PR-C wires `embed-frontend` to copy the bundle
-# into gateway-go/internal/runtime/server/miniapp_dist/ for //go:embed.
+# Outputs to frontend/dist/, then copied into the Go package directory the
+# //go:embed directive points at (gateway-go/internal/runtime/server/miniapp_dist).
+
+MINIAPP_EMBED_DIR := gateway-go/internal/runtime/server/miniapp_dist
 
 build-frontend:
 	cd frontend && pnpm install --frozen-lockfile && pnpm build
+
+embed-frontend: build-frontend
+	@echo "==> Syncing frontend/dist/ -> $(MINIAPP_EMBED_DIR)/"
+	@rm -rf $(MINIAPP_EMBED_DIR).new
+	@mkdir -p $(MINIAPP_EMBED_DIR).new
+	@cp -R frontend/dist/. $(MINIAPP_EMBED_DIR).new/
+	@rm -rf $(MINIAPP_EMBED_DIR)
+	@mv $(MINIAPP_EMBED_DIR).new $(MINIAPP_EMBED_DIR)
+	@echo "==> Mini App assets embedded; rerun 'make go' to rebuild the binary"
+
+# Full pipeline: frontend bundle + embed + Go build.
+miniapp: embed-frontend go
 
 frontend-clean:
 	rm -rf frontend/dist frontend/node_modules
