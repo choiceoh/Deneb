@@ -5,7 +5,14 @@
 // [읽음] button is kept anyway — it's a no-op cost-wise and makes the
 // model of "I've actioned this" visible.
 
-import { archive, getMessage, markRead, type GmailMessageDetail } from '../gmail';
+import {
+  archive,
+  getMessage,
+  markRead,
+  senderContext,
+  type GmailMessageDetail,
+  type SenderContext,
+} from '../gmail';
 import { RpcError } from '../rpc';
 import { navigate } from '../router';
 import { humanSize, relativeTime } from '../format';
@@ -24,6 +31,9 @@ export async function renderDetail(
     // the row keeps its UNREAD style on next list refresh and the user
     // can hit [읽음] explicitly.
     void markRead(initData, messageId).catch(() => undefined);
+    // Fetch sender context in parallel and inject the card once it lands.
+    // Errors are non-fatal — the rest of the page is already useful.
+    void hydrateSenderContext(root, initData, msg.from);
   } catch (err) {
     const msgText =
       err instanceof RpcError
@@ -72,6 +82,13 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
   (valueCells[1] as HTMLElement).textContent = msg.to || '—';
   (valueCells[2] as HTMLElement).textContent = relativeTime(msg.date);
   root.appendChild(meta);
+
+  // Placeholder for the sender context card. Filled asynchronously by
+  // hydrateSenderContext; left out of the static layout above so the
+  // initial paint is fast.
+  const senderSlot = document.createElement('div');
+  senderSlot.dataset.role = 'sender-context-slot';
+  root.appendChild(senderSlot);
 
   if (msg.attachments && msg.attachments.length > 0) {
     const attBox = document.createElement('div');
@@ -139,6 +156,93 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
 
   const closeBtn = makeAction('← 닫기', 'primary', () => navigate({ name: 'inbox' }));
   actions.appendChild(closeBtn);
+}
+
+async function hydrateSenderContext(
+  root: HTMLElement,
+  initData: string,
+  fromHeader: string,
+): Promise<void> {
+  if (!fromHeader) return;
+  let ctx: SenderContext;
+  try {
+    ctx = await senderContext(initData, fromHeader);
+  } catch {
+    // Best-effort enrichment. A failure here should not interrupt the
+    // user reading the email — leave the slot empty.
+    return;
+  }
+  const slot = root.querySelector('[data-role="sender-context-slot"]');
+  if (!slot) return; // Detail view navigated away while we were fetching.
+  if (!hasUsefulContext(ctx)) return;
+
+  const card = document.createElement('div');
+  card.className = 'card sender-context';
+
+  const header = document.createElement('div');
+  header.className = 'sender-context-header';
+  header.textContent = '보낸이 컨텍스트';
+  card.appendChild(header);
+
+  if (ctx.recent) {
+    const recent = document.createElement('div');
+    recent.className = 'sender-context-row';
+    const parts: string[] = [];
+    parts.push(`최근 ${ctx.recent.windowDays}일간 ${ctx.recent.count}건`);
+    if (ctx.recent.lastReceivedAt) {
+      parts.push(`마지막 ${relativeTime(ctx.recent.lastReceivedAt)}`);
+    }
+    recent.textContent = parts.join(' · ');
+    card.appendChild(recent);
+  }
+
+  if (ctx.wikiHits.length > 0) {
+    const wiki = document.createElement('div');
+    wiki.className = 'sender-context-wiki';
+    const label = document.createElement('div');
+    label.className = 'sender-context-wiki-label';
+    label.textContent = '메모리';
+    wiki.appendChild(label);
+    for (const hit of ctx.wikiHits) {
+      const chip = document.createElement('div');
+      chip.className = 'sender-context-chip';
+      const title = document.createElement('span');
+      title.className = 'sender-context-chip-title';
+      title.textContent = hit.title || hit.path;
+      chip.appendChild(title);
+      if (hit.category) {
+        const cat = document.createElement('span');
+        cat.className = 'sender-context-chip-cat';
+        cat.textContent = `#${hit.category}`;
+        chip.appendChild(cat);
+      }
+      if (hit.summary) {
+        const sub = document.createElement('div');
+        sub.className = 'sender-context-chip-sub';
+        sub.textContent = hit.summary;
+        chip.appendChild(sub);
+      }
+      wiki.appendChild(chip);
+    }
+    card.appendChild(wiki);
+  }
+
+  if (ctx.notices && ctx.notices.length > 0) {
+    const notice = document.createElement('div');
+    notice.className = 'sender-context-notice';
+    notice.textContent = ctx.notices.join(' · ');
+    card.appendChild(notice);
+  }
+
+  slot.replaceWith(card);
+}
+
+function hasUsefulContext(ctx: SenderContext): boolean {
+  if (ctx.recent && ctx.recent.count > 0) return true;
+  if (ctx.wikiHits.length > 0) return true;
+  // If only notices came back (both sources unavailable), don't render a
+  // banner-on-every-mail — the user can't act on it from this surface.
+  return false;
 }
 
 function makeAction(

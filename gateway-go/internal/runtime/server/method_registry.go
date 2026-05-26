@@ -225,6 +225,22 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlerminiapp.SessionsMethods(handlerminiapp.SessionsDeps{
 			Manager: hub.Sessions(),
 		}),
+
+		// Mini App Gmail sender context (miniapp.gmail.sender_context).
+		// Combines Gmail recent-activity query with wiki memory lookup
+		// so the Mini App detail view can show a contextual sender card.
+		handlerminiapp.GmailContextMethods(handlerminiapp.GmailContextDeps{
+			Client: func() (handlerminiapp.GmailClient, error) {
+				return gmail.DefaultClient()
+			},
+			WikiStore: func() (handlerminiapp.MemorySearcher, error) {
+				store := hub.WikiStore()
+				if store == nil {
+					return nil, errWikiDisabled
+				}
+				return store, nil
+			},
+		}),
 	}
 
 	// Conditional: provider methods.

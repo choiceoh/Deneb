@@ -67,3 +67,32 @@ export function markRead(initData: string, id: string): Promise<ActionResult> {
 export function archive(initData: string, id: string): Promise<ActionResult> {
   return call<ActionResult>('miniapp.gmail.archive', { id }, initData);
 }
+
+// --- Sender context (miniapp.gmail.sender_context) ---
+
+export interface SenderWikiHit {
+  path: string;
+  title?: string;
+  summary?: string;
+  category?: string;
+}
+
+export interface SenderRecent {
+  count: number;
+  /** ISO 8601 string, or raw header on parse failure. */
+  lastReceivedAt?: string;
+  windowDays: number;
+}
+
+export interface SenderContext {
+  sender: string;
+  email?: string;
+  displayName?: string;
+  recent?: SenderRecent;
+  wikiHits: SenderWikiHit[];
+  notices?: string[];
+}
+
+export function senderContext(initData: string, sender: string): Promise<SenderContext> {
+  return call<SenderContext>('miniapp.gmail.sender_context', { sender }, initData);
+}
