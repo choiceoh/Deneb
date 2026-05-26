@@ -6,6 +6,7 @@
 // model of "I've actioned this" visible.
 
 import {
+  analyzeMessage,
   archive,
   getMessage,
   markRead,
@@ -14,18 +15,21 @@ import {
   type SenderContext,
 } from '../gmail';
 import { RpcError } from '../rpc';
-import { navigate } from '../router';
+import { isCurrentHash, navigate } from '../router';
 import { humanSize, relativeTime } from '../format';
+import { renderMarkdown } from '../markdown';
 
 export async function renderDetail(
   root: HTMLElement,
   initData: string,
   messageId: string,
 ): Promise<void> {
+  const expectedHash = location.hash;
   root.innerHTML = '<div class="loading">메일 불러오는 중…</div>';
 
   try {
     const msg = await getMessage(initData, messageId);
+    if (!isCurrentHash(expectedHash)) return;
     paint(root, initData, msg);
     // Auto mark-read in the background. Ignore the result; if it fails
     // the row keeps its UNREAD style on next list refresh and the user
@@ -33,8 +37,11 @@ export async function renderDetail(
     void markRead(initData, messageId).catch(() => undefined);
     // Fetch sender context in parallel and inject the card once it lands.
     // Errors are non-fatal — the rest of the page is already useful.
-    void hydrateSenderContext(root, initData, msg.from);
+    // `expectedHash` threads the route token through so a stale fetch
+    // never injects the wrong sender's context.
+    void hydrateSenderContext(root, initData, msg.from, expectedHash);
   } catch (err) {
+    if (!isCurrentHash(expectedHash)) return;
     const msgText =
       err instanceof RpcError
         ? `${err.code} — ${err.message}`
@@ -130,6 +137,11 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
   actions.className = 'action-bar';
   root.appendChild(actions);
 
+  const analyzeBtn = makeAction('🔍 분석', 'secondary', async () => {
+    void runAnalysis(root, initData, msg, analyzeBtn);
+  });
+  actions.appendChild(analyzeBtn);
+
   const readBtn = makeAction('📌 읽음', 'secondary', async () => {
     readBtn.disabled = true;
     try {
@@ -158,10 +170,113 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
   actions.appendChild(closeBtn);
 }
 
+async function runAnalysis(
+  root: HTMLElement,
+  initData: string,
+  msg: GmailMessageDetail,
+  button: HTMLButtonElement,
+): Promise<void> {
+  const expectedHash = location.hash;
+  // Find or create the analysis card slot. Re-running the analysis just
+  // replaces the previous result in place rather than stacking cards.
+  let slot = root.querySelector('[data-role="analysis-slot"]') as HTMLElement | null;
+  if (!slot) {
+    slot = document.createElement('div');
+    slot.dataset.role = 'analysis-slot';
+    // Insert just above the action bar so the result sits between the
+    // email body and the action buttons.
+    const actionBar = root.querySelector('.action-bar');
+    if (actionBar) {
+      actionBar.before(slot);
+    } else {
+      root.appendChild(slot);
+    }
+  }
+
+  const start = performance.now();
+  button.disabled = true;
+  const originalLabel = button.textContent;
+  button.textContent = '⏳ 분석 중…';
+  slot.innerHTML = '';
+
+  const loading = document.createElement('div');
+  loading.className = 'card analysis-loading';
+  loading.innerHTML = `
+    <div class="analysis-loading-spinner">⏳</div>
+    <div class="analysis-loading-text">메일 분석 중… (최대 4분 소요)</div>
+    <div class="analysis-loading-elapsed">0s</div>
+  `;
+  slot.appendChild(loading);
+
+  // Tick the elapsed counter so the operator knows the request is still
+  // alive on slow LLM responses.
+  const elapsedEl = loading.querySelector('.analysis-loading-elapsed') as HTMLElement;
+  const tick = window.setInterval(() => {
+    const sec = Math.round((performance.now() - start) / 1000);
+    elapsedEl.textContent = `${sec}s`;
+  }, 1000);
+
+  try {
+    const result = await analyzeMessage(initData, msg.id);
+    window.clearInterval(tick);
+    // Analysis can take 30s-4min on the main LLM; the user may well
+    // have navigated away. Don't repaint into a stale detail view.
+    if (!isCurrentHash(expectedHash)) return;
+    slot.innerHTML = '';
+    slot.appendChild(buildAnalysisCard(result));
+    button.disabled = false;
+    button.textContent = '🔍 다시 분석';
+  } catch (err) {
+    window.clearInterval(tick);
+    if (!isCurrentHash(expectedHash)) return;
+    slot.innerHTML = '';
+    const banner = document.createElement('div');
+    banner.className = 'error';
+    const msgText =
+      err instanceof RpcError
+        ? `${err.code} — ${err.message}`
+        : err instanceof Error
+          ? err.message
+          : '알 수 없는 오류';
+    banner.textContent = `분석 실패: ${msgText}`;
+    slot.appendChild(banner);
+    button.disabled = false;
+    button.textContent = originalLabel ?? '🔍 분석';
+  }
+}
+
+function buildAnalysisCard(result: {
+  analysis: string;
+  durationMs: number;
+}): HTMLElement {
+  const card = document.createElement('div');
+  card.className = 'card analysis-card';
+
+  const header = document.createElement('div');
+  header.className = 'analysis-card-header';
+  const seconds = Math.round(result.durationMs / 1000);
+  header.innerHTML = `
+    <span class="analysis-card-title">🔍 분석</span>
+    <span class="analysis-card-meta"></span>
+  `;
+  (header.querySelector('.analysis-card-meta') as HTMLElement).textContent = `${seconds}s`;
+  card.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'analysis-card-body';
+  // Markdown comes from a trusted LLM call but escapeHTML inside
+  // renderMarkdown guards against any HTML it might emit by accident.
+  body.innerHTML = renderMarkdown(result.analysis);
+  card.appendChild(body);
+
+  return card;
+}
+
 async function hydrateSenderContext(
   root: HTMLElement,
   initData: string,
   fromHeader: string,
+  expectedHash: string,
 ): Promise<void> {
   if (!fromHeader) return;
   let ctx: SenderContext;
@@ -172,6 +287,11 @@ async function hydrateSenderContext(
     // user reading the email — leave the slot empty.
     return;
   }
+  // Route-token check: if the user navigated to a different message (or
+  // away from detail entirely) while we were fetching, do nothing. The
+  // querySelector below would otherwise find the NEW message's slot and
+  // inject the OLD sender's context into it.
+  if (!isCurrentHash(expectedHash)) return;
   const slot = root.querySelector('[data-role="sender-context-slot"]');
   if (!slot) return; // Detail view navigated away while we were fetching.
   if (!hasUsefulContext(ctx)) return;

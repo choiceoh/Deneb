@@ -2,16 +2,19 @@
 // domain views (currently just Gmail triage).
 
 import { ping, whoami, RpcError, type PingResult, type WhoamiResult } from '../rpc';
-import { navigate } from '../router';
+import { isCurrentHash, navigate } from '../router';
 
 export async function renderHome(root: HTMLElement, initData: string): Promise<void> {
+  const expectedHash = location.hash;
   root.innerHTML = '<div class="loading">로딩 중…</div>';
   try {
     const t0 = performance.now();
     const [user, pingResult] = await Promise.all([whoami(initData), ping(initData)]);
+    if (!isCurrentHash(expectedHash)) return;
     const latencyMs = Math.round(performance.now() - t0);
     paint(root, initData, user, pingResult, latencyMs);
   } catch (err) {
+    if (!isCurrentHash(expectedHash)) return;
     const msg =
       err instanceof RpcError
         ? `${err.code} — ${err.message}`

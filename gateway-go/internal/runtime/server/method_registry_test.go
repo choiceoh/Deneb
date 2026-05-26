@@ -127,6 +127,9 @@ var requiredMethods = []string{
 	"miniapp.gmail.mark_read",
 	"miniapp.gmail.archive",
 	"miniapp.gmail.sender_context",
+	// miniapp.gmail.analyze is conditional on an LLM client being
+	// configured (modelRegistry.Client(RoleMain) returning non-nil) —
+	// not in the required list because tests run without providers.
 	"miniapp.sessions.recent",
 	// miniapp.memory.search is conditional on wiki being enabled
 	// (DENEB_WIKI_ENABLED) — not in the required list, matching the

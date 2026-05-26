@@ -144,7 +144,11 @@ func gmailListRecent(deps GmailDeps) rpcutil.HandlerFunc {
 		}
 		results, err := client.Search(ctx, query, limit)
 		if err != nil {
-			return rpcerr.WrapUnavailable("gmail search failed", err).Response(req.ID)
+			// Route through mapGmailError so 403 (Gmail OAuth scope
+			// missing) and 404 stay distinguishable from transient
+			// outages — the client can surface different remediation
+			// hints. Matches get/mark_read/archive's behavior.
+			return mapGmailError(req.ID, "gmail search failed", err)
 		}
 
 		out := make([]rowOut, 0, len(results))

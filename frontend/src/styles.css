@@ -562,3 +562,132 @@ button.session-row:active {
   color: var(--tg-hint);
   font-style: italic;
 }
+
+/* ---- Analysis card (mail detail view, after pressing 🔍 분석) ---- */
+
+.analysis-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.analysis-loading-spinner {
+  font-size: 18px;
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.analysis-loading-text {
+  flex: 1;
+  font-size: 14px;
+}
+
+.analysis-loading-elapsed {
+  font-size: 12px;
+  color: var(--tg-hint);
+  font-variant-numeric: tabular-nums;
+}
+
+.analysis-card {
+  border-left: 3px solid var(--tg-link);
+  padding-left: 13px;
+}
+
+.analysis-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--tg-hint);
+  border-bottom-color: rgba(112, 117, 121, 0.2);
+}
+
+.analysis-card-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.analysis-card-meta {
+  font-size: 12px;
+  color: var(--tg-hint);
+  font-variant-numeric: tabular-nums;
+}
+
+.analysis-card-body {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.analysis-card-body h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 16px 0 6px;
+}
+
+.analysis-card-body h2:first-child {
+  margin-top: 0;
+}
+
+.analysis-card-body h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 12px 0 4px;
+  color: var(--tg-hint);
+}
+
+.analysis-card-body h4 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 10px 0 3px;
+  color: var(--tg-hint);
+}
+
+.analysis-card-body p {
+  margin: 0 0 8px;
+}
+
+.analysis-card-body ul,
+.analysis-card-body ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.analysis-card-body li {
+  margin: 2px 0;
+}
+
+.analysis-card-body blockquote {
+  margin: 6px 0;
+  padding: 6px 12px;
+  border-left: 2px solid var(--tg-hint);
+  color: var(--tg-hint);
+  font-style: italic;
+}
+
+.analysis-card-body hr {
+  margin: 12px 0;
+  border: none;
+  border-top: 1px solid rgba(112, 117, 121, 0.2);
+}
+
+.analysis-card-body code {
+  background: var(--tg-bg);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+
+.analysis-card-body strong {
+  font-weight: 600;
+}

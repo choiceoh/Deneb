@@ -316,6 +316,30 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			Tracker:     s.genesisTracker,
 			Transcripts: s.genesisTranscripts,
 		}),
+
+		// --- Mini App email analysis (miniapp.gmail.analyze) ---
+		// Late-bound because the analyzer needs a configured LLM client
+		// from the model registry, which is wired during memory subsystem
+		// init right before this phase. Lazy factory still — operator
+		// runs without any provider configured, the call returns
+		// UNAVAILABLE rather than crashing the gateway.
+		handlerminiapp.GmailAnalyzeMethods(handlerminiapp.GmailAnalyzeDeps{
+			Client: func() (handlerminiapp.GmailClient, error) {
+				return gmail.DefaultClient()
+			},
+			Pipeline: func() (handlerminiapp.AnalyzePipeline, error) {
+				if s.modelRegistry == nil {
+					return nil, handlerminiapp.ErrAnalyzeNoLLM
+				}
+				llmClient := s.modelRegistry.Client(modelrole.RoleMain)
+				model := s.modelRegistry.Model(modelrole.RoleMain)
+				gmailClient, err := gmail.DefaultClient()
+				if err != nil {
+					return nil, err
+				}
+				return handlerminiapp.PipelineFromGmailpoll(gmailClient, llmClient, model)
+			},
+		}),
 	}
 
 	for _, d := range domains {

@@ -6,7 +6,7 @@
 
 import { searchMemory, type MemoryHit } from '../memory';
 import { RpcError } from '../rpc';
-import { navigate } from '../router';
+import { isCurrentHash, navigate } from '../router';
 
 let lastQuery = '';
 
@@ -58,9 +58,11 @@ export function renderMemory(root: HTMLElement, initData: string): void {
 }
 
 async function runSearch(initData: string, q: string, mount: HTMLElement): Promise<void> {
+  const expectedHash = location.hash;
   mount.innerHTML = '<div class="loading">검색 중…</div>';
   try {
     const { results } = await searchMemory(initData, q, 20);
+    if (!isCurrentHash(expectedHash)) return;
     if (results.length === 0) {
       mount.innerHTML = '';
       const empty = document.createElement('div');
@@ -74,6 +76,7 @@ async function runSearch(initData: string, q: string, mount: HTMLElement): Promi
       mount.appendChild(buildHit(hit));
     }
   } catch (err) {
+    if (!isCurrentHash(expectedHash)) return;
     const msg =
       err instanceof RpcError
         ? `${err.code} — ${err.message}`
