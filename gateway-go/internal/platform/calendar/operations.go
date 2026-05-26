@@ -180,11 +180,31 @@ func projectConference(c apiConferenceData) *ConferenceInfo {
 
 // parseEventTime maps Google's union of (dateTime|date) into time.Time
 // plus an all-day flag. dateTime wins when both present.
+//
+// Google Calendar allows dateTime to omit the numeric offset when
+// `timeZone` is explicitly provided (see API docs: "offset required
+// unless timeZone is explicitly specified"). RFC3339 rejects that form,
+// so we fall back to a wall-clock parse anchored in dt.TimeZone — the
+// previous version returned the zero time, which made the briefing
+// pipeline silently drop those events.
 func parseEventTime(dt apiEventDateTime) (parsed time.Time, allDay bool) {
 	if dt.DateTime != "" {
-		t, err := time.Parse(time.RFC3339, dt.DateTime)
-		if err == nil {
+		if t, err := time.Parse(time.RFC3339, dt.DateTime); err == nil {
 			return t, false
+		}
+		if dt.TimeZone != "" {
+			if loc, err := time.LoadLocation(dt.TimeZone); err == nil {
+				// Google sends "2026-05-27T14:00:00" with a separate
+				// timeZone field; try common timezone-naive layouts.
+				for _, layout := range []string{
+					"2006-01-02T15:04:05",
+					"2006-01-02T15:04:05.999999999",
+				} {
+					if t, err := time.ParseInLocation(layout, dt.DateTime, loc); err == nil {
+						return t, false
+					}
+				}
+			}
 		}
 	}
 	if dt.Date != "" {
