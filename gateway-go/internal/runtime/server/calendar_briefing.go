@@ -41,6 +41,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"log/slog"
 	"strings"
 	"sync"
@@ -275,9 +276,11 @@ func dedupKey(ev calendar.Event) string {
 	return ev.ID + "|" + fmt.Sprintf("%d", ev.Start.Unix())
 }
 
-// sendBriefing assembles and posts the briefing message. Plain text by
-// default — inline keyboards / mini-app buttons can be added once the
-// detail view is shipped.
+// sendBriefing assembles and posts the briefing message. telegram.Plugin
+// sends every Text with ParseMode "HTML", so formatBriefing escapes all
+// calendar-provided fields before interpolation — a "<" in a meeting
+// title would otherwise cause Telegram to reject the message with an
+// entity-parse error and the D-15 push would silently fail every tick.
 func (s *calendarBriefingService) sendBriefing(ctx context.Context, chatID string, ev calendar.Event) error {
 	sendCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -288,7 +291,9 @@ func (s *calendarBriefingService) sendBriefing(ctx context.Context, chatID strin
 }
 
 // formatBriefing builds the Telegram message body. Korean-first per
-// project convention; time rendered in the cached displayLoc.
+// project convention; time rendered in the cached displayLoc. All
+// calendar-provided strings are HTML-escaped so the message survives
+// Telegram's HTML parse mode (see sendBriefing note).
 func (s *calendarBriefingService) formatBriefing(ev calendar.Event) string {
 	start := ev.Start.In(s.displayLoc).Format("15:04")
 
@@ -298,16 +303,16 @@ func (s *calendarBriefingService) formatBriefing(ev calendar.Event) string {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "🕒 D-%d분  %s\n", int(s.leadTime.Minutes()), title)
+	fmt.Fprintf(&b, "🕒 D-%d분  %s\n", int(s.leadTime.Minutes()), html.EscapeString(title))
 	fmt.Fprintf(&b, "시작: %s", start)
 	if location := strings.TrimSpace(ev.Location); location != "" {
-		fmt.Fprintf(&b, "\n📍 %s", location)
+		fmt.Fprintf(&b, "\n📍 %s", html.EscapeString(location))
 	}
 	if ev.Conference != nil && ev.Conference.URI != "" {
-		fmt.Fprintf(&b, "\n🔗 %s", ev.Conference.URI)
+		fmt.Fprintf(&b, "\n🔗 %s", html.EscapeString(ev.Conference.URI))
 	}
 	if names := attendeeNames(ev.Attendees, 4); names != "" {
-		fmt.Fprintf(&b, "\n👤 %s", names)
+		fmt.Fprintf(&b, "\n👤 %s", html.EscapeString(names))
 	}
 	return b.String()
 }
