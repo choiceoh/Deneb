@@ -7,6 +7,7 @@
        test clean check check-go fmt generate generate-check \
        tool-schemas tool-schemas-check \
        data-gen data-gen-check \
+       build-frontend frontend-clean \
        info
 
 # Version from git tags (release-please format: deneb-vX.Y.Z), injected via ldflags.
@@ -88,6 +89,16 @@ gateway-prod: go-binary
 
 go-clean:
 	cd gateway-go && go clean ./...
+
+# --- Mini App frontend (Vite + Vanilla TS) ---
+# Outputs to frontend/dist/. PR-C wires `embed-frontend` to copy the bundle
+# into gateway-go/internal/runtime/server/miniapp_dist/ for //go:embed.
+
+build-frontend:
+	cd frontend && pnpm install --frozen-lockfile && pnpm build
+
+frontend-clean:
+	rm -rf frontend/dist frontend/node_modules
 
 # Run Go benchmarks with memory allocation stats.
 go-bench:

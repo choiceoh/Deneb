@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Deneb</title>
+    <!--
+      Telegram injects its WebApp SDK at this URL when the page is opened
+      inside the Telegram client. When opened in a regular browser the script
+      will fail to load — main.ts handles that case by rendering an error
+      banner instead of trying to authenticate.
+    -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <noscript>JavaScript is required to use the Deneb Mini App.</noscript>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -63,6 +63,11 @@ projects.db
 # Local scripts
 scripts/deploy.sh
 
+# Mini App frontend (Vite output + node deps; rebuilt by `make build-frontend`)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
 # graphify CLI output (knowledge graph artifacts; rebuilt locally)
 graphify-out/
 .graphify_python
