@@ -13,8 +13,11 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
@@ -369,6 +372,8 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				}
 				return handlerminiapp.PipelineFromGmailpoll(gmailClient, llmClient, model)
 			},
+			Cache:      handlerminiapp.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
+			SaveToWiki: makeMailAnalysisWikiSink(hub),
 		}),
 
 		// --- Mini App chat (miniapp.chat.send) ---
@@ -416,4 +421,116 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			})
 		}
 	}
+}
+
+// makeMailAnalysisWikiSink returns the SaveToWiki callback the Mini App's
+// gmail.analyze handler invokes after a fresh LLM run. We persist into the
+// wiki so the analysis (a) shows up in recall/search, (b) accumulates per
+// sender for RAG context on future analyses. The wiki page lives under
+// `mail-analyses/<msgID>.md` so the message ID stays the canonical key —
+// the same key the on-disk JSON cache uses, which keeps debugging simple.
+// Returns nil if no wiki store is available, which is the handler's signal
+// to skip persistence entirely.
+func makeMailAnalysisWikiSink(hub *rpcutil.GatewayHub) func(handlerminiapp.WikiAnalysisInput) error {
+	return func(in handlerminiapp.WikiAnalysisInput) error {
+		store := hub.WikiStore()
+		if store == nil {
+			return nil
+		}
+		relPath := "mail-analyses/" + in.MsgID + ".md"
+		title := strings.TrimSpace(in.Subject)
+		if title == "" {
+			title = "(제목 없음) " + in.MsgID
+		}
+		today := time.Now().Format("2006-01-02")
+		page := &wiki.Page{
+			Meta: wiki.Frontmatter{
+				Title:    title,
+				Summary:  mailAnalysisSummary(in.From, in.Analysis),
+				Category: "mail-analysis",
+				Tags:     mailAnalysisTags(in.From),
+				Created:  today,
+				Updated:  today,
+				// Type=log keeps mail analyses from polluting the
+				// concept/entity surface of the wiki. Importance is
+				// kept low so RAG ranking favors curated pages first
+				// when an analysis happens to match a query.
+				Type:       "log",
+				Importance: 0.3,
+			},
+			Body: mailAnalysisBody(in),
+		}
+		return store.WritePage(relPath, page)
+	}
+}
+
+// mailAnalysisSummary builds the ~80-char index summary: "From X — first
+// line of the analysis". Truncates on rune boundaries so CJK doesn't get
+// chopped mid-character.
+func mailAnalysisSummary(from, analysis string) string {
+	first := analysis
+	if idx := strings.IndexByte(analysis, '\n'); idx >= 0 {
+		first = analysis[:idx]
+	}
+	first = strings.TrimSpace(first)
+	prefix := strings.TrimSpace(from)
+	var s string
+	switch {
+	case prefix != "" && first != "":
+		s = "From " + prefix + " — " + first
+	case first != "":
+		s = first
+	case prefix != "":
+		s = "From " + prefix
+	}
+	runes := []rune(s)
+	const maxRunes = 80
+	if len(runes) > maxRunes {
+		return string(runes[:maxRunes-1]) + "…"
+	}
+	return s
+}
+
+// mailAnalysisTags extracts a small, stable tag set from the From header so
+// per-sender pages stay co-discoverable in wiki search. Currently just the
+// email domain; we can layer more later (e.g., the local-part) without
+// breaking existing pages because tag matching is union-based.
+func mailAnalysisTags(from string) []string {
+	at := strings.LastIndexByte(from, '@')
+	if at < 0 || at == len(from)-1 {
+		return nil
+	}
+	domain := from[at+1:]
+	if end := strings.IndexAny(domain, " >\""); end >= 0 {
+		domain = domain[:end]
+	}
+	domain = strings.TrimSpace(domain)
+	if domain == "" {
+		return nil
+	}
+	return []string{domain}
+}
+
+// mailAnalysisBody renders the wiki page body: a small metadata block
+// quoted at the top, then the LLM analysis verbatim. Blockquote prefix
+// keeps the metadata visually distinct without inventing a custom
+// frontmatter section the wiki search wouldn't index.
+func mailAnalysisBody(in handlerminiapp.WikiAnalysisInput) string {
+	var b strings.Builder
+	if in.From != "" {
+		b.WriteString("> From: ")
+		b.WriteString(in.From)
+		b.WriteByte('\n')
+	}
+	if in.Date != "" {
+		b.WriteString("> Date: ")
+		b.WriteString(in.Date)
+		b.WriteByte('\n')
+	}
+	b.WriteString("> Message ID: `")
+	b.WriteString(in.MsgID)
+	b.WriteString("`\n\n")
+	b.WriteString(strings.TrimSpace(in.Analysis))
+	b.WriteByte('\n')
+	return b.String()
 }
