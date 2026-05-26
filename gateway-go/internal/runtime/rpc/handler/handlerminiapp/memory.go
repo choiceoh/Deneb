@@ -46,7 +46,75 @@ func MemoryMethods(deps MemoryDeps) map[string]rpcutil.HandlerFunc {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.memory.search": memorySearch(deps),
+		"miniapp.memory.search":   memorySearch(deps),
+		"miniapp.memory.get_page": memoryGetPage(deps),
+	}
+}
+
+// memoryGetPage returns the full body + frontmatter of a single wiki page.
+// Used by the Mini App's wiki detail view when a memory search hit or a
+// sender-context chip is tapped.
+func memoryGetPage(deps MemoryDeps) rpcutil.HandlerFunc {
+	type params struct {
+		Path string `json:"path"`
+	}
+	type out struct {
+		Path       string   `json:"path"`
+		Title      string   `json:"title,omitempty"`
+		Summary    string   `json:"summary,omitempty"`
+		Category   string   `json:"category,omitempty"`
+		Tags       []string `json:"tags,omitempty"`
+		Related    []string `json:"related,omitempty"`
+		Created    string   `json:"created,omitempty"`
+		Updated    string   `json:"updated,omitempty"`
+		Due        string   `json:"due,omitempty"`
+		Importance float64  `json:"importance,omitempty"`
+		Body       string   `json:"body"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		rel := strings.TrimSpace(p.Path)
+		if rel == "" {
+			return rpcerr.MissingParam("path").Response(req.ID)
+		}
+		// Reject path traversal — Store.ReadPage joins with the wiki
+		// dir but a "../" prefix would still let callers escape it.
+		if strings.Contains(rel, "..") {
+			return rpcerr.InvalidRequest("path must not contain ..").Response(req.ID)
+		}
+
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.WrapUnavailable("memory store unavailable", err).Response(req.ID)
+		}
+		page, err := store.ReadPage(rel)
+		if err != nil {
+			return rpcerr.NotFound("wiki page " + rpcutil.TruncateForError(rel)).Response(req.ID)
+		}
+		if page == nil {
+			return rpcerr.NotFound("wiki page " + rpcutil.TruncateForError(rel)).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, out{
+			Path:       rel,
+			Title:      page.Meta.Title,
+			Summary:    page.Meta.Summary,
+			Category:   page.Meta.Category,
+			Tags:       page.Meta.Tags,
+			Related:    page.Meta.Related,
+			Created:    page.Meta.Created,
+			Updated:    page.Meta.Updated,
+			Due:        page.Meta.Due,
+			Importance: page.Meta.Importance,
+			Body:       page.Body,
+		})
 	}
 }
 

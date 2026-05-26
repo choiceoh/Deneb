@@ -27,3 +27,28 @@ export function recentSessions(
 ): Promise<SessionsResult> {
   return call<SessionsResult>('miniapp.sessions.recent', opts, initData);
 }
+
+export interface TranscriptMessage {
+  id?: string;
+  role: string;
+  content: string;
+  timestampMs?: number;
+}
+
+export interface TranscriptResult {
+  sessionKey: string;
+  messages: TranscriptMessage[];
+  total: number;
+}
+
+export function getTranscript(
+  initData: string,
+  sessionKey: string,
+  limit?: number,
+): Promise<TranscriptResult> {
+  return call<TranscriptResult>(
+    'miniapp.sessions.transcript',
+    { sessionKey, limit },
+    initData,
+  );
+}

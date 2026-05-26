@@ -175,6 +175,106 @@ func TestMemoryMethods_NilStoreReturnsNil(t *testing.T) {
 	}
 }
 
+// --- get_page -----------------------------------------------------------
+
+func TestMemoryGetPage_HappyPath(t *testing.T) {
+	store := &fakeMemoryStore{
+		readPageFn: func(p string) (*wiki.Page, error) {
+			if p != "people/alice.md" {
+				t.Errorf("path = %q", p)
+			}
+			return &wiki.Page{
+				Meta: wiki.Frontmatter{
+					Title:      "Alice",
+					Summary:    "Sales contact",
+					Category:   "사람",
+					Tags:       []string{"client", "topworks"},
+					Related:    []string{"acme.md"},
+					Updated:    "2026-05-26",
+					Importance: 0.8,
+				},
+				Body: "# Alice\n\nFull notes here.",
+			}, nil
+		},
+	}
+	h := memoryGetPage(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.get_page", map[string]any{
+		"path": "people/alice.md",
+	}))
+	var got map[string]any
+	decode(t, resp, &got)
+	if got["title"] != "Alice" || got["category"] != "사람" {
+		t.Errorf("metadata wrong: %+v", got)
+	}
+	if got["body"] == "" || got["body"] == nil {
+		t.Errorf("body missing: %+v", got)
+	}
+	tags, _ := got["tags"].([]any)
+	if len(tags) != 2 {
+		t.Errorf("tags = %v, want 2", tags)
+	}
+}
+
+func TestMemoryGetPage_MissingPath(t *testing.T) {
+	h := memoryGetPage(memoryDepsFor(&fakeMemoryStore{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.get_page", map[string]any{}))
+	if resp.OK {
+		t.Fatalf("expected error")
+	}
+	if resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("code = %s, want MISSING_PARAM", resp.Error.Code)
+	}
+}
+
+func TestMemoryGetPage_PathTraversalRejected(t *testing.T) {
+	h := memoryGetPage(memoryDepsFor(&fakeMemoryStore{}))
+	for _, bad := range []string{"../etc/passwd", "people/../../secret"} {
+		resp := h(authedCtx(), reqWith(t, "miniapp.memory.get_page", map[string]any{"path": bad}))
+		if resp.OK {
+			t.Errorf("path %q: expected error, got OK", bad)
+		}
+		if resp.Error.Code != protocol.ErrInvalidRequest {
+			t.Errorf("path %q: code = %s", bad, resp.Error.Code)
+		}
+	}
+}
+
+func TestMemoryGetPage_NotFound(t *testing.T) {
+	store := &fakeMemoryStore{
+		readPageFn: func(_ string) (*wiki.Page, error) {
+			return nil, errors.New("file not found")
+		},
+	}
+	h := memoryGetPage(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.get_page", map[string]any{"path": "x.md"}))
+	if resp.OK {
+		t.Fatalf("expected error")
+	}
+	if resp.Error.Code != protocol.ErrNotFound {
+		t.Errorf("code = %s, want NOT_FOUND", resp.Error.Code)
+	}
+}
+
+func TestMemoryGetPage_RequiresAuth(t *testing.T) {
+	h := memoryGetPage(memoryDepsFor(&fakeMemoryStore{}))
+	resp := h(context.Background(), reqWith(t, "miniapp.memory.get_page", map[string]any{"path": "x.md"}))
+	if resp.OK {
+		t.Fatalf("expected unauthorized")
+	}
+	if resp.Error.Code != protocol.ErrUnauthorized {
+		t.Errorf("code = %s", resp.Error.Code)
+	}
+}
+
+func TestMemoryMethods_RegistersBothMethods(t *testing.T) {
+	got := MemoryMethods(memoryDepsFor(&fakeMemoryStore{}))
+	for _, name := range []string{"miniapp.memory.search", "miniapp.memory.get_page"} {
+		if _, ok := got[name]; !ok {
+			t.Errorf("missing %q", name)
+		}
+	}
+}
+
 func TestTruncateRunes(t *testing.T) {
 	cases := []struct {
 		in     string

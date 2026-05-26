@@ -9,7 +9,9 @@ export type Route =
   | { name: 'inbox' }
   | { name: 'detail'; messageId: string }
   | { name: 'memory' }
-  | { name: 'sessions' };
+  | { name: 'sessions' }
+  | { name: 'wikiPage'; path: string }
+  | { name: 'sessionTranscript'; sessionKey: string };
 
 export function parseRoute(hash: string): Route {
   if (hash === '' || hash === '#' || hash === '#/') return { name: 'home' };
@@ -25,6 +27,22 @@ export function parseRoute(hash: string): Route {
       return { name: 'detail', messageId: decodeURIComponent(match[1]) };
     } catch {
       return { name: 'home' };
+    }
+  }
+  const wiki = hash.match(/^#\/wiki\/(.+)$/);
+  if (wiki) {
+    try {
+      return { name: 'wikiPage', path: decodeURIComponent(wiki[1]) };
+    } catch {
+      return { name: 'memory' };
+    }
+  }
+  const sess = hash.match(/^#\/session\/(.+)$/);
+  if (sess) {
+    try {
+      return { name: 'sessionTranscript', sessionKey: decodeURIComponent(sess[1]) };
+    } catch {
+      return { name: 'sessions' };
     }
   }
   return { name: 'home' };
@@ -52,6 +70,9 @@ export function navigate(target: Route): void {
   else if (target.name === 'memory') hash = '#/memory';
   else if (target.name === 'sessions') hash = '#/sessions';
   else if (target.name === 'detail') hash = `#/m/${encodeURIComponent(target.messageId)}`;
+  else if (target.name === 'wikiPage') hash = `#/wiki/${encodeURIComponent(target.path)}`;
+  else if (target.name === 'sessionTranscript')
+    hash = `#/session/${encodeURIComponent(target.sessionKey)}`;
   if (location.hash === hash) {
     // hashchange would not fire; force re-render by dispatching ourselves.
     window.dispatchEvent(new HashChangeEvent('hashchange'));

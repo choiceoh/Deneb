@@ -2,8 +2,12 @@ package handlerminiapp
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -146,4 +150,201 @@ func TestSessionsMethods_NilManagerReturnsNil(t *testing.T) {
 	if got := SessionsMethods(SessionsDeps{Manager: nil}); got != nil {
 		t.Errorf("SessionsMethods(nil) = %v, want nil", got)
 	}
+}
+
+func TestSessionsMethods_TranscriptOptional(t *testing.T) {
+	// Without Transcripts factory: only sessions.recent registers.
+	got := SessionsMethods(SessionsDeps{Manager: &fakeSessionsLister{}})
+	if _, ok := got["miniapp.sessions.recent"]; !ok {
+		t.Errorf("sessions.recent missing")
+	}
+	if _, ok := got["miniapp.sessions.transcript"]; ok {
+		t.Errorf("transcript should not register when factory missing")
+	}
+
+	// With Transcripts factory: both register.
+	got = SessionsMethods(SessionsDeps{
+		Manager:     &fakeSessionsLister{},
+		Transcripts: func() (TranscriptLoader, error) { return &fakeTranscriptLoader{}, nil },
+	})
+	if _, ok := got["miniapp.sessions.transcript"]; !ok {
+		t.Errorf("transcript should register when factory set")
+	}
+}
+
+// --- transcript tests -----------------------------------------------------
+
+type fakeTranscriptLoader struct {
+	loadFn func(key string, limit int) ([]toolctx.ChatMessage, int, error)
+}
+
+func (f *fakeTranscriptLoader) Load(key string, limit int) ([]toolctx.ChatMessage, int, error) {
+	if f.loadFn == nil {
+		return nil, 0, errors.New("Load not stubbed")
+	}
+	return f.loadFn(key, limit)
+}
+
+func transcriptDeps(loader TranscriptLoader) SessionsDeps {
+	return SessionsDeps{
+		Manager:     &fakeSessionsLister{},
+		Transcripts: func() (TranscriptLoader, error) { return loader, nil },
+	}
+}
+
+func TestSessionsTranscript_HappyPath(t *testing.T) {
+	loader := &fakeTranscriptLoader{
+		loadFn: func(key string, limit int) ([]toolctx.ChatMessage, int, error) {
+			if key != "telegram:123" {
+				t.Errorf("key = %q", key)
+			}
+			if limit != defaultTranscriptLimit {
+				t.Errorf("limit = %d, want %d", limit, defaultTranscriptLimit)
+			}
+			return []toolctx.ChatMessage{
+				{ID: "m1", Role: "user", Content: jsonRaw(`"안녕"`), Timestamp: 1_700_000_000_000},
+				{ID: "m2", Role: "assistant", Content: jsonRaw(`"안녕하세요"`), Timestamp: 1_700_000_001_000},
+			}, 42, nil
+		},
+	}
+	h := sessionsTranscript(transcriptDeps(loader))
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
+		"sessionKey": "telegram:123",
+	}))
+
+	var got struct {
+		SessionKey string `json:"sessionKey"`
+		Messages   []struct {
+			ID          string `json:"id"`
+			Role        string `json:"role"`
+			Content     string `json:"content"`
+			TimestampMs int64  `json:"timestampMs"`
+		} `json:"messages"`
+		Total int `json:"total"`
+	}
+	decode(t, resp, &got)
+	if got.SessionKey != "telegram:123" || got.Total != 42 {
+		t.Errorf("payload header wrong: %+v", got)
+	}
+	if len(got.Messages) != 2 || got.Messages[0].Content != "안녕" {
+		t.Errorf("messages decoded wrong: %+v", got.Messages)
+	}
+	if got.Messages[1].Role != "assistant" {
+		t.Errorf("role wrong: %+v", got.Messages[1])
+	}
+}
+
+func TestSessionsTranscript_DecodesBlocks(t *testing.T) {
+	loader := &fakeTranscriptLoader{
+		loadFn: func(_ string, _ int) ([]toolctx.ChatMessage, int, error) {
+			// Content as an array of ContentBlock-like objects.
+			content := jsonRaw(`[
+				{"type": "text", "text": "Hello"},
+				{"type": "tool_use", "name": "gmail"},
+				{"type": "text", "text": "After tool"}
+			]`)
+			return []toolctx.ChatMessage{
+				{ID: "m1", Role: "assistant", Content: content},
+			}, 1, nil
+		},
+	}
+	h := sessionsTranscript(transcriptDeps(loader))
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
+		"sessionKey": "k",
+	}))
+	var got struct {
+		Messages []struct {
+			Content string `json:"content"`
+		} `json:"messages"`
+	}
+	decode(t, resp, &got)
+	if !strings.Contains(got.Messages[0].Content, "Hello") {
+		t.Errorf("text block missing: %q", got.Messages[0].Content)
+	}
+	if !strings.Contains(got.Messages[0].Content, "⚙️ gmail") {
+		t.Errorf("tool_use marker missing: %q", got.Messages[0].Content)
+	}
+	if !strings.Contains(got.Messages[0].Content, "After tool") {
+		t.Errorf("second text block missing: %q", got.Messages[0].Content)
+	}
+}
+
+func TestSessionsTranscript_LimitClamp(t *testing.T) {
+	var seenLimit int
+	loader := &fakeTranscriptLoader{
+		loadFn: func(_ string, limit int) ([]toolctx.ChatMessage, int, error) {
+			seenLimit = limit
+			return nil, 0, nil
+		},
+	}
+	h := sessionsTranscript(transcriptDeps(loader))
+	h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
+		"sessionKey": "k", "limit": 9999,
+	}))
+	if seenLimit != maxTranscriptLimit {
+		t.Errorf("limit = %d, want clamped to %d", seenLimit, maxTranscriptLimit)
+	}
+}
+
+func TestSessionsTranscript_MissingKey(t *testing.T) {
+	h := sessionsTranscript(transcriptDeps(&fakeTranscriptLoader{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{}))
+	if resp.OK {
+		t.Fatalf("expected error")
+	}
+	if resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("code = %s, want MISSING_PARAM", resp.Error.Code)
+	}
+}
+
+func TestSessionsTranscript_RequiresAuth(t *testing.T) {
+	h := sessionsTranscript(transcriptDeps(&fakeTranscriptLoader{}))
+	resp := h(context.Background(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
+		"sessionKey": "k",
+	}))
+	if resp.OK {
+		t.Fatalf("expected unauthorized")
+	}
+	if resp.Error.Code != protocol.ErrUnauthorized {
+		t.Errorf("code = %s", resp.Error.Code)
+	}
+}
+
+func TestSessionsTranscript_LoaderError(t *testing.T) {
+	loader := &fakeTranscriptLoader{
+		loadFn: func(_ string, _ int) ([]toolctx.ChatMessage, int, error) {
+			return nil, 0, errors.New("io broken")
+		},
+	}
+	h := sessionsTranscript(transcriptDeps(loader))
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{"sessionKey": "k"}))
+	if resp.OK {
+		t.Fatalf("expected error")
+	}
+	if resp.Error.Code != protocol.ErrUnavailable {
+		t.Errorf("code = %s", resp.Error.Code)
+	}
+}
+
+func TestDecodeChatContent(t *testing.T) {
+	cases := []struct {
+		name string
+		in   json.RawMessage
+		want string
+	}{
+		{"empty", nil, ""},
+		{"string", jsonRaw(`"hello"`), "hello"},
+		{"text block", jsonRaw(`[{"type":"text","text":"hi"}]`), "hi"},
+		{"unknown block", jsonRaw(`[{"type":"weird"}]`), "[weird]"},
+	}
+	for _, c := range cases {
+		got := decodeChatContent(c.in)
+		if got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func jsonRaw(s string) json.RawMessage {
+	return json.RawMessage(s)
 }

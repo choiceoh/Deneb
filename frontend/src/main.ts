@@ -15,6 +15,8 @@ import { renderList } from './views/list';
 import { renderDetail } from './views/detail';
 import { renderMemory } from './views/memory';
 import { renderSessions } from './views/sessions';
+import { renderWikiPage } from './views/wiki_page';
+import { renderSessionTranscript } from './views/session_transcript';
 
 const root = document.getElementById('app')!;
 let cachedInitData: string | null = null;
@@ -77,6 +79,12 @@ async function dispatch(route: Route): Promise<void> {
     case 'sessions':
       await renderSessions(root, cachedInitData);
       return;
+    case 'wikiPage':
+      await renderWikiPage(root, cachedInitData, route.path);
+      return;
+    case 'sessionTranscript':
+      await renderSessionTranscript(root, cachedInitData, route.sessionKey);
+      return;
   }
 }
 
@@ -105,12 +113,24 @@ function boot(): void {
   }
   cachedInitData = initData;
 
-  // Wire Telegram's BackButton to the router. The back arrow then pops
-  // detail → inbox → home in the order the user navigated.
+  // Wire Telegram's BackButton to the router. Detail views pop to their
+  // list, list views pop to home, and everything else (including home
+  // itself) pops to home.
   tg.BackButton?.onClick(() => {
     const route = parseRoute(location.hash);
-    if (route.name === 'detail') navigate({ name: 'inbox' });
-    else navigate({ name: 'home' });
+    switch (route.name) {
+      case 'detail':
+        navigate({ name: 'inbox' });
+        return;
+      case 'wikiPage':
+        navigate({ name: 'memory' });
+        return;
+      case 'sessionTranscript':
+        navigate({ name: 'sessions' });
+        return;
+      default:
+        navigate({ name: 'home' });
+    }
   });
 
   window.addEventListener('hashchange', handleHashChange);

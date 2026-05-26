@@ -92,6 +92,6 @@ function buildRow(s: SessionRow): HTMLElement {
     el.appendChild(stats);
   }
 
-  el.addEventListener('click', () => navigate({ name: 'home' }));
+  el.addEventListener('click', () => navigate({ name: 'sessionTranscript', sessionKey: s.key }));
   return el;
 }

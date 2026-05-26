@@ -41,6 +41,11 @@ import (
 // the operator see a meaningful message in the response.
 var errWikiDisabled = errors.New("wiki knowledge base not configured")
 
+// errTranscriptUnavailable surfaces when the miniapp sessions.transcript
+// factory is called before chat init has populated s.toolDeps. Treated as
+// UNAVAILABLE by the handler.
+var errTranscriptUnavailable = errors.New("session transcript store not initialized")
+
 // registerEarlyMethods registers all RPC domains that don't depend on chatHandler.
 // Called after buildHub() but before registerSessionRPCMethods().
 func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) error {
@@ -237,9 +242,19 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			},
 		}),
 
-		// Mini App sessions recent (miniapp.sessions.recent).
+		// Mini App sessions recent + transcript (miniapp.sessions.*).
+		// Transcripts is a lazy factory that reaches into s.toolDeps
+		// once chat init runs (between early and late phase) so it is
+		// safe to register here; calls before chat init resolve to
+		// UNAVAILABLE which is fine for boot-time noise.
 		handlerminiapp.SessionsMethods(handlerminiapp.SessionsDeps{
 			Manager: hub.Sessions(),
+			Transcripts: func() (handlerminiapp.TranscriptLoader, error) {
+				if s.toolDeps == nil || s.toolDeps.Sessions.Transcript == nil {
+					return nil, errTranscriptUnavailable
+				}
+				return s.toolDeps.Sessions.Transcript, nil
+			},
 		}),
 
 		// Mini App Gmail sender context (miniapp.gmail.sender_context).
