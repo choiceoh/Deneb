@@ -281,6 +281,13 @@ func (c *Client) GetAttachment(ctx context.Context, messageID, attachmentID stri
 // text inside a <pre>) doesn't end up showing raw <table>/<div> markup
 // on HTML-only newsletters.
 func extractBody(p *apiPayload) string {
+	return stripMailChrome(extractBodyRaw(p))
+}
+
+// extractBodyRaw returns the decoded body without chrome stripping. Kept
+// separate so the chrome heuristics can be unit-tested in isolation from
+// the multipart walk + base64 decode logic.
+func extractBodyRaw(p *apiPayload) string {
 	if p == nil {
 		return ""
 	}
@@ -450,6 +457,117 @@ func htmlToText(s string) string {
 	}
 	out := htmlBlankRE.ReplaceAllString(b.String(), "\n\n")
 	return strings.TrimSpace(out)
+}
+
+// Marketing-mail chrome heuristics. These run *after* htmlToText so they
+// see the same text the operator sees in the Mini App; that means the
+// preamble/footer cues can be Korean or English (newsletters in this
+// inbox are mixed) and target the rendered visible text rather than HTML.
+//
+// Word-boundary note: Go's `\b` is ASCII-only — Hangul characters fall
+// outside the `\w` class, so `\b<한글>` never matches. English patterns
+// keep `\b` to avoid substring matches; Korean patterns drop it.
+var (
+	// mailPreambleREs — one-line "이메일이 안 보이시면" / "View in
+	// browser" banners that newsletters put at the very top. We only
+	// strip when the match lands inside the first 500 bytes so a
+	// mid-body mention doesn't truncate the actual content.
+	mailPreambleREs = []*regexp.Regexp{
+		regexp.MustCompile(`(?im)^.*\bview\s+(this\s+email\s+)?in\s+(your\s+)?browser\b.*$`),
+		regexp.MustCompile(`(?im)^.*\bview\s+this\s+email\s+online\b.*$`),
+		regexp.MustCompile(`(?im)^.*이메일이?\s*(잘\s*)?(안\s*)?보이지\s*않.*$`),
+		regexp.MustCompile(`(?im)^.*이메일이?\s*제대로\s*보이지\s*않.*$`),
+		regexp.MustCompile(`(?im)^.*웹\s*에서\s*보기.*$`),
+	}
+	// mailFooterREs — unsubscribe/copyright cues. Each pattern is run
+	// independently and the earliest match in the bottom half of the
+	// body wins. The "©" branch matches both `© 2026` and `(c) 2026`.
+	mailFooterREs = []*regexp.Regexp{
+		regexp.MustCompile(`(?im)^.*\b(unsubscribe|email\s+preferences|stop\s+receiving|manage\s+(your\s+)?subscriptions?)\b.*$`),
+		regexp.MustCompile(`(?im)^.*(수신\s*거부|수신거부|구독\s*해지|구독해지|수신\s*동의\s*철회).*$`),
+		regexp.MustCompile(`(?im)^.*(©|\(c\))\s*\d{4}.*$`),
+		regexp.MustCompile(`(?im)^.*\bcopyright\s+(\(c\)|©)?\s*\d{4}.*$`),
+		regexp.MustCompile(`(?im)^.*\ball\s+rights\s+reserved\b.*$`),
+	}
+	// mailSeparatorRE — a line containing only separator characters
+	// (≥5 of them). Marketing templates love these as section dividers,
+	// but in a <pre> view they're noise. Replaced with a blank line so
+	// the trailing blank-line collapser still does its job.
+	mailSeparatorRE = regexp.MustCompile(`(?m)^\s*[\-=_*─━–—•·]{5,}\s*$`)
+)
+
+// stripMailChrome trims marketing chrome (top banner, bottom footer,
+// section separators) from an already-rendered text body. Safe by design:
+// if the heuristics carve away more than 75% of the original, we abandon
+// the cuts and return the input unchanged — better to show a noisy mail
+// than to silently lose content the operator cared about.
+func stripMailChrome(s string) string {
+	if len(s) < 200 {
+		// Short bodies (one-line replies, OTPs, alerts) don't have
+		// chrome to strip and are the population where a misfire
+		// would do the most damage.
+		return s
+	}
+	original := s
+
+	s = stripMailPreamble(s)
+	s = stripMailFooter(s)
+	s = mailSeparatorRE.ReplaceAllString(s, "")
+	s = htmlBlankRE.ReplaceAllString(s, "\n\n")
+	s = strings.TrimSpace(s)
+
+	if len(s) < len(original)/4 {
+		return original
+	}
+	return s
+}
+
+// stripMailPreamble removes everything up to and including the matched
+// "view in browser"–style line, but only when the line sits in the first
+// 500 bytes of the body. Returns the input unchanged on no-match. The
+// first pattern to match wins; we don't try to find the *latest* preamble
+// because that risks chewing into real content.
+func stripMailPreamble(s string) string {
+	const headWindow = 500
+	headEnd := headWindow
+	if headEnd > len(s) {
+		headEnd = len(s)
+	}
+	head := s[:headEnd]
+	for _, re := range mailPreambleREs {
+		if loc := re.FindStringIndex(head); loc != nil {
+			rest := s[loc[1]:]
+			return strings.TrimLeft(rest, "\n \t")
+		}
+	}
+	return s
+}
+
+// stripMailFooter finds the earliest footer cue that sits in the bottom
+// half of the body and discards from there to the end. Bottom-half gate
+// prevents a "Copyright" mention inside the actual content from cutting
+// the body short. Returns the input unchanged when no cue lands in the
+// safe zone.
+func stripMailFooter(s string) string {
+	bottomStart := len(s) / 2
+	cutAt := -1
+	for _, re := range mailFooterREs {
+		// FindAllStringIndex is O(N) but the bodies are at most a
+		// few KB after htmlToText, so this is fine.
+		for _, m := range re.FindAllStringIndex(s, -1) {
+			if m[0] < bottomStart {
+				continue
+			}
+			if cutAt == -1 || m[0] < cutAt {
+				cutAt = m[0]
+			}
+			break
+		}
+	}
+	if cutAt < 0 {
+		return s
+	}
+	return strings.TrimRight(s[:cutAt], " \t\n")
 }
 
 func decodeBase64URL(s string) string {

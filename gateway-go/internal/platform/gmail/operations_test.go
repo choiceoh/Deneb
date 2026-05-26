@@ -158,6 +158,111 @@ func TestExtractBody_Nil(t *testing.T) {
 	}
 }
 
+// stripMailChrome handles a representative subset of the noise we see on
+// real newsletters/auto-mails. Each case is shaped as the rendered text
+// the operator would see after htmlToText.
+func TestStripMailChrome(t *testing.T) {
+	// "Lorem" body padded out so the result clears the 200-byte safety
+	// gate that disables chrome stripping for short bodies (one-line
+	// replies, OTPs, alerts).
+	body := strings.Repeat("이번 주 출시 노트의 주요 변경 사항입니다. ", 8)
+
+	cases := []struct {
+		name     string
+		in       string
+		contains []string // substrings that must survive the strip
+		absent   []string // substrings that must be cut
+	}{
+		{
+			name:     "view-in-browser banner removed (en)",
+			in:       "Not displaying correctly? View in browser.\n\n" + body + "\n",
+			contains: []string{"이번 주 출시"},
+			absent:   []string{"View in browser"},
+		},
+		{
+			name:     "view-in-browser banner removed (ko)",
+			in:       "이메일이 잘 보이지 않으시나요? 웹에서 보기\n\n" + body + "\n",
+			contains: []string{"이번 주 출시"},
+			absent:   []string{"잘 보이지 않", "웹에서 보기"},
+		},
+		{
+			name:     "unsubscribe footer cut",
+			in:       body + "\n\n구독 해지하기\n회사 주소: 서울특별시 강남구\n© 2026 Acme",
+			contains: []string{"이번 주 출시"},
+			absent:   []string{"구독 해지", "© 2026"},
+		},
+		{
+			name:     "copyright footer cut",
+			in:       body + "\n\nCopyright © 2026 Acme Corp. All rights reserved.\nSomeone@example.com",
+			contains: []string{"이번 주 출시"},
+			absent:   []string{"All rights reserved", "Copyright"},
+		},
+		{
+			name:     "english unsubscribe footer cut",
+			in:       body + "\n\nUnsubscribe | Email preferences\nAcme HQ, 1 Market St",
+			contains: []string{"이번 주 출시"},
+			absent:   []string{"Unsubscribe", "Acme HQ"},
+		},
+		{
+			name:     "separator-only lines collapsed",
+			in:       body + "\n──────────────\nSee you next week!\n==========\n" + body,
+			contains: []string{"See you next week"},
+			absent:   []string{"──────────────", "=========="},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := stripMailChrome(tc.in)
+			for _, want := range tc.contains {
+				if !strings.Contains(got, want) {
+					t.Errorf("expected %q to survive; got:\n%s", want, got)
+				}
+			}
+			for _, gone := range tc.absent {
+				if strings.Contains(got, gone) {
+					t.Errorf("expected %q to be stripped; got:\n%s", gone, got)
+				}
+			}
+		})
+	}
+}
+
+// Short bodies must not be touched — OTP/alert mails are tiny and any
+// pattern misfire there would discard the entire content.
+func TestStripMailChrome_ShortBodyUntouched(t *testing.T) {
+	in := "OTP: 123456 — 5분 후 만료됩니다.\nUnsubscribe"
+	got := stripMailChrome(in)
+	if got != in {
+		t.Errorf("short body modified: got %q, want %q", got, in)
+	}
+}
+
+// Safety abort: if heuristics would carve away >75% of the body, return
+// the input unchanged. Built from a synthetic mail whose "real" content
+// is dwarfed by a fake "view in browser" header followed by a single
+// short visible line.
+func TestStripMailChrome_AbortsOnOveraggressiveCut(t *testing.T) {
+	chrome := strings.Repeat("View in browser. ", 30) // 510 bytes of preamble noise
+	visible := "한 줄."                                 // ≤25% of chrome length
+	in := chrome + "\n" + visible
+	got := stripMailChrome(in)
+	if got != in {
+		t.Errorf("expected abort (return input), got %q", got)
+	}
+}
+
+// A footer cue that lands in the *top* half of the body must not cut
+// the message — operators sometimes quote "copyright" wording inside
+// the actual content (e.g., legal review threads).
+func TestStripMailChrome_FooterCueInTopHalfIgnored(t *testing.T) {
+	body := "Copyright © 2025 holder of record.\n" +
+		strings.Repeat("이 메일은 카피라이트 문구의 적법성에 대한 토론입니다. ", 12)
+	got := stripMailChrome(body)
+	if !strings.Contains(got, "Copyright © 2025") {
+		t.Errorf("Copyright mention in top half was wrongly cut; got:\n%s", got)
+	}
+}
+
 // HTML-only newsletters used to leak raw markup into the Mini App's <pre>
 // body view. extractBody should flatten the HTML on both the single-part
 // and the multipart fallback paths.
