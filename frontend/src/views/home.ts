@@ -48,7 +48,14 @@ function paint(
   modelCell.textContent = pingResult.model || '—';
   root.appendChild(status);
 
-  // Domain entry cards. Order matters — fastest-cadence at the top.
+  // Domain entry cards. Order matters — chat goes first now that it's
+  // the primary way to talk to Deneb from the Mini App; everything else
+  // is read-only triage.
+  root.appendChild(
+    buildEntryCard('💬', 'Deneb 채팅', '메시지 입력 → 응답', () =>
+      navigate({ name: 'chat' }),
+    ),
+  );
   root.appendChild(
     buildEntryCard('📧', 'Gmail 트리아지', '최근 미처리 메일 · 읽음/보관', () =>
       navigate({ name: 'inbox' }),

@@ -17,6 +17,7 @@ import { renderMemory } from './views/memory';
 import { renderSessions } from './views/sessions';
 import { renderWikiPage } from './views/wiki_page';
 import { renderSessionTranscript } from './views/session_transcript';
+import { renderChat } from './views/chat';
 
 const root = document.getElementById('app')!;
 let cachedInitData: string | null = null;
@@ -84,6 +85,9 @@ async function dispatch(route: Route): Promise<void> {
       return;
     case 'sessionTranscript':
       await renderSessionTranscript(root, cachedInitData, route.sessionKey);
+      return;
+    case 'chat':
+      renderChat(root, cachedInitData);
       return;
   }
 }
