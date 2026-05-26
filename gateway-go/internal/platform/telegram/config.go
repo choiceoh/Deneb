@@ -63,6 +63,20 @@ type Config struct {
 	TimeoutSeconds int `json:"timeoutSeconds,omitempty"`
 	// Silent disables notification sounds for sent messages.
 	Silent bool `json:"silent,omitempty"`
+
+	// --- WebApp (Telegram Mini App) ---
+
+	// WebAppURL is the public HTTPS URL of the gateway-hosted mini app
+	// (typically the entry route, e.g. "https://deneb.example.com/app/").
+	// When set, the plugin installs a chat menu button that launches this
+	// URL inside Telegram. Empty disables the mini app integration.
+	//
+	// The domain must be registered with @BotFather via /setdomain so
+	// Telegram clients accept the WebApp launch.
+	WebAppURL string `json:"webAppURL,omitempty"`
+	// WebAppMenuLabel overrides the menu button label (max 64 chars).
+	// Empty falls back to "Deneb".
+	WebAppMenuLabel string `json:"webAppMenuLabel,omitempty"`
 }
 
 // EffectiveTimeout returns the timeout in seconds, using the default if not set.
