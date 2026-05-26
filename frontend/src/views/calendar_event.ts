@@ -1,11 +1,22 @@
 // views/calendar_event.ts — Calendar event detail.
 //
-// Shows event metadata (time, location, description, attendees, Meet
-// link). Person-card join, related-mail enrichment, and unresolved-
-// promise extraction land in follow-up PRs.
+// Shows the full event metadata (time, location, description, attendees,
+// conference link) plus a "관련 메일" section that searches Gmail for
+// recent threads involving any non-self attendee, so the user gets the
+// "when + with whom + what we last talked about" context in one screen
+// — the chief-of-staff promise made concrete.
+//
+// Related-mail loading happens AFTER the main detail paints (independent
+// fetch) so a slow Gmail call doesn't block the calendar view. Gmail
+// errors render an inline notice instead of blowing away the page.
 
-import { calendarGet, type CalendarEventDetail, RpcError } from '../rpc';
+import { calendarGet, type CalendarEventDetail, type CalendarAttendee, RpcError } from '../rpc';
+import { listRecent, type GmailMessageRow } from '../gmail';
 import { isCurrentHash, navigate } from '../router';
+import { relativeTime, shortFrom } from '../format';
+
+const RELATED_MAIL_LIMIT = 5;
+const RELATED_MAIL_WINDOW_DAYS = 90;
 
 export async function renderCalendarEvent(
   root: HTMLElement,
@@ -18,7 +29,7 @@ export async function renderCalendarEvent(
   try {
     const ev = await calendarGet(initData, eventId);
     if (!isCurrentHash(expectedHash)) return;
-    paint(root, initData, ev);
+    paint(root, initData, ev, expectedHash);
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
     const msg =
@@ -35,7 +46,12 @@ export async function renderCalendarEvent(
   }
 }
 
-function paint(root: HTMLElement, _initData: string, ev: CalendarEventDetail): void {
+function paint(
+  root: HTMLElement,
+  initData: string,
+  ev: CalendarEventDetail,
+  expectedHash: string,
+): void {
   root.innerHTML = '';
 
   const h1 = document.createElement('h1');
@@ -96,6 +112,16 @@ function paint(root: HTMLElement, _initData: string, ev: CalendarEventDetail): v
     root.appendChild(peopleCard);
   }
 
+  // Related mail — kicked off async after the main detail is painted.
+  // The placeholder card is inserted now so the section position is
+  // stable even if Gmail loads slowly; the fetch fills it in.
+  const counterpartEmails = collectCounterpartEmails(ev);
+  if (counterpartEmails.length > 0) {
+    const relatedCard = buildRelatedMailPlaceholder();
+    root.appendChild(relatedCard);
+    void loadRelatedMail(relatedCard, initData, counterpartEmails, expectedHash);
+  }
+
   if (ev.htmlLink) {
     const a = document.createElement('a');
     a.className = 'link-button';
@@ -111,6 +137,137 @@ function paint(root: HTMLElement, _initData: string, ev: CalendarEventDetail): v
   back.textContent = '← 일정 목록';
   back.addEventListener('click', () => navigate({ name: 'calendar' }));
   root.appendChild(back);
+}
+
+// collectCounterpartEmails returns lowercased emails of non-self
+// attendees. Dedupes so an organizer who is also in attendees doesn't
+// double the Gmail OR-clause.
+function collectCounterpartEmails(ev: CalendarEventDetail): string[] {
+  const seen = new Set<string>();
+  const add = (a?: CalendarAttendee): void => {
+    if (!a || a.self) return;
+    const email = (a.email ?? '').trim().toLowerCase();
+    if (!email) return;
+    seen.add(email);
+  };
+  add(ev.organizer);
+  for (const a of ev.attendees ?? []) add(a);
+  return Array.from(seen);
+}
+
+function buildRelatedMailPlaceholder(): HTMLDivElement {
+  const card = document.createElement('div');
+  card.className = 'card';
+  const label = document.createElement('div');
+  label.className = 'card-label';
+  label.textContent = '관련 메일';
+  card.appendChild(label);
+  const status = document.createElement('div');
+  status.className = 'muted';
+  status.textContent = 'Gmail에서 검색 중…';
+  card.appendChild(status);
+  return card;
+}
+
+async function loadRelatedMail(
+  card: HTMLDivElement,
+  initData: string,
+  emails: string[],
+  expectedHash: string,
+): Promise<void> {
+  const query = buildGmailQuery(emails);
+  try {
+    const { messages } = await listRecent(initData, {
+      query,
+      limit: RELATED_MAIL_LIMIT,
+    });
+    if (!isCurrentHash(expectedHash)) return;
+    renderRelatedMail(card, messages);
+  } catch (err) {
+    if (!isCurrentHash(expectedHash)) return;
+    renderRelatedMailError(card, err);
+  }
+}
+
+// buildGmailQuery joins emails into a Gmail (from:|to:) OR-clause with
+// a 90-day window. Gmail's query parser handles parentheses around the
+// OR-group fine; we cap to a reasonable number of clauses so a 40-
+// person mailing list invite doesn't blow the query length.
+function buildGmailQuery(emails: string[]): string {
+  const MAX_CLAUSES = 8;
+  const picks = emails.slice(0, MAX_CLAUSES);
+  const orClause = picks.map((e) => `from:${e} OR to:${e}`).join(' OR ');
+  return `(${orClause}) newer_than:${RELATED_MAIL_WINDOW_DAYS}d`;
+}
+
+function renderRelatedMail(card: HTMLDivElement, messages: GmailMessageRow[]): void {
+  // Drop the "Gmail에서 검색 중…" placeholder, keep the label.
+  const status = card.querySelector('.muted');
+  if (status) status.remove();
+
+  if (messages.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'muted';
+    empty.textContent = '최근 90일간 관련 메일 없음';
+    card.appendChild(empty);
+    return;
+  }
+
+  for (const m of messages) {
+    card.appendChild(buildMailRow(m));
+  }
+}
+
+function renderRelatedMailError(card: HTMLDivElement, err: unknown): void {
+  const status = card.querySelector('.muted');
+  if (status) status.remove();
+  const notice = document.createElement('div');
+  notice.className = 'muted';
+  if (err instanceof RpcError && err.code === 'UNAVAILABLE') {
+    notice.textContent = 'Gmail이 연결되지 않아 관련 메일을 가져올 수 없습니다';
+  } else {
+    const msg =
+      err instanceof RpcError
+        ? `${err.code} — ${err.message}`
+        : err instanceof Error
+          ? err.message
+          : '알 수 없는 오류';
+    notice.textContent = `관련 메일 로드 실패: ${msg}`;
+  }
+  card.appendChild(notice);
+}
+
+function buildMailRow(m: GmailMessageRow): HTMLElement {
+  const row = document.createElement('button');
+  row.className = 'related-mail-row';
+
+  const top = document.createElement('div');
+  top.className = 'related-mail-top';
+  const subj = document.createElement('span');
+  subj.className = 'related-mail-subject';
+  subj.textContent = m.subject || '(제목 없음)';
+  if (m.isUnread) subj.classList.add('unread');
+  top.appendChild(subj);
+  const when = document.createElement('span');
+  when.className = 'related-mail-time';
+  when.textContent = relativeTime(m.date);
+  top.appendChild(when);
+  row.appendChild(top);
+
+  const meta = document.createElement('div');
+  meta.className = 'related-mail-from';
+  meta.textContent = shortFrom(m.from);
+  row.appendChild(meta);
+
+  if (m.snippet) {
+    const snip = document.createElement('div');
+    snip.className = 'related-mail-snippet';
+    snip.textContent = m.snippet;
+    row.appendChild(snip);
+  }
+
+  row.addEventListener('click', () => navigate({ name: 'detail', messageId: m.id }));
+  return row;
 }
 
 function appendRow(card: HTMLElement, label: string, value: string): void {

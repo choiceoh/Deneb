@@ -841,6 +841,153 @@ pre.transcript-body {
   line-height: 1.5;
 }
 
+/* ---- Calendar list + event detail ---- */
+
+.list-section-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tg-hint, #888);
+  text-transform: none;
+  letter-spacing: 0.02em;
+  margin: 16px 0 6px;
+  padding: 0 2px;
+}
+
+.event-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  background: var(--tg-secondary-bg, #f7f7f7);
+  border: none;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.event-row:active {
+  opacity: 0.7;
+}
+
+.event-row-top {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.event-row-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--tg-link, #2481cc);
+  min-width: 92px;
+}
+
+.event-row-title {
+  flex: 1;
+  font-weight: 500;
+}
+
+.event-row-sub {
+  font-size: 12px;
+  color: var(--tg-hint, #888);
+  padding-left: 102px;
+}
+
+.event-description {
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.attendee-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.attendee-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attendee-status {
+  font-size: 11px;
+  color: var(--tg-hint, #888);
+  margin-left: 8px;
+}
+
+/* ---- Related mail (inside calendar event detail) ---- */
+
+.related-mail-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.15);
+  padding: 8px 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.related-mail-row:last-of-type {
+  border-bottom: none;
+}
+
+.related-mail-row:active {
+  opacity: 0.7;
+}
+
+.related-mail-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.related-mail-subject {
+  font-weight: 500;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.related-mail-subject.unread {
+  font-weight: 700;
+}
+
+.related-mail-time {
+  font-size: 11px;
+  color: var(--tg-hint, #888);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.related-mail-from {
+  font-size: 12px;
+  color: var(--tg-hint, #888);
+}
+
+.related-mail-snippet {
+  font-size: 12px;
+  color: var(--tg-hint, #888);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---- Chat view ---- */
 
 .chat-list {
