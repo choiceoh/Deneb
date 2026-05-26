@@ -201,27 +201,81 @@ button.entry-card:active {
 
 /* ---- Email list rows ---- */
 
-button.email-row {
-  display: block;
-  width: 100%;
+.email-row-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.email-row {
+  flex: 1;
+  min-width: 0;
   background: var(--tg-secondary-bg);
   border: none;
   border-radius: 12px;
   padding: 12px 14px;
-  margin-bottom: 8px;
   color: var(--tg-text);
   text-align: left;
   cursor: pointer;
   font: inherit;
 }
 
-button.email-row:active {
+.email-row:active {
   opacity: 0.85;
 }
 
-.email-row-unread {
+.email-row:focus-visible {
+  outline: 2px solid var(--tg-link);
+  outline-offset: 2px;
+}
+
+.email-row-wrap.email-row-unread .email-row {
   border-left: 3px solid var(--tg-link);
   padding-left: 11px;
+}
+
+.email-row-delete {
+  flex: 0 0 44px;
+  background: var(--tg-secondary-bg);
+  border: none;
+  border-radius: 12px;
+  color: var(--tg-hint);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.email-row-delete:active {
+  opacity: 0.85;
+}
+
+.email-row-delete:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.load-more-button {
+  display: block;
+  width: 100%;
+  margin: 8px 0;
+  padding: 12px;
+  background: var(--tg-secondary-bg);
+  border: none;
+  border-radius: 12px;
+  color: var(--tg-link);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.load-more-button:active {
+  opacity: 0.85;
+}
+
+.load-more-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .email-row-meta {

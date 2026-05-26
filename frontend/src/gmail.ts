@@ -42,6 +42,8 @@ export interface GmailMessageDetail {
 
 interface ListResult {
   messages: GmailMessageRow[];
+  /** Opaque cursor for the next page; empty/missing when no more pages. */
+  nextPageToken?: string;
 }
 
 interface ActionResult {
@@ -51,7 +53,7 @@ interface ActionResult {
 
 export function listRecent(
   initData: string,
-  opts: { query?: string; limit?: number } = {},
+  opts: { query?: string; limit?: number; pageToken?: string } = {},
 ): Promise<ListResult> {
   return call<ListResult>('miniapp.gmail.list_recent', opts, initData);
 }

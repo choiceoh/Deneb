@@ -40,6 +40,7 @@ import (
 // OAuth client.
 type GmailClient interface {
 	Search(ctx context.Context, query string, maxResults int) ([]gmail.MessageSummary, error)
+	SearchPage(ctx context.Context, query, pageToken string, maxResults int) ([]gmail.MessageSummary, string, error)
 	GetMessage(ctx context.Context, messageID string) (*gmail.MessageDetail, error)
 	ModifyLabels(ctx context.Context, messageID string, addNames, removeNames []string) error
 	Trash(ctx context.Context, messageID string) error
@@ -107,8 +108,9 @@ func gmailClientOrErr(deps GmailDeps, reqID string) (GmailClient, *protocol.Resp
 
 func gmailListRecent(deps GmailDeps) rpcutil.HandlerFunc {
 	type params struct {
-		Query string `json:"query,omitempty"`
-		Limit int    `json:"limit,omitempty"`
+		Query     string `json:"query,omitempty"`
+		Limit     int    `json:"limit,omitempty"`
+		PageToken string `json:"pageToken,omitempty"`
 	}
 	type rowOut struct {
 		ID       string   `json:"id"`
@@ -146,7 +148,7 @@ func gmailListRecent(deps GmailDeps) rpcutil.HandlerFunc {
 		if errResp != nil {
 			return errResp
 		}
-		results, err := client.Search(ctx, query, limit)
+		results, nextPageToken, err := client.SearchPage(ctx, query, p.PageToken, limit)
 		if err != nil {
 			// Route through mapGmailError so 403 (Gmail OAuth scope
 			// missing) and 404 stay distinguishable from transient
@@ -168,7 +170,10 @@ func gmailListRecent(deps GmailDeps) rpcutil.HandlerFunc {
 				Labels:   m.Labels,
 			})
 		}
-		return rpcutil.RespondOK(req.ID, map[string]any{"messages": out})
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"messages":      out,
+			"nextPageToken": nextPageToken,
+		})
 	}
 }
 

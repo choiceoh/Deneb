@@ -16,6 +16,7 @@ import (
 // can wire up exactly the behavior it needs.
 type fakeGmailClient struct {
 	searchFn       func(ctx context.Context, query string, maxResults int) ([]gmail.MessageSummary, error)
+	searchPageFn   func(ctx context.Context, query, pageToken string, maxResults int) ([]gmail.MessageSummary, string, error)
 	getMessageFn   func(ctx context.Context, id string) (*gmail.MessageDetail, error)
 	modifyLabelsFn func(ctx context.Context, id string, add, remove []string) error
 	trashFn        func(ctx context.Context, id string) error
@@ -26,6 +27,21 @@ func (f *fakeGmailClient) Search(ctx context.Context, q string, n int) ([]gmail.
 		return nil, errors.New("Search not stubbed")
 	}
 	return f.searchFn(ctx, q, n)
+}
+
+// SearchPage delegates to searchPageFn when set; otherwise it falls back
+// to searchFn with the pageToken ignored, which lets the existing
+// list_recent tests (which only stub searchFn) continue to exercise the
+// handler without each having to plumb an empty nextPageToken.
+func (f *fakeGmailClient) SearchPage(ctx context.Context, q, pageToken string, n int) ([]gmail.MessageSummary, string, error) {
+	if f.searchPageFn != nil {
+		return f.searchPageFn(ctx, q, pageToken, n)
+	}
+	if f.searchFn != nil {
+		out, err := f.searchFn(ctx, q, n)
+		return out, "", err
+	}
+	return nil, "", errors.New("SearchPage not stubbed")
 }
 
 func (f *fakeGmailClient) GetMessage(ctx context.Context, id string) (*gmail.MessageDetail, error) {
@@ -147,6 +163,33 @@ func TestGmailListRecent_RespectsCustomParams(t *testing.T) {
 	}
 	if seenLimit != 5 {
 		t.Errorf("limit = %d, want 5", seenLimit)
+	}
+}
+
+func TestGmailListRecent_PageTokenRoundTrip(t *testing.T) {
+	var seenPageToken string
+	client := &fakeGmailClient{
+		searchPageFn: func(_ context.Context, _, pageToken string, _ int) ([]gmail.MessageSummary, string, error) {
+			seenPageToken = pageToken
+			return []gmail.MessageSummary{{ID: "m2"}}, "next-page-abc", nil
+		},
+	}
+	h := gmailListRecent(depsFor(client))
+
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", map[string]any{
+		"pageToken": "incoming-token-xyz",
+	}))
+	var got struct {
+		Messages      []map[string]any `json:"messages"`
+		NextPageToken string           `json:"nextPageToken"`
+	}
+	decode(t, resp, &got)
+
+	if seenPageToken != "incoming-token-xyz" {
+		t.Errorf("pageToken sent to client = %q, want %q", seenPageToken, "incoming-token-xyz")
+	}
+	if got.NextPageToken != "next-page-abc" {
+		t.Errorf("nextPageToken in response = %q, want %q", got.NextPageToken, "next-page-abc")
 	}
 }
 

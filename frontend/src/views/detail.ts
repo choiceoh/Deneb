@@ -19,6 +19,7 @@ import { RpcError } from '../rpc';
 import { isCurrentHash, navigate } from '../router';
 import { humanSize, relativeTime } from '../format';
 import { renderMarkdown } from '../markdown';
+import { confirmAction } from '../dialog';
 
 export async function renderDetail(
   root: HTMLElement,
@@ -168,7 +169,7 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
   actions.appendChild(archBtn);
 
   const trashBtn = makeAction('🗑 삭제', 'danger', async () => {
-    const ok = await confirmDelete('이 메일을 휴지통으로 옮길까요?');
+    const ok = await confirmAction('이 메일을 휴지통으로 옮길까요?');
     if (!ok) return;
     trashBtn.disabled = true;
     try {
@@ -183,19 +184,6 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
 
   const closeBtn = makeAction('← 닫기', 'primary', () => navigate({ name: 'inbox' }));
   actions.appendChild(closeBtn);
-}
-
-// confirmDelete prefers Telegram's native confirm dialog so the user sees
-// a familiar OS-styled prompt; falls back to window.confirm when running
-// outside Telegram (e.g. local browser dev).
-function confirmDelete(message: string): Promise<boolean> {
-  const tg = window.Telegram?.WebApp;
-  if (tg && typeof tg.showConfirm === 'function') {
-    return new Promise((resolve) => {
-      tg.showConfirm(message, (ok: boolean) => resolve(ok));
-    });
-  }
-  return Promise.resolve(window.confirm(message));
 }
 
 async function runAnalysis(
