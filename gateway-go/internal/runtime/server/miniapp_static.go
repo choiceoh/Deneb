@@ -84,10 +84,11 @@ func (s *Server) serveMiniappStatic(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "asset read failure", http.StatusInternalServerError)
 			return
 		}
-		// SPA fallback: unknown route serves index.html with 200 so
-		// client-side routing can take over. We keep "no-cache" so the
-		// fallback never gets pinned in the browser cache.
-		serveMiniappFile(w, "index.html", true)
+		// SPA fallback: unknown route serves index.html (or, on a fresh
+		// clone where the Vite bundle has not been built, placeholder.html)
+		// with 200 so client-side routing can take over. We keep "no-cache"
+		// so the fallback never gets pinned in the browser cache.
+		serveMiniappIndexOrPlaceholder(w)
 		return
 	}
 
@@ -99,17 +100,24 @@ func (s *Server) serveMiniappStatic(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data) //nolint:gosec // G705: embedded static asset, fixed at compile time
 }
 
-// serveMiniappFile reads a known file (currently only "index.html") and
-// writes it with no-cache headers. Used by the SPA fallback path.
-func serveMiniappFile(w http.ResponseWriter, name string, indexNoCache bool) {
-	data, err := fs.ReadFile(miniappSubFS, name)
-	if err != nil {
-		http.Error(w, "asset missing: "+name, http.StatusInternalServerError)
+// serveMiniappIndexOrPlaceholder serves the Vite-built index.html when it
+// is present in the embedded filesystem, falling back to the committed
+// placeholder when the operator skipped `make embed-frontend`. Either way
+// the response is cacheable-by-revalidation only, so a build-and-redeploy
+// reaches users on next page load.
+func serveMiniappIndexOrPlaceholder(w http.ResponseWriter) {
+	for _, name := range []string{"index.html", "placeholder.html"} {
+		data, err := fs.ReadFile(miniappSubFS, name)
+		if err != nil {
+			continue
+		}
+		writeMiniappHeaders(w, name, false)
+		// G705: embedded static asset, not user input. See note in
+		// serveMiniappStatic.
+		_, _ = w.Write(data) //nolint:gosec // G705: embedded static asset, fixed at compile time
 		return
 	}
-	writeMiniappHeaders(w, name, !indexNoCache && !strings.HasPrefix(name, "assets/"))
-	// G705: see note in serveMiniappStatic — embedded asset, not user input.
-	_, _ = w.Write(data) //nolint:gosec // G705: embedded static asset, fixed at compile time
+	http.Error(w, "mini app entry not embedded", http.StatusInternalServerError)
 }
 
 // writeMiniappHeaders sets Content-Type from the file extension and a cache

@@ -104,6 +104,11 @@ embed-frontend: build-frontend
 	@rm -rf $(MINIAPP_EMBED_DIR).new
 	@mkdir -p $(MINIAPP_EMBED_DIR).new
 	@cp -R frontend/dist/. $(MINIAPP_EMBED_DIR).new/
+	# Preserve the committed placeholder.html so the embed FS always has
+	# a fallback entry point even when the Vite bundle is missing.
+	@if [ -f $(MINIAPP_EMBED_DIR)/placeholder.html ]; then \
+		cp $(MINIAPP_EMBED_DIR)/placeholder.html $(MINIAPP_EMBED_DIR).new/; \
+	fi
 	@rm -rf $(MINIAPP_EMBED_DIR)
 	@mv $(MINIAPP_EMBED_DIR).new $(MINIAPP_EMBED_DIR)
 	@echo "==> Mini App assets embedded; rerun 'make go' to rebuild the binary"
