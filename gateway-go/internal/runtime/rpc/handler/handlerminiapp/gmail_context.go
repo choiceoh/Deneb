@@ -76,6 +76,10 @@ func senderContext(deps GmailContextDeps) rpcutil.HandlerFunc {
 		Count          int    `json:"count"`
 		LastReceivedAt string `json:"lastReceivedAt,omitempty"` // ISO 8601
 		WindowDays     int    `json:"windowDays"`
+		// Truncated is true when `Count` equals the per-request cap —
+		// there could be more matching messages than reported. UI uses
+		// this to render "5+" instead of "5".
+		Truncated bool `json:"truncated,omitempty"`
 	}
 	type out struct {
 		Sender      string       `json:"sender"`
@@ -130,17 +134,28 @@ func senderContext(deps GmailContextDeps) rpcutil.HandlerFunc {
 			if err != nil {
 				resp.Notices = append(resp.Notices, "gmail unavailable: "+err.Error())
 			} else {
-				query := fmt.Sprintf("from:%s newer_than:%dd", email, recentDays)
+				// Quote the email so any operator characters (`-`, `:`,
+				// space-equivalents) in the local part are treated as
+				// part of the address, not as Gmail search syntax.
+				query := fmt.Sprintf("from:%q newer_than:%dd", email, recentDays)
 				results, qerr := client.Search(ctx, query, maxRecent)
 				if qerr != nil {
 					resp.Notices = append(resp.Notices, "gmail search failed: "+qerr.Error())
 				} else {
-					rec := &recentOut{Count: len(results), WindowDays: recentDays}
-					if len(results) > 0 {
-						// Search results are returned newest-first by
-						// Gmail's API; the first row carries the most
-						// recent received timestamp.
-						rec.LastReceivedAt = normalizeDate(results[0].Date)
+					rec := &recentOut{
+						Count:      len(results),
+						WindowDays: recentDays,
+						Truncated:  len(results) == maxRecent,
+					}
+					// Pick the first non-empty Date — Search can stub
+					// summaries with an empty Date when metadata fetch
+					// failed, so index 0 alone is unreliable.
+					for _, r := range results {
+						if strings.TrimSpace(r.Date) == "" {
+							continue
+						}
+						rec.LastReceivedAt = normalizeDate(r.Date)
+						break
 					}
 					resp.Recent = rec
 				}
@@ -184,26 +199,62 @@ func senderContext(deps GmailContextDeps) rpcutil.HandlerFunc {
 // parseSender splits "Display Name <email@host>" into ("email@host",
 // "Display Name"). Tolerant of bare emails ("a@b.com") and bare names
 // ("Alice"). Empty parts are returned as "".
+//
+// **Strict on email**: an extracted candidate is only returned as `email`
+// when it actually looks like one (`looksLikeEmail`). Without this guard
+// inputs like `<noaddr>` or `<alice@x.com newer_than:365d>` would have
+// dropped into the Gmail query verbatim, changing the search semantics or
+// triggering useless API calls. Falls back to treating the input as a
+// display name when no real address is found.
 func parseSender(raw string) (email, display string) {
-	addr, err := mail.ParseAddress(raw)
-	if err == nil {
-		return strings.TrimSpace(addr.Address), strings.TrimSpace(addr.Name)
+	if addr, err := mail.ParseAddress(raw); err == nil {
+		candidate := strings.TrimSpace(addr.Address)
+		if looksLikeEmail(candidate) {
+			return candidate, strings.TrimSpace(addr.Name)
+		}
 	}
 	// Fallback: look for an obvious "<email>" pattern even if
 	// mail.ParseAddress refused (e.g., display name has quoting issues).
 	if i := strings.Index(raw, "<"); i >= 0 {
 		j := strings.Index(raw[i:], ">")
 		if j > 0 {
-			email = strings.TrimSpace(raw[i+1 : i+j])
+			candidate := strings.TrimSpace(raw[i+1 : i+j])
 			display = strings.TrimSpace(raw[:i])
 			display = strings.Trim(display, `"' `)
-			return email, display
+			if looksLikeEmail(candidate) {
+				return candidate, display
+			}
+			// Garbage inside angle brackets — keep the display
+			// hint but skip Gmail lookup.
+			return "", display
 		}
 	}
-	// If it looks like a bare email, treat as email; otherwise treat as
-	// display name.
-	if strings.Contains(raw, "@") && !strings.ContainsAny(raw, " \t") {
+	// Bare email vs bare name.
+	if looksLikeEmail(raw) {
 		return raw, ""
 	}
 	return "", raw
+}
+
+// looksLikeEmail does the minimum validation needed to keep the address
+// safe to drop into a Gmail search query. It is intentionally lax — we
+// trust mail.ParseAddress for full RFC 5322; this guard catches the
+// failure modes that survive the fallback parser (no `@`, embedded
+// whitespace, query operators inside the angle brackets).
+func looksLikeEmail(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	if strings.ContainsAny(s, " \t\r\n\"'`<>") {
+		return false
+	}
+	at := strings.IndexByte(s, '@')
+	if at < 1 || at == len(s)-1 {
+		return false
+	}
+	if strings.IndexByte(s[at+1:], '@') >= 0 {
+		return false
+	}
+	return true
 }

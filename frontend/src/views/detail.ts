@@ -15,7 +15,7 @@ import {
   type SenderContext,
 } from '../gmail';
 import { RpcError } from '../rpc';
-import { navigate } from '../router';
+import { isCurrentHash, navigate } from '../router';
 import { humanSize, relativeTime } from '../format';
 import { renderMarkdown } from '../markdown';
 
@@ -24,10 +24,12 @@ export async function renderDetail(
   initData: string,
   messageId: string,
 ): Promise<void> {
+  const expectedHash = location.hash;
   root.innerHTML = '<div class="loading">메일 불러오는 중…</div>';
 
   try {
     const msg = await getMessage(initData, messageId);
+    if (!isCurrentHash(expectedHash)) return;
     paint(root, initData, msg);
     // Auto mark-read in the background. Ignore the result; if it fails
     // the row keeps its UNREAD style on next list refresh and the user
@@ -35,8 +37,11 @@ export async function renderDetail(
     void markRead(initData, messageId).catch(() => undefined);
     // Fetch sender context in parallel and inject the card once it lands.
     // Errors are non-fatal — the rest of the page is already useful.
-    void hydrateSenderContext(root, initData, msg.from);
+    // `expectedHash` threads the route token through so a stale fetch
+    // never injects the wrong sender's context.
+    void hydrateSenderContext(root, initData, msg.from, expectedHash);
   } catch (err) {
+    if (!isCurrentHash(expectedHash)) return;
     const msgText =
       err instanceof RpcError
         ? `${err.code} — ${err.message}`
@@ -171,6 +176,7 @@ async function runAnalysis(
   msg: GmailMessageDetail,
   button: HTMLButtonElement,
 ): Promise<void> {
+  const expectedHash = location.hash;
   // Find or create the analysis card slot. Re-running the analysis just
   // replaces the previous result in place rather than stacking cards.
   let slot = root.querySelector('[data-role="analysis-slot"]') as HTMLElement | null;
@@ -213,12 +219,16 @@ async function runAnalysis(
   try {
     const result = await analyzeMessage(initData, msg.id);
     window.clearInterval(tick);
+    // Analysis can take 30s-4min on the main LLM; the user may well
+    // have navigated away. Don't repaint into a stale detail view.
+    if (!isCurrentHash(expectedHash)) return;
     slot.innerHTML = '';
     slot.appendChild(buildAnalysisCard(result));
     button.disabled = false;
     button.textContent = '🔍 다시 분석';
   } catch (err) {
     window.clearInterval(tick);
+    if (!isCurrentHash(expectedHash)) return;
     slot.innerHTML = '';
     const banner = document.createElement('div');
     banner.className = 'error';
@@ -266,6 +276,7 @@ async function hydrateSenderContext(
   root: HTMLElement,
   initData: string,
   fromHeader: string,
+  expectedHash: string,
 ): Promise<void> {
   if (!fromHeader) return;
   let ctx: SenderContext;
@@ -276,6 +287,11 @@ async function hydrateSenderContext(
     // user reading the email — leave the slot empty.
     return;
   }
+  // Route-token check: if the user navigated to a different message (or
+  // away from detail entirely) while we were fetching, do nothing. The
+  // querySelector below would otherwise find the NEW message's slot and
+  // inject the OLD sender's context into it.
+  if (!isCurrentHash(expectedHash)) return;
   const slot = root.querySelector('[data-role="sender-context-slot"]');
   if (!slot) return; // Detail view navigated away while we were fetching.
   if (!hasUsefulContext(ctx)) return;

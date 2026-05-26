@@ -6,9 +6,10 @@
 import { recentSessions, type SessionRow } from '../sessions';
 import { RpcError } from '../rpc';
 import { relativeTime } from '../format';
-import { navigate } from '../router';
+import { isCurrentHash, navigate } from '../router';
 
 export async function renderSessions(root: HTMLElement, initData: string): Promise<void> {
+  const expectedHash = location.hash;
   root.innerHTML = '';
 
   const header = document.createElement('div');
@@ -29,6 +30,7 @@ export async function renderSessions(root: HTMLElement, initData: string): Promi
 
   try {
     const { sessions } = await recentSessions(initData, { limit: 20 });
+    if (!isCurrentHash(expectedHash)) return;
     status.remove();
     if (sessions.length === 0) {
       const empty = document.createElement('div');
@@ -41,6 +43,7 @@ export async function renderSessions(root: HTMLElement, initData: string): Promi
       root.appendChild(buildRow(s));
     }
   } catch (err) {
+    if (!isCurrentHash(expectedHash)) return;
     status.remove();
     const msg =
       err instanceof RpcError

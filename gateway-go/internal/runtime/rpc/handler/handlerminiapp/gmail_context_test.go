@@ -13,7 +13,9 @@ import (
 func TestSenderContext_HappyPath(t *testing.T) {
 	gmailClient := &fakeGmailClient{
 		searchFn: func(_ context.Context, q string, n int) ([]gmail.MessageSummary, error) {
-			if q != "from:alice@example.com newer_than:30d" {
+			// Quoted email per the hardening that protects against
+			// addresses with operator characters.
+			if q != `from:"alice@example.com" newer_than:30d` {
 				t.Errorf("query = %q", q)
 			}
 			if n != 50 {
@@ -100,7 +102,7 @@ func TestSenderContext_BareEmail(t *testing.T) {
 	if !resp.OK {
 		t.Fatalf("response error: %+v", resp.Error)
 	}
-	if seenGmailQuery != "from:bare@example.com newer_than:30d" {
+	if seenGmailQuery != `from:"bare@example.com" newer_than:30d` {
 		t.Errorf("gmail query = %q", seenGmailQuery)
 	}
 	// No display name to query → wiki query falls back to raw input.
@@ -240,25 +242,118 @@ func TestGmailContextMethods_NoSourcesReturnsNil(t *testing.T) {
 
 func TestParseSender(t *testing.T) {
 	cases := []struct {
+		name            string
 		in              string
 		wantEmail       string
 		wantDisplayName string
 	}{
-		{`Alice <alice@example.com>`, "alice@example.com", "Alice"},
-		{`"Alice Park" <alice@x.com>`, "alice@x.com", "Alice Park"},
-		{`alice@x.com`, "alice@x.com", ""},
-		{`Alice`, "", "Alice"},
-		{`<noaddr>`, "", "Alice"}, // bogus; sanity-check no crash
+		{"display name + email", `Alice <alice@example.com>`, "alice@example.com", "Alice"},
+		{"quoted display name", `"Alice Park" <alice@x.com>`, "alice@x.com", "Alice Park"},
+		{"bare email", `alice@x.com`, "alice@x.com", ""},
+		{"bare name", `Alice`, "", "Alice"},
+		// Angle-bracket fallback rejects non-emails. Display text
+		// (if any) survives so the wiki query still has something.
+		{"non-email angle brackets", `<noaddr>`, "", ""},
+		{"name + non-email angle", `Bob <not-an-email>`, "", "Bob"},
+		// Address smuggle attempt — embedded space invalidates the
+		// candidate, falls through to display only.
+		{"query smuggle attempt", `<alice@x.com newer_than:365d>`, "", ""},
+		// Double-@ is rejected so weirdly-formed user@host@domain
+		// can't drop into the search.
+		{"double at", `a@b@c.com`, "", "a@b@c.com"},
 	}
 	for _, c := range cases {
-		got1, got2 := parseSender(c.in)
-		if c.in == "<noaddr>" {
-			// just don't panic
-			continue
+		t.Run(c.name, func(t *testing.T) {
+			got1, got2 := parseSender(c.in)
+			if got1 != c.wantEmail || got2 != c.wantDisplayName {
+				t.Errorf("parseSender(%q) = (%q, %q), want (%q, %q)",
+					c.in, got1, got2, c.wantEmail, c.wantDisplayName)
+			}
+		})
+	}
+}
+
+func TestSenderContext_PicksFirstNonEmptyDate(t *testing.T) {
+	gmailClient := &fakeGmailClient{
+		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
+			// Newest-first; first row has empty Date (stubbed
+			// metadata), second is the real most-recent date.
+			return []gmail.MessageSummary{
+				{ID: "m1", Date: ""},
+				{ID: "m2", Date: "Mon, 26 May 2026 14:30:00 +0900"},
+				{ID: "m3", Date: "Sun, 25 May 2026 09:00:00 +0900"},
+			}, nil
+		},
+	}
+	deps := GmailContextDeps{
+		Client: func() (GmailClient, error) { return gmailClient, nil },
+		WikiStore: func() (MemorySearcher, error) {
+			return &fakeMemoryStore{searchFn: func(_ context.Context, _ string, _ int) ([]wiki.SearchResult, error) { return nil, nil }}, nil
+		},
+	}
+	h := senderContext(deps)
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{"sender": "alice@example.com"}))
+
+	var got map[string]any
+	decode(t, resp, &got)
+	recent := got["recent"].(map[string]any)
+	last, _ := recent["lastReceivedAt"].(string)
+	if last == "" {
+		t.Errorf("lastReceivedAt empty — should have picked m2's date")
+	}
+}
+
+func TestSenderContext_TruncatedFlag(t *testing.T) {
+	// 50 results matches MaxRecent default — handler should flag
+	// truncated even though the true total may be higher.
+	results := make([]gmail.MessageSummary, 50)
+	for i := range results {
+		results[i] = gmail.MessageSummary{ID: "m", Date: "Mon, 26 May 2026 14:30:00 +0900"}
+	}
+	gmailClient := &fakeGmailClient{
+		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
+			return results, nil
+		},
+	}
+	deps := GmailContextDeps{
+		Client: func() (GmailClient, error) { return gmailClient, nil },
+		WikiStore: func() (MemorySearcher, error) {
+			return &fakeMemoryStore{searchFn: func(_ context.Context, _ string, _ int) ([]wiki.SearchResult, error) { return nil, nil }}, nil
+		},
+	}
+	h := senderContext(deps)
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{"sender": "alice@example.com"}))
+
+	var got map[string]any
+	decode(t, resp, &got)
+	recent := got["recent"].(map[string]any)
+	if recent["truncated"] != true {
+		t.Errorf("truncated = %v, want true (count == maxRecent)", recent["truncated"])
+	}
+}
+
+func TestLooksLikeEmail(t *testing.T) {
+	good := []string{"a@b.com", "user.name+tag@example.co.kr", "x@y"}
+	bad := []string{
+		"",
+		"   ",
+		"no-at-sign",
+		"@nohost",
+		"nouser@",
+		"user@a@b",
+		"with space@x.com",
+		`quoted"local@x.com`,
+		"angle<inside@x.com",
+		"alice@x.com extra",
+	}
+	for _, s := range good {
+		if !looksLikeEmail(s) {
+			t.Errorf("looksLikeEmail(%q) = false, want true", s)
 		}
-		if got1 != c.wantEmail || got2 != c.wantDisplayName {
-			t.Errorf("parseSender(%q) = (%q, %q), want (%q, %q)",
-				c.in, got1, got2, c.wantEmail, c.wantDisplayName)
+	}
+	for _, s := range bad {
+		if looksLikeEmail(s) {
+			t.Errorf("looksLikeEmail(%q) = true, want false", s)
 		}
 	}
 }

@@ -6,10 +6,11 @@
 
 import { listRecent, type GmailMessageRow } from '../gmail';
 import { RpcError } from '../rpc';
-import { navigate } from '../router';
+import { isCurrentHash, navigate } from '../router';
 import { relativeTime, shortFrom } from '../format';
 
 export async function renderList(root: HTMLElement, initData: string): Promise<void> {
+  const expectedHash = location.hash;
   root.innerHTML = '';
   const header = buildHeader(() => renderList(root, initData));
   root.appendChild(header);
@@ -21,6 +22,7 @@ export async function renderList(root: HTMLElement, initData: string): Promise<v
 
   try {
     const result = await listRecent(initData);
+    if (!isCurrentHash(expectedHash)) return;
     status.remove();
     if (result.messages.length === 0) {
       const empty = document.createElement('div');
@@ -33,6 +35,7 @@ export async function renderList(root: HTMLElement, initData: string): Promise<v
       root.appendChild(buildRow(row));
     }
   } catch (err) {
+    if (!isCurrentHash(expectedHash)) return;
     status.remove();
     const msg =
       err instanceof RpcError
