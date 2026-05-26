@@ -5,24 +5,21 @@
 //
 // Shape:
 //
-//	/restart           → guidance: explains the restart and asks to confirm
-//	/restart 확인       → restart now (SIGUSR1 → graceful shutdown → relaunch)
-//	/restart confirm   → English alias for the confirm path
+//	/restart           → restart now (SIGUSR1 → graceful shutdown → relaunch)
+//	/restart 확인       → same; legacy confirm form kept for muscle memory
+//	/restart confirm   → English alias
 //
 // Korean alias: /재시작 routes here too (see ParseSlashCommand).
 //
 // Restart reuses the same mechanism as the /update execute path: SIGUSR1 →
 // bootstrap.ExitCodeRestart (75) → the supervising wrapper relaunches the
-// gateway. The confirm-word parsing (normalizeConfirmArg) and the signal
-// helper (signalGatewayRestart) are shared with update_dispatch.go.
+// gateway. Single-user deployment, so no confirm gate — /update keeps its
+// gate because it also pulls and rebuilds.
 
 package chat
 
-import "strings"
-
-// handleRestartCommand parses the /restart argument and either explains what
-// a restart does or sends the restart signal. Spawned in a goroutine by the
-// dispatcher so the reply is delivered before graceful shutdown begins.
+// handleRestartCommand sends the restart signal. Spawned in a goroutine by
+// the dispatcher so the reply is delivered before graceful shutdown begins.
 func (h *Handler) handleRestartCommand(delivery *DeliveryContext, rawArgs string) {
 	defer func() {
 		if r := recover(); r != nil && h.logger != nil {
@@ -31,12 +28,7 @@ func (h *Handler) handleRestartCommand(delivery *DeliveryContext, rawArgs string
 	}()
 
 	switch normalizeConfirmArg(rawArgs) {
-	case confirmIntentBare:
-		h.deliverSlashResponse(delivery,
-			"♻️ 게이트웨이를 재시작하면 진행 중인 작업이 중단됩니다.\n"+
-				"재시작하려면 `/restart 확인`을 입력하세요.")
-
-	case confirmIntentYes:
+	case confirmIntentBare, confirmIntentYes:
 		h.logger.Info("restart: requested via /restart slash command")
 		// Deliver the notice before signalling — once SIGUSR1 lands the
 		// gateway begins graceful shutdown and may not be able to reply.
@@ -47,10 +39,6 @@ func (h *Handler) handleRestartCommand(delivery *DeliveryContext, rawArgs string
 		}
 
 	default:
-		h.deliverSlashResponse(delivery, strings.Join([]string{
-			"사용법:",
-			"  /restart — 재시작 안내",
-			"  /restart 확인 — 게이트웨이 재시작",
-		}, "\n"))
+		h.deliverSlashResponse(delivery, "사용법:\n  /restart — 게이트웨이 재시작")
 	}
 }

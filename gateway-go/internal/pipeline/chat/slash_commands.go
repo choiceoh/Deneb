@@ -135,10 +135,10 @@ func ParseSlashCommand(text string) *SlashResult {
 			Command:  "update",
 			Args:     args,
 		}
+	// /restart restarts the gateway immediately (no confirm gate — single-user
+	// deployment). Legacy /restart 확인 still works. Parsed in
+	// restart_dispatch.go. Korean alias /재시작 routes to the same handler.
 	case "restart", "재시작":
-		// Bare /restart explains the restart; /restart 확인 restarts the
-		// gateway. Parsed in restart_dispatch.go. Korean alias /재시작
-		// routes to the same handler.
 		return &SlashResult{
 			Handled:  true,
 			Response: "",
