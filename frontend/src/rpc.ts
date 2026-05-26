@@ -104,3 +104,52 @@ export interface WhoamiResult {
 
 export const ping = (initData: string) => call<PingResult>('miniapp.ping', null, initData);
 export const whoami = (initData: string) => call<WhoamiResult>('miniapp.whoami', null, initData);
+
+// --- Calendar -----------------------------------------------------------
+
+export interface CalendarAttendee {
+  email?: string;
+  displayName?: string;
+  responseStatus?: string;
+  self?: boolean;
+  organizer?: boolean;
+}
+
+// Shared shape: fields the backend emits in BOTH list and detail
+// responses. List adds `hasMeet`; detail adds `description` and
+// `conference`. Splitting them prevents readers from relying on a
+// field that doesn't exist in their response path.
+interface CalendarEventBase {
+  id: string;
+  summary: string;
+  location?: string;
+  start: string; // RFC3339, "" for missing
+  end: string;
+  allDay?: boolean;
+  status?: string;
+  htmlLink?: string;
+  organizer?: CalendarAttendee;
+  attendees?: CalendarAttendee[];
+}
+
+export interface CalendarEventSummary extends CalendarEventBase {
+  hasMeet?: boolean;
+}
+
+export interface CalendarEventDetail extends CalendarEventBase {
+  description?: string;
+  conference?: { solution?: string; uri?: string };
+}
+
+export const calendarListUpcoming = (
+  initData: string,
+  params?: { hoursAhead?: number; limit?: number },
+) =>
+  call<{ events: CalendarEventSummary[] }>(
+    'miniapp.calendar.list_upcoming',
+    params ?? null,
+    initData,
+  );
+
+export const calendarGet = (initData: string, id: string) =>
+  call<CalendarEventDetail>('miniapp.calendar.get', { id }, initData);

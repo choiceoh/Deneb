@@ -48,12 +48,19 @@ function paint(
   modelCell.textContent = pingResult.model || '—';
   root.appendChild(status);
 
-  // Domain entry cards. Order matters — chat goes first now that it's
-  // the primary way to talk to Deneb from the Mini App; everything else
-  // is read-only triage.
+  // Domain entry cards. Order is intentional, by product priority:
+  //   1) chat — primary write surface (you talk to Deneb)
+  //   2) calendar — time-pressured (D-15 pushes need immediate eyeballs)
+  //   3) Gmail — steady-state triage
+  //   4) memory + sessions — reference
   root.appendChild(
     buildEntryCard('💬', 'Deneb 채팅', '메시지 입력 → 응답', () =>
       navigate({ name: 'chat' }),
+    ),
+  );
+  root.appendChild(
+    buildEntryCard('📅', '일정', '다가오는 회의 · D-15분 알림', () =>
+      navigate({ name: 'calendar' }),
     ),
   );
   root.appendChild(

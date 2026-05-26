@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
@@ -224,6 +225,17 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlerminiapp.GmailMethods(handlerminiapp.GmailDeps{
 			Client: func() (handlerminiapp.GmailClient, error) {
 				return gmail.DefaultClient()
+			},
+		}),
+
+		// Mini App Calendar domain (miniapp.calendar.list_upcoming / get).
+		// Same lazy-factory pattern as Gmail — gateway boots without
+		// OAuth tokens configured; per-call UNAVAILABLE until the
+		// operator drops calendar_client.json + calendar_token.json
+		// into ~/.deneb/credentials/.
+		handlerminiapp.CalendarMethods(handlerminiapp.CalendarDeps{
+			Client: func() (handlerminiapp.CalendarClient, error) {
+				return calendar.DefaultClient()
 			},
 		}),
 

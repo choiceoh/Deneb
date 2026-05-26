@@ -130,6 +130,11 @@ type Server struct {
 	// telegram.notify_status RPC is not registered in that case).
 	notify *notifyService
 
+	// calendarBriefing is the D-15min meeting push service. nil when
+	// calendar OAuth tokens or Telegram main chat aren't configured —
+	// safe to call start() unconditionally; the service is a no-op.
+	calendarBriefing *calendarBriefingService
+
 	// logSwap wraps the gateway logger so the notify service can install
 	// an ERROR-mirroring handler after creation. Set once in New(); never
 	// nil if logger is non-nil.
