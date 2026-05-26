@@ -1,0 +1,139 @@
+package handlerminiapp
+
+import (
+	"context"
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
+	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
+)
+
+func newReq(t *testing.T, method string) *protocol.RequestFrame {
+	t.Helper()
+	req, err := protocol.NewRequestFrame("test-1", method, nil)
+	if err != nil {
+		t.Fatalf("NewRequestFrame: %v", err)
+	}
+	return req
+}
+
+func decodePayload(t *testing.T, resp *protocol.ResponseFrame) map[string]any {
+	t.Helper()
+	if resp == nil {
+		t.Fatal("nil response")
+	}
+	if !resp.OK {
+		t.Fatalf("response not OK: code=%s message=%s", resp.Error.Code, resp.Error.Message)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(resp.Payload, &got); err != nil {
+		t.Fatalf("decode payload: %v (raw=%s)", err, string(resp.Payload))
+	}
+	return got
+}
+
+func sampleInitData() *telegram.InitData {
+	return &telegram.InitData{
+		QueryID: "AAH-1",
+		User: &telegram.WebAppUser{
+			ID:           42,
+			FirstName:    "오선택",
+			Username:     "choiceoh",
+			LanguageCode: "ko",
+			IsPremium:    true,
+		},
+		AuthDate: time.Unix(1_700_000_000, 0).UTC(),
+	}
+}
+
+func TestPing_WithInitData(t *testing.T) {
+	h := ping(Deps{Version: "4.22.3"})
+	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+
+	resp := h(ctx, newReq(t, "miniapp.ping"))
+	got := decodePayload(t, resp)
+
+	if got["ok"] != true {
+		t.Errorf("ok = %v, want true", got["ok"])
+	}
+	if got["version"] != "4.22.3" {
+		t.Errorf("version = %v, want 4.22.3", got["version"])
+	}
+	if _, ok := got["tsMs"].(float64); !ok {
+		t.Errorf("tsMs missing or not numeric: %#v", got["tsMs"])
+	}
+}
+
+func TestPing_NoInitData(t *testing.T) {
+	h := ping(Deps{Version: "4.22.3"})
+	resp := h(context.Background(), newReq(t, "miniapp.ping"))
+
+	if resp.OK {
+		t.Fatalf("expected error response, got OK")
+	}
+	if resp.Error.Code != protocol.ErrUnauthorized {
+		t.Errorf("error code = %s, want %s", resp.Error.Code, protocol.ErrUnauthorized)
+	}
+}
+
+func TestWhoami_WithInitData(t *testing.T) {
+	h := whoami()
+	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+
+	resp := h(ctx, newReq(t, "miniapp.whoami"))
+	got := decodePayload(t, resp)
+
+	if id, _ := got["id"].(float64); int64(id) != 42 {
+		t.Errorf("id = %v, want 42", got["id"])
+	}
+	if got["firstName"] != "오선택" {
+		t.Errorf("firstName = %v, want 오선택", got["firstName"])
+	}
+	if got["username"] != "choiceoh" {
+		t.Errorf("username = %v, want choiceoh", got["username"])
+	}
+	if got["isPremium"] != true {
+		t.Errorf("isPremium = %v, want true", got["isPremium"])
+	}
+}
+
+func TestWhoami_NoInitData(t *testing.T) {
+	h := whoami()
+	resp := h(context.Background(), newReq(t, "miniapp.whoami"))
+
+	if resp.OK {
+		t.Fatalf("expected error response, got OK")
+	}
+	if resp.Error.Code != protocol.ErrUnauthorized {
+		t.Errorf("error code = %s, want %s", resp.Error.Code, protocol.ErrUnauthorized)
+	}
+}
+
+func TestWhoami_NoUser(t *testing.T) {
+	data := sampleInitData()
+	data.User = nil
+	h := whoami()
+	ctx := telegram.WithInitDataContext(context.Background(), data)
+
+	resp := h(ctx, newReq(t, "miniapp.whoami"))
+	if resp.OK {
+		t.Fatalf("expected error response, got OK")
+	}
+	if resp.Error.Code != protocol.ErrUnauthorized {
+		t.Errorf("error code = %s, want %s", resp.Error.Code, protocol.ErrUnauthorized)
+	}
+}
+
+func TestMethods_RegistersBothMethods(t *testing.T) {
+	got := Methods(Deps{Version: "x"})
+	for _, name := range []string{"miniapp.ping", "miniapp.whoami"} {
+		if _, ok := got[name]; !ok {
+			t.Errorf("Methods() missing %q", name)
+		}
+	}
+	if len(got) != 2 {
+		t.Errorf("len(Methods()) = %d, want 2", len(got))
+	}
+}
