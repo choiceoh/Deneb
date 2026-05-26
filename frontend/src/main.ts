@@ -1,12 +1,21 @@
-// main.ts — Deneb Mini App entry. PoC: prove the Telegram launch + auth +
-// gateway round-trip path works, then render a card showing the
-// authenticated user and backend health. Domain features (Gmail triage,
-// memory search, etc.) layer on top in later PRs.
+// main.ts — Deneb Mini App entry + router shell.
+//
+// All real rendering lives in views/*.ts. This file:
+//   1. Boots Telegram WebApp SDK and applies its theme params.
+//   2. Validates that initData is present (otherwise show a friendly
+//      "open from Telegram" banner).
+//   3. Routes the current hash to the right view module and listens for
+//      hashchange to re-render on navigation.
+//   4. Manages Telegram's BackButton so it mirrors browser history.
 
 import './styles.css';
-import { ping, whoami, RpcError, type PingResult, type WhoamiResult } from './rpc';
+import { parseRoute, navigate, type Route } from './router';
+import { renderHome } from './views/home';
+import { renderList } from './views/list';
+import { renderDetail } from './views/detail';
 
 const root = document.getElementById('app')!;
+let cachedInitData: string | null = null;
 
 function applyThemeFromTelegram(tg: WebApp): void {
   const params = tg.themeParams;
@@ -37,53 +46,38 @@ function renderError(message: string): void {
   root.appendChild(muted);
 }
 
-function renderReady(user: WhoamiResult, pingResult: PingResult, latencyMs: number): void {
-  root.innerHTML = '';
-  const h1 = document.createElement('h1');
-  h1.textContent = 'Deneb';
-  root.appendChild(h1);
-
-  const auth = document.createElement('div');
-  auth.className = 'card';
-  auth.innerHTML = `
-    <div class="row"><span class="label">Authenticated</span><span class="value ok">✓</span></div>
-    <div class="row"><span class="label">Name</span><span class="value"></span></div>
-    <div class="row"><span class="label">Username</span><span class="value"></span></div>
-  `;
-  const nameRow = auth.querySelectorAll('.value')[1] as HTMLElement;
-  const userRow = auth.querySelectorAll('.value')[2] as HTMLElement;
-  nameRow.textContent =
-    [user.firstName, user.lastName].filter(Boolean).join(' ') || `id=${user.id}`;
-  userRow.textContent = user.username ? `@${user.username}` : '—';
-  root.appendChild(auth);
-
-  const backend = document.createElement('div');
-  backend.className = 'card';
-  backend.innerHTML = `
-    <div class="row"><span class="label">Backend</span><span class="value ok">ok</span></div>
-    <div class="row"><span class="label">Version</span><span class="value"></span></div>
-    <div class="row"><span class="label">Latency</span><span class="value"></span></div>
-  `;
-  const valueCells = backend.querySelectorAll('.value');
-  (valueCells[1] as HTMLElement).textContent = pingResult.version || '(none)';
-  (valueCells[2] as HTMLElement).textContent = `${latencyMs} ms`;
-  root.appendChild(backend);
-
-  const button = document.createElement('button');
-  button.className = 'primary';
-  button.textContent = '새로고침';
-  button.addEventListener('click', () => {
-    void boot();
-  });
-  root.appendChild(button);
-
-  const muted = document.createElement('div');
-  muted.className = 'muted';
-  muted.textContent = `query=${(window.Telegram?.WebApp?.initData ?? '').length}B · 인증=${new Date(user.authDateMs).toLocaleString()}`;
-  root.appendChild(muted);
+function syncBackButton(route: Route): void {
+  const back = window.Telegram?.WebApp?.BackButton;
+  if (!back) return;
+  if (route.name === 'home') {
+    back.hide();
+  } else {
+    back.show();
+  }
 }
 
-async function boot(): Promise<void> {
+async function dispatch(route: Route): Promise<void> {
+  if (!cachedInitData) return;
+  syncBackButton(route);
+  switch (route.name) {
+    case 'home':
+      await renderHome(root, cachedInitData);
+      return;
+    case 'inbox':
+      await renderList(root, cachedInitData);
+      return;
+    case 'detail':
+      await renderDetail(root, cachedInitData, route.messageId);
+      return;
+  }
+}
+
+function handleHashChange(): void {
+  const route = parseRoute(location.hash);
+  void dispatch(route);
+}
+
+function boot(): void {
   const tg = window.Telegram?.WebApp;
   if (!tg) {
     renderError(
@@ -91,7 +85,6 @@ async function boot(): Promise<void> {
     );
     return;
   }
-
   tg.ready();
   applyThemeFromTelegram(tg);
 
@@ -102,21 +95,18 @@ async function boot(): Promise<void> {
     );
     return;
   }
+  cachedInitData = initData;
 
-  try {
-    const t0 = performance.now();
-    const [user, pingResult] = await Promise.all([whoami(initData), ping(initData)]);
-    const latencyMs = Math.round(performance.now() - t0);
-    renderReady(user, pingResult, latencyMs);
-  } catch (err) {
-    const msg =
-      err instanceof RpcError
-        ? `${err.code} — ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : '알 수 없는 오류';
-    renderError(`백엔드 호출 실패: ${msg}`);
-  }
+  // Wire Telegram's BackButton to the router. The back arrow then pops
+  // detail → inbox → home in the order the user navigated.
+  tg.BackButton?.onClick(() => {
+    const route = parseRoute(location.hash);
+    if (route.name === 'detail') navigate({ name: 'inbox' });
+    else if (route.name === 'inbox') navigate({ name: 'home' });
+  });
+
+  window.addEventListener('hashchange', handleHashChange);
+  void dispatch(parseRoute(location.hash));
 }
 
-void boot();
+boot();
