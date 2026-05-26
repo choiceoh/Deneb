@@ -396,6 +396,14 @@ pre.email-body {
   margin-top: 12px;
 }
 
+/* Chat action bar — second row under the primary action bar.
+   In detail.ts the first row holds [읽음/보관/닫기]; this row sits
+   below with [답장/분석/질문] chat buttons. wiki_page.ts and
+   session_transcript.ts use it as a single-button row. */
+.chat-action-bar {
+  margin-top: 8px;
+}
+
 .action-button {
   flex: 1;
   padding: 12px;

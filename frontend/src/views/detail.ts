@@ -194,6 +194,31 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
 
   const closeBtn = makeAction('← 닫기', 'primary', () => navigate({ name: 'inbox' }));
   actions.appendChild(closeBtn);
+
+  // Second action bar: open this mail in chat with an intent-specific
+  // prefill. Sits below the action bar so the row stays clean and
+  // chat-flavored entries are visually grouped. SessionKey is
+  // deterministic (`miniapp-mail:<id>`) so the same mail's chat thread
+  // is preserved across visits.
+  const chatActions = document.createElement('div');
+  chatActions.className = 'action-bar chat-action-bar';
+  root.appendChild(chatActions);
+
+  chatActions.appendChild(
+    makeAction('💬 답장', 'secondary', () =>
+      navigate({ name: 'chat', ctx: { kind: 'mail', id: msg.id, intent: 'reply' } }),
+    ),
+  );
+  chatActions.appendChild(
+    makeAction('💬 분석', 'secondary', () =>
+      navigate({ name: 'chat', ctx: { kind: 'mail', id: msg.id, intent: 'analyze' } }),
+    ),
+  );
+  chatActions.appendChild(
+    makeAction('💬 질문', 'secondary', () =>
+      navigate({ name: 'chat', ctx: { kind: 'mail', id: msg.id, intent: 'question' } }),
+    ),
+  );
 }
 
 async function runAnalysis(
