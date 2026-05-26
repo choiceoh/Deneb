@@ -60,19 +60,22 @@ function paint(
   (backendCells[2] as HTMLElement).textContent = `${latencyMs} ms`;
   root.appendChild(backend);
 
-  // Entry point for the Gmail triage flow. Tap → navigate('inbox').
-  const gmail = document.createElement('button');
-  gmail.className = 'entry-card';
-  gmail.innerHTML = `
-    <span class="entry-emoji">📧</span>
-    <span class="entry-text">
-      <span class="entry-title">Gmail 트리아지</span>
-      <span class="entry-sub">최근 미처리 메일 확인 · 읽음/보관</span>
-    </span>
-    <span class="entry-chevron">›</span>
-  `;
-  gmail.addEventListener('click', () => navigate({ name: 'inbox' }));
-  root.appendChild(gmail);
+  // Domain entry cards. Order matters — fastest-cadence at the top.
+  root.appendChild(
+    buildEntryCard('📧', 'Gmail 트리아지', '최근 미처리 메일 · 읽음/보관', () =>
+      navigate({ name: 'inbox' }),
+    ),
+  );
+  root.appendChild(
+    buildEntryCard('🧠', '메모리 검색', '위키 / 메모리에서 빠른 검색', () =>
+      navigate({ name: 'memory' }),
+    ),
+  );
+  root.appendChild(
+    buildEntryCard('🗂', '최근 세션', '실행 중 / 완료된 에이전트 세션', () =>
+      navigate({ name: 'sessions' }),
+    ),
+  );
 
   const refresh = document.createElement('button');
   refresh.className = 'primary';
@@ -86,6 +89,29 @@ function paint(
   muted.className = 'muted';
   muted.textContent = `query=${initData.length}B · 인증=${new Date(user.authDateMs).toLocaleString('ko-KR')}`;
   root.appendChild(muted);
+}
+
+function buildEntryCard(
+  emoji: string,
+  title: string,
+  sub: string,
+  onClick: () => void,
+): HTMLButtonElement {
+  const card = document.createElement('button');
+  card.className = 'entry-card';
+  card.innerHTML = `
+    <span class="entry-emoji"></span>
+    <span class="entry-text">
+      <span class="entry-title"></span>
+      <span class="entry-sub"></span>
+    </span>
+    <span class="entry-chevron">›</span>
+  `;
+  (card.querySelector('.entry-emoji') as HTMLElement).textContent = emoji;
+  (card.querySelector('.entry-title') as HTMLElement).textContent = title;
+  (card.querySelector('.entry-sub') as HTMLElement).textContent = sub;
+  card.addEventListener('click', onClick);
+  return card;
 }
 
 function renderHomeError(root: HTMLElement, message: string): void {
