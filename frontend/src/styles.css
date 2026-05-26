@@ -691,3 +691,147 @@ button.session-row:active {
 .analysis-card-body strong {
   font-weight: 600;
 }
+
+/* ---- Wiki page detail view ---- */
+
+.wiki-meta {
+  border-left: 3px solid var(--tg-link);
+  padding-left: 13px;
+}
+
+.wiki-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.wiki-summary {
+  font-size: 14px;
+  color: var(--tg-hint);
+  margin-bottom: 8px;
+}
+
+.wiki-meta-tags,
+.wiki-meta-dates {
+  font-size: 12px;
+  color: var(--tg-hint);
+  margin-top: 4px;
+}
+
+.wiki-body {
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.wiki-body h1,
+.wiki-body h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 16px 0 6px;
+}
+
+.wiki-body h1:first-child,
+.wiki-body h2:first-child {
+  margin-top: 0;
+}
+
+.wiki-body h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 12px 0 4px;
+  color: var(--tg-hint);
+}
+
+.wiki-body p {
+  margin: 0 0 8px;
+}
+
+.wiki-body ul,
+.wiki-body ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.wiki-body code {
+  background: var(--tg-bg);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.wiki-related-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tg-hint);
+  margin-bottom: 8px;
+}
+
+button.wiki-related-chip {
+  display: inline-block;
+  background: var(--tg-bg);
+  color: var(--tg-link);
+  border: none;
+  border-radius: 14px;
+  padding: 4px 10px;
+  margin: 2px 4px 2px 0;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+button.wiki-related-chip:active {
+  opacity: 0.7;
+}
+
+/* ---- Session transcript view ---- */
+
+.transcript-key {
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  text-align: left;
+  margin: 0 0 8px;
+  font-size: 11px;
+}
+
+.transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.transcript-message {
+  background: var(--tg-secondary-bg);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.transcript-message.role-user {
+  background: rgba(36, 129, 204, 0.1);
+}
+
+.transcript-message.role-tool_result {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.transcript-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--tg-hint);
+  margin-bottom: 4px;
+}
+
+.transcript-time {
+  font-variant-numeric: tabular-nums;
+}
+
+pre.transcript-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.5;
+}

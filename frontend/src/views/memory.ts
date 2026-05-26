@@ -119,9 +119,6 @@ function buildHit(hit: MemoryHit): HTMLElement {
   meta.textContent = [cat, hit.path, score].filter(Boolean).join(' · ');
   card.appendChild(meta);
 
-  // Tapping a result navigates back home for now — opening a full wiki
-  // page view is left as future work. We keep the card focusable so
-  // screen-reader users can still feel the interaction surface.
-  card.addEventListener('click', () => navigate({ name: 'home' }));
+  card.addEventListener('click', () => navigate({ name: 'wikiPage', path: hit.path }));
   return card;
 }
