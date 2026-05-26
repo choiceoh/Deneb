@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
@@ -291,6 +292,52 @@ func TestSenderContext_OmitsWikiFactsWhenGraphifyReturnsEmpty(t *testing.T) {
 	decode(t, resp, &got)
 	if _, present := got["wikiFacts"]; present {
 		t.Errorf("wikiFacts should be omitted (omitempty) when graphify returns empty; got %v", got["wikiFacts"])
+	}
+}
+
+func TestSenderContext_TimesOutSlowGraphifyButReturnsWiki(t *testing.T) {
+	done := make(chan struct{})
+	deps := GmailContextDeps{
+		WikiStore: func() (MemorySearcher, error) {
+			return &fakeMemoryStore{
+				searchFn: func(_ context.Context, _ string, _ int) ([]wiki.SearchResult, error) {
+					return []wiki.SearchResult{{Path: "alice.md"}}, nil
+				},
+				readPageFn: func(_ string) (*wiki.Page, error) {
+					return &wiki.Page{Meta: wiki.Frontmatter{Title: "Alice"}}, nil
+				},
+			}, nil
+		},
+		SenderFactsTimeout: 10 * time.Millisecond,
+		SenderFacts: func(ctx context.Context, _ string) string {
+			<-ctx.Done()
+			close(done)
+			return "late graphify facts"
+		},
+	}
+	h := senderContext(deps)
+
+	start := time.Now()
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+		"sender": "Alice <alice@example.com>",
+	}))
+	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+		t.Fatalf("sender_context waited too long for graphify: %s", elapsed)
+	}
+
+	var got map[string]any
+	decode(t, resp, &got)
+	hits, _ := got["wikiHits"].([]any)
+	if len(hits) != 1 {
+		t.Fatalf("wiki hits should still be returned when graphify times out: %+v", got)
+	}
+	if _, present := got["wikiFacts"]; present {
+		t.Errorf("wikiFacts should be omitted after graphify timeout; got %v", got["wikiFacts"])
+	}
+	select {
+	case <-done:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("SenderFacts context was not cancelled after timeout")
 	}
 }
 
