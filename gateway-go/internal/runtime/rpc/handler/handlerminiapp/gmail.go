@@ -6,6 +6,7 @@
 //	miniapp.gmail.get          — full message body + headers + attachments
 //	miniapp.gmail.mark_read    — remove the UNREAD label
 //	miniapp.gmail.archive      — remove the INBOX label
+//	miniapp.gmail.trash        — move the message to Gmail's Trash folder
 //
 // Every method assumes the request already passed initData verification
 // (the HTTP bridge in server_http_miniapp.go enforces that before the
@@ -41,6 +42,7 @@ type GmailClient interface {
 	Search(ctx context.Context, query string, maxResults int) ([]gmail.MessageSummary, error)
 	GetMessage(ctx context.Context, messageID string) (*gmail.MessageDetail, error)
 	ModifyLabels(ctx context.Context, messageID string, addNames, removeNames []string) error
+	Trash(ctx context.Context, messageID string) error
 }
 
 // GmailDeps groups the values the handlers need at registration time.
@@ -53,9 +55,10 @@ type GmailDeps struct {
 }
 
 // Default list query and limit applied when the Mini App omits them.
-// Tuned for triage: recent + unread, single screenful.
+// Tuned for triage: everything received in the last week (read or
+// unread), single screenful.
 const (
-	defaultGmailQuery    = "is:unread newer_than:7d"
+	defaultGmailQuery    = "in:inbox newer_than:7d"
 	defaultGmailLimit    = 20
 	maxGmailLimit        = 100
 	maxGmailBodyChars    = 3000
@@ -76,6 +79,7 @@ func GmailMethods(deps GmailDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.gmail.get":         gmailGet(deps),
 		"miniapp.gmail.mark_read":   gmailMarkRead(deps),
 		"miniapp.gmail.archive":     gmailArchive(deps),
+		"miniapp.gmail.trash":       gmailTrash(deps),
 	}
 }
 
@@ -251,6 +255,37 @@ func gmailMarkRead(deps GmailDeps) rpcutil.HandlerFunc {
 
 func gmailArchive(deps GmailDeps) rpcutil.HandlerFunc {
 	return modifyLabelsHandler(deps, []string{labelInbox})
+}
+
+// gmailTrash moves a message to Trash via Gmail's dedicated /trash
+// endpoint (rather than ModifyLabels add=TRASH) so we skip a label-ID
+// lookup round-trip and stay aligned with how the Gmail web client
+// performs deletes — recoverable from the user's Trash UI for ~30 days.
+func gmailTrash(deps GmailDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ID string `json:"id"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		p, errResp := rpcutil.DecodeParams[params](req)
+		if errResp != nil {
+			return errResp
+		}
+		if strings.TrimSpace(p.ID) == "" {
+			return rpcerr.MissingParam("id").Response(req.ID)
+		}
+
+		client, errResp := gmailClientOrErr(deps, req.ID)
+		if errResp != nil {
+			return errResp
+		}
+		if err := client.Trash(ctx, p.ID); err != nil {
+			return mapGmailError(req.ID, "gmail trash failed", err)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true})
+	}
 }
 
 // modifyLabelsHandler builds a handler that removes the given labels from

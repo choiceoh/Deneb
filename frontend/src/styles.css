@@ -359,6 +359,11 @@ pre.email-body {
   color: var(--tg-text);
 }
 
+.action-danger {
+  background: var(--tg-destructive, #d93025);
+  color: #ffffff;
+}
+
 .flash {
   margin-top: 8px;
   padding: 8px 12px;

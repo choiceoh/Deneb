@@ -1,4 +1,4 @@
-// views/detail.ts — single-message view with [읽음] / [보관] / [닫기] actions.
+// views/detail.ts — single-message view with [읽음] / [보관] / [삭제] / [닫기] actions.
 //
 // Auto-fires miniapp.gmail.mark_read on entry (fire-and-forget) so the
 // message stops cluttering the inbox after the user opens it. Explicit
@@ -11,6 +11,7 @@ import {
   getMessage,
   markRead,
   senderContext,
+  trash,
   type GmailMessageDetail,
   type SenderContext,
 } from '../gmail';
@@ -166,8 +167,35 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
   });
   actions.appendChild(archBtn);
 
+  const trashBtn = makeAction('🗑 삭제', 'danger', async () => {
+    const ok = await confirmDelete('이 메일을 휴지통으로 옮길까요?');
+    if (!ok) return;
+    trashBtn.disabled = true;
+    try {
+      await trash(initData, msg.id);
+      navigate({ name: 'inbox' });
+    } catch (err) {
+      flash(actions, `삭제 실패: ${err instanceof Error ? err.message : err}`);
+      trashBtn.disabled = false;
+    }
+  });
+  actions.appendChild(trashBtn);
+
   const closeBtn = makeAction('← 닫기', 'primary', () => navigate({ name: 'inbox' }));
   actions.appendChild(closeBtn);
+}
+
+// confirmDelete prefers Telegram's native confirm dialog so the user sees
+// a familiar OS-styled prompt; falls back to window.confirm when running
+// outside Telegram (e.g. local browser dev).
+function confirmDelete(message: string): Promise<boolean> {
+  const tg = window.Telegram?.WebApp;
+  if (tg && typeof tg.showConfirm === 'function') {
+    return new Promise((resolve) => {
+      tg.showConfirm(message, (ok: boolean) => resolve(ok));
+    });
+  }
+  return Promise.resolve(window.confirm(message));
 }
 
 async function runAnalysis(
@@ -367,7 +395,7 @@ function hasUsefulContext(ctx: SenderContext): boolean {
 
 function makeAction(
   label: string,
-  variant: 'primary' | 'secondary',
+  variant: 'primary' | 'secondary' | 'danger',
   onClick: () => void | Promise<void>,
 ): HTMLButtonElement {
   const btn = document.createElement('button');

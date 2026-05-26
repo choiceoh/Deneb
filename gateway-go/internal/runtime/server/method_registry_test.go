@@ -126,6 +126,7 @@ var requiredMethods = []string{
 	"miniapp.gmail.get",
 	"miniapp.gmail.mark_read",
 	"miniapp.gmail.archive",
+	"miniapp.gmail.trash",
 	"miniapp.gmail.sender_context",
 	// miniapp.gmail.analyze is conditional on an LLM client being
 	// configured (modelRegistry.Client(RoleMain) returning non-nil) —
