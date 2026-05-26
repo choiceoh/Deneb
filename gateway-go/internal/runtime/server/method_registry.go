@@ -17,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
@@ -270,8 +271,9 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		}),
 
 		// Mini App Gmail sender context (miniapp.gmail.sender_context).
-		// Combines Gmail recent-activity query with wiki memory lookup
-		// so the Mini App detail view can show a contextual sender card.
+		// Combines Gmail recent-activity query, wiki memory lookup, and
+		// wiki-graph traversal (graphify CLI) so the Mini App detail
+		// view can show a contextual sender card.
 		handlerminiapp.GmailContextMethods(handlerminiapp.GmailContextDeps{
 			Client: func() (handlerminiapp.GmailClient, error) {
 				return gmail.DefaultClient()
@@ -283,6 +285,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return store, nil
 			},
+			SenderFacts: gmailpoll.ExtractSenderFacts,
 		}),
 	}
 

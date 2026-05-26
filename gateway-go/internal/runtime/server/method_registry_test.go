@@ -134,11 +134,9 @@ var requiredMethods = []string{
 	"miniapp.chat.send",
 	"miniapp.sessions.recent",
 	"miniapp.sessions.transcript",
-	// miniapp.memory.* methods are conditional on wiki being enabled
-	// (DENEB_WIKI_ENABLED) — not in required list, matching wiki.* pattern.
-	// miniapp.memory.search is conditional on wiki being enabled
-	// (DENEB_WIKI_ENABLED) — not in the required list, matching the
-	// existing wiki.* exclusion above.
+	// miniapp.memory.{search,get_page} are conditional on wiki being
+	// enabled (DENEB_WIKI_ENABLED) — omitted here, matching the wiki.*
+	// exclusion above.
 
 	// Gateway builtins.
 	"status",

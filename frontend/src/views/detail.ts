@@ -373,6 +373,23 @@ async function hydrateSenderContext(
     card.appendChild(wiki);
   }
 
+  // wikiFacts is the graphify-CLI snapshot — free-form Korean text
+  // about the sender's network (relationships, deals, decisions). The
+  // backend already truncated; the UI renders as a quote block.
+  if (ctx.wikiFacts) {
+    const facts = document.createElement('div');
+    facts.className = 'sender-context-facts';
+    const label = document.createElement('div');
+    label.className = 'sender-context-wiki-label';
+    label.textContent = '메모리 그래프';
+    facts.appendChild(label);
+    const body = document.createElement('pre');
+    body.className = 'sender-context-facts-body';
+    body.textContent = ctx.wikiFacts;
+    facts.appendChild(body);
+    card.appendChild(facts);
+  }
+
   if (ctx.notices && ctx.notices.length > 0) {
     const notice = document.createElement('div');
     notice.className = 'sender-context-notice';
@@ -386,6 +403,7 @@ async function hydrateSenderContext(
 function hasUsefulContext(ctx: SenderContext): boolean {
   if (ctx.recent && ctx.recent.count > 0) return true;
   if (ctx.wikiHits.length > 0) return true;
+  if (ctx.wikiFacts && ctx.wikiFacts.trim() !== '') return true;
   // If only notices came back (both sources unavailable), don't render a
   // banner-on-every-mail — the user can't act on it from this surface.
   return false;
