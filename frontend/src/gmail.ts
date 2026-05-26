@@ -96,6 +96,8 @@ export interface SenderContext {
   displayName?: string;
   recent?: SenderRecent;
   wikiHits: SenderWikiHit[];
+  /** Free-form wiki-graph snapshot from graphify CLI. Omitted when empty. */
+  wikiFacts?: string;
   notices?: string[];
 }
 

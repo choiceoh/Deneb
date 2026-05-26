@@ -18,7 +18,7 @@
 // The hash check alone is insufficient because an inbox refresh leaves
 // the hash identical but replaces rowsContainer.
 
-import { listRecent, trash, type GmailMessageRow } from '../gmail';
+import { archive, listRecent, markRead, trash, type GmailMessageRow } from '../gmail';
 import { RpcError } from '../rpc';
 import { isCurrentHash, navigate } from '../router';
 import { confirmAction } from '../dialog';
@@ -136,8 +136,43 @@ function buildRow(row: GmailMessageRow, initData: string, expectedHash: string):
   });
   wrap.appendChild(main);
 
+  // Inline action stack. Order matches the detail-view action bar so the
+  // gesture is consistent: read first (lightest), archive (removes from
+  // inbox), delete (destructive).
+  const actions = document.createElement('div');
+  actions.className = 'email-row-actions';
+
+  // 📌 읽음: only meaningful if the row is currently unread. We still
+  // render the button when read (greyed out via disabled) so the layout
+  // doesn't reflow between rows.
+  const readBtn = document.createElement('button');
+  readBtn.className = 'email-row-action';
+  readBtn.type = 'button';
+  readBtn.setAttribute('aria-label', '읽음');
+  readBtn.textContent = '📌';
+  if (!row.isUnread) {
+    readBtn.disabled = true;
+    readBtn.title = '이미 읽음';
+  }
+  readBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    void handleRowMarkRead(wrap, readBtn, row, initData, expectedHash);
+  });
+  actions.appendChild(readBtn);
+
+  const archBtn = document.createElement('button');
+  archBtn.className = 'email-row-action';
+  archBtn.type = 'button';
+  archBtn.setAttribute('aria-label', '보관');
+  archBtn.textContent = '📁';
+  archBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    void handleRowArchive(wrap, archBtn, row, initData, expectedHash);
+  });
+  actions.appendChild(archBtn);
+
   const del = document.createElement('button');
-  del.className = 'email-row-delete';
+  del.className = 'email-row-action email-row-action-danger';
   del.type = 'button';
   del.setAttribute('aria-label', '삭제');
   del.textContent = '🗑';
@@ -145,9 +180,69 @@ function buildRow(row: GmailMessageRow, initData: string, expectedHash: string):
     e.stopPropagation();
     void handleRowDelete(wrap, del, row, initData, expectedHash);
   });
-  wrap.appendChild(del);
+  actions.appendChild(del);
+
+  wrap.appendChild(actions);
 
   return wrap;
+}
+
+// handleRowMarkRead: in-place toggle. No confirm dialog — mark-read is
+// non-destructive (the operator can always re-mark unread from Gmail
+// directly), and a confirm on every click would defeat the "one-tap
+// triage" point of inline actions. On success the row stays in place but
+// loses its unread border + the button greys out.
+async function handleRowMarkRead(
+  wrap: HTMLElement,
+  button: HTMLButtonElement,
+  row: GmailMessageRow,
+  initData: string,
+  expectedHash: string,
+): Promise<void> {
+  if (wrap.dataset.navigating === '1' || !isCurrentHash(expectedHash) || !wrap.isConnected) {
+    return;
+  }
+  if (button.disabled) return;
+  button.disabled = true;
+  try {
+    await markRead(initData, row.id);
+    if (!wrap.isConnected) return;
+    wrap.classList.remove('email-row-unread');
+    button.title = '이미 읽음';
+    row.isUnread = false;
+  } catch (err) {
+    button.disabled = false;
+    const msg = err instanceof RpcError ? err.message : err instanceof Error ? err.message : err;
+    flashNear(wrap, `읽음 처리 실패: ${msg}`);
+  }
+}
+
+// handleRowArchive: also no confirm. Archiving in Gmail is reversible
+// (the message returns to the inbox if anyone replies, and the operator
+// can search `in:all from:...` to find it), so the speed of one-tap
+// archive beats the safety of a confirm. trash gets the confirm because
+// it moves to a 30-day-then-gone bucket.
+async function handleRowArchive(
+  wrap: HTMLElement,
+  button: HTMLButtonElement,
+  row: GmailMessageRow,
+  initData: string,
+  expectedHash: string,
+): Promise<void> {
+  if (wrap.dataset.navigating === '1' || !isCurrentHash(expectedHash) || !wrap.isConnected) {
+    return;
+  }
+  if (button.disabled) return;
+  button.disabled = true;
+  try {
+    await archive(initData, row.id);
+    if (!wrap.isConnected) return;
+    wrap.remove();
+  } catch (err) {
+    button.disabled = false;
+    const msg = err instanceof RpcError ? err.message : err instanceof Error ? err.message : err;
+    flashNear(wrap, `보관 실패: ${msg}`);
+  }
 }
 
 async function handleRowDelete(

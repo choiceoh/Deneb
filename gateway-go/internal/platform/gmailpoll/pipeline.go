@@ -437,6 +437,17 @@ func extractWikiGraphContext(ctx context.Context, msg *gmail.MessageDetail) Memo
 	return MemoryContext{SenderFacts: facts}
 }
 
+// ExtractSenderFacts is the exported entry point for callers that need a
+// wiki-graph snapshot for a single sender (Mini App sender_context handler).
+// Takes a Gmail "From" header value verbatim (the unexported worker
+// handles display-name extraction) and returns the graphify query result
+// truncated to maxSenderFactsChars. Returns "" on any failure (graphify
+// not installed, graph not yet built, query timeout, no result) so
+// callers can treat empty as "no facts" without special-casing.
+func ExtractSenderFacts(ctx context.Context, from string) string {
+	return extractWikiGraphContext(ctx, &gmail.MessageDetail{From: from}).SenderFacts
+}
+
 // extractDisplayName returns the display name portion of "Name <email>",
 // stripping surrounding quotes; falls back to the email address if no name is
 // present. Used to seed wiki-graph queries with whatever the human typically

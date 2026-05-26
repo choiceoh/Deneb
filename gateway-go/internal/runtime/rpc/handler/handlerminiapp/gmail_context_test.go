@@ -3,6 +3,7 @@ package handlerminiapp
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
@@ -237,6 +238,59 @@ func TestSenderContext_WikiDownStillReturnsRecent(t *testing.T) {
 func TestGmailContextMethods_NoSourcesReturnsNil(t *testing.T) {
 	if got := GmailContextMethods(GmailContextDeps{}); got != nil {
 		t.Errorf("expected nil when no sources wired, got %v", got)
+	}
+}
+
+func TestSenderContext_IncludesWikiFactsFromGraphify(t *testing.T) {
+	var seenFrom string
+	deps := GmailContextDeps{
+		WikiStore: func() (MemorySearcher, error) {
+			return &fakeMemoryStore{
+				searchFn: func(_ context.Context, _ string, _ int) ([]wiki.SearchResult, error) {
+					return nil, nil
+				},
+			}, nil
+		},
+		SenderFacts: func(_ context.Context, from string) string {
+			seenFrom = from
+			return "Alice 는 Acme 의 영업 담당. 최근 결정: 2026Q2 계약 검토."
+		},
+	}
+	h := senderContext(deps)
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+		"sender": "Alice <alice@example.com>",
+	}))
+
+	var got map[string]any
+	decode(t, resp, &got)
+	if seenFrom != "Alice <alice@example.com>" {
+		t.Errorf("SenderFacts seen From = %q, want raw header verbatim", seenFrom)
+	}
+	if facts, _ := got["wikiFacts"].(string); facts == "" || !strings.Contains(facts, "Acme") {
+		t.Errorf("wikiFacts missing or wrong: %v", got["wikiFacts"])
+	}
+}
+
+func TestSenderContext_OmitsWikiFactsWhenGraphifyReturnsEmpty(t *testing.T) {
+	deps := GmailContextDeps{
+		WikiStore: func() (MemorySearcher, error) {
+			return &fakeMemoryStore{
+				searchFn: func(_ context.Context, _ string, _ int) ([]wiki.SearchResult, error) {
+					return nil, nil
+				},
+			}, nil
+		},
+		// Common production case: graphify not installed → "".
+		SenderFacts: func(_ context.Context, _ string) string { return "" },
+	}
+	h := senderContext(deps)
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+		"sender": "Alice <alice@example.com>",
+	}))
+	var got map[string]any
+	decode(t, resp, &got)
+	if _, present := got["wikiFacts"]; present {
+		t.Errorf("wikiFacts should be omitted (omitempty) when graphify returns empty; got %v", got["wikiFacts"])
 	}
 }
 

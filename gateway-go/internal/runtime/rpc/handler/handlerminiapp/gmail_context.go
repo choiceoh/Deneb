@@ -38,23 +38,30 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// GmailContextDeps groups the two factories the handler needs. Both can
-// fail at construction (no OAuth / no wiki) — the handler then surfaces
-// UNAVAILABLE for that source and still returns whatever the other source
-// produced.
+// GmailContextDeps groups the factories the handler needs. Any of them
+// can fail at construction (no OAuth / no wiki / no graphify) — the
+// handler then surfaces a notice for that source and still returns
+// whatever the others produced.
+//
+// SenderFacts is the wiki-graph traversal injected from
+// gmailpoll.ExtractSenderFacts. It runs an external `graphify` CLI with
+// a 10s timeout, so it intentionally lives behind a function pointer:
+// the handler stays testable, and a deployment without graphify just
+// hands in a stub that returns "" (or omits the field entirely).
 type GmailContextDeps struct {
 	Client      func() (GmailClient, error)
 	WikiStore   func() (MemorySearcher, error)
+	SenderFacts func(ctx context.Context, from string) string
 	RecentDays  int // Lookback window for "from:<email> newer_than:..."; 0 → 30.
 	MaxRecent   int // Cap on Gmail.Search results; 0 → 50.
 	MaxWikiHits int // Cap on wiki search results; 0 → 5.
 }
 
 // GmailContextMethods returns the miniapp.gmail.sender_context handler.
-// Returns nil if neither source is wired — the gateway then skips
-// registration cleanly.
+// Returns nil if no source is wired — the gateway then skips registration
+// cleanly.
 func GmailContextMethods(deps GmailContextDeps) map[string]rpcutil.HandlerFunc {
-	if deps.Client == nil && deps.WikiStore == nil {
+	if deps.Client == nil && deps.WikiStore == nil && deps.SenderFacts == nil {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
@@ -87,6 +94,11 @@ func senderContext(deps GmailContextDeps) rpcutil.HandlerFunc {
 		DisplayName string       `json:"displayName,omitempty"`
 		Recent      *recentOut   `json:"recent,omitempty"`
 		WikiHits    []wikiHitOut `json:"wikiHits"`
+		// WikiFacts is the free-form graphify-CLI snapshot of what's
+		// known about the sender (relationships, recent deals/decisions
+		// in the wiki graph). Empty when graphify is unavailable, the
+		// graph isn't built, or the sender isn't in the graph.
+		WikiFacts string `json:"wikiFacts,omitempty"`
 		// Notes the handler attaches when a source was unavailable so
 		// the client can render "wiki not configured" hints instead of
 		// silently empty cards.
@@ -190,6 +202,16 @@ func senderContext(deps GmailContextDeps) rpcutil.HandlerFunc {
 					}
 				}
 			}
+		}
+
+		// --- Wiki-graph traversal (graphify CLI) ---
+		// Best-effort, ~10s budget. The factory function itself swallows
+		// failures and returns "" so no notice is generated for the
+		// common "graphify not installed" case; missing facts just
+		// don't render. Skipped entirely when there's no factory or
+		// the sender input was unparseable.
+		if deps.SenderFacts != nil && raw != "" {
+			resp.WikiFacts = deps.SenderFacts(ctx, raw)
 		}
 
 		return rpcutil.RespondOK(req.ID, resp)

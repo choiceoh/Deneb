@@ -235,24 +235,36 @@ button.entry-card:active {
   padding-left: 11px;
 }
 
-.email-row-delete {
+.email-row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   flex: 0 0 44px;
-  background: var(--tg-secondary-bg);
-  border: none;
-  border-radius: 12px;
-  color: var(--tg-hint);
-  font-size: 18px;
-  cursor: pointer;
-  padding: 0;
 }
 
-.email-row-delete:active {
+.email-row-action {
+  flex: 1 1 0;
+  background: var(--tg-secondary-bg);
+  border: none;
+  border-radius: 10px;
+  color: var(--tg-hint);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0;
+  min-height: 32px;
+}
+
+.email-row-action:active {
   opacity: 0.85;
 }
 
-.email-row-delete:disabled {
-  opacity: 0.4;
+.email-row-action:disabled {
+  opacity: 0.35;
   cursor: not-allowed;
+}
+
+.email-row-action-danger:active {
+  opacity: 0.7;
 }
 
 .load-more-button {
@@ -613,6 +625,25 @@ button.session-row:active {
   color: var(--tg-hint);
   margin-top: 2px;
   line-height: 1.4;
+}
+
+.sender-context-facts {
+  margin-top: 8px;
+}
+
+pre.sender-context-facts-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--tg-text);
+  background: var(--tg-bg);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 0;
+  max-height: 180px;
+  overflow-y: auto;
 }
 
 .sender-context-notice {
