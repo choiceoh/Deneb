@@ -114,8 +114,22 @@ export interface AnalyzeResult {
   date?: string;
   analysis: string;
   durationMs: number;
+  // cached=true when the gateway returned a previously stored analysis
+  // instead of running the LLM again. createdAt is the wall-clock time
+  // the analysis was first produced (ISO 8601, UTC). Both fields are
+  // always present in v2+ responses; older callers tolerate omission.
+  cached?: boolean;
+  createdAt?: string;
 }
 
-export function analyzeMessage(initData: string, id: string): Promise<AnalyzeResult> {
-  return call<AnalyzeResult>('miniapp.gmail.analyze', { id }, initData);
+// analyzeMessage runs (or fetches the cached) LLM analysis for an email.
+// Pass force=true to bypass the cache and force a fresh LLM call — the
+// "🔄 다시 분석" button uses this; the default "🔍 분석" tap lets the
+// gateway serve from cache when available.
+export function analyzeMessage(
+  initData: string,
+  id: string,
+  force = false,
+): Promise<AnalyzeResult> {
+  return call<AnalyzeResult>('miniapp.gmail.analyze', { id, force }, initData);
 }

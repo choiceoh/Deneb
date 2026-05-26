@@ -713,6 +713,30 @@ pre.sender-context-facts-body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Per-card "다시 분석" button — visually subordinate to the action-bar
+   primary buttons (smaller, secondary surface) so it reads as a
+   refinement of the existing card, not a new action. */
+.analysis-card-refresh {
+  align-self: flex-end;
+  margin-top: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  background: var(--tg-secondary-bg);
+  color: var(--tg-text);
+  border: 1px solid var(--tg-section-separator, rgba(0, 0, 0, 0.1));
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.analysis-card-refresh:active {
+  opacity: 0.7;
+}
+
+.analysis-card-refresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .analysis-card-body {
   font-size: 14px;
   line-height: 1.6;

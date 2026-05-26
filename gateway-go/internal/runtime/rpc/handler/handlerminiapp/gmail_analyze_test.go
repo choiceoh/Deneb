@@ -167,6 +167,156 @@ func TestGmailAnalyze_PipelineFactoryError(t *testing.T) {
 	}
 }
 
+// Cache hit short-circuits before client/pipeline are touched. Verified by
+// returning errors from both factories — if the handler reaches them, the
+// test fails. Also confirms the wiki sink is NOT invoked on a hit (we don't
+// want to re-write the wiki page every time the operator reopens the mail).
+func TestGmailAnalyze_CacheHit_SkipsLLMAndWiki(t *testing.T) {
+	cacheDir := t.TempDir()
+	cache := NewAnalysisStore(cacheDir)
+	if err := cache.save(&analysisRecord{
+		MsgID:         "m1",
+		Subject:       "stored subject",
+		From:          "cached@example.com",
+		Date:          "2026-05-27T10:00:00Z",
+		Analysis:      "## 저장된 분석\n캐시에서 나왔다.",
+		DurationMs:    42,
+		PromptVersion: AnalysisPromptVersion,
+	}); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+
+	wikiCalls := 0
+	deps := GmailAnalyzeDeps{
+		Client: func() (GmailClient, error) {
+			t.Fatal("client factory must not be called on cache hit")
+			return nil, nil
+		},
+		Pipeline: func() (AnalyzePipeline, error) {
+			t.Fatal("pipeline factory must not be called on cache hit")
+			return nil, nil
+		},
+		Cache: cache,
+		SaveToWiki: func(WikiAnalysisInput) error {
+			wikiCalls++
+			return nil
+		},
+	}
+	h := gmailAnalyze(deps)
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m1"}))
+	if !resp.OK {
+		t.Fatalf("expected OK on cache hit, got error %+v", resp.Error)
+	}
+	var got map[string]any
+	decode(t, resp, &got)
+	if cached, _ := got["cached"].(bool); !cached {
+		t.Errorf("cached flag = %v, want true", got["cached"])
+	}
+	if got["subject"] != "stored subject" {
+		t.Errorf("subject = %q, want from cache", got["subject"])
+	}
+	if wikiCalls != 0 {
+		t.Errorf("wiki sink called %d times on cache hit, want 0", wikiCalls)
+	}
+}
+
+// Cache miss → LLM runs → result persisted to both cache and wiki.
+func TestGmailAnalyze_CacheMiss_RunsLLMAndPersists(t *testing.T) {
+	cache := NewAnalysisStore(t.TempDir())
+
+	pipelineCalls := 0
+	pipeline := &fakeAnalyzePipeline{
+		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (string, error) {
+			pipelineCalls++
+			return "## 새로 생성\n신규 분석.", nil
+		},
+	}
+	gmailClient := &fakeGmailClient{
+		getMessageFn: func(_ context.Context, id string) (*gmail.MessageDetail, error) {
+			return &gmail.MessageDetail{
+				ID: id, From: "n@e.com", Subject: "Fresh",
+				Date: "Mon, 26 May 2026 14:30:00 +0900",
+			}, nil
+		},
+	}
+	var wikiSeen *WikiAnalysisInput
+	deps := analyzeDeps(gmailClient, pipeline)
+	deps.Cache = cache
+	deps.SaveToWiki = func(in WikiAnalysisInput) error {
+		wikiSeen = &in
+		return nil
+	}
+	h := gmailAnalyze(deps)
+
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m2"}))
+	var got map[string]any
+	decode(t, resp, &got)
+	if !resp.OK {
+		t.Fatalf("expected OK, got %+v", resp.Error)
+	}
+	if pipelineCalls != 1 {
+		t.Errorf("pipeline calls = %d, want 1", pipelineCalls)
+	}
+	if cached, _ := got["cached"].(bool); cached {
+		t.Errorf("cached flag = true on fresh run, want false")
+	}
+	if wikiSeen == nil || wikiSeen.MsgID != "m2" {
+		t.Errorf("wiki sink not invoked with correct payload: %+v", wikiSeen)
+	}
+
+	// Cache file should now exist and serve a follow-up call.
+	stored, err := cache.load("m2")
+	if err != nil || stored == nil {
+		t.Fatalf("cache not populated: err=%v stored=%+v", err, stored)
+	}
+	if stored.Analysis != "## 새로 생성\n신규 분석." {
+		t.Errorf("stored analysis = %q", stored.Analysis)
+	}
+}
+
+// force=true must bypass the cache and re-run the LLM, replacing the
+// stored copy with the fresh result.
+func TestGmailAnalyze_Force_BypassesCache(t *testing.T) {
+	cache := NewAnalysisStore(t.TempDir())
+	if err := cache.save(&analysisRecord{
+		MsgID:         "m3",
+		Analysis:      "stale analysis",
+		PromptVersion: AnalysisPromptVersion,
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	pipelineCalls := 0
+	pipeline := &fakeAnalyzePipeline{
+		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (string, error) {
+			pipelineCalls++
+			return "fresh analysis", nil
+		},
+	}
+	gmailClient := &fakeGmailClient{
+		getMessageFn: func(_ context.Context, id string) (*gmail.MessageDetail, error) {
+			return &gmail.MessageDetail{ID: id, Subject: "S"}, nil
+		},
+	}
+	deps := analyzeDeps(gmailClient, pipeline)
+	deps.Cache = cache
+	h := gmailAnalyze(deps)
+
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{
+		"id": "m3", "force": true,
+	}))
+	if !resp.OK {
+		t.Fatalf("expected OK, got %+v", resp.Error)
+	}
+	if pipelineCalls != 1 {
+		t.Errorf("pipeline calls = %d, want 1 (cache must be bypassed)", pipelineCalls)
+	}
+	stored, _ := cache.load("m3")
+	if stored == nil || stored.Analysis != "fresh analysis" {
+		t.Errorf("cache not refreshed: %+v", stored)
+	}
+}
+
 func TestGmailAnalyzeMethods_MissingDepsReturnsNil(t *testing.T) {
 	if got := GmailAnalyzeMethods(GmailAnalyzeDeps{}); got != nil {
 		t.Errorf("expected nil when no deps wired, got %v", got)

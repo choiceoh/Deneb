@@ -140,7 +140,7 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
   root.appendChild(actions);
 
   const analyzeBtn = makeAction('🔍 분석', 'secondary', async () => {
-    void runAnalysis(root, initData, msg, analyzeBtn);
+    void runAnalysis(root, initData, msg, analyzeBtn, false);
   });
   actions.appendChild(analyzeBtn);
 
@@ -201,6 +201,7 @@ async function runAnalysis(
   initData: string,
   msg: GmailMessageDetail,
   button: HTMLButtonElement,
+  force: boolean,
 ): Promise<void> {
   const expectedHash = location.hash;
   // Find or create the analysis card slot. Re-running the analysis just
@@ -235,7 +236,8 @@ async function runAnalysis(
   slot.appendChild(loading);
 
   // Tick the elapsed counter so the operator knows the request is still
-  // alive on slow LLM responses.
+  // alive on slow LLM responses. Cached results return in ~10ms so the
+  // counter usually never gets to "1s" before being cleared.
   const elapsedEl = loading.querySelector('.analysis-loading-elapsed') as HTMLElement;
   const tick = window.setInterval(() => {
     const sec = Math.round((performance.now() - start) / 1000);
@@ -243,15 +245,22 @@ async function runAnalysis(
   }, 1000);
 
   try {
-    const result = await analyzeMessage(initData, msg.id);
+    const result = await analyzeMessage(initData, msg.id, force);
     window.clearInterval(tick);
     // Analysis can take 30s-4min on the main LLM; the user may well
     // have navigated away. Don't repaint into a stale detail view.
     if (!isCurrentHash(expectedHash)) return;
     slot.innerHTML = '';
-    slot.appendChild(buildAnalysisCard(result));
+    // The card owns the "다시 분석" affordance now, so the action-bar
+    // button just snaps back to its original label. Disabling it would
+    // be redundant — the card refresh button covers the re-run case.
+    slot.appendChild(
+      buildAnalysisCard(result, () => {
+        void runAnalysis(root, initData, msg, button, true);
+      }),
+    );
     button.disabled = false;
-    button.textContent = '🔍 다시 분석';
+    button.textContent = originalLabel ?? '🔍 분석';
   } catch (err) {
     window.clearInterval(tick);
     if (!isCurrentHash(expectedHash)) return;
@@ -271,21 +280,36 @@ async function runAnalysis(
   }
 }
 
-function buildAnalysisCard(result: {
-  analysis: string;
-  durationMs: number;
-}): HTMLElement {
+function buildAnalysisCard(
+  result: {
+    analysis: string;
+    durationMs: number;
+    cached?: boolean;
+    createdAt?: string;
+  },
+  onRefresh: () => void,
+): HTMLElement {
   const card = document.createElement('div');
   card.className = 'card analysis-card';
 
   const header = document.createElement('div');
   header.className = 'analysis-card-header';
-  const seconds = Math.round(result.durationMs / 1000);
+  // Cached results show "저장된 분석 · <relative time>"; fresh runs
+  // show the wall-clock duration the LLM took. Two distinct labels so
+  // the operator can tell at a glance whether they're spending tokens
+  // every time they reopen the email.
+  let metaText: string;
+  if (result.cached && result.createdAt) {
+    metaText = `저장된 분석 · ${relativeTime(result.createdAt)}`;
+  } else {
+    const seconds = Math.round(result.durationMs / 1000);
+    metaText = `${seconds}s`;
+  }
   header.innerHTML = `
     <span class="analysis-card-title">🔍 분석</span>
     <span class="analysis-card-meta"></span>
   `;
-  (header.querySelector('.analysis-card-meta') as HTMLElement).textContent = `${seconds}s`;
+  (header.querySelector('.analysis-card-meta') as HTMLElement).textContent = metaText;
   card.appendChild(header);
 
   const body = document.createElement('div');
@@ -294,6 +318,16 @@ function buildAnalysisCard(result: {
   // renderMarkdown guards against any HTML it might emit by accident.
   body.innerHTML = renderMarkdown(result.analysis);
   card.appendChild(body);
+
+  // Per-card refresh keeps the affordance next to the analysis itself
+  // (visually closer to "what the user wants to redo" than the
+  // bottom action bar). Single tap → force=true LLM re-run.
+  const refreshBtn = document.createElement('button');
+  refreshBtn.className = 'analysis-card-refresh';
+  refreshBtn.type = 'button';
+  refreshBtn.textContent = '🔄 다시 분석';
+  refreshBtn.addEventListener('click', onRefresh);
+  card.appendChild(refreshBtn);
 
   return card;
 }

@@ -40,13 +40,28 @@ type AnalyzePipeline interface {
 	Analyze(ctx context.Context, msg *gmail.MessageDetail) (string, error)
 }
 
+// WikiAnalysisInput is the payload the handler hands to SaveToWiki when a
+// fresh analysis succeeds. Kept as a flat struct so the handler stays
+// ignorant of the wiki package's frontmatter/page types.
+type WikiAnalysisInput struct {
+	MsgID    string
+	Subject  string
+	From     string
+	Date     string
+	Analysis string
+}
+
 // GmailAnalyzeDeps groups the factories the handler needs. Client supplies
 // the Gmail OAuth client; Pipeline supplies the analysis driver
 // (production wires it to `gmailpoll.AnalyzeEmailPipeline` with a real
-// LLM client + main model).
+// LLM client + main model). Cache and SaveToWiki are optional; nil/zero
+// values disable cache lookups and wiki persistence respectively so the
+// handler keeps working when those subsystems aren't wired yet.
 type GmailAnalyzeDeps struct {
-	Client   func() (GmailClient, error)
-	Pipeline func() (AnalyzePipeline, error)
+	Client     func() (GmailClient, error)
+	Pipeline   func() (AnalyzePipeline, error)
+	Cache      *AnalysisStore
+	SaveToWiki func(in WikiAnalysisInput) error
 }
 
 // GmailAnalyzeMethods returns the miniapp.gmail.analyze handler. Returns
@@ -63,15 +78,18 @@ func GmailAnalyzeMethods(deps GmailAnalyzeDeps) map[string]rpcutil.HandlerFunc {
 
 func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 	type params struct {
-		ID string `json:"id"`
+		ID    string `json:"id"`
+		Force bool   `json:"force,omitempty"`
 	}
 	type out struct {
-		ID         string `json:"id"`
-		Subject    string `json:"subject,omitempty"`
-		From       string `json:"from,omitempty"`
-		Date       string `json:"date,omitempty"`
-		Analysis   string `json:"analysis"`
-		DurationMs int64  `json:"durationMs"`
+		ID         string    `json:"id"`
+		Subject    string    `json:"subject,omitempty"`
+		From       string    `json:"from,omitempty"`
+		Date       string    `json:"date,omitempty"`
+		Analysis   string    `json:"analysis"`
+		DurationMs int64     `json:"durationMs"`
+		Cached     bool      `json:"cached"`
+		CreatedAt  time.Time `json:"createdAt"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
@@ -85,6 +103,24 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 		}
 		if strings.TrimSpace(p.ID) == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
+		}
+
+		// Cache lookup. force=true skips it so "🔄 다시 분석" always
+		// re-runs the LLM. Load errors are logged-and-ignored so a
+		// corrupt cache file never blocks a fresh run.
+		if !p.Force && deps.Cache != nil {
+			if rec, err := deps.Cache.load(p.ID); err == nil && rec != nil {
+				return rpcutil.RespondOK(req.ID, out{
+					ID:         rec.MsgID,
+					Subject:    rec.Subject,
+					From:       rec.From,
+					Date:       rec.Date,
+					Analysis:   rec.Analysis,
+					DurationMs: rec.DurationMs,
+					Cached:     true,
+					CreatedAt:  rec.CreatedAt,
+				})
+			}
 		}
 
 		client, err := deps.Client()
@@ -114,13 +150,42 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 			return rpcerr.Unavailable("analysis returned empty result").Response(req.ID)
 		}
 
+		date := normalizeDate(msg.Date)
+		now := time.Now().UTC()
+		rec := &analysisRecord{
+			MsgID:         msg.ID,
+			Subject:       msg.Subject,
+			From:          msg.From,
+			Date:          date,
+			Analysis:      analysis,
+			DurationMs:    dur.Milliseconds(),
+			PromptVersion: AnalysisPromptVersion,
+			CreatedAt:     now,
+		}
+		// Persistence is best-effort. A working LLM result must not be
+		// surfaced as a failure just because disk or wiki write blipped.
+		if deps.Cache != nil {
+			_ = deps.Cache.save(rec)
+		}
+		if deps.SaveToWiki != nil {
+			_ = deps.SaveToWiki(WikiAnalysisInput{
+				MsgID:    msg.ID,
+				Subject:  msg.Subject,
+				From:     msg.From,
+				Date:     date,
+				Analysis: analysis,
+			})
+		}
+
 		return rpcutil.RespondOK(req.ID, out{
 			ID:         msg.ID,
 			Subject:    msg.Subject,
 			From:       msg.From,
-			Date:       normalizeDate(msg.Date),
+			Date:       date,
 			Analysis:   analysis,
 			DurationMs: dur.Milliseconds(),
+			Cached:     false,
+			CreatedAt:  now,
 		})
 	}
 }
