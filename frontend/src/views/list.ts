@@ -8,8 +8,15 @@
 //
 // Pagination: the backend returns nextPageToken; when non-empty we show
 // a "더 보기" button at the bottom that fetches the next page and appends
-// its rows. Token is tracked in module-scoped closure state for the
-// current render only — re-rendering (refresh) clobbers it, as intended.
+// its rows. The token is passed through each mountLoadMore call (no
+// module-scoped state) so a refresh or navigation that replaces
+// rowsContainer cleanly orphans any in-flight pagination work.
+//
+// Stale-render guards: every async handler that mutates the DOM checks
+// both isCurrentHash (route didn't change) AND container.isConnected
+// (the specific container it captured is still in the document tree).
+// The hash check alone is insufficient because an inbox refresh leaves
+// the hash identical but replaces rowsContainer.
 
 import { listRecent, trash, type GmailMessageRow } from '../gmail';
 import { RpcError } from '../rpc';
@@ -47,7 +54,7 @@ export async function renderList(root: HTMLElement, initData: string): Promise<v
       return;
     }
     for (const row of result.messages) {
-      rowsContainer.appendChild(buildRow(row, initData));
+      rowsContainer.appendChild(buildRow(row, initData, expectedHash));
     }
     if (result.nextPageToken) {
       mountLoadMore(rowsContainer, initData, result.nextPageToken, expectedHash);
@@ -79,7 +86,7 @@ function buildHeader(onRefresh: () => void): HTMLElement {
   return wrap;
 }
 
-function buildRow(row: GmailMessageRow, initData: string): HTMLElement {
+function buildRow(row: GmailMessageRow, initData: string, expectedHash: string): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'email-row-wrap';
   if (row.isUnread) wrap.classList.add('email-row-unread');
@@ -109,9 +116,19 @@ function buildRow(row: GmailMessageRow, initData: string): HTMLElement {
   snippet.textContent = row.snippet || '';
   main.appendChild(snippet);
 
-  const openDetail = () => navigate({ name: 'detail', messageId: row.id });
+  // Set the inert flag the moment we initiate a navigation so a quick
+  // second tap on the 🗑 button can't fire a delete against the row
+  // the user has already left.
+  const openDetail = () => {
+    wrap.dataset.navigating = '1';
+    navigate({ name: 'detail', messageId: row.id });
+  };
   main.addEventListener('click', openDetail);
   main.addEventListener('keydown', (e) => {
+    // e.repeat guards against held Space/Enter spamming navigate(); a
+    // native <button> handles repeat at the OS level, but we lost that
+    // when switching to a div role=button.
+    if (e.repeat) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       openDetail();
@@ -121,11 +138,12 @@ function buildRow(row: GmailMessageRow, initData: string): HTMLElement {
 
   const del = document.createElement('button');
   del.className = 'email-row-delete';
+  del.type = 'button';
   del.setAttribute('aria-label', '삭제');
   del.textContent = '🗑';
   del.addEventListener('click', (e) => {
     e.stopPropagation();
-    void handleRowDelete(wrap, del, row, initData);
+    void handleRowDelete(wrap, del, row, initData, expectedHash);
   });
   wrap.appendChild(del);
 
@@ -137,13 +155,33 @@ async function handleRowDelete(
   button: HTMLButtonElement,
   row: GmailMessageRow,
   initData: string,
+  expectedHash: string,
 ): Promise<void> {
-  const subjectPreview = (row.subject || '(제목 없음)').slice(0, 40);
-  const ok = await confirmAction(`"${subjectPreview}" 메일을 휴지통으로 옮길까요?`);
-  if (!ok) return;
-
+  // Bail if we got here from a tap that landed on 🗑 AFTER a tap on
+  // the main row started navigating away — the user shouldn't have a
+  // background delete fire against the email they just opened.
+  if (wrap.dataset.navigating === '1' || !isCurrentHash(expectedHash) || !wrap.isConnected) {
+    return;
+  }
+  // Disable BEFORE awaiting confirm: a double-tap on 🗑 would otherwise
+  // queue two confirm dialogs (or one dialog + one already-resolved
+  // path) and fire two trash RPCs — the second hits 404 and the error
+  // path flashes on a detached node.
+  if (button.disabled) return;
   button.disabled = true;
   try {
+    const subjectPreview = (row.subject || '(제목 없음)').slice(0, 40);
+    const ok = await confirmAction(`"${subjectPreview}" 메일을 휴지통으로 옮길까요?`);
+    if (!ok) {
+      button.disabled = false;
+      return;
+    }
+    // Re-check after the modal: the user may have navigated away
+    // while the confirm dialog was up.
+    if (!isCurrentHash(expectedHash) || !wrap.isConnected) {
+      button.disabled = false;
+      return;
+    }
     await trash(initData, row.id);
     wrap.remove();
   } catch (err) {
@@ -166,6 +204,7 @@ function mountLoadMore(
 ): void {
   const btn = document.createElement('button');
   btn.className = 'load-more-button';
+  btn.type = 'button';
   btn.textContent = '더 보기';
   btn.addEventListener('click', async () => {
     btn.disabled = true;
@@ -173,16 +212,20 @@ function mountLoadMore(
     btn.textContent = '불러오는 중…';
     try {
       const result = await listRecent(initData, { pageToken });
-      if (!isCurrentHash(expectedHash)) return;
+      // Hash AND container-attachment check: an inbox → detail →
+      // inbox round-trip leaves the hash identical but replaces
+      // rowsContainer, so isCurrentHash alone would still pass and
+      // we'd silently append rows into an orphaned subtree.
+      if (!isCurrentHash(expectedHash) || !container.isConnected) return;
       btn.remove();
       for (const row of result.messages) {
-        container.appendChild(buildRow(row, initData));
+        container.appendChild(buildRow(row, initData, expectedHash));
       }
       if (result.nextPageToken) {
         mountLoadMore(container, initData, result.nextPageToken, expectedHash);
       }
     } catch (err) {
-      if (!isCurrentHash(expectedHash)) return;
+      if (!isCurrentHash(expectedHash) || !container.isConnected) return;
       btn.disabled = false;
       btn.textContent = originalLabel ?? '더 보기';
       const msg =
@@ -198,11 +241,21 @@ function mountLoadMore(
 }
 
 function flashNear(anchor: HTMLElement, message: string): void {
-  const existing = anchor.parentElement?.querySelector(':scope > .flash');
-  if (existing) existing.remove();
+  // Scope dedup to "the flash that belongs to THIS anchor" (its
+  // immediate next sibling) — using a parent-wide selector like
+  // `:scope > .flash` would let a row-delete flash wipe an unrelated
+  // load-more flash and vice-versa, since both anchors share
+  // rowsContainer as parent.
+  const next = anchor.nextElementSibling;
+  if (next?.classList.contains('flash')) {
+    next.remove();
+  }
   const f = document.createElement('div');
   f.className = 'flash';
   f.textContent = message;
   anchor.after(f);
+  // Guard against removing a node that was moved/re-parented by a
+  // later refresh — element.remove() on an already-detached node is a
+  // no-op so this is safe.
   setTimeout(() => f.remove(), 2500);
 }
