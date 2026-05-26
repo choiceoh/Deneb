@@ -122,6 +122,10 @@ var requiredMethods = []string{
 	// Mini App (Telegram).
 	"miniapp.ping",
 	"miniapp.whoami",
+	"miniapp.gmail.list_recent",
+	"miniapp.gmail.get",
+	"miniapp.gmail.mark_read",
+	"miniapp.gmail.archive",
 
 	// Gateway builtins.
 	"status",

@@ -114,3 +114,257 @@ button.primary:active {
   margin-top: 16px;
   text-align: center;
 }
+
+.loading {
+  text-align: center;
+  color: var(--tg-hint);
+  padding: 32px 0;
+  font-size: 14px;
+}
+
+/* ---- Home: domain entry cards (Gmail, future memory/sessions, etc.) ---- */
+
+button.entry-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  background: var(--tg-secondary-bg);
+  border: none;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  color: var(--tg-text);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+button.entry-card:active {
+  opacity: 0.85;
+}
+
+.entry-emoji {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.entry-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 2px;
+}
+
+.entry-title {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.entry-sub {
+  color: var(--tg-hint);
+  font-size: 12px;
+}
+
+.entry-chevron {
+  color: var(--tg-hint);
+  font-size: 22px;
+  line-height: 1;
+}
+
+/* ---- View header (inbox + detail) ---- */
+
+.view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.view-title {
+  font-weight: 600;
+  font-size: 17px;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--tg-link);
+  font: inherit;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.link-button:active {
+  opacity: 0.65;
+}
+
+/* ---- Email list rows ---- */
+
+button.email-row {
+  display: block;
+  width: 100%;
+  background: var(--tg-secondary-bg);
+  border: none;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  color: var(--tg-text);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+button.email-row:active {
+  opacity: 0.85;
+}
+
+.email-row-unread {
+  border-left: 3px solid var(--tg-link);
+  padding-left: 11px;
+}
+
+.email-row-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.email-row-from {
+  font-weight: 600;
+  color: var(--tg-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 70%;
+}
+
+.email-row-time {
+  color: var(--tg-hint);
+  flex-shrink: 0;
+}
+
+.email-row-subject {
+  font-size: 14px;
+  margin: 2px 0;
+  color: var(--tg-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.email-row-snippet {
+  font-size: 13px;
+  color: var(--tg-hint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--tg-hint);
+  padding: 64px 16px 32px;
+  font-size: 14px;
+}
+
+/* ---- Email detail ---- */
+
+.email-subject {
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.attachments .label {
+  color: var(--tg-hint);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.attachment-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.attachment-icon {
+  font-size: 16px;
+}
+
+.attachment-name {
+  flex: 1;
+  color: var(--tg-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-size {
+  color: var(--tg-hint);
+}
+
+pre.email-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 14px;
+  background: var(--tg-secondary-bg);
+  border-radius: 12px;
+  padding: 14px;
+  margin: 0 0 12px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+/* ---- Action bar in detail view ---- */
+
+.action-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.action-button {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.action-button:active {
+  opacity: 0.85;
+}
+
+.action-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-primary {
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+}
+
+.action-secondary {
+  background: var(--tg-secondary-bg);
+  color: var(--tg-text);
+}
+
+.flash {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--tg-secondary-bg);
+  color: var(--tg-hint);
+  font-size: 13px;
+  text-align: center;
+}

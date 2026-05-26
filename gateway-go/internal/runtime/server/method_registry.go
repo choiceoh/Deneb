@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
@@ -186,6 +187,17 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// methods read the authenticated user from context via
 		// telegram.InitDataFromContext.
 		handlerminiapp.Methods(handlerminiapp.Deps{Version: hub.Version()}),
+
+		// Mini App Gmail domain (miniapp.gmail.list_recent / get /
+		// mark_read / archive). Lazy factory around gmail.DefaultClient
+		// — if OAuth tokens are missing the gateway still starts; the
+		// RPC just returns UNAVAILABLE until the operator runs the
+		// Gmail auth flow.
+		handlerminiapp.GmailMethods(handlerminiapp.GmailDeps{
+			Client: func() (handlerminiapp.GmailClient, error) {
+				return gmail.DefaultClient()
+			},
+		}),
 	}
 
 	// Conditional: provider methods.
