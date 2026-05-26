@@ -158,7 +158,7 @@ func (p *Plugin) Start(ctx context.Context) error {
 			label = "Deneb"
 		}
 		if err := p.client.SetMenuButtonWebApp(ctx, 0, label, url); err != nil {
-			p.logger.Warn("telegram setMenuButton failed", "error", err, "url", url)
+			p.logger.Warn("telegram setChatMenuButton failed", "error", err, "url", url)
 		} else {
 			p.logger.Info("telegram WebApp menu button installed", "url", url, "label", label)
 		}

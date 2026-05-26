@@ -15,7 +15,8 @@ Layout:
 Telegram API methods implemented (subset that the gateway uses):
     getMe, getUpdates (long-poll), sendMessage, editMessageText,
     deleteMessage, sendChatAction, setMessageReaction, answerCallbackQuery,
-    setMyCommands, getMyCommands, setChatMenuButton (alias: setMenuButton),
+    setMyCommands, getMyCommands, setChatMenuButton (legacy alias setMenuButton
+        accepted but the official Bot API does not implement it),
     getChatMenuButton, answerWebAppQuery, sendPhoto, sendDocument,
     sendVideo, sendAudio, sendVoice, getFile.
 
@@ -400,10 +401,10 @@ class MockTelegramHandler(BaseHTTPRequestHandler):
         self._ok([])
 
     def _handle_set_menu_button(self, params: dict[str, Any]) -> None:
-        # setMenuButton is fire-and-forget for the bot. Capture the payload
+        # setChatMenuButton is fire-and-forget for the bot. Capture the payload
         # so live tests can assert that the gateway installed a WebApp
         # launcher (or reset to default) at startup.
-        self.state.record_outbound("setMenuButton", params)
+        self.state.record_outbound("setChatMenuButton", params)
         self._ok(True)
 
     def _handle_get_menu_button(self, _params: dict[str, Any]) -> None:
