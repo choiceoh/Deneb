@@ -63,6 +63,22 @@ projects.db
 # Local scripts
 scripts/deploy.sh
 
+# Mini App frontend (Vite output + node deps; rebuilt by `make build-frontend`)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Mini App embedded assets: only the placeholder index.html is checked in;
+# `make embed-frontend` overwrites it with the real Vite bundle (along with
+# everything under assets/) before each release build. Operators rebuild
+# locally before `git pull`-style deploys.
+gateway-go/internal/runtime/server/miniapp_dist/assets/
+gateway-go/internal/runtime/server/miniapp_dist/*.svg
+gateway-go/internal/runtime/server/miniapp_dist/*.ico
+gateway-go/internal/runtime/server/miniapp_dist/*.png
+gateway-go/internal/runtime/server/miniapp_dist/*.jpg
+gateway-go/internal/runtime/server/miniapp_dist/*.json
+
 # graphify CLI output (knowledge graph artifacts; rebuilt locally)
 graphify-out/
 .graphify_python
