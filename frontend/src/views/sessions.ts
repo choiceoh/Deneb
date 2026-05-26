@@ -4,28 +4,22 @@
 // flow (load transcript, /resume, etc.) is left as future work.
 
 import { recentSessions, type SessionRow } from '../sessions';
-import { RpcError } from '../rpc';
-import { relativeTime } from '../format';
+import { formatRpcError, relativeTime } from '../format';
 import { isCurrentHash, navigate } from '../router';
+import { buildErrorBanner, buildLoadingNode, buildViewHeader } from './ui';
 
 export async function renderSessions(root: HTMLElement, initData: string): Promise<void> {
   const expectedHash = location.hash;
   root.innerHTML = '';
 
-  const header = document.createElement('div');
-  header.className = 'view-header';
-  header.innerHTML = `
-    <span class="view-title">최근 세션</span>
-    <button class="link-button">새로고침</button>
-  `;
-  header.querySelector('button')!.addEventListener('click', () => {
-    void renderSessions(root, initData);
-  });
-  root.appendChild(header);
+  root.appendChild(
+    buildViewHeader({
+      title: '최근 세션',
+      right: { label: '새로고침', onClick: () => void renderSessions(root, initData) },
+    }),
+  );
 
-  const status = document.createElement('div');
-  status.className = 'loading';
-  status.textContent = '세션 불러오는 중…';
+  const status = buildLoadingNode('세션 불러오는 중…');
   root.appendChild(status);
 
   try {
@@ -45,16 +39,7 @@ export async function renderSessions(root: HTMLElement, initData: string): Promi
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
     status.remove();
-    const msg =
-      err instanceof RpcError
-        ? `${err.code} — ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : '알 수 없는 오류';
-    const banner = document.createElement('div');
-    banner.className = 'error';
-    banner.textContent = `세션 목록 로드 실패: ${msg}`;
-    root.appendChild(banner);
+    root.appendChild(buildErrorBanner(`세션 목록 로드 실패: ${formatRpcError(err)}`));
   }
 }
 

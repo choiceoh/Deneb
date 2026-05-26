@@ -5,21 +5,16 @@
 // banner that doesn't replace prior results.
 
 import { searchMemory, type MemoryHit } from '../memory';
-import { RpcError } from '../rpc';
+import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
+import { buildErrorBanner, buildViewHeader } from './ui';
 
 let lastQuery = '';
 
 export function renderMemory(root: HTMLElement, initData: string): void {
   root.innerHTML = '';
 
-  const header = document.createElement('div');
-  header.className = 'view-header';
-  header.innerHTML = `
-    <span class="view-title">메모리 검색</span>
-    <span></span>
-  `;
-  root.appendChild(header);
+  root.appendChild(buildViewHeader({ title: '메모리 검색' }));
 
   const form = document.createElement('form');
   form.className = 'search-form';
@@ -77,17 +72,8 @@ async function runSearch(initData: string, q: string, mount: HTMLElement): Promi
     }
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
-    const msg =
-      err instanceof RpcError
-        ? `${err.code} — ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : '알 수 없는 오류';
     mount.innerHTML = '';
-    const banner = document.createElement('div');
-    banner.className = 'error';
-    banner.textContent = `검색 실패: ${msg}`;
-    mount.appendChild(banner);
+    mount.appendChild(buildErrorBanner(`검색 실패: ${formatRpcError(err)}`));
   }
 }
 

@@ -1,8 +1,10 @@
 // views/home.ts — landing screen: auth + backend health + entry points to
 // domain views (currently just Gmail triage).
 
-import { ping, whoami, RpcError, type PingResult, type WhoamiResult } from '../rpc';
+import { ping, whoami, type PingResult, type WhoamiResult } from '../rpc';
+import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
+import { buildErrorBanner } from './ui';
 
 export async function renderHome(root: HTMLElement, initData: string): Promise<void> {
   const expectedHash = location.hash;
@@ -15,13 +17,7 @@ export async function renderHome(root: HTMLElement, initData: string): Promise<v
     paint(root, initData, user, pingResult, latencyMs);
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
-    const msg =
-      err instanceof RpcError
-        ? `${err.code} — ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : '알 수 없는 오류';
-    renderHomeError(root, `백엔드 호출 실패: ${msg}`);
+    renderHomeError(root, `백엔드 호출 실패: ${formatRpcError(err)}`);
   }
 }
 
@@ -159,10 +155,7 @@ function buildNavRow(
 
 function renderHomeError(root: HTMLElement, message: string): void {
   root.innerHTML = '';
-  const banner = document.createElement('div');
-  banner.className = 'error';
-  banner.textContent = message;
-  root.appendChild(banner);
+  root.appendChild(buildErrorBanner(message));
   const muted = document.createElement('div');
   muted.className = 'muted';
   muted.textContent = 'Deneb Mini App';
