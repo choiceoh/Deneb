@@ -114,7 +114,7 @@ func (h *Handler) updatePreview(reqID, sessionKey string, delivery *DeliveryCont
 		h.deliverSlashResponse(delivery, err.Error())
 		return
 	}
-	if !h.runUpdatePrechecks(ctx, reqID, sessionKey, delivery, root) {
+	if !h.runUpdatePrechecks(ctx, reqID, sessionKey, delivery, root).Proceed {
 		return
 	}
 
@@ -163,7 +163,8 @@ func (h *Handler) updateExecute(reqID, sessionKey string, delivery *DeliveryCont
 		h.deliverSlashResponse(delivery, err.Error())
 		return
 	}
-	if !h.runUpdatePrechecks(ctx, reqID, sessionKey, delivery, root) {
+	outcome := h.runUpdatePrechecks(ctx, reqID, sessionKey, delivery, root)
+	if !outcome.Proceed {
 		return
 	}
 
@@ -178,18 +179,39 @@ func (h *Handler) updateExecute(reqID, sessionKey string, delivery *DeliveryCont
 		return
 	}
 
-	h.deliverSlashResponse(delivery, fmt.Sprintf(
+	startMsg := fmt.Sprintf(
 		"🔄 업데이트를 시작합니다 (커밋 %d개). 최신 코드를 받고 빌드하는 중입니다 — 1~2분 정도 걸립니다...",
-		countLines(commits)))
+		countLines(commits))
+	if outcome.StashUntracked {
+		startMsg += "\n📦 untracked 파일은 임시 보관 후 자동 복구합니다."
+	}
+	h.deliverSlashResponse(delivery, startMsg)
+
+	// Step 0 — stash untracked files so the worktree is clean for pull/build.
+	// `git stash push -u` records untracked files (the only kind we got past
+	// the prechecks with) under stash@{0}; the restore at the end pops it.
+	var didStash bool
+	if outcome.StashUntracked {
+		if out, err := runUpdateGit(ctx, root, "stash", "push", "-u", "-m", "deneb-update: untracked auto-stash"); err != nil {
+			h.logger.Error("update: stash failed", "error", err, "output", out)
+			h.deliverSlashResponse(delivery, fmt.Sprintf(
+				"❌ untracked 변경을 임시 보관(stash)하지 못했습니다. 게이트웨이는 그대로 유지됩니다.\n\n```\n%s\n```",
+				truncateUpdateOutput(out)))
+			return
+		}
+		didStash = true
+		h.logger.Info("update: stashed untracked files before pull")
+	}
 
 	// Step 1 — fast-forward pull. --ff-only refuses anything but a clean
 	// fast-forward, matching scripts/deploy/deploy.sh; the worktree was
-	// already verified clean by the prechecks above.
+	// already verified tracked-clean by the prechecks above.
 	if out, err := runUpdateGit(ctx, root, "pull", "--ff-only", "origin", "main"); err != nil {
 		h.logger.Error("update: git pull failed", "error", err, "output", out)
 		h.deliverSlashResponse(delivery, fmt.Sprintf(
 			"❌ 코드 받기에 실패했습니다. 게이트웨이는 그대로 유지됩니다.\n\n```\n%s\n```",
 			truncateUpdateOutput(out)))
+		h.restoreUpdateStash(ctx, root, didStash, delivery)
 		return
 	}
 
@@ -202,8 +224,14 @@ func (h *Handler) updateExecute(reqID, sessionKey string, delivery *DeliveryCont
 		h.deliverSlashResponse(delivery, fmt.Sprintf(
 			"❌ 빌드에 실패했습니다. 코드는 받았지만 재시작하지 않습니다.\n\n```\n%s\n```",
 			truncateUpdateOutput(out)))
+		h.restoreUpdateStash(ctx, root, didStash, delivery)
 		return
 	}
+
+	// Pop the stash before signalling restart, so the relaunched gateway sees
+	// the restored untracked files. After SIGUSR1 the process begins shutting
+	// down and our goroutine may not finish.
+	h.restoreUpdateStash(ctx, root, didStash, delivery)
 
 	h.logger.Info("update: build complete, restarting gateway")
 	h.deliverSlashResponse(delivery, "✅ 빌드 완료. 게이트웨이를 재시작합니다 — 몇 초 후 다시 사용할 수 있습니다.")
@@ -213,6 +241,21 @@ func (h *Handler) updateExecute(reqID, sessionKey string, delivery *DeliveryCont
 	if err := signalGatewayRestart(); err != nil {
 		h.logger.Error("update: restart signal failed", "error", err)
 		h.deliverSlashResponse(delivery, "⚠️ 빌드는 끝났지만 재시작 신호 전송에 실패했습니다. 게이트웨이를 수동으로 재시작해 주세요.")
+	}
+}
+
+// restoreUpdateStash pops the auto-stashed untracked files. On failure the
+// stash entry stays in `git stash list` and the operator is told how to find
+// it — never silently discarded.
+func (h *Handler) restoreUpdateStash(ctx context.Context, root string, didStash bool, delivery *DeliveryContext) {
+	if !didStash {
+		return
+	}
+	if out, err := runUpdateGit(ctx, root, "stash", "pop"); err != nil {
+		h.logger.Error("update: stash pop failed", "error", err, "output", out)
+		h.deliverSlashResponse(delivery, fmt.Sprintf(
+			"⚠️ 임시 보관한 untracked 변경 복구에 실패했습니다. `git stash list` 에서 `deneb-update` 항목을 확인하세요.\n\n```\n%s\n```",
+			truncateUpdateOutput(out)))
 	}
 }
 
@@ -237,34 +280,50 @@ func updateRepoRoot(ctx context.Context) (string, error) {
 type updateBlock int
 
 const (
-	updateBlockNone  updateBlock = iota // clear to proceed
-	updateBlockHard                     // refuse — deliver the message and stop
-	updateBlockDirty                    // uncommitted changes — hand to the agent
+	updateBlockNone      updateBlock = iota // clear to proceed
+	updateBlockHard                         // refuse — deliver the message and stop
+	updateBlockDirty                        // tracked uncommitted changes — hand to the agent
+	updateBlockUntracked                    // untracked-only — auto-stash and continue
 )
 
+// updatePrechecksOutcome is what runUpdatePrechecks returns to the caller.
+// Proceed=false means a message was already delivered (hard refusal or
+// hand-off to the agent); the caller stops. StashUntracked=true means the
+// execute path should `git stash push -u` before pull and `git stash pop`
+// after build.
+type updatePrechecksOutcome struct {
+	Proceed        bool
+	StashUntracked bool
+}
+
 // runUpdatePrechecks runs the branch/clean checks and handles a blocked
-// outcome: a hard failure is delivered as a message; a dirty worktree is
-// handed off to the agent to resolve. Returns true only when /update may
-// proceed.
-func (h *Handler) runUpdatePrechecks(ctx context.Context, reqID, sessionKey string, delivery *DeliveryContext, root string) bool {
+// outcome: a hard failure is delivered as a message; a tracked-dirty worktree
+// is handed off to the agent to resolve. Untracked-only dirt is allowed
+// through with a stash flag so the execute path can stash → pull → build →
+// pop.
+func (h *Handler) runUpdatePrechecks(ctx context.Context, reqID, sessionKey string, delivery *DeliveryContext, root string) updatePrechecksOutcome {
 	switch block, info := updatePrechecks(ctx, root); block {
 	case updateBlockHard:
 		h.deliverSlashResponse(delivery, info)
-		return false
+		return updatePrechecksOutcome{}
 	case updateBlockDirty:
 		h.deliverSlashResponse(delivery, "커밋되지 않은 변경이 있어 먼저 확인하고 정리하겠습니다.")
 		h.dispatchUncommittedHandoff(reqID, sessionKey, delivery, info)
-		return false
+		return updatePrechecksOutcome{}
+	case updateBlockUntracked:
+		return updatePrechecksOutcome{Proceed: true, StashUntracked: true}
 	default:
-		return true
+		return updatePrechecksOutcome{Proceed: true}
 	}
 }
 
 // updatePrechecks verifies the worktree is on main and clean.
-//   - (updateBlockNone, "")       → proceed
-//   - (updateBlockHard, msg)      → refuse: deliver msg and stop
-//   - (updateBlockDirty, status)  → uncommitted changes; status carries the
-//     `git status --porcelain` output for the agent hand-off
+//   - (updateBlockNone, "")          → proceed
+//   - (updateBlockHard, msg)         → refuse: deliver msg and stop
+//   - (updateBlockDirty, status)     → tracked uncommitted changes; status
+//     carries the `git status --porcelain` output for the agent hand-off
+//   - (updateBlockUntracked, status) → only untracked files present; safe to
+//     auto-stash around the pull/build
 func updatePrechecks(ctx context.Context, root string) (block updateBlock, info string) {
 	branch, err := runUpdateGit(ctx, root, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
@@ -277,10 +336,31 @@ func updatePrechecks(ctx context.Context, root string) (block updateBlock, info 
 	if err != nil {
 		return updateBlockHard, "작업 디렉토리 상태를 확인하지 못했습니다."
 	}
-	if status != "" {
-		return updateBlockDirty, status
+	if status == "" {
+		return updateBlockNone, ""
 	}
-	return updateBlockNone, ""
+	if isUntrackedOnly(status) {
+		return updateBlockUntracked, status
+	}
+	return updateBlockDirty, status
+}
+
+// isUntrackedOnly reports whether every non-empty line in `git status
+// --porcelain` output is an untracked file ("?? path"). Caller must
+// distinguish "clean" (empty status) from "untracked-only" beforehand.
+func isUntrackedOnly(status string) bool {
+	if status == "" {
+		return false
+	}
+	for _, line := range strings.Split(status, "\n") {
+		if line == "" {
+			continue
+		}
+		if !strings.HasPrefix(line, "??") {
+			return false
+		}
+	}
+	return true
 }
 
 // dispatchUncommittedHandoff hands a dirty-worktree /update over to the agent.

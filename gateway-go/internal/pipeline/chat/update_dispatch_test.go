@@ -120,6 +120,57 @@ func TestUpdatePrechecks(t *testing.T) {
 	if !strings.Contains(info, "a.txt") {
 		t.Errorf("dirty main: info = %q, want it to name the changed file", info)
 	}
+
+	// Untracked-only worktree → auto-stash path (revert the tracked change
+	// first, then add an untracked file).
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("hi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "build-artifact.tmp"), []byte("junk\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	block, info = updatePrechecks(ctx, root)
+	if block != updateBlockUntracked {
+		t.Fatalf("untracked-only main: block = %d, want updateBlockUntracked (%d)", block, updateBlockUntracked)
+	}
+	if !strings.Contains(info, "build-artifact.tmp") {
+		t.Errorf("untracked-only main: info = %q, want it to name the untracked file", info)
+	}
+
+	// Untracked + tracked mix → still treated as dirty (tracked changes must
+	// not be silently stashed).
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("changed again\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	block, _ = updatePrechecks(ctx, root)
+	if block != updateBlockDirty {
+		t.Errorf("mixed dirty: block = %d, want updateBlockDirty (%d)", block, updateBlockDirty)
+	}
+}
+
+func TestIsUntrackedOnly(t *testing.T) {
+	tests := []struct {
+		name   string
+		status string
+		want   bool
+	}{
+		{"empty", "", false},
+		{"single untracked", "?? foo.txt", true},
+		{"multiple untracked", "?? a\n?? b\n?? c", true},
+		{"trailing newline", "?? a\n?? b\n", true},
+		{"untracked plus modified", "?? a\n M b", false},
+		{"modified only", " M file.go", false},
+		{"staged only", "M  file.go", false},
+		{"renamed", "R  old -> new", false},
+		{"deleted", " D removed.txt", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isUntrackedOnly(tt.status); got != tt.want {
+				t.Errorf("isUntrackedOnly(%q) = %v, want %v", tt.status, got, tt.want)
+			}
+		})
+	}
 }
 
 func TestParsePRNumber(t *testing.T) {
