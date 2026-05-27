@@ -22,7 +22,10 @@ export type Route =
   | { name: 'calendar' }
   | { name: 'calendarEvent'; eventId: string }
   | { name: 'more' }
-  | { name: 'settings' };
+  | { name: 'settings' }
+  | { name: 'categories' }
+  | { name: 'categoryPages'; category: string }
+  | { name: 'diary' };
 
 // Top-level tab destinations — these show the persistent bottom tab bar
 // and Telegram's BackButton stays hidden. Drill-down views (detail,
@@ -41,6 +44,16 @@ export function parseRoute(hash: string): Route {
   if (hash === '#/sessions') return { name: 'sessions' };
   if (hash === '#/more') return { name: 'more' };
   if (hash === '#/settings') return { name: 'settings' };
+  if (hash === '#/categories') return { name: 'categories' };
+  if (hash === '#/diary') return { name: 'diary' };
+  const catPages = hash.match(/^#\/category\/(.+)$/);
+  if (catPages) {
+    try {
+      return { name: 'categoryPages', category: decodeURIComponent(catPages[1]) };
+    } catch {
+      return { name: 'categories' };
+    }
+  }
   // Accept '#/calendar', '#/calendar/' (trailing slash), and
   // '#/calendar/<id>' — the trailing-slash variant falls back to the
   // list view instead of the catch-all home.
@@ -113,6 +126,10 @@ export function navigate(target: Route): void {
   else if (target.name === 'calendar') hash = '#/calendar';
   else if (target.name === 'calendarEvent')
     hash = `#/calendar/${encodeURIComponent(target.eventId)}`;
+  else if (target.name === 'categories') hash = '#/categories';
+  else if (target.name === 'categoryPages')
+    hash = `#/category/${encodeURIComponent(target.category)}`;
+  else if (target.name === 'diary') hash = '#/diary';
   if (location.hash === hash) {
     // hashchange would not fire; force re-render by dispatching ourselves.
     window.dispatchEvent(new HashChangeEvent('hashchange'));

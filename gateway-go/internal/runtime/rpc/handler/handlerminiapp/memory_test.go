@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
@@ -11,8 +12,11 @@ import (
 )
 
 type fakeMemoryStore struct {
-	searchFn   func(ctx context.Context, q string, limit int) ([]wiki.SearchResult, error)
-	readPageFn func(relPath string) (*wiki.Page, error)
+	searchFn      func(ctx context.Context, q string, limit int) ([]wiki.SearchResult, error)
+	readPageFn    func(relPath string) (*wiki.Page, error)
+	statsFn       func() wiki.StoreStats
+	listPagesFn   func(category string) ([]string, error)
+	diaryRecentFn func(limit int) []wiki.DiaryHit
 }
 
 func (f *fakeMemoryStore) Search(ctx context.Context, q string, n int) ([]wiki.SearchResult, error) {
@@ -27,6 +31,27 @@ func (f *fakeMemoryStore) ReadPage(relPath string) (*wiki.Page, error) {
 		return nil, errors.New("ReadPage not stubbed")
 	}
 	return f.readPageFn(relPath)
+}
+
+func (f *fakeMemoryStore) Stats() wiki.StoreStats {
+	if f.statsFn == nil {
+		return wiki.StoreStats{}
+	}
+	return f.statsFn()
+}
+
+func (f *fakeMemoryStore) ListPages(category string) ([]string, error) {
+	if f.listPagesFn == nil {
+		return nil, errors.New("ListPages not stubbed")
+	}
+	return f.listPagesFn(category)
+}
+
+func (f *fakeMemoryStore) RecentDiaryEntries(limit int) []wiki.DiaryHit {
+	if f.diaryRecentFn == nil {
+		return nil
+	}
+	return f.diaryRecentFn(limit)
 }
 
 func memoryDepsFor(store MemorySearcher) MemoryDeps {
@@ -299,12 +324,213 @@ func TestMemoryGetPage_RequiresAuth(t *testing.T) {
 	}
 }
 
-func TestMemoryMethods_RegistersBothMethods(t *testing.T) {
+func TestMemoryMethods_RegistersAllMethods(t *testing.T) {
 	got := MemoryMethods(memoryDepsFor(&fakeMemoryStore{}))
-	for _, name := range []string{"miniapp.memory.search", "miniapp.memory.get_page"} {
+	for _, name := range []string{
+		"miniapp.memory.search",
+		"miniapp.memory.get_page",
+		"miniapp.memory.categories",
+		"miniapp.memory.list_in_category",
+		"miniapp.memory.diary_recent",
+	} {
 		if _, ok := got[name]; !ok {
 			t.Errorf("missing %q", name)
 		}
+	}
+}
+
+// --- categories ---------------------------------------------------------
+
+func TestMemoryCategories_HappyPath(t *testing.T) {
+	store := &fakeMemoryStore{
+		statsFn: func() wiki.StoreStats {
+			return wiki.StoreStats{
+				TotalPages: 7,
+				TotalBytes: 1024,
+				CategoryCount: map[string]int{
+					"projects": 4,
+					"people":   2,
+					"(root)":   1,
+				},
+			}
+		},
+	}
+	h := memoryCategories(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.categories", map[string]any{}))
+	var got struct {
+		Categories []map[string]any `json:"categories"`
+		TotalPages int              `json:"totalPages"`
+	}
+	decode(t, resp, &got)
+	if got.TotalPages != 7 {
+		t.Errorf("totalPages = %d, want 7", got.TotalPages)
+	}
+	// Largest bucket should come first (page count desc).
+	if got.Categories[0]["name"] != "projects" {
+		t.Errorf("first category = %v, want projects", got.Categories[0]["name"])
+	}
+	if int(got.Categories[0]["pageCount"].(float64)) != 4 {
+		t.Errorf("projects pageCount = %v, want 4", got.Categories[0]["pageCount"])
+	}
+}
+
+func TestMemoryCategories_RequiresAuth(t *testing.T) {
+	h := memoryCategories(memoryDepsFor(&fakeMemoryStore{}))
+	resp := h(context.Background(), reqWith(t, "miniapp.memory.categories", map[string]any{}))
+	if resp.OK || resp.Error.Code != protocol.ErrUnauthorized {
+		t.Errorf("auth not enforced: %+v", resp)
+	}
+}
+
+// --- list_in_category ---------------------------------------------------
+
+func TestMemoryListInCategory_HappyPath(t *testing.T) {
+	store := &fakeMemoryStore{
+		listPagesFn: func(cat string) ([]string, error) {
+			if cat != "projects" {
+				t.Errorf("ListPages cat = %q, want projects", cat)
+			}
+			return []string{"projects/a.md", "projects/b.md"}, nil
+		},
+		readPageFn: func(p string) (*wiki.Page, error) {
+			return &wiki.Page{Meta: wiki.Frontmatter{
+				Title:   "Title " + p,
+				Updated: "2026-05-2" + string([]byte{p[len(p)-4]}), // 'a' or 'b'
+			}}, nil
+		},
+	}
+	h := memoryListInCategory(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.list_in_category", map[string]any{"category": "projects"}))
+	var got struct {
+		Category string           `json:"category"`
+		Pages    []map[string]any `json:"pages"`
+		Total    int              `json:"total"`
+	}
+	decode(t, resp, &got)
+	if got.Category != "projects" || got.Total != 2 || len(got.Pages) != 2 {
+		t.Fatalf("unexpected response: %+v", got)
+	}
+	if got.Pages[0]["title"] == "" {
+		t.Errorf("title not enriched: %+v", got.Pages[0])
+	}
+}
+
+func TestMemoryListInCategory_RootBucketMapsToEmpty(t *testing.T) {
+	var seenCat string
+	store := &fakeMemoryStore{
+		listPagesFn: func(cat string) ([]string, error) {
+			seenCat = cat
+			return nil, nil
+		},
+	}
+	h := memoryListInCategory(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.list_in_category", map[string]any{"category": "(root)"}))
+	if !resp.OK {
+		t.Fatalf("unexpected error: %+v", resp.Error)
+	}
+	if seenCat != "" {
+		t.Errorf("ListPages got %q, want empty string for (root)", seenCat)
+	}
+}
+
+func TestMemoryListInCategory_PathTraversalRejected(t *testing.T) {
+	h := memoryListInCategory(memoryDepsFor(&fakeMemoryStore{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.list_in_category", map[string]any{"category": "../etc"}))
+	if resp.OK {
+		t.Fatalf("expected error")
+	}
+	if resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Errorf("code = %s, want INVALID_REQUEST", resp.Error.Code)
+	}
+}
+
+func TestMemoryListInCategory_LimitClampedAndTotalReflectsAll(t *testing.T) {
+	store := &fakeMemoryStore{
+		listPagesFn: func(_ string) ([]string, error) {
+			paths := make([]string, 300)
+			for i := range paths {
+				paths[i] = "p" + string([]byte{byte('a' + i%26)}) + ".md"
+			}
+			return paths, nil
+		},
+		readPageFn: func(_ string) (*wiki.Page, error) { return &wiki.Page{}, nil },
+	}
+	h := memoryListInCategory(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.list_in_category", map[string]any{"limit": 9999}))
+	var got struct {
+		Pages []map[string]any `json:"pages"`
+		Total int              `json:"total"`
+	}
+	decode(t, resp, &got)
+	if got.Total != 300 {
+		t.Errorf("total = %d, want 300 (full set)", got.Total)
+	}
+	if len(got.Pages) != maxMemoryListLimit {
+		t.Errorf("len(pages) = %d, want clamped to %d", len(got.Pages), maxMemoryListLimit)
+	}
+}
+
+// --- diary_recent -------------------------------------------------------
+
+func TestMemoryDiaryRecent_HappyPath(t *testing.T) {
+	var seenLimit int
+	store := &fakeMemoryStore{
+		diaryRecentFn: func(limit int) []wiki.DiaryHit {
+			seenLimit = limit
+			return []wiki.DiaryHit{
+				{File: "diary-2026-05-26.md", Header: "14:30", Content: "Met Alice", At: 1716000000000},
+				{File: "diary-2026-05-25.md", Header: "09:00", Content: "Standup notes", At: 1715900000000},
+			}
+		},
+	}
+	h := memoryDiaryRecent(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.diary_recent", map[string]any{}))
+	if seenLimit != defaultDiaryRecent {
+		t.Errorf("default limit = %d, want %d", seenLimit, defaultDiaryRecent)
+	}
+	var got struct {
+		Entries []map[string]any `json:"entries"`
+	}
+	decode(t, resp, &got)
+	if len(got.Entries) != 2 {
+		t.Fatalf("entries = %d, want 2", len(got.Entries))
+	}
+	if got.Entries[0]["file"] != "diary-2026-05-26.md" {
+		t.Errorf("first file = %v", got.Entries[0]["file"])
+	}
+}
+
+func TestMemoryDiaryRecent_LimitClamp(t *testing.T) {
+	var seenLimit int
+	store := &fakeMemoryStore{
+		diaryRecentFn: func(limit int) []wiki.DiaryHit {
+			seenLimit = limit
+			return nil
+		},
+	}
+	h := memoryDiaryRecent(memoryDepsFor(store))
+	h(authedCtx(), reqWith(t, "miniapp.memory.diary_recent", map[string]any{"limit": 9999}))
+	if seenLimit != maxDiaryRecent {
+		t.Errorf("clamp = %d, want %d", seenLimit, maxDiaryRecent)
+	}
+}
+
+func TestMemoryDiaryRecent_TruncatesLongContent(t *testing.T) {
+	longBody := strings.Repeat("가", maxDiarySnippetChars+50)
+	store := &fakeMemoryStore{
+		diaryRecentFn: func(_ int) []wiki.DiaryHit {
+			return []wiki.DiaryHit{{File: "d.md", Header: "00:00", Content: longBody}}
+		},
+	}
+	h := memoryDiaryRecent(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.diary_recent", map[string]any{}))
+	var got struct {
+		Entries []map[string]any `json:"entries"`
+	}
+	decode(t, resp, &got)
+	content := got.Entries[0]["content"].(string)
+	if !strings.HasSuffix(content, "…") {
+		t.Errorf("expected truncation suffix, got %q", content[len(content)-20:])
 	}
 }
 
