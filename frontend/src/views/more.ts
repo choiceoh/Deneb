@@ -1,13 +1,10 @@
-// views/more.ts — Profile / workspace hub.
+// views/more.ts — Profile + workspace hub in the typography idiom.
 //
-// Mira's bottom-tab Profile page inspired this view: a stack of titled
-// card sections, each containing icon-prefixed rows that either show a
-// read-only value or navigate to a sub-view. Deneb's single-user /
-// single-device model means most rows are status-only; the actionable
-// rows are workspace shortcuts (calendar, gmail, memory, sessions).
-//
-// Layout matches `home.ts` so the user can hop between the two tabs and
-// the visual grammar stays consistent.
+// One screen, one tone: a header, a flat list of section labels and
+// rows separated by hairlines. No card chrome, no color tiles, no
+// chevrons. Status rows (read-only) and nav rows (destination) use
+// the same row geometry — the chrome difference is just whether the
+// row is a button or a div.
 
 import { ping, whoami, type PingResult, type WhoamiResult } from '../rpc';
 import { formatRpcError } from '../format';
@@ -37,166 +34,95 @@ function paint(
   latencyMs: number,
 ): void {
   root.innerHTML = '';
-
   root.appendChild(buildViewHeader({ title: 'more' }));
-
-  // Profile card — who you are + what's running.
-  const profileLabel = document.createElement('div');
-  profileLabel.className = 'section-label';
-  profileLabel.textContent = '프로필';
-  root.appendChild(profileLabel);
 
   const userLabel =
     [user.firstName, user.lastName].filter(Boolean).join(' ') ||
     (user.username ? `@${user.username}` : `id=${user.id}`);
-  const profile = document.createElement('div');
-  profile.className = 'section-card';
-  profile.appendChild(
-    buildInfoRow('icon-tile-violet', '👤', '사용자', userLabel),
-  );
-  profile.appendChild(
-    buildInfoRow('icon-tile-pink', '🧠', 'LLM 모델', pingResult.model || '—'),
-  );
-  profile.appendChild(
-    buildInfoRow('icon-tile-purple', '🌐', '언어', '한국어'),
-  );
-  root.appendChild(profile);
 
-  // Workspace shortcuts — domain destinations that used to live on home.
-  const workspaceLabel = document.createElement('div');
-  workspaceLabel.className = 'section-label';
-  workspaceLabel.textContent = '워크스페이스';
-  root.appendChild(workspaceLabel);
+  root.appendChild(
+    section('profile', [
+      infoRow('user', userLabel),
+      infoRow('model', pingResult.model || '—'),
+      infoRow('language', '한국어'),
+    ]),
+  );
 
-  const workspace = document.createElement('div');
-  workspace.className = 'section-card';
-  workspace.appendChild(
-    buildNavRow('icon-tile-blue', '📅', '일정', '다가오는 회의', {
-      name: 'calendar',
-    }),
+  root.appendChild(
+    section('workspace', [
+      navRow('calendar', 'upcoming meetings', { name: 'calendar' }),
+      navRow('mail', 'unread triage', { name: 'inbox' }),
+      navRow('memory', 'wiki search', { name: 'memory' }),
+      navRow('sessions', 'recent runs', { name: 'sessions' }),
+    ]),
   );
-  workspace.appendChild(
-    buildNavRow('icon-tile-red', '📧', 'Gmail 트리아지', '미처리 메일', {
-      name: 'inbox',
-    }),
-  );
-  workspace.appendChild(
-    buildNavRow('icon-tile-amber', '🧩', '메모리 검색', '위키 / 메모리', {
-      name: 'memory',
-    }),
-  );
-  workspace.appendChild(
-    buildNavRow('icon-tile-teal', '🗂', '최근 세션', '실행 중 / 완료', {
-      name: 'sessions',
-    }),
-  );
-  root.appendChild(workspace);
 
-  // Browse — entry points for "look around" rather than "find specific".
-  // Category explorer + diary timeline cover the two ways Deneb's
-  // accumulated context surfaces: structured (category buckets) and
-  // chronological (diary entries by day).
-  const browseLabel = document.createElement('div');
-  browseLabel.className = 'section-label';
-  browseLabel.textContent = '탐색';
-  root.appendChild(browseLabel);
+  root.appendChild(
+    section('browse', [
+      navRow('categories', 'wiki by category', { name: 'categories' }),
+      navRow('diary', 'daily timeline', { name: 'diary' }),
+      navRow('people', 'frequent senders', { name: 'people' }),
+    ]),
+  );
 
-  const browse = document.createElement('div');
-  browse.className = 'section-card';
-  browse.appendChild(
-    buildNavRow('icon-tile-violet', '📂', '카테고리', '위키를 카테고리별로 둘러보기', {
-      name: 'categories',
-    }),
+  root.appendChild(
+    section('automation', [navRow('crons', 'scheduled jobs', { name: 'crons' })]),
   );
-  browse.appendChild(
-    buildNavRow('icon-tile-pink', '📖', '다이어리', 'Deneb 의 일일 기록 타임라인', {
-      name: 'diary',
-    }),
-  );
-  browse.appendChild(
-    buildNavRow('icon-tile-blue', '👤', '사람들', '최근 메일 발신자 빈도순', {
-      name: 'people',
-    }),
-  );
-  root.appendChild(browse);
-
-  // Automation — "what fires by itself". Cron jobs registered with the
-  // gateway (D-15min briefings, autoresearch tickers, etc.) live here.
-  // Read-only surface; editing is via the operator tool, not the
-  // Mini App.
-  const autoLabel = document.createElement('div');
-  autoLabel.className = 'section-label';
-  autoLabel.textContent = '자동화';
-  root.appendChild(autoLabel);
-
-  const autoCard = document.createElement('div');
-  autoCard.className = 'section-card';
-  autoCard.appendChild(
-    buildNavRow('icon-tile-amber', '⚡', '자동 작업', '예약된 cron 작업 일람', {
-      name: 'crons',
-    }),
-  );
-  root.appendChild(autoCard);
 
   if (readAppSettings().showDiagnostics) {
-    // Status / about — diagnostics + branding.
-    const aboutLabel = document.createElement('div');
-    aboutLabel.className = 'section-label';
-    aboutLabel.textContent = '상태';
-    root.appendChild(aboutLabel);
-
-    const about = document.createElement('div');
-    about.className = 'section-card';
-    about.appendChild(
-      buildInfoRow('icon-tile-slate', '⚙️', '버전', `v${pingResult.version || '?'}`),
+    root.appendChild(
+      section('status', [
+        infoRow('version', `v${pingResult.version || '?'}`),
+        infoRow('latency', `${latencyMs}ms`),
+      ]),
     );
-    about.appendChild(
-      buildInfoRow('icon-tile-green', '📡', '응답 시간', `${latencyMs}ms`),
-    );
-    root.appendChild(about);
   }
 }
 
-function buildInfoRow(
-  tileClass: string,
-  emoji: string,
-  label: string,
-  value: string,
-): HTMLElement {
+// section returns a label + a hairline-bordered group of rows. The
+// label tracks the page tone (small uppercase) while the rows
+// themselves are typography-driven (see buildRow* helpers).
+function section(label: string, rows: HTMLElement[]): HTMLElement {
+  const wrap = document.createElement('section');
+  wrap.className = 'flat-section';
+
+  const labelEl = document.createElement('div');
+  labelEl.className = 'flat-section-label';
+  labelEl.textContent = label;
+  wrap.appendChild(labelEl);
+
+  const list = document.createElement('div');
+  list.className = 'flat-list';
+  for (const r of rows) list.appendChild(r);
+  wrap.appendChild(list);
+
+  return wrap;
+}
+
+function infoRow(label: string, value: string): HTMLElement {
   const row = document.createElement('div');
-  row.className = 'profile-row';
+  row.className = 'flat-row';
   row.innerHTML = `
-    <span class="icon-tile ${tileClass}"></span>
-    <span class="profile-row-label"></span>
-    <span class="profile-row-value"></span>
+    <span class="flat-row-label"></span>
+    <span class="flat-row-value"></span>
   `;
-  (row.querySelector('.icon-tile') as HTMLElement).textContent = emoji;
-  (row.querySelector('.profile-row-label') as HTMLElement).textContent = label;
-  (row.querySelector('.profile-row-value') as HTMLElement).textContent = value;
+  (row.querySelector('.flat-row-label') as HTMLElement).textContent = label;
+  (row.querySelector('.flat-row-value') as HTMLElement).textContent = value;
   return row;
 }
 
-function buildNavRow(
-  tileClass: string,
-  emoji: string,
-  label: string,
-  sub: string,
-  target: Route,
-): HTMLButtonElement {
+function navRow(label: string, sub: string, target: Route): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'profile-row profile-row-nav';
+  btn.className = 'flat-row flat-row-nav';
   btn.innerHTML = `
-    <span class="icon-tile ${tileClass}"></span>
-    <span class="profile-row-text">
-      <span class="profile-row-label"></span>
-      <span class="profile-row-sub"></span>
+    <span class="flat-row-text">
+      <span class="flat-row-label"></span>
+      <span class="flat-row-sub"></span>
     </span>
-    <span class="profile-row-chevron">›</span>
   `;
-  (btn.querySelector('.icon-tile') as HTMLElement).textContent = emoji;
-  (btn.querySelector('.profile-row-label') as HTMLElement).textContent = label;
-  (btn.querySelector('.profile-row-sub') as HTMLElement).textContent = sub;
+  (btn.querySelector('.flat-row-label') as HTMLElement).textContent = label;
+  (btn.querySelector('.flat-row-sub') as HTMLElement).textContent = sub;
   btn.addEventListener('click', () => navigate(target));
   return btn;
 }

@@ -114,7 +114,13 @@ body {
   padding: 0;
   background: var(--tg-bg);
   color: var(--tg-text);
+  /* Inter Variable is the lead face — it carries the full weight range
+     (100..900) the Zune-style typography needs (ultralight wordmark, light
+     menu labels, regular body, semibold accents). Korean characters fall
+     through Inter's unicode-range to Apple SD Gothic Neo / Noto Sans KR
+     so the same span can mix English + Korean without weight-jumping. */
   font-family:
+    'Inter Variable',
     -apple-system,
     BlinkMacSystemFont,
     'Segoe UI',
@@ -124,9 +130,20 @@ body {
     'Apple SD Gothic Neo',
     'Noto Sans KR',
     sans-serif;
+  /* OpenType features: enable cv11 (single-story 'a'), cv02 (open '4'),
+     and the standard contextual + kerning pairs. Plus tabular-nums where
+     selectors opt in via font-variant-numeric. ss03 swaps in a true
+     'curl-less' 'a' that pairs better with the ultralight weights. */
+  font-feature-settings:
+    'cv02' on,
+    'cv11' on,
+    'ss03' on,
+    'kern' on;
+  font-optical-sizing: auto;
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 #app {
@@ -355,39 +372,46 @@ button.entry-card:active {
 
 /* ---- Email list rows ---- */
 
+/* Email rows in the Zune-style typography idiom: no card, no shadow.
+   Each wrap is a hairline-bordered list item; the row inside is just
+   stacked text. Unread rows lift the From line to full weight (no dot,
+   no badge — the weight contrast carries the signal). */
+
 .email-row-wrap {
+  position: relative;
   display: flex;
   align-items: stretch;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--hairline);
+  transition: opacity var(--transition-fast);
+}
+
+.email-row-wrap:first-child {
+  border-top: 1px solid var(--hairline);
 }
 
 .email-row {
   position: relative;
   flex: 1;
   min-width: 0;
-  background: var(--tg-bg);
+  background: none;
   border: none;
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
+  border-radius: 0;
+  padding: 16px 0;
   color: var(--tg-text);
   text-align: left;
   cursor: pointer;
   font: inherit;
-  box-shadow: var(--shadow-sm);
-  transition:
-    transform var(--transition-fast),
-    box-shadow var(--transition-fast);
+  transition: opacity 120ms ease;
 }
 
 .email-row:hover {
-  box-shadow: var(--shadow-md);
+  opacity: 0.78;
 }
 
 .email-row-select-indicator {
   position: absolute;
   top: 50%;
-  left: 14px;
+  left: 0;
   display: none;
   align-items: center;
   justify-content: center;
@@ -403,35 +427,12 @@ button.entry-card:active {
 }
 
 .email-row:active {
-  transform: translateY(1px);
+  opacity: 0.55;
 }
 
 .email-row:focus-visible {
   outline: none;
-  box-shadow: var(--shadow-focus);
-}
-
-/* Unread accent: a 4px dot column on the left, anchored inside the
-   card's padding so the row text stays aligned with read rows. Replaces
-   the old border-left which made unread cards subtly shift right. */
-.email-row-wrap.email-row-unread .email-row {
-  position: relative;
-}
-
-.email-row-wrap.email-row-unread .email-row::before {
-  content: '';
-  position: absolute;
-  left: 6px;
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--tg-link);
-  transform: translateY(-50%);
-}
-
-.email-row-wrap.email-row-unread .email-row {
-  padding-left: 20px;
+  opacity: 0.85;
 }
 
 .email-row-actions {
@@ -580,12 +581,14 @@ button.entry-card:active {
 .email-row-meta {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  font-size: 13px;
+  align-items: baseline;
+  gap: 12px;
 }
 
 .email-row-from {
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 300;
+  letter-spacing: -0.01em;
   color: var(--tg-text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -593,14 +596,31 @@ button.entry-card:active {
   max-width: 70%;
 }
 
+/* Unread = weight contrast. From line shifts from light (300) to
+   semibold (600); the subject below shifts from light to medium. The
+   eye picks unread rows up immediately without any dot or badge. */
+.email-row-wrap.email-row-unread .email-row-from {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.email-row-wrap.email-row-unread .email-row-subject {
+  font-weight: 500;
+  color: var(--tg-text);
+}
+
 .email-row-time {
   color: var(--tg-hint);
+  font-size: 12px;
+  letter-spacing: 0.02em;
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .email-row-subject {
   font-size: 14px;
-  margin: 2px 0;
+  font-weight: 300;
+  margin: 4px 0 2px;
   color: var(--tg-text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -608,13 +628,14 @@ button.entry-card:active {
 }
 
 .email-row-snippet {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--tg-hint);
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
+  letter-spacing: 0.005em;
 }
 
 .empty-state {
@@ -624,17 +645,64 @@ button.entry-card:active {
   font-size: 14px;
 }
 
-/* ---- Email detail ---- */
+/* ---- Email detail (typography idiom) ---- */
+
+/* email-meta loses its .card chrome: no shadow, no fill, no radius.
+   The subject reads big-light at the top, the from/to/when row is a
+   tight metadata strip below. */
+.card.email-meta {
+  background: none;
+  box-shadow: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 20px;
+}
+
+.email-meta .row {
+  padding: 4px 0;
+  border-bottom: none;
+  gap: 12px;
+}
+
+.email-meta .row .label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tg-hint);
+}
+
+.email-meta .row .value {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--tg-text);
+}
 
 .email-subject {
-  font-size: 17px;
-  font-weight: 600;
-  margin-bottom: 8px;
+  font-size: 24px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin-bottom: 14px;
+  color: var(--tg-text);
+}
+
+.card.attachments {
+  background: none;
+  box-shadow: none;
+  border: none;
+  border-top: 1px solid var(--hairline);
+  border-radius: 0;
+  padding: 12px 0;
+  margin-bottom: 12px;
 }
 
 .attachments .label {
   color: var(--tg-hint);
-  font-size: 13px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   margin-bottom: 8px;
 }
 
@@ -642,7 +710,7 @@ button.entry-card:active {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 0;
+  padding: 4px 0;
   font-size: 13px;
 }
 
@@ -653,8 +721,8 @@ button.entry-card:active {
 }
 
 .attachment-icon .lucide-icon {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .attachment-name {
@@ -667,6 +735,7 @@ button.entry-card:active {
 
 .attachment-size {
   color: var(--tg-hint);
+  font-variant-numeric: tabular-nums;
 }
 
 pre.email-body {
@@ -674,94 +743,101 @@ pre.email-body {
   word-break: break-word;
   font-family: inherit;
   font-size: 14px;
-  background: var(--tg-secondary-bg);
-  border-radius: 12px;
-  padding: 14px;
-  margin: 0 0 12px;
+  font-weight: 300;
+  line-height: 1.6;
+  background: none;
+  border-radius: 0;
+  padding: 16px 0;
+  margin: 0;
   max-height: 60vh;
   overflow-y: auto;
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--tg-text);
 }
 
-/* ---- Action bar in detail view ---- */
+/* ---- Action bar in detail view (text-only buttons) ---- */
 
 .action-bar {
   display: flex;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 20px;
+  padding-top: 4px;
 }
 
 .action-button {
-  flex: 1;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 6px;
-  padding: 11px var(--space-3);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  padding: 4px 0;
+  background: none;
+  border: none;
+  border-radius: 0;
   font: inherit;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  color: var(--tg-text);
   cursor: pointer;
+  text-transform: lowercase;
   transition:
-    transform var(--transition-fast),
-    background var(--transition-fast),
-    border-color var(--transition-fast);
+    opacity 120ms ease,
+    transform 90ms cubic-bezier(0.4, 0, 1, 1);
 }
 
 .action-button .action-icon {
   display: inline-flex;
   align-items: center;
+  color: var(--tg-hint);
 }
 
 .action-button .lucide-icon {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.75;
+}
+
+.action-button:hover {
+  opacity: 0.7;
 }
 
 .action-button:active {
-  transform: translateY(1px);
+  transform: translateX(2px) skewX(-1deg);
+  opacity: 0.55;
 }
 
 .action-button:focus-visible {
   outline: none;
-  box-shadow: var(--shadow-focus);
+  opacity: 0.85;
 }
 
 .action-button:disabled {
-  opacity: 0.45;
+  opacity: 0.35;
   cursor: not-allowed;
   transform: none;
 }
 
-/* Primary: solid accent button. Use sparingly — one per bar. */
+/* Primary still reads strongest — full text color, slightly heavier
+   weight; the rest of the bar carries lighter weight. */
 .action-primary {
-  background: var(--tg-button);
-  color: var(--tg-button-text);
-  border-color: var(--tg-button);
-}
-
-/* Secondary: outline button. Reads as recessive relative to primary,
-   so the eye lands on the action that "moves things forward". */
-.action-secondary {
-  background: transparent;
+  font-weight: 500;
   color: var(--tg-text);
-  border-color: var(--hairline-strong);
 }
 
-.action-secondary:hover {
-  background: var(--tg-secondary-bg);
+.action-secondary {
+  color: var(--tg-text);
 }
 
-/* Danger: red outline, fills on press. Communicates "destructive" without
-   shouting at the user every time the bar is visible. */
+/* Danger keeps the red so 'delete' never visually disappears into
+   the row of similar-looking text buttons. */
 .action-danger {
-  background: transparent;
   color: var(--color-danger);
-  border-color: var(--color-danger);
 }
 
-.action-danger:hover {
-  background: var(--color-danger-soft);
+.action-danger .action-icon {
+  color: var(--color-danger);
 }
 
 .flash {
@@ -1050,63 +1126,79 @@ pre.sender-context-facts-body {
   font-variant-numeric: tabular-nums;
 }
 
-/* The analysis card is the most "important" card on the detail screen —
-   give it a subtle accent fill + a small left accent so the eye lands
-   here first when the LLM result arrives. The accent is a low-opacity
-   tint of the Telegram link color, so it inherits the user's theme. */
-.analysis-card {
+/* Analysis card — strips the colored accent fill + left bar. In the
+   typography idiom the card is just bracketed by hairlines, with the
+   title set as a tracked-caps tag so it reads as a section header
+   inside the page rather than as a colored panel. */
+.card.analysis-card {
   position: relative;
-  background: color-mix(in srgb, var(--tg-link) 6%, var(--tg-bg));
-  border-left: 3px solid var(--tg-link);
-  padding-left: 13px;
+  background: none;
+  box-shadow: none;
+  border: none;
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
+  padding: 20px 0;
+  margin-bottom: 16px;
 }
 
 .analysis-card-header {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: var(--space-2);
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 14px;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .analysis-card-title {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: -0.01em;
-  color: var(--tg-link);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--tg-hint);
 }
 
 .analysis-card-title .lucide-icon {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
+  stroke-width: 1.75;
+  opacity: 0.7;
 }
 
 .analysis-card-meta {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--tg-hint);
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
 }
 
-/* Per-card "다시 분석" button — visually subordinate to the action-bar
-   primary buttons (smaller, secondary surface) so it reads as a
-   refinement of the existing card, not a new action. */
+/* "다시 분석" reads as a small underlined text link, same tone as
+   the page header back/refresh links. No fill, no border. */
 .analysis-card-refresh {
   align-self: flex-end;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  padding: 6px 12px;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 0;
   font-size: 12px;
-  background: var(--tg-secondary-bg);
-  color: var(--tg-text);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--tg-hint);
+  border: none;
+  border-radius: 0;
+  text-decoration: underline;
+  text-decoration-color: var(--hairline);
+  text-underline-offset: 3px;
   cursor: pointer;
+  transition: color 160ms ease;
+}
+
+.analysis-card-refresh:hover {
+  color: var(--tg-text);
 }
 
 .analysis-card-refresh .lucide-icon {
@@ -2694,4 +2786,164 @@ button.person-msg-row-unread {
   .type-item:active {
     transform: none;
   }
+}
+
+/* ============================================================
+   Flat row pattern (more, settings, future hubs)
+   ============================================================
+   A typography-driven alternative to the old .section-card +
+   .profile-row + .icon-tile stack. Each section has a tiny
+   tracked-caps label, a single hairline-bordered list, and a
+   set of rows that share one geometry — info, nav, or toggle
+   variants only differ in what sits on the right. */
+
+.flat-section {
+  margin-bottom: 28px;
+}
+
+.flat-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--tg-hint);
+  margin: 0 0 8px;
+}
+
+.flat-list {
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.flat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 14px 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--tg-text);
+  font: inherit;
+  text-align: left;
+}
+
+.flat-row:last-child {
+  border-bottom: none;
+}
+
+.flat-row-nav {
+  cursor: pointer;
+  transition:
+    opacity 120ms ease,
+    transform 90ms cubic-bezier(0.4, 0, 1, 1);
+}
+
+.flat-row-nav:hover {
+  opacity: 0.7;
+}
+
+.flat-row-nav:active {
+  transform: translateX(4px) skewX(-1deg);
+  opacity: 0.55;
+}
+
+.flat-row-nav:focus-visible {
+  outline: none;
+  opacity: 0.85;
+}
+
+.flat-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.flat-row-label {
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  text-transform: lowercase;
+  color: var(--tg-text);
+}
+
+.flat-row-sub {
+  font-size: 12px;
+  color: var(--tg-hint);
+  letter-spacing: 0.005em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flat-row-value {
+  font-size: 14px;
+  color: var(--tg-hint);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  word-break: break-all;
+}
+
+/* Toggle rows hide the native checkbox and let the .settings-switch
+   pseudo-element pair (track + thumb) carry the on/off state. The
+   wrapping label is still a real <label for=…>, so taps anywhere on
+   the row flip the input. */
+.flat-row-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.settings-switch {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.settings-switch-track {
+  display: block;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--hairline-strong);
+  position: relative;
+  transition: background 160ms ease;
+}
+
+.settings-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--tg-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 160ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.settings-switch input:checked + .settings-switch-track {
+  background: var(--tg-text);
+}
+
+.settings-switch input:checked + .settings-switch-track::after {
+  transform: translateX(16px);
+}
+
+.settings-status {
+  margin-top: 24px;
+  color: var(--tg-hint);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-align: center;
 }

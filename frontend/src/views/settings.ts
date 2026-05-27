@@ -1,4 +1,9 @@
-// views/settings.ts — local Mini App settings.
+// views/settings.ts — local Mini App settings in the flat typography idiom.
+//
+// Reset / toggle / nav rows all share the same .flat-row geometry the
+// `more` view uses. The toggle's visual chrome lives entirely on the
+// label markup; the underlying checkbox is hidden and the rest of the
+// .flat-row reads as a label-value pair with a switch on the right.
 
 import {
   readAppSettings,
@@ -23,131 +28,127 @@ export function renderSettings(root: HTMLElement, initData: string): void {
   status.className = 'settings-status';
   status.textContent = '표시는 이 기기에, 모델은 서버에 저장됩니다';
 
-  root.appendChild(sectionLabel('모델'));
-  const modelCard = sectionCard();
-  modelCard.appendChild(buildModelLoadingRow());
-  root.appendChild(modelCard);
-  void hydrateModelSummaryCard(modelCard, initData);
+  // Model section — async-hydrated, shows current model + drills into
+  // the modelSelect screen.
+  const modelSection = flatSection('model');
+  const modelList = modelSection.querySelector('.flat-list') as HTMLElement;
+  modelList.appendChild(buildModelLoadingRow());
+  root.appendChild(modelSection);
+  void hydrateModelSummaryRow(modelList, initData);
 
-  root.appendChild(sectionLabel('표시'));
-  const display = sectionCard();
-  display.appendChild(
-    buildToggleRow(
-      'compactMode',
-      'icon-tile-blue',
-      '↕',
-      '컴팩트 표시',
-      '목록과 카드 간격을 더 촘촘하게 표시',
-      saved.compactMode,
-      (checked) => saveToggle('compactMode', checked, status),
-    ),
+  root.appendChild(
+    flatSection('display', [
+      toggleRow(
+        'compactMode',
+        'compact mode',
+        '목록과 카드 간격을 더 촘촘하게 표시',
+        saved.compactMode,
+        (checked) => saveToggle('compactMode', checked, status),
+      ),
+      toggleRow(
+        'showDiagnostics',
+        'diagnostics',
+        '버전, 응답 시간 같은 운영 정보를 표시',
+        saved.showDiagnostics,
+        (checked) => saveToggle('showDiagnostics', checked, status),
+      ),
+    ]),
   );
-  display.appendChild(
-    buildToggleRow(
-      'showDiagnostics',
-      'icon-tile-green',
-      'ⓘ',
-      '진단 정보',
-      '버전, 응답 시간 같은 운영 정보를 표시',
-      saved.showDiagnostics,
-      (checked) => saveToggle('showDiagnostics', checked, status),
-    ),
-  );
-  root.appendChild(display);
 
-  root.appendChild(sectionLabel('입력'));
-  const input = sectionCard();
-  input.appendChild(
-    buildToggleRow(
-      'enterToSend',
-      'icon-tile-violet',
-      '↵',
-      'Enter 로 전송',
-      '끄면 Ctrl/⌘+Enter 로 전송',
-      saved.enterToSend,
-      (checked) => saveToggle('enterToSend', checked, status),
-    ),
+  root.appendChild(
+    flatSection('input', [
+      toggleRow(
+        'enterToSend',
+        'enter to send',
+        '끄면 Ctrl/⌘+Enter 로 전송',
+        saved.enterToSend,
+        (checked) => saveToggle('enterToSend', checked, status),
+      ),
+      toggleRow(
+        'hapticFeedback',
+        'haptic feedback',
+        'Telegram 이 지원할 때 탭 전환에 촉각 피드백 사용',
+        saved.hapticFeedback,
+        (checked) => saveToggle('hapticFeedback', checked, status),
+      ),
+    ]),
   );
-  input.appendChild(
-    buildToggleRow(
-      'hapticFeedback',
-      'icon-tile-pink',
-      '◌',
-      '탭 진동 피드백',
-      'Telegram 이 지원할 때 탭 전환에 촉각 피드백 사용',
-      saved.hapticFeedback,
-      (checked) => saveToggle('hapticFeedback', checked, status),
-    ),
-  );
-  root.appendChild(input);
 
-  root.appendChild(sectionLabel('초기화'));
-  const resetCard = sectionCard();
-  const reset = document.createElement('button');
-  reset.type = 'button';
-  reset.className = 'settings-reset-row';
-  reset.innerHTML = `
-    <span class="icon-tile icon-tile-slate">↺</span>
-    <span class="settings-row-text">
-      <span class="settings-row-title">기본값으로 되돌리기</span>
-      <span class="settings-row-sub">표시와 입력 설정을 처음 상태로 복원</span>
-    </span>
-  `;
-  reset.addEventListener('click', () => {
+  const resetBtn = resetRow(() => {
     resetAppSettings();
     triggerSelectionHaptic();
     renderSettings(root, initData);
   });
-  resetCard.appendChild(reset);
-  root.appendChild(resetCard);
+  root.appendChild(flatSection('reset', [resetBtn]));
+
   root.appendChild(status);
 }
 
-function sectionLabel(text: string): HTMLElement {
-  const label = document.createElement('div');
-  label.className = 'section-label';
-  label.textContent = text;
-  return label;
+// flatSection returns a label + a hairline-bordered list group, with
+// optional rows pre-attached. Returning the wrapper lets the caller
+// hold a ref to .flat-list for async hydration (model summary).
+function flatSection(label: string, rows: HTMLElement[] = []): HTMLElement {
+  const wrap = document.createElement('section');
+  wrap.className = 'flat-section';
+
+  const labelEl = document.createElement('div');
+  labelEl.className = 'flat-section-label';
+  labelEl.textContent = label;
+  wrap.appendChild(labelEl);
+
+  const list = document.createElement('div');
+  list.className = 'flat-list';
+  for (const r of rows) list.appendChild(r);
+  wrap.appendChild(list);
+
+  return wrap;
 }
 
-function sectionCard(): HTMLElement {
-  const card = document.createElement('div');
-  card.className = 'section-card settings-card';
-  return card;
-}
-
-function buildToggleRow(
+function toggleRow(
   key: ToggleKey,
-  tileClass: string,
-  icon: string,
-  title: string,
+  label: string,
   sub: string,
   checked: boolean,
   onChange: (checked: boolean) => void,
 ): HTMLElement {
-  const label = document.createElement('label');
-  label.className = 'settings-toggle-row';
-  label.htmlFor = `setting-${key}`;
-  label.innerHTML = `
-    <span class="icon-tile ${tileClass}"></span>
-    <span class="settings-row-text">
-      <span class="settings-row-title"></span>
-      <span class="settings-row-sub"></span>
+  const wrap = document.createElement('label');
+  wrap.className = 'flat-row flat-row-toggle';
+  wrap.htmlFor = `setting-${key}`;
+  wrap.innerHTML = `
+    <span class="flat-row-text">
+      <span class="flat-row-label"></span>
+      <span class="flat-row-sub"></span>
     </span>
     <span class="settings-switch">
       <input type="checkbox" />
       <span class="settings-switch-track"></span>
     </span>
   `;
-  (label.querySelector('.icon-tile') as HTMLElement).textContent = icon;
-  (label.querySelector('.settings-row-title') as HTMLElement).textContent = title;
-  (label.querySelector('.settings-row-sub') as HTMLElement).textContent = sub;
+  (wrap.querySelector('.flat-row-label') as HTMLElement).textContent = label;
+  (wrap.querySelector('.flat-row-sub') as HTMLElement).textContent = sub;
 
-  const input = label.querySelector('input') as HTMLInputElement;
+  const input = wrap.querySelector('input') as HTMLInputElement;
   input.id = `setting-${key}`;
   input.checked = checked;
   input.addEventListener('change', () => onChange(input.checked));
-  return label;
+  return wrap;
+}
+
+function resetRow(onClick: () => void): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'flat-row flat-row-nav';
+  btn.innerHTML = `
+    <span class="flat-row-text">
+      <span class="flat-row-label"></span>
+      <span class="flat-row-sub"></span>
+    </span>
+  `;
+  (btn.querySelector('.flat-row-label') as HTMLElement).textContent = 'reset defaults';
+  (btn.querySelector('.flat-row-sub') as HTMLElement).textContent =
+    '표시와 입력 설정을 처음 상태로 복원';
+  btn.addEventListener('click', onClick);
+  return btn;
 }
 
 function saveToggle(key: ToggleKey, checked: boolean, status: HTMLElement): void {
@@ -161,39 +162,42 @@ function saveToggle(key: ToggleKey, checked: boolean, status: HTMLElement): void
 
 function buildModelLoadingRow(): HTMLElement {
   const row = document.createElement('div');
-  row.className = 'settings-model-loading';
-  row.textContent = '모델 불러오는 중…';
+  row.className = 'flat-row';
+  row.innerHTML = `
+    <span class="flat-row-text">
+      <span class="flat-row-label">model</span>
+      <span class="flat-row-sub">loading…</span>
+    </span>
+  `;
   return row;
 }
 
-async function hydrateModelSummaryCard(card: HTMLElement, initData: string): Promise<void> {
+async function hydrateModelSummaryRow(list: HTMLElement, initData: string): Promise<void> {
   try {
     const result = await listMiniappModels(initData);
-    if (!card.isConnected) return;
-    paintModelSummaryCard(card, result.current);
-  } catch (err) {
-    if (!card.isConnected) return;
-    paintModelSummaryCard(card, '불러오기 실패');
+    if (!list.isConnected) return;
+    paintModelSummary(list, result.current);
+  } catch {
+    if (!list.isConnected) return;
+    paintModelSummary(list, '불러오기 실패');
   }
 }
 
-function paintModelSummaryCard(card: HTMLElement, currentModel: string): void {
-  card.innerHTML = '';
-  const row = document.createElement('button');
-  row.type = 'button';
-  row.className = 'settings-model-nav';
-  row.innerHTML = `
-    <span class="icon-tile icon-tile-purple">🤖</span>
-    <span class="settings-row-text">
-      <span class="settings-row-title">모델</span>
-      <span class="settings-row-sub"></span>
+function paintModelSummary(list: HTMLElement, currentModel: string): void {
+  list.innerHTML = '';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'flat-row flat-row-nav';
+  btn.innerHTML = `
+    <span class="flat-row-text">
+      <span class="flat-row-label">model</span>
+      <span class="flat-row-sub"></span>
     </span>
-    <span class="settings-model-chevron">›</span>
   `;
-  (row.querySelector('.settings-row-sub') as HTMLElement).textContent = currentModel || '—';
-  row.addEventListener('click', () => {
+  (btn.querySelector('.flat-row-sub') as HTMLElement).textContent = currentModel || '—';
+  btn.addEventListener('click', () => {
     triggerSelectionHaptic();
     navigate({ name: 'modelSelect' });
   });
-  card.appendChild(row);
+  list.appendChild(btn);
 }
