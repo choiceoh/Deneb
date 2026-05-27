@@ -14,16 +14,22 @@ import {
 } from '../app_settings';
 import { navigate } from '../router';
 import { listMiniappModels } from '../rpc';
+import { buildViewHeader } from './ui';
 
 type ToggleKey = keyof AppSettings;
 
 export function renderSettings(root: HTMLElement, initData: string): void {
   root.innerHTML = '';
 
-  // Panorama strip at the top of the viewport already shows 'settings'
-  // as the active tab, so a buildViewHeader here would be a redundant
-  // second title. Other tab views (home, more) drop the page header
-  // too. Drill-down screens (modelSelect, etc.) keep theirs.
+  // Settings is now a drill-down off home (the panorama tab strip is
+  // gone), so the page carries its own header with a back link, the
+  // same as every other drill-down view.
+  root.appendChild(
+    buildViewHeader({
+      title: 'settings',
+      left: { label: '← home', onClick: () => navigate({ name: 'home' }) },
+    }),
+  );
 
   const saved = readAppSettings();
   const status = document.createElement('div');

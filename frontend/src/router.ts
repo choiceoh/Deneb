@@ -31,15 +31,12 @@ export type Route =
   | { name: 'personDetail'; email: string }
   | { name: 'wikiNew'; category?: string };
 
-// Top-level tab destinations — these show the panorama tab strip up top
-// and Telegram's BackButton stays hidden. Drill-down views (detail,
-// wikiPage, calendarEvent, sessionTranscript, every category/diary/
-// crons/people list, etc.) hide the panorama so the BackButton can take
-// over. The 'more' hub is gone — home now lists every destination.
-export const TAB_ROUTES = ['home', 'settings'] as const;
-export type TabRouteName = (typeof TAB_ROUTES)[number];
-export function isTabRoute(route: Route): route is { name: TabRouteName } {
-  return (TAB_ROUTES as readonly string[]).includes(route.name);
+// Home is the index; every other route is a drill-down that gets the
+// Telegram BackButton. The panorama tab strip is gone — home's
+// type-menu lists every destination (including settings), so there's
+// no top-of-screen chrome to switch between top-level surfaces.
+export function isHomeRoute(route: Route): boolean {
+  return route.name === 'home';
 }
 
 export function parseRoute(hash: string): Route {
