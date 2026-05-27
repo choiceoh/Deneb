@@ -23,6 +23,7 @@ export async function renderSessions(root: HTMLElement, initData: string): Promi
   root.appendChild(
     buildViewHeader({
       title: 'topics',
+      right: { label: '+ 새 토픽', onClick: () => navigate({ name: 'topicNew' }) },
     }),
   );
   setPullToRefreshHandler(() => renderSessions(root, initData));
