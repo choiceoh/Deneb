@@ -25,7 +25,8 @@ export type Route =
   | { name: 'settings' }
   | { name: 'categories' }
   | { name: 'categoryPages'; category: string }
-  | { name: 'diary' };
+  | { name: 'diary' }
+  | { name: 'crons' };
 
 // Top-level tab destinations — these show the persistent bottom tab bar
 // and Telegram's BackButton stays hidden. Drill-down views (detail,
@@ -46,6 +47,7 @@ export function parseRoute(hash: string): Route {
   if (hash === '#/settings') return { name: 'settings' };
   if (hash === '#/categories') return { name: 'categories' };
   if (hash === '#/diary') return { name: 'diary' };
+  if (hash === '#/crons') return { name: 'crons' };
   const catPages = hash.match(/^#\/category\/(.+)$/);
   if (catPages) {
     try {
@@ -130,6 +132,7 @@ export function navigate(target: Route): void {
   else if (target.name === 'categoryPages')
     hash = `#/category/${encodeURIComponent(target.category)}`;
   else if (target.name === 'diary') hash = '#/diary';
+  else if (target.name === 'crons') hash = '#/crons';
   if (location.hash === hash) {
     // hashchange would not fire; force re-render by dispatching ourselves.
     window.dispatchEvent(new HashChangeEvent('hashchange'));
