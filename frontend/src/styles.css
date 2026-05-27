@@ -2879,6 +2879,16 @@ button.person-msg-row-unread {
   color: var(--tg-text);
 }
 
+/* Non-blocking whoami failure surface: home stays usable (menu still
+   navigates) but the operator sees the error below the greeting so the
+   silent failure doesn't go unnoticed. */
+.type-greeting-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--tg-destructive, #d9534f);
+}
+
 .type-status {
   margin: 0;
   font-size: 12px;

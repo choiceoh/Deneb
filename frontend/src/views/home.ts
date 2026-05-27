@@ -11,19 +11,27 @@
 import { whoami, type WhoamiResult } from '../rpc';
 import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
-import { buildErrorBanner } from './ui';
 import type { Route } from '../router';
 
 export async function renderHome(root: HTMLElement, initData: string): Promise<void> {
   const expectedHash = location.hash;
-  root.innerHTML = '<div class="loading">로딩 중…</div>';
+
+  // Progressive paint: the type-menu doesn't depend on whoami, so we paint
+  // it immediately with a placeholder greeting. The whoami RPC (~50-150ms
+  // depending on backend warmth) then hydrates the greeting in-place. The
+  // operator sees the navigable menu the moment the JS runs instead of
+  // staring at "로딩 중…" for a network round-trip.
+  paint(root, null);
   try {
     const user = await whoami(initData);
-    if (!isCurrentHash(expectedHash)) return;
-    paint(root, user);
+    if (!isCurrentHash(expectedHash) || !root.isConnected) return;
+    hydrateGreeting(root, user);
   } catch (err) {
-    if (!isCurrentHash(expectedHash)) return;
-    renderHomeError(root, `백엔드 호출 실패: ${formatRpcError(err)}`);
+    if (!isCurrentHash(expectedHash) || !root.isConnected) return;
+    // whoami fail is non-fatal for navigation — the menu is already
+    // usable. We surface the error inline in the footer area so the
+    // operator notices without losing the menu.
+    hydrateGreetingError(root, formatRpcError(err));
   }
 }
 
@@ -32,7 +40,7 @@ interface MenuEntry {
   route: Route;
 }
 
-function paint(root: HTMLElement, user: WhoamiResult): void {
+function paint(root: HTMLElement, user: WhoamiResult | null): void {
   root.innerHTML = '';
 
   // Full destination list — ordered by how often the operator hits
@@ -70,10 +78,29 @@ function paint(root: HTMLElement, user: WhoamiResult): void {
 
   const greet = document.createElement('p');
   greet.className = 'type-greeting';
-  greet.textContent = greeting(user.firstName);
+  // While whoami is in flight we paint the phase-of-day phrase without a
+  // name suffix. When the RPC settles, hydrateGreeting() swaps in the
+  // personalized form. If the RPC never settles, the operator still
+  // reads a sensible greeting.
+  greet.textContent = greeting(user?.firstName);
   footer.appendChild(greet);
 
   root.appendChild(footer);
+}
+
+function hydrateGreeting(root: HTMLElement, user: WhoamiResult): void {
+  const greet = root.querySelector<HTMLElement>('.type-greeting');
+  if (!greet) return;
+  greet.textContent = greeting(user.firstName);
+}
+
+function hydrateGreetingError(root: HTMLElement, message: string): void {
+  const footer = root.querySelector<HTMLElement>('.type-footer');
+  if (!footer) return;
+  const err = document.createElement('p');
+  err.className = 'type-greeting-error';
+  err.textContent = `백엔드 호출 실패: ${message}`;
+  footer.appendChild(err);
 }
 
 function buildMenuItem(entry: MenuEntry, index: number, total: number): HTMLButtonElement {
@@ -104,7 +131,3 @@ function greeting(firstName?: string): string {
   return who ? `${phase}, ${who}` : phase;
 }
 
-function renderHomeError(root: HTMLElement, message: string): void {
-  root.innerHTML = '';
-  root.appendChild(buildErrorBanner(message));
-}
