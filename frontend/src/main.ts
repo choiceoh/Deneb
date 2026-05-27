@@ -20,7 +20,6 @@ import { renderWikiPage } from './views/wiki_page';
 import { renderSessionTranscript } from './views/session_transcript';
 import { renderCalendar } from './views/calendar';
 import { renderCalendarEvent } from './views/calendar_event';
-import { renderMore } from './views/more';
 import { renderSettings } from './views/settings';
 import { renderModelSelect } from './views/model_select';
 import { renderCategories } from './views/categories';
@@ -114,7 +113,6 @@ function syncBackButton(route: Route): void {
 // label gets localized later; we just don't need it for these three.
 const TAB_DEFS: ReadonlyArray<{ name: TabRouteName; label: string }> = [
   { name: 'home', label: 'home' },
-  { name: 'more', label: 'more' },
   { name: 'settings', label: 'settings' },
 ];
 
@@ -177,9 +175,6 @@ async function dispatch(route: Route): Promise<void> {
       return;
     case 'calendarEvent':
       await renderCalendarEvent(root, cachedInitData, route.eventId);
-      return;
-    case 'more':
-      await renderMore(root, cachedInitData);
       return;
     case 'settings':
       renderSettings(root, cachedInitData);
@@ -298,7 +293,9 @@ function boot(): void {
       case 'diary':
       case 'crons':
       case 'people':
-        navigate({ name: 'more' });
+        // The "more" hub is gone — every former more-tab destination
+        // now pops back to home, where its entry word lives.
+        navigate({ name: 'home' });
         return;
       default:
         navigate({ name: 'home' });

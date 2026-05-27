@@ -27,7 +27,7 @@ export async function renderDiary(
   root.appendChild(
     buildViewHeader({
       title: 'diary',
-      left: { label: '← more', onClick: () => navigate({ name: 'more' }) },
+      left: { label: '← home', onClick: () => navigate({ name: 'home' }) },
       right: { label: 'refresh', onClick: () => void renderDiary(root, initData) },
     }),
   );

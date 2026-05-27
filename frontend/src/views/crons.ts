@@ -22,7 +22,7 @@ export async function renderCrons(
   root.appendChild(
     buildViewHeader({
       title: 'crons',
-      left: { label: '← more', onClick: () => navigate({ name: 'more' }) },
+      left: { label: '← home', onClick: () => navigate({ name: 'home' }) },
       right: { label: 'refresh', onClick: () => void renderCrons(root, initData) },
     }),
   );
