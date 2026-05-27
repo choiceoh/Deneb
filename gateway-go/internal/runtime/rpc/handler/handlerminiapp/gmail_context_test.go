@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -430,6 +431,181 @@ func TestSenderContext_TruncatedFlag(t *testing.T) {
 	recent := got["recent"].(map[string]any)
 	if recent["truncated"] != true {
 		t.Errorf("truncated = %v, want true (count == maxRecent)", recent["truncated"])
+	}
+}
+
+// TestSenderContext_SourcesRunInParallel verifies the three sources
+// (Gmail / Wiki / SenderFacts) run concurrently rather than
+// sequentially. Each fake source sleeps 80ms; sequential execution
+// would take ≥240ms, parallel ≈80ms. The threshold is generous (150ms)
+// to absorb scheduling jitter on slow CI hardware while still catching
+// a regression to the serial pattern.
+func TestSenderContext_SourcesRunInParallel(t *testing.T) {
+	const sleepEach = 80 * time.Millisecond
+	gmailClient := &fakeGmailClient{
+		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
+			time.Sleep(sleepEach)
+			return []gmail.MessageSummary{{ID: "m1", Date: "Mon, 26 May 2026 14:30:00 +0900"}}, nil
+		},
+	}
+	store := &fakeMemoryStore{
+		searchFn: func(_ context.Context, _ string, _ int) ([]wiki.SearchResult, error) {
+			time.Sleep(sleepEach)
+			return []wiki.SearchResult{{Path: "alice.md"}}, nil
+		},
+		readPageFn: func(_ string) (*wiki.Page, error) {
+			return &wiki.Page{Meta: wiki.Frontmatter{Title: "Alice"}}, nil
+		},
+	}
+	deps := GmailContextDeps{
+		Client:    func() (GmailClient, error) { return gmailClient, nil },
+		WikiStore: func() (MemorySearcher, error) { return store, nil },
+		SenderFacts: func(_ context.Context, _ string) string {
+			time.Sleep(sleepEach)
+			return "facts go here"
+		},
+		// Disable the cache for this test so two back-to-back calls
+		// can both time the underlying work.
+		CacheTTL: -1,
+	}
+	h := senderContext(deps)
+	start := time.Now()
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+		"sender": "Alice <alice@x.com>",
+	}))
+	elapsed := time.Since(start)
+	if !resp.OK {
+		t.Fatalf("response not OK: %+v", resp.Error)
+	}
+	if elapsed > 150*time.Millisecond {
+		t.Errorf("elapsed = %v, want < 150ms (parallel execution); 3×%v sequential would have been ~%v",
+			elapsed, sleepEach, 3*sleepEach)
+	}
+	// And verify the result still contains all three sources.
+	var got map[string]any
+	decode(t, resp, &got)
+	if got["recent"] == nil || got["wikiFacts"] == "" || len(got["wikiHits"].([]any)) == 0 {
+		t.Errorf("parallel run lost data: %+v", got)
+	}
+}
+
+// TestSenderContext_CacheHitSkipsWork validates two contract pieces:
+// (a) the cache really does prevent the Gmail/Wiki/SenderFacts work
+// from running a second time within the TTL, and (b) it keys off the
+// extracted email so "Alice <alice@x.com>" and "ALICE <Alice@X.COM>"
+// reuse the same cache entry.
+func TestSenderContext_CacheHitSkipsWork(t *testing.T) {
+	var gmailCalls, wikiCalls, factsCalls atomic.Int32
+	deps := GmailContextDeps{
+		Client: func() (GmailClient, error) {
+			return &fakeGmailClient{
+				searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
+					gmailCalls.Add(1)
+					return []gmail.MessageSummary{{ID: "m1", Date: "Mon, 26 May 2026 14:30:00 +0900"}}, nil
+				},
+			}, nil
+		},
+		WikiStore: func() (MemorySearcher, error) {
+			return &fakeMemoryStore{
+				searchFn: func(_ context.Context, _ string, _ int) ([]wiki.SearchResult, error) {
+					wikiCalls.Add(1)
+					return []wiki.SearchResult{{Path: "alice.md"}}, nil
+				},
+				readPageFn: func(_ string) (*wiki.Page, error) {
+					return &wiki.Page{Meta: wiki.Frontmatter{Title: "Alice"}}, nil
+				},
+			}, nil
+		},
+		SenderFacts: func(_ context.Context, _ string) string {
+			factsCalls.Add(1)
+			return "facts go here"
+		},
+		CacheTTL: time.Minute, // long enough that neither call expires
+	}
+	h := senderContext(deps)
+
+	first := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+		"sender": "Alice <alice@x.com>",
+	}))
+	if !first.OK {
+		t.Fatalf("first call failed: %+v", first.Error)
+	}
+	second := h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{
+		// Different display name + casing on the email should still
+		// hit the cache because the normalized key is the lower-cased
+		// email.
+		"sender": "Alice Liddell <ALICE@X.COM>",
+	}))
+	if !second.OK {
+		t.Fatalf("second call failed: %+v", second.Error)
+	}
+
+	if g := gmailCalls.Load(); g != 1 {
+		t.Errorf("gmail calls = %d, want 1 (cache should have served the second call)", g)
+	}
+	if w := wikiCalls.Load(); w != 1 {
+		t.Errorf("wiki calls = %d, want 1", w)
+	}
+	if f := factsCalls.Load(); f != 1 {
+		t.Errorf("sender-facts calls = %d, want 1", f)
+	}
+
+	// And the cached payload should equal the fresh payload (modulo
+	// the response frame's id, which we don't decode here).
+	var firstBody, secondBody map[string]any
+	decode(t, first, &firstBody)
+	decode(t, second, &secondBody)
+	if firstBody["wikiFacts"] != secondBody["wikiFacts"] {
+		t.Errorf("cache served a different payload: %v vs %v",
+			firstBody["wikiFacts"], secondBody["wikiFacts"])
+	}
+}
+
+// TestSenderContext_CacheTTLExpiry confirms that an entry past its
+// TTL is treated as a miss and recomputed.
+func TestSenderContext_CacheTTLExpiry(t *testing.T) {
+	var gmailCalls atomic.Int32
+	deps := GmailContextDeps{
+		Client: func() (GmailClient, error) {
+			return &fakeGmailClient{
+				searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
+					gmailCalls.Add(1)
+					return []gmail.MessageSummary{{ID: "m1"}}, nil
+				},
+			}, nil
+		},
+		CacheTTL: 30 * time.Millisecond,
+	}
+	h := senderContext(deps)
+	h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{"sender": "a@b.com"}))
+	time.Sleep(60 * time.Millisecond)
+	h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{"sender": "a@b.com"}))
+	if g := gmailCalls.Load(); g != 2 {
+		t.Errorf("gmail calls = %d, want 2 (TTL should have expired)", g)
+	}
+}
+
+// TestSenderContext_CacheDisabled checks that a negative TTL skips
+// caching entirely — useful for the parallel-execution test above and
+// for any future operator-facing flag.
+func TestSenderContext_CacheDisabled(t *testing.T) {
+	var gmailCalls atomic.Int32
+	deps := GmailContextDeps{
+		Client: func() (GmailClient, error) {
+			return &fakeGmailClient{
+				searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
+					gmailCalls.Add(1)
+					return []gmail.MessageSummary{{ID: "m1"}}, nil
+				},
+			}, nil
+		},
+		CacheTTL: -1,
+	}
+	h := senderContext(deps)
+	h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{"sender": "a@b.com"}))
+	h(authedCtx(), reqWith(t, "miniapp.gmail.sender_context", map[string]any{"sender": "a@b.com"}))
+	if g := gmailCalls.Load(); g != 2 {
+		t.Errorf("gmail calls = %d, want 2 (cache disabled)", g)
 	}
 }
 

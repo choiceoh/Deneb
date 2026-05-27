@@ -9,13 +9,17 @@ import {
   analyzeMessage,
   archive,
   markRead,
-  senderContext,
   trash,
   type GmailMessageDetail,
   type GmailMessageRow,
   type SenderContext,
 } from '../gmail';
-import { fetchMessage, getRowSummary, invalidate } from '../gmail_prefetch';
+import {
+  fetchMessage,
+  fetchSenderContext,
+  getRowSummary,
+  invalidate,
+} from '../gmail_prefetch';
 import { isCurrentHash, navigate } from '../router';
 import { errorMessage, formatRpcError, humanSize, relativeTime } from '../format';
 import { renderMarkdown } from '../markdown';
@@ -384,7 +388,15 @@ async function hydrateSenderContext(
   if (!fromHeader) return;
   let ctx: SenderContext;
   try {
-    ctx = await senderContext(initData, fromHeader);
+    // fetchSenderContext returns the prefetched in-flight promise
+    // (kicked at pointerdown in the list view) when available, so the
+    // RPC has typically been running in parallel with the message
+    // fetch since before the operator finished tapping. Sender
+    // context is also the slow source — graphify can take 300-1000ms
+    // — so the prefetch + server-side parallelization combine to
+    // bring this card up significantly sooner than a cold start
+    // would.
+    ctx = await fetchSenderContext(initData, fromHeader);
   } catch {
     // Best-effort enrichment. A failure here should not interrupt the
     // user reading the email — leave the slot empty.
