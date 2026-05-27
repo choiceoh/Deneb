@@ -3,6 +3,7 @@ package handlerminiapp
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
@@ -228,13 +229,26 @@ func TestMemoryGetPage_MissingPath(t *testing.T) {
 
 func TestMemoryGetPage_PathTraversalRejected(t *testing.T) {
 	h := memoryGetPage(memoryDepsFor(&fakeMemoryStore{}))
-	for _, bad := range []string{"../etc/passwd", "people/../../secret"} {
+	// Each entry would let a caller escape the wiki root without the
+	// pre-flight validation: parent traversal, absolute paths, Windows
+	// drive letters, backslash variants, and pure "." / ".." stubs.
+	for _, bad := range []string{
+		"../etc/passwd",
+		"people/../../secret",
+		"/etc/hosts",
+		"\\etc\\hosts",
+		"C:\\Windows\\System32",
+		"..\\..\\secret.md",
+		".",
+		"..",
+	} {
 		resp := h(authedCtx(), reqWith(t, "miniapp.memory.get_page", map[string]any{"path": bad}))
 		if resp.OK {
 			t.Errorf("path %q: expected error, got OK", bad)
+			continue
 		}
 		if resp.Error.Code != protocol.ErrInvalidRequest {
-			t.Errorf("path %q: code = %s", bad, resp.Error.Code)
+			t.Errorf("path %q: code = %s, want INVALID_REQUEST", bad, resp.Error.Code)
 		}
 	}
 }
@@ -242,7 +256,7 @@ func TestMemoryGetPage_PathTraversalRejected(t *testing.T) {
 func TestMemoryGetPage_NotFound(t *testing.T) {
 	store := &fakeMemoryStore{
 		readPageFn: func(_ string) (*wiki.Page, error) {
-			return nil, errors.New("file not found")
+			return nil, fs.ErrNotExist
 		},
 	}
 	h := memoryGetPage(memoryDepsFor(store))
@@ -252,6 +266,25 @@ func TestMemoryGetPage_NotFound(t *testing.T) {
 	}
 	if resp.Error.Code != protocol.ErrNotFound {
 		t.Errorf("code = %s, want NOT_FOUND", resp.Error.Code)
+	}
+}
+
+// Real IO/permission failures must not be misreported as NOT_FOUND —
+// the client would stop retrying even though the page still exists.
+// Anything that is not fs.ErrNotExist surfaces as UNAVAILABLE.
+func TestMemoryGetPage_ReadFailureIsUnavailable(t *testing.T) {
+	store := &fakeMemoryStore{
+		readPageFn: func(_ string) (*wiki.Page, error) {
+			return nil, errors.New("permission denied")
+		},
+	}
+	h := memoryGetPage(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.get_page", map[string]any{"path": "x.md"}))
+	if resp.OK {
+		t.Fatalf("expected error")
+	}
+	if resp.Error.Code != protocol.ErrUnavailable {
+		t.Errorf("code = %s, want UNAVAILABLE", resp.Error.Code)
 	}
 }
 

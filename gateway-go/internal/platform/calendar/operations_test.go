@@ -268,6 +268,50 @@ func TestParseEventTime_Fallbacks(t *testing.T) {
 	}
 }
 
+// Google Calendar can send dateTime without numeric offset when
+// timeZone is set explicitly. The previous parser returned the zero
+// time for that shape and the event was silently dropped from list +
+// briefing pipelines. Verify the fallback parses wall-clock in
+// dt.TimeZone instead.
+func TestParseEventTime_NoOffsetWithTimezone(t *testing.T) {
+	seoul, err := time.LoadLocation("Asia/Seoul")
+	if err != nil {
+		t.Skipf("Asia/Seoul tzdata unavailable: %v", err)
+	}
+	tm, allDay := parseEventTime(apiEventDateTime{
+		DateTime: "2026-05-27T14:00:00",
+		TimeZone: "Asia/Seoul",
+	})
+	if tm.IsZero() {
+		t.Fatalf("expected wall-clock parse, got zero time")
+	}
+	if allDay {
+		t.Errorf("expected timed event (allDay=false), got allDay=true")
+	}
+	want := time.Date(2026, 5, 27, 14, 0, 0, 0, seoul)
+	if !tm.Equal(want) {
+		t.Errorf("got %v, want %v", tm, want)
+	}
+}
+
+// Sub-second precision form ("2026-05-27T14:00:00.123") with timeZone
+// must also parse — Google sometimes includes fractional seconds.
+func TestParseEventTime_NoOffsetWithTimezone_Fractional(t *testing.T) {
+	if _, err := time.LoadLocation("Asia/Seoul"); err != nil {
+		t.Skipf("Asia/Seoul tzdata unavailable: %v", err)
+	}
+	tm, allDay := parseEventTime(apiEventDateTime{
+		DateTime: "2026-05-27T14:00:00.5",
+		TimeZone: "Asia/Seoul",
+	})
+	if tm.IsZero() || allDay {
+		t.Fatalf("expected timed parse, got zero=%v allDay=%v", tm.IsZero(), allDay)
+	}
+	if loc := tm.Location().String(); loc != "Asia/Seoul" {
+		t.Errorf("got location %q, want Asia/Seoul", loc)
+	}
+}
+
 // Sanity check: malformed JSON in Calendar response surfaces an error
 // rather than a panic. Ensures readJSON propagates Unmarshal failures.
 func TestReadJSON_MalformedSurfaces(t *testing.T) {

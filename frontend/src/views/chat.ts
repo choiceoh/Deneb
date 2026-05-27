@@ -11,6 +11,13 @@
 // keeps its own thread; "새 대화" resets only the active context's entry.
 // Plain (no-ctx) chats key into a shared "default" slot.
 //
+// Reset semantics: clearing thread.sessionKey to `undefined` would let
+// the backend re-derive `miniapp:<userId>` and pull the previous
+// transcript right back in, defeating the reset. So generic-chat reset
+// mints a fresh client-side key (`newSessionKey`). Context-attached
+// reset leaves the key undefined because hydrateContext will reassign
+// the deterministic per-context key on the next render.
+//
 // Mount-token guard: `renderChat` bumps `mountToken` on every call (and so
 // does the "새 대화" reset). `submit()` captures the token at entry and
 // bails out of any post-await DOM/state mutation when the token has moved
@@ -78,9 +85,16 @@ export function renderChat(root: HTMLElement, initData: string, ctx?: ChatContex
       // Reset bumps the token so any in-flight RPC's late resolution
       // skips both DOM and state mutation, then clears just this
       // thread's state. Other contexts' threads are untouched.
+      //
+      // Generic chats need a fresh client-side sessionKey on reset —
+      // miniapp.chat.send deterministically derives `miniapp:<userId>`
+      // from an undefined key and would replay the prior transcript.
+      // Context chats reassign their deterministic key in
+      // hydrateContext on the next render, so leaving them undefined
+      // is correct.
       mountToken += 1;
       thread.history = [];
-      thread.sessionKey = undefined;
+      thread.sessionKey = ctx ? undefined : newSessionKey();
       renderChat(root, initData, ctx);
     }),
   );
@@ -422,4 +436,14 @@ function scrollToBottom(list: HTMLElement): void {
   requestAnimationFrame(() => {
     list.scrollTop = list.scrollHeight;
   });
+}
+
+// newSessionKey mints a client-side sessionKey unique enough that the
+// backend's deterministic fallback (`miniapp:<userId>`) never collides
+// with it. Format mirrors the server's namespacing so logs stay easy
+// to grep.
+function newSessionKey(): string {
+  const ts = Date.now();
+  const rand = Math.random().toString(36).slice(2, 10);
+  return `miniapp:fresh:${ts}-${rand}`;
 }

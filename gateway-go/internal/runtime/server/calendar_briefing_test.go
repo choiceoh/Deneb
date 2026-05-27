@@ -209,6 +209,38 @@ func TestFormatBriefing_HandlesMissingTitle(t *testing.T) {
 	}
 }
 
+// HTML escape: telegram.Plugin sends the briefing with ParseMode "HTML"
+// (plugin.go), so any raw "<"/">"/"&" in calendar fields would make
+// Telegram reject the message with an entity-parse error and the D-15
+// push would silently fail every tick. The escape must happen inside
+// formatBriefing — anything that survives to the wire breaks delivery.
+func TestFormatBriefing_EscapesHTMLEntities(t *testing.T) {
+	s := makeService(t)
+	ev := calendar.Event{
+		Summary:    "Q1 <리뷰> & 계획",
+		Location:   "회의실 A <3F>",
+		Start:      time.Date(2026, 5, 26, 14, 0, 0, 0, s.displayLoc),
+		Conference: &calendar.ConferenceInfo{URI: "https://example.com/?a=1&b=2"},
+		Attendees: []calendar.Attendee{
+			{DisplayName: "이름 <bracket>", ResponseStatus: "accepted"},
+		},
+	}
+	body := s.formatBriefing(ev)
+	for _, leak := range []string{"<리뷰>", "<3F>", "<bracket>"} {
+		if strings.Contains(body, leak) {
+			t.Errorf("raw HTML entity %q must be escaped, got:\n%s", leak, body)
+		}
+	}
+	if strings.Contains(body, "?a=1&b=2") && !strings.Contains(body, "?a=1&amp;b=2") {
+		t.Errorf("conference URL ampersand not escaped, got:\n%s", body)
+	}
+	for _, must := range []string{"&lt;리뷰&gt;", "&lt;3F&gt;", "&lt;bracket&gt;"} {
+		if !strings.Contains(body, must) {
+			t.Errorf("expected escaped %q in:\n%s", must, body)
+		}
+	}
+}
+
 // FixedZone fallback: when LoadLocation fails, the service uses a
 // +09:00 offset, so a 14:00 KST event renders as "14:00" — never UTC.
 func TestFormatBriefing_FixedZoneFallbackRendersKSTWallClock(t *testing.T) {
