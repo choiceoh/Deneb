@@ -8,6 +8,7 @@
 //      hashchange to re-render on navigation.
 //   4. Manages Telegram's BackButton so it mirrors browser history.
 
+import '@fontsource-variable/inter';
 import './styles.css';
 import { parseRoute, navigate, isTabRoute, type Route, type TabRouteName } from './router';
 import { renderHome } from './views/home';

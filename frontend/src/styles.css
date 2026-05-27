@@ -114,7 +114,13 @@ body {
   padding: 0;
   background: var(--tg-bg);
   color: var(--tg-text);
+  /* Inter Variable is the lead face — it carries the full weight range
+     (100..900) the Zune-style typography needs (ultralight wordmark, light
+     menu labels, regular body, semibold accents). Korean characters fall
+     through Inter's unicode-range to Apple SD Gothic Neo / Noto Sans KR
+     so the same span can mix English + Korean without weight-jumping. */
   font-family:
+    'Inter Variable',
     -apple-system,
     BlinkMacSystemFont,
     'Segoe UI',
@@ -124,9 +130,20 @@ body {
     'Apple SD Gothic Neo',
     'Noto Sans KR',
     sans-serif;
+  /* OpenType features: enable cv11 (single-story 'a'), cv02 (open '4'),
+     and the standard contextual + kerning pairs. Plus tabular-nums where
+     selectors opt in via font-variant-numeric. ss03 swaps in a true
+     'curl-less' 'a' that pairs better with the ultralight weights. */
+  font-feature-settings:
+    'cv02' on,
+    'cv11' on,
+    'ss03' on,
+    'kern' on;
+  font-optical-sizing: auto;
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 #app {
