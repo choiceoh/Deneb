@@ -464,25 +464,40 @@ class MockTelegramHandler(BaseHTTPRequestHandler):
             self._write_json(400, {"ok": False, "error": "text is required"})
             return
 
+        # Forum-topic injection: caller may set chat_type="supergroup",
+        # is_forum=true, message_thread_id=N, is_topic_message=true to
+        # simulate a message in a forum topic. Defaults keep the existing
+        # 1:1 private chat behavior so older tests stay unchanged.
+        chat_type = str(body.get("chat_type") or "private")
+        chat: dict[str, Any] = {"id": chat_id, "type": chat_type}
+        if chat_type == "private":
+            chat["first_name"] = first_name
+        if bool(body.get("is_forum")):
+            chat["is_forum"] = True
+        if title := body.get("chat_title"):
+            chat["title"] = str(title)
+
         msg_id = self.state.next_message_id()
-        update = {
-            "message": {
-                "message_id": msg_id,
-                "date": int(time.time()),
-                "chat": {
-                    "id": chat_id,
-                    "type": "private",
-                    "first_name": first_name,
-                },
-                "from": {
-                    "id": from_id,
-                    "is_bot": False,
-                    "first_name": first_name,
-                },
-                "text": text,
-            }
+        message: dict[str, Any] = {
+            "message_id": msg_id,
+            "date": int(time.time()),
+            "chat": chat,
+            "from": {
+                "id": from_id,
+                "is_bot": False,
+                "first_name": first_name,
+            },
+            "text": text,
         }
-        update_id = self.state.enqueue_update(update)
+        if thread_id := body.get("message_thread_id"):
+            message["message_thread_id"] = int(thread_id)
+            # Telegram sets is_topic_message=true only when the message lives
+            # in a forum topic. Reply chains in non-forum groups carry a
+            # message_thread_id without that flag.
+            if bool(body.get("is_topic_message")):
+                message["is_topic_message"] = True
+
+        update_id = self.state.enqueue_update({"message": message})
         self._write_json(200, {
             "ok": True,
             "update_id": update_id,

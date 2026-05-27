@@ -42,6 +42,7 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 			Channel:   params.Channel,
 			To:        params.To,
 			AccountID: params.AccountID,
+			ThreadID:  params.ThreadID,
 		}
 	}
 	result, err := a.chat.SendSync(ctx, params.SessionKey, params.Command, "", opts)

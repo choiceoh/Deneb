@@ -241,11 +241,15 @@ func cronAdd(ctx context.Context, d *toolctx.ChronoDeps, name, schedule, command
 			// Explicit no-delivery: leave Delivery nil (agent runs silently).
 		} else if opts.DeliveryMode == "announce" || opts.DeliveryMode == "" {
 			// Default: capture delivery context from the creating session so the
-			// cron job knows where to send output (e.g. Telegram chat ID).
+			// cron job knows where to send output (e.g. Telegram chat ID). The
+			// thread ID is captured too so a cron defined inside a forum topic
+			// produces its output in that same topic instead of leaking into
+			// General — the user-visible win of M4.
 			if delivery := toolctx.DeliveryFromContext(ctx); delivery != nil && delivery.To != "" {
 				job.Delivery = &cron.JobDeliveryConfig{
-					Channel: delivery.Channel,
-					To:      delivery.To,
+					Channel:  delivery.Channel,
+					To:       delivery.To,
+					ThreadID: delivery.ThreadID,
 				}
 			}
 		}

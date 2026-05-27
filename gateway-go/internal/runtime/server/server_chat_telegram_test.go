@@ -7,8 +7,60 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
+
+// TestSplitTelegramTarget covers the proactive-relay path that splits
+// "<chat>:thread:<id>" target strings: a forum-topic target must yield both
+// parts so the relayed cron / dream / mail-poll message lands in the right
+// topic instead of leaking into General.
+func TestSplitTelegramTarget(t *testing.T) {
+	tests := []struct {
+		name       string
+		target     string
+		wantChat   string
+		wantThread string
+	}{
+		{name: "1:1 chat", target: "7074071666", wantChat: "7074071666"},
+		{name: "supergroup chat", target: "-1001234567890", wantChat: "-1001234567890"},
+		{name: "forum topic", target: "-1001234567890:thread:42", wantChat: "-1001234567890", wantThread: "42"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotChat, gotThread := splitTelegramTarget(tt.target)
+			if gotChat != tt.wantChat || gotThread != tt.wantThread {
+				t.Fatalf("splitTelegramTarget(%q) = (%q, %q), want (%q, %q)",
+					tt.target, gotChat, gotThread, tt.wantChat, tt.wantThread)
+			}
+		})
+	}
+}
+
+// TestDeliveryThreadID locks in the forum-topic routing of outbound replies:
+// an empty / missing ThreadID must yield 0 (Bot API "no thread"), a numeric
+// string must parse, and a malformed value must degrade to 0 rather than
+// surface a parse error to the user — silent fallback to General is safer
+// than dropping the reply because of a corrupt delivery context.
+func TestDeliveryThreadID(t *testing.T) {
+	tests := []struct {
+		name string
+		dc   *chat.DeliveryContext
+		want int64
+	}{
+		{name: "nil context", dc: nil, want: 0},
+		{name: "empty thread", dc: &chat.DeliveryContext{}, want: 0},
+		{name: "valid thread", dc: &chat.DeliveryContext{ThreadID: "42"}, want: 42},
+		{name: "malformed thread", dc: &chat.DeliveryContext{ThreadID: "not-a-number"}, want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := deliveryThreadID(tt.dc); got != tt.want {
+				t.Fatalf("deliveryThreadID = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
 
 // TestTelegramDedupKey_DifferentLongMessagesCollide covers the regression
 // where the dedup key was a fixed-length byte prefix of the reply text. Two

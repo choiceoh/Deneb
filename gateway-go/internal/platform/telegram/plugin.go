@@ -20,6 +20,9 @@ type OutboundMessage struct {
 	ReplyTo string `json:"replyTo,omitempty"`
 	// Media is a list of media attachment URLs or paths.
 	Media []string `json:"media,omitempty"`
+	// ThreadID routes the message into a forum topic; 0 = no thread
+	// (lands in the chat's main feed or General topic).
+	ThreadID int64 `json:"threadId,omitempty"`
 }
 
 // Plugin implements the Telegram Bot API channel.
@@ -342,15 +345,18 @@ func (p *Plugin) SendMessage(ctx context.Context, msg OutboundMessage) error {
 	if msg.Text != "" {
 		_, err := SendText(ctx, c, chatID, msg.Text, SendOptions{
 			ParseMode: "HTML",
+			ThreadID:  msg.ThreadID,
 		})
 		if err != nil {
 			return fmt.Errorf("send text: %w", err)
 		}
 	}
 
-	// Send media attachments (URLs or file_ids).
+	// Send media attachments (URLs or file_ids). Media inherits the same
+	// thread routing as the text so multi-part replies (text + photo) stay
+	// in one topic tab instead of splitting across the feed.
 	for _, media := range msg.Media {
-		if _, err := SendDocument(ctx, c, chatID, media, "", SendOptions{}); err != nil {
+		if _, err := SendDocument(ctx, c, chatID, media, "", SendOptions{ThreadID: msg.ThreadID}); err != nil {
 			return fmt.Errorf("send media: %w", err)
 		}
 	}

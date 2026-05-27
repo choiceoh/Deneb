@@ -120,6 +120,7 @@ func (s *Service) executeJobFullWithTrigger(ctx context.Context, job StoreJob, t
 				Channel:    safeStr(target, func(t *DeliveryTarget) string { return t.Channel }),
 				To:         safeStr(target, func(t *DeliveryTarget) string { return t.To }),
 				AccountID:  safeStr(target, func(t *DeliveryTarget) string { return t.AccountID }),
+				ThreadID:   safeStr(target, func(t *DeliveryTarget) string { return t.ThreadID }),
 			})
 			if runErr == nil {
 				break

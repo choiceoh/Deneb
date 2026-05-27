@@ -475,10 +475,11 @@ func modelsMessageText(currentModel string) string {
 }
 
 // handleModelsCommand sends a model quick-change message with an inline keyboard.
-func (p *InboundProcessor) handleModelsCommand(chatID string) {
+// threadID routes the message into a forum topic; pass "" for non-forum chats.
+func (p *InboundProcessor) handleModelsCommand(chatID, threadID string) {
 	sections := p.quickChangeModels()
 	if len(sections) == 0 {
-		p.sendCommandReply(chatID, &handlers.CommandResult{Reply: "사용 가능한 모델이 없습니다.", SkipAgent: true})
+		p.sendCommandReply(chatID, threadID, &handlers.CommandResult{Reply: "사용 가능한 모델이 없습니다.", SkipAgent: true})
 		return
 	}
 
@@ -491,6 +492,7 @@ func (p *InboundProcessor) handleModelsCommand(chatID string) {
 	if err != nil {
 		return
 	}
+	tid, _ := strconv.ParseInt(threadID, 10, 64)
 
 	currentModel := p.currentModel()
 	keyboard := buildModelKeyboard(sections, currentModel)
@@ -500,6 +502,7 @@ func (p *InboundProcessor) handleModelsCommand(chatID string) {
 	if _, err := telegram.SendText(ctx, client, id, modelsMessageText(currentModel), telegram.SendOptions{
 		ParseMode: "HTML",
 		Keyboard:  keyboard,
+		ThreadID:  tid,
 	}); err != nil {
 		p.logger.Warn("failed to send models command reply", "error", err)
 	}

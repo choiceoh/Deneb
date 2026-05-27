@@ -16,6 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/appsettings"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -98,6 +99,20 @@ func (s *Server) registerSessionRPCMethods() {
 	chatCfg.Tools = chat.NewToolRegistry()
 	chatCfg.JobTracker = s.jobTracker
 	chatCfg.AgentLog = agentLogWriter
+
+	// Wire app settings store so /use-forum can persist the active home.
+	// A failure here is logged but non-fatal — the gateway boots and the
+	// chat handler degrades to refusing /use-forum (and inbound stays in
+	// legacy "accept any chat" mode).
+	if s.denebDir != "" {
+		if appSettings, err := appsettings.NewStore(s.denebDir); err != nil {
+			s.logger.Error("appsettings: init failed; /use-forum unavailable",
+				"dir", s.denebDir, "error", err)
+		} else {
+			s.appSettings = appSettings
+			chatCfg.AppSettings = appSettings
+		}
+	}
 
 	// Phase 1: Memory subsystem (unified store, Aurora, memory, wiki).
 	var reg *modelrole.Registry
