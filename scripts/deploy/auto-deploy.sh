@@ -18,6 +18,15 @@
 # - Pull-based rather than push-based (GitHub Actions → SSH) because the DGX
 #   is a single-operator local host and we do not want to expose SSH or a
 #   webhook receiver to the internet.
+# - **Always exit 0**, even on failure. The script writes errors to its log
+#   so an operator can spot them via `tail`, but exiting non-zero would mark
+#   the systemd service as "failed", which historically caused operators to
+#   disable the timer entirely when they saw the red status. The May-2026
+#   incident is the cautionary tale: a brief week of `git pull` divergence
+#   produced a stream of failed status lines, the timer got disabled, and
+#   prod stopped auto-pulling for two days. The FAIL_FILE/RETRY_SEC guard
+#   already throttles retries on the same broken commit, so swallowing the
+#   exit code costs nothing while protecting the watchdog.
 set -euo pipefail
 
 PROD_DIR="${DENEB_PROD_DIR:-$HOME/deneb}"
@@ -60,7 +69,10 @@ fi
 
 if [[ ! -d "$PROD_DIR/.git" ]]; then
     log "ERROR: $PROD_DIR is not a git repo; skipping"
-    exit 1
+    # Exit 0 even on a permanent config error — see header comment.
+    # An operator who reads the log will see the ERROR line; systemd
+    # stays happy so the watchdog doesn't get disabled.
+    exit 0
 fi
 
 cd "$PROD_DIR"
@@ -108,15 +120,24 @@ if recent_failed_head "$remote_head"; then
 fi
 
 log "new main candidate: current=$local_head deployed=${deployed_head:-none} remote=$remote_head; running deploy.sh"
-if "$PROD_DIR/scripts/deploy/deploy.sh" >>"$LOG_FILE" 2>&1; then
+# `set -e` would normally bail on a non-zero deploy.sh, so we disable it
+# for this one block — both branches need to run (the failure branch
+# records the bad head so we don't retry immediately, then exits 0 so
+# systemd stays green).
+set +e
+"$PROD_DIR/scripts/deploy/deploy.sh" >>"$LOG_FILE" 2>&1
+rc=$?
+set -e
+if (( rc == 0 )); then
     deployed_now=$(git rev-parse HEAD)
     mkdir -p "$STATE_DIR"
     printf '%s\n' "$deployed_now" > "$STATE_FILE"
     rm -f "$FAIL_FILE"
     log "deploy OK (head now $deployed_now)"
 else
-    rc=$?
     record_failure "$remote_head"
     log "deploy FAILED (rc=$rc) — manual intervention may be required"
-    exit $rc
+    # Exit 0 — see header. The FAIL_FILE/RETRY_SEC throttle stops the
+    # next tick from re-running the same broken commit for 10 minutes,
+    # so this isn't a hot loop.
 fi
