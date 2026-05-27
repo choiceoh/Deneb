@@ -45,7 +45,12 @@ export function getRowSummary(id: string): GmailMessageRow | undefined {
 // Errors are swallowed here (and the entry removed) so a failed
 // prefetch doesn't poison the cache; the detail view will retry when
 // it calls fetchMessage() and surface any error there.
-export function prefetchMessage(initData: string, id: string): void {
+export function prefetchMessage(initData: string, id: string | null | undefined): void {
+  // Defensive against a missing/empty id — the row id should always
+  // be present, but a falsy id here would otherwise key the in-flight
+  // map with "" and serve every message-less prefetch the same stale
+  // promise. Bail out cheaply.
+  if (!id) return;
   if (inFlightDetails.has(id)) return;
   const p = getMessage(initData, id).catch((err) => {
     inFlightDetails.delete(id);
@@ -101,11 +106,16 @@ export function invalidate(id: string): void {
 // ones — sender context is durable enough within a session that re-
 // using a result from 30 seconds ago is fine, and lets a re-opened
 // detail view paint the sender card synchronously.
-export function prefetchSenderContext(initData: string, from: string): void {
+export function prefetchSenderContext(
+  initData: string,
+  from: string | null | undefined,
+): void {
   const key = normalizeSenderKey(from);
   if (!key) return;
   if (senderContextCache.has(key)) return;
-  const p = senderContext(initData, from).catch((err) => {
+  // `from as string` is safe — normalizeSenderKey returned non-empty,
+  // which requires `from` to have been a non-empty string.
+  const p = senderContext(initData, from as string).catch((err) => {
     senderContextCache.delete(key);
     throw err;
   });
@@ -114,17 +124,22 @@ export function prefetchSenderContext(initData: string, from: string): void {
 
 export async function fetchSenderContext(
   initData: string,
-  from: string,
+  from: string | null | undefined,
 ): Promise<SenderContext> {
   const key = normalizeSenderKey(from);
   if (key) {
     const existing = senderContextCache.get(key);
     if (existing) return existing;
   }
-  const fresh = senderContext(initData, from).catch((err) => {
-    if (key) senderContextCache.delete(key);
-    throw err;
-  });
+  // If `from` was empty/nullish, key is empty and we still need to
+  // make the call (the backend will surface a MissingParam error or
+  // handle it gracefully); we just skip caching.
+  const fresh = senderContext(initData, (from as string | undefined) ?? '').catch(
+    (err) => {
+      if (key) senderContextCache.delete(key);
+      throw err;
+    },
+  );
   if (key) senderContextCache.set(key, fresh);
   return fresh;
 }
@@ -133,7 +148,15 @@ export async function fetchSenderContext(
 // "Alice <alice@x.com>" and "ALICE <Alice@X.COM>" share the cache
 // entry, matching the server-side cache's normalization. Falls back
 // to the trimmed raw string when there's no angle-bracketed email.
-function normalizeSenderKey(from: string): string {
+//
+// Tolerates a nullish input (undefined, null, ""), returning an empty
+// key — the GmailMessageRow type says `from: string` but defensive
+// callers pay nothing for the guard and a single missing-header mail
+// would otherwise throw `Cannot read properties of undefined (reading
+// 'trim')` synchronously, taking down whichever event listener
+// invoked the prefetch.
+function normalizeSenderKey(from: string | null | undefined): string {
+  if (typeof from !== 'string') return '';
   const trimmed = from.trim();
   if (!trimmed) return '';
   const lt = trimmed.indexOf('<');
