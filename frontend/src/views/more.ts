@@ -13,7 +13,7 @@ import { ping, whoami, type PingResult, type WhoamiResult } from '../rpc';
 import { formatRpcError } from '../format';
 import { isCurrentHash, navigate, type Route } from '../router';
 import { readAppSettings } from '../app_settings';
-import { buildErrorBanner } from './ui';
+import { buildErrorBanner, buildViewHeader } from './ui';
 
 export async function renderMore(root: HTMLElement, initData: string): Promise<void> {
   const expectedHash = location.hash;
@@ -38,13 +38,7 @@ function paint(
 ): void {
   root.innerHTML = '';
 
-  const header = document.createElement('div');
-  header.className = 'brand-header';
-  header.innerHTML = `
-    <span class="brand-name">Deneb</span>
-    <span class="brand-badge" title="비서실장형 단일 에이전트">✓</span>
-  `;
-  root.appendChild(header);
+  root.appendChild(buildViewHeader({ title: 'more' }));
 
   // Profile card — who you are + what's running.
   const profileLabel = document.createElement('div');

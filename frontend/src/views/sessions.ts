@@ -14,8 +14,8 @@ export async function renderSessions(root: HTMLElement, initData: string): Promi
 
   root.appendChild(
     buildViewHeader({
-      title: '최근 세션',
-      right: { label: '새로고침', onClick: () => void renderSessions(root, initData) },
+      title: 'sessions',
+      right: { label: 'refresh', onClick: () => void renderSessions(root, initData) },
     }),
   );
 

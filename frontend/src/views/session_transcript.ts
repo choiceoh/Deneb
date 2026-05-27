@@ -19,8 +19,8 @@ export async function renderSessionTranscript(
 
   root.appendChild(
     buildViewHeader({
-      title: '대화 기록',
-      left: { label: '← 세션 목록', onClick: () => navigate({ name: 'sessions' }) },
+      title: 'transcript',
+      left: { label: '← sessions', onClick: () => navigate({ name: 'sessions' }) },
     }),
   );
 

@@ -53,11 +53,11 @@ function paint(
 
   root.appendChild(
     buildViewHeader({
-      title: editing ? '위키 · 수정' : '위키',
-      left: { label: '← 검색', onClick: () => navigate({ name: 'memory' }) },
+      title: editing ? 'wiki · edit' : 'wiki',
+      left: { label: '← search', onClick: () => navigate({ name: 'memory' }) },
       right: editing
-        ? { label: '취소', onClick: () => paint(root, initData, page, false) }
-        : { label: '수정', onClick: () => paint(root, initData, page, true) },
+        ? { label: 'cancel', onClick: () => paint(root, initData, page, false) }
+        : { label: 'edit', onClick: () => paint(root, initData, page, true) },
     }),
   );
 

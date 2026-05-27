@@ -14,7 +14,7 @@ let lastQuery = '';
 export function renderMemory(root: HTMLElement, initData: string): void {
   root.innerHTML = '';
 
-  root.appendChild(buildViewHeader({ title: '메모리 검색' }));
+  root.appendChild(buildViewHeader({ title: 'memory' }));
 
   const form = document.createElement('form');
   form.className = 'search-form';

@@ -9,19 +9,14 @@ import {
 } from '../app_settings';
 import { navigate } from '../router';
 import { listMiniappModels } from '../rpc';
+import { buildViewHeader } from './ui';
 
 type ToggleKey = keyof AppSettings;
 
 export function renderSettings(root: HTMLElement, initData: string): void {
   root.innerHTML = '';
 
-  const header = document.createElement('div');
-  header.className = 'brand-header';
-  header.innerHTML = `
-    <span class="brand-name">설정</span>
-    <span class="brand-badge" title="로컬 저장">✓</span>
-  `;
-  root.appendChild(header);
+  root.appendChild(buildViewHeader({ title: 'settings' }));
 
   const saved = readAppSettings();
   const status = document.createElement('div');

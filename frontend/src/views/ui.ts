@@ -18,25 +18,38 @@ export interface HeaderButton {
 }
 
 /**
- * buildViewHeader returns a `.view-header` row with the standard 3-slot
- * layout: left button | title | right button. Either button may be
- * omitted — an empty span fills the slot so the flex spacing stays
- * predictable (justify-content: space-between with 2 children pushes
- * them to the edges, with 3 children centers the middle one).
+ * buildViewHeader returns the standard page header for any drill-down
+ * view. Layout matches the new home idiom: a small actions row (back
+ * link on the left, optional action on the right) sits above a large
+ * lowercase title.
+ *
+ *   ← back                                                  refresh
+ *   mail
+ *
+ * Either button may be omitted — the actions row collapses when both
+ * slots are empty, so views like memory/categories that only have a
+ * title get just the title with no leftover whitespace above.
  */
 export function buildViewHeader(opts: {
   title: string;
   left?: HeaderButton;
   right?: HeaderButton;
 }): HTMLElement {
-  const wrap = document.createElement('div');
+  const wrap = document.createElement('header');
   wrap.className = 'view-header';
-  wrap.appendChild(buildSlot(opts.left));
-  const title = document.createElement('span');
+
+  if (opts.left || opts.right) {
+    const actions = document.createElement('div');
+    actions.className = 'view-actions';
+    actions.appendChild(buildSlot(opts.left));
+    actions.appendChild(buildSlot(opts.right));
+    wrap.appendChild(actions);
+  }
+
+  const title = document.createElement('h1');
   title.className = 'view-title';
   title.textContent = opts.title;
   wrap.appendChild(title);
-  wrap.appendChild(buildSlot(opts.right));
   return wrap;
 }
 

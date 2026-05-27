@@ -90,8 +90,8 @@ export async function renderList(root: HTMLElement, initData: string): Promise<v
 
 function buildHeader(onRefresh: () => void): HTMLElement {
   return buildViewHeader({
-    title: '받은 편지함',
-    right: { label: '새로고침', onClick: onRefresh },
+    title: 'mail',
+    right: { label: 'refresh', onClick: onRefresh },
   });
 }
 

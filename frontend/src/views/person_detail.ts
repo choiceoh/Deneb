@@ -33,10 +33,10 @@ export async function renderPersonDetail(
 
   root.appendChild(
     buildViewHeader({
-      title: '👤 사람',
-      left: { label: '← 사람들', onClick: () => navigate({ name: 'people' }) },
+      title: 'person',
+      left: { label: '← people', onClick: () => navigate({ name: 'people' }) },
       right: {
-        label: '새로고침',
+        label: 'refresh',
         onClick: () => void renderPersonDetail(root, initData, email),
       },
     }),

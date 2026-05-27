@@ -20,9 +20,9 @@ export async function renderPeople(
 
   root.appendChild(
     buildViewHeader({
-      title: '👤 사람들',
-      left: { label: '← 더보기', onClick: () => navigate({ name: 'more' }) },
-      right: { label: '새로고침', onClick: () => void renderPeople(root, initData) },
+      title: 'people',
+      left: { label: '← more', onClick: () => navigate({ name: 'more' }) },
+      right: { label: 'refresh', onClick: () => void renderPeople(root, initData) },
     }),
   );
 
