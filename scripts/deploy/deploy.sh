@@ -13,7 +13,17 @@ LOG_ARCHIVE_KEEP=20   # keep last N pre-restart logs; older ones get pruned
 LOG_ARCHIVE_MAX_BYTES=$((200 * 1024 * 1024))  # cap archive dir at 200MB
 
 health_ok() {
-    curl -sf "http://127.0.0.1:$PROD_PORT/health" > /dev/null
+    # Auto-detect listen address — gateway may bind loopback OR a specific
+    # interface (e.g. tailnet) depending on --bind. ss output col 4 is
+    # "Local Address:Port".
+    local listen addr
+    listen=$(ss -ltnH "sport = :$PROD_PORT" 2>/dev/null | awk '{print $4}' | head -1)
+    [[ -z "$listen" ]] && return 1
+    case "$listen" in
+        "*:"*|"0.0.0.0:"*|"[::]:"*) addr="127.0.0.1:$PROD_PORT" ;;
+        *)                          addr="$listen" ;;
+    esac
+    curl -sf "http://$addr/health" > /dev/null
 }
 
 systemd_unit_loaded() {
