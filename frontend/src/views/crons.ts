@@ -47,7 +47,7 @@ export async function renderCrons(
     if (jobs.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.textContent = '등록된 자동 작업이 없습니다';
+      empty.textContent = 'no scheduled jobs';
       root.appendChild(empty);
       return;
     }

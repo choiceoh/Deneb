@@ -206,6 +206,32 @@ async function dispatch(route: Route): Promise<void> {
   }
 }
 
+// Stash the previous route so the next transition can decide whether
+// to flow left→right (going forward in the tab order, e.g. home →
+// settings) or right→left (going back). For drill-down enters we
+// flow in from below; for drill-down exits we flow out below.
+let lastRoute: Route | null = null;
+
+const TRANSITION_ORDER: Record<string, number> = {
+  home: 0,
+  settings: 1,
+};
+
+function transitionDirection(from: Route | null, to: Route): 'forward' | 'back' | 'deep' | 'shallow' {
+  if (!from) return 'forward';
+  const fromOrder = TRANSITION_ORDER[from.name];
+  const toOrder = TRANSITION_ORDER[to.name];
+  if (fromOrder !== undefined && toOrder !== undefined) {
+    return toOrder > fromOrder ? 'forward' : 'back';
+  }
+  // tab → drill-down = deep; drill-down → tab = shallow.
+  if (fromOrder !== undefined && toOrder === undefined) return 'deep';
+  if (fromOrder === undefined && toOrder !== undefined) return 'shallow';
+  // drill-down → drill-down (e.g., mail detail → wiki page) treats as
+  // forward — the keyframes pick a neutral slide direction.
+  return 'forward';
+}
+
 function handleHashChange(): void {
   const route = parseRoute(location.hash);
   // View Transitions API gives us a free Zune-style shear/fade between
@@ -213,9 +239,13 @@ function handleHashChange(): void {
   // enter animations on every component. We hand it our dispatch fn;
   // it snapshots the old DOM, lets the new DOM mount, and crossfades
   // through `::view-transition-old(root)` and `::view-transition-new(root)`
-  // keyframes defined in styles.css. Telegram's WebView (Chromium-based,
-  // recent enough on both Android and desktop) supports the API. Older
-  // engines just fall through to the un-animated dispatch.
+  // keyframes defined in styles.css. Direction is stamped onto
+  // <html data-transition-dir="…"> so the keyframes can pick the
+  // matching slide vector.
+  const dir = transitionDirection(lastRoute, route);
+  document.documentElement.dataset.transitionDir = dir;
+  lastRoute = route;
+
   const startTransition = (document as Document & {
     startViewTransition?: (cb: () => void | Promise<void>) => unknown;
   }).startViewTransition;
@@ -303,6 +333,40 @@ function boot(): void {
   });
 
   window.addEventListener('hashchange', handleHashChange);
+
+  // Auto-hide the panorama tab strip when the user scrolls down, slide
+  // it back into view when they scroll up. Only fires when the page is
+  // tall enough to scroll (no point hiding a strip the user can already
+  // see in full). 8px threshold avoids flickering on bouncy iOS
+  // momentum scrolling. Class lives on <body> so CSS can shift the
+  // strip via transform/opacity without re-querying refs.
+  let lastScrollY = window.scrollY;
+  let scrollTicking = false;
+  window.addEventListener(
+    'scroll',
+    () => {
+      if (scrollTicking) return;
+      scrollTicking = true;
+      requestAnimationFrame(() => {
+        const y = window.scrollY;
+        const dy = y - lastScrollY;
+        if (Math.abs(dy) > 8) {
+          if (dy > 0 && y > 80) {
+            document.body.classList.add('panorama-hidden');
+          } else {
+            document.body.classList.remove('panorama-hidden');
+          }
+          lastScrollY = y;
+        }
+      });
+      // Reset on next frame so subsequent rafs can fire.
+      requestAnimationFrame(() => {
+        scrollTicking = false;
+      });
+    },
+    { passive: true },
+  );
+
   void dispatch(parseRoute(location.hash));
 }
 

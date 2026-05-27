@@ -39,7 +39,7 @@ export async function renderCategories(
     if (categories.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.textContent = '카테고리가 비어있습니다';
+      empty.textContent = 'no categories yet';
       root.appendChild(empty);
       return;
     }

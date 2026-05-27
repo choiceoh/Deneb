@@ -43,7 +43,7 @@ export async function renderDiary(
     if (entries.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.textContent = '다이어리에 기록이 없습니다';
+      empty.textContent = 'no diary entries yet';
       root.appendChild(empty);
       return;
     }

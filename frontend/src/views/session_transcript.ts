@@ -53,7 +53,7 @@ function paintMessages(
   if (messages.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
-    empty.textContent = '메시지가 없습니다';
+    empty.textContent = 'no messages';
     root.appendChild(empty);
     return;
   }
