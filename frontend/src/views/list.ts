@@ -191,21 +191,20 @@ function buildRow(row: GmailMessageRow, selection: SelectionState): HTMLElement 
       enterSelectionMode(selection);
       toggleSelected(selection, row, wrap, true);
     }, longPressMs);
-    // Fire the detail RPC the moment the finger touches the row. By
-    // the time the operator releases + the click event fires + we
-    // navigate + the detail view boots (~150-300ms total), the
-    // response is often already back, so detail.ts paints immediately
-    // instead of waiting on the network. Skipped when we're in
-    // multi-select mode (the tap toggles selection, not navigation).
-    //
-    // The sender-context RPC is the slow one (~300-1000ms because of
-    // graphify), so we prefetch it on the same pointerdown — it runs
-    // in parallel with the message fetch and the detail view's
-    // hydrateSenderContext picks up the in-flight promise instead of
-    // firing a duplicate.
+    // Fire the detail + sender-context RPCs the moment the finger
+    // touches the row. Wrapped in try/catch defensively: a thrown
+    // error here would otherwise interrupt the pointerdown listener
+    // and leave the press timer set, which can manifest as "tapping
+    // a mail does nothing". Both prefetch helpers are designed to
+    // never throw synchronously, but the wrapper makes that contract
+    // unbreakable.
     if (!selection.selecting) {
-      prefetchMessage(selection.initData, row.id);
-      prefetchSenderContext(selection.initData, row.from);
+      try {
+        prefetchMessage(selection.initData, row.id);
+        prefetchSenderContext(selection.initData, row.from);
+      } catch (err) {
+        console.warn('mail row prefetch failed', err);
+      }
     }
   });
 

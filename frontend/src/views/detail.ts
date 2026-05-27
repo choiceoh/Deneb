@@ -11,13 +11,11 @@ import {
   markRead,
   trash,
   type GmailMessageDetail,
-  type GmailMessageRow,
   type SenderContext,
 } from '../gmail';
 import {
   fetchMessage,
   fetchSenderContext,
-  getRowSummary,
   invalidate,
 } from '../gmail_prefetch';
 import { isCurrentHash, navigate } from '../router';
@@ -33,17 +31,16 @@ export async function renderDetail(
 ): Promise<void> {
   const expectedHash = location.hash;
 
-  // If the list view cached this row before the operator drilled in,
-  // paint a partial shell immediately so subject/from/when are on
-  // screen while the detail RPC is in flight. The list view's
-  // pointerdown handler also kicks the RPC early via prefetchMessage,
-  // so the body usually fills in within ~50-150ms of this paint.
-  const summary = getRowSummary(messageId);
-  if (summary) {
-    paintShellFromSummary(root, summary);
-  } else {
-    root.innerHTML = '<div class="loading">메일 불러오는 중…</div>';
-  }
+  // Show a clear "loading mail" indicator so the operator sees
+  // explicit feedback that the tap landed and a new view is
+  // mounting. The previous optimistic-shell paint reused the list
+  // row's subject/from/snippet here, but the result was visually
+  // close enough to an inbox row that some taps read as "the click
+  // did nothing" rather than "the detail view is loading". We still
+  // get the perceived-latency win from prefetchMessage — the RPC
+  // fired on pointerdown — so the loading text below is usually
+  // visible for only one frame before paint() replaces it.
+  root.innerHTML = '<div class="loading">메일 불러오는 중…</div>';
 
   try {
     const msg = await fetchMessage(initData, messageId);
@@ -65,52 +62,6 @@ export async function renderDetail(
       onClick: () => navigate({ name: 'inbox' }),
     });
   }
-}
-
-// paintShellFromSummary renders the parts of the detail view that the
-// list-row summary already knows about: header, meta card with
-// subject/from/when (To is shown as "—" until the RPC lands), and the
-// snippet as a body placeholder. Actions are deliberately omitted —
-// rendering disabled buttons would just be visual noise; the full
-// action bar lands a moment later when paint() runs over this shell.
-function paintShellFromSummary(root: HTMLElement, summary: GmailMessageRow): void {
-  root.innerHTML = '';
-
-  root.appendChild(
-    buildViewHeader({
-      title: 'message',
-      left: { label: '← mail', onClick: () => navigate({ name: 'inbox' }) },
-    }),
-  );
-
-  const meta = document.createElement('div');
-  meta.className = 'card email-meta';
-  meta.innerHTML = `
-    <div class="email-subject"></div>
-    <div class="row"><span class="label">From</span><span class="value"></span></div>
-    <div class="row"><span class="label">To</span><span class="value"></span></div>
-    <div class="row"><span class="label">When</span><span class="value"></span></div>
-  `;
-  (meta.querySelector('.email-subject') as HTMLElement).textContent =
-    summary.subject || '(제목 없음)';
-  const valueCells = meta.querySelectorAll('.value');
-  (valueCells[0] as HTMLElement).textContent = summary.from;
-  (valueCells[1] as HTMLElement).textContent = '—';
-  (valueCells[2] as HTMLElement).textContent = relativeTime(summary.date);
-  root.appendChild(meta);
-
-  // Body placeholder: show the list snippet with a quiet hint so the
-  // operator knows the full body is still loading. The full paint
-  // replaces this whole subtree as soon as the RPC lands.
-  const body = document.createElement('pre');
-  body.className = 'email-body email-body-loading';
-  body.textContent = summary.snippet || '';
-  root.appendChild(body);
-
-  const hint = document.createElement('div');
-  hint.className = 'muted';
-  hint.textContent = '전문 불러오는 중…';
-  root.appendChild(hint);
 }
 
 function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): void {
