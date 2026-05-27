@@ -1,10 +1,9 @@
 // views/list.ts — Gmail inbox triage queue.
 //
 // Calls miniapp.gmail.list_recent and renders one row per message. Tap on
-// the row → navigate to detail. Each row also exposes an inline 🗑 button
-// for quick triage without entering the detail view; the row itself stops
-// being a <button> (so we can nest a sibling delete button) and uses a
-// div with role="button" for keyboard / screen-reader parity.
+// the row → navigate to detail. Long-press a row → enter multi-select mode;
+// normal taps then toggle rows and a fixed bottom action bar exposes bulk
+// read/archive/delete actions.
 //
 // Pagination: the backend returns nextPageToken; when non-empty we show
 // a "더 보기" button at the bottom that fetches the next page and appends
@@ -24,6 +23,27 @@ import { confirmAction } from '../dialog';
 import { errorMessage, formatRpcError, relativeTime, shortFrom } from '../format';
 import { buildErrorBanner, buildLoadingNode, buildViewHeader } from './ui';
 
+const longPressMs = 450;
+const longPressMoveTolerancePx = 10;
+
+type BulkAction = 'read' | 'archive' | 'trash';
+
+interface SelectedMail {
+  row: GmailMessageRow;
+  wrap: HTMLElement;
+}
+
+interface SelectionState {
+  root: HTMLElement;
+  rowsContainer: HTMLElement;
+  initData: string;
+  expectedHash: string;
+  selected: Map<string, SelectedMail>;
+  selecting: boolean;
+  busy: boolean;
+  actionBar?: HTMLElement;
+}
+
 export async function renderList(root: HTMLElement, initData: string): Promise<void> {
   const expectedHash = location.hash;
   root.innerHTML = '';
@@ -36,6 +56,7 @@ export async function renderList(root: HTMLElement, initData: string): Promise<v
   const rowsContainer = document.createElement('div');
   rowsContainer.className = 'email-list';
   root.appendChild(rowsContainer);
+  const selection = createSelectionState(root, rowsContainer, initData, expectedHash);
 
   const status = buildLoadingNode('메일 불러오는 중…');
   rowsContainer.appendChild(status);
@@ -52,10 +73,10 @@ export async function renderList(root: HTMLElement, initData: string): Promise<v
       return;
     }
     for (const row of result.messages) {
-      rowsContainer.appendChild(buildRow(row, initData, expectedHash));
+      rowsContainer.appendChild(buildRow(row, selection));
     }
     if (result.nextPageToken) {
-      mountLoadMore(rowsContainer, initData, result.nextPageToken, expectedHash);
+      mountLoadMore(rowsContainer, selection, result.nextPageToken);
     }
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
@@ -73,7 +94,24 @@ function buildHeader(onRefresh: () => void): HTMLElement {
   });
 }
 
-function buildRow(row: GmailMessageRow, initData: string, expectedHash: string): HTMLElement {
+function createSelectionState(
+  root: HTMLElement,
+  rowsContainer: HTMLElement,
+  initData: string,
+  expectedHash: string,
+): SelectionState {
+  return {
+    root,
+    rowsContainer,
+    initData,
+    expectedHash,
+    selected: new Map(),
+    selecting: false,
+    busy: false,
+  };
+}
+
+function buildRow(row: GmailMessageRow, selection: SelectionState): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'email-row-wrap';
   if (row.isUnread) wrap.classList.add('email-row-unread');
@@ -81,7 +119,13 @@ function buildRow(row: GmailMessageRow, initData: string, expectedHash: string):
   const main = document.createElement('div');
   main.className = 'email-row';
   main.setAttribute('role', 'button');
+  main.setAttribute('aria-pressed', 'false');
   main.tabIndex = 0;
+
+  const indicator = document.createElement('span');
+  indicator.className = 'email-row-select-indicator';
+  indicator.setAttribute('aria-hidden', 'true');
+  main.appendChild(indicator);
 
   const fromLine = document.createElement('div');
   fromLine.className = 'email-row-meta';
@@ -103,170 +147,273 @@ function buildRow(row: GmailMessageRow, initData: string, expectedHash: string):
   snippet.textContent = row.snippet || '';
   main.appendChild(snippet);
 
-  // Set the inert flag the moment we initiate a navigation so a quick
-  // second tap on the 🗑 button can't fire a delete against the row
-  // the user has already left.
+  let pressTimer: number | undefined;
+  let longPressTriggered = false;
+  let pointerStartX = 0;
+  let pointerStartY = 0;
+
+  const clearPressTimer = () => {
+    if (pressTimer !== undefined) {
+      window.clearTimeout(pressTimer);
+      pressTimer = undefined;
+    }
+  };
+
   const openDetail = () => {
+    if (selection.selecting) return;
     wrap.dataset.navigating = '1';
     navigate({ name: 'detail', messageId: row.id });
   };
-  main.addEventListener('click', openDetail);
+
+  main.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || selection.busy) return;
+    longPressTriggered = false;
+    pointerStartX = e.clientX;
+    pointerStartY = e.clientY;
+    clearPressTimer();
+    pressTimer = window.setTimeout(() => {
+      longPressTriggered = true;
+      enterSelectionMode(selection);
+      toggleSelected(selection, row, wrap, true);
+    }, longPressMs);
+  });
+
+  main.addEventListener('pointermove', (e) => {
+    const dx = Math.abs(e.clientX - pointerStartX);
+    const dy = Math.abs(e.clientY - pointerStartY);
+    if (dx > longPressMoveTolerancePx || dy > longPressMoveTolerancePx) clearPressTimer();
+  });
+
+  main.addEventListener('pointerup', clearPressTimer);
+  main.addEventListener('pointercancel', clearPressTimer);
+  main.addEventListener('pointerleave', clearPressTimer);
+  main.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  main.addEventListener('click', (e) => {
+    if (longPressTriggered) {
+      e.preventDefault();
+      longPressTriggered = false;
+      return;
+    }
+    if (selection.selecting) {
+      e.preventDefault();
+      toggleSelected(selection, row, wrap);
+      return;
+    }
+    openDetail();
+  });
+
   main.addEventListener('keydown', (e) => {
     // e.repeat guards against held Space/Enter spamming navigate(); a
     // native <button> handles repeat at the OS level, but we lost that
     // when switching to a div role=button.
     if (e.repeat) return;
+    if (e.key === 'Escape' && selection.selecting) {
+      e.preventDefault();
+      exitSelectionMode(selection);
+      return;
+    }
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      openDetail();
+      if (selection.selecting) {
+        toggleSelected(selection, row, wrap);
+      } else {
+        openDetail();
+      }
     }
   });
   wrap.appendChild(main);
 
-  // Inline action stack. Order matches the detail-view action bar so the
-  // gesture is consistent: read first (lightest), archive (removes from
-  // inbox), delete (destructive).
-  const actions = document.createElement('div');
-  actions.className = 'email-row-actions';
-
-  // 📌 읽음: only meaningful if the row is currently unread. We still
-  // render the button when read (greyed out via disabled) so the layout
-  // doesn't reflow between rows.
-  const readBtn = document.createElement('button');
-  readBtn.className = 'email-row-action';
-  readBtn.type = 'button';
-  readBtn.setAttribute('aria-label', '읽음');
-  readBtn.textContent = '📌';
-  if (!row.isUnread) {
-    readBtn.disabled = true;
-    readBtn.title = '이미 읽음';
-  }
-  readBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    void handleRowMarkRead(wrap, readBtn, row, initData, expectedHash);
-  });
-  actions.appendChild(readBtn);
-
-  const archBtn = document.createElement('button');
-  archBtn.className = 'email-row-action';
-  archBtn.type = 'button';
-  archBtn.setAttribute('aria-label', '보관');
-  archBtn.textContent = '📁';
-  archBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    void handleRowArchive(wrap, archBtn, row, initData, expectedHash);
-  });
-  actions.appendChild(archBtn);
-
-  const del = document.createElement('button');
-  del.className = 'email-row-action email-row-action-danger';
-  del.type = 'button';
-  del.setAttribute('aria-label', '삭제');
-  del.textContent = '🗑';
-  del.addEventListener('click', (e) => {
-    e.stopPropagation();
-    void handleRowDelete(wrap, del, row, initData, expectedHash);
-  });
-  actions.appendChild(del);
-
-  wrap.appendChild(actions);
-
   return wrap;
 }
 
-// handleRowMarkRead: in-place toggle. No confirm dialog — mark-read is
-// non-destructive (the operator can always re-mark unread from Gmail
-// directly), and a confirm on every click would defeat the "one-tap
-// triage" point of inline actions. On success the row stays in place but
-// loses its unread border + the button greys out.
-async function handleRowMarkRead(
-  wrap: HTMLElement,
-  button: HTMLButtonElement,
-  row: GmailMessageRow,
-  initData: string,
-  expectedHash: string,
-): Promise<void> {
-  if (wrap.dataset.navigating === '1' || !isCurrentHash(expectedHash) || !wrap.isConnected) {
-    return;
+function enterSelectionMode(selection: SelectionState): void {
+  if (selection.selecting) return;
+  selection.selecting = true;
+  selection.rowsContainer.classList.add('email-list-selecting');
+  renderSelectionBar(selection);
+}
+
+function exitSelectionMode(selection: SelectionState): void {
+  selection.selecting = false;
+  selection.busy = false;
+  selection.rowsContainer.classList.remove('email-list-selecting');
+  for (const { wrap } of selection.selected.values()) {
+    updateRowSelection(selection, wrap, false);
   }
-  if (button.disabled) return;
-  button.disabled = true;
-  try {
-    await markRead(initData, row.id);
-    if (!wrap.isConnected) return;
-    wrap.classList.remove('email-row-unread');
-    button.title = '이미 읽음';
-    row.isUnread = false;
-  } catch (err) {
-    button.disabled = false;
-    flashNear(wrap, `읽음 처리 실패: ${errorMessage(err)}`);
+  selection.selected.clear();
+  selection.actionBar?.remove();
+  selection.actionBar = undefined;
+}
+
+function toggleSelected(
+  selection: SelectionState,
+  row: GmailMessageRow,
+  wrap: HTMLElement,
+  forceSelected?: boolean,
+): void {
+  if (selection.busy || !wrap.isConnected) return;
+  if (!selection.selecting) enterSelectionMode(selection);
+  const selected = forceSelected ?? !selection.selected.has(row.id);
+  if (selected) {
+    selection.selected.set(row.id, { row, wrap });
+  } else {
+    selection.selected.delete(row.id);
+  }
+  updateRowSelection(selection, wrap, selected);
+  if (selection.selected.size === 0) {
+    exitSelectionMode(selection);
+  } else {
+    renderSelectionBar(selection);
   }
 }
 
-// handleRowArchive: also no confirm. Archiving in Gmail is reversible
-// (the message returns to the inbox if anyone replies, and the operator
-// can search `in:all from:...` to find it), so the speed of one-tap
-// archive beats the safety of a confirm. trash gets the confirm because
-// it moves to a 30-day-then-gone bucket.
-async function handleRowArchive(
+function updateRowSelection(
+  selection: SelectionState,
   wrap: HTMLElement,
-  button: HTMLButtonElement,
-  row: GmailMessageRow,
-  initData: string,
-  expectedHash: string,
-): Promise<void> {
-  if (wrap.dataset.navigating === '1' || !isCurrentHash(expectedHash) || !wrap.isConnected) {
-    return;
+  selected: boolean,
+): void {
+  wrap.classList.toggle('email-row-selected', selected);
+  const main = wrap.querySelector('.email-row');
+  main?.setAttribute('aria-pressed', selection.selecting ? String(selected) : 'false');
+}
+
+function renderSelectionBar(selection: SelectionState): void {
+  if (!selection.selecting || selection.selected.size === 0) return;
+  const bar = selection.actionBar ?? document.createElement('div');
+  if (!selection.actionBar) {
+    bar.className = 'email-bulk-bar';
+    selection.root.appendChild(bar);
+    selection.actionBar = bar;
   }
-  if (button.disabled) return;
-  button.disabled = true;
+  bar.innerHTML = '';
+
+  const count = document.createElement('div');
+  count.className = 'email-bulk-count';
+  count.textContent = `${selection.selected.size.toLocaleString('ko-KR')}개 선택`;
+  bar.appendChild(count);
+
+  const actions = document.createElement('div');
+  actions.className = 'email-bulk-actions';
+  actions.appendChild(buildBulkButton('📌 읽음', selection.busy, () =>
+    runBulkAction(selection, 'read'),
+  ));
+  actions.appendChild(buildBulkButton('📁 보관', selection.busy, () =>
+    runBulkAction(selection, 'archive'),
+  ));
+  actions.appendChild(buildBulkButton('🗑 삭제', selection.busy, () =>
+    runBulkAction(selection, 'trash'),
+  ));
+  actions.appendChild(buildBulkButton('취소', selection.busy, () => exitSelectionMode(selection)));
+  bar.appendChild(actions);
+}
+
+function buildBulkButton(
+  label: string,
+  disabled: boolean,
+  onClick: () => void | Promise<void>,
+): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'email-bulk-button';
+  btn.textContent = label;
+  btn.disabled = disabled;
+  btn.addEventListener('click', () => {
+    void onClick();
+  });
+  return btn;
+}
+
+async function runBulkAction(
+  selection: SelectionState,
+  action: BulkAction,
+): Promise<void> {
+  if (selection.busy || selection.selected.size === 0) return;
+  const items = Array.from(selection.selected.values());
+  if (action === 'trash') {
+    const ok = await confirmAction(
+      `${items.length.toLocaleString('ko-KR')}개 메일을 휴지통으로 옮길까요?`,
+    );
+    if (!ok) return;
+  }
+
+  selection.busy = true;
+  renderSelectionBar(selection);
+
+  const succeeded: SelectedMail[] = [];
+  const failed: string[] = [];
   try {
-    await archive(initData, row.id);
-    if (!wrap.isConnected) return;
-    wrap.remove();
-  } catch (err) {
-    button.disabled = false;
-    flashNear(wrap, `보관 실패: ${errorMessage(err)}`);
+    for (const item of items) {
+      if (!isCurrentHash(selection.expectedHash) || !item.wrap.isConnected) continue;
+      try {
+        await applyBulkAction(selection.initData, action, item.row.id);
+        succeeded.push(item);
+      } catch (err) {
+        failed.push(errorMessage(err));
+      }
+    }
+  } finally {
+    selection.busy = false;
+  }
+
+  if (!isCurrentHash(selection.expectedHash) || !selection.rowsContainer.isConnected) return;
+
+  for (const item of succeeded) {
+    if (action === 'read') {
+      item.row.isUnread = false;
+      item.wrap.classList.remove('email-row-unread');
+      selection.selected.delete(item.row.id);
+      updateRowSelection(selection, item.wrap, false);
+    } else {
+      selection.selected.delete(item.row.id);
+      item.wrap.remove();
+    }
+  }
+
+  const successCount = succeeded.length;
+  const actionLabel = bulkActionLabel(action);
+  if (failed.length === 0) {
+    exitSelectionMode(selection);
+    if (successCount > 0) {
+      flashNear(
+        selection.rowsContainer,
+        `${successCount.toLocaleString('ko-KR')}개 메일 ${actionLabel} 완료`,
+      );
+    }
+  } else {
+    if (selection.selected.size === 0) {
+      exitSelectionMode(selection);
+    } else {
+      renderSelectionBar(selection);
+    }
+    flashNear(
+      selection.rowsContainer,
+      `${successCount.toLocaleString('ko-KR')}개 완료 · ${failed.length.toLocaleString(
+        'ko-KR',
+      )}개 실패: ${failed[0]}`,
+    );
   }
 }
 
-async function handleRowDelete(
-  wrap: HTMLElement,
-  button: HTMLButtonElement,
-  row: GmailMessageRow,
-  initData: string,
-  expectedHash: string,
-): Promise<void> {
-  // Bail if we got here from a tap that landed on 🗑 AFTER a tap on
-  // the main row started navigating away — the user shouldn't have a
-  // background delete fire against the email they just opened.
-  if (wrap.dataset.navigating === '1' || !isCurrentHash(expectedHash) || !wrap.isConnected) {
-    return;
+function applyBulkAction(initData: string, action: BulkAction, id: string): Promise<unknown> {
+  switch (action) {
+    case 'read':
+      return markRead(initData, id);
+    case 'archive':
+      return archive(initData, id);
+    case 'trash':
+      return trash(initData, id);
   }
-  // Disable BEFORE awaiting confirm: a double-tap on 🗑 would otherwise
-  // queue two confirm dialogs (or one dialog + one already-resolved
-  // path) and fire two trash RPCs — the second hits 404 and the error
-  // path flashes on a detached node.
-  if (button.disabled) return;
-  button.disabled = true;
-  try {
-    const subjectPreview = (row.subject || '(제목 없음)').slice(0, 40);
-    const ok = await confirmAction(`"${subjectPreview}" 메일을 휴지통으로 옮길까요?`);
-    if (!ok) {
-      button.disabled = false;
-      return;
-    }
-    // Re-check after the modal: the user may have navigated away
-    // while the confirm dialog was up.
-    if (!isCurrentHash(expectedHash) || !wrap.isConnected) {
-      button.disabled = false;
-      return;
-    }
-    await trash(initData, row.id);
-    wrap.remove();
-  } catch (err) {
-    button.disabled = false;
-    flashNear(wrap, `삭제 실패: ${errorMessage(err)}`);
+}
+
+function bulkActionLabel(action: BulkAction): string {
+  switch (action) {
+    case 'read':
+      return '읽음 처리';
+    case 'archive':
+      return '보관';
+    case 'trash':
+      return '삭제';
   }
 }
 
@@ -277,9 +424,8 @@ async function handleRowDelete(
 // stale fetch from a stale page doesn't inject into the wrong view.
 function mountLoadMore(
   container: HTMLElement,
-  initData: string,
+  selection: SelectionState,
   pageToken: string,
-  expectedHash: string,
 ): void {
   const btn = document.createElement('button');
   btn.className = 'load-more-button';
@@ -290,21 +436,21 @@ function mountLoadMore(
     const originalLabel = btn.textContent;
     btn.textContent = '불러오는 중…';
     try {
-      const result = await listRecent(initData, { pageToken });
+      const result = await listRecent(selection.initData, { pageToken });
       // Hash AND container-attachment check: an inbox → detail →
       // inbox round-trip leaves the hash identical but replaces
       // rowsContainer, so isCurrentHash alone would still pass and
       // we'd silently append rows into an orphaned subtree.
-      if (!isCurrentHash(expectedHash) || !container.isConnected) return;
+      if (!isCurrentHash(selection.expectedHash) || !container.isConnected) return;
       btn.remove();
       for (const row of result.messages) {
-        container.appendChild(buildRow(row, initData, expectedHash));
+        container.appendChild(buildRow(row, selection));
       }
       if (result.nextPageToken) {
-        mountLoadMore(container, initData, result.nextPageToken, expectedHash);
+        mountLoadMore(container, selection, result.nextPageToken);
       }
     } catch (err) {
-      if (!isCurrentHash(expectedHash) || !container.isConnected) return;
+      if (!isCurrentHash(selection.expectedHash) || !container.isConnected) return;
       btn.disabled = false;
       btn.textContent = originalLabel ?? '더 보기';
       flashNear(btn, `더 불러오기 실패: ${errorMessage(err)}`);
