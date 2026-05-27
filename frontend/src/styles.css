@@ -2187,157 +2187,112 @@ button.person-msg-row-unread {
 
 
 /* ============================================================
-   Home view — Zune HD / Metro typography idiom
+   Home view — pure typography
    ============================================================
-   The hero is a giant ultralight wordmark that lets the page identity
-   live in the font itself (no logo asset, no widget chrome). The menu
-   underneath is a 3-column row per entry (num · label · meta) backed
-   by hairline dividers. Stagger fade-in on mount makes the screen
-   read as composed instead of snapped together. */
+   Zero icons. Zero dividers. Zero tracked-caps captions. Two colors
+   (the active --tg-text and --tg-hint, both from Telegram's theme).
+   The page is the words: a small lowercase brand mark, four huge
+   lowercase English menu words, and a quiet footer line. Stagger
+   fade-in on mount is the only motion; tap dims + slightly shrinks
+   the word. */
 
-.hero {
-  padding: 32px 0 28px;
-  margin-bottom: 8px;
-}
-
-.hero-title {
-  margin: 0;
-  font-size: 68px;
-  font-weight: 200;
-  letter-spacing: -0.045em;
-  line-height: 0.95;
-  /* The Telegram dark theme bg is dark blue-ish; on top of it an
-     ultralight black title can vanish. Use the live text color so we
-     inherit whatever Telegram's themeParams said the foreground is. */
-  color: var(--tg-text);
-  animation: metro-enter 480ms cubic-bezier(0.2, 0, 0.2, 1) both;
-}
-
-.hero-greeting {
-  margin: 14px 0 0;
-  font-size: 20px;
-  font-weight: 300;
-  letter-spacing: -0.01em;
-  color: var(--tg-text);
-  animation: metro-enter 480ms cubic-bezier(0.2, 0, 0.2, 1) 80ms both;
-}
-
-.hero-status {
-  margin: 6px 0 0;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+.type-brand {
+  margin: 24px 0 32px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
   color: var(--tg-hint);
-  font-variant-numeric: tabular-nums;
-  animation: metro-enter 480ms cubic-bezier(0.2, 0, 0.2, 1) 140ms both;
+  animation: type-enter 480ms cubic-bezier(0.2, 0, 0.2, 1) both;
 }
 
-.metro-menu {
-  margin-top: 16px;
-  display: block;
-  border-top: 1px solid var(--hairline);
-}
-
-.metro-item {
-  display: grid;
-  grid-template-columns: 38px 1fr auto;
-  align-items: baseline;
-  gap: 14px;
-  width: 100%;
-  padding: 22px 0;
-  background: none;
-  border: none;
-  border-bottom: 1px solid var(--hairline);
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    transform 100ms cubic-bezier(0.2, 0, 0.2, 1),
-    opacity 160ms ease;
-  animation: metro-enter 520ms cubic-bezier(0.2, 0, 0.2, 1) var(--enter-delay, 0ms) both;
-}
-
-.metro-item:hover {
-  opacity: 0.72;
-}
-
-.metro-item:active {
-  transform: scale(0.98);
-  opacity: 0.6;
-}
-
-.metro-item:focus-visible {
-  outline: none;
-  background: var(--surface-tint);
-}
-
-.metro-num {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  color: var(--tg-hint);
-  font-variant-numeric: tabular-nums;
-  align-self: baseline;
-  padding-top: 12px; /* visually align number cap with label baseline */
-}
-
-.metro-text {
+.type-menu {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  min-width: 0;
 }
 
-.metro-label {
-  font-size: 34px;
-  font-weight: 300;
-  letter-spacing: -0.025em;
+.type-item {
+  display: block;
+  width: 100%;
+  padding: 8px 0;
+  background: none;
+  border: none;
+  color: var(--tg-text);
+  font: inherit;
+  font-size: 52px;
+  font-weight: 200;
+  letter-spacing: -0.035em;
   line-height: 1.05;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 120ms cubic-bezier(0.2, 0, 0.2, 1),
+    opacity 160ms ease;
+  animation: type-enter 560ms cubic-bezier(0.2, 0, 0.2, 1) var(--enter-delay, 0ms) both;
+}
+
+.type-item:hover {
+  opacity: 0.7;
+}
+
+.type-item:active {
+  transform: translateX(2px);
+  opacity: 0.55;
+}
+
+.type-item:focus-visible {
+  outline: none;
+  opacity: 0.85;
+}
+
+.type-footer {
+  margin-top: 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: type-enter 560ms cubic-bezier(0.2, 0, 0.2, 1) 360ms both;
+}
+
+.type-greeting {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 400;
   color: var(--tg-text);
 }
 
-.metro-meta {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+.type-status {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 400;
   color: var(--tg-hint);
+  font-variant-numeric: tabular-nums;
 }
 
-.metro-refresh {
-  display: block;
-  margin: 36px auto 0;
-  padding: 8px 18px;
+.type-refresh {
+  align-self: flex-start;
+  margin-top: 14px;
+  padding: 0;
   background: none;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-pill);
+  border: none;
   color: var(--tg-hint);
   font: inherit;
   font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   cursor: pointer;
-  transition:
-    color 160ms ease,
-    border-color 160ms ease,
-    transform 100ms ease;
+  text-decoration: underline;
+  text-decoration-color: var(--hairline);
+  text-underline-offset: 3px;
+  transition: color 160ms ease;
 }
 
-.metro-refresh:hover {
+.type-refresh:hover {
   color: var(--tg-text);
-  border-color: var(--hairline-strong);
 }
 
-.metro-refresh:active {
-  transform: scale(0.97);
-}
-
-@keyframes metro-enter {
+@keyframes type-enter {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -2345,14 +2300,10 @@ button.person-msg-row-unread {
   }
 }
 
-/* Respect the OS's "less motion" preference. Animation collapses to a
-   single-frame reveal; everything still arrives, just without the
-   slide. */
 @media (prefers-reduced-motion: reduce) {
-  .hero-title,
-  .hero-greeting,
-  .hero-status,
-  .metro-item {
+  .type-brand,
+  .type-item,
+  .type-footer {
     animation: none;
   }
 }
