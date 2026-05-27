@@ -778,6 +778,9 @@ func (c *Client) resolveLabels(ctx context.Context, names []string) ([]string, e
 }
 
 // FormatSearchResults formats message summaries into a readable string.
+// Each entry is prefixed with a read-state marker (🔵 안 읽음 / ⚪ 읽음) so the
+// user can distinguish unread messages at a glance. Unread items also keep the
+// sender name bold; read items render plain to mirror standard mail clients.
 func FormatSearchResults(msgs []MessageSummary) string {
 	if len(msgs) == 0 {
 		return ""
@@ -787,7 +790,11 @@ func FormatSearchResults(msgs []MessageSummary) string {
 		if i > 0 {
 			sb.WriteString("\n")
 		}
-		fmt.Fprintf(&sb, "**%s** — %s\n", m.From, m.Date)
+		if hasUnreadLabel(m.Labels) {
+			fmt.Fprintf(&sb, "🔵 **%s** — %s  _(안 읽음)_\n", m.From, m.Date)
+		} else {
+			fmt.Fprintf(&sb, "⚪ %s — %s\n", m.From, m.Date)
+		}
 		fmt.Fprintf(&sb, "  %s\n", m.Subject)
 		if m.Snippet != "" {
 			fmt.Fprintf(&sb, "  %s\n", m.Snippet)
@@ -795,6 +802,16 @@ func FormatSearchResults(msgs []MessageSummary) string {
 		fmt.Fprintf(&sb, "  ID: %s", m.ID)
 	}
 	return sb.String()
+}
+
+// hasUnreadLabel reports whether labels contain the Gmail UNREAD system label.
+func hasUnreadLabel(labels []string) bool {
+	for _, l := range labels {
+		if l == "UNREAD" {
+			return true
+		}
+	}
+	return false
 }
 
 // FormatMessage formats a full message detail into a readable string.
