@@ -29,7 +29,8 @@ export type Route =
   | { name: 'diary' }
   | { name: 'crons' }
   | { name: 'people' }
-  | { name: 'personDetail'; email: string };
+  | { name: 'personDetail'; email: string }
+  | { name: 'wikiNew'; category?: string };
 
 // Top-level tab destinations — these show the persistent bottom tab bar
 // and Telegram's BackButton stays hidden. Drill-down views (detail,
@@ -53,6 +54,15 @@ export function parseRoute(hash: string): Route {
   if (hash === '#/diary') return { name: 'diary' };
   if (hash === '#/crons') return { name: 'crons' };
   if (hash === '#/people') return { name: 'people' };
+  if (hash === '#/wiki-new') return { name: 'wikiNew' };
+  const newCat = hash.match(/^#\/wiki-new\?category=(.+)$/);
+  if (newCat) {
+    try {
+      return { name: 'wikiNew', category: decodeURIComponent(newCat[1]) };
+    } catch {
+      return { name: 'wikiNew' };
+    }
+  }
   const person = hash.match(/^#\/person\/(.+)$/);
   if (person) {
     try {
@@ -150,6 +160,11 @@ export function navigate(target: Route): void {
   else if (target.name === 'people') hash = '#/people';
   else if (target.name === 'personDetail')
     hash = `#/person/${encodeURIComponent(target.email)}`;
+  else if (target.name === 'wikiNew') {
+    hash = target.category
+      ? `#/wiki-new?category=${encodeURIComponent(target.category)}`
+      : '#/wiki-new';
+  }
   if (location.hash === hash) {
     // hashchange would not fire; force re-render by dispatching ourselves.
     window.dispatchEvent(new HashChangeEvent('hashchange'));

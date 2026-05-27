@@ -28,6 +28,7 @@ import { renderDiary } from './views/diary';
 import { renderCrons } from './views/crons';
 import { renderPeople } from './views/people';
 import { renderPersonDetail } from './views/person_detail';
+import { renderWikiNew } from './views/wiki_new';
 import { applyAppSettings, triggerSelectionHaptic } from './app_settings';
 import { icon, type IconName } from './icons';
 
@@ -183,6 +184,9 @@ async function dispatch(route: Route): Promise<void> {
     case 'personDetail':
       await renderPersonDetail(root, cachedInitData, route.email);
       return;
+    case 'wikiNew':
+      renderWikiNew(root, cachedInitData, route.category ?? '');
+      return;
   }
 }
 
@@ -239,6 +243,12 @@ function boot(): void {
         return;
       case 'modelSelect':
         navigate({ name: 'settings' });
+        return;
+      case 'wikiNew':
+        // Pop back to wherever the user came from — memory search or
+        // a category page. history.back() is what wiki_new.ts's own
+        // cancel button uses for the same reason.
+        history.back();
         return;
       // List-level destinations now live under 더보기, so back pops
       // there (not home) — matches the path the user took to get in.

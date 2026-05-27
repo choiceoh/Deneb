@@ -17,10 +17,18 @@ export async function renderCategoryPages(
   root.innerHTML = '';
 
   const displayName = category === '(root)' ? 'root' : category;
+  // Seed wiki-new with the current category so the user doesn't have
+  // to retype it. (root) is filesystem-fake (Stats() reports it for
+  // pages without a category) so we don't seed for that bucket.
+  const newPageCategory = category === '(root)' ? undefined : category;
   root.appendChild(
     buildViewHeader({
       title: displayName,
       left: { label: '← categories', onClick: () => navigate({ name: 'categories' }) },
+      right: {
+        label: '+ new',
+        onClick: () => navigate({ name: 'wikiNew', category: newPageCategory }),
+      },
     }),
   );
 

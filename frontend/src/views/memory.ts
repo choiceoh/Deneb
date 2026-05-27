@@ -14,7 +14,12 @@ let lastQuery = '';
 export function renderMemory(root: HTMLElement, initData: string): void {
   root.innerHTML = '';
 
-  root.appendChild(buildViewHeader({ title: 'memory' }));
+  root.appendChild(
+    buildViewHeader({
+      title: 'memory',
+      right: { label: '+ new', onClick: () => navigate({ name: 'wikiNew' }) },
+    }),
+  );
 
   const form = document.createElement('form');
   form.className = 'search-form';

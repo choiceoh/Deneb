@@ -339,6 +339,7 @@ func TestMemoryMethods_RegistersAllMethods(t *testing.T) {
 		"miniapp.memory.search",
 		"miniapp.memory.get_page",
 		"miniapp.memory.write_page",
+		"miniapp.memory.create_page",
 		"miniapp.memory.categories",
 		"miniapp.memory.list_in_category",
 		"miniapp.memory.diary_recent",
@@ -483,6 +484,270 @@ func TestMemoryWritePage_RequiresAuth(t *testing.T) {
 	}))
 	if resp.OK || resp.Error.Code != protocol.ErrUnauthorized {
 		t.Errorf("expected UNAUTHORIZED: %+v", resp)
+	}
+}
+
+func TestMemoryWritePage_OverridesFrontmatter(t *testing.T) {
+	prevNow := nowFunc
+	nowFunc = func() time.Time { return time.Date(2026, 5, 27, 0, 0, 0, 0, time.UTC) }
+	defer func() { nowFunc = prevNow }()
+
+	var captured *wiki.Page
+	store := &fakeMemoryStore{
+		readPageFn: func(_ string) (*wiki.Page, error) {
+			return &wiki.Page{
+				Meta: wiki.Frontmatter{
+					Title:    "Old",
+					Summary:  "Old summary",
+					Category: "사람",
+					Tags:     []string{"old"},
+				},
+				Body: "old body",
+			}, nil
+		},
+		writePageFn: func(_ string, page *wiki.Page) error {
+			captured = page
+			return nil
+		},
+	}
+	h := memoryWritePage(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.write_page", map[string]any{
+		"path":    "people/alice.md",
+		"body":    "new body",
+		"title":   "New",
+		"summary": "New summary",
+		"tags":    []any{"client", "vip", ""},
+	}))
+	if !resp.OK {
+		t.Fatalf("expected OK: %+v", resp.Error)
+	}
+	if captured.Meta.Title != "New" || captured.Meta.Summary != "New summary" {
+		t.Errorf("frontmatter not overridden: %+v", captured.Meta)
+	}
+	// Category cannot change via write_page.
+	if captured.Meta.Category != "사람" {
+		t.Errorf("category should be preserved: %q", captured.Meta.Category)
+	}
+	// Blank tag entry is dropped during cleanup.
+	if len(captured.Meta.Tags) != 2 || captured.Meta.Tags[0] != "client" || captured.Meta.Tags[1] != "vip" {
+		t.Errorf("tags not replaced cleanly: %v", captured.Meta.Tags)
+	}
+}
+
+func TestMemoryWritePage_EmptyTagsListClears(t *testing.T) {
+	prevNow := nowFunc
+	nowFunc = func() time.Time { return time.Date(2026, 5, 27, 0, 0, 0, 0, time.UTC) }
+	defer func() { nowFunc = prevNow }()
+
+	var captured *wiki.Page
+	store := &fakeMemoryStore{
+		readPageFn: func(_ string) (*wiki.Page, error) {
+			return &wiki.Page{Meta: wiki.Frontmatter{Tags: []string{"old"}}, Body: "x"}, nil
+		},
+		writePageFn: func(_ string, page *wiki.Page) error {
+			captured = page
+			return nil
+		},
+	}
+	h := memoryWritePage(memoryDepsFor(store))
+	// "tags": [] is the explicit-clear case (vs omitting the key).
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.write_page", map[string]any{
+		"path": "a.md",
+		"body": "x",
+		"tags": []any{},
+	}))
+	if !resp.OK {
+		t.Fatalf("expected OK: %+v", resp.Error)
+	}
+	if len(captured.Meta.Tags) != 0 {
+		t.Errorf("tags should be cleared: %v", captured.Meta.Tags)
+	}
+}
+
+func TestMemoryWritePage_OmittedTagsPreserved(t *testing.T) {
+	prevNow := nowFunc
+	nowFunc = func() time.Time { return time.Date(2026, 5, 27, 0, 0, 0, 0, time.UTC) }
+	defer func() { nowFunc = prevNow }()
+
+	var captured *wiki.Page
+	store := &fakeMemoryStore{
+		readPageFn: func(_ string) (*wiki.Page, error) {
+			return &wiki.Page{Meta: wiki.Frontmatter{Tags: []string{"keep1", "keep2"}}, Body: "x"}, nil
+		},
+		writePageFn: func(_ string, page *wiki.Page) error {
+			captured = page
+			return nil
+		},
+	}
+	h := memoryWritePage(memoryDepsFor(store))
+	// No "tags" key at all → preserve existing.
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.write_page", map[string]any{
+		"path": "a.md",
+		"body": "x",
+	}))
+	if !resp.OK {
+		t.Fatalf("expected OK: %+v", resp.Error)
+	}
+	if len(captured.Meta.Tags) != 2 {
+		t.Errorf("tags should be preserved: %v", captured.Meta.Tags)
+	}
+}
+
+// --- create_page --------------------------------------------------------
+
+func TestMemoryCreatePage_HappyPath(t *testing.T) {
+	prevNow := nowFunc
+	nowFunc = func() time.Time { return time.Date(2026, 5, 27, 10, 0, 0, 0, time.UTC) }
+	defer func() { nowFunc = prevNow }()
+
+	var capturedPath string
+	var captured *wiki.Page
+	store := &fakeMemoryStore{
+		readPageFn: func(_ string) (*wiki.Page, error) {
+			return nil, fs.ErrNotExist
+		},
+		writePageFn: func(p string, page *wiki.Page) error {
+			capturedPath = p
+			captured = page
+			return nil
+		},
+	}
+	h := memoryCreatePage(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.create_page", map[string]any{
+		"title":    "Acme Corp",
+		"category": "회사",
+		"summary":  "Vendor of widgets",
+		"tags":     []any{"vendor", "B2B", ""},
+		"body":     "## 컨택\n\nAlice",
+	}))
+	if !resp.OK {
+		t.Fatalf("expected OK: %+v", resp.Error)
+	}
+	if capturedPath != "회사/acme-corp.md" {
+		t.Errorf("path = %q, want '회사/acme-corp.md'", capturedPath)
+	}
+	if captured.Meta.Title != "Acme Corp" || captured.Meta.Category != "회사" {
+		t.Errorf("meta wrong: %+v", captured.Meta)
+	}
+	if captured.Meta.Created != "2026-05-27" || captured.Meta.Updated != "2026-05-27" {
+		t.Errorf("dates wrong: created=%q updated=%q", captured.Meta.Created, captured.Meta.Updated)
+	}
+	if len(captured.Meta.Tags) != 2 {
+		t.Errorf("tags blank not filtered: %v", captured.Meta.Tags)
+	}
+	if captured.Body != "## 컨택\n\nAlice" {
+		t.Errorf("body wrong: %q", captured.Body)
+	}
+
+	var got map[string]any
+	decode(t, resp, &got)
+	if got["path"] != "회사/acme-corp.md" || got["title"] != "Acme Corp" {
+		t.Errorf("response: %+v", got)
+	}
+}
+
+func TestMemoryCreatePage_RejectsExisting(t *testing.T) {
+	store := &fakeMemoryStore{
+		readPageFn: func(_ string) (*wiki.Page, error) {
+			return &wiki.Page{Meta: wiki.Frontmatter{Title: "Existing"}}, nil
+		},
+	}
+	h := memoryCreatePage(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.create_page", map[string]any{
+		"title":    "Existing",
+		"category": "사람",
+	}))
+	if resp.OK {
+		t.Fatal("expected error for existing page")
+	}
+	if resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Errorf("code = %s, want INVALID_REQUEST", resp.Error.Code)
+	}
+}
+
+func TestMemoryCreatePage_MissingTitle(t *testing.T) {
+	h := memoryCreatePage(memoryDepsFor(&fakeMemoryStore{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.create_page", map[string]any{
+		"category": "사람",
+	}))
+	if resp.OK || resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("expected MISSING_PARAM(title): %+v", resp)
+	}
+}
+
+func TestMemoryCreatePage_MissingCategory(t *testing.T) {
+	h := memoryCreatePage(memoryDepsFor(&fakeMemoryStore{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.create_page", map[string]any{
+		"title": "Alice",
+	}))
+	if resp.OK || resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("expected MISSING_PARAM(category): %+v", resp)
+	}
+}
+
+func TestMemoryCreatePage_RejectsCategoryTraversal(t *testing.T) {
+	h := memoryCreatePage(memoryDepsFor(&fakeMemoryStore{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.create_page", map[string]any{
+		"title":    "Sneaky",
+		"category": "../etc",
+	}))
+	if resp.OK {
+		t.Fatal("expected error for traversal category")
+	}
+	if resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Errorf("code = %s", resp.Error.Code)
+	}
+}
+
+func TestMemoryCreatePage_EmptySlugRejected(t *testing.T) {
+	h := memoryCreatePage(memoryDepsFor(&fakeMemoryStore{}))
+	// Title is all punctuation → slug ends up empty.
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.create_page", map[string]any{
+		"title":    "??!!",
+		"category": "misc",
+	}))
+	if resp.OK {
+		t.Fatal("expected error for empty slug")
+	}
+	if resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Errorf("code = %s", resp.Error.Code)
+	}
+}
+
+func TestMemoryCreatePage_RequiresAuth(t *testing.T) {
+	h := memoryCreatePage(memoryDepsFor(&fakeMemoryStore{}))
+	resp := h(context.Background(), reqWith(t, "miniapp.memory.create_page", map[string]any{
+		"title":    "X",
+		"category": "Y",
+	}))
+	if resp.OK || resp.Error.Code != protocol.ErrUnauthorized {
+		t.Errorf("expected UNAUTHORIZED: %+v", resp)
+	}
+}
+
+// --- slugifyTitle helper ------------------------------------------------
+
+func TestSlugifyTitle(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"Acme Corp", "acme-corp"},
+		{"Acme  Corp  ", "acme-corp"},
+		{"Hello, World!", "hello-world"},
+		{"DGX Spark v2", "dgx-spark-v2"},
+		{"NVIDIA H100", "nvidia-h100"},
+		{"한글 페이지", "한글-페이지"},
+		{"홍길동", "홍길동"},
+		{"  --leading-trailing--  ", "leading-trailing"},
+		{"", ""},
+		{"!!!", ""},
+		{"a", "a"},
+	}
+	for _, c := range cases {
+		got := slugifyTitle(c.in)
+		if got != c.want {
+			t.Errorf("slugifyTitle(%q) = %q, want %q", c.in, got, c.want)
+		}
 	}
 }
 
