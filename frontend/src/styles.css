@@ -1493,14 +1493,27 @@ pre.sender-context-facts-body {
   margin-bottom: 12px;
 }
 
-.wiki-meta-tags,
-.wiki-meta-dates {
+/* Metadata rows inside .wiki-meta mirror the email-meta typography idiom:
+   tracked-caps uppercase label on the left, plain value on the right.
+   Keeps the wiki detail consistent with calendar-event + mail detail
+   instead of the old concatenated "갱신 X · #tag" strip. */
+.wiki-meta .row {
+  padding: 4px 0;
+  gap: 12px;
+}
+
+.wiki-meta .row .label {
   font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--tg-hint);
-  margin-top: 4px;
+}
+
+.wiki-meta .row .value {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--tg-text);
   font-variant-numeric: tabular-nums;
 }
 
