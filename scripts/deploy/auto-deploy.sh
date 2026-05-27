@@ -83,13 +83,62 @@ if [[ "$branch" != "main" ]]; then
     exit 0
 fi
 
-# Tracked local edits are operator intent until proven otherwise. Untracked
-# scratch directories are tolerated because this host keeps build/cache
-# experiments beside the production checkout.
+# Tracked local edits are operator intent until proven otherwise.
+# Untracked scratch is tolerated (build / cache / .bak files etc.).
+#
+# Old behavior was to *skip* on any dirty tracked file, which produced
+# wedged "skipping auto-deploy" ticks until an operator intervened. We
+# now auto-stash so a transient dirty state (build artifact, half-saved
+# operator edit) never blocks the watchdog — the stash entry stays in
+# `git stash list` for inspection. The May-2026 incident: a single
+# dirty tick from an unknown source held back a deploy for ~1min;
+# auto-stash makes that case self-heal in 0 ticks.
+#
+# Tracked diff vs cached diff: `git diff` catches worktree edits,
+# `git diff --cached` catches staged-but-uncommitted. Combined they
+# cover everything `git stash push` will reach. Untracked files (the
+# `-u` flag would include) stay untouched — they were tolerated before
+# and an aggressive stash could swallow build outputs we'd want to
+# keep around.
+AUTOSTASH_REF=""
 if ! git diff --quiet || ! git diff --cached --quiet; then
-    log "WARN: tracked production worktree changes present; skipping auto-deploy"
-    exit 0
+    dirty_summary=$(git status --porcelain --untracked-files=no | head -5)
+    log "INFO: worktree dirty, auto-stashing for deploy:"
+    printf '%s\n' "$dirty_summary" | sed 's/^/  /' >> "$LOG_FILE"
+    stash_msg="auto-deploy stash $(date -Iseconds)"
+    # `--keep-index` would re-stage staged changes after stash, but
+    # we want a fully clean tree for the upcoming build, so omit it.
+    if git stash push --message "$stash_msg" >>"$LOG_FILE" 2>&1; then
+        AUTOSTASH_REF="$stash_msg"
+    else
+        log "WARN: auto-stash failed; skipping this tick — inspect with 'git -C $PROD_DIR status'"
+        exit 0
+    fi
 fi
+
+# Always try to restore stashed changes on exit, even if the deploy
+# fails or the script bails early. `git stash pop` is best-effort: a
+# pop conflict logs loudly but the script still exits 0 so systemd
+# stays green (see the always-exit-0 rationale in the header).
+restore_stash() {
+    if [[ -z "$AUTOSTASH_REF" ]]; then
+        return
+    fi
+    # Find the stash slot by message — index numbers shift if other
+    # stashes happened in parallel (unlikely here but defensive).
+    local slot
+    slot=$(git stash list | grep -F -- "$AUTOSTASH_REF" | head -1 | cut -d: -f1)
+    if [[ -z "$slot" ]]; then
+        log "WARN: auto-stash entry not found; nothing to pop"
+        return
+    fi
+    if git stash pop --quiet "$slot" >>"$LOG_FILE" 2>&1; then
+        log "auto-stash popped successfully (slot $slot)"
+    else
+        log "WARN: auto-stash pop conflict; entry kept at $slot for operator review"
+    fi
+}
+trap restore_stash EXIT
 
 # Quiet fetch; tolerate transient failures (flaky network, GitHub blip).
 if ! git fetch --quiet origin main 2>>"$LOG_FILE"; then
