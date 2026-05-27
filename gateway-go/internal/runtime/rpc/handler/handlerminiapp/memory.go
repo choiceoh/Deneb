@@ -70,6 +70,7 @@ func MemoryMethods(deps MemoryDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.memory.search":           memorySearch(deps),
 		"miniapp.memory.get_page":         memoryGetPage(deps),
 		"miniapp.memory.write_page":       memoryWritePage(deps),
+		"miniapp.memory.create_page":      memoryCreatePage(deps),
 		"miniapp.memory.categories":       memoryCategories(deps),
 		"miniapp.memory.list_in_category": memoryListInCategory(deps),
 		"miniapp.memory.diary_recent":     memoryDiaryRecent(deps),
@@ -217,10 +218,16 @@ func memorySearch(deps MemoryDeps) rpcutil.HandlerFunc {
 	}
 }
 
-// memoryWritePage replaces the body of an existing wiki page while
-// preserving its frontmatter (title/summary/category/tags/related/...).
-// Updated date is stamped to today so the Mini App's "갱신 N일 전"
-// labels reflect the edit.
+// memoryWritePage replaces the body of an existing wiki page and,
+// optionally, selected frontmatter fields. Body is always required;
+// title/summary/tags are pointer-typed in the param so the client can
+// distinguish "leave unchanged" (omit / null) from "clear to empty"
+// (provide ""). Updated date is always bumped to today.
+//
+// Category is intentionally NOT editable here — changing the category
+// would require moving the file on disk (the on-disk path encodes the
+// category as a subdirectory). Page creation is the right surface for
+// that and lives in memoryCreatePage.
 //
 // Single-operator deployment, no versioning / optimistic locking —
 // the underlying wiki.Store is the source of truth and last-write-wins.
@@ -231,29 +238,30 @@ func memoryWritePage(deps MemoryDeps) rpcutil.HandlerFunc {
 	type params struct {
 		Path string `json:"path"`
 		Body string `json:"body"`
-	}
-	type out struct {
-		Path       string   `json:"path"`
-		Title      string   `json:"title,omitempty"`
-		Summary    string   `json:"summary,omitempty"`
-		Category   string   `json:"category,omitempty"`
-		Tags       []string `json:"tags,omitempty"`
-		Related    []string `json:"related,omitempty"`
-		Created    string   `json:"created,omitempty"`
-		Updated    string   `json:"updated,omitempty"`
-		Due        string   `json:"due,omitempty"`
-		Importance float64  `json:"importance,omitempty"`
-		Body       string   `json:"body"`
+		// Frontmatter overrides. Pointer-typed for title/summary so the
+		// client can distinguish "absent" (preserve existing) from ""
+		// (clear the field). Tags presence is detected via the raw map
+		// pass below because []string can't distinguish nil from
+		// omitted in encoding/json.
+		Title   *string  `json:"title,omitempty"`
+		Summary *string  `json:"summary,omitempty"`
+		Tags    []string `json:"tags,omitempty"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
 			return errResp
 		}
 		var p params
+		var rawFields map[string]json.RawMessage
 		if len(req.Params) > 0 {
 			if err := json.Unmarshal(req.Params, &p); err != nil {
 				return rpcerr.InvalidParams(err).Response(req.ID)
 			}
+			// Second pass: figure out which fields were *present* in the
+			// payload (so we can tell `omitted` apart from explicit-nil
+			// or explicit-empty). Cheaper than chasing every field with
+			// json.RawMessage.
+			_ = json.Unmarshal(req.Params, &rawFields)
 		}
 		rel := strings.TrimSpace(p.Path)
 		if rel == "" {
@@ -268,9 +276,8 @@ func memoryWritePage(deps MemoryDeps) rpcutil.HandlerFunc {
 			return rpcerr.WrapUnavailable("memory store unavailable", err).Response(req.ID)
 		}
 
-		// ReadPage to preserve existing frontmatter. A miss → NOT_FOUND
-		// (the Mini App doesn't expose page creation yet — that would
-		// need title/category inputs).
+		// ReadPage to preserve existing frontmatter for fields the
+		// client didn't touch. Missing page → NOT_FOUND.
 		existing, err := store.ReadPage(rel)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
@@ -282,29 +289,195 @@ func memoryWritePage(deps MemoryDeps) rpcutil.HandlerFunc {
 			return rpcerr.NotFound("wiki page " + rpcutil.TruncateForError(rel)).Response(req.ID)
 		}
 
-		// Replace body, bump Updated to today's local date. Frontmatter
-		// otherwise untouched.
 		existing.Body = p.Body
+		if p.Title != nil {
+			existing.Meta.Title = strings.TrimSpace(*p.Title)
+		}
+		if p.Summary != nil {
+			existing.Meta.Summary = strings.TrimSpace(*p.Summary)
+		}
+		if _, ok := rawFields["tags"]; ok {
+			// "tags": [] clears, "tags": ["a","b"] replaces. Trim each
+			// and drop blanks so the file doesn't accumulate empty tags.
+			cleaned := make([]string, 0, len(p.Tags))
+			for _, t := range p.Tags {
+				t = strings.TrimSpace(t)
+				if t != "" {
+					cleaned = append(cleaned, t)
+				}
+			}
+			existing.Meta.Tags = cleaned
+		}
 		existing.Meta.Updated = todayDateString()
 
 		if err := store.WritePage(rel, existing); err != nil {
 			return rpcerr.WrapUnavailable("wiki page write failed", err).Response(req.ID)
 		}
 
-		return rpcutil.RespondOK(req.ID, out{
-			Path:       rel,
-			Title:      existing.Meta.Title,
-			Summary:    existing.Meta.Summary,
-			Category:   existing.Meta.Category,
-			Tags:       existing.Meta.Tags,
-			Related:    existing.Meta.Related,
-			Created:    existing.Meta.Created,
-			Updated:    existing.Meta.Updated,
-			Due:        existing.Meta.Due,
-			Importance: existing.Meta.Importance,
-			Body:       existing.Body,
-		})
+		return rpcutil.RespondOK(req.ID, pageToOut(rel, existing))
 	}
+}
+
+// memoryCreatePage creates a brand-new wiki page. Path is computed
+// from category + a slugified title so the user doesn't have to think
+// about filesystem layout. Returns CONFLICT (NOT_FOUND-not-quite —
+// using INVALID_REQUEST since wire protocol lacks a dedicated conflict
+// code) when the computed path already exists.
+//
+// Required: title, category. Optional: summary, tags, body. Created
+// AND Updated are stamped to today; the operator can edit later.
+func memoryCreatePage(deps MemoryDeps) rpcutil.HandlerFunc {
+	type params struct {
+		Title    string   `json:"title"`
+		Category string   `json:"category"`
+		Summary  string   `json:"summary,omitempty"`
+		Tags     []string `json:"tags,omitempty"`
+		Body     string   `json:"body,omitempty"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		title := strings.TrimSpace(p.Title)
+		category := strings.TrimSpace(p.Category)
+		if title == "" {
+			return rpcerr.MissingParam("title").Response(req.ID)
+		}
+		if category == "" {
+			return rpcerr.MissingParam("category").Response(req.ID)
+		}
+
+		// Compute path: <category>/<slug>.md. The category itself goes
+		// through the same path validation as the final relative path
+		// (so "../" in the category gets rejected). Slug derives from
+		// title: lowercase, non-alnum → "-", collapse repeats, trim.
+		slug := slugifyTitle(title)
+		if slug == "" {
+			return rpcerr.InvalidRequest("title yields empty slug").Response(req.ID)
+		}
+		rel := path.Join(category, slug+".md")
+		if err := validateWikiPath(rel); err != nil {
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+		}
+
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.WrapUnavailable("memory store unavailable", err).Response(req.ID)
+		}
+
+		// Conflict check: if ReadPage succeeds the file already exists.
+		// fs.ErrNotExist is the "all clear" signal here; everything else
+		// is a real IO error and surfaces as UNAVAILABLE.
+		if existing, rerr := store.ReadPage(rel); rerr == nil && existing != nil {
+			return rpcerr.InvalidRequest("page already exists: " + rel).Response(req.ID)
+		} else if rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
+			return rpcerr.WrapUnavailable("wiki page probe failed", rerr).Response(req.ID)
+		}
+
+		today := todayDateString()
+		cleanedTags := make([]string, 0, len(p.Tags))
+		for _, t := range p.Tags {
+			t = strings.TrimSpace(t)
+			if t != "" {
+				cleanedTags = append(cleanedTags, t)
+			}
+		}
+		page := &wiki.Page{
+			Meta: wiki.Frontmatter{
+				Title:    title,
+				Summary:  strings.TrimSpace(p.Summary),
+				Category: category,
+				Tags:     cleanedTags,
+				Created:  today,
+				Updated:  today,
+			},
+			Body: p.Body,
+		}
+
+		if err := store.WritePage(rel, page); err != nil {
+			return rpcerr.WrapUnavailable("wiki page write failed", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, pageToOut(rel, page))
+	}
+}
+
+// pageToOut shapes a wiki.Page as the JSON map the get_page /
+// write_page / create_page handlers all return. Extracted because
+// three callers share it and the field list will keep growing.
+func pageToOut(rel string, page *wiki.Page) map[string]any {
+	out := map[string]any{
+		"path": rel,
+		"body": page.Body,
+	}
+	// omitempty parity with the original anonymous structs — empty
+	// strings / slices stay absent from the JSON.
+	if page.Meta.Title != "" {
+		out["title"] = page.Meta.Title
+	}
+	if page.Meta.Summary != "" {
+		out["summary"] = page.Meta.Summary
+	}
+	if page.Meta.Category != "" {
+		out["category"] = page.Meta.Category
+	}
+	if len(page.Meta.Tags) > 0 {
+		out["tags"] = page.Meta.Tags
+	}
+	if len(page.Meta.Related) > 0 {
+		out["related"] = page.Meta.Related
+	}
+	if page.Meta.Created != "" {
+		out["created"] = page.Meta.Created
+	}
+	if page.Meta.Updated != "" {
+		out["updated"] = page.Meta.Updated
+	}
+	if page.Meta.Due != "" {
+		out["due"] = page.Meta.Due
+	}
+	if page.Meta.Importance != 0 {
+		out["importance"] = page.Meta.Importance
+	}
+	return out
+}
+
+// slugifyTitle reduces a human-readable title to a filesystem-safe
+// slug. Korean and other non-ASCII letters are preserved (the wiki
+// store handles UTF-8 paths fine on the host filesystem); only
+// punctuation and whitespace collapse to hyphens.
+func slugifyTitle(title string) string {
+	var b strings.Builder
+	prevHyphen := false
+	for _, r := range strings.TrimSpace(title) {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+			prevHyphen = false
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r + 32) // lowercase
+			prevHyphen = false
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+			prevHyphen = false
+		case r > 0x7F:
+			// Non-ASCII (Korean, CJK, etc.) — pass through unchanged.
+			b.WriteRune(r)
+			prevHyphen = false
+		default:
+			// Whitespace / punctuation → hyphen, collapsed.
+			if !prevHyphen && b.Len() > 0 {
+				b.WriteByte('-')
+				prevHyphen = true
+			}
+		}
+	}
+	return strings.TrimRight(b.String(), "-")
 }
 
 // todayDateString returns YYYY-MM-DD in the gateway's local zone.

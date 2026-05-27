@@ -1270,6 +1270,63 @@ pre.sender-context-facts-body {
   margin-top: 10px;
 }
 
+/* Single-line frontmatter input row inside wiki-edit / wiki-new.
+   <label class="wiki-edit-field"><span class="wiki-edit-field-label">…</span>
+   <input class="wiki-edit-input"/></label> stacks vertically and the
+   label text is dim above the input. */
+.wiki-edit-field {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.wiki-edit-field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tg-hint);
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+
+.wiki-edit-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--tg-bg);
+  color: var(--tg-text);
+  font: inherit;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.wiki-edit-input:focus {
+  outline: none;
+  border-color: var(--tg-link);
+  box-shadow: var(--shadow-focus);
+}
+
+/* Read-only frontmatter row (category in edit mode — the on-disk
+   path locks it). Same vertical rhythm as .wiki-edit-field but the
+   value sits next to the label, not below it. */
+.wiki-edit-static {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.wiki-edit-static-label {
+  color: var(--tg-hint);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.wiki-edit-static-value {
+  color: var(--tg-text);
+}
+
 .wiki-body h1,
 .wiki-body h2 {
   font-size: 16px;

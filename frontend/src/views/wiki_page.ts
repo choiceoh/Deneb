@@ -6,11 +6,16 @@
 // the in-house renderer.
 //
 // Edit mode is a per-render flag toggled by the "수정" header button.
-// In edit mode the body card is replaced with a <textarea> holding
-// the raw markdown plus a small action bar (저장 / 취소). Save POSTs
-// to miniapp.memory.write_page; the response is the updated page, so
-// we re-render in view mode with the fresh content (including the
+// In edit mode the meta card is replaced with editable inputs (title,
+// summary, tags) and the body card is replaced with a textarea
+// holding the raw markdown. Save POSTs everything in one
+// miniapp.memory.write_page call; the response is the updated page,
+// so we re-render in view mode with the fresh content (including the
 // bumped 갱신 date) and no extra round-trip.
+//
+// Category is intentionally read-only in edit mode — changing the
+// category would require moving the file on disk, which is a "create
+// new page" operation (not an edit).
 
 import { getPage, writePage, type MemoryPage } from '../memory';
 import { errorMessage, formatRpcError } from '../format';
@@ -61,15 +66,13 @@ function paint(
     }),
   );
 
-  // Meta card — same in both modes (title + summary + tags + dates).
-  // Frontmatter editing is out of scope for v1; the user can still
-  // tweak title/tags by hand-editing the markdown file outside the
-  // Mini App.
-  root.appendChild(buildMetaCard(page));
-
   if (editing) {
+    // Edit mode replaces both the meta card and the body card with
+    // form fields. They share a doSave call (one RPC roundtrip) so
+    // the user can change everything in one save.
     root.appendChild(buildEditor(root, initData, page));
   } else {
+    root.appendChild(buildMetaCard(page));
     const body = document.createElement('div');
     body.className = 'card wiki-body';
     body.innerHTML = renderMarkdown(page.body || '(본문 없음)');
@@ -131,25 +134,48 @@ function buildMetaCard(page: MemoryPage): HTMLElement {
   return meta;
 }
 
-// buildEditor returns a card containing a textarea pre-populated with
-// the page's raw markdown body plus a 저장 / 취소 action row. Save
-// disables the button mid-flight to prevent double-fire; failure
-// surfaces inline so the textarea contents aren't lost.
+// buildEditor renders a single card with input rows for title /
+// summary / tags, a textarea for the body, an inline flash for save
+// errors, and the 저장 / 취소 action row. One `doSave` packs all
+// fields into a single write_page call so the user doesn't have to
+// save in stages.
 function buildEditor(root: HTMLElement, initData: string, page: MemoryPage): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'card wiki-edit';
 
+  const titleInput = buildFieldInput(wrap, '제목', page.title || '');
+  const summaryInput = buildFieldInput(wrap, '요약', page.summary || '');
+  const tagsInput = buildFieldInput(
+    wrap,
+    '태그 (쉼표로 구분)',
+    (page.tags || []).join(', '),
+  );
+
+  // Category is read-only — the on-disk path encodes it. Show it as
+  // a static line so the user understands what's locked.
+  if (page.category) {
+    const catRow = document.createElement('div');
+    catRow.className = 'wiki-edit-static';
+    catRow.innerHTML = `<span class="wiki-edit-static-label">카테고리</span><span class="wiki-edit-static-value"></span>`;
+    (catRow.querySelector('.wiki-edit-static-value') as HTMLElement).textContent =
+      `#${page.category}`;
+    wrap.appendChild(catRow);
+  }
+
+  const bodyLabel = document.createElement('div');
+  bodyLabel.className = 'wiki-edit-field-label';
+  bodyLabel.textContent = '본문 (Markdown)';
+  wrap.appendChild(bodyLabel);
+
   const textarea = document.createElement('textarea');
   textarea.className = 'wiki-edit-textarea';
   textarea.value = page.body || '';
-  textarea.rows = 18;
+  textarea.rows = 14;
   textarea.spellcheck = false;
   wrap.appendChild(textarea);
 
   const flash = document.createElement('div');
   flash.className = 'wiki-edit-flash';
-  // Stays empty until a save attempt actually fails. CSS hides it
-  // when blank so the action bar sits flush against the textarea.
   wrap.appendChild(flash);
 
   const actions = document.createElement('div');
@@ -166,7 +192,12 @@ function buildEditor(root: HTMLElement, initData: string, page: MemoryPage): HTM
   saveBtn.className = 'action-button action-primary';
   saveBtn.textContent = '저장';
   saveBtn.addEventListener('click', () => {
-    void doSave(root, initData, page, textarea, saveBtn, cancelBtn, flash);
+    void doSave(root, initData, page, {
+      title: titleInput.value,
+      summary: summaryInput.value,
+      tags: tagsInput.value,
+      body: textarea.value,
+    }, saveBtn, cancelBtn, flash);
   });
 
   actions.appendChild(cancelBtn);
@@ -176,16 +207,46 @@ function buildEditor(root: HTMLElement, initData: string, page: MemoryPage): HTM
   // Defer focus until after the new DOM is attached. setTimeout(0)
   // beats requestAnimationFrame here because some Telegram WebView
   // builds throw away rAF callbacks during navigation animations.
-  setTimeout(() => textarea.focus(), 0);
+  setTimeout(() => titleInput.focus(), 0);
 
   return wrap;
+}
+
+// buildFieldInput appends a labeled single-line input to `wrap` and
+// returns the input element. Shared by the three frontmatter fields
+// so they all align visually. Uses <label> with a nested <span> +
+// <input> so tapping the label text focuses the input.
+function buildFieldInput(wrap: HTMLElement, label: string, value: string): HTMLInputElement {
+  const labelEl = document.createElement('label');
+  labelEl.className = 'wiki-edit-field';
+
+  const textEl = document.createElement('span');
+  textEl.className = 'wiki-edit-field-label';
+  textEl.textContent = label;
+  labelEl.appendChild(textEl);
+
+  const input = document.createElement('input');
+  input.className = 'wiki-edit-input';
+  input.type = 'text';
+  input.value = value;
+  labelEl.appendChild(input);
+
+  wrap.appendChild(labelEl);
+  return input;
+}
+
+interface EditFormValues {
+  title: string;
+  summary: string;
+  tags: string; // comma-separated raw input
+  body: string;
 }
 
 async function doSave(
   root: HTMLElement,
   initData: string,
   page: MemoryPage,
-  textarea: HTMLTextAreaElement,
+  values: EditFormValues,
   saveBtn: HTMLButtonElement,
   cancelBtn: HTMLButtonElement,
   flash: HTMLElement,
@@ -195,8 +256,21 @@ async function doSave(
   flash.textContent = '';
   saveBtn.textContent = '저장 중…';
 
+  // Parse tags from the comma-separated input. Backend trims + drops
+  // blanks, but doing it here too gives the user a quick visual sense
+  // of what's about to be saved (we don't show that, but the backend
+  // result we re-render with does).
+  const tags = values.tags
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean);
+
   try {
-    const updated = await writePage(initData, page.path, textarea.value);
+    const updated = await writePage(initData, page.path, values.body, {
+      title: values.title.trim(),
+      summary: values.summary.trim(),
+      tags,
+    });
     // Re-render in view mode. The backend returned the updated page
     // with bumped 갱신 date, so the meta card refreshes too.
     paint(root, initData, updated, false);
