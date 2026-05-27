@@ -12,6 +12,7 @@ import { whoami, type WhoamiResult } from '../rpc';
 import { listRecent, type GmailMessageRow } from '../gmail';
 import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
+import { setPullToRefreshHandler } from '../pull_to_refresh';
 import { buildErrorBanner } from './ui';
 import type { Route } from '../router';
 
@@ -22,10 +23,12 @@ export async function renderHome(root: HTMLElement, initData: string): Promise<v
     const user = await whoami(initData);
     if (!isCurrentHash(expectedHash)) return;
     paint(root, user);
-    // Notification fetch runs in the background after the menu paints —
-    // the home screen never blocks on Gmail. Failures (gmail not
-    // configured, transient outage) hide the section silently.
-    void hydrateRecentNotice(root, initData, expectedHash);
+    // Mail notice is gated behind pull-to-refresh: the initial render
+    // shows nothing about mail. The operator only sees the latest
+    // unread subject after deliberately pulling the page — so the home
+    // screen stays "the page is the words" by default, and the mail
+    // peek is opt-in per session.
+    setPullToRefreshHandler(() => refreshMailNotice(root, initData, expectedHash));
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
     renderHomeError(root, `백엔드 호출 실패: ${formatRpcError(err)}`);
@@ -39,17 +42,6 @@ interface MenuEntry {
 
 function paint(root: HTMLElement, user: WhoamiResult): void {
   root.innerHTML = '';
-
-  // Notice slot — populated asynchronously by hydrateRecentNotice once
-  // Gmail returns. We paint a placeholder element here (rather than
-  // inserting after the fact) so the menu's stagger animation isn't
-  // disturbed when the notice arrives. The slot stays display:none
-  // until there's something to show.
-  const notice = document.createElement('section');
-  notice.className = 'type-notice';
-  notice.dataset.state = 'pending';
-  notice.setAttribute('aria-live', 'polite');
-  root.appendChild(notice);
 
   // Full destination list — ordered by how often the operator hits
   // each one. Calendar + mail are time-pressured (D-15 push, unread
@@ -119,63 +111,62 @@ function renderHomeError(root: HTMLElement, message: string): void {
   root.appendChild(buildErrorBanner(message));
 }
 
-// hydrateRecentNotice surfaces the single most-relevant unread mail at
-// the top of home. Strategy: prefer messages Gmail has flagged
-// `is:important`, fall back to plain unread when none exist. Anything
-// older than 7 days is ignored — the home banner is for "right now",
-// not an inbox snapshot. Errors (UNAVAILABLE when Gmail isn't
-// configured, transient network failures) leave the slot empty so the
-// home screen reads identically for operators without Gmail wired.
-async function hydrateRecentNotice(
+// refreshMailNotice is invoked by the pull-to-refresh gesture. It fetches
+// the single most-recent unread mail (no importance filter — Gmail's
+// `is:important` label can be sticky and would surface a 5-day-old flagged
+// mail over a fresh unread one, the opposite of what "pull for the latest"
+// implies) and inserts/replaces the notice line above the menu. Errors —
+// UNAVAILABLE when Gmail isn't configured, transient network failures —
+// remove the slot silently so the home screen reads identically for
+// operators without Gmail wired.
+async function refreshMailNotice(
   root: HTMLElement,
   initData: string,
   expectedHash: string,
 ): Promise<void> {
-  const slot = root.querySelector<HTMLElement>('.type-notice');
-  if (!slot) return;
-  const pick = await fetchTopMail(initData);
-  if (!isCurrentHash(expectedHash) || !slot.isConnected) return;
+  const pick = await safeFetchLatestUnread(initData);
+  if (!isCurrentHash(expectedHash) || !root.isConnected) return;
+
+  const existing = root.querySelector<HTMLElement>('.type-notice');
   if (!pick) {
-    slot.remove();
+    existing?.remove();
     return;
   }
+  const slot = existing ?? buildNoticeSlot();
   paintNotice(slot, pick);
-}
-
-async function fetchTopMail(initData: string): Promise<GmailMessageRow | null> {
-  // Important-first, then any unread — keep both limits at 1 to avoid
-  // doing the work of listing a full inbox just to throw 19 rows away.
-  const important = await safeListRecent(initData, {
-    query: 'is:important is:unread newer_than:7d',
-    limit: 1,
-  });
-  if (important.length > 0) return important[0];
-  const unread = await safeListRecent(initData, {
-    query: 'is:unread newer_than:7d',
-    limit: 1,
-  });
-  return unread[0] ?? null;
-}
-
-// safeListRecent swallows Gmail RPC errors so the home banner stays
-// silent when the operator hasn't connected Gmail (UNAVAILABLE) or
-// when there's a transient outage. Re-throwing here would leak red
-// banners into the home screen on every launch for non-mail users.
-async function safeListRecent(
-  initData: string,
-  opts: { query: string; limit: number },
-): Promise<GmailMessageRow[]> {
-  try {
-    const res = await listRecent(initData, opts);
-    return res.messages ?? [];
-  } catch {
-    return [];
+  if (!existing) {
+    // First successful pull this session: insert above the menu so the
+    // mail subject sits above the navigation, not in the footer area.
+    const menu = root.querySelector<HTMLElement>('.type-menu');
+    if (menu) {
+      root.insertBefore(slot, menu);
+    } else {
+      root.prepend(slot);
+    }
   }
+}
+
+async function safeFetchLatestUnread(initData: string): Promise<GmailMessageRow | null> {
+  try {
+    const res = await listRecent(initData, {
+      query: 'is:unread newer_than:7d',
+      limit: 1,
+    });
+    return res.messages?.[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function buildNoticeSlot(): HTMLElement {
+  const notice = document.createElement('section');
+  notice.className = 'type-notice';
+  notice.setAttribute('aria-live', 'polite');
+  return notice;
 }
 
 function paintNotice(slot: HTMLElement, mail: GmailMessageRow): void {
   slot.innerHTML = '';
-  slot.dataset.state = 'ready';
 
   // One quiet line: tap the subject to open the mail. Sender and time
   // are dropped — the rest of home is "the page is the words" and a
