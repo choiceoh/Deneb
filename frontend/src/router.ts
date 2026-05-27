@@ -15,7 +15,7 @@ export type Route =
   | { name: 'home' }
   | { name: 'inbox' }
   | { name: 'detail'; messageId: string }
-  | { name: 'memory' }
+  | { name: 'search' }
   | { name: 'sessions' }
   | { name: 'topicNew' }
   | { name: 'wikiPage'; path: string }
@@ -26,9 +26,7 @@ export type Route =
   | { name: 'modelSelect' }
   | { name: 'categories' }
   | { name: 'categoryPages'; category: string }
-  | { name: 'diary' }
   | { name: 'crons' }
-  | { name: 'people' }
   | { name: 'personDetail'; email: string }
   | { name: 'wikiNew'; category?: string };
 
@@ -43,19 +41,24 @@ export function isHomeRoute(route: Route): boolean {
 export function parseRoute(hash: string): Route {
   if (hash === '' || hash === '#' || hash === '#/') return { name: 'home' };
   if (hash === '#/inbox') return { name: 'inbox' };
-  if (hash === '#/memory') return { name: 'memory' };
+  if (hash === '#/search') return { name: 'search' };
   if (hash === '#/sessions') return { name: 'sessions' };
   if (hash === '#/topic-new') return { name: 'topicNew' };
-  // Legacy '#/more' hash maps to home now — the more hub is gone, but
-  // deep-links and BackButton stack entries pointing there should
-  // still resolve cleanly instead of falling through to the catch-all.
+  // Legacy hashes map forward so stale BackButton stack entries and
+  // deep-links resolve cleanly instead of falling through to home:
+  //   #/more   — the more hub is gone (subsumed by home).
+  //   #/memory — the dedicated memory-search view is gone; search
+  //              now unifies wiki + diary + people.
+  //   #/diary / #/people — listing views are gone; the same content
+  //              is reachable by typing into the unified search box.
   if (hash === '#/more') return { name: 'home' };
+  if (hash === '#/memory' || hash === '#/diary' || hash === '#/people') {
+    return { name: 'search' };
+  }
   if (hash === '#/settings') return { name: 'settings' };
   if (hash === '#/settings/model') return { name: 'modelSelect' };
   if (hash === '#/categories') return { name: 'categories' };
-  if (hash === '#/diary') return { name: 'diary' };
   if (hash === '#/crons') return { name: 'crons' };
-  if (hash === '#/people') return { name: 'people' };
   if (hash === '#/wiki-new') return { name: 'wikiNew' };
   const newCat = hash.match(/^#\/wiki-new\?category=(.+)$/);
   if (newCat) {
@@ -70,7 +73,7 @@ export function parseRoute(hash: string): Route {
     try {
       return { name: 'personDetail', email: decodeURIComponent(person[1]) };
     } catch {
-      return { name: 'people' };
+      return { name: 'search' };
     }
   }
   const catPages = hash.match(/^#\/category\/(.+)$/);
@@ -109,7 +112,7 @@ export function parseRoute(hash: string): Route {
     try {
       return { name: 'wikiPage', path: decodeURIComponent(wiki[1]) };
     } catch {
-      return { name: 'memory' };
+      return { name: 'search' };
     }
   }
   const sess = hash.match(/^#\/session\/(.+)$/);
@@ -142,7 +145,7 @@ export function isCurrentHash(expected: string): boolean {
 export function navigate(target: Route): void {
   let hash = '#/';
   if (target.name === 'inbox') hash = '#/inbox';
-  else if (target.name === 'memory') hash = '#/memory';
+  else if (target.name === 'search') hash = '#/search';
   else if (target.name === 'sessions') hash = '#/sessions';
   else if (target.name === 'topicNew') hash = '#/topic-new';
   else if (target.name === 'settings') hash = '#/settings';
@@ -157,9 +160,7 @@ export function navigate(target: Route): void {
   else if (target.name === 'categories') hash = '#/categories';
   else if (target.name === 'categoryPages')
     hash = `#/category/${encodeURIComponent(target.category)}`;
-  else if (target.name === 'diary') hash = '#/diary';
   else if (target.name === 'crons') hash = '#/crons';
-  else if (target.name === 'people') hash = '#/people';
   else if (target.name === 'personDetail')
     hash = `#/person/${encodeURIComponent(target.email)}`;
   else if (target.name === 'wikiNew') {

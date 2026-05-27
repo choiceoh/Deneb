@@ -1,27 +1,11 @@
-// memory.ts — typed client for the miniapp.memory.search RPC.
+// memory.ts — typed clients for the miniapp.memory.* page/category RPCs.
+//
+// Free-text search across wiki / diary / people moved to search.ts
+// (miniapp.search.all). This file is now just the page-CRUD + category
+// browsing surface used by wiki_page, wiki_new, categories, and
+// category_pages views.
 
 import { call } from './rpc';
-
-export interface MemoryHit {
-  path: string;
-  title?: string;
-  summary?: string;
-  category?: string;
-  snippet: string;
-  score: number;
-}
-
-interface SearchResult {
-  results: MemoryHit[];
-}
-
-export function searchMemory(
-  initData: string,
-  query: string,
-  limit?: number,
-): Promise<SearchResult> {
-  return call<SearchResult>('miniapp.memory.search', { query, limit }, initData);
-}
 
 export interface MemoryPage {
   path: string;
@@ -126,24 +110,4 @@ export function listPagesInCategory(
     { category, limit },
     initData,
   );
-}
-
-// --- Diary timeline (더보기 > 📖 다이어리) ---
-
-export interface DiaryEntry {
-  file: string;    // e.g., "diary-2026-05-26.md"
-  header: string;  // e.g., "14:30"
-  content: string;
-  at?: number;     // unix millis derived from filename + header
-}
-
-interface DiaryRecentResult {
-  entries: DiaryEntry[];
-}
-
-export function recentDiary(
-  initData: string,
-  limit?: number,
-): Promise<DiaryRecentResult> {
-  return call<DiaryRecentResult>('miniapp.memory.diary_recent', { limit }, initData);
 }

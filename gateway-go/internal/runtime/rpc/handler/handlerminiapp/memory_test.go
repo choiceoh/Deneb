@@ -14,6 +14,7 @@ import (
 
 type fakeMemoryStore struct {
 	searchFn      func(ctx context.Context, q string, limit int) ([]wiki.SearchResult, error)
+	searchDiaryFn func(ctx context.Context, q string, limit int) ([]wiki.DiaryHit, error)
 	readPageFn    func(relPath string) (*wiki.Page, error)
 	writePageFn   func(relPath string, page *wiki.Page) error
 	statsFn       func() wiki.StoreStats
@@ -26,6 +27,13 @@ func (f *fakeMemoryStore) Search(ctx context.Context, q string, n int) ([]wiki.S
 		return nil, errors.New("Search not stubbed")
 	}
 	return f.searchFn(ctx, q, n)
+}
+
+func (f *fakeMemoryStore) SearchDiary(ctx context.Context, q string, n int) ([]wiki.DiaryHit, error) {
+	if f.searchDiaryFn == nil {
+		return nil, errors.New("SearchDiary not stubbed")
+	}
+	return f.searchDiaryFn(ctx, q, n)
 }
 
 func (f *fakeMemoryStore) ReadPage(relPath string) (*wiki.Page, error) {

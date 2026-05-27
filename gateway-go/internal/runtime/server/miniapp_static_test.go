@@ -156,10 +156,10 @@ func TestServeMiniappStatic_NoEntryFile500(t *testing.T) {
 
 func TestServeMiniappStatic_ServesBrotliWhenAccepted(t *testing.T) {
 	swapMiniappFS(t, fstest.MapFS{
-		"index.html":           &fstest.MapFile{Data: []byte("RAW")},
-		"assets/app.js":        &fstest.MapFile{Data: []byte("RAW JS BODY")},
-		"assets/app.js.br":     &fstest.MapFile{Data: []byte("BR BODY")},
-		"assets/app.js.gz":     &fstest.MapFile{Data: []byte("GZ BODY")},
+		"index.html":       &fstest.MapFile{Data: []byte("RAW")},
+		"assets/app.js":    &fstest.MapFile{Data: []byte("RAW JS BODY")},
+		"assets/app.js.br": &fstest.MapFile{Data: []byte("BR BODY")},
+		"assets/app.js.gz": &fstest.MapFile{Data: []byte("GZ BODY")},
 	})
 	s := newServerForStatic(t)
 
