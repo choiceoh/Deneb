@@ -1,6 +1,7 @@
 // views/person_detail.ts — Full-screen profile for a single person.
 //
-// Reached by tapping a card in 더보기 > 👤 사람들. Composes three
+// Reached by tapping a person card in the unified search results.
+// Composes three
 // existing data sources into one view so the user can see "everything
 // Deneb knows about this counterparty" in one place:
 //
@@ -35,7 +36,7 @@ export async function renderPersonDetail(
   root.appendChild(
     buildViewHeader({
       title: 'person',
-      left: { label: '← people', onClick: () => navigate({ name: 'people' }) },
+      left: { label: '← search', onClick: () => navigate({ name: 'search' }) },
     }),
   );
   setPullToRefreshHandler(() => renderPersonDetail(root, initData, email));

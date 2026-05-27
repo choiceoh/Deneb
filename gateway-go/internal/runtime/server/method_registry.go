@@ -343,6 +343,25 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				return gmail.DefaultClient()
 			},
 		}),
+
+		// Mini App unified search (miniapp.search.all). Single entry
+		// point that fans out to wiki + diary + people in parallel.
+		// Replaces the per-domain home menu entries — there's now one
+		// search input on home that returns three result sections.
+		// Either factory may be unavailable; the handler degrades
+		// gracefully (Gmail-disabled gateway still serves wiki+diary).
+		handlerminiapp.SearchMethods(handlerminiapp.SearchDeps{
+			Store: func() (handlerminiapp.MemorySearcher, error) {
+				store := hub.WikiStore()
+				if store == nil {
+					return nil, errWikiDisabled
+				}
+				return store, nil
+			},
+			Client: func() (handlerminiapp.PeopleClient, error) {
+				return gmail.DefaultClient()
+			},
+		}),
 	}
 
 	// Conditional: provider methods.

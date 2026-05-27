@@ -81,18 +81,17 @@ function paint(root: HTMLElement): void {
 
   // Full destination list — ordered by how often the operator hits
   // each one. Calendar + mail are time-pressured (D-15 push, unread
-  // triage); memory is the daily search surface; topics is the
-  // active-conversation register; diary/people/categories/crons sit
-  // lower because they're reach-when-needed rather than reach-daily.
-  // settings is last — preferences are touched rarely, but they have
-  // to live somewhere now that the panorama tab strip is gone.
+  // triage); search is the single discovery surface for wiki + diary
+  // + people (the per-domain listing views are gone — discovery
+  // happens through the search box, not browsing); topics is the
+  // active-conversation register; categories/crons sit lower because
+  // they're reach-when-needed rather than reach-daily. settings is
+  // last — preferences are touched rarely.
   const entries: MenuEntry[] = [
     { label: 'calendar', route: { name: 'calendar' } },
     { label: 'mail', route: { name: 'inbox' } },
-    { label: 'memory', route: { name: 'memory' } },
+    { label: 'search', route: { name: 'search' } },
     { label: 'topics', route: { name: 'sessions' } },
-    { label: 'diary', route: { name: 'diary' } },
-    { label: 'people', route: { name: 'people' } },
     { label: 'categories', route: { name: 'categories' } },
     { label: 'crons', route: { name: 'crons' } },
     { label: 'settings', route: { name: 'settings' } },

@@ -29,6 +29,7 @@ import (
 // these naturally; tests provide a fake.
 type MemorySearcher interface {
 	Search(ctx context.Context, query string, limit int) ([]wiki.SearchResult, error)
+	SearchDiary(ctx context.Context, query string, limit int) ([]wiki.DiaryHit, error)
 	ReadPage(relPath string) (*wiki.Page, error)
 	WritePage(relPath string, page *wiki.Page) error
 	Stats() wiki.StoreStats

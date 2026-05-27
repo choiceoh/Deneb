@@ -121,9 +121,9 @@ async function dispatch(route: Route): Promise<void> {
       void renderDetail(root, initData, route.messageId);
       return;
     }
-    case 'memory': {
-      const { renderMemory } = await import('./views/memory');
-      renderMemory(root, initData);
+    case 'search': {
+      const { renderSearch } = await import('./views/search');
+      renderSearch(root, initData);
       return;
     }
     case 'sessions': {
@@ -171,19 +171,9 @@ async function dispatch(route: Route): Promise<void> {
       void renderCategoryPages(root, initData, route.category);
       return;
     }
-    case 'diary': {
-      const { renderDiary } = await import('./views/diary');
-      void renderDiary(root, initData);
-      return;
-    }
     case 'crons': {
       const { renderCrons } = await import('./views/crons');
       void renderCrons(root, initData);
-      return;
-    }
-    case 'people': {
-      const { renderPeople } = await import('./views/people');
-      void renderPeople(root, initData);
       return;
     }
     case 'personDetail': {
@@ -216,7 +206,7 @@ function prefetchOtherViews(): void {
   const work = () => {
     void import('./views/list');
     void import('./views/detail');
-    void import('./views/memory');
+    void import('./views/search');
     void import('./views/sessions');
     void import('./views/wiki_page');
     void import('./views/session_transcript');
@@ -226,9 +216,7 @@ function prefetchOtherViews(): void {
     void import('./views/model_select');
     void import('./views/categories');
     void import('./views/category_pages');
-    void import('./views/diary');
     void import('./views/crons');
-    void import('./views/people');
     void import('./views/person_detail');
     void import('./views/wiki_new');
     void import('./views/topic_new');
@@ -331,7 +319,7 @@ function boot(): void {
         navigate({ name: 'inbox' });
         return;
       case 'wikiPage':
-        navigate({ name: 'memory' });
+        navigate({ name: 'search' });
         return;
       case 'sessionTranscript':
         navigate({ name: 'sessions' });
@@ -343,13 +331,13 @@ function boot(): void {
         navigate({ name: 'categories' });
         return;
       case 'personDetail':
-        navigate({ name: 'people' });
+        navigate({ name: 'search' });
         return;
       case 'modelSelect':
         navigate({ name: 'settings' });
         return;
       case 'wikiNew':
-        // Pop back to wherever the user came from — memory search or
+        // Pop back to wherever the user came from — search results or
         // a category page. history.back() is what wiki_new.ts's own
         // cancel button uses for the same reason.
         history.back();
@@ -361,13 +349,11 @@ function boot(): void {
       // matches the path the user took to get in. No "more" hub
       // exists; home is the single index.
       case 'inbox':
-      case 'memory':
+      case 'search':
       case 'sessions':
       case 'calendar':
       case 'categories':
-      case 'diary':
       case 'crons':
-      case 'people':
       case 'settings':
         navigate({ name: 'home' });
         return;

@@ -39,7 +39,7 @@ export async function renderWikiPage(
     if (!isCurrentHash(expectedHash)) return;
     renderErrorView(root, `위키 페이지 로드 실패: ${formatRpcError(err)}`, {
       label: '← 메모리 검색으로',
-      onClick: () => navigate({ name: 'memory' }),
+      onClick: () => navigate({ name: 'search' }),
     });
   }
 }
@@ -59,7 +59,7 @@ function paint(
   root.appendChild(
     buildViewHeader({
       title: editing ? 'wiki · edit' : 'wiki',
-      left: { label: '← search', onClick: () => navigate({ name: 'memory' }) },
+      left: { label: '← search', onClick: () => navigate({ name: 'search' }) },
       right: editing
         ? { label: 'cancel', onClick: () => paint(root, initData, page, false) }
         : { label: 'edit', onClick: () => paint(root, initData, page, true) },
