@@ -1,0 +1,224 @@
+package server
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
+)
+
+func (s *Server) miniappModelMethods() map[string]rpcutil.HandlerFunc {
+	return handlerminiapp.ModelMethods(handlerminiapp.ModelDeps{
+		CurrentModel: s.currentMiniappModel,
+		ListModels:   s.listMiniappModels,
+		SetModel:     s.setMiniappModel,
+		AddModel:     s.addMiniappCustomModel,
+	})
+}
+
+func (s *Server) currentMiniappModel() string {
+	if s.chatHandler != nil {
+		if m := s.chatHandler.DefaultModel(); m != "" {
+			return m
+		}
+	}
+	if s.modelRegistry != nil {
+		return s.modelRegistry.FullModelID(modelrole.RoleMain)
+	}
+	return ""
+}
+
+func (s *Server) listMiniappModels(ctx context.Context) ([]handlerminiapp.ModelSection, error) {
+	current := s.currentMiniappModel()
+	sections := s.miniappModelSections(ctx)
+
+	out := make([]handlerminiapp.ModelSection, 0, len(sections))
+	for _, section := range sections {
+		models := make([]handlerminiapp.ModelOption, 0, len(section.entries))
+		for _, entry := range section.entries {
+			models = append(models, handlerminiapp.ModelOption{
+				ID:       entry.fullID,
+				Label:    entry.label,
+				Provider: entry.provider,
+				Display:  entry.display,
+				Current:  entry.fullID == current,
+			})
+		}
+		if len(models) > 0 {
+			out = append(out, handlerminiapp.ModelSection{
+				Title:  section.title,
+				Models: models,
+			})
+		}
+	}
+	if out == nil {
+		out = []handlerminiapp.ModelSection{}
+	}
+	return out, nil
+}
+
+func (s *Server) setMiniappModel(ctx context.Context, requested string) (string, error) {
+	modelID := strings.TrimSpace(requested)
+	if s.modelRegistry != nil {
+		if resolved, _, ok := s.modelRegistry.ResolveModel(modelID); ok {
+			modelID = resolved
+		}
+	}
+
+	allowed := false
+	for _, section := range s.miniappModelSections(ctx) {
+		for _, entry := range section.entries {
+			if entry.fullID == modelID {
+				allowed = true
+				break
+			}
+		}
+		if allowed {
+			break
+		}
+	}
+	if !allowed {
+		return "", rpcerr.Newf(protocol.ErrNotFound, "model not available: %s", requested)
+	}
+	if s.chatHandler == nil {
+		return "", rpcerr.Unavailable("chat handler is not ready")
+	}
+
+	cfgPath := config.ResolveConfigPath()
+	if err := config.PersistDefaultModel(cfgPath, modelID, s.logger); err != nil {
+		return "", rpcerr.WrapDependencyFailed("persist default model", err)
+	}
+	s.chatHandler.SetDefaultModel(modelID)
+	return modelID, nil
+}
+
+func (s *Server) addMiniappCustomModel(_ context.Context, endpoint, model string) (handlerminiapp.ModelAddResult, error) {
+	cfgPath := config.ResolveConfigPath()
+	persisted, err := config.PersistCustomProviderModel(cfgPath, endpoint, model, s.logger)
+	if err != nil {
+		if errors.Is(err, config.ErrInvalidCustomModel) {
+			return handlerminiapp.ModelAddResult{}, rpcerr.InvalidRequest(err.Error())
+		}
+		return handlerminiapp.ModelAddResult{}, rpcerr.WrapDependencyFailed("persist custom model", err)
+	}
+
+	localModelCache.mu.Lock()
+	localModelCache.models = nil
+	localModelCache.builtAt = time.Time{}
+	localModelCache.mu.Unlock()
+
+	if s.chatHandler != nil {
+		s.chatHandler.SetProviderConfigs(loadProviderConfigs(s.logger))
+	}
+
+	return handlerminiapp.ModelAddResult{
+		OK:       true,
+		ID:       persisted.FullModelID,
+		Provider: persisted.ProviderID,
+		Endpoint: persisted.BaseURL,
+		Model:    persisted.ModelID,
+		Added:    persisted.Added,
+	}, nil
+}
+
+func (s *Server) miniappModelSections(ctx context.Context) []modelSection {
+	roles := registryRoleEntries(s.modelRegistry)
+	providers := appendBuiltinProviders(loadConfiguredProviders())
+	discovered := s.discoverMiniappLocalModels(ctx, providers)
+	for i := range providers {
+		providers[i].models = mergeModels(providers[i].models, discovered[providers[i].name])
+		if len(providers[i].models) > maxModelsPerProvider {
+			providers[i].models = providers[i].models[:maxModelsPerProvider]
+		}
+	}
+	return assembleMiniappModelSections(roles, providers)
+}
+
+func assembleMiniappModelSections(roles []modelEntry, providers []providerSpec) []modelSection {
+	seen := make(map[string]struct{})
+	var sections []modelSection
+
+	add := func(title string, entries []modelEntry) {
+		var kept []modelEntry
+		for _, entry := range entries {
+			if entry.fullID == "" {
+				continue
+			}
+			if _, dup := seen[entry.fullID]; dup {
+				continue
+			}
+			seen[entry.fullID] = struct{}{}
+			kept = append(kept, entry)
+		}
+		if len(kept) > 0 {
+			sections = append(sections, modelSection{title: title, entries: kept})
+		}
+	}
+
+	add("역할", roles)
+	for _, provider := range providers {
+		add(providerDisplayName(provider.name), providerEntries(provider))
+	}
+	return sections
+}
+
+func (s *Server) discoverMiniappLocalModels(ctx context.Context, providers []providerSpec) map[string][]string {
+	localModelCache.mu.Lock()
+	if localModelCache.models != nil && time.Since(localModelCache.builtAt) < localModelCacheTTL {
+		cached := localModelCache.models
+		localModelCache.mu.Unlock()
+		return cached
+	}
+	localModelCache.mu.Unlock()
+
+	type target struct {
+		name    string
+		baseURL string
+	}
+	var targets []target
+	for _, provider := range providers {
+		if base := effectiveBaseURL(provider); isLocalURL(base) {
+			targets = append(targets, target{name: provider.name, baseURL: base})
+		}
+	}
+
+	out := make(map[string][]string)
+	if len(targets) > 0 {
+		results := make([][]string, len(targets))
+		var wg sync.WaitGroup
+		for i, target := range targets {
+			wg.Add(1)
+			go func(idx int, name, baseURL string) {
+				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						s.logger.Error("panic in miniapp model discovery probe", "provider", name, "panic", r)
+					}
+				}()
+				probeCtx, cancel := context.WithTimeout(ctx, localDiscoveryTimeout)
+				defer cancel()
+				results[idx] = discoverProviderModels(probeCtx, baseURL)
+			}(i, target.name, target.baseURL)
+		}
+		wg.Wait()
+		for i, target := range targets {
+			if len(results[i]) > 0 {
+				out[target.name] = results[i]
+			}
+		}
+	}
+
+	localModelCache.mu.Lock()
+	localModelCache.models = out
+	localModelCache.builtAt = time.Now()
+	localModelCache.mu.Unlock()
+	return out
+}

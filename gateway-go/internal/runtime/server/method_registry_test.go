@@ -128,6 +128,9 @@ var requiredMethods = []string{
 	"miniapp.gmail.archive",
 	"miniapp.gmail.trash",
 	"miniapp.gmail.sender_context",
+	"miniapp.models.add_custom",
+	"miniapp.models.list",
+	"miniapp.models.set",
 	// miniapp.gmail.analyze is conditional on an LLM client being
 	// configured (modelRegistry.Client(RoleMain) returning non-nil) —
 	// not in the required list because tests run without providers.

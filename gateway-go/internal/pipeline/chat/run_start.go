@@ -142,7 +142,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		broadcast:            h.broadcast,
 		jobTracker:           h.jobTracker,
 		channelUploadLimitFn: h.ChannelUploadLimit,
-		providerConfigs:      h.providerConfigs,
+		providerConfigs:      h.ProviderConfigs(),
 		logger:               h.logger,
 		embeddingClient:      h.embeddingClient,
 		wikiStore:            h.wikiStore,

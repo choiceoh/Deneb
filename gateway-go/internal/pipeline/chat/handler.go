@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
@@ -29,19 +30,20 @@ type Handler struct {
 	logger    *slog.Logger
 
 	// Native agent execution deps.
-	llmClient       *llm.Client
-	transcript      TranscriptStore
-	tools           *ToolRegistry
-	authManager     *provider.AuthManager
-	jobTracker      *agent.JobTracker
-	providerConfigs map[string]ProviderConfig
-	embeddingClient compact.Embedder                  // optional; BGE-M3 for MMR compaction fallback
-	wikiStore       *wiki.Store                       // optional; wiki knowledge base
-	hindsightClient *hindsight.Client                 // optional; self-hosted Hindsight memory bank
-	dreamTurnFn     func(ctx context.Context)         // optional; increments dream turn via autonomous
-	agentLog        *agentlog.Writer                  // optional; agent detail logging
-	registry        *modelrole.Registry               // centralized model role registry
-	providerRuntime *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
+	llmClient         *llm.Client
+	transcript        TranscriptStore
+	tools             *ToolRegistry
+	authManager       *provider.AuthManager
+	jobTracker        *agent.JobTracker
+	providerConfigsMu sync.RWMutex
+	providerConfigs   map[string]ProviderConfig
+	embeddingClient   compact.Embedder                  // optional; BGE-M3 for MMR compaction fallback
+	wikiStore         *wiki.Store                       // optional; wiki knowledge base
+	hindsightClient   *hindsight.Client                 // optional; self-hosted Hindsight memory bank
+	dreamTurnFn       func(ctx context.Context)         // optional; increments dream turn via autonomous
+	agentLog          *agentlog.Writer                  // optional; agent detail logging
+	registry          *modelrole.Registry               // centralized model role registry
+	providerRuntime   *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
 
 	// Agent run configuration.
 	contextCfg           ContextConfig
@@ -207,7 +209,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		tools:                cfg.Tools,
 		authManager:          cfg.AuthManager,
 		jobTracker:           cfg.JobTracker,
-		providerConfigs:      cfg.ProviderConfigs,
+		providerConfigs:      cloneProviderConfigs(cfg.ProviderConfigs),
 		embeddingClient:      cfg.EmbeddingClient,
 		wikiStore:            cfg.WikiStore,
 		hindsightClient:      cfg.HindsightClient,
@@ -245,6 +247,39 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		Sessions:    func() *session.Manager { return h.sessions },
 	})
 	return h
+}
+
+func cloneProviderConfigs(src map[string]ProviderConfig) map[string]ProviderConfig {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make(map[string]ProviderConfig, len(src))
+	for k, v := range src {
+		if len(v.Headers) > 0 {
+			headers := make(map[string]string, len(v.Headers))
+			for hk, hv := range v.Headers {
+				headers[hk] = hv
+			}
+			v.Headers = headers
+		}
+		out[k] = v
+	}
+	return out
+}
+
+// SetProviderConfigs replaces the runtime provider config snapshot used by
+// future agent runs. Active runs keep the snapshot they already started with.
+func (h *Handler) SetProviderConfigs(configs map[string]ProviderConfig) {
+	h.providerConfigsMu.Lock()
+	h.providerConfigs = cloneProviderConfigs(configs)
+	h.providerConfigsMu.Unlock()
+}
+
+// ProviderConfigs returns a copy of the current runtime provider configs.
+func (h *Handler) ProviderConfigs() map[string]ProviderConfig {
+	h.providerConfigsMu.RLock()
+	defer h.providerConfigsMu.RUnlock()
+	return cloneProviderConfigs(h.providerConfigs)
 }
 
 // ModelRegistry returns the centralized model role registry.

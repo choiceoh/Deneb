@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -290,6 +291,133 @@ func TestPersistDefaultModel(t *testing.T) {
 		}
 		if agents["defaultModel"] != "google/gemini-3.1-pro" {
 			t.Errorf("got %v, want defaultModel=google/gemini-3.1-pro", agents["defaultModel"])
+		}
+	})
+}
+
+func TestPersistCustomProviderModel(t *testing.T) {
+	logger := slog.Default()
+
+	t.Run("creates provider in new config", func(t *testing.T) {
+		tmp := t.TempDir()
+		cfgPath := filepath.Join(tmp, "deneb.json")
+
+		result, err := PersistCustomProviderModel(cfgPath, " http://127.0.0.1:8000/v1/ ", " qwen3.6-35b-a3b ", logger)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.ProviderID != "custom" {
+			t.Fatalf("provider = %q, want custom", result.ProviderID)
+		}
+		if result.FullModelID != "custom/qwen3.6-35b-a3b" {
+			t.Errorf("full model = %q, want custom/qwen3.6-35b-a3b", result.FullModelID)
+		}
+		if result.BaseURL != "http://127.0.0.1:8000/v1" {
+			t.Errorf("base URL = %q, want normalized URL", result.BaseURL)
+		}
+		if !result.Added {
+			t.Error("Added = false, want true")
+		}
+
+		raw := testutil.Must(os.ReadFile(cfgPath))
+		var written map[string]any
+		if err := json.Unmarshal(raw, &written); err != nil {
+			t.Fatal(err)
+		}
+		providers := written["models"].(map[string]any)["providers"].(map[string]any)
+		custom := providers["custom"].(map[string]any)
+		if custom["baseUrl"] != "http://127.0.0.1:8000/v1" {
+			t.Errorf("baseUrl = %v, want normalized URL", custom["baseUrl"])
+		}
+		if custom["api"] != "openai" {
+			t.Errorf("api = %v, want openai", custom["api"])
+		}
+		models := custom["models"].([]any)
+		if got := models[0].(map[string]any)["id"]; got != "qwen3.6-35b-a3b" {
+			t.Errorf("model id = %v, want qwen3.6-35b-a3b", got)
+		}
+	})
+
+	t.Run("reuses endpoint provider and keeps newest first", func(t *testing.T) {
+		tmp := t.TempDir()
+		cfgPath := filepath.Join(tmp, "deneb.json")
+		existing := map[string]any{
+			"models": map[string]any{
+				"providers": map[string]any{
+					"local": map[string]any{
+						"baseUrl": "http://127.0.0.1:8000/v1",
+						"apiKey":  "keep-me",
+						"models": []any{
+							map[string]any{"id": "older-model"},
+						},
+					},
+				},
+			},
+		}
+		data, _ := json.Marshal(existing)
+		os.WriteFile(cfgPath, data, 0644)
+
+		result, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "new-model", logger)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.ProviderID != "local" {
+			t.Fatalf("provider = %q, want local", result.ProviderID)
+		}
+		if result.FullModelID != "local/new-model" {
+			t.Errorf("full model = %q, want local/new-model", result.FullModelID)
+		}
+
+		raw := testutil.Must(os.ReadFile(cfgPath))
+		var written map[string]any
+		if err := json.Unmarshal(raw, &written); err != nil {
+			t.Fatal(err)
+		}
+		local := written["models"].(map[string]any)["providers"].(map[string]any)["local"].(map[string]any)
+		if local["apiKey"] != "keep-me" {
+			t.Errorf("apiKey = %v, want preserved apiKey", local["apiKey"])
+		}
+		models := local["models"].([]any)
+		if got := models[0].(map[string]any)["id"]; got != "new-model" {
+			t.Errorf("first model = %v, want new-model", got)
+		}
+		if got := models[1].(map[string]any)["id"]; got != "older-model" {
+			t.Errorf("second model = %v, want older-model", got)
+		}
+	})
+
+	t.Run("deduplicates model", func(t *testing.T) {
+		tmp := t.TempDir()
+		cfgPath := filepath.Join(tmp, "deneb.json")
+		if _, err := PersistCustomProviderModel(cfgPath, "http://localhost:9000/v1", "same-model", logger); err != nil {
+			t.Fatal(err)
+		}
+		result, err := PersistCustomProviderModel(cfgPath, "http://localhost:9000/v1/", "same-model", logger)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Added {
+			t.Error("Added = true, want false for duplicate")
+		}
+
+		raw := testutil.Must(os.ReadFile(cfgPath))
+		var written map[string]any
+		if err := json.Unmarshal(raw, &written); err != nil {
+			t.Fatal(err)
+		}
+		models := written["models"].(map[string]any)["providers"].(map[string]any)["custom"].(map[string]any)["models"].([]any)
+		if len(models) != 1 {
+			t.Fatalf("models len = %d, want 1", len(models))
+		}
+	})
+
+	t.Run("rejects invalid endpoint", func(t *testing.T) {
+		tmp := t.TempDir()
+		cfgPath := filepath.Join(tmp, "deneb.json")
+
+		_, err := PersistCustomProviderModel(cfgPath, "127.0.0.1:8000/v1", "model", logger)
+		if !errors.Is(err, ErrInvalidCustomModel) {
+			t.Fatalf("error = %v, want ErrInvalidCustomModel", err)
 		}
 	})
 }

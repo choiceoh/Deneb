@@ -109,6 +109,9 @@ func providerDisplayName(name string) string {
 	case "mimo-plan":
 		return "MiMo Token Plan"
 	}
+	if name == "custom" || strings.HasPrefix(name, "custom-") {
+		return "직접 추가"
+	}
 	return name
 }
 
