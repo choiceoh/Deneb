@@ -43,7 +43,7 @@ export async function renderCategoryPages(
     if (pages.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.textContent = '이 카테고리에 페이지가 없습니다';
+      empty.textContent = 'no pages in this category';
       root.appendChild(empty);
       return;
     }

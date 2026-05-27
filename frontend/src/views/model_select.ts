@@ -65,7 +65,7 @@ function paintModelSelect(
   if (result.sections.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'settings-model-empty';
-    empty.textContent = '사용 가능한 모델이 없습니다';
+    empty.textContent = 'no models available';
     card.appendChild(empty);
     return;
   }

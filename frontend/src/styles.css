@@ -48,9 +48,18 @@
   --space-5: 24px;
   --space-6: 32px;
 
-  /* Motion */
+  /* Motion. The two duration tokens have always existed; the new
+     easing tokens give the rest of the app a shared vocabulary:
+       --ease-emphasis : standard "decelerate" — content arriving.
+       --ease-exit     : "accelerate" — content leaving.
+       --ease-spring   : mild overshoot — for indicators + ack
+                         feedback (the panorama underline, settings
+                         toggle thumb, etc.). */
   --transition-fast: 120ms cubic-bezier(0.2, 0, 0.2, 1);
   --transition-base: 200ms cubic-bezier(0.2, 0, 0.2, 1);
+  --ease-emphasis: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* Semantic colors (not from Telegram — same in both schemes) */
   --color-danger: #ef4444;
@@ -130,14 +139,23 @@ body {
     'Apple SD Gothic Neo',
     'Noto Sans KR',
     sans-serif;
-  /* OpenType features: enable cv11 (single-story 'a'), cv02 (open '4'),
-     and the standard contextual + kerning pairs. Plus tabular-nums where
-     selectors opt in via font-variant-numeric. ss03 swaps in a true
-     'curl-less' 'a' that pairs better with the ultralight weights. */
+  /* OpenType features for Inter Variable, in order of impact:
+       'ss01' — single-story 'a' (matches the wordmark wordform)
+       'ss02' — disambiguation 'i' + 'l' (helps at small sizes)
+       'ss03' — curl-less tail on 'a' (pairs with ultralight weights)
+       'ss04' — open '6' / '9' bowls (cleaner against tabular nums)
+       'cv02' — open '4'
+       'cv11' — single-story 'a' (cv11 + ss01 is the canonical pair)
+       'kern' — explicit kerning pair enable (browser-default but
+                we set it so font-variant: tabular-nums in callsites
+                doesn't accidentally drop it). */
   font-feature-settings:
+    'ss01' on,
+    'ss02' on,
+    'ss03' on,
+    'ss04' on,
     'cv02' on,
     'cv11' on,
-    'ss03' on,
     'kern' on;
   font-optical-sizing: auto;
   font-size: 15px;
@@ -379,6 +397,34 @@ button.entry-card:active {
   line-height: 1;
   text-transform: lowercase;
   color: var(--tg-text);
+  /* The h1 host has no animation of its own; per-letter spans inside
+     carry the cascade via .view-title-letter. */
+}
+
+.view-title-letter {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(8px);
+  filter: blur(1px);
+  animation: view-title-letter-in 520ms var(--ease-emphasis) both;
+  animation-delay: calc(var(--i, 0) * 25ms);
+}
+
+@keyframes view-title-letter-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-title-letter {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
 }
 
 .link-button {
@@ -2217,14 +2263,39 @@ button.profile-row-nav:active .icon-tile {
   /* Trailing space so the last tab can snap-align to the left while
      leaving the previous one visible at the right edge. */
   padding-right: 35vw;
+  transition:
+    transform 280ms var(--ease-emphasis),
+    opacity 220ms ease;
+}
+
+/* Scroll-hide: body.panorama-hidden flips when the user scrolls down
+   past ~80px. The strip translates up and fades out so the content
+   gets the full viewport; scrolling back up brings it back with the
+   same easing. */
+body.panorama-hidden #tab-bar.tab-bar-visible {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #tab-bar.tab-bar-visible {
+    transition: none;
+  }
+  body.panorama-hidden #tab-bar.tab-bar-visible {
+    transform: none;
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .panorama-tab {
+  position: relative;
   flex-shrink: 0;
   scroll-snap-align: start;
   background: none;
   border: none;
-  padding: 0;
+  padding: 0 0 8px;
   font: inherit;
   font-size: 30px;
   font-weight: 200;
@@ -2235,9 +2306,27 @@ button.profile-row-nav:active .icon-tile {
   opacity: 0.32;
   cursor: pointer;
   transition:
-    opacity 200ms ease,
-    transform 100ms cubic-bezier(0.4, 0, 1, 1),
-    font-weight 200ms ease;
+    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 120ms cubic-bezier(0.4, 0, 1, 1),
+    font-weight 220ms ease;
+}
+
+/* Active-tab marker — a 2px hairline just under the active word's
+   baseline. Width is sized to the word via the underline pseudo-element,
+   so when the user swipes/taps to another tab, the marker reads as
+   sliding across because the new tab's word has a different width.
+   spring curve gives it a tiny overshoot. */
+.panorama-tab::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--tg-text);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .panorama-tab:hover {
@@ -2256,6 +2345,10 @@ button.profile-row-nav:active .icon-tile {
 .panorama-tab-active {
   opacity: 1;
   font-weight: 300;
+}
+
+.panorama-tab-active::after {
+  transform: scaleX(1);
 }
 
 /* The body padding-bottom reservation the old bottom bar needed is
@@ -2842,34 +2935,140 @@ button.person-msg-row-unread {
    into each other. */
 
 ::view-transition-group(root) {
-  animation-duration: 280ms;
+  animation-duration: 300ms;
 }
 
+/* Direction-aware page transition.
+   main.ts stamps <html data-transition-dir="..."> with one of
+   forward / back / deep / shallow:
+
+   forward  : moving to a later-ordered tab (home -> settings)
+              old slides left, new comes in from the right
+   back     : moving to an earlier-ordered tab (settings -> home)
+              old slides right, new comes in from the left
+   deep     : tab -> drill-down (home -> mail detail)
+              old falls slightly down + fades, new rises from below
+   shallow  : drill-down -> tab (mail detail -> home)
+              old rises + fades, new falls into place from above
+
+   The default (no attribute or anything else) falls through to the
+   forward case — keeps the original Zune panorama feel for any
+   ambiguous transitions (drill-down → drill-down). */
+
 ::view-transition-old(root) {
-  animation: 240ms cubic-bezier(0.4, 0, 1, 1) both zune-shear-out;
+  animation: 260ms cubic-bezier(0.4, 0, 1, 1) both zune-shear-out-forward;
 }
 
 ::view-transition-new(root) {
-  animation: 360ms cubic-bezier(0.16, 1, 0.3, 1) both zune-shear-in;
+  animation: 380ms cubic-bezier(0.16, 1, 0.3, 1) both zune-shear-in-forward;
 }
 
-@keyframes zune-shear-out {
+[data-transition-dir='back']::view-transition-old(root) {
+  animation-name: zune-shear-out-back;
+}
+
+[data-transition-dir='back']::view-transition-new(root) {
+  animation-name: zune-shear-in-back;
+}
+
+[data-transition-dir='deep']::view-transition-old(root) {
+  animation-name: zune-fall-out;
+  animation-duration: 220ms;
+}
+
+[data-transition-dir='deep']::view-transition-new(root) {
+  animation-name: zune-rise-in;
+}
+
+[data-transition-dir='shallow']::view-transition-old(root) {
+  animation-name: zune-rise-out;
+  animation-duration: 220ms;
+}
+
+[data-transition-dir='shallow']::view-transition-new(root) {
+  animation-name: zune-fall-in;
+}
+
+@keyframes zune-shear-out-forward {
   to {
     opacity: 0;
-    transform: translateX(-24px) skewX(-3deg);
+    transform: translateX(-28px) skewX(-3deg);
     filter: blur(2px);
   }
 }
 
-@keyframes zune-shear-in {
+@keyframes zune-shear-in-forward {
   from {
     opacity: 0;
-    transform: translateX(28px) skewX(2deg);
+    transform: translateX(32px) skewX(2deg);
     filter: blur(2px);
   }
   to {
     opacity: 1;
     transform: translateX(0) skewX(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes zune-shear-out-back {
+  to {
+    opacity: 0;
+    transform: translateX(28px) skewX(3deg);
+    filter: blur(2px);
+  }
+}
+
+@keyframes zune-shear-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(-32px) skewX(-2deg);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) skewX(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes zune-fall-out {
+  to {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+    filter: blur(2px);
+  }
+}
+
+@keyframes zune-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes zune-rise-out {
+  to {
+    opacity: 0;
+    transform: translateY(-12px) scale(1.012);
+    filter: blur(2px);
+  }
+}
+
+@keyframes zune-fall-in {
+  from {
+    opacity: 0;
+    transform: translateY(-18px) scale(1.012);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
     filter: blur(0);
   }
 }

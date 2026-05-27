@@ -68,7 +68,7 @@ export async function renderList(root: HTMLElement, initData: string): Promise<v
     if (result.messages.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.textContent = '최근 7일간 받은 메일이 없습니다 ✨';
+      empty.textContent = 'no mail in the last 7 days';
       rowsContainer.appendChild(empty);
       return;
     }

@@ -32,7 +32,7 @@ export function renderMemory(root: HTMLElement, initData: string): void {
   const results = document.createElement('div');
   results.className = 'search-results';
   if (!lastQuery) {
-    results.innerHTML = '<div class="empty-state">기억할 만한 것을 찾아보세요</div>';
+    results.innerHTML = '<div class="empty-state">search memory</div>';
   }
   root.appendChild(form);
   root.appendChild(results);
@@ -41,7 +41,7 @@ export function renderMemory(root: HTMLElement, initData: string): void {
     ev.preventDefault();
     const q = input.value.trim();
     if (!q) {
-      results.innerHTML = '<div class="empty-state">검색어를 입력하세요</div>';
+      results.innerHTML = '<div class="empty-state">type to search</div>';
       return;
     }
     lastQuery = q;
@@ -67,7 +67,7 @@ async function runSearch(initData: string, q: string, mount: HTMLElement): Promi
       mount.innerHTML = '';
       const empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.textContent = `"${q}" 에 대한 결과가 없습니다`;
+      empty.textContent = `no matches for "${q}"`;
       mount.appendChild(empty);
       return;
     }

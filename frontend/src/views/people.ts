@@ -44,7 +44,7 @@ export async function renderPeople(
     if (people.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.textContent = '최근 메일이 없거나 발신자를 식별할 수 없습니다';
+      empty.textContent = 'no senders identified yet';
       root.appendChild(empty);
       return;
     }

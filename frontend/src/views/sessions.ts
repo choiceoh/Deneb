@@ -36,7 +36,7 @@ export async function renderSessions(root: HTMLElement, initData: string): Promi
     if (sessions.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.textContent = '최근 토픽이 없습니다';
+      empty.textContent = 'no topics yet';
       root.appendChild(empty);
       return;
     }

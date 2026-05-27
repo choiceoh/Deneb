@@ -48,9 +48,57 @@ export function buildViewHeader(opts: {
 
   const title = document.createElement('h1');
   title.className = 'view-title';
-  title.textContent = opts.title;
+  // Letter-by-letter cascade entry: each grapheme gets its own span
+  // with a 25ms-per-char staggered delay via inline --i. The fall-
+  // back when split is empty (or for accessibility / RTL languages
+  // that don't tokenize well into letters) is to set textContent —
+  // the CSS animation just plays on the whole element instead.
+  appendLetterCascade(title, opts.title);
   wrap.appendChild(title);
   return wrap;
+}
+
+// appendLetterCascade splits text into per-character spans (using the
+// Intl.Segmenter where available so CJK + emoji stay coherent) and
+// stamps an inline --i index on each so the CSS keyframe can fire
+// staggered. Whitespace stays text-node so word wrap still works
+// naturally inside lowercase titles.
+function appendLetterCascade(host: HTMLElement, text: string): void {
+  const segments = segmentGraphemes(text);
+  if (!segments.length) {
+    host.textContent = text;
+    return;
+  }
+  segments.forEach((seg, i) => {
+    if (seg === ' ') {
+      host.appendChild(document.createTextNode(' '));
+      return;
+    }
+    const span = document.createElement('span');
+    span.className = 'view-title-letter';
+    span.style.setProperty('--i', String(i));
+    span.textContent = seg;
+    host.appendChild(span);
+  });
+}
+
+function segmentGraphemes(text: string): string[] {
+  // Intl.Segmenter is widely available in modern browsers + Telegram
+  // WebView. Fall back to Array.from which still respects surrogate
+  // pairs (so emoji stay intact even if the segmenter is missing).
+  type SegmenterCtor = new (
+    locales?: string | string[],
+    options?: { granularity?: 'grapheme' | 'word' | 'sentence' },
+  ) => { segment(input: string): Iterable<{ segment: string }> };
+  const Seg = (Intl as unknown as { Segmenter?: SegmenterCtor }).Segmenter;
+  if (Seg) {
+    const out: string[] = [];
+    for (const s of new Seg(undefined, { granularity: 'grapheme' }).segment(text)) {
+      out.push(s.segment);
+    }
+    return out;
+  }
+  return Array.from(text);
 }
 
 function buildSlot(btn: HeaderButton | undefined): HTMLElement {

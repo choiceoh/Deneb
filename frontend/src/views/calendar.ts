@@ -33,7 +33,7 @@ export async function renderCalendar(root: HTMLElement, initData: string): Promi
     if (events.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.textContent = '향후 7일간 일정이 없습니다';
+      empty.textContent = 'nothing on the next 7 days';
       root.appendChild(empty);
       return;
     }
