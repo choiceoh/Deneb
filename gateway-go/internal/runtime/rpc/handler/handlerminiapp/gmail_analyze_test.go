@@ -150,6 +150,34 @@ func TestGmailAnalyze_EmptyAnalysisIsRejected(t *testing.T) {
 	}
 }
 
+// --- cache + wiki sink coverage --------------------------------------------
+//
+// CacheMiss + CacheHit + Force are covered further down by
+// TestGmailAnalyze_CacheMiss_RunsLLMAndPersists,
+// TestGmailAnalyze_CacheHit_SkipsLLMAndWiki, and
+// TestGmailAnalyze_Force_BypassesCache. The wiki-failure-is-non-fatal
+// contract has no sibling assertion, so it lives here.
+
+// TestGmailAnalyze_WikiSinkFailure_NonFatal: if the wiki sink returns an
+// error, the LLM result must still surface to the caller as success.
+func TestGmailAnalyze_WikiSinkFailure_NonFatal(t *testing.T) {
+	deps := analyzeDeps(
+		&fakeGmailClient{getMessageFn: func(_ context.Context, id string) (*gmail.MessageDetail, error) {
+			return &gmail.MessageDetail{ID: id}, nil
+		}},
+		&fakeAnalyzePipeline{analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (string, error) {
+			return "result", nil
+		}},
+	)
+	deps.SaveToWiki = func(WikiAnalysisInput) error { return errors.New("disk full") }
+	h := gmailAnalyze(deps)
+
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m1"}))
+	if !resp.OK {
+		t.Fatalf("expected OK despite wiki failure, got %+v", resp.Error)
+	}
+}
+
 func TestGmailAnalyze_PipelineFactoryError(t *testing.T) {
 	deps := GmailAnalyzeDeps{
 		Client: func() (GmailClient, error) { return &fakeGmailClient{}, nil },
