@@ -2864,31 +2864,6 @@ button.person-msg-row-unread {
   letter-spacing: -0.02em;
 }
 
-.type-footer {
-  margin-top: 64px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  animation: type-enter 560ms cubic-bezier(0.2, 0, 0.2, 1) 360ms both;
-}
-
-.type-greeting {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--tg-text);
-}
-
-/* Non-blocking whoami failure surface: home stays usable (menu still
-   navigates) but the operator sees the error below the greeting so the
-   silent failure doesn't go unnoticed. */
-.type-greeting-error {
-  margin: 6px 0 0;
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--tg-destructive, #d9534f);
-}
-
 .type-status {
   margin: 0;
   font-size: 12px;
@@ -2936,8 +2911,7 @@ button.person-msg-row-unread {
 
 @media (prefers-reduced-motion: reduce) {
   .type-brand,
-  .type-item,
-  .type-footer {
+  .type-item {
     animation: none;
   }
 }

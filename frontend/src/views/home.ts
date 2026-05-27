@@ -4,34 +4,29 @@
 // tracked-caps captions, no dividers — the page is the words. The
 // previous home/more split is gone: every domain surface lives in
 // one column here so the operator can scan everything in one motion
-// instead of toggling tabs. Footer keeps just the greeting; model +
-// status moved to the settings screen, and an explicit "refresh"
-// button is no longer needed (each drill-down view has its own).
+// instead of toggling tabs. Model + status moved to the settings
+// screen, and an explicit "refresh" button is no longer needed
+// (each drill-down view has its own).
 
-import { whoami, type WhoamiResult } from '../rpc';
+import { whoami } from '../rpc';
 import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
+import { buildErrorBanner } from './ui';
 import type { Route } from '../router';
 
 export async function renderHome(root: HTMLElement, initData: string): Promise<void> {
   const expectedHash = location.hash;
 
   // Progressive paint: the type-menu doesn't depend on whoami, so we paint
-  // it immediately with a placeholder greeting. The whoami RPC (~50-150ms
-  // depending on backend warmth) then hydrates the greeting in-place. The
-  // operator sees the navigable menu the moment the JS runs instead of
-  // staring at "로딩 중…" for a network round-trip.
-  paint(root, null);
+  // it immediately. whoami still runs for auth validation, but its result
+  // no longer feeds any visible UI — on failure we surface a quiet inline
+  // banner so the operator notices without losing the menu.
+  paint(root);
   try {
-    const user = await whoami(initData);
-    if (!isCurrentHash(expectedHash) || !root.isConnected) return;
-    hydrateGreeting(root, user);
+    await whoami(initData);
   } catch (err) {
     if (!isCurrentHash(expectedHash) || !root.isConnected) return;
-    // whoami fail is non-fatal for navigation — the menu is already
-    // usable. We surface the error inline in the footer area so the
-    // operator notices without losing the menu.
-    hydrateGreetingError(root, formatRpcError(err));
+    root.appendChild(buildErrorBanner(`백엔드 호출 실패: ${formatRpcError(err)}`));
   }
 }
 
@@ -40,7 +35,7 @@ interface MenuEntry {
   route: Route;
 }
 
-function paint(root: HTMLElement, user: WhoamiResult | null): void {
+function paint(root: HTMLElement): void {
   root.innerHTML = '';
 
   // Full destination list — ordered by how often the operator hits
@@ -69,38 +64,6 @@ function paint(root: HTMLElement, user: WhoamiResult | null): void {
     list.appendChild(buildMenuItem(entry, i, entries.length)),
   );
   root.appendChild(list);
-
-  // Footer: just the greeting now. Model + refresh removed — model
-  // lives on the settings page; refresh either lives on each drill-
-  // down view's header link, or the user pulls a tab again.
-  const footer = document.createElement('footer');
-  footer.className = 'type-footer';
-
-  const greet = document.createElement('p');
-  greet.className = 'type-greeting';
-  // While whoami is in flight we paint the phase-of-day phrase without a
-  // name suffix. When the RPC settles, hydrateGreeting() swaps in the
-  // personalized form. If the RPC never settles, the operator still
-  // reads a sensible greeting.
-  greet.textContent = greeting(user?.firstName);
-  footer.appendChild(greet);
-
-  root.appendChild(footer);
-}
-
-function hydrateGreeting(root: HTMLElement, user: WhoamiResult): void {
-  const greet = root.querySelector<HTMLElement>('.type-greeting');
-  if (!greet) return;
-  greet.textContent = greeting(user.firstName);
-}
-
-function hydrateGreetingError(root: HTMLElement, message: string): void {
-  const footer = root.querySelector<HTMLElement>('.type-footer');
-  if (!footer) return;
-  const err = document.createElement('p');
-  err.className = 'type-greeting-error';
-  err.textContent = `백엔드 호출 실패: ${message}`;
-  footer.appendChild(err);
 }
 
 function buildMenuItem(entry: MenuEntry, index: number, total: number): HTMLButtonElement {
@@ -121,13 +84,3 @@ function buildMenuItem(entry: MenuEntry, index: number, total: number): HTMLButt
   });
   return btn;
 }
-
-// greeting picks a Korean phase-of-day phrase. Suffixes the user's first
-// name when we have one so the page reads as a personal landing.
-function greeting(firstName?: string): string {
-  const h = new Date().getHours();
-  const phase = h < 5 ? '안녕하세요' : h < 12 ? '좋은 아침' : h < 18 ? '좋은 오후' : '좋은 저녁';
-  const who = firstName?.trim();
-  return who ? `${phase}, ${who}` : phase;
-}
-
