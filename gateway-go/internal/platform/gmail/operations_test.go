@@ -402,11 +402,11 @@ func TestFormatSearchResults(t *testing.T) {
 	if !strings.Contains(result, "Meeting") {
 		t.Error("missing second message subject")
 	}
-	if !strings.Contains(result, "🔵") {
-		t.Error("missing unread marker 🔵 for unread message")
+	if strings.Contains(result, "🔵") || strings.Contains(result, "⚪") {
+		t.Error("legacy emoji markers should be gone")
 	}
-	if !strings.Contains(result, "⚪") {
-		t.Error("missing read marker ⚪ for read message")
+	if strings.Contains(result, "(안 읽음)") {
+		t.Error("legacy 안 읽음 label should be gone")
 	}
 	if !strings.Contains(result, "**Alice <alice@example.com>**") {
 		t.Error("unread sender should be bold")
@@ -414,8 +414,13 @@ func TestFormatSearchResults(t *testing.T) {
 	if strings.Contains(result, "**Bob <bob@example.com>**") {
 		t.Error("read sender should not be bold")
 	}
-	if !strings.Contains(result, "(안 읽음)") {
-		t.Error("unread message should include 안 읽음 label")
+	if !strings.Contains(result, "> Bob <bob@example.com>") {
+		t.Error("read message should be wrapped in a blockquote (`>`)")
+	}
+	for _, line := range strings.Split(result, "\n") {
+		if strings.Contains(line, "Alice") && strings.HasPrefix(line, ">") {
+			t.Errorf("unread line should not be a blockquote: %q", line)
+		}
 	}
 }
 
@@ -424,11 +429,13 @@ func TestFormatSearchResults_AllRead(t *testing.T) {
 		{ID: "x1", From: "Carol", Subject: "FYI", Date: "Wed", Labels: []string{"INBOX"}},
 	}
 	result := FormatSearchResults(msgs)
-	if !strings.Contains(result, "⚪") {
-		t.Error("expected read marker ⚪")
-	}
-	if strings.Contains(result, "🔵") {
-		t.Error("did not expect unread marker for read-only list")
+	for _, line := range strings.Split(result, "\n") {
+		if line == "" {
+			continue
+		}
+		if !strings.HasPrefix(line, ">") {
+			t.Errorf("every read line should start with `>`, got %q", line)
+		}
 	}
 }
 
