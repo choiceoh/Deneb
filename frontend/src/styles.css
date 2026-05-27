@@ -61,43 +61,45 @@
 }
 
 /* Dark scheme: Telegram stamps data-color-scheme="dark" via main.ts.
-   This block adjusts only the depth/hairline tokens — colors come from
-   Telegram themeParams which are already dark-correct at this point. */
+   We override --tg-bg with pure #000 (the Telegram dark theme bg is a
+   muted blue-gray; AMOLED-black makes the ultralight Zune-style type
+   feel weightless against the panel instead of floating over a
+   low-contrast gradient). The rest is just hairline/shadow nudges. */
 [data-color-scheme='dark'] {
-  --hairline: rgba(255, 255, 255, 0.08);
-  --hairline-strong: rgba(255, 255, 255, 0.14);
-  --surface-tint: rgba(255, 255, 255, 0.04);
+  --tg-bg: #000000;
+  --hairline: rgba(255, 255, 255, 0.09);
+  --hairline-strong: rgba(255, 255, 255, 0.18);
+  --surface-tint: rgba(255, 255, 255, 0.05);
   --shadow-sm:
-    0 1px 2px rgba(0, 0, 0, 0.25),
+    0 1px 2px rgba(0, 0, 0, 0.6),
     0 0 0 1px var(--hairline);
   --shadow-md:
-    0 4px 12px rgba(0, 0, 0, 0.35),
-    0 1px 2px rgba(0, 0, 0, 0.18);
+    0 4px 12px rgba(0, 0, 0, 0.6),
+    0 1px 2px rgba(0, 0, 0, 0.4);
   --color-warning-soft: rgba(217, 119, 6, 0.22);
 }
 
 /* Browser fallback when Telegram isn't there to set data-color-scheme
-   (local dev, accidental browser hit). Mirrors the dark token values
-   above and gives the Telegram-style dark palette so the page is
-   readable rather than fluorescent. */
+   (local dev, accidental browser hit). Matches the in-Telegram dark
+   look so the page reads the same whichever way it was opened. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-color-scheme]) {
-    --tg-bg: #17212b;
+    --tg-bg: #000000;
     --tg-text: #ffffff;
     --tg-hint: #7d8b99;
     --tg-link: #6ab3f3;
     --tg-button: #5288c1;
     --tg-button-text: #ffffff;
-    --tg-secondary-bg: #232e3c;
-    --hairline: rgba(255, 255, 255, 0.08);
-    --hairline-strong: rgba(255, 255, 255, 0.14);
-    --surface-tint: rgba(255, 255, 255, 0.04);
+    --tg-secondary-bg: #0f0f0f;
+    --hairline: rgba(255, 255, 255, 0.09);
+    --hairline-strong: rgba(255, 255, 255, 0.18);
+    --surface-tint: rgba(255, 255, 255, 0.05);
     --shadow-sm:
-      0 1px 2px rgba(0, 0, 0, 0.25),
+      0 1px 2px rgba(0, 0, 0, 0.6),
       0 0 0 1px var(--hairline);
     --shadow-md:
-      0 4px 12px rgba(0, 0, 0, 0.35),
-      0 1px 2px rgba(0, 0, 0, 0.18);
+      0 4px 12px rgba(0, 0, 0, 0.6),
+      0 1px 2px rgba(0, 0, 0, 0.4);
     --color-warning-soft: rgba(217, 119, 6, 0.22);
   }
 }
@@ -2564,5 +2566,75 @@ button.person-msg-row-unread {
   .type-item,
   .type-footer {
     animation: none;
+  }
+}
+
+/* ============================================================
+   Page transitions — Zune-style shear + cross-fade
+   ============================================================
+   Triggered by main.ts wrapping every router dispatch in
+   document.startViewTransition(). The outgoing snapshot shears
+   off to the left while losing opacity; the incoming page slides
+   in from the right with a complementary skew that settles back
+   to flat. Together they read as the camera panning across a
+   long horizontal page — Metro's "panorama" motion without the
+   gesture cost.
+
+   ::view-transition-group(root) carries the default cross-fade,
+   so we override its duration to keep the panes from ghosting
+   into each other. */
+
+::view-transition-group(root) {
+  animation-duration: 280ms;
+}
+
+::view-transition-old(root) {
+  animation: 240ms cubic-bezier(0.4, 0, 1, 1) both zune-shear-out;
+}
+
+::view-transition-new(root) {
+  animation: 360ms cubic-bezier(0.16, 1, 0.3, 1) both zune-shear-in;
+}
+
+@keyframes zune-shear-out {
+  to {
+    opacity: 0;
+    transform: translateX(-24px) skewX(-3deg);
+    filter: blur(2px);
+  }
+}
+
+@keyframes zune-shear-in {
+  from {
+    opacity: 0;
+    transform: translateX(28px) skewX(2deg);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) skewX(0);
+    filter: blur(0);
+  }
+}
+
+/* Tap feedback on Zune-style typography rows. When the user taps a
+   home menu word or a header back link, we want a micro version of
+   the same shear motion the page transition uses — feels like the
+   word is already on its way out before the new page arrives. */
+.type-item:active {
+  transform: translateX(4px) skewX(-1deg);
+  opacity: 0.5;
+  transition:
+    transform 90ms cubic-bezier(0.4, 0, 1, 1),
+    opacity 90ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+  .type-item:active {
+    transform: none;
   }
 }

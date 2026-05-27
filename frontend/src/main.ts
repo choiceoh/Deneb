@@ -188,7 +188,24 @@ async function dispatch(route: Route): Promise<void> {
 
 function handleHashChange(): void {
   const route = parseRoute(location.hash);
-  void dispatch(route);
+  // View Transitions API gives us a free Zune-style shear/fade between
+  // any two route states without us having to hand-orchestrate exit +
+  // enter animations on every component. We hand it our dispatch fn;
+  // it snapshots the old DOM, lets the new DOM mount, and crossfades
+  // through `::view-transition-old(root)` and `::view-transition-new(root)`
+  // keyframes defined in styles.css. Telegram's WebView (Chromium-based,
+  // recent enough on both Android and desktop) supports the API. Older
+  // engines just fall through to the un-animated dispatch.
+  const startTransition = (document as Document & {
+    startViewTransition?: (cb: () => void | Promise<void>) => unknown;
+  }).startViewTransition;
+  if (typeof startTransition === 'function') {
+    startTransition.call(document, () => {
+      void dispatch(route);
+    });
+  } else {
+    void dispatch(route);
+  }
 }
 
 function boot(): void {
