@@ -138,6 +138,9 @@ button.entry-card {
   text-align: left;
   cursor: pointer;
   font: inherit;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 button.entry-card:active {
@@ -209,6 +212,7 @@ button.entry-card:active {
 }
 
 .email-row {
+  position: relative;
   flex: 1;
   min-width: 0;
   background: var(--tg-secondary-bg);
@@ -219,6 +223,24 @@ button.entry-card:active {
   text-align: left;
   cursor: pointer;
   font: inherit;
+}
+
+.email-row-select-indicator {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid color-mix(in srgb, var(--tg-hint) 40%, transparent);
+  border-radius: 50%;
+  color: var(--tg-button-text);
+  background: var(--tg-bg);
+  font-size: 13px;
+  font-weight: 700;
+  transform: translateY(-50%);
 }
 
 .email-row:active {
@@ -235,36 +257,89 @@ button.entry-card:active {
   padding-left: 11px;
 }
 
-.email-row-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 0 0 44px;
+.email-list-selecting {
+  padding-bottom: 96px;
 }
 
-.email-row-action {
-  flex: 1 1 0;
-  background: var(--tg-secondary-bg);
+.email-list-selecting .email-row {
+  padding-left: 46px;
+}
+
+.email-list-selecting .email-row-wrap.email-row-unread .email-row {
+  padding-left: 43px;
+}
+
+.email-list-selecting .email-row-select-indicator {
+  display: inline-flex;
+}
+
+.email-row-wrap.email-row-selected .email-row {
+  background: color-mix(in srgb, var(--tg-link) 14%, var(--tg-secondary-bg));
+  outline: 2px solid color-mix(in srgb, var(--tg-link) 45%, transparent);
+  outline-offset: 0;
+}
+
+.email-row-wrap.email-row-selected .email-row-select-indicator {
+  border-color: var(--tg-button);
+  background: var(--tg-button);
+}
+
+.email-row-wrap.email-row-selected .email-row-select-indicator::after {
+  content: '✓';
+}
+
+.email-list-selecting .load-more-button {
+  display: none;
+}
+
+.email-bulk-bar {
+  position: fixed;
+  left: 50%;
+  right: auto;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  z-index: 120;
+  width: min(448px, calc(100vw - 24px));
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--tg-hint) 18%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--tg-bg) 94%, var(--tg-secondary-bg));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  transform: translateX(-50%);
+}
+
+.email-bulk-count {
+  margin: 0 4px 8px;
+  color: var(--tg-hint);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.email-bulk-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.email-bulk-button {
+  min-height: 40px;
+  padding: 8px 6px;
   border: none;
   border-radius: 10px;
-  color: var(--tg-hint);
-  font-size: 16px;
+  background: var(--tg-secondary-bg);
+  color: var(--tg-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  padding: 0;
-  min-height: 32px;
 }
 
-.email-row-action:active {
-  opacity: 0.85;
+.email-bulk-button:active {
+  opacity: 0.8;
 }
 
-.email-row-action:disabled {
-  opacity: 0.35;
+.email-bulk-button:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
-}
-
-.email-row-action-danger:active {
-  opacity: 0.7;
 }
 
 .load-more-button {
