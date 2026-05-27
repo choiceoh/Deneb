@@ -16,11 +16,11 @@ export async function renderCategoryPages(
   const expectedHash = location.hash;
   root.innerHTML = '';
 
-  const displayName = category === '(root)' ? '(루트)' : category;
+  const displayName = category === '(root)' ? 'root' : category;
   root.appendChild(
     buildViewHeader({
-      title: `📂 ${displayName}`,
-      left: { label: '← 카테고리', onClick: () => navigate({ name: 'categories' }) },
+      title: displayName,
+      left: { label: '← categories', onClick: () => navigate({ name: 'categories' }) },
     }),
   );
 

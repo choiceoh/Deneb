@@ -21,9 +21,9 @@ export async function renderCrons(
 
   root.appendChild(
     buildViewHeader({
-      title: '⚡ 자동 작업',
-      left: { label: '← 더보기', onClick: () => navigate({ name: 'more' }) },
-      right: { label: '새로고침', onClick: () => void renderCrons(root, initData) },
+      title: 'crons',
+      left: { label: '← more', onClick: () => navigate({ name: 'more' }) },
+      right: { label: 'refresh', onClick: () => void renderCrons(root, initData) },
     }),
   );
 

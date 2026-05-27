@@ -57,8 +57,8 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
 
   root.appendChild(
     buildViewHeader({
-      title: '메일',
-      left: { label: '← 받은 편지함', onClick: () => navigate({ name: 'inbox' }) },
+      title: 'message',
+      left: { label: '← mail', onClick: () => navigate({ name: 'inbox' }) },
     }),
   );
 

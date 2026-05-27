@@ -17,8 +17,8 @@ export async function renderCalendar(root: HTMLElement, initData: string): Promi
 
   root.appendChild(
     buildViewHeader({
-      title: '📅 일정',
-      right: { label: '새로고침', onClick: () => void renderCalendar(root, initData) },
+      title: 'calendar',
+      right: { label: 'refresh', onClick: () => void renderCalendar(root, initData) },
     }),
   );
 

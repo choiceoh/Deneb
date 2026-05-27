@@ -18,8 +18,8 @@ export async function renderCategories(
 
   root.appendChild(
     buildViewHeader({
-      title: '📂 카테고리',
-      left: { label: '← 더보기', onClick: () => navigate({ name: 'more' }) },
+      title: 'categories',
+      left: { label: '← more', onClick: () => navigate({ name: 'more' }) },
     }),
   );
 
