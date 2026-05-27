@@ -18,6 +18,7 @@
 // the hash identical but replaces rowsContainer.
 
 import { archive, listRecent, markRead, trash, type GmailMessageRow } from '../gmail';
+import { cacheRowSummary, invalidate, prefetchMessage } from '../gmail_prefetch';
 import { isCurrentHash, navigate } from '../router';
 import { confirmAction } from '../dialog';
 import { errorMessage, formatRpcError, relativeTime, shortFrom } from '../format';
@@ -116,6 +117,11 @@ function createSelectionState(
 }
 
 function buildRow(row: GmailMessageRow, selection: SelectionState): HTMLElement {
+  // Stash this row so the detail view can paint subject/from/when
+  // immediately when the operator drills in — no "메일 불러오는 중…"
+  // flash while the detail RPC is in flight.
+  cacheRowSummary(row);
+
   const wrap = document.createElement('div');
   wrap.className = 'email-row-wrap';
   if (row.isUnread) wrap.classList.add('email-row-unread');
@@ -180,6 +186,15 @@ function buildRow(row: GmailMessageRow, selection: SelectionState): HTMLElement 
       enterSelectionMode(selection);
       toggleSelected(selection, row, wrap, true);
     }, longPressMs);
+    // Fire the detail RPC the moment the finger touches the row. By
+    // the time the operator releases + the click event fires + we
+    // navigate + the detail view boots (~150-300ms total), the
+    // response is often already back, so detail.ts paints immediately
+    // instead of waiting on the network. Skipped when we're in
+    // multi-select mode (the tap toggles selection, not navigation).
+    if (!selection.selecting) {
+      prefetchMessage(selection.initData, row.id);
+    }
   });
 
   main.addEventListener('pointermove', (e) => {
@@ -406,9 +421,18 @@ function applyBulkAction(initData: string, action: BulkAction, id: string): Prom
     case 'read':
       return markRead(initData, id);
     case 'archive':
-      return archive(initData, id);
+      // Drop the cached summary + any in-flight detail prefetch so the
+      // detail view can't paint this row back from cache after the
+      // bulk action moves it out of the inbox.
+      return archive(initData, id).then((res) => {
+        invalidate(id);
+        return res;
+      });
     case 'trash':
-      return trash(initData, id);
+      return trash(initData, id).then((res) => {
+        invalidate(id);
+        return res;
+      });
   }
 }
 
