@@ -1983,3 +1983,189 @@ button.category-row:active {
   color: var(--tg-hint);
   font-variant-numeric: tabular-nums;
 }
+
+/* People card is a button when tappable; reset native button styling. */
+button.person-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+  color: var(--tg-text);
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+button.person-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+button.person-card:active {
+  transform: translateY(1px);
+}
+
+/* ---- Person detail (#/person/<email>) ---- */
+
+.person-detail-ident {
+  /* Reuse .card hairline/shadow tokens; this is just a quick header
+     block, not a full-blown profile sheet. */
+  padding: var(--space-4);
+}
+
+.person-detail-name {
+  font-size: 18px;
+  font-weight: 600;
+  word-break: break-word;
+  margin-bottom: 2px;
+}
+
+.person-detail-email {
+  font-size: 13px;
+  color: var(--tg-hint);
+  word-break: break-all;
+  margin-bottom: 8px;
+}
+
+.person-detail-stat {
+  font-size: 13px;
+  color: var(--tg-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.person-detail-notices {
+  text-align: left;
+  margin-top: 0;
+  margin-bottom: 12px;
+  padding: 6px 10px;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.person-detail-facts {
+  padding: var(--space-4);
+}
+
+.person-detail-facts .card-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tg-hint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+.person-detail-facts-body {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--tg-text);
+}
+
+/* Wiki hit rows inside the person detail "관련 위키" card. Same
+   density as memory-card rows but inside a stacked card. */
+button.wiki-hit-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  padding: 12px 0;
+  color: var(--tg-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+button.wiki-hit-row:last-child {
+  border-bottom: none;
+}
+
+button.wiki-hit-row:active {
+  opacity: 0.85;
+}
+
+.wiki-hit-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.wiki-hit-summary {
+  font-size: 13px;
+  color: var(--tg-text);
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.wiki-hit-meta {
+  font-size: 11px;
+  color: var(--tg-hint);
+  word-break: break-all;
+}
+
+/* Person-detail recent-message rows. Compact one-tap cards that open
+   the full mail detail view; not as rich as inbox rows because this
+   list is already scoped to one sender. */
+button.person-msg-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--tg-secondary-bg);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  color: var(--tg-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+button.person-msg-row:active {
+  opacity: 0.85;
+}
+
+button.person-msg-row-unread {
+  border-left: 3px solid var(--tg-link);
+  padding-left: 9px;
+}
+
+.person-msg-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.person-msg-row-subject {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.person-msg-row-time {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--tg-hint);
+  font-variant-numeric: tabular-nums;
+}
+
+.person-msg-row-snippet {
+  font-size: 12px;
+  color: var(--tg-hint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
