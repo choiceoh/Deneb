@@ -100,6 +100,14 @@ function syncBackButton(route: Route): void {
 // Transitions API caller awaits dispatch, snapshots the new DOM, and
 // animates. RPC settles afterward and hydrates content into the
 // already-visible layout, with no transition animation.
+//
+// Failed dynamic imports are cached permanently by the browser's
+// module map — once `import('./views/foo')` rejects, every subsequent
+// call returns the same rejected promise without re-fetching. To
+// avoid a single transient network blip permanently poisoning a
+// route, we render an inline error banner on import failure so the
+// operator gets visible feedback (instead of "the tap did nothing")
+// and can refresh to retry.
 async function dispatch(route: Route): Promise<void> {
   if (!cachedInitData) return;
   syncBackButton(route);
@@ -107,130 +115,110 @@ async function dispatch(route: Route): Promise<void> {
   // that want to opt in re-register their own handler after rendering.
   clearPullToRefreshHandler();
   const initData = cachedInitData;
-  switch (route.name) {
-    case 'home':
-      void renderHome(root, initData);
-      return;
-    case 'inbox': {
-      const { renderList } = await import('./views/list');
-      void renderList(root, initData);
-      return;
+  try {
+    switch (route.name) {
+      case 'home':
+        void renderHome(root, initData);
+        return;
+      case 'inbox': {
+        const { renderList } = await import('./views/list');
+        void renderList(root, initData);
+        return;
+      }
+      case 'detail': {
+        const { renderDetail } = await import('./views/detail');
+        void renderDetail(root, initData, route.messageId);
+        return;
+      }
+      case 'search': {
+        const { renderSearch } = await import('./views/search');
+        renderSearch(root, initData);
+        return;
+      }
+      case 'sessions': {
+        const { renderSessions } = await import('./views/sessions');
+        void renderSessions(root, initData);
+        return;
+      }
+      case 'wikiPage': {
+        const { renderWikiPage } = await import('./views/wiki_page');
+        void renderWikiPage(root, initData, route.path);
+        return;
+      }
+      case 'sessionTranscript': {
+        const { renderSessionTranscript } = await import('./views/session_transcript');
+        void renderSessionTranscript(root, initData, route.sessionKey);
+        return;
+      }
+      case 'calendar': {
+        const { renderCalendar } = await import('./views/calendar');
+        void renderCalendar(root, initData);
+        return;
+      }
+      case 'calendarEvent': {
+        const { renderCalendarEvent } = await import('./views/calendar_event');
+        void renderCalendarEvent(root, initData, route.eventId);
+        return;
+      }
+      case 'settings': {
+        const { renderSettings } = await import('./views/settings');
+        renderSettings(root, initData);
+        return;
+      }
+      case 'modelSelect': {
+        const { renderModelSelect } = await import('./views/model_select');
+        renderModelSelect(root, initData);
+        return;
+      }
+      case 'categories': {
+        const { renderCategories } = await import('./views/categories');
+        void renderCategories(root, initData);
+        return;
+      }
+      case 'categoryPages': {
+        const { renderCategoryPages } = await import('./views/category_pages');
+        void renderCategoryPages(root, initData, route.category);
+        return;
+      }
+      case 'crons': {
+        const { renderCrons } = await import('./views/crons');
+        void renderCrons(root, initData);
+        return;
+      }
+      case 'personDetail': {
+        const { renderPersonDetail } = await import('./views/person_detail');
+        void renderPersonDetail(root, initData, route.email);
+        return;
+      }
+      case 'wikiNew': {
+        const { renderWikiNew } = await import('./views/wiki_new');
+        renderWikiNew(root, initData, route.category ?? '');
+        return;
+      }
+      case 'topicNew': {
+        const { renderTopicNew } = await import('./views/topic_new');
+        renderTopicNew(root, initData);
+        return;
+      }
     }
-    case 'detail': {
-      const { renderDetail } = await import('./views/detail');
-      void renderDetail(root, initData, route.messageId);
-      return;
-    }
-    case 'search': {
-      const { renderSearch } = await import('./views/search');
-      renderSearch(root, initData);
-      return;
-    }
-    case 'sessions': {
-      const { renderSessions } = await import('./views/sessions');
-      void renderSessions(root, initData);
-      return;
-    }
-    case 'wikiPage': {
-      const { renderWikiPage } = await import('./views/wiki_page');
-      void renderWikiPage(root, initData, route.path);
-      return;
-    }
-    case 'sessionTranscript': {
-      const { renderSessionTranscript } = await import('./views/session_transcript');
-      void renderSessionTranscript(root, initData, route.sessionKey);
-      return;
-    }
-    case 'calendar': {
-      const { renderCalendar } = await import('./views/calendar');
-      void renderCalendar(root, initData);
-      return;
-    }
-    case 'calendarEvent': {
-      const { renderCalendarEvent } = await import('./views/calendar_event');
-      void renderCalendarEvent(root, initData, route.eventId);
-      return;
-    }
-    case 'settings': {
-      const { renderSettings } = await import('./views/settings');
-      renderSettings(root, initData);
-      return;
-    }
-    case 'modelSelect': {
-      const { renderModelSelect } = await import('./views/model_select');
-      renderModelSelect(root, initData);
-      return;
-    }
-    case 'categories': {
-      const { renderCategories } = await import('./views/categories');
-      void renderCategories(root, initData);
-      return;
-    }
-    case 'categoryPages': {
-      const { renderCategoryPages } = await import('./views/category_pages');
-      void renderCategoryPages(root, initData, route.category);
-      return;
-    }
-    case 'crons': {
-      const { renderCrons } = await import('./views/crons');
-      void renderCrons(root, initData);
-      return;
-    }
-    case 'personDetail': {
-      const { renderPersonDetail } = await import('./views/person_detail');
-      void renderPersonDetail(root, initData, route.email);
-      return;
-    }
-    case 'wikiNew': {
-      const { renderWikiNew } = await import('./views/wiki_new');
-      renderWikiNew(root, initData, route.category ?? '');
-      return;
-    }
-    case 'topicNew': {
-      const { renderTopicNew } = await import('./views/topic_new');
-      renderTopicNew(root, initData);
-      return;
-    }
-  }
-}
-
-// Prefetch every lazy-loaded view module during idle time after the
-// home view paints. The first-time navigation cost for each
-// destination is the chunk fetch (~5-20 KB gzipped, ~50-200ms cold),
-// and the operator will hit most of them during a typical session —
-// so we warm the cache once on boot. Each `import()` returns a Promise
-// the browser can park; we don't need the resolved modules here
-// because dispatch will re-`import()` them later, but module-loading
-// is idempotent so the second call hits the cache.
-function prefetchOtherViews(): void {
-  const work = () => {
-    void import('./views/list');
-    void import('./views/detail');
-    void import('./views/search');
-    void import('./views/sessions');
-    void import('./views/wiki_page');
-    void import('./views/session_transcript');
-    void import('./views/calendar');
-    void import('./views/calendar_event');
-    void import('./views/settings');
-    void import('./views/model_select');
-    void import('./views/categories');
-    void import('./views/category_pages');
-    void import('./views/crons');
-    void import('./views/person_detail');
-    void import('./views/wiki_new');
-    void import('./views/topic_new');
-  };
-  // requestIdleCallback isn't on Safari < 17 and isn't in lib.dom.d.ts
-  // by default; fall back to a generous setTimeout so we still kick the
-  // prefetch eventually on platforms that lack it.
-  const ric = (window as Window & {
-    requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
-  }).requestIdleCallback;
-  if (typeof ric === 'function') {
-    ric(work, { timeout: 4000 });
-  } else {
-    setTimeout(work, 800);
+  } catch (err) {
+    // Most likely: the dynamic import for this view's chunk failed
+    // (network blip during prefetch, server hiccup, asset hash drift
+    // after a deploy mid-session). Without this handler the awaited
+    // chunk-load rejection would propagate up to the View Transitions
+    // callback, which silently aborts — leaving the operator on the
+    // previous view with no visible feedback that the tap landed.
+    // Paint a visible error so they can refresh and retry.
+    console.error('dispatch failed for route', route.name, err);
+    root.innerHTML = '';
+    const banner = document.createElement('div');
+    banner.className = 'error';
+    banner.textContent = `화면을 불러오지 못했습니다 (${route.name}). 미니앱을 다시 열어주세요.`;
+    root.appendChild(banner);
+    const hint = document.createElement('div');
+    hint.className = 'muted';
+    hint.textContent = String((err as Error)?.message ?? err);
+    root.appendChild(hint);
   }
 }
 
@@ -366,11 +354,18 @@ function boot(): void {
 
   void dispatch(parseRoute(location.hash));
 
-  // Warm the chunk cache for every non-home view in the background.
-  // The operator hits most destinations during a typical session, so
-  // paying ~5-20 KB per chunk in idle time is cheaper than paying it
-  // synchronously the first time they tap each menu row.
-  prefetchOtherViews();
+  // Note: an idle-time prefetchOtherViews() used to fire dynamic
+  // imports for every non-home view chunk on boot, to warm the
+  // browser's module cache. It was removed because the browser
+  // permanently caches FAILED dynamic imports in its module map:
+  // any chunk that lost a coin-flip against a network blip during
+  // prefetch would return the same rejected promise forever, and
+  // the user's later tap would land on that rejected promise
+  // instead of triggering a fresh fetch — manifesting as "every
+  // menu item taps but nothing happens". Each chunk is small (a
+  // few KB gzipped) and only fetched the first time the operator
+  // navigates into it; the latency cost on cold first-tap is
+  // smaller than the regression risk of a poisoned module map.
 }
 
 boot();
