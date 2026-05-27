@@ -223,6 +223,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				return ""
 			},
 		}),
+		s.miniappModelMethods(),
 
 		// Mini App Gmail domain (miniapp.gmail.list_recent / get /
 		// mark_read / archive). Lazy factory around gmail.DefaultClient

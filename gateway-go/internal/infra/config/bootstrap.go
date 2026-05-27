@@ -4,12 +4,16 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
@@ -20,6 +24,8 @@ const (
 	// maxMediaTTLHours is the maximum media retention window (7 days).
 	maxMediaTTLHours = 24 * 7
 )
+
+var ErrInvalidCustomModel = errors.New("invalid custom model")
 
 // BootstrapResult is the result of the gateway config bootstrap sequence.
 type BootstrapResult struct {
@@ -324,6 +330,208 @@ func PersistDefaultModel(configPath, model string, logger *slog.Logger) error {
 
 	logger.Info("persisted default model", "model", model, "path", configPath)
 	return nil
+}
+
+// PersistedCustomModel describes the provider/model entry written to config.
+type PersistedCustomModel struct {
+	ProviderID  string
+	ModelID     string
+	FullModelID string
+	BaseURL     string
+	Added       bool
+}
+
+// PersistCustomProviderModel writes an OpenAI-compatible endpoint + model into
+// models.providers, preserving all other config fields. The newest direct model
+// is kept first so it remains visible even when provider lists are capped.
+func PersistCustomProviderModel(configPath, endpoint, model string, logger *slog.Logger) (PersistedCustomModel, error) {
+	baseURL, err := normalizeCustomModelEndpoint(endpoint)
+	if err != nil {
+		return PersistedCustomModel{}, err
+	}
+	modelID, err := normalizeCustomModelID(model)
+	if err != nil {
+		return PersistedCustomModel{}, err
+	}
+
+	dir := filepath.Dir(configPath)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return PersistedCustomModel{}, fmt.Errorf("creating config directory: %w", err)
+	}
+
+	var raw map[string]any
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return PersistedCustomModel{}, fmt.Errorf("reading config: %w", err)
+		}
+		raw = make(map[string]any)
+	} else {
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return PersistedCustomModel{}, fmt.Errorf("parsing config: %w", err)
+		}
+	}
+
+	models := ensureObject(raw, "models")
+	providers := ensureObject(models, "providers")
+
+	providerID, providerConfig := providerForCustomEndpoint(providers, baseURL)
+	if providerConfig == nil {
+		providerID = nextCustomProviderID(providers)
+		providerConfig = map[string]any{
+			"baseUrl": baseURL,
+			"api":     "openai",
+		}
+		providers[providerID] = providerConfig
+	}
+	added := upsertCustomModel(providerConfig, modelID)
+
+	meta := ensureObject(raw, "meta")
+	meta["lastTouchedAt"] = time.Now().UTC().Format(time.RFC3339)
+
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return PersistedCustomModel{}, fmt.Errorf("encoding config: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, append(out, '\n'), 0o600); err != nil {
+		return PersistedCustomModel{}, fmt.Errorf("writing config: %w", err)
+	}
+
+	result := PersistedCustomModel{
+		ProviderID:  providerID,
+		ModelID:     modelID,
+		FullModelID: providerID + "/" + modelID,
+		BaseURL:     baseURL,
+		Added:       added,
+	}
+	if logger != nil {
+		logger.Info("persisted custom model", "provider", providerID, "model", modelID, "path", configPath)
+	}
+	return result, nil
+}
+
+func normalizeCustomModelEndpoint(endpoint string) (string, error) {
+	raw := strings.TrimSpace(endpoint)
+	if raw == "" {
+		return "", fmt.Errorf("%w: endpoint is required", ErrInvalidCustomModel)
+	}
+	if !strings.Contains(raw, "://") {
+		return "", fmt.Errorf("%w: endpoint must include http:// or https://", ErrInvalidCustomModel)
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("%w: endpoint URL is invalid", ErrInvalidCustomModel)
+	}
+	switch parsed.Scheme {
+	case "http", "https":
+	default:
+		return "", fmt.Errorf("%w: endpoint must use http or https", ErrInvalidCustomModel)
+	}
+	if parsed.Host == "" {
+		return "", fmt.Errorf("%w: endpoint host is required", ErrInvalidCustomModel)
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", fmt.Errorf("%w: endpoint must not include query or fragment", ErrInvalidCustomModel)
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	return parsed.String(), nil
+}
+
+func normalizeCustomModelID(model string) (string, error) {
+	id := strings.TrimSpace(model)
+	if id == "" {
+		return "", fmt.Errorf("%w: model name is required", ErrInvalidCustomModel)
+	}
+	if strings.HasPrefix(id, "/") || strings.HasSuffix(id, "/") {
+		return "", fmt.Errorf("%w: model name must not start or end with /", ErrInvalidCustomModel)
+	}
+	if strings.ContainsFunc(id, unicode.IsSpace) {
+		return "", fmt.Errorf("%w: model name must not contain whitespace", ErrInvalidCustomModel)
+	}
+	return id, nil
+}
+
+func ensureObject(parent map[string]any, key string) map[string]any {
+	if obj, ok := parent[key].(map[string]any); ok {
+		return obj
+	}
+	obj := make(map[string]any)
+	parent[key] = obj
+	return obj
+}
+
+func providerForCustomEndpoint(providers map[string]any, baseURL string) (string, map[string]any) {
+	keys := make([]string, 0, len(providers))
+	for id := range providers {
+		keys = append(keys, id)
+	}
+	sort.Strings(keys)
+	for _, id := range keys {
+		rawProvider := providers[id]
+		providerConfig, ok := rawProvider.(map[string]any)
+		if !ok {
+			continue
+		}
+		existingBase, ok := providerConfig["baseUrl"].(string)
+		if !ok {
+			continue
+		}
+		normalized, err := normalizeCustomModelEndpoint(existingBase)
+		if err != nil {
+			continue
+		}
+		if normalized == baseURL {
+			return id, providerConfig
+		}
+	}
+	return "", nil
+}
+
+func nextCustomProviderID(providers map[string]any) string {
+	for i := 1; ; i++ {
+		id := "custom"
+		if i > 1 {
+			id = fmt.Sprintf("custom-%d", i)
+		}
+		if _, exists := providers[id]; !exists {
+			return id
+		}
+	}
+}
+
+func upsertCustomModel(providerConfig map[string]any, modelID string) bool {
+	var existing []any
+	if arr, ok := providerConfig["models"].([]any); ok {
+		existing = arr
+	}
+
+	added := true
+	front := any(map[string]any{"id": modelID})
+	next := []any{}
+	for _, item := range existing {
+		if existingID := customModelID(item); existingID == modelID {
+			added = false
+			front = item
+			continue
+		}
+		next = append(next, item)
+	}
+	next = append([]any{front}, next...)
+	providerConfig["models"] = next
+	return added
+}
+
+func customModelID(item any) string {
+	switch v := item.(type) {
+	case map[string]any:
+		if id, ok := v["id"].(string); ok {
+			return strings.TrimSpace(id)
+		}
+	case string:
+		return strings.TrimSpace(v)
+	}
+	return ""
 }
 
 // mergeAuthConfig merges an override auth config into the base.

@@ -21,6 +21,7 @@ import { renderCalendar } from './views/calendar';
 import { renderCalendarEvent } from './views/calendar_event';
 import { renderMore } from './views/more';
 import { renderSettings } from './views/settings';
+import { renderModelSelect } from './views/model_select';
 import { renderCategories } from './views/categories';
 import { renderCategoryPages } from './views/category_pages';
 import { renderDiary } from './views/diary';
@@ -159,7 +160,10 @@ async function dispatch(route: Route): Promise<void> {
       await renderMore(root, cachedInitData);
       return;
     case 'settings':
-      renderSettings(root);
+      renderSettings(root, cachedInitData);
+      return;
+    case 'modelSelect':
+      renderModelSelect(root, cachedInitData);
       return;
     case 'categories':
       await renderCategories(root, cachedInitData);
@@ -232,6 +236,9 @@ function boot(): void {
         return;
       case 'personDetail':
         navigate({ name: 'people' });
+        return;
+      case 'modelSelect':
+        navigate({ name: 'settings' });
         return;
       // List-level destinations now live under 더보기, so back pops
       // there (not home) — matches the path the user took to get in.

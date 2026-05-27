@@ -7,10 +7,12 @@ import {
   updateAppSettings,
   type AppSettings,
 } from '../app_settings';
+import { navigate } from '../router';
+import { listMiniappModels } from '../rpc';
 
 type ToggleKey = keyof AppSettings;
 
-export function renderSettings(root: HTMLElement): void {
+export function renderSettings(root: HTMLElement, initData: string): void {
   root.innerHTML = '';
 
   const header = document.createElement('div');
@@ -24,7 +26,13 @@ export function renderSettings(root: HTMLElement): void {
   const saved = readAppSettings();
   const status = document.createElement('div');
   status.className = 'settings-status';
-  status.textContent = '이 기기의 Telegram 미니앱에 저장됩니다';
+  status.textContent = '표시는 이 기기에, 모델은 서버에 저장됩니다';
+
+  root.appendChild(sectionLabel('모델'));
+  const modelCard = sectionCard();
+  modelCard.appendChild(buildModelLoadingRow());
+  root.appendChild(modelCard);
+  void hydrateModelSummaryCard(modelCard, initData);
 
   root.appendChild(sectionLabel('표시'));
   const display = sectionCard();
@@ -93,7 +101,7 @@ export function renderSettings(root: HTMLElement): void {
   reset.addEventListener('click', () => {
     resetAppSettings();
     triggerSelectionHaptic();
-    renderSettings(root);
+    renderSettings(root, initData);
   });
   resetCard.appendChild(reset);
   root.appendChild(resetCard);
@@ -152,6 +160,45 @@ function saveToggle(key: ToggleKey, checked: boolean, status: HTMLElement): void
   triggerSelectionHaptic();
   status.textContent = '저장됨';
   window.setTimeout(() => {
-    status.textContent = '이 기기의 Telegram 미니앱에 저장됩니다';
+    status.textContent = '표시는 이 기기에, 모델은 서버에 저장됩니다';
   }, 1600);
+}
+
+function buildModelLoadingRow(): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'settings-model-loading';
+  row.textContent = '모델 불러오는 중…';
+  return row;
+}
+
+async function hydrateModelSummaryCard(card: HTMLElement, initData: string): Promise<void> {
+  try {
+    const result = await listMiniappModels(initData);
+    if (!card.isConnected) return;
+    paintModelSummaryCard(card, result.current);
+  } catch (err) {
+    if (!card.isConnected) return;
+    paintModelSummaryCard(card, '불러오기 실패');
+  }
+}
+
+function paintModelSummaryCard(card: HTMLElement, currentModel: string): void {
+  card.innerHTML = '';
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'settings-model-nav';
+  row.innerHTML = `
+    <span class="icon-tile icon-tile-purple">🤖</span>
+    <span class="settings-row-text">
+      <span class="settings-row-title">모델</span>
+      <span class="settings-row-sub"></span>
+    </span>
+    <span class="settings-model-chevron">›</span>
+  `;
+  (row.querySelector('.settings-row-sub') as HTMLElement).textContent = currentModel || '—';
+  row.addEventListener('click', () => {
+    triggerSelectionHaptic();
+    navigate({ name: 'modelSelect' });
+  });
+  card.appendChild(row);
 }

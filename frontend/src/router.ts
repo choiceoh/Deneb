@@ -23,6 +23,7 @@ export type Route =
   | { name: 'calendarEvent'; eventId: string }
   | { name: 'more' }
   | { name: 'settings' }
+  | { name: 'modelSelect' }
   | { name: 'categories' }
   | { name: 'categoryPages'; category: string }
   | { name: 'diary' }
@@ -47,6 +48,7 @@ export function parseRoute(hash: string): Route {
   if (hash === '#/sessions') return { name: 'sessions' };
   if (hash === '#/more') return { name: 'more' };
   if (hash === '#/settings') return { name: 'settings' };
+  if (hash === '#/settings/model') return { name: 'modelSelect' };
   if (hash === '#/categories') return { name: 'categories' };
   if (hash === '#/diary') return { name: 'diary' };
   if (hash === '#/crons') return { name: 'crons' };
@@ -63,7 +65,7 @@ export function parseRoute(hash: string): Route {
   if (catPages) {
     try {
       return { name: 'categoryPages', category: decodeURIComponent(catPages[1]) };
-    } catch {
+  } catch {
       return { name: 'categories' };
     }
   }
@@ -132,6 +134,7 @@ export function navigate(target: Route): void {
   else if (target.name === 'sessions') hash = '#/sessions';
   else if (target.name === 'more') hash = '#/more';
   else if (target.name === 'settings') hash = '#/settings';
+  else if (target.name === 'modelSelect') hash = '#/settings/model';
   else if (target.name === 'detail') hash = `#/m/${encodeURIComponent(target.messageId)}`;
   else if (target.name === 'wikiPage') hash = `#/wiki/${encodeURIComponent(target.path)}`;
   else if (target.name === 'sessionTranscript')

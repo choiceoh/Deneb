@@ -105,6 +105,49 @@ export interface WhoamiResult {
 export const ping = (initData: string) => call<PingResult>('miniapp.ping', null, initData);
 export const whoami = (initData: string) => call<WhoamiResult>('miniapp.whoami', null, initData);
 
+// --- Model quick-change --------------------------------------------------
+
+export interface MiniappModelOption {
+  id: string;
+  label: string;
+  provider?: string;
+  display?: string;
+  current: boolean;
+}
+
+export interface MiniappModelSection {
+  title: string;
+  models: MiniappModelOption[];
+}
+
+export interface MiniappModelsResult {
+  current: string;
+  sections: MiniappModelSection[];
+}
+
+export interface MiniappModelSetResult {
+  ok: boolean;
+  current: string;
+}
+
+export interface MiniappModelAddResult {
+  ok: boolean;
+  id: string;
+  provider: string;
+  endpoint: string;
+  model: string;
+  added: boolean;
+}
+
+export const listMiniappModels = (initData: string) =>
+  call<MiniappModelsResult>('miniapp.models.list', null, initData);
+
+export const setMiniappModel = (initData: string, id: string) =>
+  call<MiniappModelSetResult>('miniapp.models.set', { id }, initData);
+
+export const addMiniappModel = (initData: string, endpoint: string, model: string) =>
+  call<MiniappModelAddResult>('miniapp.models.add_custom', { endpoint, model }, initData);
+
 // --- Calendar -----------------------------------------------------------
 
 export interface CalendarAttendee {
