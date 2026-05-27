@@ -119,6 +119,11 @@ function paint(
       name: 'diary',
     }),
   );
+  browse.appendChild(
+    buildNavRow('icon-tile-blue', '👤', '사람들', '최근 메일 발신자 빈도순', {
+      name: 'people',
+    }),
+  );
   root.appendChild(browse);
 
   // Automation — "what fires by itself". Cron jobs registered with the
