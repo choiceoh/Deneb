@@ -372,20 +372,6 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			Cache:      handlerminiapp.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
 			SaveToWiki: makeMailAnalysisWikiSink(hub),
 		}),
-
-		// --- Mini App chat (miniapp.chat.send) ---
-		// Late-bound because the chat handler (hub.Chat()) is created
-		// during the session phase right before this. Lazy factory keeps
-		// the wiring uniform with the other miniapp.* late entries.
-		handlerminiapp.ChatMethods(handlerminiapp.ChatDeps{
-			Sender: func() (handlerminiapp.ChatSender, error) {
-				ch := hub.Chat()
-				if ch == nil {
-					return nil, handlerminiapp.ErrChatUnavailable
-				}
-				return ch, nil
-			},
-		}),
 	}
 
 	for _, d := range domains {

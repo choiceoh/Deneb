@@ -93,21 +93,6 @@ function paint(root: HTMLElement, page: MemoryPage): void {
     root.appendChild(related);
   }
 
-  // Chat action: open this page in chat with body pre-filled as
-  // context. SessionKey deterministic (`miniapp-wiki:<path>`) so the
-  // same page's chat thread is preserved across visits.
-  const chatActions = document.createElement('div');
-  chatActions.className = 'action-bar chat-action-bar';
-  const chatBtn = document.createElement('button');
-  chatBtn.className = 'action-button action-secondary';
-  chatBtn.type = 'button';
-  chatBtn.textContent = '💬 대화';
-  chatBtn.addEventListener('click', () =>
-    navigate({ name: 'chat', ctx: { kind: 'wiki', id: page.path, intent: 'question' } }),
-  );
-  chatActions.appendChild(chatBtn);
-  root.appendChild(chatActions);
-
   const footer = document.createElement('div');
   footer.className = 'muted';
   footer.textContent = page.path;

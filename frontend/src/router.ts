@@ -3,25 +3,13 @@
 // We avoid pulling in a router library; for the 3-route surface a tiny
 // hand-rolled parser is enough and keeps the bundle small. Adding routes
 // later means extending the discriminated union below.
-
-/**
- * ChatContext anchors a chat session to a piece of content the user is
- * looking at — a Gmail message, a wiki page, or another session's
- * transcript. The chat view uses it to (a) override the default
- * sessionKey so per-context multi-turn stays scoped, (b) pre-fill the
- * composer with an intent-specific prompt + the relevant content, and
- * (c) render a header card that names the source.
- *
- * `intent` selects the prefill prefix template:
- *   - mail: reply | analyze | question
- *   - wiki: question
- *   - session: continue (special — uses original sessionKey verbatim,
- *     no prefill — i.e. "resume this chat")
- */
-export type ChatContext =
-  | { kind: 'mail'; id: string; intent: 'reply' | 'analyze' | 'question' }
-  | { kind: 'wiki'; id: string; intent: 'question' }
-  | { kind: 'session'; id: string; intent: 'continue' };
+//
+// Note on chat: the Mini App used to have its own chat surface (#/chat,
+// with context-attach variants like ?ctx=mail:<id>:reply). It was removed
+// because Telegram itself is the chat surface for Deneb — duplicating it
+// inside the Mini App added friction without adding capability. The
+// content-detail views still expose the source on tap, and any follow-up
+// conversation happens in the parent Telegram thread.
 
 export type Route =
   | { name: 'home' }
@@ -31,7 +19,6 @@ export type Route =
   | { name: 'sessions' }
   | { name: 'wikiPage'; path: string }
   | { name: 'sessionTranscript'; sessionKey: string }
-  | { name: 'chat'; ctx?: ChatContext }
   | { name: 'calendar' }
   | { name: 'calendarEvent'; eventId: string }
   | { name: 'more' }
@@ -41,7 +28,7 @@ export type Route =
 // and Telegram's BackButton stays hidden. Drill-down views (detail,
 // wikiPage, calendarEvent, sessionTranscript, etc.) hide the tab bar so
 // the BackButton can take over.
-export const TAB_ROUTES = ['home', 'chat', 'more', 'settings'] as const;
+export const TAB_ROUTES = ['home', 'more', 'settings'] as const;
 export type TabRouteName = (typeof TAB_ROUTES)[number];
 export function isTabRoute(route: Route): route is { name: TabRouteName } {
   return (TAB_ROUTES as readonly string[]).includes(route.name);
@@ -52,14 +39,6 @@ export function parseRoute(hash: string): Route {
   if (hash === '#/inbox') return { name: 'inbox' };
   if (hash === '#/memory') return { name: 'memory' };
   if (hash === '#/sessions') return { name: 'sessions' };
-  if (hash === '#/chat') return { name: 'chat' };
-  // #/chat?ctx=<kind>:<encoded-id>:<intent>
-  const chatCtx = hash.match(/^#\/chat\?ctx=([^:]+):([^:]+):([^:&]+)/);
-  if (chatCtx) {
-    const ctx = parseChatContext(chatCtx[1], chatCtx[2], chatCtx[3]);
-    if (ctx) return { name: 'chat', ctx };
-    return { name: 'chat' };
-  }
   if (hash === '#/more') return { name: 'more' };
   if (hash === '#/settings') return { name: 'settings' };
   // Accept '#/calendar', '#/calendar/' (trailing slash), and
@@ -120,49 +99,11 @@ export function isCurrentHash(expected: string): boolean {
   return location.hash === expected;
 }
 
-// parseChatContext validates a (kind, encoded id, intent) triple from
-// the URL. Returns null when the combination is unknown so the route
-// degrades gracefully to a context-free chat instead of throwing.
-function parseChatContext(
-  kindRaw: string,
-  idRaw: string,
-  intentRaw: string,
-): ChatContext | null {
-  let id: string;
-  try {
-    id = decodeURIComponent(idRaw);
-  } catch {
-    return null;
-  }
-  if (id === '') return null;
-  switch (kindRaw) {
-    case 'mail':
-      if (intentRaw === 'reply' || intentRaw === 'analyze' || intentRaw === 'question') {
-        return { kind: 'mail', id, intent: intentRaw };
-      }
-      return null;
-    case 'wiki':
-      if (intentRaw === 'question') return { kind: 'wiki', id, intent: 'question' };
-      return null;
-    case 'session':
-      if (intentRaw === 'continue') return { kind: 'session', id, intent: 'continue' };
-      return null;
-    default:
-      return null;
-  }
-}
-
 export function navigate(target: Route): void {
   let hash = '#/';
   if (target.name === 'inbox') hash = '#/inbox';
   else if (target.name === 'memory') hash = '#/memory';
   else if (target.name === 'sessions') hash = '#/sessions';
-  else if (target.name === 'chat') {
-    hash = '#/chat';
-    if (target.ctx) {
-      hash += `?ctx=${target.ctx.kind}:${encodeURIComponent(target.ctx.id)}:${target.ctx.intent}`;
-    }
-  }
   else if (target.name === 'more') hash = '#/more';
   else if (target.name === 'settings') hash = '#/settings';
   else if (target.name === 'detail') hash = `#/m/${encodeURIComponent(target.messageId)}`;

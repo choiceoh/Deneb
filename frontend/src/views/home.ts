@@ -54,10 +54,11 @@ function paint(
   root.appendChild(status);
 
   // Domain entry cards. Order is intentional, by product priority:
-  //   1) chat — primary write surface (you talk to Deneb)
-  //   2) calendar — time-pressured (D-15 pushes need immediate eyeballs)
-  //   3) Gmail — steady-state triage
-  //   4) memory + sessions — reference
+  //   1) calendar — time-pressured (D-15 pushes need immediate eyeballs)
+  //   2) Gmail — steady-state triage
+  //   3) memory + sessions — reference
+  // Chat lives in Telegram itself, not the Mini App, so it's not an entry
+  // here.
   const shortcutsLabel = document.createElement('div');
   shortcutsLabel.className = 'section-label';
   shortcutsLabel.textContent = '바로가기';
@@ -65,11 +66,6 @@ function paint(
 
   const shortcuts = document.createElement('div');
   shortcuts.className = 'section-card';
-  shortcuts.appendChild(
-    buildNavRow('icon-tile-violet', '💬', 'Deneb 채팅', '메시지 입력 → 응답', () =>
-      navigate({ name: 'chat' }),
-    ),
-  );
   shortcuts.appendChild(
     buildNavRow('icon-tile-blue', '📅', '일정', '다가오는 회의 · D-15분 알림', () =>
       navigate({ name: 'calendar' }),
