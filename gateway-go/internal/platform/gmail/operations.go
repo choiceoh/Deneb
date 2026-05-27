@@ -778,9 +778,10 @@ func (c *Client) resolveLabels(ctx context.Context, names []string) ([]string, e
 }
 
 // FormatSearchResults formats message summaries into a readable string.
-// Each entry is prefixed with a read-state marker (🔵 안 읽음 / ⚪ 읽음) so the
-// user can distinguish unread messages at a glance. Unread items also keep the
-// sender name bold; read items render plain to mirror standard mail clients.
+// Unread items render plain with a bold sender so they pop; read items render
+// inside a Telegram blockquote (`>`) so they appear in a softer gray tone —
+// the same "unread highlighted / read muted" pattern used by mainstream mail
+// clients, without explicit icons or labels.
 func FormatSearchResults(msgs []MessageSummary) string {
 	if len(msgs) == 0 {
 		return ""
@@ -791,15 +792,20 @@ func FormatSearchResults(msgs []MessageSummary) string {
 			sb.WriteString("\n")
 		}
 		if hasUnreadLabel(m.Labels) {
-			fmt.Fprintf(&sb, "🔵 **%s** — %s  _(안 읽음)_\n", m.From, m.Date)
+			fmt.Fprintf(&sb, "**%s** — %s\n", m.From, m.Date)
+			fmt.Fprintf(&sb, "  %s\n", m.Subject)
+			if m.Snippet != "" {
+				fmt.Fprintf(&sb, "  %s\n", m.Snippet)
+			}
+			fmt.Fprintf(&sb, "  ID: %s", m.ID)
 		} else {
-			fmt.Fprintf(&sb, "⚪ %s — %s\n", m.From, m.Date)
+			fmt.Fprintf(&sb, "> %s — %s\n", m.From, m.Date)
+			fmt.Fprintf(&sb, ">   %s\n", m.Subject)
+			if m.Snippet != "" {
+				fmt.Fprintf(&sb, ">   %s\n", m.Snippet)
+			}
+			fmt.Fprintf(&sb, ">   ID: %s", m.ID)
 		}
-		fmt.Fprintf(&sb, "  %s\n", m.Subject)
-		if m.Snippet != "" {
-			fmt.Fprintf(&sb, "  %s\n", m.Snippet)
-		}
-		fmt.Fprintf(&sb, "  ID: %s", m.ID)
 	}
 	return sb.String()
 }
