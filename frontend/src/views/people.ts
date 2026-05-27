@@ -3,10 +3,8 @@
 // "Who's in motion right now" — Gmail senders over the last 30 days,
 // sorted by message volume. Each card shows: display name + email,
 // message count badge, last subject preview, last seen relative time.
-// Read-only for now (no tap action) — the existing inbox + detail
-// flow already covers the drill-in for individual messages, and the
-// row's value is comparative ("Alice is 12 msg, Bob is 3") rather
-// than navigational.
+// Tap a card to drill into the per-person detail view (wiki facts +
+// recent messages from that sender).
 
 import { listPeople, type PersonRow } from '../people';
 import { formatRpcError, relativeTime } from '../format';
@@ -61,8 +59,12 @@ export async function renderPeople(
 }
 
 function buildPersonCard(p: PersonRow): HTMLElement {
-  const card = document.createElement('div');
+  const card = document.createElement('button');
+  card.type = 'button';
   card.className = 'person-card';
+  card.addEventListener('click', () =>
+    navigate({ name: 'personDetail', email: p.email }),
+  );
 
   const top = document.createElement('div');
   top.className = 'person-card-top';

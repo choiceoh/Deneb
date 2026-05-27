@@ -26,6 +26,7 @@ import { renderCategoryPages } from './views/category_pages';
 import { renderDiary } from './views/diary';
 import { renderCrons } from './views/crons';
 import { renderPeople } from './views/people';
+import { renderPersonDetail } from './views/person_detail';
 import { applyAppSettings, triggerSelectionHaptic } from './app_settings';
 
 const root = document.getElementById('app')!;
@@ -175,6 +176,9 @@ async function dispatch(route: Route): Promise<void> {
     case 'people':
       await renderPeople(root, cachedInitData);
       return;
+    case 'personDetail':
+      await renderPersonDetail(root, cachedInitData, route.email);
+      return;
   }
 }
 
@@ -225,6 +229,9 @@ function boot(): void {
         return;
       case 'categoryPages':
         navigate({ name: 'categories' });
+        return;
+      case 'personDetail':
+        navigate({ name: 'people' });
         return;
       // List-level destinations now live under 더보기, so back pops
       // there (not home) — matches the path the user took to get in.
