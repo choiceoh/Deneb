@@ -48,6 +48,12 @@ var errWikiDisabled = errors.New("wiki knowledge base not configured")
 // UNAVAILABLE by the handler.
 var errTranscriptUnavailable = errors.New("session transcript store not initialized")
 
+// errCronUnavailable surfaces from the miniapp crons factory when the
+// cron service hasn't been wired (e.g., a gateway started without the
+// cron subsystem). Treated as UNAVAILABLE by the handler so the Mini
+// App shows a "automation not configured" banner instead of crashing.
+var errCronUnavailable = errors.New("cron service not configured")
+
 // registerEarlyMethods registers all RPC domains that don't depend on chatHandler.
 // Called after buildHub() but before registerSessionRPCMethods().
 func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) error {
@@ -252,6 +258,21 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 					return nil, errWikiDisabled
 				}
 				return store, nil
+			},
+		}),
+
+		// Mini App cron job list (miniapp.crons.list). Same lazy-factory
+		// pattern as memory: cron.Service is wired during buildHub so by
+		// the time the first RPC fires the service is ready, but a
+		// gateway started with the cron subsystem disabled still gets a
+		// clean UNAVAILABLE per call instead of a crash at boot.
+		handlerminiapp.CronsMethods(handlerminiapp.CronsDeps{
+			Service: func() (handlerminiapp.CronLister, error) {
+				svc := hub.CronService()
+				if svc == nil {
+					return nil, errCronUnavailable
+				}
+				return svc, nil
 			},
 		}),
 

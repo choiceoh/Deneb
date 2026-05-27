@@ -121,6 +121,24 @@ function paint(
   );
   root.appendChild(browse);
 
+  // Automation — "what fires by itself". Cron jobs registered with the
+  // gateway (D-15min briefings, autoresearch tickers, etc.) live here.
+  // Read-only surface; editing is via the operator tool, not the
+  // Mini App.
+  const autoLabel = document.createElement('div');
+  autoLabel.className = 'section-label';
+  autoLabel.textContent = '자동화';
+  root.appendChild(autoLabel);
+
+  const autoCard = document.createElement('div');
+  autoCard.className = 'section-card';
+  autoCard.appendChild(
+    buildNavRow('icon-tile-amber', '⚡', '자동 작업', '예약된 cron 작업 일람', {
+      name: 'crons',
+    }),
+  );
+  root.appendChild(autoCard);
+
   if (readAppSettings().showDiagnostics) {
     // Status / about — diagnostics + branding.
     const aboutLabel = document.createElement('div');
