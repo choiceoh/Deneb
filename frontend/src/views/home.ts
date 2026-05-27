@@ -43,12 +43,9 @@ function paint(
 ): void {
   root.innerHTML = '';
 
-  // Brand mark sits small and lowercase at the top. It identifies the
-  // page; it doesn't try to be the page. The menu carries that load.
-  const brand = document.createElement('div');
-  brand.className = 'type-brand';
-  brand.textContent = 'deneb';
-  root.appendChild(brand);
+  // No brand mark here — the panorama tab strip pinned to the top of
+  // the viewport already identifies the active page ("home"), so a
+  // separate "deneb" sub-line would be redundant. The menu IS the page.
 
   // Menu: four lowercase English words, set huge. No numbers, no
   // sublabels, no divider rules. Just the words. The stagger animation
