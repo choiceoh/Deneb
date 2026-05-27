@@ -14,6 +14,15 @@ import { isCurrentHash, navigate } from '../router';
 import { buildErrorBanner } from './ui';
 import type { Route } from '../router';
 
+// sessionStorage key for the per-session whoami success marker. We only
+// store a literal "ok" — the call's result isn't consumed by the UI
+// anymore (greeting was removed), so the cache exists purely to skip
+// the network round-trip on subsequent home visits within the same
+// Telegram WebView session. sessionStorage scope is exactly right:
+// fresh on app launch, persisted across in-session re-renders, and
+// auto-cleared when Telegram tears the WebView down.
+const WHOAMI_OK_KEY = 'deneb.whoami.ok';
+
 export async function renderHome(root: HTMLElement, initData: string): Promise<void> {
   const expectedHash = location.hash;
 
@@ -23,10 +32,42 @@ export async function renderHome(root: HTMLElement, initData: string): Promise<v
   // banner so the operator notices without losing the menu.
   paint(root);
   try {
-    await whoami(initData);
+    await whoamiOnce(initData);
   } catch (err) {
     if (!isCurrentHash(expectedHash) || !root.isConnected) return;
     root.appendChild(buildErrorBanner(`백엔드 호출 실패: ${formatRpcError(err)}`));
+  }
+}
+
+// whoamiOnce fires the RPC at most once per Telegram WebView session.
+// The first call writes a success marker into sessionStorage; subsequent
+// home visits in the same session return immediately. Failures don't
+// poison the cache, so a transient backend hiccup still gets retried
+// on the next navigation home.
+async function whoamiOnce(initData: string): Promise<void> {
+  if (readWhoamiOk()) return;
+  await whoami(initData);
+  writeWhoamiOk();
+}
+
+function readWhoamiOk(): boolean {
+  // sessionStorage access can throw in some sandboxed contexts (older
+  // Telegram WebView modes, private browsing on iOS) — treat that as a
+  // cold cache so we just pay the RPC. Cheaper than a noisy try-catch
+  // at every caller.
+  try {
+    return sessionStorage.getItem(WHOAMI_OK_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeWhoamiOk(): void {
+  try {
+    sessionStorage.setItem(WHOAMI_OK_KEY, '1');
+  } catch {
+    // Storage quota / disabled — fall through; the next visit just
+    // re-fires whoami, same as if we'd never tried to cache.
   }
 }
 
