@@ -128,6 +128,30 @@ export function buildLoadingNode(text: string): HTMLElement {
 }
 
 /**
+ * buildRowSkeleton returns N hairline-bracketed empty rows that match
+ * the geometry of .email-row / .session-row, used while the real list
+ * is fetching. Each row carries a `.skeleton-shimmer` line that pulses
+ * in opacity so the placeholder reads as "loading" without spinning.
+ * Pass count to control how many rows to render (default 5 — fits
+ * roughly one viewport before scroll).
+ */
+export function buildRowSkeleton(count = 5): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'skeleton-list';
+  for (let i = 0; i < count; i++) {
+    const row = document.createElement('div');
+    row.className = 'skeleton-row';
+    row.style.setProperty('--i', String(i));
+    row.innerHTML = `
+      <span class="skeleton-line skeleton-line-primary"></span>
+      <span class="skeleton-line skeleton-line-secondary"></span>
+    `;
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
+/**
  * renderErrorView clears `root` and paints an error banner plus an
  * optional primary back button. Use when the entire view failed to
  * load and the user needs a way out (e.g. mail detail, wiki page).

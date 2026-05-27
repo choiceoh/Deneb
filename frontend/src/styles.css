@@ -418,6 +418,31 @@ button.entry-card:active {
   }
 }
 
+/* Body content sequencing — every direct child of #app that follows
+   the .view-header gets a soft fade-in keyed off when the title
+   letter cascade lands. The .view-header itself isn't animated as a
+   block (its letters are doing the work). */
+.view-header ~ * {
+  animation: view-body-in 480ms var(--ease-emphasis) 180ms both;
+}
+
+@keyframes view-body-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-header ~ * {
+    animation: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .view-title-letter {
     animation: none;
@@ -810,12 +835,16 @@ button.entry-card:active {
 }
 
 .email-subject {
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 300;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  margin-bottom: 14px;
+  letter-spacing: -0.025em;
+  line-height: 1.18;
+  margin-bottom: 16px;
   color: var(--tg-text);
+  /* Soft optical-size hint: at this size Inter's optical-sizing axis
+     tightens the apertures a bit, so the subject reads with the same
+     weight feel as the page title (40px) instead of looking lighter. */
+  font-optical-sizing: auto;
 }
 
 .card.attachments {
@@ -1233,6 +1262,29 @@ pre.sender-context-facts-body {
   font-weight: 300;
   letter-spacing: -0.005em;
   color: var(--tg-text);
+}
+
+/* Trailing dot trio after the loading text gets a three-phase pulse
+   so the row picks up a 'thinking' rhythm in addition to the broad
+   opacity pulse on the parent. Each dot fades in 200ms apart, on
+   loop. Drop into the text via a ::after pseudo so the markup
+   doesn't need to change. */
+.analysis-loading-text::after {
+  content: ' · · ·';
+  margin-left: 4px;
+  color: var(--tg-hint);
+  letter-spacing: -0.04em;
+  animation: type-dots 1400ms ease-in-out infinite;
+}
+
+@keyframes type-dots {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.9;
+  }
 }
 
 .analysis-loading-elapsed {
@@ -2228,7 +2280,15 @@ button.profile-row-nav:active .icon-tile {
   max-width: 480px;
   margin: 0 auto;
   padding: 18px 16px 10px;
-  background: var(--tg-bg);
+  /* color-mix(in srgb, var(--tg-bg) 86%, transparent) lets backdrop-
+     filter blur the content behind the strip — when the user scrolls
+     content up under the panorama, the words behind soften instead of
+     hard-cutting. Falls back to the solid bg in browsers without
+     backdrop-filter (~98% support but Telegram's older WebView is
+     conservative). */
+  background: color-mix(in srgb, var(--tg-bg) 86%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
   overflow-x: auto;
   overflow-y: hidden;
   scroll-snap-type: x mandatory;
@@ -2832,23 +2892,39 @@ button.person-msg-row-unread {
   text-align: left;
   cursor: pointer;
   transition:
-    transform 120ms cubic-bezier(0.2, 0, 0.2, 1),
-    opacity 160ms ease;
-  animation: type-enter 560ms cubic-bezier(0.2, 0, 0.2, 1) var(--enter-delay, 0ms) both;
+    transform 140ms var(--ease-exit),
+    opacity 220ms var(--ease-emphasis),
+    letter-spacing 220ms var(--ease-emphasis);
+  animation: type-enter 620ms var(--ease-emphasis) var(--enter-delay, 0ms) both;
+}
+
+/* Focal-point hover: the touched word opens its tracking slightly
+   while sibling items in the same menu dim — so the eye locks onto
+   the one the operator is targeting. :has() + :hover is supported
+   everywhere we care about (Chrome 105+, Telegram WebView). */
+.type-menu:has(.type-item:hover) .type-item {
+  opacity: 0.32;
+}
+
+.type-menu:has(.type-item:focus-visible) .type-item {
+  opacity: 0.32;
 }
 
 .type-item:hover {
-  opacity: 0.7;
-}
-
-.type-item:active {
-  transform: translateX(2px);
-  opacity: 0.55;
+  opacity: 1 !important;
+  letter-spacing: -0.025em;
 }
 
 .type-item:focus-visible {
   outline: none;
-  opacity: 0.85;
+  opacity: 1 !important;
+  letter-spacing: -0.025em;
+}
+
+.type-item:active {
+  transform: translateX(4px);
+  opacity: 0.55 !important;
+  letter-spacing: -0.02em;
 }
 
 .type-footer {
@@ -3253,4 +3329,76 @@ button.person-msg-row-unread {
   font-size: 11px;
   letter-spacing: 0.04em;
   text-align: center;
+}
+
+/* ============================================================
+   Loading skeleton — hairline rows that mimic .email-row /
+   .session-row geometry. Used while a list is fetching, so the
+   page doesn't pop from blank → populated. Each row carries a
+   primary line (subject/from-sized) and a secondary line
+   (snippet/meta-sized); both pulse in opacity with a staggered
+   delay so the placeholder reads as 'working' without spinning.
+   ============================================================ */
+
+.skeleton-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.skeleton-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.skeleton-row:first-child {
+  border-top: 1px solid var(--hairline);
+}
+
+.skeleton-line {
+  display: block;
+  height: 14px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-tint) 0%,
+    var(--hairline) 40%,
+    var(--hairline) 60%,
+    var(--surface-tint) 100%
+  );
+  background-size: 200% 100%;
+  border-radius: 2px;
+  animation: skeleton-shimmer 1800ms ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * 80ms);
+}
+
+.skeleton-line-primary {
+  width: 60%;
+  height: 16px;
+}
+
+.skeleton-line-secondary {
+  width: 80%;
+  height: 12px;
+  opacity: 0.7;
+}
+
+@keyframes skeleton-shimmer {
+  0%,
+  100% {
+    background-position: 200% 50%;
+    opacity: 0.6;
+  }
+  50% {
+    background-position: -100% 50%;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line {
+    animation: none;
+    background: var(--surface-tint);
+  }
 }
