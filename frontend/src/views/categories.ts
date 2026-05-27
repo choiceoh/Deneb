@@ -19,7 +19,7 @@ export async function renderCategories(
   root.appendChild(
     buildViewHeader({
       title: 'categories',
-      left: { label: '← more', onClick: () => navigate({ name: 'more' }) },
+      left: { label: '← home', onClick: () => navigate({ name: 'home' }) },
     }),
   );
 

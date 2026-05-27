@@ -21,7 +21,6 @@ export type Route =
   | { name: 'sessionTranscript'; sessionKey: string }
   | { name: 'calendar' }
   | { name: 'calendarEvent'; eventId: string }
-  | { name: 'more' }
   | { name: 'settings' }
   | { name: 'modelSelect' }
   | { name: 'categories' }
@@ -32,11 +31,12 @@ export type Route =
   | { name: 'personDetail'; email: string }
   | { name: 'wikiNew'; category?: string };
 
-// Top-level tab destinations — these show the persistent bottom tab bar
+// Top-level tab destinations — these show the panorama tab strip up top
 // and Telegram's BackButton stays hidden. Drill-down views (detail,
-// wikiPage, calendarEvent, sessionTranscript, etc.) hide the tab bar so
-// the BackButton can take over.
-export const TAB_ROUTES = ['home', 'more', 'settings'] as const;
+// wikiPage, calendarEvent, sessionTranscript, every category/diary/
+// crons/people list, etc.) hide the panorama so the BackButton can take
+// over. The 'more' hub is gone — home now lists every destination.
+export const TAB_ROUTES = ['home', 'settings'] as const;
 export type TabRouteName = (typeof TAB_ROUTES)[number];
 export function isTabRoute(route: Route): route is { name: TabRouteName } {
   return (TAB_ROUTES as readonly string[]).includes(route.name);
@@ -47,7 +47,10 @@ export function parseRoute(hash: string): Route {
   if (hash === '#/inbox') return { name: 'inbox' };
   if (hash === '#/memory') return { name: 'memory' };
   if (hash === '#/sessions') return { name: 'sessions' };
-  if (hash === '#/more') return { name: 'more' };
+  // Legacy '#/more' hash maps to home now — the more hub is gone, but
+  // deep-links and BackButton stack entries pointing there should
+  // still resolve cleanly instead of falling through to the catch-all.
+  if (hash === '#/more') return { name: 'home' };
   if (hash === '#/settings') return { name: 'settings' };
   if (hash === '#/settings/model') return { name: 'modelSelect' };
   if (hash === '#/categories') return { name: 'categories' };
@@ -142,7 +145,6 @@ export function navigate(target: Route): void {
   if (target.name === 'inbox') hash = '#/inbox';
   else if (target.name === 'memory') hash = '#/memory';
   else if (target.name === 'sessions') hash = '#/sessions';
-  else if (target.name === 'more') hash = '#/more';
   else if (target.name === 'settings') hash = '#/settings';
   else if (target.name === 'modelSelect') hash = '#/settings/model';
   else if (target.name === 'detail') hash = `#/m/${encodeURIComponent(target.messageId)}`;

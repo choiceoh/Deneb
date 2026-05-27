@@ -21,7 +21,7 @@ export async function renderPeople(
   root.appendChild(
     buildViewHeader({
       title: 'people',
-      left: { label: '← more', onClick: () => navigate({ name: 'more' }) },
+      left: { label: '← home', onClick: () => navigate({ name: 'home' }) },
       right: { label: 'refresh', onClick: () => void renderPeople(root, initData) },
     }),
   );
