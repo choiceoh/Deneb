@@ -14,6 +14,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
@@ -23,11 +24,13 @@ import (
 
 // MemorySearcher is the subset of *wiki.Store the handler needs. Defined
 // here so tests can drop in a fake without spinning up the real store.
-// Name kept for compatibility — it now covers listing/stats/diary too,
-// not strictly searching. Reads remain the only mutating-free operations.
+// Name kept for compatibility — it now covers listing/stats/diary AND
+// writes too, not strictly searching. *wiki.Store satisfies all of
+// these naturally; tests provide a fake.
 type MemorySearcher interface {
 	Search(ctx context.Context, query string, limit int) ([]wiki.SearchResult, error)
 	ReadPage(relPath string) (*wiki.Page, error)
+	WritePage(relPath string, page *wiki.Page) error
 	Stats() wiki.StoreStats
 	ListPages(category string) ([]string, error)
 	RecentDiaryEntries(limit int) []wiki.DiaryHit
@@ -66,6 +69,7 @@ func MemoryMethods(deps MemoryDeps) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
 		"miniapp.memory.search":           memorySearch(deps),
 		"miniapp.memory.get_page":         memoryGetPage(deps),
+		"miniapp.memory.write_page":       memoryWritePage(deps),
 		"miniapp.memory.categories":       memoryCategories(deps),
 		"miniapp.memory.list_in_category": memoryListInCategory(deps),
 		"miniapp.memory.diary_recent":     memoryDiaryRecent(deps),
@@ -211,6 +215,106 @@ func memorySearch(deps MemoryDeps) rpcutil.HandlerFunc {
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{"results": out})
 	}
+}
+
+// memoryWritePage replaces the body of an existing wiki page while
+// preserving its frontmatter (title/summary/category/tags/related/...).
+// Updated date is stamped to today so the Mini App's "갱신 N일 전"
+// labels reflect the edit.
+//
+// Single-operator deployment, no versioning / optimistic locking —
+// the underlying wiki.Store is the source of truth and last-write-wins.
+// If we ever multi-tenant, this needs an etag-style guard; for now the
+// risk is the operator clobbering their own pending edit, which is
+// recoverable from git history.
+func memoryWritePage(deps MemoryDeps) rpcutil.HandlerFunc {
+	type params struct {
+		Path string `json:"path"`
+		Body string `json:"body"`
+	}
+	type out struct {
+		Path       string   `json:"path"`
+		Title      string   `json:"title,omitempty"`
+		Summary    string   `json:"summary,omitempty"`
+		Category   string   `json:"category,omitempty"`
+		Tags       []string `json:"tags,omitempty"`
+		Related    []string `json:"related,omitempty"`
+		Created    string   `json:"created,omitempty"`
+		Updated    string   `json:"updated,omitempty"`
+		Due        string   `json:"due,omitempty"`
+		Importance float64  `json:"importance,omitempty"`
+		Body       string   `json:"body"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		rel := strings.TrimSpace(p.Path)
+		if rel == "" {
+			return rpcerr.MissingParam("path").Response(req.ID)
+		}
+		if err := validateWikiPath(rel); err != nil {
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+		}
+
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.WrapUnavailable("memory store unavailable", err).Response(req.ID)
+		}
+
+		// ReadPage to preserve existing frontmatter. A miss → NOT_FOUND
+		// (the Mini App doesn't expose page creation yet — that would
+		// need title/category inputs).
+		existing, err := store.ReadPage(rel)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return rpcerr.NotFound("wiki page " + rpcutil.TruncateForError(rel)).Response(req.ID)
+			}
+			return rpcerr.WrapUnavailable("wiki page read failed", err).Response(req.ID)
+		}
+		if existing == nil {
+			return rpcerr.NotFound("wiki page " + rpcutil.TruncateForError(rel)).Response(req.ID)
+		}
+
+		// Replace body, bump Updated to today's local date. Frontmatter
+		// otherwise untouched.
+		existing.Body = p.Body
+		existing.Meta.Updated = todayDateString()
+
+		if err := store.WritePage(rel, existing); err != nil {
+			return rpcerr.WrapUnavailable("wiki page write failed", err).Response(req.ID)
+		}
+
+		return rpcutil.RespondOK(req.ID, out{
+			Path:       rel,
+			Title:      existing.Meta.Title,
+			Summary:    existing.Meta.Summary,
+			Category:   existing.Meta.Category,
+			Tags:       existing.Meta.Tags,
+			Related:    existing.Meta.Related,
+			Created:    existing.Meta.Created,
+			Updated:    existing.Meta.Updated,
+			Due:        existing.Meta.Due,
+			Importance: existing.Meta.Importance,
+			Body:       existing.Body,
+		})
+	}
+}
+
+// todayDateString returns YYYY-MM-DD in the gateway's local zone.
+// Pulled out of memoryWritePage so the test can swap in a fixed clock.
+// Production reads the wall clock directly; tests inject by overriding
+// the package-level `nowFunc` (see memory_test.go).
+var nowFunc = time.Now
+
+func todayDateString() string {
+	return nowFunc().Format("2006-01-02")
 }
 
 // MemoryCategoryRow is a single category entry exposed via

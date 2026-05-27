@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -14,6 +15,7 @@ import (
 type fakeMemoryStore struct {
 	searchFn      func(ctx context.Context, q string, limit int) ([]wiki.SearchResult, error)
 	readPageFn    func(relPath string) (*wiki.Page, error)
+	writePageFn   func(relPath string, page *wiki.Page) error
 	statsFn       func() wiki.StoreStats
 	listPagesFn   func(category string) ([]string, error)
 	diaryRecentFn func(limit int) []wiki.DiaryHit
@@ -31,6 +33,13 @@ func (f *fakeMemoryStore) ReadPage(relPath string) (*wiki.Page, error) {
 		return nil, errors.New("ReadPage not stubbed")
 	}
 	return f.readPageFn(relPath)
+}
+
+func (f *fakeMemoryStore) WritePage(relPath string, page *wiki.Page) error {
+	if f.writePageFn == nil {
+		return errors.New("WritePage not stubbed")
+	}
+	return f.writePageFn(relPath, page)
 }
 
 func (f *fakeMemoryStore) Stats() wiki.StoreStats {
@@ -329,6 +338,7 @@ func TestMemoryMethods_RegistersAllMethods(t *testing.T) {
 	for _, name := range []string{
 		"miniapp.memory.search",
 		"miniapp.memory.get_page",
+		"miniapp.memory.write_page",
 		"miniapp.memory.categories",
 		"miniapp.memory.list_in_category",
 		"miniapp.memory.diary_recent",
@@ -336,6 +346,143 @@ func TestMemoryMethods_RegistersAllMethods(t *testing.T) {
 		if _, ok := got[name]; !ok {
 			t.Errorf("missing %q", name)
 		}
+	}
+}
+
+// --- write_page ---------------------------------------------------------
+
+func TestMemoryWritePage_HappyPath(t *testing.T) {
+	// Inject a fixed date so the test isn't time-dependent.
+	prevNow := nowFunc
+	nowFunc = func() time.Time {
+		return time.Date(2026, 5, 27, 10, 0, 0, 0, time.UTC)
+	}
+	defer func() { nowFunc = prevNow }()
+
+	var capturedPath string
+	var captured *wiki.Page
+	store := &fakeMemoryStore{
+		readPageFn: func(p string) (*wiki.Page, error) {
+			if p != "people/alice.md" {
+				t.Errorf("ReadPage path = %q", p)
+			}
+			return &wiki.Page{
+				Meta: wiki.Frontmatter{
+					Title:    "Alice",
+					Summary:  "Sales contact",
+					Category: "사람",
+					Tags:     []string{"client"},
+					Updated:  "2026-05-01",
+				},
+				Body: "old body",
+			}, nil
+		},
+		writePageFn: func(p string, page *wiki.Page) error {
+			capturedPath = p
+			captured = page
+			return nil
+		},
+	}
+	h := memoryWritePage(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.write_page", map[string]any{
+		"path": "people/alice.md",
+		"body": "new body",
+	}))
+	if !resp.OK {
+		t.Fatalf("expected OK: %+v", resp.Error)
+	}
+	if capturedPath != "people/alice.md" {
+		t.Errorf("write path = %q", capturedPath)
+	}
+	if captured.Body != "new body" {
+		t.Errorf("body not replaced: %q", captured.Body)
+	}
+	if captured.Meta.Title != "Alice" || captured.Meta.Category != "사람" || captured.Meta.Summary != "Sales contact" {
+		t.Errorf("frontmatter not preserved: %+v", captured.Meta)
+	}
+	if captured.Meta.Updated != "2026-05-27" {
+		t.Errorf("updated not bumped: %q", captured.Meta.Updated)
+	}
+	if len(captured.Meta.Tags) != 1 || captured.Meta.Tags[0] != "client" {
+		t.Errorf("tags not preserved: %v", captured.Meta.Tags)
+	}
+
+	// Response shape matches get_page output (body + meta).
+	var got map[string]any
+	decode(t, resp, &got)
+	if got["body"] != "new body" || got["title"] != "Alice" {
+		t.Errorf("response wrong: %+v", got)
+	}
+}
+
+func TestMemoryWritePage_MissingPath(t *testing.T) {
+	h := memoryWritePage(memoryDepsFor(&fakeMemoryStore{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.write_page", map[string]any{"body": "x"}))
+	if resp.OK || resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("expected MISSING_PARAM: %+v", resp)
+	}
+}
+
+func TestMemoryWritePage_PathTraversalRejected(t *testing.T) {
+	h := memoryWritePage(memoryDepsFor(&fakeMemoryStore{}))
+	for _, bad := range []string{"../etc/passwd", "/etc/hosts", "..", "."} {
+		resp := h(authedCtx(), reqWith(t, "miniapp.memory.write_page", map[string]any{
+			"path": bad,
+			"body": "pwn",
+		}))
+		if resp.OK {
+			t.Errorf("path %q: expected error, got OK", bad)
+			continue
+		}
+		if resp.Error.Code != protocol.ErrInvalidRequest {
+			t.Errorf("path %q: code = %s, want INVALID_REQUEST", bad, resp.Error.Code)
+		}
+	}
+}
+
+func TestMemoryWritePage_NotFoundIfPageMissing(t *testing.T) {
+	store := &fakeMemoryStore{
+		readPageFn: func(_ string) (*wiki.Page, error) {
+			return nil, fs.ErrNotExist
+		},
+	}
+	h := memoryWritePage(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.write_page", map[string]any{
+		"path": "missing.md",
+		"body": "x",
+	}))
+	if resp.OK || resp.Error.Code != protocol.ErrNotFound {
+		t.Errorf("expected NOT_FOUND: %+v", resp)
+	}
+}
+
+func TestMemoryWritePage_WriteFailureIsUnavailable(t *testing.T) {
+	store := &fakeMemoryStore{
+		readPageFn: func(_ string) (*wiki.Page, error) {
+			return &wiki.Page{Meta: wiki.Frontmatter{Title: "X"}, Body: "old"}, nil
+		},
+		writePageFn: func(_ string, _ *wiki.Page) error {
+			return errors.New("disk full")
+		},
+	}
+	h := memoryWritePage(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.write_page", map[string]any{
+		"path": "a.md",
+		"body": "x",
+	}))
+	if resp.OK || resp.Error.Code != protocol.ErrUnavailable {
+		t.Errorf("expected UNAVAILABLE: %+v", resp)
+	}
+}
+
+func TestMemoryWritePage_RequiresAuth(t *testing.T) {
+	h := memoryWritePage(memoryDepsFor(&fakeMemoryStore{}))
+	resp := h(context.Background(), reqWith(t, "miniapp.memory.write_page", map[string]any{
+		"path": "a.md",
+		"body": "x",
+	}))
+	if resp.OK || resp.Error.Code != protocol.ErrUnauthorized {
+		t.Errorf("expected UNAUTHORIZED: %+v", resp)
 	}
 }
 

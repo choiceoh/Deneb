@@ -41,6 +41,20 @@ export function getPage(initData: string, path: string): Promise<MemoryPage> {
   return call<MemoryPage>('miniapp.memory.get_page', { path }, initData);
 }
 
+/**
+ * writePage replaces the body of an existing wiki page. Frontmatter
+ * is preserved server-side (the handler reads the page first and
+ * merges the new body in). Updated date is bumped to today. The
+ * response is the full updated page in the same shape as getPage.
+ */
+export function writePage(
+  initData: string,
+  path: string,
+  body: string,
+): Promise<MemoryPage> {
+  return call<MemoryPage>('miniapp.memory.write_page', { path, body }, initData);
+}
+
 // --- Categories explorer (더보기 > 📂 카테고리) ---
 
 export interface MemoryCategory {
