@@ -1,11 +1,19 @@
-// views/wiki_page.ts — full wiki page render.
+// views/wiki_page.ts — full wiki page render with inline edit.
 //
-// Reached by tapping a memory search hit or (eventually) a sender-context
-// chip. Shows frontmatter meta in a sidebar-ish row, then the Markdown
-// body via the in-house renderer.
+// Reached by tapping a memory search hit, a sender-context chip in
+// mail detail, or any other navigate({name:'wikiPage'}) call. Shows
+// frontmatter meta in a sidebar-ish row, then the Markdown body via
+// the in-house renderer.
+//
+// Edit mode is a per-render flag toggled by the "수정" header button.
+// In edit mode the body card is replaced with a <textarea> holding
+// the raw markdown plus a small action bar (저장 / 취소). Save POSTs
+// to miniapp.memory.write_page; the response is the updated page, so
+// we re-render in view mode with the fresh content (including the
+// bumped 갱신 date) and no extra round-trip.
 
-import { getPage, type MemoryPage } from '../memory';
-import { formatRpcError } from '../format';
+import { getPage, writePage, type MemoryPage } from '../memory';
+import { errorMessage, formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
 import { renderMarkdown } from '../markdown';
 import { buildViewHeader, renderErrorView } from './ui';
@@ -21,7 +29,7 @@ export async function renderWikiPage(
   try {
     const page = await getPage(initData, path);
     if (!isCurrentHash(expectedHash)) return;
-    paint(root, page);
+    paint(root, initData, page, false);
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
     renderErrorView(root, `위키 페이지 로드 실패: ${formatRpcError(err)}`, {
@@ -31,16 +39,67 @@ export async function renderWikiPage(
   }
 }
 
-function paint(root: HTMLElement, page: MemoryPage): void {
+// paint renders `page` either in view mode (rendered markdown body)
+// or edit mode (textarea + save/cancel). The header right slot
+// swaps between "수정" and "취소" so the user always has a clear
+// way back to view mode.
+function paint(
+  root: HTMLElement,
+  initData: string,
+  page: MemoryPage,
+  editing: boolean,
+): void {
   root.innerHTML = '';
 
   root.appendChild(
     buildViewHeader({
-      title: '위키',
+      title: editing ? '위키 · 수정' : '위키',
       left: { label: '← 검색', onClick: () => navigate({ name: 'memory' }) },
+      right: editing
+        ? { label: '취소', onClick: () => paint(root, initData, page, false) }
+        : { label: '수정', onClick: () => paint(root, initData, page, true) },
     }),
   );
 
+  // Meta card — same in both modes (title + summary + tags + dates).
+  // Frontmatter editing is out of scope for v1; the user can still
+  // tweak title/tags by hand-editing the markdown file outside the
+  // Mini App.
+  root.appendChild(buildMetaCard(page));
+
+  if (editing) {
+    root.appendChild(buildEditor(root, initData, page));
+  } else {
+    const body = document.createElement('div');
+    body.className = 'card wiki-body';
+    body.innerHTML = renderMarkdown(page.body || '(본문 없음)');
+    root.appendChild(body);
+  }
+
+  if (page.related && page.related.length > 0) {
+    const related = document.createElement('div');
+    related.className = 'card wiki-related';
+    const label = document.createElement('div');
+    label.className = 'wiki-related-label';
+    label.textContent = '관련 페이지';
+    related.appendChild(label);
+    for (const r of page.related) {
+      const chip = document.createElement('button');
+      chip.className = 'wiki-related-chip';
+      chip.textContent = r;
+      chip.addEventListener('click', () => navigate({ name: 'wikiPage', path: r }));
+      related.appendChild(chip);
+    }
+    root.appendChild(related);
+  }
+
+  const footer = document.createElement('div');
+  footer.className = 'muted';
+  footer.textContent = page.path;
+  root.appendChild(footer);
+}
+
+function buildMetaCard(page: MemoryPage): HTMLElement {
   const meta = document.createElement('div');
   meta.className = 'card wiki-meta';
   const title = document.createElement('div');
@@ -69,32 +128,82 @@ function paint(root: HTMLElement, page: MemoryPage): void {
   if (page.due) dateParts.push(`📅 ${page.due}`);
   dateLine.textContent = dateParts.join(' · ');
   if (dateLine.textContent) meta.appendChild(dateLine);
-  root.appendChild(meta);
+  return meta;
+}
 
-  const body = document.createElement('div');
-  body.className = 'card wiki-body';
-  body.innerHTML = renderMarkdown(page.body || '(본문 없음)');
-  root.appendChild(body);
+// buildEditor returns a card containing a textarea pre-populated with
+// the page's raw markdown body plus a 저장 / 취소 action row. Save
+// disables the button mid-flight to prevent double-fire; failure
+// surfaces inline so the textarea contents aren't lost.
+function buildEditor(root: HTMLElement, initData: string, page: MemoryPage): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'card wiki-edit';
 
-  if (page.related && page.related.length > 0) {
-    const related = document.createElement('div');
-    related.className = 'card wiki-related';
-    const label = document.createElement('div');
-    label.className = 'wiki-related-label';
-    label.textContent = '관련 페이지';
-    related.appendChild(label);
-    for (const r of page.related) {
-      const chip = document.createElement('button');
-      chip.className = 'wiki-related-chip';
-      chip.textContent = r;
-      chip.addEventListener('click', () => navigate({ name: 'wikiPage', path: r }));
-      related.appendChild(chip);
-    }
-    root.appendChild(related);
+  const textarea = document.createElement('textarea');
+  textarea.className = 'wiki-edit-textarea';
+  textarea.value = page.body || '';
+  textarea.rows = 18;
+  textarea.spellcheck = false;
+  wrap.appendChild(textarea);
+
+  const flash = document.createElement('div');
+  flash.className = 'wiki-edit-flash';
+  // Stays empty until a save attempt actually fails. CSS hides it
+  // when blank so the action bar sits flush against the textarea.
+  wrap.appendChild(flash);
+
+  const actions = document.createElement('div');
+  actions.className = 'wiki-edit-actions';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'action-button action-secondary';
+  cancelBtn.textContent = '취소';
+  cancelBtn.addEventListener('click', () => paint(root, initData, page, false));
+
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'action-button action-primary';
+  saveBtn.textContent = '저장';
+  saveBtn.addEventListener('click', () => {
+    void doSave(root, initData, page, textarea, saveBtn, cancelBtn, flash);
+  });
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(saveBtn);
+  wrap.appendChild(actions);
+
+  // Defer focus until after the new DOM is attached. setTimeout(0)
+  // beats requestAnimationFrame here because some Telegram WebView
+  // builds throw away rAF callbacks during navigation animations.
+  setTimeout(() => textarea.focus(), 0);
+
+  return wrap;
+}
+
+async function doSave(
+  root: HTMLElement,
+  initData: string,
+  page: MemoryPage,
+  textarea: HTMLTextAreaElement,
+  saveBtn: HTMLButtonElement,
+  cancelBtn: HTMLButtonElement,
+  flash: HTMLElement,
+): Promise<void> {
+  saveBtn.disabled = true;
+  cancelBtn.disabled = true;
+  flash.textContent = '';
+  saveBtn.textContent = '저장 중…';
+
+  try {
+    const updated = await writePage(initData, page.path, textarea.value);
+    // Re-render in view mode. The backend returned the updated page
+    // with bumped 갱신 date, so the meta card refreshes too.
+    paint(root, initData, updated, false);
+  } catch (err) {
+    saveBtn.disabled = false;
+    cancelBtn.disabled = false;
+    saveBtn.textContent = '저장';
+    flash.textContent = `저장 실패: ${errorMessage(err)}`;
   }
-
-  const footer = document.createElement('div');
-  footer.className = 'muted';
-  footer.textContent = page.path;
-  root.appendChild(footer);
 }
