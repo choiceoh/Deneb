@@ -158,12 +158,20 @@ h1 {
   font-weight: 600;
 }
 
+/* Global .card: in the typography idiom this becomes a hairline-
+   bracketed strip rather than a shadowed pill. Every view's bespoke
+   .card.email-meta / .card.analysis-card / .card.wiki-* override
+   already opts into this shape; defaulting it here means any new
+   card-shaped widget inherits the same tone for free. */
 .card {
-  background: var(--tg-bg);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-  margin-bottom: var(--space-3);
-  box-shadow: var(--shadow-sm);
+  background: none;
+  border: none;
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
+  padding: 16px 0;
+  margin-bottom: 16px;
+  box-shadow: none;
 }
 
 .row {
@@ -218,14 +226,22 @@ button.primary:disabled {
   opacity: 0.55;
 }
 
+/* Error: drop the warning-tinted card; in the typography idiom we
+   communicate state with a hairline-bracketed strip and the same
+   lowercase-meta language the rest of the app uses. */
 .error {
-  background: var(--color-warning-soft);
-  color: var(--color-warning);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-  margin-bottom: var(--space-3);
+  background: none;
+  color: var(--tg-text);
+  border: none;
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
+  padding: 16px 0;
+  margin: 16px 0;
   font-size: 14px;
-  border: 1px solid var(--hairline);
+  font-weight: 300;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
 }
 
 .ok {
@@ -234,16 +250,43 @@ button.primary:disabled {
 
 .muted {
   color: var(--tg-hint);
-  font-size: 12px;
-  margin-top: 16px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 24px;
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
+/* Loading: the previous "로딩 중…" centered-hint pattern is fine but
+   reads stronger with the typography idiom's weight scale. We also
+   add a quiet pulsing dim so the placeholder doesn't feel static
+   during long fetches. */
 .loading {
-  text-align: center;
+  text-align: left;
   color: var(--tg-hint);
-  padding: 32px 0;
-  font-size: 14px;
+  padding: 48px 0 0;
+  font-size: 16px;
+  font-weight: 300;
+  letter-spacing: -0.005em;
+  animation: type-loading-pulse 1600ms ease-in-out infinite;
+}
+
+@keyframes type-loading-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading {
+    animation: none;
+  }
 }
 
 /* ---- Home: domain entry cards (Gmail, future memory/sessions, etc.) ---- */
@@ -714,17 +757,6 @@ button.entry-card:active {
   font-size: 13px;
 }
 
-.attachment-icon {
-  display: inline-flex;
-  align-items: center;
-  color: var(--tg-hint);
-}
-
-.attachment-icon .lucide-icon {
-  width: 14px;
-  height: 14px;
-}
-
 .attachment-name {
   flex: 1;
   color: var(--tg-text);
@@ -768,9 +800,6 @@ pre.email-body {
 
 .action-button {
   flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   padding: 4px 0;
   background: none;
   border: none;
@@ -785,18 +814,6 @@ pre.email-body {
   transition:
     opacity 120ms ease,
     transform 90ms cubic-bezier(0.4, 0, 1, 1);
-}
-
-.action-button .action-icon {
-  display: inline-flex;
-  align-items: center;
-  color: var(--tg-hint);
-}
-
-.action-button .lucide-icon {
-  width: 14px;
-  height: 14px;
-  stroke-width: 1.75;
 }
 
 .action-button:hover {
@@ -1087,43 +1104,39 @@ pre.sender-context-facts-body {
 
 /* ---- Analysis card (mail detail view, after pressing 🔍 분석) ---- */
 
+/* Text-only loading state. A single typography line with the elapsed
+   counter at the right end, the whole row pulsing in opacity so the
+   operator can tell the LLM is still working without a spinner. */
 .analysis-loading {
   display: flex;
-  align-items: center;
+  align-items: baseline;
+  justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
-}
-
-.analysis-loading-spinner {
-  display: inline-flex;
-  align-items: center;
-  color: var(--tg-link);
-  animation: spin 1.2s linear infinite;
-}
-
-.analysis-loading-spinner .lucide-icon {
-  width: 20px;
-  height: 20px;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  padding: 20px 0;
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 16px;
+  animation: type-loading-pulse 1600ms ease-in-out infinite;
 }
 
 .analysis-loading-text {
-  flex: 1;
   font-size: 14px;
+  font-weight: 300;
+  letter-spacing: -0.005em;
+  color: var(--tg-text);
 }
 
 .analysis-loading-elapsed {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--tg-hint);
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .analysis-loading {
+    animation: none;
+  }
 }
 
 /* Analysis card — strips the colored accent fill + left bar. In the
@@ -1152,21 +1165,11 @@ pre.sender-context-facts-body {
 }
 
 .analysis-card-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   font-weight: 600;
   font-size: 11px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--tg-hint);
-}
-
-.analysis-card-title .lucide-icon {
-  width: 12px;
-  height: 12px;
-  stroke-width: 1.75;
-  opacity: 0.7;
 }
 
 .analysis-card-meta {
@@ -1199,11 +1202,6 @@ pre.sender-context-facts-body {
 
 .analysis-card-refresh:hover {
   color: var(--tg-text);
-}
-
-.analysis-card-refresh .lucide-icon {
-  width: 14px;
-  height: 14px;
 }
 
 .analysis-card-refresh:active {

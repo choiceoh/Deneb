@@ -14,14 +14,16 @@ import {
 } from '../app_settings';
 import { navigate } from '../router';
 import { listMiniappModels } from '../rpc';
-import { buildViewHeader } from './ui';
 
 type ToggleKey = keyof AppSettings;
 
 export function renderSettings(root: HTMLElement, initData: string): void {
   root.innerHTML = '';
 
-  root.appendChild(buildViewHeader({ title: 'settings' }));
+  // Panorama strip at the top of the viewport already shows 'settings'
+  // as the active tab, so a buildViewHeader here would be a redundant
+  // second title. Other tab views (home, more) drop the page header
+  // too. Drill-down screens (modelSelect, etc.) keep theirs.
 
   const saved = readAppSettings();
   const status = document.createElement('div');

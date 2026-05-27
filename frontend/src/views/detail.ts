@@ -20,7 +20,6 @@ import { errorMessage, formatRpcError, humanSize, relativeTime } from '../format
 import { renderMarkdown } from '../markdown';
 import { confirmAction } from '../dialog';
 import { buildErrorBanner, buildViewHeader, renderErrorView } from './ui';
-import { icon, type IconName } from '../icons';
 
 export async function renderDetail(
   root: HTMLElement,
@@ -96,7 +95,6 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
       const chip = document.createElement('div');
       chip.className = 'attachment-chip';
       chip.innerHTML = `
-        <span class="attachment-icon">${icon('paperclip')}</span>
         <span class="attachment-name"></span>
         <span class="attachment-size"></span>
       `;
@@ -125,12 +123,12 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
   actions.className = 'action-bar';
   root.appendChild(actions);
 
-  const analyzeBtn = makeAction('analyze', '분석', 'secondary', async () => {
+  const analyzeBtn = makeAction('analyze', 'secondary', async () => {
     void runAnalysis(root, initData, msg, analyzeBtn, false);
   });
   actions.appendChild(analyzeBtn);
 
-  const readBtn = makeAction('read', '읽음', 'secondary', async () => {
+  const readBtn = makeAction('read', 'secondary', async () => {
     readBtn.disabled = true;
     try {
       await markRead(initData, msg.id);
@@ -142,7 +140,7 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
   });
   actions.appendChild(readBtn);
 
-  const archBtn = makeAction('archive', '보관', 'secondary', async () => {
+  const archBtn = makeAction('archive', 'secondary', async () => {
     archBtn.disabled = true;
     try {
       await archive(initData, msg.id);
@@ -154,7 +152,7 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
   });
   actions.appendChild(archBtn);
 
-  const trashBtn = makeAction('trash', '삭제', 'danger', async () => {
+  const trashBtn = makeAction('trash', 'danger', async () => {
     // Disable BEFORE awaiting confirm: prevents a double-tap from
     // queueing a second confirm dialog + second trash RPC.
     if (trashBtn.disabled) return;
@@ -178,7 +176,7 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
   });
   actions.appendChild(trashBtn);
 
-  const closeBtn = makeAction('back', '닫기', 'primary', () => navigate({ name: 'inbox' }));
+  const closeBtn = makeAction('close', 'primary', () => navigate({ name: 'inbox' }));
   actions.appendChild(closeBtn);
 }
 
@@ -208,19 +206,21 @@ async function runAnalysis(
 
   const start = performance.now();
   button.disabled = true;
-  // The button is `[svg].action-icon + [span].icon-label` now, so we
-  // mutate only the label — overwriting textContent would wipe the SVG.
-  const labelEl = button.querySelector('.icon-label') as HTMLElement | null;
-  const originalLabel = labelEl?.textContent ?? '';
-  if (labelEl) labelEl.textContent = '분석 중…';
+  // Action buttons are pure text now (no inner spans), so we mutate
+  // textContent directly. originalLabel snapshots whatever it was so
+  // both the success and failure paths can restore it.
+  const originalLabel = button.textContent ?? '';
+  button.textContent = 'analyzing…';
   slot.innerHTML = '';
 
+  // Loading state is text-only — a quiet typography line that pulses.
+  // No spinner SVG. The elapsed counter sits to the right and ticks up
+  // every second so a long LLM call still feels alive.
   const loading = document.createElement('div');
-  loading.className = 'card analysis-loading';
+  loading.className = 'analysis-loading';
   loading.innerHTML = `
-    <div class="analysis-loading-spinner">${icon('spinner')}</div>
-    <div class="analysis-loading-text">메일 분석 중… (최대 4분 소요)</div>
-    <div class="analysis-loading-elapsed">0s</div>
+    <span class="analysis-loading-text">메일 분석 중… (최대 4분)</span>
+    <span class="analysis-loading-elapsed">0s</span>
   `;
   slot.appendChild(loading);
 
@@ -249,14 +249,14 @@ async function runAnalysis(
       }),
     );
     button.disabled = false;
-    if (labelEl) labelEl.textContent = originalLabel || '분석';
+    button.textContent = originalLabel || 'analyze';
   } catch (err) {
     window.clearInterval(tick);
     if (!isCurrentHash(expectedHash)) return;
     slot.innerHTML = '';
     slot.appendChild(buildErrorBanner(`분석 실패: ${formatRpcError(err)}`));
     button.disabled = false;
-    if (labelEl) labelEl.textContent = originalLabel || '분석';
+    button.textContent = originalLabel || 'analyze';
   }
 }
 
@@ -286,7 +286,7 @@ function buildAnalysisCard(
     metaText = `${seconds}s`;
   }
   header.innerHTML = `
-    <span class="analysis-card-title">${icon('analyze')}<span class="icon-label">분석</span></span>
+    <span class="analysis-card-title">analysis</span>
     <span class="analysis-card-meta"></span>
   `;
   (header.querySelector('.analysis-card-meta') as HTMLElement).textContent = metaText;
@@ -305,7 +305,7 @@ function buildAnalysisCard(
   const refreshBtn = document.createElement('button');
   refreshBtn.className = 'analysis-card-refresh';
   refreshBtn.type = 'button';
-  refreshBtn.innerHTML = `${icon('refresh')}<span class="icon-label">다시 분석</span>`;
+  refreshBtn.textContent = 'rerun';
   refreshBtn.addEventListener('click', onRefresh);
   card.appendChild(refreshBtn);
 
@@ -432,25 +432,13 @@ function hasUsefulContext(ctx: SenderContext): boolean {
 }
 
 function makeAction(
-  iconName: IconName | null,
   label: string,
   variant: 'primary' | 'secondary' | 'danger',
   onClick: () => void | Promise<void>,
 ): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.className = `action-button action-${variant}`;
-  // Icon (trusted SVG) + label (textContent). Inline so the icon
-  // sits flush against the label and CSS can space the gap.
-  if (iconName) {
-    const iconSpan = document.createElement('span');
-    iconSpan.className = 'action-icon';
-    iconSpan.innerHTML = icon(iconName);
-    btn.appendChild(iconSpan);
-  }
-  const labelSpan = document.createElement('span');
-  labelSpan.className = 'icon-label';
-  labelSpan.textContent = label;
-  btn.appendChild(labelSpan);
+  btn.textContent = label;
   btn.addEventListener('click', () => {
     void onClick();
   });
