@@ -292,6 +292,31 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			},
 		}),
 
+		// Mini App forum topic creation (miniapp.topics.create). Lazy
+		// client factory + active-home accessor so the gateway boots
+		// fine without a Telegram plugin or before the operator has
+		// run /use-forum; the handler then surfaces UNAVAILABLE per
+		// call instead of failing at registration time.
+		handlerminiapp.TopicsMethods(handlerminiapp.TopicsDeps{
+			Client: func() (handlerminiapp.TopicsClient, error) {
+				plug := hub.Telegram()
+				if plug == nil {
+					return nil, errors.New("telegram plugin not configured")
+				}
+				c := plug.Client()
+				if c == nil {
+					return nil, errors.New("telegram client not started")
+				}
+				return c, nil
+			},
+			ActiveChatID: func() int64 {
+				if s.appSettings == nil {
+					return 0
+				}
+				return s.appSettings.ActiveHome().ChatID
+			},
+		}),
+
 		// Mini App Gmail sender context (miniapp.gmail.sender_context).
 		// Combines Gmail recent-activity query, wiki memory lookup, and
 		// wiki-graph traversal (graphify CLI) so the Mini App detail

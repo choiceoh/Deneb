@@ -196,6 +196,11 @@ async function dispatch(route: Route): Promise<void> {
       renderWikiNew(root, initData, route.category ?? '');
       return;
     }
+    case 'topicNew': {
+      const { renderTopicNew } = await import('./views/topic_new');
+      renderTopicNew(root, initData);
+      return;
+    }
   }
 }
 
@@ -226,6 +231,7 @@ function prefetchOtherViews(): void {
     void import('./views/people');
     void import('./views/person_detail');
     void import('./views/wiki_new');
+    void import('./views/topic_new');
   };
   // requestIdleCallback isn't on Safari < 17 and isn't in lib.dom.d.ts
   // by default; fall back to a generous setTimeout so we still kick the
@@ -347,6 +353,9 @@ function boot(): void {
         // a category page. history.back() is what wiki_new.ts's own
         // cancel button uses for the same reason.
         history.back();
+        return;
+      case 'topicNew':
+        navigate({ name: 'sessions' });
         return;
       // Every top-level drill-down off home pops back to home —
       // matches the path the user took to get in. No "more" hub

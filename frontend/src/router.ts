@@ -17,6 +17,7 @@ export type Route =
   | { name: 'detail'; messageId: string }
   | { name: 'memory' }
   | { name: 'sessions' }
+  | { name: 'topicNew' }
   | { name: 'wikiPage'; path: string }
   | { name: 'sessionTranscript'; sessionKey: string }
   | { name: 'calendar' }
@@ -44,6 +45,7 @@ export function parseRoute(hash: string): Route {
   if (hash === '#/inbox') return { name: 'inbox' };
   if (hash === '#/memory') return { name: 'memory' };
   if (hash === '#/sessions') return { name: 'sessions' };
+  if (hash === '#/topic-new') return { name: 'topicNew' };
   // Legacy '#/more' hash maps to home now — the more hub is gone, but
   // deep-links and BackButton stack entries pointing there should
   // still resolve cleanly instead of falling through to the catch-all.
@@ -142,6 +144,7 @@ export function navigate(target: Route): void {
   if (target.name === 'inbox') hash = '#/inbox';
   else if (target.name === 'memory') hash = '#/memory';
   else if (target.name === 'sessions') hash = '#/sessions';
+  else if (target.name === 'topicNew') hash = '#/topic-new';
   else if (target.name === 'settings') hash = '#/settings';
   else if (target.name === 'modelSelect') hash = '#/settings/model';
   else if (target.name === 'detail') hash = `#/m/${encodeURIComponent(target.messageId)}`;

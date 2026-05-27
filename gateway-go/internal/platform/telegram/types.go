@@ -231,9 +231,15 @@ type File struct {
 	FilePath     string `json:"file_path,omitempty"`
 }
 
-// ForumTopic represents a forum topic in a supergroup.
+// ForumTopic represents a forum topic in a supergroup. Used both as the
+// inbound payload on forum_topic_created service messages (Name only) and
+// as the createForumTopic response (which additionally carries the new
+// thread ID and chosen icon color).
 type ForumTopic struct {
-	Name string `json:"name"`
+	MessageThreadID   int64  `json:"message_thread_id,omitempty"`
+	Name              string `json:"name"`
+	IconColor         int64  `json:"icon_color,omitempty"`
+	IconCustomEmojiID string `json:"icon_custom_emoji_id,omitempty"`
 }
 
 // CallbackQuery represents an incoming callback query from inline keyboard.

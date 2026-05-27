@@ -466,6 +466,34 @@ func (c *Client) DownloadFile(ctx context.Context, fileID string) ([]byte, strin
 	return data, f.FilePath, nil
 }
 
+// CreateForumTopic creates a new forum topic in a supergroup with topics
+// enabled. The bot must be an admin in the chat with the can_manage_topics
+// right. Returns the created topic (including the new message_thread_id).
+//
+// name is required (1-128 chars). iconColor selects from Telegram's small
+// palette of allowed RGB ints (7322096, 16766590, 13338331, 9367192,
+// 16749490, 16478047) — pass 0 to let Telegram pick the default.
+func (c *Client) CreateForumTopic(ctx context.Context, chatID int64, name string, iconColor int64) (*ForumTopic, error) {
+	params := map[string]any{
+		"chat_id": chatID,
+		"name":    name,
+	}
+	if iconColor != 0 {
+		params["icon_color"] = iconColor
+	}
+	// Not idempotent — Telegram would create a duplicate topic on retry.
+	// Use Call (pre-connect retries only).
+	result, err := c.Call(ctx, "createForumTopic", params)
+	if err != nil {
+		return nil, err
+	}
+	var topic ForumTopic
+	if err := json.Unmarshal(result, &topic); err != nil {
+		return nil, fmt.Errorf("decode createForumTopic: %w", err)
+	}
+	return &topic, nil
+}
+
 // DeleteMessage deletes a message.
 func (c *Client) DeleteMessage(ctx context.Context, chatID, messageID int64) error {
 	_, err := c.CallIdempotent(ctx, "deleteMessage", map[string]any{
