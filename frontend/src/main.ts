@@ -41,9 +41,16 @@ function applyThemeFromTelegram(tg: WebApp): void {
     '--tg-button-text': params.button_text_color,
     '--tg-secondary-bg': params.secondary_bg_color,
   };
-  const docStyle = document.documentElement.style;
+  const docEl = document.documentElement;
+  const docStyle = docEl.style;
   for (const [name, value] of Object.entries(map)) {
     if (value) docStyle.setProperty(name, value);
+  }
+  // Stamp the active scheme so CSS can swap hairline/shadow tokens
+  // without re-reading themeParams. Telegram exposes 'light' | 'dark';
+  // default to light if undefined.
+  if (tg.colorScheme === 'light' || tg.colorScheme === 'dark') {
+    docEl.dataset.colorScheme = tg.colorScheme;
   }
 }
 

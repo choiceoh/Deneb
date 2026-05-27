@@ -35,9 +35,14 @@ function paint(
   header.className = 'brand-header';
   header.innerHTML = `
     <span class="brand-name">Deneb</span>
-    <span class="brand-badge" title="비서실장형 단일 에이전트">✓</span>
+    <span class="brand-status" title="모든 서비스 정상" aria-label="online"></span>
   `;
   root.appendChild(header);
+
+  const subtitle = document.createElement('div');
+  subtitle.className = 'brand-subtitle';
+  subtitle.textContent = '비서실장형 단일 에이전트';
+  root.appendChild(subtitle);
 
   // Status: just the current model. Version/latency stay in the muted
   // footer so the visible status stays minimal.

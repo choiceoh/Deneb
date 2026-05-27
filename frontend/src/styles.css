@@ -2,9 +2,12 @@
  * Pull colors from Telegram's theme params so the Mini App blends with the
  * client's light/dark theme. Telegram exposes these on launch via
  * window.Telegram.WebApp.themeParams; main.ts mirrors them into the
- * --tg-* custom properties before paint.
+ * --tg-* custom properties before paint, and stamps tg.colorScheme onto
+ * <html data-color-scheme="…"> so depth tokens below pick the right
+ * hairline/shadow values without re-reading themeParams from JS.
  */
 :root {
+  /* Telegram theme params (overridden at runtime) */
   --tg-bg: #ffffff;
   --tg-text: #000000;
   --tg-hint: #707579;
@@ -12,6 +15,91 @@
   --tg-button: #2481cc;
   --tg-button-text: #ffffff;
   --tg-secondary-bg: #f4f4f5;
+
+  /* Hairline borders + surface tint — alpha-layered so they read as
+     subtle separators on top of whichever bg color Telegram supplied. */
+  --hairline: rgba(0, 0, 0, 0.06);
+  --hairline-strong: rgba(0, 0, 0, 0.12);
+  --surface-tint: rgba(0, 0, 0, 0.025);
+
+  /* Radius scale */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* Soft, modern shadows — depth without 2008-skeuomorph weight.
+     `shadow-sm` is paired with a 1px hairline so cards retain their
+     edge even when the shadow is too subtle to read (e.g. very light
+     Telegram themes). */
+  --shadow-sm:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 0 0 1px var(--hairline);
+  --shadow-md:
+    0 4px 12px rgba(0, 0, 0, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-focus: 0 0 0 3px rgba(36, 129, 204, 0.22);
+
+  /* Spacing scale (4-based) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Motion */
+  --transition-fast: 120ms cubic-bezier(0.2, 0, 0.2, 1);
+  --transition-base: 200ms cubic-bezier(0.2, 0, 0.2, 1);
+
+  /* Semantic colors (not from Telegram — same in both schemes) */
+  --color-danger: #ef4444;
+  --color-danger-soft: rgba(239, 68, 68, 0.1);
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-warning-soft: rgba(217, 119, 6, 0.12);
+}
+
+/* Dark scheme: Telegram stamps data-color-scheme="dark" via main.ts.
+   This block adjusts only the depth/hairline tokens — colors come from
+   Telegram themeParams which are already dark-correct at this point. */
+[data-color-scheme='dark'] {
+  --hairline: rgba(255, 255, 255, 0.08);
+  --hairline-strong: rgba(255, 255, 255, 0.14);
+  --surface-tint: rgba(255, 255, 255, 0.04);
+  --shadow-sm:
+    0 1px 2px rgba(0, 0, 0, 0.25),
+    0 0 0 1px var(--hairline);
+  --shadow-md:
+    0 4px 12px rgba(0, 0, 0, 0.35),
+    0 1px 2px rgba(0, 0, 0, 0.18);
+  --color-warning-soft: rgba(217, 119, 6, 0.22);
+}
+
+/* Browser fallback when Telegram isn't there to set data-color-scheme
+   (local dev, accidental browser hit). Mirrors the dark token values
+   above and gives the Telegram-style dark palette so the page is
+   readable rather than fluorescent. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-color-scheme]) {
+    --tg-bg: #17212b;
+    --tg-text: #ffffff;
+    --tg-hint: #7d8b99;
+    --tg-link: #6ab3f3;
+    --tg-button: #5288c1;
+    --tg-button-text: #ffffff;
+    --tg-secondary-bg: #232e3c;
+    --hairline: rgba(255, 255, 255, 0.08);
+    --hairline-strong: rgba(255, 255, 255, 0.14);
+    --surface-tint: rgba(255, 255, 255, 0.04);
+    --shadow-sm:
+      0 1px 2px rgba(0, 0, 0, 0.25),
+      0 0 0 1px var(--hairline);
+    --shadow-md:
+      0 4px 12px rgba(0, 0, 0, 0.35),
+      0 1px 2px rgba(0, 0, 0, 0.18);
+    --color-warning-soft: rgba(217, 119, 6, 0.22);
+  }
 }
 
 * {
@@ -52,18 +140,19 @@ h1 {
 }
 
 .card {
-  background: var(--tg-secondary-bg);
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 12px;
+  background: var(--tg-bg);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+  box-shadow: var(--shadow-sm);
 }
 
 .row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  padding: 4px 0;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
 }
 
 .row .label {
@@ -80,32 +169,43 @@ h1 {
 button.primary {
   display: block;
   width: 100%;
-  padding: 12px 16px;
+  padding: 13px var(--space-4);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--tg-button);
   color: var(--tg-button-text);
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  margin-top: 8px;
+  margin-top: var(--space-2);
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    opacity var(--transition-fast);
 }
 
 button.primary:active {
-  opacity: 0.85;
+  transform: translateY(1px);
+  opacity: 0.92;
+}
+
+button.primary:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
 
 .error {
-  background: #fff3cd;
-  color: #664d03;
-  border-radius: 12px;
-  padding: 12px 16px;
-  margin-bottom: 12px;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
   font-size: 14px;
+  border: 1px solid var(--hairline);
 }
 
 .ok {
-  color: #198754;
+  color: var(--color-success);
 }
 
 .muted {
@@ -127,13 +227,13 @@ button.primary:active {
 button.entry-card {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   width: 100%;
-  background: var(--tg-secondary-bg);
+  background: var(--tg-bg);
   border: none;
-  border-radius: 12px;
-  padding: 14px 16px;
-  margin-bottom: 12px;
+  border-radius: var(--radius-md);
+  padding: 14px var(--space-4);
+  margin-bottom: var(--space-3);
   color: var(--tg-text);
   text-align: left;
   cursor: pointer;
@@ -141,10 +241,18 @@ button.entry-card {
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+button.entry-card:hover {
+  box-shadow: var(--shadow-md);
 }
 
 button.entry-card:active {
-  opacity: 0.85;
+  transform: translateY(1px);
 }
 
 .entry-emoji {
@@ -181,12 +289,15 @@ button.entry-card:active {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .view-title {
   font-weight: 600;
   font-size: 17px;
+  letter-spacing: -0.01em;
 }
 
 .link-button {
@@ -195,11 +306,22 @@ button.entry-card:active {
   color: var(--tg-link);
   font: inherit;
   cursor: pointer;
-  padding: 4px 0;
+  padding: var(--space-1) 0;
+  border-radius: var(--radius-sm);
+  transition: opacity var(--transition-fast);
+}
+
+.link-button:hover {
+  opacity: 0.8;
 }
 
 .link-button:active {
-  opacity: 0.65;
+  opacity: 0.55;
+}
+
+.link-button:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
 
 /* ---- Email list rows ---- */
@@ -207,22 +329,30 @@ button.entry-card:active {
 .email-row-wrap {
   display: flex;
   align-items: stretch;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
 }
 
 .email-row {
   position: relative;
   flex: 1;
   min-width: 0;
-  background: var(--tg-secondary-bg);
+  background: var(--tg-bg);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 12px 14px;
   color: var(--tg-text);
   text-align: left;
   cursor: pointer;
   font: inherit;
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.email-row:hover {
+  box-shadow: var(--shadow-md);
 }
 
 .email-row-select-indicator {
@@ -244,17 +374,42 @@ button.entry-card:active {
 }
 
 .email-row:active {
-  opacity: 0.85;
+  transform: translateY(1px);
 }
 
 .email-row:focus-visible {
-  outline: 2px solid var(--tg-link);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* Unread accent: a 4px dot column on the left, anchored inside the
+   card's padding so the row text stays aligned with read rows. Replaces
+   the old border-left which made unread cards subtly shift right. */
+.email-row-wrap.email-row-unread .email-row {
+  position: relative;
+}
+
+.email-row-wrap.email-row-unread .email-row::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tg-link);
+  transform: translateY(-50%);
 }
 
 .email-row-wrap.email-row-unread .email-row {
-  border-left: 3px solid var(--tg-link);
-  padding-left: 11px;
+  padding-left: 20px;
+}
+
+.email-row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 0 0 44px;
 }
 
 .email-list-selecting {
@@ -331,6 +486,34 @@ button.entry-card:active {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.email-row-action {
+  flex: 1 1 0;
+  background: var(--tg-secondary-bg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  color: var(--tg-text);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 0;
+  min-height: 32px;
+  transition:
+    background var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.email-row-action:hover {
+  background: var(--tg-bg);
+}
+
+.email-row-action:active {
+  transform: scale(0.96);
+}
+
+.email-row-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .email-bulk-button:active {
@@ -467,48 +650,74 @@ pre.email-body {
 
 .action-bar {
   display: flex;
-  gap: 8px;
-  margin-top: 12px;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
 }
 
 .action-button {
   flex: 1;
-  padding: 12px;
-  border: none;
-  border-radius: 12px;
+  padding: 11px var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+  transition:
+    transform var(--transition-fast),
+    background var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .action-button:active {
-  opacity: 0.85;
+  transform: translateY(1px);
+}
+
+.action-button:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
 
 .action-button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
+  transform: none;
 }
 
+/* Primary: solid accent button. Use sparingly — one per bar. */
 .action-primary {
   background: var(--tg-button);
   color: var(--tg-button-text);
+  border-color: var(--tg-button);
 }
 
+/* Secondary: outline button. Reads as recessive relative to primary,
+   so the eye lands on the action that "moves things forward". */
 .action-secondary {
-  background: var(--tg-secondary-bg);
+  background: transparent;
   color: var(--tg-text);
+  border-color: var(--hairline-strong);
 }
 
+.action-secondary:hover {
+  background: var(--tg-secondary-bg);
+}
+
+/* Danger: red outline, fills on press. Communicates "destructive" without
+   shouting at the user every time the bar is visible. */
 .action-danger {
-  background: var(--tg-destructive, #d93025);
-  color: #ffffff;
+  background: transparent;
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.action-danger:hover {
+  background: var(--color-danger-soft);
 }
 
 .flash {
-  margin-top: 8px;
-  padding: 8px 12px;
-  border-radius: 8px;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
   background: var(--tg-secondary-bg);
   color: var(--tg-hint);
   font-size: 13px;
@@ -762,7 +971,13 @@ pre.sender-context-facts-body {
   font-variant-numeric: tabular-nums;
 }
 
+/* The analysis card is the most "important" card on the detail screen —
+   give it a subtle accent fill + a small left accent so the eye lands
+   here first when the LLM result arrives. The accent is a low-opacity
+   tint of the Telegram link color, so it inherits the user's theme. */
 .analysis-card {
+  position: relative;
+  background: color-mix(in srgb, var(--tg-link) 6%, var(--tg-bg));
   border-left: 3px solid var(--tg-link);
   padding-left: 13px;
 }
@@ -771,15 +986,15 @@ pre.sender-context-facts-body {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--tg-hint);
-  border-bottom-color: rgba(112, 117, 121, 0.2);
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .analysis-card-title {
-  font-weight: 600;
+  font-weight: 700;
   font-size: 14px;
+  letter-spacing: -0.01em;
 }
 
 .analysis-card-meta {
@@ -1179,52 +1394,61 @@ body.compact-ui button.session-row {
 .brand-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin: 0 0 18px;
+  gap: var(--space-2);
+  margin: var(--space-1) 0 2px;
 }
 
 .brand-name {
-  font-size: 22px;
+  font-size: 28px;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  line-height: 1;
 }
 
-.brand-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
+/* Status dot — green ring around a green fill, similar to OS-level
+   "online" indicators. The outer ring gives it presence without
+   making the dot itself oversized. Pulses on first paint as a tiny
+   sign-of-life cue. */
+.brand-status {
+  position: relative;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: var(--tg-link);
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
+  background: var(--color-success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success) 22%, transparent);
+}
+
+.brand-subtitle {
+  color: var(--tg-hint);
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  margin: 0 0 var(--space-5);
 }
 
 /* ---- Section labels (Mira-inspired blue caps above each card) ---- */
 
 .section-label {
-  color: var(--tg-link);
-  font-size: 13px;
+  color: var(--tg-hint);
+  font-size: 12px;
   font-weight: 600;
-  margin: 16px 4px 8px;
-  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: var(--space-4) var(--space-1) var(--space-2);
 }
 
 .section-label:first-of-type {
-  margin-top: 4px;
+  margin-top: var(--space-2);
 }
 
 /* ---- Section card (a list container) + profile rows ---- */
 
 .section-card {
-  background: var(--tg-secondary-bg);
-  border-radius: 14px;
-  padding: 4px 0;
-  margin-bottom: 4px;
+  background: var(--tg-bg);
+  border-radius: var(--radius-lg);
+  padding: var(--space-1) 0;
+  margin-bottom: var(--space-1);
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .profile-row {
@@ -1242,10 +1466,21 @@ body.compact-ui button.session-row {
 
 button.profile-row-nav {
   cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+button.profile-row-nav:hover {
+  background: var(--surface-tint);
 }
 
 button.profile-row-nav:active {
-  opacity: 0.7;
+  background: var(--hairline);
+}
+
+button.profile-row-nav:focus-visible {
+  outline: none;
+  background: var(--surface-tint);
+  box-shadow: inset 0 0 0 2px var(--tg-link);
 }
 
 .profile-row + .profile-row {
@@ -1297,12 +1532,24 @@ button.profile-row-nav:active {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   font-size: 17px;
   line-height: 1;
   flex-shrink: 0;
+  /* Inner top-light + outer drop for the soft 3D feel of iOS-style
+     icons. The inset highlight is what sells the depth — flat solid
+     fills with a drop alone read as "sticker on paper". */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.12);
+  transition: transform var(--transition-fast);
+}
+
+button.profile-row-nav:active .icon-tile {
+  transform: scale(0.94);
 }
 
 .icon-tile-violet {
