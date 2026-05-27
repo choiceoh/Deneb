@@ -10,7 +10,7 @@
 
 import '@fontsource-variable/inter';
 import './styles.css';
-import { parseRoute, navigate, isTabRoute, type Route, type TabRouteName } from './router';
+import { parseRoute, navigate, isHomeRoute, type Route } from './router';
 import { renderHome } from './views/home';
 import { renderList } from './views/list';
 import { renderDetail } from './views/detail';
@@ -29,11 +29,10 @@ import { renderCrons } from './views/crons';
 import { renderPeople } from './views/people';
 import { renderPersonDetail } from './views/person_detail';
 import { renderWikiNew } from './views/wiki_new';
-import { applyAppSettings, triggerSelectionHaptic } from './app_settings';
+import { applyAppSettings } from './app_settings';
 import { clearPullToRefreshHandler } from './pull_to_refresh';
 
 const root = document.getElementById('app')!;
-const tabBarRoot = document.getElementById('tab-bar')!;
 let cachedInitData: string | null = null;
 let activeWebApp: WebApp | null = null;
 
@@ -92,63 +91,21 @@ function renderError(message: string): void {
   root.appendChild(muted);
 }
 
-// Tab bar visibility = exactly the top-level tab destinations. Drill-down
-// views (detail, wikiPage, calendarEvent, etc.) hide the bar so the
-// Telegram BackButton can take over.
-function showsTabBar(route: Route): boolean {
-  return isTabRoute(route);
-}
-
+// Home is the only no-back route; every other view is a drill-down
+// where Telegram's BackButton takes the operator to its parent.
 function syncBackButton(route: Route): void {
   const back = activeWebApp?.BackButton;
   if (!back) return;
-  if (showsTabBar(route)) {
+  if (isHomeRoute(route)) {
     back.hide();
   } else {
     back.show();
   }
 }
 
-// Tab labels are English lowercase to match the page typography idiom.
-// The Korean fallback in the system font stack still kicks in if any
-// label gets localized later; we just don't need it for these three.
-const TAB_DEFS: ReadonlyArray<{ name: TabRouteName; label: string }> = [
-  { name: 'home', label: 'home' },
-  { name: 'settings', label: 'settings' },
-];
-
-function renderTabBar(route: Route): void {
-  const visible = showsTabBar(route);
-  tabBarRoot.classList.toggle('tab-bar-visible', visible);
-  document.body.classList.toggle('has-tab-bar', visible);
-  if (!visible) {
-    tabBarRoot.innerHTML = '';
-    return;
-  }
-  // Zune-style panorama: big lowercase words in a horizontal scroller.
-  // The active tab gets full weight + full opacity; siblings ride dim
-  // and slightly to the side, with the trailing one prebleeding past
-  // the right edge so a hint of "next" peeks into the active surface.
-  tabBarRoot.innerHTML = '';
-  for (const def of TAB_DEFS) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    const isActive = def.name === route.name;
-    btn.className = 'panorama-tab' + (isActive ? ' panorama-tab-active' : '');
-    btn.textContent = def.label;
-    btn.addEventListener('click', () => {
-      if (isActive) return;
-      triggerSelectionHaptic();
-      navigate({ name: def.name });
-    });
-    tabBarRoot.appendChild(btn);
-  }
-}
-
 async function dispatch(route: Route): Promise<void> {
   if (!cachedInitData) return;
   syncBackButton(route);
-  renderTabBar(route);
   // Clear any pull-to-refresh handler from the previous view; views
   // that want to opt in re-register their own handler after rendering.
   clearPullToRefreshHandler();
@@ -210,29 +167,17 @@ async function dispatch(route: Route): Promise<void> {
   }
 }
 
-// Stash the previous route so the next transition can decide whether
-// to flow left→right (going forward in the tab order, e.g. home →
-// settings) or right→left (going back). For drill-down enters we
-// flow in from below; for drill-down exits we flow out below.
+// Stash the previous route so the next transition can pick a slide
+// direction. Home is the single index, so transitions are read as:
+//   home → anywhere   = deep    (push down into a destination)
+//   anywhere → home   = shallow (pop back to the index)
+//   X → Y (non-home)  = forward (neutral lateral slide)
 let lastRoute: Route | null = null;
 
-const TRANSITION_ORDER: Record<string, number> = {
-  home: 0,
-  settings: 1,
-};
-
-function transitionDirection(from: Route | null, to: Route): 'forward' | 'back' | 'deep' | 'shallow' {
+function transitionDirection(from: Route | null, to: Route): 'forward' | 'deep' | 'shallow' {
   if (!from) return 'forward';
-  const fromOrder = TRANSITION_ORDER[from.name];
-  const toOrder = TRANSITION_ORDER[to.name];
-  if (fromOrder !== undefined && toOrder !== undefined) {
-    return toOrder > fromOrder ? 'forward' : 'back';
-  }
-  // tab → drill-down = deep; drill-down → tab = shallow.
-  if (fromOrder !== undefined && toOrder === undefined) return 'deep';
-  if (fromOrder === undefined && toOrder !== undefined) return 'shallow';
-  // drill-down → drill-down (e.g., mail detail → wiki page) treats as
-  // forward — the keyframes pick a neutral slide direction.
+  if (isHomeRoute(from) && !isHomeRoute(to)) return 'deep';
+  if (!isHomeRoute(from) && isHomeRoute(to)) return 'shallow';
   return 'forward';
 }
 
@@ -324,8 +269,9 @@ function boot(): void {
         // cancel button uses for the same reason.
         history.back();
         return;
-      // List-level destinations now live under 더보기, so back pops
-      // there (not home) — matches the path the user took to get in.
+      // Every top-level drill-down off home pops back to home —
+      // matches the path the user took to get in. No "more" hub
+      // exists; home is the single index.
       case 'inbox':
       case 'memory':
       case 'sessions':
@@ -334,8 +280,7 @@ function boot(): void {
       case 'diary':
       case 'crons':
       case 'people':
-        // The "more" hub is gone — every former more-tab destination
-        // now pops back to home, where its entry word lives.
+      case 'settings':
         navigate({ name: 'home' });
         return;
       default:
@@ -344,39 +289,6 @@ function boot(): void {
   });
 
   window.addEventListener('hashchange', handleHashChange);
-
-  // Auto-hide the panorama tab strip when the user scrolls down, slide
-  // it back into view when they scroll up. Only fires when the page is
-  // tall enough to scroll (no point hiding a strip the user can already
-  // see in full). 8px threshold avoids flickering on bouncy iOS
-  // momentum scrolling. Class lives on <body> so CSS can shift the
-  // strip via transform/opacity without re-querying refs.
-  let lastScrollY = window.scrollY;
-  let scrollTicking = false;
-  window.addEventListener(
-    'scroll',
-    () => {
-      if (scrollTicking) return;
-      scrollTicking = true;
-      requestAnimationFrame(() => {
-        const y = window.scrollY;
-        const dy = y - lastScrollY;
-        if (Math.abs(dy) > 8) {
-          if (dy > 0 && y > 80) {
-            document.body.classList.add('panorama-hidden');
-          } else {
-            document.body.classList.remove('panorama-hidden');
-          }
-          lastScrollY = y;
-        }
-      });
-      // Reset on next frame so subsequent rafs can fire.
-      requestAnimationFrame(() => {
-        scrollTicking = false;
-      });
-    },
-    { passive: true },
-  );
 
   void dispatch(parseRoute(location.hash));
 }

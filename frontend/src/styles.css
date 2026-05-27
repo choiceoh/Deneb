@@ -53,8 +53,7 @@
        --ease-emphasis : standard "decelerate" — content arriving.
        --ease-exit     : "accelerate" — content leaving.
        --ease-spring   : mild overshoot — for indicators + ack
-                         feedback (the panorama underline, settings
-                         toggle thumb, etc.). */
+                         feedback (settings toggle thumb, etc.). */
   --transition-fast: 120ms cubic-bezier(0.2, 0, 0.2, 1);
   --transition-base: 200ms cubic-bezier(0.2, 0, 0.2, 1);
   --ease-emphasis: cubic-bezier(0.22, 1, 0.36, 1);
@@ -2276,8 +2275,7 @@ button.profile-row-nav:active .icon-tile {
    while the user drags. The arrow rotates 180deg once the pull crosses
    the trigger threshold (signalling "release to refresh"); during the
    actual refresh the same element spins as a loading indicator. The
-   strip is body-level so it floats above the panorama tabs and the
-   view content alike. */
+   strip is body-level so it floats above the view content. */
 .ptr-indicator {
   --ptr-offset: 0px;
   position: fixed;
@@ -2350,159 +2348,6 @@ body.ptr-refreshing .ptr-indicator {
   .ptr-indicator.ptr-refreshing .ptr-arrow {
     animation: none;
   }
-}
-
-/* ---- Top panorama tabs (Zune-style)
-   Big lowercase words running horizontally across the top. Active tab
-   sits at the start with full weight + full opacity; the next tab
-   prebleeds into view at the right edge so the user can read it
-   peripherally before deciding to swipe. Hidden entirely on
-   drill-down routes so detail/list pages reclaim the viewport. */
-
-#tab-bar {
-  display: none;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  max-width: 480px;
-  margin: 0 auto;
-  padding: 18px 16px 10px;
-  /* color-mix(in srgb, var(--tg-bg) 86%, transparent) lets backdrop-
-     filter blur the content behind the strip — when the user scrolls
-     content up under the panorama, the words behind soften instead of
-     hard-cutting. Falls back to the solid bg in browsers without
-     backdrop-filter (~98% support but Telegram's older WebView is
-     conservative). */
-  background: color-mix(in srgb, var(--tg-bg) 86%, transparent);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  backdrop-filter: blur(14px) saturate(140%);
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-  /* Right-edge fade signals that the strip is horizontally
-     scrollable — the trailing tab dissolves into the bg instead of
-     hard-cutting. The mask gradient ends fully opaque so the inactive
-     tabs on the left stay sharp. */
-  mask-image: linear-gradient(
-    to right,
-    #000 0%,
-    #000 calc(100% - 80px),
-    transparent 100%
-  );
-  -webkit-mask-image: linear-gradient(
-    to right,
-    #000 0%,
-    #000 calc(100% - 80px),
-    transparent 100%
-  );
-}
-
-#tab-bar::-webkit-scrollbar {
-  display: none;
-}
-
-#tab-bar.tab-bar-visible {
-  display: flex;
-  gap: 28px;
-  align-items: baseline;
-  /* Trailing space so the last tab can snap-align to the left while
-     leaving the previous one visible at the right edge. */
-  padding-right: 35vw;
-  transition:
-    transform 280ms var(--ease-emphasis),
-    opacity 220ms ease;
-}
-
-/* Scroll-hide: body.panorama-hidden flips when the user scrolls down
-   past ~80px. The strip translates up and fades out so the content
-   gets the full viewport; scrolling back up brings it back with the
-   same easing. */
-body.panorama-hidden #tab-bar.tab-bar-visible {
-  transform: translateY(-100%);
-  opacity: 0;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  #tab-bar.tab-bar-visible {
-    transition: none;
-  }
-  body.panorama-hidden #tab-bar.tab-bar-visible {
-    transform: none;
-    opacity: 1;
-    pointer-events: auto;
-  }
-}
-
-.panorama-tab {
-  position: relative;
-  flex-shrink: 0;
-  scroll-snap-align: start;
-  background: none;
-  border: none;
-  padding: 0 0 8px;
-  font: inherit;
-  font-size: 30px;
-  font-weight: 200;
-  letter-spacing: -0.03em;
-  line-height: 1;
-  text-transform: lowercase;
-  color: var(--tg-text);
-  opacity: 0.32;
-  cursor: pointer;
-  transition:
-    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 120ms cubic-bezier(0.4, 0, 1, 1),
-    font-weight 220ms ease;
-}
-
-/* Active-tab marker — a 2px hairline just under the active word's
-   baseline. Width is sized to the word via the underline pseudo-element,
-   so when the user swipes/taps to another tab, the marker reads as
-   sliding across because the new tab's word has a different width.
-   spring curve gives it a tiny overshoot. */
-.panorama-tab::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2px;
-  background: var(--tg-text);
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.panorama-tab:hover {
-  opacity: 0.6;
-}
-
-.panorama-tab:active {
-  transform: translateX(2px) skewX(-1deg);
-}
-
-.panorama-tab:focus-visible {
-  outline: none;
-  opacity: 0.85;
-}
-
-.panorama-tab-active {
-  opacity: 1;
-  font-weight: 300;
-}
-
-.panorama-tab-active::after {
-  transform: scaleX(1);
-}
-
-/* The body padding-bottom reservation the old bottom bar needed is
-   gone — panorama lives at the top. The tab strip's negative margin
-   above lets it use the full viewport width inside #app's padding. */
-body.has-tab-bar #app {
-  padding-bottom: 32px;
 }
 
 /* ---- Section header used by calendar, diary, and any future
@@ -2958,47 +2803,6 @@ button.person-msg-row-unread {
   animation: type-enter 480ms cubic-bezier(0.2, 0, 0.2, 1) both;
 }
 
-/* Recent-mail notice: a single quiet line at the top of home. Kept
-   intentionally tiny so the type-menu remains the focal element —
-   this is a "what's new" peek, not a competing surface. The slot is
-   removed entirely when there's no mail to show, so reduced-motion
-   operators don't get a flicker on launch. */
-.type-notice {
-  margin: 0 0 20px;
-  animation: type-enter 520ms var(--ease-emphasis) 80ms both;
-}
-
-.type-notice-row {
-  display: block;
-  width: 100%;
-  padding: 0;
-  background: none;
-  border: none;
-  color: var(--tg-hint);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 400;
-  letter-spacing: 0.01em;
-  text-align: left;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: color 160ms ease;
-}
-
-.type-notice-row:hover,
-.type-notice-row:focus-visible {
-  outline: none;
-  color: var(--tg-text);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .type-notice {
-    animation: none;
-  }
-}
-
 .type-menu {
   display: flex;
   flex-direction: column;
@@ -3144,20 +2948,17 @@ button.person-msg-row-unread {
 
 /* Direction-aware page transition.
    main.ts stamps <html data-transition-dir="..."> with one of
-   forward / back / deep / shallow:
+   forward / deep / shallow:
 
-   forward  : moving to a later-ordered tab (home -> settings)
-              old slides left, new comes in from the right
-   back     : moving to an earlier-ordered tab (settings -> home)
-              old slides right, new comes in from the left
-   deep     : tab -> drill-down (home -> mail detail)
+   deep     : home → drill-down (home → mail, home → settings, …)
               old falls slightly down + fades, new rises from below
-   shallow  : drill-down -> tab (mail detail -> home)
+   shallow  : drill-down → home (mail → home, settings → home, …)
               old rises + fades, new falls into place from above
+   forward  : drill-down → drill-down (mail → mail detail)
+              neutral lateral slide
 
-   The default (no attribute or anything else) falls through to the
-   forward case — keeps the original Zune panorama feel for any
-   ambiguous transitions (drill-down → drill-down). */
+   The default falls through to forward — neutral lateral slide
+   for anything we didn't classify. */
 
 ::view-transition-old(root) {
   animation: 260ms cubic-bezier(0.4, 0, 1, 1) both zune-shear-out-forward;
@@ -3165,14 +2966,6 @@ button.person-msg-row-unread {
 
 ::view-transition-new(root) {
   animation: 380ms cubic-bezier(0.16, 1, 0.3, 1) both zune-shear-in-forward;
-}
-
-[data-transition-dir='back']::view-transition-old(root) {
-  animation-name: zune-shear-out-back;
-}
-
-[data-transition-dir='back']::view-transition-new(root) {
-  animation-name: zune-shear-in-back;
 }
 
 [data-transition-dir='deep']::view-transition-old(root) {
@@ -3205,27 +2998,6 @@ button.person-msg-row-unread {
   from {
     opacity: 0;
     transform: translateX(32px) skewX(2deg);
-    filter: blur(2px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0) skewX(0);
-    filter: blur(0);
-  }
-}
-
-@keyframes zune-shear-out-back {
-  to {
-    opacity: 0;
-    transform: translateX(28px) skewX(3deg);
-    filter: blur(2px);
-  }
-}
-
-@keyframes zune-shear-in-back {
-  from {
-    opacity: 0;
-    transform: translateX(-32px) skewX(-2deg);
     filter: blur(2px);
   }
   to {
