@@ -31,7 +31,6 @@ import { renderPeople } from './views/people';
 import { renderPersonDetail } from './views/person_detail';
 import { renderWikiNew } from './views/wiki_new';
 import { applyAppSettings, triggerSelectionHaptic } from './app_settings';
-import { icon, type IconName } from './icons';
 
 const root = document.getElementById('app')!;
 const tabBarRoot = document.getElementById('tab-bar')!;
@@ -42,14 +41,20 @@ const LOCAL_MOCK_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 
 function applyThemeFromTelegram(tg: WebApp): void {
   const params = tg.themeParams;
+  // In dark mode we want real AMOLED black, not Telegram's muted blue-gray
+  // bg_color (~#17212b). The CSS [data-color-scheme='dark'] block already
+  // sets --tg-bg: #000, but an inline JS style.setProperty here would beat
+  // that selector on specificity. So in dark mode we skip the bg/secondary
+  // overrides and let CSS run them; in light mode we apply everything.
+  const isDark = tg.colorScheme === 'dark';
   const map: Record<string, string | undefined> = {
-    '--tg-bg': params.bg_color,
+    '--tg-bg': isDark ? undefined : params.bg_color,
     '--tg-text': params.text_color,
     '--tg-hint': params.hint_color,
     '--tg-link': params.link_color,
     '--tg-button': params.button_color,
     '--tg-button-text': params.button_text_color,
-    '--tg-secondary-bg': params.secondary_bg_color,
+    '--tg-secondary-bg': isDark ? undefined : params.secondary_bg_color,
   };
   const docEl = document.documentElement;
   const docStyle = docEl.style;
@@ -57,10 +62,21 @@ function applyThemeFromTelegram(tg: WebApp): void {
     if (value) docStyle.setProperty(name, value);
   }
   // Stamp the active scheme so CSS can swap hairline/shadow tokens
-  // without re-reading themeParams. Telegram exposes 'light' | 'dark';
-  // default to light if undefined.
-  if (tg.colorScheme === 'light' || tg.colorScheme === 'dark') {
-    docEl.dataset.colorScheme = tg.colorScheme;
+  // without re-reading themeParams. Default to dark when Telegram doesn't
+  // hand us a scheme — modern operators are on dark, and that's also where
+  // our typography idiom looks intended.
+  docEl.dataset.colorScheme = tg.colorScheme === 'light' ? 'light' : 'dark';
+
+  // Push the same black to Telegram's own chrome (header, bottom safe
+  // area, swipe-back background) so the Mini App appears framed by the
+  // same color it paints. Both APIs are no-ops on platforms that haven't
+  // implemented them yet.
+  if (isDark) {
+    tg.setHeaderColor?.('#000000');
+    tg.setBackgroundColor?.('#000000');
+  } else if (params.bg_color) {
+    tg.setHeaderColor?.(params.bg_color);
+    tg.setBackgroundColor?.(params.bg_color);
   }
 }
 
@@ -93,10 +109,13 @@ function syncBackButton(route: Route): void {
   }
 }
 
-const TAB_DEFS: ReadonlyArray<{ name: TabRouteName; icon: IconName; label: string }> = [
-  { name: 'home', icon: 'home', label: '홈' },
-  { name: 'more', icon: 'menu', label: '더보기' },
-  { name: 'settings', icon: 'settings', label: '설정' },
+// Tab labels are English lowercase to match the page typography idiom.
+// The Korean fallback in the system font stack still kicks in if any
+// label gets localized later; we just don't need it for these three.
+const TAB_DEFS: ReadonlyArray<{ name: TabRouteName; label: string }> = [
+  { name: 'home', label: 'home' },
+  { name: 'more', label: 'more' },
+  { name: 'settings', label: 'settings' },
 ];
 
 function renderTabBar(route: Route): void {
@@ -107,18 +126,19 @@ function renderTabBar(route: Route): void {
     tabBarRoot.innerHTML = '';
     return;
   }
+  // Zune-style panorama: big lowercase words in a horizontal scroller.
+  // The active tab gets full weight + full opacity; siblings ride dim
+  // and slightly to the side, with the trailing one prebleeding past
+  // the right edge so a hint of "next" peeks into the active surface.
   tabBarRoot.innerHTML = '';
   for (const def of TAB_DEFS) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'tab-item' + (def.name === route.name ? ' tab-item-active' : '');
-    btn.innerHTML = `
-      <span class="tab-item-icon">${icon(def.icon)}</span>
-      <span class="tab-item-label"></span>
-    `;
-    (btn.querySelector('.tab-item-label') as HTMLElement).textContent = def.label;
+    const isActive = def.name === route.name;
+    btn.className = 'panorama-tab' + (isActive ? ' panorama-tab-active' : '');
+    btn.textContent = def.label;
     btn.addEventListener('click', () => {
-      if (def.name === route.name) return;
+      if (isActive) return;
       triggerSelectionHaptic();
       navigate({ name: def.name });
     });

@@ -1,16 +1,22 @@
-// views/more.ts — Profile + workspace hub in the typography idiom.
+// views/more.ts — Hub for the surfaces home doesn't show.
 //
-// One screen, one tone: a header, a flat list of section labels and
-// rows separated by hairlines. No card chrome, no color tiles, no
-// chevrons. Status rows (read-only) and nav rows (destination) use
-// the same row geometry — the chrome difference is just whether the
-// row is a button or a div.
+// Same idiom as home: a lowercase brand mark, a stack of huge
+// English menu words, and a quiet footer line. The split is by
+// scope, not by section header: home holds the four daily surfaces
+// (calendar, mail, memory, sessions); more holds everything else
+// the operator might reach for less often (categories, diary,
+// people, crons). Profile + diagnostics collapse into the footer.
 
 import { ping, whoami, type PingResult, type WhoamiResult } from '../rpc';
 import { formatRpcError } from '../format';
 import { isCurrentHash, navigate, type Route } from '../router';
 import { readAppSettings } from '../app_settings';
-import { buildErrorBanner, buildViewHeader } from './ui';
+import { buildErrorBanner } from './ui';
+
+interface MenuEntry {
+  label: string;
+  route: Route;
+}
 
 export async function renderMore(root: HTMLElement, initData: string): Promise<void> {
   const expectedHash = location.hash;
@@ -34,97 +40,65 @@ function paint(
   latencyMs: number,
 ): void {
   root.innerHTML = '';
-  root.appendChild(buildViewHeader({ title: 'more' }));
+
+  // Brand mark omitted — see home.ts: the panorama tab strip already
+  // says "more" at the top, no need to repeat it.
+
+  const entries: MenuEntry[] = [
+    { label: 'categories', route: { name: 'categories' } },
+    { label: 'diary', route: { name: 'diary' } },
+    { label: 'people', route: { name: 'people' } },
+    { label: 'crons', route: { name: 'crons' } },
+  ];
+
+  const list = document.createElement('nav');
+  list.className = 'type-menu';
+  list.setAttribute('aria-label', '더보기');
+  entries.forEach((entry, i) => list.appendChild(buildMenuItem(entry, i)));
+  root.appendChild(list);
+
+  // Footer: profile + status compressed into two quiet lines, same shape
+  // as home's greeting + meta block.
+  const footer = document.createElement('footer');
+  footer.className = 'type-footer';
 
   const userLabel =
     [user.firstName, user.lastName].filter(Boolean).join(' ') ||
     (user.username ? `@${user.username}` : `id=${user.id}`);
 
-  root.appendChild(
-    section('profile', [
-      infoRow('user', userLabel),
-      infoRow('model', pingResult.model || '—'),
-      infoRow('language', '한국어'),
-    ]),
-  );
+  const profile = document.createElement('p');
+  profile.className = 'type-greeting';
+  profile.textContent = userLabel;
+  footer.appendChild(profile);
 
-  root.appendChild(
-    section('workspace', [
-      navRow('calendar', 'upcoming meetings', { name: 'calendar' }),
-      navRow('mail', 'unread triage', { name: 'inbox' }),
-      navRow('memory', 'wiki search', { name: 'memory' }),
-      navRow('sessions', 'recent runs', { name: 'sessions' }),
-    ]),
-  );
-
-  root.appendChild(
-    section('browse', [
-      navRow('categories', 'wiki by category', { name: 'categories' }),
-      navRow('diary', 'daily timeline', { name: 'diary' }),
-      navRow('people', 'frequent senders', { name: 'people' }),
-    ]),
-  );
-
-  root.appendChild(
-    section('automation', [navRow('crons', 'scheduled jobs', { name: 'crons' })]),
-  );
-
+  const meta = document.createElement('p');
+  meta.className = 'type-status';
+  const model = prettyModel(pingResult.model);
+  const parts: string[] = [];
+  if (model) parts.push(model);
   if (readAppSettings().showDiagnostics) {
-    root.appendChild(
-      section('status', [
-        infoRow('version', `v${pingResult.version || '?'}`),
-        infoRow('latency', `${latencyMs}ms`),
-      ]),
-    );
+    if (pingResult.version) parts.push(`v${pingResult.version}`);
+    parts.push(`${latencyMs}ms`);
   }
+  meta.textContent = parts.join(' · ') || 'offline';
+  footer.appendChild(meta);
+
+  root.appendChild(footer);
 }
 
-// section returns a label + a hairline-bordered group of rows. The
-// label tracks the page tone (small uppercase) while the rows
-// themselves are typography-driven (see buildRow* helpers).
-function section(label: string, rows: HTMLElement[]): HTMLElement {
-  const wrap = document.createElement('section');
-  wrap.className = 'flat-section';
-
-  const labelEl = document.createElement('div');
-  labelEl.className = 'flat-section-label';
-  labelEl.textContent = label;
-  wrap.appendChild(labelEl);
-
-  const list = document.createElement('div');
-  list.className = 'flat-list';
-  for (const r of rows) list.appendChild(r);
-  wrap.appendChild(list);
-
-  return wrap;
-}
-
-function infoRow(label: string, value: string): HTMLElement {
-  const row = document.createElement('div');
-  row.className = 'flat-row';
-  row.innerHTML = `
-    <span class="flat-row-label"></span>
-    <span class="flat-row-value"></span>
-  `;
-  (row.querySelector('.flat-row-label') as HTMLElement).textContent = label;
-  (row.querySelector('.flat-row-value') as HTMLElement).textContent = value;
-  return row;
-}
-
-function navRow(label: string, sub: string, target: Route): HTMLButtonElement {
+function buildMenuItem(entry: MenuEntry, index: number): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'flat-row flat-row-nav';
-  btn.innerHTML = `
-    <span class="flat-row-text">
-      <span class="flat-row-label"></span>
-      <span class="flat-row-sub"></span>
-    </span>
-  `;
-  (btn.querySelector('.flat-row-label') as HTMLElement).textContent = label;
-  (btn.querySelector('.flat-row-sub') as HTMLElement).textContent = sub;
-  btn.addEventListener('click', () => navigate(target));
+  btn.className = 'type-item';
+  btn.style.setProperty('--enter-delay', `${index * 70}ms`);
+  btn.textContent = entry.label;
+  btn.addEventListener('click', () => navigate(entry.route));
   return btn;
+}
+
+function prettyModel(raw?: string): string {
+  if (!raw) return '';
+  return raw.split('/').pop()?.trim() ?? '';
 }
 
 function paintError(root: HTMLElement, message: string): void {
