@@ -344,6 +344,10 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64, timeout int) ([]U
 		"allowed_updates": []string{
 			"message", "edited_message", "channel_post",
 			"callback_query", "message_reaction",
+			// my_chat_member is gated off by default in getUpdates and
+			// must be opted into. Needed for the admin-promotion greeting
+			// and the can_manage_topics permission watcher.
+			"my_chat_member",
 		},
 	}
 	// Long polling needs generous deadline.

@@ -111,6 +111,13 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		return
 	}
 
+	// Handle my_chat_member: bot was added/promoted/demoted/kicked.
+	// Drives the forum-supergroup greeting + permission-loss warnings.
+	if update.MyChatMember != nil {
+		p.handleMyChatMember(update.MyChatMember)
+		return
+	}
+
 	msg := update.Message
 	if msg == nil {
 		return

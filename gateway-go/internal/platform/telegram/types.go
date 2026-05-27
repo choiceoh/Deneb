@@ -50,12 +50,36 @@ const (
 
 // Update represents an incoming update from Telegram.
 type Update struct {
-	UpdateID        int64            `json:"update_id"`
-	Message         *Message         `json:"message,omitempty"`
-	EditedMessage   *Message         `json:"edited_message,omitempty"`
-	ChannelPost     *Message         `json:"channel_post,omitempty"`
-	CallbackQuery   *CallbackQuery   `json:"callback_query,omitempty"`
-	MessageReaction *MessageReaction `json:"message_reaction,omitempty"`
+	UpdateID        int64              `json:"update_id"`
+	Message         *Message           `json:"message,omitempty"`
+	EditedMessage   *Message           `json:"edited_message,omitempty"`
+	ChannelPost     *Message           `json:"channel_post,omitempty"`
+	CallbackQuery   *CallbackQuery     `json:"callback_query,omitempty"`
+	MessageReaction *MessageReaction   `json:"message_reaction,omitempty"`
+	MyChatMember    *ChatMemberUpdated `json:"my_chat_member,omitempty"`
+}
+
+// ChatMemberUpdated reports a change in a chat member's status. Telegram
+// emits it for the bot itself in the "my_chat_member" update — we use it
+// to detect admin promotion (greet in the supergroup) and the loss of
+// Manage Topics permission (warn the user before they discover it the
+// hard way through a failed topic operation).
+type ChatMemberUpdated struct {
+	Chat          Chat       `json:"chat"`
+	From          User       `json:"from"`
+	Date          int64      `json:"date"`
+	OldChatMember ChatMember `json:"old_chat_member"`
+	NewChatMember ChatMember `json:"new_chat_member"`
+}
+
+// ChatMember describes a member's status in a chat. Only the fields we act
+// on are decoded — Status drives the promotion/demotion check, User picks
+// out whether this event is about our bot or someone else, and
+// CanManageTopics is the one permission that gates forum-topic features.
+type ChatMember struct {
+	Status          string `json:"status"` // "creator","administrator","member","restricted","left","kicked"
+	User            User   `json:"user"`
+	CanManageTopics bool   `json:"can_manage_topics,omitempty"`
 }
 
 // Message represents a Telegram message.
