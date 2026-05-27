@@ -62,11 +62,13 @@ func (d proactiveRelayDeps) relay(ctx context.Context, sessionKey, content strin
 		if client == nil {
 			return false, nil
 		}
-		chatID, err := strconv.ParseInt(target, 10, 64)
+		chatPart, threadPart := splitTelegramTarget(target)
+		chatID, err := strconv.ParseInt(chatPart, 10, 64)
 		if err != nil {
-			return false, fmt.Errorf("proactive relay: parse chatID %q: %w", target, err)
+			return false, fmt.Errorf("proactive relay: parse chatID %q: %w", chatPart, err)
 		}
-		if _, err := telegram.SendText(ctx, client, chatID, content, telegram.SendOptions{}); err != nil {
+		threadID, _ := strconv.ParseInt(threadPart, 10, 64)
+		if _, err := telegram.SendText(ctx, client, chatID, content, telegram.SendOptions{ThreadID: threadID}); err != nil {
 			return false, fmt.Errorf("proactive relay: telegram send: %w", err)
 		}
 	default:
@@ -96,6 +98,16 @@ func splitSessionKey(key string) (channel, target string, ok bool) {
 		return "", "", false
 	}
 	return key[:idx], key[idx+1:], true
+}
+
+// splitTelegramTarget pulls an optional ":thread:N" suffix off a target so the
+// relay can route into a forum topic. For non-forum chats the suffix is
+// absent and threadPart is "".
+func splitTelegramTarget(target string) (chatPart, threadPart string) {
+	if idx := strings.Index(target, ":thread:"); idx >= 0 {
+		return target[:idx], target[idx+len(":thread:"):]
+	}
+	return target, ""
 }
 
 // relayNotifier adapts proactiveRelayDeps to the Notifier interface used

@@ -439,13 +439,19 @@ func (h *Handler) SendDirect(sessionKey, message string) {
 
 // deliveryFromSessionKey extracts a DeliveryContext from a session key.
 // "telegram:7074071666" → Channel="telegram", To="7074071666".
+// "telegram:7074071666:thread:42" → adds ThreadID="42" so reply paths
+// without an explicit Delivery (e.g. cron-driven autoreply, internal
+// dispatches) still land in the forum topic the session belongs to.
 func deliveryFromSessionKey(key string) *DeliveryContext {
 	idx := strings.Index(key, ":")
 	if idx < 0 {
 		return nil
 	}
-	return &DeliveryContext{
-		Channel: key[:idx],
-		To:      key[idx+1:],
+	rest := key[idx+1:]
+	dc := &DeliveryContext{Channel: key[:idx], To: rest}
+	if threadIdx := strings.Index(rest, ":thread:"); threadIdx >= 0 {
+		dc.To = rest[:threadIdx]
+		dc.ThreadID = rest[threadIdx+len(":thread:"):]
 	}
+	return dc
 }

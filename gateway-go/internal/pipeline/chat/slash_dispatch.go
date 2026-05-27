@@ -80,6 +80,9 @@ func (h *Handler) handleSlashCommand(
 	case "think":
 		h.deliverSlashResponse(delivery, applyThinkSlashCommand(h.sessions, sessionKey, cmd.Args))
 
+	case "use-forum":
+		h.deliverSlashResponse(delivery, h.handleUseForum(delivery))
+
 	case "mode":
 		sess := h.sessions.Get(sessionKey)
 		if sess == nil {

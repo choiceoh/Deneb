@@ -36,6 +36,7 @@ type JobDeliveryConfig struct {
 	Channel    string `json:"channel,omitempty"`    // channel ID or "last"
 	To         string `json:"to,omitempty"`         // recipient
 	AccountID  string `json:"accountId,omitempty"`  // explicit account override
+	ThreadID   string `json:"threadId,omitempty"`   // forum topic ID; empty for non-forum chats
 	BestEffort bool   `json:"bestEffort,omitempty"` // don't fail job on delivery error
 }
 
@@ -67,14 +68,17 @@ func ResolveDeliveryTarget(
 	}
 
 	accountID := ""
+	threadID := ""
 	if jobDelivery != nil {
 		accountID = jobDelivery.AccountID
+		threadID = jobDelivery.ThreadID
 	}
 
 	return &DeliveryTarget{
 		Channel:   ch,
 		To:        NormalizeDeliveryTarget(ch, to),
 		AccountID: accountID,
+		ThreadID:  threadID,
 		Mode:      "explicit",
 	}, nil
 }
@@ -160,8 +164,9 @@ func DeliverCronOutput(
 
 		for i, text := range texts {
 			msg := telegram.OutboundMessage{
-				To:   target.To,
-				Text: text,
+				To:       target.To,
+				Text:     text,
+				ThreadID: parseThreadID(target.ThreadID),
 			}
 			if i == len(texts)-1 {
 				if payload.MediaURL != "" {
@@ -210,4 +215,32 @@ type DeliverOutputOptions struct {
 	ChunkMode  string // "length" or "newline"
 	BestEffort bool
 	Logger     *slog.Logger
+}
+
+// parseThreadID converts the string form used on disk into the int64 the
+// Telegram API expects. Empty or malformed strings yield 0, which the Bot
+// API treats as "no thread" — safer than failing delivery on a corrupt
+// stored value.
+func parseThreadID(s string) int64 {
+	if s == "" {
+		return 0
+	}
+	// strconv.ParseInt is imported via the strings/time pair; isolate the
+	// dependency by inlining the simple base-10 case rather than adding
+	// strconv to a delivery file that didn't need it before.
+	var n int64
+	for i := range len(s) {
+		c := s[i]
+		if c < '0' || c > '9' {
+			if i == 0 && c == '-' {
+				continue
+			}
+			return 0
+		}
+		n = n*10 + int64(c-'0')
+	}
+	if s[0] == '-' {
+		return -n
+	}
+	return n
 }

@@ -145,6 +145,17 @@ func ParseSlashCommand(text string) *SlashResult {
 			Command:  "restart",
 			Args:     args,
 		}
+	// /use-forum migrates the bot's home from the 1:1 chat into a Forum
+	// supergroup. Must be invoked from inside the target supergroup; the
+	// dispatcher refuses if the delivery target looks like a direct chat
+	// (positive Telegram chat IDs) so a stray /use-forum in the 1:1 doesn't
+	// silently re-bind to itself.
+	case "use-forum":
+		return &SlashResult{
+			Handled:  true,
+			Response: "",
+			Command:  "use-forum",
+		}
 	default:
 		// Not a recognized slash command; pass through to LLM.
 		return nil

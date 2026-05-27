@@ -252,6 +252,7 @@ var _ autoreply.AgentExecutor = (*chatSendExecutor)(nil)
 type chatSendExecutor struct {
 	chatHandler *chat.Handler
 	chatID      string
+	threadID    string // forum topic ID; empty for non-forum chats
 	messageID   int64
 	attachments []chat.ChatAttachment
 	logger      *slog.Logger
@@ -275,6 +276,9 @@ func (e *chatSendExecutor) RunTurn(ctx context.Context, cfg autoreply.AgentTurnC
 	}
 	if e.messageID != 0 {
 		delivery["messageId"] = strconv.FormatInt(e.messageID, 10)
+	}
+	if e.threadID != "" {
+		delivery["threadId"] = e.threadID
 	}
 
 	sendParams := map[string]any{

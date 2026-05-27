@@ -20,6 +20,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/appsettings"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/middleware"
@@ -145,6 +146,13 @@ type Server struct {
 	// wiring (checkpoint root, log dir, etc.) reads this instead of
 	// re-resolving — single source of truth.
 	denebDir string
+
+	// appSettings persists user-mutable runtime state (today: active home
+	// chat after /use-forum migration). Set during registerSessionRPCMethods
+	// from denebDir. Nil if the settings dir is unavailable — /use-forum
+	// then refuses with an explanatory message and inbound.go falls back to
+	// legacy "accept any chat" behavior.
+	appSettings *appsettings.Store
 
 	// Session, chat, and hook subsystems — logically grouped to reduce God-Object growth.
 	*SessionManager // sessions, transcript

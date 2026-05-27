@@ -137,10 +137,42 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	chatID := fmt.Sprintf("%d", msg.Chat.ID)
 	sessionKey := "telegram:" + chatID
 
-	// Thread bindings: when processing a message in a forum topic thread,
-	// create a thread-specific session key so each topic gets its own context.
+	// threadID is propagated to every outbound (replies, typing, media) so the
+	// bot's messages land in the same thread tab the user is looking at, both
+	// for forum topics and for group reply chains.
+	var threadID string
+	if msg.MessageThreadID != 0 {
+		threadID = fmt.Sprintf("%d", msg.MessageThreadID)
+	}
+
+	// Session key only splits on forum topics — reply chains in non-forum
+	// groups continue to share one transcript per chat so the assistant keeps
+	// the full conversational context.
 	if msg.MessageThreadID != 0 && msg.IsTopicMessage {
 		sessionKey = fmt.Sprintf("telegram:%s:thread:%d", chatID, msg.MessageThreadID)
+	}
+
+	// Post-migration gating: once /use-forum has set an active home, drop
+	// messages from any other chat (legacy 1:1, stray groups) with a single
+	// redirect. /use-forum itself is allowed through so the user can re-bind
+	// to a different supergroup later without first un-migrating; the
+	// dispatcher then validates the new chat is actually a supergroup.
+	if p.server.appSettings != nil {
+		if home := p.server.appSettings.ActiveHome(); home.IsSet() && home.ChatID != msg.Chat.ID {
+			bareCmd := strings.ToLower(strings.TrimSpace(msgText))
+			if atIdx := strings.IndexByte(bareCmd, '@'); atIdx >= 0 {
+				bareCmd = bareCmd[:atIdx]
+			}
+			if !strings.HasPrefix(bareCmd, "/use-forum") {
+				p.sendCommandReply(chatID, threadID, &handlers.CommandResult{
+					Reply: fmt.Sprintf(
+						"ℹ️ deneb 의 home 은 다른 채팅(ID %d)으로 이전되었습니다. 그곳에서 사용해주세요.\n새로 이 채팅으로 옮기려면 /use-forum 을 입력하세요.",
+						home.ChatID,
+					),
+				})
+				return
+			}
+		}
 	}
 
 	if p.server.activity != nil {
@@ -164,6 +196,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		SessionOrigin: types.SessionOrigin{
 			SessionKey: sessionKey,
 			Channel:    "telegram",
+			ThreadID:   threadID,
 			IsGroup:    isGroupChat(msg.Chat),
 		},
 		SenderInfo: types.SenderInfo{
@@ -216,7 +249,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		}
 		switch bareCmd {
 		case "/models":
-			p.handleModelsCommand(chatID)
+			p.handleModelsCommand(chatID, threadID)
 			return
 		}
 	}
@@ -291,7 +324,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		kind, note, _ := parseSteerCommand(rawBody, sessionKey, lookup)
 		if kind == SteerMainAgent {
 			if p.chatHandler != nil && p.chatHandler.EnqueueSteer(sessionKey, note) {
-				p.sendCommandReply(chatID, &handlers.CommandResult{
+				p.sendCommandReply(chatID, threadID, &handlers.CommandResult{
 					Reply: "✅ 메인 에이전트에게 조정 메모를 전달했어요. 다음 도구 결과에 포함됩니다.",
 				})
 				return
@@ -308,17 +341,13 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	// before the general autoreply pipeline.
 	if normalized := strings.ToLower(strings.TrimSpace(msgCtx.BodyForCommands)); normalized != "" {
 		if subagentpkg.ResolveHandledPrefix(normalized) != "" {
-			var threadID string
-			if msg.MessageThreadID != 0 {
-				threadID = fmt.Sprintf("%d", msg.MessageThreadID)
-			}
 			subagentResult := p.dispatchSubagentCommand(
 				normalized, sessionKey, "telegram", msgCtx.AccountID,
 				threadID, msgCtx.SenderID, msgCtx.IsGroup,
 			)
 			if subagentResult != nil && subagentResult.ShouldStop {
 				if subagentResult.Reply != "" {
-					p.sendCommandReply(chatID, &handlers.CommandResult{Reply: subagentResult.Reply})
+					p.sendCommandReply(chatID, threadID, &handlers.CommandResult{Reply: subagentResult.Reply})
 				}
 				return
 			}
@@ -342,6 +371,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	executor := &chatSendExecutor{
 		chatHandler: p.chatHandler,
 		chatID:      chatID,
+		threadID:    threadID,
 		messageID:   msg.MessageID,
 		attachments: attachments,
 		logger:      p.logger,
@@ -382,7 +412,7 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 	if len(dispatchResult.Payloads) > 0 && !executor.didSend {
 		for _, payload := range dispatchResult.Payloads {
 			if payload.Text != "" {
-				p.sendCommandReply(chatID, &handlers.CommandResult{Reply: payload.Text})
+				p.sendCommandReply(chatID, threadID, &handlers.CommandResult{Reply: payload.Text})
 			}
 		}
 	}
@@ -508,7 +538,8 @@ func (p *InboundProcessor) handleMediaGroup(messages []*telegram.Message) {
 }
 
 // sendCommandReply delivers a command result back to the Telegram chat.
-func (p *InboundProcessor) sendCommandReply(chatID string, result *handlers.CommandResult) {
+// threadID routes the reply into a forum topic; pass "" for non-forum chats.
+func (p *InboundProcessor) sendCommandReply(chatID, threadID string, result *handlers.CommandResult) {
 	replyText := result.Reply
 	if replyText == "" && len(result.Payloads) > 0 {
 		replyText = result.Payloads[0].Text
@@ -527,11 +558,12 @@ func (p *InboundProcessor) sendCommandReply(chatID string, result *handlers.Comm
 	if err != nil {
 		return
 	}
+	tid, _ := strconv.ParseInt(threadID, 10, 64)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	html := telegram.MarkdownToTelegramHTML(replyText)
-	if _, err := telegram.SendText(ctx, client, id, html, telegram.SendOptions{ParseMode: "HTML"}); err != nil {
+	if _, err := telegram.SendText(ctx, client, id, html, telegram.SendOptions{ParseMode: "HTML", ThreadID: tid}); err != nil {
 		p.logger.Warn("failed to send command reply", "chatId", chatID, "error", err)
 	}
 }

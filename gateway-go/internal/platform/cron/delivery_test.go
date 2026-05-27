@@ -6,6 +6,64 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
+// TestParseThreadID locks in the malformed-input safety: cron job
+// definitions live on disk and may be hand-edited or migrated. A bad
+// thread ID must degrade silently to 0 ("no thread" in Telegram terms)
+// rather than panic or fail-closed on delivery.
+func TestParseThreadID(t *testing.T) {
+	tests := []struct {
+		in   string
+		want int64
+	}{
+		{"", 0},
+		{"42", 42},
+		{"-100", -100},
+		{"0", 0},
+		{"not-a-number", 0},
+		{"42abc", 0},
+		{" 42", 0}, // strict: no whitespace tolerance, callers should TrimSpace
+	}
+	for _, tt := range tests {
+		if got := parseThreadID(tt.in); got != tt.want {
+			t.Errorf("parseThreadID(%q) = %d, want %d", tt.in, got, tt.want)
+		}
+	}
+}
+
+// TestResolveDeliveryTarget_ThreadID is the cron-defined-in-topic happy
+// path: when a job's stored Delivery has a ThreadID, the resolved
+// DeliveryTarget must carry it forward so executeJobFullWithTrigger →
+// AgentTurnParams → DeliverCronOutput → SendMessage all see the right
+// topic. Without this, cron output from a topic-scoped job silently
+// leaks into the supergroup's General topic — the exact regression M4
+// is preventing.
+func TestResolveDeliveryTarget_ThreadID(t *testing.T) {
+	target, err := ResolveDeliveryTarget(
+		&JobDeliveryConfig{Channel: "telegram", To: "-1001234567890", ThreadID: "42"},
+		"telegram", "fallback-chat")
+	if err != nil {
+		t.Fatalf("ResolveDeliveryTarget: %v", err)
+	}
+	if target.ThreadID != "42" {
+		t.Errorf("ThreadID = %q, want %q", target.ThreadID, "42")
+	}
+}
+
+// TestResolveDeliveryTarget_NoThreadID covers the legacy 1:1 path: an
+// older job stored before M4 has no ThreadID — the resolved target must
+// stay empty, not pick up some default from the defaults pair.
+func TestResolveDeliveryTarget_NoThreadID(t *testing.T) {
+	target, err := ResolveDeliveryTarget(
+		&JobDeliveryConfig{Channel: "telegram", To: "7074071666"},
+		"telegram", "fallback-chat")
+	if err != nil {
+		t.Fatalf("ResolveDeliveryTarget: %v", err)
+	}
+	if target.ThreadID != "" {
+		t.Errorf("ThreadID = %q, want empty", target.ThreadID)
+	}
+}
+
 func TestNormalizeDeliveryTarget(t *testing.T) {
 	tests := []struct {
 		ch   string

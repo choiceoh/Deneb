@@ -364,12 +364,18 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64, timeout int) ([]U
 	return updates, nil
 }
 
-// SendChatAction sends a chat action (e.g. "typing").
-func (c *Client) SendChatAction(ctx context.Context, chatID int64, action string) error {
-	_, err := c.CallIdempotent(ctx, "sendChatAction", map[string]any{
+// SendChatAction sends a chat action (e.g. "typing"). When threadID is
+// non-zero the action is scoped to that forum topic so the typing indicator
+// appears in the right tab; pass 0 for non-forum chats.
+func (c *Client) SendChatAction(ctx context.Context, chatID, threadID int64, action string) error {
+	params := map[string]any{
 		"chat_id": chatID,
 		"action":  action,
-	})
+	}
+	if threadID != 0 {
+		params["message_thread_id"] = threadID
+	}
+	_, err := c.CallIdempotent(ctx, "sendChatAction", params)
 	return err
 }
 

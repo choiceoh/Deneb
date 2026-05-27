@@ -31,6 +31,18 @@ func telegramDedupKey(chatID, text string) string {
 	return chatID + ":" + hex.EncodeToString(h[:8])
 }
 
+// deliveryThreadID extracts the int64 thread ID from a delivery context, or 0
+// when the field is empty or unparseable. Bot API treats 0 as "no thread"
+// (message lands in the chat's General topic for forums or the main feed
+// otherwise), so silently returning 0 on a bad value is the safe default.
+func deliveryThreadID(delivery *chat.DeliveryContext) int64 {
+	if delivery == nil || delivery.ThreadID == "" {
+		return 0
+	}
+	id, _ := strconv.ParseInt(delivery.ThreadID, 10, 64)
+	return id
+}
+
 func (s *Server) wireTelegramChatHandler() {
 	// Recent-send dedup cache: prevents the same text from being delivered
 	// to the same chat twice within a short window (e.g. when the LLM uses
@@ -183,7 +195,7 @@ func (s *Server) wireTelegramChatHandler() {
 			}
 		}
 
-		opts := telegram.SendOptions{ParseMode: "HTML", Keyboard: keyboard}
+		opts := telegram.SendOptions{ParseMode: "HTML", Keyboard: keyboard, ThreadID: deliveryThreadID(delivery)}
 		if _, err = telegram.SendText(ctx, client, chatID, html, opts); err != nil {
 			return err
 		}
@@ -216,7 +228,7 @@ func (s *Server) wireTelegramChatHandler() {
 		defer f.Close()
 
 		fileName := filepath.Base(filePath)
-		opts := telegram.SendOptions{DisableNotification: silent}
+		opts := telegram.SendOptions{DisableNotification: silent, ThreadID: deliveryThreadID(delivery)}
 
 		switch mediaType {
 		case "photo":
@@ -268,7 +280,7 @@ func (s *Server) wireTelegramChatHandler() {
 		if err != nil {
 			return fmt.Errorf("invalid chat ID %q: %w", delivery.To, err)
 		}
-		return client.SendChatAction(ctx, chatID, "typing")
+		return client.SendChatAction(ctx, chatID, deliveryThreadID(delivery), "typing")
 	})
 
 	// Set reaction function: sets emoji reactions on the user's triggering message
@@ -318,6 +330,7 @@ func (s *Server) wireTelegramChatHandler() {
 			results, err := telegram.SendText(ctx, client, chatID, html, telegram.SendOptions{
 				ParseMode:          "HTML",
 				DisableLinkPreview: true,
+				ThreadID:           deliveryThreadID(delivery),
 			})
 			if err != nil || len(results) == 0 {
 				return "", err

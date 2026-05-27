@@ -77,6 +77,23 @@ type Handler struct {
 	// Injected by the server via SetSkillNudger so chat doesn't depend
 	// on the domain/skills/genesis package directly.
 	skillNudger SkillNudger
+
+	// appSettings persists user-mutable runtime state — currently only the
+	// "active home" chat set by /use-forum. Optional: if nil, /use-forum
+	// returns an error explaining migration is unavailable. The chat package
+	// stays free of any infra import by talking through the AppSettings
+	// interface (concrete *appsettings.Store satisfies it).
+	appSettings AppSettings
+}
+
+// AppSettings is the minimal app-settings surface the chat handler needs to
+// process /use-forum. The concrete implementation lives in
+// internal/infra/appsettings and is wired at server construction.
+type AppSettings interface {
+	// SetActiveHome records the chat that owns future bot conversation.
+	// Implementations must persist atomically — a crash mid-write must not
+	// produce a truncated settings file.
+	SetActiveHome(chatID int64, chatType string) error
 }
 
 // SkillNudger is the chat-side interface the server's genesis.Nudger
@@ -143,6 +160,11 @@ type HandlerConfig struct {
 	BroadcastRaw     streaming.BroadcastRawFunc        // optional; raw event relay
 	EmitAgentFn      func(kind, sessionKey, runID string, payload map[string]any)
 	EmitTranscriptFn func(sessionKey string, message any, messageID string)
+
+	// AppSettings persists /use-forum migration state. Optional: when nil,
+	// /use-forum politely refuses with "migration unavailable" so a degraded
+	// boot path (no settings dir) doesn't silently lose user intent.
+	AppSettings AppSettings
 }
 
 // DefaultHandlerConfig returns sensible defaults.
@@ -209,6 +231,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		tools:                cfg.Tools,
 		authManager:          cfg.AuthManager,
 		jobTracker:           cfg.JobTracker,
+		appSettings:          cfg.AppSettings,
 		providerConfigs:      cloneProviderConfigs(cfg.ProviderConfigs),
 		embeddingClient:      cfg.EmbeddingClient,
 		wikiStore:            cfg.WikiStore,
