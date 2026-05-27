@@ -355,39 +355,46 @@ button.entry-card:active {
 
 /* ---- Email list rows ---- */
 
+/* Email rows in the Zune-style typography idiom: no card, no shadow.
+   Each wrap is a hairline-bordered list item; the row inside is just
+   stacked text. Unread rows lift the From line to full weight (no dot,
+   no badge — the weight contrast carries the signal). */
+
 .email-row-wrap {
+  position: relative;
   display: flex;
   align-items: stretch;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--hairline);
+  transition: opacity var(--transition-fast);
+}
+
+.email-row-wrap:first-child {
+  border-top: 1px solid var(--hairline);
 }
 
 .email-row {
   position: relative;
   flex: 1;
   min-width: 0;
-  background: var(--tg-bg);
+  background: none;
   border: none;
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
+  border-radius: 0;
+  padding: 16px 0;
   color: var(--tg-text);
   text-align: left;
   cursor: pointer;
   font: inherit;
-  box-shadow: var(--shadow-sm);
-  transition:
-    transform var(--transition-fast),
-    box-shadow var(--transition-fast);
+  transition: opacity 120ms ease;
 }
 
 .email-row:hover {
-  box-shadow: var(--shadow-md);
+  opacity: 0.78;
 }
 
 .email-row-select-indicator {
   position: absolute;
   top: 50%;
-  left: 14px;
+  left: 0;
   display: none;
   align-items: center;
   justify-content: center;
@@ -403,35 +410,12 @@ button.entry-card:active {
 }
 
 .email-row:active {
-  transform: translateY(1px);
+  opacity: 0.55;
 }
 
 .email-row:focus-visible {
   outline: none;
-  box-shadow: var(--shadow-focus);
-}
-
-/* Unread accent: a 4px dot column on the left, anchored inside the
-   card's padding so the row text stays aligned with read rows. Replaces
-   the old border-left which made unread cards subtly shift right. */
-.email-row-wrap.email-row-unread .email-row {
-  position: relative;
-}
-
-.email-row-wrap.email-row-unread .email-row::before {
-  content: '';
-  position: absolute;
-  left: 6px;
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--tg-link);
-  transform: translateY(-50%);
-}
-
-.email-row-wrap.email-row-unread .email-row {
-  padding-left: 20px;
+  opacity: 0.85;
 }
 
 .email-row-actions {
@@ -580,12 +564,14 @@ button.entry-card:active {
 .email-row-meta {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  font-size: 13px;
+  align-items: baseline;
+  gap: 12px;
 }
 
 .email-row-from {
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 300;
+  letter-spacing: -0.01em;
   color: var(--tg-text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -593,14 +579,31 @@ button.entry-card:active {
   max-width: 70%;
 }
 
+/* Unread = weight contrast. From line shifts from light (300) to
+   semibold (600); the subject below shifts from light to medium. The
+   eye picks unread rows up immediately without any dot or badge. */
+.email-row-wrap.email-row-unread .email-row-from {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.email-row-wrap.email-row-unread .email-row-subject {
+  font-weight: 500;
+  color: var(--tg-text);
+}
+
 .email-row-time {
   color: var(--tg-hint);
+  font-size: 12px;
+  letter-spacing: 0.02em;
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .email-row-subject {
   font-size: 14px;
-  margin: 2px 0;
+  font-weight: 300;
+  margin: 4px 0 2px;
   color: var(--tg-text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -608,13 +611,14 @@ button.entry-card:active {
 }
 
 .email-row-snippet {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--tg-hint);
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
+  letter-spacing: 0.005em;
 }
 
 .empty-state {
