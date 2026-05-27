@@ -886,12 +886,34 @@ button.session-row:active {
   margin-bottom: 6px;
 }
 
-.sender-context-chip {
+/* Tappable wiki chip — buttons by default but the original CSS was
+   written for divs, so we explicitly reset native button styling
+   (border, font, text-align) and add a pressed state. */
+button.sender-context-chip {
+  display: block;
+  width: 100%;
+  text-align: left;
   background: var(--tg-bg);
+  border: none;
   border-radius: 8px;
   padding: 8px 10px;
   margin-bottom: 6px;
+  font: inherit;
   font-size: 13px;
+  color: var(--tg-text);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+button.sender-context-chip:hover {
+  box-shadow: var(--shadow-md);
+}
+
+button.sender-context-chip:active {
+  transform: translateY(1px);
 }
 
 .sender-context-chip-title {
@@ -1125,6 +1147,53 @@ pre.sender-context-facts-body {
 .wiki-body {
   font-size: 14px;
   line-height: 1.65;
+}
+
+/* ---- Wiki edit mode (#/wiki/<path> with "수정" tapped) ---- */
+
+.wiki-edit {
+  padding: var(--space-3);
+}
+
+.wiki-edit-textarea {
+  width: 100%;
+  min-height: 320px;
+  padding: 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--tg-bg);
+  color: var(--tg-text);
+  font-family:
+    'SF Mono', Menlo, Consolas, 'Apple SD Gothic Neo', 'Noto Sans KR', monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.wiki-edit-textarea:focus {
+  outline: none;
+  border-color: var(--tg-link);
+  box-shadow: var(--shadow-focus);
+}
+
+.wiki-edit-flash {
+  font-size: 12px;
+  color: var(--color-warning);
+  margin-top: 8px;
+  min-height: 0;
+  /* Suppress the empty paragraph reserving vertical space when there
+     is no error to show. textContent === "" stays invisible. */
+}
+
+.wiki-edit-flash:empty {
+  display: none;
+}
+
+.wiki-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .wiki-body h1,

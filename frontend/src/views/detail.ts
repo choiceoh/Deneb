@@ -360,8 +360,16 @@ async function hydrateSenderContext(
     label.textContent = '메모리';
     wiki.appendChild(label);
     for (const hit of ctx.wikiHits) {
-      const chip = document.createElement('div');
+      // Wiki chip is a button so tapping opens the wiki page detail.
+      // Without this the user could see "메모리 / Alice (#사람)" right
+      // there in the mail view but had to navigate the long way
+      // (more → memory → search "Alice" → tap) to actually read it.
+      const chip = document.createElement('button');
+      chip.type = 'button';
       chip.className = 'sender-context-chip';
+      chip.addEventListener('click', () =>
+        navigate({ name: 'wikiPage', path: hit.path }),
+      );
       const title = document.createElement('span');
       title.className = 'sender-context-chip-title';
       title.textContent = hit.title || hit.path;
