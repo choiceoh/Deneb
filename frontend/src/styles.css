@@ -1398,3 +1398,84 @@ button.profile-row-nav:active {
 body.has-tab-bar #app {
   padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
 }
+
+/* ---- Section header used by calendar, diary, and any future
+       chronologically-grouped list view ---- */
+
+.list-section-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tg-hint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 14px 4px 6px;
+}
+
+/* ---- Categories explorer (더보기 > 📂 카테고리) ---- */
+
+.category-summary {
+  margin-top: 0;
+  margin-bottom: 12px;
+  text-align: left;
+  font-size: 12px;
+}
+
+button.category-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: var(--tg-secondary-bg);
+  border: none;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  color: var(--tg-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+button.category-row:active {
+  opacity: 0.85;
+}
+
+.category-row-name {
+  font-weight: 600;
+  font-size: 15px;
+  flex: 1;
+  text-align: left;
+  word-break: break-all;
+}
+
+.category-row-count {
+  color: var(--tg-hint);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  background: var(--tg-bg);
+  border-radius: 999px;
+  padding: 2px 10px;
+  margin-left: 12px;
+}
+
+/* ---- Diary timeline (더보기 > 📖 다이어리) ---- */
+
+.diary-entry {
+  background: var(--tg-secondary-bg);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+
+.diary-entry-meta {
+  font-size: 12px;
+  color: var(--tg-hint);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 4px;
+}
+
+.diary-entry-body {
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}

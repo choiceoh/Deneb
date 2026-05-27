@@ -98,6 +98,29 @@ function paint(
   );
   root.appendChild(workspace);
 
+  // Browse — entry points for "look around" rather than "find specific".
+  // Category explorer + diary timeline cover the two ways Deneb's
+  // accumulated context surfaces: structured (category buckets) and
+  // chronological (diary entries by day).
+  const browseLabel = document.createElement('div');
+  browseLabel.className = 'section-label';
+  browseLabel.textContent = '탐색';
+  root.appendChild(browseLabel);
+
+  const browse = document.createElement('div');
+  browse.className = 'section-card';
+  browse.appendChild(
+    buildNavRow('icon-tile-violet', '📂', '카테고리', '위키를 카테고리별로 둘러보기', {
+      name: 'categories',
+    }),
+  );
+  browse.appendChild(
+    buildNavRow('icon-tile-pink', '📖', '다이어리', 'Deneb 의 일일 기록 타임라인', {
+      name: 'diary',
+    }),
+  );
+  root.appendChild(browse);
+
   if (readAppSettings().showDiagnostics) {
     // Status / about — diagnostics + branding.
     const aboutLabel = document.createElement('div');

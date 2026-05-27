@@ -133,8 +133,9 @@ var requiredMethods = []string{
 	// not in the required list because tests run without providers.
 	"miniapp.sessions.recent",
 	"miniapp.sessions.transcript",
-	// miniapp.memory.{search,get_page} are conditional on wiki being
-	// enabled (DENEB_WIKI_ENABLED) — omitted here, matching the wiki.*
+	// miniapp.memory.{search,get_page,categories,list_in_category,diary_recent}
+	// are conditional on wiki being enabled (DENEB_WIKI_ENABLED) — omitted
+	// here, matching the wiki.*
 	// exclusion above.
 
 	// Gateway builtins.

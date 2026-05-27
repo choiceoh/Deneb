@@ -21,6 +21,9 @@ import { renderCalendar } from './views/calendar';
 import { renderCalendarEvent } from './views/calendar_event';
 import { renderMore } from './views/more';
 import { renderSettings } from './views/settings';
+import { renderCategories } from './views/categories';
+import { renderCategoryPages } from './views/category_pages';
+import { renderDiary } from './views/diary';
 import { applyAppSettings, triggerSelectionHaptic } from './app_settings';
 
 const root = document.getElementById('app')!;
@@ -148,6 +151,15 @@ async function dispatch(route: Route): Promise<void> {
     case 'settings':
       renderSettings(root);
       return;
+    case 'categories':
+      await renderCategories(root, cachedInitData);
+      return;
+    case 'categoryPages':
+      await renderCategoryPages(root, cachedInitData, route.category);
+      return;
+    case 'diary':
+      await renderDiary(root, cachedInitData);
+      return;
   }
 }
 
@@ -196,12 +208,17 @@ function boot(): void {
       case 'calendarEvent':
         navigate({ name: 'calendar' });
         return;
+      case 'categoryPages':
+        navigate({ name: 'categories' });
+        return;
       // List-level destinations now live under 더보기, so back pops
       // there (not home) — matches the path the user took to get in.
       case 'inbox':
       case 'memory':
       case 'sessions':
       case 'calendar':
+      case 'categories':
+      case 'diary':
         navigate({ name: 'more' });
         return;
       default:
