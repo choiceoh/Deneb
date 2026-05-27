@@ -1,11 +1,11 @@
 // views/home.ts — landing screen.
 //
-// Design idiom: Zune HD / Windows Phone "Metro" — typography carries the
-// hierarchy, no icons compete with the words, motion is the texture. The
-// hero is a giant ultralight wordmark + a personal greeting, the menu is
-// a numbered list of huge labels each backed by a hairline divider. On
-// mount the items stagger in (~60ms per row) so the screen reads as
-// "composed" rather than "snapped together".
+// Idiom: pure black-and-white typography. No icons, no numbers, no
+// tracked-caps captions, no dividers — the page is the words. Menu
+// labels are lowercase English because that's the typography the user
+// brought up (Zune HD home screen) and because Korean shapes don't
+// flow the same way at 48-72px ultralight weight. The Korean greeting
+// stays — it's a one-line read, not a hero element.
 
 import { ping, whoami, type PingResult, type WhoamiResult } from '../rpc';
 import { formatRpcError } from '../format';
@@ -31,7 +31,6 @@ export async function renderHome(root: HTMLElement, initData: string): Promise<v
 
 interface MenuEntry {
   label: string;
-  meta: string;
   route: Route;
 }
 
@@ -44,51 +43,58 @@ function paint(
 ): void {
   root.innerHTML = '';
 
-  // Hero block: ultralight wordmark, full-weight greeting, tiny meta.
-  // Three weight classes in three lines = the whole identity.
-  const hero = document.createElement('header');
-  hero.className = 'hero';
-  hero.innerHTML = `
-    <h1 class="hero-title">Deneb</h1>
-    <p class="hero-greeting"></p>
-    <p class="hero-status"></p>
-  `;
-  (hero.querySelector('.hero-greeting') as HTMLElement).textContent = greeting(user.firstName);
-  const model = prettyModel(pingResult.model);
-  (hero.querySelector('.hero-status') as HTMLElement).textContent = model
-    ? `${model} · 정상`
-    : '연결 안 됨';
-  root.appendChild(hero);
+  // Brand mark sits small and lowercase at the top. It identifies the
+  // page; it doesn't try to be the page. The menu carries that load.
+  const brand = document.createElement('div');
+  brand.className = 'type-brand';
+  brand.textContent = 'deneb';
+  root.appendChild(brand);
 
-  // Menu: numbered list of huge labels. Order is intentional, by product
-  // priority — calendar (time-pressured) first, mail steady-state, then
-  // memory + sessions as reference.
+  // Menu: four lowercase English words, set huge. No numbers, no
+  // sublabels, no divider rules. Just the words. The stagger animation
+  // does the work of "list-ness".
   const entries: MenuEntry[] = [
-    { label: '일정', meta: '다가오는 회의 · D-15분 알림', route: { name: 'calendar' } },
-    { label: '메일', meta: '미처리 트리아지', route: { name: 'inbox' } },
-    { label: '메모리', meta: '위키 / 빠른 검색', route: { name: 'memory' } },
-    { label: '세션', meta: '실행 중 · 완료', route: { name: 'sessions' } },
+    { label: 'calendar', route: { name: 'calendar' } },
+    { label: 'mail', route: { name: 'inbox' } },
+    { label: 'memory', route: { name: 'memory' } },
+    { label: 'sessions', route: { name: 'sessions' } },
   ];
 
   const list = document.createElement('nav');
-  list.className = 'metro-menu';
+  list.className = 'type-menu';
   list.setAttribute('aria-label', '주요 영역');
   entries.forEach((entry, i) => {
     list.appendChild(buildMenuItem(entry, i));
   });
   root.appendChild(list);
 
-  // Subtle, low-weight "refresh" affordance below the menu — kept around
-  // because the user still asks for it, but tones down from the old
-  // chunky primary button so it doesn't compete with the menu.
+  // Footer block: the greeting + live status read, all in one quiet line
+  // beneath the menu. Sits in the page's negative space so the eye only
+  // lands here after taking in the menu.
+  const footer = document.createElement('footer');
+  footer.className = 'type-footer';
+
+  const greet = document.createElement('p');
+  greet.className = 'type-greeting';
+  greet.textContent = greeting(user.firstName);
+  footer.appendChild(greet);
+
+  const status = document.createElement('p');
+  status.className = 'type-status';
+  const model = prettyModel(pingResult.model);
+  status.textContent = model ? `${model.toLowerCase()} · online` : 'offline';
+  footer.appendChild(status);
+
   const refresh = document.createElement('button');
   refresh.type = 'button';
-  refresh.className = 'metro-refresh';
-  refresh.textContent = '새로고침';
+  refresh.className = 'type-refresh';
+  refresh.textContent = 'refresh';
   refresh.addEventListener('click', () => {
     void renderHome(root, initData);
   });
-  root.appendChild(refresh);
+  footer.appendChild(refresh);
+
+  root.appendChild(footer);
 
   if (readAppSettings().showDiagnostics) {
     const muted = document.createElement('div');
@@ -104,21 +110,11 @@ function paint(
 function buildMenuItem(entry: MenuEntry, index: number): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'metro-item';
-  // Stagger fade-in is driven by a CSS custom property the keyframes
-  // animation reads — keeps the cascade declarative and means we don't
-  // have to bake a fixed N-item table into stylesheet selectors.
-  btn.style.setProperty('--enter-delay', `${index * 60}ms`);
-  btn.innerHTML = `
-    <span class="metro-num"></span>
-    <span class="metro-text">
-      <span class="metro-label"></span>
-      <span class="metro-meta"></span>
-    </span>
-  `;
-  (btn.querySelector('.metro-num') as HTMLElement).textContent = String(index + 1).padStart(2, '0');
-  (btn.querySelector('.metro-label') as HTMLElement).textContent = entry.label;
-  (btn.querySelector('.metro-meta') as HTMLElement).textContent = entry.meta;
+  btn.className = 'type-item';
+  // Per-row stagger delay drives the CSS keyframes — keeps the animation
+  // declarative without baking nth-child rules into the stylesheet.
+  btn.style.setProperty('--enter-delay', `${index * 70}ms`);
+  btn.textContent = entry.label;
   btn.addEventListener('click', () => {
     navigate(entry.route);
   });
@@ -126,8 +122,7 @@ function buildMenuItem(entry: MenuEntry, index: number): HTMLButtonElement {
 }
 
 // greeting picks a Korean phase-of-day phrase. Suffixes the user's first
-// name when we have one so the screen reads as a personal landing rather
-// than a generic dashboard.
+// name when we have one so the page reads as a personal landing.
 function greeting(firstName?: string): string {
   const h = new Date().getHours();
   const phase = h < 5 ? '안녕하세요' : h < 12 ? '좋은 아침' : h < 18 ? '좋은 오후' : '좋은 저녁';
@@ -135,14 +130,11 @@ function greeting(firstName?: string): string {
   return who ? `${phase}, ${who}` : phase;
 }
 
-// prettyModel strips the provider prefix and uppercases the model name
-// so e.g. "zai/glm-5.1" reads as "GLM-5.1" — the part the operator
-// actually cares about. Returns "" when the gateway hasn't reported
-// a model yet (caller falls back to "연결 안 됨").
+// prettyModel strips the provider prefix so e.g. "zai/glm-5.1" reads as
+// "glm-5.1" — the part the operator actually cares about.
 function prettyModel(raw?: string): string {
   if (!raw) return '';
-  const trimmed = raw.split('/').pop()?.trim() ?? '';
-  return trimmed.toUpperCase();
+  return raw.split('/').pop()?.trim() ?? '';
 }
 
 function renderHomeError(root: HTMLElement, message: string): void {
