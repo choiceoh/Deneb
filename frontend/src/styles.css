@@ -915,6 +915,15 @@ pre.email-body {
   color: var(--tg-text);
 }
 
+/* While the detail RPC is in flight we paint the list-row snippet as
+   a body placeholder. A subtle opacity drop signals "this is partial"
+   without making the text hard to read — the operator can already
+   start skimming. The full body replaces this subtree as soon as the
+   RPC lands. */
+pre.email-body-loading {
+  opacity: 0.6;
+}
+
 /* ---- Action bar in detail view (text-only buttons) ---- */
 
 .action-bar {
