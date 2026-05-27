@@ -501,15 +501,23 @@ button.entry-card:active {
   display: inline-flex;
 }
 
+/* Selected row in bulk-selection mode. No outline + tinted fill;
+   the text color flip + an inverted check-dot on the left carries
+   the signal in the typography idiom. */
 .email-row-wrap.email-row-selected .email-row {
-  background: color-mix(in srgb, var(--tg-link) 14%, var(--tg-secondary-bg));
-  outline: 2px solid color-mix(in srgb, var(--tg-link) 45%, transparent);
-  outline-offset: 0;
+  opacity: 1;
+}
+
+.email-row-wrap.email-row-selected .email-row-from,
+.email-row-wrap.email-row-selected .email-row-subject {
+  color: var(--tg-text);
+  font-weight: 500;
 }
 
 .email-row-wrap.email-row-selected .email-row-select-indicator {
-  border-color: var(--tg-button);
-  background: var(--tg-button);
+  border-color: var(--tg-text);
+  background: var(--tg-text);
+  color: var(--tg-bg);
 }
 
 .email-row-wrap.email-row-selected .email-row-select-indicator::after {
@@ -520,45 +528,73 @@ button.entry-card:active {
   display: none;
 }
 
+/* Bulk-action bar (long-press selection mode). Drops the floating
+   rounded panel; sits as a hairline-bracketed bar pinned to the
+   bottom safe-area, same negative-space tone as the rest of the
+   typography idiom. The buttons inside become text-only lowercase
+   links to match the detail action bar. */
 .email-bulk-bar {
   position: fixed;
   left: 50%;
   right: auto;
-  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  bottom: 0;
   z-index: 120;
-  width: min(448px, calc(100vw - 24px));
-  padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--tg-hint) 18%, transparent);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--tg-bg) 94%, var(--tg-secondary-bg));
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  width: min(480px, 100vw);
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  border: none;
+  border-top: 1px solid var(--hairline);
+  border-radius: 0;
+  background: var(--tg-bg);
+  box-shadow: none;
   transform: translateX(-50%);
 }
 
 .email-bulk-count {
-  margin: 0 4px 8px;
+  margin: 0 0 10px;
   color: var(--tg-hint);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
 }
 
 .email-bulk-actions {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+  display: flex;
+  gap: 22px;
+  align-items: baseline;
 }
 
 .email-bulk-button {
-  min-height: 40px;
-  padding: 8px 6px;
+  padding: 0;
+  background: none;
   border: none;
-  border-radius: 10px;
-  background: var(--tg-secondary-bg);
+  border-radius: 0;
   color: var(--tg-text);
   font: inherit;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  text-transform: lowercase;
   cursor: pointer;
+  transition:
+    opacity 120ms ease,
+    transform 90ms cubic-bezier(0.4, 0, 1, 1);
+}
+
+.email-bulk-button:hover {
+  opacity: 0.7;
+}
+
+.email-bulk-button:active {
+  transform: translateX(2px) skewX(-1deg);
+  opacity: 0.55;
+}
+
+.email-bulk-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .email-row-action {
@@ -681,11 +717,17 @@ button.entry-card:active {
   letter-spacing: 0.005em;
 }
 
+/* Empty-state lines (no mail this week, no sessions, no diary,
+   etc.). Quiet typography line, left-aligned, with the same hint
+   tone the rest of the meta text uses. */
 .empty-state {
-  text-align: center;
+  text-align: left;
   color: var(--tg-hint);
-  padding: 64px 16px 32px;
-  font-size: 14px;
+  padding: 48px 0 24px;
+  font-size: 16px;
+  font-weight: 300;
+  letter-spacing: -0.005em;
+  line-height: 1.4;
 }
 
 /* ---- Email detail (typography idiom) ---- */
@@ -943,34 +985,48 @@ button.memory-card:active {
 
 /* ---- Sessions list ---- */
 
+/* Sessions list — hairline rows, typography idiom. Each row is a
+   text-only stack: session key on top in weight 400, then a
+   tracked-caps stats line and tags line below in hint color. */
 button.session-row {
   display: block;
   width: 100%;
-  background: var(--tg-secondary-bg);
+  background: none;
   border: none;
-  border-radius: 12px;
-  padding: 12px 14px;
-  margin-bottom: 8px;
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
+  padding: 16px 0;
+  margin: 0;
   text-align: left;
   cursor: pointer;
   font: inherit;
   color: var(--tg-text);
+  transition: opacity 120ms ease;
+}
+
+button.session-row:first-child {
+  border-top: 1px solid var(--hairline);
+}
+
+button.session-row:hover {
+  opacity: 0.78;
 }
 
 button.session-row:active {
-  opacity: 0.85;
+  opacity: 0.55;
 }
 
 .session-row-meta {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 8px;
+  gap: 12px;
 }
 
 .session-row-key {
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: 400;
+  font-size: 16px;
+  letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -978,28 +1034,35 @@ button.session-row:active {
 }
 
 .session-row-time {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--tg-hint);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
   flex-shrink: 0;
 }
 
 .session-row-tags {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--tg-hint);
-  margin-top: 4px;
+  margin-top: 6px;
+  letter-spacing: 0.02em;
 }
 
 .session-row-stats {
   font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--tg-hint);
+  font-variant-numeric: tabular-nums;
   margin-top: 4px;
 }
 
 /* ---- Sender context card (email detail view) ---- */
 
 .sender-context {
-  border-left: 3px solid var(--tg-link);
-  padding-left: 13px;
+  border-left: none;
+  padding-left: 0;
 }
 
 .sender-context-header {
@@ -1213,15 +1276,25 @@ pre.sender-context-facts-body {
   cursor: not-allowed;
 }
 
+/* Markdown body inside the analysis card. Headings drop from
+   semibold to medium with a wider tracking so they read as section
+   labels in the typography idiom rather than as iOS-style filled
+   headers. Body weight is 300 to match the rest of the page; bold
+   keys lift to 500 (not 600) so the contrast is gentler. */
 .analysis-card-body {
   font-size: 14px;
-  line-height: 1.6;
+  font-weight: 300;
+  line-height: 1.7;
+  letter-spacing: -0.003em;
 }
 
 .analysis-card-body h2 {
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 600;
-  margin: 16px 0 6px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--tg-hint);
+  margin: 22px 0 10px;
 }
 
 .analysis-card-body h2:first-child {
@@ -1229,88 +1302,109 @@ pre.sender-context-facts-body {
 }
 
 .analysis-card-body h3 {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
-  margin: 12px 0 4px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 16px 0 6px;
   color: var(--tg-hint);
 }
 
 .analysis-card-body h4 {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
-  margin: 10px 0 3px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 12px 0 4px;
   color: var(--tg-hint);
 }
 
 .analysis-card-body p {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
 }
 
 .analysis-card-body ul,
 .analysis-card-body ol {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   padding-left: 20px;
 }
 
 .analysis-card-body li {
-  margin: 2px 0;
+  margin: 4px 0;
 }
 
 .analysis-card-body blockquote {
-  margin: 6px 0;
-  padding: 6px 12px;
-  border-left: 2px solid var(--tg-hint);
+  margin: 10px 0;
+  padding: 4px 0 4px 14px;
+  border-left: 1px solid var(--hairline-strong);
   color: var(--tg-hint);
-  font-style: italic;
+  font-style: normal;
 }
 
 .analysis-card-body hr {
-  margin: 12px 0;
+  margin: 16px 0;
   border: none;
-  border-top: 1px solid rgba(112, 117, 121, 0.2);
+  border-top: 1px solid var(--hairline);
 }
 
 .analysis-card-body code {
-  background: var(--tg-bg);
-  padding: 1px 5px;
-  border-radius: 4px;
+  background: none;
+  padding: 0;
+  border-bottom: 1px dashed var(--hairline-strong);
+  border-radius: 0;
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 13px;
+  color: var(--tg-text);
 }
 
 .analysis-card-body strong {
-  font-weight: 600;
+  font-weight: 500;
 }
 
 /* ---- Wiki page detail view ---- */
 
+/* Wiki page detail — typography idiom. The meta strip carries the
+   title big-light + summary lighter, tags + dates as tracked-caps
+   uppercase footer. No accent bar, no fill. */
 .wiki-meta {
-  border-left: 3px solid var(--tg-link);
-  padding-left: 13px;
+  border-left: none;
+  padding-left: 0;
 }
 
 .wiki-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 6px;
+  font-size: 28px;
+  font-weight: 300;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  margin-bottom: 8px;
+  color: var(--tg-text);
 }
 
 .wiki-summary {
   font-size: 14px;
-  color: var(--tg-hint);
-  margin-bottom: 8px;
+  font-weight: 300;
+  line-height: 1.5;
+  color: var(--tg-text);
+  opacity: 0.7;
+  margin-bottom: 12px;
 }
 
 .wiki-meta-tags,
 .wiki-meta-dates {
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--tg-hint);
   margin-top: 4px;
+  font-variant-numeric: tabular-nums;
 }
 
 .wiki-body {
   font-size: 14px;
-  line-height: 1.65;
+  font-weight: 300;
+  line-height: 1.7;
+  letter-spacing: -0.003em;
 }
 
 /* ---- Wiki edit mode (#/wiki/<path> with "수정" tapped) ---- */
@@ -2019,29 +2113,6 @@ button.profile-row-nav:active .icon-tile {
   transform: scale(0.94);
 }
 
-/* Stroke width 1.75 reads as "modern line icon" — Lucide's default 2 is
-   slightly too chunky against the typography weights we use, and 1.5 is
-   too brittle on small tiles. 1.75 hits the sweet spot. */
-.lucide-icon {
-  width: 20px;
-  height: 20px;
-  stroke-width: 1.75;
-  flex-shrink: 0;
-  vertical-align: middle;
-}
-
-.icon-tile .lucide-icon {
-  width: 20px;
-  height: 20px;
-  stroke-width: 1.75;
-}
-
-/* Inline icons inside text buttons want a tiny right gap so the label
-   doesn't crash into the stroke. */
-.lucide-icon + .icon-label {
-  margin-left: 6px;
-}
-
 /* Color variants: each picks a hue and emits a soft tint background +
    matching stroke color. We use color-mix so each variant adapts to the
    active theme (Telegram themes can shift bg) without baking light/dark
@@ -2117,6 +2188,22 @@ button.profile-row-nav:active .icon-tile {
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
+  /* Right-edge fade signals that the strip is horizontally
+     scrollable — the trailing tab dissolves into the bg instead of
+     hard-cutting. The mask gradient ends fully opaque so the inactive
+     tabs on the left stay sharp. */
+  mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 calc(100% - 80px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 calc(100% - 80px),
+    transparent 100%
+  );
 }
 
 #tab-bar::-webkit-scrollbar {
@@ -2718,11 +2805,16 @@ button.person-msg-row-unread {
 @keyframes type-enter {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    /* Combined Y + slight X reveal feels less mechanical than pure
+       vertical — words 'drift in from the right' as well as up,
+       echoing the page transition's directional bias. */
+    transform: translate3d(-6px, 10px, 0);
+    filter: blur(1px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
+    filter: blur(0);
   }
 }
 

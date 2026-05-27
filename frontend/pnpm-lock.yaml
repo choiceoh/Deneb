@@ -11,9 +11,6 @@ importers:
       '@fontsource-variable/inter':
         specifier: ^5.2.8
         version: 5.2.8
-      lucide-static:
-        specifier: ^1.16.0
-        version: 1.16.0
     devDependencies:
       '@types/telegram-web-app':
         specifier: ^7.10.0
@@ -349,9 +346,6 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
-  lucide-static@1.16.0:
-    resolution: {integrity: sha512-/EH96rDLRLNKaxuhqHHbmUPx3+qHS/kQRzI1ZGZqnxmh6ljX9yX0xC2UZlQSfBE/n84eNIaxKsv9P8sMiOdCww==}
-
   nanoid@3.3.12:
     resolution: {integrity: sha512-ZB9RH/39qpq5Vu6Y+NmUaFhQR6pp+M2Xt76XBnEwDaGcVAqhlvxrl3B2bKS5D3NH3QR76v3aSrKaF/Kiy7lEtQ==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
@@ -622,8 +616,6 @@ snapshots:
 
   fsevents@2.3.3:
     optional: true
-
-  lucide-static@1.16.0: {}
 
   nanoid@3.3.12: {}
 
