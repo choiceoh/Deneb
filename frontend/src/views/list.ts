@@ -18,7 +18,12 @@
 // the hash identical but replaces rowsContainer.
 
 import { archive, listRecent, markRead, trash, type GmailMessageRow } from '../gmail';
-import { cacheRowSummary, invalidate, prefetchMessage } from '../gmail_prefetch';
+import {
+  cacheRowSummary,
+  invalidate,
+  prefetchMessage,
+  prefetchSenderContext,
+} from '../gmail_prefetch';
 import { isCurrentHash, navigate } from '../router';
 import { confirmAction } from '../dialog';
 import { errorMessage, formatRpcError, relativeTime, shortFrom } from '../format';
@@ -192,8 +197,15 @@ function buildRow(row: GmailMessageRow, selection: SelectionState): HTMLElement 
     // response is often already back, so detail.ts paints immediately
     // instead of waiting on the network. Skipped when we're in
     // multi-select mode (the tap toggles selection, not navigation).
+    //
+    // The sender-context RPC is the slow one (~300-1000ms because of
+    // graphify), so we prefetch it on the same pointerdown — it runs
+    // in parallel with the message fetch and the detail view's
+    // hydrateSenderContext picks up the in-flight promise instead of
+    // firing a duplicate.
     if (!selection.selecting) {
       prefetchMessage(selection.initData, row.id);
+      prefetchSenderContext(selection.initData, row.from);
     }
   });
 

@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"net/mail"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
@@ -51,12 +52,32 @@ type GmailContextDeps struct {
 	WikiStore          func() (MemorySearcher, error)
 	SenderFacts        func(ctx context.Context, from string) string
 	SenderFactsTimeout time.Duration
-	RecentDays         int // Lookback window for "from:<email> newer_than:..."; 0 → 30.
-	MaxRecent          int // Cap on Gmail.Search results; 0 → 50.
-	MaxWikiHits        int // Cap on wiki search results; 0 → 5.
+	RecentDays         int           // Lookback window for "from:<email> newer_than:..."; 0 → 30.
+	MaxRecent          int           // Cap on Gmail.Search results; 0 → 50.
+	MaxWikiHits        int           // Cap on wiki search results; 0 → 5.
+	CacheTTL           time.Duration // Per-sender result cache window; 0 → 90s. Negative disables caching.
+	CacheMax           int           // LRU bound for the result cache; 0 → 64.
 }
 
-const defaultSenderFactsTimeout = 750 * time.Millisecond
+const (
+	defaultSenderFactsTimeout = 750 * time.Millisecond
+
+	// Cache window for assembled sender context. The card mixes
+	// metadata that changes slowly (wiki pages, graph facts) with a
+	// 30-day recent-mail count that ticks every time a new message
+	// arrives. 90 seconds is short enough that a freshly-arrived mail
+	// shows up in the count on the next drill-in, but long enough to
+	// absorb the burst of repeat reads that happen as the operator
+	// scans through several mails from the same sender. Tunable via
+	// GmailContextDeps.CacheTTL when wired.
+	defaultSenderContextCacheTTL = 90 * time.Second
+
+	// LRU bound: the operator works through dozens of senders per
+	// session, not thousands. A small bounded cache avoids unbounded
+	// memory growth on long-running gateways while still covering the
+	// "I'll come back to this one in a minute" pattern.
+	defaultSenderContextCacheMax = 64
+)
 
 // GmailContextMethods returns the miniapp.gmail.sender_context handler.
 // Returns nil if no source is wired — the gateway then skips registration
@@ -117,6 +138,18 @@ func senderContext(deps GmailContextDeps) rpcutil.HandlerFunc {
 	if maxWiki <= 0 {
 		maxWiki = 5
 	}
+	cacheTTL := deps.CacheTTL
+	if cacheTTL == 0 {
+		cacheTTL = defaultSenderContextCacheTTL
+	}
+	cacheMax := deps.CacheMax
+	if cacheMax <= 0 {
+		cacheMax = defaultSenderContextCacheMax
+	}
+	var cache *senderContextCache
+	if cacheTTL > 0 {
+		cache = newSenderContextCache(cacheMax, cacheTTL)
+	}
 
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
@@ -133,54 +166,93 @@ func senderContext(deps GmailContextDeps) rpcutil.HandlerFunc {
 			return rpcerr.MissingParam("sender").Response(req.ID)
 		}
 
+		// Cache key is the lower-cased extracted email when we have
+		// one, otherwise the trimmed raw input. This collapses casing
+		// differences ("Alice@Foo.com" vs "alice@foo.com") and lets
+		// the same person hit cache across messages that label them
+		// differently in the From header.
 		email, displayName := parseSender(raw)
+		cacheKey := strings.ToLower(email)
+		if cacheKey == "" {
+			cacheKey = strings.ToLower(raw)
+		}
+		if cache != nil {
+			if cached, ok := cache.get(cacheKey); ok {
+				return rpcutil.RespondOK(req.ID, cached)
+			}
+		}
+
+		// Three sources fan out in parallel. Each writes to its own
+		// slot of the response struct under the mutex below; notices
+		// accumulate in a slice the goroutines append to (also under
+		// the mutex). Wall-clock for the slowest source — graphify,
+		// bounded by SenderFactsTimeout — sets the response latency,
+		// instead of summing all three as the sequential version did.
 		resp := out{
 			Sender:      raw,
 			Email:       email,
 			DisplayName: displayName,
 			WikiHits:    []wikiHitOut{},
 		}
+		var mu sync.Mutex
+		addNotice := func(s string) {
+			mu.Lock()
+			resp.Notices = append(resp.Notices, s)
+			mu.Unlock()
+		}
+
+		var wg sync.WaitGroup
 
 		// --- Gmail recent activity ---
 		if deps.Client != nil && email != "" {
-			client, err := deps.Client()
-			if err != nil {
-				resp.Notices = append(resp.Notices, "gmail unavailable: "+err.Error())
-			} else {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				client, err := deps.Client()
+				if err != nil {
+					addNotice("gmail unavailable: " + err.Error())
+					return
+				}
 				// Quote the email so any operator characters (`-`, `:`,
 				// space-equivalents) in the local part are treated as
 				// part of the address, not as Gmail search syntax.
 				query := fmt.Sprintf("from:%q newer_than:%dd", email, recentDays)
 				results, qerr := client.Search(ctx, query, maxRecent)
 				if qerr != nil {
-					resp.Notices = append(resp.Notices, "gmail search failed: "+qerr.Error())
-				} else {
-					rec := &recentOut{
-						Count:      len(results),
-						WindowDays: recentDays,
-						Truncated:  len(results) == maxRecent,
-					}
-					// Pick the first non-empty Date — Search can stub
-					// summaries with an empty Date when metadata fetch
-					// failed, so index 0 alone is unreliable.
-					for _, r := range results {
-						if strings.TrimSpace(r.Date) == "" {
-							continue
-						}
-						rec.LastReceivedAt = normalizeDate(r.Date)
-						break
-					}
-					resp.Recent = rec
+					addNotice("gmail search failed: " + qerr.Error())
+					return
 				}
-			}
+				rec := &recentOut{
+					Count:      len(results),
+					WindowDays: recentDays,
+					Truncated:  len(results) == maxRecent,
+				}
+				// Pick the first non-empty Date — Search can stub
+				// summaries with an empty Date when metadata fetch
+				// failed, so index 0 alone is unreliable.
+				for _, r := range results {
+					if strings.TrimSpace(r.Date) == "" {
+						continue
+					}
+					rec.LastReceivedAt = normalizeDate(r.Date)
+					break
+				}
+				mu.Lock()
+				resp.Recent = rec
+				mu.Unlock()
+			}()
 		}
 
 		// --- Wiki hand-curated notes ---
 		if deps.WikiStore != nil {
-			store, err := deps.WikiStore()
-			if err != nil {
-				resp.Notices = append(resp.Notices, "memory unavailable: "+err.Error())
-			} else {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				store, err := deps.WikiStore()
+				if err != nil {
+					addNotice("memory unavailable: " + err.Error())
+					return
+				}
 				// Prefer the display name for the query (matches title
 				// field in person/company pages); fall back to the raw
 				// input if we couldn't parse one out.
@@ -190,19 +262,23 @@ func senderContext(deps GmailContextDeps) rpcutil.HandlerFunc {
 				}
 				hits, werr := store.Search(ctx, wikiQuery, maxWiki)
 				if werr != nil {
-					resp.Notices = append(resp.Notices, "memory search failed: "+werr.Error())
-				} else {
-					for _, h := range hits {
-						row := wikiHitOut{Path: h.Path}
-						if page, perr := store.ReadPage(h.Path); perr == nil && page != nil {
-							row.Title = page.Meta.Title
-							row.Summary = page.Meta.Summary
-							row.Category = page.Meta.Category
-						}
-						resp.WikiHits = append(resp.WikiHits, row)
-					}
+					addNotice("memory search failed: " + werr.Error())
+					return
 				}
-			}
+				rows := make([]wikiHitOut, 0, len(hits))
+				for _, h := range hits {
+					row := wikiHitOut{Path: h.Path}
+					if page, perr := store.ReadPage(h.Path); perr == nil && page != nil {
+						row.Title = page.Meta.Title
+						row.Summary = page.Meta.Summary
+						row.Category = page.Meta.Category
+					}
+					rows = append(rows, row)
+				}
+				mu.Lock()
+				resp.WikiHits = rows
+				mu.Unlock()
+			}()
 		}
 
 		// --- Wiki-graph traversal (graphify CLI) ---
@@ -211,11 +287,98 @@ func senderContext(deps GmailContextDeps) rpcutil.HandlerFunc {
 		// pipelines, but this Mini App path should not make fast
 		// Gmail/wiki context wait on graph traversal.
 		if deps.SenderFacts != nil && raw != "" {
-			resp.WikiFacts = senderFactsWithin(ctx, deps.SenderFacts, raw, deps.SenderFactsTimeout)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				facts := senderFactsWithin(ctx, deps.SenderFacts, raw, deps.SenderFactsTimeout)
+				mu.Lock()
+				resp.WikiFacts = facts
+				mu.Unlock()
+			}()
+		}
+
+		wg.Wait()
+
+		// Cache the assembled response only when at least one source
+		// actually contributed data — there's no point pinning an
+		// all-empty result on the off chance a transient failure made
+		// every source return nothing. The wikiHits slice is always
+		// allocated, so check its length rather than nil.
+		if cache != nil && (resp.Recent != nil || len(resp.WikiHits) > 0 || resp.WikiFacts != "") {
+			cache.put(cacheKey, resp)
 		}
 
 		return rpcutil.RespondOK(req.ID, resp)
 	}
+}
+
+// senderContextCache is a small TTL-bounded LRU keyed by normalized
+// sender. Reads + writes are mutex-protected; the value is the full
+// `out` struct (cheap to copy — ~5 small fields and a sub-slice).
+//
+// Expiry is opportunistic: a get() past the TTL evicts the entry and
+// reports a miss; there's no background sweep. With a 64-entry bound
+// and 90-second TTL the worst-case footprint is a few KB.
+type senderContextCache struct {
+	mu      sync.Mutex
+	entries map[string]senderContextEntry
+	max     int
+	ttl     time.Duration
+}
+
+type senderContextEntry struct {
+	value    senderContextResp
+	insertAt time.Time
+}
+
+// senderContextResp captures every field the handler returns. Kept as
+// a named type alias of the inline `out` struct via interface so the
+// cache doesn't have to re-declare the whole response shape — see
+// the type assertion in get/put.
+type senderContextResp = any
+
+func newSenderContextCache(max int, ttl time.Duration) *senderContextCache {
+	return &senderContextCache{
+		entries: make(map[string]senderContextEntry, max),
+		max:     max,
+		ttl:     ttl,
+	}
+}
+
+func (c *senderContextCache) get(key string) (senderContextResp, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	entry, ok := c.entries[key]
+	if !ok {
+		return nil, false
+	}
+	if time.Since(entry.insertAt) > c.ttl {
+		delete(c.entries, key)
+		return nil, false
+	}
+	return entry.value, true
+}
+
+func (c *senderContextCache) put(key string, value senderContextResp) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// Crude LRU: when at capacity, evict the oldest by insertAt. The
+	// cache turns over slowly (one entry per unique sender per ~90s)
+	// so the linear scan stays cheap up to ~64 entries.
+	if len(c.entries) >= c.max {
+		var oldestKey string
+		var oldestAt time.Time
+		for k, e := range c.entries {
+			if oldestKey == "" || e.insertAt.Before(oldestAt) {
+				oldestKey = k
+				oldestAt = e.insertAt
+			}
+		}
+		if oldestKey != "" {
+			delete(c.entries, oldestKey)
+		}
+	}
+	c.entries[key] = senderContextEntry{value: value, insertAt: time.Now()}
 }
 
 func senderFactsWithin(
