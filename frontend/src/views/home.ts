@@ -126,7 +126,7 @@ function buildMenuItem(entry: MenuEntry, index: number, total: number): HTMLButt
 // name when we have one so the page reads as a personal landing.
 function greeting(firstName?: string): string {
   const h = new Date().getHours();
-  const phase = h < 5 ? '안녕하세요' : h < 12 ? '좋은 아침' : h < 18 ? '좋은 오후' : '좋은 저녁';
+  const phase = h < 12 ? '안녕하세요' : h < 18 ? '좋은 오후' : '좋은 저녁';
   const who = firstName?.trim();
   return who ? `${phase}, ${who}` : phase;
 }
