@@ -388,8 +388,8 @@ func TestHTMLToText(t *testing.T) {
 
 func TestFormatSearchResults(t *testing.T) {
 	msgs := []MessageSummary{
-		{ID: "abc123", From: "Alice <alice@example.com>", Subject: "Hello", Date: "Mon, 1 Jan 2026", Snippet: "Hi there"},
-		{ID: "def456", From: "Bob <bob@example.com>", Subject: "Meeting", Date: "Tue, 2 Jan 2026"},
+		{ID: "abc123", From: "Alice <alice@example.com>", Subject: "Hello", Date: "Mon, 1 Jan 2026", Snippet: "Hi there", Labels: []string{"INBOX", "UNREAD"}},
+		{ID: "def456", From: "Bob <bob@example.com>", Subject: "Meeting", Date: "Tue, 2 Jan 2026", Labels: []string{"INBOX"}},
 	}
 
 	result := FormatSearchResults(msgs)
@@ -401,6 +401,46 @@ func TestFormatSearchResults(t *testing.T) {
 	}
 	if !strings.Contains(result, "Meeting") {
 		t.Error("missing second message subject")
+	}
+	if !strings.Contains(result, "🔵") {
+		t.Error("missing unread marker 🔵 for unread message")
+	}
+	if !strings.Contains(result, "⚪") {
+		t.Error("missing read marker ⚪ for read message")
+	}
+	if !strings.Contains(result, "**Alice <alice@example.com>**") {
+		t.Error("unread sender should be bold")
+	}
+	if strings.Contains(result, "**Bob <bob@example.com>**") {
+		t.Error("read sender should not be bold")
+	}
+	if !strings.Contains(result, "(안 읽음)") {
+		t.Error("unread message should include 안 읽음 label")
+	}
+}
+
+func TestFormatSearchResults_AllRead(t *testing.T) {
+	msgs := []MessageSummary{
+		{ID: "x1", From: "Carol", Subject: "FYI", Date: "Wed", Labels: []string{"INBOX"}},
+	}
+	result := FormatSearchResults(msgs)
+	if !strings.Contains(result, "⚪") {
+		t.Error("expected read marker ⚪")
+	}
+	if strings.Contains(result, "🔵") {
+		t.Error("did not expect unread marker for read-only list")
+	}
+}
+
+func TestHasUnreadLabel(t *testing.T) {
+	if !hasUnreadLabel([]string{"INBOX", "UNREAD"}) {
+		t.Error("expected true when UNREAD label present")
+	}
+	if hasUnreadLabel([]string{"INBOX"}) {
+		t.Error("expected false without UNREAD label")
+	}
+	if hasUnreadLabel(nil) {
+		t.Error("expected false for nil labels")
 	}
 }
 
