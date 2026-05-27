@@ -71,21 +71,6 @@ function paintMessages(
     note.textContent = `최근 ${messages.length}건 표시 · 전체 ${total.toLocaleString('ko-KR')}건`;
     root.appendChild(note);
   }
-
-  // Chat action: resume this session in chat. SessionKey is the
-  // original (no `miniapp-*` prefix) so the same thread continues.
-  // No prefill — user just keeps talking.
-  const chatActions = document.createElement('div');
-  chatActions.className = 'action-bar chat-action-bar';
-  const chatBtn = document.createElement('button');
-  chatBtn.className = 'action-button action-secondary';
-  chatBtn.type = 'button';
-  chatBtn.textContent = '💬 대화';
-  chatBtn.addEventListener('click', () =>
-    navigate({ name: 'chat', ctx: { kind: 'session', id: sessionKey, intent: 'continue' } }),
-  );
-  chatActions.appendChild(chatBtn);
-  root.appendChild(chatActions);
 }
 
 function buildBubble(m: TranscriptMessage): HTMLElement {

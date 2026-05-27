@@ -17,7 +17,6 @@ import { renderMemory } from './views/memory';
 import { renderSessions } from './views/sessions';
 import { renderWikiPage } from './views/wiki_page';
 import { renderSessionTranscript } from './views/session_transcript';
-import { renderChat } from './views/chat';
 import { renderCalendar } from './views/calendar';
 import { renderCalendarEvent } from './views/calendar_event';
 import { renderMore } from './views/more';
@@ -60,12 +59,11 @@ function renderError(message: string): void {
   root.appendChild(muted);
 }
 
-// Tab bar visibility = exactly the routes that should NOT show the
-// Telegram BackButton. Chat is a tab destination, but its composer
-// needs the bottom edge, so we hide the bar there and fall back to the
-// BackButton to navigate out.
+// Tab bar visibility = exactly the top-level tab destinations. Drill-down
+// views (detail, wikiPage, calendarEvent, etc.) hide the bar so the
+// Telegram BackButton can take over.
 function showsTabBar(route: Route): boolean {
-  return isTabRoute(route) && route.name !== 'chat';
+  return isTabRoute(route);
 }
 
 function syncBackButton(route: Route): void {
@@ -80,7 +78,6 @@ function syncBackButton(route: Route): void {
 
 const TAB_DEFS: ReadonlyArray<{ name: TabRouteName; icon: string; label: string }> = [
   { name: 'home', icon: '🏠', label: '홈' },
-  { name: 'chat', icon: '💬', label: '채팅' },
   { name: 'more', icon: '☰', label: '더보기' },
   { name: 'settings', icon: '⚙️', label: '설정' },
 ];
@@ -138,9 +135,6 @@ async function dispatch(route: Route): Promise<void> {
       return;
     case 'sessionTranscript':
       await renderSessionTranscript(root, cachedInitData, route.sessionKey);
-      return;
-    case 'chat':
-      renderChat(root, cachedInitData, route.ctx);
       return;
     case 'calendar':
       await renderCalendar(root, cachedInitData);
