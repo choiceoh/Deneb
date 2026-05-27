@@ -10,7 +10,7 @@
 
 import '@fontsource-variable/inter';
 import './styles.css';
-import { parseRoute, navigate, isTabRoute, type Route, type TabRouteName } from './router';
+import { parseRoute, navigate, isTabRoute, TAB_ROUTES, type Route, type TabRouteName } from './router';
 import { renderHome } from './views/home';
 import { renderList } from './views/list';
 import { renderDetail } from './views/detail';
@@ -367,7 +367,118 @@ function boot(): void {
     { passive: true },
   );
 
+  attachTabSwipeNav();
+
   void dispatch(parseRoute(location.hash));
+}
+
+// Horizontal swipe → next/previous tab. Mirrors the Zune panorama
+// motif: dragging the page leftward (finger moves left) advances to
+// the right-neighbor tab; dragging rightward retreats. We only commit
+// once the gesture is decisively horizontal so vertical scrolling on
+// long pages stays untouched. The actual page transition is reused
+// from the existing startViewTransition path (hashchange → dispatch).
+function attachTabSwipeNav(): void {
+  // 60px is a comfortable "I meant it" threshold on a Telegram-sized
+  // viewport (375-430px wide); a faster flick clears with less travel
+  // via the velocity branch. AXIS_LOCK keeps us from intercepting any
+  // touch that started as a vertical scroll. EDGE_IGNORE leaves the
+  // first 20px to whatever system back-swipe Telegram or the OS may
+  // surface — we'd rather lose a swipe than fight system gestures.
+  const HORIZ_DIST = 60;
+  const FLICK_DIST = 30;
+  const FLICK_VELOCITY = 0.5; // px / ms
+  const AXIS_LOCK_THRESHOLD = 10;
+  const EDGE_IGNORE = 20;
+
+  let startX = 0;
+  let startY = 0;
+  let startTime = 0;
+  let tracking = false;
+  let axisLocked: 'h' | 'v' | null = null;
+
+  document.addEventListener(
+    'touchstart',
+    (e) => {
+      if (e.touches.length !== 1) {
+        tracking = false;
+        return;
+      }
+      if (!isTabRoute(parseRoute(location.hash))) {
+        tracking = false;
+        return;
+      }
+      const t = e.touches[0];
+      // If the gesture begins inside the tab strip itself the user is
+      // scroll-panning the strip — let that work natively. Same idea
+      // covers any future horizontal scroller (carousel, code block)
+      // via closest('[data-hscroll]').
+      const target = t.target as Element | null;
+      if (target?.closest?.('#tab-bar, [data-hscroll]')) {
+        tracking = false;
+        return;
+      }
+      if (t.clientX < EDGE_IGNORE) {
+        tracking = false;
+        return;
+      }
+      startX = t.clientX;
+      startY = t.clientY;
+      startTime = performance.now();
+      tracking = true;
+      axisLocked = null;
+    },
+    { passive: true },
+  );
+
+  document.addEventListener(
+    'touchmove',
+    (e) => {
+      if (!tracking || axisLocked === 'v') return;
+      const t = e.touches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      if (axisLocked === null) {
+        if (Math.abs(dx) < AXIS_LOCK_THRESHOLD && Math.abs(dy) < AXIS_LOCK_THRESHOLD) return;
+        axisLocked = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+      }
+    },
+    { passive: true },
+  );
+
+  const finish = (e: TouchEvent) => {
+    if (!tracking) return;
+    tracking = false;
+    if (axisLocked !== 'h') return;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    const dx = t.clientX - startX;
+    const dt = Math.max(1, performance.now() - startTime);
+    const velocity = Math.abs(dx) / dt;
+    const decisive =
+      Math.abs(dx) >= HORIZ_DIST ||
+      (Math.abs(dx) >= FLICK_DIST && velocity >= FLICK_VELOCITY);
+    if (!decisive) return;
+    const route = parseRoute(location.hash);
+    if (!isTabRoute(route)) return;
+    const idx = TAB_ROUTES.indexOf(route.name);
+    // dx < 0 (finger moved left) reads as "next page" in carousel
+    // semantics, so advance to the right-neighbor tab.
+    const nextIdx = dx < 0 ? idx + 1 : idx - 1;
+    if (nextIdx < 0 || nextIdx >= TAB_ROUTES.length) return;
+    triggerSelectionHaptic();
+    navigate({ name: TAB_ROUTES[nextIdx] });
+  };
+
+  document.addEventListener('touchend', finish, { passive: true });
+  document.addEventListener(
+    'touchcancel',
+    () => {
+      tracking = false;
+      axisLocked = null;
+    },
+    { passive: true },
+  );
 }
 
 boot();
