@@ -1586,6 +1586,12 @@ button.profile-row-nav:focus-visible {
 
 /* ---- Icon tiles (rounded color-tinted squares) ---- */
 
+/* Icon tile: a flat container for the icon. No more inset highlights or
+   chunky 3D — we go for the Notion/Linear/Vercel idiom where the tile is
+   a quiet rounded surface and the icon itself carries the hue. Each
+   .icon-tile-<color> variant below tints the bg + stroke from the same
+   base color, so the tile reads as "this domain has identity" without
+   shouting like the old vibrant solids did. */
 .icon-tile {
   display: inline-flex;
   align-items: center;
@@ -1593,17 +1599,11 @@ button.profile-row-nav:focus-visible {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  font-size: 17px;
   line-height: 1;
   flex-shrink: 0;
-  color: #ffffff;
-  /* Inner top-light + outer drop for the soft 3D feel of iOS-style
-     icons. The inset highlight is what sells the depth — flat solid
-     fills with a drop alone read as "sticker on paper". */
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.08),
-    0 1px 2px rgba(0, 0, 0, 0.12);
+  background: var(--tile-bg, var(--surface-tint));
+  color: var(--tile-fg, var(--tg-text));
+  border: 1px solid var(--hairline);
   transition: transform var(--transition-fast);
 }
 
@@ -1611,23 +1611,21 @@ button.profile-row-nav:active .icon-tile {
   transform: scale(0.94);
 }
 
-/* Lucide SVGs render at 18px inside a 36px tile (50% — leaves room for
-   the colored backdrop to read as the "container") and 20px in standalone
-   contexts (action buttons, list rows). currentColor inherits from the
-   surrounding text — on a tile that's #fff via .icon-tile, in a button
-   that's the button's text color. */
+/* Stroke width 1.75 reads as "modern line icon" — Lucide's default 2 is
+   slightly too chunky against the typography weights we use, and 1.5 is
+   too brittle on small tiles. 1.75 hits the sweet spot. */
 .lucide-icon {
   width: 20px;
   height: 20px;
-  stroke-width: 2;
+  stroke-width: 1.75;
   flex-shrink: 0;
   vertical-align: middle;
 }
 
 .icon-tile .lucide-icon {
-  width: 19px;
-  height: 19px;
-  stroke-width: 2.25;
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.75;
 }
 
 /* Inline icons inside text buttons want a tiny right gap so the label
@@ -1636,41 +1634,58 @@ button.profile-row-nav:active .icon-tile {
   margin-left: 6px;
 }
 
-.icon-tile-violet {
-  background: #6c5ce7;
-  color: #ffffff;
+/* Color variants: each picks a hue and emits a soft tint background +
+   matching stroke color. We use color-mix so each variant adapts to the
+   active theme (Telegram themes can shift bg) without baking light/dark
+   values into every selector. */
+.icon-tile-blue {
+  --tile-bg: color-mix(in srgb, #3b82f6 12%, transparent);
+  --tile-fg: #3b82f6;
 }
-.icon-tile-pink {
-  background: #ff6fa8;
-  color: #ffffff;
+.icon-tile-violet {
+  --tile-bg: color-mix(in srgb, #8b5cf6 12%, transparent);
+  --tile-fg: #8b5cf6;
 }
 .icon-tile-purple {
-  background: #a679f0;
-  color: #ffffff;
+  --tile-bg: color-mix(in srgb, #a855f7 12%, transparent);
+  --tile-fg: #a855f7;
 }
-.icon-tile-blue {
-  background: #4a8ef0;
-  color: #ffffff;
+.icon-tile-pink {
+  --tile-bg: color-mix(in srgb, #ec4899 12%, transparent);
+  --tile-fg: #ec4899;
 }
 .icon-tile-red {
-  background: #ef5a5a;
-  color: #ffffff;
+  --tile-bg: color-mix(in srgb, #ef4444 12%, transparent);
+  --tile-fg: #ef4444;
 }
 .icon-tile-amber {
-  background: #f0a23a;
-  color: #ffffff;
+  --tile-bg: color-mix(in srgb, #f59e0b 14%, transparent);
+  --tile-fg: #d97706;
 }
 .icon-tile-teal {
-  background: #2eb8a0;
-  color: #ffffff;
-}
-.icon-tile-slate {
-  background: #6e7787;
-  color: #ffffff;
+  --tile-bg: color-mix(in srgb, #14b8a6 14%, transparent);
+  --tile-fg: #0d9488;
 }
 .icon-tile-green {
-  background: #34a853;
-  color: #ffffff;
+  --tile-bg: color-mix(in srgb, #22c55e 14%, transparent);
+  --tile-fg: #16a34a;
+}
+.icon-tile-slate {
+  --tile-bg: color-mix(in srgb, var(--tg-hint) 14%, transparent);
+  --tile-fg: var(--tg-hint);
+}
+
+/* Dark scheme nudges: alpha-tints look more washed out against a dark
+   background, so we lift them slightly to keep the variant readable. */
+[data-color-scheme='dark'] .icon-tile-blue,
+[data-color-scheme='dark'] .icon-tile-violet,
+[data-color-scheme='dark'] .icon-tile-purple,
+[data-color-scheme='dark'] .icon-tile-pink,
+[data-color-scheme='dark'] .icon-tile-red,
+[data-color-scheme='dark'] .icon-tile-amber,
+[data-color-scheme='dark'] .icon-tile-teal,
+[data-color-scheme='dark'] .icon-tile-green {
+  --tile-bg: color-mix(in srgb, var(--tile-fg) 22%, transparent);
 }
 
 /* ---- Bottom tab bar (persistent on top-level routes) ---- */
