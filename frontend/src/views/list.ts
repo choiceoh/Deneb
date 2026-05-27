@@ -21,7 +21,7 @@ import { archive, listRecent, markRead, trash, type GmailMessageRow } from '../g
 import { isCurrentHash, navigate } from '../router';
 import { confirmAction } from '../dialog';
 import { errorMessage, formatRpcError, relativeTime, shortFrom } from '../format';
-import { buildErrorBanner, buildLoadingNode, buildViewHeader } from './ui';
+import { buildErrorBanner, buildRowSkeleton, buildViewHeader } from './ui';
 
 const longPressMs = 450;
 const longPressMoveTolerancePx = 10;
@@ -58,7 +58,10 @@ export async function renderList(root: HTMLElement, initData: string): Promise<v
   root.appendChild(rowsContainer);
   const selection = createSelectionState(root, rowsContainer, initData, expectedHash);
 
-  const status = buildLoadingNode('메일 불러오는 중…');
+  // Skeleton placeholders mimic the .email-row geometry so the page
+  // doesn't pop blank → populated. buildLoadingNode is still around
+  // for non-list views.
+  const status = buildRowSkeleton(6);
   rowsContainer.appendChild(status);
 
   try {

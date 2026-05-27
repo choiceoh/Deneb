@@ -13,7 +13,7 @@
 import { recentSessions, type SessionRow } from '../sessions';
 import { formatRpcError, relativeTime } from '../format';
 import { isCurrentHash, navigate } from '../router';
-import { buildErrorBanner, buildLoadingNode, buildViewHeader } from './ui';
+import { buildErrorBanner, buildRowSkeleton, buildViewHeader } from './ui';
 
 export async function renderSessions(root: HTMLElement, initData: string): Promise<void> {
   const expectedHash = location.hash;
@@ -26,7 +26,7 @@ export async function renderSessions(root: HTMLElement, initData: string): Promi
     }),
   );
 
-  const status = buildLoadingNode('토픽 불러오는 중…');
+  const status = buildRowSkeleton(6);
   root.appendChild(status);
 
   try {

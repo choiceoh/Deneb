@@ -75,9 +75,13 @@ function buildMenuItem(entry: MenuEntry, index: number): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'type-item';
-  // Per-row stagger delay drives the CSS keyframes — keeps the animation
-  // declarative without baking nth-child rules into the stylesheet.
-  btn.style.setProperty('--enter-delay', `${index * 55}ms`);
+  // Stagger delay with ease-out spacing: early rows fire quickly,
+  // later rows stretch out. ~45ms for the first gap, expanding toward
+  // ~85ms by the last row. Same arrival window everyone uses, but the
+  // motion reads as "decelerating into place" instead of metronomic.
+  const ease = 1 - Math.pow(1 - index / 7, 2.2);
+  const delay = Math.round(ease * 380);
+  btn.style.setProperty('--enter-delay', `${delay}ms`);
   btn.textContent = entry.label;
   btn.addEventListener('click', () => {
     navigate(entry.route);
