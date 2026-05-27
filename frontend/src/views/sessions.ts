@@ -13,6 +13,7 @@
 import { recentSessions, type SessionRow } from '../sessions';
 import { formatRpcError, relativeTime } from '../format';
 import { isCurrentHash, navigate } from '../router';
+import { setPullToRefreshHandler } from '../pull_to_refresh';
 import { buildErrorBanner, buildRowSkeleton, buildViewHeader } from './ui';
 
 export async function renderSessions(root: HTMLElement, initData: string): Promise<void> {
@@ -22,9 +23,9 @@ export async function renderSessions(root: HTMLElement, initData: string): Promi
   root.appendChild(
     buildViewHeader({
       title: 'topics',
-      right: { label: 'refresh', onClick: () => void renderSessions(root, initData) },
     }),
   );
+  setPullToRefreshHandler(() => renderSessions(root, initData));
 
   const status = buildRowSkeleton(6);
   root.appendChild(status);

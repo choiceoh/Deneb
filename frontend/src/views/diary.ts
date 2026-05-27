@@ -8,6 +8,7 @@
 import { recentDiary, type DiaryEntry } from '../memory';
 import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
+import { setPullToRefreshHandler } from '../pull_to_refresh';
 import { buildErrorBanner, buildLoadingNode, buildViewHeader } from './ui';
 
 interface DiaryGroup {
@@ -28,9 +29,9 @@ export async function renderDiary(
     buildViewHeader({
       title: 'diary',
       left: { label: '← home', onClick: () => navigate({ name: 'home' }) },
-      right: { label: 'refresh', onClick: () => void renderDiary(root, initData) },
     }),
   );
+  setPullToRefreshHandler(() => renderDiary(root, initData));
 
   const status = buildLoadingNode('다이어리 불러오는 중…');
   root.appendChild(status);

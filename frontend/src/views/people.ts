@@ -9,6 +9,7 @@
 import { listPeople, type PersonRow } from '../people';
 import { formatRpcError, relativeTime } from '../format';
 import { isCurrentHash, navigate } from '../router';
+import { setPullToRefreshHandler } from '../pull_to_refresh';
 import { buildErrorBanner, buildLoadingNode, buildViewHeader } from './ui';
 
 export async function renderPeople(
@@ -22,9 +23,9 @@ export async function renderPeople(
     buildViewHeader({
       title: 'people',
       left: { label: '← home', onClick: () => navigate({ name: 'home' }) },
-      right: { label: 'refresh', onClick: () => void renderPeople(root, initData) },
     }),
   );
+  setPullToRefreshHandler(() => renderPeople(root, initData));
 
   const status = buildLoadingNode('메일 발신자 집계 중…');
   root.appendChild(status);

@@ -30,6 +30,7 @@ import { renderPeople } from './views/people';
 import { renderPersonDetail } from './views/person_detail';
 import { renderWikiNew } from './views/wiki_new';
 import { applyAppSettings, triggerSelectionHaptic } from './app_settings';
+import { clearPullToRefreshHandler } from './pull_to_refresh';
 
 const root = document.getElementById('app')!;
 const tabBarRoot = document.getElementById('tab-bar')!;
@@ -148,6 +149,9 @@ async function dispatch(route: Route): Promise<void> {
   if (!cachedInitData) return;
   syncBackButton(route);
   renderTabBar(route);
+  // Clear any pull-to-refresh handler from the previous view; views
+  // that want to opt in re-register their own handler after rendering.
+  clearPullToRefreshHandler();
   switch (route.name) {
     case 'home':
       await renderHome(root, cachedInitData);
@@ -268,6 +272,13 @@ function boot(): void {
   }
   tg.ready();
   applyThemeFromTelegram(tg);
+
+  // Bot API 7.7+. Without this, dragging down inside the Mini App also
+  // tugs Telegram's own swipe-to-minimize gesture, so pull-to-refresh
+  // ends up shrinking the whole app instead of just nudging the page.
+  // The optional chain handles older Telegram clients gracefully —
+  // overscroll-behavior in CSS is the secondary fallback.
+  tg.disableVerticalSwipes?.();
 
   const initData = tg.initData;
   if (!initData) {

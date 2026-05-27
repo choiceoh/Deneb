@@ -7,6 +7,7 @@
 import { calendarListUpcoming, type CalendarEventSummary, RpcError } from '../rpc';
 import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
+import { setPullToRefreshHandler } from '../pull_to_refresh';
 import { buildErrorBanner, buildLoadingNode, buildViewHeader } from './ui';
 
 const HOURS_AHEAD = 24 * 7;
@@ -18,9 +19,9 @@ export async function renderCalendar(root: HTMLElement, initData: string): Promi
   root.appendChild(
     buildViewHeader({
       title: 'calendar',
-      right: { label: 'refresh', onClick: () => void renderCalendar(root, initData) },
     }),
   );
+  setPullToRefreshHandler(() => renderCalendar(root, initData));
 
   const status = buildLoadingNode('일정 불러오는 중…');
   root.appendChild(status);

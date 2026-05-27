@@ -123,6 +123,12 @@ body {
   padding: 0;
   background: var(--tg-bg);
   color: var(--tg-text);
+  /* Keep scroll momentum + overscroll bouncing contained inside the
+     Mini App so a pull-from-top doesn't bleed up to Telegram's own
+     swipe-to-close gesture. Pairs with WebApp.disableVerticalSwipes()
+     called at boot — overscroll-behavior catches older WebViews and
+     non-Telegram browsers where the WebApp API is missing. */
+  overscroll-behavior-y: contain;
   /* Inter Variable is the lead face — it carries the full weight range
      (100..900) the Zune-style typography needs (ultralight wordmark, light
      menu labels, regular body, semibold accents). Korean characters fall
@@ -2263,6 +2269,87 @@ button.profile-row-nav:active .icon-tile {
 [data-color-scheme='dark'] .icon-tile-teal,
 [data-color-scheme='dark'] .icon-tile-green {
   --tile-bg: color-mix(in srgb, var(--tile-fg) 22%, transparent);
+}
+
+/* ---- Pull-to-refresh indicator
+   Pinned to the top of the viewport and shifted down by --ptr-offset
+   while the user drags. The arrow rotates 180deg once the pull crosses
+   the trigger threshold (signalling "release to refresh"); during the
+   actual refresh the same element spins as a loading indicator. The
+   strip is body-level so it floats above the panorama tabs and the
+   view content alike. */
+.ptr-indicator {
+  --ptr-offset: 0px;
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-left: -18px;
+  margin-top: -36px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tg-bg) 78%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+  color: var(--tg-hint);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(var(--ptr-offset));
+  transition:
+    transform 240ms var(--ease-emphasis),
+    opacity 200ms ease;
+}
+
+body.ptr-pulling .ptr-indicator {
+  opacity: 1;
+  /* No transition during active drag — the finger drives the offset
+     directly so smoothing would feel rubbery. */
+  transition: opacity 120ms ease;
+}
+
+body.ptr-refreshing .ptr-indicator {
+  opacity: 1;
+}
+
+.ptr-indicator .ptr-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    transform 200ms var(--ease-emphasis),
+    color 160ms ease;
+}
+
+.ptr-indicator.ptr-armed {
+  color: var(--tg-text);
+}
+
+.ptr-indicator.ptr-armed .ptr-arrow {
+  transform: rotate(180deg);
+}
+
+.ptr-indicator.ptr-refreshing .ptr-arrow {
+  animation: ptr-spin 900ms linear infinite;
+}
+
+@keyframes ptr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ptr-indicator,
+  .ptr-indicator .ptr-arrow {
+    transition: none;
+  }
+  .ptr-indicator.ptr-refreshing .ptr-arrow {
+    animation: none;
+  }
 }
 
 /* ---- Top panorama tabs (Zune-style)

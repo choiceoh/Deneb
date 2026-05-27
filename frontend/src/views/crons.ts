@@ -10,6 +10,7 @@
 import { listCrons, type CronJobRow } from '../crons';
 import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
+import { setPullToRefreshHandler } from '../pull_to_refresh';
 import { buildErrorBanner, buildLoadingNode, buildViewHeader } from './ui';
 
 export async function renderCrons(
@@ -23,9 +24,9 @@ export async function renderCrons(
     buildViewHeader({
       title: 'crons',
       left: { label: '← home', onClick: () => navigate({ name: 'home' }) },
-      right: { label: 'refresh', onClick: () => void renderCrons(root, initData) },
     }),
   );
+  setPullToRefreshHandler(() => renderCrons(root, initData));
 
   const status = buildLoadingNode('자동 작업 불러오는 중…');
   root.appendChild(status);
