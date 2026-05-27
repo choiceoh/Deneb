@@ -76,6 +76,11 @@
    low-contrast gradient). The rest is just hairline/shadow nudges. */
 [data-color-scheme='dark'] {
   --tg-bg: #000000;
+  /* main.ts skips secondary_bg_color from Telegram themeParams in dark mode
+     (so AMOLED black stays in charge of the page bg); without an explicit
+     dark default here, --tg-secondary-bg falls through to :root's light-mode
+     #f4f4f5, which renders card rows as light gray + white text = invisible. */
+  --tg-secondary-bg: #0f0f0f;
   --hairline: rgba(255, 255, 255, 0.09);
   --hairline-strong: rgba(255, 255, 255, 0.18);
   --surface-tint: rgba(255, 255, 255, 0.05);
