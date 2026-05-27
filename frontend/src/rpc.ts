@@ -112,6 +112,7 @@ export interface MiniappModelOption {
   label: string;
   provider?: string;
   display?: string;
+  health?: 'online' | 'offline' | 'unknown';
   current: boolean;
 }
 

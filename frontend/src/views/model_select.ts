@@ -113,14 +113,24 @@ function buildModelRow(
   btn.innerHTML = `
     <span class="settings-model-check"></span>
     <span class="settings-row-text">
-      <span class="settings-row-title"></span>
+      <span class="settings-model-title-line">
+        <span class="settings-row-title"></span>
+        <span class="settings-model-health"></span>
+      </span>
       <span class="settings-row-sub"></span>
     </span>
   `;
+  const health = normalizeModelHealth(model.health);
+  const healthLabel = modelHealthLabel(health);
   (btn.querySelector('.settings-model-check') as HTMLElement).textContent = model.current ? '✓' : '';
   (btn.querySelector('.settings-row-title') as HTMLElement).textContent =
     model.label || model.display || model.id;
   (btn.querySelector('.settings-row-sub') as HTMLElement).textContent = model.id;
+  const healthDot = btn.querySelector('.settings-model-health') as HTMLElement;
+  healthDot.className = `settings-model-health settings-model-health-${health}`;
+  healthDot.title = healthLabel;
+  healthDot.setAttribute('aria-label', healthLabel);
+  healthDot.setAttribute('role', 'img');
   btn.addEventListener('click', () => {
     void switchModel(model.id, initData, card, status);
   });
@@ -284,4 +294,20 @@ function shortModelName(model: string): string {
   const idx = model.lastIndexOf('/');
   if (idx >= 0 && idx < model.length - 1) return model.slice(idx + 1);
   return model;
+}
+
+function normalizeModelHealth(health: MiniappModelOption['health']): 'online' | 'offline' | 'unknown' {
+  if (health === 'online' || health === 'offline') return health;
+  return 'unknown';
+}
+
+function modelHealthLabel(health: 'online' | 'offline' | 'unknown'): string {
+  switch (health) {
+    case 'online':
+      return '응답 가능';
+    case 'offline':
+      return '응답 없음';
+    default:
+      return '상태 미확인';
+  }
 }

@@ -15,6 +15,23 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+const (
+	miniappModelHealthOnline  = "online"
+	miniappModelHealthOffline = "offline"
+	miniappModelHealthUnknown = "unknown"
+	miniappModelHealthTimeout = 1500 * time.Millisecond
+)
+
+type miniappModelSnapshot struct {
+	sections []modelSection
+	health   map[string]string
+}
+
+type providerModelProbe struct {
+	checked bool
+	models  []string
+}
+
 func (s *Server) miniappModelMethods() map[string]rpcutil.HandlerFunc {
 	return handlerminiapp.ModelMethods(handlerminiapp.ModelDeps{
 		CurrentModel: s.currentMiniappModel,
@@ -38,10 +55,10 @@ func (s *Server) currentMiniappModel() string {
 
 func (s *Server) listMiniappModels(ctx context.Context) ([]handlerminiapp.ModelSection, error) {
 	current := s.currentMiniappModel()
-	sections := s.miniappModelSections(ctx)
+	snapshot := s.miniappModelSnapshot(ctx)
 
-	out := make([]handlerminiapp.ModelSection, 0, len(sections))
-	for _, section := range sections {
+	out := make([]handlerminiapp.ModelSection, 0, len(snapshot.sections))
+	for _, section := range snapshot.sections {
 		models := make([]handlerminiapp.ModelOption, 0, len(section.entries))
 		for _, entry := range section.entries {
 			models = append(models, handlerminiapp.ModelOption{
@@ -49,6 +66,7 @@ func (s *Server) listMiniappModels(ctx context.Context) ([]handlerminiapp.ModelS
 				Label:    entry.label,
 				Provider: entry.provider,
 				Display:  entry.display,
+				Health:   snapshot.health[entry.fullID],
 				Current:  entry.fullID == current,
 			})
 		}
@@ -129,6 +147,24 @@ func (s *Server) addMiniappCustomModel(_ context.Context, endpoint, model string
 	}, nil
 }
 
+func (s *Server) miniappModelSnapshot(ctx context.Context) miniappModelSnapshot {
+	roles := registryRoleEntries(s.modelRegistry)
+	providers := appendBuiltinProviders(loadConfiguredProviders())
+	discovered := s.discoverMiniappLocalModels(ctx, providers)
+	probes := s.miniappModelHealthProbes(ctx, providers, discovered)
+	for i := range providers {
+		providers[i].models = mergeModels(providers[i].models, discovered[providers[i].name])
+		if len(providers[i].models) > maxModelsPerProvider {
+			providers[i].models = providers[i].models[:maxModelsPerProvider]
+		}
+	}
+	sections := assembleMiniappModelSections(roles, providers)
+	return miniappModelSnapshot{
+		sections: sections,
+		health:   buildMiniappModelHealth(sections, probes),
+	}
+}
+
 func (s *Server) miniappModelSections(ctx context.Context) []modelSection {
 	roles := registryRoleEntries(s.modelRegistry)
 	providers := appendBuiltinProviders(loadConfiguredProviders())
@@ -140,6 +176,116 @@ func (s *Server) miniappModelSections(ctx context.Context) []modelSection {
 		}
 	}
 	return assembleMiniappModelSections(roles, providers)
+}
+
+func (s *Server) miniappModelHealthProbes(
+	ctx context.Context,
+	providers []providerSpec,
+	localDiscovered map[string][]string,
+) map[string]providerModelProbe {
+	probes := make(map[string]providerModelProbe, len(providers))
+	type target struct {
+		name    string
+		baseURL string
+	}
+	var targets []target
+	for _, provider := range providers {
+		baseURL := effectiveBaseURL(provider)
+		if baseURL == "" {
+			continue
+		}
+		if isLocalURL(baseURL) {
+			probes[provider.name] = providerModelProbe{
+				checked: true,
+				models:  localDiscovered[provider.name],
+			}
+			continue
+		}
+		if strings.TrimSpace(provider.baseURL) == "" || !isMiniappCustomProvider(provider.name) {
+			continue
+		}
+		targets = append(targets, target{name: provider.name, baseURL: baseURL})
+	}
+	if len(targets) == 0 {
+		return probes
+	}
+
+	results := make([][]string, len(targets))
+	var wg sync.WaitGroup
+	for i, target := range targets {
+		wg.Add(1)
+		go func(idx int, name, baseURL string) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil && s.logger != nil {
+					s.logger.Error("panic in miniapp model health probe", "provider", name, "panic", r)
+				}
+			}()
+			probeCtx, cancel := context.WithTimeout(ctx, miniappModelHealthTimeout)
+			defer cancel()
+			results[idx] = probeProviderModelIDs(probeCtx, baseURL)
+		}(i, target.name, target.baseURL)
+	}
+	wg.Wait()
+
+	for i, target := range targets {
+		probes[target.name] = providerModelProbe{
+			checked: true,
+			models:  results[i],
+		}
+	}
+	return probes
+}
+
+func buildMiniappModelHealth(
+	sections []modelSection,
+	probes map[string]providerModelProbe,
+) map[string]string {
+	health := make(map[string]string)
+	for _, section := range sections {
+		for _, entry := range section.entries {
+			health[entry.fullID] = miniappModelHealthForEntry(entry, probes)
+		}
+	}
+	return health
+}
+
+func miniappModelHealthForEntry(entry modelEntry, probes map[string]providerModelProbe) string {
+	if entry.provider == "" {
+		return miniappModelHealthUnknown
+	}
+	probe, ok := probes[entry.provider]
+	if !ok || !probe.checked {
+		return miniappModelHealthUnknown
+	}
+	modelID := modelIDForProviderEntry(entry)
+	for _, served := range probe.models {
+		if served == modelID {
+			return miniappModelHealthOnline
+		}
+	}
+	return miniappModelHealthOffline
+}
+
+func modelIDForProviderEntry(entry modelEntry) string {
+	if entry.provider != "" {
+		if modelID, ok := strings.CutPrefix(entry.fullID, entry.provider+"/"); ok {
+			return modelID
+		}
+	}
+	return entry.display
+}
+
+func isMiniappCustomProvider(name string) bool {
+	return name == "custom" || strings.HasPrefix(name, "custom-")
+}
+
+func probeProviderModelIDs(ctx context.Context, baseURL string) []string {
+	ids, err := modelrole.DiscoverServedVllmModels(ctx, baseURL)
+	if err != nil {
+		return nil
+	}
+	return ids
 }
 
 func assembleMiniappModelSections(roles []modelEntry, providers []providerSpec) []modelSection {
