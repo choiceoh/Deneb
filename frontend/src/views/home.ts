@@ -1,12 +1,18 @@
-// views/home.ts — landing screen: auth + backend health + entry points to
-// domain views (currently just Gmail triage).
+// views/home.ts — landing screen.
+//
+// Design idiom: Zune HD / Windows Phone "Metro" — typography carries the
+// hierarchy, no icons compete with the words, motion is the texture. The
+// hero is a giant ultralight wordmark + a personal greeting, the menu is
+// a numbered list of huge labels each backed by a hairline divider. On
+// mount the items stagger in (~60ms per row) so the screen reads as
+// "composed" rather than "snapped together".
 
 import { ping, whoami, type PingResult, type WhoamiResult } from '../rpc';
 import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
 import { readAppSettings } from '../app_settings';
 import { buildErrorBanner } from './ui';
-import { icon, type IconName } from '../icons';
+import type { Route } from '../router';
 
 export async function renderHome(root: HTMLElement, initData: string): Promise<void> {
   const expectedHash = location.hash;
@@ -23,6 +29,12 @@ export async function renderHome(root: HTMLElement, initData: string): Promise<v
   }
 }
 
+interface MenuEntry {
+  label: string;
+  meta: string;
+  route: Route;
+}
+
 function paint(
   root: HTMLElement,
   initData: string,
@@ -32,65 +44,46 @@ function paint(
 ): void {
   root.innerHTML = '';
 
-  const header = document.createElement('div');
-  header.className = 'brand-header';
-  header.innerHTML = `
-    <span class="brand-name">Deneb</span>
-    <span class="brand-status" title="모든 서비스 정상" aria-label="online"></span>
+  // Hero block: ultralight wordmark, full-weight greeting, tiny meta.
+  // Three weight classes in three lines = the whole identity.
+  const hero = document.createElement('header');
+  hero.className = 'hero';
+  hero.innerHTML = `
+    <h1 class="hero-title">Deneb</h1>
+    <p class="hero-greeting"></p>
+    <p class="hero-status"></p>
   `;
-  root.appendChild(header);
-
-  // Replaces the old "비서실장형 단일 에이전트" tagline with a
-  // greeting + live status read. Two short lines = identity + signal
-  // without marketing copy.
-  const subtitle = document.createElement('div');
-  subtitle.className = 'brand-subtitle';
-  subtitle.textContent = greeting(user.firstName);
-  root.appendChild(subtitle);
-
-  const meta = document.createElement('div');
-  meta.className = 'brand-meta';
+  (hero.querySelector('.hero-greeting') as HTMLElement).textContent = greeting(user.firstName);
   const model = prettyModel(pingResult.model);
-  meta.textContent = model ? `${model} · 정상` : '연결 안 됨';
-  root.appendChild(meta);
+  (hero.querySelector('.hero-status') as HTMLElement).textContent = model
+    ? `${model} · 정상`
+    : '연결 안 됨';
+  root.appendChild(hero);
 
-  // Domain entry cards. Order is intentional, by product priority:
-  //   1) calendar — time-pressured (D-15 pushes need immediate eyeballs)
-  //   2) Gmail — steady-state triage
-  //   3) memory + sessions — reference
-  // Chat lives in Telegram itself, not the Mini App, so it's not an entry
-  // here.
-  const shortcutsLabel = document.createElement('div');
-  shortcutsLabel.className = 'section-label';
-  shortcutsLabel.textContent = '바로가기';
-  root.appendChild(shortcutsLabel);
+  // Menu: numbered list of huge labels. Order is intentional, by product
+  // priority — calendar (time-pressured) first, mail steady-state, then
+  // memory + sessions as reference.
+  const entries: MenuEntry[] = [
+    { label: '일정', meta: '다가오는 회의 · D-15분 알림', route: { name: 'calendar' } },
+    { label: '메일', meta: '미처리 트리아지', route: { name: 'inbox' } },
+    { label: '메모리', meta: '위키 / 빠른 검색', route: { name: 'memory' } },
+    { label: '세션', meta: '실행 중 · 완료', route: { name: 'sessions' } },
+  ];
 
-  const shortcuts = document.createElement('div');
-  shortcuts.className = 'section-card';
-  shortcuts.appendChild(
-    buildNavRow('icon-tile-blue', 'calendar', '일정', '다가오는 회의 · D-15분 알림', () =>
-      navigate({ name: 'calendar' }),
-    ),
-  );
-  shortcuts.appendChild(
-    buildNavRow('icon-tile-red', 'mail', 'Gmail 트리아지', '최근 미처리 메일', () =>
-      navigate({ name: 'inbox' }),
-    ),
-  );
-  shortcuts.appendChild(
-    buildNavRow('icon-tile-amber', 'memory', '메모리 검색', '위키 / 메모리 빠른 검색', () =>
-      navigate({ name: 'memory' }),
-    ),
-  );
-  shortcuts.appendChild(
-    buildNavRow('icon-tile-teal', 'sessions', '최근 세션', '실행 중 / 완료', () =>
-      navigate({ name: 'sessions' }),
-    ),
-  );
-  root.appendChild(shortcuts);
+  const list = document.createElement('nav');
+  list.className = 'metro-menu';
+  list.setAttribute('aria-label', '주요 영역');
+  entries.forEach((entry, i) => {
+    list.appendChild(buildMenuItem(entry, i));
+  });
+  root.appendChild(list);
 
+  // Subtle, low-weight "refresh" affordance below the menu — kept around
+  // because the user still asks for it, but tones down from the old
+  // chunky primary button so it doesn't compete with the menu.
   const refresh = document.createElement('button');
-  refresh.className = 'primary';
+  refresh.type = 'button';
+  refresh.className = 'metro-refresh';
   refresh.textContent = '새로고침';
   refresh.addEventListener('click', () => {
     void renderHome(root, initData);
@@ -98,7 +91,6 @@ function paint(
   root.appendChild(refresh);
 
   if (readAppSettings().showDiagnostics) {
-    // Diagnostics live in the muted footer so the visible status stays minimal.
     const muted = document.createElement('div');
     muted.className = 'muted';
     const userLabel =
@@ -109,29 +101,27 @@ function paint(
   }
 }
 
-function buildNavRow(
-  tileClass: string,
-  iconName: IconName,
-  label: string,
-  sub: string,
-  onClick: () => void,
-): HTMLButtonElement {
+function buildMenuItem(entry: MenuEntry, index: number): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'profile-row profile-row-nav';
-  // icon() returns trusted SVG markup from our own registry — no user
-  // input — so it's safe to put inside innerHTML.
+  btn.className = 'metro-item';
+  // Stagger fade-in is driven by a CSS custom property the keyframes
+  // animation reads — keeps the cascade declarative and means we don't
+  // have to bake a fixed N-item table into stylesheet selectors.
+  btn.style.setProperty('--enter-delay', `${index * 60}ms`);
   btn.innerHTML = `
-    <span class="icon-tile ${tileClass}">${icon(iconName)}</span>
-    <span class="profile-row-text">
-      <span class="profile-row-label"></span>
-      <span class="profile-row-sub"></span>
+    <span class="metro-num"></span>
+    <span class="metro-text">
+      <span class="metro-label"></span>
+      <span class="metro-meta"></span>
     </span>
-    <span class="profile-row-chevron">›</span>
   `;
-  (btn.querySelector('.profile-row-label') as HTMLElement).textContent = label;
-  (btn.querySelector('.profile-row-sub') as HTMLElement).textContent = sub;
-  btn.addEventListener('click', onClick);
+  (btn.querySelector('.metro-num') as HTMLElement).textContent = String(index + 1).padStart(2, '0');
+  (btn.querySelector('.metro-label') as HTMLElement).textContent = entry.label;
+  (btn.querySelector('.metro-meta') as HTMLElement).textContent = entry.meta;
+  btn.addEventListener('click', () => {
+    navigate(entry.route);
+  });
   return btn;
 }
 
