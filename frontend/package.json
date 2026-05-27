@@ -13,5 +13,8 @@
     "@types/telegram-web-app": "^7.10.0",
     "typescript": "^5.6.3",
     "vite": "^6.0.5"
+  },
+  "dependencies": {
+    "lucide-static": "^1.16.0"
   }
 }

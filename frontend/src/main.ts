@@ -27,6 +27,7 @@ import { renderDiary } from './views/diary';
 import { renderCrons } from './views/crons';
 import { renderPeople } from './views/people';
 import { applyAppSettings, triggerSelectionHaptic } from './app_settings';
+import { icon, type IconName } from './icons';
 
 const root = document.getElementById('app')!;
 const tabBarRoot = document.getElementById('tab-bar')!;
@@ -88,10 +89,10 @@ function syncBackButton(route: Route): void {
   }
 }
 
-const TAB_DEFS: ReadonlyArray<{ name: TabRouteName; icon: string; label: string }> = [
-  { name: 'home', icon: '🏠', label: '홈' },
-  { name: 'more', icon: '☰', label: '더보기' },
-  { name: 'settings', icon: '⚙️', label: '설정' },
+const TAB_DEFS: ReadonlyArray<{ name: TabRouteName; icon: IconName; label: string }> = [
+  { name: 'home', icon: 'home', label: '홈' },
+  { name: 'more', icon: 'menu', label: '더보기' },
+  { name: 'settings', icon: 'settings', label: '설정' },
 ];
 
 function renderTabBar(route: Route): void {
@@ -108,10 +109,9 @@ function renderTabBar(route: Route): void {
     btn.type = 'button';
     btn.className = 'tab-item' + (def.name === route.name ? ' tab-item-active' : '');
     btn.innerHTML = `
-      <span class="tab-item-icon"></span>
+      <span class="tab-item-icon">${icon(def.icon)}</span>
       <span class="tab-item-label"></span>
     `;
-    (btn.querySelector('.tab-item-icon') as HTMLElement).textContent = def.icon;
     (btn.querySelector('.tab-item-label') as HTMLElement).textContent = def.label;
     btn.addEventListener('click', () => {
       if (def.name === route.name) return;

@@ -618,7 +618,14 @@ button.entry-card:active {
 }
 
 .attachment-icon {
-  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--tg-hint);
+}
+
+.attachment-icon .lucide-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .attachment-name {
@@ -656,6 +663,10 @@ pre.email-body {
 
 .action-button {
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   padding: 11px var(--space-3);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
@@ -666,6 +677,16 @@ pre.email-body {
     transform var(--transition-fast),
     background var(--transition-fast),
     border-color var(--transition-fast);
+}
+
+.action-button .action-icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.action-button .lucide-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .action-button:active {
@@ -947,8 +968,15 @@ pre.sender-context-facts-body {
 }
 
 .analysis-loading-spinner {
-  font-size: 18px;
-  animation: spin 2s linear infinite;
+  display: inline-flex;
+  align-items: center;
+  color: var(--tg-link);
+  animation: spin 1.2s linear infinite;
+}
+
+.analysis-loading-spinner .lucide-icon {
+  width: 20px;
+  height: 20px;
 }
 
 @keyframes spin {
@@ -992,9 +1020,18 @@ pre.sender-context-facts-body {
 }
 
 .analysis-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-weight: 700;
   font-size: 14px;
   letter-spacing: -0.01em;
+  color: var(--tg-link);
+}
+
+.analysis-card-title .lucide-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .analysis-card-meta {
@@ -1008,14 +1045,22 @@ pre.sender-context-facts-body {
    refinement of the existing card, not a new action. */
 .analysis-card-refresh {
   align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin-top: 4px;
   padding: 6px 12px;
   font-size: 12px;
   background: var(--tg-secondary-bg);
   color: var(--tg-text);
-  border: 1px solid var(--tg-section-separator, rgba(0, 0, 0, 0.1));
-  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
   cursor: pointer;
+}
+
+.analysis-card-refresh .lucide-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .analysis-card-refresh:active {
@@ -1418,10 +1463,23 @@ body.compact-ui button.session-row {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success) 22%, transparent);
 }
 
+/* Brand subtitle: greeting line (e.g. "좋은 저녁, choiceoh"). Sits
+   tight under the brand name so the two read as one identity block. */
 .brand-subtitle {
+  color: var(--tg-text);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  margin: 6px 0 2px;
+}
+
+/* Status meta: small live read-out under the greeting (model · status).
+   tabular-nums keeps numeric segments from shifting on each refresh. */
+.brand-meta {
   color: var(--tg-hint);
-  font-size: 13px;
-  letter-spacing: 0.01em;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
   margin: 0 0 var(--space-5);
 }
 
@@ -1532,12 +1590,13 @@ button.profile-row-nav:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 10px;
   font-size: 17px;
   line-height: 1;
   flex-shrink: 0;
+  color: #ffffff;
   /* Inner top-light + outer drop for the soft 3D feel of iOS-style
      icons. The inset highlight is what sells the depth — flat solid
      fills with a drop alone read as "sticker on paper". */
@@ -1550,6 +1609,31 @@ button.profile-row-nav:focus-visible {
 
 button.profile-row-nav:active .icon-tile {
   transform: scale(0.94);
+}
+
+/* Lucide SVGs render at 18px inside a 36px tile (50% — leaves room for
+   the colored backdrop to read as the "container") and 20px in standalone
+   contexts (action buttons, list rows). currentColor inherits from the
+   surrounding text — on a tile that's #fff via .icon-tile, in a button
+   that's the button's text color. */
+.lucide-icon {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.icon-tile .lucide-icon {
+  width: 19px;
+  height: 19px;
+  stroke-width: 2.25;
+}
+
+/* Inline icons inside text buttons want a tiny right gap so the label
+   doesn't crash into the stroke. */
+.lucide-icon + .icon-label {
+  margin-left: 6px;
 }
 
 .icon-tile-violet {
@@ -1628,8 +1712,15 @@ button.profile-row-nav:active .icon-tile {
 }
 
 .tab-item-icon {
-  font-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
+}
+
+.tab-item-icon .lucide-icon {
+  width: 22px;
+  height: 22px;
 }
 
 .tab-item-label {
