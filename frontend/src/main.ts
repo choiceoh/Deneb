@@ -11,24 +11,13 @@
 import '@fontsource-variable/inter';
 import './styles.css';
 import { parseRoute, navigate, isHomeRoute, type Route } from './router';
+// Home stays statically imported so the first-paint chunk includes
+// everything needed to render the index. Every other view is split out
+// via dynamic import in dispatch() — the operator only pays the chunk-
+// fetch cost the first time they navigate into a given destination, and
+// prefetchOtherViews() warms the cache during idle time after boot so
+// that first visit usually finds the chunk already there.
 import { renderHome } from './views/home';
-import { renderList } from './views/list';
-import { renderDetail } from './views/detail';
-import { renderMemory } from './views/memory';
-import { renderSessions } from './views/sessions';
-import { renderWikiPage } from './views/wiki_page';
-import { renderSessionTranscript } from './views/session_transcript';
-import { renderCalendar } from './views/calendar';
-import { renderCalendarEvent } from './views/calendar_event';
-import { renderSettings } from './views/settings';
-import { renderModelSelect } from './views/model_select';
-import { renderCategories } from './views/categories';
-import { renderCategoryPages } from './views/category_pages';
-import { renderDiary } from './views/diary';
-import { renderCrons } from './views/crons';
-import { renderPeople } from './views/people';
-import { renderPersonDetail } from './views/person_detail';
-import { renderWikiNew } from './views/wiki_new';
 import { applyAppSettings } from './app_settings';
 import { clearPullToRefreshHandler } from './pull_to_refresh';
 
@@ -103,67 +92,151 @@ function syncBackButton(route: Route): void {
   }
 }
 
+// dispatch awaits the dynamic chunk fetch, then invokes the view's
+// render function as fire-and-forget (`void renderX(...)`). Every view
+// paints its loading-state DOM synchronously at the top of its body
+// before its first await — so by the time render's promise yields,
+// the new DOM is already in place and dispatch can return. The View
+// Transitions API caller awaits dispatch, snapshots the new DOM, and
+// animates. RPC settles afterward and hydrates content into the
+// already-visible layout, with no transition animation.
 async function dispatch(route: Route): Promise<void> {
   if (!cachedInitData) return;
   syncBackButton(route);
   // Clear any pull-to-refresh handler from the previous view; views
   // that want to opt in re-register their own handler after rendering.
   clearPullToRefreshHandler();
+  const initData = cachedInitData;
   switch (route.name) {
     case 'home':
-      await renderHome(root, cachedInitData);
+      void renderHome(root, initData);
       return;
-    case 'inbox':
-      await renderList(root, cachedInitData);
+    case 'inbox': {
+      const { renderList } = await import('./views/list');
+      void renderList(root, initData);
       return;
-    case 'detail':
-      await renderDetail(root, cachedInitData, route.messageId);
+    }
+    case 'detail': {
+      const { renderDetail } = await import('./views/detail');
+      void renderDetail(root, initData, route.messageId);
       return;
-    case 'memory':
-      renderMemory(root, cachedInitData);
+    }
+    case 'memory': {
+      const { renderMemory } = await import('./views/memory');
+      renderMemory(root, initData);
       return;
-    case 'sessions':
-      await renderSessions(root, cachedInitData);
+    }
+    case 'sessions': {
+      const { renderSessions } = await import('./views/sessions');
+      void renderSessions(root, initData);
       return;
-    case 'wikiPage':
-      await renderWikiPage(root, cachedInitData, route.path);
+    }
+    case 'wikiPage': {
+      const { renderWikiPage } = await import('./views/wiki_page');
+      void renderWikiPage(root, initData, route.path);
       return;
-    case 'sessionTranscript':
-      await renderSessionTranscript(root, cachedInitData, route.sessionKey);
+    }
+    case 'sessionTranscript': {
+      const { renderSessionTranscript } = await import('./views/session_transcript');
+      void renderSessionTranscript(root, initData, route.sessionKey);
       return;
-    case 'calendar':
-      await renderCalendar(root, cachedInitData);
+    }
+    case 'calendar': {
+      const { renderCalendar } = await import('./views/calendar');
+      void renderCalendar(root, initData);
       return;
-    case 'calendarEvent':
-      await renderCalendarEvent(root, cachedInitData, route.eventId);
+    }
+    case 'calendarEvent': {
+      const { renderCalendarEvent } = await import('./views/calendar_event');
+      void renderCalendarEvent(root, initData, route.eventId);
       return;
-    case 'settings':
-      renderSettings(root, cachedInitData);
+    }
+    case 'settings': {
+      const { renderSettings } = await import('./views/settings');
+      renderSettings(root, initData);
       return;
-    case 'modelSelect':
-      renderModelSelect(root, cachedInitData);
+    }
+    case 'modelSelect': {
+      const { renderModelSelect } = await import('./views/model_select');
+      renderModelSelect(root, initData);
       return;
-    case 'categories':
-      await renderCategories(root, cachedInitData);
+    }
+    case 'categories': {
+      const { renderCategories } = await import('./views/categories');
+      void renderCategories(root, initData);
       return;
-    case 'categoryPages':
-      await renderCategoryPages(root, cachedInitData, route.category);
+    }
+    case 'categoryPages': {
+      const { renderCategoryPages } = await import('./views/category_pages');
+      void renderCategoryPages(root, initData, route.category);
       return;
-    case 'diary':
-      await renderDiary(root, cachedInitData);
+    }
+    case 'diary': {
+      const { renderDiary } = await import('./views/diary');
+      void renderDiary(root, initData);
       return;
-    case 'crons':
-      await renderCrons(root, cachedInitData);
+    }
+    case 'crons': {
+      const { renderCrons } = await import('./views/crons');
+      void renderCrons(root, initData);
       return;
-    case 'people':
-      await renderPeople(root, cachedInitData);
+    }
+    case 'people': {
+      const { renderPeople } = await import('./views/people');
+      void renderPeople(root, initData);
       return;
-    case 'personDetail':
-      await renderPersonDetail(root, cachedInitData, route.email);
+    }
+    case 'personDetail': {
+      const { renderPersonDetail } = await import('./views/person_detail');
+      void renderPersonDetail(root, initData, route.email);
       return;
-    case 'wikiNew':
-      renderWikiNew(root, cachedInitData, route.category ?? '');
+    }
+    case 'wikiNew': {
+      const { renderWikiNew } = await import('./views/wiki_new');
+      renderWikiNew(root, initData, route.category ?? '');
       return;
+    }
+  }
+}
+
+// Prefetch every lazy-loaded view module during idle time after the
+// home view paints. The first-time navigation cost for each
+// destination is the chunk fetch (~5-20 KB gzipped, ~50-200ms cold),
+// and the operator will hit most of them during a typical session —
+// so we warm the cache once on boot. Each `import()` returns a Promise
+// the browser can park; we don't need the resolved modules here
+// because dispatch will re-`import()` them later, but module-loading
+// is idempotent so the second call hits the cache.
+function prefetchOtherViews(): void {
+  const work = () => {
+    void import('./views/list');
+    void import('./views/detail');
+    void import('./views/memory');
+    void import('./views/sessions');
+    void import('./views/wiki_page');
+    void import('./views/session_transcript');
+    void import('./views/calendar');
+    void import('./views/calendar_event');
+    void import('./views/settings');
+    void import('./views/model_select');
+    void import('./views/categories');
+    void import('./views/category_pages');
+    void import('./views/diary');
+    void import('./views/crons');
+    void import('./views/people');
+    void import('./views/person_detail');
+    void import('./views/wiki_new');
+  };
+  // requestIdleCallback isn't on Safari < 17 and isn't in lib.dom.d.ts
+  // by default; fall back to a generous setTimeout so we still kick the
+  // prefetch eventually on platforms that lack it.
+  const ric = (window as Window & {
+    requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
+  }).requestIdleCallback;
+  if (typeof ric === 'function') {
+    ric(work, { timeout: 4000 });
+  } else {
+    setTimeout(work, 800);
   }
 }
 
@@ -199,8 +272,14 @@ function handleHashChange(): void {
     startViewTransition?: (cb: () => void | Promise<void>) => unknown;
   }).startViewTransition;
   if (typeof startTransition === 'function') {
-    startTransition.call(document, () => {
-      void dispatch(route);
+    // The callback is async because dispatch now awaits a dynamic
+    // import before it can run the view's render function. View
+    // Transitions holds the old snapshot until the callback resolves,
+    // so the snapshot of "new DOM" happens after the chunk fetch +
+    // the render's synchronous paint phase have both completed —
+    // which is exactly the state we want to animate into.
+    startTransition.call(document, async () => {
+      await dispatch(route);
     });
   } else {
     void dispatch(route);
@@ -291,6 +370,12 @@ function boot(): void {
   window.addEventListener('hashchange', handleHashChange);
 
   void dispatch(parseRoute(location.hash));
+
+  // Warm the chunk cache for every non-home view in the background.
+  // The operator hits most destinations during a typical session, so
+  // paying ~5-20 KB per chunk in idle time is cheaper than paying it
+  // synchronously the first time they tap each menu row.
+  prefetchOtherViews();
 }
 
 boot();
