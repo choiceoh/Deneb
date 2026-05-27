@@ -403,24 +403,21 @@ func TestFormatSearchResults(t *testing.T) {
 		t.Error("missing second message subject")
 	}
 	if strings.Contains(result, "🔵") || strings.Contains(result, "⚪") {
-		t.Error("legacy emoji markers should be gone")
+		t.Error("legacy color emoji markers should be gone")
 	}
 	if strings.Contains(result, "(안 읽음)") {
 		t.Error("legacy 안 읽음 label should be gone")
 	}
-	if !strings.Contains(result, "**Alice <alice@example.com>**") {
-		t.Error("unread sender should be bold")
-	}
-	if strings.Contains(result, "**Bob <bob@example.com>**") {
-		t.Error("read sender should not be bold")
-	}
-	if !strings.Contains(result, "> Bob <bob@example.com>") {
-		t.Error("read message should be wrapped in a blockquote (`>`)")
-	}
 	for _, line := range strings.Split(result, "\n") {
-		if strings.Contains(line, "Alice") && strings.HasPrefix(line, ">") {
-			t.Errorf("unread line should not be a blockquote: %q", line)
+		if strings.HasPrefix(line, "> ") || strings.HasPrefix(line, ">  ") {
+			t.Errorf("legacy blockquote prefix should be gone, got line %q", line)
 		}
+	}
+	if !strings.Contains(result, "○ **Alice <alice@example.com>**") {
+		t.Error("unread item should be prefixed with `○ ` and bold sender")
+	}
+	if strings.Contains(result, "○ Bob") || strings.Contains(result, "**Bob <bob@example.com>**") {
+		t.Error("read item should have no marker and no bold sender")
 	}
 }
 
@@ -429,13 +426,22 @@ func TestFormatSearchResults_AllRead(t *testing.T) {
 		{ID: "x1", From: "Carol", Subject: "FYI", Date: "Wed", Labels: []string{"INBOX"}},
 	}
 	result := FormatSearchResults(msgs)
-	for _, line := range strings.Split(result, "\n") {
-		if line == "" {
-			continue
-		}
-		if !strings.HasPrefix(line, ">") {
-			t.Errorf("every read line should start with `>`, got %q", line)
-		}
+	if strings.Contains(result, "○") {
+		t.Error("read-only list should contain no `○` marker")
+	}
+	if strings.Contains(result, "**Carol**") {
+		t.Error("read sender should not be bold")
+	}
+}
+
+func TestFormatSearchResults_AllUnread(t *testing.T) {
+	msgs := []MessageSummary{
+		{ID: "u1", From: "Dan", Subject: "Ping", Date: "Thu", Labels: []string{"INBOX", "UNREAD"}},
+		{ID: "u2", From: "Eve", Subject: "Pong", Date: "Fri", Labels: []string{"INBOX", "UNREAD"}},
+	}
+	result := FormatSearchResults(msgs)
+	if strings.Count(result, "○") != 2 {
+		t.Errorf("expected one `○` per unread item, got %d in %q", strings.Count(result, "○"), result)
 	}
 }
 
