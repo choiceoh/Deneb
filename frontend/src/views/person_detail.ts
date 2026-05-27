@@ -19,6 +19,7 @@
 import { listRecent, senderContext, type GmailMessageRow, type SenderContext } from '../gmail';
 import { formatRpcError, relativeTime, shortFrom } from '../format';
 import { isCurrentHash, navigate } from '../router';
+import { setPullToRefreshHandler } from '../pull_to_refresh';
 import { buildErrorBanner, buildLoadingNode, buildViewHeader } from './ui';
 
 const recentMessagesLimit = 30;
@@ -35,12 +36,9 @@ export async function renderPersonDetail(
     buildViewHeader({
       title: 'person',
       left: { label: '← people', onClick: () => navigate({ name: 'people' }) },
-      right: {
-        label: 'refresh',
-        onClick: () => void renderPersonDetail(root, initData, email),
-      },
     }),
   );
+  setPullToRefreshHandler(() => renderPersonDetail(root, initData, email));
 
   const status = buildLoadingNode('정보 모으는 중…');
   root.appendChild(status);

@@ -21,6 +21,7 @@ import { archive, listRecent, markRead, trash, type GmailMessageRow } from '../g
 import { isCurrentHash, navigate } from '../router';
 import { confirmAction } from '../dialog';
 import { errorMessage, formatRpcError, relativeTime, shortFrom } from '../format';
+import { setPullToRefreshHandler } from '../pull_to_refresh';
 import { buildErrorBanner, buildRowSkeleton, buildViewHeader } from './ui';
 
 const longPressMs = 450;
@@ -47,8 +48,9 @@ interface SelectionState {
 export async function renderList(root: HTMLElement, initData: string): Promise<void> {
   const expectedHash = location.hash;
   root.innerHTML = '';
-  const header = buildHeader(() => renderList(root, initData));
+  const header = buildHeader();
   root.appendChild(header);
+  setPullToRefreshHandler(() => renderList(root, initData));
 
   // Container the load-more handler appends into. Keeping it separate
   // from the page-level root lets us swap the "더 보기" button in/out
@@ -90,10 +92,9 @@ export async function renderList(root: HTMLElement, initData: string): Promise<v
   }
 }
 
-function buildHeader(onRefresh: () => void): HTMLElement {
+function buildHeader(): HTMLElement {
   return buildViewHeader({
     title: 'mail',
-    right: { label: 'refresh', onClick: onRefresh },
   });
 }
 
