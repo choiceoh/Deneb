@@ -2837,6 +2837,7 @@ button.person-msg-row-unread {
   line-height: 1.05;
   text-align: left;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
   transition:
     transform 140ms var(--ease-exit),
     opacity 220ms var(--ease-emphasis),
