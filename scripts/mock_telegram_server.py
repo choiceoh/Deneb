@@ -319,6 +319,9 @@ class MockTelegramHandler(BaseHTTPRequestHandler):
         if path == "/_test/inject_callback":
             self._handle_inject_callback()
             return
+        if path == "/_test/inject_my_chat_member":
+            self._handle_inject_my_chat_member()
+            return
         if path == "/_test/reset":
             self.state.reset()
             self._write_json(200, {"ok": True})
@@ -540,6 +543,61 @@ class MockTelegramHandler(BaseHTTPRequestHandler):
         }
         update_id = self.state.enqueue_update(update)
         self._write_json(200, {"ok": True, "update_id": update_id})
+
+    def _handle_inject_my_chat_member(self) -> None:
+        """Queue a my_chat_member update so M5 (admin-promotion greeting +
+        permission watcher) can be exercised without a real supergroup.
+        Body fields:
+          chat_id            (default: DEFAULT_CHAT_ID)
+          chat_type          (default: "supergroup")
+          is_forum           (default: True for supergroup_type)
+          chat_title         (optional)
+          old_status         (default: "member")
+          new_status         (default: "administrator")
+          old_can_manage_topics  (default: False)
+          new_can_manage_topics  (default: True)
+          from_id            (the user performing the change; default DEFAULT_USER_ID)
+        The bot is always the subject of the change (User.ID = BOT_ID).
+        """
+        body = self._read_json()
+        chat_id = int(body.get("chat_id") or DEFAULT_CHAT_ID)
+        chat_type = str(body.get("chat_type") or "supergroup")
+        is_forum = body.get("is_forum")
+        if is_forum is None:
+            is_forum = chat_type == "supergroup"
+        from_id = int(body.get("from_id") or DEFAULT_USER_ID)
+        old_status = str(body.get("old_status") or "member")
+        new_status = str(body.get("new_status") or "administrator")
+
+        chat: dict[str, Any] = {"id": chat_id, "type": chat_type}
+        if is_forum:
+            chat["is_forum"] = True
+        if title := body.get("chat_title"):
+            chat["title"] = str(title)
+
+        old_member: dict[str, Any] = {
+            "status": old_status,
+            "user": {"id": BOT_ID, "is_bot": True, "first_name": BOT_FIRST_NAME},
+        }
+        new_member: dict[str, Any] = {
+            "status": new_status,
+            "user": {"id": BOT_ID, "is_bot": True, "first_name": BOT_FIRST_NAME},
+        }
+        if "old_can_manage_topics" in body:
+            old_member["can_manage_topics"] = bool(body["old_can_manage_topics"])
+        if "new_can_manage_topics" in body:
+            new_member["can_manage_topics"] = bool(body["new_can_manage_topics"])
+
+        update_id = self.state.enqueue_update({
+            "my_chat_member": {
+                "chat": chat,
+                "from": {"id": from_id, "is_bot": False, "first_name": DEFAULT_USER_FIRST_NAME},
+                "date": int(time.time()),
+                "old_chat_member": old_member,
+                "new_chat_member": new_member,
+            }
+        })
+        self._write_json(200, {"ok": True, "update_id": update_id, "chat_id": chat_id})
 
     def _handle_outbound(self, query_string: str) -> None:
         qs = parse_qs(query_string)
