@@ -25,6 +25,7 @@ import { renderCategories } from './views/categories';
 import { renderCategoryPages } from './views/category_pages';
 import { renderDiary } from './views/diary';
 import { renderCrons } from './views/crons';
+import { renderPeople } from './views/people';
 import { applyAppSettings, triggerSelectionHaptic } from './app_settings';
 
 const root = document.getElementById('app')!;
@@ -171,6 +172,9 @@ async function dispatch(route: Route): Promise<void> {
     case 'crons':
       await renderCrons(root, cachedInitData);
       return;
+    case 'people':
+      await renderPeople(root, cachedInitData);
+      return;
   }
 }
 
@@ -231,6 +235,7 @@ function boot(): void {
       case 'categories':
       case 'diary':
       case 'crons':
+      case 'people':
         navigate({ name: 'more' });
         return;
       default:

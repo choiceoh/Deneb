@@ -308,6 +308,15 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			},
 			SenderFacts: gmailpoll.ExtractSenderFacts,
 		}),
+
+		// Mini App people directory (miniapp.people.list). Same Gmail
+		// lazy-client pattern; aggregates a single Search call into a
+		// frequency-sorted counterparty list.
+		handlerminiapp.PeopleMethods(handlerminiapp.PeopleDeps{
+			Client: func() (handlerminiapp.PeopleClient, error) {
+				return gmail.DefaultClient()
+			},
+		}),
 	}
 
 	// Conditional: provider methods.
