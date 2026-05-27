@@ -1,7 +1,7 @@
 // views/session_transcript.ts — show recent messages of a single session.
 //
-// Reached by tapping a row in the "최근 세션" list. Lays messages out
-// as a vertical timeline; each bubble is colored by role (user / assistant /
+// Reached by tapping a row in the topics list. Lays messages out as a
+// vertical timeline; each bubble is colored by role (user / assistant /
 // tool). No interaction yet — open-and-continue lives in chat, not Mini App.
 
 import { getTranscript, type TranscriptMessage } from '../sessions';
@@ -20,7 +20,7 @@ export async function renderSessionTranscript(
   root.appendChild(
     buildViewHeader({
       title: 'transcript',
-      left: { label: '← sessions', onClick: () => navigate({ name: 'sessions' }) },
+      left: { label: '← topics', onClick: () => navigate({ name: 'sessions' }) },
     }),
   );
 

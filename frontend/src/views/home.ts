@@ -54,7 +54,7 @@ function paint(
     { label: 'calendar', route: { name: 'calendar' } },
     { label: 'mail', route: { name: 'inbox' } },
     { label: 'memory', route: { name: 'memory' } },
-    { label: 'sessions', route: { name: 'sessions' } },
+    { label: 'topics', route: { name: 'sessions' } },
   ];
 
   const list = document.createElement('nav');

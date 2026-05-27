@@ -1,7 +1,14 @@
-// views/sessions.ts — Recent sessions list.
+// views/sessions.ts — Recent topics list.
 //
-// Read-only for now: tapping a row just returns to home. A "open session"
-// flow (load transcript, /resume, etc.) is left as future work.
+// Backed by miniapp.sessions.recent — the underlying RPC still returns one
+// row per agent run, but in forum-supergroup mode each row's key carries a
+// "telegram:CHAT:thread:N" suffix that identifies the owning topic. The
+// row display surfaces that suffix as a "topic #N" tag so the user can
+// see which Telegram topic each session belongs to. Sessions without a
+// thread suffix render as plain rows (1:1 chats, General topic, btw/cron).
+//
+// Read-only for now: tapping a row opens the transcript. A "resume here"
+// or "switch active topic" flow is left as future work.
 
 import { recentSessions, type SessionRow } from '../sessions';
 import { formatRpcError, relativeTime } from '../format';
@@ -14,12 +21,12 @@ export async function renderSessions(root: HTMLElement, initData: string): Promi
 
   root.appendChild(
     buildViewHeader({
-      title: 'sessions',
+      title: 'topics',
       right: { label: 'refresh', onClick: () => void renderSessions(root, initData) },
     }),
   );
 
-  const status = buildLoadingNode('세션 불러오는 중…');
+  const status = buildLoadingNode('토픽 불러오는 중…');
   root.appendChild(status);
 
   try {
@@ -29,7 +36,7 @@ export async function renderSessions(root: HTMLElement, initData: string): Promi
     if (sessions.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.textContent = '최근 세션이 없습니다';
+      empty.textContent = '최근 토픽이 없습니다';
       root.appendChild(empty);
       return;
     }
@@ -39,8 +46,17 @@ export async function renderSessions(root: HTMLElement, initData: string): Promi
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
     status.remove();
-    root.appendChild(buildErrorBanner(`세션 목록 로드 실패: ${formatRpcError(err)}`));
+    root.appendChild(buildErrorBanner(`토픽 목록 로드 실패: ${formatRpcError(err)}`));
   }
+}
+
+// extractThreadID pulls "N" out of a "telegram:CHAT:thread:N" key. Returns
+// null for any key without that exact suffix (1:1 chats, General messages,
+// non-telegram channels). Kept as a small helper because both the row
+// display and any future grouping logic will want the same parse rule.
+function extractThreadID(key: string): string | null {
+  const m = key.match(/:thread:(\d+)$/);
+  return m ? m[1] : null;
 }
 
 function buildRow(s: SessionRow): HTMLElement {
@@ -59,9 +75,20 @@ function buildRow(s: SessionRow): HTMLElement {
     : '';
   el.appendChild(top);
 
+  // Tag row: prepend "topic #N" for forum-topic sessions so the user can
+  // tell at a glance which rows belong to a thread vs the chat's General /
+  // 1:1 / non-telegram path. Other tags (channel, kind, status, model)
+  // follow unchanged.
   const middle = document.createElement('div');
   middle.className = 'session-row-tags';
-  const tags = [s.channel, s.kind, s.status, s.model].filter(Boolean) as string[];
+  const threadID = extractThreadID(s.key);
+  const tags = [
+    threadID !== null ? `topic #${threadID}` : null,
+    s.channel,
+    s.kind,
+    s.status,
+    s.model,
+  ].filter(Boolean) as string[];
   middle.textContent = tags.join(' · ');
   el.appendChild(middle);
 
