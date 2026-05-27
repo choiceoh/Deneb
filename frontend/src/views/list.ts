@@ -22,6 +22,7 @@ import { isCurrentHash, navigate } from '../router';
 import { confirmAction } from '../dialog';
 import { errorMessage, formatRpcError, relativeTime, shortFrom } from '../format';
 import { buildErrorBanner, buildLoadingNode, buildViewHeader } from './ui';
+import { icon, type IconName } from '../icons';
 
 const longPressMs = 450;
 const longPressMoveTolerancePx = 10;
@@ -295,20 +296,23 @@ function renderSelectionBar(selection: SelectionState): void {
 
   const actions = document.createElement('div');
   actions.className = 'email-bulk-actions';
-  actions.appendChild(buildBulkButton('📌 읽음', selection.busy, () =>
+  actions.appendChild(buildBulkButton('read', '읽음', selection.busy, () =>
     runBulkAction(selection, 'read'),
   ));
-  actions.appendChild(buildBulkButton('📁 보관', selection.busy, () =>
+  actions.appendChild(buildBulkButton('archive', '보관', selection.busy, () =>
     runBulkAction(selection, 'archive'),
   ));
-  actions.appendChild(buildBulkButton('🗑 삭제', selection.busy, () =>
+  actions.appendChild(buildBulkButton('trash', '삭제', selection.busy, () =>
     runBulkAction(selection, 'trash'),
   ));
-  actions.appendChild(buildBulkButton('취소', selection.busy, () => exitSelectionMode(selection)));
+  actions.appendChild(
+    buildBulkButton(null, '취소', selection.busy, () => exitSelectionMode(selection)),
+  );
   bar.appendChild(actions);
 }
 
 function buildBulkButton(
+  iconName: IconName | null,
   label: string,
   disabled: boolean,
   onClick: () => void | Promise<void>,
@@ -316,7 +320,19 @@ function buildBulkButton(
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'email-bulk-button';
-  btn.textContent = label;
+  // Same icon + label pattern as the action bar: trusted SVG markup
+  // first, then a textContent-bound label span so future label changes
+  // don't have to re-emit the SVG.
+  if (iconName) {
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'action-icon';
+    iconSpan.innerHTML = icon(iconName);
+    btn.appendChild(iconSpan);
+  }
+  const labelSpan = document.createElement('span');
+  labelSpan.className = 'icon-label';
+  labelSpan.textContent = label;
+  btn.appendChild(labelSpan);
   btn.disabled = disabled;
   btn.addEventListener('click', () => {
     void onClick();

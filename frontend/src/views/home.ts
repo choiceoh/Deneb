@@ -6,6 +6,7 @@ import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
 import { readAppSettings } from '../app_settings';
 import { buildErrorBanner } from './ui';
+import { icon, type IconName } from '../icons';
 
 export async function renderHome(root: HTMLElement, initData: string): Promise<void> {
   const expectedHash = location.hash;
@@ -39,24 +40,19 @@ function paint(
   `;
   root.appendChild(header);
 
+  // Replaces the old "비서실장형 단일 에이전트" tagline with a
+  // greeting + live status read. Two short lines = identity + signal
+  // without marketing copy.
   const subtitle = document.createElement('div');
   subtitle.className = 'brand-subtitle';
-  subtitle.textContent = '비서실장형 단일 에이전트';
+  subtitle.textContent = greeting(user.firstName);
   root.appendChild(subtitle);
 
-  // Status: just the current model. Version/latency stay in the muted
-  // footer so the visible status stays minimal.
-  const statusLabel = document.createElement('div');
-  statusLabel.className = 'section-label';
-  statusLabel.textContent = '상태';
-  root.appendChild(statusLabel);
-
-  const status = document.createElement('div');
-  status.className = 'section-card';
-  status.appendChild(
-    buildInfoRow('icon-tile-pink', '🧠', '모델', pingResult.model || '—'),
-  );
-  root.appendChild(status);
+  const meta = document.createElement('div');
+  meta.className = 'brand-meta';
+  const model = prettyModel(pingResult.model);
+  meta.textContent = model ? `${model} · 정상` : '연결 안 됨';
+  root.appendChild(meta);
 
   // Domain entry cards. Order is intentional, by product priority:
   //   1) calendar — time-pressured (D-15 pushes need immediate eyeballs)
@@ -72,22 +68,22 @@ function paint(
   const shortcuts = document.createElement('div');
   shortcuts.className = 'section-card';
   shortcuts.appendChild(
-    buildNavRow('icon-tile-blue', '📅', '일정', '다가오는 회의 · D-15분 알림', () =>
+    buildNavRow('icon-tile-blue', 'calendar', '일정', '다가오는 회의 · D-15분 알림', () =>
       navigate({ name: 'calendar' }),
     ),
   );
   shortcuts.appendChild(
-    buildNavRow('icon-tile-red', '📧', 'Gmail 트리아지', '최근 미처리 메일', () =>
+    buildNavRow('icon-tile-red', 'mail', 'Gmail 트리아지', '최근 미처리 메일', () =>
       navigate({ name: 'inbox' }),
     ),
   );
   shortcuts.appendChild(
-    buildNavRow('icon-tile-amber', '🧩', '메모리 검색', '위키 / 메모리 빠른 검색', () =>
+    buildNavRow('icon-tile-amber', 'memory', '메모리 검색', '위키 / 메모리 빠른 검색', () =>
       navigate({ name: 'memory' }),
     ),
   );
   shortcuts.appendChild(
-    buildNavRow('icon-tile-teal', '🗂', '최근 세션', '실행 중 / 완료', () =>
+    buildNavRow('icon-tile-teal', 'sessions', '최근 세션', '실행 중 / 완료', () =>
       navigate({ name: 'sessions' }),
     ),
   );
@@ -113,28 +109,9 @@ function paint(
   }
 }
 
-function buildInfoRow(
-  tileClass: string,
-  emoji: string,
-  label: string,
-  value: string,
-): HTMLElement {
-  const row = document.createElement('div');
-  row.className = 'profile-row';
-  row.innerHTML = `
-    <span class="icon-tile ${tileClass}"></span>
-    <span class="profile-row-label"></span>
-    <span class="profile-row-value"></span>
-  `;
-  (row.querySelector('.icon-tile') as HTMLElement).textContent = emoji;
-  (row.querySelector('.profile-row-label') as HTMLElement).textContent = label;
-  (row.querySelector('.profile-row-value') as HTMLElement).textContent = value;
-  return row;
-}
-
 function buildNavRow(
   tileClass: string,
-  emoji: string,
+  iconName: IconName,
   label: string,
   sub: string,
   onClick: () => void,
@@ -142,19 +119,40 @@ function buildNavRow(
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'profile-row profile-row-nav';
+  // icon() returns trusted SVG markup from our own registry — no user
+  // input — so it's safe to put inside innerHTML.
   btn.innerHTML = `
-    <span class="icon-tile ${tileClass}"></span>
+    <span class="icon-tile ${tileClass}">${icon(iconName)}</span>
     <span class="profile-row-text">
       <span class="profile-row-label"></span>
       <span class="profile-row-sub"></span>
     </span>
     <span class="profile-row-chevron">›</span>
   `;
-  (btn.querySelector('.icon-tile') as HTMLElement).textContent = emoji;
   (btn.querySelector('.profile-row-label') as HTMLElement).textContent = label;
   (btn.querySelector('.profile-row-sub') as HTMLElement).textContent = sub;
   btn.addEventListener('click', onClick);
   return btn;
+}
+
+// greeting picks a Korean phase-of-day phrase. Suffixes the user's first
+// name when we have one so the screen reads as a personal landing rather
+// than a generic dashboard.
+function greeting(firstName?: string): string {
+  const h = new Date().getHours();
+  const phase = h < 5 ? '안녕하세요' : h < 12 ? '좋은 아침' : h < 18 ? '좋은 오후' : '좋은 저녁';
+  const who = firstName?.trim();
+  return who ? `${phase}, ${who}` : phase;
+}
+
+// prettyModel strips the provider prefix and uppercases the model name
+// so e.g. "zai/glm-5.1" reads as "GLM-5.1" — the part the operator
+// actually cares about. Returns "" when the gateway hasn't reported
+// a model yet (caller falls back to "연결 안 됨").
+function prettyModel(raw?: string): string {
+  if (!raw) return '';
+  const trimmed = raw.split('/').pop()?.trim() ?? '';
+  return trimmed.toUpperCase();
 }
 
 function renderHomeError(root: HTMLElement, message: string): void {
