@@ -9,28 +9,35 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
 
-// handleAppCommand replies to /app with a one-button inline message that
-// launches the Mini App. Inline web_app buttons work in any chat type
-// (1:1, group, supergroup, topic) — unlike setChatMenuButton, which
-// Telegram restricts to private chats. So /app is how the operator gets
-// at the Mini App from inside a forum topic without first bouncing back
-// to the bot's DM.
+// handleAppCommand replies to /app with a one-button URL message that
+// launches the Mini App. We use a URL button instead of a web_app
+// inline button because Bot API restricts InlineKeyboardButton.web_app
+// to private chats — in supergroups Telegram returns "Text buttons are
+// unallowed in the inline keyboard" and the button is rejected. The
+// t.me/<bot>?startapp=... link is Telegram's official path for opening
+// a Main Mini App from any chat (groups + channels included), so it
+// works inside forum topics where /app actually adds value.
 //
-// Refuses with a brief explanation if no Mini App is configured —
-// silently sending a button to about:blank would just confuse the user.
+// Refuses with a brief explanation when prerequisites are missing
+// (bot username not yet resolved by getMe, or no Mini App configured)
+// rather than sending a button to a broken URL.
 func (p *InboundProcessor) handleAppCommand(chatID, threadID string) {
-	url := ""
-	if plug := p.server.telegramPlug; plug != nil {
-		url = plug.WebAppURL()
-	}
-	if url == "" {
+	plug := p.server.telegramPlug
+	if plug == nil || plug.WebAppURL() == "" {
 		p.sendCommandReply(chatID, threadID, &handlers.CommandResult{
 			Reply: "⚠️ Mini App URL 이 설정되어 있지 않습니다. 운영자가 telegram.webAppURL 을 설정해주세요.",
 		})
 		return
 	}
+	bot := plug.BotUser()
+	if bot == nil || bot.Username == "" {
+		p.sendCommandReply(chatID, threadID, &handlers.CommandResult{
+			Reply: "⚠️ 봇 username 을 아직 확인하지 못했습니다. 잠시 후 다시 시도해주세요.",
+		})
+		return
+	}
 
-	client := p.server.telegramPlug.Client()
+	client := plug.Client()
 	if client == nil {
 		p.logger.Warn("telegram client not available for /app command")
 		return
@@ -41,9 +48,15 @@ func (p *InboundProcessor) handleAppCommand(chatID, threadID string) {
 	}
 	tid, _ := strconv.ParseInt(threadID, 10, 64)
 
+	// Main Mini App launch URL. startapp param is required for Telegram
+	// to recognize the link as a Mini App launcher (vs a plain bot DM
+	// link); the value itself is opaque to deneb — present so we can
+	// add deep-link context later (e.g. ?startapp=topic-42) without
+	// changing the slash dispatch.
+	launchURL := "https://t.me/" + bot.Username + "?startapp=open"
 	keyboard := &telegram.InlineKeyboardMarkup{
 		InlineKeyboard: [][]telegram.InlineKeyboardButton{{
-			{Text: "🚀 Mini App 열기", WebApp: &telegram.WebAppInfo{URL: url}},
+			{Text: "🚀 Mini App 열기", URL: launchURL},
 		}},
 	}
 
