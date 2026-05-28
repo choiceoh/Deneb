@@ -279,6 +279,10 @@ function boot(): void {
   tg.ready();
   applyThemeFromTelegram(tg);
 
+  // Bot API 8.0+: go fullscreen so Telegram's native title bar
+  // ("네브", ⋮, ×) is hidden. No-op on older clients.
+  (tg as unknown as { requestFullscreen?: () => void }).requestFullscreen?.();
+
   // Bot API 7.7+. Without this, dragging down inside the Mini App also
   // tugs Telegram's own swipe-to-minimize gesture, so pull-to-refresh
   // ends up shrinking the whole app instead of just nudging the page.

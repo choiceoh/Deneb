@@ -18,6 +18,14 @@
       on boot).
     -->
     <script defer src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!--
+      Belt-and-suspenders guard: if an older cached JS bundle still
+      references the Vite modulePreload placeholder as a free identifier,
+      define it here so the ReferenceError never fires. An empty array
+      means "no deps to preload" — the dynamic import still works, just
+      without the parallel prefetch optimisation that we disabled anyway.
+    -->
+    <script>window.__VITE_PRELOAD__=[]</script>
   </head>
   <body>
     <div id="app">
