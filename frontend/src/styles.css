@@ -3449,3 +3449,84 @@ button.person-msg-row-unread {
     background: var(--surface-tint);
   }
 }
+
+/* ============================================================
+   Desktop optimization
+   ============================================================
+   Telegram on desktop (tdesktop / macos / web) opens the Mini App
+   in a wider, resizable window with mouse + keyboard input. The
+   typography idiom that fits a 480px mobile column reads
+   undersized against a 720-900px desktop viewport, so we scale up
+   the hero type, panorama, and content column. Hover effects also
+   only land on platforms that actually carry a hover state — the
+   media query gates everything on (hover: hover) so a touch laptop
+   stays on the mobile cadence.
+
+   body.tg-desktop is the JS-stamped class; we double-gate with
+   (hover: hover) because some touch laptops report 'tdesktop'
+   while still using a stylus or finger as primary input. */
+
+@media (hover: hover) and (min-width: 720px) {
+  body.tg-desktop #app {
+    max-width: 720px;
+    padding: 28px 32px 48px;
+  }
+
+  body.tg-desktop #tab-bar {
+    max-width: 720px;
+    padding: 22px 32px 12px;
+  }
+
+  body.tg-desktop .panorama-tab {
+    font-size: 36px;
+  }
+
+  body.tg-desktop .type-item {
+    font-size: 64px;
+    padding: 10px 0;
+  }
+
+  body.tg-desktop .view-title {
+    font-size: 56px;
+  }
+
+  body.tg-desktop .email-subject {
+    font-size: 36px;
+  }
+
+  /* Stronger hover affordance on actual-mouse platforms. The mobile
+     rule already gives type-item:hover an opacity + tracking lift;
+     here we add a tiny translate so the word leans toward the
+     pointer, which only makes sense when there *is* a pointer. */
+  body.tg-desktop .type-item:hover {
+    transform: translateX(6px);
+  }
+
+  body.tg-desktop .type-item {
+    cursor: pointer;
+  }
+
+  body.tg-desktop .view-title,
+  body.tg-desktop .type-greeting,
+  body.tg-desktop .type-status {
+    cursor: default;
+  }
+
+  /* Panorama active marker reads better at the larger desktop size
+     if we thicken it slightly. */
+  body.tg-desktop .panorama-tab::after {
+    height: 3px;
+  }
+}
+
+/* Keyboard-focus indicator. The mobile rule on :focus-visible
+   bumps opacity; desktop gets an explicit underline so the
+   currently-keyboarded item is unambiguous. */
+@media (hover: hover) {
+  body.tg-desktop .type-item:focus-visible {
+    text-decoration: underline;
+    text-decoration-color: var(--tg-text);
+    text-underline-offset: 6px;
+    text-decoration-thickness: 2px;
+  }
+}
