@@ -68,6 +68,101 @@ function applyThemeFromTelegram(tg: WebApp): void {
   }
 }
 
+// stampPlatformClass mirrors tg.platform onto body so CSS + JS can
+// branch on it. The 'tg-desktop' / 'tg-mobile' grouping is the one
+// most rules actually want — viewport scaling, hover, keyboard. The
+// raw 'tg-platform-<x>' class is kept around for any future
+// platform-specific edge case (e.g. macOS-only quirks).
+function stampPlatformClass(tg: WebApp): void {
+  const platform = (tg.platform ?? 'unknown').toLowerCase();
+  const desktopPlatforms = new Set(['tdesktop', 'macos', 'web', 'weba', 'webk']);
+  const isDesktop = desktopPlatforms.has(platform);
+  document.body.classList.toggle('tg-desktop', isDesktop);
+  document.body.classList.toggle('tg-mobile', !isDesktop);
+  document.body.dataset.tgPlatform = platform;
+}
+
+// Keyboard navigation for Telegram-on-desktop. Bindings:
+//   j / ArrowDown : focus next .type-item or .email-row
+//   k / ArrowUp   : focus previous
+//   Enter         : activate the focused element (default browser
+//                   behavior; we no-op so we don't double-fire)
+//   Esc           : back — pops to home (or the back stack via
+//                   the BackButton handler that's already wired).
+//   /             : focus the global search input if we're on
+//                   search; navigate to search otherwise.
+//
+// We intentionally don't intercept anything when the focus is in a
+// real text input — the keys above need to type literally there.
+function handleKeyboardNav(ev: KeyboardEvent): void {
+  if (!document.body.classList.contains('tg-desktop')) return;
+  if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+
+  const target = ev.target as HTMLElement | null;
+  const inTextInput =
+    target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
+  if (inTextInput && ev.key !== 'Escape') return;
+
+  switch (ev.key) {
+    case 'j':
+    case 'ArrowDown':
+      moveFocus(1);
+      ev.preventDefault();
+      return;
+    case 'k':
+    case 'ArrowUp':
+      moveFocus(-1);
+      ev.preventDefault();
+      return;
+    case 'Escape': {
+      // From any drill-down or tab view, escape pops to home. The
+      // BackButton handler installed during boot() handles the
+      // smarter "pop to the parent list" path; this is a simpler
+      // straight-shot for keyboard users who just want out.
+      const route = parseRoute(location.hash);
+      if (route.name !== 'home') {
+        navigate({ name: 'home' });
+        ev.preventDefault();
+      }
+      return;
+    }
+    case '/': {
+      // / drops focus into the search input if we're already there,
+      // otherwise navigates to the search view.
+      const route = parseRoute(location.hash);
+      if (route.name === 'search') {
+        const input = document.querySelector('input[type="search"], .search-form input');
+        (input as HTMLInputElement | null)?.focus();
+      } else {
+        navigate({ name: 'search' });
+      }
+      ev.preventDefault();
+      return;
+    }
+    default:
+      return;
+  }
+}
+
+// moveFocus walks the page's set of focusable rows (menu items on
+// home; email rows on mail; flat-rows in settings; etc.) and shifts
+// focus by `delta`. Wraps around at either end so the operator can
+// just keep pressing j to spin the cursor through the list.
+function moveFocus(delta: number): void {
+  const candidates = Array.from(
+    document.querySelectorAll<HTMLElement>(
+      '.type-item, .email-row, .session-row, .flat-row-nav, .panorama-tab',
+    ),
+  ).filter((el) => !el.hasAttribute('disabled') && el.offsetParent !== null);
+  if (candidates.length === 0) return;
+  const current = document.activeElement as HTMLElement | null;
+  const idx = current ? candidates.indexOf(current) : -1;
+  let next = idx + delta;
+  if (next < 0) next = candidates.length - 1;
+  if (next >= candidates.length) next = 0;
+  candidates[next]?.focus();
+}
+
 function renderError(message: string): void {
   root.innerHTML = '';
   const banner = document.createElement('div');
@@ -278,6 +373,7 @@ function boot(): void {
   }
   tg.ready();
   applyThemeFromTelegram(tg);
+  stampPlatformClass(tg);
 
   // Bot API 8.0+: go fullscreen so Telegram's native title bar
   // ("네브", ⋮, ×) is hidden. No-op on older clients.
@@ -355,6 +451,12 @@ function boot(): void {
   });
 
   window.addEventListener('hashchange', handleHashChange);
+
+  // Keyboard navigation (desktop-class platforms). Bound at the window
+  // level so it works across page navigations without re-attaching per
+  // view. We gate on body.tg-desktop so phones with an attached BT
+  // keyboard still behave like phones — the cadence there is touch-first.
+  window.addEventListener('keydown', handleKeyboardNav);
 
   void dispatch(parseRoute(location.hash));
 
