@@ -22,11 +22,8 @@ import { isCurrentHash, navigate } from '../router';
 import { errorMessage, formatRpcError, humanSize, relativeTime } from '../format';
 import { renderMarkdown } from '../markdown';
 import { confirmAction } from '../dialog';
-import { buildErrorBanner, buildViewHeader, renderErrorView } from './ui';
-import {
-  triggerImpactHaptic,
-  triggerNotificationHaptic,
-} from '../app_settings';
+import { buildErrorBanner, buildViewHeader, renderErrorView, showFlash } from './ui';
+import { triggerImpactHaptic } from '../app_settings';
 
 export async function renderDetail(
   root: HTMLElement,
@@ -153,13 +150,12 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
     if (readBtn.disabled) return;
     triggerImpactHaptic('medium');
     readBtn.disabled = true;
-    flash(actions, '✓ 읽음 처리');
+    showFlash('read', 'success');
     void markRead(initData, msg.id).then(
       () => undefined,
       (err) => {
         readBtn.disabled = false;
-        flash(actions, `읽음 실패: ${errorMessage(err)}`);
-        triggerNotificationHaptic('error');
+        showFlash(`read failed: ${errorMessage(err)}`, 'error');
       },
     );
   });
@@ -175,11 +171,11 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
     triggerImpactHaptic('medium');
     archBtn.disabled = true;
     invalidate(msg.id);
-    void archive(initData, msg.id).catch(() => {
-      // Errors land on the inbox where the row will reappear; we just
-      // need to nudge with a notification haptic so the operator
-      // notices the next refresh isn't a no-op.
-      triggerNotificationHaptic('error');
+    void archive(initData, msg.id).catch((err) => {
+      // Errors surface as a toast in the inbox — the row will
+      // reappear on the next refresh, and the toast tells the
+      // operator why. showFlash also fires notify-err itself.
+      showFlash(`archive failed: ${errorMessage(err)}`, 'error');
     });
     navigate({ name: 'inbox' });
   });
@@ -202,14 +198,13 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
       }
       triggerImpactHaptic('heavy');
       invalidate(msg.id);
-      void trash(initData, msg.id).catch(() => {
-        triggerNotificationHaptic('error');
+      void trash(initData, msg.id).catch((err) => {
+        showFlash(`trash failed: ${errorMessage(err)}`, 'error');
       });
       navigate({ name: 'inbox' });
     } catch (err) {
-      flash(actions, `삭제 실패: ${errorMessage(err)}`);
+      showFlash(`trash failed: ${errorMessage(err)}`, 'error');
       trashBtn.disabled = false;
-      triggerNotificationHaptic('error');
     }
   });
   actions.appendChild(trashBtn);
@@ -494,12 +489,3 @@ function makeAction(
   return btn;
 }
 
-function flash(host: HTMLElement, message: string): void {
-  const existing = host.parentElement?.querySelector('.flash');
-  if (existing) existing.remove();
-  const f = document.createElement('div');
-  f.className = 'flash';
-  f.textContent = message;
-  host.after(f);
-  setTimeout(() => f.remove(), 2500);
-}

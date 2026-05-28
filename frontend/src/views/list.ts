@@ -28,7 +28,7 @@ import { isCurrentHash, navigate } from '../router';
 import { confirmAction } from '../dialog';
 import { errorMessage, formatRpcError, relativeTime, shortFrom } from '../format';
 import { setPullToRefreshHandler } from '../pull_to_refresh';
-import { buildErrorBanner, buildRowSkeleton, buildViewHeader } from './ui';
+import { buildErrorBanner, buildRowSkeleton, buildViewHeader, showFlash } from './ui';
 import { triggerImpactHaptic } from '../app_settings';
 
 const longPressMs = 450;
@@ -417,10 +417,7 @@ async function runBulkAction(
   if (failed.length === 0) {
     exitSelectionMode(selection);
     if (successCount > 0) {
-      flashNear(
-        selection.rowsContainer,
-        `${successCount.toLocaleString('ko-KR')}개 메일 ${actionLabel} 완료`,
-      );
+      showFlash(`${successCount} ${actionLabel}`, 'success');
     }
   } else {
     if (selection.selected.size === 0) {
@@ -428,11 +425,9 @@ async function runBulkAction(
     } else {
       renderSelectionBar(selection);
     }
-    flashNear(
-      selection.rowsContainer,
-      `${successCount.toLocaleString('ko-KR')}개 완료 · ${failed.length.toLocaleString(
-        'ko-KR',
-      )}개 실패: ${failed[0]}`,
+    showFlash(
+      `${successCount} done · ${failed.length} failed: ${failed[0]}`,
+      'error',
     );
   }
 }
@@ -504,28 +499,9 @@ function mountLoadMore(
       if (!isCurrentHash(selection.expectedHash) || !container.isConnected) return;
       btn.disabled = false;
       btn.textContent = originalLabel ?? '더 보기';
-      flashNear(btn, `더 불러오기 실패: ${errorMessage(err)}`);
+      showFlash(`load more failed: ${errorMessage(err)}`, 'error');
     }
   });
   container.appendChild(btn);
 }
 
-function flashNear(anchor: HTMLElement, message: string): void {
-  // Scope dedup to "the flash that belongs to THIS anchor" (its
-  // immediate next sibling) — using a parent-wide selector like
-  // `:scope > .flash` would let a row-delete flash wipe an unrelated
-  // load-more flash and vice-versa, since both anchors share
-  // rowsContainer as parent.
-  const next = anchor.nextElementSibling;
-  if (next?.classList.contains('flash')) {
-    next.remove();
-  }
-  const f = document.createElement('div');
-  f.className = 'flash';
-  f.textContent = message;
-  anchor.after(f);
-  // Guard against removing a node that was moved/re-parented by a
-  // later refresh — element.remove() on an already-detached node is a
-  // no-op so this is safe.
-  setTimeout(() => f.remove(), 2500);
-}
