@@ -13,6 +13,7 @@ import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
 import { buildErrorBanner } from './ui';
 import type { Route } from '../router';
+import { triggerImpactHaptic } from '../app_settings';
 
 // sessionStorage key for the per-session whoami success marker. We only
 // store a literal "ok" — the call's result isn't consumed by the UI
@@ -120,6 +121,7 @@ function buildMenuItem(entry: MenuEntry, index: number, total: number): HTMLButt
   btn.style.setProperty('--enter-delay', `${delay}ms`);
   btn.textContent = entry.label;
   btn.addEventListener('click', () => {
+    triggerImpactHaptic('light');
     navigate(entry.route);
   });
   return btn;

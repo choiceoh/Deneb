@@ -11,6 +11,8 @@
 // New helpers belong here when ≥2 views need them. One-shot view chrome
 // stays inline.
 
+import { triggerImpactHaptic } from '../app_settings';
+
 /** Label + click handler for an inline button slot. */
 export interface HeaderButton {
   label: string;
@@ -107,7 +109,13 @@ function buildSlot(btn: HeaderButton | undefined): HTMLElement {
   el.type = 'button';
   el.className = 'link-button';
   el.textContent = btn.label;
-  el.addEventListener('click', btn.onClick);
+  el.addEventListener('click', () => {
+    // Back / refresh link in every view header. Light impact so the
+    // operator gets a confirm that the tap registered even before the
+    // page transition starts firing.
+    triggerImpactHaptic('light');
+    btn.onClick();
+  });
   return el;
 }
 
