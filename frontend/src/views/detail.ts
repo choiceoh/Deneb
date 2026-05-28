@@ -23,6 +23,10 @@ import { errorMessage, formatRpcError, humanSize, relativeTime } from '../format
 import { renderMarkdown } from '../markdown';
 import { confirmAction } from '../dialog';
 import { buildErrorBanner, buildViewHeader, renderErrorView } from './ui';
+import {
+  triggerImpactHaptic,
+  triggerNotificationHaptic,
+} from '../app_settings';
 
 export async function renderDetail(
   root: HTMLElement,
@@ -136,65 +140,84 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
   actions.className = 'action-bar';
   root.appendChild(actions);
 
-  const analyzeBtn = makeAction('analyze', 'secondary', async () => {
+  const analyzeBtn = makeAction('analyze', 'secondary', () => {
+    triggerImpactHaptic('medium');
     void runAnalysis(root, initData, msg, analyzeBtn, false);
   });
   actions.appendChild(analyzeBtn);
 
-  const readBtn = makeAction('read', 'secondary', async () => {
+  // Read = optimistic. Flip the UI immediately so the operator gets
+  // the 'this is handled' read. RPC fires in the background; on
+  // failure we roll the button back + flash an error + warn haptic.
+  const readBtn = makeAction('read', 'secondary', () => {
+    if (readBtn.disabled) return;
+    triggerImpactHaptic('medium');
     readBtn.disabled = true;
-    try {
-      await markRead(initData, msg.id);
-      flash(actions, '✓ 읽음 처리');
-    } catch (err) {
-      flash(actions, `읽음 실패: ${errorMessage(err)}`);
-      readBtn.disabled = false;
-    }
+    flash(actions, '✓ 읽음 처리');
+    void markRead(initData, msg.id).then(
+      () => undefined,
+      (err) => {
+        readBtn.disabled = false;
+        flash(actions, `읽음 실패: ${errorMessage(err)}`);
+        triggerNotificationHaptic('error');
+      },
+    );
   });
   actions.appendChild(readBtn);
 
-  const archBtn = makeAction('archive', 'secondary', async () => {
+  // Archive = optimistic + immediate navigate. The cached summary is
+  // dropped before navigation so the inbox doesn't repaint this row;
+  // the RPC continues in the background. If it fails the operator
+  // discovers it on the next inbox refresh — same cost as a flaky
+  // network on the foreground path.
+  const archBtn = makeAction('archive', 'secondary', () => {
+    if (archBtn.disabled) return;
+    triggerImpactHaptic('medium');
     archBtn.disabled = true;
-    try {
-      await archive(initData, msg.id);
-      // Drop the cached summary so the inbox doesn't paint this row
-      // back if the operator opens detail from a stale list element
-      // between the archive and the next list refresh.
-      invalidate(msg.id);
-      navigate({ name: 'inbox' });
-    } catch (err) {
-      flash(actions, `보관 실패: ${errorMessage(err)}`);
-      archBtn.disabled = false;
-    }
+    invalidate(msg.id);
+    void archive(initData, msg.id).catch(() => {
+      // Errors land on the inbox where the row will reappear; we just
+      // need to nudge with a notification haptic so the operator
+      // notices the next refresh isn't a no-op.
+      triggerNotificationHaptic('error');
+    });
+    navigate({ name: 'inbox' });
   });
   actions.appendChild(archBtn);
 
+  // Trash = optimistic, but only after the confirm dialog. We can't
+  // skip the dialog (a stray tap deleting mail is a real category of
+  // mistake), so the only win is to navigate right after the confirm
+  // resolves instead of after the RPC. Heavy impact on confirm so
+  // 'this is destructive' reads in the wrist before the bus stop.
   const trashBtn = makeAction('trash', 'danger', async () => {
-    // Disable BEFORE awaiting confirm: prevents a double-tap from
-    // queueing a second confirm dialog + second trash RPC.
     if (trashBtn.disabled) return;
+    triggerImpactHaptic('medium');
     trashBtn.disabled = true;
-    let navigated = false;
     try {
       const ok = await confirmAction('이 메일을 휴지통으로 옮길까요?');
-      if (!ok) return;
-      await trash(initData, msg.id);
+      if (!ok) {
+        trashBtn.disabled = false;
+        return;
+      }
+      triggerImpactHaptic('heavy');
       invalidate(msg.id);
+      void trash(initData, msg.id).catch(() => {
+        triggerNotificationHaptic('error');
+      });
       navigate({ name: 'inbox' });
-      navigated = true;
     } catch (err) {
       flash(actions, `삭제 실패: ${errorMessage(err)}`);
-    } finally {
-      // Re-enable on every exit except a successful navigate (where
-      // the view is about to be torn down anyway); otherwise a
-      // user-cancelled confirm or a navigate that fails silently
-      // would leave the button permanently disabled with no feedback.
-      if (!navigated) trashBtn.disabled = false;
+      trashBtn.disabled = false;
+      triggerNotificationHaptic('error');
     }
   });
   actions.appendChild(trashBtn);
 
-  const closeBtn = makeAction('close', 'primary', () => navigate({ name: 'inbox' }));
+  const closeBtn = makeAction('close', 'primary', () => {
+    triggerImpactHaptic('light');
+    navigate({ name: 'inbox' });
+  });
   actions.appendChild(closeBtn);
 }
 

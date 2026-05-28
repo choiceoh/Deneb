@@ -29,6 +29,7 @@ import { confirmAction } from '../dialog';
 import { errorMessage, formatRpcError, relativeTime, shortFrom } from '../format';
 import { setPullToRefreshHandler } from '../pull_to_refresh';
 import { buildErrorBanner, buildRowSkeleton, buildViewHeader } from './ui';
+import { triggerImpactHaptic } from '../app_settings';
 
 const longPressMs = 450;
 const longPressMoveTolerancePx = 10;
@@ -188,6 +189,10 @@ function buildRow(row: GmailMessageRow, selection: SelectionState): HTMLElement 
     clearPressTimer();
     pressTimer = window.setTimeout(() => {
       longPressTriggered = true;
+      // Soft impact = 'mode changed, you're in selection now'. Soft
+      // rather than medium so it reads as a continuous push from the
+      // long-press itself, not a fresh tap.
+      triggerImpactHaptic('soft');
       enterSelectionMode(selection);
       toggleSelected(selection, row, wrap, true);
     }, longPressMs);
@@ -351,6 +356,11 @@ function buildBulkButton(
   btn.textContent = label;
   btn.disabled = disabled;
   btn.addEventListener('click', () => {
+    // Medium impact on bulk action triggers — destructive (trash) gets
+    // upgraded later inside runBulkAction once the confirm clears.
+    // Cancel is just a selection clear; light enough to fall through
+    // to selectionChanged via the same medium hit.
+    triggerImpactHaptic('medium');
     void onClick();
   });
   return btn;

@@ -48,9 +48,41 @@ export function applyAppSettings(settings = readAppSettings()): void {
   document.body.classList.toggle('compact-ui', settings.compactMode);
 }
 
+// Telegram's HapticFeedback exposes three primitives. We wrap each so
+// every call site reads identical: feature-gated by the user's haptic
+// setting + null-safe if the WebApp object hasn't loaded (local dev or
+// older Telegram clients).
+//
+//   selection    : panorama tab change, toggle flip, page navigation
+//   impact-light : menu word tap, secondary button
+//   impact-med   : action button tap (analyze / read / archive)
+//   impact-heavy : destructive primary (trash on confirm)
+//   impact-soft  : long-press selection enter (gentler than tap)
+//   notify-ok    : RPC completed successfully on an action the user
+//                  is waiting on (analyze done, save complete)
+//   notify-err   : optimistic action failed and rolled back
+//   notify-warn  : reserved for future use
+//
+// Setting the toggle off in settings silences everything — we still
+// keep wiring the calls so the code reads consistently.
+
 export function triggerSelectionHaptic(): void {
   if (!readAppSettings().hapticFeedback) return;
   window.Telegram?.WebApp?.HapticFeedback?.selectionChanged();
+}
+
+type HapticImpactStyle = 'light' | 'medium' | 'heavy' | 'rigid' | 'soft';
+
+export function triggerImpactHaptic(style: HapticImpactStyle = 'light'): void {
+  if (!readAppSettings().hapticFeedback) return;
+  window.Telegram?.WebApp?.HapticFeedback?.impactOccurred(style);
+}
+
+type HapticNotificationType = 'error' | 'success' | 'warning';
+
+export function triggerNotificationHaptic(type: HapticNotificationType): void {
+  if (!readAppSettings().hapticFeedback) return;
+  window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred(type);
 }
 
 function normalizeSettings(input: Partial<AppSettings>): AppSettings {
