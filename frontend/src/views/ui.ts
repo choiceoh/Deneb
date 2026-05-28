@@ -11,7 +11,7 @@
 // New helpers belong here when ≥2 views need them. One-shot view chrome
 // stays inline.
 
-import { triggerImpactHaptic } from '../app_settings';
+import { triggerImpactHaptic, triggerNotificationHaptic } from '../app_settings';
 
 /** Label + click handler for an inline button slot. */
 export interface HeaderButton {
@@ -133,6 +133,77 @@ export function buildLoadingNode(text: string): HTMLElement {
   el.className = 'loading';
   el.textContent = text;
   return el;
+}
+
+// ----- Toast / flash -----
+//
+// A single global stack pinned to the bottom-center of the viewport.
+// Every call adds another pill which slides up + fades in, sits for a
+// duration, then slides out. Tap dismisses immediately. Variants flip
+// the color treatment + auto-fire the matching haptic notification.
+
+export type FlashVariant = 'info' | 'success' | 'error';
+
+let flashStackEl: HTMLDivElement | null = null;
+
+function ensureFlashStack(): HTMLDivElement {
+  if (flashStackEl?.isConnected) return flashStackEl;
+  const el = document.createElement('div');
+  el.className = 'flash-stack';
+  document.body.appendChild(el);
+  flashStackEl = el;
+  return el;
+}
+
+/**
+ * showFlash drops a transient bottom-center pill into the global flash
+ * stack. Variant selects color + auto-fires the matching haptic. Tap
+ * the pill or wait `duration` ms for it to slide out.
+ */
+export function showFlash(
+  message: string,
+  variant: FlashVariant = 'info',
+  duration = 2400,
+): void {
+  const stack = ensureFlashStack();
+  const pill = document.createElement('button');
+  pill.type = 'button';
+  pill.className = `flash flash-${variant}`;
+  pill.textContent = message;
+  stack.appendChild(pill);
+
+  // Force reflow so the .flash-visible class triggers the transition
+  // instead of just landing in the final state.
+  void pill.offsetHeight;
+  pill.classList.add('flash-visible');
+
+  if (variant === 'error') triggerNotificationHaptic('error');
+  else if (variant === 'success') triggerNotificationHaptic('success');
+
+  let dismissed = false;
+  const dismiss = (): void => {
+    if (dismissed) return;
+    dismissed = true;
+    pill.classList.remove('flash-visible');
+    // After the slide-out transition finishes, remove the node so it
+    // doesn't accumulate in the stack. If transitionend never fires
+    // (display change, prefers-reduced-motion), the timeout backup
+    // catches it.
+    let removed = false;
+    const remove = (): void => {
+      if (removed) return;
+      removed = true;
+      pill.remove();
+    };
+    pill.addEventListener('transitionend', remove, { once: true });
+    window.setTimeout(remove, 600);
+  };
+
+  const timer = window.setTimeout(dismiss, duration);
+  pill.addEventListener('click', () => {
+    window.clearTimeout(timer);
+    dismiss();
+  });
 }
 
 /**
