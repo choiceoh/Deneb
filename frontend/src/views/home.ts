@@ -45,6 +45,7 @@ function paint(root: HTMLElement, user: WhoamiResult): void {
     { label: 'mail', route: { name: 'inbox' } },
     { label: 'memory', route: { name: 'memory' } },
     { label: 'topics', route: { name: 'sessions' } },
+    { label: 'new topic', route: { name: 'topicNew' } },
     { label: 'diary', route: { name: 'diary' } },
     { label: 'people', route: { name: 'people' } },
     { label: 'categories', route: { name: 'categories' } },

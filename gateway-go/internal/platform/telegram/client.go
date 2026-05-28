@@ -368,6 +368,31 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64, timeout int) ([]U
 	return updates, nil
 }
 
+// CreateForumTopic asks Telegram to create a new topic in a forum
+// supergroup. The bot must be an administrator with the can_manage_topics
+// permission; without it the API returns a 400 the caller can surface to
+// the user. Pass iconColor=0 to accept Telegram's default — a non-zero
+// value must be one of the six values the API documents
+// (7322096, 16766590, 13338331, 9367192, 16749490, 16478047).
+func (c *Client) CreateForumTopic(ctx context.Context, chatID int64, name string, iconColor int) (*ForumTopic, error) {
+	params := map[string]any{
+		"chat_id": chatID,
+		"name":    name,
+	}
+	if iconColor != 0 {
+		params["icon_color"] = iconColor
+	}
+	raw, err := c.Call(ctx, "createForumTopic", params)
+	if err != nil {
+		return nil, err
+	}
+	var topic ForumTopic
+	if err := json.Unmarshal(raw, &topic); err != nil {
+		return nil, fmt.Errorf("decode createForumTopic: %w", err)
+	}
+	return &topic, nil
+}
+
 // SendChatAction sends a chat action (e.g. "typing"). When threadID is
 // non-zero the action is scoped to that forum topic so the typing indicator
 // appears in the right tab; pass 0 for non-forum chats.

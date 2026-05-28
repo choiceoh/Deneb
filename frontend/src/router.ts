@@ -29,7 +29,8 @@ export type Route =
   | { name: 'crons' }
   | { name: 'people' }
   | { name: 'personDetail'; email: string }
-  | { name: 'wikiNew'; category?: string };
+  | { name: 'wikiNew'; category?: string }
+  | { name: 'topicNew' };
 
 // Top-level tab destinations — these show the panorama tab strip up top
 // and Telegram's BackButton stays hidden. Drill-down views (detail,
@@ -58,6 +59,7 @@ export function parseRoute(hash: string): Route {
   if (hash === '#/crons') return { name: 'crons' };
   if (hash === '#/people') return { name: 'people' };
   if (hash === '#/wiki-new') return { name: 'wikiNew' };
+  if (hash === '#/topics/new') return { name: 'topicNew' };
   const newCat = hash.match(/^#\/wiki-new\?category=(.+)$/);
   if (newCat) {
     try {
@@ -166,7 +168,7 @@ export function navigate(target: Route): void {
     hash = target.category
       ? `#/wiki-new?category=${encodeURIComponent(target.category)}`
       : '#/wiki-new';
-  }
+  } else if (target.name === 'topicNew') hash = '#/topics/new';
   if (location.hash === hash) {
     // hashchange would not fire; force re-render by dispatching ourselves.
     window.dispatchEvent(new HashChangeEvent('hashchange'));

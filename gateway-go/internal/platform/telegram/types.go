@@ -231,9 +231,15 @@ type File struct {
 	FilePath     string `json:"file_path,omitempty"`
 }
 
-// ForumTopic represents a forum topic in a supergroup.
+// ForumTopic represents a forum topic in a supergroup. Returned by
+// createForumTopic and the various forum-topic management methods. The
+// MessageThreadID is the field the rest of deneb routes on (every
+// inbound/outbound carries it as message_thread_id).
 type ForumTopic struct {
-	Name string `json:"name"`
+	MessageThreadID int64  `json:"message_thread_id"`
+	Name            string `json:"name"`
+	IconColor       int    `json:"icon_color,omitempty"`
+	IconCustomEmoji string `json:"icon_custom_emoji_id,omitempty"`
 }
 
 // CallbackQuery represents an incoming callback query from inline keyboard.

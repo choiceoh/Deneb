@@ -54,6 +54,11 @@ var errTranscriptUnavailable = errors.New("session transcript store not initiali
 // App shows a "automation not configured" banner instead of crashing.
 var errCronUnavailable = errors.New("cron service not configured")
 
+// errTelegramUnavailable surfaces when the Mini App tries to call the
+// Bot API (currently only miniapp.topics.create) before the Telegram
+// plugin's client has been initialized. Treated as UNAVAILABLE.
+var errTelegramUnavailable = errors.New("telegram client not initialized")
+
 // registerEarlyMethods registers all RPC domains that don't depend on chatHandler.
 // Called after buildHub() but before registerSessionRPCMethods().
 func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) error {
@@ -289,6 +294,29 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 					return nil, errTranscriptUnavailable
 				}
 				return s.toolDeps.Sessions.Transcript, nil
+			},
+		}),
+
+		// Mini App "new topic" creation (miniapp.topics.create). Routes
+		// the form submit to Bot API createForumTopic with the active
+		// home chat ID injected — the user never sees the chat_id.
+		// Telegram owns the topic data; deneb keeps no topic store.
+		handlerminiapp.TopicsMethods(handlerminiapp.TopicsDeps{
+			Creator: func() (handlerminiapp.TopicCreator, error) {
+				if s.telegramPlug == nil {
+					return nil, errTelegramUnavailable
+				}
+				c := s.telegramPlug.Client()
+				if c == nil {
+					return nil, errTelegramUnavailable
+				}
+				return c, nil
+			},
+			ActiveHomeChatID: func() int64 {
+				if s.appSettings == nil {
+					return 0
+				}
+				return s.appSettings.ActiveHome().ChatID
 			},
 		}),
 
