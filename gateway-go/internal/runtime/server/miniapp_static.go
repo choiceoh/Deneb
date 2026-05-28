@@ -131,7 +131,12 @@ func writeMiniappAsset(
 	if immutable {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	} else {
-		w.Header().Set("Cache-Control", "no-cache")
+		// no-store forces Telegram's embedded WebView to always fetch a
+		// fresh copy. no-cache alone was insufficient — Telegram served
+		// stale index.html from its internal WebView cache even after the
+		// binary was updated and the app was closed/reopened.
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
 	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	// Tell upstreams (and the browser's HTTP cache) that the response

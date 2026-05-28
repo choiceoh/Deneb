@@ -47,8 +47,11 @@ func TestServeMiniappStatic_IndexAtRoot(t *testing.T) {
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Errorf("Content-Type = %q, want text/html prefix", ct)
 	}
-	if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
-		t.Errorf("Cache-Control = %q, want no-cache", cc)
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-store, no-cache, must-revalidate" {
+		t.Errorf("Cache-Control = %q, want no-store, no-cache, must-revalidate", cc)
+	}
+	if p := rec.Header().Get("Pragma"); p != "no-cache" {
+		t.Errorf("Pragma = %q, want no-cache", p)
 	}
 	if !strings.Contains(rec.Body.String(), "<html") {
 		t.Errorf("response body does not look like HTML: %q", rec.Body.String())
@@ -73,8 +76,8 @@ func TestServeMiniappStatic_SPAFallback(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "<html") {
 		t.Errorf("SPA fallback did not serve HTML: %q", rec.Body.String())
 	}
-	if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
-		t.Errorf("Cache-Control on fallback = %q, want no-cache", cc)
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-store, no-cache, must-revalidate" {
+		t.Errorf("Cache-Control on fallback = %q, want no-store, no-cache, must-revalidate", cc)
 	}
 }
 
@@ -111,8 +114,8 @@ func TestServeMiniappStatic_FallsBackToPlaceholderWhenIndexMissing(t *testing.T)
 	if !strings.Contains(body, "placeholder") {
 		t.Errorf("expected placeholder content, got %q", body)
 	}
-	if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
-		t.Errorf("Cache-Control = %q, want no-cache", cc)
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-store, no-cache, must-revalidate" {
+		t.Errorf("Cache-Control = %q, want no-store, no-cache, must-revalidate", cc)
 	}
 }
 

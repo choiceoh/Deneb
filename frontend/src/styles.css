@@ -177,7 +177,15 @@ body {
 #app {
   max-width: 480px;
   margin: 0 auto;
-  padding: 20px 16px 32px;
+  /* In Telegram fullscreen mode, --tg-safe-top (set by applySafeArea in
+     main.ts) is the combined inset for the device status bar/notch plus
+     the floating × 네브 / ⋮ pills. Outside fullscreen it's 0 and the
+     base 20px takes over. env() is the secondary fallback for non-
+     Telegram browsers / older clients where the WebApp API is missing. */
+  padding:
+    calc(20px + var(--tg-safe-top, env(safe-area-inset-top, 0px)))
+    16px
+    32px;
 }
 
 h1 {

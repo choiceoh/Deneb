@@ -68,6 +68,38 @@ function applyThemeFromTelegram(tg: WebApp): void {
   }
 }
 
+// applySafeArea writes the Telegram-reported content safe-area top inset
+// into `--tg-safe-top` on <html>. The styles.css `#app` padding adds this
+// value to its base 20px so the page content clears the device status
+// bar/notch *plus* the floating × / 네브 / ⋮ pills Telegram overlays in
+// fullscreen mode (Bot API 8.0+). Outside fullscreen the inset is 0 and
+// the base 20px takes over; on older clients without the API the CSS
+// fallback `env(safe-area-inset-top, 0px)` covers iOS Safari and modern
+// Telegram WebView, and the worst case is just 20px padding (no clip).
+//
+// We re-apply on `contentSafeAreaChanged` so a mid-session rotation or a
+// late fullscreen request (the requestFullscreen() call below races the
+// event) settles onto the right value without a reload.
+function applySafeArea(tg: WebApp): void {
+  type Inset = { top?: number };
+  type WebAppExt = {
+    contentSafeAreaInset?: Inset;
+    safeAreaInset?: Inset;
+    onEvent?: (event: string, cb: () => void) => void;
+  };
+  const ext = tg as unknown as WebAppExt;
+  const write = (): void => {
+    const top =
+      ext.contentSafeAreaInset?.top ??
+      ext.safeAreaInset?.top ??
+      0;
+    document.documentElement.style.setProperty('--tg-safe-top', `${top}px`);
+  };
+  write();
+  ext.onEvent?.('contentSafeAreaChanged', write);
+  ext.onEvent?.('safeAreaChanged', write);
+}
+
 // stampPlatformClass mirrors tg.platform onto body so CSS + JS can
 // branch on it. The 'tg-desktop' / 'tg-mobile' grouping is the one
 // most rules actually want — viewport scaling, hover, keyboard. The
@@ -374,9 +406,12 @@ function boot(): void {
   tg.ready();
   applyThemeFromTelegram(tg);
   stampPlatformClass(tg);
+  applySafeArea(tg);
 
   // Bot API 8.0+: go fullscreen so Telegram's native title bar
-  // ("네브", ⋮, ×) is hidden. No-op on older clients.
+  // ("네브", ⋮, ×) is hidden. No-op on older clients. applySafeArea
+  // above already registered the contentSafeAreaChanged listener, so
+  // the post-fullscreen inset update lands without a second call.
   (tg as unknown as { requestFullscreen?: () => void }).requestFullscreen?.();
 
   // Bot API 7.7+. Without this, dragging down inside the Mini App also
