@@ -1927,6 +1927,36 @@ pre.transcript-body {
   background: var(--tg-button);
 }
 
+.settings-model-title-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.settings-model-title-line .settings-row-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-model-health {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--tg-hint) 54%, transparent);
+}
+
+.settings-model-health-online {
+  background: #32a66a;
+}
+
+.settings-model-health-offline {
+  background: #c95c52;
+}
+
 .settings-model-row .settings-row-sub,
 .settings-model-nav .settings-row-sub,
 .settings-model-current .settings-row-sub,

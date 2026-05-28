@@ -16,6 +16,7 @@ type ModelOption struct {
 	Label    string `json:"label"`
 	Provider string `json:"provider,omitempty"`
 	Display  string `json:"display,omitempty"`
+	Health   string `json:"health,omitempty"`
 	Current  bool   `json:"current"`
 }
 
