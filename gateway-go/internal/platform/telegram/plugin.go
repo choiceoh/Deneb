@@ -212,6 +212,17 @@ func (p *Plugin) Client() *Client {
 	return p.client
 }
 
+// WebAppURL returns the configured Mini App URL (empty when no web app
+// is configured). Read at runtime so callers can react when the menu
+// button wasn't installed (e.g., /app slash refuses politely instead
+// of sending a button that opens about:blank).
+func (p *Plugin) WebAppURL() string {
+	if p.config == nil {
+		return ""
+	}
+	return strings.TrimSpace(p.config.WebAppURL)
+}
+
 // Bot returns the underlying bot instance (for poll draining).
 func (p *Plugin) Bot() *Bot {
 	p.mu.Lock()

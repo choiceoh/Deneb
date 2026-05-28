@@ -258,6 +258,9 @@ func (p *InboundProcessor) HandleTelegramUpdate(update *telegram.Update) {
 		case "/models":
 			p.handleModelsCommand(chatID, threadID)
 			return
+		case "/app", "/miniapp":
+			p.handleAppCommand(chatID, threadID)
+			return
 		}
 	}
 
