@@ -23,9 +23,15 @@ export async function renderSessions(root: HTMLElement, initData: string): Promi
   root.appendChild(
     buildViewHeader({
       title: 'topics',
-      right: { label: '+ 새 토픽', onClick: () => navigate({ name: 'topicNew' }) },
     }),
   );
+  // Horizontal chip strip below the header. Today it carries a single
+  // action chip ("+ 새 토픽"); the same row is the natural home for
+  // real topic-filter chips once a deneb-side topic store lands (the
+  // forum-topic-created event listener that M4b needs). Keeping the
+  // structure here from day one means that future change is a chip
+  // append, not a header re-layout.
+  root.appendChild(buildTopicChips());
   setPullToRefreshHandler(() => renderSessions(root, initData));
 
   const status = buildRowSkeleton(6);
@@ -59,6 +65,25 @@ export async function renderSessions(root: HTMLElement, initData: string): Promi
 function extractThreadID(key: string): string | null {
   const m = key.match(/:thread:(\d+)$/);
   return m ? m[1] : null;
+}
+
+// buildTopicChips builds the horizontal chip strip below the header.
+// Currently a one-chip row (the "+ 새 토픽" action); future topic-filter
+// chips will sit alongside once a deneb-side topic store is available.
+// Kept inline (rather than pulled into ui.ts) because the styling is
+// shared with no other view at the moment.
+function buildTopicChips(): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'topics-chip-row';
+
+  const create = document.createElement('button');
+  create.type = 'button';
+  create.className = 'topics-chip topics-chip-action';
+  create.textContent = '+ 새 토픽';
+  create.addEventListener('click', () => navigate({ name: 'topicNew' }));
+  row.appendChild(create);
+
+  return row;
 }
 
 function buildRow(s: SessionRow): HTMLElement {

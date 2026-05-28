@@ -88,17 +88,16 @@ function paint(root: HTMLElement): void {
   // active-conversation register; categories/crons sit lower because
   // they're reach-when-needed rather than reach-daily. settings is
   // last — preferences are touched rarely.
-  // "new topic" sits directly under "topics" so the create-a-topic flow
-  // is reachable in one tap from home — the same form is also exposed
-  // via the topics view's header "+" (#1748), but the home-menu entry
-  // saves a click when the operator already knows they want to make
-  // a new one and doesn't need to see the existing list first.
+  // Note: "new topic" was briefly a sibling entry here, but a top-of-list
+  // entry is unwarranted real estate for an action — the topics view now
+  // surfaces the create flow as a horizontal chip at its top, which is
+  // visible the moment the operator opens topics without taking a row
+  // away from real destinations.
   const entries: MenuEntry[] = [
     { label: 'calendar', route: { name: 'calendar' } },
     { label: 'mail', route: { name: 'inbox' } },
     { label: 'search', route: { name: 'search' } },
     { label: 'topics', route: { name: 'sessions' } },
-    { label: 'new topic', route: { name: 'topicNew' } },
     { label: 'categories', route: { name: 'categories' } },
     { label: 'crons', route: { name: 'crons' } },
     { label: 'settings', route: { name: 'settings' } },
