@@ -117,6 +117,26 @@ export default defineConfig({
     // name so we can serve with long-lived cache headers in PR-C.
     assetsInlineLimit: 4096,
     sourcemap: false,
+    // Disable Vite's modulePreload feature. By default Vite wraps every
+    // dynamic `import('./views/foo')` in a `__vitePreload(() => import(),
+    // __VITE_PRELOAD__)` helper, then replaces the `__VITE_PRELOAD__`
+    // placeholder with the resolved dep array at renderChunk time. A
+    // user-reported production bug (#1756 follow-up) showed the bundle
+    // shipping with the literal `__VITE_PRELOAD__` identifier intact —
+    // meaning the renderChunk replacement step had been skipped or
+    // partially applied — causing every chunk-loading dynamic import to
+    // throw `ReferenceError: __VITE_PRELOAD__ is not defined` at
+    // runtime (visible to the operator as the inline error banner
+    // dispatch paints when an import rejects). The placeholder leak
+    // couldn't be reproduced locally, and chasing the upstream Vite
+    // bug is out of scope for a hotfix. Disabling modulePreload
+    // entirely makes the placeholder unreachable — dynamic imports
+    // stay as plain `import()` calls and the browser loads each chunk
+    // on demand without the parallel dependency-preload optimization.
+    // For our small chunk graph (~5-10 KB gzip per route) the perf
+    // cost is unmeasurable; the correctness win is removing a moving
+    // part that can fail open and break every route.
+    modulePreload: false,
   },
   server: {
     port: 5173,
