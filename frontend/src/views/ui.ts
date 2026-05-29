@@ -119,6 +119,33 @@ function buildSlot(btn: HeaderButton | undefined): HTMLElement {
   return el;
 }
 
+/**
+ * buildChipRow returns the horizontal pill-chip strip that sits between a
+ * view header and the content below it. Each chip is a tappable action.
+ * Today topics + search each pass a single create-action chip ("+ 새 토픽"
+ * / "+ 새 페이지"); future filter chips can be appended and the row
+ * scrolls horizontally when they overflow. Shared by both views so the
+ * chip idiom (CSS: .chip-row / .chip) stays identical across the app.
+ */
+export function buildChipRow(chips: HeaderButton[]): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'chip-row';
+  for (const chip of chips) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chip chip-action';
+    btn.textContent = chip.label;
+    btn.addEventListener('click', () => {
+      // Light impact mirrors the home menu + header links so every
+      // tappable chrome element confirms the tap the same way.
+      triggerImpactHaptic('light');
+      chip.onClick();
+    });
+    row.appendChild(btn);
+  }
+  return row;
+}
+
 /** Plain `.error` banner element (no parent insertion). */
 export function buildErrorBanner(text: string): HTMLElement {
   const banner = document.createElement('div');

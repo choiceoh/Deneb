@@ -14,25 +14,32 @@
 import { searchAll, type SearchAllResult, type SearchDiaryHit, type SearchPersonHit, type SearchWikiHit } from '../search';
 import { formatRpcError, relativeTime } from '../format';
 import { isCurrentHash, navigate } from '../router';
-import { buildErrorBanner, buildViewHeader } from './ui';
+import { buildChipRow, buildErrorBanner, buildViewHeader } from './ui';
 
 let lastQuery = '';
 
 export function renderSearch(root: HTMLElement, initData: string): void {
   root.innerHTML = '';
 
+  root.appendChild(buildViewHeader({ title: 'search' }));
+
+  // Create-action chip strip under the header, mirroring the topics view
+  // (#1764): "+ 새 페이지" opens the wiki-page creator. This lived as a
+  // saturated header-right "+ new" action before — a filled button broke
+  // the black-and-white typographic idiom — so it moved into the shared
+  // chip row that calendar / mail / topics already read as native chrome.
   root.appendChild(
-    buildViewHeader({
-      title: 'search',
-      right: { label: '+ new', onClick: () => navigate({ name: 'wikiNew' }) },
-    }),
+    buildChipRow([{ label: '+ 새 페이지', onClick: () => navigate({ name: 'wikiNew' }) }]),
   );
 
   const form = document.createElement('form');
   form.className = 'search-form';
+  // Single search field — submit on Enter (enterkeyhint="search" surfaces
+  // a search key on mobile). No separate submit button: a saturated
+  // button would break the typographic idiom and the form's submit
+  // handler already covers Enter.
   form.innerHTML = `
     <input type="search" class="search-input" placeholder="검색어를 입력하세요" autocomplete="off" enterkeyhint="search" />
-    <button type="submit" class="primary search-submit">검색</button>
   `;
   const input = form.querySelector('input') as HTMLInputElement;
   if (lastQuery) input.value = lastQuery;
