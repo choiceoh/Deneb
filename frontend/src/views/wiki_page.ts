@@ -120,23 +120,33 @@ function buildMetaCard(page: MemoryPage): HTMLElement {
     sub.textContent = page.summary;
     meta.appendChild(sub);
   }
-  const tagsLine = document.createElement('div');
-  tagsLine.className = 'wiki-meta-tags';
-  const tagParts: string[] = [];
-  if (page.category) tagParts.push(`#${page.category}`);
-  if (page.tags) tagParts.push(...page.tags.map((t) => `#${t}`));
-  tagsLine.textContent = tagParts.join(' · ');
-  if (tagsLine.textContent) meta.appendChild(tagsLine);
 
-  const dateLine = document.createElement('div');
-  dateLine.className = 'wiki-meta-dates';
-  const dateParts: string[] = [];
-  if (page.updated) dateParts.push(`갱신 ${page.updated}`);
-  if (page.created) dateParts.push(`생성 ${page.created}`);
-  if (page.due) dateParts.push(`📅 ${page.due}`);
-  dateLine.textContent = dateParts.join(' · ');
-  if (dateLine.textContent) meta.appendChild(dateLine);
+  // Metadata rows — the .row > .label + .value pattern is the canonical
+  // detail-view idiom used by calendar_event and mail detail. Concatenated
+  // "갱신 X · 생성 Y · #tag1 · #tag2" strings read as an afterthought; rows
+  // line the fields up the same way the rest of the app does.
+  if (page.category) appendMetaRow(meta, '카테고리', `#${page.category}`);
+  if (page.tags && page.tags.length > 0) {
+    appendMetaRow(meta, '태그', page.tags.map((t) => `#${t}`).join(' '));
+  }
+  if (page.updated) appendMetaRow(meta, '갱신', page.updated);
+  if (page.created) appendMetaRow(meta, '생성', page.created);
+  if (page.due) appendMetaRow(meta, '마감', page.due);
   return meta;
+}
+
+function appendMetaRow(card: HTMLElement, label: string, value: string): void {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const l = document.createElement('span');
+  l.className = 'label';
+  l.textContent = label;
+  const v = document.createElement('span');
+  v.className = 'value';
+  v.textContent = value;
+  row.appendChild(l);
+  row.appendChild(v);
+  card.appendChild(row);
 }
 
 // buildEditor renders a single card with input rows for title /
