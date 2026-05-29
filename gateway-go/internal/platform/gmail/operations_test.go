@@ -514,3 +514,27 @@ func TestFormatLabels_Empty(t *testing.T) {
 		t.Errorf("got %q, want empty", result)
 	}
 }
+
+// TestMetadataConcurrency pins the fan-out sizing that keeps a default
+// inbox page in a single API round while throttling large custom pages
+// under Gmail's per-second quota. Bumping these without re-checking the
+// quota math (metadata.get = 5 units, ~250 units/sec) risks 429s.
+func TestMetadataConcurrency(t *testing.T) {
+	cases := []struct {
+		n    int
+		want int
+	}{
+		{-1, 1},   // defensive: never zero/negative slots
+		{0, 1},    // empty list still floors to 1
+		{1, 1},    // never more slots than messages
+		{8, 8},    // small page: one slot each
+		{20, 20},  // default screenful: single round
+		{21, 16},  // just over default: throttled to the ceiling
+		{100, 16}, // max page: quota-safe ceiling
+	}
+	for _, tc := range cases {
+		if got := metadataConcurrency(tc.n); got != tc.want {
+			t.Errorf("metadataConcurrency(%d) = %d, want %d", tc.n, got, tc.want)
+		}
+	}
+}
