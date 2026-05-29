@@ -104,14 +104,16 @@ function applySafeArea(tg: WebApp): void {
 // branch on it. The 'tg-desktop' / 'tg-mobile' grouping is the one
 // most rules actually want — viewport scaling, hover, keyboard. The
 // raw 'tg-platform-<x>' class is kept around for any future
-// platform-specific edge case (e.g. macOS-only quirks).
-function stampPlatformClass(tg: WebApp): void {
+// platform-specific edge case (e.g. macOS-only quirks). Returns
+// isDesktop so boot() can decide whether to request fullscreen.
+function stampPlatformClass(tg: WebApp): boolean {
   const platform = (tg.platform ?? 'unknown').toLowerCase();
   const desktopPlatforms = new Set(['tdesktop', 'macos', 'web', 'weba', 'webk']);
   const isDesktop = desktopPlatforms.has(platform);
   document.body.classList.toggle('tg-desktop', isDesktop);
   document.body.classList.toggle('tg-mobile', !isDesktop);
   document.body.dataset.tgPlatform = platform;
+  return isDesktop;
 }
 
 // Keyboard navigation for Telegram-on-desktop. Bindings:
@@ -405,14 +407,24 @@ function boot(): void {
   }
   tg.ready();
   applyThemeFromTelegram(tg);
-  stampPlatformClass(tg);
+  const isDesktop = stampPlatformClass(tg);
   applySafeArea(tg);
 
-  // Bot API 8.0+: go fullscreen so Telegram's native title bar
-  // ("네브", ⋮, ×) is hidden. No-op on older clients. applySafeArea
-  // above already registered the contentSafeAreaChanged listener, so
-  // the post-fullscreen inset update lands without a second call.
-  (tg as unknown as { requestFullscreen?: () => void }).requestFullscreen?.();
+  // Bot API 8.0+: on mobile go fullscreen so Telegram's native title
+  // bar ("네브", ⋮, ×) is hidden, reclaiming vertical real estate.
+  // No-op on older clients. applySafeArea above already registered the
+  // contentSafeAreaChanged listener, so the post-fullscreen inset
+  // update lands without a second call.
+  //
+  // On desktop we deliberately skip this: Telegram opens Mini Apps in a
+  // medium windowed panel (app header + close ×) by default, which is
+  // what we want on PC. Requesting fullscreen there blows the panel up
+  // to cover the whole client; staying windowed keeps it usable
+  // alongside the rest of Telegram. Outside fullscreen the safe-area
+  // inset is 0 and the base #app padding takes over (see applySafeArea).
+  if (!isDesktop) {
+    (tg as unknown as { requestFullscreen?: () => void }).requestFullscreen?.();
+  }
 
   // Bot API 7.7+. Without this, dragging down inside the Mini App also
   // tugs Telegram's own swipe-to-minimize gesture, so pull-to-refresh
