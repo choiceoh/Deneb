@@ -2,6 +2,32 @@ package server
 
 import "testing"
 
+func TestResolveHome(t *testing.T) {
+	cases := []struct {
+		name       string
+		key        string
+		activeHome func() int64
+		wantKey    string
+		wantOK     bool
+	}{
+		{"non-sentinel passthrough", "telegram:-1003946703971", nil, "telegram:-1003946703971", true},
+		{"non-sentinel with thread passthrough", "telegram:-1003946703971:thread:5", nil, "telegram:-1003946703971:thread:5", true},
+		{"sentinel resolves to active home", homeSessionKey, func() int64 { return -1003946703971 }, "telegram:-1003946703971", true},
+		{"sentinel unresolved (activeHome returns 0)", homeSessionKey, func() int64 { return 0 }, "", false},
+		{"sentinel unresolved (no resolver)", homeSessionKey, nil, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := proactiveRelayDeps{activeHome: tc.activeHome}
+			gotKey, gotOK := d.resolveHome(tc.key)
+			if gotKey != tc.wantKey || gotOK != tc.wantOK {
+				t.Fatalf("resolveHome(%q) = (%q, %v), want (%q, %v)",
+					tc.key, gotKey, gotOK, tc.wantKey, tc.wantOK)
+			}
+		})
+	}
+}
+
 func TestSplitSessionKey(t *testing.T) {
 	cases := []struct {
 		name, key, wantCh, wantTgt string

@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
@@ -65,13 +64,11 @@ func (s *Server) initGmailPoll() {
 	// are delivered verbatim AND mirrored into the main session
 	// transcript — follow-ups ("방금 그 메일 답장 초안 써줘") answer in a
 	// session that knows what arrived.
-	if s.telegramPlug != nil {
-		if tgCfg := s.telegramPlug.Config(); tgCfg != nil && tgCfg.ChatID != 0 {
-			sessionKey := "telegram:" + strconv.FormatInt(tgCfg.ChatID, 10)
-			if n := s.proactiveRelay.notifierForSession(sessionKey); n != nil {
-				s.gmailPollSvc.SetNotifier(n)
-			}
-		}
+	// Home sentinel (resolved at send time) so summaries follow the active
+	// home; previously gated on the static telegram.chatID, which is unset in
+	// forum deployments → notifier nil → every summary silently dropped.
+	if n := s.proactiveRelay.notifierForSession(homeSessionKey); n != nil {
+		s.gmailPollSvc.SetNotifier(n)
 	}
 
 	// Register as a periodic task within the autonomous service.

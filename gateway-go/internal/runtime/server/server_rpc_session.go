@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -239,6 +238,22 @@ func (s *Server) registerSessionRPCMethods() {
 		telegramPlug:    s.telegramPlug,
 		transcriptStore: transcriptStore,
 		logger:          s.logger,
+		// Resolve the homeSessionKey sentinel to the live active home:
+		// ActiveHome (/use-forum) first, else the static telegram.chatID.
+		// Read lazily so a mid-session migration is followed without re-wiring.
+		activeHome: func() int64 {
+			if s.appSettings != nil {
+				if id := s.appSettings.ActiveHome().ChatID; id != 0 {
+					return id
+				}
+			}
+			if s.telegramPlug != nil {
+				if tg := s.telegramPlug.Config(); tg != nil {
+					return tg.ChatID
+				}
+			}
+			return 0
+		},
 	}
 
 	// Wire transcript cloner for subagent cron session support.
@@ -391,13 +406,11 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// session transcript, so a follow-up message after a dream
 	// completion ("방금 뭔 얘기야?") is answered in a session that knows
 	// what was just delivered.
-	if s.telegramPlug != nil {
-		if tgCfg := s.telegramPlug.Config(); tgCfg != nil && tgCfg.ChatID != 0 {
-			sessionKey := "telegram:" + strconv.FormatInt(tgCfg.ChatID, 10)
-			if n := s.proactiveRelay.notifierForSession(sessionKey); n != nil {
-				s.autonomousSvc.SetNotifier(n)
-			}
-		}
+	// Wire with the home sentinel so dreaming delivery follows the active home
+	// (resolved at send time) instead of a static config chatID that goes stale
+	// after /use-forum or a topic restructure.
+	if n := s.proactiveRelay.notifierForSession(homeSessionKey); n != nil {
+		s.autonomousSvc.SetNotifier(n)
 	}
 
 	// Register boot task: on startup (and daily thereafter), runs a full
