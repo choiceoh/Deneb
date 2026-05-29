@@ -332,6 +332,72 @@ func PersistDefaultModel(configPath, model string, logger *slog.Logger) error {
 	return nil
 }
 
+// PersistRoleModel writes a model ID into the agents config field for the
+// given modelrole role, preserving all other fields:
+//
+//	main        → agents.defaultModel
+//	lightweight → agents.lightweightModel
+//	fallback    → agents.fallbackModel
+//
+// Mirrors PersistDefaultModel; used by the miniapp per-role model picker.
+func PersistRoleModel(configPath, role, model string, logger *slog.Logger) error {
+	var field string
+	switch role {
+	case "main", "":
+		field = "defaultModel"
+	case "lightweight":
+		field = "lightweightModel"
+	case "fallback":
+		field = "fallbackModel"
+	default:
+		return fmt.Errorf("unknown model role %q", role)
+	}
+
+	dir := filepath.Dir(configPath)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("creating config directory: %w", err)
+	}
+
+	var raw map[string]any
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("reading config: %w", err)
+		}
+		raw = make(map[string]any)
+	} else {
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return fmt.Errorf("parsing config: %w", err)
+		}
+	}
+
+	agents, ok := raw["agents"].(map[string]any)
+	if !ok {
+		agents = make(map[string]any)
+		raw["agents"] = agents
+	}
+	agents[field] = model
+
+	meta, ok := raw["meta"].(map[string]any)
+	if !ok {
+		meta = make(map[string]any)
+		raw["meta"] = meta
+	}
+	meta["lastTouchedAt"] = time.Now().UTC().Format(time.RFC3339)
+
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encoding config: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, append(out, '\n'), 0o600); err != nil {
+		return fmt.Errorf("writing config: %w", err)
+	}
+
+	logger.Info("persisted role model", "role", role, "field", field, "model", model, "path", configPath)
+	return nil
+}
+
 // PersistedCustomModel describes the provider/model entry written to config.
 type PersistedCustomModel struct {
 	ProviderID  string

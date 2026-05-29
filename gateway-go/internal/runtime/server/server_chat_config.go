@@ -133,6 +133,26 @@ func loadProviderConfigs(logger *slog.Logger) map[string]chat.ProviderConfig {
 	return root.Models.Providers
 }
 
+// providerCatalog converts the deneb.json models.providers entries into the
+// modelrole registry's dependency-free ProviderResolved shape, so a per-role
+// model can target ANY configured provider (e.g. "google/...") instead of
+// falling back to modelrole's built-in provider switch.
+func providerCatalog(logger *slog.Logger) map[string]modelrole.ProviderResolved {
+	raw := loadProviderConfigs(logger)
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string]modelrole.ProviderResolved, len(raw))
+	for id, p := range raw {
+		out[id] = modelrole.ProviderResolved{
+			BaseURL: p.BaseURL,
+			APIKey:  p.APIKey,
+			APIMode: p.API,
+		}
+	}
+	return out
+}
+
 // resolveDefaultModel reads agents.defaultModel or agents.defaults.model from
 // deneb.json, falling back to the registry's main model default.
 // The model field can be either a string ("model-name") or an object
@@ -190,6 +210,42 @@ func resolveLocalVllmModel(_ *slog.Logger) string {
 		return ""
 	}
 	return root.Models.Providers.Vllm.Models[0].ID
+}
+
+// resolveLightweightModel / resolveFallbackModel read the optional per-role
+// overrides agents.lightweightModel / agents.fallbackModel from deneb.json.
+// Empty leaves the registry's built-in local vLLM default for that role.
+func resolveLightweightModel(logger *slog.Logger) string {
+	return resolveAgentRoleModel("lightweightModel", logger)
+}
+
+func resolveFallbackModel(logger *slog.Logger) string {
+	return resolveAgentRoleModel("fallbackModel", logger)
+}
+
+// resolveAgentRoleModel reads a string field directly under "agents" in
+// deneb.json (e.g. "lightweightModel"). Returns "" when absent/unparseable.
+func resolveAgentRoleModel(field string, logger *slog.Logger) string {
+	snapshot, err := config.LoadConfigFromDefaultPath()
+	if err != nil || !snapshot.Valid || snapshot.Raw == "" {
+		return ""
+	}
+	var root struct {
+		Agents map[string]json.RawMessage `json:"agents"`
+	}
+	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
+		logger.Warn("failed to parse agents config for role model", "field", field, "error", err)
+		return ""
+	}
+	raw, ok := root.Agents[field]
+	if !ok {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(s)
 }
 
 // resolveSubagentDefaultModel reads agents.defaults.subagents.model from

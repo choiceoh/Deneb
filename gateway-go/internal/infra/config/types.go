@@ -274,7 +274,13 @@ type AgentsConfig struct {
 	MaxConcurrent         *int                  `json:"maxConcurrent,omitempty"`
 	SubagentMaxConcurrent *int                  `json:"subagentMaxConcurrent,omitempty"`
 	DefaultModel          string                `json:"defaultModel,omitempty"`
-	DefaultSystem         string                `json:"defaultSystem,omitempty"`
+	// LightweightModel / FallbackModel override the modelrole registry's
+	// lightweight and fallback roles (used by gmail-poll, genesis, pilot,
+	// and the chat fallback chain). Empty leaves the built-in default
+	// (the local vLLM model) in place. Format: "provider/model".
+	LightweightModel string                `json:"lightweightModel,omitempty"`
+	FallbackModel    string                `json:"fallbackModel,omitempty"`
+	DefaultSystem    string                `json:"defaultSystem,omitempty"`
 	Defaults              *AgentsDefaultsConfig `json:"defaults,omitempty"`
 	List                  []AgentEntryConfig    `json:"list,omitempty"`
 }

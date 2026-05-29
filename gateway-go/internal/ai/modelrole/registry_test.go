@@ -101,6 +101,59 @@ func TestEmptyMainModelDefaultsToVllm(t *testing.T) {
 	}
 }
 
+func TestNewRegistryWithOptions_PerRoleAndCatalog(t *testing.T) {
+	const googleURL = "https://gen.googleapis.example/v1beta/openai"
+	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
+		MainModel:        "zai/main-model",
+		LightweightModel: "google/gemini-3.5-flash", // catalog provider
+		FallbackModel:    "openrouter/some-model",    // built-in switch provider
+		Providers: map[string]ProviderResolved{
+			"google": {BaseURL: googleURL, APIKey: "gkey", APIMode: "openai"},
+		},
+	})
+
+	// Lightweight resolves its endpoint from the provider catalog — NOT the
+	// zai default that the built-in switch would return for "google".
+	lw := reg.Config(RoleLightweight)
+	if lw.ProviderID != "google" || lw.Model != "gemini-3.5-flash" {
+		t.Errorf("lightweight = %s/%s, want google/gemini-3.5-flash", lw.ProviderID, lw.Model)
+	}
+	if lw.BaseURL != googleURL {
+		t.Errorf("lightweight baseURL = %q, want catalog URL %q (regression: fell back to zai?)", lw.BaseURL, googleURL)
+	}
+	if lw.APIKey != "gkey" {
+		t.Errorf("lightweight apiKey = %q, want catalog key", lw.APIKey)
+	}
+
+	// Fallback's provider isn't in the catalog → built-in switch resolves it.
+	fb := reg.Config(RoleFallback)
+	if fb.ProviderID != "openrouter" || fb.BaseURL != "https://openrouter.ai/api/v1" {
+		t.Errorf("fallback = %s @ %q, want openrouter @ built-in URL", fb.ProviderID, fb.BaseURL)
+	}
+
+	// SetRoleModelID re-resolves at runtime.
+	reg.SetRoleModelID(RoleLightweight, "openrouter/swapped")
+	if got := reg.FullModelID(RoleLightweight); got != "openrouter/swapped" {
+		t.Errorf("after SetRoleModelID: FullModelID(RoleLightweight) = %q, want openrouter/swapped", got)
+	}
+	if got := reg.Config(RoleLightweight).BaseURL; got != "https://openrouter.ai/api/v1" {
+		t.Errorf("after SetRoleModelID: baseURL = %q, want built-in openrouter URL", got)
+	}
+}
+
+func TestNewRegistryWithOptions_UnsetRolesDefaultToVllm(t *testing.T) {
+	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
+		MainModel:      "zai/main-model",
+		LocalVllmModel: "qwen-test",
+	})
+	for _, role := range []Role{RoleLightweight, RoleFallback} {
+		cfg := reg.Config(role)
+		if cfg.ProviderID != "vllm" || cfg.Model != "qwen-test" {
+			t.Errorf("%s = %s/%s, want vllm/qwen-test (default)", role, cfg.ProviderID, cfg.Model)
+		}
+	}
+}
+
 func TestFallbackChain(t *testing.T) {
 	reg := NewRegistry(slog.Default(), "zai/test-model", "")
 
