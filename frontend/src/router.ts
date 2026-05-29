@@ -23,7 +23,7 @@ export type Route =
   | { name: 'calendar' }
   | { name: 'calendarEvent'; eventId: string }
   | { name: 'settings' }
-  | { name: 'modelSelect' }
+  | { name: 'modelSelect'; role?: string }
   | { name: 'categories' }
   | { name: 'categoryPages'; category: string }
   | { name: 'crons' }
@@ -57,6 +57,8 @@ export function parseRoute(hash: string): Route {
   }
   if (hash === '#/settings') return { name: 'settings' };
   if (hash === '#/settings/model') return { name: 'modelSelect' };
+  const roleSel = hash.match(/^#\/settings\/model\/(main|lightweight|fallback)$/);
+  if (roleSel) return { name: 'modelSelect', role: roleSel[1] };
   if (hash === '#/categories') return { name: 'categories' };
   if (hash === '#/crons') return { name: 'crons' };
   if (hash === '#/wiki-new') return { name: 'wikiNew' };
@@ -149,7 +151,11 @@ export function navigate(target: Route): void {
   else if (target.name === 'sessions') hash = '#/sessions';
   else if (target.name === 'topicNew') hash = '#/topic-new';
   else if (target.name === 'settings') hash = '#/settings';
-  else if (target.name === 'modelSelect') hash = '#/settings/model';
+  else if (target.name === 'modelSelect')
+    hash =
+      target.role && target.role !== 'main'
+        ? `#/settings/model/${target.role}`
+        : '#/settings/model';
   else if (target.name === 'detail') hash = `#/m/${encodeURIComponent(target.messageId)}`;
   else if (target.name === 'wikiPage') hash = `#/wiki/${encodeURIComponent(target.path)}`;
   else if (target.name === 'sessionTranscript')
