@@ -227,30 +227,40 @@ func (s *Server) doShutdown() error {
 		stopCancel()
 	}
 
+	// Every drain below is wrapped in stopWithTimeout. doShutdown closes the
+	// HTTP listener first (step 1), so any step that blocks indefinitely keeps
+	// the gateway un-serving until it returns; an unbounded drain therefore
+	// stretches the listener-closed window up to the lifecycle watchdog's grace
+	// (45s) before the process is force-exited. Bounding each step keeps that
+	// window short — the watchdog stays a last resort, not the routine path.
+
 	// 4. Stop autonomous service (dreaming).
 	if s.autonomousSvc != nil {
-		s.autonomousSvc.Stop()
+		stopWithTimeout(10*time.Second, "autonomousSvc.Stop", s.logger, s.autonomousSvc.Stop)
 	}
 
 	// 5. Cleanup genesis subsystem.
 	if s.genesisSvc != nil {
-		s.genesisSvc.Stop()
+		stopWithTimeout(5*time.Second, "genesisSvc.Stop", s.logger, s.genesisSvc.Stop)
 	}
 	if s.genesisTracker != nil {
-		s.genesisTracker.Close()
+		stopWithTimeout(5*time.Second, "genesisTracker.Close", s.logger, func() { _ = s.genesisTracker.Close() })
 	}
 
-	// 6. Stop local AI hub (drains queued requests, cancels in-flight).
+	// 6. Stop local AI hub (drains queued requests, cancels in-flight). Bounded
+	// because the drain can block on an in-flight inference to a stalled local
+	// model server (vLLM under memory pressure) — the most likely cause of the
+	// shutdown hang that wedged the gateway before the watchdog + these caps.
 	if s.localAIHub != nil {
-		s.localAIHub.Shutdown()
+		stopWithTimeout(10*time.Second, "localAIHub.Shutdown", s.logger, s.localAIHub.Shutdown)
 	}
 	if s.embeddingClient != nil {
-		s.embeddingClient.Shutdown()
+		stopWithTimeout(10*time.Second, "embeddingClient.Shutdown", s.logger, s.embeddingClient.Shutdown)
 	}
 
 	// 7. Close task store.
 	if s.taskStore != nil {
-		s.taskStore.Close()
+		stopWithTimeout(5*time.Second, "taskStore.Close", s.logger, func() { _ = s.taskStore.Close() })
 	}
 
 	// Gmail polling is stopped by autonomous service (registered as periodic task).
@@ -264,22 +274,22 @@ func (s *Server) doShutdown() error {
 
 	// 11. Close run state machine.
 	if s.runStateMachine != nil {
-		s.runStateMachine.Close()
+		stopWithTimeout(5*time.Second, "runStateMachine.Close", s.logger, s.runStateMachine.Close)
 	}
 
 	// 12. Close chat handler.
 	if s.chatHandler != nil {
-		s.chatHandler.Close()
+		stopWithTimeout(5*time.Second, "chatHandler.Close", s.logger, s.chatHandler.Close)
 	}
 
 	// 13. Close wiki store (FTS database).
 	if s.wikiStore != nil {
-		s.wikiStore.Close()
+		stopWithTimeout(5*time.Second, "wikiStore.Close", s.logger, func() { _ = s.wikiStore.Close() })
 	}
 
 	// 14. Stop process manager background goroutine.
 	if s.processes != nil {
-		s.processes.Stop()
+		stopWithTimeout(5*time.Second, "processes.Stop", s.logger, s.processes.Stop)
 	}
 
 	// 15. ACP cleanup: persist bindings, registry, and unsubscribe lifecycle sync.
