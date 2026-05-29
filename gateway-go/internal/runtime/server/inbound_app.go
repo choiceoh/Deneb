@@ -18,6 +18,15 @@ import (
 // a Main Mini App from any chat (groups + channels included), so it
 // works inside forum topics where /app actually adds value.
 //
+// PREREQUISITE: ?startapp only launches the app when the operator has
+// enabled a Main Mini App in BotFather (Bot Settings -> Configure Mini
+// App). The webAppURL config alone powers the menu button via
+// setChatMenuButton, NOT this link — without the Main Mini App the link
+// just opens the bot chat. The presence check below can only confirm
+// webAppURL is set, not that the Main Mini App is configured, so the
+// setup is documented in docs/operations/cloudflare-tunnel-setup.md
+// ("Enable the Main Mini App").
+//
 // Refuses with a brief explanation when prerequisites are missing
 // (bot username not yet resolved by getMe, or no Mini App configured)
 // rather than sending a button to a broken URL.
