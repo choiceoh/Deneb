@@ -8,7 +8,14 @@
 //      hashchange to re-render on navigation.
 //   4. Manages Telegram's BackButton so it mirrors browser history.
 
-import '@fontsource-variable/inter';
+// Pretendard Variable as the single lead face: its Latin/numerals are
+// Inter-based (so the English look the previous Inter setup gave us is
+// preserved) while its Hangul is first-class and metrically matched to the
+// Latin — no weight/baseline jump between English and Korean in a mixed
+// line, which the old Inter + Apple SD Gothic / Noto fallback suffered. The
+// dynamic-subset variant @font-faces one variable file per unicode-range,
+// so the WebView fetches only the glyph ranges actually on screen.
+import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
 import './styles.css';
 import { parseRoute, navigate, isHomeRoute, type Route } from './router';
 // Home stays statically imported so the first-paint chunk includes
@@ -18,7 +25,6 @@ import { parseRoute, navigate, isHomeRoute, type Route } from './router';
 // prefetchOtherViews() warms the cache during idle time after boot so
 // that first visit usually finds the chunk already there.
 import { renderHome } from './views/home';
-import { applyAppSettings } from './app_settings';
 import { clearPullToRefreshHandler } from './pull_to_refresh';
 
 const root = document.getElementById('app')!;
@@ -501,7 +507,6 @@ function boot(): void {
   }
   cachedInitData = initData;
   activeWebApp = tg;
-  applyAppSettings();
 
   // Wire Telegram's BackButton to the router. Detail views pop to their
   // list, list views pop to home, and everything else (including home

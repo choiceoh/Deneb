@@ -133,13 +133,16 @@ body {
      called at boot — overscroll-behavior catches older WebViews and
      non-Telegram browsers where the WebApp API is missing. */
   overscroll-behavior-y: contain;
-  /* Inter Variable is the lead face — it carries the full weight range
-     (100..900) the Zune-style typography needs (ultralight wordmark, light
-     menu labels, regular body, semibold accents). Korean characters fall
-     through Inter's unicode-range to Apple SD Gothic Neo / Noto Sans KR
-     so the same span can mix English + Korean without weight-jumping. */
+  /* Pretendard Variable is the lead face — one variable file (weight 45..920,
+     covering the ultralight wordmark → semibold accents the Zune-style
+     typography needs) that renders BOTH Latin and Hangul. Its Latin/numerals
+     are Inter-based, so the English look the old Inter setup gave us carries
+     over; its Hangul is metrically matched to that Latin, so a mixed
+     English+Korean line no longer weight-jumps between two faces (the prior
+     Inter + Apple SD Gothic / Noto fallback did). The system Korean faces
+     stay as a last-resort fallback for the swap window (font-display: swap). */
   font-family:
-    'Inter Variable',
+    'Pretendard Variable',
     -apple-system,
     BlinkMacSystemFont,
     'Segoe UI',
@@ -149,24 +152,14 @@ body {
     'Apple SD Gothic Neo',
     'Noto Sans KR',
     sans-serif;
-  /* OpenType features for Inter Variable, in order of impact:
-       'ss01' — single-story 'a' (matches the wordmark wordform)
-       'ss02' — disambiguation 'i' + 'l' (helps at small sizes)
-       'ss03' — curl-less tail on 'a' (pairs with ultralight weights)
-       'ss04' — open '6' / '9' bowls (cleaner against tabular nums)
-       'cv02' — open '4'
-       'cv11' — single-story 'a' (cv11 + ss01 is the canonical pair)
-       'kern' — explicit kerning pair enable (browser-default but
-                we set it so font-variant: tabular-nums in callsites
-                doesn't accidentally drop it). */
-  font-feature-settings:
-    'ss01' on,
-    'ss02' on,
-    'ss03' on,
-    'ss04' on,
-    'cv02' on,
-    'cv11' on,
-    'kern' on;
+  /* Kerning is the one OpenType feature we force on: it's a browser default,
+     but we set it explicitly so the `font-variant: tabular-nums` applied at
+     numeric callsites doesn't accidentally drop kerning elsewhere.
+     (The old Inter setup also toggled ss01/cv11 stylistic sets for a
+     single-story 'a' etc.; Pretendard's variable build doesn't expose those
+     Inter-specific sets, so we render its default Latin letterforms — which
+     are themselves Inter-derived — rather than toggling alternates.) */
+  font-feature-settings: 'kern' on;
   font-optical-sizing: auto;
   font-size: 15px;
   line-height: 1.5;
@@ -859,10 +852,6 @@ button.entry-card:active {
   line-height: 1.18;
   margin-bottom: 16px;
   color: var(--tg-text);
-  /* Soft optical-size hint: at this size Inter's optical-sizing axis
-     tightens the apertures a bit, so the subject reads with the same
-     weight feel as the page title (40px) instead of looking lighter. */
-  font-optical-sizing: auto;
 }
 
 .card.attachments {
@@ -2156,54 +2145,6 @@ pre.transcript-body {
 
 button.settings-model-add-submit {
   margin-top: 2px;
-}
-
-/* ---- Compact mode ---- */
-
-body.compact-ui #app {
-  padding-top: 14px;
-}
-
-body.compact-ui .section-label {
-  margin-top: 12px;
-  margin-bottom: 6px;
-}
-
-body.compact-ui .profile-row,
-body.compact-ui .settings-toggle-row,
-body.compact-ui .settings-reset-row,
-body.compact-ui .settings-model-nav,
-body.compact-ui .settings-model-current,
-body.compact-ui .settings-model-row,
-body.compact-ui .settings-model-error {
-  min-height: 48px;
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
-
-body.compact-ui .settings-model-add {
-  padding: 12px;
-  gap: 8px;
-}
-
-body.compact-ui .settings-model-field input {
-  min-height: 38px;
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
-
-body.compact-ui .card,
-body.compact-ui .email-row,
-body.compact-ui button.memory-card,
-body.compact-ui button.session-row,
-body.compact-ui .transcript-message {
-  padding: 10px 12px;
-}
-
-body.compact-ui .email-row-wrap,
-body.compact-ui button.memory-card,
-body.compact-ui button.session-row {
-  margin-bottom: 6px;
 }
 
 /* ---- Brand header (home + more) ---- */

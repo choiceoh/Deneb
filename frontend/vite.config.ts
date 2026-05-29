@@ -1,26 +1,27 @@
 import { defineConfig, type Plugin } from 'vite';
 import { brotliCompressSync, gzipSync, constants as zlibConstants } from 'node:zlib';
 
-// Inject a <link rel="preload"> for the latin Inter subset so the font
-// fetch starts in parallel with HTML/JS/CSS parsing instead of waiting
-// for the CSS bundle to arrive + parse before discovery. Other Inter
-// subsets (cyrillic, greek, vietnamese, …) are skipped automatically by
-// the browser via @font-face `unicode-range` — they never get fetched
-// on a Korean-first UI rendering English labels, so we only preload the
-// one subset that always runs.
-function preloadLatinFont(): Plugin {
+// Inject a <link rel="preload"> for Pretendard's primary subset so the font
+// fetch starts in parallel with HTML/JS/CSS parsing instead of waiting for
+// the CSS bundle to arrive + parse before discovery. The dynamic-subset
+// build splits Pretendard Variable into 92 woff2 files by `unicode-range`;
+// subset 91 is the one that carries ASCII Latin + the most common Hangul
+// syllables — the glyph set every screen needs first (English section
+// labels + frequent Korean). The other 91 subsets stay on-demand: the
+// browser fetches each only when a glyph in its range actually renders.
+function preloadPrimaryFont(): Plugin {
   return {
-    name: 'preload-latin-font',
+    name: 'preload-primary-font',
     apply: 'build',
     transformIndexHtml: {
       order: 'post',
       handler(html, ctx) {
         if (!ctx.bundle) return html;
-        const latin = Object.keys(ctx.bundle).find(
-          (f) => f.includes('inter-latin-wght-normal') && f.endsWith('.woff2'),
+        const primary = Object.keys(ctx.bundle).find(
+          (f) => f.includes('PretendardVariable.subset.91') && f.endsWith('.woff2'),
         );
-        if (!latin) return html;
-        const tag = `<link rel="preload" as="font" type="font/woff2" crossorigin href="/app/${latin}">`;
+        if (!primary) return html;
+        const tag = `<link rel="preload" as="font" type="font/woff2" crossorigin href="/app/${primary}">`;
         return html.replace('</title>', `</title>\n    ${tag}`);
       },
     },
@@ -107,7 +108,7 @@ function precompressTextAssets(): Plugin {
 // FileServer in Go resolves /app/assets/<hash>.js).
 export default defineConfig({
   base: '/app/',
-  plugins: [preloadLatinFont(), precompressTextAssets()],
+  plugins: [preloadPrimaryFont(), precompressTextAssets()],
   build: {
     outDir: 'dist',
     target: 'es2020',
