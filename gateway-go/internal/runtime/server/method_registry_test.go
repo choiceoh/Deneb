@@ -131,9 +131,10 @@ var requiredMethods = []string{
 	"miniapp.models.add_custom",
 	"miniapp.models.list",
 	"miniapp.models.set",
-	// miniapp.gmail.analyze is conditional on an LLM client being
-	// configured (modelRegistry.Client(RoleMain) returning non-nil) —
-	// not in the required list because tests run without providers.
+	// miniapp.gmail.analyze and miniapp.gmail.analysis_cached are
+	// conditional on an LLM client being configured
+	// (modelRegistry.Client(RoleMain) returning non-nil) — not in the
+	// required list because tests run without providers.
 	"miniapp.sessions.recent",
 	"miniapp.sessions.transcript",
 	// miniapp.memory.{search,get_page,categories,list_in_category,diary_recent}

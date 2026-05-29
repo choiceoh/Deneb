@@ -7,16 +7,17 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 type fakeAnalyzePipeline struct {
-	analyzeFn func(ctx context.Context, msg *gmail.MessageDetail) (string, error)
+	analyzeFn func(ctx context.Context, msg *gmail.MessageDetail) (gmailpoll.AnalysisResult, error)
 }
 
-func (f *fakeAnalyzePipeline) Analyze(ctx context.Context, msg *gmail.MessageDetail) (string, error) {
+func (f *fakeAnalyzePipeline) Analyze(ctx context.Context, msg *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
 	if f.analyzeFn == nil {
-		return "", errors.New("Analyze not stubbed")
+		return gmailpoll.AnalysisResult{}, errors.New("Analyze not stubbed")
 	}
 	return f.analyzeFn(ctx, msg)
 }
@@ -43,11 +44,11 @@ func TestGmailAnalyze_HappyPath(t *testing.T) {
 		},
 	}
 	pipeline := &fakeAnalyzePipeline{
-		analyzeFn: func(_ context.Context, msg *gmail.MessageDetail) (string, error) {
+		analyzeFn: func(_ context.Context, msg *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
 			if msg.ID != "m1" {
 				t.Errorf("pipeline got id=%q, want m1", msg.ID)
 			}
-			return "## 핵심 요약\n회의 일정 조율 요청.\n", nil
+			return gmailpoll.AnalysisResult{Text: "## 핵심 요약\n회의 일정 조율 요청.\n"}, nil
 		},
 	}
 	h := gmailAnalyze(analyzeDeps(gmailClient, pipeline))
@@ -115,8 +116,8 @@ func TestGmailAnalyze_PipelineFailure(t *testing.T) {
 		},
 	}
 	pipeline := &fakeAnalyzePipeline{
-		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (string, error) {
-			return "", errors.New("LLM call timed out")
+		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
+			return gmailpoll.AnalysisResult{}, errors.New("LLM call timed out")
 		},
 	}
 	h := gmailAnalyze(analyzeDeps(gmailClient, pipeline))
@@ -136,8 +137,8 @@ func TestGmailAnalyze_EmptyAnalysisIsRejected(t *testing.T) {
 		},
 	}
 	pipeline := &fakeAnalyzePipeline{
-		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (string, error) {
-			return "   \n  ", nil // whitespace only
+		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
+			return gmailpoll.AnalysisResult{Text: "   \n  "}, nil // whitespace only
 		},
 	}
 	h := gmailAnalyze(analyzeDeps(gmailClient, pipeline))
@@ -165,8 +166,8 @@ func TestGmailAnalyze_WikiSinkFailure_NonFatal(t *testing.T) {
 		&fakeGmailClient{getMessageFn: func(_ context.Context, id string) (*gmail.MessageDetail, error) {
 			return &gmail.MessageDetail{ID: id}, nil
 		}},
-		&fakeAnalyzePipeline{analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (string, error) {
-			return "result", nil
+		&fakeAnalyzePipeline{analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
+			return gmailpoll.AnalysisResult{Text: "result"}, nil
 		}},
 	)
 	deps.SaveToWiki = func(WikiAnalysisInput) error { return errors.New("disk full") }
@@ -254,9 +255,9 @@ func TestGmailAnalyze_CacheMiss_RunsLLMAndPersists(t *testing.T) {
 
 	pipelineCalls := 0
 	pipeline := &fakeAnalyzePipeline{
-		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (string, error) {
+		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
 			pipelineCalls++
-			return "## 새로 생성\n신규 분석.", nil
+			return gmailpoll.AnalysisResult{Text: "## 새로 생성\n신규 분석."}, nil
 		},
 	}
 	gmailClient := &fakeGmailClient{
@@ -316,9 +317,9 @@ func TestGmailAnalyze_Force_BypassesCache(t *testing.T) {
 
 	pipelineCalls := 0
 	pipeline := &fakeAnalyzePipeline{
-		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (string, error) {
+		analyzeFn: func(_ context.Context, _ *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
 			pipelineCalls++
-			return "fresh analysis", nil
+			return gmailpoll.AnalysisResult{Text: "fresh analysis"}, nil
 		},
 	}
 	gmailClient := &fakeGmailClient{
@@ -357,12 +358,74 @@ func TestGmailAnalyzeMethods_MissingDepsReturnsNil(t *testing.T) {
 }
 
 func TestPipelineFromGmailpoll_NoLLM(t *testing.T) {
-	_, err := PipelineFromGmailpoll(nil, nil, "")
+	_, err := PipelineFromGmailpoll(nil, nil, "", nil)
 	if !errors.Is(err, ErrAnalyzeNoLLM) {
 		t.Errorf("err = %v, want ErrAnalyzeNoLLM", err)
 	}
-	_, err = PipelineFromGmailpoll(nil, nil, "claude-opus")
+	_, err = PipelineFromGmailpoll(nil, nil, "claude-opus", nil)
 	if !errors.Is(err, ErrAnalyzeNoLLM) {
 		t.Errorf("nil LLMClient should still return ErrAnalyzeNoLLM, got %v", err)
+	}
+}
+
+// analysis_cached returns a stored analysis (with its related projects)
+// without touching the pipeline. WikiStore is nil here, so projects fall
+// back to bare paths — which is exactly what the chip renders on enrichment
+// failure.
+func TestGmailAnalysisCached_HitReturnsProjects(t *testing.T) {
+	cache := NewAnalysisStore(t.TempDir())
+	if err := cache.save(&analysisRecord{
+		MsgID:           "m1",
+		Analysis:        "저장된 분석",
+		RelatedProjects: []string{"프로젝트/deneb.md"},
+		PromptVersion:   AnalysisPromptVersion,
+	}); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+	deps := GmailAnalyzeDeps{
+		Client:   func() (GmailClient, error) { return &fakeGmailClient{}, nil },
+		Pipeline: func() (AnalyzePipeline, error) { return &fakeAnalyzePipeline{}, nil },
+		Cache:    cache,
+	}
+	h := GmailAnalyzeMethods(deps)["miniapp.gmail.analysis_cached"]
+	if h == nil {
+		t.Fatal("analysis_cached handler not registered")
+	}
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analysis_cached", map[string]any{"id": "m1"}))
+	if !resp.OK {
+		t.Fatalf("expected OK, got %+v", resp.Error)
+	}
+	var got map[string]any
+	decode(t, resp, &got)
+	if cached, _ := got["cached"].(bool); !cached {
+		t.Errorf("cached = %v, want true", got["cached"])
+	}
+	if got["analysis"] != "저장된 분석" {
+		t.Errorf("analysis = %q", got["analysis"])
+	}
+	projects, _ := got["relatedProjects"].([]any)
+	if len(projects) != 1 {
+		t.Fatalf("relatedProjects len = %d, want 1 (%+v)", len(projects), got["relatedProjects"])
+	}
+	if p0, _ := projects[0].(map[string]any); p0["path"] != "프로젝트/deneb.md" {
+		t.Errorf("project path = %v, want 프로젝트/deneb.md", p0["path"])
+	}
+}
+
+func TestGmailAnalysisCached_MissReturnsNotCached(t *testing.T) {
+	deps := GmailAnalyzeDeps{
+		Client:   func() (GmailClient, error) { return &fakeGmailClient{}, nil },
+		Pipeline: func() (AnalyzePipeline, error) { return &fakeAnalyzePipeline{}, nil },
+		Cache:    NewAnalysisStore(t.TempDir()),
+	}
+	h := GmailAnalyzeMethods(deps)["miniapp.gmail.analysis_cached"]
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.analysis_cached", map[string]any{"id": "nope"}))
+	if !resp.OK {
+		t.Fatalf("expected OK on miss, got %+v", resp.Error)
+	}
+	var got map[string]any
+	decode(t, resp, &got)
+	if cached, _ := got["cached"].(bool); cached {
+		t.Errorf("cached = true on miss, want false")
 	}
 }

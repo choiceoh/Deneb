@@ -107,6 +107,14 @@ export function senderContext(initData: string, sender: string): Promise<SenderC
 
 // --- Analyze (miniapp.gmail.analyze) ---
 
+// ProjectRef is a related project wiki page cited by an analysis: the path
+// plus enriched title/summary for chip rendering.
+export interface ProjectRef {
+  path: string;
+  title?: string;
+  summary?: string;
+}
+
 export interface AnalyzeResult {
   id: string;
   subject?: string;
@@ -120,6 +128,8 @@ export interface AnalyzeResult {
   // always present in v2+ responses; older callers tolerate omission.
   cached?: boolean;
   createdAt?: string;
+  // relatedProjects: project wiki pages the analyzer linked to this email.
+  relatedProjects?: ProjectRef[];
 }
 
 // analyzeMessage runs (or fetches the cached) LLM analysis for an email.
@@ -132,4 +142,22 @@ export function analyzeMessage(
   force = false,
 ): Promise<AnalyzeResult> {
   return call<AnalyzeResult>('miniapp.gmail.analyze', { id, force }, initData);
+}
+
+// CachedAnalysis is the analysis_cached response: a stored analysis served
+// without running the LLM. cached=false (with empty analysis) on a miss.
+export interface CachedAnalysis {
+  id: string;
+  analysis: string;
+  relatedProjects?: ProjectRef[];
+  cached: boolean;
+  createdAt?: string;
+}
+
+// analysisCached fetches a pre-computed analysis for an email (from the
+// autonomous poller or a prior manual run) without ever triggering the LLM.
+// Used on detail open to show the analysis + related projects instantly; a
+// miss (cached=false) means the operator must tap analyze to generate one.
+export function analysisCached(initData: string, id: string): Promise<CachedAnalysis> {
+  return call<CachedAnalysis>('miniapp.gmail.analysis_cached', { id }, initData);
 }

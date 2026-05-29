@@ -33,14 +33,15 @@ const AnalysisPromptVersion = "v1"
 
 // analysisRecord is the on-disk shape of one cached analysis.
 type analysisRecord struct {
-	MsgID         string    `json:"msgID"`
-	Subject       string    `json:"subject,omitempty"`
-	From          string    `json:"from,omitempty"`
-	Date          string    `json:"date,omitempty"`
-	Analysis      string    `json:"analysis"`
-	DurationMs    int64     `json:"durationMs"`
-	PromptVersion string    `json:"promptVersion"`
-	CreatedAt     time.Time `json:"createdAt"`
+	MsgID           string    `json:"msgID"`
+	Subject         string    `json:"subject,omitempty"`
+	From            string    `json:"from,omitempty"`
+	Date            string    `json:"date,omitempty"`
+	Analysis        string    `json:"analysis"`
+	RelatedProjects []string  `json:"relatedProjects,omitempty"` // wiki paths of related project pages
+	DurationMs      int64     `json:"durationMs"`
+	PromptVersion   string    `json:"promptVersion"`
+	CreatedAt       time.Time `json:"createdAt"`
 }
 
 // AnalysisStore is a per-message JSON cache rooted at a directory.
@@ -103,6 +104,38 @@ func (s *AnalysisStore) save(rec *analysisRecord) error {
 		return err
 	}
 	return atomicfile.WriteFile(path, data, nil)
+}
+
+// CachedAnalysis is the public payload for storing an analysis produced
+// outside the analyze handler (e.g., the autonomous Gmail poller) so it
+// lands in the same cache the Mini App reads. PromptVersion is stamped
+// automatically so a poller-written record is served by analyze/
+// analysis_cached exactly like a manually-run one.
+type CachedAnalysis struct {
+	MsgID           string
+	Subject         string
+	From            string
+	Date            string
+	Analysis        string
+	RelatedProjects []string
+	DurationMs      int64
+	CreatedAt       time.Time
+}
+
+// SaveAnalysis stores a CachedAnalysis under the current prompt version.
+// Best-effort: callers log the error but don't fail the poll cycle on it.
+func (s *AnalysisStore) SaveAnalysis(in CachedAnalysis) error {
+	return s.save(&analysisRecord{
+		MsgID:           in.MsgID,
+		Subject:         in.Subject,
+		From:            in.From,
+		Date:            in.Date,
+		Analysis:        in.Analysis,
+		RelatedProjects: in.RelatedProjects,
+		DurationMs:      in.DurationMs,
+		PromptVersion:   AnalysisPromptVersion,
+		CreatedAt:       in.CreatedAt,
+	})
 }
 
 // pathFor returns the on-disk path for msgID. Returns "" if the ID

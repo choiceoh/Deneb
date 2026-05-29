@@ -37,18 +37,28 @@ import (
 // on. Pulling it behind an interface keeps the handler testable without
 // standing up an LLM.
 type AnalyzePipeline interface {
-	Analyze(ctx context.Context, msg *gmail.MessageDetail) (string, error)
+	Analyze(ctx context.Context, msg *gmail.MessageDetail) (gmailpoll.AnalysisResult, error)
+}
+
+// ProjectRef is a related project wiki page surfaced to the Mini App: the
+// path plus enriched title/summary so the client renders a chip without a
+// second round trip.
+type ProjectRef struct {
+	Path    string `json:"path"`
+	Title   string `json:"title,omitempty"`
+	Summary string `json:"summary,omitempty"`
 }
 
 // WikiAnalysisInput is the payload the handler hands to SaveToWiki when a
 // fresh analysis succeeds. Kept as a flat struct so the handler stays
 // ignorant of the wiki package's frontmatter/page types.
 type WikiAnalysisInput struct {
-	MsgID    string
-	Subject  string
-	From     string
-	Date     string
-	Analysis string
+	MsgID           string
+	Subject         string
+	From            string
+	Date            string
+	Analysis        string
+	RelatedProjects []string // wiki paths of related project pages → page.Related
 }
 
 // GmailAnalyzeDeps groups the factories the handler needs. Client supplies
@@ -62,6 +72,9 @@ type GmailAnalyzeDeps struct {
 	Pipeline   func() (AnalyzePipeline, error)
 	Cache      *AnalysisStore
 	SaveToWiki func(in WikiAnalysisInput) error
+	// WikiStore (optional) enriches related-project paths with their
+	// title/summary for display. nil → chips fall back to the bare path.
+	WikiStore func() (MemorySearcher, error)
 }
 
 // GmailAnalyzeMethods returns the miniapp.gmail.analyze handler. Returns
@@ -72,7 +85,8 @@ func GmailAnalyzeMethods(deps GmailAnalyzeDeps) map[string]rpcutil.HandlerFunc {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.gmail.analyze": gmailAnalyze(deps),
+		"miniapp.gmail.analyze":         gmailAnalyze(deps),
+		"miniapp.gmail.analysis_cached": gmailAnalysisCached(deps),
 	}
 }
 
@@ -82,14 +96,15 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 		Force bool   `json:"force,omitempty"`
 	}
 	type out struct {
-		ID         string    `json:"id"`
-		Subject    string    `json:"subject,omitempty"`
-		From       string    `json:"from,omitempty"`
-		Date       string    `json:"date,omitempty"`
-		Analysis   string    `json:"analysis"`
-		DurationMs int64     `json:"durationMs"`
-		Cached     bool      `json:"cached"`
-		CreatedAt  time.Time `json:"createdAt"`
+		ID              string       `json:"id"`
+		Subject         string       `json:"subject,omitempty"`
+		From            string       `json:"from,omitempty"`
+		Date            string       `json:"date,omitempty"`
+		Analysis        string       `json:"analysis"`
+		RelatedProjects []ProjectRef `json:"relatedProjects,omitempty"`
+		DurationMs      int64        `json:"durationMs"`
+		Cached          bool         `json:"cached"`
+		CreatedAt       time.Time    `json:"createdAt"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
@@ -111,14 +126,15 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 		if !p.Force && deps.Cache != nil {
 			if rec, err := deps.Cache.load(p.ID); err == nil && rec != nil {
 				return rpcutil.RespondOK(req.ID, out{
-					ID:         rec.MsgID,
-					Subject:    rec.Subject,
-					From:       rec.From,
-					Date:       rec.Date,
-					Analysis:   rec.Analysis,
-					DurationMs: rec.DurationMs,
-					Cached:     true,
-					CreatedAt:  rec.CreatedAt,
+					ID:              rec.MsgID,
+					Subject:         rec.Subject,
+					From:            rec.From,
+					Date:            rec.Date,
+					Analysis:        rec.Analysis,
+					RelatedProjects: enrichProjects(deps, rec.RelatedProjects),
+					DurationMs:      rec.DurationMs,
+					Cached:          true,
+					CreatedAt:       rec.CreatedAt,
 				})
 			}
 		}
@@ -141,26 +157,27 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 		}
 
 		start := time.Now()
-		analysis, err := pipeline.Analyze(ctx, msg)
+		result, err := pipeline.Analyze(ctx, msg)
 		dur := time.Since(start)
 		if err != nil {
 			return rpcerr.WrapUnavailable("email analysis failed", err).Response(req.ID)
 		}
-		if strings.TrimSpace(analysis) == "" {
+		if strings.TrimSpace(result.Text) == "" {
 			return rpcerr.Unavailable("analysis returned empty result").Response(req.ID)
 		}
 
 		date := normalizeDate(msg.Date)
 		now := time.Now().UTC()
 		rec := &analysisRecord{
-			MsgID:         msg.ID,
-			Subject:       msg.Subject,
-			From:          msg.From,
-			Date:          date,
-			Analysis:      analysis,
-			DurationMs:    dur.Milliseconds(),
-			PromptVersion: AnalysisPromptVersion,
-			CreatedAt:     now,
+			MsgID:           msg.ID,
+			Subject:         msg.Subject,
+			From:            msg.From,
+			Date:            date,
+			Analysis:        result.Text,
+			RelatedProjects: result.RelatedProjects,
+			DurationMs:      dur.Milliseconds(),
+			PromptVersion:   AnalysisPromptVersion,
+			CreatedAt:       now,
 		}
 		// Persistence is best-effort. A working LLM result must not be
 		// surfaced as a failure just because disk or wiki write blipped.
@@ -169,23 +186,97 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 		}
 		if deps.SaveToWiki != nil {
 			_ = deps.SaveToWiki(WikiAnalysisInput{
-				MsgID:    msg.ID,
-				Subject:  msg.Subject,
-				From:     msg.From,
-				Date:     date,
-				Analysis: analysis,
+				MsgID:           msg.ID,
+				Subject:         msg.Subject,
+				From:            msg.From,
+				Date:            date,
+				Analysis:        result.Text,
+				RelatedProjects: result.RelatedProjects,
 			})
 		}
 
 		return rpcutil.RespondOK(req.ID, out{
-			ID:         msg.ID,
-			Subject:    msg.Subject,
-			From:       msg.From,
-			Date:       date,
-			Analysis:   analysis,
-			DurationMs: dur.Milliseconds(),
-			Cached:     false,
-			CreatedAt:  now,
+			ID:              msg.ID,
+			Subject:         msg.Subject,
+			From:            msg.From,
+			Date:            date,
+			Analysis:        result.Text,
+			RelatedProjects: enrichProjects(deps, result.RelatedProjects),
+			DurationMs:      dur.Milliseconds(),
+			Cached:          false,
+			CreatedAt:       now,
+		})
+	}
+}
+
+// enrichProjects resolves project wiki paths to ProjectRefs with title and
+// summary for display. Best-effort: a path that can't be read falls back to
+// just the path so the chip still links somewhere.
+func enrichProjects(deps GmailAnalyzeDeps, paths []string) []ProjectRef {
+	if len(paths) == 0 {
+		return nil
+	}
+	var store MemorySearcher
+	if deps.WikiStore != nil {
+		store, _ = deps.WikiStore()
+	}
+	refs := make([]ProjectRef, 0, len(paths))
+	for _, p := range paths {
+		ref := ProjectRef{Path: p}
+		if store != nil {
+			if page, err := store.ReadPage(p); err == nil && page != nil {
+				ref.Title = page.Meta.Title
+				ref.Summary = page.Meta.Summary
+			}
+		}
+		refs = append(refs, ref)
+	}
+	return refs
+}
+
+// gmailAnalysisCached returns a stored analysis without ever running the
+// LLM. The Mini App calls this when opening an email so a pre-computed
+// analysis (from the autonomous poller or a prior manual run) shows up
+// instantly, including its related projects. On a miss it returns
+// cached=false with an empty analysis, and the client offers the manual
+// analyze button.
+func gmailAnalysisCached(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ID string `json:"id"`
+	}
+	type out struct {
+		ID              string       `json:"id"`
+		Analysis        string       `json:"analysis"`
+		RelatedProjects []ProjectRef `json:"relatedProjects,omitempty"`
+		Cached          bool         `json:"cached"`
+		CreatedAt       time.Time    `json:"createdAt,omitempty"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		if strings.TrimSpace(p.ID) == "" {
+			return rpcerr.MissingParam("id").Response(req.ID)
+		}
+		if deps.Cache == nil {
+			return rpcutil.RespondOK(req.ID, out{ID: p.ID})
+		}
+		rec, err := deps.Cache.load(p.ID)
+		if err != nil || rec == nil {
+			return rpcutil.RespondOK(req.ID, out{ID: p.ID})
+		}
+		return rpcutil.RespondOK(req.ID, out{
+			ID:              rec.MsgID,
+			Analysis:        rec.Analysis,
+			RelatedProjects: enrichProjects(deps, rec.RelatedProjects),
+			Cached:          true,
+			CreatedAt:       rec.CreatedAt,
 		})
 	}
 }
@@ -199,7 +290,7 @@ var ErrAnalyzeNoLLM = errors.New("analyze pipeline: LLM client not configured")
 // AnalyzePipeline interface. Returns ErrAnalyzeNoLLM when the inputs are
 // missing so callers can map cleanly to UNAVAILABLE without touching the
 // gmailpoll package internals.
-func PipelineFromGmailpoll(gmailClient *gmail.Client, llmClient *llm.Client, mainModel string) (AnalyzePipeline, error) {
+func PipelineFromGmailpoll(gmailClient *gmail.Client, llmClient *llm.Client, mainModel string, projectsFn func() []gmailpoll.ProjectCandidate) (AnalyzePipeline, error) {
 	if llmClient == nil || strings.TrimSpace(mainModel) == "" {
 		return nil, ErrAnalyzeNoLLM
 	}
@@ -208,6 +299,7 @@ func PipelineFromGmailpoll(gmailClient *gmail.Client, llmClient *llm.Client, mai
 			GmailClient: gmailClient,
 			LLMClient:   llmClient,
 			MainModel:   mainModel,
+			ProjectsFn:  projectsFn,
 		},
 	}, nil
 }
@@ -216,6 +308,6 @@ type gmailpollPipeline struct {
 	deps gmailpoll.PipelineDeps
 }
 
-func (g *gmailpollPipeline) Analyze(ctx context.Context, msg *gmail.MessageDetail) (string, error) {
+func (g *gmailpollPipeline) Analyze(ctx context.Context, msg *gmail.MessageDetail) (gmailpoll.AnalysisResult, error) {
 	return gmailpoll.AnalyzeEmailPipeline(ctx, g.deps, msg)
 }

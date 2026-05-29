@@ -32,6 +32,10 @@ const (
 	// Stage 2 (final analysis) token limit.
 	stage2MaxTokens   = 1536
 	batchStage2Tokens = 4096 // batch analysis needs more tokens
+
+	// Cap on project candidates injected into the analysis prompt. Keeps
+	// the prompt bounded when the project wiki grows large.
+	maxProjectCandidates = 40
 )
 
 // PipelineDeps holds dependencies for the multi-stage analysis pipeline.
@@ -42,11 +46,30 @@ type PipelineDeps struct {
 	LocalModel  string       // local AI model name
 	MainModel   string       // main LLM model name
 	Logger      *slog.Logger // optional; nil = slog.Default()
+
+	// ProjectsFn lists the registered project wiki pages so the analyzer
+	// can cite related ones by real path. Optional; nil = no candidates
+	// offered (analysis still runs, RelatedProjects stays empty).
+	ProjectsFn func() []ProjectCandidate
 }
 
 // canRunPipeline returns true if we have enough deps for the multi-stage pipeline.
 func (d *PipelineDeps) canRunPipeline() bool {
 	return d.LocalClient != nil && d.LocalModel != "" && d.GmailClient != nil
+}
+
+// projectCandidates returns the registered project pages, or nil when no
+// provider is wired. Capped so a large project wiki can't bloat the
+// analysis prompt.
+func (d *PipelineDeps) projectCandidates() []ProjectCandidate {
+	if d.ProjectsFn == nil {
+		return nil
+	}
+	cands := d.ProjectsFn()
+	if len(cands) > maxProjectCandidates {
+		cands = cands[:maxProjectCandidates]
+	}
+	return cands
 }
 
 // ThreadContext holds extracted context from email thread history.
@@ -64,6 +87,25 @@ type EmailFact struct {
 	Importance float64 `json:"importance"`
 	ExpiryHint string  `json:"expiry_hint,omitempty"`
 	Project    string  `json:"project,omitempty"`
+}
+
+// AnalysisResult is the outcome of analyzing one email: the human-readable
+// analysis text plus the wiki paths of projects the analyzer judged related.
+// RelatedProjects is always validated against the supplied candidate list,
+// so it never contains a hallucinated path.
+type AnalysisResult struct {
+	Text            string
+	RelatedProjects []string
+}
+
+// ProjectCandidate is one registered project wiki page offered to the
+// analyzer so it can cite related projects by their real path. The server
+// layer supplies these via PipelineDeps.ProjectsFn, which keeps the wiki
+// store out of this package's imports.
+type ProjectCandidate struct {
+	Path    string
+	Title   string
+	Summary string
 }
 
 // MemoryContext holds extracted context from memory recall.
@@ -123,9 +165,21 @@ const finalAnalysisPrompt = `다음 이메일을 종합적으로 분석해주세
 //
 // Stage 2: final analysis combining email + thread context + memory via main LLM.
 // Falls back to single-LLM analysis if pipeline deps are insufficient.
-func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail) (string, error) {
+func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail) (AnalysisResult, error) {
+	candidates := deps.projectCandidates()
+
 	if !deps.canRunPipeline() {
-		return AnalyzeEmail(ctx, deps.LLMClient, deps.MainModel, DefaultPrompt, msg)
+		// Single-call fallback (no local AI for stage-1 extractors). Project
+		// selection is still offered by appending the candidate block to the
+		// prompt, so the manual Mini App path — which never wires LocalClient
+		// — still cites related projects.
+		prompt := DefaultPrompt + projectSelectionSuffix(candidates)
+		text, err := AnalyzeEmail(ctx, deps.LLMClient, deps.MainModel, prompt, msg)
+		if err != nil {
+			return AnalysisResult{}, err
+		}
+		clean, projects := parseRelatedProjects(text, candidates)
+		return AnalysisResult{Text: clean, RelatedProjects: projects}, nil
 	}
 
 	// Stage 1: extract thread context + wiki-graph context in parallel.
@@ -152,7 +206,7 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 	// Stage 2: final analysis combining all context.
 	stage2Ctx, cancel := context.WithTimeout(ctx, stage2Timeout)
 	defer cancel()
-	return synthesizeAnalysis(stage2Ctx, deps, msg, threadCtx, memCtx)
+	return synthesizeAnalysis(stage2Ctx, deps, msg, threadCtx, memCtx, candidates)
 }
 
 // --- batch analysis ---
@@ -190,101 +244,84 @@ const batchAnalysisPrompt = `다음 %d건의 이메일을 분석하여 통합 �
 
 %s`
 
-// emailWithContext pairs an email with its pre-extracted Stage 1 context.
-type emailWithContext struct {
-	Msg       *gmail.MessageDetail
-	ThreadCtx ThreadContext
-	MemoryCtx MemoryContext
+// BatchItem pairs an email with its individual analysis result. AnalyzeBatch
+// returns these so the caller can cache/page each one, and the consolidated
+// report is synthesized from the originals + these analyses.
+type BatchItem struct {
+	Msg    *gmail.MessageDetail
+	Result AnalysisResult
 }
 
-// AnalyzeBatch runs the multi-stage pipeline on a batch of emails,
-// producing a single consolidated report grouped by project and priority.
-// For a single email, delegates to AnalyzeEmailPipeline.
-func AnalyzeBatch(ctx context.Context, deps PipelineDeps, msgs []*gmail.MessageDetail) (string, error) {
+// AnalyzeBatch analyzes a batch of emails: each email is analyzed
+// individually (including related-project selection), and those per-email
+// results are both returned (for the caller to cache/page) and fed — along
+// with the original emails — into a single consolidated report grouped by
+// project and priority. Per-email analysis is best-effort: a failed one is
+// logged and skipped rather than failing the whole batch.
+func AnalyzeBatch(ctx context.Context, deps PipelineDeps, msgs []*gmail.MessageDetail) (string, []BatchItem, error) {
 	if len(msgs) == 0 {
-		return "", fmt.Errorf("no emails to analyze")
+		return "", nil, fmt.Errorf("no emails to analyze")
 	}
 
-	// Single email — use the individual pipeline.
-	if len(msgs) == 1 {
-		return AnalyzeEmailPipeline(ctx, deps, msgs[0])
+	logger := deps.Logger
+	if logger == nil {
+		logger = slog.Default()
 	}
 
-	// Stage 1: extract context for each email in parallel.
-	enriched := make([]emailWithContext, len(msgs))
-	var wg sync.WaitGroup
-
-	for i, msg := range msgs {
-		enriched[i].Msg = msg
-
-		if !deps.canRunPipeline() {
+	// Phase 1: individual analysis per email. Sequential to bound concurrent
+	// LLM load on the local server (the batch caps at MaxPerCycle anyway).
+	// These per-email results are the single source of truth — the caller
+	// caches/pages each one, and they feed the consolidated report below.
+	items := make([]BatchItem, 0, len(msgs))
+	for _, msg := range msgs {
+		res, err := AnalyzeEmailPipeline(ctx, deps, msg)
+		if err != nil {
+			logger.Warn("개별 메일 분석 실패 — 건너뜀", "id", msg.ID, "error", err)
 			continue
 		}
-
-		// Thread context.
-		wg.Add(1)
-		go func(idx int, m *gmail.MessageDetail) {
-			defer wg.Done()
-			s1Ctx, cancel := context.WithTimeout(ctx, stage1Timeout)
-			defer cancel()
-			tc, err := extractThreadContext(s1Ctx, deps, m)
-			if err == nil {
-				enriched[idx].ThreadCtx = tc
-			}
-		}(i, msg)
-
+		items = append(items, BatchItem{Msg: msg, Result: res})
+	}
+	if len(items) == 0 {
+		return "", nil, fmt.Errorf("모든 메일 분석 실패 (%d건)", len(msgs)) //nolint:staticcheck // ST1005 — Korean error message
 	}
 
-	wg.Wait()
+	// Single email: the individual analysis IS the report — no consolidation.
+	if len(items) == 1 {
+		return items[0].Result.Text, items, nil
+	}
 
-	// Stage 2: batch synthesis — all emails in one LLM call.
+	// Phase 2: consolidated report from originals + individual analyses.
 	stage2Ctx, cancel := context.WithTimeout(ctx, stage2Timeout)
 	defer cancel()
-	report, err := synthesizeBatchReport(stage2Ctx, deps, enriched)
+	report, err := synthesizeBatchReport(stage2Ctx, deps, items)
 	if err != nil {
-		return "", err
+		// Per-email results are still valuable (cache/page) even if the
+		// consolidated report failed — return them alongside the error.
+		return "", items, err
 	}
-
-	return report, nil
+	return report, items, nil
 }
 
-// synthesizeBatchReport generates the consolidated report from all enriched emails.
-func synthesizeBatchReport(ctx context.Context, deps PipelineDeps, emails []emailWithContext) (string, error) {
-	// Build the combined email block with context annotations.
+// synthesizeBatchReport generates the consolidated report from the original
+// emails plus their individual analyses. Feeding both — not just the
+// analyses — gives the model the full source material for a richer
+// big-picture report (grouping by project, prioritizing across emails).
+func synthesizeBatchReport(ctx context.Context, deps PipelineDeps, items []BatchItem) (string, error) {
 	var sb strings.Builder
-	for i, e := range emails {
+	for i, it := range items {
 		if i > 0 {
 			sb.WriteString("\n---\n\n")
 		}
 		fmt.Fprintf(&sb, "### 메일 %d\n", i+1)
-		sb.WriteString(FormatEmailForAnalysis(e.Msg))
-
-		if hasThreadContext(e.ThreadCtx) {
-			sb.WriteString("\n[이전 맥락] ")
-			if e.ThreadCtx.ThreadSummary != "" {
-				sb.WriteString(e.ThreadCtx.ThreadSummary)
-			}
-			if e.ThreadCtx.PriorExchanges != "" {
-				sb.WriteString(" / ")
-				sb.WriteString(e.ThreadCtx.PriorExchanges)
-			}
-			sb.WriteString("\n")
-		}
-
-		if hasMemoryContext(e.MemoryCtx) {
-			sb.WriteString("[기억] ")
-			if e.MemoryCtx.SenderFacts != "" {
-				sb.WriteString(e.MemoryCtx.SenderFacts)
-			}
-			if e.MemoryCtx.TopicFacts != "" {
-				sb.WriteString(" / ")
-				sb.WriteString(e.MemoryCtx.TopicFacts)
-			}
+		sb.WriteString(FormatEmailForAnalysis(it.Msg))
+		if analysis := strings.TrimSpace(it.Result.Text); analysis != "" {
+			sb.WriteString("\n\n[개별 분석]\n")
+			sb.WriteString(analysis)
 			sb.WriteString("\n")
 		}
 	}
 
-	userPrompt := fmt.Sprintf(batchAnalysisPrompt, len(emails), sb.String())
+	userPrompt := fmt.Sprintf(batchAnalysisPrompt, len(items), sb.String())
 
 	req := llm.ChatRequest{
 		Model:     deps.MainModel,
@@ -469,7 +506,7 @@ func extractDisplayName(from string) string {
 }
 
 // synthesizeAnalysis combines the email with extracted contexts for final LLM analysis.
-func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail, tc ThreadContext, mc MemoryContext) (string, error) {
+func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail, tc ThreadContext, mc MemoryContext, candidates []ProjectCandidate) (AnalysisResult, error) {
 	emailText := FormatEmailForAnalysis(msg)
 
 	// Build optional context sections.
@@ -509,6 +546,7 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	}
 
 	userPrompt := fmt.Sprintf(finalAnalysisPrompt, emailText, threadSection, memorySection)
+	userPrompt += projectSelectionSuffix(candidates)
 
 	req := llm.ChatRequest{
 		Model:     deps.MainModel,
@@ -520,13 +558,18 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 
 	events, err := deps.LLMClient.StreamChat(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("final analysis LLM call failed: %w", err)
+		return AnalysisResult{}, fmt.Errorf("final analysis LLM call failed: %w", err)
 	}
 
 	analysis, err := collectStreamText(ctx, events)
 	if err != nil {
-		return "", err
+		return AnalysisResult{}, err
 	}
+
+	// Parse + strip the RELATED_PROJECTS tag before appending the facts
+	// block, so the tag stays at the analysis tail where the parser expects
+	// it (the facts block would otherwise bury it).
+	clean, projects := parseRelatedProjects(analysis, candidates)
 
 	// Local-AI fact extraction for wiki write-back. The system prompt's
 	// "분석 → 위키 갱신" section asks the agent to record new facts after
@@ -534,10 +577,96 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	// concrete `wiki(action="write")` inputs rather than having to derive
 	// them from prose. Best-effort — empty when local AI is unavailable or
 	// yields nothing to record.
-	if factsBlock := extractFactsForWiki(ctx, deps, analysis); factsBlock != "" {
-		analysis = analysis + "\n\n" + factsBlock
+	if factsBlock := extractFactsForWiki(ctx, deps, clean); factsBlock != "" {
+		clean = clean + "\n\n" + factsBlock
 	}
-	return analysis, nil
+	return AnalysisResult{Text: clean, RelatedProjects: projects}, nil
+}
+
+// --- related-project selection ---
+
+// projectSelectionSuffix builds the prompt addendum that lists registered
+// project pages and asks the model to tag related ones on the last line.
+// Returns "" when there are no candidates, so prompts are unchanged when no
+// project provider is wired. Appended in code (not baked into the prompt
+// templates) so a custom analysis prompt still gets project tagging.
+func projectSelectionSuffix(candidates []ProjectCandidate) string {
+	if len(candidates) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("\n\n## 등록된 프로젝트 목록\n")
+	sb.WriteString("아래는 위키에 등록된 프로젝트다. 이 이메일과 직접 관련된 프로젝트가 있으면, ")
+	sb.WriteString("응답의 가장 마지막 줄에 정확히 다음 형식으로 경로만 나열하라:\n")
+	sb.WriteString("RELATED_PROJECTS: <경로1>, <경로2>\n")
+	sb.WriteString("관련 프로젝트가 없으면 그 줄을 아예 생략하라. 목록에 없는 경로는 절대 만들지 마라.\n\n")
+	for _, c := range candidates {
+		sb.WriteString("- ")
+		sb.WriteString(c.Path)
+		if c.Title != "" {
+			sb.WriteString(": ")
+			sb.WriteString(c.Title)
+		}
+		if c.Summary != "" {
+			sb.WriteString(" — ")
+			sb.WriteString(c.Summary)
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
+// parseRelatedProjects extracts the "RELATED_PROJECTS:" tag line from the
+// analysis text, returning the text with that line removed plus the paths
+// that actually exist in candidates (so a hallucinated or stale path is
+// dropped). Order-preserving and de-duplicated.
+func parseRelatedProjects(text string, candidates []ProjectCandidate) (string, []string) {
+	if len(candidates) == 0 {
+		return text, nil
+	}
+	valid := make(map[string]struct{}, len(candidates))
+	for _, c := range candidates {
+		valid[c.Path] = struct{}{}
+	}
+
+	lines := strings.Split(text, "\n")
+	keep := make([]string, 0, len(lines))
+	var paths []string
+	seen := make(map[string]struct{})
+	for _, line := range lines {
+		rest, ok := cutTagPrefix(strings.TrimSpace(line), "RELATED_PROJECTS:")
+		if !ok {
+			keep = append(keep, line)
+			continue
+		}
+		for _, raw := range strings.Split(rest, ",") {
+			p := strings.Trim(strings.TrimSpace(raw), "`\"'")
+			if p == "" {
+				continue
+			}
+			if _, isValid := valid[p]; !isValid {
+				continue
+			}
+			if _, dup := seen[p]; dup {
+				continue
+			}
+			seen[p] = struct{}{}
+			paths = append(paths, p)
+		}
+		// drop the tag line itself from the visible text
+	}
+	clean := strings.TrimRight(strings.Join(keep, "\n"), "\n ")
+	return clean, paths
+}
+
+// cutTagPrefix returns the remainder after a case-insensitive prefix match,
+// tolerating a leading markdown marker (e.g. "**RELATED_PROJECTS:**").
+func cutTagPrefix(line, tag string) (string, bool) {
+	stripped := strings.TrimLeft(line, "*_ \t")
+	if len(stripped) < len(tag) || !strings.EqualFold(stripped[:len(tag)], tag) {
+		return "", false
+	}
+	return strings.TrimLeft(stripped[len(tag):], "*_ \t"), true
 }
 
 // --- wiki fact extraction (local AI) ---
