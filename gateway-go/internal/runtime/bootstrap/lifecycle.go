@@ -24,8 +24,34 @@ import (
 // auto-restart loops. Matches EX_TEMPFAIL from sysexits.h.
 const ExitCodeRestart = 75
 
+// shutdownGraceTimeout bounds how long graceful shutdown may run after a
+// signal before the process is force-exited.
+//
+// Why this exists: a deploy sends SIGUSR1, which cancels the run context so
+// the server tears down (HTTP listener closed first, then subsystems drained)
+// and the process exits — systemd's Restart=always then brings up the new
+// binary. But server.doShutdown drains several subsystems with their own
+// (some unbounded) waits, so if any drain hangs, the process closes its HTTP
+// listener and then never exits: the gateway is WEDGED — HTTP down, process
+// alive, so systemd never restarts it and only a manual SIGKILL recovers it.
+// (This caused a production miniapp outage.) The watchdog guarantees the
+// process always terminates after a signal so a fresh listener always comes
+// back. 45s sits well above a healthy shutdown (<2s) and above the sum of the
+// bounded drains in doShutdown, so it only fires on a genuine hang.
+// Indirected as a var so tests can shorten it.
+var shutdownGraceTimeout = 45 * time.Second
+
+// osExit is indirected so tests can assert the force-exit path without
+// terminating the test binary.
+var osExit = os.Exit
+
 // RunWithSignals runs fn with a context cancelled on SIGINT, SIGTERM, or SIGUSR1.
 // Returns ExitCodeRestart (75) on SIGUSR1, 1 on error, or 0 on clean shutdown.
+//
+// Robustness contract: once a signal arrives the process is guaranteed to exit
+// within shutdownGraceTimeout (force-exited if graceful shutdown stalls), and a
+// repeated SIGINT/SIGTERM hard-terminates immediately — so a hung shutdown can
+// never wedge the gateway with its listener closed but the process alive.
 func RunWithSignals(fn func(ctx context.Context) error, logger *slog.Logger) int {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -35,21 +61,50 @@ func RunWithSignals(fn func(ctx context.Context) error, logger *slog.Logger) int
 	defer signal.Stop(sigCh)
 
 	var restartRequested atomic.Bool
+	fnDone := make(chan struct{})
 
 	go func() {
-		sig := <-sigCh
-		if sig == syscall.SIGUSR1 {
-			logger.Info("received SIGUSR1, initiating graceful restart")
-			restartRequested.Store(true)
-		} else {
-			logger.Info("received shutdown signal", "signal", sig)
+		select {
+		case <-fnDone:
+			// fn returned before any signal — nothing to supervise.
+			return
+		case sig := <-sigCh:
+			if sig == syscall.SIGUSR1 {
+				logger.Info("received SIGUSR1, initiating graceful restart")
+				restartRequested.Store(true)
+			} else {
+				logger.Info("received shutdown signal", "signal", sig)
+			}
+			cancel()
+
+			// A repeated INT/TERM now hard-terminates: restore the default
+			// disposition so an impatient operator (or systemd) can force the
+			// kill if graceful shutdown stalls. SIGUSR1 stays handled.
+			signal.Reset(syscall.SIGINT, syscall.SIGTERM)
+
+			// Watchdog: force-exit if graceful shutdown overruns the grace
+			// window so the process ALWAYS terminates and systemd restarts a
+			// fresh listener. See shutdownGraceTimeout.
+			select {
+			case <-fnDone:
+			case <-time.After(shutdownGraceTimeout):
+				code := 0
+				if restartRequested.Load() {
+					code = ExitCodeRestart
+				}
+				logger.Error("graceful shutdown exceeded grace window; forcing exit",
+					"grace", shutdownGraceTimeout, "exitCode", code)
+				osExit(code)
+			}
 		}
-		cancel()
 	}()
 
 	defer httputil.CloseIdle()
 
-	if err := fn(ctx); err != nil {
+	err := fn(ctx)
+	close(fnDone)
+
+	if err != nil {
 		logger.Error("gateway error", "error", err)
 		return 1
 	}
