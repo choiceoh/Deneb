@@ -453,6 +453,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				}
 				return store, nil
 			},
+			Ask: s.makeMailQAAsk(),
 		}),
 	}
 
