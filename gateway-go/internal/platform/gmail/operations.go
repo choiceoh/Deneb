@@ -77,11 +77,11 @@ func (c *Client) Search(ctx context.Context, query string, maxResults int) ([]Me
 // next-page token alongside. An empty pageToken starts from the most
 // recent message; an empty returned nextPageToken means no more pages.
 //
-// Per-message metadata fetches are capped at maxMetadataConcurrency
-// in-flight goroutines (semaphore on a buffered channel) to stay under
-// Gmail's per-user-per-second quota even for the max limit=100 case;
-// without this a single burst of 100 metadata.get calls (~5 quota units
-// each) can trip 429 RESOURCE_EXHAUSTED.
+// Per-message metadata fetches fan out in parallel, sized by
+// metadataConcurrency: a normal screenful goes out in a single round,
+// while larger pages stay capped so a burst of metadata.get calls
+// (~5 quota units each) can't trip 429 RESOURCE_EXHAUSTED on the max
+// limit=100 case.
 func (c *Client) SearchPage(ctx context.Context, query, pageToken string, maxResults int) ([]MessageSummary, string, error) {
 	if maxResults <= 0 {
 		maxResults = 10
@@ -115,7 +115,12 @@ func (c *Client) SearchPage(ctx context.Context, query, pageToken string, maxRes
 	}
 	results := make([]MessageSummary, len(list.Messages))
 	ch := make(chan indexedResult, len(list.Messages))
-	sem := make(chan struct{}, maxMetadataConcurrency)
+	// Scale the fan-out to the page size: a single screenful (the default
+	// limit=20) fires all its metadata.get calls in one round instead of
+	// being serialized across multiple semaphore rounds, which is the
+	// dominant cost of a cold inbox load (each round is a full API
+	// round-trip). Larger custom pages stay throttled for quota safety.
+	sem := make(chan struct{}, metadataConcurrency(len(list.Messages)))
 	var wg sync.WaitGroup
 
 	for i, m := range list.Messages {
@@ -143,11 +148,35 @@ func (c *Client) SearchPage(ctx context.Context, query, pageToken string, maxRes
 	return results, list.NextPageToken, nil
 }
 
-// maxMetadataConcurrency caps the parallel metadata.get fan-out in
-// SearchPage. 8 keeps a limit=100 page well under Gmail's per-user
-// quota (~250 units/sec; metadata.get = 5 units) while still
-// completing a typical inbox refresh in well under a second.
-const maxMetadataConcurrency = 8
+// Gmail allows ~250 quota units per user per second; a metadata.get
+// costs 5 units, so ~50 gets/sec is the sustained-safe rate. Each
+// round-trip to the Gmail API is ~330ms in practice, so the real cost
+// of a cold inbox load is the *number of rounds* the fan-out is split
+// into, not raw quota.
+//
+//   - metadataFanoutDefault lets the default page (limit=20) fire every
+//     metadata.get in a single round: ~20 gets complete in ~660ms
+//     (~30 gets/sec), comfortably under quota.
+//   - metadataFanoutLarge throttles larger custom pages (up to limit=100)
+//     so a 100-message page can't burst past the per-second quota —
+//     16 in flight ≈ 215 units/sec sustained across its rounds.
+const (
+	metadataFanoutDefault = 20
+	metadataFanoutLarge   = 16
+)
+
+// metadataConcurrency picks the parallel fan-out for fetching n message
+// summaries: never more slots than messages, a single round for a normal
+// screenful, and a quota-safe ceiling once a custom page exceeds it.
+func metadataConcurrency(n int) int {
+	if n > metadataFanoutDefault {
+		return metadataFanoutLarge
+	}
+	if n < 1 {
+		return 1
+	}
+	return n
+}
 
 // fetchMessageMetadata fetches a single message with metadata format.
 func (c *Client) fetchMessageMetadata(ctx context.Context, id, _ string) (MessageSummary, error) {

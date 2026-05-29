@@ -84,12 +84,18 @@ func GmailMethods(deps GmailDeps) map[string]rpcutil.HandlerFunc {
 	if deps.Client == nil {
 		return nil
 	}
+	// One cache shared across the handlers: list_recent fills it, while
+	// archive/trash invalidate it. mark_read intentionally does NOT — it
+	// leaves inbox membership intact and the client fires it on every
+	// open, so invalidating there would defeat the cache (see
+	// gmail_list_cache.go).
+	cache := newListCache(listCacheTTL)
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.gmail.list_recent": gmailListRecent(deps),
+		"miniapp.gmail.list_recent": gmailListRecent(deps, cache),
 		"miniapp.gmail.get":         gmailGet(deps),
 		"miniapp.gmail.mark_read":   gmailMarkRead(deps),
-		"miniapp.gmail.archive":     gmailArchive(deps),
-		"miniapp.gmail.trash":       gmailTrash(deps),
+		"miniapp.gmail.archive":     gmailArchive(deps, cache),
+		"miniapp.gmail.trash":       gmailTrash(deps, cache),
 	}
 }
 
@@ -115,7 +121,7 @@ func gmailClientOrErr(deps GmailDeps, reqID string) (GmailClient, *protocol.Resp
 
 // --- list_recent ---------------------------------------------------------
 
-func gmailListRecent(deps GmailDeps) rpcutil.HandlerFunc {
+func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 	type params struct {
 		Query     string `json:"query,omitempty"`
 		Limit     int    `json:"limit,omitempty"`
@@ -151,6 +157,16 @@ func gmailListRecent(deps GmailDeps) rpcutil.HandlerFunc {
 		}
 		if limit > maxGmailLimit {
 			limit = maxGmailLimit
+		}
+
+		// Serve a recent identical page from cache so re-entering the
+		// inbox (back from a mail, tab switch) is instant. Keyed by the
+		// exact query/limit/page so pagination and custom queries each
+		// cache independently. A nil cache (tests) makes get a no-op.
+		cacheKey := query + "|" + itoa(limit) + "|" + p.PageToken
+		now := time.Now()
+		if payload, ok := cache.get(cacheKey, now); ok {
+			return rpcutil.RespondOK(req.ID, payload)
 		}
 
 		client, errResp := gmailClientOrErr(deps, req.ID)
@@ -191,10 +207,12 @@ func gmailListRecent(deps GmailDeps) rpcutil.HandlerFunc {
 				Labels:   m.Labels,
 			})
 		}
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		payload := map[string]any{
 			"messages":      out,
 			"nextPageToken": nextPageToken,
-		})
+		}
+		cache.put(cacheKey, payload, now)
+		return rpcutil.RespondOK(req.ID, payload)
 	}
 }
 
@@ -276,18 +294,24 @@ func gmailGet(deps GmailDeps) rpcutil.HandlerFunc {
 // --- mark_read / archive --------------------------------------------------
 
 func gmailMarkRead(deps GmailDeps) rpcutil.HandlerFunc {
-	return modifyLabelsHandler(deps, []string{labelUnread})
+	// nil cache: marking read leaves inbox membership unchanged, so a
+	// cached list stays valid (the client updates the read dot
+	// optimistically). See gmail_list_cache.go for why this must not
+	// invalidate.
+	return modifyLabelsHandler(deps, nil, []string{labelUnread})
 }
 
-func gmailArchive(deps GmailDeps) rpcutil.HandlerFunc {
-	return modifyLabelsHandler(deps, []string{labelInbox})
+func gmailArchive(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
+	// Archive drops the message from the inbox, so any cached list is now
+	// stale — invalidate so the next list reflects the removal.
+	return modifyLabelsHandler(deps, cache, []string{labelInbox})
 }
 
 // gmailTrash moves a message to Trash via Gmail's dedicated /trash
 // endpoint (rather than ModifyLabels add=TRASH) so we skip a label-ID
 // lookup round-trip and stay aligned with how the Gmail web client
 // performs deletes — recoverable from the user's Trash UI for ~30 days.
-func gmailTrash(deps GmailDeps) rpcutil.HandlerFunc {
+func gmailTrash(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 	type params struct {
 		ID string `json:"id"`
 	}
@@ -310,6 +334,9 @@ func gmailTrash(deps GmailDeps) rpcutil.HandlerFunc {
 		if err := client.Trash(ctx, p.ID); err != nil {
 			return mapGmailError(req.ID, "gmail trash failed", err)
 		}
+		// Trashing removes the message from the inbox — drop the cached
+		// list so the next fetch no longer includes it.
+		cache.invalidate()
 		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true})
 	}
 }
@@ -317,7 +344,7 @@ func gmailTrash(deps GmailDeps) rpcutil.HandlerFunc {
 // modifyLabelsHandler builds a handler that removes the given labels from
 // the message identified by params.id and returns the resulting label set
 // so the Mini App can update its row without a follow-up fetch.
-func modifyLabelsHandler(deps GmailDeps, removeLabels []string) rpcutil.HandlerFunc {
+func modifyLabelsHandler(deps GmailDeps, cache *listCache, removeLabels []string) rpcutil.HandlerFunc {
 	type params struct {
 		ID string `json:"id"`
 	}
@@ -340,6 +367,9 @@ func modifyLabelsHandler(deps GmailDeps, removeLabels []string) rpcutil.HandlerF
 		if err := client.ModifyLabels(ctx, p.ID, nil, removeLabels); err != nil {
 			return mapGmailError(req.ID, "gmail modify labels failed", err)
 		}
+		// Invalidate when this action changes inbox membership (archive
+		// passes a cache; mark_read passes nil, a no-op).
+		cache.invalidate()
 		// Re-fetch metadata for the updated label list. Skipped silently
 		// on failure — the action itself succeeded.
 		labels := []string{}

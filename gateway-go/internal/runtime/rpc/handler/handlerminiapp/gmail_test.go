@@ -121,7 +121,7 @@ func TestGmailListRecent_DefaultsAndShape(t *testing.T) {
 			}, nil
 		},
 	}
-	h := gmailListRecent(depsFor(client))
+	h := gmailListRecent(depsFor(client), nil)
 
 	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
 	var got struct {
@@ -156,7 +156,7 @@ func TestGmailListRecent_RespectsCustomParams(t *testing.T) {
 			return nil, nil
 		},
 	}
-	h := gmailListRecent(depsFor(client))
+	h := gmailListRecent(depsFor(client), nil)
 
 	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", map[string]any{
 		"query": "is:starred", "limit": 5,
@@ -199,7 +199,7 @@ func TestGmailListRecent_AbsorbsEmptyPages(t *testing.T) {
 			return nil, "", nil
 		},
 	}
-	h := gmailListRecent(depsFor(client))
+	h := gmailListRecent(depsFor(client), nil)
 	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
 
 	var got struct {
@@ -230,7 +230,7 @@ func TestGmailListRecent_EmptyPageHopBudget(t *testing.T) {
 			return nil, "always-more", nil
 		},
 	}
-	h := gmailListRecent(depsFor(client))
+	h := gmailListRecent(depsFor(client), nil)
 	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
 	if !resp.OK {
 		t.Fatalf("expected OK, got %+v", resp.Error)
@@ -263,7 +263,7 @@ func TestGmailListRecent_PageTokenRoundTrip(t *testing.T) {
 			return []gmail.MessageSummary{{ID: "m2"}}, "next-page-abc", nil
 		},
 	}
-	h := gmailListRecent(depsFor(client))
+	h := gmailListRecent(depsFor(client), nil)
 
 	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", map[string]any{
 		"pageToken": "incoming-token-xyz",
@@ -290,7 +290,7 @@ func TestGmailListRecent_LimitClamp(t *testing.T) {
 			return nil, nil
 		},
 	}
-	h := gmailListRecent(depsFor(client))
+	h := gmailListRecent(depsFor(client), nil)
 
 	h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", map[string]any{"limit": 99999}))
 	if seenLimit != maxGmailLimit {
@@ -299,7 +299,7 @@ func TestGmailListRecent_LimitClamp(t *testing.T) {
 }
 
 func TestGmailListRecent_RequiresAuth(t *testing.T) {
-	h := gmailListRecent(depsFor(&fakeGmailClient{}))
+	h := gmailListRecent(depsFor(&fakeGmailClient{}), nil)
 	resp := h(context.Background(), reqWith(t, "miniapp.gmail.list_recent", nil))
 	if resp.OK {
 		t.Fatalf("expected unauthorized, got OK")
@@ -313,7 +313,7 @@ func TestGmailListRecent_ClientUnavailable(t *testing.T) {
 	deps := GmailDeps{
 		Client: func() (GmailClient, error) { return nil, errors.New("OAuth not configured") },
 	}
-	h := gmailListRecent(deps)
+	h := gmailListRecent(deps, nil)
 	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
 	if resp.OK {
 		t.Fatalf("expected error, got OK")
@@ -449,7 +449,7 @@ func TestGmailArchive_RemovesInboxLabel(t *testing.T) {
 			return &gmail.MessageDetail{ID: "m1", Labels: []string{}}, nil
 		},
 	}
-	h := gmailArchive(depsFor(client))
+	h := gmailArchive(depsFor(client), nil)
 	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.archive", map[string]any{"id": "m1"}))
 
 	if !resp.OK {
@@ -466,7 +466,7 @@ func TestGmailArchive_ModifyFails(t *testing.T) {
 			return errors.New("HTTP 403: insufficient permission")
 		},
 	}
-	h := gmailArchive(depsFor(client))
+	h := gmailArchive(depsFor(client), nil)
 	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.archive", map[string]any{"id": "m1"}))
 	if resp.OK {
 		t.Fatalf("expected error, got OK")
@@ -486,7 +486,7 @@ func TestGmailTrash_CallsClientTrash(t *testing.T) {
 			return nil
 		},
 	}
-	h := gmailTrash(depsFor(client))
+	h := gmailTrash(depsFor(client), nil)
 	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.trash", map[string]any{"id": "m1"}))
 
 	var got map[string]any
@@ -500,7 +500,7 @@ func TestGmailTrash_CallsClientTrash(t *testing.T) {
 }
 
 func TestGmailTrash_MissingID(t *testing.T) {
-	h := gmailTrash(depsFor(&fakeGmailClient{}))
+	h := gmailTrash(depsFor(&fakeGmailClient{}), nil)
 	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.trash", map[string]any{}))
 	if resp.OK {
 		t.Fatalf("expected error, got OK")
@@ -511,7 +511,7 @@ func TestGmailTrash_MissingID(t *testing.T) {
 }
 
 func TestGmailTrash_RequiresAuth(t *testing.T) {
-	h := gmailTrash(depsFor(&fakeGmailClient{}))
+	h := gmailTrash(depsFor(&fakeGmailClient{}), nil)
 	resp := h(context.Background(), reqWith(t, "miniapp.gmail.trash", map[string]any{"id": "m1"}))
 	if resp.OK {
 		t.Fatalf("expected unauthorized, got OK")
@@ -527,7 +527,7 @@ func TestGmailTrash_ClientError(t *testing.T) {
 			return errors.New("HTTP 404: Not Found")
 		},
 	}
-	h := gmailTrash(depsFor(client))
+	h := gmailTrash(depsFor(client), nil)
 	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.trash", map[string]any{"id": "missing"}))
 	if resp.OK {
 		t.Fatalf("expected error, got OK")
