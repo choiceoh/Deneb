@@ -36,11 +36,19 @@ type ModelAddResult struct {
 	Added    bool   `json:"added"`
 }
 
+// RoleModel reports the model bound to a registry role (main/lightweight/
+// fallback), for the per-role model picker.
+type RoleModel struct {
+	Role  string `json:"role"`
+	Model string `json:"model"`
+}
+
 // ModelDeps holds the lazy model operations exposed to the Mini App.
 type ModelDeps struct {
 	CurrentModel func() string
+	RoleModels   func() []RoleModel
 	ListModels   func(context.Context) ([]ModelSection, error)
-	SetModel     func(context.Context, string) (string, error)
+	SetModel     func(ctx context.Context, role, id string) (string, error)
 	AddModel     func(context.Context, string, string) (ModelAddResult, error)
 }
 
@@ -69,8 +77,13 @@ func modelsList(deps ModelDeps) rpcutil.HandlerFunc {
 		if deps.CurrentModel != nil {
 			current = deps.CurrentModel()
 		}
+		roles := []RoleModel{}
+		if deps.RoleModels != nil {
+			roles = deps.RoleModels()
+		}
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"current":  current,
+			"roles":    roles,
 			"sections": sections,
 		})
 	}
@@ -78,7 +91,8 @@ func modelsList(deps ModelDeps) rpcutil.HandlerFunc {
 
 func modelsSet(deps ModelDeps) rpcutil.HandlerFunc {
 	type params struct {
-		ID string `json:"id"`
+		ID   string `json:"id"`
+		Role string `json:"role"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if telegram.InitDataFromContext(ctx) == nil {
@@ -89,15 +103,20 @@ func modelsSet(deps ModelDeps) rpcutil.HandlerFunc {
 			if id == "" {
 				return nil, rpcerr.MissingParam("id")
 			}
+			role := strings.TrimSpace(p.Role)
+			if role == "" {
+				role = "main"
+			}
 			if deps.SetModel == nil {
 				return nil, rpcerr.Unavailable("model switch is unavailable")
 			}
-			current, err := deps.SetModel(ctx, id)
+			current, err := deps.SetModel(ctx, role, id)
 			if err != nil {
 				return nil, err
 			}
 			return map[string]any{
 				"ok":      true,
+				"role":    role,
 				"current": current,
 			}, nil
 		})

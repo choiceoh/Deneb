@@ -39,6 +39,28 @@ type ModelConfig struct {
 	APIMode    string // "openai" (default) or "anthropic"; routes to the matching LLM client
 }
 
+// ProviderResolved is a resolved entry from the deneb.json models.providers
+// catalog. The caller (server package) converts its provider configs into
+// this dependency-free shape so a role can target ANY configured provider —
+// not just the built-in resolveBaseURL switch.
+type ProviderResolved struct {
+	BaseURL string
+	APIKey  string
+	APIMode string // "openai" (default) or "anthropic"
+}
+
+// RegistryOptions configures NewRegistryWithOptions.
+type RegistryOptions struct {
+	MainModel        string // "provider/model"; empty → local vLLM
+	LocalVllmModel   string // served model name for the local vLLM default
+	LightweightModel string // override for RoleLightweight; empty → local vLLM
+	FallbackModel    string // override for RoleFallback; empty → local vLLM
+	// Providers is the deneb.json provider catalog (providerID → resolved
+	// endpoint/credentials). A role whose provider is present here resolves
+	// from the catalog; otherwise it falls back to the built-in switch.
+	Providers map[string]ProviderResolved
+}
+
 // clientEntry caches a lazily-initialized LLM client per role.
 type clientEntry struct {
 	once   sync.Once
@@ -48,10 +70,11 @@ type clientEntry struct {
 // Registry holds the configured model roles and provides resolution,
 // client caching, and fallback chain logic.
 type Registry struct {
-	mu      sync.RWMutex
-	models  map[Role]ModelConfig
-	clients map[Role]*clientEntry
-	logger  *slog.Logger
+	mu        sync.RWMutex
+	models    map[Role]ModelConfig
+	clients   map[Role]*clientEntry
+	providers map[string]ProviderResolved // deneb.json catalog, for runtime role re-resolution
+	logger    *slog.Logger
 }
 
 // Default constants for known providers.
@@ -94,56 +117,60 @@ const (
 	codingAgentUserAgent = "claude-code/2.1.142"
 )
 
-// NewRegistry creates a registry with hardcoded defaults.
-// mainModel is the resolved default model from deneb.json (e.g., "zai/some-model").
-// localVllmModel is the resolved local vLLM model served on DefaultVllmBaseURL
-// (e.g., "gemma4"). Empty values fall back to the const DefaultVllmModel.
+// NewRegistry creates a registry with the legacy two-argument signature
+// (main model + local vLLM model), leaving lightweight/fallback on the local
+// vLLM default. Prefer NewRegistryWithOptions for per-role configuration.
 func NewRegistry(logger *slog.Logger, mainModel, localVllmModel string) *Registry {
+	return NewRegistryWithOptions(logger, RegistryOptions{
+		MainModel:      mainModel,
+		LocalVllmModel: localVllmModel,
+	})
+}
+
+// NewRegistryWithOptions builds the role registry from explicit per-role
+// overrides and an optional provider catalog. Unset lightweight/fallback
+// roles keep the built-in local vLLM default, preserving prior behaviour.
+// mainModel/lightweight/fallback are "provider/model" IDs resolved against
+// the catalog first, then the built-in provider switch.
+func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
+	localVllmModel := opts.LocalVllmModel
 	if localVllmModel == "" {
 		localVllmModel = DefaultVllmModel
 	}
 
-	// Fall back to local vLLM model when no main model is configured.
+	mainModel := opts.MainModel
 	if mainModel == "" {
+		// Fall back to local vLLM model when no main model is configured.
 		mainModel = "vllm/" + localVllmModel
 	}
 
-	// Parse main model provider/name.
-	mainProvider, mainModelName := ParseModelID(mainModel)
-	mainBaseURL := resolveBaseURL(mainProvider)
-	mainAPIKey := resolveAPIKey(mainProvider)
-	mainAPIMode := resolveAPIMode(mainProvider)
+	// Local vLLM default shared by any unconfigured lightweight/fallback role.
+	vllmDefault := ModelConfig{
+		ProviderID: "vllm",
+		Model:      localVllmModel,
+		BaseURL:    DefaultVllmBaseURL,
+		APIKey:     resolveVllmAPIKey(),
+	}
 
 	models := map[Role]ModelConfig{
-		RoleMain: {
-			ProviderID: mainProvider,
-			Model:      mainModelName,
-			BaseURL:    mainBaseURL,
-			APIKey:     mainAPIKey,
-			APIMode:    mainAPIMode,
-		},
-		RoleLightweight: {
-			ProviderID: "vllm",
-			Model:      localVllmModel,
-			BaseURL:    DefaultVllmBaseURL,
-			APIKey:     resolveVllmAPIKey(),
-		},
-		RoleFallback: {
-			ProviderID: "vllm",
-			Model:      localVllmModel,
-			BaseURL:    DefaultVllmBaseURL,
-			APIKey:     resolveVllmAPIKey(),
-		},
+		RoleMain:        resolveModelConfig(mainModel, opts.Providers),
+		RoleLightweight: vllmDefault,
+		RoleFallback:    vllmDefault,
+	}
+	if opts.LightweightModel != "" {
+		models[RoleLightweight] = resolveModelConfig(opts.LightweightModel, opts.Providers)
+	}
+	if opts.FallbackModel != "" {
+		models[RoleFallback] = resolveModelConfig(opts.FallbackModel, opts.Providers)
 	}
 
 	// Auto-discover the actual model name the local vLLM is serving and
-	// substitute it in when config drifts (e.g. operator typed `qwen3.6`
-	// but vLLM advertises `qwen3.6-35b-a3b`). One probe is enough — both
-	// vllm roles share the same baseURL.
+	// substitute it in when config drifts. reconcileVllmModel is a no-op for
+	// non-vllm roles, so running it across all roles is safe.
 	for _, role := range []Role{RoleMain, RoleLightweight, RoleFallback} {
 		cfg := models[role]
 		reconcileVllmModel(logger, &cfg)
@@ -151,9 +178,10 @@ func NewRegistry(logger *slog.Logger, mainModel, localVllmModel string) *Registr
 	}
 
 	r := &Registry{
-		models:  models,
-		clients: make(map[Role]*clientEntry),
-		logger:  logger,
+		models:    models,
+		clients:   make(map[Role]*clientEntry),
+		providers: opts.Providers,
+		logger:    logger,
 	}
 
 	// Pre-create client entries for lazy initialization.
@@ -168,6 +196,31 @@ func NewRegistry(logger *slog.Logger, mainModel, localVllmModel string) *Registr
 	)
 
 	return r
+}
+
+// resolveModelConfig builds a ModelConfig for a "provider/model" ID,
+// resolving endpoint + credentials from the provider catalog first and the
+// built-in provider switch second. This lets a role target any provider
+// configured in deneb.json (e.g. "google/...") instead of silently falling
+// back to the zai default when the provider is not in the hardcoded switch.
+func resolveModelConfig(modelID string, providers map[string]ProviderResolved) ModelConfig {
+	providerID, modelName := ParseModelID(modelID)
+	cfg := ModelConfig{ProviderID: providerID, Model: modelName}
+	if p, ok := providers[providerID]; ok {
+		cfg.BaseURL = p.BaseURL
+		cfg.APIKey = p.APIKey
+		cfg.APIMode = p.APIMode
+	}
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = resolveBaseURL(providerID)
+	}
+	if cfg.APIKey == "" {
+		cfg.APIKey = resolveAPIKey(providerID)
+	}
+	if cfg.APIMode == "" {
+		cfg.APIMode = resolveAPIMode(providerID)
+	}
+	return cfg
 }
 
 // Config returns the model configuration for the given role.
@@ -328,6 +381,23 @@ func (r *Registry) ConfiguredModels() map[Role]ModelConfig {
 		out[role] = cfg
 	}
 	return out
+}
+
+// SetRoleModelID re-resolves a role to the given "provider/model" ID at
+// runtime and resets the role's cached client so the next Client(role) call
+// rebuilds against the new endpoint. Returns the resolved config. Cache-safe
+// for lightweight/fallback: those roles don't feed the static system-prompt
+// cache (built around the main model + toolset).
+func (r *Registry) SetRoleModelID(role Role, modelID string) ModelConfig {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cfg := resolveModelConfig(modelID, r.providers)
+	reconcileVllmModel(r.logger, &cfg)
+	r.models[role] = cfg
+	r.clients[role] = &clientEntry{}
+	r.logger.Info("modelrole: role model updated",
+		"role", role, "model", logModelAlias(cfg))
+	return cfg
 }
 
 // ParseModelID splits "provider/model" into provider and model name.

@@ -35,6 +35,7 @@ type providerModelProbe struct {
 func (s *Server) miniappModelMethods() map[string]rpcutil.HandlerFunc {
 	return handlerminiapp.ModelMethods(handlerminiapp.ModelDeps{
 		CurrentModel: s.currentMiniappModel,
+		RoleModels:   s.roleMiniappModels,
 		ListModels:   s.listMiniappModels,
 		SetModel:     s.setMiniappModel,
 		AddModel:     s.addMiniappCustomModel,
@@ -83,7 +84,17 @@ func (s *Server) listMiniappModels(ctx context.Context) ([]handlerminiapp.ModelS
 	return out, nil
 }
 
-func (s *Server) setMiniappModel(ctx context.Context, requested string) (string, error) {
+func (s *Server) setMiniappModel(ctx context.Context, role, requested string) (string, error) {
+	role = strings.TrimSpace(role)
+	if role == "" {
+		role = "main"
+	}
+	switch role {
+	case "main", "lightweight", "fallback":
+	default:
+		return "", rpcerr.InvalidRequest("unknown model role: " + role)
+	}
+
 	modelID := strings.TrimSpace(requested)
 	if s.modelRegistry != nil {
 		if resolved, _, ok := s.modelRegistry.ResolveModel(modelID); ok {
@@ -106,16 +117,49 @@ func (s *Server) setMiniappModel(ctx context.Context, requested string) (string,
 	if !allowed {
 		return "", rpcerr.Newf(protocol.ErrNotFound, "model not available: %s", requested)
 	}
-	if s.chatHandler == nil {
-		return "", rpcerr.Unavailable("chat handler is not ready")
-	}
 
 	cfgPath := config.ResolveConfigPath()
-	if err := config.PersistDefaultModel(cfgPath, modelID, s.logger); err != nil {
-		return "", rpcerr.WrapDependencyFailed("persist default model", err)
+	if err := config.PersistRoleModel(cfgPath, role, modelID, s.logger); err != nil {
+		return "", rpcerr.WrapDependencyFailed("persist role model", err)
 	}
-	s.chatHandler.SetDefaultModel(modelID)
+
+	// Apply in-memory so the change takes effect without a gateway restart.
+	switch role {
+	case "main":
+		if s.chatHandler == nil {
+			return "", rpcerr.Unavailable("chat handler is not ready")
+		}
+		s.chatHandler.SetDefaultModel(modelID)
+	default:
+		if s.modelRegistry == nil {
+			return "", rpcerr.Unavailable("model registry is not ready")
+		}
+		s.modelRegistry.SetRoleModelID(modelrole.Role(role), modelID)
+	}
 	return modelID, nil
+}
+
+// roleMiniappModels reports the model bound to each registry role for the
+// per-role picker (main/lightweight/fallback). Main reflects the live
+// chat-handler default when a /model switch changed it this session.
+func (s *Server) roleMiniappModels() []handlerminiapp.RoleModel {
+	if s.modelRegistry == nil {
+		return nil
+	}
+	roleList := []modelrole.Role{modelrole.RoleMain, modelrole.RoleLightweight, modelrole.RoleFallback}
+	out := make([]handlerminiapp.RoleModel, 0, len(roleList))
+	for _, r := range roleList {
+		out = append(out, handlerminiapp.RoleModel{
+			Role:  string(r),
+			Model: s.modelRegistry.FullModelID(r),
+		})
+	}
+	if s.chatHandler != nil {
+		if m := s.chatHandler.DefaultModel(); m != "" {
+			out[0].Model = m
+		}
+	}
+	return out
 }
 
 func (s *Server) addMiniappCustomModel(_ context.Context, endpoint, model string) (handlerminiapp.ModelAddResult, error) {

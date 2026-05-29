@@ -54,9 +54,10 @@ func TestModelsList_NoInitData(t *testing.T) {
 }
 
 func TestModelsSet_WithInitData(t *testing.T) {
-	var requested string
+	var requested, gotRole string
 	h := modelsSet(ModelDeps{
-		SetModel: func(_ context.Context, id string) (string, error) {
+		SetModel: func(_ context.Context, role, id string) (string, error) {
+			gotRole = role
 			requested = id
 			return "zai/glm-5.1", nil
 		},
@@ -68,11 +69,37 @@ func TestModelsSet_WithInitData(t *testing.T) {
 	if requested != "zai/glm-5.1" {
 		t.Errorf("requested = %q, want trimmed id", requested)
 	}
+	if gotRole != "main" {
+		t.Errorf("role = %q, want main (default when omitted)", gotRole)
+	}
 	if got["ok"] != true {
 		t.Errorf("ok = %v, want true", got["ok"])
 	}
 	if got["current"] != "zai/glm-5.1" {
 		t.Errorf("current = %v, want zai/glm-5.1", got["current"])
+	}
+}
+
+func TestModelsSet_WithRole(t *testing.T) {
+	var gotRole, gotID string
+	h := modelsSet(ModelDeps{
+		SetModel: func(_ context.Context, role, id string) (string, error) {
+			gotRole, gotID = role, id
+			return id, nil
+		},
+	})
+	req := reqWith(t, "miniapp.models.set", map[string]any{"id": "vllm/qwen", "role": "lightweight"})
+	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+
+	got := decodePayload(t, h(ctx, req))
+	if gotRole != "lightweight" {
+		t.Errorf("role = %q, want lightweight", gotRole)
+	}
+	if gotID != "vllm/qwen" {
+		t.Errorf("id = %q, want vllm/qwen", gotID)
+	}
+	if got["role"] != "lightweight" {
+		t.Errorf("response role = %v, want lightweight", got["role"])
 	}
 }
 

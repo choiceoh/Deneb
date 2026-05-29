@@ -30,7 +30,13 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 	chatCfg.DefaultModel = resolveDefaultModel(s.logger)
 	chatCfg.SubagentDefaultModel = resolveSubagentDefaultModel(s.logger)
 	localVllmModel := resolveLocalVllmModel(s.logger)
-	reg := modelrole.NewRegistry(s.logger, chatCfg.DefaultModel, localVllmModel)
+	reg := modelrole.NewRegistryWithOptions(s.logger, modelrole.RegistryOptions{
+		MainModel:        chatCfg.DefaultModel,
+		LocalVllmModel:   localVllmModel,
+		LightweightModel: resolveLightweightModel(s.logger),
+		FallbackModel:    resolveFallbackModel(s.logger),
+		Providers:        providerCatalog(s.logger),
+	})
 	*regPtr = reg
 	chatCfg.Registry = reg
 	s.modelRegistry = reg
