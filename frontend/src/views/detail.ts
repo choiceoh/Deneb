@@ -6,11 +6,14 @@
 // model of "I've actioned this" visible.
 
 import {
+  analysisCached,
   analyzeMessage,
   archive,
   markRead,
   trash,
+  type CachedAnalysis,
   type GmailMessageDetail,
+  type ProjectRef,
   type SenderContext,
 } from '../gmail';
 import {
@@ -56,6 +59,10 @@ export async function renderDetail(
     // `expectedHash` threads the route token through so a stale fetch
     // never injects the wrong sender's context.
     void hydrateSenderContext(root, initData, msg.from, expectedHash);
+    // Fetch any pre-computed analysis (autonomous poller or a prior run) and,
+    // if present, show it in the analyze slot + cite its related projects —
+    // no manual tap needed. A miss leaves the manual analyze button as-is.
+    void hydrateCachedAnalysis(root, initData, msg, expectedHash);
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
     renderErrorView(root, `메일 로드 실패: ${formatRpcError(err)}`, {
@@ -97,6 +104,12 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
   const senderSlot = document.createElement('div');
   senderSlot.dataset.role = 'sender-context-slot';
   root.appendChild(senderSlot);
+
+  // Slot for the related-projects card, filled asynchronously by
+  // hydrateCachedAnalysis from a cached analysis's project links.
+  const projectSlot = document.createElement('div');
+  projectSlot.dataset.role = 'project-slot';
+  root.appendChild(projectSlot);
 
   if (msg.attachments && msg.attachments.length > 0) {
     const attBox = document.createElement('div');
@@ -141,6 +154,9 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
     triggerImpactHaptic('medium');
     void runAnalysis(root, initData, msg, analyzeBtn, false);
   });
+  // Tagged so hydrateCachedAnalysis can wire the card's "rerun" action back
+  // to this button without threading a reference through the call chain.
+  analyzeBtn.dataset.role = 'analyze-btn';
   actions.appendChild(analyzeBtn);
 
   // Read = optimistic. Flip the UI immediately so the operator gets
@@ -400,61 +416,10 @@ async function hydrateSenderContext(
     card.appendChild(recent);
   }
 
-  if (ctx.wikiHits.length > 0) {
-    const wiki = document.createElement('div');
-    wiki.className = 'sender-context-wiki';
-    const label = document.createElement('div');
-    label.className = 'sender-context-wiki-label';
-    label.textContent = '메모리';
-    wiki.appendChild(label);
-    for (const hit of ctx.wikiHits) {
-      // Wiki chip is a button so tapping opens the wiki page detail.
-      // Without this the user could see "메모리 / Alice (#사람)" right
-      // there in the mail view but had to navigate the long way
-      // (more → memory → search "Alice" → tap) to actually read it.
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'sender-context-chip';
-      chip.addEventListener('click', () =>
-        navigate({ name: 'wikiPage', path: hit.path }),
-      );
-      const title = document.createElement('span');
-      title.className = 'sender-context-chip-title';
-      title.textContent = hit.title || hit.path;
-      chip.appendChild(title);
-      if (hit.category) {
-        const cat = document.createElement('span');
-        cat.className = 'sender-context-chip-cat';
-        cat.textContent = `#${hit.category}`;
-        chip.appendChild(cat);
-      }
-      if (hit.summary) {
-        const sub = document.createElement('div');
-        sub.className = 'sender-context-chip-sub';
-        sub.textContent = hit.summary;
-        chip.appendChild(sub);
-      }
-      wiki.appendChild(chip);
-    }
-    card.appendChild(wiki);
-  }
-
-  // wikiFacts is the graphify-CLI snapshot — free-form Korean text
-  // about the sender's network (relationships, deals, decisions). The
-  // backend already truncated; the UI renders as a quote block.
-  if (ctx.wikiFacts) {
-    const facts = document.createElement('div');
-    facts.className = 'sender-context-facts';
-    const label = document.createElement('div');
-    label.className = 'sender-context-wiki-label';
-    label.textContent = '메모리 그래프';
-    facts.appendChild(label);
-    const body = document.createElement('pre');
-    body.className = 'sender-context-facts-body';
-    body.textContent = ctx.wikiFacts;
-    facts.appendChild(body);
-    card.appendChild(facts);
-  }
+  // Memory ("메모리") and memory-graph ("메모리 그래프") sections were
+  // removed here: sender-name wiki search mostly surfaced the person's own
+  // page, not what the mail is about. Related *projects* now come from the
+  // email analysis and render in the project slot via hydrateCachedAnalysis.
 
   if (ctx.notices && ctx.notices.length > 0) {
     const notice = document.createElement('div');
@@ -468,11 +433,104 @@ async function hydrateSenderContext(
 
 function hasUsefulContext(ctx: SenderContext): boolean {
   if (ctx.recent && ctx.recent.count > 0) return true;
-  if (ctx.wikiHits.length > 0) return true;
-  if (ctx.wikiFacts && ctx.wikiFacts.trim() !== '') return true;
-  // If only notices came back (both sources unavailable), don't render a
-  // banner-on-every-mail — the user can't act on it from this surface.
+  // wikiHits/wikiFacts are no longer rendered here (related projects moved to
+  // the analysis-driven project slot), so only the recent-activity row makes
+  // this card worth showing.
   return false;
+}
+
+// hydrateCachedAnalysis loads a pre-computed analysis for the open email and,
+// on a hit, fills the analyze slot with it and renders its related projects —
+// so a polled/previously-analyzed mail shows up complete without a tap. On a
+// miss it does nothing; the manual analyze button stays the only path.
+async function hydrateCachedAnalysis(
+  root: HTMLElement,
+  initData: string,
+  msg: GmailMessageDetail,
+  expectedHash: string,
+): Promise<void> {
+  let cached: CachedAnalysis;
+  try {
+    cached = await analysisCached(initData, msg.id);
+  } catch {
+    return; // best-effort; analyze button remains available
+  }
+  if (!isCurrentHash(expectedHash)) return;
+  if (!cached.cached) return;
+
+  showCachedAnalysis(root, initData, msg, cached);
+  renderRelatedProjects(root, cached.relatedProjects);
+}
+
+// showCachedAnalysis renders a stored analysis into the analyze slot exactly
+// like a fresh run would, so the operator sees it on open. The card's "rerun"
+// action is wired back to the analyze button (a forced re-run).
+function showCachedAnalysis(
+  root: HTMLElement,
+  initData: string,
+  msg: GmailMessageDetail,
+  cached: CachedAnalysis,
+): void {
+  let slot = root.querySelector('[data-role="analysis-slot"]') as HTMLElement | null;
+  if (!slot) {
+    slot = document.createElement('div');
+    slot.dataset.role = 'analysis-slot';
+    const actionBar = root.querySelector('.action-bar');
+    if (actionBar) actionBar.before(slot);
+    else root.appendChild(slot);
+  }
+  // Don't clobber an in-flight or already-painted manual run.
+  if (slot.querySelector('.analysis-card') || slot.querySelector('.analysis-loading')) {
+    return;
+  }
+  slot.innerHTML = '';
+  slot.appendChild(
+    buildAnalysisCard(
+      { analysis: cached.analysis, durationMs: 0, cached: true, createdAt: cached.createdAt },
+      () => {
+        const btn = root.querySelector('[data-role="analyze-btn"]') as HTMLButtonElement | null;
+        if (btn) void runAnalysis(root, initData, msg, btn, true);
+      },
+    ),
+  );
+}
+
+// renderRelatedProjects fills the project slot with chips linking to the
+// project wiki pages the analysis cited, reusing the sender-context chip
+// styling. No projects → leaves the slot empty (no card).
+function renderRelatedProjects(root: HTMLElement, projects?: ProjectRef[]): void {
+  const slot = root.querySelector('[data-role="project-slot"]');
+  if (!slot || !projects || projects.length === 0) return;
+
+  const card = document.createElement('div');
+  card.className = 'card sender-context';
+
+  const header = document.createElement('div');
+  header.className = 'sender-context-header';
+  header.textContent = '관련 프로젝트';
+  card.appendChild(header);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'sender-context-wiki';
+  for (const p of projects) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'sender-context-chip';
+    chip.addEventListener('click', () => navigate({ name: 'wikiPage', path: p.path }));
+    const title = document.createElement('span');
+    title.className = 'sender-context-chip-title';
+    title.textContent = p.title || p.path;
+    chip.appendChild(title);
+    if (p.summary) {
+      const sub = document.createElement('div');
+      sub.className = 'sender-context-chip-sub';
+      sub.textContent = p.summary;
+      chip.appendChild(sub);
+    }
+    wrap.appendChild(chip);
+  }
+  card.appendChild(wrap);
+  slot.replaceWith(card);
 }
 
 function makeAction(

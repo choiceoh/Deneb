@@ -44,6 +44,16 @@ type Config struct {
 	// DiaryDir is the wiki diary directory for logging analysis results.
 	// Empty = diary logging disabled.
 	DiaryDir string
+
+	// OnAnalyzed, if set, is invoked once per individually-analyzed email in
+	// a poll cycle so the server layer can cache the result and write a
+	// per-message wiki page (Related = identified projects). nil = skip
+	// per-email persistence (consolidated report/diary still run).
+	OnAnalyzed func(msg *gmail.MessageDetail, res AnalysisResult)
+
+	// ProjectsFn lists registered project wiki pages so analysis can cite
+	// related projects by real path. Forwarded to PipelineDeps. nil = none.
+	ProjectsFn func() []ProjectCandidate
 }
 
 // Compile-time interface compliance.
@@ -231,11 +241,20 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 		return nil
 	}
 
-	// Batch analysis: all emails → one consolidated report.
-	report, err := s.batchAnalyze(ctx, client, details)
+	// Batch analysis: each email analyzed individually + one consolidated report.
+	report, items, err := s.batchAnalyze(ctx, client, details)
 	if err != nil {
 		s.log.Warn("배치 분석 실패", "error", err, "count", len(details))
 		report = "(분석 실패)"
+	}
+
+	// Persist each individual analysis (cache + per-message wiki page) so the
+	// Mini App shows it instantly without a manual re-run. Runs even if the
+	// consolidated report failed — the per-email results are independent.
+	if s.cfg.OnAnalyzed != nil {
+		for _, it := range items {
+			s.cfg.OnAnalyzed(it.Msg, it.Result)
+		}
 	}
 
 	// Log analysis result to diary for wiki knowledge synthesis.
@@ -253,9 +272,10 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	return nil
 }
 
-// batchAnalyze runs the multi-stage pipeline on a batch of emails.
-// For a single email, AnalyzeBatch delegates to AnalyzeEmailPipeline internally.
-func (s *Service) batchAnalyze(ctx context.Context, gmailClient *gmail.Client, msgs []*gmail.MessageDetail) (string, error) {
+// batchAnalyze analyzes a batch: per-email individual analyses + one
+// consolidated report. Returns the report plus the per-email items so the
+// caller can persist each (cache + wiki page).
+func (s *Service) batchAnalyze(ctx context.Context, gmailClient *gmail.Client, msgs []*gmail.MessageDetail) (string, []BatchItem, error) {
 	deps := PipelineDeps{
 		GmailClient: gmailClient,
 		LLMClient:   s.llmClient,
@@ -263,6 +283,7 @@ func (s *Service) batchAnalyze(ctx context.Context, gmailClient *gmail.Client, m
 		LocalModel:  s.cfg.LocalModel,
 		MainModel:   s.cfg.Model,
 		Logger:      s.log,
+		ProjectsFn:  s.cfg.ProjectsFn,
 	}
 
 	s.log.Debug("batch analysis 실행", "count", len(msgs))

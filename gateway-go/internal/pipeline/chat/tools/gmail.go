@@ -378,7 +378,7 @@ func gmailAnalyze(ctx context.Context, client *gmail.Client, deps GmailPipelineD
 		// analysis pipeline sees the substance, not just the cover note.
 		appendAttachmentText(ctx, client, detail)
 
-		analysis, err := gmailpoll.AnalyzeEmailPipeline(ctx, pipeDeps, detail)
+		result, err := gmailpoll.AnalyzeEmailPipeline(ctx, pipeDeps, detail)
 		if err != nil {
 			fmt.Fprintf(&sb, "⚠️ 분석 실패 (%s): %s\n\n", detail.Subject, err)
 			continue
@@ -390,7 +390,7 @@ func gmailAnalyze(ctx context.Context, client *gmail.Client, deps GmailPipelineD
 		fmt.Fprintf(&sb, "## 📬 %s\n", detail.Subject)
 		fmt.Fprintf(&sb, "**From:** %s\n", detail.From)
 		fmt.Fprintf(&sb, "**Date:** %s\n\n", detail.Date)
-		sb.WriteString(analysis)
+		sb.WriteString(result.Text)
 		sb.WriteString("\n")
 	}
 

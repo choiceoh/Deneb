@@ -59,6 +59,13 @@ func (s *Server) initGmailPoll() {
 		cfg.DiaryDir = s.wikiStore.DiaryDir()
 	}
 
+	// Per-email persistence (Mini App cache + per-message wiki page with
+	// related projects) and the project-candidate provider for
+	// related-project selection. Both read the same wiki store the Mini App
+	// uses, so a polled email shows up already-analyzed with its projects.
+	cfg.OnAnalyzed = s.makeMailAnalysisSink()
+	cfg.ProjectsFn = s.projectCandidatesFn()
+
 	s.gmailPollSvc = gmailpoll.NewService(cfg, s.logger)
 
 	// Wire proactive relay as the gmail-poll notifier so email summaries
