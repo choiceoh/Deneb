@@ -118,7 +118,15 @@
                 "group": "Mini App",
                 "pages": [
                   "operations/index",
+                  "operations/mini-app-guide",
                   "operations/cloudflare-tunnel-setup"
+                ]
+              },
+              {
+                "group": "Mail and Delivery",
+                "pages": [
+                  "operations/mail-analysis",
+                  "operations/proactive-delivery"
                 ]
               }
             ]
