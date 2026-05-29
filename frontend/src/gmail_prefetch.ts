@@ -20,6 +20,14 @@ import {
 
 const rowSummaries = new Map<string, GmailMessageRow>();
 const inFlightDetails = new Map<string, Promise<GmailMessageDetail>>();
+// Optimistically-hidden message ids. The detail view archives/trashes a
+// mail and navigates back to the inbox *before* the RPC settles; clearing
+// the row-summary cache (invalidate) is not enough, because the inbox
+// re-runs listRecent() and the server can still return the just-actioned
+// row until the mutation lands. The list render filters these ids out so
+// the row never visibly reappears. On RPC failure the id is un-hidden so
+// the row comes back on the next refresh (and a failure toast explains).
+const pendingHidden = new Set<string>();
 // Sender context cache: keyed by the raw From header so the same
 // person hits cache across detail visits within the session, even
 // when the server-side cache TTL has lapsed. Different mails from
@@ -95,6 +103,23 @@ export async function fetchMessage(
 export function invalidate(id: string): void {
   rowSummaries.delete(id);
   inFlightDetails.delete(id);
+}
+
+// hideMessage marks an id as optimistically removed from the inbox and
+// invalidates its caches in one call — use it on archive/trash right
+// before navigating back to the list. isHidden() lets the list render
+// skip it; unhideMessage() reverses it when the mutation ultimately fails.
+export function hideMessage(id: string): void {
+  pendingHidden.add(id);
+  invalidate(id);
+}
+
+export function unhideMessage(id: string): void {
+  pendingHidden.delete(id);
+}
+
+export function isHidden(id: string): boolean {
+  return pendingHidden.has(id);
 }
 
 // prefetchSenderContext kicks the miniapp.gmail.sender_context RPC for

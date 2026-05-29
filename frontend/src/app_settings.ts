@@ -20,18 +20,32 @@
 //   notify-err   : optimistic action failed and rolled back
 //   notify-warn  : reserved for future use
 
+// runHaptic shields the tap from older/partial Telegram WebViews: the
+// HapticFeedback object can exist while a given method is missing (guarded
+// by `?.()`) or throws WebAppMethodUnsupported on clients that predate that
+// primitive (guarded by try/catch). These calls fire *before* the click's
+// real work (navigation / RPC), so an unguarded throw would silently turn
+// taps into no-ops — feedback is non-essential and must never block it.
+function runHaptic(invoke: () => void): void {
+  try {
+    invoke();
+  } catch {
+    // Unsupported on this client — swallow; the caller's work continues.
+  }
+}
+
 export function triggerSelectionHaptic(): void {
-  window.Telegram?.WebApp?.HapticFeedback?.selectionChanged();
+  runHaptic(() => window.Telegram?.WebApp?.HapticFeedback?.selectionChanged?.());
 }
 
 type HapticImpactStyle = 'light' | 'medium' | 'heavy' | 'rigid' | 'soft';
 
 export function triggerImpactHaptic(style: HapticImpactStyle = 'light'): void {
-  window.Telegram?.WebApp?.HapticFeedback?.impactOccurred(style);
+  runHaptic(() => window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.(style));
 }
 
 type HapticNotificationType = 'error' | 'success' | 'warning';
 
 export function triggerNotificationHaptic(type: HapticNotificationType): void {
-  window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred(type);
+  runHaptic(() => window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(type));
 }

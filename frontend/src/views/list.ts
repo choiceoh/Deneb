@@ -21,6 +21,7 @@ import { archive, listRecent, markRead, trash, type GmailMessageRow } from '../g
 import {
   cacheRowSummary,
   invalidate,
+  isHidden,
   prefetchMessage,
   prefetchSenderContext,
 } from '../gmail_prefetch';
@@ -85,6 +86,11 @@ export async function renderList(root: HTMLElement, initData: string): Promise<v
       return;
     }
     for (const row of result.messages) {
+      // Skip rows the operator just archived/trashed from the detail view:
+      // that action navigates back here before its RPC settles, so
+      // listRecent can still return the row for a beat. isHidden keeps it
+      // out of view until the mutation lands (or it's un-hidden on failure).
+      if (isHidden(row.id)) continue;
       rowsContainer.appendChild(buildRow(row, selection));
     }
     if (result.nextPageToken) {
@@ -490,6 +496,7 @@ function mountLoadMore(
       if (!isCurrentHash(selection.expectedHash) || !container.isConnected) return;
       btn.remove();
       for (const row of result.messages) {
+        if (isHidden(row.id)) continue;
         container.appendChild(buildRow(row, selection));
       }
       if (result.nextPageToken) {
