@@ -38,8 +38,8 @@ export async function renderWikiPage(
   } catch (err) {
     if (!isCurrentHash(expectedHash)) return;
     renderErrorView(root, `위키 페이지 로드 실패: ${formatRpcError(err)}`, {
-      label: '← 메모리 검색으로',
-      onClick: () => navigate({ name: 'search' }),
+      label: '← back',
+      onClick: () => history.back(),
     });
   }
 }
@@ -59,7 +59,12 @@ function paint(
   root.appendChild(
     buildViewHeader({
       title: editing ? 'wiki · edit' : 'wiki',
-      left: { label: '← search', onClick: () => navigate({ name: 'search' }) },
+      // Wiki pages have many parents (mail, a category, search, a person
+      // card, another wiki page), so a fixed "← search" both mislabeled
+      // and mis-navigated for every entry point except search. Pop the
+      // real history entry — same as the Telegram BackButton (main.ts) and
+      // the wikiNew view's back link.
+      left: { label: '← back', onClick: () => history.back() },
       right: editing
         ? { label: 'cancel', onClick: () => paint(root, initData, page, false) }
         : { label: 'edit', onClick: () => paint(root, initData, page, true) },
