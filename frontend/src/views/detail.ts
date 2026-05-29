@@ -16,11 +16,9 @@ import {
   type GmailMessageDetail,
   type ProjectRef,
   type QATurn,
-  type SenderContext,
 } from '../gmail';
 import {
   fetchMessage,
-  fetchSenderContext,
   hideMessage,
   unhideMessage,
 } from '../gmail_prefetch';
@@ -57,11 +55,6 @@ export async function renderDetail(
     // the row keeps its UNREAD style on next list refresh and the user
     // can hit [읽음] explicitly.
     void markRead(initData, messageId).catch(() => undefined);
-    // Fetch sender context in parallel and inject the card once it lands.
-    // Errors are non-fatal — the rest of the page is already useful.
-    // `expectedHash` threads the route token through so a stale fetch
-    // never injects the wrong sender's context.
-    void hydrateSenderContext(root, initData, msg.from, expectedHash);
     // Fetch any pre-computed analysis (autonomous poller or a prior run) and,
     // if present, show it in the analyze slot + cite its related projects —
     // no manual tap needed. A miss leaves the manual analyze button as-is.
@@ -80,7 +73,8 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
 
   root.appendChild(
     buildViewHeader({
-      title: 'message',
+      // No title: the subject card directly below is this page's real
+      // heading, so a generic "message" h1 would just be redundant chrome.
       left: { label: '← mail', onClick: () => navigate({ name: 'inbox' }) },
     }),
   );
@@ -100,13 +94,6 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
   (valueCells[1] as HTMLElement).textContent = msg.to || '—';
   (valueCells[2] as HTMLElement).textContent = relativeTime(msg.date);
   root.appendChild(meta);
-
-  // Placeholder for the sender context card. Filled asynchronously by
-  // hydrateSenderContext; left out of the static layout above so the
-  // initial paint is fast.
-  const senderSlot = document.createElement('div');
-  senderSlot.dataset.role = 'sender-context-slot';
-  root.appendChild(senderSlot);
 
   // Slot for the related-projects card, filled asynchronously by
   // hydrateCachedAnalysis from a cached analysis's project links.
@@ -368,81 +355,6 @@ function buildAnalysisCard(
   card.appendChild(refreshBtn);
 
   return card;
-}
-
-async function hydrateSenderContext(
-  root: HTMLElement,
-  initData: string,
-  fromHeader: string,
-  expectedHash: string,
-): Promise<void> {
-  if (!fromHeader) return;
-  let ctx: SenderContext;
-  try {
-    // fetchSenderContext returns the prefetched in-flight promise
-    // (kicked at pointerdown in the list view) when available, so the
-    // RPC has typically been running in parallel with the message
-    // fetch since before the operator finished tapping. Sender
-    // context is also the slow source — graphify can take 300-1000ms
-    // — so the prefetch + server-side parallelization combine to
-    // bring this card up significantly sooner than a cold start
-    // would.
-    ctx = await fetchSenderContext(initData, fromHeader);
-  } catch {
-    // Best-effort enrichment. A failure here should not interrupt the
-    // user reading the email — leave the slot empty.
-    return;
-  }
-  // Route-token check: if the user navigated to a different message (or
-  // away from detail entirely) while we were fetching, do nothing. The
-  // querySelector below would otherwise find the NEW message's slot and
-  // inject the OLD sender's context into it.
-  if (!isCurrentHash(expectedHash)) return;
-  const slot = root.querySelector('[data-role="sender-context-slot"]');
-  if (!slot) return; // Detail view navigated away while we were fetching.
-  if (!hasUsefulContext(ctx)) return;
-
-  const card = document.createElement('div');
-  card.className = 'card sender-context';
-
-  const header = document.createElement('div');
-  header.className = 'sender-context-header';
-  header.textContent = '보낸이 컨텍스트';
-  card.appendChild(header);
-
-  if (ctx.recent) {
-    const recent = document.createElement('div');
-    recent.className = 'sender-context-row';
-    const parts: string[] = [];
-    parts.push(`최근 ${ctx.recent.windowDays}일간 ${ctx.recent.count}건`);
-    if (ctx.recent.lastReceivedAt) {
-      parts.push(`마지막 ${relativeTime(ctx.recent.lastReceivedAt)}`);
-    }
-    recent.textContent = parts.join(' · ');
-    card.appendChild(recent);
-  }
-
-  // Memory ("메모리") and memory-graph ("메모리 그래프") sections were
-  // removed here: sender-name wiki search mostly surfaced the person's own
-  // page, not what the mail is about. Related *projects* now come from the
-  // email analysis and render in the project slot via hydrateCachedAnalysis.
-
-  if (ctx.notices && ctx.notices.length > 0) {
-    const notice = document.createElement('div');
-    notice.className = 'sender-context-notice';
-    notice.textContent = ctx.notices.join(' · ');
-    card.appendChild(notice);
-  }
-
-  slot.replaceWith(card);
-}
-
-function hasUsefulContext(ctx: SenderContext): boolean {
-  if (ctx.recent && ctx.recent.count > 0) return true;
-  // wikiHits/wikiFacts are no longer rendered here (related projects moved to
-  // the analysis-driven project slot), so only the recent-activity row makes
-  // this card worth showing.
-  return false;
 }
 
 // hydrateCachedAnalysis loads a pre-computed analysis for the open email and,

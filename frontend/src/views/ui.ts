@@ -30,10 +30,12 @@ export interface HeaderButton {
  *
  * Either button may be omitted — the actions row collapses when both
  * slots are empty, so views like memory/categories that only have a
- * title get just the title with no leftover whitespace above.
+ * title get just the title with no leftover whitespace above. The title
+ * itself is also optional: omit it (as the mail detail does) and only
+ * the actions row renders.
  */
 export function buildViewHeader(opts: {
-  title: string;
+  title?: string;
   left?: HeaderButton;
   right?: HeaderButton;
 }): HTMLElement {
@@ -48,15 +50,21 @@ export function buildViewHeader(opts: {
     wrap.appendChild(actions);
   }
 
-  const title = document.createElement('h1');
-  title.className = 'view-title';
-  // Letter-by-letter cascade entry: each grapheme gets its own span
-  // with a 25ms-per-char staggered delay via inline --i. The fall-
-  // back when split is empty (or for accessibility / RTL languages
-  // that don't tokenize well into letters) is to set textContent —
-  // the CSS animation just plays on the whole element instead.
-  appendLetterCascade(title, opts.title);
-  wrap.appendChild(title);
+  // The title is optional: a drill-down whose body already leads with its
+  // own heading (e.g. the mail detail's subject card) passes none, and we
+  // skip the <h1> entirely so no empty heading leaves a stray gap below
+  // the actions row.
+  if (opts.title) {
+    const title = document.createElement('h1');
+    title.className = 'view-title';
+    // Letter-by-letter cascade entry: each grapheme gets its own span
+    // with a 25ms-per-char staggered delay via inline --i. The fall-
+    // back when split is empty (or for accessibility / RTL languages
+    // that don't tokenize well into letters) is to set textContent —
+    // the CSS animation just plays on the whole element instead.
+    appendLetterCascade(title, opts.title);
+    wrap.appendChild(title);
+  }
   return wrap;
 }
 
