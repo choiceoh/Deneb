@@ -12,19 +12,31 @@ import {
 import { isCurrentHash, navigate } from '../router';
 import { buildErrorBanner, buildLoadingNode, buildViewHeader } from './ui';
 
-export function renderModelSelect(root: HTMLElement, initData: string): void {
+// Role labels for the picker header (main/lightweight/fallback).
+const ROLE_LABELS: Record<string, string> = {
+  main: '메인 (대화)',
+  lightweight: '경량 (메일분석·요약·스킬)',
+  fallback: '폴백 (메인 실패 시)',
+};
+
+// The role this picker is scoped to. Set at the top of each render and read
+// synchronously when a row is tapped, so it is always correct for the view.
+let pickerRole = 'main';
+
+export function renderModelSelect(root: HTMLElement, initData: string, role = 'main'): void {
+  pickerRole = role;
   const expectedHash = location.hash;
   root.innerHTML = '';
   root.appendChild(
     buildViewHeader({
-      title: '모델 교체',
+      title: `모델 교체 — ${ROLE_LABELS[role] ?? role}`,
       left: { label: '← 설정', onClick: () => navigate({ name: 'settings' }) },
     }),
   );
 
   const status = document.createElement('div');
   status.className = 'settings-status';
-  status.textContent = '다음 대화부터 선택한 모델을 사용합니다';
+  status.textContent = '이 역할에 사용할 모델을 선택하세요';
 
   const listCard = document.createElement('div');
   listCard.className = 'section-card settings-card';
@@ -60,7 +72,11 @@ function paintModelSelect(
   result: MiniappModelsResult,
 ): void {
   card.innerHTML = '';
-  card.appendChild(buildCurrentRow(result.current));
+  // Highlight the model bound to THIS role (not the main model). The backend
+  // marks model.current against main; for a role picker we recompute against
+  // the role's own current model from result.roles.
+  const roleCurrent = result.roles?.find((r) => r.role === pickerRole)?.model ?? result.current;
+  card.appendChild(buildCurrentRow(roleCurrent));
 
   if (result.sections.length === 0) {
     const empty = document.createElement('div');
@@ -80,7 +96,7 @@ function paintModelSelect(
     group.appendChild(title);
 
     for (const model of section.models) {
-      group.appendChild(buildModelRow(model, initData, card, status));
+      group.appendChild(buildModelRow(model, initData, card, status, roleCurrent));
     }
     card.appendChild(group);
   }
@@ -105,11 +121,13 @@ function buildModelRow(
   initData: string,
   card: HTMLElement,
   status: HTMLElement,
+  roleCurrent: string,
 ): HTMLButtonElement {
+  const isCurrent = model.id === roleCurrent;
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'settings-model-row' + (model.current ? ' settings-model-row-current' : '');
-  btn.disabled = model.current;
+  btn.className = 'settings-model-row' + (isCurrent ? ' settings-model-row-current' : '');
+  btn.disabled = isCurrent;
   btn.innerHTML = `
     <span class="settings-model-check"></span>
     <span class="settings-row-text">
@@ -122,7 +140,7 @@ function buildModelRow(
   `;
   const health = normalizeModelHealth(model.health);
   const healthLabel = modelHealthLabel(health);
-  (btn.querySelector('.settings-model-check') as HTMLElement).textContent = model.current ? '✓' : '';
+  (btn.querySelector('.settings-model-check') as HTMLElement).textContent = isCurrent ? '✓' : '';
   (btn.querySelector('.settings-row-title') as HTMLElement).textContent =
     model.label || model.display || model.id;
   (btn.querySelector('.settings-row-sub') as HTMLElement).textContent = model.id;
@@ -185,7 +203,7 @@ async function switchModel(
   status.textContent = '모델 변경 중…';
 
   try {
-    const result = await setMiniappModel(initData, modelID);
+    const result = await setMiniappModel(initData, modelID, pickerRole);
     triggerSelectionHaptic();
     status.textContent = `${shortModelName(result.current)} 적용됨`;
     await refreshModelSelect(card, initData, status);
@@ -228,7 +246,7 @@ async function addDirectModel(args: {
   try {
     const added = await addMiniappModel(args.initData, endpoint, model);
     args.status.textContent = '모델 적용 중…';
-    const result = await setMiniappModel(args.initData, added.id);
+    const result = await setMiniappModel(args.initData, added.id, pickerRole);
     triggerSelectionHaptic();
     args.status.textContent = `${shortModelName(result.current)} 적용됨`;
     if (args.endpoint) args.endpoint.value = '';

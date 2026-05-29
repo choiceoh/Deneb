@@ -64,32 +64,53 @@ function buildModelLoadingRow(): HTMLElement {
   return row;
 }
 
+// Role labels shown in the settings list. main/lightweight/fallback each get
+// a one-line hint of what they power so the operator knows what they're
+// changing before drilling into the picker.
+const ROLE_LABELS: Record<string, string> = {
+  main: '메인 (대화)',
+  lightweight: '경량 (메일분석·요약·스킬)',
+  fallback: '폴백 (메인 실패 시)',
+};
+
+function roleLabel(role: string): string {
+  return ROLE_LABELS[role] ?? role;
+}
+
 async function hydrateModelSummaryRow(list: HTMLElement, initData: string): Promise<void> {
   try {
     const result = await listMiniappModels(initData);
     if (!list.isConnected) return;
-    paintModelSummary(list, result.current);
+    const roles =
+      result.roles && result.roles.length > 0
+        ? result.roles
+        : [{ role: 'main', model: result.current }];
+    paintModelRoles(list, roles);
   } catch {
     if (!list.isConnected) return;
-    paintModelSummary(list, '불러오기 실패');
+    paintModelRoles(list, [{ role: 'main', model: '불러오기 실패' }]);
   }
 }
 
-function paintModelSummary(list: HTMLElement, currentModel: string): void {
+// One nav row per model role; tap drills into the picker scoped to that role.
+function paintModelRoles(list: HTMLElement, roles: { role: string; model: string }[]): void {
   list.innerHTML = '';
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'flat-row flat-row-nav';
-  btn.innerHTML = `
-    <span class="flat-row-text">
-      <span class="flat-row-label">model</span>
-      <span class="flat-row-sub"></span>
-    </span>
-  `;
-  (btn.querySelector('.flat-row-sub') as HTMLElement).textContent = currentModel || '—';
-  btn.addEventListener('click', () => {
-    triggerSelectionHaptic();
-    navigate({ name: 'modelSelect' });
-  });
-  list.appendChild(btn);
+  for (const entry of roles) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'flat-row flat-row-nav';
+    btn.innerHTML = `
+      <span class="flat-row-text">
+        <span class="flat-row-label"></span>
+        <span class="flat-row-sub"></span>
+      </span>
+    `;
+    (btn.querySelector('.flat-row-label') as HTMLElement).textContent = roleLabel(entry.role);
+    (btn.querySelector('.flat-row-sub') as HTMLElement).textContent = entry.model || '—';
+    btn.addEventListener('click', () => {
+      triggerSelectionHaptic();
+      navigate({ name: 'modelSelect', role: entry.role });
+    });
+    list.appendChild(btn);
+  }
 }

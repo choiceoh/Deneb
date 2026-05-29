@@ -357,7 +357,7 @@ async function dispatch(route: Route): Promise<void> {
       }
       case 'modelSelect': {
         const { renderModelSelect } = await import('./views/model_select');
-        renderModelSelect(root, initData);
+        renderModelSelect(root, initData, route.role);
         return;
       }
       case 'categories': {

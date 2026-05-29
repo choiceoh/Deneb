@@ -121,13 +121,20 @@ export interface MiniappModelSection {
   models: MiniappModelOption[];
 }
 
+export interface MiniappRoleModel {
+  role: string;
+  model: string;
+}
+
 export interface MiniappModelsResult {
   current: string;
+  roles: MiniappRoleModel[];
   sections: MiniappModelSection[];
 }
 
 export interface MiniappModelSetResult {
   ok: boolean;
+  role?: string;
   current: string;
 }
 
@@ -143,8 +150,8 @@ export interface MiniappModelAddResult {
 export const listMiniappModels = (initData: string) =>
   call<MiniappModelsResult>('miniapp.models.list', null, initData);
 
-export const setMiniappModel = (initData: string, id: string) =>
-  call<MiniappModelSetResult>('miniapp.models.set', { id }, initData);
+export const setMiniappModel = (initData: string, id: string, role?: string) =>
+  call<MiniappModelSetResult>('miniapp.models.set', { id, role }, initData);
 
 export const addMiniappModel = (initData: string, endpoint: string, model: string) =>
   call<MiniappModelAddResult>('miniapp.models.add_custom', { endpoint, model }, initData);
