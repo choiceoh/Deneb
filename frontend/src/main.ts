@@ -209,6 +209,58 @@ function renderError(message: string): void {
   root.appendChild(muted);
 }
 
+// --- Stale-chunk recovery --------------------------------------------------
+//
+// Every non-home view is a separate content-hashed chunk fetched on first
+// navigation. When the operator already has the app open (or Telegram's
+// WebView cached the old entry bundle) and a redeploy lands, the bundle in
+// memory still points at the *old* hashes — e.g. assets/calendar-BMaDBaGq.js
+// — which the new server no longer has. The import() then rejects with
+// "Failed to fetch dynamically imported module".
+//
+// The durable fix is to reload once: index.html is served no-store (see
+// miniapp_static.go), so the reload pulls a fresh entry document referencing
+// the new hashes, and the re-navigation fetches the chunk that actually
+// exists. We stamp sessionStorage so a genuinely broken deploy (the chunk
+// 404s even after the reload) can't trap us in a reload loop — after one
+// attempt inside the window we fall through to the visible banner instead.
+const CHUNK_RELOAD_STAMP = 'deneb:chunkReloadAt';
+const CHUNK_RELOAD_WINDOW_MS = 30_000;
+
+function isChunkLoadError(err: unknown): boolean {
+  const msg = String((err as { message?: string } | null)?.message ?? err);
+  return (
+    msg.includes('Failed to fetch dynamically imported module') ||
+    msg.includes('error loading dynamically imported module') ||
+    msg.includes('Importing a module script failed')
+  );
+}
+
+// reloadForStaleChunk attempts exactly one reload per incident. Returns true
+// when it kicked off a reload (caller should bail out and not paint a
+// banner), false when a reload was already attempted recently or
+// sessionStorage is unavailable — in which case we can't guarantee
+// loop-safety, so we prefer the manual banner over risking a reload loop.
+function reloadForStaleChunk(): boolean {
+  let lastAt: number;
+  try {
+    lastAt = Number(sessionStorage.getItem(CHUNK_RELOAD_STAMP) ?? '0');
+  } catch {
+    return false;
+  }
+  const now = Date.now();
+  if (Number.isFinite(lastAt) && now - lastAt < CHUNK_RELOAD_WINDOW_MS) {
+    return false;
+  }
+  try {
+    sessionStorage.setItem(CHUNK_RELOAD_STAMP, String(now));
+  } catch {
+    return false;
+  }
+  location.reload();
+  return true;
+}
+
 // Home is the only no-back route; every other view is a drill-down
 // where Telegram's BackButton takes the operator to its parent.
 function syncBackButton(route: Route): void {
@@ -337,8 +389,15 @@ async function dispatch(route: Route): Promise<void> {
     // chunk-load rejection would propagate up to the View Transitions
     // callback, which silently aborts — leaving the operator on the
     // previous view with no visible feedback that the tap landed.
-    // Paint a visible error so they can refresh and retry.
     console.error('dispatch failed for route', route.name, err);
+    // Asset hash drift after a redeploy is the dominant cause: the chunk
+    // filename this bundle points at no longer exists. Reload once to
+    // pick up the fresh entry bundle (served no-store) before falling
+    // back to a visible banner. reloadForStaleChunk guards against loops.
+    if (isChunkLoadError(err) && reloadForStaleChunk()) {
+      return;
+    }
+    // Paint a visible error so they can refresh and retry.
     root.innerHTML = '';
     const banner = document.createElement('div');
     banner.className = 'error';

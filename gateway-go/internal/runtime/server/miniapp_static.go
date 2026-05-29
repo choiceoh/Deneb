@@ -95,10 +95,25 @@ func (s *Server) serveMiniappStatic(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "asset read failure", http.StatusInternalServerError)
 			return
 		}
-		// SPA fallback: unknown route serves index.html (or, on a fresh
-		// clone where the Vite bundle has not been built, placeholder.html)
-		// with 200 so client-side routing can take over. We keep "no-cache"
-		// so the fallback never gets pinned in the browser cache.
+		// A miss under assets/ is a hashed-chunk miss, not a client-side
+		// route. It happens when a redeploy replaced the content-hashed
+		// filenames that an already-loaded (or WebView-cached) bundle still
+		// points at: the browser requests the old hash, which the new embed
+		// FS no longer has. Returning the SPA HTML fallback here would hand
+		// the browser's ES-module loader an HTML document with a 200 — it
+		// can't parse that as JS and surfaces the cryptic "Failed to fetch
+		// dynamically imported module" error to the operator. A real 404
+		// keeps the failure honest and lets the client's stale-chunk reload
+		// path (frontend/src/main.ts) recover cleanly.
+		if strings.HasPrefix(rel, "assets/") {
+			http.NotFound(w, r)
+			return
+		}
+		// SPA fallback: an unknown *route* (e.g. "/app/calendar") serves
+		// index.html (or, on a fresh clone where the Vite bundle has not
+		// been built, placeholder.html) with 200 so client-side routing can
+		// take over. We keep "no-store" so the fallback never gets pinned in
+		// the browser cache.
 		serveMiniappIndexOrPlaceholder(w, r)
 		return
 	}

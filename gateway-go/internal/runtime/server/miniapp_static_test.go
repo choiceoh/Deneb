@@ -81,6 +81,29 @@ func TestServeMiniappStatic_SPAFallback(t *testing.T) {
 	}
 }
 
+func TestServeMiniappStatic_MissingHashedAssetReturns404(t *testing.T) {
+	// A redeploy rewrites every content-hashed chunk filename. A bundle
+	// still in memory (or cached by Telegram's WebView) keeps requesting an
+	// old hash that the new embed FS no longer carries. That must surface as
+	// a real 404 — NOT the SPA HTML fallback. If we returned index.html with
+	// 200, the browser's ES-module loader would receive an HTML body where
+	// it expected JS and choke with "Failed to fetch dynamically imported
+	// module", which is exactly the operator-visible bug this guards against.
+	swapMiniappFS(t, fstest.MapFS{
+		"index.html":             &fstest.MapFile{Data: []byte("<!doctype html><html><body>app</body></html>")},
+		"assets/calendar-new.js": &fstest.MapFile{Data: []byte("export const x = 1;")},
+	})
+	s := newServerForStatic(t)
+
+	rec := getMiniappPath(t, s, "/app/assets/calendar-BMaDBaGq.js")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 for missing hashed asset", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "<html") {
+		t.Errorf("missing asset served HTML fallback (would break the module loader): %q", rec.Body.String())
+	}
+}
+
 func TestServeMiniappStatic_PathTraversalRejected(t *testing.T) {
 	s := newServerForStatic(t)
 	for _, p := range []string{
