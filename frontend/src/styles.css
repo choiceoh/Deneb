@@ -1086,16 +1086,14 @@ pre.email-body-loading {
   }
 }
 
-/* ---- Memory search ---- */
+/* ---- Search ---- */
 
 .search-form {
-  display: flex;
-  gap: 8px;
   margin-bottom: 12px;
 }
 
 .search-input {
-  flex: 1;
+  width: 100%;
   padding: 12px 14px;
   border: 1px solid transparent;
   border-radius: 12px;
@@ -1106,13 +1104,11 @@ pre.email-body-loading {
 
 .search-input:focus {
   outline: none;
-  border-color: var(--tg-link);
-}
-
-.search-submit {
-  margin: 0 !important;
-  width: auto !important;
-  padding: 12px 18px !important;
+  /* Monochrome focus cue — a soft white hairline, not the saturated
+     --tg-link blue. Keeps the search field in the same black-and-white
+     idiom as the rest of the screen (the blue submit button + header
+     action were removed for the same reason). */
+  border-color: var(--hairline-strong);
 }
 
 button.memory-card {
@@ -1160,14 +1156,14 @@ button.memory-card:active {
   color: var(--tg-hint);
 }
 
-/* ---- Topics chip row ---- */
+/* ---- Chip row (shared: topics + search) ---- */
 
-/* Horizontal scrollable strip that sits between the topics view header
-   and the session list. Today carries a single action chip; once a
-   deneb-side topic store exists, real topic-filter chips will sit
-   alongside it (calendar / coding / mail …) and the row scrolls
+/* Horizontal scrollable strip that sits between a view header and the
+   content below it. Today each carries a single create-action chip
+   ("+ 새 토픽" on topics, "+ 새 페이지" on search); future filter chips
+   will sit alongside (categories / status / …) and the row scrolls
    horizontally when they overflow. */
-.topics-chip-row {
+.chip-row {
   display: flex;
   gap: 8px;
   padding: 8px 0 16px 0;
@@ -1175,11 +1171,11 @@ button.memory-card:active {
   scrollbar-width: none;
 }
 
-.topics-chip-row::-webkit-scrollbar {
+.chip-row::-webkit-scrollbar {
   display: none;
 }
 
-.topics-chip {
+.chip {
   flex-shrink: 0;
   padding: 6px 14px;
   border-radius: 999px;
@@ -1195,11 +1191,11 @@ button.memory-card:active {
   transition: opacity 120ms ease;
 }
 
-.topics-chip:hover {
+.chip:hover {
   opacity: 0.7;
 }
 
-.topics-chip:active {
+.chip:active {
   opacity: 0.5;
 }
 
@@ -1674,8 +1670,9 @@ pre.sender-context-facts-body {
 
 .wiki-edit-textarea:focus {
   outline: none;
-  border-color: var(--tg-link);
-  box-shadow: var(--shadow-focus);
+  /* Monochrome focus cue (matches .search-input) — soft white hairline,
+     not the saturated --tg-link blue + blue glow. */
+  border-color: var(--hairline-strong);
 }
 
 .wiki-edit-flash {
@@ -1729,8 +1726,8 @@ pre.sender-context-facts-body {
 
 .wiki-edit-input:focus {
   outline: none;
-  border-color: var(--tg-link);
-  box-shadow: var(--shadow-focus);
+  /* Monochrome focus cue (matches .search-input + .wiki-edit-textarea). */
+  border-color: var(--hairline-strong);
 }
 
 /* Read-only frontmatter row (category in edit mode — the on-disk
