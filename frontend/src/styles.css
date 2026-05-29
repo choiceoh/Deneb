@@ -1504,9 +1504,10 @@ pre.sender-context-facts-body {
   cursor: not-allowed;
 }
 
-/* --- Mail follow-up Q&A (inline, sits just below the analysis card) ---
-   Chat-like bubbles + a composer, scoped to the mail view. This is the
-   "메일 맥락 특화" Q&A, not the removed general chat surface. */
+/* --- Mail follow-up Q&A (inline, below the analysis card) ---
+   Typography-only, no chat bubbles: matches the monochrome / hairline /
+   right-angle idiom of .analysis-card. Telegram's blue is intentionally
+   unused. Q = the echoed question (hint tone), A = the answer body. */
 .card.mail-qa {
   background: none;
   box-shadow: none;
@@ -1523,41 +1524,45 @@ pre.sender-context-facts-body {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--tg-hint);
-  margin-bottom: 12px;
+  margin-bottom: 4px;
 }
 
 .mail-qa-log {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.mail-qa-log:empty {
-  margin-bottom: 0;
 }
 
 .mail-qa-bubble {
-  max-width: 85%;
-  padding: 9px 12px;
-  border-radius: 14px;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
   word-break: break-word;
 }
 
+/* Question: the echoed prompt. Hint-toned with a leading dash; a hairline
+   rule opens each new turn (except the first) so a multi-turn thread reads
+   as a stack of Q/A sections rather than balloons. */
 .mail-qa-q {
-  align-self: flex-end;
-  background: var(--tg-button, #2ea6ff);
-  color: var(--tg-button-text, #fff);
-  border-bottom-right-radius: 4px;
+  color: var(--tg-hint);
   white-space: pre-wrap;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--hairline);
+}
+.mail-qa-q::before {
+  content: '— ';
+}
+.mail-qa-q:first-child {
+  margin-top: 12px;
+  padding-top: 0;
+  border-top: none;
 }
 
+/* Answer: the body. Page text color at the light weight used across the
+   analysis card so it reads as prose, not a filled balloon. */
 .mail-qa-a {
-  align-self: flex-start;
-  background: var(--surface-2, rgba(127, 127, 127, 0.12));
   color: var(--tg-text);
-  border-bottom-left-radius: 4px;
+  font-weight: 300;
+  margin-top: 6px;
 }
 .mail-qa-a > :first-child {
   margin-top: 0;
@@ -1572,14 +1577,16 @@ pre.sender-context-facts-body {
 }
 
 .mail-qa-error {
-  background: rgba(220, 60, 60, 0.12);
-  color: #d33;
+  color: var(--color-danger);
 }
 
+/* Composer: an underline input + a text-link send button — same restraint
+   as .analysis-card-refresh. No fill, no pill, no Telegram blue. */
 .mail-qa-composer {
   display: flex;
-  gap: 8px;
+  gap: 14px;
   align-items: flex-end;
+  margin-top: 16px;
 }
 
 .mail-qa-input {
@@ -1587,37 +1594,44 @@ pre.sender-context-facts-body {
   resize: none;
   font: inherit;
   font-size: 14px;
-  line-height: 1.4;
-  padding: 9px 12px;
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
-  background: var(--surface-2, rgba(127, 127, 127, 0.08));
+  line-height: 1.5;
+  padding: 6px 0;
+  border: none;
+  border-bottom: 1px solid var(--hairline-strong);
+  border-radius: 0;
+  background: none;
   color: var(--tg-text);
   max-height: 120px;
   overflow-y: auto;
 }
+.mail-qa-input::placeholder {
+  color: var(--tg-hint);
+}
 .mail-qa-input:focus {
   outline: none;
-  border-color: var(--tg-button, #2ea6ff);
+  border-bottom-color: var(--tg-text);
 }
 
 .mail-qa-send {
   flex-shrink: 0;
-  padding: 9px 16px;
-  font-size: 14px;
-  font-weight: 500;
-  background: var(--tg-button, #2ea6ff);
-  color: var(--tg-button-text, #fff);
+  align-self: flex-end;
+  padding: 6px 0;
+  font-size: 13px;
+  background: none;
+  color: var(--tg-hint);
   border: none;
-  border-radius: 12px;
+  border-radius: 0;
+  text-decoration: underline;
+  text-decoration-color: var(--hairline-strong);
+  text-underline-offset: 3px;
   cursor: pointer;
-  transition: opacity 160ms ease;
+  transition: color 160ms ease;
 }
 .mail-qa-send:hover {
-  opacity: 0.85;
+  color: var(--tg-text);
 }
 .mail-qa-send:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
