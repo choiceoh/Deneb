@@ -23,7 +23,6 @@ import {
   invalidate,
   isHidden,
   prefetchMessage,
-  prefetchSenderContext,
 } from '../gmail_prefetch';
 import { isCurrentHash, navigate } from '../router';
 import { confirmAction } from '../dialog';
@@ -202,17 +201,15 @@ function buildRow(row: GmailMessageRow, selection: SelectionState): HTMLElement 
       enterSelectionMode(selection);
       toggleSelected(selection, row, wrap, true);
     }, longPressMs);
-    // Fire the detail + sender-context RPCs the moment the finger
-    // touches the row. Wrapped in try/catch defensively: a thrown
-    // error here would otherwise interrupt the pointerdown listener
-    // and leave the press timer set, which can manifest as "tapping
-    // a mail does nothing". Both prefetch helpers are designed to
-    // never throw synchronously, but the wrapper makes that contract
-    // unbreakable.
+    // Fire the detail RPC the moment the finger touches the row.
+    // Wrapped in try/catch defensively: a thrown error here would
+    // otherwise interrupt the pointerdown listener and leave the press
+    // timer set, which can manifest as "tapping a mail does nothing".
+    // prefetchMessage is designed never to throw synchronously, but the
+    // wrapper makes that contract unbreakable.
     if (!selection.selecting) {
       try {
         prefetchMessage(selection.initData, row.id);
-        prefetchSenderContext(selection.initData, row.from);
       } catch (err) {
         console.warn('mail row prefetch failed', err);
       }
