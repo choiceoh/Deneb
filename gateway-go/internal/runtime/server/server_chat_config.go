@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
@@ -71,10 +72,28 @@ func (s *Server) initGmailPoll() {
 	// are delivered verbatim AND mirrored into the main session
 	// transcript — follow-ups ("방금 그 메일 답장 초안 써줘") answer in a
 	// session that knows what arrived.
-	// Home sentinel (resolved at send time) so summaries follow the active
-	// home; previously gated on the static telegram.chatID, which is unset in
-	// forum deployments → notifier nil → every summary silently dropped.
-	if n := s.proactiveRelay.notifierForSession(homeSessionKey); n != nil {
+	//
+	// Default target is the active home (homeSessionKey, resolved at send
+	// time so it follows /use-forum migrations); previously gated on the
+	// static telegram.chatID, which is unset in forum deployments → notifier
+	// nil → every summary silently dropped. An explicit gmailPoll.deliverTo
+	// overrides it — e.g. "-1003946703971:thread:5" to route summaries to a
+	// specific topic instead of the home's General. A non-General topic's
+	// thread ID changes if the topic is recreated, so an explicit :thread:
+	// target can go stale; the home default is restructure-proof. An
+	// unparseable deliverTo falls back to home rather than dropping summaries.
+	notifyKey := homeSessionKey
+	if to := strings.TrimSpace(pollCfg.DeliverTo); to != "" {
+		chatPart, _ := splitTelegramTarget(to)
+		if _, err := telegram.ParseChatID(chatPart); err != nil {
+			s.logger.Warn("gmailpoll: invalid deliverTo, using active home instead",
+				"deliverTo", to, "error", err)
+		} else {
+			notifyKey = "telegram:" + to
+			s.logger.Info("gmailpoll: proactive target overridden via config", "deliverTo", to)
+		}
+	}
+	if n := s.proactiveRelay.notifierForSession(notifyKey); n != nil {
 		s.gmailPollSvc.SetNotifier(n)
 	}
 
