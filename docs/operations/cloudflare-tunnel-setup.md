@@ -253,6 +253,28 @@ Set this in `~/.config/systemd/user/deneb-gateway.service.d/override.conf`
     is not registered yet — re-run the previous step.
   </Step>
 
+  <Step title="Enable the Main Mini App (required for /app)">
+    The previous steps power the **menu button** (the paperclip-adjacent
+    label that opens the app in a private chat). The `/app` slash command
+    opens the app from a group or forum topic instead, and Telegram only
+    allows that through a `https://t.me/<bot>?startapp=...` link — which
+    resolves to your app **only when a Main Mini App is configured**.
+    Without it the link just opens the bot chat, so `/app` appears to do
+    nothing.
+
+    In [@BotFather](https://t.me/BotFather): pick your bot, then
+    **Bot Settings -> Configure Mini App -> Enable Mini App**, and set its
+    URL to the same value as `webAppURL` (`https://miniapp.example.com/app/`).
+    BotFather confirms with "Success".
+
+    <Note>
+      `web_app` inline-keyboard buttons are not an alternative here: the Bot
+      API restricts them to private chats, so they cannot launch the app
+      from the group topics `/app` targets. The Main Mini App link is the
+      only path that works everywhere.
+    </Note>
+  </Step>
+
   <Step title="Verify end-to-end">
     From any internet-connected machine:
 
