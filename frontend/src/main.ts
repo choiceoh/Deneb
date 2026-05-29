@@ -537,7 +537,16 @@ function boot(): void {
         navigate({ name: 'inbox' });
         return;
       case 'wikiPage':
-        navigate({ name: 'search' });
+        // Wiki pages are reached from many parents — mail detail, a
+        // category page, a person card, search results, or another wiki
+        // page via a related-page chip. A hardcoded parent (this used to
+        // force 'search') was right for exactly one of those entry points
+        // and wrong for the rest. Pop the real history entry so back
+        // returns to wherever the user actually came from, matching the
+        // wikiNew case below. The app always boots at home (the startapp
+        // launch sets no hash), so a wiki page always has an in-app screen
+        // behind it — history.back() never escapes the Mini App.
+        history.back();
         return;
       case 'sessionTranscript':
         navigate({ name: 'sessions' });
