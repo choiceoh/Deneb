@@ -106,7 +106,7 @@ func TestNewRegistryWithOptions_PerRoleAndCatalog(t *testing.T) {
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		MainModel:        "zai/main-model",
 		LightweightModel: "google/gemini-3.5-flash", // catalog provider
-		FallbackModel:    "openrouter/some-model",    // built-in switch provider
+		FallbackModel:    "openrouter/some-model",   // built-in switch provider
 		Providers: map[string]ProviderResolved{
 			"google": {BaseURL: googleURL, APIKey: "gkey", APIMode: "openai"},
 		},
