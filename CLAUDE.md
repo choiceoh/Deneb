@@ -71,21 +71,22 @@
 - **업무분석가 모드 (반응형·깊이)**: 메일/문서/관계/자금 컨텍스트 합성, 리스크 플래그, 의사결정 근거 제공.
 - **업무비서 모드 (능동형·간결)**: 일정·미팅 준비·캡처(녹음/OCR/카톡 페이스트)·임박 알림.
 - **통합 원칙**: "왜 지금 중요한가(분석)"와 "언제까지 처리해야 하나(비서)"가 한 응답에서 같이 나와야 의사결정 보조가 된다.
-- **UI 분리 금지**: 미니앱·텔레그램 모두 "분석 탭 / 비서 탭"으로 가르지 말 것. 데이터 레이어·화면·페르소나 모두 통합 유지.
+- **UI 분리 금지**: 미니앱·텔레그램 모두 "분석 탭 / 비서 탭"으로 가르지 말 것. 데이터 레이어·화면·페르소나 모두 통합 유지. (이는 *페르소나* 분리 금지이지 기기별 반응형 레이아웃 금지가 아니다 — 미니앱의 PC/모바일 레이아웃 차이는 허용·권장.)
 - **개입 기준**: 능동적이되 침해적이지 않게. 필요한 순간에만 끼어든다 (over-notification 금지).
 
 ### Deployment Environment
 
 - **Single operator, single user.** No multi-tenant, multi-user, or team deployment. Ignore user isolation, permission separation, multi-user auth.
 - **Hardware:** NVIDIA DGX Spark (local server). All services run on this single machine.
-- **Sole I/O surface:** Telegram on Android (Samsung Galaxy S25). Optimize exclusively for this path.
+- **Primary I/O surface:** Telegram on Android (Samsung Galaxy S25) — the daily driver; optimize this path first.
+- **PC as a first-class surface:** the Telegram Mini App also targets Telegram Desktop / web. On desktop it presents a PC-native layout (persistent sidebar + master-detail panes); on mobile it stays the single-column touch UI. One responsive codebase, not a separate app — see `frontend/src/desktop_shell.ts`.
 
 ### Design Principles
 
 - **High completeness and cohesion.** Every feature must be fully finished and tightly integrated.
 - **Opinionated defaults over user configuration.** Apple-like philosophy: fewer moving parts, not more options.
 - **Narrow scope, deep quality.** Fewer things well > more things shallowly.
-- **Depth over breadth.** Optimize the narrow supported surface (Telegram + DGX Spark + single user).
+- **Depth over breadth.** Optimize the narrow supported surface (Telegram + DGX Spark + single user). "Narrow" means one user + one backend — not one device class: Android (touch) and Telegram Desktop (mouse/keyboard) are both first-class via one responsive Mini App.
 
 ### AI Agent Guidelines
 
@@ -93,10 +94,11 @@
 - Break complex logic into small, well-named functions.
 - Prefer simple sequential processing over concurrency/race-condition handling.
 
-### Telegram-Only Optimization
+### Telegram Optimization (Android-first, PC first-class)
 
 - Optimize for Telegram Bot API constraints: 4096-char message limit, MarkdownV2 parse mode, inline keyboards.
 - Respect Telegram file size limits (50 MB for media uploads).
+- **Mini App is responsive, not device-forked:** Android renders the single-column touch UI; Telegram Desktop / web renders a PC-native shell (sidebar + master-detail). Gate every desktop rule under `body.tg-desktop` + the `#app.desktop-shell` class (and width) so the mobile path stays byte-identical. This is orthogonal to the "UI 분리 금지" persona rule — that forbids splitting 분석/비서 *personas* into tabs, not adapting layout to screen size.
 
 ### Korean Language First
 

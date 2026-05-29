@@ -132,6 +132,9 @@ function buildDayHeader(label: string): HTMLElement {
 function buildEventRow(ev: CalendarEventSummary): HTMLElement {
   const el = document.createElement('button');
   el.className = 'event-row';
+  // Tag the row with its event id so the desktop master-detail shell can
+  // mark it selected while its detail pane is open (inert on mobile).
+  el.dataset.eventId = ev.id;
 
   const top = document.createElement('div');
   top.className = 'event-row-top';

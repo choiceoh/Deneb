@@ -12,10 +12,13 @@
 // rowsContainer cleanly orphans any in-flight pagination work.
 //
 // Stale-render guards: every async handler that mutates the DOM checks
-// both isCurrentHash (route didn't change) AND container.isConnected
-// (the specific container it captured is still in the document tree).
-// The hash check alone is insufficient because an inbox refresh leaves
-// the hash identical but replaces rowsContainer.
+// container/wrap .isConnected — "is the node I captured still in the
+// document tree?". That single signal is the real staleness authority: on
+// mobile every navigation/refresh detaches the old container (the next
+// view does root.innerHTML=''), and on the desktop master-detail shell the
+// list pane *persists* across detail navigations (the hash changes while
+// the pane stays mounted), so an isCurrentHash check would wrongly abort
+// load-more/bulk there. Connectivity is correct for both layouts.
 
 import { archive, listRecent, markRead, trash, type GmailMessageRow } from '../gmail';
 import {
@@ -25,7 +28,7 @@ import {
   prefetchMessage,
   prefetchSenderContext,
 } from '../gmail_prefetch';
-import { isCurrentHash, navigate } from '../router';
+import { navigate } from '../router';
 import { confirmAction } from '../dialog';
 import { errorMessage, formatRpcError, relativeTime, shortFrom } from '../format';
 import { setPullToRefreshHandler } from '../pull_to_refresh';
@@ -46,7 +49,6 @@ interface SelectionState {
   root: HTMLElement;
   rowsContainer: HTMLElement;
   initData: string;
-  expectedHash: string;
   selected: Map<string, SelectedMail>;
   selecting: boolean;
   busy: boolean;
@@ -54,7 +56,6 @@ interface SelectionState {
 }
 
 export async function renderList(root: HTMLElement, initData: string): Promise<void> {
-  const expectedHash = location.hash;
   root.innerHTML = '';
   const header = buildHeader();
   root.appendChild(header);
@@ -66,7 +67,7 @@ export async function renderList(root: HTMLElement, initData: string): Promise<v
   const rowsContainer = document.createElement('div');
   rowsContainer.className = 'email-list';
   root.appendChild(rowsContainer);
-  const selection = createSelectionState(root, rowsContainer, initData, expectedHash);
+  const selection = createSelectionState(root, rowsContainer, initData);
 
   // Skeleton placeholders mimic the .email-row geometry so the page
   // doesn't pop blank → populated. buildLoadingNode is still around
@@ -76,7 +77,7 @@ export async function renderList(root: HTMLElement, initData: string): Promise<v
 
   try {
     const result = await listRecent(initData);
-    if (!isCurrentHash(expectedHash)) return;
+    if (!rowsContainer.isConnected) return;
     status.remove();
     if (result.messages.length === 0) {
       const empty = document.createElement('div');
@@ -97,7 +98,7 @@ export async function renderList(root: HTMLElement, initData: string): Promise<v
       mountLoadMore(rowsContainer, selection, result.nextPageToken);
     }
   } catch (err) {
-    if (!isCurrentHash(expectedHash)) return;
+    if (!rowsContainer.isConnected) return;
     status.remove();
     rowsContainer.appendChild(
       buildErrorBanner(`메일 목록 로드 실패: ${formatRpcError(err)}`),
@@ -115,13 +116,11 @@ function createSelectionState(
   root: HTMLElement,
   rowsContainer: HTMLElement,
   initData: string,
-  expectedHash: string,
 ): SelectionState {
   return {
     root,
     rowsContainer,
     initData,
-    expectedHash,
     selected: new Map(),
     selecting: false,
     busy: false,
@@ -136,6 +135,10 @@ function buildRow(row: GmailMessageRow, selection: SelectionState): HTMLElement 
 
   const wrap = document.createElement('div');
   wrap.className = 'email-row-wrap';
+  // Tag the wrap with its message id so the desktop master-detail shell
+  // can mark this row selected while its detail pane is open. Inert on
+  // mobile (a data-* attribute changes nothing about touch rendering).
+  wrap.dataset.messageId = row.id;
   if (row.isUnread) wrap.classList.add('email-row-unread');
 
   const main = document.createElement('div');
@@ -392,7 +395,7 @@ async function runBulkAction(
   const failed: string[] = [];
   try {
     for (const item of items) {
-      if (!isCurrentHash(selection.expectedHash) || !item.wrap.isConnected) continue;
+      if (!item.wrap.isConnected) continue;
       try {
         await applyBulkAction(selection.initData, action, item.row.id);
         succeeded.push(item);
@@ -404,7 +407,7 @@ async function runBulkAction(
     selection.busy = false;
   }
 
-  if (!isCurrentHash(selection.expectedHash) || !selection.rowsContainer.isConnected) return;
+  if (!selection.rowsContainer.isConnected) return;
 
   for (const item of succeeded) {
     if (action === 'read') {
@@ -472,8 +475,9 @@ function bulkActionLabel(action: BulkAction): string {
 // mountLoadMore appends a "더 보기" button below the rendered rows; the
 // button replaces itself with a loading state on click, fetches the next
 // page, appends its rows, and (if more pages remain) re-mounts itself
-// with the new token. expectedHash threads the route token through so a
-// stale fetch from a stale page doesn't inject into the wrong view.
+// with the new token. Staleness is gated on container.isConnected, so a
+// fetch that resolves after the list was torn down (mobile navigation, or
+// a family switch in the desktop shell) won't inject into a detached tree.
 function mountLoadMore(
   container: HTMLElement,
   selection: SelectionState,
@@ -489,11 +493,11 @@ function mountLoadMore(
     btn.textContent = '불러오는 중…';
     try {
       const result = await listRecent(selection.initData, { pageToken });
-      // Hash AND container-attachment check: an inbox → detail →
-      // inbox round-trip leaves the hash identical but replaces
-      // rowsContainer, so isCurrentHash alone would still pass and
-      // we'd silently append rows into an orphaned subtree.
-      if (!isCurrentHash(selection.expectedHash) || !container.isConnected) return;
+      // Container-attachment check: a refresh or navigation detaches the
+      // captured rowsContainer, so appending here would inject rows into an
+      // orphaned subtree. We deliberately do NOT also gate on the hash —
+      // the desktop master pane persists across detail hash changes.
+      if (!container.isConnected) return;
       btn.remove();
       for (const row of result.messages) {
         if (isHidden(row.id)) continue;
@@ -503,7 +507,7 @@ function mountLoadMore(
         mountLoadMore(container, selection, result.nextPageToken);
       }
     } catch (err) {
-      if (!isCurrentHash(selection.expectedHash) || !container.isConnected) return;
+      if (!container.isConnected) return;
       btn.disabled = false;
       btn.textContent = originalLabel ?? '더 보기';
       showFlash(`load more failed: ${errorMessage(err)}`, 'error');

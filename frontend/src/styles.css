@@ -3620,3 +3620,206 @@ button.person-msg-row-unread {
     text-decoration-thickness: 2px;
   }
 }
+
+/* ============================================================
+   PC-native desktop shell (sidebar + master-detail)
+   ============================================================
+   A true desktop layout for Telegram Desktop / web: a persistent
+   left sidebar (the home menu, made permanent) + a content region
+   that, when wide enough, splits into master-detail panes for the
+   mail / calendar / topics families.
+
+   GATING: every rule below is scoped under `#app.desktop-shell`. That
+   class is added by JS (desktop_shell.ts) ONLY on a tg-desktop platform
+   at >= 720px, and removed (teardownDesktopShell) the moment the window
+   drops below that. So when the class is absent — every phone, and any
+   narrow desktop window — NONE of these rules apply and the mobile
+   single-column layout above is byte-for-byte untouched. The two-pane
+   split is further gated on the `.two-pane` class (added only at
+   >= 1000px). No mobile selector is modified anywhere in this section. */
+
+body.tg-desktop #app.desktop-shell {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  max-width: 1280px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 0;
+}
+
+/* --- Sidebar --- */
+
+body.tg-desktop #app.desktop-shell .app-sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 28px 16px;
+  border-right: 1px solid var(--hairline);
+  overflow-y: auto;
+}
+
+body.tg-desktop #app.desktop-shell .app-sidebar-brand {
+  appearance: none;
+  background: none;
+  border: none;
+  /* Ultralight lowercase wordmark — same Zune-style cadence as the hero
+     type elsewhere in the app. */
+  font-family: inherit;
+  font-size: 26px;
+  font-weight: 200;
+  letter-spacing: 0.01em;
+  color: var(--tg-text);
+  text-align: left;
+  padding: 4px 10px 0;
+  margin-bottom: 28px;
+  cursor: pointer;
+}
+
+body.tg-desktop #app.desktop-shell .app-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+body.tg-desktop #app.desktop-shell .app-sidebar-item {
+  appearance: none;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 17px;
+  text-align: left;
+  color: var(--tg-hint);
+  padding: 9px 12px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+body.tg-desktop #app.desktop-shell .app-sidebar-item:hover {
+  color: var(--tg-text);
+  background: color-mix(in srgb, var(--tg-text) 5%, transparent);
+}
+
+body.tg-desktop #app.desktop-shell .app-sidebar-item.is-active {
+  color: var(--tg-text);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--tg-text) 9%, transparent);
+}
+
+body.tg-desktop #app.desktop-shell .app-sidebar-item:focus-visible,
+body.tg-desktop #app.desktop-shell .app-sidebar-brand:focus-visible {
+  outline: 2px solid var(--tg-link);
+  outline-offset: 2px;
+  border-radius: 9px;
+}
+
+/* --- Content region --- */
+
+body.tg-desktop #app.desktop-shell .app-content {
+  min-width: 0;
+  padding: 32px 36px 56px;
+}
+
+/* Two-pane master-detail (>= 1000px). Each pane scrolls independently so
+   the list keeps its place while the detail scrolls. */
+body.tg-desktop #app.desktop-shell .app-content.two-pane {
+  display: grid;
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  height: 100vh;
+  padding: 0;
+}
+
+body.tg-desktop #app.desktop-shell .master-pane {
+  min-width: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 24px 20px 40px;
+  border-right: 1px solid var(--hairline);
+}
+
+body.tg-desktop #app.desktop-shell .detail-pane {
+  min-width: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 28px 32px 56px;
+}
+
+/* Empty detail pane (no leaf selected). */
+body.tg-desktop #app.desktop-shell .detail-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 240px;
+  color: var(--tg-hint);
+  font-size: 15px;
+}
+
+/* --- Typography: bring the hero sizes (set by the older desktop block
+   above for a 720px single column) back to app-like sizes that fit the
+   shell's narrower panes. --- */
+
+body.tg-desktop #app.desktop-shell .view-title {
+  font-size: 30px;
+}
+
+body.tg-desktop #app.desktop-shell .master-pane .view-title {
+  font-size: 22px;
+}
+
+body.tg-desktop #app.desktop-shell .email-subject {
+  font-size: 22px;
+}
+
+/* --- Master-list rows: mouse affordances + selected highlight. The row
+   element differs per family (mail wraps the clickable; calendar/topics
+   are the button themselves), so the selectors enumerate all three. --- */
+
+body.tg-desktop #app.desktop-shell .master-pane .email-row,
+body.tg-desktop #app.desktop-shell .master-pane .event-row,
+body.tg-desktop #app.desktop-shell .master-pane .session-row {
+  cursor: pointer;
+}
+
+body.tg-desktop #app.desktop-shell .master-pane .email-row:hover,
+body.tg-desktop #app.desktop-shell .master-pane .event-row:hover,
+body.tg-desktop #app.desktop-shell .master-pane .session-row:hover {
+  background: color-mix(in srgb, var(--tg-text) 4%, transparent);
+  border-radius: 9px;
+}
+
+body.tg-desktop #app.desktop-shell .master-pane .email-row-wrap.is-selected .email-row,
+body.tg-desktop #app.desktop-shell .master-pane .event-row.is-selected,
+body.tg-desktop #app.desktop-shell .master-pane .session-row.is-selected {
+  background: color-mix(in srgb, var(--tg-text) 9%, transparent);
+  border-radius: 9px;
+}
+
+/* --- Desktop home: the sidebar already carries the menu, so home shows a
+   calm welcome rather than duplicating the big mobile type-menu. --- */
+
+body.tg-desktop #app.desktop-shell .desktop-home {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 10px;
+}
+
+body.tg-desktop #app.desktop-shell .desktop-home-brand {
+  font-size: 64px;
+  font-weight: 200;
+  letter-spacing: 0.01em;
+  color: var(--tg-text);
+}
+
+body.tg-desktop #app.desktop-shell .desktop-home-hint {
+  font-size: 16px;
+  color: var(--tg-hint);
+}
