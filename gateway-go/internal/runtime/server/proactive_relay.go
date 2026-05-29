@@ -38,6 +38,13 @@ type proactiveRelayDeps struct {
 	telegramPlug    *telegram.Plugin
 	transcriptStore toolctx.TranscriptStore
 	logger          *slog.Logger
+	// activeHome resolves the homeSessionKey sentinel ("telegram:home") to the
+	// live active-home chat ID — ActiveHome (set by /use-forum) first, else the
+	// static telegram.chatID. Returns 0 when neither is available. Read lazily
+	// at send time so a mid-session migration is followed without re-wiring the
+	// proactive notifiers. May be nil (older wiring / tests); the sentinel then
+	// stays unresolved and the relay no-ops.
+	activeHome func() int64
 }
 
 // relay delivers content to sessionKey's channel and records it in the
@@ -46,6 +53,10 @@ type proactiveRelayDeps struct {
 // uses that signal to fall back to an alternate delivery path.
 func (d proactiveRelayDeps) relay(ctx context.Context, sessionKey, content string) (bool, error) {
 	if strings.TrimSpace(content) == "" {
+		return false, nil
+	}
+	sessionKey, ok := d.resolveHome(sessionKey)
+	if !ok {
 		return false, nil
 	}
 	channel, target, ok := splitSessionKey(sessionKey)
@@ -108,6 +119,31 @@ func splitTelegramTarget(target string) (chatPart, threadPart string) {
 		return target[:idx], target[idx+len(":thread:"):]
 	}
 	return target, ""
+}
+
+// homeSessionKey is the sentinel proactive target that resolves to the live
+// active home at send time. Proactive senders (gmail poll, dreaming) wire their
+// notifier with this constant so delivery follows /use-forum migrations and
+// topic restructures without re-wiring or a gateway restart.
+const homeSessionKey = "telegram:home"
+
+// resolveHome rewrites the homeSessionKey sentinel to the concrete active-home
+// session key (e.g. "telegram:-1003946703971"). A bare home chat (no
+// ":thread:") lands in the supergroup's General topic, which Telegram forbids
+// deleting — the most restructure-proof proactive target. Non-sentinel keys
+// pass through unchanged (ok=true). Returns ok=false only when the sentinel
+// can't be resolved (no active home and no static chatID), so the caller
+// no-ops instead of attempting an invalid send.
+func (d proactiveRelayDeps) resolveHome(sessionKey string) (string, bool) {
+	if sessionKey != homeSessionKey {
+		return sessionKey, true
+	}
+	if d.activeHome != nil {
+		if id := d.activeHome(); id != 0 {
+			return "telegram:" + strconv.FormatInt(id, 10), true
+		}
+	}
+	return "", false
 }
 
 // relayNotifier adapts proactiveRelayDeps to the Notifier interface used
