@@ -19,7 +19,8 @@ import {
 import {
   fetchMessage,
   fetchSenderContext,
-  invalidate,
+  hideMessage,
+  unhideMessage,
 } from '../gmail_prefetch';
 import { isCurrentHash, navigate } from '../router';
 import { errorMessage, formatRpcError, humanSize, relativeTime } from '../format';
@@ -159,16 +160,18 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
   analyzeBtn.dataset.role = 'analyze-btn';
   actions.appendChild(analyzeBtn);
 
-  // Read = optimistic. Flip the UI immediately so the operator gets
-  // the 'this is handled' read. RPC fires in the background; on
-  // failure we roll the button back + flash an error + warn haptic.
+  // Read = optimistic. Disabling the button immediately is the "this is
+  // handled" cue; the RPC fires in the background. The success toast (and
+  // its success haptic) waits for the RPC to *fulfill* — firing it up front
+  // raced the failure path, so a rejected mark_read could stack a green
+  // "read" pill and a red "read failed" pill at once. Now exactly one of
+  // the two shows. On failure we also roll the button back.
   const readBtn = makeAction('read', 'secondary', () => {
     if (readBtn.disabled) return;
     triggerImpactHaptic('medium');
     readBtn.disabled = true;
-    showFlash('read', 'success');
     void markRead(initData, msg.id).then(
-      () => undefined,
+      () => showFlash('read', 'success'),
       (err) => {
         readBtn.disabled = false;
         showFlash(`read failed: ${errorMessage(err)}`, 'error');
@@ -177,20 +180,19 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
   });
   actions.appendChild(readBtn);
 
-  // Archive = optimistic + immediate navigate. The cached summary is
-  // dropped before navigation so the inbox doesn't repaint this row;
-  // the RPC continues in the background. If it fails the operator
-  // discovers it on the next inbox refresh — same cost as a flaky
-  // network on the foreground path.
+  // Archive = optimistic + immediate navigate. hideMessage() both drops
+  // the cached summary and marks the id hidden, so the inbox re-render
+  // skips this row even though listRecent() can still return it until the
+  // archive RPC lands server-side. The RPC continues in the background; on
+  // failure we un-hide the id (the row returns on the next refresh) and
+  // toast the reason. showFlash also fires notify-err itself.
   const archBtn = makeAction('archive', 'secondary', () => {
     if (archBtn.disabled) return;
     triggerImpactHaptic('medium');
     archBtn.disabled = true;
-    invalidate(msg.id);
+    hideMessage(msg.id);
     void archive(initData, msg.id).catch((err) => {
-      // Errors surface as a toast in the inbox — the row will
-      // reappear on the next refresh, and the toast tells the
-      // operator why. showFlash also fires notify-err itself.
+      unhideMessage(msg.id);
       showFlash(`archive failed: ${errorMessage(err)}`, 'error');
     });
     navigate({ name: 'inbox' });
@@ -213,8 +215,9 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
         return;
       }
       triggerImpactHaptic('heavy');
-      invalidate(msg.id);
+      hideMessage(msg.id);
       void trash(initData, msg.id).catch((err) => {
+        unhideMessage(msg.id);
         showFlash(`trash failed: ${errorMessage(err)}`, 'error');
       });
       navigate({ name: 'inbox' });

@@ -95,10 +95,13 @@ function applySafeArea(tg: WebApp): void {
   };
   const ext = tg as unknown as WebAppExt;
   const write = (): void => {
-    const top =
-      ext.contentSafeAreaInset?.top ??
-      ext.safeAreaInset?.top ??
-      0;
+    const top = ext.contentSafeAreaInset?.top ?? ext.safeAreaInset?.top;
+    // When neither inset API is exposed (older Telegram WebViews), leave
+    // --tg-safe-top *unset* so the styles.css `env(safe-area-inset-top)`
+    // fallback can take over. Writing an explicit 0px here would win over
+    // that fallback and clip notch content in fullscreen — the exact case
+    // the env() fallback exists to cover.
+    if (typeof top !== 'number') return;
     document.documentElement.style.setProperty('--tg-safe-top', `${top}px`);
   };
   write();
@@ -488,7 +491,23 @@ function boot(): void {
   // alongside the rest of Telegram. Outside fullscreen the safe-area
   // inset is 0 and the base #app padding takes over (see applySafeArea).
   if (!isDesktop) {
-    (tg as unknown as { requestFullscreen?: () => void }).requestFullscreen?.();
+    // requestFullscreen is Bot API 8.0+. On older mobile clients the SDK
+    // can still expose the method but throws WebAppMethodUnsupported when
+    // it's called — and this runs synchronously inside boot() before the
+    // router mounts, so an unguarded throw would blank the Mini App for
+    // users on 7.x clients that previously worked. Gate on the reported
+    // version and still wrap in try/catch as a belt-and-suspenders guard.
+    const fs = tg as unknown as {
+      requestFullscreen?: () => void;
+      isVersionAtLeast?: (version: string) => boolean;
+    };
+    if (fs.isVersionAtLeast?.('8.0')) {
+      try {
+        fs.requestFullscreen?.();
+      } catch {
+        // Client claimed >= 8.0 but still rejected fullscreen — keep booting.
+      }
+    }
   }
 
   // Bot API 7.7+. Without this, dragging down inside the Mini App also
