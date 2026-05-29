@@ -9,11 +9,13 @@ import {
   analysisCached,
   analyzeMessage,
   archive,
+  askMail,
   markRead,
   trash,
   type CachedAnalysis,
   type GmailMessageDetail,
   type ProjectRef,
+  type QATurn,
   type SenderContext,
 } from '../gmail';
 import {
@@ -303,6 +305,7 @@ async function runAnalysis(
         void runAnalysis(root, initData, msg, button, true);
       }),
     );
+    mountMailQA(root, initData, msg.id);
     button.disabled = false;
     button.textContent = originalLabel || 'analyze';
   } catch (err) {
@@ -496,6 +499,7 @@ function showCachedAnalysis(
       },
     ),
   );
+  mountMailQA(root, initData, msg.id);
 }
 
 // renderRelatedProjects fills the project slot with chips linking to the
@@ -534,6 +538,116 @@ function renderRelatedProjects(root: HTMLElement, projects?: ProjectRef[]): void
   }
   card.appendChild(wrap);
   slot.replaceWith(card);
+}
+
+// mountMailQA installs the inline Q&A section just below the analysis card: a
+// composer (textarea + send) plus a running log of question/answer bubbles.
+// The Q&A is grounded in the email + its analysis (assembled server-side) and
+// kept ephemeral — `history` lives only in this closure and rides along on
+// each askMail call so the backend stays stateless. Re-mount is a no-op.
+function mountMailQA(root: HTMLElement, initData: string, messageId: string): void {
+  const analysisSlot = root.querySelector('[data-role="analysis-slot"]');
+  if (!analysisSlot) return;
+  if (root.querySelector('[data-role="qa-slot"]')) return; // already mounted
+
+  const slot = document.createElement('div');
+  slot.dataset.role = 'qa-slot';
+  slot.className = 'card mail-qa';
+  analysisSlot.after(slot);
+
+  const header = document.createElement('div');
+  header.className = 'mail-qa-header';
+  header.textContent = '이 메일에 대해 질문';
+  slot.appendChild(header);
+
+  const log = document.createElement('div');
+  log.className = 'mail-qa-log';
+  slot.appendChild(log);
+
+  // Q&A history is closure-local: it never leaves this mounted view, and is
+  // re-sent with each call so the backend holds no conversation state.
+  const history: QATurn[] = [];
+
+  const form = document.createElement('form');
+  form.className = 'mail-qa-composer';
+  const input = document.createElement('textarea');
+  input.className = 'mail-qa-input';
+  input.rows = 1;
+  input.placeholder = '예: 가장 급한 건 뭐야? 답장 초안 잡아줘';
+  input.setAttribute('enterkeyhint', 'send');
+  const sendBtn = document.createElement('button');
+  sendBtn.type = 'submit';
+  sendBtn.className = 'mail-qa-send';
+  sendBtn.textContent = '질문';
+  form.appendChild(input);
+  form.appendChild(sendBtn);
+  slot.appendChild(form);
+
+  // Auto-grow the textarea up to ~5 lines.
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
+  });
+
+  // Enter sends; Shift+Enter newlines. isComposing guards Korean IME so a
+  // composition-commit Enter doesn't fire a premature send.
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter' || ev.isComposing || ev.shiftKey) return;
+    ev.preventDefault();
+    form.requestSubmit();
+  });
+
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    if (sendBtn.disabled) return;
+    const question = input.value.trim();
+    if (!question) return;
+    // Route token: if the operator navigates away before the answer lands,
+    // don't paint into a stale view.
+    const expectedHash = location.hash;
+
+    appendQABubble(log, 'q', question);
+    input.value = '';
+    input.style.height = 'auto';
+    sendBtn.disabled = true;
+    input.disabled = true;
+
+    const pending = appendQABubble(log, 'a', '답변 생성 중…');
+    pending.classList.add('mail-qa-pending');
+
+    void askMail(initData, messageId, question, history).then(
+      (res) => {
+        if (!isCurrentHash(expectedHash)) return;
+        pending.classList.remove('mail-qa-pending');
+        pending.innerHTML = renderMarkdown(res.answer);
+        history.push({ q: question, a: res.answer });
+        sendBtn.disabled = false;
+        input.disabled = false;
+        input.focus();
+      },
+      (err) => {
+        if (!isCurrentHash(expectedHash)) return;
+        pending.classList.remove('mail-qa-pending');
+        pending.classList.add('mail-qa-error');
+        pending.textContent = `질문 실패: ${formatRpcError(err)}`;
+        sendBtn.disabled = false;
+        input.disabled = false;
+      },
+    );
+  });
+}
+
+// appendQABubble adds a question (right) or answer (left) bubble to the log
+// and returns it. Answers render markdown; questions stay plain text.
+function appendQABubble(log: HTMLElement, kind: 'q' | 'a', text: string): HTMLElement {
+  const bubble = document.createElement('div');
+  bubble.className =
+    kind === 'q' ? 'mail-qa-bubble mail-qa-q' : 'mail-qa-bubble mail-qa-a';
+  if (kind === 'a') bubble.innerHTML = renderMarkdown(text);
+  else bubble.textContent = text;
+  log.appendChild(bubble);
+  bubble.scrollIntoView({ block: 'nearest' });
+  return bubble;
 }
 
 function makeAction(

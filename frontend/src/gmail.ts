@@ -161,3 +161,29 @@ export interface CachedAnalysis {
 export function analysisCached(initData: string, id: string): Promise<CachedAnalysis> {
   return call<CachedAnalysis>('miniapp.gmail.analysis_cached', { id }, initData);
 }
+
+// --- Follow-up Q&A (miniapp.gmail.ask) ---
+
+// QATurn is one prior question/answer turn. The client accumulates these and
+// resends them so the backend stays stateless and the Q&A never touches the
+// main session — see backend gmail_qa.go.
+export interface QATurn {
+  q: string;
+  a: string;
+}
+
+// askMail asks a follow-up question about an email, grounded in its body +
+// cached analysis + related projects. `history` carries prior turns for
+// multi-turn context. The answer is markdown.
+export function askMail(
+  initData: string,
+  id: string,
+  question: string,
+  history: QATurn[],
+): Promise<{ answer: string }> {
+  return call<{ answer: string }>(
+    'miniapp.gmail.ask',
+    { id, question, history },
+    initData,
+  );
+}

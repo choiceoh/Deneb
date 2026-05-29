@@ -75,6 +75,9 @@ type GmailAnalyzeDeps struct {
 	// WikiStore (optional) enriches related-project paths with their
 	// title/summary for display. nil → chips fall back to the bare path.
 	WikiStore func() (MemorySearcher, error)
+	// Ask runs an ephemeral, isolated LLM Q&A grounded in the mail context
+	// (body + analysis + projects). nil → miniapp.gmail.ask is not registered.
+	Ask func(ctx context.Context, mailContext string, history []QATurn, question string) (string, error)
 }
 
 // GmailAnalyzeMethods returns the miniapp.gmail.analyze handler. Returns
@@ -84,10 +87,16 @@ func GmailAnalyzeMethods(deps GmailAnalyzeDeps) map[string]rpcutil.HandlerFunc {
 	if deps.Client == nil || deps.Pipeline == nil {
 		return nil
 	}
-	return map[string]rpcutil.HandlerFunc{
+	m := map[string]rpcutil.HandlerFunc{
 		"miniapp.gmail.analyze":         gmailAnalyze(deps),
 		"miniapp.gmail.analysis_cached": gmailAnalysisCached(deps),
 	}
+	// Follow-up Q&A is registered only when the chat-backed Ask callback is
+	// wired (late phase, after chatHandler exists).
+	if deps.Ask != nil {
+		m["miniapp.gmail.ask"] = gmailAsk(deps)
+	}
+	return m
 }
 
 func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
