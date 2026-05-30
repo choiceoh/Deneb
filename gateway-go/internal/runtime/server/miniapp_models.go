@@ -192,7 +192,7 @@ func (s *Server) addMiniappCustomModel(_ context.Context, endpoint, model string
 }
 
 func (s *Server) miniappModelSnapshot(ctx context.Context) miniappModelSnapshot {
-	roles := registryRoleEntries(s.modelRegistry)
+	roles := registryRoleEntries(s.modelRegistry, s.currentMiniappModel())
 	providers := appendBuiltinProviders(loadConfiguredProviders())
 	discovered := s.discoverMiniappLocalModels(ctx, providers)
 	probes := s.miniappModelHealthProbes(ctx, providers, discovered)
@@ -210,7 +210,7 @@ func (s *Server) miniappModelSnapshot(ctx context.Context) miniappModelSnapshot 
 }
 
 func (s *Server) miniappModelSections(ctx context.Context) []modelSection {
-	roles := registryRoleEntries(s.modelRegistry)
+	roles := registryRoleEntries(s.modelRegistry, s.currentMiniappModel())
 	providers := appendBuiltinProviders(loadConfiguredProviders())
 	discovered := s.discoverMiniappLocalModels(ctx, providers)
 	for i := range providers {

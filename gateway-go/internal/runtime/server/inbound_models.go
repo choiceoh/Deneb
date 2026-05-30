@@ -275,7 +275,15 @@ func providerEntries(spec providerSpec) []modelEntry {
 }
 
 // registryRoleEntries builds the role-based section (main/lightweight/fallback).
-func registryRoleEntries(reg *modelrole.Registry) []modelEntry {
+//
+// liveMain, when non-empty, is the model currently in effect for the main role:
+// the live chat-handler default after a same-session /model or picker switch.
+// The registry keeps the startup main until restart, so the main row is sourced
+// from liveMain instead — keeping the 역할 section consistent with the current
+// marker (and with roleMiniappModels / currentMiniappModel, which already treat
+// the chat-handler default as the authoritative live main). Without it, the old
+// main lingers as a stale "main: <old>" row until the gateway restarts.
+func registryRoleEntries(reg *modelrole.Registry, liveMain string) []modelEntry {
 	if reg == nil {
 		return nil
 	}
@@ -289,6 +297,18 @@ func registryRoleEntries(reg *modelrole.Registry) []modelEntry {
 	}
 	var entries []modelEntry
 	for _, r := range roles {
+		if r.role == modelrole.RoleMain {
+			if live := strings.TrimSpace(liveMain); live != "" {
+				providerID, _ := modelrole.ParseModelID(live)
+				entries = append(entries, modelEntry{
+					provider: providerID,
+					label:    r.label + ": " + shortModelName(live),
+					fullID:   live,
+					display:  shortModelName(live),
+				})
+				continue
+			}
+		}
 		cfg := reg.Config(r.role)
 		if cfg.Model == "" {
 			continue
@@ -411,7 +431,7 @@ func (p *InboundProcessor) discoverLocalModels(providers []providerSpec) map[str
 
 // quickChangeModels returns the ordered sections for the /models keyboard.
 func (p *InboundProcessor) quickChangeModels() []modelSection {
-	roles := registryRoleEntries(p.server.modelRegistry)
+	roles := registryRoleEntries(p.server.modelRegistry, p.currentModel())
 	providers := appendBuiltinProviders(loadConfiguredProviders())
 	discovered := p.discoverLocalModels(providers)
 	for i := range providers {
