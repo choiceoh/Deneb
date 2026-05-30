@@ -32,7 +32,6 @@ type MemorySearcher interface {
 	SearchDiary(ctx context.Context, query string, limit int) ([]wiki.DiaryHit, error)
 	ReadPage(relPath string) (*wiki.Page, error)
 	WritePage(relPath string, page *wiki.Page) error
-	MergePage(targetPath, sourcePath, mergedBody string, opts wiki.MergeOptions) (wiki.MergeResult, error)
 	Stats() wiki.StoreStats
 	ListPages(category string) ([]string, error)
 	RecentDiaryEntries(limit int) []wiki.DiaryHit
@@ -45,12 +44,15 @@ type MemorySearcher interface {
 type MemoryDeps struct {
 	Store func() (MemorySearcher, error)
 
-	// MergeBodies synthesizes one combined body from two pages (lightweight
-	// LLM). Optional: when nil — or when it errors or returns blank — the
-	// merge falls back to a labeled concatenation, so a missing or
-	// oversubscribed model never blocks the structural merge. Wired by the
-	// server from the lightweight model role (see makeWikiMergeBodies).
-	MergeBodies func(ctx context.Context, targetTitle, targetBody, sourceTitle, sourceBody string) (string, error)
+	// StartMerge launches a project-page merge in the BACKGROUND and returns
+	// immediately. The slow part — synthesizing the combined body with the
+	// lightweight model — runs off the request path with a generous timeout;
+	// when it finishes (or falls back to concatenation, or fails) the user is
+	// notified via Telegram. The handler hands over the two already-read pages
+	// so the synthesizer has the original bodies before the source is deleted.
+	// Wired by the server (see makeWikiMergeStarter); nil in tests / when the
+	// merge worker is unavailable, in which case merge requests get UNAVAILABLE.
+	StartMerge func(targetPath, sourcePath string, target, source *wiki.Page)
 }
 
 const (
@@ -417,27 +419,28 @@ func memoryCreatePage(deps MemoryDeps) rpcutil.HandlerFunc {
 	}
 }
 
-// memoryMergePage folds one wiki page into another: the target survives with a
-// combined body + unioned frontmatter, every page that referenced the source is
-// repointed to the target, and the source is deleted. Body synthesis is
-// delegated to deps.MergeBodies (lightweight LLM); when that's unavailable or
-// fails, the body falls back to a labeled concatenation so the structural merge
-// (links, frontmatter, deletion) still completes losslessly.
+// memoryMergePage kicks off folding one wiki page into another and returns
+// immediately — the merge runs in the BACKGROUND. The slow step is synthesizing
+// the combined body with the lightweight model, so blocking the request on it
+// made the Mini App spin (and time out when the model was slow/down). Instead
+// the handler validates, confirms both pages exist, hands the two pages to
+// deps.StartMerge, and replies "started"; when the background job completes
+// (combined body written, every referencing page repointed, source deleted —
+// or a concatenation fallback if the model is unavailable) the user gets a
+// Telegram completion notice.
 //
 // Drives the Mini App's "두 프로젝트 병합" action (category-page multi-select).
-// Like memoryWritePage this is last-write-wins with no optimistic locking —
-// fine for the single-operator deployment; recoverable from git history.
+// Single-operator, last-write-wins, recoverable from git history.
 func memoryMergePage(deps MemoryDeps) rpcutil.HandlerFunc {
 	type params struct {
 		TargetPath string `json:"targetPath"`
 		SourcePath string `json:"sourcePath"`
 	}
 	type out struct {
-		OK            bool   `json:"ok"`
-		TargetPath    string `json:"targetPath"`
-		MergedTitle   string `json:"mergedTitle,omitempty"`
-		RewriteCount  int    `json:"rewriteCount"`
-		SourceRemoved bool   `json:"sourceRemoved"`
+		OK          bool   `json:"ok"`
+		Started     bool   `json:"started"`
+		TargetPath  string `json:"targetPath"`
+		MergedTitle string `json:"mergedTitle,omitempty"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
@@ -468,13 +471,20 @@ func memoryMergePage(deps MemoryDeps) rpcutil.HandlerFunc {
 			return rpcerr.InvalidRequest("cannot merge a page into itself").Response(req.ID)
 		}
 
+		if deps.StartMerge == nil {
+			return rpcerr.WrapUnavailable("merge worker unavailable",
+				errors.New("StartMerge not wired")).Response(req.ID)
+		}
+
 		store, err := deps.Store()
 		if err != nil {
 			return rpcerr.WrapUnavailable("memory store unavailable", err).Response(req.ID)
 		}
 
-		// Read both pages up front: reject a missing page with a clear
-		// NOT_FOUND, and hand their titles+bodies to the synthesizer.
+		// Read both pages up front so a typo / already-deleted page fails fast
+		// with NOT_FOUND instead of being queued for a doomed background job,
+		// and so the synthesizer gets the original bodies before the source is
+		// deleted mid-merge.
 		targetPage, err := store.ReadPage(target)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
@@ -490,41 +500,15 @@ func memoryMergePage(deps MemoryDeps) rpcutil.HandlerFunc {
 			return rpcerr.WrapUnavailable("wiki page read failed", err).Response(req.ID)
 		}
 
-		// Synthesize the merged body. LLM first; on any failure fall back to a
-		// labeled concatenation so the merge never silently drops content.
-		mergedBody := fallbackMergeBody(targetPage, sourcePage)
-		if deps.MergeBodies != nil {
-			if synth, serr := deps.MergeBodies(ctx, targetPage.Meta.Title, targetPage.Body, sourcePage.Meta.Title, sourcePage.Body); serr == nil && strings.TrimSpace(synth) != "" {
-				mergedBody = synth
-			}
-		}
-
-		result, err := store.MergePage(target, source, mergedBody, wiki.MergeOptions{})
-		if err != nil {
-			return rpcerr.WrapUnavailable("wiki merge failed", err).Response(req.ID)
-		}
+		deps.StartMerge(target, source, targetPage, sourcePage)
 
 		return rpcutil.RespondOK(req.ID, out{
-			OK:            true,
-			TargetPath:    result.TargetPath,
-			MergedTitle:   result.MergedTitle,
-			RewriteCount:  result.RewriteCount,
-			SourceRemoved: result.SourceRemoved,
+			OK:          true,
+			Started:     true,
+			TargetPath:  target,
+			MergedTitle: targetPage.Meta.Title,
 		})
 	}
-}
-
-// fallbackMergeBody concatenates two page bodies under a divider when no LLM
-// synthesis is available. Keeps every line of both pages — lossless by design.
-func fallbackMergeBody(target, source *wiki.Page) string {
-	srcTitle := strings.TrimSpace(source.Meta.Title)
-	if srcTitle == "" {
-		srcTitle = "병합된 페이지"
-	}
-	return strings.TrimSpace(
-		strings.TrimSpace(target.Body) +
-			"\n\n---\n\n## (병합: " + srcTitle + ")\n\n" +
-			strings.TrimSpace(source.Body))
 }
 
 // pageToOut shapes a wiki.Page as the JSON map the get_page /

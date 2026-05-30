@@ -17,7 +17,6 @@ type fakeMemoryStore struct {
 	searchDiaryFn func(ctx context.Context, q string, limit int) ([]wiki.DiaryHit, error)
 	readPageFn    func(relPath string) (*wiki.Page, error)
 	writePageFn   func(relPath string, page *wiki.Page) error
-	mergePageFn   func(targetPath, sourcePath, mergedBody string, opts wiki.MergeOptions) (wiki.MergeResult, error)
 	statsFn       func() wiki.StoreStats
 	listPagesFn   func(category string) ([]string, error)
 	diaryRecentFn func(limit int) []wiki.DiaryHit
@@ -49,13 +48,6 @@ func (f *fakeMemoryStore) WritePage(relPath string, page *wiki.Page) error {
 		return errors.New("WritePage not stubbed")
 	}
 	return f.writePageFn(relPath, page)
-}
-
-func (f *fakeMemoryStore) MergePage(targetPath, sourcePath, mergedBody string, opts wiki.MergeOptions) (wiki.MergeResult, error) {
-	if f.mergePageFn == nil {
-		return wiki.MergeResult{}, errors.New("MergePage not stubbed")
-	}
-	return f.mergePageFn(targetPath, sourcePath, mergedBody, opts)
 }
 
 func (f *fakeMemoryStore) Stats() wiki.StoreStats {
@@ -983,7 +975,10 @@ func TestTruncateRunes(t *testing.T) {
 
 // --- merge --------------------------------------------------------------
 
-func twoProjectStore(merge func(target, source, body string) (wiki.MergeResult, error)) *fakeMemoryStore {
+// twoProjectStore returns a fake store holding two project pages. The handler
+// no longer merges inline — the structural merge + synthesis run in the
+// server's background worker (StartMerge) — so the fake only needs ReadPage.
+func twoProjectStore() *fakeMemoryStore {
 	pages := map[string]*wiki.Page{
 		"프로젝트/a.md": {Meta: wiki.Frontmatter{Title: "A"}, Body: "본문 A"},
 		"프로젝트/b.md": {Meta: wiki.Frontmatter{Title: "B"}, Body: "본문 B"},
@@ -995,29 +990,28 @@ func twoProjectStore(merge func(target, source, body string) (wiki.MergeResult, 
 			}
 			return nil, fs.ErrNotExist
 		},
-		mergePageFn: func(target, source, body string, _ wiki.MergeOptions) (wiki.MergeResult, error) {
-			return merge(target, source, body)
-		},
 	}
 }
 
-func TestMemoryMerge_HappyPathUsesSynthesizedBody(t *testing.T) {
-	var gotTarget, gotSource, gotBody string
-	synthCalled := false
-	store := twoProjectStore(func(target, source, body string) (wiki.MergeResult, error) {
-		gotTarget, gotSource, gotBody = target, source, body
-		return wiki.MergeResult{TargetPath: target, MergedTitle: "A", RewriteCount: 3, SourceRemoved: true}, nil
-	})
-	deps := MemoryDeps{
-		Store: func() (MemorySearcher, error) { return store, nil },
-		MergeBodies: func(_ context.Context, tt, tb, st, sb string) (string, error) {
-			synthCalled = true
-			if tt != "A" || tb != "본문 A" || st != "B" || sb != "본문 B" {
-				t.Errorf("MergeBodies args = %q/%q/%q/%q", tt, tb, st, sb)
-			}
-			return "통합 본문", nil
-		},
+// mergeDepsFor wires a store + a StartMerge callback for the merge handler.
+func mergeDepsFor(store MemorySearcher, start func(targetPath, sourcePath string, target, source *wiki.Page)) MemoryDeps {
+	return MemoryDeps{
+		Store:      func() (MemorySearcher, error) { return store, nil },
+		StartMerge: start,
 	}
+}
+
+func noopStart(_, _ string, _, _ *wiki.Page) {}
+
+func TestMemoryMerge_HappyPathStartsBackgroundJob(t *testing.T) {
+	var gotTarget, gotSource string
+	var gotTargetPage, gotSourcePage *wiki.Page
+	started := 0
+	deps := mergeDepsFor(twoProjectStore(), func(target, source string, tp, sp *wiki.Page) {
+		started++
+		gotTarget, gotSource = target, source
+		gotTargetPage, gotSourcePage = tp, sp
+	})
 	resp := memoryMergePage(deps)(authedCtx(), reqWith(t, "miniapp.memory.merge", map[string]any{
 		"targetPath": "프로젝트/a.md",
 		"sourcePath": "프로젝트/b.md",
@@ -1025,68 +1019,41 @@ func TestMemoryMerge_HappyPathUsesSynthesizedBody(t *testing.T) {
 	if !resp.OK {
 		t.Fatalf("expected OK: %+v", resp.Error)
 	}
-	if !synthCalled {
-		t.Error("MergeBodies was not called")
+	if started != 1 {
+		t.Fatalf("StartMerge called %d times, want 1", started)
 	}
 	if gotTarget != "프로젝트/a.md" || gotSource != "프로젝트/b.md" {
-		t.Errorf("MergePage paths = %q/%q", gotTarget, gotSource)
+		t.Errorf("StartMerge paths = %q/%q", gotTarget, gotSource)
 	}
-	if gotBody != "통합 본문" {
-		t.Errorf("MergePage body = %q, want synthesized text", gotBody)
+	// The handler hands the already-read pages over so the synthesizer has the
+	// original bodies before the source is deleted mid-merge.
+	if gotTargetPage == nil || gotTargetPage.Meta.Title != "A" ||
+		gotSourcePage == nil || gotSourcePage.Meta.Title != "B" {
+		t.Errorf("pages not handed over: %+v / %+v", gotTargetPage, gotSourcePage)
 	}
 	var got map[string]any
 	decode(t, resp, &got)
-	if got["ok"] != true || got["targetPath"] != "프로젝트/a.md" || got["rewriteCount"].(float64) != 3 {
+	if got["ok"] != true || got["started"] != true ||
+		got["targetPath"] != "프로젝트/a.md" || got["mergedTitle"] != "A" {
 		t.Errorf("response = %+v", got)
 	}
 }
 
-func TestMemoryMerge_FallsBackToConcatWhenNoLLM(t *testing.T) {
-	var gotBody string
-	store := twoProjectStore(func(_, _, body string) (wiki.MergeResult, error) {
-		gotBody = body
-		return wiki.MergeResult{SourceRemoved: true}, nil
-	})
-	// MergeBodies omitted → handler must synthesize via concatenation.
-	deps := MemoryDeps{Store: func() (MemorySearcher, error) { return store, nil }}
+func TestMemoryMerge_UnavailableWhenStarterMissing(t *testing.T) {
+	// StartMerge nil → merge worker not wired → UNAVAILABLE, surfaced before
+	// the store is even touched.
+	deps := MemoryDeps{Store: func() (MemorySearcher, error) { return twoProjectStore(), nil }}
 	resp := memoryMergePage(deps)(authedCtx(), reqWith(t, "miniapp.memory.merge", map[string]any{
 		"targetPath": "프로젝트/a.md",
 		"sourcePath": "프로젝트/b.md",
 	}))
-	if !resp.OK {
-		t.Fatalf("expected OK: %+v", resp.Error)
-	}
-	if !strings.Contains(gotBody, "본문 A") || !strings.Contains(gotBody, "본문 B") {
-		t.Errorf("fallback body missing source/target content: %q", gotBody)
-	}
-}
-
-func TestMemoryMerge_FallsBackWhenLLMErrors(t *testing.T) {
-	var gotBody string
-	store := twoProjectStore(func(_, _, body string) (wiki.MergeResult, error) {
-		gotBody = body
-		return wiki.MergeResult{SourceRemoved: true}, nil
-	})
-	deps := MemoryDeps{
-		Store: func() (MemorySearcher, error) { return store, nil },
-		MergeBodies: func(_ context.Context, _, _, _, _ string) (string, error) {
-			return "", errors.New("model unavailable")
-		},
-	}
-	resp := memoryMergePage(deps)(authedCtx(), reqWith(t, "miniapp.memory.merge", map[string]any{
-		"targetPath": "프로젝트/a.md",
-		"sourcePath": "프로젝트/b.md",
-	}))
-	if !resp.OK {
-		t.Fatalf("expected OK despite LLM error: %+v", resp.Error)
-	}
-	if !strings.Contains(gotBody, "본문 A") || !strings.Contains(gotBody, "본문 B") {
-		t.Errorf("expected concat fallback when LLM errors: %q", gotBody)
+	if resp.OK || resp.Error.Code != protocol.ErrUnavailable {
+		t.Errorf("expected UNAVAILABLE when StartMerge unwired: %+v", resp)
 	}
 }
 
 func TestMemoryMerge_RejectsSelfMerge(t *testing.T) {
-	resp := memoryMergePage(memoryDepsFor(&fakeMemoryStore{}))(authedCtx(),
+	resp := memoryMergePage(mergeDepsFor(&fakeMemoryStore{}, noopStart))(authedCtx(),
 		reqWith(t, "miniapp.memory.merge", map[string]any{
 			"targetPath": "프로젝트/a.md",
 			"sourcePath": "프로젝트/a.md",
@@ -1097,7 +1064,7 @@ func TestMemoryMerge_RejectsSelfMerge(t *testing.T) {
 }
 
 func TestMemoryMerge_MissingParams(t *testing.T) {
-	h := memoryMergePage(memoryDepsFor(&fakeMemoryStore{}))
+	h := memoryMergePage(mergeDepsFor(&fakeMemoryStore{}, noopStart))
 	for _, p := range []map[string]any{
 		{"targetPath": "프로젝트/a.md"}, // missing source
 		{"sourcePath": "프로젝트/b.md"}, // missing target
@@ -1110,7 +1077,7 @@ func TestMemoryMerge_MissingParams(t *testing.T) {
 }
 
 func TestMemoryMerge_PathTraversalRejected(t *testing.T) {
-	resp := memoryMergePage(memoryDepsFor(&fakeMemoryStore{}))(authedCtx(),
+	resp := memoryMergePage(mergeDepsFor(&fakeMemoryStore{}, noopStart))(authedCtx(),
 		reqWith(t, "miniapp.memory.merge", map[string]any{
 			"targetPath": "../etc/passwd",
 			"sourcePath": "프로젝트/b.md",
@@ -1120,11 +1087,12 @@ func TestMemoryMerge_PathTraversalRejected(t *testing.T) {
 	}
 }
 
-func TestMemoryMerge_NotFoundWhenPageMissing(t *testing.T) {
+func TestMemoryMerge_NotFoundDoesNotStart(t *testing.T) {
+	started := 0
 	store := &fakeMemoryStore{
 		readPageFn: func(_ string) (*wiki.Page, error) { return nil, fs.ErrNotExist },
 	}
-	resp := memoryMergePage(memoryDepsFor(store))(authedCtx(),
+	resp := memoryMergePage(mergeDepsFor(store, func(_, _ string, _, _ *wiki.Page) { started++ }))(authedCtx(),
 		reqWith(t, "miniapp.memory.merge", map[string]any{
 			"targetPath": "프로젝트/a.md",
 			"sourcePath": "프로젝트/b.md",
@@ -1132,10 +1100,13 @@ func TestMemoryMerge_NotFoundWhenPageMissing(t *testing.T) {
 	if resp.OK || resp.Error.Code != protocol.ErrNotFound {
 		t.Errorf("expected NOT_FOUND: %+v", resp)
 	}
+	if started != 0 {
+		t.Errorf("StartMerge fired %d times for a missing page, want 0", started)
+	}
 }
 
 func TestMemoryMerge_RequiresAuth(t *testing.T) {
-	resp := memoryMergePage(memoryDepsFor(&fakeMemoryStore{}))(context.Background(),
+	resp := memoryMergePage(mergeDepsFor(&fakeMemoryStore{}, noopStart))(context.Background(),
 		reqWith(t, "miniapp.memory.merge", map[string]any{
 			"targetPath": "프로젝트/a.md",
 			"sourcePath": "프로젝트/b.md",
