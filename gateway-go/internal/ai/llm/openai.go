@@ -293,10 +293,35 @@ func applySamplingParams(oaiReq *openAIRequest, req *ChatRequest) {
 		default:
 			oaiReq.ReasoningEffort = "high"
 		}
-		// Reasoning models require max_completion_tokens instead of max_tokens.
-		oaiReq.MaxCompletionTokens = &oaiReq.MaxTokens
-		oaiReq.MaxTokens = 0
+		// Genuine OpenAI reasoning models (o-series, gpt-5) require
+		// max_completion_tokens and reject max_tokens. OpenAI-compatible
+		// servers (self-hosted vLLM, etc.) keep max_tokens and 400 on
+		// max_tokens=0 ("max_tokens must be at least 1, got 0"), so only
+		// remap for models that actually use the reasoning endpoint.
+		if isOpenAIReasoningModel(req.Model) {
+			// Copy the value before zeroing — aliasing &oaiReq.MaxTokens would
+			// drag max_completion_tokens to 0 along with max_tokens.
+			maxCompletion := oaiReq.MaxTokens
+			oaiReq.MaxCompletionTokens = &maxCompletion
+			oaiReq.MaxTokens = 0
+		}
 	}
+}
+
+// isOpenAIReasoningModel reports whether model is a genuine OpenAI reasoning
+// model (o1/o3/o4 series, gpt-5) that requires max_completion_tokens instead
+// of max_tokens. OpenAI-compatible servers such as self-hosted vLLM keep
+// max_tokens and would reject max_tokens=0, so the reasoning remap must not
+// apply to them. A provider prefix ("openai/o3-mini") is ignored.
+func isOpenAIReasoningModel(model string) bool {
+	m := strings.ToLower(strings.TrimSpace(model))
+	if i := strings.LastIndex(m, "/"); i >= 0 {
+		m = m[i+1:]
+	}
+	return strings.HasPrefix(m, "o1") ||
+		strings.HasPrefix(m, "o3") ||
+		strings.HasPrefix(m, "o4") ||
+		strings.HasPrefix(m, "gpt-5")
 }
 
 // marshalMessageStart builds a serialized MessageStart payload with optional input token count.
