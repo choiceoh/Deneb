@@ -31,6 +31,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -168,6 +169,20 @@ func (s *Server) handleMiniappGmailAttachment(w http.ResponseWriter, r *http.Req
 // Telegram bot token. On failure it writes the HTTP error and returns
 // (nil, false); on success it returns the parsed *InitData and (data, true).
 func (s *Server) authenticateMiniappRequest(w http.ResponseWriter, r *http.Request) (*telegram.InitData, bool) {
+	// Standalone native client: a static bearer secret in a dedicated header.
+	// Present-but-invalid is rejected here (a native client has no initData to
+	// fall back to); an absent header falls through to the Telegram initData
+	// path below, so existing Mini App webview callers are unaffected.
+	if tok := strings.TrimSpace(r.Header.Get(clientauth.Header)); tok != "" {
+		if clientauth.Verify(tok) {
+			return syntheticOperatorInitData(), true
+		}
+		s.writeJSON(w, http.StatusUnauthorized, map[string]any{
+			"error": "invalid client token",
+		})
+		return nil, false
+	}
+
 	raw, err := extractMiniappAuthHeader(r.Header.Get("Authorization"))
 	if err != nil {
 		s.writeJSON(w, http.StatusUnauthorized, map[string]any{
