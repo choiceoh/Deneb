@@ -65,12 +65,27 @@ class DenebGatewayClient(
         get() = appSettings.settings.getString(KEY_TOKEN, "")
 
     override suspend fun ask(question: String?, files: List<PlatformFile>, uiSubmission: UiSubmission?) {
-        val message = question?.trim().orEmpty()
-        if (message.isEmpty()) return
-        _chatHistory.update { it + History(role = History.Role.USER, content = message) }
-        val reply = runCatching { send(message) }
+        val displayText = question?.trim().orEmpty()
+        // A kai-ui button press arrives as a UiSubmission. Show the friendly
+        // question in the chat, but send the agent a structured callback naming
+        // the event (per the kai-ui prompt contract) plus the collected inputs.
+        val sendText = if (uiSubmission != null) formatCallback(uiSubmission) else displayText
+        if (sendText.isEmpty()) return
+        if (displayText.isNotEmpty()) {
+            _chatHistory.update { it + History(role = History.Role.USER, content = displayText) }
+        }
+        val reply = runCatching { send(sendText) }
             .getOrElse { "⚠️ ${it.message ?: "gateway request failed"}" }
         _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
+    }
+
+    private fun formatCallback(submission: UiSubmission): String = buildString {
+        append("[kai-ui] event=").append(submission.pressedEvent)
+        if (submission.values.isNotEmpty()) {
+            append(" values={")
+            append(submission.values.entries.joinToString(", ") { "${it.key}=${it.value}" })
+            append("}")
+        }
     }
 
     override fun clearHistory() {
