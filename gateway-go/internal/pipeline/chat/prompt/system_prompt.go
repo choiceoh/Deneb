@@ -96,6 +96,12 @@ type SystemPromptParams struct {
 	// buildStaticCacheKey so (a) different topics never share a Static cache
 	// entry and (b) editing a topic .md invalidates it.
 	TopicCacheKey string
+
+	// SupportsRichUI gates the kai-ui interactive-UI instructions in the
+	// dynamic block. True only for clients that can render kai-ui fences
+	// (the native Android app); Telegram leaves it false so its prompt
+	// bytes are unchanged. Dynamic (uncached) block — no prompt-cache impact.
+	SupportsRichUI bool
 }
 
 // RuntimeInfo describes the current runtime environment for the system prompt.
@@ -469,6 +475,27 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("- 내부 전송 도구가 실패하더라도 그것은 채널 장애가 아니다. \"채널이 끊겼다 / 연결되지 않았다 / 복구되면 보내겠다 / 여기 직접 전달한다\" 같은 안내를 절대 하지 마라 — 채널은 정상이고 너의 결과물은 그대로 전달된다.\n")
 	}
 	d.WriteString("\n")
+
+	// Rich interactive UI (kai-ui) — gated to clients that can render it (the
+	// native app). Lives in the dynamic block, so Telegram (flag off) keeps
+	// byte-identical prompt and the prompt cache is untouched.
+	if params.SupportsRichUI {
+		d.WriteString("## 리치 인터랙티브 UI (kai-ui)\n")
+		d.WriteString("이 클라이언트는 인터랙티브 화면을 렌더할 수 있다. 대시보드·폼·선택지·구조화된 데이터를 보여줄 때 일반 텍스트 대신 ```kai-ui 코드펜스 안에 JSON 한 객체를 넣어라. 펜스는 네이티브 화면으로 렌더되고, 버튼을 누르면 새 사용자 턴으로 돌아온다.\n")
+		d.WriteString("- 언제: 비교/현황/지표 → 대시보드, 입력 받기 → 폼, 분기 선택 → 버튼/칩. 단순 한두 문장 답변은 그냥 텍스트로 (모든 답을 UI로 만들지 마라).\n")
+		d.WriteString("- **반드시 ```kai-ui 코드펜스로 감싸라** — 펜스 없는 raw JSON은 화면으로 렌더되지 않는다. 펜스 안은 유효한 JSON 한 객체, 보통 root는 `{\"type\":\"column\",\"children\":[...]}`. 짧은 안내 문장 + 펜스 조합이 좋다.\n")
+		d.WriteString("- 노드 `type`: 레이아웃 column/row/card/box/list/accordion/tabs/divider · 콘텐츠 text(value,style:headline|title|body|caption)/image/icon/code/quote/badge/stat(value,label)/avatar/table(headers,rows) · 입력 text_input/checkbox/select/switch/slider/radio_group/chip_group · 피드백 progress/alert(message,severity:info|success|warning|error)/countdown · button(label,variant:filled|outlined|text|tonal,action).\n")
+		d.WriteString("- **입력 노드(text_input/checkbox/select/switch/slider/radio_group/chip_group)는 고유한 `id` 필수.**\n")
+		d.WriteString("- 상호작용: button/countdown의 `action`은 `{\"type\":\"callback\",\"event\":\"이름\",\"collectFrom\":[\"입력id\",...]}`. `event`는 다음 턴에 받을 식별자, `collectFrom`은 함께 보낼 입력 노드 id들. 외부 링크는 `{\"type\":\"open_url\",\"url\":\"...\"}`.\n")
+		d.WriteString("- 예시(대시보드):\n")
+		d.WriteString("```kai-ui\n")
+		d.WriteString("{\"type\":\"column\",\"children\":[{\"type\":\"text\",\"value\":\"오늘 거래 현황\",\"style\":\"title\"},{\"type\":\"row\",\"children\":[{\"type\":\"stat\",\"value\":\"3\",\"label\":\"임박\"},{\"type\":\"stat\",\"value\":\"12\",\"label\":\"진행\"}]},{\"type\":\"button\",\"label\":\"새로고침\",\"action\":{\"type\":\"callback\",\"event\":\"refresh_deals\"}}]}\n")
+		d.WriteString("```\n")
+		d.WriteString("- 예시(폼):\n")
+		d.WriteString("```kai-ui\n")
+		d.WriteString("{\"type\":\"column\",\"children\":[{\"type\":\"text_input\",\"id\":\"title\",\"label\":\"제목\"},{\"type\":\"select\",\"id\":\"cat\",\"label\":\"분류\",\"options\":[\"업무\",\"개인\"]},{\"type\":\"button\",\"label\":\"저장\",\"action\":{\"type\":\"callback\",\"event\":\"save_note\",\"collectFrom\":[\"title\",\"cat\"]}}]}\n")
+		d.WriteString("```\n\n")
+	}
 
 	// Inter-agent bridge.
 	if _, ok := toolSet["bridge"]; ok {
