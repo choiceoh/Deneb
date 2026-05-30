@@ -85,8 +85,30 @@ func (s *Store) Dir() string { return s.dir }
 // DiaryDir returns the diary directory for raw daily logs.
 func (s *Store) DiaryDir() string { return s.diaryDir }
 
+// normalizePagePath ensures a wiki page path carries the .md extension.
+//
+// Wiki pages are always stored as .md files, but callers pass paths from many
+// sources — RPC clients, the dreamer's LLM-proposed paths, the wiki tool — and
+// some omit the extension. Centralizing the fix-up here means "프로젝트/foo" and
+// "프로젝트/foo.md" resolve to the same file. Without it, a bare path writes an
+// extensionless sibling that ListPages (which filters on .md) silently drops
+// from search and the master index, which in turn defeats duplicate detection
+// and lets the same page be created over and over.
+func normalizePagePath(relPath string) string {
+	relPath = strings.TrimSpace(relPath)
+	if relPath == "" {
+		return relPath
+	}
+	if !strings.HasSuffix(relPath, ".md") {
+		relPath += ".md"
+	}
+	return relPath
+}
+
 // ReadPage reads a wiki page by relative path (e.g., "기술/dgx-spark.md").
+// The .md extension is optional; it is appended when absent.
 func (s *Store) ReadPage(relPath string) (*Page, error) {
+	relPath = normalizePagePath(relPath)
 	abs := filepath.Join(s.dir, relPath)
 	return ParsePageFile(abs)
 }
@@ -94,6 +116,7 @@ func (s *Store) ReadPage(relPath string) (*Page, error) {
 // WritePage writes a page to the wiki. Creates parent directories if needed.
 // Updates the master index entry and maintains bidirectional backlinks.
 func (s *Store) WritePage(relPath string, page *Page) error {
+	relPath = normalizePagePath(relPath)
 	_, readErr := s.ReadPage(relPath)
 	op := "update"
 	if readErr != nil {
@@ -107,6 +130,7 @@ func (s *Store) WritePage(relPath string, page *Page) error {
 }
 
 func (s *Store) writePageInternal(relPath string, page *Page, skipBacklinks bool) error {
+	relPath = normalizePagePath(relPath)
 	abs := filepath.Join(s.dir, relPath)
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return fmt.Errorf("wiki: mkdir: %w", err)
@@ -144,6 +168,7 @@ func (s *Store) writePageInternal(relPath string, page *Page, skipBacklinks bool
 // DeletePage removes a page and its index entry.
 // Cleans up backlinks from related pages.
 func (s *Store) DeletePage(relPath string) error {
+	relPath = normalizePagePath(relPath)
 	// Read page before deleting to get its related list.
 	var oldRelated []string
 	if page, err := s.ReadPage(relPath); err == nil {

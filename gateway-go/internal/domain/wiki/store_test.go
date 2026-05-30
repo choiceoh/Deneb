@@ -43,6 +43,68 @@ func TestStore_WriteAndReadPage(t *testing.T) {
 	}
 }
 
+// TestStore_PathNormalization verifies that a page written with a bare path
+// (no .md extension) resolves to the same .md file on every access path —
+// ReadPage, ListPages, and the master index. This guards the duplicate-page
+// regression: before normalization, a bare path wrote an extensionless sibling
+// that ListPages (which filters on .md) dropped, so search and index never saw
+// it and the dreamer kept re-creating the same page.
+func TestStore_PathNormalization(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	page := NewPage("스파이럴 테스트베드", "프로젝트", []string{"자동화"})
+	page.Meta.Importance = 0.85
+	page.Body = "# 스파이럴 테스트베드\n\n본문"
+
+	// Write WITHOUT the .md extension — the bug trigger.
+	if err := store.WritePage("프로젝트/스파이럴-테스트베드", page); err != nil {
+		t.Fatalf("WritePage(bare): %v", err)
+	}
+
+	// Only the .md file must exist on disk; no extensionless sibling.
+	mdPath := filepath.Join(dir, "wiki", "프로젝트", "스파이럴-테스트베드.md")
+	if _, err := os.Stat(mdPath); err != nil {
+		t.Fatalf("expected .md file on disk: %v", err)
+	}
+	barePath := filepath.Join(dir, "wiki", "프로젝트", "스파이럴-테스트베드")
+	if _, err := os.Stat(barePath); !os.IsNotExist(err) {
+		t.Errorf("extensionless sibling should not exist (err=%v)", err)
+	}
+
+	// ReadPage resolves with or without the extension.
+	if _, err := store.ReadPage("프로젝트/스파이럴-테스트베드"); err != nil {
+		t.Errorf("ReadPage(bare): %v", err)
+	}
+	if _, err := store.ReadPage("프로젝트/스파이럴-테스트베드.md"); err != nil {
+		t.Errorf("ReadPage(.md): %v", err)
+	}
+
+	// ListPages sees exactly one page (the .md file), not zero or two.
+	pages := testutil.Must(store.ListPages("프로젝트"))
+	if len(pages) != 1 {
+		t.Fatalf("ListPages(프로젝트) = %d, want 1 (%v)", len(pages), pages)
+	}
+	if !strings.HasSuffix(pages[0], ".md") {
+		t.Errorf("listed page %q lacks .md", pages[0])
+	}
+
+	// The master index is keyed by the normalized .md path.
+	if _, ok := store.Index().Entries["프로젝트/스파이럴-테스트베드.md"]; !ok {
+		t.Errorf("index missing normalized key; entries=%v", store.Index().Entries)
+	}
+
+	// Re-writing with the .md form must update in place, not create a second page.
+	page.Meta.Importance = 0.90
+	if err := store.WritePage("프로젝트/스파이럴-테스트베드.md", page); err != nil {
+		t.Fatalf("WritePage(.md update): %v", err)
+	}
+	if pages := testutil.Must(store.ListPages("프로젝트")); len(pages) != 1 {
+		t.Errorf("after re-write ListPages = %d, want 1 (%v)", len(pages), pages)
+	}
+}
+
 func TestStore_DeletePage(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
