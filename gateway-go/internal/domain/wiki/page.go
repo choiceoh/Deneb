@@ -274,6 +274,63 @@ func splitFrontmatter(data []byte) (meta []byte, body string, err error) {
 	return []byte(rest[:idx]), strings.TrimLeft(rest[idx+5:], "\r\n"), nil
 }
 
+// StripLeadingFrontmatter removes any YAML frontmatter block(s) at the very
+// start of s and returns the remaining body.
+//
+// LLM-synthesized page content (WikiDreamer) and agent-supplied bodies
+// sometimes begin with their own "---\nkey: value\n---" block — the model
+// mimics the page format it saw in the index. If that text is stored as a
+// Page.Body it round-trips into a *second* on-disk frontmatter, since Render
+// always prepends one more from Page.Meta. Repeated dream/merge passes then
+// stack the blocks, and ParsePage (which only strips the first) mis-reads the
+// rest as body. Stripping at the content boundary keeps every page to exactly
+// one frontmatter.
+//
+// Only leading, frontmatter-shaped blocks are removed (one or more, stacked):
+// a "---" horizontal rule mid-body, or one whose first line is not a "key:"
+// pair, is left untouched. Metadata in a stripped block is intentionally
+// dropped — callers populate Page.Meta from their own structured fields, so the
+// embedded copy is redundant duplication.
+func StripLeadingFrontmatter(s string) string {
+	for {
+		trimmed := strings.TrimLeft(s, "\r\n")
+		meta, body, err := splitFrontmatter([]byte(trimmed))
+		if err != nil || !looksLikeFrontmatter(string(meta)) {
+			return s
+		}
+		s = body
+	}
+}
+
+// looksLikeFrontmatter reports whether the block's first non-empty line is a
+// "key:" pair, which real frontmatter always opens with. This guards against
+// stripping a horizontal-rule-delimited prose section that happens to be fenced
+// by "---" lines.
+func looksLikeFrontmatter(meta string) bool {
+	for _, line := range strings.Split(meta, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		colon := strings.IndexByte(line, ':')
+		if colon <= 0 {
+			return false
+		}
+		for i, r := range line[:colon] {
+			isAlpha := r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+			isDigitOrDash := (r >= '0' && r <= '9') || r == '-'
+			if i == 0 && !isAlpha {
+				return false
+			}
+			if !isAlpha && !isDigitOrDash {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 // parseFrontmatterFields parses simple YAML key-value pairs.
 // Supports: scalar strings, YAML flow arrays [a, b, c], booleans, floats.
 func parseFrontmatterFields(raw string) Frontmatter {

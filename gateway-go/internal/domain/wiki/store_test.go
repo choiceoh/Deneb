@@ -49,6 +49,45 @@ func TestStore_WriteAndReadPage(t *testing.T) {
 // regression: before normalization, a bare path wrote an extensionless sibling
 // that ListPages (which filters on .md) dropped, so search and index never saw
 // it and the dreamer kept re-creating the same page.
+// TestStore_StripsEmbeddedFrontmatter guards the duplicate-frontmatter
+// regression: when content arrives with its own frontmatter block prepended
+// (as WikiDreamer's LLM output sometimes does), WritePage must store the page
+// with exactly one frontmatter — the one Render emits from Page.Meta — not the
+// stacked pair that previously round-tripped onto disk and broke parsing.
+func TestStore_StripsEmbeddedFrontmatter(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	page := NewPage("ZTT 케이블", "프로젝트", []string{"비금도"})
+	// Body carries its own (redundant) frontmatter, the bug trigger.
+	page.Body = "---\ntitle: ZTT 케이블\ncategory: 프로젝트\nimportance: 0.9\n---\n\n# ZTT 케이블\n\n진행 중."
+
+	if err := store.WritePage("프로젝트/ztt.md", page); err != nil {
+		t.Fatalf("WritePage: %v", err)
+	}
+
+	raw := string(testutil.Must(os.ReadFile(filepath.Join(dir, "wiki", "프로젝트", "ztt.md"))))
+	if got := strings.Count(raw, "\n---\n"); got != 1 {
+		t.Fatalf("expected exactly one frontmatter fence, got %d:\n%s", got, raw)
+	}
+	if !strings.Contains(raw, "# ZTT 케이블") || !strings.Contains(raw, "진행 중.") {
+		t.Errorf("body content lost:\n%s", raw)
+	}
+	if strings.Contains(raw, "title: ZTT 케이블\ncategory: 프로젝트\nimportance: 0.9") {
+		t.Errorf("embedded frontmatter survived into body:\n%s", raw)
+	}
+
+	// Re-parse: clean single-frontmatter page.
+	got := testutil.Must(store.ReadPage("프로젝트/ztt.md"))
+	if got.Meta.Title != "ZTT 케이블" {
+		t.Errorf("title = %q", got.Meta.Title)
+	}
+	if strings.Contains(got.Body, "---") {
+		t.Errorf("parsed body still contains a fence: %q", got.Body)
+	}
+}
+
 func TestStore_PathNormalization(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))

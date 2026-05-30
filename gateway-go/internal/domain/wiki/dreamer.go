@@ -692,6 +692,12 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 		if u.Path == "" || u.Title == "" {
 			continue
 		}
+		// The LLM occasionally wraps its proposed content in a frontmatter
+		// block; strip it here so the append/create paths below never fold a
+		// second frontmatter into the page body. (Store.WritePage strips the
+		// create case too, but the update-append at existing.Body += u.Content
+		// would otherwise embed it mid-body, out of that helper's reach.)
+		u.Content = StripLeadingFrontmatter(u.Content)
 		if !strings.HasSuffix(u.Path, ".md") {
 			u.Path += ".md"
 		}

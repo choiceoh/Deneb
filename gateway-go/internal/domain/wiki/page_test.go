@@ -68,6 +68,57 @@ func TestParsePage_NoFrontmatter(t *testing.T) {
 	}
 }
 
+func TestStripLeadingFrontmatter(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "one leading block",
+			in:   "---\ntitle: Foo\ncategory: 프로젝트\n---\n\n# Foo\n\nbody",
+			want: "# Foo\n\nbody",
+		},
+		{
+			name: "stacked blocks both stripped",
+			in:   "---\ntitle: Foo\n---\n\n---\ntitle: Foo\ntags: [a, b]\n---\n\n# Foo",
+			want: "# Foo",
+		},
+		{
+			name: "leading newlines before block",
+			in:   "\n\n---\nid: foo\n---\n\nbody text",
+			want: "body text",
+		},
+		{
+			name: "plain markdown unchanged",
+			in:   "# Heading\n\nsome text",
+			want: "# Heading\n\nsome text",
+		},
+		{
+			name: "horizontal rule not stripped",
+			in:   "intro\n\n---\n\n## (병합: Other)\n\nmore",
+			want: "intro\n\n---\n\n## (병합: Other)\n\nmore",
+		},
+		{
+			name: "non-key fenced prose not stripped",
+			in:   "---\nthis is just a quote\n---\nrest",
+			want: "---\nthis is just a quote\n---\nrest",
+		},
+		{
+			name: "empty",
+			in:   "",
+			want: "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := StripLeadingFrontmatter(tc.in); got != tc.want {
+				t.Errorf("StripLeadingFrontmatter(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestPage_RenderRoundtrip(t *testing.T) {
 	page := NewPage("테스트", "기술", []string{"Go", "테스트"})
 	page.Meta.ID = "test-page"
