@@ -268,7 +268,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// gateway started with the cron subsystem disabled still gets a
 		// clean UNAVAILABLE per call instead of a crash at boot.
 		handlerminiapp.CronsMethods(handlerminiapp.CronsDeps{
-			Service: func() (handlerminiapp.CronLister, error) {
+			Service: func() (handlerminiapp.CronService, error) {
 				svc := hub.CronService()
 				if svc == nil {
 					return nil, errCronUnavailable

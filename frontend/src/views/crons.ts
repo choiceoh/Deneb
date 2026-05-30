@@ -3,10 +3,12 @@
 // Read-only surface in the Mini App: shows "what's wired up to fire
 // automatically." Each row is one job with its schedule, payload
 // preview, and either a "다음 실행" timestamp or an error/disabled
-// state badge. Tapping a row currently does nothing — mutation lives
-// in the operator tool (cron.add/update/remove); the Mini App is for
-// awareness, not editing.
+// state badge. Tapping a row opens the cron detail view (cron_detail.ts)
+// — the full prompt, delivery target, schedule, and execution context.
+// Still read-only end to end; mutation lives in the operator tool
+// (cron.add/update/remove), not the Mini App.
 
+import { triggerImpactHaptic } from '../app_settings';
 import { listCrons, type CronJobRow } from '../crons';
 import { formatRpcError } from '../format';
 import { isCurrentHash, navigate } from '../router';
@@ -66,6 +68,23 @@ function buildCronRow(job: CronJobRow): HTMLElement {
   const card = document.createElement('div');
   card.className = 'cron-row';
   if (!job.enabled) card.classList.add('cron-row-disabled');
+
+  // Tap (or Enter/Space on desktop) drills into the detail view. The row
+  // stays a styled <div> rather than a <button> so the card layout is
+  // untouched; role + tabindex + keydown restore the button semantics.
+  const open = (): void => {
+    triggerImpactHaptic('soft');
+    navigate({ name: 'cronDetail', id: job.id });
+  };
+  card.setAttribute('role', 'button');
+  card.tabIndex = 0;
+  card.addEventListener('click', open);
+  card.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      open();
+    }
+  });
 
   const top = document.createElement('div');
   top.className = 'cron-row-top';
