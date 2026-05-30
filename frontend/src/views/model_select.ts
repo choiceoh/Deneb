@@ -31,7 +31,7 @@ export function renderModelSelect(root: HTMLElement, initData: string, role = 'm
   root.innerHTML = '';
   root.appendChild(
     buildViewHeader({
-      title: `모델 교체 — ${ROLE_LABELS[role] ?? role}`,
+      title: ROLE_LABELS[role] ?? role,
       left: { label: '← 설정', onClick: () => navigate({ name: 'settings' }) },
     }),
   );
@@ -108,7 +108,6 @@ function buildCurrentRow(modelID: string): HTMLElement {
   const current = document.createElement('div');
   current.className = 'settings-model-current';
   current.innerHTML = `
-    <span class="icon-tile icon-tile-purple">🤖</span>
     <span class="settings-row-text">
       <span class="settings-row-title">현재 모델</span>
       <span class="settings-row-sub"></span>
