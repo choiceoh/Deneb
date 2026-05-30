@@ -29,7 +29,9 @@ if [ -d "$APP_DIR" ] && [ -n "$(ls -A "$APP_DIR" 2>/dev/null)" ] && [ "$force" !
   exit 1
 fi
 
-tmp="$(mktemp -d)"
+# Disk-backed temp dir under $DEST: /tmp is often tmpfs (RAM) and too small to
+# check out a full clone, which fails mid-checkout.
+tmp="$(mktemp -d "$DEST/.vendor.XXXXXX")"
 cleanup() { rm -rf "$tmp"; }
 trap cleanup EXIT
 
