@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
 
@@ -37,7 +38,9 @@ import (
 var fetchGroup singleflight
 
 // Tool returns the unified web tool handler (fetch + search + search+fetch).
-func Tool(cache *FetchCache, localAI *LocalAIExtractor) func(context.Context, json.RawMessage) (string, error) {
+// spill (optional) lets the YouTube path offload full transcripts to disk while
+// returning only a summary to the conversation transcript.
+func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill *agent.SpilloverStore) func(context.Context, json.RawMessage) (string, error) {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			URL      string   `json:"url"`
@@ -59,7 +62,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor) func(context.Context, js
 		switch {
 		case p.URL != "":
 			// Fetch mode: extract content from URL.
-			return webFetchURL(ctx, cache, localAI, p.URL, p.MaxChars)
+			return webFetchURL(ctx, cache, localAI, spill, p.URL, p.MaxChars)
 
 		case len(p.Queries) > 0:
 			// Parallel search mode: multiple queries at once.
@@ -81,7 +84,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor) func(context.Context, js
 			if fetch > 3 {
 				fetch = 3
 			}
-			return webParallelSearch(ctx, cache, localAI, p.Queries, p.Count, fetch, p.MaxChars)
+			return webParallelSearch(ctx, cache, localAI, spill, p.Queries, p.Count, fetch, p.MaxChars)
 
 		case p.Query != "":
 			if p.Count <= 0 {
@@ -101,7 +104,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor) func(context.Context, js
 				if p.Fetch > 3 {
 					p.Fetch = 3
 				}
-				return webSearchAndFetch(ctx, cache, localAI, p.Query, p.Count, p.Fetch, p.MaxChars)
+				return webSearchAndFetch(ctx, cache, localAI, spill, p.Query, p.Count, p.Fetch, p.MaxChars)
 			}
 			// Search-only mode: return search results.
 			return webSearch(ctx, p.Query, p.Count)
@@ -115,14 +118,14 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor) func(context.Context, js
 }
 
 // webFetchURL fetches a URL and returns extracted content with metadata envelope.
-func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, targetURL string, maxChars int) (string, error) {
+func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill *agent.SpilloverStore, targetURL string, maxChars int) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 20000
 	}
 
-	// YouTube → transcript.
+	// YouTube → summarized transcript (full text offloaded to spillover).
 	if media.IsYouTubeURL(targetURL) {
-		return fetchYouTube(ctx, targetURL)
+		return fetchYouTube(ctx, spill, targetURL)
 	}
 
 	// Cache hit.
@@ -228,7 +231,7 @@ func webFetchViaSerper(ctx context.Context, cache *FetchCache, apiKey, targetURL
 // webParallelSearch runs multiple search queries concurrently and returns
 // combined results. Each query runs independently with optional fetch.
 // This avoids sequential LLM round-trips for multi-constraint questions.
-func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, queries []string, count, fetch, maxChars int) (string, error) {
+func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill *agent.SpilloverStore, queries []string, count, fetch, maxChars int) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 20000
 	}
@@ -248,7 +251,7 @@ func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 			var content string
 			var err error
 			if fetch > 0 {
-				content, err = webSearchAndFetch(ctx, cache, localAI, query, count, fetch, perQueryChars)
+				content, err = webSearchAndFetch(ctx, cache, localAI, spill, query, count, fetch, perQueryChars)
 			} else {
 				content, err = webSearch(ctx, query, count)
 			}
@@ -274,7 +277,7 @@ func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 
 // webSearchAndFetch searches the web and auto-fetches the top N results.
 // Uses webSearchWithURLs() to get both formatted output and fetchable URLs.
-func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, query string, count, fetchTop, maxChars int) (string, error) {
+func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill *agent.SpilloverStore, query string, count, fetchTop, maxChars int) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 15000
 	}
@@ -313,7 +316,7 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			c, e := webFetchURL(ctx, cache, localAI, fetchURLs[idx], perResultChars)
+			c, e := webFetchURL(ctx, cache, localAI, spill, fetchURLs[idx], perResultChars)
 			results[idx] = fetchResult{content: c, err: e}
 		}(i)
 	}

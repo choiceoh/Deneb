@@ -96,7 +96,7 @@ func ExtractYouTubeTranscript(ctx context.Context, videoURL string) (*YouTubeRes
 	transcript, lang, err := downloadSubtitles(ctx, ytdlpPath, videoURL, tmpDir)
 	if err != nil {
 		// Transcript extraction failed; return metadata-only result.
-		result.Transcript = "(자막을 추출할 수 없습니다)"
+		result.Transcript = noTranscriptMarker
 		return result, nil
 	}
 
@@ -105,9 +105,19 @@ func ExtractYouTubeTranscript(ctx context.Context, videoURL string) (*YouTubeRes
 	return result, nil
 }
 
-// FormatYouTubeResult formats the extraction result as a readable string
-// suitable for inclusion in an LLM prompt.
-func FormatYouTubeResult(r *YouTubeResult) string {
+// noTranscriptMarker is the sentinel transcript value set when subtitle
+// extraction fails but metadata was retrieved.
+const noTranscriptMarker = "(자막을 추출할 수 없습니다)"
+
+// HasTranscript reports whether the result carries usable subtitle text.
+func (r *YouTubeResult) HasTranscript() bool {
+	return r.Transcript != "" && r.Transcript != noTranscriptMarker
+}
+
+// FormatYouTubeMeta formats only the video metadata (title, channel, duration,
+// upload date, view count, URL, description) — without the transcript. Callers
+// that summarize the transcript separately reuse this for the header.
+func FormatYouTubeMeta(r *YouTubeResult) string {
 	var b strings.Builder
 	b.WriteString("## YouTube 비디오 정보\n\n")
 
@@ -134,7 +144,16 @@ func FormatYouTubeResult(r *YouTubeResult) string {
 		fmt.Fprintf(&b, "\n### 설명\n%s\n", r.Description)
 	}
 
-	if r.Transcript != "" && r.Transcript != "(자막을 추출할 수 없습니다)" {
+	return b.String()
+}
+
+// FormatYouTubeResult formats the extraction result as a readable string
+// suitable for inclusion in an LLM prompt (metadata + full transcript).
+func FormatYouTubeResult(r *YouTubeResult) string {
+	var b strings.Builder
+	b.WriteString(FormatYouTubeMeta(r))
+
+	if r.HasTranscript() {
 		lang := r.Language
 		if lang == "" {
 			lang = "unknown"
