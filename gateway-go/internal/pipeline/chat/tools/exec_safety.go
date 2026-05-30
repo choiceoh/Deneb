@@ -32,8 +32,28 @@ var sensitiveWriteTargets = regexp.MustCompile(
 		`)`,
 )
 
+// sensitiveReadTargets matches commands that touch a credential / secret store.
+// Unlike the fs tools (which hard-deny these paths in path_guard.go), exec keeps
+// the warn-only model — the operator may have a legitimate one-off need — but the
+// prepended warning makes a prompt-injection-driven `cat ~/.deneb/credentials |
+// send` attempt visible to both the model and the operator log.
+var sensitiveReadTargets = regexp.MustCompile(
+	`(?i)(?:` +
+		`(?:~|\$home|\$\{home\})?/?\.deneb/credentials|` +
+		`(?:~|\$home|\$\{home\})?/?\.aws/credentials\b|` +
+		`(?:~|\$home|\$\{home\})?/?\.ssh/id_(?:rsa|ed25519|ecdsa|dsa)|` +
+		`(?:~|\$home|\$\{home\})?/?\.netrc\b|` +
+		`(?:^|[\s/])\.env(?:\.[a-z]+)?\b` +
+		`)`,
+)
+
 // destructivePatterns detects commands that could cause data loss.
 var destructivePatterns = []DestructiveCheck{
+	{
+		Pattern:     sensitiveReadTargets,
+		Description: "references a credential/secret store (~/.deneb/credentials, ~/.aws/credentials, SSH keys, .env) — do not echo its contents",
+		Severity:    "warning",
+	},
 	{
 		Pattern:     regexp.MustCompile(`\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|(-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*)|-[a-zA-Z]*r\s+-[a-zA-Z]*f|-[a-zA-Z]*f\s+-[a-zA-Z]*r)\b`),
 		Description: "recursive force delete (rm -rf)",
