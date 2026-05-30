@@ -317,6 +317,58 @@ func (s *Store) SearchMessages(sessionKey, query string, maxResults int) ([]Sear
 	return results, nil
 }
 
+// SearchResidentSessions runs query against the FTS index of every session
+// currently resident in memory EXCEPT excludeKey, returning the best-scoring
+// hits merged across them. It performs NO disk I/O — only sessions already
+// loaded this uptime are searched — so it is a cheap, aux-LLM-free way to surface
+// relevant messages from other recent conversations. This is Deneb's analogue of
+// hermes-agent's cross-session session_search: today recall only sees the
+// current session, leaving anything said in a different session invisible to the
+// polaris path. Sessions that were never loaded (paged out on disk) are
+// intentionally skipped to keep recall within its latency budget; wiki/diary/
+// hindsight remain the durable cross-session memory for older material.
+func (s *Store) SearchResidentSessions(excludeKey, query string, maxResults int) ([]SearchHit, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if query == "" || maxResults <= 0 {
+		return nil, nil
+	}
+
+	var results []SearchHit
+	for key, sd := range s.sessions {
+		if key == excludeKey {
+			continue
+		}
+		hits := sd.fts.Search(query, maxResults)
+		for _, h := range hits {
+			var msgIdx int
+			if n, _ := fmt.Sscanf(h.ID, "%d", &msgIdx); n != 1 {
+				continue
+			}
+			for _, m := range sd.messages {
+				if m.MsgIndex == msgIdx {
+					results = append(results, SearchHit{
+						SessionKey: key,
+						Role:       m.Role,
+						Snippet:    h.Snippet,
+						MsgIndex:   m.MsgIndex,
+						Timestamp:  m.Timestamp,
+						Score:      h.Score / (h.Score + 1), // normalize to 0-1
+					})
+					break
+				}
+			}
+		}
+	}
+
+	sort.Slice(results, func(i, j int) bool { return results[i].Score > results[j].Score })
+	if len(results) > maxResults {
+		results = results[:maxResults]
+	}
+	return results, nil
+}
+
 // RecentSummariesAcrossSessions returns up to limit most recent summary nodes
 // across all sessions, sorted by CreatedAt descending. Used by wiki dreamer
 // to seed fact synthesis with polaris-compressed conversation history.
