@@ -55,6 +55,9 @@ func ToolRead(defaultDir string) ToolFunc {
 		}
 
 		path := ResolvePath(p.FilePath, defaultDir)
+		if err := CheckProtectedPath(path, "read"); err != nil {
+			return "", err
+		}
 
 		// File-read dedup: for default full-file reads (no offset/limit/function),
 		// check cache before hitting disk.  Skip if force=true.
@@ -291,6 +294,9 @@ func ToolWrite(defaultDir string) ToolFunc {
 		}
 
 		path := ResolvePath(p.FilePath, defaultDir)
+		if err := CheckProtectedPath(path, "write"); err != nil {
+			return "", err
+		}
 
 		// Staleness check: reject if the file changed since our last read.
 		if fc := toolctx.FileCacheFromContext(ctx); fc != nil {
@@ -333,6 +339,9 @@ func ToolEdit(defaultDir string) ToolFunc {
 		}
 
 		path := ResolvePath(p.FilePath, defaultDir)
+		if err := CheckProtectedPath(path, "edit"); err != nil {
+			return "", err
+		}
 
 		// Staleness check: reject if the file changed since our last read.
 		fc := toolctx.FileCacheFromContext(ctx)
