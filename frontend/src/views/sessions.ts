@@ -72,6 +72,9 @@ function extractThreadID(key: string): string | null {
 function buildRow(s: SessionRow): HTMLElement {
   const el = document.createElement('button');
   el.className = 'session-row';
+  // Tag the row with its session key so the desktop master-detail shell
+  // can mark it selected while its transcript pane is open (inert on mobile).
+  el.dataset.sessionKey = s.key;
 
   const top = document.createElement('div');
   top.className = 'session-row-meta';

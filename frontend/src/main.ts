@@ -26,6 +26,13 @@ import { parseRoute, navigate, isHomeRoute, type Route } from './router';
 // that first visit usually finds the chunk already there.
 import { renderHome } from './views/home';
 import { clearPullToRefreshHandler } from './pull_to_refresh';
+import {
+  currentShellMode,
+  desktopEscapeTarget,
+  dispatchDesktop,
+  isDesktopShellActive,
+  teardownDesktopShell,
+} from './desktop_shell';
 
 const root = document.getElementById('app')!;
 let cachedInitData: string | null = null;
@@ -158,12 +165,16 @@ function handleKeyboardNav(ev: KeyboardEvent): void {
       ev.preventDefault();
       return;
     case 'Escape': {
-      // From any drill-down or tab view, escape pops to home. The
-      // BackButton handler installed during boot() handles the
-      // smarter "pop to the parent list" path; this is a simpler
-      // straight-shot for keyboard users who just want out.
       const route = parseRoute(location.hash);
-      if (route.name !== 'home') {
+      // On the desktop shell, Esc first collapses an open detail pane back
+      // to its family's list (mail/calendar/topics) — a second Esc from the
+      // bare list (or any non-home view) then returns to home. Mirrors the
+      // BackButton's smarter "pop to parent" path for keyboard users.
+      const collapse = desktopEscapeTarget(route);
+      if (collapse) {
+        navigate(collapse);
+        ev.preventDefault();
+      } else if (route.name !== 'home') {
         navigate({ name: 'home' });
         ev.preventDefault();
       }
@@ -194,7 +205,8 @@ function handleKeyboardNav(ev: KeyboardEvent): void {
 function moveFocus(delta: number): void {
   const candidates = Array.from(
     document.querySelectorAll<HTMLElement>(
-      '.type-item, .email-row, .session-row, .flat-row-nav, .panorama-tab',
+      '.type-item, .email-row, .event-row, .session-row, .flat-row-nav, ' +
+        '.panorama-tab, .app-sidebar-item',
     ),
   ).filter((el) => !el.hasAttribute('disabled') && el.offsetParent !== null);
   if (candidates.length === 0) return;
@@ -282,22 +294,9 @@ function syncBackButton(route: Route): void {
   }
 }
 
-// dispatch awaits the dynamic chunk fetch, then invokes the view's
-// render function as fire-and-forget (`void renderX(...)`). Every view
-// paints its loading-state DOM synchronously at the top of its body
-// before its first await — so by the time render's promise yields,
-// the new DOM is already in place and dispatch can return. The View
-// Transitions API caller awaits dispatch, snapshots the new DOM, and
-// animates. RPC settles afterward and hydrates content into the
-// already-visible layout, with no transition animation.
-//
-// Failed dynamic imports are cached permanently by the browser's
-// module map — once `import('./views/foo')` rejects, every subsequent
-// call returns the same rejected promise without re-fetching. To
-// avoid a single transient network blip permanently poisoning a
-// route, we render an inline error banner on import failure so the
-// operator gets visible feedback (instead of "the tap did nothing")
-// and can refresh to retry.
+// dispatch routes the current hash to the right layout — the PC-native
+// desktop shell (Telegram Desktop/web, wide enough) or the mobile
+// single-column path — and both mount the actual view via renderViewInto.
 async function dispatch(route: Route): Promise<void> {
   if (!cachedInitData) return;
   syncBackButton(route);
@@ -305,74 +304,107 @@ async function dispatch(route: Route): Promise<void> {
   // that want to opt in re-register their own handler after rendering.
   clearPullToRefreshHandler();
   const initData = cachedInitData;
+
+  // Desktop (Telegram Desktop / web) at >= 720px gets the persistent
+  // sidebar shell, and at >= 1000px master-detail panes. The shell
+  // renders views into its content region / panes via renderViewInto, so
+  // nothing in views/*.ts has to know which layout it's in. Everything
+  // narrower — every phone, and a deliberately-narrowed desktop window —
+  // falls through to the untouched mobile column below.
+  if (isDesktopShellActive()) {
+    await dispatchDesktop(root, route, initData, renderViewInto);
+    return;
+  }
+  // Leaving the shell (the desktop window was dragged narrow) drops the
+  // shell chrome first so the mobile column renders into a clean #app.
+  teardownDesktopShell(root);
+  await renderViewInto(root, route, initData);
+}
+
+// renderViewInto awaits the view's dynamic chunk fetch, then invokes its
+// render function as fire-and-forget (`void renderX(...)`). Every view
+// paints its loading-state DOM synchronously before its first await, so by
+// the time render's promise yields the new DOM is already in `container`.
+// `container` is #app on mobile, or a shell content region / detail pane on
+// desktop — views only ever touch the container they're handed, never #app
+// directly, which is what lets the same modules drive both layouts.
+//
+// Failed dynamic imports are cached permanently by the browser's module
+// map, so a transient blip would otherwise poison a route forever — we
+// render an inline error banner on import failure instead.
+async function renderViewInto(
+  container: HTMLElement,
+  route: Route,
+  initData: string,
+): Promise<void> {
   try {
     switch (route.name) {
       case 'home':
-        void renderHome(root, initData);
+        void renderHome(container, initData);
         return;
       case 'inbox': {
         const { renderList } = await import('./views/list');
-        void renderList(root, initData);
+        void renderList(container, initData);
         return;
       }
       case 'detail': {
         const { renderDetail } = await import('./views/detail');
-        void renderDetail(root, initData, route.messageId);
+        void renderDetail(container, initData, route.messageId);
         return;
       }
       case 'search': {
         const { renderSearch } = await import('./views/search');
-        renderSearch(root, initData);
+        renderSearch(container, initData);
         return;
       }
       case 'sessions': {
         const { renderSessions } = await import('./views/sessions');
-        void renderSessions(root, initData);
+        void renderSessions(container, initData);
         return;
       }
       case 'wikiPage': {
         const { renderWikiPage } = await import('./views/wiki_page');
-        void renderWikiPage(root, initData, route.path);
+        void renderWikiPage(container, initData, route.path);
         return;
       }
       case 'sessionTranscript': {
         const { renderSessionTranscript } = await import('./views/session_transcript');
-        void renderSessionTranscript(root, initData, route.sessionKey);
+        void renderSessionTranscript(container, initData, route.sessionKey);
         return;
       }
       case 'calendar': {
         const { renderCalendar } = await import('./views/calendar');
-        void renderCalendar(root, initData);
+        void renderCalendar(container, initData);
         return;
       }
       case 'calendarEvent': {
         const { renderCalendarEvent } = await import('./views/calendar_event');
-        void renderCalendarEvent(root, initData, route.eventId);
+        void renderCalendarEvent(container, initData, route.eventId);
         return;
       }
       case 'settings': {
         const { renderSettings } = await import('./views/settings');
-        renderSettings(root, initData);
+        renderSettings(container, initData);
         return;
       }
       case 'modelSelect': {
         const { renderModelSelect } = await import('./views/model_select');
-        renderModelSelect(root, initData, route.role);
+        renderModelSelect(container, initData, route.role);
         return;
       }
       case 'categories': {
         const { renderCategories } = await import('./views/categories');
-        void renderCategories(root, initData);
+        void renderCategories(container, initData);
         return;
       }
       case 'categoryPages': {
         const { renderCategoryPages } = await import('./views/category_pages');
-        void renderCategoryPages(root, initData, route.category);
+        void renderCategoryPages(container, initData, route.category);
         return;
       }
       case 'crons': {
         const { renderCrons } = await import('./views/crons');
-        void renderCrons(root, initData);
+        void renderCrons(container, initData);
         return;
       }
       case 'cronDetail': {
@@ -387,17 +419,17 @@ async function dispatch(route: Route): Promise<void> {
       }
       case 'personDetail': {
         const { renderPersonDetail } = await import('./views/person_detail');
-        void renderPersonDetail(root, initData, route.email);
+        void renderPersonDetail(container, initData, route.email);
         return;
       }
       case 'wikiNew': {
         const { renderWikiNew } = await import('./views/wiki_new');
-        renderWikiNew(root, initData, route.category ?? '');
+        renderWikiNew(container, initData, route.category ?? '');
         return;
       }
       case 'topicNew': {
         const { renderTopicNew } = await import('./views/topic_new');
-        renderTopicNew(root, initData);
+        renderTopicNew(container, initData);
         return;
       }
       case 'topicDocs': {
@@ -432,15 +464,15 @@ async function dispatch(route: Route): Promise<void> {
       return;
     }
     // Paint a visible error so they can refresh and retry.
-    root.innerHTML = '';
+    container.innerHTML = '';
     const banner = document.createElement('div');
     banner.className = 'error';
     banner.textContent = `화면을 불러오지 못했습니다 (${route.name}). 미니앱을 다시 열어주세요.`;
-    root.appendChild(banner);
+    container.appendChild(banner);
     const hint = document.createElement('div');
     hint.className = 'muted';
     hint.textContent = String((err as Error)?.message ?? err);
-    root.appendChild(hint);
+    container.appendChild(hint);
   }
 }
 
@@ -475,7 +507,11 @@ function handleHashChange(): void {
   const startTransition = (document as Document & {
     startViewTransition?: (cb: () => void | Promise<void>) => unknown;
   }).startViewTransition;
-  if (typeof startTransition === 'function') {
+  // Skip the full-page crossfade on the desktop shell: there, navigation
+  // often changes only the detail pane (clicking a second mail), and a
+  // root-level View Transition would flash the persistent sidebar + master
+  // list too. Desktop gets instant pane swaps, which is the PC expectation.
+  if (typeof startTransition === 'function' && !isDesktopShellActive()) {
     // The callback is async because dispatch now awaits a dynamic
     // import before it can run the view's render function. View
     // Transitions holds the old snapshot until the callback resolves,
@@ -627,6 +663,23 @@ function boot(): void {
   // view. We gate on body.tg-desktop so phones with an attached BT
   // keyboard still behave like phones — the cadence there is touch-first.
   window.addEventListener('keydown', handleKeyboardNav);
+
+  // The desktop shell layout (mobile column / sidebar / sidebar+panes) is
+  // chosen by viewport width. Re-dispatch when a resize crosses a
+  // breakpoint so dragging the Telegram Desktop window narrow/wide
+  // re-lays-out live instead of only on the next navigation. Debounced so
+  // a drag doesn't thrash dispatch; a no-op when the mode is unchanged.
+  let shellMode = currentShellMode();
+  let resizeTimer: number | undefined;
+  window.addEventListener('resize', () => {
+    if (resizeTimer !== undefined) window.clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(() => {
+      const mode = currentShellMode();
+      if (mode === shellMode) return;
+      shellMode = mode;
+      void dispatch(parseRoute(location.hash));
+    }, 150);
+  });
 
   void dispatch(parseRoute(location.hash));
 
