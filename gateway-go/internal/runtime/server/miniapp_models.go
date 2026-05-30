@@ -89,7 +89,7 @@ func (s *Server) listMiniappModels(ctx context.Context) ([]handlerminiapp.ModelS
 				Display:  entry.display,
 				Health:   snapshot.health[entry.fullID],
 				Current:  entry.fullID == current,
-				Custom:   isMiniappCustomProvider(entry.provider),
+				Custom:   config.IsCustomProviderID(entry.provider),
 			})
 		}
 		if len(models) > 0 {
@@ -238,9 +238,14 @@ func (s *Server) deleteMiniappCustomModel(_ context.Context, id string) (handler
 	localModelCache.mu.Unlock()
 
 	// Reset any role that was bound to the deleted model to the local vLLM
-	// default. SetRoleModelID reconciles the actual served vLLM model name, so
-	// this stays valid even if config drifted.
-	defaultModel := "vllm/" + modelrole.DefaultVllmModel
+	// default — resolved from config (models.providers.vllm.models[0].id),
+	// matching what a fresh registry build uses for an unset role, not a
+	// hardcoded name. SetRoleModelID additionally reconciles the served model.
+	localVllm := resolveLocalVllmModel(s.logger)
+	if localVllm == "" {
+		localVllm = modelrole.DefaultVllmModel
+	}
+	defaultModel := "vllm/" + localVllm
 	for _, role := range deleted.ClearedRoles {
 		switch role {
 		case "main":
@@ -419,10 +424,6 @@ func modelIDForProviderEntry(entry modelEntry) string {
 		}
 	}
 	return entry.display
-}
-
-func isMiniappCustomProvider(name string) bool {
-	return name == "custom" || strings.HasPrefix(name, "custom-")
 }
 
 // probeModelsClassified does GET <baseURL>/models and classifies the outcome so

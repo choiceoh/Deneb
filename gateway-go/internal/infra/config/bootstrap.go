@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -698,16 +699,27 @@ func splitCustomModelID(fullModelID string) (providerID, modelID string, err err
 		return "", "", fmt.Errorf("%w: model id must be provider/model", ErrInvalidCustomModel)
 	}
 	providerID, modelID = full[:slash], full[slash+1:]
-	if !isCustomProviderID(providerID) {
+	if !IsCustomProviderID(providerID) {
 		return "", "", fmt.Errorf("%w: only directly-added custom models can be deleted", ErrInvalidCustomModel)
 	}
 	return providerID, modelID, nil
 }
 
-// isCustomProviderID reports whether a provider key is one created by the Mini
-// App's "직접 추가" flow (custom, custom-2, ...).
-func isCustomProviderID(id string) bool {
-	return id == "custom" || strings.HasPrefix(id, "custom-")
+// IsCustomProviderID reports whether a provider key is one the Mini App's
+// "직접 추가" flow generates: "custom" or "custom-<n>" with a numeric suffix
+// (see nextCustomProviderID). A manually named provider such as "custom-prod"
+// or "custom-openai" is NOT treated as Mini App-managed, so the picker neither
+// shows a delete button for it nor lets delete_custom remove its models.
+func IsCustomProviderID(id string) bool {
+	if id == "custom" {
+		return true
+	}
+	rest, ok := strings.CutPrefix(id, "custom-")
+	if !ok || rest == "" {
+		return false
+	}
+	_, err := strconv.Atoi(rest)
+	return err == nil
 }
 
 // removeCustomModel drops modelID from providerConfig["models"], reporting
@@ -740,27 +752,58 @@ func customModelCount(providerConfig map[string]any) int {
 	return 0
 }
 
-// clearRolesReferencingModel deletes any agents.{default,lightweight,fallback}Model
-// field equal to fullModelID and returns the affected modelrole role names, so the
-// caller can reset the live registry. Mirrors PersistRoleModel's field mapping.
+// clearRolesReferencingModel deletes any agents config that binds a role to
+// fullModelID and returns the affected modelrole role names, so the caller can
+// reset the live registry. Covers the flat agents.{default,lightweight,fallback}Model
+// fields (PersistRoleModel's mapping) and the nested agents.defaults.model main
+// fallback (resolveDefaultModel reads it when agents.defaultModel is absent).
 func clearRolesReferencingModel(raw map[string]any, fullModelID string) []string {
 	agents, ok := raw["agents"].(map[string]any)
 	if !ok {
 		return nil
 	}
-	fields := []struct{ field, role string }{
+	var cleared []string
+	mainCleared := false
+	for _, f := range []struct{ field, role string }{
 		{"defaultModel", "main"},
 		{"lightweightModel", "lightweight"},
 		{"fallbackModel", "fallback"},
-	}
-	var cleared []string
-	for _, f := range fields {
+	} {
 		if cur, ok := agents[f.field].(string); ok && strings.TrimSpace(cur) == fullModelID {
 			delete(agents, f.field)
 			cleared = append(cleared, f.role)
+			if f.role == "main" {
+				mainCleared = true
+			}
+		}
+	}
+	// Nested agents.defaults.model is the main-model fallback when the flat
+	// field is absent; clear it too so main never resolves to the deleted model.
+	if defaults, ok := agents["defaults"].(map[string]any); ok {
+		if clearDefaultsModelIfMatches(defaults, fullModelID) && !mainCleared {
+			cleared = append(cleared, "main")
 		}
 	}
 	return cleared
+}
+
+// clearDefaultsModelIfMatches removes agents.defaults.model when it points at
+// fullModelID, accepting either the string form ("provider/model") or the
+// object form ({"primary": "provider/model", ...}). Returns whether it cleared.
+func clearDefaultsModelIfMatches(defaults map[string]any, fullModelID string) bool {
+	switch m := defaults["model"].(type) {
+	case string:
+		if strings.TrimSpace(m) == fullModelID {
+			delete(defaults, "model")
+			return true
+		}
+	case map[string]any:
+		if primary, ok := m["primary"].(string); ok && strings.TrimSpace(primary) == fullModelID {
+			delete(defaults, "model")
+			return true
+		}
+	}
+	return false
 }
 
 // mergeAuthConfig merges an override auth config into the base.

@@ -601,4 +601,77 @@ func TestDeleteCustomProviderModel(t *testing.T) {
 			t.Error("Removed = true, want false")
 		}
 	})
+
+	t.Run("rejects manually named custom-prefixed provider", func(t *testing.T) {
+		tmp := t.TempDir()
+		cfgPath := filepath.Join(tmp, "deneb.json")
+		// A hand-named provider like custom-prod is not Mini App-generated.
+		existing := map[string]any{"models": map[string]any{"providers": map[string]any{
+			"custom-prod": map[string]any{"baseUrl": "http://127.0.0.1:8000/v1", "models": []any{map[string]any{"id": "m"}}},
+		}}}
+		data, _ := json.Marshal(existing)
+		os.WriteFile(cfgPath, data, 0644)
+
+		if _, err := DeleteCustomProviderModel(cfgPath, "custom-prod/m", logger); !errors.Is(err, ErrInvalidCustomModel) {
+			t.Fatalf("error = %v, want ErrInvalidCustomModel (custom-prod is not generated)", err)
+		}
+	})
+
+	t.Run("clears nested agents.defaults.model binding", func(t *testing.T) {
+		for _, tc := range []struct {
+			name      string
+			modelNode any
+		}{
+			{"string form", "custom/bad"},
+			{"object form", map[string]any{"primary": "custom/bad", "fallbacks": []any{"vllm/gemma4"}}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				tmp := t.TempDir()
+				cfgPath := filepath.Join(tmp, "deneb.json")
+				existing := map[string]any{
+					"agents": map[string]any{"defaults": map[string]any{"model": tc.modelNode}},
+					"models": map[string]any{"providers": map[string]any{
+						"custom": map[string]any{"baseUrl": "http://127.0.0.1:8000/v1", "models": []any{map[string]any{"id": "bad"}}},
+					}},
+				}
+				data, _ := json.Marshal(existing)
+				os.WriteFile(cfgPath, data, 0644)
+
+				res, err := DeleteCustomProviderModel(cfgPath, "custom/bad", logger)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(res.ClearedRoles) != 1 || res.ClearedRoles[0] != "main" {
+					t.Fatalf("ClearedRoles = %v, want [main]", res.ClearedRoles)
+				}
+				var written map[string]any
+				if err := json.Unmarshal(testutil.Must(os.ReadFile(cfgPath)), &written); err != nil {
+					t.Fatal(err)
+				}
+				defaults := written["agents"].(map[string]any)["defaults"].(map[string]any)
+				if _, present := defaults["model"]; present {
+					t.Errorf("agents.defaults.model still present, want cleared")
+				}
+			})
+		}
+	})
+}
+
+func TestIsCustomProviderID(t *testing.T) {
+	cases := map[string]bool{
+		"custom":        true,
+		"custom-2":      true,
+		"custom-10":     true,
+		"custom-prod":   false,
+		"custom-openai": false,
+		"custom-":       false,
+		"zai":           false,
+		"vllm":          false,
+		"":              false,
+	}
+	for id, want := range cases {
+		if got := IsCustomProviderID(id); got != want {
+			t.Errorf("IsCustomProviderID(%q) = %v, want %v", id, got, want)
+		}
+	}
 }
