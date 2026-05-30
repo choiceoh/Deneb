@@ -1,6 +1,8 @@
 package com.inspiredandroid.kai.deneb
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,6 +36,7 @@ fun DenebConfigScreen(
     appSettings: AppSettings,
     onBack: () -> Unit,
     onOpenKaiSettings: () -> Unit = {},
+    navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var url by remember { mutableStateOf(appSettings.settings.getString(KEY_URL, "")) }
     var token by remember { mutableStateOf(appSettings.settings.getString(KEY_TOKEN, "")) }
@@ -45,6 +48,12 @@ fun DenebConfigScreen(
             .padding(16.dp)
             .verticalScroll(rememberScrollState()),
     ) {
+        if (navigationTabBar != null) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                navigationTabBar()
+            }
+            Spacer(Modifier.height(16.dp))
+        }
         Text("Deneb 게이트웨이", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(16.dp))
 

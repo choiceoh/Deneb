@@ -196,7 +196,7 @@ private fun AppContent(
                         SegmentedButton(
                             selected = !isHome,
                             onClick = {
-                                navController.navigate(Settings) {
+                                navController.navigate(DenebConfig) {
                                     popUpTo(Home)
                                     launchSingleTop = true
                                 }
@@ -246,6 +246,7 @@ private fun AppContent(
                             appSettings = appSettings,
                             onBack = { navController.navigateUp() },
                             onOpenKaiSettings = { navController.navigate(Settings) },
+                            navigationTabBar = if (showTabBar) navigationTabBar else null,
                         )
                     }
                 }
