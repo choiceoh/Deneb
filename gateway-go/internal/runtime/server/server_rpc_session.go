@@ -113,6 +113,11 @@ func (s *Server) registerSessionRPCMethods() {
 		}
 	}
 
+	// Wire the per-topic knowledge resolver (deneb.json topics.map). Returns
+	// nil when topics are unconfigured, so the chat handler simply skips
+	// per-topic injection.
+	chatCfg.TopicResolver = newTopicResolver(s.logger)
+
 	// Phase 1: Memory subsystem (unified store, Aurora, memory, wiki).
 	var reg *modelrole.Registry
 	s.initMemorySubsystem(&chatCfg, &reg)

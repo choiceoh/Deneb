@@ -152,6 +152,10 @@ type runDeps struct {
 	// Contains reply, media, typing, reaction, draft, emit, shutdown, and model fields.
 	callbacks CallbackSnapshot
 
+	// topicResolver maps a forum threadID to a per-topic knowledge key for
+	// system-prompt injection. nil disables per-topic knowledge.
+	topicResolver TopicResolver
+
 	// chatport holds injected adapters that decouple chat from autoreply.
 	chatport chatportAdapters
 }

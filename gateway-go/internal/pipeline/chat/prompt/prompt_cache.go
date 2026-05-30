@@ -26,8 +26,9 @@ type PromptCache struct {
 	ctxCachedAt  time.Time
 
 	// --- Session snapshots (frozen context files per session) ---
-	sessMu    sync.Mutex
-	sessStore map[string][]ContextFile
+	sessMu         sync.Mutex
+	sessStore      map[string][]ContextFile
+	sessTopicStore map[string]TopicKnowledge // frozen per-topic knowledge per session
 
 	// --- One-time values (resolved at startup) ---
 	timezoneOnce sync.Once
@@ -122,11 +123,33 @@ func (c *PromptCache) SetSessionSnapshot(key string, files []ContextFile) {
 	c.sessStore[key] = files
 }
 
-// ClearSession removes the frozen context files for a session.
+// TopicSnapshot returns frozen per-topic knowledge for a session.
+func (c *PromptCache) TopicSnapshot(key string) (TopicKnowledge, bool) {
+	c.sessMu.Lock()
+	defer c.sessMu.Unlock()
+	if c.sessTopicStore == nil {
+		return TopicKnowledge{}, false
+	}
+	tk, ok := c.sessTopicStore[key]
+	return tk, ok
+}
+
+// SetTopicSnapshot stores frozen per-topic knowledge for a session.
+func (c *PromptCache) SetTopicSnapshot(key string, tk TopicKnowledge) {
+	c.sessMu.Lock()
+	defer c.sessMu.Unlock()
+	if c.sessTopicStore == nil {
+		c.sessTopicStore = make(map[string]TopicKnowledge)
+	}
+	c.sessTopicStore[key] = tk
+}
+
+// ClearSession removes the frozen context files and topic knowledge for a session.
 func (c *PromptCache) ClearSession(key string) {
 	c.sessMu.Lock()
 	defer c.sessMu.Unlock()
 	delete(c.sessStore, key)
+	delete(c.sessTopicStore, key)
 }
 
 // --- One-time values ---
@@ -180,5 +203,6 @@ func (c *PromptCache) Reset() {
 
 	c.sessMu.Lock()
 	c.sessStore = nil
+	c.sessTopicStore = nil
 	c.sessMu.Unlock()
 }

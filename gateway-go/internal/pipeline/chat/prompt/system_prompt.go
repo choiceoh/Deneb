@@ -85,6 +85,17 @@ type SystemPromptParams struct {
 	// automatically and relevant memories arrive via <recall-context>.
 	// Dynamic (uncached) block — no prompt-cache impact.
 	HindsightEnabled bool
+
+	// TopicKnowledge is per-forum-topic background knowledge merged into the
+	// Static (cached) block. Empty = no topic section. It is byte-stable for
+	// the session (frozen snapshot in LoadTopicKnowledge) so the Static cache
+	// key stays fixed across turns.
+	TopicKnowledge string
+	// TopicCacheKey distinguishes the Static cache slot per topic, formatted
+	// "<topicKey>:<contentHash>". Empty = no topic. Folded into
+	// buildStaticCacheKey so (a) different topics never share a Static cache
+	// entry and (b) editing a topic .md invalidates it.
+	TopicCacheKey string
 }
 
 // RuntimeInfo describes the current runtime environment for the system prompt.
@@ -116,7 +127,7 @@ var toolCategories = []struct {
 
 // buildStaticCacheKey returns a stable string key for the static prompt block
 // based on the sorted tool name list.
-func buildStaticCacheKey(toolDefs []ToolDef, deferredTools []DeferredToolInfo) string {
+func buildStaticCacheKey(toolDefs []ToolDef, deferredTools []DeferredToolInfo, topicCacheKey string) string {
 	names := make([]string, 0, len(toolDefs)+len(deferredTools))
 	for _, d := range toolDefs {
 		names = append(names, d.Name)
@@ -125,7 +136,13 @@ func buildStaticCacheKey(toolDefs []ToolDef, deferredTools []DeferredToolInfo) s
 		names = append(names, "D:"+dt.Name)
 	}
 	sort.Strings(names)
-	return strings.Join(names, ",")
+	base := strings.Join(names, ",")
+	if topicCacheKey == "" {
+		// No topic → identical key to the pre-topic implementation, so
+		// topic-less sessions keep sharing the existing Static cache entry.
+		return base
+	}
+	return base + "|topic=" + topicCacheKey
 }
 
 // buildPromptSections assembles the system prompt into static, semi-static, and dynamic parts.
@@ -150,7 +167,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// --- Static block (cached) ---
 	// The static block depends only on the tool set, which is fixed after server
 	// start. Cache it to avoid rebuilding ~2 KB of strings on every request.
-	cacheKey := buildStaticCacheKey(params.ToolDefs, params.DeferredTools)
+	cacheKey := buildStaticCacheKey(params.ToolDefs, params.DeferredTools, params.TopicCacheKey)
 	if cached, ok := Cache.StaticPrompt(cacheKey); ok {
 		staticText = cached
 	} else {
@@ -162,6 +179,19 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		// Role (chief-of-staff persona — see CLAUDE.md "비서실장형 단일 에이전트").
 		s.WriteString("## 역할\n")
 		s.WriteString("당신은 비서실장형 단일 에이전트다 — 분석가와 비서를 분리하지 않는다. **업무분석**(메일·프로젝트·인물·거래의 맥락을 합성해 \"왜 지금 중요한가\"와 리스크·기한)과 **업무비서**(일정·미팅 준비·임박 알림으로 \"언제까지 무엇을\")를 한 머리로 수행한다. 좋은 답에는 분석의 '왜'와 비서의 '언제까지'가 한 응답에 함께 담긴다 — 둘을 분리된 응답이나 탭으로 가르지 마라.\n\n")
+
+		// Topic background knowledge (per-forum-topic; config-mapped). Lives in
+		// the Static block so it is cached; the cache key carries the topic key
+		// + content hash (buildStaticCacheKey) so topics never collide and edits
+		// invalidate. Placed right after Role so the model reads "what I know in
+		// this topic" before the rest of the contract. Byte-stable for the
+		// session via LoadTopicKnowledge's frozen snapshot.
+		if params.TopicKnowledge != "" {
+			s.WriteString("## 토픽 배경지식\n")
+			s.WriteString("현재 대화 토픽에 대한 배경지식이다. 이 토픽의 작업·질문에 이 지식을 우선 활용하라.\n\n")
+			s.WriteString(strings.TrimSpace(params.TopicKnowledge))
+			s.WriteString("\n\n")
+		}
 
 		// Communication.
 		s.WriteString("## 소통\n")

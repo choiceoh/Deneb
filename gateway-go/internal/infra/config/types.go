@@ -100,6 +100,7 @@ type DenebConfig struct {
 	Agents    *AgentsConfig    `json:"agents,omitempty"`
 	GmailPoll *GmailPollConfig `json:"gmailPoll,omitempty"`
 	Cron      *CronConfig      `json:"cron,omitempty"`
+	Topics    *TopicsConfig    `json:"topics,omitempty"`
 	// Timezone is an optional IANA zone name (e.g. "Asia/Seoul") used by
 	// pkg/dentime for Deneb's zone-aware clock. The DENEB_TIMEZONE env var
 	// still wins; an empty or invalid value falls back to server local.
@@ -317,6 +318,21 @@ type AgentEntryConfig struct {
 // When nil or Enabled is nil, the cron service defaults to enabled.
 type CronConfig struct {
 	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// TopicsConfig configures per-forum-topic knowledge injection into the system
+// prompt's Static (cached) block. It maps a Telegram forum threadID to a topic
+// key; the agent then loads <Dir>/<topicKey>.md and injects it for that topic's
+// sessions. Unmapped topics get no injection (graceful no-op).
+type TopicsConfig struct {
+	// Dir holds the <topicKey>.md knowledge files. Relative paths resolve
+	// against the agent workspace dir; absolute paths are used as-is. Empty
+	// defaults to "topics".
+	Dir string `json:"dir,omitempty"`
+	// Map maps a Telegram forum threadID (as a string) to a topic key. The
+	// General topic (no message_thread_id) uses the "0" key.
+	// Example: {"42": "coding", "57": "work", "0": "general"}.
+	Map map[string]string `json:"map,omitempty"`
 }
 
 // GmailPollConfig configures the periodic Gmail polling and analysis service.

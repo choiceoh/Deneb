@@ -49,12 +49,12 @@ func TestStaticCacheKeyIgnoresSkills(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "exec"}, {Name: "wiki"}}
 	deferred := []DeferredToolInfo{{Name: "gmail", Description: "Gmail"}}
 
-	keyNoSkills := buildStaticCacheKey(tools, deferred)
+	keyNoSkills := buildStaticCacheKey(tools, deferred, "")
 
 	// Same tools + deferred list; the SkillsPrompt is NOT an input to this
 	// function. Calling again must return the identical key regardless of
 	// what skills are active.
-	keyAgain := buildStaticCacheKey(tools, deferred)
+	keyAgain := buildStaticCacheKey(tools, deferred, "")
 	if keyNoSkills != keyAgain {
 		t.Fatalf("buildStaticCacheKey not deterministic: %q vs %q", keyNoSkills, keyAgain)
 	}
@@ -122,5 +122,71 @@ func TestSkillsInjectedOnlyInSemiStatic(t *testing.T) {
 	}
 	if !strings.Contains(semiStaticText, marker) {
 		t.Errorf("skill payload missing from SEMI-STATIC block — skills not delivered to model")
+	}
+}
+
+// TestStaticCacheKeyVariesByTopic asserts the per-topic knowledge cache key
+// (a) splits distinct topics into distinct Static cache entries and
+// (b) invalidates when a topic's content hash changes (its .md was edited).
+// Without (a) two topics would overwrite each other's Static cache; without
+// (b) an edited topic file would keep serving stale cached knowledge.
+func TestStaticCacheKeyVariesByTopic(t *testing.T) {
+	tools := []ToolDef{{Name: "read"}, {Name: "exec"}}
+	deferred := []DeferredToolInfo{{Name: "gmail", Description: "Gmail"}}
+
+	base := buildStaticCacheKey(tools, deferred, "")
+	coding := buildStaticCacheKey(tools, deferred, "coding:hashA")
+	codingEdited := buildStaticCacheKey(tools, deferred, "coding:hashB")
+	work := buildStaticCacheKey(tools, deferred, "work:hashA")
+
+	if coding == base {
+		t.Errorf("topic key must differ from the topic-less key")
+	}
+	if coding == work {
+		t.Errorf("distinct topics must produce distinct cache keys: both %q", coding)
+	}
+	if coding == codingEdited {
+		t.Errorf("editing a topic's content (hash change) must change the cache key")
+	}
+}
+
+// TestStaticCacheKeyTopicEmptyEqualsLegacy asserts an empty topicCacheKey adds
+// no topic suffix, so sessions without per-topic knowledge keep sharing the
+// existing Static cache entry (zero regression for the common case).
+func TestStaticCacheKeyTopicEmptyEqualsLegacy(t *testing.T) {
+	tools := []ToolDef{{Name: "read"}, {Name: "wiki"}}
+	deferred := []DeferredToolInfo{{Name: "gmail", Description: "Gmail"}}
+
+	withEmpty := buildStaticCacheKey(tools, deferred, "")
+	if strings.Contains(withEmpty, "|topic=") {
+		t.Errorf("empty topic must not append a topic suffix: %q", withEmpty)
+	}
+}
+
+// TestTopicKnowledgeOnlyInStaticBlock asserts per-topic knowledge appears ONLY
+// in the Static (cached) block — never in semi-static or dynamic. Static
+// integration is the chosen design: a leak into the dynamic block would make
+// every turn a cache miss, and a leak into semi-static would collide with the
+// skills cache marker.
+func TestTopicKnowledgeOnlyInStaticBlock(t *testing.T) {
+	ResetContextFileCacheForTest()
+	marker := "DENEB_TOPIC_CACHE_SENTINEL_ZZZ"
+	params := SystemPromptParams{
+		WorkspaceDir:   "/tmp",
+		ToolDefs:       []ToolDef{{Name: "read"}},
+		TopicKnowledge: "코딩 토픽 배경지식: " + marker,
+		TopicCacheKey:  "coding:hashA",
+	}
+
+	staticText, semiStaticText, dynamicText := buildPromptSections(params)
+
+	if !strings.Contains(staticText, marker) {
+		t.Errorf("topic knowledge missing from STATIC block — not delivered to model")
+	}
+	if strings.Contains(semiStaticText, marker) {
+		t.Errorf("topic knowledge leaked into SEMI-STATIC block")
+	}
+	if strings.Contains(dynamicText, marker) {
+		t.Errorf("topic knowledge leaked into DYNAMIC block — causes cache miss every turn")
 	}
 }
