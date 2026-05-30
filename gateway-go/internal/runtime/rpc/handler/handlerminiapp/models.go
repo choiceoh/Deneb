@@ -18,6 +18,9 @@ type ModelOption struct {
 	Display  string `json:"display,omitempty"`
 	Health   string `json:"health,omitempty"`
 	Current  bool   `json:"current"`
+	// Custom marks a user-added model (provider custom/custom-N) that the
+	// picker may delete; built-in/role models leave this false.
+	Custom bool `json:"custom,omitempty"`
 }
 
 // ModelSection groups selectable models by role/provider.
@@ -36,6 +39,17 @@ type ModelAddResult struct {
 	Added    bool   `json:"added"`
 }
 
+// ModelDeleteResult is returned after a custom model entry is removed.
+type ModelDeleteResult struct {
+	OK      bool   `json:"ok"`
+	ID      string `json:"id"`
+	Removed bool   `json:"removed"`
+	// ClearedRoles names the roles (main/lightweight/fallback) that were reset
+	// to the default because they had been bound to the deleted model.
+	ClearedRoles []string `json:"clearedRoles,omitempty"`
+	Current      string   `json:"current"`
+}
+
 // RoleModel reports the model bound to a registry role (main/lightweight/
 // fallback), for the per-role model picker.
 type RoleModel struct {
@@ -50,14 +64,16 @@ type ModelDeps struct {
 	ListModels   func(context.Context) ([]ModelSection, error)
 	SetModel     func(ctx context.Context, role, id string) (string, error)
 	AddModel     func(context.Context, string, string) (ModelAddResult, error)
+	DeleteModel  func(ctx context.Context, id string) (ModelDeleteResult, error)
 }
 
 // ModelMethods returns Mini App model quick-change RPC handlers.
 func ModelMethods(deps ModelDeps) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.models.add_custom": modelsAddCustom(deps),
-		"miniapp.models.list":       modelsList(deps),
-		"miniapp.models.set":        modelsSet(deps),
+		"miniapp.models.add_custom":    modelsAddCustom(deps),
+		"miniapp.models.delete_custom": modelsDeleteCustom(deps),
+		"miniapp.models.list":          modelsList(deps),
+		"miniapp.models.set":           modelsSet(deps),
 	}
 }
 
@@ -145,6 +161,32 @@ func modelsAddCustom(deps ModelDeps) rpcutil.HandlerFunc {
 				return nil, rpcerr.Unavailable("custom model add is unavailable")
 			}
 			result, err := deps.AddModel(ctx, endpoint, model)
+			if err != nil {
+				return nil, err
+			}
+			result.OK = true
+			return result, nil
+		})
+	}
+}
+
+func modelsDeleteCustom(deps ModelDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ID string `json:"id"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if telegram.InitDataFromContext(ctx) == nil {
+			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.models.delete_custom requires initData context").Response(req.ID)
+		}
+		return rpcutil.BindCtx[params](ctx, req, func(ctx context.Context, p params) (any, error) {
+			id := strings.TrimSpace(p.ID)
+			if id == "" {
+				return nil, rpcerr.MissingParam("id")
+			}
+			if deps.DeleteModel == nil {
+				return nil, rpcerr.Unavailable("custom model delete is unavailable")
+			}
+			result, err := deps.DeleteModel(ctx, id)
 			if err != nil {
 				return nil, err
 			}

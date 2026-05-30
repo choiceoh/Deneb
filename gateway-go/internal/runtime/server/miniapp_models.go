@@ -2,7 +2,10 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -27,10 +30,26 @@ type miniappModelSnapshot struct {
 	health   map[string]string
 }
 
+// providerModelProbe captures what a health probe learned about one provider.
+//
+//	checked   — a probe was attempted for this provider
+//	reachable — the endpoint answered (any HTTP status) or local discovery
+//	            returned models; false means a network failure / provider down
+//	listed    — we obtained a parseable served-model list, so "model not in
+//	            models" is a meaningful offline signal. When false (e.g. an
+//	            Anthropic-format endpoint without /models) reachability alone
+//	            decides the dot, never a false "offline".
 type providerModelProbe struct {
-	checked bool
-	models  []string
+	checked   bool
+	reachable bool
+	listed    bool
+	models    []string
 }
+
+// miniappProbeClient performs the per-provider /models reachability probes.
+// The per-request context (miniappModelHealthTimeout) bounds each call; the
+// client timeout is a backstop for a stuck connection.
+var miniappProbeClient = &http.Client{Timeout: miniappModelHealthTimeout}
 
 func (s *Server) miniappModelMethods() map[string]rpcutil.HandlerFunc {
 	return handlerminiapp.ModelMethods(handlerminiapp.ModelDeps{
@@ -39,6 +58,7 @@ func (s *Server) miniappModelMethods() map[string]rpcutil.HandlerFunc {
 		ListModels:   s.listMiniappModels,
 		SetModel:     s.setMiniappModel,
 		AddModel:     s.addMiniappCustomModel,
+		DeleteModel:  s.deleteMiniappCustomModel,
 	})
 }
 
@@ -69,6 +89,7 @@ func (s *Server) listMiniappModels(ctx context.Context) ([]handlerminiapp.ModelS
 				Display:  entry.display,
 				Health:   snapshot.health[entry.fullID],
 				Current:  entry.fullID == current,
+				Custom:   isMiniappCustomProvider(entry.provider),
 			})
 		}
 		if len(models) > 0 {
@@ -191,6 +212,68 @@ func (s *Server) addMiniappCustomModel(_ context.Context, endpoint, model string
 	}, nil
 }
 
+// deleteMiniappCustomModel removes a user-added custom model and applies the
+// change live (no gateway restart). If the deleted model was bound to a role,
+// that role is reset to the local vLLM default — the same fallback a fresh
+// registry build applies for an unset role — so a deletion never leaves a
+// dangling reference behind. The inverse of addMiniappCustomModel.
+func (s *Server) deleteMiniappCustomModel(_ context.Context, id string) (handlerminiapp.ModelDeleteResult, error) {
+	cfgPath := config.ResolveConfigPath()
+	deleted, err := config.DeleteCustomProviderModel(cfgPath, id, s.logger)
+	if err != nil {
+		if errors.Is(err, config.ErrInvalidCustomModel) {
+			return handlerminiapp.ModelDeleteResult{}, rpcerr.InvalidRequest(err.Error())
+		}
+		return handlerminiapp.ModelDeleteResult{}, rpcerr.WrapDependencyFailed("delete custom model", err)
+	}
+	if !deleted.Removed {
+		return handlerminiapp.ModelDeleteResult{}, rpcerr.Newf(protocol.ErrNotFound, "custom model not found: %s", id)
+	}
+
+	// Drop cached local-model discovery so the removed entry disappears from
+	// the picker (mirrors addMiniappCustomModel).
+	localModelCache.mu.Lock()
+	localModelCache.models = nil
+	localModelCache.builtAt = time.Time{}
+	localModelCache.mu.Unlock()
+
+	// Reset any role that was bound to the deleted model to the local vLLM
+	// default. SetRoleModelID reconciles the actual served vLLM model name, so
+	// this stays valid even if config drifted.
+	defaultModel := "vllm/" + modelrole.DefaultVllmModel
+	for _, role := range deleted.ClearedRoles {
+		switch role {
+		case "main":
+			// Reset both the live chat default and the registry role: the
+			// chat default drives currentMiniappModel(), while the registry
+			// feeds the picker's 역할 section — leaving the registry stale
+			// would keep the just-deleted model visible there.
+			if s.chatHandler != nil {
+				s.chatHandler.SetDefaultModel(defaultModel)
+			}
+			if s.modelRegistry != nil {
+				s.modelRegistry.SetRoleModelID(modelrole.RoleMain, defaultModel)
+			}
+		case "lightweight", "fallback":
+			if s.modelRegistry != nil {
+				s.modelRegistry.SetRoleModelID(modelrole.Role(role), defaultModel)
+			}
+		}
+	}
+
+	if s.chatHandler != nil {
+		s.chatHandler.SetProviderConfigs(loadProviderConfigs(s.logger))
+	}
+
+	return handlerminiapp.ModelDeleteResult{
+		OK:           true,
+		ID:           deleted.FullModelID,
+		Removed:      true,
+		ClearedRoles: deleted.ClearedRoles,
+		Current:      s.currentMiniappModel(),
+	}, nil
+}
+
 func (s *Server) miniappModelSnapshot(ctx context.Context) miniappModelSnapshot {
 	roles := registryRoleEntries(s.modelRegistry, s.currentMiniappModel())
 	providers := appendBuiltinProviders(loadConfiguredProviders())
@@ -239,22 +322,27 @@ func (s *Server) miniappModelHealthProbes(
 			continue
 		}
 		if isLocalURL(baseURL) {
+			// Local providers are probed once by discoverMiniappLocalModels and
+			// reused here; a non-empty served list means up + enumerable.
+			models := localDiscovered[provider.name]
 			probes[provider.name] = providerModelProbe{
-				checked: true,
-				models:  localDiscovered[provider.name],
+				checked:   true,
+				reachable: len(models) > 0,
+				listed:    len(models) > 0,
+				models:    models,
 			}
 			continue
 		}
-		if strings.TrimSpace(provider.baseURL) == "" || !isMiniappCustomProvider(provider.name) {
-			continue
-		}
+		// Every remote provider with a resolvable endpoint (built-in cloud or
+		// configured custom) gets a live reachability probe — previously only
+		// custom providers were checked, leaving cloud models permanently gray.
 		targets = append(targets, target{name: provider.name, baseURL: baseURL})
 	}
 	if len(targets) == 0 {
 		return probes
 	}
 
-	results := make([][]string, len(targets))
+	results := make([]providerModelProbe, len(targets))
 	var wg sync.WaitGroup
 	for i, target := range targets {
 		wg.Add(1)
@@ -267,16 +355,19 @@ func (s *Server) miniappModelHealthProbes(
 			}()
 			probeCtx, cancel := context.WithTimeout(ctx, miniappModelHealthTimeout)
 			defer cancel()
-			results[idx] = probeProviderModelIDs(probeCtx, baseURL)
+			models, listed, reachable := probeModelsClassified(probeCtx, baseURL)
+			results[idx] = providerModelProbe{
+				checked:   true,
+				reachable: reachable,
+				listed:    listed,
+				models:    models,
+			}
 		}(i, target.name, target.baseURL)
 	}
 	wg.Wait()
 
 	for i, target := range targets {
-		probes[target.name] = providerModelProbe{
-			checked: true,
-			models:  results[i],
-		}
+		probes[target.name] = results[i]
 	}
 	return probes
 }
@@ -302,11 +393,21 @@ func miniappModelHealthForEntry(entry modelEntry, probes map[string]providerMode
 	if !ok || !probe.checked {
 		return miniappModelHealthUnknown
 	}
-	modelID := modelIDForProviderEntry(entry)
-	for _, served := range probe.models {
-		if served == modelID {
-			return miniappModelHealthOnline
+	// When we have a served-model list, membership is authoritative: present →
+	// online, absent → offline (e.g. a mistyped local/custom model name).
+	if probe.listed {
+		modelID := modelIDForProviderEntry(entry)
+		for _, served := range probe.models {
+			if served == modelID {
+				return miniappModelHealthOnline
+			}
 		}
+		return miniappModelHealthOffline
+	}
+	// No enumerable list (Anthropic-format endpoints without /models, non-OK
+	// responses): a reachable endpoint counts as usable, never a false offline.
+	if probe.reachable {
+		return miniappModelHealthOnline
 	}
 	return miniappModelHealthOffline
 }
@@ -324,12 +425,49 @@ func isMiniappCustomProvider(name string) bool {
 	return name == "custom" || strings.HasPrefix(name, "custom-")
 }
 
-func probeProviderModelIDs(ctx context.Context, baseURL string) []string {
-	ids, err := modelrole.DiscoverServedVllmModels(ctx, baseURL)
+// probeModelsClassified does GET <baseURL>/models and classifies the outcome so
+// the picker can show a meaningful dot for any OpenAI-style endpoint:
+//
+//	reachable=false                 → network error / timeout (provider down)
+//	reachable=true, listed=false    → endpoint answered but no parseable model
+//	                                  list (non-200, or not OpenAI-shaped, e.g.
+//	                                  Anthropic-format providers) — treat as up
+//	reachable=true, listed=true     → models holds the served model IDs
+//
+// No auth header is sent: the goal is reachability + (when available) the served
+// set, and many /models endpoints (e.g. OpenRouter) are public while others
+// answer 401/404 — all of which still prove the endpoint is up.
+func probeModelsClassified(ctx context.Context, baseURL string) (models []string, listed, reachable bool) {
+	endpoint := strings.TrimRight(strings.TrimSpace(baseURL), "/") + "/models"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil
+		return nil, false, false
 	}
-	return ids
+	resp, err := miniappProbeClient.Do(req)
+	if err != nil {
+		return nil, false, false // network failure → provider unreachable
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, false, true // reachable, but no usable model list
+	}
+	var payload struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&payload); err != nil {
+		return nil, false, true // reachable, but response is not OpenAI-shaped
+	}
+	for _, m := range payload.Data {
+		if id := strings.TrimSpace(m.ID); id != "" {
+			models = append(models, id)
+		}
+	}
+	if len(models) == 0 {
+		return nil, false, true // reachable, list empty/unenumerable
+	}
+	return models, true, true
 }
 
 func assembleMiniappModelSections(roles []modelEntry, providers []providerSpec) []modelSection {

@@ -186,3 +186,68 @@ func TestModelsAddCustom_MissingModel(t *testing.T) {
 		t.Errorf("error code = %s, want %s", resp.Error.Code, protocol.ErrMissingParam)
 	}
 }
+
+func TestModelsDeleteCustom_WithInitData(t *testing.T) {
+	var gotID string
+	h := modelsDeleteCustom(ModelDeps{
+		DeleteModel: func(_ context.Context, id string) (ModelDeleteResult, error) {
+			gotID = id
+			return ModelDeleteResult{
+				ID:           "custom/typo-model",
+				Removed:      true,
+				ClearedRoles: []string{"main"},
+				Current:      "vllm/gemma4",
+			}, nil
+		},
+	})
+	req := reqWith(t, "miniapp.models.delete_custom", map[string]any{"id": " custom/typo-model "})
+	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+
+	got := decodePayload(t, h(ctx, req))
+	if gotID != "custom/typo-model" {
+		t.Errorf("id = %q, want trimmed id", gotID)
+	}
+	if got["ok"] != true {
+		t.Errorf("ok = %v, want true", got["ok"])
+	}
+	if got["removed"] != true {
+		t.Errorf("removed = %v, want true", got["removed"])
+	}
+	if got["current"] != "vllm/gemma4" {
+		t.Errorf("current = %v, want vllm/gemma4", got["current"])
+	}
+	roles, ok := got["clearedRoles"].([]any)
+	if !ok || len(roles) != 1 || roles[0] != "main" {
+		t.Errorf("clearedRoles = %#v, want [main]", got["clearedRoles"])
+	}
+}
+
+func TestModelsDeleteCustom_MissingID(t *testing.T) {
+	h := modelsDeleteCustom(ModelDeps{})
+	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+	resp := h(ctx, reqWith(t, "miniapp.models.delete_custom", map[string]any{"id": "   "}))
+
+	if resp.OK {
+		t.Fatal("expected missing param response")
+	}
+	if resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("error code = %s, want %s", resp.Error.Code, protocol.ErrMissingParam)
+	}
+}
+
+func TestModelsDeleteCustom_NoInitData(t *testing.T) {
+	h := modelsDeleteCustom(ModelDeps{
+		DeleteModel: func(context.Context, string) (ModelDeleteResult, error) {
+			t.Fatal("DeleteModel should not be called without initData")
+			return ModelDeleteResult{}, nil
+		},
+	})
+
+	resp := h(context.Background(), reqWith(t, "miniapp.models.delete_custom", map[string]any{"id": "custom/x"}))
+	if resp.OK {
+		t.Fatal("expected unauthorized response")
+	}
+	if resp.Error.Code != protocol.ErrUnauthorized {
+		t.Errorf("error code = %s, want %s", resp.Error.Code, protocol.ErrUnauthorized)
+	}
+}

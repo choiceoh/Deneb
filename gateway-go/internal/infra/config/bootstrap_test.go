@@ -421,3 +421,184 @@ func TestPersistCustomProviderModel(t *testing.T) {
 		}
 	})
 }
+
+func TestDeleteCustomProviderModel(t *testing.T) {
+	logger := slog.Default()
+
+	// providerModels reads back the model IDs persisted under a provider key.
+	providerModels := func(t *testing.T, cfgPath, provider string) []string {
+		t.Helper()
+		var written map[string]any
+		if err := json.Unmarshal(testutil.Must(os.ReadFile(cfgPath)), &written); err != nil {
+			t.Fatal(err)
+		}
+		models, _ := written["models"].(map[string]any)
+		providers, _ := models["providers"].(map[string]any)
+		pc, ok := providers[provider].(map[string]any)
+		if !ok {
+			return nil
+		}
+		arr, _ := pc["models"].([]any)
+		var ids []string
+		for _, item := range arr {
+			if m, ok := item.(map[string]any); ok {
+				ids = append(ids, m["id"].(string))
+			}
+		}
+		return ids
+	}
+	providerExists := func(t *testing.T, cfgPath, provider string) bool {
+		t.Helper()
+		var written map[string]any
+		if err := json.Unmarshal(testutil.Must(os.ReadFile(cfgPath)), &written); err != nil {
+			t.Fatal(err)
+		}
+		models, _ := written["models"].(map[string]any)
+		providers, _ := models["providers"].(map[string]any)
+		_, ok := providers[provider]
+		return ok
+	}
+
+	t.Run("removes one model and keeps the rest", func(t *testing.T) {
+		tmp := t.TempDir()
+		cfgPath := filepath.Join(tmp, "deneb.json")
+		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "keep-me", logger); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "typo-model", logger); err != nil {
+			t.Fatal(err)
+		}
+
+		res, err := DeleteCustomProviderModel(cfgPath, "custom/typo-model", logger)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !res.Removed {
+			t.Error("Removed = false, want true")
+		}
+		if res.ProviderDropped {
+			t.Error("ProviderDropped = true, want false (provider still has a model)")
+		}
+		got := providerModels(t, cfgPath, "custom")
+		if len(got) != 1 || got[0] != "keep-me" {
+			t.Errorf("remaining models = %v, want [keep-me]", got)
+		}
+	})
+
+	t.Run("drops provider when last model removed", func(t *testing.T) {
+		tmp := t.TempDir()
+		cfgPath := filepath.Join(tmp, "deneb.json")
+		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "only-model", logger); err != nil {
+			t.Fatal(err)
+		}
+
+		res, err := DeleteCustomProviderModel(cfgPath, "custom/only-model", logger)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !res.Removed || !res.ProviderDropped {
+			t.Errorf("Removed=%v ProviderDropped=%v, want both true", res.Removed, res.ProviderDropped)
+		}
+		if providerExists(t, cfgPath, "custom") {
+			t.Error("custom provider still present, want dropped")
+		}
+	})
+
+	t.Run("clears role binding pointing at the deleted model", func(t *testing.T) {
+		tmp := t.TempDir()
+		cfgPath := filepath.Join(tmp, "deneb.json")
+		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "bad-main", logger); err != nil {
+			t.Fatal(err)
+		}
+		// Bind the freshly-added model to main + lightweight, like the picker does.
+		if err := PersistRoleModel(cfgPath, "main", "custom/bad-main", logger); err != nil {
+			t.Fatal(err)
+		}
+		if err := PersistRoleModel(cfgPath, "lightweight", "custom/bad-main", logger); err != nil {
+			t.Fatal(err)
+		}
+
+		res, err := DeleteCustomProviderModel(cfgPath, "custom/bad-main", logger)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantRoles := map[string]bool{"main": true, "lightweight": true}
+		if len(res.ClearedRoles) != 2 {
+			t.Fatalf("ClearedRoles = %v, want main+lightweight", res.ClearedRoles)
+		}
+		for _, r := range res.ClearedRoles {
+			if !wantRoles[r] {
+				t.Errorf("unexpected cleared role %q", r)
+			}
+		}
+
+		var written map[string]any
+		if err := json.Unmarshal(testutil.Must(os.ReadFile(cfgPath)), &written); err != nil {
+			t.Fatal(err)
+		}
+		agents, _ := written["agents"].(map[string]any)
+		if _, present := agents["defaultModel"]; present {
+			t.Error("agents.defaultModel still present, want cleared")
+		}
+		if _, present := agents["lightweightModel"]; present {
+			t.Error("agents.lightweightModel still present, want cleared")
+		}
+	})
+
+	t.Run("rejects non-custom provider", func(t *testing.T) {
+		tmp := t.TempDir()
+		cfgPath := filepath.Join(tmp, "deneb.json")
+		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "m", logger); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := DeleteCustomProviderModel(cfgPath, "zai/glm-5.1", logger)
+		if !errors.Is(err, ErrInvalidCustomModel) {
+			t.Fatalf("error = %v, want ErrInvalidCustomModel", err)
+		}
+	})
+
+	t.Run("rejects malformed id", func(t *testing.T) {
+		tmp := t.TempDir()
+		cfgPath := filepath.Join(tmp, "deneb.json")
+
+		for _, id := range []string{"", "  ", "no-slash", "custom/", "/model"} {
+			if _, err := DeleteCustomProviderModel(cfgPath, id, logger); !errors.Is(err, ErrInvalidCustomModel) {
+				t.Errorf("id %q: error = %v, want ErrInvalidCustomModel", id, err)
+			}
+		}
+	})
+
+	t.Run("idempotent when model is absent", func(t *testing.T) {
+		tmp := t.TempDir()
+		cfgPath := filepath.Join(tmp, "deneb.json")
+		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "present", logger); err != nil {
+			t.Fatal(err)
+		}
+
+		res, err := DeleteCustomProviderModel(cfgPath, "custom/missing", logger)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Removed {
+			t.Error("Removed = true, want false for absent model")
+		}
+		// The existing model must be untouched.
+		if got := providerModels(t, cfgPath, "custom"); len(got) != 1 || got[0] != "present" {
+			t.Errorf("models = %v, want [present]", got)
+		}
+	})
+
+	t.Run("idempotent when config does not exist", func(t *testing.T) {
+		tmp := t.TempDir()
+		cfgPath := filepath.Join(tmp, "deneb.json")
+
+		res, err := DeleteCustomProviderModel(cfgPath, "custom/anything", logger)
+		if err != nil {
+			t.Fatalf("error = %v, want nil for missing config", err)
+		}
+		if res.Removed {
+			t.Error("Removed = true, want false")
+		}
+	})
+}
