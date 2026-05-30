@@ -7,6 +7,7 @@
 package toolreg
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
@@ -20,7 +21,7 @@ import (
 func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps) {
 	RegisterFSTools(registry, deps)
 	RegisterProcessTools(registry, &deps.Process)
-	RegisterWebTools(registry)
+	RegisterWebTools(registry, deps.SpilloverStore)
 	RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
 	RegisterMediaTools(registry)
@@ -163,7 +164,8 @@ func RegisterProcessTools(registry toolctx.ToolRegistrar, d *toolctx.ProcessDeps
 }
 
 // RegisterWebTools registers the unified web tool (search mode only).
-func RegisterWebTools(registry toolctx.ToolRegistrar) {
+// spill (optional) lets the YouTube path offload full transcripts to disk.
+func RegisterWebTools(registry toolctx.ToolRegistrar, spill *agent.SpilloverStore) {
 	webCache := web.NewFetchCache()
 	localAI := web.NewLocalAIExtractor()
 
@@ -171,7 +173,7 @@ func RegisterWebTools(registry toolctx.ToolRegistrar) {
 		Name:        "web",
 		Description: "Web access: search the web or fetch page content. Use query for keyword search, url for direct fetch",
 		InputSchema: webToolSchema(),
-		Fn:          web.MergedTool(webCache, localAI),
+		Fn:          web.MergedTool(webCache, localAI, spill),
 	})
 }
 

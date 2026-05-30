@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
 
@@ -70,17 +71,27 @@ func isRetryableError(err error) bool {
 	return errors.Is(err, context.DeadlineExceeded)
 }
 
-func fetchYouTube(ctx context.Context, url string) (string, error) {
-	ytCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
-	defer cancel()
-	result, err := media.ExtractYouTubeTranscript(ytCtx, url)
+// fetchYouTube extracts a YouTube transcript and returns a summarized result.
+// The full transcript is summarized in an isolated local-LLM call and offloaded
+// to spillover (when available) so it never enters the main conversation
+// transcript — see web_youtube.go for the rationale.
+func fetchYouTube(ctx context.Context, spill *agent.SpilloverStore, url string) (string, error) {
+	result, err := extractYouTube(ctx, url)
 	if err != nil {
 		return formatFetchError(webFetchErr{
 			Code: "youtube_failed", Message: err.Error(),
 			URL: url, Retryable: true,
 		}), nil
 	}
-	return media.FormatYouTubeResult(result), nil
+	return summarizeYouTubeResult(ctx, spill, result), nil
+}
+
+// extractYouTube runs transcript extraction under its own bounded deadline so
+// summarization (which uses the parent ctx) is not capped by the fetch timeout.
+func extractYouTube(ctx context.Context, url string) (*media.YouTubeResult, error) {
+	ytCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+	return media.ExtractYouTubeTranscript(ytCtx, url)
 }
 
 // classifyFetchError maps transport and HTTP errors to agent-readable codes.
