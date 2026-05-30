@@ -35,6 +35,7 @@ import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.svg.SvgDecoder
 import com.inspiredandroid.kai.data.AppSettings
 import com.inspiredandroid.kai.data.ThemeMode
+import com.inspiredandroid.kai.deneb.DenebConfigScreen
 import com.inspiredandroid.kai.tools.CalendarPermissionController
 import com.inspiredandroid.kai.tools.NotificationPermissionController
 import com.inspiredandroid.kai.tools.SetupCalendarPermissionHandler
@@ -72,6 +73,10 @@ object Home
 @Serializable
 @SerialName("settings")
 object Settings
+
+@Serializable
+@SerialName("deneb_config")
+object DenebConfig
 
 @Composable
 fun App(
@@ -214,7 +219,7 @@ private fun AppContent(
                             viewModel = chatViewModel,
                             textToSpeech = textToSpeech,
                             onNavigateToSettings = {
-                                navController.navigate(Settings)
+                                navController.navigate(DenebConfig)
                             },
                             isSandboxAvailable = currentPlatform is Platform.Mobile.Android,
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
@@ -234,6 +239,13 @@ private fun AppContent(
                                 navController.navigateUp()
                             },
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
+                        )
+                    }
+                    composable<DenebConfig> {
+                        DenebConfigScreen(
+                            appSettings = appSettings,
+                            onBack = { navController.navigateUp() },
+                            onOpenKaiSettings = { navController.navigate(Settings) },
                         )
                     }
                 }
