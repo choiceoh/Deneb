@@ -1,0 +1,17 @@
+Deneb Native Android Client
+===========================
+
+This component vendors user-interface code from Kai (Kai 9000):
+
+    https://github.com/SimonSchubert/Kai
+    Copyright (c) the Kai contributors
+    Licensed under the Apache License, Version 2.0.
+
+The vendored sources are placed under client-android/app/ by vendor-kai.sh and
+retain their original Apache-2.0 license and per-file headers. A copy of the
+upstream license ships inside the vendored tree (app/LICENSE or app/LICENSE.txt),
+and VENDOR.txt records the exact commit that was vendored.
+
+Modifications made by the Deneb project (removing non-Android targets, removing
+Kai's brain/data layer, and wiring the UI to the Deneb gateway) are described in
+README.md and are likewise licensed under the Apache License, Version 2.0.
