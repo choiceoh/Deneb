@@ -31,6 +31,18 @@ export function renderSettings(root: HTMLElement, initData: string): void {
   modelList.appendChild(buildModelLoadingRow());
   root.appendChild(modelSection);
   void hydrateModelSummaryRow(modelList, initData);
+
+  // Topic docs — per-topic knowledge file editor (<workspace>/topics/*.md).
+  // Lives in settings, not home: it's management/config, not a daily
+  // destination like calendar/mail/search.
+  root.appendChild(
+    flatSection('knowledge', [
+      buildNavRow('topic docs', 'topics/*.md 편집', () => {
+        triggerSelectionHaptic();
+        navigate({ name: 'topicDocs' });
+      }),
+    ]),
+  );
 }
 
 // flatSection returns a label + a hairline-bordered list group. Returning the
@@ -50,6 +62,24 @@ function flatSection(label: string, rows: HTMLElement[] = []): HTMLElement {
   wrap.appendChild(list);
 
   return wrap;
+}
+
+// buildNavRow returns a tappable flat-row that drills into another view —
+// same shape as the model-role rows but with a fixed label/sub.
+function buildNavRow(label: string, sub: string, onClick: () => void): HTMLElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'flat-row flat-row-nav';
+  btn.innerHTML = `
+    <span class="flat-row-text">
+      <span class="flat-row-label"></span>
+      <span class="flat-row-sub"></span>
+    </span>
+  `;
+  (btn.querySelector('.flat-row-label') as HTMLElement).textContent = label;
+  (btn.querySelector('.flat-row-sub') as HTMLElement).textContent = sub;
+  btn.addEventListener('click', onClick);
+  return btn;
 }
 
 function buildModelLoadingRow(): HTMLElement {
