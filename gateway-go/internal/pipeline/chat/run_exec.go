@@ -538,6 +538,7 @@ func prepareContextAndPrompt(
 			HindsightEnabled:    deps.hindsightClient != nil,
 			TopicKnowledge:      topicKnowledge,
 			TopicCacheKey:       topicCacheKey,
+			SupportsRichUI:      richUIChannel(ch),
 		}
 
 		systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
