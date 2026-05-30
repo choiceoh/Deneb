@@ -117,6 +117,12 @@ func (s *Store) ReadPage(relPath string) (*Page, error) {
 // Updates the master index entry and maintains bidirectional backlinks.
 func (s *Store) WritePage(relPath string, page *Page) error {
 	relPath = normalizePagePath(relPath)
+	// Defend every write path (dreamer, wiki tool, RPC, miniapp merge) against
+	// content that arrives with its own frontmatter prepended — storing it as a
+	// body would stack a duplicate on-disk frontmatter. See StripLeadingFrontmatter.
+	if page != nil {
+		page.Body = StripLeadingFrontmatter(page.Body)
+	}
 	_, readErr := s.ReadPage(relPath)
 	op := "update"
 	if readErr != nil {
