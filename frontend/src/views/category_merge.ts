@@ -40,23 +40,20 @@ export async function runMerge(
   const ok = await confirmAction(
     `「${label(source)}」를 「${label(target)}」에 병합합니다.\n\n` +
       `「${label(source)}」 페이지는 삭제되고, 이를 참조하던 링크는 ` +
-      `「${label(target)}」로 옮겨집니다. 계속할까요?`,
+      `「${label(target)}」로 옮겨집니다.\n\n` +
+      `병합은 백그라운드에서 처리되고, 끝나면 알림이 와요. 계속할까요?`,
   );
   if (!ok) return false;
 
-  // The merge runs an LLM body synthesis, so it can take several seconds —
-  // hold a progress pill open until the call settles, then dismiss it.
-  const dismiss = showFlash('병합 중… 잠시만요', 'info', 60000);
+  // The merge runs in the background on the gateway (the slow part is the
+  // model combining the two bodies), so this call returns right away — we just
+  // confirm it started. Completion arrives as a Telegram notice, not here.
   try {
-    const res = await mergePages(initData, target.path, source.path);
-    dismiss();
-    const links =
-      res.rewriteCount > 0 ? ` · 링크 ${res.rewriteCount}개 재연결` : '';
-    showFlash(`병합 완료${links}`, 'success');
+    await mergePages(initData, target.path, source.path);
+    showFlash('병합을 시작했어요 · 끝나면 알림을 보낼게요', 'success', 4000);
     return true;
   } catch (err) {
-    dismiss();
-    showFlash(`병합 실패: ${formatRpcError(err)}`, 'error', 4000);
+    showFlash(`병합 시작 실패: ${formatRpcError(err)}`, 'error', 4000);
     return false;
   }
 }

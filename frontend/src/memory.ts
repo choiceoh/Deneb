@@ -116,18 +116,20 @@ export function listPagesInCategory(
 
 export interface MergeResult {
   ok: boolean;
+  started: boolean; // merge accepted; runs in the background
   targetPath: string;
   mergedTitle?: string;
-  rewriteCount: number; // other pages whose links were repointed to the target
-  sourceRemoved: boolean;
 }
 
 /**
- * mergePages folds the source page into the target: the target survives with
- * a combined body + unioned frontmatter, every page that referenced the
- * source is repointed to the target, and the source page is deleted. The
- * combined body is synthesized server-side by the lightweight model (with a
- * plain concatenation fallback), so this call can take a few seconds.
+ * mergePages starts folding the source page into the target and returns as
+ * soon as the job is accepted — the merge runs in the BACKGROUND on the
+ * gateway. The slow step (synthesizing the combined body with the lightweight
+ * model) happens off the request path with a generous timeout; when it
+ * finishes (combined body written, referencing pages repointed, source
+ * deleted — or a concatenation fallback if the model is unavailable) the user
+ * gets a Telegram completion notice. So this call returns quickly and does NOT
+ * mean the merge is done yet.
  */
 export function mergePages(
   initData: string,

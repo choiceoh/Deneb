@@ -298,19 +298,18 @@ async function doMerge(selection: SelectionState): Promise<void> {
   selection.busy = true;
   renderSelectionBar(selection);
 
-  const merged = await runMerge(selection.initData, a, b);
+  const started = await runMerge(selection.initData, a, b);
 
-  if (!merged) {
-    // Cancelled or failed — drop the busy lock and let the user retry.
+  if (!started) {
+    // Cancelled or failed to start — drop the busy lock and let the user retry.
     selection.busy = false;
     if (selection.selecting) renderSelectionBar(selection);
     return;
   }
 
-  // Merged: tear down selection and reload the list so the surviving page
-  // shows its combined body and the source row is gone.
+  // Started: the merge runs in the background, so the source page isn't gone
+  // yet — re-rendering now would still show both rows. Just leave selection
+  // mode; the list reflects the merge when the user revisits after the
+  // completion notification.
   exitSelectionMode(selection);
-  if (isCurrentHash(selection.expectedHash)) {
-    void renderCategoryPages(selection.root, selection.initData, selection.category);
-  }
 }
