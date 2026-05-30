@@ -98,6 +98,7 @@ function paint(root: HTMLElement): void {
     { label: 'mail', route: { name: 'inbox' } },
     { label: 'search', route: { name: 'search' } },
     { label: 'topics', route: { name: 'sessions' } },
+    { label: 'topic docs', route: { name: 'topicDocs' } },
     { label: 'categories', route: { name: 'categories' } },
     { label: 'crons', route: { name: 'crons' } },
     { label: 'settings', route: { name: 'settings' } },
