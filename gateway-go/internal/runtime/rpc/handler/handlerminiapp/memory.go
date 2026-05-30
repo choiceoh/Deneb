@@ -32,6 +32,7 @@ type MemorySearcher interface {
 	SearchDiary(ctx context.Context, query string, limit int) ([]wiki.DiaryHit, error)
 	ReadPage(relPath string) (*wiki.Page, error)
 	WritePage(relPath string, page *wiki.Page) error
+	MergePage(targetPath, sourcePath, mergedBody string, opts wiki.MergeOptions) (wiki.MergeResult, error)
 	Stats() wiki.StoreStats
 	ListPages(category string) ([]string, error)
 	RecentDiaryEntries(limit int) []wiki.DiaryHit
@@ -43,6 +44,13 @@ type MemorySearcher interface {
 // handlers then surface UNAVAILABLE per call instead of crashing at boot.
 type MemoryDeps struct {
 	Store func() (MemorySearcher, error)
+
+	// MergeBodies synthesizes one combined body from two pages (lightweight
+	// LLM). Optional: when nil — or when it errors or returns blank — the
+	// merge falls back to a labeled concatenation, so a missing or
+	// oversubscribed model never blocks the structural merge. Wired by the
+	// server from the lightweight model role (see makeWikiMergeBodies).
+	MergeBodies func(ctx context.Context, targetTitle, targetBody, sourceTitle, sourceBody string) (string, error)
 }
 
 const (
@@ -72,6 +80,7 @@ func MemoryMethods(deps MemoryDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.memory.get_page":         memoryGetPage(deps),
 		"miniapp.memory.write_page":       memoryWritePage(deps),
 		"miniapp.memory.create_page":      memoryCreatePage(deps),
+		"miniapp.memory.merge":            memoryMergePage(deps),
 		"miniapp.memory.categories":       memoryCategories(deps),
 		"miniapp.memory.list_in_category": memoryListInCategory(deps),
 		"miniapp.memory.diary_recent":     memoryDiaryRecent(deps),
@@ -406,6 +415,116 @@ func memoryCreatePage(deps MemoryDeps) rpcutil.HandlerFunc {
 		}
 		return rpcutil.RespondOK(req.ID, pageToOut(rel, page))
 	}
+}
+
+// memoryMergePage folds one wiki page into another: the target survives with a
+// combined body + unioned frontmatter, every page that referenced the source is
+// repointed to the target, and the source is deleted. Body synthesis is
+// delegated to deps.MergeBodies (lightweight LLM); when that's unavailable or
+// fails, the body falls back to a labeled concatenation so the structural merge
+// (links, frontmatter, deletion) still completes losslessly.
+//
+// Drives the Mini App's "두 프로젝트 병합" action (category-page multi-select).
+// Like memoryWritePage this is last-write-wins with no optimistic locking —
+// fine for the single-operator deployment; recoverable from git history.
+func memoryMergePage(deps MemoryDeps) rpcutil.HandlerFunc {
+	type params struct {
+		TargetPath string `json:"targetPath"`
+		SourcePath string `json:"sourcePath"`
+	}
+	type out struct {
+		OK            bool   `json:"ok"`
+		TargetPath    string `json:"targetPath"`
+		MergedTitle   string `json:"mergedTitle,omitempty"`
+		RewriteCount  int    `json:"rewriteCount"`
+		SourceRemoved bool   `json:"sourceRemoved"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		target := strings.TrimSpace(p.TargetPath)
+		source := strings.TrimSpace(p.SourcePath)
+		if target == "" {
+			return rpcerr.MissingParam("targetPath").Response(req.ID)
+		}
+		if source == "" {
+			return rpcerr.MissingParam("sourcePath").Response(req.ID)
+		}
+		// Same traversal guard as get_page/write_page on both paths.
+		if err := validateWikiPath(target); err != nil {
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+		}
+		if err := validateWikiPath(source); err != nil {
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+		}
+		if target == source {
+			return rpcerr.InvalidRequest("cannot merge a page into itself").Response(req.ID)
+		}
+
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.WrapUnavailable("memory store unavailable", err).Response(req.ID)
+		}
+
+		// Read both pages up front: reject a missing page with a clear
+		// NOT_FOUND, and hand their titles+bodies to the synthesizer.
+		targetPage, err := store.ReadPage(target)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return rpcerr.NotFound("wiki page " + rpcutil.TruncateForError(target)).Response(req.ID)
+			}
+			return rpcerr.WrapUnavailable("wiki page read failed", err).Response(req.ID)
+		}
+		sourcePage, err := store.ReadPage(source)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return rpcerr.NotFound("wiki page " + rpcutil.TruncateForError(source)).Response(req.ID)
+			}
+			return rpcerr.WrapUnavailable("wiki page read failed", err).Response(req.ID)
+		}
+
+		// Synthesize the merged body. LLM first; on any failure fall back to a
+		// labeled concatenation so the merge never silently drops content.
+		mergedBody := fallbackMergeBody(targetPage, sourcePage)
+		if deps.MergeBodies != nil {
+			if synth, serr := deps.MergeBodies(ctx, targetPage.Meta.Title, targetPage.Body, sourcePage.Meta.Title, sourcePage.Body); serr == nil && strings.TrimSpace(synth) != "" {
+				mergedBody = synth
+			}
+		}
+
+		result, err := store.MergePage(target, source, mergedBody, wiki.MergeOptions{})
+		if err != nil {
+			return rpcerr.WrapUnavailable("wiki merge failed", err).Response(req.ID)
+		}
+
+		return rpcutil.RespondOK(req.ID, out{
+			OK:            true,
+			TargetPath:    result.TargetPath,
+			MergedTitle:   result.MergedTitle,
+			RewriteCount:  result.RewriteCount,
+			SourceRemoved: result.SourceRemoved,
+		})
+	}
+}
+
+// fallbackMergeBody concatenates two page bodies under a divider when no LLM
+// synthesis is available. Keeps every line of both pages — lossless by design.
+func fallbackMergeBody(target, source *wiki.Page) string {
+	srcTitle := strings.TrimSpace(source.Meta.Title)
+	if srcTitle == "" {
+		srcTitle = "병합된 페이지"
+	}
+	return strings.TrimSpace(
+		strings.TrimSpace(target.Body) +
+			"\n\n---\n\n## (병합: " + srcTitle + ")\n\n" +
+			strings.TrimSpace(source.Body))
 }
 
 // pageToOut shapes a wiki.Page as the JSON map the get_page /

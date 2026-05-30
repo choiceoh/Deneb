@@ -111,3 +111,32 @@ export function listPagesInCategory(
     initData,
   );
 }
+
+// --- Page merge (category-page multi-select → 병합) ---
+
+export interface MergeResult {
+  ok: boolean;
+  targetPath: string;
+  mergedTitle?: string;
+  rewriteCount: number; // other pages whose links were repointed to the target
+  sourceRemoved: boolean;
+}
+
+/**
+ * mergePages folds the source page into the target: the target survives with
+ * a combined body + unioned frontmatter, every page that referenced the
+ * source is repointed to the target, and the source page is deleted. The
+ * combined body is synthesized server-side by the lightweight model (with a
+ * plain concatenation fallback), so this call can take a few seconds.
+ */
+export function mergePages(
+  initData: string,
+  targetPath: string,
+  sourcePath: string,
+): Promise<MergeResult> {
+  return call<MergeResult>(
+    'miniapp.memory.merge',
+    { targetPath, sourcePath },
+    initData,
+  );
+}

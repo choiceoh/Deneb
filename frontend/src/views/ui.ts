@@ -194,12 +194,17 @@ function ensureFlashStack(): HTMLDivElement {
  * showFlash drops a transient bottom-center pill into the global flash
  * stack. Variant selects color + auto-fires the matching haptic. Tap
  * the pill or wait `duration` ms for it to slide out.
+ *
+ * Returns a dismiss function so callers showing a long-lived "in
+ * progress…" pill can clear it the moment the work finishes instead of
+ * leaving it to time out. Calling it after the pill is already gone is a
+ * no-op. Most callers ignore the return value.
  */
 export function showFlash(
   message: string,
   variant: FlashVariant = 'info',
   duration = 2400,
-): void {
+): () => void {
   const stack = ensureFlashStack();
   const pill = document.createElement('button');
   pill.type = 'button';
@@ -239,6 +244,11 @@ export function showFlash(
     window.clearTimeout(timer);
     dismiss();
   });
+
+  return () => {
+    window.clearTimeout(timer);
+    dismiss();
+  };
 }
 
 /**

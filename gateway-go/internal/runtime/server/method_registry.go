@@ -260,6 +260,10 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return store, nil
 			},
+			// LLM body synthesis for miniapp.memory.merge. Lazy lightweight
+			// model resolution; the handler falls back to concatenation when
+			// this errors, so it's safe even with no provider configured.
+			MergeBodies: s.makeWikiMergeBodies(),
 		}),
 
 		// Mini App cron job list (miniapp.crons.list). Same lazy-factory
