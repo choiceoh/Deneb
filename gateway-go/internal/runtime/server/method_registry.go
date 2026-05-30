@@ -262,6 +262,18 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			},
 		}),
 
+		// Mini App topic-doc editing (miniapp.topicdocs.list_files /
+		// read_file / write_file): plain-text per-topic knowledge files under
+		// <workspace>/topics/*.md, edited from the Mini App. resolveWorkspaceDir
+		// is reused (config load + ~/.deneb/workspace fallback), resolved per
+		// call so a config change reflects without a restart; the dir is
+		// auto-created on first write (atomicfile MkdirAll).
+		handlerminiapp.TopicDocsMethods(handlerminiapp.TopicDocsDeps{
+			TopicsDir: func() (string, error) {
+				return filepath.Join(resolveWorkspaceDir(), "topics"), nil
+			},
+		}),
+
 		// Mini App cron job list (miniapp.crons.list). Same lazy-factory
 		// pattern as memory: cron.Service is wired during buildHub so by
 		// the time the first RPC fires the service is ready, but a

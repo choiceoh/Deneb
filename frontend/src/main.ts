@@ -400,6 +400,21 @@ async function dispatch(route: Route): Promise<void> {
         renderTopicNew(root, initData);
         return;
       }
+      case 'topicDocs': {
+        const { renderTopicDocs } = await import('./views/topic_docs');
+        void renderTopicDocs(root, initData);
+        return;
+      }
+      case 'topicDocNew': {
+        const { renderTopicDocNew } = await import('./views/topic_doc_edit');
+        renderTopicDocNew(root, initData);
+        return;
+      }
+      case 'topicDocEdit': {
+        const { renderTopicDocEdit } = await import('./views/topic_doc_edit');
+        void renderTopicDocEdit(root, initData, route.file);
+        return;
+      }
     }
   } catch (err) {
     // Most likely: the dynamic import for this view's chunk failed

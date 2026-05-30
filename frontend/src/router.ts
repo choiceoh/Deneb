@@ -30,7 +30,10 @@ export type Route =
   | { name: 'cronDetail'; id: string }
   | { name: 'cronEdit'; id: string }
   | { name: 'personDetail'; email: string }
-  | { name: 'wikiNew'; category?: string };
+  | { name: 'wikiNew'; category?: string }
+  | { name: 'topicDocs' }
+  | { name: 'topicDocNew' }
+  | { name: 'topicDocEdit'; file: string };
 
 // Home is the index; every other route is a drill-down that gets the
 // Telegram BackButton. The panorama tab strip is gone — home's
@@ -79,6 +82,17 @@ export function parseRoute(hash: string): Route {
       return { name: 'cronDetail', id: decodeURIComponent(cron[1]) };
     } catch {
       return { name: 'crons' };
+    }
+  }
+  // topic-docs: list, new (must precede the edit catch-all), and edit.
+  if (hash === '#/topic-docs') return { name: 'topicDocs' };
+  if (hash === '#/topic-docs/new') return { name: 'topicDocNew' };
+  const topicDoc = hash.match(/^#\/topic-docs\/(.+)$/);
+  if (topicDoc) {
+    try {
+      return { name: 'topicDocEdit', file: decodeURIComponent(topicDoc[1]) };
+    } catch {
+      return { name: 'topicDocs' };
     }
   }
   if (hash === '#/wiki-new') return { name: 'wikiNew' };
@@ -195,7 +209,10 @@ export function navigate(target: Route): void {
     hash = target.category
       ? `#/wiki-new?category=${encodeURIComponent(target.category)}`
       : '#/wiki-new';
-  }
+  } else if (target.name === 'topicDocs') hash = '#/topic-docs';
+  else if (target.name === 'topicDocNew') hash = '#/topic-docs/new';
+  else if (target.name === 'topicDocEdit')
+    hash = `#/topic-docs/${encodeURIComponent(target.file)}`;
   if (location.hash === hash) {
     // hashchange would not fire; force re-render by dispatching ourselves.
     window.dispatchEvent(new HashChangeEvent('hashchange'));
