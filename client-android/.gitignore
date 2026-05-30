@@ -1,12 +1,16 @@
-# Build outputs and caches for the vendored Android client (client-android/app).
+# Build outputs, caches, and machine-specific config under the vendored app/.
 # The vendored Kai source is reproducible via vendor-kai.sh at the commit pinned
-# in VENDOR.txt; build artifacts and machine-specific config are not committed.
-/app/.gradle/
-/app/.kotlin/
-/app/build/
-/app/*/build/
-/app/local.properties
-/app/captures/
+# in VENDOR.txt. Standard (unanchored) patterns so they match at any depth.
+#
+# NOTE: scripts/committer uses `git add --force`, which bypasses these rules —
+# clean build dirs (./gradlew clean) before committing the app/ directory, or
+# commit specific files.
+.gradle/
+.kotlin/
+build/
+local.properties
+captures/
+.cxx/
 /.vendor.*
 *.apk
 *.aab
