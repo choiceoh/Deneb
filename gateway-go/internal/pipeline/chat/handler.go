@@ -84,6 +84,10 @@ type Handler struct {
 	// stays free of any infra import by talking through the AppSettings
 	// interface (concrete *appsettings.Store satisfies it).
 	appSettings AppSettings
+
+	// topicResolver maps a forum threadID to a per-topic knowledge key for
+	// system-prompt injection. Optional: nil disables per-topic knowledge.
+	topicResolver TopicResolver
 }
 
 // AppSettings is the minimal app-settings surface the chat handler needs to
@@ -94,6 +98,21 @@ type AppSettings interface {
 	// Implementations must persist atomically — a crash mid-write must not
 	// produce a truncated settings file.
 	SetActiveHome(chatID int64, chatType string) error
+}
+
+// TopicResolver maps a Telegram forum threadID to a per-topic knowledge key
+// (from deneb.json topics.map). The concrete implementation lives in the
+// server package and snapshots config at boot; the chat package stays free of
+// any infra/config import by talking through this interface. nil disables
+// per-topic knowledge injection.
+type TopicResolver interface {
+	// TopicKey returns the topic key for a threadID, or "" if unmapped. The
+	// General topic (empty threadID) is normalized to "0". Must be cheap (an
+	// in-memory map lookup) — it runs on the agent goroutine each turn.
+	TopicKey(threadID string) string
+	// Dir returns the configured knowledge directory (TopicsConfig.Dir); may
+	// be empty, in which case the loader applies the "topics" default.
+	Dir() string
 }
 
 // SkillNudger is the chat-side interface the server's genesis.Nudger
@@ -165,6 +184,10 @@ type HandlerConfig struct {
 	// /use-forum politely refuses with "migration unavailable" so a degraded
 	// boot path (no settings dir) doesn't silently lose user intent.
 	AppSettings AppSettings
+
+	// TopicResolver maps a forum threadID to a per-topic knowledge key.
+	// Optional: nil disables per-topic knowledge injection.
+	TopicResolver TopicResolver
 }
 
 // DefaultHandlerConfig returns sensible defaults.
@@ -232,6 +255,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		authManager:          cfg.AuthManager,
 		jobTracker:           cfg.JobTracker,
 		appSettings:          cfg.AppSettings,
+		topicResolver:        cfg.TopicResolver,
 		providerConfigs:      cloneProviderConfigs(cfg.ProviderConfigs),
 		embeddingClient:      cfg.EmbeddingClient,
 		wikiStore:            cfg.WikiStore,

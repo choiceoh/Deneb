@@ -2,6 +2,7 @@ package chat
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -180,5 +181,41 @@ func TestCacheBreakpointBudget_AnthropicMultiBlockMessages(t *testing.T) {
 	}
 	if got != 4 {
 		t.Errorf("expected 4 breakpoints (Static + Semi + msg×2 last-block), got %d", got)
+	}
+}
+
+func TestCacheBreakpointBudget_AnthropicWithTopicKnowledge(t *testing.T) {
+	// Per-topic knowledge merges into the Static block (not a new block), so
+	// the marker count is unchanged: Static + Semi + msg×2 = 4.
+	sysBlocks := prompt.BuildSystemPromptBlocks(prompt.SystemPromptParams{
+		WorkspaceDir:   "/tmp",
+		ToolDefs:       []prompt.ToolDef{{Name: "read"}},
+		SkillsPrompt:   `<available_skills><skill><name>x</name></skill></available_skills>`,
+		TopicKnowledge: "코딩 토픽: Go 1.24, vLLM on DGX Spark.",
+		TopicCacheKey:  "coding:hashA",
+	})
+	msgs := []llm.Message{
+		llm.NewTextMessage("user", "u1"),
+		llm.NewTextMessage("assistant", "a1"),
+		llm.NewTextMessage("user", "u2"),
+	}
+	msgs = applyTrailingHookOrIdentity(llm.APIModeAnthropic, msgs)
+
+	got := countCacheBreakpoints(sysBlocks, msgs, nil)
+	if got > anthropicMaxBreakpoints {
+		t.Fatalf("breakpoint budget exceeded with topic knowledge: got %d, max %d", got, anthropicMaxBreakpoints)
+	}
+	if got != 4 {
+		t.Errorf("topic knowledge must not add a breakpoint; expected 4, got %d", got)
+	}
+	// Confirm the topic content actually landed in a system block (Static).
+	found := false
+	for _, b := range sysBlocks {
+		if strings.Contains(b.Text, "vLLM") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("topic knowledge not present in system blocks")
 	}
 }

@@ -505,6 +505,24 @@ func prepareContextAndPrompt(
 				compactionFired = sess.CompactionFired
 			}
 		}
+
+		// Per-topic knowledge: map the forum threadID (from the delivery
+		// context) to a topic key, then load <dir>/<key>.md (frozen per
+		// session). The content joins the Static cache block; topicCacheKey
+		// keys that cache per topic + content hash so topics never collide and
+		// edits invalidate. Unmapped/missing → empty (no injection, no cache
+		// key change → topic-less Static cache stays shared).
+		var topicKnowledge, topicCacheKey string
+		if deps.topicResolver != nil && params.Delivery != nil {
+			if key := deps.topicResolver.TopicKey(params.Delivery.ThreadID); key != "" {
+				tk := prompt.LoadTopicKnowledge(workspaceDir, deps.topicResolver.Dir(), key, params.SessionKey)
+				if tk.Content != "" {
+					topicKnowledge = tk.Content
+					topicCacheKey = tk.Key + ":" + tk.Hash
+				}
+			}
+		}
+
 		spp := prompt.SystemPromptParams{
 			WorkspaceDir:        workspaceDir,
 			ToolDefs:            toolDefs,
@@ -518,6 +536,8 @@ func prepareContextAndPrompt(
 			CompactionFired:     compactionFired,
 			AutoDeliveredOutput: params.AutoDeliveredOutput,
 			HindsightEnabled:    deps.hindsightClient != nil,
+			TopicKnowledge:      topicKnowledge,
+			TopicCacheKey:       topicCacheKey,
 		}
 
 		systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
