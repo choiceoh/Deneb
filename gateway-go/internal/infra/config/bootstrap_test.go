@@ -302,7 +302,7 @@ func TestPersistCustomProviderModel(t *testing.T) {
 		tmp := t.TempDir()
 		cfgPath := filepath.Join(tmp, "deneb.json")
 
-		result, err := PersistCustomProviderModel(cfgPath, " http://127.0.0.1:8000/v1/ ", " qwen3.6-35b-a3b ", logger)
+		result, err := PersistCustomProviderModel(cfgPath, " http://127.0.0.1:8000/v1/ ", " qwen3.6-35b-a3b ", CustomModelMeta{}, logger)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -357,7 +357,7 @@ func TestPersistCustomProviderModel(t *testing.T) {
 		data, _ := json.Marshal(existing)
 		os.WriteFile(cfgPath, data, 0644)
 
-		result, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "new-model", logger)
+		result, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "new-model", CustomModelMeta{}, logger)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -389,10 +389,10 @@ func TestPersistCustomProviderModel(t *testing.T) {
 	t.Run("deduplicates model", func(t *testing.T) {
 		tmp := t.TempDir()
 		cfgPath := filepath.Join(tmp, "deneb.json")
-		if _, err := PersistCustomProviderModel(cfgPath, "http://localhost:9000/v1", "same-model", logger); err != nil {
+		if _, err := PersistCustomProviderModel(cfgPath, "http://localhost:9000/v1", "same-model", CustomModelMeta{}, logger); err != nil {
 			t.Fatal(err)
 		}
-		result, err := PersistCustomProviderModel(cfgPath, "http://localhost:9000/v1/", "same-model", logger)
+		result, err := PersistCustomProviderModel(cfgPath, "http://localhost:9000/v1/", "same-model", CustomModelMeta{}, logger)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -415,9 +415,43 @@ func TestPersistCustomProviderModel(t *testing.T) {
 		tmp := t.TempDir()
 		cfgPath := filepath.Join(tmp, "deneb.json")
 
-		_, err := PersistCustomProviderModel(cfgPath, "127.0.0.1:8000/v1", "model", logger)
+		_, err := PersistCustomProviderModel(cfgPath, "127.0.0.1:8000/v1", "model", CustomModelMeta{}, logger)
 		if !errors.Is(err, ErrInvalidCustomModel) {
 			t.Fatalf("error = %v, want ErrInvalidCustomModel", err)
+		}
+	})
+
+	t.Run("writes metadata and backfills an existing bare entry", func(t *testing.T) {
+		tmp := t.TempDir()
+		cfgPath := filepath.Join(tmp, "deneb.json")
+
+		// Legacy/no-probe path first: a bare {"id": ...} entry.
+		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "step3p7", CustomModelMeta{}, logger); err != nil {
+			t.Fatal(err)
+		}
+		// Re-add with detected metadata: enriches the existing entry in place.
+		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "step3p7", CustomModelMeta{ContextWindow: 262144, Name: "step3p7"}, logger); err != nil {
+			t.Fatal(err)
+		}
+
+		raw := testutil.Must(os.ReadFile(cfgPath))
+		var written map[string]any
+		if err := json.Unmarshal(raw, &written); err != nil {
+			t.Fatal(err)
+		}
+		models := written["models"].(map[string]any)["providers"].(map[string]any)["custom"].(map[string]any)["models"].([]any)
+		if len(models) != 1 {
+			t.Fatalf("models len = %d, want 1 (backfilled in place)", len(models))
+		}
+		entry := models[0].(map[string]any)
+		if entry["id"] != "step3p7" {
+			t.Errorf("id = %v, want step3p7", entry["id"])
+		}
+		if entry["name"] != "step3p7" {
+			t.Errorf("name = %v, want step3p7", entry["name"])
+		}
+		if cw, ok := entry["contextWindow"].(float64); !ok || int(cw) != 262144 {
+			t.Errorf("contextWindow = %v, want 262144", entry["contextWindow"])
 		}
 	})
 }
@@ -462,10 +496,10 @@ func TestDeleteCustomProviderModel(t *testing.T) {
 	t.Run("removes one model and keeps the rest", func(t *testing.T) {
 		tmp := t.TempDir()
 		cfgPath := filepath.Join(tmp, "deneb.json")
-		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "keep-me", logger); err != nil {
+		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "keep-me", CustomModelMeta{}, logger); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "typo-model", logger); err != nil {
+		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "typo-model", CustomModelMeta{}, logger); err != nil {
 			t.Fatal(err)
 		}
 
@@ -488,7 +522,7 @@ func TestDeleteCustomProviderModel(t *testing.T) {
 	t.Run("drops provider when last model removed", func(t *testing.T) {
 		tmp := t.TempDir()
 		cfgPath := filepath.Join(tmp, "deneb.json")
-		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "only-model", logger); err != nil {
+		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "only-model", CustomModelMeta{}, logger); err != nil {
 			t.Fatal(err)
 		}
 
@@ -507,7 +541,7 @@ func TestDeleteCustomProviderModel(t *testing.T) {
 	t.Run("clears role binding pointing at the deleted model", func(t *testing.T) {
 		tmp := t.TempDir()
 		cfgPath := filepath.Join(tmp, "deneb.json")
-		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "bad-main", logger); err != nil {
+		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "bad-main", CustomModelMeta{}, logger); err != nil {
 			t.Fatal(err)
 		}
 		// Bind the freshly-added model to main + lightweight, like the picker does.
@@ -548,7 +582,7 @@ func TestDeleteCustomProviderModel(t *testing.T) {
 	t.Run("rejects non-custom provider", func(t *testing.T) {
 		tmp := t.TempDir()
 		cfgPath := filepath.Join(tmp, "deneb.json")
-		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "m", logger); err != nil {
+		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "m", CustomModelMeta{}, logger); err != nil {
 			t.Fatal(err)
 		}
 
@@ -572,7 +606,7 @@ func TestDeleteCustomProviderModel(t *testing.T) {
 	t.Run("idempotent when model is absent", func(t *testing.T) {
 		tmp := t.TempDir()
 		cfgPath := filepath.Join(tmp, "deneb.json")
-		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "present", logger); err != nil {
+		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "present", CustomModelMeta{}, logger); err != nil {
 			t.Fatal(err)
 		}
 

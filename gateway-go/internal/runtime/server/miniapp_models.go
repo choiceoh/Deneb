@@ -23,6 +23,10 @@ const (
 	miniappModelHealthOffline = "offline"
 	miniappModelHealthUnknown = "unknown"
 	miniappModelHealthTimeout = 1500 * time.Millisecond
+	// customModelProbeTimeout bounds the /models probe used to auto-detect a
+	// newly-added custom model's context window. Best-effort: a miss just
+	// omits contextWindow.
+	customModelProbeTimeout = 3 * time.Second
 )
 
 type miniappModelSnapshot struct {
@@ -183,9 +187,10 @@ func (s *Server) roleMiniappModels() []handlerminiapp.RoleModel {
 	return out
 }
 
-func (s *Server) addMiniappCustomModel(_ context.Context, endpoint, model string) (handlerminiapp.ModelAddResult, error) {
+func (s *Server) addMiniappCustomModel(ctx context.Context, endpoint, model string) (handlerminiapp.ModelAddResult, error) {
 	cfgPath := config.ResolveConfigPath()
-	persisted, err := config.PersistCustomProviderModel(cfgPath, endpoint, model, s.logger)
+	meta := s.detectCustomModelMeta(ctx, endpoint, model)
+	persisted, err := config.PersistCustomProviderModel(cfgPath, endpoint, model, meta, s.logger)
 	if err != nil {
 		if errors.Is(err, config.ErrInvalidCustomModel) {
 			return handlerminiapp.ModelAddResult{}, rpcerr.InvalidRequest(err.Error())
@@ -272,6 +277,32 @@ func (s *Server) deleteMiniappCustomModel(_ context.Context, id string) (handler
 		ClearedRoles: deleted.ClearedRoles,
 		Current:      s.currentMiniappModel(),
 	}, nil
+}
+
+// detectCustomModelMeta best-effort probes the endpoint's /models so a newly
+// added custom model is persisted with its context window and a display name
+// instead of a bare {"id": ...} stub. contextWindow is left 0 when the probe
+// fails or the server omits max_model_len; name defaults to the model id.
+func (s *Server) detectCustomModelMeta(ctx context.Context, endpoint, model string) config.CustomModelMeta {
+	endpoint = strings.TrimSpace(endpoint)
+	model = strings.TrimSpace(model)
+	meta := config.CustomModelMeta{Name: model}
+	if endpoint == "" || model == "" {
+		return meta
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, customModelProbeTimeout)
+	defer cancel()
+	infos, err := modelrole.DiscoverServedVllmModelInfos(probeCtx, endpoint)
+	if err != nil {
+		return meta
+	}
+	for _, info := range infos {
+		if info.ID == model && info.MaxModelLen > 0 {
+			meta.ContextWindow = info.MaxModelLen
+			break
+		}
+	}
+	return meta
 }
 
 func (s *Server) miniappModelSnapshot(ctx context.Context) miniappModelSnapshot {

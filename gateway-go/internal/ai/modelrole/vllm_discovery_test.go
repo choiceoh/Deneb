@@ -101,6 +101,26 @@ func TestDiscoverServedVllmModels(t *testing.T) {
 	}
 }
 
+func TestDiscoverServedVllmModelInfos(t *testing.T) {
+	t.Run("parses max_model_len and defaults to zero when absent", func(t *testing.T) {
+		srv := newDiscoverySrv(t, `{"data":[{"id":"step3p7","max_model_len":262144},{"id":"other"}]}`, 200)
+		infos, err := DiscoverServedVllmModelInfos(context.Background(), srv.URL+"/v1")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(infos) != 2 {
+			t.Fatalf("got %d infos, want 2", len(infos))
+		}
+		if infos[0].ID != "step3p7" || infos[0].MaxModelLen != 262144 {
+			t.Errorf("infos[0] = %+v, want {step3p7 262144}", infos[0])
+		}
+		// A model with no max_model_len reports 0 so the caller omits contextWindow.
+		if infos[1].ID != "other" || infos[1].MaxModelLen != 0 {
+			t.Errorf("infos[1] = %+v, want {other 0}", infos[1])
+		}
+	})
+}
+
 func TestReconcileVllmModel(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
