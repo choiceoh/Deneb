@@ -17,6 +17,7 @@ type fakeMemoryStore struct {
 	searchDiaryFn func(ctx context.Context, q string, limit int) ([]wiki.DiaryHit, error)
 	readPageFn    func(relPath string) (*wiki.Page, error)
 	writePageFn   func(relPath string, page *wiki.Page) error
+	mergePageFn   func(targetPath, sourcePath, mergedBody string, opts wiki.MergeOptions) (wiki.MergeResult, error)
 	statsFn       func() wiki.StoreStats
 	listPagesFn   func(category string) ([]string, error)
 	diaryRecentFn func(limit int) []wiki.DiaryHit
@@ -48,6 +49,13 @@ func (f *fakeMemoryStore) WritePage(relPath string, page *wiki.Page) error {
 		return errors.New("WritePage not stubbed")
 	}
 	return f.writePageFn(relPath, page)
+}
+
+func (f *fakeMemoryStore) MergePage(targetPath, sourcePath, mergedBody string, opts wiki.MergeOptions) (wiki.MergeResult, error) {
+	if f.mergePageFn == nil {
+		return wiki.MergeResult{}, errors.New("MergePage not stubbed")
+	}
+	return f.mergePageFn(targetPath, sourcePath, mergedBody, opts)
 }
 
 func (f *fakeMemoryStore) Stats() wiki.StoreStats {
@@ -970,5 +978,169 @@ func TestTruncateRunes(t *testing.T) {
 		if got != c.expect {
 			t.Errorf("truncateRunes(%q, %d) = %q, want %q", c.in, c.max, got, c.expect)
 		}
+	}
+}
+
+// --- merge --------------------------------------------------------------
+
+func twoProjectStore(merge func(target, source, body string) (wiki.MergeResult, error)) *fakeMemoryStore {
+	pages := map[string]*wiki.Page{
+		"프로젝트/a.md": {Meta: wiki.Frontmatter{Title: "A"}, Body: "본문 A"},
+		"프로젝트/b.md": {Meta: wiki.Frontmatter{Title: "B"}, Body: "본문 B"},
+	}
+	return &fakeMemoryStore{
+		readPageFn: func(p string) (*wiki.Page, error) {
+			if pg, ok := pages[p]; ok {
+				return pg, nil
+			}
+			return nil, fs.ErrNotExist
+		},
+		mergePageFn: func(target, source, body string, _ wiki.MergeOptions) (wiki.MergeResult, error) {
+			return merge(target, source, body)
+		},
+	}
+}
+
+func TestMemoryMerge_HappyPathUsesSynthesizedBody(t *testing.T) {
+	var gotTarget, gotSource, gotBody string
+	synthCalled := false
+	store := twoProjectStore(func(target, source, body string) (wiki.MergeResult, error) {
+		gotTarget, gotSource, gotBody = target, source, body
+		return wiki.MergeResult{TargetPath: target, MergedTitle: "A", RewriteCount: 3, SourceRemoved: true}, nil
+	})
+	deps := MemoryDeps{
+		Store: func() (MemorySearcher, error) { return store, nil },
+		MergeBodies: func(_ context.Context, tt, tb, st, sb string) (string, error) {
+			synthCalled = true
+			if tt != "A" || tb != "본문 A" || st != "B" || sb != "본문 B" {
+				t.Errorf("MergeBodies args = %q/%q/%q/%q", tt, tb, st, sb)
+			}
+			return "통합 본문", nil
+		},
+	}
+	resp := memoryMergePage(deps)(authedCtx(), reqWith(t, "miniapp.memory.merge", map[string]any{
+		"targetPath": "프로젝트/a.md",
+		"sourcePath": "프로젝트/b.md",
+	}))
+	if !resp.OK {
+		t.Fatalf("expected OK: %+v", resp.Error)
+	}
+	if !synthCalled {
+		t.Error("MergeBodies was not called")
+	}
+	if gotTarget != "프로젝트/a.md" || gotSource != "프로젝트/b.md" {
+		t.Errorf("MergePage paths = %q/%q", gotTarget, gotSource)
+	}
+	if gotBody != "통합 본문" {
+		t.Errorf("MergePage body = %q, want synthesized text", gotBody)
+	}
+	var got map[string]any
+	decode(t, resp, &got)
+	if got["ok"] != true || got["targetPath"] != "프로젝트/a.md" || got["rewriteCount"].(float64) != 3 {
+		t.Errorf("response = %+v", got)
+	}
+}
+
+func TestMemoryMerge_FallsBackToConcatWhenNoLLM(t *testing.T) {
+	var gotBody string
+	store := twoProjectStore(func(_, _, body string) (wiki.MergeResult, error) {
+		gotBody = body
+		return wiki.MergeResult{SourceRemoved: true}, nil
+	})
+	// MergeBodies omitted → handler must synthesize via concatenation.
+	deps := MemoryDeps{Store: func() (MemorySearcher, error) { return store, nil }}
+	resp := memoryMergePage(deps)(authedCtx(), reqWith(t, "miniapp.memory.merge", map[string]any{
+		"targetPath": "프로젝트/a.md",
+		"sourcePath": "프로젝트/b.md",
+	}))
+	if !resp.OK {
+		t.Fatalf("expected OK: %+v", resp.Error)
+	}
+	if !strings.Contains(gotBody, "본문 A") || !strings.Contains(gotBody, "본문 B") {
+		t.Errorf("fallback body missing source/target content: %q", gotBody)
+	}
+}
+
+func TestMemoryMerge_FallsBackWhenLLMErrors(t *testing.T) {
+	var gotBody string
+	store := twoProjectStore(func(_, _, body string) (wiki.MergeResult, error) {
+		gotBody = body
+		return wiki.MergeResult{SourceRemoved: true}, nil
+	})
+	deps := MemoryDeps{
+		Store: func() (MemorySearcher, error) { return store, nil },
+		MergeBodies: func(_ context.Context, _, _, _, _ string) (string, error) {
+			return "", errors.New("model unavailable")
+		},
+	}
+	resp := memoryMergePage(deps)(authedCtx(), reqWith(t, "miniapp.memory.merge", map[string]any{
+		"targetPath": "프로젝트/a.md",
+		"sourcePath": "프로젝트/b.md",
+	}))
+	if !resp.OK {
+		t.Fatalf("expected OK despite LLM error: %+v", resp.Error)
+	}
+	if !strings.Contains(gotBody, "본문 A") || !strings.Contains(gotBody, "본문 B") {
+		t.Errorf("expected concat fallback when LLM errors: %q", gotBody)
+	}
+}
+
+func TestMemoryMerge_RejectsSelfMerge(t *testing.T) {
+	resp := memoryMergePage(memoryDepsFor(&fakeMemoryStore{}))(authedCtx(),
+		reqWith(t, "miniapp.memory.merge", map[string]any{
+			"targetPath": "프로젝트/a.md",
+			"sourcePath": "프로젝트/a.md",
+		}))
+	if resp.OK || resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Errorf("expected INVALID_REQUEST for self-merge: %+v", resp)
+	}
+}
+
+func TestMemoryMerge_MissingParams(t *testing.T) {
+	h := memoryMergePage(memoryDepsFor(&fakeMemoryStore{}))
+	for _, p := range []map[string]any{
+		{"targetPath": "프로젝트/a.md"}, // missing source
+		{"sourcePath": "프로젝트/b.md"}, // missing target
+	} {
+		resp := h(authedCtx(), reqWith(t, "miniapp.memory.merge", p))
+		if resp.OK || resp.Error.Code != protocol.ErrMissingParam {
+			t.Errorf("params %v: expected MISSING_PARAM, got %+v", p, resp)
+		}
+	}
+}
+
+func TestMemoryMerge_PathTraversalRejected(t *testing.T) {
+	resp := memoryMergePage(memoryDepsFor(&fakeMemoryStore{}))(authedCtx(),
+		reqWith(t, "miniapp.memory.merge", map[string]any{
+			"targetPath": "../etc/passwd",
+			"sourcePath": "프로젝트/b.md",
+		}))
+	if resp.OK || resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Errorf("expected INVALID_REQUEST for traversal: %+v", resp)
+	}
+}
+
+func TestMemoryMerge_NotFoundWhenPageMissing(t *testing.T) {
+	store := &fakeMemoryStore{
+		readPageFn: func(_ string) (*wiki.Page, error) { return nil, fs.ErrNotExist },
+	}
+	resp := memoryMergePage(memoryDepsFor(store))(authedCtx(),
+		reqWith(t, "miniapp.memory.merge", map[string]any{
+			"targetPath": "프로젝트/a.md",
+			"sourcePath": "프로젝트/b.md",
+		}))
+	if resp.OK || resp.Error.Code != protocol.ErrNotFound {
+		t.Errorf("expected NOT_FOUND: %+v", resp)
+	}
+}
+
+func TestMemoryMerge_RequiresAuth(t *testing.T) {
+	resp := memoryMergePage(memoryDepsFor(&fakeMemoryStore{}))(context.Background(),
+		reqWith(t, "miniapp.memory.merge", map[string]any{
+			"targetPath": "프로젝트/a.md",
+			"sourcePath": "프로젝트/b.md",
+		}))
+	if resp.OK {
+		t.Errorf("expected auth rejection, got OK")
 	}
 }
