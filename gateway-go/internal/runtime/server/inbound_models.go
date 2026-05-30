@@ -189,7 +189,9 @@ func isLocalURL(raw string) bool {
 }
 
 // effectiveBaseURL returns the provider's base URL, falling back to the known
-// default for local providers when config omits it.
+// default endpoint when config omits it. Built-in cloud providers resolve to
+// their default endpoints too so the Mini App health probe can reach them
+// (an unset URL would otherwise leave their dots permanently "unknown").
 func effectiveBaseURL(spec providerSpec) string {
 	if spec.baseURL != "" {
 		return spec.baseURL
@@ -199,6 +201,16 @@ func effectiveBaseURL(spec providerSpec) string {
 		return modelrole.DefaultVllmBaseURL
 	case "localai":
 		return modelrole.DefaultLocalAIBaseURL
+	case "zai":
+		return modelrole.DefaultZaiBaseURL
+	case "openrouter":
+		return "https://openrouter.ai/api/v1"
+	case "kimi":
+		return modelrole.DefaultKimiBaseURL
+	case "mimo":
+		return modelrole.DefaultMimoBaseURL
+	case "mimo-plan":
+		return modelrole.DefaultMimoPlanBaseURL
 	}
 	return ""
 }

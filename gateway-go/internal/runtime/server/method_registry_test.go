@@ -129,6 +129,7 @@ var requiredMethods = []string{
 	"miniapp.gmail.trash",
 	"miniapp.gmail.sender_context",
 	"miniapp.models.add_custom",
+	"miniapp.models.delete_custom",
 	"miniapp.models.list",
 	"miniapp.models.set",
 	// miniapp.gmail.analyze and miniapp.gmail.analysis_cached are

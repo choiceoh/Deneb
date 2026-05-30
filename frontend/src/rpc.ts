@@ -114,6 +114,8 @@ export interface MiniappModelOption {
   display?: string;
   health?: 'online' | 'offline' | 'unknown';
   current: boolean;
+  // True for user-added models (직접 추가) the picker may delete.
+  custom?: boolean;
 }
 
 export interface MiniappModelSection {
@@ -147,6 +149,15 @@ export interface MiniappModelAddResult {
   added: boolean;
 }
 
+export interface MiniappModelDeleteResult {
+  ok: boolean;
+  id: string;
+  removed: boolean;
+  // Roles reset to the default because they were bound to the deleted model.
+  clearedRoles?: string[];
+  current: string;
+}
+
 export const listMiniappModels = (initData: string) =>
   call<MiniappModelsResult>('miniapp.models.list', null, initData);
 
@@ -155,6 +166,9 @@ export const setMiniappModel = (initData: string, id: string, role?: string) =>
 
 export const addMiniappModel = (initData: string, endpoint: string, model: string) =>
   call<MiniappModelAddResult>('miniapp.models.add_custom', { endpoint, model }, initData);
+
+export const deleteMiniappModel = (initData: string, id: string) =>
+  call<MiniappModelDeleteResult>('miniapp.models.delete_custom', { id }, initData);
 
 // --- Calendar -----------------------------------------------------------
 

@@ -1,9 +1,11 @@
 // views/model_select.ts — choose the default model from a dedicated screen.
 
 import { triggerSelectionHaptic } from '../app_settings';
+import { confirmAction } from '../dialog';
 import { errorMessage, formatRpcError } from '../format';
 import {
   addMiniappModel,
+  deleteMiniappModel,
   listMiniappModels,
   setMiniappModel,
   type MiniappModelOption,
@@ -122,8 +124,13 @@ function buildModelRow(
   card: HTMLElement,
   status: HTMLElement,
   roleCurrent: string,
-): HTMLButtonElement {
+): HTMLElement {
   const isCurrent = model.id === roleCurrent;
+  // A wrapper holds the select button plus, for user-added models, a delete
+  // button — nesting buttons is invalid, so they sit as flex siblings.
+  const wrap = document.createElement('div');
+  wrap.className = 'settings-model-row-wrap';
+
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'settings-model-row' + (isCurrent ? ' settings-model-row-current' : '');
@@ -152,7 +159,24 @@ function buildModelRow(
   btn.addEventListener('click', () => {
     void switchModel(model.id, initData, card, status);
   });
-  return btn;
+  wrap.appendChild(btn);
+
+  // Built-in/role models cannot be removed; only user-added ones get a delete
+  // affordance so a mistyped custom model can be recovered.
+  if (model.custom) {
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'settings-model-row-delete';
+    del.textContent = '🗑';
+    del.title = '삭제';
+    del.setAttribute('aria-label', `${model.label || model.id} 삭제`);
+    del.addEventListener('click', () => {
+      void deleteModel(model, initData, card, status);
+    });
+    wrap.appendChild(del);
+  }
+
+  return wrap;
 }
 
 function buildDirectModelForm(
@@ -190,16 +214,27 @@ function buildDirectModelForm(
   return form;
 }
 
+// setModelRowsBusy disables every actionable row button while an async model
+// op runs. On re-enable the current model's select button stays disabled (it
+// is already active) and delete buttons are always re-enabled.
+function setModelRowsBusy(card: HTMLElement, busy: boolean): void {
+  const selects = Array.from(card.querySelectorAll<HTMLButtonElement>('.settings-model-row'));
+  const deletes = Array.from(card.querySelectorAll<HTMLButtonElement>('.settings-model-row-delete'));
+  if (busy) {
+    for (const b of [...selects, ...deletes]) b.disabled = true;
+    return;
+  }
+  for (const b of selects) b.disabled = b.classList.contains('settings-model-row-current');
+  for (const b of deletes) b.disabled = false;
+}
+
 async function switchModel(
   modelID: string,
   initData: string,
   card: HTMLElement,
   status: HTMLElement,
 ): Promise<void> {
-  const buttons = Array.from(card.querySelectorAll<HTMLButtonElement>('.settings-model-row'));
-  buttons.forEach((button) => {
-    button.disabled = true;
-  });
+  setModelRowsBusy(card, true);
   status.textContent = '모델 변경 중…';
 
   try {
@@ -209,9 +244,33 @@ async function switchModel(
     await refreshModelSelect(card, initData, status);
   } catch (err) {
     status.textContent = `모델 변경 실패: ${errorMessage(err)}`;
-    buttons.forEach((button) => {
-      button.disabled = button.classList.contains('settings-model-row-current');
-    });
+    setModelRowsBusy(card, false);
+  }
+}
+
+async function deleteModel(
+  model: MiniappModelOption,
+  initData: string,
+  card: HTMLElement,
+  status: HTMLElement,
+): Promise<void> {
+  const ok = await confirmAction(`'${model.label || model.id}' 모델을 삭제할까요?`);
+  if (!ok) return;
+
+  setModelRowsBusy(card, true);
+  status.textContent = '모델 삭제 중…';
+
+  try {
+    const result = await deleteMiniappModel(initData, model.id);
+    triggerSelectionHaptic();
+    status.textContent =
+      result.clearedRoles && result.clearedRoles.length > 0
+        ? '삭제했습니다 — 사용 중이던 역할은 기본 모델로 되돌렸습니다'
+        : '삭제했습니다';
+    await refreshModelSelect(card, initData, status);
+  } catch (err) {
+    status.textContent = `모델 삭제 실패: ${errorMessage(err)}`;
+    setModelRowsBusy(card, false);
   }
 }
 
@@ -237,10 +296,7 @@ async function addDirectModel(args: {
   }
 
   setFormDisabled(args.form, true);
-  const buttons = Array.from(args.card.querySelectorAll<HTMLButtonElement>('.settings-model-row'));
-  buttons.forEach((button) => {
-    button.disabled = true;
-  });
+  setModelRowsBusy(args.card, true);
   args.status.textContent = '모델 추가 중…';
 
   try {
@@ -254,9 +310,7 @@ async function addDirectModel(args: {
     await refreshModelSelect(args.card, args.initData, args.status);
   } catch (err) {
     args.status.textContent = `모델 추가 실패: ${errorMessage(err)}`;
-    buttons.forEach((button) => {
-      button.disabled = button.classList.contains('settings-model-row-current');
-    });
+    setModelRowsBusy(args.card, false);
   } finally {
     setFormDisabled(args.form, false);
   }

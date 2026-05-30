@@ -2042,8 +2042,44 @@ pre.transcript-body {
 
 .settings-toggle-row + .settings-toggle-row,
 .settings-reset-row + .settings-reset-row,
-.settings-model-row + .settings-model-row {
+.settings-model-row-wrap + .settings-model-row-wrap {
   border-top: 1px solid color-mix(in srgb, var(--tg-hint) 18%, transparent);
+}
+
+/* Each model row is a flex wrapper: the select button grows, an optional
+   delete button (custom models only) sits at the trailing edge. */
+.settings-model-row-wrap {
+  display: flex;
+  align-items: stretch;
+}
+
+.settings-model-row-wrap .settings-model-row {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.settings-model-row-delete {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: none;
+  background: transparent;
+  color: var(--tg-hint);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.settings-model-row-delete:active {
+  opacity: 0.6;
+}
+
+.settings-model-row-delete:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .settings-row-text {

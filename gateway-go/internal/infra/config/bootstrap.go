@@ -477,6 +477,91 @@ func PersistCustomProviderModel(configPath, endpoint, model string, logger *slog
 	return result, nil
 }
 
+// DeletedCustomModel reports the outcome of removing a custom model entry.
+type DeletedCustomModel struct {
+	ProviderID      string   // provider the model belonged to
+	ModelID         string   // model name removed
+	FullModelID     string   // provider/model
+	Removed         bool     // a matching model entry was found and removed
+	ProviderDropped bool     // provider had no models left and was deleted
+	ClearedRoles    []string // agents role fields cleared because they pointed here
+}
+
+// DeleteCustomProviderModel removes a user-added model from models.providers,
+// preserving every other config field. Only custom providers (custom, custom-N)
+// are user-managed and therefore deletable; built-in/role model IDs return
+// ErrInvalidCustomModel. When the provider's model list becomes empty the whole
+// provider entry is dropped. Any agents.{default,lightweight,fallback}Model that
+// referenced the deleted model is cleared so the role falls back to its default
+// on the next registry build (the live registry is reset separately by the
+// caller). This is the inverse of PersistCustomProviderModel.
+func DeleteCustomProviderModel(configPath, fullModelID string, logger *slog.Logger) (DeletedCustomModel, error) {
+	providerID, modelID, err := splitCustomModelID(fullModelID)
+	if err != nil {
+		return DeletedCustomModel{}, err
+	}
+
+	result := DeletedCustomModel{
+		ProviderID:  providerID,
+		ModelID:     modelID,
+		FullModelID: providerID + "/" + modelID,
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return result, nil // nothing persisted yet — idempotent no-op
+		}
+		return DeletedCustomModel{}, fmt.Errorf("reading config: %w", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return DeletedCustomModel{}, fmt.Errorf("parsing config: %w", err)
+	}
+
+	// Remove the model from its provider, dropping the provider when empty.
+	if models, ok := raw["models"].(map[string]any); ok {
+		if providers, ok := models["providers"].(map[string]any); ok {
+			if providerConfig, ok := providers[providerID].(map[string]any); ok {
+				if removeCustomModel(providerConfig, modelID) {
+					result.Removed = true
+					if customModelCount(providerConfig) == 0 {
+						delete(providers, providerID)
+						result.ProviderDropped = true
+					}
+				}
+			}
+		}
+	}
+
+	// Clear any role binding that pointed at the deleted model so the role
+	// resolves to its default again instead of a now-missing model.
+	result.ClearedRoles = clearRolesReferencingModel(raw, result.FullModelID)
+
+	if !result.Removed && len(result.ClearedRoles) == 0 {
+		return result, nil // nothing changed — skip the write
+	}
+
+	meta := ensureObject(raw, "meta")
+	meta["lastTouchedAt"] = time.Now().UTC().Format(time.RFC3339)
+
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return DeletedCustomModel{}, fmt.Errorf("encoding config: %w", err)
+	}
+	if err := os.WriteFile(configPath, append(out, '\n'), 0o600); err != nil {
+		return DeletedCustomModel{}, fmt.Errorf("writing config: %w", err)
+	}
+
+	if logger != nil {
+		logger.Info("deleted custom model",
+			"provider", providerID, "model", modelID,
+			"providerDropped", result.ProviderDropped,
+			"clearedRoles", result.ClearedRoles, "path", configPath)
+	}
+	return result, nil
+}
+
 func normalizeCustomModelEndpoint(endpoint string) (string, error) {
 	raw := strings.TrimSpace(endpoint)
 	if raw == "" {
@@ -598,6 +683,84 @@ func customModelID(item any) string {
 		return strings.TrimSpace(v)
 	}
 	return ""
+}
+
+// splitCustomModelID parses "provider/model" and verifies the provider is a
+// user-managed custom provider. Built-in/role model IDs are rejected so the
+// delete path can never remove a model the user did not add by hand.
+func splitCustomModelID(fullModelID string) (providerID, modelID string, err error) {
+	full := strings.TrimSpace(fullModelID)
+	if full == "" {
+		return "", "", fmt.Errorf("%w: model id is required", ErrInvalidCustomModel)
+	}
+	slash := strings.IndexByte(full, '/')
+	if slash <= 0 || slash >= len(full)-1 {
+		return "", "", fmt.Errorf("%w: model id must be provider/model", ErrInvalidCustomModel)
+	}
+	providerID, modelID = full[:slash], full[slash+1:]
+	if !isCustomProviderID(providerID) {
+		return "", "", fmt.Errorf("%w: only directly-added custom models can be deleted", ErrInvalidCustomModel)
+	}
+	return providerID, modelID, nil
+}
+
+// isCustomProviderID reports whether a provider key is one created by the Mini
+// App's "직접 추가" flow (custom, custom-2, ...).
+func isCustomProviderID(id string) bool {
+	return id == "custom" || strings.HasPrefix(id, "custom-")
+}
+
+// removeCustomModel drops modelID from providerConfig["models"], reporting
+// whether an entry was actually removed.
+func removeCustomModel(providerConfig map[string]any, modelID string) bool {
+	existing, ok := providerConfig["models"].([]any)
+	if !ok {
+		return false
+	}
+	next := make([]any, 0, len(existing))
+	removed := false
+	for _, item := range existing {
+		if customModelID(item) == modelID {
+			removed = true
+			continue
+		}
+		next = append(next, item)
+	}
+	if removed {
+		providerConfig["models"] = next
+	}
+	return removed
+}
+
+// customModelCount returns how many model entries remain on a provider.
+func customModelCount(providerConfig map[string]any) int {
+	if arr, ok := providerConfig["models"].([]any); ok {
+		return len(arr)
+	}
+	return 0
+}
+
+// clearRolesReferencingModel deletes any agents.{default,lightweight,fallback}Model
+// field equal to fullModelID and returns the affected modelrole role names, so the
+// caller can reset the live registry. Mirrors PersistRoleModel's field mapping.
+func clearRolesReferencingModel(raw map[string]any, fullModelID string) []string {
+	agents, ok := raw["agents"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	fields := []struct{ field, role string }{
+		{"defaultModel", "main"},
+		{"lightweightModel", "lightweight"},
+		{"fallbackModel", "fallback"},
+	}
+	var cleared []string
+	for _, f := range fields {
+		if cur, ok := agents[f.field].(string); ok && strings.TrimSpace(cur) == fullModelID {
+			delete(agents, f.field)
+			cleared = append(cleared, f.role)
+		}
+	}
+	return cleared
 }
 
 // mergeAuthConfig merges an override auth config into the base.
