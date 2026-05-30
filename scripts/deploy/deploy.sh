@@ -163,9 +163,13 @@ if [[ "$branch" != "main" ]]; then
     exit 1
 fi
 
-# Pull latest
+# Pull latest. Force a non-rebase fast-forward regardless of the checkout's
+# pull.* config: a box with pull.rebase=true (and especially with pull.ff=only
+# also set) otherwise dies here with "Cannot rebase onto multiple branches",
+# even though production only ever fast-forwards main. -c overrides for this
+# invocation only; it does not touch the repo's stored config.
 echo "==> git pull"
-git pull --ff-only origin main
+git -c pull.rebase=false pull --ff-only origin main
 
 # Build
 echo "==> make gateway-prod"
