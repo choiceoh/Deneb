@@ -38,13 +38,35 @@ func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 			return "", fmt.Errorf("names or query is required")
 		}
 
-		// If query is provided, search deferred tools by keyword.
+		// If query is provided, search deferred tools by keyword. Rank with
+		// BM25 over name + description + parameter names so the most relevant
+		// tools come first; fall back to substring match when no token hits.
 		if p.Query != "" && len(p.Names) == 0 {
-			q := strings.ToLower(p.Query)
-			for _, s := range registry.DeferredSummaries() {
-				if strings.Contains(strings.ToLower(s.Name), q) ||
-					strings.Contains(strings.ToLower(s.Description), q) {
-					p.Names = append(p.Names, s.Name)
+			summaries := registry.DeferredSummaries()
+			docs := make([]searchDoc, 0, len(summaries))
+			for _, s := range summaries {
+				tokens := append(tokenize(s.Name), tokenize(s.Description)...)
+				if def, ok := registry.DeferredToolDef(s.Name); ok {
+					for _, pn := range extractParamNames(def.InputSchema) {
+						tokens = append(tokens, tokenize(pn)...)
+					}
+				}
+				docs = append(docs, searchDoc{
+					name:     s.Name,
+					tokens:   tokens,
+					fallback: strings.ToLower(s.Name + " " + s.Description),
+				})
+			}
+
+			p.Names = bm25Rank(p.Query, docs)
+			if len(p.Names) == 0 {
+				// Zero-IDF fallback: literal substring match catches substrings
+				// BM25's whole-token match misses (e.g. "mail" -> "gmail").
+				q := strings.ToLower(p.Query)
+				for _, d := range docs {
+					if strings.Contains(d.fallback, q) {
+						p.Names = append(p.Names, d.name)
+					}
 				}
 			}
 			if len(p.Names) == 0 {
