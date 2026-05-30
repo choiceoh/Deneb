@@ -27,6 +27,8 @@ export type Route =
   | { name: 'categories' }
   | { name: 'categoryPages'; category: string }
   | { name: 'crons' }
+  | { name: 'cronDetail'; id: string }
+  | { name: 'cronEdit'; id: string }
   | { name: 'personDetail'; email: string }
   | { name: 'wikiNew'; category?: string };
 
@@ -61,6 +63,24 @@ export function parseRoute(hash: string): Route {
   if (roleSel) return { name: 'modelSelect', role: roleSel[1] };
   if (hash === '#/categories') return { name: 'categories' };
   if (hash === '#/crons') return { name: 'crons' };
+  // Edit must be matched before the detail catch-all below — the detail
+  // regex's greedy (.+) would otherwise capture "<id>/edit" as the id.
+  const cronEdit = hash.match(/^#\/crons\/(.+)\/edit$/);
+  if (cronEdit) {
+    try {
+      return { name: 'cronEdit', id: decodeURIComponent(cronEdit[1]) };
+    } catch {
+      return { name: 'crons' };
+    }
+  }
+  const cron = hash.match(/^#\/crons\/(.+)$/);
+  if (cron) {
+    try {
+      return { name: 'cronDetail', id: decodeURIComponent(cron[1]) };
+    } catch {
+      return { name: 'crons' };
+    }
+  }
   if (hash === '#/wiki-new') return { name: 'wikiNew' };
   const newCat = hash.match(/^#\/wiki-new\?category=(.+)$/);
   if (newCat) {
@@ -167,6 +187,8 @@ export function navigate(target: Route): void {
   else if (target.name === 'categoryPages')
     hash = `#/category/${encodeURIComponent(target.category)}`;
   else if (target.name === 'crons') hash = '#/crons';
+  else if (target.name === 'cronDetail') hash = `#/crons/${encodeURIComponent(target.id)}`;
+  else if (target.name === 'cronEdit') hash = `#/crons/${encodeURIComponent(target.id)}/edit`;
   else if (target.name === 'personDetail')
     hash = `#/person/${encodeURIComponent(target.email)}`;
   else if (target.name === 'wikiNew') {

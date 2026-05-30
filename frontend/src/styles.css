@@ -2692,10 +2692,27 @@ button.category-row:active {
   border-radius: 12px;
   padding: 12px 14px;
   margin-bottom: 8px;
+  /* Rows drill into the cron detail view on tap. */
+  cursor: pointer;
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+
+/* Press feedback uses transform (not opacity) so it stays visible on
+   disabled rows, which are already dimmed to 0.6. */
+.cron-row:active {
+  transform: scale(0.99);
+}
+
+.cron-row:hover {
+  opacity: 0.85;
 }
 
 .cron-row-disabled {
   opacity: 0.6;
+}
+
+.cron-row-disabled:hover {
+  opacity: 0.7;
 }
 
 .cron-row-top {
@@ -2770,6 +2787,99 @@ button.category-row:active {
   background: #fff3cd;
   border-radius: 8px;
   word-break: break-word;
+}
+
+/* ---- Cron detail (tap a row in 자동 작업) ---- */
+
+/* Name + state badge sit at the top of the detail, above the metadata
+   cards. The name can be a long Korean phrase, so it wraps rather than
+   forcing the lowercase 40px view-title treatment. */
+.cron-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 4px 0 16px;
+}
+
+.cron-detail-name {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+/* The section label that sits above a group of metadata rows or the
+   prompt body, e.g. "지시문" / "실행" / "배달". */
+.cron-detail-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tg-hint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 4px 0 8px;
+}
+
+/* The full job prompt — can be many lines, so preserve newlines, wrap
+   long tokens, and give it a faint inset so it reads as quoted content
+   rather than chrome. */
+.cron-detail-prompt {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--tg-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--tg-secondary-bg);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+/* Disabled / auto-disabled banner at the top of the detail so the state
+   reason is the first thing the operator sees. */
+.cron-detail-state {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.cron-detail-state-off {
+  background: rgba(112, 117, 121, 0.15);
+  color: var(--tg-hint);
+}
+
+.cron-detail-state-error {
+  background: rgba(217, 48, 37, 0.12);
+  color: #d93025;
+}
+
+/* Action cluster under the name: edit on its own line, then a row of
+   run / toggle / delete text-buttons. Uses the shared .action-button
+   family so it reads like the rest of the app's action rows. */
+.cron-action-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.cron-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: center;
+}
+
+/* Format hint under the schedule field in the edit form. */
+.cron-edit-hint {
+  font-size: 11.5px;
+  color: var(--tg-hint);
+  line-height: 1.4;
+  margin: -4px 0 10px;
 }
 
 /* ---- People directory (더보기 > 👤 사람들) ---- */

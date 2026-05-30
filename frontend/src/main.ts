@@ -375,6 +375,16 @@ async function dispatch(route: Route): Promise<void> {
         void renderCrons(root, initData);
         return;
       }
+      case 'cronDetail': {
+        const { renderCronDetail } = await import('./views/cron_detail');
+        void renderCronDetail(root, initData, route.id);
+        return;
+      }
+      case 'cronEdit': {
+        const { renderCronEdit } = await import('./views/cron_edit');
+        void renderCronEdit(root, initData, route.id);
+        return;
+      }
       case 'personDetail': {
         const { renderPersonDetail } = await import('./views/person_detail');
         void renderPersonDetail(root, initData, route.email);
@@ -553,6 +563,12 @@ function boot(): void {
         return;
       case 'calendarEvent':
         navigate({ name: 'calendar' });
+        return;
+      case 'cronDetail':
+        navigate({ name: 'crons' });
+        return;
+      case 'cronEdit':
+        navigate({ name: 'cronDetail', id: route.id });
         return;
       case 'categoryPages':
         navigate({ name: 'categories' });
