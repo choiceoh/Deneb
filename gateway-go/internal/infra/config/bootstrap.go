@@ -407,10 +407,20 @@ type PersistedCustomModel struct {
 	Added       bool
 }
 
+// CustomModelMeta carries optional metadata written alongside a custom model
+// entry so models added via the Mini App are complete (matching hand-authored
+// entries) instead of bare {"id": ...} stubs. Zero/empty fields are omitted.
+type CustomModelMeta struct {
+	ContextWindow int    // advertised context length in tokens; 0 = omit
+	Name          string // display label; "" = omit
+}
+
 // PersistCustomProviderModel writes an OpenAI-compatible endpoint + model into
 // models.providers, preserving all other config fields. The newest direct model
 // is kept first so it remains visible even when provider lists are capped.
-func PersistCustomProviderModel(configPath, endpoint, model string, logger *slog.Logger) (PersistedCustomModel, error) {
+// Optional meta (context window, display name) is written onto the entry and
+// backfills any of those fields missing from an already-present entry.
+func PersistCustomProviderModel(configPath, endpoint, model string, meta CustomModelMeta, logger *slog.Logger) (PersistedCustomModel, error) {
 	baseURL, err := normalizeCustomModelEndpoint(endpoint)
 	if err != nil {
 		return PersistedCustomModel{}, err
@@ -450,10 +460,10 @@ func PersistCustomProviderModel(configPath, endpoint, model string, logger *slog
 		}
 		providers[providerID] = providerConfig
 	}
-	added := upsertCustomModel(providerConfig, modelID)
+	added := upsertCustomModel(providerConfig, modelID, meta)
 
-	meta := ensureObject(raw, "meta")
-	meta["lastTouchedAt"] = time.Now().UTC().Format(time.RFC3339)
+	metaObj := ensureObject(raw, "meta")
+	metaObj["lastTouchedAt"] = time.Now().UTC().Format(time.RFC3339)
 
 	out, err := json.MarshalIndent(raw, "", "  ")
 	if err != nil {
@@ -651,19 +661,19 @@ func nextCustomProviderID(providers map[string]any) string {
 	}
 }
 
-func upsertCustomModel(providerConfig map[string]any, modelID string) bool {
+func upsertCustomModel(providerConfig map[string]any, modelID string, meta CustomModelMeta) bool {
 	var existing []any
 	if arr, ok := providerConfig["models"].([]any); ok {
 		existing = arr
 	}
 
 	added := true
-	front := any(map[string]any{"id": modelID})
+	front := any(buildCustomModelEntry(modelID, meta))
 	next := []any{}
 	for _, item := range existing {
 		if existingID := customModelID(item); existingID == modelID {
 			added = false
-			front = item
+			front = enrichCustomModelEntry(item, modelID, meta)
 			continue
 		}
 		next = append(next, item)
@@ -671,6 +681,39 @@ func upsertCustomModel(providerConfig map[string]any, modelID string) bool {
 	next = append([]any{front}, next...)
 	providerConfig["models"] = next
 	return added
+}
+
+// buildCustomModelEntry creates a model entry including any provided metadata,
+// so the persisted shape matches hand-authored entries ({contextWindow, id,
+// name}) instead of a bare {"id": ...} stub. Empty/zero meta fields are omitted.
+func buildCustomModelEntry(modelID string, meta CustomModelMeta) map[string]any {
+	entry := map[string]any{"id": modelID}
+	if name := strings.TrimSpace(meta.Name); name != "" {
+		entry["name"] = name
+	}
+	if meta.ContextWindow > 0 {
+		entry["contextWindow"] = meta.ContextWindow
+	}
+	return entry
+}
+
+// enrichCustomModelEntry backfills newly-detected metadata onto an existing
+// entry without clobbering values the operator already set by hand. A bare
+// string or otherwise non-object entry is replaced with a full entry.
+func enrichCustomModelEntry(existing any, modelID string, meta CustomModelMeta) map[string]any {
+	obj, ok := existing.(map[string]any)
+	if !ok {
+		return buildCustomModelEntry(modelID, meta)
+	}
+	if _, has := obj["name"]; !has {
+		if name := strings.TrimSpace(meta.Name); name != "" {
+			obj["name"] = name
+		}
+	}
+	if _, has := obj["contextWindow"]; !has && meta.ContextWindow > 0 {
+		obj["contextWindow"] = meta.ContextWindow
+	}
+	return obj
 }
 
 func customModelID(item any) string {

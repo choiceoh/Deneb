@@ -20,11 +20,34 @@ const vllmDiscoveryTimeout = 3 * time.Second
 // Overridden in tests to point at httptest servers.
 var vllmDiscoveryClient = &http.Client{Timeout: vllmDiscoveryTimeout}
 
+// ServedModelInfo describes one model reported by an OpenAI-compatible
+// /models endpoint, including its advertised context length when present.
+type ServedModelInfo struct {
+	ID          string
+	MaxModelLen int // context length in tokens; 0 when the server omits it
+}
+
 // DiscoverServedVllmModels probes an OpenAI-compatible /models endpoint and
 // returns the served model ids in the order the server reports them.
 // Returns a non-nil error when the probe fails (network, bad payload, empty
 // data list). The returned slice may be empty only when err != nil.
 func DiscoverServedVllmModels(ctx context.Context, baseURL string) ([]string, error) {
+	infos, err := DiscoverServedVllmModelInfos(ctx, baseURL)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(infos))
+	for _, m := range infos {
+		ids = append(ids, m.ID)
+	}
+	return ids, nil
+}
+
+// DiscoverServedVllmModelInfos is like DiscoverServedVllmModels but also
+// reports each model's advertised context length (max_model_len). Used to
+// auto-populate a custom model's contextWindow when it is added, so the
+// persisted entry is complete rather than a bare {"id": ...} stub.
+func DiscoverServedVllmModelInfos(ctx context.Context, baseURL string) ([]ServedModelInfo, error) {
 	url := strings.TrimRight(baseURL, "/") + "/models"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -44,7 +67,8 @@ func DiscoverServedVllmModels(ctx context.Context, baseURL string) ([]string, er
 	}
 	var payload struct {
 		Data []struct {
-			ID string `json:"id"`
+			ID          string `json:"id"`
+			MaxModelLen int    `json:"max_model_len"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
@@ -53,16 +77,16 @@ func DiscoverServedVllmModels(ctx context.Context, baseURL string) ([]string, er
 	if len(payload.Data) == 0 {
 		return nil, errors.New("no models served")
 	}
-	ids := make([]string, 0, len(payload.Data))
+	infos := make([]ServedModelInfo, 0, len(payload.Data))
 	for _, m := range payload.Data {
 		if id := strings.TrimSpace(m.ID); id != "" {
-			ids = append(ids, id)
+			infos = append(infos, ServedModelInfo{ID: id, MaxModelLen: m.MaxModelLen})
 		}
 	}
-	if len(ids) == 0 {
+	if len(infos) == 0 {
 		return nil, errors.New("no model ids in response")
 	}
-	return ids, nil
+	return infos, nil
 }
 
 // reconcileVllmModel rewrites cfg.Model so it matches whatever the local
