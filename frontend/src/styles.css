@@ -3702,82 +3702,108 @@ button.person-msg-row-unread {
 }
 
 /* ============================================================
-   Desktop optimization
+   Desktop optimization (Telegram tdesktop / macOS / web)
    ============================================================
-   Telegram on desktop (tdesktop / macos / web) opens the Mini App
-   in a wider, resizable window with mouse + keyboard input. The
-   typography idiom that fits a 480px mobile column reads
-   undersized against a 720-900px desktop viewport, so we scale up
-   the hero type, panorama, and content column. Hover effects also
-   only land on platforms that actually carry a hover state — the
-   media query gates everything on (hover: hover) so a touch laptop
-   stays on the mobile cadence.
+   Telegram opens a Mini App on desktop in a FIXED, non-resizable
+   384x694 panel (tdesktop's st::botWebViewPanelSize) — a narrow
+   PORTRAIT window, NOT a wide desktop viewport. An earlier pass
+   assumed a 720-900px desktop column and gated every desktop rule
+   on `min-width: 720px`; the 384px panel never satisfies that, so
+   none of it ever applied and PC users got the raw mobile layout —
+   a blown-up phone screen (the reported "핸드폰 UI 티").
 
-   body.tg-desktop is the JS-stamped class; we double-gate with
-   (hover: hover) because some touch laptops report 'tdesktop'
-   while still using a stylus or finger as primary input. */
+   So we do NOT scale type up for a wide viewport that never exists.
+   Instead we TIGHTEN the large-format mobile idiom into a denser,
+   mouse-first cadence: smaller hero type, tighter rows + headers,
+   and real hover / cursor / keyboard-focus affordances. The gate is
+   body.tg-desktop alone (JS-stamped from tg.platform in main.ts), so
+   it actually fires at 384px. Mobile keeps its full-size Zune
+   typography untouched. Pure-pointer effects (lean, scrollbar) are
+   additionally wrapped in (hover: hover) so a touch laptop that
+   reports 'tdesktop' but is finger-driven stays on the touch cadence. */
 
-@media (hover: hover) and (min-width: 720px) {
-  body.tg-desktop #app {
-    max-width: 720px;
-    padding: 28px 32px 48px;
-  }
-
-  body.tg-desktop #tab-bar {
-    max-width: 720px;
-    padding: 22px 32px 12px;
-  }
-
-  body.tg-desktop .panorama-tab {
-    font-size: 36px;
-  }
-
-  body.tg-desktop .type-item {
-    font-size: 64px;
-    padding: 10px 0;
-  }
-
-  body.tg-desktop .view-title {
-    font-size: 56px;
-  }
-
-  body.tg-desktop .email-subject {
-    font-size: 36px;
-  }
-
-  /* Stronger hover affordance on actual-mouse platforms. The mobile
-     rule already gives type-item:hover an opacity + tracking lift;
-     here we add a tiny translate so the word leans toward the
-     pointer, which only makes sense when there *is* a pointer. */
-  body.tg-desktop .type-item:hover {
-    transform: translateX(6px);
-  }
-
-  body.tg-desktop .type-item {
-    cursor: pointer;
-  }
-
-  body.tg-desktop .view-title,
-  body.tg-desktop .type-greeting,
-  body.tg-desktop .type-status {
-    cursor: default;
-  }
-
-  /* Panorama active marker reads better at the larger desktop size
-     if we thicken it slightly. */
-  body.tg-desktop .panorama-tab::after {
-    height: 3px;
-  }
+/* Hero menu (home): denser than the 52px mobile poster type so the
+   384px panel reads as a compact PC list rather than an enlarged
+   phone home screen. */
+body.tg-desktop .type-item {
+  font-size: 38px;
+  padding: 6px 0;
+  line-height: 1.1;
+  cursor: pointer;
 }
 
-/* Keyboard-focus indicator. The mobile rule on :focus-visible
-   bumps opacity; desktop gets an explicit underline so the
-   currently-keyboarded item is unambiguous. */
+body.tg-desktop .type-menu {
+  gap: 2px;
+}
+
+/* View titles + headers: trim the oversized mobile hero spacing so
+   more content clears the fold in the short 694px panel. */
+body.tg-desktop .view-title {
+  font-size: 30px;
+}
+
+body.tg-desktop .view-header {
+  margin: 12px 0 20px;
+}
+
+/* No notch / status bar on desktop — reclaim the top padding the
+   mobile safe-area reserve leaves behind. */
+body.tg-desktop #app {
+  padding-top: 16px;
+}
+
+/* Denser list rows: mouse users don't need finger-sized hit targets,
+   and the short panel benefits from showing more rows per screen. */
+body.tg-desktop .email-row {
+  padding-top: 11px;
+  padding-bottom: 11px;
+}
+
+body.tg-desktop .flat-row {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+/* Non-interactive headings keep the arrow cursor (rows stay pointer)
+   so hover doesn't imply they're clickable. */
+body.tg-desktop .view-title,
+body.tg-desktop .type-greeting,
+body.tg-desktop .type-status {
+  cursor: default;
+}
+
+/* Pure-pointer affordances — real mouse only. */
 @media (hover: hover) {
+  /* Focal-point lean: the hovered word leans toward the pointer,
+     which only reads right when there actually is a pointer. */
+  body.tg-desktop .type-item:hover {
+    transform: translateX(5px);
+  }
+
+  /* Keyboard-focus indicator: the mobile :focus-visible rule only
+     bumps opacity; desktop gets an explicit underline so the j/k
+     keyboard cursor position is unambiguous. */
   body.tg-desktop .type-item:focus-visible {
     text-decoration: underline;
     text-decoration-color: var(--tg-text);
-    text-underline-offset: 6px;
+    text-underline-offset: 5px;
     text-decoration-thickness: 2px;
+  }
+
+  /* Thin styled scrollbar — mouse users expect a visible track; the
+     mobile build leaves the WebView default (hidden / overlay). */
+  body.tg-desktop ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+
+  body.tg-desktop ::-webkit-scrollbar-thumb {
+    background: var(--hairline-strong);
+    border-radius: 999px;
+    border: 2px solid var(--tg-bg);
+  }
+
+  body.tg-desktop ::-webkit-scrollbar-thumb:hover {
+    background: var(--tg-hint);
   }
 }
