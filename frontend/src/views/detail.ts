@@ -109,8 +109,9 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
     label.textContent = '첨부';
     attBox.appendChild(label);
     for (const att of msg.attachments) {
-      const chip = document.createElement('div');
+      const chip = document.createElement('button');
       chip.className = 'attachment-chip';
+      chip.type = 'button';
       chip.innerHTML = `
         <span class="attachment-name"></span>
         <span class="attachment-size"></span>
@@ -118,6 +119,10 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
       (chip.querySelector('.attachment-name') as HTMLElement).textContent =
         att.filename || '(이름없음)';
       (chip.querySelector('.attachment-size') as HTMLElement).textContent = humanSize(att.size);
+      chip.addEventListener('click', () => {
+        triggerImpactHaptic('light');
+        openAttachment(buildAttachmentURL(initData, msg.id, att));
+      });
       attBox.appendChild(chip);
     }
     root.appendChild(attBox);
@@ -222,6 +227,36 @@ function paint(root: HTMLElement, initData: string, msg: GmailMessageDetail): vo
     navigate({ name: 'inbox' });
   });
   actions.appendChild(closeBtn);
+}
+
+function buildAttachmentURL(
+  initData: string,
+  messageID: string,
+  att: GmailMessageDetail['attachments'][number],
+): string {
+  const url = new URL('/api/v1/miniapp/gmail/attachment', location.origin);
+  url.searchParams.set('initData', initData);
+  url.searchParams.set('messageId', messageID);
+  url.searchParams.set('attachmentId', att.id);
+  if (att.filename) url.searchParams.set('filename', att.filename);
+  if (att.mimeType) url.searchParams.set('mimeType', att.mimeType);
+  return url.toString();
+}
+
+function openAttachment(url: string): void {
+  const tg = window.Telegram?.WebApp;
+  if (tg?.openLink) {
+    tg.openLink(url);
+    return;
+  }
+
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.target = '_blank';
+  anchor.rel = 'noopener';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
 }
 
 async function runAnalysis(
@@ -575,4 +610,3 @@ function makeAction(
   });
   return btn;
 }
-

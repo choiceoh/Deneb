@@ -14,6 +14,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /readyz", s.handleReady)
 	mux.HandleFunc("POST /api/cron/run", s.handleCronRun)
 	mux.HandleFunc("POST /api/v1/miniapp/rpc", s.handleMiniappRPC)
+	mux.HandleFunc("GET /api/v1/miniapp/gmail/attachment", s.handleMiniappGmailAttachment)
 
 	// Mini App static assets (Vite-built bundle embedded via //go:embed).
 	// Trailing slash makes this a subtree match in Go 1.22+ ServeMux, so:
@@ -45,6 +46,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("/readyz", methodNotAllowed)
 	mux.HandleFunc("/api/cron/run", methodNotAllowed)
 	mux.HandleFunc("/api/v1/miniapp/rpc", methodNotAllowed)
+	mux.HandleFunc("/api/v1/miniapp/gmail/attachment", methodNotAllowed)
 	// Catch-all handler: root fallback.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// Root fallback for exact "/" GET.

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -101,6 +102,47 @@ func postMiniappRPC(t *testing.T, s *Server, authHeader string, body any) *httpt
 	return rec
 }
 
+type fakeMiniappAttachmentClient struct {
+	data          []byte
+	err           error
+	seenMessageID string
+	seenAttachID  string
+}
+
+func (f *fakeMiniappAttachmentClient) GetAttachment(_ context.Context, messageID, attachmentID string) ([]byte, error) {
+	f.seenMessageID = messageID
+	f.seenAttachID = attachmentID
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.data, nil
+}
+
+func getMiniappAttachment(t *testing.T, s *Server, rawInitData string, params map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	values := url.Values{}
+	values.Set("initData", rawInitData)
+	for k, v := range params {
+		values.Set(k, v)
+	}
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/api/v1/miniapp/gmail/attachment?"+values.Encode(),
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	s.handleMiniappGmailAttachment(rec, req)
+	return rec
+}
+
+func withMiniappAttachmentClientFactory(t *testing.T, factory func() (miniappGmailAttachmentClient, error)) {
+	t.Helper()
+	orig := miniappGmailAttachmentClientFactory
+	miniappGmailAttachmentClientFactory = factory
+	t.Cleanup(func() { miniappGmailAttachmentClientFactory = orig })
+}
+
 func TestHandleMiniappRPC_ValidInitData_Whoami(t *testing.T) {
 	s := newServerWithTelegram(t)
 	raw := freshInitData(t)
@@ -130,6 +172,88 @@ func TestHandleMiniappRPC_ValidInitData_Whoami(t *testing.T) {
 	}
 	if user["firstName"] != "오선택" {
 		t.Errorf("firstName = %v, want 오선택", user["firstName"])
+	}
+}
+
+func TestHandleMiniappGmailAttachment_ValidInitDataStreamsBytes(t *testing.T) {
+	s := newServerWithTelegram(t)
+	client := &fakeMiniappAttachmentClient{data: []byte("%PDF")}
+	withMiniappAttachmentClientFactory(t, func() (miniappGmailAttachmentClient, error) {
+		return client, nil
+	})
+
+	rec := getMiniappAttachment(t, s, freshInitData(t), map[string]string{
+		"messageId":    "m1",
+		"attachmentId": "att1",
+		"filename":     "report.pdf",
+		"mimeType":     "application/pdf",
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if rec.Body.String() != "%PDF" {
+		t.Errorf("body = %q, want %%PDF", rec.Body.String())
+	}
+	if client.seenMessageID != "m1" || client.seenAttachID != "att1" {
+		t.Errorf("GetAttachment args = %q/%q, want m1/att1", client.seenMessageID, client.seenAttachID)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/pdf" {
+		t.Errorf("Content-Type = %q, want application/pdf", got)
+	}
+	if got := rec.Header().Get("Content-Disposition"); !strings.Contains(got, "report.pdf") {
+		t.Errorf("Content-Disposition = %q, want filename", got)
+	}
+}
+
+func TestHandleMiniappGmailAttachment_MissingInitData(t *testing.T) {
+	s := newServerWithTelegram(t)
+	rec := getMiniappAttachment(t, s, "", map[string]string{
+		"messageId":    "m1",
+		"attachmentId": "att1",
+	})
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestHandleMiniappGmailAttachment_MissingParams(t *testing.T) {
+	s := newServerWithTelegram(t)
+	rec := getMiniappAttachment(t, s, freshInitData(t), map[string]string{
+		"messageId": "m1",
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleMiniappGmailAttachment_ClientUnavailable(t *testing.T) {
+	s := newServerWithTelegram(t)
+	withMiniappAttachmentClientFactory(t, func() (miniappGmailAttachmentClient, error) {
+		return nil, errors.New("OAuth not configured")
+	})
+
+	rec := getMiniappAttachment(t, s, freshInitData(t), map[string]string{
+		"messageId":    "m1",
+		"attachmentId": "att1",
+	})
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestHandleMiniappGmailAttachment_GmailNotFound(t *testing.T) {
+	s := newServerWithTelegram(t)
+	withMiniappAttachmentClientFactory(t, func() (miniappGmailAttachmentClient, error) {
+		return &fakeMiniappAttachmentClient{err: errors.New("Gmail API error (HTTP 404): not found")}, nil
+	})
+
+	rec := getMiniappAttachment(t, s, freshInitData(t), map[string]string{
+		"messageId":    "m1",
+		"attachmentId": "att-missing",
+	})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
 
