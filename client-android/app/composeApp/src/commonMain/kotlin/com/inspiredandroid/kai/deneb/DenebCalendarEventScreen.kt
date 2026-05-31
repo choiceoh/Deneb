@@ -102,13 +102,6 @@ fun DenebCalendarEventScreen(
                         Text("📹 Meet 참가")
                     }
                 }
-                if (ev.htmlLink.isNotBlank()) {
-                    Spacer(Modifier.height(if (ev.meetUri.isNotBlank()) 2.dp else 12.dp))
-                    TextButton(onClick = { uriHandler.openUri(ev.htmlLink) }) {
-                        Text("Google 캘린더에서 열기")
-                    }
-                }
-
                 if (ev.attendees.isNotEmpty()) {
                     Spacer(Modifier.height(16.dp))
                     Text(
@@ -117,19 +110,12 @@ fun DenebCalendarEventScreen(
                         color = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(Modifier.height(4.dp))
-                    ev.attendees.forEach { a ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                rsvpBadge(a.responseStatus),
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.width(22.dp),
-                            )
-                            Text(
-                                a.name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
+                    ev.attendees.forEach { name ->
+                        Text(
+                            "· $name",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                 }
 
@@ -165,14 +151,6 @@ private fun InfoRow(label: String, value: String) {
             modifier = Modifier.weight(1f),
         )
     }
-}
-
-/** Google responseStatus -> a compact RSVP glyph. */
-private fun rsvpBadge(status: String): String = when (status) {
-    "accepted" -> "✓"
-    "declined" -> "✗"
-    "tentative" -> "?"
-    else -> "·" // needsAction / unknown
 }
 
 /** Event status -> a Korean label, or null when confirmed (no banner needed). */

@@ -491,11 +491,8 @@ class DenebGatewayClient(
             end = p.end,
             allDay = p.allDay,
             organizer = p.organizer?.let { it.displayName.ifBlank { it.email } }.orEmpty(),
-            attendees = p.attendees
-                .filter { (it.displayName.ifBlank { it.email }).isNotBlank() }
-                .map { EventAttendee(it.displayName.ifBlank { it.email }, it.responseStatus) },
+            attendees = p.attendees.mapNotNull { (it.displayName.ifBlank { it.email }).ifBlank { null } },
             meetUri = p.conference?.uri.orEmpty(),
-            htmlLink = p.htmlLink,
             status = p.status,
         )
     }
@@ -1051,14 +1048,10 @@ data class CalendarEventDetail(
     val end: String,
     val allDay: Boolean,
     val organizer: String,
-    val attendees: List<EventAttendee>,
+    val attendees: List<String>,
     val meetUri: String,
-    val htmlLink: String,
     val status: String,
 )
-
-/** A calendar event attendee with their RSVP (Google responseStatus). */
-data class EventAttendee(val name: String, val responseStatus: String)
 
 /** Unified search results across wiki, diary and people. */
 data class SearchResults(
