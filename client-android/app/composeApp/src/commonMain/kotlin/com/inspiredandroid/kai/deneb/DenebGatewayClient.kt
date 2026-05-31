@@ -47,6 +47,8 @@ import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -752,6 +754,32 @@ class DenebGatewayClient(
             null
         }
     }.getOrNull()
+
+    /**
+     * OCR a shared image on the gateway and run one agent turn over the extracted
+     * text, showing the result in the chat. The native client's "share an image to
+     * Deneb" path — the gateway uses the PaddleOCR sidecar (tesseract fallback).
+     */
+    @OptIn(ExperimentalEncodingApi::class)
+    suspend fun captureImage(bytes: ByteArray, mimeType: String) {
+        if (clientToken.isEmpty() || bytes.isEmpty()) return
+        _chatHistory.update { it + History(role = History.Role.USER, content = "📷 이미지 공유됨 (OCR 분석 중…)") }
+        val reply = runCatching {
+            val payload = callRpc<CaptureImagePayload>(
+                "miniapp.capture.image",
+                buildJsonObject {
+                    put("image", Base64.encode(bytes))
+                    put("mimeType", mimeType)
+                    put("sessionKey", sessionKey)
+                },
+            )
+            payload?.text?.ifBlank { null } ?: "이미지에서 텍스트를 찾지 못했거나 분석에 실패했습니다."
+        }.getOrElse { "⚠️ ${it.message ?: "이미지 캡처 실패"}" }
+        _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
+    }
+
+    @Serializable
+    private data class CaptureImagePayload(val text: String = "")
 
     private suspend fun send(message: String): GatewayReply {
         if (clientToken.isEmpty()) {

@@ -1,6 +1,7 @@
 package com.inspiredandroid.kai
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -144,6 +145,10 @@ class MainActivity : ComponentActivity() {
     // native-only capability the Telegram bot can't offer.
     private fun handleShareIntent(intent: Intent?) {
         if (intent?.action != Intent.ACTION_SEND) return
+        if (intent.type?.startsWith("image/") == true) {
+            handleSharedImage(intent)
+            return
+        }
         val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
         if (text.isEmpty()) return
         val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)?.trim().orEmpty()
@@ -152,6 +157,24 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch { dataRepository.ask(captured, emptyList(), null) }
         // Clear so a configuration change doesn't re-send the capture.
         intent.removeExtra(Intent.EXTRA_TEXT)
+    }
+
+    // Shared image -> gateway OCR -> chat. Reads the image bytes (a temporary read
+    // grant rides with the share) and hands them to the gateway, which OCRs via the
+    // PaddleOCR sidecar and runs one agent turn over the extracted text.
+    private fun handleSharedImage(intent: Intent) {
+        @Suppress("DEPRECATION")
+        val uri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        }
+        if (uri == null) return
+        val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+        if (bytes == null || bytes.isEmpty()) return
+        val client = get<DataRepository>() as? DenebGatewayClient ?: return
+        lifecycleScope.launch { client.captureImage(bytes, intent.type ?: "image/*") }
+        intent.removeExtra(Intent.EXTRA_STREAM)
     }
 }
 

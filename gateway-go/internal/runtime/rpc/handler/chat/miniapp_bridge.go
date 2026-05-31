@@ -2,6 +2,8 @@ package chat
 
 import (
 	"context"
+	"encoding/base64"
+	"fmt"
 	"strings"
 
 	chatpkg "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -29,9 +31,73 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 	if deps.Chat == nil {
 		return nil
 	}
-	return map[string]rpcutil.HandlerFunc{
+	m := map[string]rpcutil.HandlerFunc{
 		"miniapp.chat.send":    handleMiniappChatSend(deps),
 		"miniapp.chat.history": handleHistory(deps),
+	}
+	// Image capture (share a photo/screenshot to Deneb) needs the OCR sidecar
+	// wired; skip the method cleanly when it isn't.
+	if deps.OcrImage != nil {
+		m["miniapp.capture.image"] = handleMiniappCaptureImage(deps)
+	}
+	return m
+}
+
+// handleMiniappCaptureImage OCRs a directly-shared image and runs one agent turn
+// over the extracted text — the native client's "share an image to Deneb" path.
+//
+// Params:
+//   - image      (base64, required; an optional `data:...;base64,` prefix is stripped)
+//   - mimeType   (string, optional)
+//   - sessionKey (string, optional): defaults to "client:main"
+func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		p, errResp := rpcutil.DecodeParams[struct {
+			Image      string `json:"image"`
+			MimeType   string `json:"mimeType"`
+			SessionKey string `json:"sessionKey"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		raw := strings.TrimSpace(p.Image)
+		if strings.HasPrefix(raw, "data:") {
+			if i := strings.IndexByte(raw, ','); i > 0 {
+				raw = raw[i+1:]
+			}
+		}
+		if raw == "" {
+			return rpcerr.MissingParam("image").Response(req.ID)
+		}
+		img, err := base64.StdEncoding.DecodeString(raw)
+		if err != nil || len(img) == 0 {
+			return rpcerr.InvalidParams(fmt.Errorf("image is not valid base64")).Response(req.ID)
+		}
+		text, err := deps.OcrImage(ctx, img)
+		if err != nil {
+			return rpcerr.WrapDependencyFailed("image OCR failed", err).Response(req.ID)
+		}
+		if strings.TrimSpace(text) == "" {
+			return rpcerr.Unavailable("no text found in image").Response(req.ID)
+		}
+		sessionKey := strings.TrimSpace(p.SessionKey)
+		if sessionKey == "" {
+			sessionKey = nativeClientChannel + ":main"
+		}
+		message := "📷 공유 이미지에서 추출한 텍스트 (OCR):\n\n" + strings.TrimSpace(text)
+		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
+			Delivery:            &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
+			AutoDeliveredOutput: true,
+		})
+		if err != nil {
+			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"text":       res.Text,
+			"ocr":        strings.TrimSpace(text),
+			"model":      res.Model,
+			"sessionKey": sessionKey,
+		})
 	}
 }
 
