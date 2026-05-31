@@ -45,6 +45,7 @@ fun DenebSearchScreen(
     onBack: () -> Unit,
     onOpenWiki: (String) -> Unit = {},
     onOpenPerson: (String) -> Unit = {},
+    onOpenCategories: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var query by remember { mutableStateOf("") }
@@ -77,6 +78,7 @@ fun DenebSearchScreen(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
+                TextButton(onClick = onOpenCategories) { Text("카테고리") }
                 TextButton(onClick = { onOpenWiki("") }) { Text("+ 새 위키") }
                 TextButton(onClick = onBack) { Text("닫기") }
             }
