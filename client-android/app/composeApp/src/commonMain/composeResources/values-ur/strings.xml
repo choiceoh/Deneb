@@ -1,5 +1,5 @@
 <resources>
-    <string name="welcome_message">Kai 9000 میں خوش آمدید</string>
+    <string name="welcome_message">Deneb میں خوش آمدید</string>
     <string name="prompt_ask_question">سوال پوچھیں</string>
     <string name="error_invalid_api_key">غلط API کلید۔ براہ کرم اپنی ترتیبات چیک کریں۔</string>
     <string name="error_rate_limit_exceeded">شرح کی حد سے تجاوز ہو گیا۔ براہ کرم بعد میں دوبارہ کوشش کریں۔</string>
@@ -78,7 +78,7 @@
     <string name="bot_message_regenerate_content_description">دوبارہ بنائیں</string>
     <string name="error_empty_response">کوئی جواب موصول نہیں ہوا۔ نئی چیٹ شروع کرنے یا اپنا پیغام مختصر کرنے کی کوشش کریں۔</string>
     <string name="settings_daemon_mode">ڈیمن موڈ</string>
-    <string name="settings_daemon_mode_description">Kai 9000 کو پس منظر میں چلتا رکھیں تاکہ طے شدہ کام ایپ کے پیش منظر میں نہ ہونے پر بھی چلتے رہیں۔</string>
+    <string name="settings_daemon_mode_description">Deneb کو پس منظر میں چلتا رکھیں تاکہ طے شدہ کام ایپ کے پیش منظر میں نہ ہونے پر بھی چلتے رہیں۔</string>
     <string name="settings_scheduled_tasks">طے شدہ کام</string>
     <string name="settings_scheduled_tasks_description">AI کی جانب سے مستقبل میں انجام دینے کے لیے طے شدہ کام۔ طے شدہ کام بنانے کے لیے AI سے یاد دلانے یا بعد میں کچھ چلانے کو کہیں۔</string>
     <string name="settings_scheduled_tasks_cancel">کام منسوخ کریں</string>
@@ -229,7 +229,7 @@
     <string name="interactive_welcome_title">میں مکمل طور پر فعال ہوں۔</string>
     <string name="interactive_welcome_subtitle">مجھے بتائیں آپ کیا کرنا چاہتے ہیں۔</string>
     <string name="interactive_back_content_description">واپس</string>
-    <string name="interactive_title">Kai 9000</string>
+    <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">انٹرایکٹو موڈ سے باہر نکلیں</string>
     <string name="interactive_ui_parsing_failed">UI تجزیہ ناکام، دوبارہ کوشش ہو رہی ہے…</string>
     <string name="settings_sponsors_monthly">ماہانہ سپانسرز</string>
@@ -348,8 +348,8 @@
     <string name="tool_search_notifications_name">اطلاعات تلاش کریں</string>
     <string name="tool_search_notifications_description">ایپ یا متن کے لحاظ سے اطلاعات تلاش کریں</string>
     <string name="settings_notifications_label">اطلاعات پڑھیں</string>
-    <string name="settings_notifications_description">آنے والی اطلاعات پس منظر میں جمع کی جاتی ہیں اور heartbeat انہیں اٹھاتا ہے۔ سسٹم کی اطلاع رسائی ترتیبات میں منتخب کریں کہ Kai کن ایپس کو پڑھ سکتا ہے۔</string>
-    <string name="settings_notifications_access_required">اطلاع رسائی نہیں دی گئی۔ سسٹم ترتیبات میں Kai کو فعال کرنے کے لیے نیچے ٹیپ کریں۔</string>
+    <string name="settings_notifications_description">آنے والی اطلاعات پس منظر میں جمع کی جاتی ہیں اور heartbeat انہیں اٹھاتا ہے۔ سسٹم کی اطلاع رسائی ترتیبات میں منتخب کریں کہ Deneb کن ایپس کو پڑھ سکتا ہے۔</string>
+    <string name="settings_notifications_access_required">اطلاع رسائی نہیں دی گئی۔ سسٹم ترتیبات میں Deneb کو فعال کرنے کے لیے نیچے ٹیپ کریں۔</string>
     <string name="settings_notifications_access_button">اطلاع رسائی کھولیں</string>
     <string name="settings_notifications_manage_apps">ایپس کا انتظام کریں</string>
     <string name="settings_notifications_listener_bound">سننے والا فعال ہے</string>

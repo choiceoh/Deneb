@@ -1,5 +1,5 @@
 <resources>
-    <string name="welcome_message">Velkommen til Kai 9000</string>
+    <string name="welcome_message">Velkommen til Deneb</string>
     <string name="prompt_ask_question">Still et spørsmål</string>
     <string name="error_invalid_api_key">Ugyldig API-nøkkel. Sjekk innstillingene dine.</string>
     <string name="error_rate_limit_exceeded">Hastighetsgrense overskredet. Prøv igjen senere.</string>
@@ -78,7 +78,7 @@
     <string name="bot_message_regenerate_content_description">Regenerer</string>
     <string name="error_empty_response">Intet svar mottatt. Prøv å starte en ny chat eller forkorte meldingen din.</string>
     <string name="settings_daemon_mode">Daemon-modus</string>
-    <string name="settings_daemon_mode_description">Hold Kai 9000 kjørende i bakgrunnen slik at planlagte oppgaver utføres selv når appen ikke er i forgrunnen.</string>
+    <string name="settings_daemon_mode_description">Hold Deneb kjørende i bakgrunnen slik at planlagte oppgaver utføres selv når appen ikke er i forgrunnen.</string>
     <string name="settings_scheduled_tasks">Planlagte oppgaver</string>
     <string name="settings_scheduled_tasks_description">Oppgaver planlagt av AI-en for fremtidig utførelse. Be AI-en om å minne deg på eller kjøre noe senere for å opprette planlagte oppgaver.</string>
     <string name="settings_scheduled_tasks_cancel">Avbryt oppgave</string>
@@ -230,7 +230,7 @@ Hvis noe trenger oppmerksomhet (utdaterte minner, forfalte oppgaver, brukeroppf�
     <string name="interactive_welcome_title">Jeg er fullt operativ.</string>
     <string name="interactive_welcome_subtitle">Fortell meg hva du ønsker å gjøre.</string>
     <string name="interactive_back_content_description">Tilbake</string>
-    <string name="interactive_title">Kai 9000</string>
+    <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Avslutt interaktiv modus</string>
     <string name="interactive_ui_parsing_failed">UI-analyse mislyktes, prøver igjen…</string>
     <string name="settings_sponsors_monthly">Månedlige sponsorer</string>
@@ -349,8 +349,8 @@ Hvis noe trenger oppmerksomhet (utdaterte minner, forfalte oppgaver, brukeroppf�
     <string name="tool_search_notifications_name">Søk i varslinger</string>
     <string name="tool_search_notifications_description">Søk i varslinger etter app eller tekst</string>
     <string name="settings_notifications_label">Les varslinger</string>
-    <string name="settings_notifications_description">Innkommende varslinger samles inn i bakgrunnen og plukkes opp av heartbeat. Velg hvilke apper Kai kan lese i systemets innstillinger for varslingstilgang.</string>
-    <string name="settings_notifications_access_required">Varslingstilgang er ikke gitt. Trykk under for å aktivere Kai i systeminnstillingene.</string>
+    <string name="settings_notifications_description">Innkommende varslinger samles inn i bakgrunnen og plukkes opp av heartbeat. Velg hvilke apper Deneb kan lese i systemets innstillinger for varslingstilgang.</string>
+    <string name="settings_notifications_access_required">Varslingstilgang er ikke gitt. Trykk under for å aktivere Deneb i systeminnstillingene.</string>
     <string name="settings_notifications_access_button">Åpne varslingstilgang</string>
     <string name="settings_notifications_manage_apps">Administrer apper</string>
     <string name="settings_notifications_listener_bound">Lytter aktiv</string>

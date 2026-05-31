@@ -1,5 +1,5 @@
 <resources>
-    <string name="welcome_message">Witamy w Kai 9000</string>
+    <string name="welcome_message">Witamy w Deneb</string>
     <string name="prompt_ask_question">Zadaj pytanie</string>
     <string name="error_invalid_api_key">Nieprawidłowy klucz API. Sprawdź ustawienia.</string>
     <string name="error_rate_limit_exceeded">Przekroczono limit żądań. Spróbuj ponownie później.</string>
@@ -78,7 +78,7 @@
     <string name="bot_message_regenerate_content_description">Wygeneruj ponownie</string>
     <string name="error_empty_response">Nie otrzymano odpowiedzi. Spróbuj rozpocząć nowy czat lub skrócić wiadomość.</string>
     <string name="settings_daemon_mode">Tryb demona</string>
-    <string name="settings_daemon_mode_description">Utrzymuj Kai 9000 działającego w tle, aby zaplanowane zadania były wykonywane nawet gdy aplikacja nie jest na pierwszym planie.</string>
+    <string name="settings_daemon_mode_description">Utrzymuj Deneb działającego w tle, aby zaplanowane zadania były wykonywane nawet gdy aplikacja nie jest na pierwszym planie.</string>
     <string name="settings_scheduled_tasks">Zaplanowane zadania</string>
     <string name="settings_scheduled_tasks_description">Zadania zaplanowane przez AI do przyszłego wykonania. Poproś AI o przypomnienie lub uruchomienie czegoś później, aby utworzyć zaplanowane zadania.</string>
     <string name="settings_scheduled_tasks_cancel">Anuluj zadanie</string>
@@ -230,7 +230,7 @@ Jeśli coś wymaga uwagi (przestarzałe wspomnienia, zaległe zadania, dalsze dz
     <string name="interactive_welcome_title">Jestem w pełni sprawny.</string>
     <string name="interactive_welcome_subtitle">Powiedz mi, co chcesz zrobić.</string>
     <string name="interactive_back_content_description">Wstecz</string>
-    <string name="interactive_title">Kai 9000</string>
+    <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Wyjdź z trybu interaktywnego</string>
     <string name="interactive_ui_parsing_failed">Analiza UI nie powiodła się, ponawiam próbę…</string>
     <string name="settings_sponsors_monthly">Miesięczni sponsorzy</string>
@@ -349,8 +349,8 @@ Jeśli coś wymaga uwagi (przestarzałe wspomnienia, zaległe zadania, dalsze dz
     <string name="tool_search_notifications_name">Szukaj powiadomień</string>
     <string name="tool_search_notifications_description">Szukaj powiadomień według aplikacji lub tekstu</string>
     <string name="settings_notifications_label">Czytaj powiadomienia</string>
-    <string name="settings_notifications_description">Przychodzące powiadomienia są zbierane w tle i odbierane przez heartbeat. W systemowych ustawieniach dostępu do powiadomień wybierz, które aplikacje może czytać Kai.</string>
-    <string name="settings_notifications_access_required">Dostęp do powiadomień nie został przyznany. Stuknij poniżej, aby włączyć Kai w ustawieniach systemowych.</string>
+    <string name="settings_notifications_description">Przychodzące powiadomienia są zbierane w tle i odbierane przez heartbeat. W systemowych ustawieniach dostępu do powiadomień wybierz, które aplikacje może czytać Deneb.</string>
+    <string name="settings_notifications_access_required">Dostęp do powiadomień nie został przyznany. Stuknij poniżej, aby włączyć Deneb w ustawieniach systemowych.</string>
     <string name="settings_notifications_access_button">Otwórz dostęp do powiadomień</string>
     <string name="settings_notifications_manage_apps">Zarządzaj aplikacjami</string>
     <string name="settings_notifications_listener_bound">Listener aktywny</string>

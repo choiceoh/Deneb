@@ -3,15 +3,16 @@
     android:height="108dp"
     android:viewportWidth="90"
     android:viewportHeight="90">
+  <!-- Deneb mark: a five-pointed star with softly rounded tips. -->
   <group android:scaleX="0.59"
       android:scaleY="0.59"
       android:translateX="18.45"
       android:translateY="18.45">
     <path
-        android:pathData="M35,45m-30,0a30,30 0,1 1,60 0a30,30 0,1 1,-60 0"
-        android:fillColor="#6200ee"/>
-    <path
-        android:pathData="M55,45m-30,0a30,30 0,1 1,60 0a30,30 0,1 1,-60 0"
-        android:fillColor="#8063C5"/>
+        android:pathData="M45,5 L55,31.2 L83,32.6 L61.2,50.2 L68.5,77.4 L45,62 L21.5,77.4 L28.8,50.2 L7,32.6 L35,31.2 Z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineJoin="round"/>
   </group>
 </vector>

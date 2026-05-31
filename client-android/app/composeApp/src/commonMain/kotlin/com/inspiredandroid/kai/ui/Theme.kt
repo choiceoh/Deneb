@@ -36,19 +36,22 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
-val darkPurple = Color(0xFF6200EE)
-val lightPurple = Color(0xff8063C5)
+// Deneb Prussian-blue palette — a deep navy brand color (Deneb is a bright star
+// against the night sky). Variable names are retained from the vendored Kai
+// theme to keep the rebrand diff small.
+val darkPurple = Color(0xFF003153)
+val lightPurple = Color(0xFF2C5F8F)
 val gradientBrush = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(darkPurple, lightPurple))
 
-// Animated border gradient colors
-val gradientPurple = Color(0xFF9C27B0)
-val gradientViolet = Color(0xFF7C4DFF)
-val gradientMagenta = Color(0xFFE040FB)
+// Animated border gradient colors (Prussian-blue sweep).
+val gradientPurple = Color(0xFF001F3D)
+val gradientViolet = Color(0xFF003153)
+val gradientMagenta = Color(0xFF2C5F8F)
 
 fun Modifier.handCursor() = pointerHoverIcon(PointerIcon.Hand, overrideDescendants = true)
 
 val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFFBB86FC),
+    primary = Color(0xFF7FA8D0),
     onPrimary = Color(0xFF000000),
     surface = Color(0xFF1E1E1E),
     background = Color(0xFF121212),

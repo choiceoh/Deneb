@@ -1,5 +1,5 @@
 <resources>
-    <string name="welcome_message">እንኳን ወደ Kai 9000 በደህና መጡ</string>
+    <string name="welcome_message">እንኳን ወደ Deneb በደህና መጡ</string>
     <string name="prompt_ask_question">ጥያቄ ይጠይቁ</string>
     <string name="error_invalid_api_key">ልክ ያልሆነ API ቁልፍ። እባክዎ ቅንብሮችዎን ያረጋግጡ።</string>
     <string name="error_rate_limit_exceeded">የተጠቀሙበት ገደብ አልፏል። እባክዎ ቆይተው ይሞክሩ።</string>
@@ -78,7 +78,7 @@
     <string name="bot_message_regenerate_content_description">እንደገና አፍርት</string>
     <string name="error_empty_response">ምላሽ አልተቀበለም። አዲስ ውይይት ለመጀመር ወይም መልዕክትዎን ለማሳጠር ይሞክሩ።</string>
     <string name="settings_daemon_mode">የዳይሞን ሁነታ</string>
-    <string name="settings_daemon_mode_description">Kai 9000 ከበስተጀርባ እንዲሰራ ያቆዩ ስለዚህ የተያዙ ተግባራት ምንም እንኳን መተግበሪያው በፊት ላይ ባይሆንም ይፈጸማሉ።</string>
+    <string name="settings_daemon_mode_description">Deneb ከበስተጀርባ እንዲሰራ ያቆዩ ስለዚህ የተያዙ ተግባራት ምንም እንኳን መተግበሪያው በፊት ላይ ባይሆንም ይፈጸማሉ።</string>
     <string name="settings_scheduled_tasks">የተያዙ ተግባራት</string>
     <string name="settings_scheduled_tasks_description">ለወደፊት ማስፈጸሚያ በ AI የተያዙ ተግባራት። የተያዙ ተግባራትን ለመፍጠር AI ን ያስታውሱኝ ወይም ነገር በኋላ ያሂዱ ይበሉት።</string>
     <string name="settings_scheduled_tasks_cancel">ተግባር ሰርዝ</string>
@@ -230,7 +230,7 @@
     <string name="interactive_welcome_title">ሙሉ በሙሉ ስራዬን እየሰራሁ ነው።</string>
     <string name="interactive_welcome_subtitle">ምን ማድረግ እንደሚፈልጉ ይንገሩኝ።</string>
     <string name="interactive_back_content_description">ተመለስ</string>
-    <string name="interactive_title">Kai 9000</string>
+    <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">መስተጋብር ሁነታን ውጣ</string>
     <string name="interactive_ui_parsing_failed">UI ትንተና አልተሳካም፣ እንደገና በመሞከር ላይ…</string>
     <string name="settings_sponsors_monthly">ወርሃዊ ስፖንሰሮች</string>
@@ -350,7 +350,7 @@
     <string name="tool_search_notifications_name">ማሳወቂያዎችን ፈልግ</string>
     <string name="tool_search_notifications_description">ማሳወቂያዎችን በመተግበሪያ ወይም በጽሑፍ ፈልግ</string>
     <string name="settings_notifications_label">ማሳወቂያዎችን አንብብ</string>
-    <string name="settings_notifications_description">የሚገቡ ማሳወቂያዎች በከባቢ ይነሱና በheartbeat ይጨበጣሉ። Kai ሊያነበው የሚችለውን መተግበሪያ በስርዓት ቅንብሮች ይምረጡ።</string>
+    <string name="settings_notifications_description">የሚገቡ ማሳወቂያዎች በከባቢ ይነሱና በheartbeat ይጨበጣሉ። Deneb ሊያነበው የሚችለውን መተግበሪያ በስርዓት ቅንብሮች ይምረጡ።</string>
     <string name="settings_notifications_access_required">የማሳወቂያ ድርሻ አልተሰጠም። Kaiን በስርዓት ቅንብሮች ለማንቃት ከታች ይንኩ።</string>
     <string name="settings_notifications_access_button">የማሳወቂያ ድርሻ ክፈት</string>
     <string name="settings_notifications_manage_apps">መተግበሪያዎችን ያስተዳድሩ</string>

@@ -1,5 +1,5 @@
 <resources>
-    <string name="welcome_message">Selamat datang di Kai 9000</string>
+    <string name="welcome_message">Selamat datang di Deneb</string>
     <string name="prompt_ask_question">Ajukan pertanyaan</string>
     <string name="error_invalid_api_key">Kunci API tidak valid. Silakan periksa pengaturan Anda.</string>
     <string name="error_rate_limit_exceeded">Batas kecepatan tercapai. Coba lagi nanti.</string>
@@ -78,7 +78,7 @@
     <string name="bot_message_regenerate_content_description">Regenerasi</string>
     <string name="error_empty_response">Tidak ada respons yang diterima. Coba mulai obrolan baru atau persingkat pesan Anda.</string>
     <string name="settings_daemon_mode">Mode Daemon</string>
-    <string name="settings_daemon_mode_description">Biarkan Kai 9000 berjalan di latar belakang agar tugas terjadwal tetap dijalankan meskipun aplikasi tidak di latar depan.</string>
+    <string name="settings_daemon_mode_description">Biarkan Deneb berjalan di latar belakang agar tugas terjadwal tetap dijalankan meskipun aplikasi tidak di latar depan.</string>
     <string name="settings_scheduled_tasks">Tugas Terjadwal</string>
     <string name="settings_scheduled_tasks_description">Tugas yang dijadwalkan oleh AI untuk dijalankan di masa depan. Minta AI untuk mengingatkan Anda atau menjalankan sesuatu nanti untuk membuat tugas terjadwal.</string>
     <string name="settings_scheduled_tasks_cancel">Batalkan tugas</string>
@@ -229,7 +229,7 @@
     <string name="interactive_welcome_title">Saya sepenuhnya beroperasi.</string>
     <string name="interactive_welcome_subtitle">Beritahu saya apa yang ingin Anda lakukan.</string>
     <string name="interactive_back_content_description">Kembali</string>
-    <string name="interactive_title">Kai 9000</string>
+    <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Keluar dari mode interaktif</string>
     <string name="interactive_ui_parsing_failed">Penguraian UI gagal, mencoba lagi…</string>
     <string name="settings_sponsors_monthly">Sponsor Bulanan</string>
@@ -348,8 +348,8 @@
     <string name="tool_search_notifications_name">Cari notifikasi</string>
     <string name="tool_search_notifications_description">Cari notifikasi berdasarkan aplikasi atau teks</string>
     <string name="settings_notifications_label">Baca notifikasi</string>
-    <string name="settings_notifications_description">Notifikasi masuk dikumpulkan di latar belakang dan diambil oleh heartbeat. Pilih aplikasi mana yang dapat dibaca Kai di pengaturan akses notifikasi sistem.</string>
-    <string name="settings_notifications_access_required">Akses notifikasi belum diberikan. Ketuk di bawah untuk mengaktifkan Kai di pengaturan sistem.</string>
+    <string name="settings_notifications_description">Notifikasi masuk dikumpulkan di latar belakang dan diambil oleh heartbeat. Pilih aplikasi mana yang dapat dibaca Deneb di pengaturan akses notifikasi sistem.</string>
+    <string name="settings_notifications_access_required">Akses notifikasi belum diberikan. Ketuk di bawah untuk mengaktifkan Deneb di pengaturan sistem.</string>
     <string name="settings_notifications_access_button">Buka akses notifikasi</string>
     <string name="settings_notifications_manage_apps">Kelola aplikasi</string>
     <string name="settings_notifications_listener_bound">Listener aktif</string>
