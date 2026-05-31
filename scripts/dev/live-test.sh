@@ -56,19 +56,19 @@ devlib_load_dotenv
 
 SCRIPT_DIR="$DEVLIB_SCRIPT_DIR"
 REPO_DIR="$DEVLIB_REPO_DIR"
-DEV_PORT="${DEV_LIVE_PORT:-18790}"
-DEV_BINARY="/tmp/deneb-gateway-live"
-DEV_PID_FILE="/tmp/deneb-gateway-live.pid"
-DEV_LOG="/tmp/deneb-gateway-live.log"
+DEV_PORT="${DEV_LIVE_PORT:-$DEVLIB_LIVE_PORT}"
+DEV_BINARY="${DEVLIB_TMP_PREFIX}-gateway-live"
+DEV_PID_FILE="${DEVLIB_TMP_PREFIX}-gateway-live.pid"
+DEV_LOG="${DEVLIB_TMP_PREFIX}-gateway-live.log"
 DEV_HOST="$DEVLIB_HOST"
-DEV_STATE_DIR="/tmp/deneb-dev-state"
+DEV_STATE_DIR="${DEVLIB_TMP_PREFIX}-dev-state"
 DENEB_VERSION=$(devlib_version)
 
 # Mock Telegram server: any fake token works because /bot<TOKEN>/<method> is
 # only used for routing by the mock. A fixed placeholder keeps startup logs
 # stable and avoids accidentally shadowing a real credential from the env.
 MOCK_TELEGRAM_TOKEN="mock-dev-token"
-MOCK_TELEGRAM_PORT="${DENEB_DEV_MOCK_TELEGRAM_PORT:-18792}"
+MOCK_TELEGRAM_PORT="${DENEB_DEV_MOCK_TELEGRAM_PORT:-$DEVLIB_MOCK_DEFAULT_PORT}"
 export DENEB_DEV_MOCK_TELEGRAM_URL="${DENEB_DEV_MOCK_TELEGRAM_URL:-http://$DEV_HOST:$MOCK_TELEGRAM_PORT}"
 
 cmd_build() {
@@ -100,7 +100,7 @@ cmd_start() {
     return 1
   fi
 
-  local dev_config="/tmp/deneb-dev-config.json"
+  local dev_config="${DEVLIB_TMP_PREFIX}-dev-config.json"
   DENEB_DEV_TELEGRAM_TOKEN="$MOCK_TELEGRAM_TOKEN" devlib_gen_config "$dev_config"
   echo "    Config: production (Telegram: mock bot on port $MOCK_TELEGRAM_PORT)"
 
