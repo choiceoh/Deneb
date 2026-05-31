@@ -137,6 +137,72 @@ func TestTopicsCreate_APIFailureSurfacesAsDependencyFailed(t *testing.T) {
 
 func TestTopicsMethods_NilFactoryReturnsNil(t *testing.T) {
 	if got := TopicsMethods(TopicsDeps{Client: nil}); got != nil {
-		t.Errorf("TopicsMethods with nil Client = %v, want nil", got)
+		t.Errorf("TopicsMethods with nil deps = %v, want nil", got)
+	}
+}
+
+func TestTopicsMethods_RegistersPerDependency(t *testing.T) {
+	// Only Client wired → create only.
+	m := TopicsMethods(TopicsDeps{Client: func() (TopicsClient, error) { return &fakeTopicsClient{}, nil }})
+	if _, ok := m["miniapp.topics.create"]; !ok {
+		t.Error("create not registered when Client wired")
+	}
+	if _, ok := m["miniapp.topics.list"]; ok {
+		t.Error("list registered without KnowledgeTopics")
+	}
+	// Only KnowledgeTopics wired → list only (gateway with no Telegram plugin).
+	m = TopicsMethods(TopicsDeps{KnowledgeTopics: func() []KnowledgeTopic { return nil }})
+	if _, ok := m["miniapp.topics.list"]; !ok {
+		t.Error("list not registered when KnowledgeTopics wired")
+	}
+	if _, ok := m["miniapp.topics.create"]; ok {
+		t.Error("create registered without Client")
+	}
+}
+
+func TestTopicsList_SortsGeneralFirstThenByKey(t *testing.T) {
+	deps := TopicsDeps{KnowledgeTopics: func() []KnowledgeTopic {
+		// Intentionally unsorted; General ("0") is last in the input.
+		return []KnowledgeTopic{
+			{Key: "잡담", ThreadID: "57"},
+			{Key: "코딩", ThreadID: "42"},
+			{Key: "업무", ThreadID: "0"},
+		}
+	}}
+	h := topicsList(deps)
+	resp := h(authedCtx(), reqWith(t, "miniapp.topics.list", map[string]any{}))
+	var got struct {
+		Topics []KnowledgeTopic `json:"topics"`
+	}
+	decode(t, resp, &got)
+	if len(got.Topics) != 3 {
+		t.Fatalf("got %d topics, want 3: %+v", len(got.Topics), got.Topics)
+	}
+	if got.Topics[0].ThreadID != "0" || got.Topics[0].Key != "업무" {
+		t.Errorf("General not first: %+v", got.Topics)
+	}
+	// Remaining sorted by key: "잡담" < "코딩" (Hangul codepoint order).
+	if got.Topics[1].Key != "잡담" || got.Topics[2].Key != "코딩" {
+		t.Errorf("non-General topics not key-sorted: %+v", got.Topics)
+	}
+}
+
+func TestTopicsList_RequiresAuth(t *testing.T) {
+	h := topicsList(TopicsDeps{KnowledgeTopics: func() []KnowledgeTopic { return nil }})
+	resp := h(context.Background(), reqWith(t, "miniapp.topics.list", map[string]any{}))
+	if resp.OK || resp.Error.Code != protocol.ErrUnauthorized {
+		t.Errorf("auth not enforced: %+v", resp)
+	}
+}
+
+func TestTopicsList_EmptyWhenUnconfigured(t *testing.T) {
+	h := topicsList(TopicsDeps{KnowledgeTopics: func() []KnowledgeTopic { return nil }})
+	resp := h(authedCtx(), reqWith(t, "miniapp.topics.list", map[string]any{}))
+	var got struct {
+		Topics []KnowledgeTopic `json:"topics"`
+	}
+	decode(t, resp, &got)
+	if len(got.Topics) != 0 {
+		t.Errorf("expected empty topics, got %+v", got.Topics)
 	}
 }

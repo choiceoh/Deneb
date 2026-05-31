@@ -44,9 +44,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
@@ -85,6 +88,8 @@ import com.inspiredandroid.kai.onDragAndDropEventDropped
 import com.inspiredandroid.kai.ui.chat.composables.BotMessage
 import com.inspiredandroid.kai.ui.chat.composables.ChatHistorySheet
 import com.inspiredandroid.kai.ui.chat.composables.CircleIconButton
+import com.inspiredandroid.kai.ui.chat.composables.DenebDrawerSheet
+import com.inspiredandroid.kai.ui.chat.composables.DenebTopicSwitcher
 import com.inspiredandroid.kai.ui.chat.composables.EmptyState
 import com.inspiredandroid.kai.ui.chat.composables.ErrorMessage
 import com.inspiredandroid.kai.ui.chat.composables.HeartbeatBanner
@@ -92,6 +97,7 @@ import com.inspiredandroid.kai.ui.chat.composables.PendingSmsBanners
 import com.inspiredandroid.kai.ui.chat.composables.QuestionInput
 import com.inspiredandroid.kai.ui.chat.composables.ServiceSelector
 import com.inspiredandroid.kai.ui.chat.composables.TopBar
+import com.inspiredandroid.kai.ui.chat.composables.TopicTab
 import com.inspiredandroid.kai.ui.chat.composables.TrailingIcon
 import com.inspiredandroid.kai.ui.chat.composables.UserMessage
 import com.inspiredandroid.kai.ui.chat.composables.WaitingResponseRow
@@ -138,6 +144,10 @@ fun ChatScreen(
     onOpenCalendar: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenPeople: () -> Unit = {},
+    onOpenCategories: () -> Unit = {},
+    topics: ImmutableList<TopicTab> = persistentListOf(),
+    selectedTopicKey: String? = null,
+    onSelectTopic: (String) -> Unit = {},
     isSandboxAvailable: Boolean = false,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
@@ -151,6 +161,10 @@ fun ChatScreen(
         onOpenCalendar = onOpenCalendar,
         onOpenSearch = onOpenSearch,
         onOpenPeople = onOpenPeople,
+        onOpenCategories = onOpenCategories,
+        topics = topics,
+        selectedTopicKey = selectedTopicKey,
+        onSelectTopic = onSelectTopic,
         isSandboxAvailable = isSandboxAvailable,
         navigationTabBar = navigationTabBar,
     )
@@ -165,6 +179,10 @@ fun ChatScreenContent(
     onOpenCalendar: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenPeople: () -> Unit = {},
+    onOpenCategories: () -> Unit = {},
+    topics: ImmutableList<TopicTab> = persistentListOf(),
+    selectedTopicKey: String? = null,
+    onSelectTopic: (String) -> Unit = {},
     isSandboxAvailable: Boolean = false,
     navigationTabBar: (@Composable () -> Unit)? = null,
     initialSandboxOpen: Boolean = false,
@@ -182,6 +200,10 @@ fun ChatScreenContent(
             onOpenCalendar = onOpenCalendar,
             onOpenSearch = onOpenSearch,
             onOpenPeople = onOpenPeople,
+            onOpenCategories = onOpenCategories,
+            topics = topics,
+            selectedTopicKey = selectedTopicKey,
+            onSelectTopic = onSelectTopic,
             isSandboxAvailable = isSandboxAvailable,
             navigationTabBar = navigationTabBar,
             initialSandboxOpen = initialSandboxOpen,
@@ -476,6 +498,10 @@ private fun ChatModeScreen(
     onOpenCalendar: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenPeople: () -> Unit = {},
+    onOpenCategories: () -> Unit = {},
+    topics: ImmutableList<TopicTab> = persistentListOf(),
+    selectedTopicKey: String? = null,
+    onSelectTopic: (String) -> Unit = {},
     isSandboxAvailable: Boolean,
     navigationTabBar: (@Composable () -> Unit)?,
     initialSandboxOpen: Boolean = false,
@@ -491,6 +517,14 @@ private fun ChatModeScreen(
     }
     val keyboardController = LocalSoftwareKeyboardController.current
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Left navigation drawer (analysis surfaces): opened by the top-bar
+    // hamburger or a left-edge swipe; system back closes it before exiting.
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val drawerScope = rememberCoroutineScope()
+    com.inspiredandroid.kai.PlatformBackHandler(enabled = drawerState.isOpen) {
+        drawerScope.launch { drawerState.close() }
+    }
 
     // When the active conversation changes (e.g. user starts a new chat from the
     // top bar or taps the heartbeat banner), collapse the sandbox view so the
@@ -523,6 +557,19 @@ private fun ChatModeScreen(
         }
     }
 
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            DenebDrawerSheet(
+                onOpenSearch = onOpenSearch,
+                onOpenMail = onOpenMail,
+                onOpenCalendar = onOpenCalendar,
+                onOpenPeople = onOpenPeople,
+                onOpenCategories = onOpenCategories,
+                onClose = { drawerScope.launch { drawerState.close() } },
+            )
+        },
+    ) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).navigationBarsPadding().statusBarsPadding().imePadding()) {
         Column(Modifier.fillMaxSize()) {
             TopBar(
@@ -533,10 +580,7 @@ private fun ChatModeScreen(
                 isChatHistoryEmpty = uiState.history.isEmpty(),
                 hasSavedConversations = filteredConversations.any { it.id != uiState.currentConversationId },
                 onNavigateToSettings = onNavigateToSettings,
-                onOpenMail = onOpenMail,
-                onOpenCalendar = onOpenCalendar,
-                onOpenSearch = onOpenSearch,
-                onOpenPeople = onOpenPeople,
+                onOpenDrawer = { drawerScope.launch { drawerState.open() } },
                 isSandboxAvailable = isSandboxAvailable,
                 isSandboxOpen = isSandboxOpen,
                 isShellExecuting = isShellExecuting,
@@ -546,6 +590,12 @@ private fun ChatModeScreen(
                     showHistorySheet = true
                 },
                 navigationTabBar = navigationTabBar,
+            )
+
+            DenebTopicSwitcher(
+                topics = topics,
+                selectedKey = selectedTopicKey,
+                onSelectTopic = onSelectTopic,
             )
 
             HeartbeatBanner(
@@ -934,6 +984,7 @@ private fun ChatModeScreen(
             Snackbar(snackbarData = data)
         }
     }
+    } // ModalNavigationDrawer
 
     if (showHistorySheet) {
         ChatHistorySheet(
