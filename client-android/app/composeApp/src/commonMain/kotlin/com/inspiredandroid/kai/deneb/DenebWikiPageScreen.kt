@@ -50,6 +50,8 @@ fun DenebWikiPageScreen(
     var editing by remember(path) { mutableStateOf(creating) }
     var draftTitle by remember(path) { mutableStateOf("") }
     var draftCategory by remember(path) { mutableStateOf("") }
+    var draftSummary by remember(path) { mutableStateOf("") }
+    var draftTags by remember(path) { mutableStateOf("") }
     var draftBody by remember(path) { mutableStateOf("") }
     var saving by remember(path) { mutableStateOf(false) }
     var status by remember(path) { mutableStateOf<String?>(null) }
@@ -111,7 +113,16 @@ fun DenebWikiPageScreen(
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = { editing = !editing; if (!editing) draftBody = pg.body; status = null }) {
+                    TextButton(onClick = {
+                        if (!editing) {
+                            draftTitle = pg.title
+                            draftSummary = pg.summary
+                            draftTags = pg.tags.joinToString(", ")
+                            draftBody = pg.body
+                        }
+                        editing = !editing
+                        status = null
+                    }) {
                         Text(if (editing) "취소" else "편집")
                     }
                 }
@@ -136,6 +147,14 @@ fun DenebWikiPageScreen(
             Spacer(Modifier.height(12.dp))
 
             if (editing) {
+                if (!creating) {
+                    OutlinedTextField(draftTitle, { draftTitle = it }, label = { Text("제목") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(draftSummary, { draftSummary = it }, label = { Text("요약") }, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(draftTags, { draftTags = it }, label = { Text("태그 (쉼표로 구분)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                }
                 OutlinedTextField(
                     value = draftBody,
                     onValueChange = { draftBody = it },
@@ -154,7 +173,8 @@ fun DenebWikiPageScreen(
                                 saving = false
                                 if (newPath != null) onBack() else status = "생성 실패"
                             } else {
-                                val ok = client.saveWikiPage(path, draftBody)
+                                val tags = draftTags.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                                val ok = client.saveWikiPage(path, draftBody, draftTitle.trim(), draftSummary.trim(), tags)
                                 saving = false
                                 if (ok) {
                                     editing = false

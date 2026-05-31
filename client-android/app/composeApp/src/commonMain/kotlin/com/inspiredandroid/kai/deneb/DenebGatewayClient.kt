@@ -36,6 +36,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -133,8 +134,16 @@ class DenebGatewayClient(
             _chatHistory.update { it + History(role = History.Role.USER, content = displayText) }
         }
         val reply = runCatching { send(sendText) }
-            .getOrElse { "⚠️ ${it.message ?: "gateway request failed"}" }
-        _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
+            .getOrElse { GatewayReply("⚠️ ${it.message ?: "gateway request failed"}") }
+        _chatHistory.update {
+            it + History(
+                role = History.Role.ASSISTANT,
+                content = reply.text,
+                // Mirrors Kai's fallback badge: show which model answered when the
+                // gateway fell back from its main model to a fallback role.
+                fallbackServiceName = if (reply.fellBack && reply.model.isNotBlank()) reply.model else null,
+            )
+        }
     }
 
     private fun formatCallback(submission: UiSubmission): String = buildString {
@@ -516,6 +525,7 @@ class DenebGatewayClient(
             organizer = p.organizer?.let { it.displayName.ifBlank { it.email } }.orEmpty(),
             attendees = p.attendees.mapNotNull { (it.displayName.ifBlank { it.email }).ifBlank { null } },
             meetUri = p.conference?.uri.orEmpty(),
+            status = p.status,
         )
     }
 
@@ -572,6 +582,7 @@ class DenebGatewayClient(
         return WikiPage(
             path = p.path,
             title = p.title.ifBlank { p.path },
+            summary = p.summary,
             category = p.category,
             tags = p.tags,
             updated = p.updated,
@@ -579,11 +590,23 @@ class DenebGatewayClient(
         )
     }
 
-    /** Overwrite a wiki page body (`miniapp.memory.write_page`). */
-    suspend fun saveWikiPage(path: String, body: String): Boolean =
+    /** Overwrite a wiki page; non-null title/summary/tags also update frontmatter. */
+    suspend fun saveWikiPage(
+        path: String,
+        body: String,
+        title: String? = null,
+        summary: String? = null,
+        tags: List<String>? = null,
+    ): Boolean =
         callRpc<JsonObject>(
             "miniapp.memory.write_page",
-            buildJsonObject { put("path", path); put("body", body) },
+            buildJsonObject {
+                put("path", path)
+                put("body", body)
+                if (title != null) put("title", title)
+                if (summary != null) put("summary", summary)
+                if (tags != null) putJsonArray("tags") { tags.forEach { add(it) } }
+            },
         ) != null
 
     /** Create a new wiki page (`miniapp.memory.create_page`); returns its path. */
@@ -612,6 +635,56 @@ class DenebGatewayClient(
     suspend fun runCron(id: String): Boolean =
         callRpc<JsonObject>("miniapp.crons.run", buildJsonObject { put("id", id) }) != null
 
+    /** Full cron job detail (`miniapp.crons.get`). */
+    suspend fun fetchCron(id: String): CronDetail? {
+        val p = callRpc<CronDetailPayload>("miniapp.crons.get", buildJsonObject { put("id", id) }) ?: return null
+        return CronDetail(
+            id = p.id,
+            name = p.name,
+            enabled = p.enabled,
+            schedule = p.schedule,
+            scheduleSpec = p.scheduleSpec,
+            scheduleKind = p.scheduleKind,
+            payloadKind = p.payloadKind,
+            prompt = p.prompt,
+            model = p.model,
+            deliveryChannel = p.deliveryChannel,
+            deliveryTo = p.deliveryTo,
+            nextRunAtMs = p.nextRunAtMs,
+            lastDeliveryStatus = p.lastDeliveryStatus,
+            lastError = p.lastError,
+            consecutiveErrors = p.consecutiveErrors,
+            autoDisabledAtMs = p.autoDisabledAtMs,
+        )
+    }
+
+    /** Enable or disable a cron job (`miniapp.crons.update`). */
+    suspend fun setCronEnabled(id: String, enabled: Boolean): Boolean =
+        callRpc<JsonObject>(
+            "miniapp.crons.update",
+            buildJsonObject { put("id", id); put("enabled", enabled) },
+        ) != null
+
+    @Serializable
+    private data class CronDetailPayload(
+        val id: String = "",
+        val name: String = "",
+        val enabled: Boolean = false,
+        val schedule: String = "",
+        val scheduleSpec: String = "",
+        val scheduleKind: String = "",
+        val payloadKind: String = "",
+        val prompt: String = "",
+        val model: String = "",
+        val deliveryChannel: String = "",
+        val deliveryTo: String = "",
+        val nextRunAtMs: Long = 0,
+        val lastDeliveryStatus: String = "",
+        val lastError: String = "",
+        val consecutiveErrors: Int = 0,
+        val autoDisabledAtMs: Long = 0,
+    )
+
     /** APK + version.json are served on :19010 of the same host as the gateway. */
     private val updateBaseUrl: String
         get() {
@@ -635,9 +708,9 @@ class DenebGatewayClient(
         }
     }.getOrNull()
 
-    private suspend fun send(message: String): String {
+    private suspend fun send(message: String): GatewayReply {
         if (clientToken.isEmpty()) {
-            return "⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요."
+            return GatewayReply("⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요.")
         }
         val resp: RpcResponse = http.post("$gatewayUrl/api/v1/miniapp/rpc") {
             header(CLIENT_TOKEN_HEADER, clientToken)
@@ -650,7 +723,12 @@ class DenebGatewayClient(
                 ),
             )
         }.body()
-        return if (resp.ok && resp.payload != null) resp.payload.text else "⚠️ 게이트웨이 오류"
+        val payload = resp.payload
+        return if (resp.ok && payload != null) {
+            GatewayReply(text = payload.text, model = payload.model, fellBack = payload.fellBack)
+        } else {
+            GatewayReply("⚠️ 게이트웨이 오류")
+        }
     }
 
     private suspend fun fetchRecentSessions(): List<Conversation> {
@@ -729,7 +807,21 @@ class DenebGatewayClient(
     private data class RpcResponse(val ok: Boolean = false, val payload: SendPayload? = null)
 
     @Serializable
-    private data class SendPayload(val text: String = "", val model: String = "", val sessionKey: String = "")
+    private data class SendPayload(
+        val text: String = "",
+        val model: String = "",
+        val sessionKey: String = "",
+        // True when the gateway's model fallback chain fired (main → fallback);
+        // `model` is then the model that actually answered. Surfaced as a badge.
+        val fellBack: Boolean = false,
+    )
+
+    /** Internal result of one gateway chat turn (text + which model answered). */
+    private data class GatewayReply(
+        val text: String,
+        val model: String = "",
+        val fellBack: Boolean = false,
+    )
 
     @Serializable
     private data class RpcReq(val id: String, val method: String, val params: JsonObject)
@@ -909,6 +1001,8 @@ class DenebGatewayClient(
         val organizer: CalAttendee? = null,
         val attendees: List<CalAttendee> = emptyList(),
         val conference: CalConference? = null,
+        val htmlLink: String = "",
+        val status: String = "",
     )
 
     @Serializable
@@ -1067,6 +1161,27 @@ data class CalendarEventDetail(
     val organizer: String,
     val attendees: List<String>,
     val meetUri: String,
+    val status: String,
+)
+
+/** Full cron job detail for the cron screen (`miniapp.crons.get`). */
+data class CronDetail(
+    val id: String,
+    val name: String,
+    val enabled: Boolean,
+    val schedule: String,
+    val scheduleSpec: String,
+    val scheduleKind: String,
+    val payloadKind: String,
+    val prompt: String,
+    val model: String,
+    val deliveryChannel: String,
+    val deliveryTo: String,
+    val nextRunAtMs: Long,
+    val lastDeliveryStatus: String,
+    val lastError: String,
+    val consecutiveErrors: Int,
+    val autoDisabledAtMs: Long,
 )
 
 /** Unified search results across wiki, diary and people. */
@@ -1090,6 +1205,7 @@ data class TopicDocContent(val name: String, val content: String, val modified: 
 data class WikiPage(
     val path: String,
     val title: String,
+    val summary: String,
     val category: String,
     val tags: List<String>,
     val updated: String,

@@ -48,6 +48,7 @@ import com.inspiredandroid.kai.deneb.DenebPersonScreen
 import com.inspiredandroid.kai.deneb.DenebCategoriesScreen
 import com.inspiredandroid.kai.deneb.DenebCategoryPagesScreen
 import com.inspiredandroid.kai.deneb.DenebSearchScreen
+import com.inspiredandroid.kai.deneb.DenebCronScreen
 import com.inspiredandroid.kai.deneb.DenebTopicDocScreen
 import com.inspiredandroid.kai.deneb.DenebWikiPageScreen
 import com.inspiredandroid.kai.tools.CalendarPermissionController
@@ -135,6 +136,10 @@ object DenebCategories
 @Serializable
 @SerialName("deneb_category_pages")
 data class DenebCategoryPages(val category: String)
+
+@Serializable
+@SerialName("deneb_cron")
+data class DenebCron(val cronId: String)
 
 @Composable
 fun App(
@@ -313,6 +318,7 @@ private fun AppContent(
                             onBack = { navController.navigateUp() },
                             onOpenPerson = { sender -> navController.navigate(DenebPerson(sender)) },
                             onOpenTopicDoc = { name -> navController.navigate(DenebTopicDoc(name)) },
+                            onOpenCron = { id -> navController.navigate(DenebCron(id)) },
                             onOpenKaiSettings = { navController.navigate(Settings) },
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
                         )
@@ -417,6 +423,16 @@ private fun AppContent(
                             DenebTopicDocScreen(
                                 client = client,
                                 name = entry.toRoute<DenebTopicDoc>().name,
+                                onBack = { navController.navigateUp() },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebCron> { entry ->
+                        denebClient?.let { client ->
+                            DenebCronScreen(
+                                client = client,
+                                cronId = entry.toRoute<DenebCron>().cronId,
                                 onBack = { navController.navigateUp() },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
