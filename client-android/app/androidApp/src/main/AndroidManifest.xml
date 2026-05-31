@@ -60,6 +60,18 @@
             android:name="com.inspiredandroid.kai.inference.ModelDownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <!-- Home-screen widget: next meeting + unread mail. -->
+        <receiver
+            android:name="com.inspiredandroid.kai.DenebWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/deneb_widget_info" />
+        </receiver>
         <uses-native-library android:name="libvndksupport.so" android:required="false"/>
         <uses-native-library android:name="libOpenCL.so" android:required="false"/>
     </application>
