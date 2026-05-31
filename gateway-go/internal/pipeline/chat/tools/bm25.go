@@ -19,6 +19,13 @@ import (
 const (
 	bm25K1 = 1.5  // term-frequency saturation
 	bm25B  = 0.75 // length normalization
+
+	// searchResultLimit caps how many tools a single query may surface, so a
+	// broad query cannot flood the next turn with unrelated schemas.
+	searchResultLimit = 5
+	// searchScoreFloorRatio drops tail matches scoring far below the top hit
+	// (e.g. a multi-word query that matched only one common word in a tool).
+	searchScoreFloorRatio = 0.25
 )
 
 // searchDoc is one tool in the BM25 corpus.
@@ -29,7 +36,8 @@ type searchDoc struct {
 }
 
 // tokenize lowercases and splits a string on any non-alphanumeric rune.
-// No stemming — the corpus is tiny and exact-prefix matching is good enough.
+// No stemming — the corpus is tiny and exact whole-token matching is good
+// enough (a query token scores only when it equals an indexed token).
 func tokenize(s string) []string {
 	return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
@@ -117,9 +125,20 @@ func bm25Rank(query string, docs []searchDoc) []string {
 		}
 		return results[a].idx < results[b].idx // stable: preserve corpus order on ties
 	})
-	out := make([]string, len(results))
-	for i, r := range results {
-		out[i] = r.name
+
+	// Drop tail matches that score far below the top hit. A multi-word query
+	// (e.g. "send a file") that matched only one common word in some tool
+	// would otherwise activate that tool's schema alongside the real match.
+	floor := results[0].score * searchScoreFloorRatio
+	out := make([]string, 0, len(results))
+	for _, r := range results {
+		if r.score < floor {
+			break // sorted descending — everything after is also below floor
+		}
+		out = append(out, r.name)
+		if len(out) >= searchResultLimit {
+			break
+		}
 	}
 	return out
 }
