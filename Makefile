@@ -15,6 +15,27 @@
 DENEB_VERSION := $(shell git tag --sort=-v:refname --list 'deneb-v*' 2>/dev/null | head -1 | sed 's/^deneb-v//')
 GO_LDFLAGS := -ldflags '-s -w -X main.Version=$(DENEB_VERSION)'
 
+# DGX Spark unified-memory guard for the Go toolchain.
+#
+# On GB10 the GPU shares system RAM, so resident sidecar models (vLLM, OCR, ASR)
+# eat into the headroom the Go toolchain can use. `go build`/`test`/`vet` default
+# to one build action per CPU (20 on this box), and each compile/link/test binary
+# can peak at a few GB — enough to OOM the host when free memory is already low.
+#
+# GO_PAR caps the parallel build/test actions, budgeting ~4 GB per action against
+# current MemAvailable, clamped to [2, NPROC]. So a busy box (little free RAM)
+# falls back toward `-p 2`, while an idle one uses every core. Override explicitly
+# with `make go GO_PAR=4`, or export GOGC=50 to trade build speed for a smaller
+# heap. CI runs on a dedicated 16-vCPU runner and calls `go` directly (not make),
+# so this guard only ever affects local DGX builds — never CI timing.
+GO_PAR ?= $(shell \
+	mem_gb=$$(awk '/MemAvailable/ {print int($$2/1024/1024)}' /proc/meminfo 2>/dev/null || echo 8); \
+	cpu=$$(nproc 2>/dev/null || echo 4); \
+	par=$$((mem_gb / 4)); \
+	[ $$par -gt $$cpu ] && par=$$cpu; \
+	[ $$par -lt 2 ] && par=2; \
+	echo $$par)
+
 # Fix NO_PROXY for Claude Code web containers: Go module proxy uses googleapis.com,
 # but NO_PROXY includes *.googleapis.com which makes Go bypass the egress proxy and
 # attempt direct UDP DNS (blocked). Strip those entries so Go traffic routes through proxy.
@@ -34,7 +55,7 @@ all: go
 # --- Go gateway ---
 
 go:
-	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build $(GO_LDFLAGS) ./...
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build -p $(GO_PAR) $(GO_LDFLAGS) ./...
 
 go-run: go
 	cd gateway-go && $(GO_ENV) go run ./cmd/gateway/
@@ -44,7 +65,7 @@ go-run: go
 go-dev:
 	@echo "Starting Go gateway in dev mode (auto-restart on SIGUSR1)..."
 	@while true; do \
-		if ! $(GO_ENV) CGO_ENABLED=0 go build -C gateway-go $(GO_LDFLAGS) -o /tmp/deneb-gateway-dev ./cmd/gateway/; then \
+		if ! $(GO_ENV) CGO_ENABLED=0 go build -C gateway-go -p $(GO_PAR) $(GO_LDFLAGS) -o /tmp/deneb-gateway-dev ./cmd/gateway/; then \
 			echo "[go-dev] Build failed, aborting."; \
 			exit 1; \
 		fi; \
@@ -60,13 +81,13 @@ go-dev:
 	done
 
 go-test:
-	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go test -count=1 ./...
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go test -p $(GO_PAR) -count=1 ./...
 
 go-test-fuzz:
 	cd gateway-go && $(GO_ENV) go test ./internal/runtime/bridge/ -fuzz=FuzzParseRequestFrame -fuzztime=10s
 
 go-vet:
-	cd gateway-go && $(GO_ENV) go vet ./...
+	cd gateway-go && $(GO_ENV) go vet -p $(GO_PAR) ./...
 
 go-fmt:
 	@cd gateway-go && test -z "$$(gofmt -l .)" || (echo "Go files need formatting:"; gofmt -l .; exit 1)
@@ -80,7 +101,7 @@ go-lint-all:
 	cd gateway-go && golangci-lint run ./...
 
 go-binary:
-	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build -trimpath $(GO_LDFLAGS) -o ../dist/deneb-gateway ./cmd/gateway/
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build -trimpath -p $(GO_PAR) $(GO_LDFLAGS) -o ../dist/deneb-gateway ./cmd/gateway/
 
 
 # Build production gateway binary to dist/.
@@ -219,3 +240,5 @@ info:
 	@echo "  make generate-check   - Verify all generated files"
 	@echo "  make clean      - Clean Go build artifacts"
 	@echo "  make go-bench   - Run Go gateway benchmarks"
+	@echo ""
+	@echo "  GO_PAR=$(GO_PAR)  - parallel build/test actions (auto from free RAM; override: make go GO_PAR=4)"
