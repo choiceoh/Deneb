@@ -21,10 +21,6 @@ class NotificationHelper(
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private val notificationIdCounter = AtomicInteger(0)
 
-    companion object {
-        private const val CHANNEL_ID = "kai_ai_notifications"
-    }
-
     init {
         createNotificationChannel()
     }
@@ -33,7 +29,7 @@ class NotificationHelper(
         val channelName = runBlocking { getString(Res.string.notification_channel_name) }
         val channelDescription = runBlocking { getString(Res.string.notification_channel_description) }
         val channel = NotificationChannel(
-            CHANNEL_ID,
+            AI_NOTIFICATION_CHANNEL_ID,
             channelName,
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
@@ -54,6 +50,10 @@ class NotificationHelper(
             }
         }
 
+        if (!canPostNotifications(context, AI_NOTIFICATION_CHANNEL_ID)) {
+            return NotificationResult.Error("Notifications are disabled for this app or notification channel")
+        }
+
         return try {
             val notificationId = notificationIdCounter.incrementAndGet()
 
@@ -67,7 +67,7 @@ class NotificationHelper(
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
-            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            val notification = NotificationCompat.Builder(context, AI_NOTIFICATION_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
                 .setContentText(message)

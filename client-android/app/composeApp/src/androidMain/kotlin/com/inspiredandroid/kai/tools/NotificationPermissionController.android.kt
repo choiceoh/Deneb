@@ -27,14 +27,14 @@ actual class NotificationPermissionController actual constructor() {
     private val permissionResultFlow = MutableStateFlow<Boolean?>(null)
 
     actual fun hasPermission(): Boolean {
-        // POST_NOTIFICATIONS permission is only required on Android 13+
+        // POST_NOTIFICATIONS permission is only required on Android 13+. Other
+        // notification-blocking states (app/channel disabled) are checked at send time.
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
         } else {
-            // Permission not required on older Android versions
             true
         }
     }
