@@ -36,6 +36,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -500,6 +501,7 @@ class DenebGatewayClient(
             organizer = p.organizer?.let { it.displayName.ifBlank { it.email } }.orEmpty(),
             attendees = p.attendees.mapNotNull { (it.displayName.ifBlank { it.email }).ifBlank { null } },
             meetUri = p.conference?.uri.orEmpty(),
+            status = p.status,
         )
     }
 
@@ -556,6 +558,7 @@ class DenebGatewayClient(
         return WikiPage(
             path = p.path,
             title = p.title.ifBlank { p.path },
+            summary = p.summary,
             category = p.category,
             tags = p.tags,
             updated = p.updated,
@@ -563,11 +566,23 @@ class DenebGatewayClient(
         )
     }
 
-    /** Overwrite a wiki page body (`miniapp.memory.write_page`). */
-    suspend fun saveWikiPage(path: String, body: String): Boolean =
+    /** Overwrite a wiki page; non-null title/summary/tags also update frontmatter. */
+    suspend fun saveWikiPage(
+        path: String,
+        body: String,
+        title: String? = null,
+        summary: String? = null,
+        tags: List<String>? = null,
+    ): Boolean =
         callRpc<JsonObject>(
             "miniapp.memory.write_page",
-            buildJsonObject { put("path", path); put("body", body) },
+            buildJsonObject {
+                put("path", path)
+                put("body", body)
+                if (title != null) put("title", title)
+                if (summary != null) put("summary", summary)
+                if (tags != null) putJsonArray("tags") { tags.forEach { add(it) } }
+            },
         ) != null
 
     /** Create a new wiki page (`miniapp.memory.create_page`); returns its path. */
@@ -902,6 +917,8 @@ class DenebGatewayClient(
         val organizer: CalAttendee? = null,
         val attendees: List<CalAttendee> = emptyList(),
         val conference: CalConference? = null,
+        val htmlLink: String = "",
+        val status: String = "",
     )
 
     @Serializable
@@ -1060,6 +1077,7 @@ data class CalendarEventDetail(
     val organizer: String,
     val attendees: List<String>,
     val meetUri: String,
+    val status: String,
 )
 
 /** Unified search results across wiki, diary and people. */
@@ -1083,6 +1101,7 @@ data class TopicDocContent(val name: String, val content: String, val modified: 
 data class WikiPage(
     val path: String,
     val title: String,
+    val summary: String,
     val category: String,
     val tags: List<String>,
     val updated: String,

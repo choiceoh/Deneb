@@ -82,6 +82,10 @@ fun DenebCalendarEventScreen(
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
+                statusLabel(ev.status)?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
 
                 if (ev.location.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
@@ -98,7 +102,6 @@ fun DenebCalendarEventScreen(
                         Text("📹 Meet 참가")
                     }
                 }
-
                 if (ev.attendees.isNotEmpty()) {
                     Spacer(Modifier.height(16.dp))
                     Text(
@@ -148,6 +151,13 @@ private fun InfoRow(label: String, value: String) {
             modifier = Modifier.weight(1f),
         )
     }
+}
+
+/** Event status -> a Korean label, or null when confirmed (no banner needed). */
+private fun statusLabel(status: String): String? = when (status) {
+    "tentative" -> "미확정"
+    "cancelled" -> "취소됨"
+    else -> null
 }
 
 /** "5월 31일 (토) 14:00 – 15:00" or "5월 31일 (토) · 종일". */
