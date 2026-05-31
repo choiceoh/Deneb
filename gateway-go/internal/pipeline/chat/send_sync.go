@@ -14,6 +14,7 @@ type SyncResult struct {
 	Text         string
 	AllText      string // accumulated text from all turns; used by cron delivery as a fallback when the final turn is NO_REPLY
 	Model        string
+	FellBack     bool // true when the model fallback chain fired (Model is the model that actually answered)
 	InputTokens  int
 	OutputTokens int
 	StopReason   string // "end_turn", "max_tokens", "tool_use", etc.
@@ -142,10 +143,16 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 		return nil, fmt.Errorf("agent run returned nil result")
 	}
 
+	// Prefer the model that actually answered (set when the fallback chain fired).
+	if result.ActualModel != "" {
+		resolvedModel = result.ActualModel
+	}
+
 	return &SyncResult{
 		Text:         result.Text,
 		AllText:      result.AllText,
 		Model:        resolvedModel,
+		FellBack:     result.FellBack,
 		InputTokens:  result.Usage.InputTokens,
 		OutputTokens: result.Usage.OutputTokens,
 		StopReason:   result.StopReason,
