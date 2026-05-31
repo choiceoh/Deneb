@@ -584,4 +584,46 @@ class SettingsViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    @Test
+    fun `onToggleDaemon is ignored when daemon toggle is hidden`() = runTest {
+        class RecordingDaemonController : DaemonController {
+            var startCount = 0
+            var stopCount = 0
+
+            override fun start() {
+                startCount++
+            }
+
+            override fun stop() {
+                stopCount++
+            }
+        }
+
+        val daemonController = RecordingDaemonController()
+        val viewModel = SettingsViewModel(
+            fakeRepository,
+            daemonController,
+            fakeNotificationPermissionController,
+            noOpScheduler,
+            testDispatcher,
+        )
+
+        viewModel.state.test {
+            val initialState = awaitItem()
+            assertFalse(initialState.showDaemonToggle)
+            assertFalse(initialState.isDaemonEnabled)
+
+            viewModel.actions.onToggleDaemon(true)
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            assertFalse(fakeRepository.isDaemonEnabled())
+            assertEquals(0, daemonController.startCount)
+            assertEquals(0, daemonController.stopCount)
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
 }
