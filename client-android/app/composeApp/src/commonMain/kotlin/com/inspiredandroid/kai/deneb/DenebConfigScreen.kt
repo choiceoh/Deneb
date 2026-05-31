@@ -52,6 +52,7 @@ import com.inspiredandroid.kai.data.AppSettings
 import com.inspiredandroid.kai.data.NotificationRecord
 import com.inspiredandroid.kai.data.NotificationStore
 import com.inspiredandroid.kai.tools.NotificationListenerController
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.handCursor
 import com.inspiredandroid.kai.ui.settings.SettingsCard
 import kotlinx.coroutines.launch
@@ -74,6 +75,7 @@ fun DenebConfigScreen(
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var tab by remember { mutableStateOf(0) }
+    val haptics = rememberHaptics()
     val tabs = listOf("게이트웨이", "모델", "사람", "크론", "토픽문서", "알림")
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -103,7 +105,7 @@ fun DenebConfigScreen(
                         modifier = Modifier
                             .handCursor()
                             .clip(RoundedCornerShape(50))
-                            .clickable { tab = i },
+                            .clickable { haptics.tap(); tab = i },
                         shape = RoundedCornerShape(50),
                         color = if (isSelected) {
                             MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)

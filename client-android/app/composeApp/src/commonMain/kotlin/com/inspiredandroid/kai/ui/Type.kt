@@ -2,8 +2,10 @@ package com.inspiredandroid.kai.ui
 
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.pretendard_bold
 import kai.composeapp.generated.resources.pretendard_light
@@ -29,29 +31,33 @@ fun PretendardFontFamily(): FontFamily = FontFamily(
 )
 
 /**
- * Material 3 default type scale with every role re-pointed at Pretendard.
- * We keep the default sizes/line-heights/weights and only swap the family, so
- * components that read MaterialTheme.typography.* pick up Pretendard everywhere.
+ * Material 3 default type scale re-pointed at Pretendard and tuned for Korean.
+ *
+ * We keep the default sizes/line-heights/weights and swap the family, but also
+ * zero out letterSpacing on every role: the M3 defaults carry small positive
+ * tracking tuned for Roboto, which reads loose for Hangul. Pretendard is
+ * designed for tight spacing, so 0 is the Korean-first choice.
  */
 @Composable
 fun pretendardTypography(): Typography {
     val family = PretendardFontFamily()
     val base = Typography()
+    fun TextStyle.kr() = copy(fontFamily = family, letterSpacing = 0.sp)
     return Typography(
-        displayLarge = base.displayLarge.copy(fontFamily = family),
-        displayMedium = base.displayMedium.copy(fontFamily = family),
-        displaySmall = base.displaySmall.copy(fontFamily = family),
-        headlineLarge = base.headlineLarge.copy(fontFamily = family),
-        headlineMedium = base.headlineMedium.copy(fontFamily = family),
-        headlineSmall = base.headlineSmall.copy(fontFamily = family),
-        titleLarge = base.titleLarge.copy(fontFamily = family),
-        titleMedium = base.titleMedium.copy(fontFamily = family),
-        titleSmall = base.titleSmall.copy(fontFamily = family),
-        bodyLarge = base.bodyLarge.copy(fontFamily = family),
-        bodyMedium = base.bodyMedium.copy(fontFamily = family),
-        bodySmall = base.bodySmall.copy(fontFamily = family),
-        labelLarge = base.labelLarge.copy(fontFamily = family),
-        labelMedium = base.labelMedium.copy(fontFamily = family),
-        labelSmall = base.labelSmall.copy(fontFamily = family),
+        displayLarge = base.displayLarge.kr(),
+        displayMedium = base.displayMedium.kr(),
+        displaySmall = base.displaySmall.kr(),
+        headlineLarge = base.headlineLarge.kr(),
+        headlineMedium = base.headlineMedium.kr(),
+        headlineSmall = base.headlineSmall.kr(),
+        titleLarge = base.titleLarge.kr(),
+        titleMedium = base.titleMedium.kr(),
+        titleSmall = base.titleSmall.kr(),
+        bodyLarge = base.bodyLarge.kr(),
+        bodyMedium = base.bodyMedium.kr(),
+        bodySmall = base.bodySmall.kr(),
+        labelLarge = base.labelLarge.kr(),
+        labelMedium = base.labelMedium.kr(),
+        labelSmall = base.labelSmall.kr(),
     )
 }

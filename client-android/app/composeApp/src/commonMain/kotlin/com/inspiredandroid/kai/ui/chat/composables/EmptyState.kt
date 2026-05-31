@@ -30,7 +30,9 @@ import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.privacy_agree_prefix
 import kai.composeapp.generated.resources.privacy_policy
 import kai.composeapp.generated.resources.start_interactive_ui
-import kai.composeapp.generated.resources.welcome_message
+import kotlin.time.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -44,10 +46,19 @@ internal fun EmptyState(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        val greeting = remember {
+            val hour = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
+            when (hour) {
+                in 5..10 -> "좋은 아침이에요"
+                in 11..16 -> "좋은 오후예요"
+                in 17..21 -> "좋은 저녁이에요"
+                else -> "늦은 시간까지 고생 많으세요"
+            }
+        }
         LogoAnimation()
         Spacer(Modifier.height(16.dp))
         Text(
-            text = stringResource(Res.string.welcome_message),
+            text = greeting,
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onBackground,
         )
