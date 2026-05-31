@@ -21,6 +21,14 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.7",
+        code = 130,
+        highlights = listOf(
+            "모닝레터·메일분석이 업무 토픽에도 표시 (텔레그램과 함께)",
+            "좌측 드로어를 미니앱식 타이포 메뉴로 정리",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.6",
         code = 129,
         highlights = listOf(
