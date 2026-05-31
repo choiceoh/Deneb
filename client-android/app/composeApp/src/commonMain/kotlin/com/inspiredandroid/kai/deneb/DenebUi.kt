@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.ui.components.SkeletonList
 
 /**
  * Shared chrome for Deneb surface screens. Material3 with intentional depth —
@@ -90,15 +91,14 @@ fun DenebChipRow(chips: List<DenebChip>) {
     }
 }
 
-/** Centered "loading" placeholder line. */
+/**
+ * Shimmering skeleton placeholder shown while a Deneb surface loads — content
+ * fades in instead of replacing a "불러오는 중…" line. Shared by every Deneb
+ * screen, so improving it here upgrades all of them at once.
+ */
 @Composable
-fun DenebLoading(text: String = "불러오는 중…") {
-    Text(
-        text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(vertical = 24.dp),
-    )
+fun DenebLoading(@Suppress("UNUSED_PARAMETER") text: String = "불러오는 중…") {
+    SkeletonList(showAvatar = false)
 }
 
 /** Error banner with an optional retry button. */

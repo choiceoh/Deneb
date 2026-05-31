@@ -61,6 +61,7 @@ import com.inspiredandroid.kai.currentPlatform
 import com.inspiredandroid.kai.data.ServiceEntry
 import com.inspiredandroid.kai.data.imageExtensions
 import com.inspiredandroid.kai.ui.gradientBrush
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.handCursor
 import com.inspiredandroid.kai.ui.outlineTextFieldColors
 import io.github.vinceglb.filekit.PlatformFile
@@ -98,6 +99,7 @@ fun QuestionInput(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
+        val haptics = rememberHaptics()
         if (files.isNotEmpty()) {
             FlowRow(
                 modifier = Modifier
@@ -139,6 +141,7 @@ fun QuestionInput(
         fun submitQuestion() {
             val text = textState.text
             if (text.isNotBlank()) {
+                haptics.tap()
                 ask(text.trim())
                 onTextStateChange(TextFieldValue(""))
             }

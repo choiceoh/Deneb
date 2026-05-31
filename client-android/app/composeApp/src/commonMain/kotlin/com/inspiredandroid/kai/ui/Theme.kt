@@ -50,13 +50,42 @@ val gradientMagenta = Color(0xFF2C5F8F)
 
 fun Modifier.handCursor() = pointerHoverIcon(PointerIcon.Hand, overrideDescendants = true)
 
+// Full Prussian-blue M3 role set. Defining every role (not just primary +
+// surfaces) keeps Material's default purple/lavender from leaking into
+// secondary/tertiary/container/outline surfaces — switches, segmented buttons,
+// chips, dividers and error tints now read as one blue-tinted family.
 val DarkColorScheme = darkColorScheme(
     primary = Color(0xFF7FA8D0),
-    onPrimary = Color(0xFF000000),
-    surface = Color(0xFF1E1E1E),
+    onPrimary = Color(0xFF00131F),
+    primaryContainer = Color(0xFF004C77),
+    onPrimaryContainer = Color(0xFFD4E4F5),
+    inversePrimary = Color(0xFF003153),
+    secondary = Color(0xFFAFC2D6),
+    onSecondary = Color(0xFF0A1A28),
+    secondaryContainer = Color(0xFF2C4257),
+    onSecondaryContainer = Color(0xFFD4E4F5),
+    tertiary = Color(0xFF8FC9C4),
+    onTertiary = Color(0xFF00322E),
+    tertiaryContainer = Color(0xFF1F4A46),
+    onTertiaryContainer = Color(0xFFC8EEE9),
+    error = Color(0xFFF2B8B5),
+    onError = Color(0xFF601410),
+    errorContainer = Color(0xFF8C1D18),
+    onErrorContainer = Color(0xFFF9DEDC),
     background = Color(0xFF121212),
     onBackground = Color(0xFFFFFFFF),
+    surface = Color(0xFF1E1E1E),
     onSurface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFF2A2F35),
+    onSurfaceVariant = Color(0xFFC2C9D1),
+    surfaceTint = Color(0xFF7FA8D0),
+    surfaceContainerLowest = Color(0xFF0D0D0D),
+    surfaceContainerLow = Color(0xFF1A1A1A),
+    surfaceContainer = Color(0xFF1E1E1E),
+    surfaceContainerHigh = Color(0xFF282828),
+    surfaceContainerHighest = Color(0xFF333333),
+    outline = Color(0xFF5A6470),
+    outlineVariant = Color(0xFF3A4048),
 )
 
 fun ColorScheme.withBlackBackground(): ColorScheme = copy(
@@ -104,10 +133,35 @@ fun Modifier.kaiAdaptiveCardSurface(shape: Shape = CardDefaults.shape): Modifier
 val LightColorScheme = lightColorScheme(
     primary = darkPurple,
     onPrimary = Color(0xFFFFFFFF),
-    surface = Color(0xFFF2F2F2),
+    primaryContainer = Color(0xFFD2E3F7),
+    onPrimaryContainer = Color(0xFF001D33),
+    inversePrimary = Color(0xFF7FA8D0),
+    secondary = Color(0xFF4A6072),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFD5E3F0),
+    onSecondaryContainer = Color(0xFF0A1F2E),
+    tertiary = Color(0xFF1F6F68),
+    onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFB8ECE6),
+    onTertiaryContainer = Color(0xFF00201D),
+    error = Color(0xFFB3261E),
+    onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFF9DEDC),
+    onErrorContainer = Color(0xFF410E0B),
     background = Color(0xFFFFFFFF),
     onBackground = Color(0xFF000000),
+    surface = Color(0xFFF7F9FB),
     onSurface = Color(0xFF000000),
+    surfaceVariant = Color(0xFFE1E7EE),
+    onSurfaceVariant = Color(0xFF434A52),
+    surfaceTint = darkPurple,
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFF2F5F8),
+    surfaceContainer = Color(0xFFECF1F6),
+    surfaceContainerHigh = Color(0xFFE6EDF3),
+    surfaceContainerHighest = Color(0xFFE0E8F0),
+    outline = Color(0xFF74808C),
+    outlineVariant = Color(0xFFC4CDD6),
 )
 
 @Composable
