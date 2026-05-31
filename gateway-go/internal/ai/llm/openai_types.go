@@ -93,9 +93,21 @@ type openAIChunk struct {
 type openAIDelta struct {
 	Role             string                `json:"role,omitempty"`
 	Content          string                `json:"content,omitempty"`
-	ReasoningContent string                `json:"reasoning_content,omitempty"` // reasoning model thinking
+	ReasoningContent string                `json:"reasoning_content,omitempty"` // reasoning text (DeepSeek/OpenRouter)
+	Reasoning        string                `json:"reasoning,omitempty"`         // reasoning text (vLLM/step3p7 stream under "reasoning")
 	Refusal          string                `json:"refusal,omitempty"`           // model refusal
 	ToolCalls        []openAIDeltaToolCall `json:"tool_calls,omitempty"`
+}
+
+// reasoningText returns the streamed reasoning, accepting both field names in
+// the wild: DeepSeek/OpenRouter emit "reasoning_content"; vLLM-backed models
+// (e.g. step3p7) emit "reasoning". Reading only reasoning_content silently drops
+// vLLM reasoning so no thinking_delta is ever emitted to the client.
+func (d openAIDelta) reasoningText() string {
+	if d.ReasoningContent != "" {
+		return d.ReasoningContent
+	}
+	return d.Reasoning
 }
 
 // openAIDeltaToolCall is a streamed fragment of a tool call.
