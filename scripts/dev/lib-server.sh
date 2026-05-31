@@ -30,6 +30,37 @@ DEVLIB_REPO_DIR="$(cd "$DEVLIB_SCRIPT_DIR/../.." && pwd)"
 DEVLIB_HOST="127.0.0.1"
 
 # ---------------------------------------------------------------------------
+# Instance isolation
+# ---------------------------------------------------------------------------
+#
+# DENEB_INSTANCE scopes every /tmp state path and default port so multiple
+# worktrees/agents can run live-test.sh and iterate.sh concurrently without
+# clobbering each other's binary, logs, state dir, mock server, or ports.
+#
+# The "default" instance keeps the historical paths and ports byte-for-byte
+# (live=18790, iterate=18791, mock=18792, /tmp/deneb-*), so existing habits and
+# any already-running default instance are undisturbed. A named instance — e.g.
+# `export DENEB_INSTANCE="$(basename "$PWD")"` per worktree — gets its own /tmp
+# prefix plus a deterministic 4-port block derived from the name. Paths are
+# keyed by the full name so they never collide; ports use a name hash mod 100,
+# so two differently-named instances clash on ports only ~1% of the time (and
+# then merely can't run at the same instant, same as today's single default).
+DEVLIB_INSTANCE="${DENEB_INSTANCE:-default}"
+if [[ "$DEVLIB_INSTANCE" == "default" ]]; then
+  DEVLIB_TMP_PREFIX="/tmp/deneb"
+  DEVLIB_LIVE_PORT=18790
+  DEVLIB_ITERATE_PORT=18791
+  DEVLIB_MOCK_DEFAULT_PORT=18792
+else
+  DEVLIB_TMP_PREFIX="/tmp/deneb-${DEVLIB_INSTANCE}"
+  _devlib_off=$(printf '%s' "$DEVLIB_INSTANCE" | cksum | cut -d' ' -f1)
+  _devlib_base=$(( 18800 + (_devlib_off % 100) * 4 ))
+  DEVLIB_LIVE_PORT=$_devlib_base
+  DEVLIB_ITERATE_PORT=$((_devlib_base + 1))
+  DEVLIB_MOCK_DEFAULT_PORT=$((_devlib_base + 2))
+fi
+
+# ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
 
@@ -113,7 +144,7 @@ devlib_start_gateway() {
 
   mkdir -p "$state_dir"
 
-  local mock_url="${DENEB_DEV_MOCK_TELEGRAM_URL:-http://127.0.0.1:18792}"
+  local mock_url="${DENEB_DEV_MOCK_TELEGRAM_URL:-http://127.0.0.1:${DEVLIB_MOCK_DEFAULT_PORT}}"
   # Plugin appends the bot token to TELEGRAM_API_BASE, so the base must end
   # with "/bot" — the token is joined directly after with no separator.
   local telegram_api_base="${mock_url%/}/bot"
@@ -143,9 +174,9 @@ devlib_start_gateway() {
 # across restarts, so we run a single instance per port for as long as any
 # dev gateway needs it. Helpers below manage start/stop/healthcheck.
 
-DEVLIB_MOCK_DEFAULT_PORT=18792
-DEVLIB_MOCK_PID_FILE="/tmp/deneb-mock-telegram.pid"
-DEVLIB_MOCK_LOG="/tmp/deneb-mock-telegram.log"
+# DEVLIB_MOCK_DEFAULT_PORT is set in the instance-isolation block near the top.
+DEVLIB_MOCK_PID_FILE="${DEVLIB_TMP_PREFIX}-mock-telegram.pid"
+DEVLIB_MOCK_LOG="${DEVLIB_TMP_PREFIX}-mock-telegram.log"
 
 # Start the mock Telegram server. No-op if already running.
 #   $1 — port (optional, default 18792)

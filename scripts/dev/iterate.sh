@@ -25,14 +25,14 @@ source "$(cd "$(dirname "$0")" && pwd)/lib-server.sh"
 
 SCRIPT_DIR="$DEVLIB_SCRIPT_DIR"
 REPO_DIR="$DEVLIB_REPO_DIR"
-PORT="${ITERATE_PORT:-18791}"
-BINARY="/tmp/deneb-gateway-iterate"
-LOG="/tmp/deneb-gateway-iterate.log"
+PORT="${ITERATE_PORT:-$DEVLIB_ITERATE_PORT}"
+BINARY="${DEVLIB_TMP_PREFIX}-gateway-iterate"
+LOG="${DEVLIB_TMP_PREFIX}-gateway-iterate.log"
 HOST="$DEVLIB_HOST"
-RESULT_FILE="/tmp/deneb-iterate-result.json"
-BUILD_LOG="/tmp/deneb-iterate-build.log"
-LOCK_FILE="/tmp/deneb-iterate.lock"
-ITERATE_STATE_DIR="/tmp/deneb-iterate-state"
+RESULT_FILE="${DEVLIB_TMP_PREFIX}-iterate-result.json"
+BUILD_LOG="${DEVLIB_TMP_PREFIX}-iterate-build.log"
+LOCK_FILE="${DEVLIB_TMP_PREFIX}-iterate.lock"
+ITERATE_STATE_DIR="${DEVLIB_TMP_PREFIX}-iterate-state"
 
 # Parse arguments.
 METRIC_CMD=""
@@ -166,13 +166,13 @@ echo "ok (${BUILD_MS}ms)"
 # mock instance; they should not be run concurrently (iterate.sh already
 # holds an flock for its own run).
 echo -n "start... "
-DEV_CONFIG="/tmp/deneb-iterate-config.json"
+DEV_CONFIG="${DEVLIB_TMP_PREFIX}-iterate-config.json"
 MOCK_TOKEN="mock-dev-token"
 DENEB_DEV_TELEGRAM_TOKEN="$MOCK_TOKEN" devlib_gen_config "$DEV_CONFIG"
 
 # Ensure the mock Telegram server is up. Idempotent — no-op if a live-test
 # invocation already started it.
-devlib_start_mock_telegram "${DENEB_DEV_MOCK_TELEGRAM_PORT:-18792}" "$HOST" >/dev/null 2>&1 || true
+devlib_start_mock_telegram "${DENEB_DEV_MOCK_TELEGRAM_PORT:-$DEVLIB_MOCK_DEFAULT_PORT}" "$HOST" >/dev/null 2>&1 || true
 
 START_WAIT_BEGIN=$(date +%s%N)
 DENEB_DEV_TELEGRAM_TOKEN="$MOCK_TOKEN" \
