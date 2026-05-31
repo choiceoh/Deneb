@@ -65,65 +65,72 @@ class SettingsViewModel(
     private var connectionCheckJobs: MutableMap<String, Job> = mutableMapOf()
     private var hasCheckedInitialConnection = false
     private var pendingDeleteJob: Job? = null
+    private var daemonToggleJob: Job? = null
 
-    private fun buildFullState(): SettingsUiState = SettingsUiState(
-        configuredServices = buildConfiguredServiceEntries().toImmutableList(),
-        availableServicesToAdd = computeAvailableServices().toImmutableList(),
-        tools = dataRepository.getToolDefinitions().toImmutableList(),
-        soulText = dataRepository.getSoulText(),
-        isDynamicUiEnabled = dataRepository.isDynamicUiEnabled(),
-        themeMode = dataRepository.getThemeMode(),
-        isMemoryEnabled = dataRepository.isMemoryEnabled(),
-        memories = dataRepository.getMemories().toImmutableList(),
-        isSchedulingEnabled = dataRepository.isSchedulingEnabled(),
-        scheduledTasks = dataRepository.getScheduledTasks().toImmutableList(),
-        isDaemonEnabled = dataRepository.isDaemonEnabled(),
-        showDaemonToggle = currentPlatform is Platform.Mobile.Android,
-        isHeartbeatEnabled = dataRepository.getHeartbeatConfig().enabled,
-        heartbeatIntervalMinutes = dataRepository.getHeartbeatConfig().intervalMinutes,
-        heartbeatActiveHoursStart = dataRepository.getHeartbeatConfig().activeHoursStart,
-        heartbeatActiveHoursEnd = dataRepository.getHeartbeatConfig().activeHoursEnd,
-        heartbeatPrompt = dataRepository.getHeartbeatPrompt(),
-        heartbeatLog = dataRepository.getHeartbeatLog().toImmutableList(),
-        heartbeatServiceEntries = dataRepository.getServiceEntries()
-            .filter { supportsAgenticFlows(it.serviceId, it.modelId) }
-            .toImmutableList(),
-        heartbeatSelectedInstanceId = dataRepository.getHeartbeatInstanceId()?.takeIf { id ->
-            dataRepository.getServiceEntries().any { it.instanceId == id }
-        }.also { validId ->
-            val savedId = dataRepository.getHeartbeatInstanceId()
-            if (savedId != null && validId == null) dataRepository.setHeartbeatInstanceId(null)
-        },
-        isEmailEnabled = dataRepository.isEmailEnabled(),
-        showEmailToggle = isEmailSupported,
-        emailAccounts = dataRepository.getEmailAccounts().toImmutableList(),
-        emailPollIntervalMinutes = dataRepository.getEmailPollIntervalMinutes(),
-        emailPendingCount = dataRepository.getPendingEmailCount(),
-        emailSyncStates = dataRepository.getEmailSyncStates().toImmutableMap(),
-        showSmsSection = isSmsSupported,
-        isSmsEnabled = dataRepository.isSmsEnabled(),
-        smsPermissionGranted = dataRepository.hasSmsPermission(),
-        smsPollIntervalMinutes = dataRepository.getSmsPollIntervalMinutes(),
-        smsPendingCount = dataRepository.getPendingSmsCount(),
-        smsSyncState = dataRepository.getSmsSyncState(),
-        isSmsSendEnabled = dataRepository.isSmsSendEnabled(),
-        smsSendPermissionGranted = dataRepository.hasSmsSendPermission(),
-        showNotificationsSection = isNotificationsSupported,
-        isNotificationsEnabled = dataRepository.isNotificationsEnabled(),
-        notificationListenerAccessGranted = dataRepository.isNotificationListenerAccessGranted(),
-        notificationListenerBound = dataRepository.getNotificationSyncState().listenerBound,
-        notificationPendingCount = dataRepository.getPendingNotificationCount(),
-        isFreeFallbackEnabled = dataRepository.isFreeFallbackEnabled(),
-        uiScale = dataRepository.getUiScale(),
-        showUiScale = currentPlatform is Platform.Desktop,
-        mcpServers = buildMcpServerEntries().toImmutableList(),
-        localAvailableModels = dataRepository.getLocalAvailableModels().toImmutableList(),
-        totalDeviceMemoryBytes = dataRepository.getTotalDeviceMemoryBytes(),
-        localFreeSpaceBytes = dataRepository.getLocalFreeSpaceBytes(),
-        localDownloadingModelId = dataRepository.getLocalDownloadingModelId()?.value,
-        localDownloadProgress = dataRepository.getLocalDownloadProgress()?.value,
-        modelContextTokens = buildModelContextTokensMap(),
-    )
+    private fun buildFullState(): SettingsUiState {
+        val showDaemonToggle = shouldShowDaemonToggle()
+        return SettingsUiState(
+            configuredServices = buildConfiguredServiceEntries().toImmutableList(),
+            availableServicesToAdd = computeAvailableServices().toImmutableList(),
+            tools = dataRepository.getToolDefinitions().toImmutableList(),
+            soulText = dataRepository.getSoulText(),
+            isDynamicUiEnabled = dataRepository.isDynamicUiEnabled(),
+            themeMode = dataRepository.getThemeMode(),
+            isMemoryEnabled = dataRepository.isMemoryEnabled(),
+            memories = dataRepository.getMemories().toImmutableList(),
+            isSchedulingEnabled = dataRepository.isSchedulingEnabled(),
+            scheduledTasks = dataRepository.getScheduledTasks().toImmutableList(),
+            isDaemonEnabled = showDaemonToggle && dataRepository.isDaemonEnabled(),
+            showDaemonToggle = showDaemonToggle,
+            isHeartbeatEnabled = dataRepository.getHeartbeatConfig().enabled,
+            heartbeatIntervalMinutes = dataRepository.getHeartbeatConfig().intervalMinutes,
+            heartbeatActiveHoursStart = dataRepository.getHeartbeatConfig().activeHoursStart,
+            heartbeatActiveHoursEnd = dataRepository.getHeartbeatConfig().activeHoursEnd,
+            heartbeatPrompt = dataRepository.getHeartbeatPrompt(),
+            heartbeatLog = dataRepository.getHeartbeatLog().toImmutableList(),
+            heartbeatServiceEntries = dataRepository.getServiceEntries()
+                .filter { supportsAgenticFlows(it.serviceId, it.modelId) }
+                .toImmutableList(),
+            heartbeatSelectedInstanceId = dataRepository.getHeartbeatInstanceId()?.takeIf { id ->
+                dataRepository.getServiceEntries().any { it.instanceId == id }
+            }.also { validId ->
+                val savedId = dataRepository.getHeartbeatInstanceId()
+                if (savedId != null && validId == null) dataRepository.setHeartbeatInstanceId(null)
+            },
+            isEmailEnabled = dataRepository.isEmailEnabled(),
+            showEmailToggle = isEmailSupported,
+            emailAccounts = dataRepository.getEmailAccounts().toImmutableList(),
+            emailPollIntervalMinutes = dataRepository.getEmailPollIntervalMinutes(),
+            emailPendingCount = dataRepository.getPendingEmailCount(),
+            emailSyncStates = dataRepository.getEmailSyncStates().toImmutableMap(),
+            showSmsSection = isSmsSupported,
+            isSmsEnabled = dataRepository.isSmsEnabled(),
+            smsPermissionGranted = dataRepository.hasSmsPermission(),
+            smsPollIntervalMinutes = dataRepository.getSmsPollIntervalMinutes(),
+            smsPendingCount = dataRepository.getPendingSmsCount(),
+            smsSyncState = dataRepository.getSmsSyncState(),
+            isSmsSendEnabled = dataRepository.isSmsSendEnabled(),
+            smsSendPermissionGranted = dataRepository.hasSmsSendPermission(),
+            showNotificationsSection = isNotificationsSupported,
+            isNotificationsEnabled = dataRepository.isNotificationsEnabled(),
+            notificationListenerAccessGranted = dataRepository.isNotificationListenerAccessGranted(),
+            notificationListenerBound = dataRepository.getNotificationSyncState().listenerBound,
+            notificationPendingCount = dataRepository.getPendingNotificationCount(),
+            isFreeFallbackEnabled = dataRepository.isFreeFallbackEnabled(),
+            uiScale = dataRepository.getUiScale(),
+            showUiScale = currentPlatform is Platform.Desktop,
+            mcpServers = buildMcpServerEntries().toImmutableList(),
+            localAvailableModels = dataRepository.getLocalAvailableModels().toImmutableList(),
+            totalDeviceMemoryBytes = dataRepository.getTotalDeviceMemoryBytes(),
+            localFreeSpaceBytes = dataRepository.getLocalFreeSpaceBytes(),
+            localDownloadingModelId = dataRepository.getLocalDownloadingModelId()?.value,
+            localDownloadProgress = dataRepository.getLocalDownloadProgress()?.value,
+            modelContextTokens = buildModelContextTokensMap(),
+        )
+    }
+
+    private fun shouldShowDaemonToggle(): Boolean =
+        currentPlatform is Platform.Mobile.Android && dataRepository !is DenebGatewayClient
 
     // Bound once so downstream Compose skipping works — a new SettingsActions
     // instance on every state emission would defeat it.
@@ -472,14 +479,23 @@ class SettingsViewModel(
     }
 
     private fun onToggleDaemon(enabled: Boolean) {
-        dataRepository.setDaemonEnabled(enabled)
+        if (!shouldShowDaemonToggle()) return
+
+        daemonToggleJob?.cancel()
         if (enabled) {
-            viewModelScope.launch { notificationPermissionController.requestPermission() }
-            daemonController.start()
+            daemonToggleJob = viewModelScope.launch {
+                val granted = notificationPermissionController.requestPermission()
+                dataRepository.setDaemonEnabled(granted)
+                if (granted) {
+                    daemonController.start()
+                }
+                _state.update { it.copy(isDaemonEnabled = granted) }
+            }
         } else {
+            dataRepository.setDaemonEnabled(false)
             daemonController.stop()
+            _state.update { it.copy(isDaemonEnabled = false) }
         }
-        _state.update { it.copy(isDaemonEnabled = enabled) }
     }
 
     private fun onToggleHeartbeat(enabled: Boolean) {

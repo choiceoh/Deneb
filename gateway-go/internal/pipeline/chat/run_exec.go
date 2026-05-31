@@ -5,6 +5,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -35,6 +36,13 @@ type chatRunResult struct {
 	*agent.AgentResult
 	// SpawnFlag is non-nil; IsSet() returns true when sessions_spawn was called.
 	SpawnFlag *SpawnFlag
+	// ActualModel is the model that actually produced the answer. It differs
+	// from the requested model only when the model fallback chain fired.
+	ActualModel string
+	// FellBack is true when runAgentWithFallback had to drop from the initial
+	// role to a fallback role to get a successful turn. Surfaced to clients so
+	// the UI can show which model answered.
+	FellBack bool
 }
 
 // executeAgentRun performs the core agent execution: persist user msg, assemble context,
@@ -255,7 +263,7 @@ func executeAgentRun(
 
 	// Execute agent loop with model fallback chain.
 	agentStart := time.Now()
-	agentResult, err := runAgentWithFallback(ctx, cfg, messages, client, deps, initialRole, hooks, logger, runLog)
+	agentResult, actualModel, fellBack, err := runAgentWithFallback(ctx, cfg, messages, client, deps, initialRole, hooks, logger, runLog)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +312,7 @@ func executeAgentRun(
 		})
 	}
 
-	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag}, nil
+	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag, ActualModel: actualModel, FellBack: fellBack}, nil
 }
 
 // emitPhase publishes a phase.changed lifecycle event so WebSocket
@@ -1089,6 +1097,27 @@ func wireDraftStreamHook(
 }
 
 // ---------------------------------------------------------------------------
+// errModelStalled marks a turn that timed out without producing any output (an
+// LLM stream stall). It is synthesized inside runAgentWithFallback so a stall
+// engages the model fallback chain the same way a hard error does.
+var errModelStalled = errors.New("model produced no output before timeout (stream stall)")
+
+// stallFallbackBudget bounds the fallback attempt when a stall has already
+// consumed the per-turn deadline. A stall surfaces as a timeout result only
+// after the parent ctx is spent, so the fallback needs a fresh budget — but a
+// bounded one, so a wedged turn can't run unbounded. Single-user: a slightly
+// late answer from a healthy model beats silence.
+const stallFallbackBudget = 90 * time.Second
+
+// isStalledResult reports whether an agent run timed out without emitting any
+// text — the signature of a stalled LLM stream (the inner per-run timeout fired
+// before a single token arrived). A turn that timed out after producing text is
+// left alone: the user already got a partial answer, so falling back would only
+// discard it.
+func isStalledResult(r *agent.AgentResult) bool {
+	return r != nil && r.StopReason == "timeout" && strings.TrimSpace(r.AllText) == ""
+}
+
 // Stage 3: runAgentWithFallback — agent loop with compaction retry + model fallback.
 // ---------------------------------------------------------------------------
 
@@ -1104,7 +1133,7 @@ func runAgentWithFallback(
 	hooks agent.StreamHooks,
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,
-) (*agent.AgentResult, error) {
+) (*agent.AgentResult, string, bool, error) {
 	const maxCompactionRetries = 2
 
 	contextBudget := int(deps.contextCfg.MemoryTokenBudget - deps.contextCfg.SystemPromptBudget) //nolint:gosec // G115
@@ -1124,8 +1153,27 @@ func runAgentWithFallback(
 
 	var agentResult *agent.AgentResult
 	var runErr error
+	// Track which model actually answered. Starts as the requested model and
+	// only changes if the fallback chain below fires.
+	actualModel := cfg.Model
+	fellBack := false
+	// stalledResult holds the original empty timeout result when the main model
+	// stalled. If no fallback model recovers, we return this rather than the
+	// fallback's error — preserving the pre-fallback "stall = empty reply"
+	// behavior instead of surfacing a downstream error.
+	var stalledResult *agent.AgentResult
 	for compactAttempt := 0; compactAttempt <= maxCompactionRetries; compactAttempt++ {
 		agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+		// A stall (timed out with zero output) returns no error but an empty
+		// timeout result. Treat it as a failure so the fallback chain below gets
+		// a shot with a different model. Only the inner per-run timeout fired,
+		// not the parent ctx, so fallback attempts still have budget.
+		if runErr == nil && isStalledResult(agentResult) {
+			logger.Warn("model stalled (no output before timeout); engaging fallback chain",
+				"model", cfg.Model, "stopReason", agentResult.StopReason)
+			runErr = errModelStalled
+			stalledResult = agentResult
+		}
 		if runErr == nil {
 			break
 		}
@@ -1152,7 +1200,7 @@ func runAgentWithFallback(
 				return &agent.AgentResult{
 					StopReason:    stopReasonCompressionStuck,
 					FinalMessages: messages,
-				}, nil
+				}, cfg.Model, false, nil
 			}
 
 			// Early-abort guard B: input hash matches the prior attempt.
@@ -1176,7 +1224,7 @@ func runAgentWithFallback(
 				return &agent.AgentResult{
 					StopReason:    stopReasonCompressionStuck,
 					FinalMessages: messages,
-				}, nil
+				}, cfg.Model, false, nil
 			}
 			lastCompactInputHash = inputHash
 
@@ -1223,7 +1271,7 @@ func runAgentWithFallback(
 			logger.Warn("transient HTTP error, retrying once", "error", runErr)
 			select {
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return nil, "", false, ctx.Err()
 			case <-time.After(2500 * time.Millisecond):
 			}
 			agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
@@ -1234,32 +1282,76 @@ func runAgentWithFallback(
 
 		// Model fallback chain: try each subsequent role in the chain.
 		// e.g., Main → Lightweight → Fallback
-		if runErr != nil && deps.registry != nil && ctx.Err() == nil {
-			chain := deps.registry.FallbackChain(initialRole)
-			for i := 1; i < len(chain); i++ {
-				fbRole := chain[i]
-				fbCfg := deps.registry.Config(fbRole)
-				fbClient := deps.registry.Client(fbRole)
-				if fbClient == nil {
-					continue
+		if runErr != nil && deps.registry != nil {
+			// Choose the context for fallback attempts. A hard error leaves the
+			// parent ctx alive (budget remains, so reuse it). A stall, however,
+			// only surfaces once the per-turn deadline is already spent waiting
+			// on the dead model — so give the fallback a fresh, bounded budget,
+			// otherwise the user gets silence instead of an answer from a
+			// healthy model. A user abort yields StopReason "aborted" (not
+			// "timeout"), so it never reaches this stall branch.
+			fbCtx, fbCancel := ctx, context.CancelFunc(nil)
+			runFallback := true
+			if ctx.Err() != nil {
+				if errors.Is(runErr, errModelStalled) {
+					fbCtx, fbCancel = context.WithTimeout(context.WithoutCancel(ctx), stallFallbackBudget)
+				} else {
+					runFallback = false // parent canceled for another reason — respect it
 				}
-				logger.Warn("model failed, trying fallback",
-					"failedRole", string(chain[i-1]),
-					"nextRole", string(fbRole),
-					"nextModel", fbCfg.Model,
-					"error", runErr)
-				agentCfg := cfg
-				agentCfg.Model = fbCfg.Model
-				agentResult, runErr = agent.RunAgent(ctx, agentCfg, messages, fbClient, deps.tools, hooks, logger, runLog)
-				if runErr == nil {
-					break
+			}
+			if runFallback {
+				chain := deps.registry.FallbackChain(initialRole)
+				// Skip models already attempted — the chain can list the same model
+				// for multiple roles (e.g. main == lightweight), and re-running a
+				// model that just stalled only burns the budget.
+				triedModels := map[string]bool{cfg.Model: true}
+				for i := 1; i < len(chain); i++ {
+					if fbCtx.Err() != nil {
+						break
+					}
+					fbRole := chain[i]
+					fbCfg := deps.registry.Config(fbRole)
+					fbClient := deps.registry.Client(fbRole)
+					if fbClient == nil || triedModels[fbCfg.Model] {
+						continue
+					}
+					triedModels[fbCfg.Model] = true
+					logger.Warn("model failed, trying fallback",
+						"failedRole", string(chain[i-1]),
+						"nextRole", string(fbRole),
+						"nextModel", fbCfg.Model,
+						"error", runErr)
+					agentCfg := cfg
+					agentCfg.Model = fbCfg.Model
+					agentResult, runErr = agent.RunAgent(fbCtx, agentCfg, messages, fbClient, deps.tools, hooks, logger, runLog)
+					// A stalled fallback (empty timeout) is also a failure — advance
+					// to the next role instead of returning its empty result.
+					if runErr == nil && isStalledResult(agentResult) {
+						runErr = errModelStalled
+					}
+					if runErr == nil {
+						actualModel = fbCfg.Model
+						fellBack = true
+						break
+					}
+					logger.Error("fallback also failed",
+						"role", string(fbRole), "model", fbCfg.Model, "error", runErr)
 				}
-				logger.Error("fallback also failed",
-					"role", string(fbRole), "model", fbCfg.Model, "error", runErr)
+			}
+			if fbCancel != nil {
+				fbCancel()
 			}
 		}
 
 		if runErr != nil {
+			// The main model stalled and no fallback model produced an answer
+			// (it stalled too, or errored — e.g. a provider rejecting the
+			// history). Degrade to the original empty timeout result rather than
+			// surfacing the fallback's error, matching the prior behavior from
+			// before stalls engaged the fallback chain.
+			if stalledResult != nil && !fellBack {
+				return stalledResult, actualModel, false, nil
+			}
 			// Surface unrecoverable context overflow so operators/UI see it.
 			// Without this the only signal was a Warn log in the retry loop
 			// and the final error return — easy to miss when diagnosing
@@ -1277,12 +1369,12 @@ func runAgentWithFallback(
 					"attempts", maxCompactionRetries+1,
 					"error", runErr)
 			}
-			return nil, runErr
+			return nil, "", false, runErr
 		}
 		break // success via transient retry or fallback
 	}
 
-	return agentResult, nil
+	return agentResult, actualModel, fellBack, nil
 }
 
 // resolveThinkingConfig maps a session ThinkingLevel string to an llm.ThinkingConfig.
