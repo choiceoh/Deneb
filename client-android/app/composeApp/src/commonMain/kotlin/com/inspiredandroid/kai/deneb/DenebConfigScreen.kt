@@ -1,5 +1,6 @@
 package com.inspiredandroid.kai.deneb
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,23 +19,31 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.data.AppSettings
+import kotlinx.coroutines.launch
 
 /**
  * Minimal Deneb gateway configuration: the gateway URL and the standalone client
- * token that [DenebGatewayClient] reads. Self-contained (talks to AppSettings
- * directly) so it survives any future gut of Kai's own settings screen.
+ * token that [DenebGatewayClient] reads, plus a model switcher backed by the
+ * gateway's model registry. Self-contained (talks to AppSettings directly) so it
+ * survives any future gut of Kai's own settings screen.
  */
 @Composable
 fun DenebConfigScreen(
     appSettings: AppSettings,
     onBack: () -> Unit,
+    denebClient: DenebGatewayClient? = null,
+    onOpenMail: () -> Unit = {},
     onOpenKaiSettings: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
@@ -92,8 +101,67 @@ fun DenebConfigScreen(
         Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("취소") }
 
+        if (denebClient != null) {
+            Spacer(Modifier.height(28.dp))
+            Text("Deneb", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onOpenMail, modifier = Modifier.fillMaxWidth()) { Text("📧  받은 메일") }
+            ModelSection(denebClient)
+        }
+
         Spacer(Modifier.height(24.dp))
-        TextButton(onClick = onOpenKaiSettings) { Text("Kai 고급 설정") }
+        TextButton(onClick = onOpenKaiSettings) { Text("고급 설정") }
+    }
+}
+
+/**
+ * Deneb model switcher. Lists the gateway's models and switches the default chat
+ * model (`models.set role=main`) — which changes chat across every Deneb surface.
+ */
+@Composable
+private fun ModelSection(client: DenebGatewayClient) {
+    val models by client.denebModels.collectAsState()
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { client.refreshModels() }
+
+    if (models.isEmpty()) return
+
+    Spacer(Modifier.height(28.dp))
+    Text("모델", style = MaterialTheme.typography.titleMedium)
+    Spacer(Modifier.height(2.dp))
+    Text(
+        "Deneb의 기본 채팅 모델 — 모든 채널(텔레그램·미니앱·이 앱)에 공통 적용됩니다.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(Modifier.height(8.dp))
+    models.forEach { model ->
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = !model.current) {
+                    scope.launch { client.setMainModel(model.id) }
+                }
+                .padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                if (model.current) "● " else "○ ",
+                color = if (model.current) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            Column(Modifier.weight(1f)) {
+                Text(model.display, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    model.id + if (model.health.equals("offline", ignoreCase = true)) "  ·  오프라인" else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

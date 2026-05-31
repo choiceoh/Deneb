@@ -7,10 +7,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -35,11 +34,20 @@ import kai.composeapp.generated.resources.start_interactive_ui
 import kai.composeapp.generated.resources.welcome_message
 import org.jetbrains.compose.resources.stringResource
 
+/** Tappable first-turn suggestions covering Deneb's analyst + secretary roles. */
+private val DenebQuickPrompts = listOf(
+    "오늘 일정 알려줘",
+    "최근 메일 요약해줘",
+    "진행 중인 프로젝트 정리",
+    "이번 주 할 일 정리",
+)
+
 @Composable
 internal fun EmptyState(
     modifier: Modifier,
     isUsingSharedKey: Boolean,
     onStartInteractiveMode: (() -> Unit)? = null,
+    onQuickPrompt: ((String) -> Unit)? = null,
 ) {
     Column(
         modifier = modifier,
@@ -53,6 +61,28 @@ internal fun EmptyState(
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onBackground,
         )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "분석부터 일정까지 — 무엇이든 물어보세요",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 24.dp),
+        )
+        if (onQuickPrompt != null) {
+            Spacer(Modifier.height(24.dp))
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                DenebQuickPrompts.forEach { prompt ->
+                    SuggestionChip(
+                        onClick = { onQuickPrompt(prompt) },
+                        label = { Text(prompt) },
+                    )
+                }
+            }
+        }
         if (onStartInteractiveMode != null) {
             Spacer(Modifier.height(16.dp))
             AnimatedBorderButton(

@@ -615,6 +615,7 @@ private fun ChatModeScreen(
                                 isUsingSharedKey = uiState.showPrivacyInfo,
                                 onStartInteractiveMode = uiState.actions.enterInteractiveMode
                                     .takeUnless { primaryIsOnDevice },
+                                onQuickPrompt = { uiState.actions.ask(it) },
                             )
                         } else {
                             val listState = rememberLazyListState()

@@ -11,6 +11,7 @@ import com.inspiredandroid.kai.data.Service
 import com.inspiredandroid.kai.data.TaskScheduler
 import com.inspiredandroid.kai.data.ThemeMode
 import com.inspiredandroid.kai.data.supportsAgenticFlows
+import com.inspiredandroid.kai.deneb.DenebGatewayClient
 import com.inspiredandroid.kai.getBackgroundDispatcher
 import com.inspiredandroid.kai.httpClient
 import com.inspiredandroid.kai.inference.LocalModel
@@ -189,6 +190,21 @@ class SettingsViewModel(
     )
 
     init {
+        // Deneb-backed screens (wiki, …) arrive asynchronously; observe their
+        // flows and fold them into settings state as each refresh lands.
+        (dataRepository as? DenebGatewayClient)?.let { client ->
+            viewModelScope.launch {
+                client.denebMemories.collect { mems ->
+                    _state.update { it.copy(memories = mems.toImmutableList()) }
+                }
+            }
+            viewModelScope.launch {
+                client.denebScheduledTasks.collect { tasks ->
+                    _state.update { it.copy(scheduledTasks = tasks.toImmutableList()) }
+                }
+            }
+        }
+
         // Observe download state from the engine singleton (survives activity recreation)
         val downloadingFlow = dataRepository.getLocalDownloadingModelId() ?: flowOf(null)
         val progressFlow = dataRepository.getLocalDownloadProgress() ?: flowOf(null)

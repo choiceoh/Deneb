@@ -35,7 +35,10 @@ import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.svg.SvgDecoder
 import com.inspiredandroid.kai.data.AppSettings
 import com.inspiredandroid.kai.data.ThemeMode
+import com.inspiredandroid.kai.data.DataRepository
 import com.inspiredandroid.kai.deneb.DenebConfigScreen
+import com.inspiredandroid.kai.deneb.DenebGatewayClient
+import com.inspiredandroid.kai.deneb.DenebMailScreen
 import com.inspiredandroid.kai.tools.CalendarPermissionController
 import com.inspiredandroid.kai.tools.NotificationPermissionController
 import com.inspiredandroid.kai.tools.SetupCalendarPermissionHandler
@@ -77,6 +80,10 @@ object Settings
 @Serializable
 @SerialName("deneb_config")
 object DenebConfig
+
+@Serializable
+@SerialName("deneb_mail")
+object DenebMail
 
 @Composable
 fun App(
@@ -120,6 +127,7 @@ private fun AppContent(
     onAppOpens: ((Int) -> Unit)?,
 ) {
     val appSettings = koinInject<AppSettings>()
+    val denebClient = koinInject<DataRepository>() as? DenebGatewayClient
 
     // Track app opens after Koin is initialized
     onAppOpens?.let { callback ->
@@ -244,10 +252,21 @@ private fun AppContent(
                     composable<DenebConfig> {
                         DenebConfigScreen(
                             appSettings = appSettings,
+                            denebClient = denebClient,
                             onBack = { navController.navigateUp() },
+                            onOpenMail = { navController.navigate(DenebMail) },
                             onOpenKaiSettings = { navController.navigate(Settings) },
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
                         )
+                    }
+                    composable<DenebMail> {
+                        denebClient?.let { client ->
+                            DenebMailScreen(
+                                client = client,
+                                onBack = { navController.navigateUp() },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
                     }
                 }
             }
