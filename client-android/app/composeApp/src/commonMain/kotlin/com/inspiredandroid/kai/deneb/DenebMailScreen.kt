@@ -208,7 +208,7 @@ fun DenebMailScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MailRow(
+internal fun MailRow(
     message: MailMessage,
     selecting: Boolean,
     isSelected: Boolean,
