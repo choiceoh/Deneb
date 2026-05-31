@@ -46,6 +46,7 @@ import com.inspiredandroid.kai.deneb.DenebMailScreen
 import com.inspiredandroid.kai.deneb.DenebPeopleScreen
 import com.inspiredandroid.kai.deneb.DenebPersonScreen
 import com.inspiredandroid.kai.deneb.DenebSearchScreen
+import com.inspiredandroid.kai.deneb.DenebTopicDocScreen
 import com.inspiredandroid.kai.deneb.DenebWikiPageScreen
 import com.inspiredandroid.kai.tools.CalendarPermissionController
 import com.inspiredandroid.kai.tools.NotificationPermissionController
@@ -120,6 +121,10 @@ object DenebPeople
 @Serializable
 @SerialName("deneb_person")
 data class DenebPerson(val sender: String)
+
+@Serializable
+@SerialName("deneb_topic_doc")
+data class DenebTopicDoc(val name: String)
 
 @Composable
 fun App(
@@ -296,6 +301,8 @@ private fun AppContent(
                             appSettings = appSettings,
                             denebClient = denebClient,
                             onBack = { navController.navigateUp() },
+                            onOpenPerson = { sender -> navController.navigate(DenebPerson(sender)) },
+                            onOpenTopicDoc = { name -> navController.navigate(DenebTopicDoc(name)) },
                             onOpenKaiSettings = { navController.navigate(Settings) },
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
                         )
@@ -365,6 +372,16 @@ private fun AppContent(
                             DenebPersonScreen(
                                 client = client,
                                 sender = entry.toRoute<DenebPerson>().sender,
+                                onBack = { navController.navigateUp() },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebTopicDoc> { entry ->
+                        denebClient?.let { client ->
+                            DenebTopicDocScreen(
+                                client = client,
+                                name = entry.toRoute<DenebTopicDoc>().name,
                                 onBack = { navController.navigateUp() },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )

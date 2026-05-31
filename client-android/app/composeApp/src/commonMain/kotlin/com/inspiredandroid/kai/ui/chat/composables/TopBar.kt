@@ -97,16 +97,6 @@ internal fun TopBar(
             }
             IconButton(
                 modifier = Modifier.handCursor(),
-                onClick = onOpenPeople,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Group,
-                    contentDescription = "사람",
-                    tint = MaterialTheme.colorScheme.onBackground,
-                )
-            }
-            IconButton(
-                modifier = Modifier.handCursor(),
                 onClick = onOpenMail,
             ) {
                 Icon(

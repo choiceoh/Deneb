@@ -450,6 +450,21 @@ class DenebGatewayClient(
         )
     }
 
+    /** Topic doc files (`miniapp.topicdocs.list_files`). */
+    suspend fun fetchTopicDocs(): List<TopicDocFile> {
+        val p = callRpc<TopicDocsListPayload>("miniapp.topicdocs.list_files", buildJsonObject {}) ?: return emptyList()
+        return p.files.filter { it.name.isNotBlank() }.map { TopicDocFile(it.name, it.modified) }
+    }
+
+    /** Read one topic doc (`miniapp.topicdocs.read_file`). */
+    suspend fun readTopicDoc(name: String): TopicDocContent? {
+        val p = callRpc<TopicDocReadPayload>(
+            "miniapp.topicdocs.read_file",
+            buildJsonObject { put("name", name) },
+        ) ?: return null
+        return TopicDocContent(p.name.ifBlank { name }, p.content, p.modified)
+    }
+
     /** People ranked by recent message volume (`miniapp.people.list`). */
     suspend fun fetchPeople(): List<PersonHit> {
         val p = callRpc<PeopleListPayload>(
@@ -771,6 +786,15 @@ class DenebGatewayClient(
     private data class PeopleListPayload(val people: List<SearchPersonRow> = emptyList())
 
     @Serializable
+    private data class TopicDocsListPayload(val files: List<TopicDocRow> = emptyList())
+
+    @Serializable
+    private data class TopicDocRow(val name: String = "", val size: Long = 0, val modified: String = "")
+
+    @Serializable
+    private data class TopicDocReadPayload(val name: String = "", val content: String = "", val modified: String = "")
+
+    @Serializable
     private data class WikiPagePayload(
         val path: String = "",
         val title: String = "",
@@ -873,6 +897,12 @@ data class SearchResults(
 data class SearchHit(val path: String, val title: String, val snippet: String, val category: String)
 
 data class PersonHit(val name: String, val email: String, val messageCount: Int, val lastSubject: String)
+
+/** A topic doc file in the hub list. */
+data class TopicDocFile(val name: String, val modified: String)
+
+/** A topic doc's content for the read view. */
+data class TopicDocContent(val name: String, val content: String, val modified: String)
 
 /** Full wiki/memory page for the page view. */
 data class WikiPage(
