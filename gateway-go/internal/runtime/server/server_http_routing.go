@@ -14,6 +14,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /readyz", s.handleReady)
 	mux.HandleFunc("POST /api/cron/run", s.handleCronRun)
 	mux.HandleFunc("POST /api/v1/miniapp/rpc", s.handleMiniappRPC)
+	mux.HandleFunc("POST /api/v1/miniapp/chat/stream", s.handleMiniappChatStream)
 	mux.HandleFunc("GET /api/v1/miniapp/gmail/attachment", s.handleMiniappGmailAttachment)
 
 	// Mini App static assets (Vite-built bundle embedded via //go:embed).
@@ -46,6 +47,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("/readyz", methodNotAllowed)
 	mux.HandleFunc("/api/cron/run", methodNotAllowed)
 	mux.HandleFunc("/api/v1/miniapp/rpc", methodNotAllowed)
+	mux.HandleFunc("/api/v1/miniapp/chat/stream", methodNotAllowed)
 	mux.HandleFunc("/api/v1/miniapp/gmail/attachment", methodNotAllowed)
 	// Catch-all handler: root fallback.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

@@ -18,14 +18,20 @@ import io.github.vinceglb.filekit.PlatformFile
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.encodeURLParameter
+import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.utils.io.readUTF8Line
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -137,17 +143,48 @@ class DenebGatewayClient(
         if (displayText.isNotEmpty()) {
             _chatHistory.update { it + History(role = History.Role.USER, content = displayText) }
         }
-        val reply = runCatching { send(sendText) }
-            .getOrElse { GatewayReply("⚠️ ${it.message ?: "gateway request failed"}") }
-        _chatHistory.update {
-            it + History(
-                role = History.Role.ASSISTANT,
-                content = reply.text,
-                // Mirrors Kai's fallback badge: show which model answered when the
-                // gateway fell back from its main model to a fallback role.
-                fallbackServiceName = if (reply.fellBack && reply.model.isNotBlank()) reply.model else null,
-            )
+
+        // Append a placeholder assistant bubble and grow it as deltas stream in.
+        // Replacement is keyed by id so concurrent history edits stay safe.
+        val assistantId = Uuid.random().toString()
+        _chatHistory.update { it + History(id = assistantId, role = History.Role.ASSISTANT, content = "") }
+        val accumulated = StringBuilder()
+        val replaceAssistant: (String, String?) -> Unit = { text, fallback ->
+            _chatHistory.update { list ->
+                list.map {
+                    if (it.id == assistantId) it.copy(content = text, fallbackServiceName = fallback) else it
+                }
+            }
         }
+
+        val reply = try {
+            sendStreaming(sendText) { delta ->
+                accumulated.append(delta)
+                replaceAssistant(accumulated.toString(), null)
+            }
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (e: Exception) {
+            // Older gateway without the stream endpoint, or a mid-stream failure.
+            // Only retry through the blocking RPC when nothing streamed yet, so a
+            // partial answer is never discarded or double-generated.
+            if (accumulated.isEmpty()) {
+                runCatching { send(sendText) }
+                    .getOrElse { GatewayReply("⚠️ ${it.message ?: "gateway request failed"}") }
+            } else {
+                GatewayReply(text = accumulated.toString())
+            }
+        }
+
+        // Finalize: canonical text + fallback badge. Fall back to the streamed
+        // accumulation if the gateway returned empty terminal text.
+        val finalText = reply.text.ifBlank { accumulated.toString() }
+        replaceAssistant(
+            finalText.ifBlank { "⚠️ 빈 응답" },
+            // Mirrors Kai's fallback badge: show which model answered when the
+            // gateway fell back from its main model to a fallback role.
+            if (reply.fellBack && reply.model.isNotBlank()) reply.model else null,
+        )
     }
 
     private fun formatCallback(submission: UiSubmission): String = buildString {
@@ -739,6 +776,87 @@ class DenebGatewayClient(
         }
     }
 
+    /**
+     * Streaming counterpart of [send]: POSTs to the gateway's SSE chat endpoint
+     * and invokes [onDelta] with each assistant text chunk as it arrives. The
+     * terminal `done` frame carries the canonical text + which model answered,
+     * returned as the [GatewayReply]. Throws on transport failure or a server
+     * `error` frame so [ask] can fall back to the blocking RPC.
+     *
+     * SSE is parsed by hand off the response channel (no Ktor SSE plugin): lines
+     * accumulate per frame and dispatch on the blank-line separator. Comment
+     * lines (": keepalive") are ignored. The request timeout is disabled because
+     * an agent turn (tool calls included) can outlast the default window.
+     */
+    private suspend fun sendStreaming(message: String, onDelta: (String) -> Unit): GatewayReply {
+        if (clientToken.isEmpty()) {
+            return GatewayReply("⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요.")
+        }
+        var model = ""
+        var fellBack = false
+        var doneText: String? = null
+        http.preparePost("$gatewayUrl/api/v1/miniapp/chat/stream") {
+            header(CLIENT_TOKEN_HEADER, clientToken)
+            header("Accept", "text/event-stream")
+            contentType(ContentType.Application.Json)
+            setBody(SendParams(message = message, sessionKey = sessionKey))
+            timeout {
+                // No overall request cap: an agent turn (tool calls included) can
+                // outlast any fixed window. Long.MAX_VALUE is the plugin's
+                // "infinite" sentinel. The 15s server keepalive keeps the socket
+                // from idling out within STREAM_SOCKET_TIMEOUT_MS.
+                requestTimeoutMillis = Long.MAX_VALUE
+                socketTimeoutMillis = STREAM_SOCKET_TIMEOUT_MS
+            }
+        }.execute { response ->
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("stream HTTP ${response.status.value}")
+            }
+            val channel = response.bodyAsChannel()
+            var event = ""
+            val data = StringBuilder()
+            while (!channel.isClosedForRead) {
+                val line = channel.readUTF8Line() ?: break
+                when {
+                    line.startsWith(":") -> Unit // comment / keepalive
+                    line.startsWith("event:") -> event = line.removePrefix("event:").trim()
+                    line.startsWith("data:") -> {
+                        if (data.isNotEmpty()) data.append('\n')
+                        data.append(line.removePrefix("data:").trimStart())
+                    }
+                    line.isEmpty() -> {
+                        when (event) {
+                            "delta" -> {
+                                val d = runCatching {
+                                    jsonCodec.decodeFromString(DeltaEvent.serializer(), data.toString()).delta
+                                }.getOrNull()
+                                if (!d.isNullOrEmpty()) onDelta(d)
+                            }
+                            "done" -> {
+                                runCatching {
+                                    jsonCodec.decodeFromString(DoneEvent.serializer(), data.toString())
+                                }.getOrNull()?.let {
+                                    doneText = it.text
+                                    model = it.model
+                                    fellBack = it.fellBack
+                                }
+                            }
+                            "error" -> {
+                                val msg = runCatching {
+                                    jsonCodec.decodeFromString(ErrorEvent.serializer(), data.toString()).error
+                                }.getOrNull() ?: "gateway stream error"
+                                throw IllegalStateException(msg)
+                            }
+                        }
+                        event = ""
+                        data.clear()
+                    }
+                }
+            }
+        }
+        return GatewayReply(text = doneText ?: "", model = model, fellBack = fellBack)
+    }
+
     private suspend fun fetchRecentSessions(): List<Conversation> {
         val payload = callRpc<RecentPayload>(
             "miniapp.sessions.recent",
@@ -830,6 +948,16 @@ class DenebGatewayClient(
         val model: String = "",
         val fellBack: Boolean = false,
     )
+
+    // SSE frame payloads from POST /api/v1/miniapp/chat/stream.
+    @Serializable
+    private data class DeltaEvent(val delta: String = "")
+
+    @Serializable
+    private data class DoneEvent(val text: String = "", val model: String = "", val fellBack: Boolean = false)
+
+    @Serializable
+    private data class ErrorEvent(val error: String = "")
 
     @Serializable
     private data class RpcReq(val id: String, val method: String, val params: JsonObject)
@@ -1087,6 +1215,10 @@ class DenebGatewayClient(
         // LAN/Tailscale URL under KEY_URL.
         const val DEFAULT_URL = "http://10.0.2.2:18789"
         const val REQUEST_TIMEOUT_MS = 180_000L
+
+        // Max idle between bytes on the chat SSE stream. The server emits a
+        // keepalive comment every 15s, so this only trips on a real stall.
+        const val STREAM_SOCKET_TIMEOUT_MS = 120_000L
     }
 }
 
