@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import com.inspiredandroid.kai.data.AppSettings
 import com.inspiredandroid.kai.data.DataRepository
@@ -31,6 +32,7 @@ import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.dialogs.init
 import nl.marc_apps.tts.TextToSpeechEngine
 import nl.marc_apps.tts.rememberTextToSpeechOrNull
+import kotlinx.coroutines.launch
 import org.koin.android.ext.android.get
 
 class MainActivity : ComponentActivity() {
@@ -40,6 +42,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         FileKit.init(this)
         handleDeepLinkIntent(intent)
+        handleShareIntent(intent)
 
         val dynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
         val appSettings: AppSettings = get()
@@ -122,6 +125,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleDeepLinkIntent(intent)
+        handleShareIntent(intent)
     }
 
     private fun handleDeepLinkIntent(intent: Intent?) {
@@ -132,6 +136,22 @@ class MainActivity : ComponentActivity() {
             // the deep-link after ChatViewModel has already consumed it.
             intent.removeExtra(EXTRA_OPEN_HEARTBEAT)
         }
+    }
+
+    // Share-sheet capture: text shared from any app (a KakaoTalk message, a URL,
+    // an article excerpt) goes straight into the Deneb chat for triage. Home is
+    // the chat screen, so the capture appears immediately on launch. This is a
+    // native-only capability the Telegram bot can't offer.
+    private fun handleShareIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND) return
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
+        if (text.isEmpty()) return
+        val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)?.trim().orEmpty()
+        val captured = if (subject.isNotEmpty()) "📥 공유: $subject\n\n$text" else "📥 공유됨\n\n$text"
+        val dataRepository: DataRepository = get()
+        lifecycleScope.launch { dataRepository.ask(captured, emptyList(), null) }
+        // Clear so a configuration change doesn't re-send the capture.
+        intent.removeExtra(Intent.EXTRA_TEXT)
     }
 }
 
