@@ -434,7 +434,7 @@ private fun PeopleTab(client: DenebGatewayClient, onOpenPerson: (String) -> Unit
         else -> LazyColumn(Modifier.fillMaxSize()) {
             items(list, key = { it.email.ifBlank { it.name } }) { person ->
                 Column(
-                    Modifier.fillMaxWidth().clickable { onOpenPerson(person.email.ifBlank { person.name }) }
+                    Modifier.animateItem().fillMaxWidth().clickable { onOpenPerson(person.email.ifBlank { person.name }) }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -470,7 +470,7 @@ private fun CronTab(client: DenebGatewayClient, onOpenCron: (String) -> Unit) {
     LazyColumn(Modifier.fillMaxSize()) {
         items(crons, key = { it.id }) { cron ->
             Column(
-                Modifier.fillMaxWidth().clickable { onOpenCron(cron.id) }.padding(horizontal = 16.dp, vertical = 14.dp),
+                Modifier.animateItem().fillMaxWidth().clickable { onOpenCron(cron.id) }.padding(horizontal = 16.dp, vertical = 14.dp),
             ) {
                 Text(
                     cron.description.ifBlank { cron.id },
@@ -595,7 +595,7 @@ private fun TopicDocsList(list: List<TopicDocFile>?, onOpenTopicDoc: (String) ->
         else -> LazyColumn(Modifier.fillMaxSize()) {
             items(list, key = { it.name }) { doc ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().clickable { onOpenTopicDoc(doc.name) }.padding(horizontal = 16.dp, vertical = 14.dp),
+                    modifier = Modifier.animateItem().fillMaxWidth().clickable { onOpenTopicDoc(doc.name) }.padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(

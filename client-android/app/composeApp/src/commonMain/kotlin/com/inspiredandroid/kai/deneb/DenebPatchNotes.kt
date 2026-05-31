@@ -21,6 +21,14 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.6",
+        code = 129,
+        highlights = listOf(
+            "접근성 — 입력바 아이콘(보내기·중지·첨부)에 TalkBack 라벨",
+            "설정 탭 목록(사람·크론·토픽문서)도 부드럽게 등장하는 모션",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.5",
         code = 128,
         highlights = listOf(
