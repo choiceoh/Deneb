@@ -44,6 +44,7 @@ fun DenebSearchScreen(
     client: DenebGatewayClient,
     onBack: () -> Unit,
     onOpenWiki: (String) -> Unit = {},
+    onOpenPerson: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var query by remember { mutableStateOf("") }
@@ -121,7 +122,7 @@ fun DenebSearchScreen(
                             ResultRow(
                                 "${person.name}  ·  ${person.messageCount}통",
                                 person.lastSubject,
-                                onClick = null,
+                                onClick = { onOpenPerson(person.email.ifBlank { person.name }) },
                             )
                         }
                     }

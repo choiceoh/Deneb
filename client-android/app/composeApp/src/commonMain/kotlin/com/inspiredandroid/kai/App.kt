@@ -343,6 +343,7 @@ private fun AppContent(
                                 client = client,
                                 onBack = { navController.navigateUp() },
                                 onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
+                                onOpenPerson = { sender -> navController.navigate(DenebPerson(sender)) },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }
@@ -373,6 +374,8 @@ private fun AppContent(
                                 client = client,
                                 sender = entry.toRoute<DenebPerson>().sender,
                                 onBack = { navController.navigateUp() },
+                                onOpenMail = { id -> navController.navigate(DenebMailDetail(id)) },
+                                onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }

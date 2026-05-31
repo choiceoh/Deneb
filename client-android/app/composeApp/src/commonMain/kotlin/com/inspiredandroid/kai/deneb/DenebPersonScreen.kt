@@ -1,5 +1,6 @@
 package com.inspiredandroid.kai.deneb
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,23 +28,29 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /**
- * Person relationship context (`miniapp.gmail.sender_context`): recent volume
- * and the wiki pages that mention this person. Surface-wrapped for dark mode.
+ * Person dossier (`miniapp.gmail.sender_context` + `list_recent from:`): recent
+ * volume, the wiki pages that mention them (tap -> page), and their recent
+ * messages (tap -> mail detail). Surface-wrapped for dark mode.
  */
 @Composable
 fun DenebPersonScreen(
     client: DenebGatewayClient,
     sender: String,
     onBack: () -> Unit,
+    onOpenMail: (String) -> Unit = {},
+    onOpenWiki: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var ctx by remember(sender) { mutableStateOf<SenderContext?>(null) }
     var loadFailed by remember(sender) { mutableStateOf(false) }
+    var recent by remember(sender) { mutableStateOf<List<MailMessage>?>(null) }
 
     LaunchedEffect(sender) {
         val c = client.fetchSenderContext(sender)
         ctx = c
         loadFailed = c == null
+        val email = c?.email?.ifBlank { sender } ?: sender
+        recent = client.fetchRecentFromSender(email)
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -60,55 +67,78 @@ fun DenebPersonScreen(
             val c = ctx
             if (c == null) {
                 if (loadFailed) DenebError("정보를 불러오지 못했습니다.") else DenebLoading()
-            } else {
+                return@Column
+            }
+
+            Text(
+                c.displayName,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (c.email.isNotBlank()) {
+                Text(c.email, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (c.recentCount > 0) {
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    c.displayName,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
+                    "최근 ${c.windowDays}일 · ${c.recentCount}통 수신",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                if (c.email.isNotBlank()) {
-                    Text(
-                        c.email,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (c.recentCount > 0) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "최근 ${c.windowDays}일 · ${c.recentCount}통 수신",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-                if (c.wikiFacts.isNotBlank()) {
-                    Spacer(Modifier.height(12.dp))
-                    Text(c.wikiFacts, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                }
-                if (c.wikiHits.isNotEmpty()) {
-                    Spacer(Modifier.height(16.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Spacer(Modifier.height(12.dp))
-                    Text("관련 위키", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                    c.wikiHits.forEach { hit ->
-                        Spacer(Modifier.height(8.dp))
+            }
+            if (c.wikiFacts.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                DenebMarkdown(c.wikiFacts)
+            }
+
+            if (c.wikiHits.isNotEmpty()) {
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(Modifier.height(12.dp))
+                Text("관련 위키", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                c.wikiHits.forEach { hit ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .then(if (hit.path.isNotBlank()) Modifier.clickable { onOpenWiki(hit.path) } else Modifier)
+                            .padding(vertical = 8.dp),
+                    ) {
                         Text(hit.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                         if (hit.summary.isNotBlank()) {
                             Text(hit.summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
-                if (c.recentCount == 0 && c.wikiHits.isEmpty() && c.wikiFacts.isBlank()) {
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "알려진 컨텍스트가 없습니다.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+            }
+
+            val mail = recent
+            if (!mail.isNullOrEmpty()) {
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(Modifier.height(12.dp))
+                Text("최근 메일 ${mail.size}", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.height(4.dp))
+                mail.forEach { m ->
+                    MailRow(
+                        message = m,
+                        selecting = false,
+                        isSelected = false,
+                        onTap = { onOpenMail(m.id) },
+                        onLongPress = {},
                     )
                 }
-                Spacer(Modifier.height(24.dp))
             }
+
+            if (c.recentCount == 0 && c.wikiHits.isEmpty() && c.wikiFacts.isBlank() && mail.isNullOrEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "알려진 컨텍스트가 없습니다.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(24.dp))
         }
     }
 }

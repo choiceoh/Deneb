@@ -442,9 +442,24 @@ class DenebGatewayClient(
             email = p.email,
             recentCount = p.recent?.count ?: 0,
             windowDays = p.recent?.windowDays ?: 0,
-            wikiHits = p.wikiHits.map { SenderWikiHit(it.title.ifBlank { it.path }, it.summary, it.category) },
+            wikiHits = p.wikiHits.map { SenderWikiHit(it.title.ifBlank { it.path }, it.summary, it.category, it.path) },
             wikiFacts = p.wikiFacts,
         )
+    }
+
+    /** Recent messages from a specific sender (`list_recent` with a from: query). */
+    suspend fun fetchRecentFromSender(email: String, limit: Int = 15): List<MailMessage> {
+        if (email.isBlank()) return emptyList()
+        val payload = callRpc<MailListPayload>(
+            "miniapp.gmail.list_recent",
+            buildJsonObject {
+                put("query", "from:\"$email\"")
+                put("limit", limit)
+            },
+        ) ?: return emptyList()
+        return payload.messages
+            .filter { it.id.isNotBlank() }
+            .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread) }
     }
 
     suspend fun refreshCalendar() {
@@ -993,7 +1008,7 @@ data class SenderContext(
     val wikiFacts: String,
 )
 
-data class SenderWikiHit(val title: String, val summary: String, val category: String)
+data class SenderWikiHit(val title: String, val summary: String, val category: String, val path: String = "")
 
 /** An upcoming calendar event shown in the native calendar screen. */
 data class CalendarEvent(
