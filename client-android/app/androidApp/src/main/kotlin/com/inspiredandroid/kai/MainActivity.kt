@@ -4,9 +4,11 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
@@ -38,12 +40,26 @@ import org.koin.android.ext.android.get
 
 class MainActivity : ComponentActivity() {
 
+    // System speech-to-text result -> Deneb chat (the 음성 캡처 app shortcut).
+    private val speechLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val spoken = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                ?.trim()
+                .orEmpty()
+            if (spoken.isNotEmpty()) {
+                lifecycleScope.launch { get<DataRepository>().ask("🎤 $spoken", emptyList(), null) }
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         FileKit.init(this)
         handleDeepLinkIntent(intent)
         handleShareIntent(intent)
+        handleVoiceIntent(intent)
 
         val dynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
         val appSettings: AppSettings = get()
@@ -127,6 +143,21 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         handleDeepLinkIntent(intent)
         handleShareIntent(intent)
+        handleVoiceIntent(intent)
+    }
+
+    // Voice capture (음성 캡처 app shortcut): launch the system speech recognizer;
+    // its transcript is sent to the Deneb chat by speechLauncher. No RECORD_AUDIO
+    // permission needed — the recognizer activity handles capture.
+    private fun handleVoiceIntent(intent: Intent?) {
+        if (intent?.data?.toString() != "deneb://voice") return
+        intent.data = null // consume so a configuration change doesn't re-launch
+        val recognize = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Deneb에게 말하세요")
+        }
+        runCatching { speechLauncher.launch(recognize) }
     }
 
     private fun handleDeepLinkIntent(intent: Intent?) {
