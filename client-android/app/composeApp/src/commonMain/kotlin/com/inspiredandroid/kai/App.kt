@@ -393,6 +393,7 @@ private fun AppContent(
                                 client = client,
                                 messageId = entry.toRoute<DenebMailDetail>().id,
                                 onBack = { navController.navigateUp() },
+                                onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }

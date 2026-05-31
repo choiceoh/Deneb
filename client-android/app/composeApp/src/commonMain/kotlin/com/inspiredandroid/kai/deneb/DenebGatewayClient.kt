@@ -24,6 +24,7 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import io.ktor.http.encodeURLParameter
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,8 +36,10 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -342,7 +345,9 @@ class DenebGatewayClient(
             date = row.date,
             body = row.body,
             bodyTotal = row.bodyTotal,
-            attachments = row.attachments.map { it.filename.ifBlank { it.mimeType } },
+            attachments = row.attachments
+                .filter { it.id.isNotBlank() }
+                .map { MailAttachment(it.id, it.filename.ifBlank { it.mimeType }, it.mimeType, it.size) },
         )
     }
 
@@ -369,20 +374,62 @@ class DenebGatewayClient(
         return ok
     }
 
-    /** Run (or fetch cached) AI analysis for a message; returns the analysis text. */
-    suspend fun analyzeMail(id: String): String? =
-        callRpc<AnalyzePayload>("miniapp.gmail.analyze", buildJsonObject { put("id", id) })
-            ?.analysis?.ifBlank { null }
+    /** Instant cached analysis (no LLM call) if one was already produced on poll or earlier. */
+    suspend fun fetchCachedAnalysis(id: String): MailAnalysis? =
+        callRpc<AnalyzePayload>("miniapp.gmail.analysis_cached", buildJsonObject { put("id", id) })?.toAnalysis()
 
-    /** Ask a free-form question about a message; returns the answer text. */
-    suspend fun askMail(id: String, question: String): String? =
+    /** Run AI analysis; force=true reruns the LLM instead of returning the cached result. */
+    suspend fun analyzeMail(id: String, force: Boolean = false): MailAnalysis? =
+        callRpc<AnalyzePayload>(
+            "miniapp.gmail.analyze",
+            buildJsonObject {
+                put("id", id)
+                if (force) put("force", true)
+            },
+        )?.toAnalysis()
+
+    private fun AnalyzePayload.toAnalysis(): MailAnalysis? =
+        if (analysis.isBlank()) {
+            null
+        } else {
+            MailAnalysis(
+                text = analysis,
+                related = relatedProjects.map { RelatedProject(it.path, it.title, it.summary) },
+                cached = cached,
+                createdAt = createdAt,
+                durationMs = durationMs,
+            )
+        }
+
+    /** Ask a follow-up about a message; prior Q&A is sent as history for multi-turn context. */
+    suspend fun askMail(id: String, question: String, history: List<Pair<String, String>> = emptyList()): String? =
         callRpc<AskPayload>(
             "miniapp.gmail.ask",
             buildJsonObject {
                 put("id", id)
                 put("question", question)
+                putJsonArray("history") {
+                    history.forEach { (q, a) ->
+                        addJsonObject {
+                            put("question", q)
+                            put("answer", a)
+                        }
+                    }
+                }
             },
         )?.answer?.ifBlank { null }
+
+    /**
+     * Browser-openable attachment download URL. The download endpoint can't read
+     * the X-Deneb-Client-Token header from a browser opening a link, so the token
+     * rides in the query string (acceptable in this single-user local setup).
+     */
+    fun attachmentUrl(messageId: String, att: MailAttachment): String {
+        fun e(s: String) = s.encodeURLParameter()
+        return "$gatewayUrl/api/v1/miniapp/gmail/attachment" +
+            "?messageId=${e(messageId)}&attachmentId=${e(att.id)}" +
+            "&filename=${e(att.filename)}&mimeType=${e(att.mimeType)}&clientToken=${e(clientToken)}"
+    }
 
     /** Fetch wiki / relationship context for a message's sender. */
     suspend fun fetchSenderContext(sender: String): SenderContext? {
@@ -752,7 +799,16 @@ class DenebGatewayClient(
     private data class OkPayload(val ok: Boolean = false)
 
     @Serializable
-    private data class AnalyzePayload(val analysis: String = "", val cached: Boolean = false)
+    private data class ProjectRefRow(val path: String = "", val title: String = "", val summary: String = "")
+
+    @Serializable
+    private data class AnalyzePayload(
+        val analysis: String = "",
+        val relatedProjects: List<ProjectRefRow> = emptyList(),
+        val cached: Boolean = false,
+        val createdAt: String = "",
+        val durationMs: Long = 0,
+    )
 
     @Serializable
     private data class AskPayload(val answer: String = "")
@@ -904,7 +960,27 @@ data class MailDetail(
     val date: String,
     val body: String,
     val bodyTotal: Int,
-    val attachments: List<String>,
+    val attachments: List<MailAttachment>,
+)
+
+/** A downloadable attachment on a message (id + size kept for download). */
+data class MailAttachment(
+    val id: String,
+    val filename: String,
+    val mimeType: String,
+    val size: Int,
+)
+
+/** A wiki project page cited by an analysis, surfaced as a tappable chip. */
+data class RelatedProject(val path: String, val title: String, val summary: String)
+
+/** Result of an AI mail analysis (fresh or cached). */
+data class MailAnalysis(
+    val text: String,
+    val related: List<RelatedProject> = emptyList(),
+    val cached: Boolean = false,
+    val createdAt: String = "",
+    val durationMs: Long = 0,
 )
 
 /** Sender relationship context (recent volume + cited wiki pages). */
