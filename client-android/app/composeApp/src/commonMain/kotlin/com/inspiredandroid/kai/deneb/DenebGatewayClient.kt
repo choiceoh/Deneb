@@ -614,6 +614,50 @@ class DenebGatewayClient(
             .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.hasMeet) }
     }
 
+    /**
+     * One-shot glanceable summary for the home-screen widget: the next upcoming
+     * event and the unread-mail count. Returns a not-configured summary when the
+     * gateway token is unset, and ok=false on a fetch error so the widget shows a
+     * quiet fallback instead of stale data.
+     */
+    suspend fun widgetSummary(): WidgetSummary {
+        if (clientToken.isEmpty() || gatewayUrl.isBlank()) {
+            return WidgetSummary(configured = false)
+        }
+        return runCatching {
+            val cal = callRpc<CalListPayload>(
+                "miniapp.calendar.list_upcoming",
+                buildJsonObject {
+                    put("hoursAhead", 168)
+                    put("limit", 5)
+                },
+            )
+            val next = cal?.events?.firstOrNull { it.id.isNotBlank() }
+            val meeting = next?.let { formatMeeting(it.summary, it.start, it.allDay) }.orEmpty()
+
+            val mail = callRpc<MailListPayload>(
+                "miniapp.gmail.list_recent",
+                buildJsonObject { put("limit", 25) },
+            )
+            val unread = mail?.messages?.count { it.isUnread } ?: 0
+
+            WidgetSummary(meeting = meeting, unread = unread)
+        }.getOrElse { WidgetSummary(ok = false) }
+    }
+
+    // formatMeeting renders "M/D HH:mm · title" from an RFC3339 start using only
+    // string ops, to keep this widget hot-path free of a date-library dependency.
+    private fun formatMeeting(title: String, start: String, allDay: Boolean): String {
+        val t = title.trim().ifBlank { "일정" }
+        val md = runCatching {
+            val parts = start.take(10).split("-") // 2026-05-31
+            "${parts[1].toInt()}/${parts[2].toInt()}"
+        }.getOrDefault("")
+        val hm = if (!allDay && start.length >= 16 && start[10] == 'T') start.substring(11, 16) else ""
+        val whenStr = listOf(md, hm).filter { it.isNotBlank() }.joinToString(" ")
+        return if (whenStr.isBlank()) t else "$whenStr · $t"
+    }
+
     /** Full calendar event (attendees, Meet link, description) for the detail screen. */
     suspend fun fetchCalendarEvent(id: String): CalendarEventDetail? {
         val p = callRpc<CalEventPayload>(
@@ -1414,6 +1458,14 @@ data class SenderContext(
 )
 
 data class SenderWikiHit(val title: String, val summary: String, val category: String, val path: String = "")
+
+/** Glanceable home-widget data: next-meeting line + unread-mail count. */
+data class WidgetSummary(
+    val meeting: String = "",
+    val unread: Int = 0,
+    val configured: Boolean = true,
+    val ok: Boolean = true,
+)
 
 /** An upcoming calendar event shown in the native calendar screen. */
 data class CalendarEvent(

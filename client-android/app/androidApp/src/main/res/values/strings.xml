@@ -5,4 +5,5 @@
     <string name="daemon_notification_text">Daemon is running</string>
     <string name="shortcut_voice_short">음성 캡처</string>
     <string name="shortcut_voice_long">음성으로 Deneb에 캡처</string>
+    <string name="widget_label">Deneb — 다음 일정·미읽음</string>
 </resources>
