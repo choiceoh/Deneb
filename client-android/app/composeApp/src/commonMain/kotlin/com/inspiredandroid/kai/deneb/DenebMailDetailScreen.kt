@@ -58,10 +58,13 @@ fun DenebMailDetailScreen(
     var askText by remember(messageId) { mutableStateOf("") }
     var asking by remember(messageId) { mutableStateOf(false) }
     val qa = remember(messageId) { mutableStateListOf<Pair<String, String>>() }
+    var loadFailed by remember(messageId) { mutableStateOf(false) }
 
     LaunchedEffect(messageId) {
-        detail = client.fetchMailDetail(messageId)
-        client.markMailRead(messageId)
+        val d = client.fetchMailDetail(messageId)
+        detail = d
+        loadFailed = d == null
+        if (d != null) client.markMailRead(messageId)
     }
 
     Column(
@@ -82,30 +85,31 @@ fun DenebMailDetailScreen(
 
         val mail = detail
         if (mail == null) {
-            DenebLoading()
+            if (loadFailed) {
+                DenebError("메일을 불러오지 못했습니다.")
+            } else {
+                DenebLoading()
+            }
         } else {
-            Row(verticalAlignment = Alignment.Top) {
-                DenebAvatar(displayName(mail.from), 44.dp)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
+            Column(Modifier.fillMaxWidth()) {
+                Text(
+                    mail.subject.ifBlank { "(제목 없음)" },
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    mail.from,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (mail.date.isNotBlank()) {
                     Text(
-                        mail.subject.ifBlank { "(제목 없음)" },
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        mail.from,
-                        style = MaterialTheme.typography.bodyMedium,
+                        mail.date.take(16).replace('T', ' '),
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (mail.date.isNotBlank()) {
-                        Text(
-                            mail.date.take(16).replace('T', ' '),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -132,7 +136,7 @@ fun DenebMailDetailScreen(
                     },
                     enabled = !analyzing,
                     modifier = Modifier.weight(1f),
-                ) { Text(if (analyzing) "분석 중…" else "🤖 AI 분석") }
+                ) { Text(if (analyzing) "분석 중…" else "AI 분석") }
                 OutlinedButton(
                     onClick = {
                         scope.launch {
@@ -143,7 +147,7 @@ fun DenebMailDetailScreen(
                     },
                     enabled = !loadingSender,
                     modifier = Modifier.weight(1f),
-                ) { Text(if (loadingSender) "불러오는 중…" else "👤 발신자") }
+                ) { Text(if (loadingSender) "불러오는 중…" else "발신자") }
             }
 
             if (analyzing || analysis != null) {

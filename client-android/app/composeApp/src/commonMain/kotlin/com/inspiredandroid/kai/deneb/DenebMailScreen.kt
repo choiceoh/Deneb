@@ -225,39 +225,38 @@ private fun MailRow(
                 },
             )
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
     ) {
-        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-            if (selecting) {
-                Checkbox(checked = isSelected, onCheckedChange = null)
-            } else {
-                DenebAvatar(senderName(message.from))
-            }
+        if (selecting) {
+            Checkbox(
+                checked = isSelected,
+                onCheckedChange = null,
+                modifier = Modifier.padding(end = 10.dp),
+            )
         }
-        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (message.unread) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
+                    Spacer(Modifier.width(6.dp))
+                }
                 Text(
-                    senderName(message.from),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = if (message.unread) FontWeight.Bold else FontWeight.Normal,
+                    senderName(message.from).ifBlank { "(발신자 없음)" },
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (message.unread) FontWeight.Bold else FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                if (message.unread) {
-                    Box(
-                        Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                }
+                Spacer(Modifier.width(8.dp))
                 Text(
                     shortDate(message.date),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(3.dp))
             Text(
                 message.subject.ifBlank { "(제목 없음)" },
                 style = MaterialTheme.typography.bodyMedium,
@@ -267,7 +266,7 @@ private fun MailRow(
                 overflow = TextOverflow.Ellipsis,
             )
             if (message.snippet.isNotBlank()) {
-                Spacer(Modifier.height(1.dp))
+                Spacer(Modifier.height(2.dp))
                 Text(
                     message.snippet,
                     style = MaterialTheme.typography.bodySmall,
