@@ -18,6 +18,7 @@ import io.github.vinceglb.filekit.PlatformFile
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -524,6 +525,29 @@ class DenebGatewayClient(
     /** Trigger a cron job immediately (`miniapp.crons.run`). */
     suspend fun runCron(id: String): Boolean =
         callRpc<JsonObject>("miniapp.crons.run", buildJsonObject { put("id", id) }) != null
+
+    /** APK + version.json are served on :19010 of the same host as the gateway. */
+    private val updateBaseUrl: String
+        get() {
+            val u = gatewayUrl.trim().removeSuffix("/")
+            val schemeEnd = u.indexOf("://").let { if (it >= 0) it + 3 else 0 }
+            val scheme = if (schemeEnd > 0) u.substring(0, schemeEnd) else "http://"
+            val host = u.substring(schemeEnd).substringBefore("/").substringBefore(":")
+            return "$scheme$host:19010"
+        }
+
+    /**
+     * Check the self-served manifest. Returns non-null only when a strictly
+     * newer build than the compiled-in [DENEB_VERSION_CODE] is published.
+     */
+    suspend fun checkUpdate(): UpdateInfo? = runCatching {
+        val m = http.get("$updateBaseUrl/version.json").body<UpdateManifest>()
+        if (m.code > DENEB_VERSION_CODE && m.url.isNotBlank()) {
+            UpdateInfo(versionName = m.name.ifBlank { m.code.toString() }, apkUrl = m.url, notes = m.notes)
+        } else {
+            null
+        }
+    }.getOrNull()
 
     private suspend fun send(message: String): String {
         if (clientToken.isEmpty()) {

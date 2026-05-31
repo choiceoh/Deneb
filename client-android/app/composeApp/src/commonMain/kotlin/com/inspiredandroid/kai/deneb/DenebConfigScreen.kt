@@ -35,6 +35,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -79,7 +80,7 @@ fun DenebConfigScreen(
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (tab) {
-                    0 -> GatewayTab(appSettings, onBack, onOpenKaiSettings)
+                    0 -> GatewayTab(appSettings, onBack, onOpenKaiSettings, denebClient)
                     1 -> denebClient?.let { ModelTab(it) }
                     2 -> denebClient?.let { PeopleTab(it, onOpenPerson) }
                     3 -> denebClient?.let { CronTab(it) }
@@ -91,9 +92,19 @@ fun DenebConfigScreen(
 }
 
 @Composable
-private fun GatewayTab(appSettings: AppSettings, onBack: () -> Unit, onOpenKaiSettings: () -> Unit) {
+private fun GatewayTab(
+    appSettings: AppSettings,
+    onBack: () -> Unit,
+    onOpenKaiSettings: () -> Unit,
+    denebClient: DenebGatewayClient?,
+) {
     var url by remember { mutableStateOf(appSettings.settings.getString(KEY_URL, "")) }
     var token by remember { mutableStateOf(appSettings.settings.getString(KEY_TOKEN, "")) }
+    val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
+    var checking by remember { mutableStateOf(false) }
+    var checked by remember { mutableStateOf(false) }
+    var update by remember { mutableStateOf<UpdateInfo?>(null) }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -158,6 +169,62 @@ private fun GatewayTab(appSettings: AppSettings, onBack: () -> Unit, onOpenKaiSe
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+        SettingsCard {
+            Text(
+                "버전",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "현재 v$DENEB_VERSION_NAME ($DENEB_VERSION_CODE)",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            val info = update
+            if (info != null) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "새 버전 v${info.versionName} 사용 가능",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                if (info.notes.isNotBlank()) {
+                    Text(
+                        info.notes,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = { uriHandler.openUri(info.apkUrl) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("다운로드 후 설치")
+                }
+            } else if (checked && !checking) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "최신 버전입니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = {
+                    val c = denebClient ?: return@OutlinedButton
+                    scope.launch {
+                        checking = true
+                        update = c.checkUpdate()
+                        checked = true
+                        checking = false
+                    }
+                },
+                enabled = !checking && denebClient != null,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (checking) "확인 중…" else "업데이트 확인") }
         }
     }
 }
