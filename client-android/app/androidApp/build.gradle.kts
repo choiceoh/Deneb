@@ -1,3 +1,5 @@
+import com.android.build.api.variant.impl.VariantOutputImpl
+
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeMultiplatform)
@@ -81,6 +83,20 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
+    }
+}
+
+// Name build artifacts with the version so a downloaded APK is self-describing
+// (e.g. deneb-2.8.1-122-fossDebug.apk) instead of the default androidApp-foss-debug.apk.
+androidComponents {
+    val versionName = libs.versions.appVersion.get()
+    val versionCode = libs.versions.android.versionCode.get()
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            (output as? VariantOutputImpl)?.outputFileName?.set(
+                "deneb-$versionName-$versionCode-${variant.name}.apk",
+            )
+        }
     }
 }
 
