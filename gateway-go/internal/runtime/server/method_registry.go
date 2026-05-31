@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
@@ -426,7 +427,8 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		// standalone app drive a turn over the miniapp.* RPC surface via
 		// SendSync, with kai-ui emission enabled (channel "client").
 		handlerchat.MiniappMethods(handlerchat.Deps{
-			Chat: hub.Chat(),
+			Chat:     hub.Chat(),
+			OcrImage: tools.OcrImageBytes,
 		}),
 		handlersession.ExecMethods(handlersession.ExecDeps{
 			Chat:       hub.Chat(),

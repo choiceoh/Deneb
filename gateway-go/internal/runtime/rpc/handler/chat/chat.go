@@ -20,6 +20,9 @@ type BroadcastFunc = rpcutil.BroadcastFunc
 type Deps struct {
 	Chat        *chatpkg.Handler
 	Broadcaster BroadcastFunc // optional; receives chat.steer_received events
+	// OcrImage OCRs a directly-shared image (native-client image capture).
+	// Optional; nil disables miniapp.capture.image.
+	OcrImage func(ctx context.Context, img []byte) (string, error)
 }
 
 // BtwDeps holds the dependencies for the chat.btw side-question RPC method.
