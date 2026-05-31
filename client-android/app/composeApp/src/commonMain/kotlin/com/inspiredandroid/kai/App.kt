@@ -236,13 +236,15 @@ private fun AppContent(
                     composable<Home> {
                         ChatScreen(
                             viewModel = chatViewModel,
-                            textToSpeech = textToSpeech,
+                            // TTS removed for Deneb — text-first client.
+                            textToSpeech = null,
                             onNavigateToSettings = {
                                 navController.navigate(DenebConfig)
                             },
                             onOpenMail = { navController.navigate(DenebMail) },
                             onOpenCalendar = { navController.navigate(DenebCalendar) },
-                            isSandboxAvailable = currentPlatform is Platform.Mobile.Android,
+                            // Deneb runs tools on the gateway; the local terminal/sandbox is irrelevant.
+                            isSandboxAvailable = false,
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
                         )
                     }
