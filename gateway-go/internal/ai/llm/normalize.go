@@ -8,7 +8,10 @@
 // Inspired by Claude Code's normalizeMessagesForAPI pattern.
 package llm
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // NormalizeMessages merges consecutive messages with the same role into a
 // single message. Content blocks are concatenated; plain text strings are
@@ -46,6 +49,60 @@ func NormalizeMessages(messages []Message) []Message {
 	}
 
 	return result
+}
+
+// DropEmptyMessages removes messages that carry no usable content — no
+// non-blank text and no structural block (tool_use, tool_result, image,
+// thinking). Anthropic rejects such messages ("... must not be empty"); they
+// are stall or compaction artifacts (e.g. a turn that timed out with zero
+// output) and carry no information. Run it before NormalizeMessages so any
+// adjacency the drop creates is merged away. The input slice is not modified.
+func DropEmptyMessages(messages []Message) []Message {
+	hasEmpty := false
+	for i := range messages {
+		if isContentEmpty(messages[i].Content) {
+			hasEmpty = true
+			break
+		}
+	}
+	if !hasEmpty {
+		return messages
+	}
+	result := make([]Message, 0, len(messages))
+	for _, m := range messages {
+		if !isContentEmpty(m.Content) {
+			result = append(result, m)
+		}
+	}
+	return result
+}
+
+// isContentEmpty reports whether a message's content has no payload that would
+// survive to the Anthropic wire: no non-blank text, no tool_use / tool_result /
+// image. A single empty text block (what sanitizeAnthropicContent emits for null
+// content) counts as empty.
+//
+// Thinking blocks are judged by their wire field (`thinking`), not `text`: some
+// persisted history stores reasoning in a thinking block's `text` field, which
+// marshalAnthropicBlocks drops (it serializes `thinking`). Such a block reaches
+// Anthropic empty, so a message made only of those is empty for our purposes and
+// must be dropped — otherwise Anthropic rejects it ("... must not be empty").
+func isContentEmpty(content json.RawMessage) bool {
+	for _, b := range contentToBlocks(content) {
+		switch b.Type {
+		case "", "text":
+			if strings.TrimSpace(b.Text) != "" {
+				return false
+			}
+		case "thinking":
+			if strings.TrimSpace(b.Thinking) != "" {
+				return false
+			}
+		default:
+			return false // tool_use / tool_result / image — meaningful
+		}
+	}
+	return true
 }
 
 // mergeContent combines two json.RawMessage content values into one block

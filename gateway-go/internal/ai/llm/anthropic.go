@@ -90,8 +90,15 @@ func buildAnthropicRequestBody(req ChatRequest) ([]byte, error) {
 	// we only need to ensure each Content payload is a JSON array of blocks
 	// (string content is also accepted by Anthropic, but normalizing to
 	// blocks keeps tool_use / tool_result handling uniform).
-	areq.Messages = make([]anthropicMessage, 0, len(req.Messages))
-	for _, m := range req.Messages {
+	// Drop empty (stall / compaction artifact) messages and merge consecutive
+	// same-role messages: Anthropic rejects empty messages ("... must not be
+	// empty") and requires strict user/assistant alternation. vLLM tolerates
+	// empties, so they accumulate in history and only break a fallback to an
+	// Anthropic-style provider (e.g. kimi-for-coding). Drop first so any
+	// adjacency the drop creates is merged away.
+	msgs := NormalizeMessages(DropEmptyMessages(req.Messages))
+	areq.Messages = make([]anthropicMessage, 0, len(msgs))
+	for _, m := range msgs {
 		content, err := sanitizeAnthropicContent(m.Content)
 		if err != nil {
 			return nil, fmt.Errorf("sanitize message content for role %q: %w", m.Role, err)
