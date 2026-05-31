@@ -3,4 +3,6 @@
     <string name="daemon_channel_name">Deneb Background Service</string>
     <string name="daemon_channel_description">Keeps Deneb running for scheduled task execution</string>
     <string name="daemon_notification_text">Daemon is running</string>
+    <string name="shortcut_voice_short">음성 캡처</string>
+    <string name="shortcut_voice_long">음성으로 Deneb에 캡처</string>
 </resources>
