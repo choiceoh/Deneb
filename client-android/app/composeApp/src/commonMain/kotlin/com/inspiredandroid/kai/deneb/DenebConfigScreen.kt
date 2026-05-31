@@ -46,9 +46,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.data.AppSettings
+import com.inspiredandroid.kai.data.NotificationRecord
+import com.inspiredandroid.kai.data.NotificationStore
+import com.inspiredandroid.kai.tools.NotificationListenerController
 import com.inspiredandroid.kai.ui.handCursor
 import com.inspiredandroid.kai.ui.settings.SettingsCard
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 
 /**
  * Deneb hub + settings as a tabbed screen (the "더보기" surface): gateway config
@@ -67,7 +71,7 @@ fun DenebConfigScreen(
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var tab by remember { mutableStateOf(0) }
-    val tabs = listOf("게이트웨이", "모델", "사람", "크론", "토픽문서")
+    val tabs = listOf("게이트웨이", "모델", "사람", "크론", "토픽문서", "알림")
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -121,6 +125,7 @@ fun DenebConfigScreen(
                     2 -> denebClient?.let { PeopleTab(it, onOpenPerson) }
                     3 -> denebClient?.let { CronTab(it, onOpenCron) }
                     4 -> denebClient?.let { TopicDocsTab(it, onOpenTopicDoc) }
+                    5 -> denebClient?.let { NotificationsTab(it) }
                 }
             }
         }
@@ -400,6 +405,83 @@ private fun CronTab(client: DenebGatewayClient, onOpenCron: (String) -> Unit) {
                 }
             }
             HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        }
+    }
+}
+
+// Android-native: list other apps' notifications the listener captured and tap
+// one to send it into the Deneb chat for triage. Cross-platform-safe — non-FOSS
+// / non-Android builds report unsupported and show a hint.
+@Composable
+private fun NotificationsTab(client: DenebGatewayClient) {
+    val controller = koinInject<NotificationListenerController>()
+    val store = koinInject<NotificationStore>()
+    val scope = rememberCoroutineScope()
+    var access by remember { mutableStateOf(controller.isAccessGranted()) }
+    var records by remember { mutableStateOf<List<NotificationRecord>>(emptyList()) }
+    var sentId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(access) {
+        if (access) records = store.getStore().sortedByDescending { it.postedAtEpochMs }
+    }
+    when {
+        !controller.isSupported() -> EmptyTab("이 빌드는 알림 캡처를 지원하지 않습니다.")
+        !access -> Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                "타 앱 알림(카톡·메일·캘린더 등)을 Deneb가 읽으려면 '알림 접근' 권한이 필요합니다. Telegram이 못 하는 네이티브 기능입니다.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(onClick = { controller.openAccessSettings() }, modifier = Modifier.fillMaxWidth()) { Text("알림 접근 권한 열기") }
+            OutlinedButton(onClick = { access = controller.isAccessGranted() }, modifier = Modifier.fillMaxWidth()) { Text("권한 부여 후 새로고침") }
+        }
+        records.isEmpty() -> EmptyTab("캡처된 알림이 없습니다.")
+        else -> Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "탭하면 Deneb 채팅으로 보내 트리아지합니다.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            records.forEach { rec ->
+                SettingsCard(
+                    onClick = {
+                        scope.launch {
+                            client.ask("📲 ${rec.appLabel} 알림 — ${rec.title}\n${rec.text}".trim(), emptyList(), null)
+                            sentId = rec.id
+                        }
+                    },
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                rec.appLabel + if (rec.title.isNotBlank()) "  ·  ${rec.title}" else "",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (rec.text.isNotBlank()) {
+                                Text(
+                                    rec.text,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        if (sentId == rec.id) {
+                            Text("✓ 보냄", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+            }
         }
     }
 }
