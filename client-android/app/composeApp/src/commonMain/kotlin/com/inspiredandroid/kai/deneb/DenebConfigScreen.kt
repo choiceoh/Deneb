@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -20,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,6 +31,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -146,6 +149,7 @@ private fun GatewayTab(
     var checking by remember { mutableStateOf(false) }
     var checked by remember { mutableStateOf(false) }
     var update by remember { mutableStateOf<UpdateInfo?>(null) }
+    var showPatchNotes by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -224,6 +228,13 @@ private fun GatewayTab(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "패치노트 보기",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.handCursor().clickable { showPatchNotes = true },
+            )
             val info = update
             if (info != null) {
                 Spacer(Modifier.height(12.dp))
@@ -266,6 +277,73 @@ private fun GatewayTab(
                 enabled = !checking && denebClient != null,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(if (checking) "확인 중…" else "업데이트 확인") }
+        }
+    }
+    if (showPatchNotes) {
+        PatchNotesSheet(onDismiss = { showPatchNotes = false })
+    }
+}
+
+/**
+ * Bottom sheet listing the compiled-in [DENEB_PATCH_NOTES], newest first, with the
+ * running build flagged. Opened from the "버전" card — no auto-popup on update.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PatchNotesSheet(onDismiss: () -> Unit) {
+    ModalBottomSheet(
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        onDismissRequest = onDismiss,
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            item {
+                Text(
+                    "패치노트",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            items(DENEB_PATCH_NOTES) { note ->
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "v${note.version}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        if (note.code == DENEB_VERSION_CODE) {
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "현재 버전",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    note.highlights.forEach { line ->
+                        Row {
+                            Text(
+                                "· ",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                line,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
