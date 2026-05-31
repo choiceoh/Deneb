@@ -100,10 +100,6 @@ fun DenebConfigScreen(
         Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("취소") }
 
-        if (denebClient != null) {
-            ModelSection(denebClient)
-        }
-
         Spacer(Modifier.height(24.dp))
         TextButton(onClick = onOpenKaiSettings) { Text("고급 설정") }
     }
