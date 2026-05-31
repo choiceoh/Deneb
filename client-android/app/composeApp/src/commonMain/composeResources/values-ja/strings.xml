@@ -1,5 +1,5 @@
 <resources>
-    <string name="welcome_message">Kai 9000へようこそ</string>
+    <string name="welcome_message">Denebへようこそ</string>
     <string name="prompt_ask_question">質問する</string>
     <string name="error_invalid_api_key">無効なAPIキーです。設定をご確認ください。</string>
     <string name="error_rate_limit_exceeded">レート制限を超えました。後でもう一度お試しください。</string>
@@ -78,7 +78,7 @@
     <string name="bot_message_regenerate_content_description">再生成</string>
     <string name="error_empty_response">応答がありませんでした。新しいチャットを開始するか、メッセージを短くしてみてください。</string>
     <string name="settings_daemon_mode">デーモンモード</string>
-    <string name="settings_daemon_mode_description">Kai 9000をバックグラウンドで実行し続け、アプリがフォアグラウンドにない場合でもスケジュールされたタスクが実行されるようにします。</string>
+    <string name="settings_daemon_mode_description">Denebをバックグラウンドで実行し続け、アプリがフォアグラウンドにない場合でもスケジュールされたタスクが実行されるようにします。</string>
     <string name="settings_scheduled_tasks">スケジュールされたタスク</string>
     <string name="settings_scheduled_tasks_description">AIが将来の実行のためにスケジュールしたタスクです。スケジュールされたタスクを作成するには、AIにリマインドまたは後で何かを実行するよう依頼してください。</string>
     <string name="settings_scheduled_tasks_cancel">タスクをキャンセル</string>
@@ -230,7 +230,7 @@
     <string name="interactive_welcome_title">完全に稼働中です。</string>
     <string name="interactive_welcome_subtitle">何をしたいか教えてください。</string>
     <string name="interactive_back_content_description">戻る</string>
-    <string name="interactive_title">Kai 9000</string>
+    <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">インタラクティブモードを終了</string>
     <string name="interactive_ui_parsing_failed">UIの解析に失敗しました。再試行中…</string>
     <string name="settings_sponsors_monthly">月間スポンサー</string>
@@ -349,8 +349,8 @@
     <string name="tool_search_notifications_name">通知を検索</string>
     <string name="tool_search_notifications_description">アプリまたはテキストで通知を検索</string>
     <string name="settings_notifications_label">通知を読む</string>
-    <string name="settings_notifications_description">受信通知はバックグラウンドで収集され、ハートビートで処理されます。Kaiがどのアプリの通知を読めるかは、システムの通知アクセス設定で選択してください。</string>
-    <string name="settings_notifications_access_required">通知アクセスが許可されていません。下をタップしてシステム設定でKaiを有効にしてください。</string>
+    <string name="settings_notifications_description">受信通知はバックグラウンドで収集され、ハートビートで処理されます。Denebがどのアプリの通知を読めるかは、システムの通知アクセス設定で選択してください。</string>
+    <string name="settings_notifications_access_required">通知アクセスが許可されていません。下をタップしてシステム設定でDenebを有効にしてください。</string>
     <string name="settings_notifications_access_button">通知アクセスを開く</string>
     <string name="settings_notifications_manage_apps">アプリを管理</string>
     <string name="settings_notifications_listener_bound">リスナー有効</string>

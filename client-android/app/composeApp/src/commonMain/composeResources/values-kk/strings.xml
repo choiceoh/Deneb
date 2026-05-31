@@ -1,5 +1,5 @@
 <resources>
-    <string name="welcome_message">Kai 9000-ға қош келдіңіз</string>
+    <string name="welcome_message">Deneb-ға қош келдіңіз</string>
     <string name="prompt_ask_question">Сұрақ қойыңыз</string>
     <string name="error_invalid_api_key">Жарамсыз API кілті. Параметрлерді тексеріңіз.</string>
     <string name="error_rate_limit_exceeded">Сұрау лимитінен асып кетті. Кейінірек қайталаңыз.</string>
@@ -78,7 +78,7 @@
     <string name="bot_message_regenerate_content_description">Қайта жасау</string>
     <string name="error_empty_response">Жауап алынбады. Жаңа чат бастаңыз немесе хабарламаңызды қысқартыңыз.</string>
     <string name="settings_daemon_mode">Daemon режимі</string>
-    <string name="settings_daemon_mode_description">Қолданба алдыңғы жақта болмаса да, жоспарланған тапсырмалар орындалуы үшін Kai 9000-ды фонда жұмыс істетіп ұстаңыз.</string>
+    <string name="settings_daemon_mode_description">Қолданба алдыңғы жақта болмаса да, жоспарланған тапсырмалар орындалуы үшін Deneb-ды фонда жұмыс істетіп ұстаңыз.</string>
     <string name="settings_scheduled_tasks">Жоспарланған тапсырмалар</string>
     <string name="settings_scheduled_tasks_description">AI болашақта орындау үшін жоспарлаған тапсырмалар. Жоспарланған тапсырмалар жасау үшін AI-дан есіңізге салуды немесе кейінірек бірдеңе орындауды сұраңыз.</string>
     <string name="settings_scheduled_tasks_cancel">Тапсырманы болдырмау</string>
@@ -229,7 +229,7 @@
     <string name="interactive_welcome_title">Мен толығымен жұмыс істеп тұрмын.</string>
     <string name="interactive_welcome_subtitle">Не істегіңіз келетінін айтыңыз.</string>
     <string name="interactive_back_content_description">Артқа</string>
-    <string name="interactive_title">Kai 9000</string>
+    <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Интерактивті режимнен шығу</string>
     <string name="interactive_ui_parsing_failed">UI талдауы сәтсіз аяқталды, қайта әрекет жасалуда…</string>
     <string name="settings_sponsors_monthly">Ай сайынғы демеушілер</string>
@@ -348,8 +348,8 @@
     <string name="tool_search_notifications_name">Хабарландыруларды іздеу</string>
     <string name="tool_search_notifications_description">Қолданба немесе мәтін бойынша хабарландыруларды іздеу</string>
     <string name="settings_notifications_label">Хабарландыруларды оқу</string>
-    <string name="settings_notifications_description">Кіріс хабарландырулар фонда жиналып, heartbeat арқылы өңделеді. Kai оқи алатын қолданбаларды жүйенің хабарландыру қол жеткізу параметрлерінен таңдаңыз.</string>
-    <string name="settings_notifications_access_required">Хабарландыру қол жеткізуі берілмеген. Kai-ды жүйелік параметрлерден қосу үшін төмендегіні түртіңіз.</string>
+    <string name="settings_notifications_description">Кіріс хабарландырулар фонда жиналып, heartbeat арқылы өңделеді. Deneb оқи алатын қолданбаларды жүйенің хабарландыру қол жеткізу параметрлерінен таңдаңыз.</string>
+    <string name="settings_notifications_access_required">Хабарландыру қол жеткізуі берілмеген. Deneb-ды жүйелік параметрлерден қосу үшін төмендегіні түртіңіз.</string>
     <string name="settings_notifications_access_button">Хабарландыру қол жеткізуін ашу</string>
     <string name="settings_notifications_manage_apps">Қолданбаларды басқару</string>
     <string name="settings_notifications_listener_bound">Тыңдағыш белсенді</string>

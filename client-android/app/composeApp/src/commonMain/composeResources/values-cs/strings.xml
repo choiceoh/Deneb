@@ -1,5 +1,5 @@
 <resources>
-    <string name="welcome_message">V\u00edtejte v Kai 9000</string>
+    <string name="welcome_message">V\u00edtejte v Deneb</string>
     <string name="prompt_ask_question">Polo\u017ete ot\u00e1zku</string>
     <string name="error_invalid_api_key">Neplatn\u00fd API kl\u00ed\u010d. Zkontrolujte pros\u00edm nastaven\u00ed.</string>
     <string name="error_rate_limit_exceeded">Limit po\u017eadavk\u016f p\u0159ekro\u010den. Zkuste to pros\u00edm pozd\u011bji.</string>
@@ -78,7 +78,7 @@
     <string name="bot_message_regenerate_content_description">Vygenerovat znovu</string>
     <string name="error_empty_response">Nebyla přijata žádná odpověď. Zkuste začít nový chat nebo zkrátit zprávu.</string>
     <string name="settings_daemon_mode">Režim démona</string>
-    <string name="settings_daemon_mode_description">Ponechte Kai 9000 spuštěné na pozadí, aby se naplánované úlohy prováděly i když aplikace není v popředí.</string>
+    <string name="settings_daemon_mode_description">Ponechte Deneb spuštěné na pozadí, aby se naplánované úlohy prováděly i když aplikace není v popředí.</string>
     <string name="settings_scheduled_tasks">Naplánované úlohy</string>
     <string name="settings_scheduled_tasks_description">Úlohy naplánované AI pro budoucí provedení. Požádejte AI, aby vám připomněla nebo spustila něco později a vytvořila naplánované úlohy.</string>
     <string name="settings_scheduled_tasks_cancel">Zrušit úlohu</string>
@@ -229,7 +229,7 @@
     <string name="interactive_welcome_title">Jsem plně funkční.</string>
     <string name="interactive_welcome_subtitle">Řekněte mi, co chcete udělat.</string>
     <string name="interactive_back_content_description">Zpět</string>
-    <string name="interactive_title">Kai 9000</string>
+    <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Ukončit interaktivní režim</string>
     <string name="interactive_ui_parsing_failed">Parsování UI selhalo, zkouším znovu…</string>
     <string name="settings_sponsors_monthly">Měsíční sponzoři</string>
@@ -349,8 +349,8 @@
     <string name="tool_search_notifications_name">Hledat v oznámeních</string>
     <string name="tool_search_notifications_description">Hledat oznámení podle aplikace nebo textu</string>
     <string name="settings_notifications_label">Číst oznámení</string>
-    <string name="settings_notifications_description">Příchozí oznámení jsou shromažďována na pozadí a zachycena srdečním tepem. V systémovém nastavení přístupu k oznámením vyberte, které aplikace může Kai číst.</string>
-    <string name="settings_notifications_access_required">Přístup k oznámením nebyl udělen. Klepnutím níže povolte Kai v nastavení systému.</string>
+    <string name="settings_notifications_description">Příchozí oznámení jsou shromažďována na pozadí a zachycena srdečním tepem. V systémovém nastavení přístupu k oznámením vyberte, které aplikace může Deneb číst.</string>
+    <string name="settings_notifications_access_required">Přístup k oznámením nebyl udělen. Klepnutím níže povolte Deneb v nastavení systému.</string>
     <string name="settings_notifications_access_button">Otevřít přístup k oznámením</string>
     <string name="settings_notifications_manage_apps">Spravovat aplikace</string>
     <string name="settings_notifications_listener_bound">Posluchač aktivní</string>

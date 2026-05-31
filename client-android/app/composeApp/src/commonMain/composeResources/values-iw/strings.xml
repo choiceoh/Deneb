@@ -1,5 +1,5 @@
 <resources>
-    <string name="welcome_message">ברוכים הבאים ל-Kai 9000</string>
+    <string name="welcome_message">ברוכים הבאים ל-Deneb</string>
     <string name="prompt_ask_question">שאל שאלה</string>
     <string name="error_invalid_api_key">מפתח API לא תקין. בדוק את ההגדרות שלך.</string>
     <string name="error_rate_limit_exceeded">חריגה ממגבלת הבקשות. נסה שוב מאוחר יותר.</string>
@@ -78,7 +78,7 @@
     <string name="bot_message_regenerate_content_description">יצירה מחדש</string>
     <string name="error_empty_response">לא התקבלה תשובה. נסה להתחיל צ'אט חדש או לקצר את ההודעה שלך.</string>
     <string name="settings_daemon_mode">מצב שירות רקע</string>
-    <string name="settings_daemon_mode_description">השאר את Kai 9000 פועל ברקע כדי שמשימות מתוזמנות יבוצעו גם כשהאפליקציה אינה בחזית.</string>
+    <string name="settings_daemon_mode_description">השאר את Deneb פועל ברקע כדי שמשימות מתוזמנות יבוצעו גם כשהאפליקציה אינה בחזית.</string>
     <string name="settings_scheduled_tasks">משימות מתוזמנות</string>
     <string name="settings_scheduled_tasks_description">משימות שתוזמנו על ידי הבינה המלאכותית לביצוע עתידי. בקש מהבינה המלאכותית להזכיר לך או להריץ משהו מאוחר יותר כדי ליצור משימות מתוזמנות.</string>
     <string name="settings_scheduled_tasks_cancel">בטל משימה</string>
@@ -229,7 +229,7 @@
     <string name="interactive_welcome_title">אני פעיל לחלוטין.</string>
     <string name="interactive_welcome_subtitle">ספר לי מה תרצה לעשות.</string>
     <string name="interactive_back_content_description">חזרה</string>
-    <string name="interactive_title">Kai 9000</string>
+    <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">יציאה ממצב אינטראקטיבי</string>
     <string name="interactive_ui_parsing_failed">ניתוח ממשק המשתמש נכשל, מנסה שוב…</string>
     <string name="settings_sponsors_monthly">נותני חסות חודשיים</string>
@@ -348,8 +348,8 @@
     <string name="tool_search_notifications_name">חיפוש התראות</string>
     <string name="tool_search_notifications_description">חיפוש התראות לפי אפליקציה או טקסט</string>
     <string name="settings_notifications_label">קריאת התראות</string>
-    <string name="settings_notifications_description">התראות נכנסות נאספות ברקע ונאספות על ידי הלב הפועם. בחר באילו אפליקציות Kai רשאי לקרוא בהגדרות גישת ההתראות של המערכת.</string>
-    <string name="settings_notifications_access_required">גישת התראות לא הוענקה. הקש למטה כדי להפעיל את Kai בהגדרות המערכת.</string>
+    <string name="settings_notifications_description">התראות נכנסות נאספות ברקע ונאספות על ידי הלב הפועם. בחר באילו אפליקציות Deneb רשאי לקרוא בהגדרות גישת ההתראות של המערכת.</string>
+    <string name="settings_notifications_access_required">גישת התראות לא הוענקה. הקש למטה כדי להפעיל את Deneb בהגדרות המערכת.</string>
     <string name="settings_notifications_access_button">פתח גישת התראות</string>
     <string name="settings_notifications_manage_apps">ניהול אפליקציות</string>
     <string name="settings_notifications_listener_bound">מאזין פעיל</string>
