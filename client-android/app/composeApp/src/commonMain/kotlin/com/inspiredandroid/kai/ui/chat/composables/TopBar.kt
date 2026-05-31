@@ -25,15 +25,11 @@ import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.ui.chat.ChatActions
 import com.inspiredandroid.kai.ui.handCursor
 import kai.composeapp.generated.resources.Res
-import kai.composeapp.generated.resources.chat_history_content_description
 import kai.composeapp.generated.resources.ic_add
-import kai.composeapp.generated.resources.ic_history
-import kai.composeapp.generated.resources.ic_settings
 import kai.composeapp.generated.resources.ic_volume_off
 import kai.composeapp.generated.resources.ic_volume_up
 import kai.composeapp.generated.resources.new_chat_content_description
 import kai.composeapp.generated.resources.sandbox_content_description
-import kai.composeapp.generated.resources.settings_content_description
 import kai.composeapp.generated.resources.toggle_speech_output_content_description
 import nl.marc_apps.tts.TextToSpeechInstance
 import org.jetbrains.compose.resources.stringResource
@@ -46,14 +42,11 @@ internal fun TopBar(
     isSpeaking: Boolean,
     actions: ChatActions,
     isChatHistoryEmpty: Boolean,
-    hasSavedConversations: Boolean,
-    onNavigateToSettings: () -> Unit,
     onOpenDrawer: (() -> Unit)? = null,
     isSandboxAvailable: Boolean,
     isSandboxOpen: Boolean,
     isShellExecuting: Boolean,
     onToggleSandbox: () -> Unit,
-    onShowHistory: () -> Unit,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     if (navigationTabBar != null) {
@@ -62,7 +55,7 @@ internal fun TopBar(
         ) {
             Row(modifier = Modifier.align(Alignment.CenterStart)) {
                 DrawerButton(onOpenDrawer)
-                LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty, hasSavedConversations, onShowHistory, isSandboxAvailable, isSandboxOpen, isShellExecuting, onToggleSandbox)
+                LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty, isSandboxAvailable, isSandboxOpen, isShellExecuting, onToggleSandbox)
             }
             Box(modifier = Modifier.align(Alignment.Center)) {
                 navigationTabBar()
@@ -76,23 +69,13 @@ internal fun TopBar(
     } else {
         Row {
             DrawerButton(onOpenDrawer)
-            LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty, hasSavedConversations, onShowHistory, isSandboxAvailable, isSandboxOpen, isShellExecuting, onToggleSandbox)
+            LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty, isSandboxAvailable, isSandboxOpen, isShellExecuting, onToggleSandbox)
             Spacer(Modifier.weight(1f))
             if (textToSpeech != null) {
                 SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
             }
-            // 검색 / 메일 / 일정 / 사람 / 카테고리 moved into the left drawer
-            // (DenebDrawerSheet); only settings stays pinned in the top bar.
-            IconButton(
-                modifier = Modifier.handCursor(),
-                onClick = onNavigateToSettings,
-            ) {
-                Icon(
-                    imageVector = vectorResource(Res.drawable.ic_settings),
-                    contentDescription = stringResource(Res.string.settings_content_description),
-                    tint = MaterialTheme.colorScheme.onBackground,
-                )
-            }
+            // 검색 / 메일 / 일정 / 사람 / 카테고리 / 대화 기록 / 설정 all live in the
+            // left drawer (DenebDrawerSheet) now — the top bar stays chat-only.
         }
     }
 }
@@ -121,25 +104,11 @@ private fun LeadingButtons(
     isSpeaking: Boolean,
     actions: ChatActions,
     isChatHistoryEmpty: Boolean,
-    hasSavedConversations: Boolean,
-    onShowHistory: () -> Unit,
     isSandboxAvailable: Boolean,
     isSandboxOpen: Boolean,
     isShellExecuting: Boolean,
     onToggleSandbox: () -> Unit,
 ) {
-    if (hasSavedConversations) {
-        IconButton(
-            modifier = Modifier.handCursor(),
-            onClick = onShowHistory,
-        ) {
-            Icon(
-                imageVector = vectorResource(Res.drawable.ic_history),
-                contentDescription = stringResource(Res.string.chat_history_content_description),
-                tint = MaterialTheme.colorScheme.onBackground,
-            )
-        }
-    }
     if (!isChatHistoryEmpty) {
         IconButton(
             modifier = Modifier.handCursor(),
