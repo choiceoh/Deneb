@@ -566,6 +566,12 @@ private fun ChatModeScreen(
                 onOpenCalendar = onOpenCalendar,
                 onOpenPeople = onOpenPeople,
                 onOpenCategories = onOpenCategories,
+                onShowHistory = {
+                    keyboardController?.hide()
+                    showHistorySheet = true
+                },
+                onNavigateToSettings = onNavigateToSettings,
+                hasSavedConversations = filteredConversations.any { it.id != uiState.currentConversationId },
                 onClose = { drawerScope.launch { drawerState.close() } },
             )
         },
@@ -578,17 +584,11 @@ private fun ChatModeScreen(
                 isSpeaking = uiState.isSpeaking,
                 actions = uiState.actions,
                 isChatHistoryEmpty = uiState.history.isEmpty(),
-                hasSavedConversations = filteredConversations.any { it.id != uiState.currentConversationId },
-                onNavigateToSettings = onNavigateToSettings,
                 onOpenDrawer = { drawerScope.launch { drawerState.open() } },
                 isSandboxAvailable = isSandboxAvailable,
                 isSandboxOpen = isSandboxOpen,
                 isShellExecuting = isShellExecuting,
                 onToggleSandbox = { isSandboxOpen = !isSandboxOpen },
-                onShowHistory = {
-                    keyboardController?.hide()
-                    showHistorySheet = true
-                },
                 navigationTabBar = navigationTabBar,
             )
 

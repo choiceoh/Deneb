@@ -2,8 +2,11 @@
 
 package com.inspiredandroid.kai
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -17,6 +20,10 @@ import com.inspiredandroid.kai.deneb.MailMessage
 import com.inspiredandroid.kai.deneb.MailRow
 import com.inspiredandroid.kai.ui.DarkColorScheme
 import com.inspiredandroid.kai.ui.LightColorScheme
+import com.inspiredandroid.kai.ui.chat.composables.DenebDrawerSheet
+import com.inspiredandroid.kai.ui.chat.composables.DenebTopicSwitcher
+import com.inspiredandroid.kai.ui.chat.composables.TopicTab
+import kotlinx.collections.immutable.persistentListOf
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 
@@ -48,7 +55,54 @@ fun main() {
     render("mail_dark.png", DarkColorScheme)
     render("mail_light.png", LightColorScheme)
     renderMarkdown("markdown_dark.png", DarkColorScheme)
+    renderChrome("chrome_dark.png", DarkColorScheme)
+    renderChrome("chrome_light.png", LightColorScheme)
     println("rendered -> /tmp/deneb-render/")
+}
+
+// Renders the redesigned chat chrome — the left drawer (분석 + 기록·설정 groups)
+// beside the pill topic switcher (업무/잡담/코딩, 잡담 selected) — so the look can
+// be checked without an APK.
+private fun renderChrome(name: String, scheme: ColorScheme) {
+    val topics = persistentListOf(
+        TopicTab("work", "업무"),
+        TopicTab("chat", "잡담"),
+        TopicTab("coding", "코딩"),
+    )
+    val scene = ImageComposeScene(width = 980, height = 1000, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Row {
+                    Box(Modifier.width(320.dp)) {
+                        DenebDrawerSheet(
+                            onOpenSearch = {},
+                            onOpenMail = {},
+                            onOpenCalendar = {},
+                            onOpenPeople = {},
+                            onOpenCategories = {},
+                            onShowHistory = {},
+                            onNavigateToSettings = {},
+                            hasSavedConversations = true,
+                            onClose = {},
+                        )
+                    }
+                    Column(Modifier.padding(top = 28.dp)) {
+                        Text(
+                            "토픽 스위처 — 선택: 잡담",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.padding(16.dp),
+                        )
+                        DenebTopicSwitcher(topics = topics, selectedKey = "chat", onSelectTopic = {})
+                    }
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
 }
 
 private fun renderMarkdown(name: String, scheme: ColorScheme) {
