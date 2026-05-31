@@ -13,7 +13,7 @@ import com.inspiredandroid.kai.data.UiSubmission
 import com.inspiredandroid.kai.httpClient
 import com.inspiredandroid.kai.ui.chat.History
 import kai.composeapp.generated.resources.Res
-import kai.composeapp.generated.resources.ic_refresh
+import kai.composeapp.generated.resources.ic_service_litert
 import io.github.vinceglb.filekit.PlatformFile
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
@@ -287,7 +287,7 @@ class DenebGatewayClient(
                 serviceId = "deneb",
                 serviceName = model.display,
                 modelId = model.id,
-                icon = Res.drawable.ic_refresh,
+                icon = Res.drawable.ic_service_litert,
             )
         }
     }
