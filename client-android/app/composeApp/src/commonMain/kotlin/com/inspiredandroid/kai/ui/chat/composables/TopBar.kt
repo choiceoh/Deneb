@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -51,6 +52,7 @@ internal fun TopBar(
     onNavigateToSettings: () -> Unit,
     onOpenMail: () -> Unit = {},
     onOpenCalendar: () -> Unit = {},
+    onOpenSearch: () -> Unit = {},
     isSandboxAvailable: Boolean,
     isSandboxOpen: Boolean,
     isShellExecuting: Boolean,
@@ -80,6 +82,16 @@ internal fun TopBar(
             Spacer(Modifier.weight(1f))
             if (textToSpeech != null) {
                 SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
+            }
+            IconButton(
+                modifier = Modifier.handCursor(),
+                onClick = onOpenSearch,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Search,
+                    contentDescription = "검색",
+                    tint = MaterialTheme.colorScheme.onBackground,
+                )
             }
             IconButton(
                 modifier = Modifier.handCursor(),

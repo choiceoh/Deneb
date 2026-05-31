@@ -432,6 +432,40 @@ class DenebGatewayClient(
         )
     }
 
+    /** Unified search across wiki, diary and people (`miniapp.search.all`). */
+    suspend fun searchAll(query: String): SearchResults? {
+        val p = callRpc<SearchPayload>(
+            "miniapp.search.all",
+            buildJsonObject {
+                put("query", query)
+                put("limit", 20)
+            },
+        ) ?: return null
+        return SearchResults(
+            wiki = p.wiki.filter { it.path.isNotBlank() }
+                .map { SearchHit(it.path, it.title.ifBlank { it.path }, it.snippet.ifBlank { it.summary }, it.category) },
+            diary = p.diary.map { SearchHit("", it.header.ifBlank { "일기" }, it.content, "diary") },
+            people = p.people.filter { it.email.isNotBlank() || it.name.isNotBlank() }
+                .map { PersonHit(it.name.ifBlank { it.email }, it.email, it.messageCount, it.lastSubject) },
+        )
+    }
+
+    /** Full wiki/memory page by path (`miniapp.memory.get_page`). */
+    suspend fun fetchWikiPage(path: String): WikiPage? {
+        val p = callRpc<WikiPagePayload>(
+            "miniapp.memory.get_page",
+            buildJsonObject { put("path", path) },
+        ) ?: return null
+        return WikiPage(
+            path = p.path,
+            title = p.title.ifBlank { p.path },
+            category = p.category,
+            tags = p.tags,
+            updated = p.updated,
+            body = p.body,
+        )
+    }
+
     private suspend fun send(message: String): String {
         if (clientToken.isEmpty()) {
             return "⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요."
@@ -695,6 +729,45 @@ class DenebGatewayClient(
     @Serializable
     private data class CalConference(val solution: String = "", val uri: String = "")
 
+    @Serializable
+    private data class SearchPayload(
+        val wiki: List<SearchWikiRow> = emptyList(),
+        val diary: List<SearchDiaryRow> = emptyList(),
+        val people: List<SearchPersonRow> = emptyList(),
+    )
+
+    @Serializable
+    private data class SearchWikiRow(
+        val path: String = "",
+        val title: String = "",
+        val summary: String = "",
+        val category: String = "",
+        val snippet: String = "",
+    )
+
+    @Serializable
+    private data class SearchDiaryRow(val file: String = "", val header: String = "", val content: String = "")
+
+    @Serializable
+    private data class SearchPersonRow(
+        val email: String = "",
+        val name: String = "",
+        val messageCount: Int = 0,
+        val lastSubject: String = "",
+    )
+
+    @Serializable
+    private data class WikiPagePayload(
+        val path: String = "",
+        val title: String = "",
+        val summary: String = "",
+        val category: String = "",
+        val tags: List<String> = emptyList(),
+        val related: List<String> = emptyList(),
+        val updated: String = "",
+        val body: String = "",
+    )
+
     private companion object {
         const val CLIENT_TOKEN_HEADER = "X-Deneb-Client-Token"
         const val DENEB_MODEL_PREFIX = "deneb-model:"
@@ -774,4 +847,25 @@ data class CalendarEventDetail(
     val organizer: String,
     val attendees: List<String>,
     val meetUri: String,
+)
+
+/** Unified search results across wiki, diary and people. */
+data class SearchResults(
+    val wiki: List<SearchHit>,
+    val diary: List<SearchHit>,
+    val people: List<PersonHit>,
+)
+
+data class SearchHit(val path: String, val title: String, val snippet: String, val category: String)
+
+data class PersonHit(val name: String, val email: String, val messageCount: Int, val lastSubject: String)
+
+/** Full wiki/memory page for the page view. */
+data class WikiPage(
+    val path: String,
+    val title: String,
+    val category: String,
+    val tags: List<String>,
+    val updated: String,
+    val body: String,
 )

@@ -43,6 +43,8 @@ import com.inspiredandroid.kai.deneb.DenebCalendarEventScreen
 import com.inspiredandroid.kai.deneb.DenebCalendarScreen
 import com.inspiredandroid.kai.deneb.DenebMailDetailScreen
 import com.inspiredandroid.kai.deneb.DenebMailScreen
+import com.inspiredandroid.kai.deneb.DenebSearchScreen
+import com.inspiredandroid.kai.deneb.DenebWikiPageScreen
 import com.inspiredandroid.kai.tools.CalendarPermissionController
 import com.inspiredandroid.kai.tools.NotificationPermissionController
 import com.inspiredandroid.kai.tools.SetupCalendarPermissionHandler
@@ -100,6 +102,14 @@ data class DenebMailDetail(val id: String)
 @Serializable
 @SerialName("deneb_calendar_event")
 data class DenebCalendarEvent(val id: String)
+
+@Serializable
+@SerialName("deneb_search")
+object DenebSearch
+
+@Serializable
+@SerialName("deneb_wiki")
+data class DenebWiki(val path: String)
 
 @Composable
 fun App(
@@ -248,6 +258,7 @@ private fun AppContent(
                             },
                             onOpenMail = { navController.navigate(DenebMail) },
                             onOpenCalendar = { navController.navigate(DenebCalendar) },
+                            onOpenSearch = { navController.navigate(DenebSearch) },
                             // Deneb runs tools on the gateway; the local terminal/sandbox is irrelevant.
                             isSandboxAvailable = false,
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
@@ -303,6 +314,26 @@ private fun AppContent(
                             DenebCalendarEventScreen(
                                 client = client,
                                 eventId = entry.toRoute<DenebCalendarEvent>().id,
+                                onBack = { navController.navigateUp() },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebSearch> {
+                        denebClient?.let { client ->
+                            DenebSearchScreen(
+                                client = client,
+                                onBack = { navController.navigateUp() },
+                                onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebWiki> { entry ->
+                        denebClient?.let { client ->
+                            DenebWikiPageScreen(
+                                client = client,
+                                path = entry.toRoute<DenebWiki>().path,
                                 onBack = { navController.navigateUp() },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
