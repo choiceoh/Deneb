@@ -611,6 +611,56 @@ class DenebGatewayClient(
     suspend fun runCron(id: String): Boolean =
         callRpc<JsonObject>("miniapp.crons.run", buildJsonObject { put("id", id) }) != null
 
+    /** Full cron job detail (`miniapp.crons.get`). */
+    suspend fun fetchCron(id: String): CronDetail? {
+        val p = callRpc<CronDetailPayload>("miniapp.crons.get", buildJsonObject { put("id", id) }) ?: return null
+        return CronDetail(
+            id = p.id,
+            name = p.name,
+            enabled = p.enabled,
+            schedule = p.schedule,
+            scheduleSpec = p.scheduleSpec,
+            scheduleKind = p.scheduleKind,
+            payloadKind = p.payloadKind,
+            prompt = p.prompt,
+            model = p.model,
+            deliveryChannel = p.deliveryChannel,
+            deliveryTo = p.deliveryTo,
+            nextRunAtMs = p.nextRunAtMs,
+            lastDeliveryStatus = p.lastDeliveryStatus,
+            lastError = p.lastError,
+            consecutiveErrors = p.consecutiveErrors,
+            autoDisabledAtMs = p.autoDisabledAtMs,
+        )
+    }
+
+    /** Enable or disable a cron job (`miniapp.crons.update`). */
+    suspend fun setCronEnabled(id: String, enabled: Boolean): Boolean =
+        callRpc<JsonObject>(
+            "miniapp.crons.update",
+            buildJsonObject { put("id", id); put("enabled", enabled) },
+        ) != null
+
+    @Serializable
+    private data class CronDetailPayload(
+        val id: String = "",
+        val name: String = "",
+        val enabled: Boolean = false,
+        val schedule: String = "",
+        val scheduleSpec: String = "",
+        val scheduleKind: String = "",
+        val payloadKind: String = "",
+        val prompt: String = "",
+        val model: String = "",
+        val deliveryChannel: String = "",
+        val deliveryTo: String = "",
+        val nextRunAtMs: Long = 0,
+        val lastDeliveryStatus: String = "",
+        val lastError: String = "",
+        val consecutiveErrors: Int = 0,
+        val autoDisabledAtMs: Long = 0,
+    )
+
     /** APK + version.json are served on :19010 of the same host as the gateway. */
     private val updateBaseUrl: String
         get() {
@@ -1078,6 +1128,26 @@ data class CalendarEventDetail(
     val attendees: List<String>,
     val meetUri: String,
     val status: String,
+)
+
+/** Full cron job detail for the cron screen (`miniapp.crons.get`). */
+data class CronDetail(
+    val id: String,
+    val name: String,
+    val enabled: Boolean,
+    val schedule: String,
+    val scheduleSpec: String,
+    val scheduleKind: String,
+    val payloadKind: String,
+    val prompt: String,
+    val model: String,
+    val deliveryChannel: String,
+    val deliveryTo: String,
+    val nextRunAtMs: Long,
+    val lastDeliveryStatus: String,
+    val lastError: String,
+    val consecutiveErrors: Int,
+    val autoDisabledAtMs: Long,
 )
 
 /** Unified search results across wiki, diary and people. */

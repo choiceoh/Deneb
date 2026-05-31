@@ -58,6 +58,7 @@ fun DenebConfigScreen(
     denebClient: DenebGatewayClient? = null,
     onOpenPerson: (String) -> Unit = {},
     onOpenTopicDoc: (String) -> Unit = {},
+    onOpenCron: (String) -> Unit = {},
     onOpenKaiSettings: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
@@ -114,7 +115,7 @@ fun DenebConfigScreen(
                     0 -> GatewayTab(appSettings, onBack, onOpenKaiSettings, denebClient)
                     1 -> denebClient?.let { ModelTab(it) }
                     2 -> denebClient?.let { PeopleTab(it, onOpenPerson) }
-                    3 -> denebClient?.let { CronTab(it) }
+                    3 -> denebClient?.let { CronTab(it, onOpenCron) }
                     4 -> denebClient?.let { TopicDocsTab(it, onOpenTopicDoc) }
                 }
             }
@@ -348,9 +349,8 @@ private fun PeopleTab(client: DenebGatewayClient, onOpenPerson: (String) -> Unit
 }
 
 @Composable
-private fun CronTab(client: DenebGatewayClient) {
+private fun CronTab(client: DenebGatewayClient, onOpenCron: (String) -> Unit) {
     val crons by client.denebScheduledTasks.collectAsState()
-    val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { client.getScheduledTasks() }
     if (crons.isEmpty()) {
         EmptyTab("예약된 작업이 없습니다.")
@@ -358,25 +358,20 @@ private fun CronTab(client: DenebGatewayClient) {
     }
     LazyColumn(Modifier.fillMaxSize()) {
         items(crons, key = { it.id }) { cron ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            Column(
+                Modifier.fillMaxWidth().clickable { onOpenCron(cron.id) }.padding(horizontal = 16.dp, vertical = 14.dp),
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        cron.description.ifBlank { cron.id },
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    cron.cron?.let {
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                Text(
+                    cron.description.ifBlank { cron.id },
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                cron.cron?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                TextButton(onClick = { scope.launch { client.runCron(cron.id) } }) { Text("실행") }
-                TextButton(onClick = { scope.launch { client.cancelScheduledTask(cron.id) } }) { Text("삭제") }
             }
             HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         }
