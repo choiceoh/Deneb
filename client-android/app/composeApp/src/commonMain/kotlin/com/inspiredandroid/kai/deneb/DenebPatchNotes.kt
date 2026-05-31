@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.5",
+        code = 128,
+        highlights = listOf(
+            "유지보수 빌드 — 최신 변경 반영 및 안정화",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.4",
         code = 127,
         highlights = listOf(
