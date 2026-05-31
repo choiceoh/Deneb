@@ -6,11 +6,14 @@ import com.inspiredandroid.kai.data.DataRepository
 import com.inspiredandroid.kai.data.MemoryEntry
 import com.inspiredandroid.kai.data.RemoteDataRepository
 import com.inspiredandroid.kai.data.ScheduledTask
+import com.inspiredandroid.kai.data.ServiceEntry
 import com.inspiredandroid.kai.data.TaskStatus
 import com.inspiredandroid.kai.data.TaskTrigger
 import com.inspiredandroid.kai.data.UiSubmission
 import com.inspiredandroid.kai.httpClient
 import com.inspiredandroid.kai.ui.chat.History
+import kai.composeapp.generated.resources.Res
+import kai.composeapp.generated.resources.ic_refresh
 import io.github.vinceglb.filekit.PlatformFile
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
@@ -262,6 +265,34 @@ class DenebGatewayClient(
             },
         )
         refreshModels()
+    }
+
+    // --- Chat-input model switcher → Deneb registry --------------------------
+    // Kai's chat input has a service/model switcher (ServiceSelector) driven by
+    // ChatUiState.availableServices. When this client is active, ChatViewModel
+    // sources that list from here so the switcher changes the gateway main model
+    // instead of Kai's local providers.
+
+    /** Gateway models as switcher entries, current model first (it renders as selected). */
+    fun denebServiceEntries(): List<ServiceEntry> {
+        val models = _denebModels.value
+        val ordered = models.filter { it.current } + models.filterNot { it.current }
+        return ordered.map { model ->
+            ServiceEntry(
+                instanceId = DENEB_MODEL_PREFIX + model.id,
+                serviceId = "deneb",
+                serviceName = model.display,
+                modelId = model.id,
+                icon = Res.drawable.ic_refresh,
+            )
+        }
+    }
+
+    /** Switch the gateway main model from a switcher tap (instanceId = prefixed model id). */
+    fun selectDenebModelInstance(instanceId: String) {
+        val modelId = instanceId.removePrefix(DENEB_MODEL_PREFIX)
+        if (modelId.isBlank() || modelId == instanceId) return
+        scope.launch { setMainModel(modelId) }
     }
 
     suspend fun refreshMail() {
@@ -551,6 +582,7 @@ class DenebGatewayClient(
 
     private companion object {
         const val CLIENT_TOKEN_HEADER = "X-Deneb-Client-Token"
+        const val DENEB_MODEL_PREFIX = "deneb-model:"
         const val KEY_URL = "deneb.gatewayUrl"
         const val KEY_TOKEN = "deneb.clientToken"
 
