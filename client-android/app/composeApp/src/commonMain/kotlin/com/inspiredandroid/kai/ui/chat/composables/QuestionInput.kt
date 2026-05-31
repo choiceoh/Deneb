@@ -215,9 +215,9 @@ fun QuestionInput(
                         )
                     }
                     if (isLoading) {
-                        TrailingIcon(icon = Res.drawable.ic_stop, onClick = cancel, isPulsing = true)
+                        TrailingIcon(icon = Res.drawable.ic_stop, onClick = cancel, isPulsing = true, contentDescription = "중지")
                     } else if (textState.text.isNotBlank()) {
-                        TrailingIcon(icon = Res.drawable.ic_up, onClick = { submitQuestion() })
+                        TrailingIcon(icon = Res.drawable.ic_up, onClick = { submitQuestion() }, contentDescription = "보내기")
                     }
                 }
             },
@@ -233,6 +233,7 @@ fun QuestionInput(
                         onClick = { filePickerLauncher.launch() },
                         modifier = Modifier.padding(start = 7.dp),
                         tint = MaterialTheme.colorScheme.onBackground,
+                        contentDescription = "파일 첨부",
                     )
                 }
             } else {
@@ -273,6 +274,7 @@ internal fun TrailingIcon(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     isPulsing: Boolean = false,
+    contentDescription: String? = null,
 ) {
     val pulseModifier = if (isPulsing) {
         val infiniteTransition = rememberInfiniteTransition()
@@ -314,7 +316,7 @@ internal fun TrailingIcon(
         Icon(
             vectorResource(icon),
             modifier = Modifier.size(32.dp).then(pulseModifier),
-            contentDescription = null,
+            contentDescription = contentDescription,
             tint = Color.White,
         )
     }
@@ -326,6 +328,7 @@ internal fun CircleIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    contentDescription: String? = null,
 ) {
     Box(
         modifier = modifier
@@ -338,7 +341,7 @@ internal fun CircleIconButton(
         Icon(
             imageVector = icon,
             modifier = Modifier.size(24.dp),
-            contentDescription = null,
+            contentDescription = contentDescription,
             tint = tint,
         )
     }
