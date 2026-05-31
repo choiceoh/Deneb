@@ -21,6 +21,16 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.3",
+        code = 126,
+        highlights = listOf(
+            "UI 폴리싱 — 브랜드 블루 컬러 일관화, Pretendard 한글 자간 정리",
+            "불러올 때 스켈레톤(시머) 표시 — 빈 화면 대신 부드럽게 채워짐",
+            "전송·탭에 햅틱, 따뜻해진 오류 카드, 시간대 인사",
+            "브랜드 테두리를 잔잔한 오로라 스윕으로 통일",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.7.7",
         code = 120,
         highlights = listOf(
