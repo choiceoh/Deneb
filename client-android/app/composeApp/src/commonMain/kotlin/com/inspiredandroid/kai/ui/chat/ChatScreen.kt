@@ -87,7 +87,6 @@ import com.inspiredandroid.kai.ui.chat.composables.BotMessage
 import com.inspiredandroid.kai.ui.chat.composables.ChatHistorySheet
 import com.inspiredandroid.kai.ui.chat.composables.CircleIconButton
 import com.inspiredandroid.kai.ui.chat.composables.DenebDrawerSheet
-import com.inspiredandroid.kai.ui.chat.composables.DenebTopicSwitcher
 import com.inspiredandroid.kai.ui.chat.composables.EmptyState
 import com.inspiredandroid.kai.ui.chat.composables.ErrorMessage
 import com.inspiredandroid.kai.ui.chat.composables.HeartbeatBanner
@@ -585,11 +584,8 @@ private fun ChatModeScreen(
                 isShellExecuting = isShellExecuting,
                 onToggleSandbox = { isSandboxOpen = !isSandboxOpen },
                 navigationTabBar = navigationTabBar,
-            )
-
-            DenebTopicSwitcher(
                 topics = topics,
-                selectedKey = selectedTopicKey,
+                selectedTopicKey = selectedTopicKey,
                 onSelectTopic = onSelectTopic,
             )
 
