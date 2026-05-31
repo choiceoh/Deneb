@@ -980,12 +980,16 @@
       },
       "tags": {
         "type": "array",
-        "items": { "type": "string" },
+        "items": {
+          "type": "string"
+        },
         "description": "검색 태그 (op=record)"
       },
       "related": {
         "type": "array",
-        "items": { "type": "string" },
+        "items": {
+          "type": "string"
+        },
         "description": "관련 페이지 경로들 (op=record)"
       },
       "importance": {
@@ -1023,7 +1027,11 @@
     "properties": {
       "action": {
         "type": "string",
-        "enum": ["query", "path", "explain"],
+        "enum": [
+          "query",
+          "path",
+          "explain"
+        ],
         "description": "query: BFS/DFS traversal of the knowledge graph for a natural-language question. explain: plain-language description of a node and its neighbors. path: shortest path between two nodes"
       },
       "question": {
@@ -1072,6 +1080,30 @@
     },
     "required": [
       "content"
+    ]
+  },
+  {
+    "name": "watch",
+    "properties": {
+      "source": {
+        "type": "string",
+        "description": "YouTube URL or local video file path to watch (extract frames + subtitles, then analyze with the vision model)"
+      },
+      "task": {
+        "type": "string",
+        "description": "What to analyze in the video (e.g. 'analyze the hook in the first 3 seconds', 'where does the UI break?'). Default: general analysis"
+      },
+      "start": {
+        "type": "number",
+        "description": "Optional analysis window start in seconds"
+      },
+      "end": {
+        "type": "number",
+        "description": "Optional analysis window end in seconds"
+      }
+    },
+    "required": [
+      "source"
     ]
   }
 ]

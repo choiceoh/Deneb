@@ -970,6 +970,31 @@ func heartbeatUpdateToolSchema() map[string]any {
 	}
 }
 
+func watchToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"end": map[string]any{
+				"type":        "number",
+				"description": "Optional analysis window end in seconds",
+			},
+			"source": map[string]any{
+				"type":        "string",
+				"description": "YouTube URL or local video file path to watch (extract frames + subtitles, then analyze with the vision model)",
+			},
+			"start": map[string]any{
+				"type":        "number",
+				"description": "Optional analysis window start in seconds",
+			},
+			"task": map[string]any{
+				"type":        "string",
+				"description": "What to analyze in the video (e.g. 'analyze the hook in the first 3 seconds', 'where does the UI break?'). Default: general analysis",
+			},
+		},
+		"required": []string{"source"},
+	}
+}
+
 // ToolMaxOutputs returns per-tool output character budgets from tool_schemas.json.
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {
