@@ -1,6 +1,11 @@
 package com.inspiredandroid.kai.ui.chat.composables
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
@@ -35,6 +40,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
@@ -79,6 +85,7 @@ internal fun BotMessage(
     frozen: FrozenSubmission? = null,
     onResubmit: ((event: String, data: Map<String, String>) -> Unit)? = null,
     reasoningSegments: ImmutableList<String> = persistentListOf(),
+    isStreaming: Boolean = false,
 ) {
     val document = remember(message) { parseMarkdown(message) }
     var isEditing by remember(frozen) { mutableStateOf(false) }
@@ -119,6 +126,9 @@ internal fun BotMessage(
                             .padding(start = 16.dp, top = answerTopPadding, end = 16.dp, bottom = 8.dp),
                     )
                 }
+            }
+            if (isStreaming) {
+                StreamingCaret()
             }
         }
         if (frozen != null && onResubmit != null) {
@@ -196,6 +206,24 @@ internal fun BotMessage(
         }
         Spacer(Modifier.weight(1f))
     }
+}
+
+/** Blinking caret shown at the end of a reply while it streams in. */
+@Composable
+private fun StreamingCaret() {
+    val transition = rememberInfiniteTransition(label = "caret")
+    val caretAlpha by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
+        label = "caret-alpha",
+    )
+    Text(
+        text = "▍",
+        modifier = Modifier.padding(start = 16.dp, bottom = 8.dp).alpha(caretAlpha),
+        color = MaterialTheme.colorScheme.primary,
+        style = MaterialTheme.typography.bodyLarge,
+    )
 }
 
 @Composable

@@ -1,6 +1,7 @@
 package com.inspiredandroid.kai.deneb
 
 import androidx.compose.foundation.clickable
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -56,6 +57,7 @@ fun DenebCalendarScreen(
 ) {
     val events by client.denebCalendar.collectAsState()
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
     var refreshing by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { client.refreshCalendar() }
 
@@ -105,7 +107,7 @@ fun DenebCalendarScreen(
                             lastDayKey = stamp?.dayKey
                         }
                         Row(
-                            modifier = Modifier.fillMaxWidth().clickable { onOpenEvent(event.id) }.padding(vertical = 12.dp),
+                            modifier = Modifier.fillMaxWidth().clickable { haptics.tap(); onOpenEvent(event.id) }.padding(vertical = 12.dp),
                             verticalAlignment = Alignment.Top,
                         ) {
                             Text(

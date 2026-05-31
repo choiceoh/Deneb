@@ -21,6 +21,15 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.4",
+        code = 127,
+        highlights = listOf(
+            "답변이 생성될 때 깜빡이는 타이핑 커서 — 스트리밍이 한눈에",
+            "드로어·목록·일정·검색 탭에 햅틱 — 손끝 피드백 통일",
+            "사람 목록 항목이 부드럽게 나타나는 모션",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.3",
         code = 126,
         highlights = listOf(

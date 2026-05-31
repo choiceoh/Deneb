@@ -1,6 +1,7 @@
 package com.inspiredandroid.kai.deneb
 
 import androidx.compose.foundation.clickable
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -154,10 +155,11 @@ private fun GroupHeader(label: String) {
 
 @Composable
 private fun ResultRow(title: String, snippet: String, onClick: (() -> Unit)?) {
+    val haptics = rememberHaptics()
     Column(
         Modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+            .then(if (onClick != null) Modifier.clickable { haptics.tap(); onClick() } else Modifier)
             .padding(vertical = 10.dp),
     ) {
         Text(
