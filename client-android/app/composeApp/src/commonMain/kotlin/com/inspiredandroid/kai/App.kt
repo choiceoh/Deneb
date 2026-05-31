@@ -240,6 +240,8 @@ private fun AppContent(
                             onNavigateToSettings = {
                                 navController.navigate(DenebConfig)
                             },
+                            onOpenMail = { navController.navigate(DenebMail) },
+                            onOpenCalendar = { navController.navigate(DenebCalendar) },
                             isSandboxAvailable = currentPlatform is Platform.Mobile.Android,
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
                         )
@@ -265,8 +267,6 @@ private fun AppContent(
                             appSettings = appSettings,
                             denebClient = denebClient,
                             onBack = { navController.navigateUp() },
-                            onOpenCalendar = { navController.navigate(DenebCalendar) },
-                            onOpenMail = { navController.navigate(DenebMail) },
                             onOpenKaiSettings = { navController.navigate(Settings) },
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
                         )
