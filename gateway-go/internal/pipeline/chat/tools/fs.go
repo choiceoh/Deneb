@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"time"
 
@@ -36,6 +37,20 @@ func snapshotBeforeWrite(ctx context.Context, path, reason string) {
 	}
 }
 
+// lineAnchorHash returns a short, stable content hash for a single line of
+// text. The read tool surfaces it (hashes=true) and the edit tool resolves it
+// (anchor=…) so the model can target a whole line without reproducing it as
+// old_string — saving output tokens. 24-bit FNV-1a → 6 hex chars: short enough
+// to keep the model's output cost near zero, wide enough that distinct-content
+// collisions across a normal file are negligible. Lines with identical content
+// share a hash by design; the edit path reports that as an ambiguous anchor so
+// the model falls back to line= or old_string.
+func lineAnchorHash(line string) string {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(line))
+	return fmt.Sprintf("%06x", h.Sum32()&0xffffff)
+}
+
 // --- Read tool ---
 
 func ToolRead(defaultDir string) ToolFunc {
@@ -46,6 +61,7 @@ func ToolRead(defaultDir string) ToolFunc {
 			Limit    int    `json:"limit"`
 			Function string `json:"function"`
 			Force    bool   `json:"force"`
+			Hashes   bool   `json:"hashes"`
 		}
 		if err := jsonutil.UnmarshalInto("read params", input, &p); err != nil {
 			return "", err
@@ -62,7 +78,9 @@ func ToolRead(defaultDir string) ToolFunc {
 		// File-read dedup: for default full-file reads (no offset/limit/function),
 		// check cache before hitting disk.  Skip if force=true.
 		fc := toolctx.FileCacheFromContext(ctx)
-		useCache := fc != nil && !p.Force && p.Function == "" && p.Offset <= 0 && p.Limit <= 0
+		// hashes=true emits per-line anchors, which the plain cached output does
+		// not contain — bypass the dedup cache for those reads.
+		useCache := fc != nil && !p.Force && !p.Hashes && p.Function == "" && p.Offset <= 0 && p.Limit <= 0
 		if useCache {
 			if entry := fc.Get(path); entry != nil && !agent.FileChanged(path, entry) {
 				entry.ReadCount++
@@ -105,7 +123,11 @@ func ToolRead(defaultDir string) ToolFunc {
 		// Stream through the byte slice, materializing only the lines in range.
 		// This avoids strings.Split() which allocates a string per line.
 		var sb strings.Builder
-		fmt.Fprintf(&sb, "[File: %s | %d lines]\n", p.FilePath, totalLines)
+		if p.Hashes {
+			fmt.Fprintf(&sb, "[File: %s | %d lines | columns: line<TAB>anchor<TAB>content — pass anchor=<hash> to edit]\n", p.FilePath, totalLines)
+		} else {
+			fmt.Fprintf(&sb, "[File: %s | %d lines]\n", p.FilePath, totalLines)
+		}
 		scanner := bufio.NewScanner(bytes.NewReader(data))
 		scanner.Buffer(nil, bufio.MaxScanTokenSize)
 		lineNum := 0
@@ -114,7 +136,11 @@ func ToolRead(defaultDir string) ToolFunc {
 				break
 			}
 			if lineNum >= start {
-				fmt.Fprintf(&sb, "%d\t%s\n", lineNum+1, scanner.Text())
+				if p.Hashes {
+					fmt.Fprintf(&sb, "%d\t%s\t%s\n", lineNum+1, lineAnchorHash(scanner.Text()), scanner.Text())
+				} else {
+					fmt.Fprintf(&sb, "%d\t%s\n", lineNum+1, scanner.Text())
+				}
 			}
 			lineNum++
 		}
@@ -327,6 +353,8 @@ func ToolEdit(defaultDir string) ToolFunc {
 			ReplaceAll bool   `json:"replace_all"`
 			Regex      bool   `json:"regex"`
 			Line       int    `json:"line"`
+			Anchor     string `json:"anchor"`
+			AnchorEnd  string `json:"anchor_end"`
 		}
 		if err := jsonutil.UnmarshalInto("edit params", input, &p); err != nil {
 			return "", err
@@ -334,8 +362,8 @@ func ToolEdit(defaultDir string) ToolFunc {
 		if p.FilePath == "" {
 			return "", fmt.Errorf("file_path is required")
 		}
-		if p.OldString == "" {
-			return "", fmt.Errorf("old_string is required")
+		if p.OldString == "" && p.Anchor == "" {
+			return "", fmt.Errorf("old_string is required (or use anchor= for a content-hash anchored edit)")
 		}
 
 		path := ResolvePath(p.FilePath, defaultDir)
@@ -368,6 +396,18 @@ func ToolEdit(defaultDir string) ToolFunc {
 			if fc != nil {
 				fc.UpdateAfterWrite(path)
 			}
+		}
+
+		// Content-hash anchored replacement (opt-in, token-efficient). The
+		// model addresses a whole line — or an anchor..anchor_end range — by the
+		// short hash surfaced via read(hashes=true), instead of reproducing
+		// old_string. Replaces the matched line(s) wholesale with new_string.
+		if p.Anchor != "" {
+			result, err := editByAnchor(path, p.FilePath, content, p.Anchor, p.AnchorEnd, p.NewString)
+			if err == nil {
+				updateCache()
+			}
+			return result, err
 		}
 
 		// Regex-based replacement.
@@ -463,6 +503,62 @@ func editAtLine(path, displayPath, content, oldStr, newStr string, lineNum int) 
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 	return fmt.Sprintf("Edited %s (line %d)", displayPath, lineNum), nil
+}
+
+// editByAnchor replaces a whole line — or an inclusive line range
+// (anchor..anchorEnd) — addressed by content-hash anchors from
+// read(hashes=true) with newStr. newStr may span multiple lines. Anchors that
+// match zero or multiple lines are rejected so the model can disambiguate
+// (re-read for fresh anchors, or fall back to line=/old_string).
+func editByAnchor(path, displayPath, content, anchor, anchorEnd, newStr string) (string, error) {
+	lines := strings.Split(content, "\n")
+
+	findUnique := func(target string) (int, error) {
+		idx, matches := -1, 0
+		for i, line := range lines {
+			if lineAnchorHash(line) == target {
+				matches++
+				idx = i
+			}
+		}
+		if matches == 0 {
+			return -1, fmt.Errorf("anchor %q not found — re-read the file with hashes=true to get current anchors", target)
+		}
+		if matches > 1 {
+			return -1, fmt.Errorf("anchor %q matches %d lines (identical content). Use line= to target one, or old_string with surrounding context", target, matches)
+		}
+		return idx, nil
+	}
+
+	startIdx, err := findUnique(anchor)
+	if err != nil {
+		return "", err
+	}
+	endIdx := startIdx
+	if anchorEnd != "" {
+		endIdx, err = findUnique(anchorEnd)
+		if err != nil {
+			return "", err
+		}
+		if endIdx < startIdx {
+			return "", fmt.Errorf("anchor_end (line %d) is before anchor (line %d)", endIdx+1, startIdx+1)
+		}
+	}
+
+	// Splice: replace lines[startIdx..endIdx] (inclusive) with newStr.
+	newLines := make([]string, 0, len(lines))
+	newLines = append(newLines, lines[:startIdx]...)
+	newLines = append(newLines, strings.Split(newStr, "\n")...)
+	newLines = append(newLines, lines[endIdx+1:]...)
+	newContent := strings.Join(newLines, "\n")
+
+	if err := atomicfile.WriteFile(path, []byte(newContent), nil); err != nil {
+		return "", fmt.Errorf("failed to write file: %w", err)
+	}
+	if endIdx > startIdx {
+		return fmt.Sprintf("Edited %s (anchor lines %d-%d)", displayPath, startIdx+1, endIdx+1), nil
+	}
+	return fmt.Sprintf("Edited %s (anchor line %d)", displayPath, startIdx+1), nil
 }
 
 // editFuzzyHint provides a hint when old_string is not found.

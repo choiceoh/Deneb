@@ -25,6 +25,11 @@
         "type": "boolean",
         "description": "Force re-read even if cached (default: false)",
         "default": false
+      },
+      "hashes": {
+        "type": "boolean",
+        "description": "Prefix each line with a short content-hash anchor (columns: line<TAB>anchor<TAB>content). Pass an anchor to edit's anchor= to replace that line without reproducing it as old_string (saves output tokens). Default: false",
+        "default": false
       }
     },
     "required": [
@@ -89,11 +94,18 @@
         "type": "number",
         "description": "Replace at a specific line number (1-based). When set, old_string matches only on this line",
         "minimum": 1
+      },
+      "anchor": {
+        "type": "string",
+        "description": "Content-hash anchor from read(hashes=true) identifying the line to replace. Replaces the whole anchored line with new_string — no old_string needed. Errors if the anchor matches zero or multiple (identical) lines"
+      },
+      "anchor_end": {
+        "type": "string",
+        "description": "Optional second anchor. With anchor set, replaces the inclusive line range anchor..anchor_end with new_string (which may span multiple lines)"
       }
     },
     "required": [
       "file_path",
-      "old_string",
       "new_string"
     ]
   },
