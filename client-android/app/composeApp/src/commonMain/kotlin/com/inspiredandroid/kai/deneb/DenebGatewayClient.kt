@@ -373,6 +373,32 @@ class DenebGatewayClient(
         callRpc<AnalyzePayload>("miniapp.gmail.analyze", buildJsonObject { put("id", id) })
             ?.analysis?.ifBlank { null }
 
+    /** Ask a free-form question about a message; returns the answer text. */
+    suspend fun askMail(id: String, question: String): String? =
+        callRpc<AskPayload>(
+            "miniapp.gmail.ask",
+            buildJsonObject {
+                put("id", id)
+                put("question", question)
+            },
+        )?.answer?.ifBlank { null }
+
+    /** Fetch wiki / relationship context for a message's sender. */
+    suspend fun fetchSenderContext(sender: String): SenderContext? {
+        val p = callRpc<SenderContextPayload>(
+            "miniapp.gmail.sender_context",
+            buildJsonObject { put("sender", sender) },
+        ) ?: return null
+        return SenderContext(
+            displayName = p.displayName.ifBlank { p.sender },
+            email = p.email,
+            recentCount = p.recent?.count ?: 0,
+            windowDays = p.recent?.windowDays ?: 0,
+            wikiHits = p.wikiHits.map { SenderWikiHit(it.title.ifBlank { it.path }, it.summary, it.category) },
+            wikiFacts = p.wikiFacts,
+        )
+    }
+
     suspend fun refreshCalendar() {
         val payload = callRpc<CalListPayload>(
             "miniapp.calendar.list_upcoming",
@@ -592,6 +618,30 @@ class DenebGatewayClient(
     private data class AnalyzePayload(val analysis: String = "", val cached: Boolean = false)
 
     @Serializable
+    private data class AskPayload(val answer: String = "")
+
+    @Serializable
+    private data class SenderContextPayload(
+        val sender: String = "",
+        val email: String = "",
+        val displayName: String = "",
+        val recent: MailSenderRecent? = null,
+        val wikiHits: List<MailWikiHit> = emptyList(),
+        val wikiFacts: String = "",
+    )
+
+    @Serializable
+    private data class MailSenderRecent(val count: Int = 0, val lastReceivedAt: String = "", val windowDays: Int = 0)
+
+    @Serializable
+    private data class MailWikiHit(
+        val path: String = "",
+        val title: String = "",
+        val summary: String = "",
+        val category: String = "",
+    )
+
+    @Serializable
     private data class CalListPayload(val events: List<CalRow> = emptyList())
 
     @Serializable
@@ -648,6 +698,18 @@ data class MailDetail(
     val bodyTotal: Int,
     val attachments: List<String>,
 )
+
+/** Sender relationship context (recent volume + cited wiki pages). */
+data class SenderContext(
+    val displayName: String,
+    val email: String,
+    val recentCount: Int,
+    val windowDays: Int,
+    val wikiHits: List<SenderWikiHit>,
+    val wikiFacts: String,
+)
+
+data class SenderWikiHit(val title: String, val summary: String, val category: String)
 
 /** An upcoming calendar event shown in the native calendar screen. */
 data class CalendarEvent(

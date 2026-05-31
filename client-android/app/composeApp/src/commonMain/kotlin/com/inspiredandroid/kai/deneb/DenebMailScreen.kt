@@ -14,11 +14,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -32,15 +36,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 /**
- * Native inbox triage backed by `miniapp.gmail.list_recent`, ported from the
- * Mini App's list.ts: long-press a row to enter multi-select, a bottom bar
- * runs bulk read / archive / trash, and "더 보기" pages through nextPageToken.
- * Tapping a row (when not selecting) opens the detail screen.
+ * Native inbox triage backed by `miniapp.gmail.list_recent`. Long-press a row
+ * to multi-select; a tonal bottom bar runs bulk read / archive / trash, and
+ * "더 보기" pages through nextPageToken. Tapping a row opens the detail screen.
+ * Rows carry a sender monogram + type hierarchy so the list reads with weight.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -81,45 +88,53 @@ fun DenebMailScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .padding(horizontal = 16.dp),
-    ) {
+    Column(Modifier.fillMaxSize().statusBarsPadding()) {
         if (navigationTabBar != null) {
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
         }
-        Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             if (selecting) {
-                TextButton(onClick = { clearSelection() }) { Text("취소") }
                 Text(
                     "${selected.size}개 선택",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f).padding(start = 8.dp),
-                )
-            } else {
-                Text(
-                    "받은 메일",
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
+                TextButton(onClick = { clearSelection() }) { Text("취소") }
+            } else {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "받은 메일",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (mail.isNotEmpty()) {
+                        Text(
+                            "${mail.size}통 · 안 읽음 ${mail.count { it.unread }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 TextButton(onClick = onBack) { Text("닫기") }
             }
         }
-        Spacer(Modifier.height(8.dp))
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (!loaded && mail.isEmpty()) {
-                DenebLoading()
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { DenebLoading() }
             } else if (mail.isEmpty()) {
-                Text(
-                    "최근 7일 메일 없음",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "최근 7일 메일 없음",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
                     items(mail, key = { it.id }) { m ->
@@ -127,7 +142,7 @@ fun DenebMailScreen(
                             message = m,
                             selecting = selecting,
                             isSelected = m.id in selected,
-                            onClick = {
+                            onTap = {
                                 if (selecting) {
                                     if (m.id in selected) selected.remove(m.id) else selected.add(m.id)
                                     if (selected.isEmpty()) selecting = false
@@ -135,12 +150,15 @@ fun DenebMailScreen(
                                     onOpenDetail(m.id)
                                 }
                             },
-                            onLongClick = {
+                            onLongPress = {
                                 selecting = true
                                 if (m.id !in selected) selected.add(m.id)
                             },
                         )
-                        HorizontalDivider()
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 68.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        )
                     }
                     if (nextToken != null) {
                         item {
@@ -149,7 +167,7 @@ fun DenebMailScreen(
                                 contentAlignment = Alignment.Center,
                             ) {
                                 if (loadingMore) {
-                                    CircularProgressIndicator(Modifier.size(22.dp))
+                                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
                                 } else {
                                     TextButton(onClick = {
                                         scope.launch {
@@ -167,22 +185,20 @@ fun DenebMailScreen(
         }
 
         if (selecting && selected.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "${selected.size}개",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = { bulk { client.markMailRead(it) } }, enabled = !busy) { Text("읽음") }
-                TextButton(onClick = { bulk { client.archiveMail(it) } }, enabled = !busy) { Text("보관") }
-                TextButton(onClick = { bulk { client.trashMail(it) } }, enabled = !busy) { Text("휴지통") }
+            Surface(tonalElevation = 3.dp, shadowElevation = 6.dp) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "${selected.size}개 선택",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = { bulk { client.markMailRead(it) } }, enabled = !busy) { Text("읽음") }
+                    TextButton(onClick = { bulk { client.archiveMail(it) } }, enabled = !busy) { Text("보관") }
+                    TextButton(onClick = { bulk { client.trashMail(it) } }, enabled = !busy) { Text("휴지통") }
+                }
             }
         }
     }
@@ -194,58 +210,70 @@ private fun MailRow(
     message: MailMessage,
     selecting: Boolean,
     isSelected: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .combinedClickable(onClick = onTap, onLongClick = onLongPress)
             .background(
                 if (isSelected) {
-                    MaterialTheme.colorScheme.primaryContainer
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                 } else {
-                    androidx.compose.ui.graphics.Color.Transparent
+                    Color.Transparent
                 },
             )
-            .padding(vertical = 10.dp),
-        verticalAlignment = Alignment.Top,
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        when {
-            selecting -> Text(
-                if (isSelected) "☑ " else "☐ ",
-                color = MaterialTheme.colorScheme.primary,
-            )
-            message.unread -> Text("● ", color = MaterialTheme.colorScheme.primary)
+        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            if (selecting) {
+                Checkbox(checked = isSelected, onCheckedChange = null)
+            } else {
+                DenebAvatar(senderName(message.from))
+            }
         }
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     senderName(message.from),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = if (message.unread) FontWeight.Bold else FontWeight.Normal,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                if (message.unread) {
+                    Box(
+                        Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                }
                 Text(
                     shortDate(message.date),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Spacer(Modifier.height(2.dp))
             Text(
                 message.subject.ifBlank { "(제목 없음)" },
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = if (message.unread) FontWeight.SemiBold else FontWeight.Normal,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (message.unread) FontWeight.Medium else FontWeight.Normal,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             if (message.snippet.isNotBlank()) {
+                Spacer(Modifier.height(1.dp))
                 Text(
                     message.snippet,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
