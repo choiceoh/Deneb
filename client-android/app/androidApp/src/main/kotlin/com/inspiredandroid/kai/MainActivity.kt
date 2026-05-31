@@ -24,6 +24,7 @@ import androidx.navigation.compose.rememberNavController
 import com.inspiredandroid.kai.data.AppSettings
 import com.inspiredandroid.kai.data.DataRepository
 import com.inspiredandroid.kai.data.ThemeMode
+import com.inspiredandroid.kai.deneb.DenebGatewayClient
 import com.inspiredandroid.kai.ui.DarkColorScheme
 import com.inspiredandroid.kai.ui.LightColorScheme
 import io.github.vinceglb.filekit.FileKit
@@ -109,6 +110,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun autoStartDaemon() {
+        if (get<DataRepository>() is DenebGatewayClient) return
+
         val daemonController: DaemonController = get()
         if (daemonController is AndroidDaemonController && daemonController.shouldAutoStart()) {
             daemonController.start()
