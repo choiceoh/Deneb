@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
@@ -171,9 +172,12 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 		resolvedModel = result.ActualModel
 	}
 
+	// Strip any chain-of-thought delimiters that leaked into the answer (see
+	// reasoning_leak.go). The block regex matches here because the full assembled
+	// text is available. TrimSpace cleans the gap a removed leading block leaves.
 	return &SyncResult{
-		Text:         result.Text,
-		AllText:      result.AllText,
+		Text:         strings.TrimSpace(stripReasoningLeak(result.Text)),
+		AllText:      strings.TrimSpace(stripReasoningLeak(result.AllText)),
 		Model:        resolvedModel,
 		FellBack:     result.FellBack,
 		InputTokens:  result.Usage.InputTokens,
@@ -206,7 +210,20 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 		return nil, err
 	}
 
-	result, err := executeAgentRunWithDelta(ctx, params, deps, onDelta, h.logger)
+	// Wrap onDelta to scrub leaked reasoning delimiters per chunk so a literal
+	// "[thinking]" never reaches the stream. The block regex can't match across
+	// delta boundaries, but the standalone-marker strip catches the tokens; the
+	// final answer is fully cleaned in buildSyncResult. See reasoning_leak.go.
+	streamDelta := onDelta
+	if onDelta != nil {
+		streamDelta = func(delta string) {
+			if cleaned := stripReasoningLeak(delta); cleaned != "" {
+				onDelta(cleaned)
+			}
+		}
+	}
+
+	result, err := executeAgentRunWithDelta(ctx, params, deps, streamDelta, h.logger)
 	if err != nil {
 		return nil, err
 	}
