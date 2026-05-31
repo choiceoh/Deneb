@@ -10,11 +10,15 @@ on:
     paths:
       - "gateway-go/internal/pipeline/chat/toolreg/tool_schemas.json"
       - "gateway-go/cmd/tool-schema-gen/**"
+      - "gateway-go/internal/pipeline/chat/tool_classification.json"
+      - "gateway-go/cmd/data-gen/**"
   push:
     branches: [main]
     paths:
       - "gateway-go/internal/pipeline/chat/toolreg/tool_schemas.json"
       - "gateway-go/cmd/tool-schema-gen/**"
+      - "gateway-go/internal/pipeline/chat/tool_classification.json"
+      - "gateway-go/cmd/data-gen/**"
 
 concurrency:
   group: generate-check-${{ github.event.pull_request.number || github.ref }}
@@ -28,6 +32,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     outputs:
       tool-schemas: ${{ steps.filter.outputs.tool-schemas }}
+      data-gen: ${{ steps.filter.outputs.data-gen }}
     steps:
       - uses: actions/checkout@v6
 
@@ -38,6 +43,9 @@ jobs:
             tool-schemas:
               - "gateway-go/internal/pipeline/chat/toolreg/tool_schemas.json"
               - "gateway-go/cmd/tool-schema-gen/**"
+            data-gen:
+              - "gateway-go/internal/pipeline/chat/tool_classification.json"
+              - "gateway-go/cmd/data-gen/**"
 
 # ── Domain check jobs ──────────────────────────────────────────────────────
 
@@ -58,3 +66,21 @@ jobs:
 
       - name: tool schemas check (tool_schemas.json -> tool_schemas_gen.go)
         run: make tool-schemas-check
+
+  # tool_classification.json -> tool_classification_gen.go
+  data-gen:
+    name: data tables
+    needs: changes
+    if: needs.changes.outputs.data-gen == 'true'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+          cache-dependency-path: gateway-go/go.sum
+
+      - name: data tables check (tool_classification.json -> tool_classification_gen.go)
+        run: make data-gen-check
