@@ -102,6 +102,10 @@ class DenebGatewayClient(
     private val _denebMail = MutableStateFlow<List<MailMessage>>(emptyList())
     val denebMail: StateFlow<List<MailMessage>> = _denebMail
 
+    // Pagination cursor for the inbox; null when there are no more pages.
+    private val _denebMailNextToken = MutableStateFlow<String?>(null)
+    val denebMailNextToken: StateFlow<String?> = _denebMailNextToken
+
     // Upcoming calendar events surfaced in the native calendar screen.
     private val _denebCalendar = MutableStateFlow<List<CalendarEvent>>(emptyList())
     val denebCalendar: StateFlow<List<CalendarEvent>> = _denebCalendar
@@ -303,6 +307,24 @@ class DenebGatewayClient(
         _denebMail.value = payload.messages
             .filter { it.id.isNotBlank() }
             .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread) }
+        _denebMailNextToken.value = payload.nextPageToken.ifBlank { null }
+    }
+
+    /** Append the next inbox page (if any) to the current list. */
+    suspend fun loadMoreMail() {
+        val token = _denebMailNextToken.value ?: return
+        val payload = callRpc<MailListPayload>(
+            "miniapp.gmail.list_recent",
+            buildJsonObject {
+                put("limit", 25)
+                put("pageToken", token)
+            },
+        ) ?: return
+        val seen = _denebMail.value.mapTo(HashSet()) { it.id }
+        _denebMail.value = _denebMail.value + payload.messages
+            .filter { it.id.isNotBlank() && it.id !in seen }
+            .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread) }
+        _denebMailNextToken.value = payload.nextPageToken.ifBlank { null }
     }
 
     suspend fun fetchMailDetail(id: String): MailDetail? {
@@ -332,17 +354,17 @@ class DenebGatewayClient(
         return ok
     }
 
-    /** Archive (drop from inbox); refreshes the list so the row disappears. */
+    /** Archive (drop from inbox); optimistically removes the row from the list. */
     suspend fun archiveMail(id: String): Boolean {
         val ok = callRpc<OkPayload>("miniapp.gmail.archive", buildJsonObject { put("id", id) })?.ok == true
-        if (ok) refreshMail()
+        if (ok) _denebMail.update { list -> list.filterNot { it.id == id } }
         return ok
     }
 
-    /** Move to Trash; refreshes the list so the row disappears. */
+    /** Move to Trash; optimistically removes the row from the list. */
     suspend fun trashMail(id: String): Boolean {
         val ok = callRpc<OkPayload>("miniapp.gmail.trash", buildJsonObject { put("id", id) })?.ok == true
-        if (ok) refreshMail()
+        if (ok) _denebMail.update { list -> list.filterNot { it.id == id } }
         return ok
     }
 
@@ -527,7 +549,10 @@ class DenebGatewayClient(
     )
 
     @Serializable
-    private data class MailListPayload(val messages: List<MailRow> = emptyList())
+    private data class MailListPayload(
+        val messages: List<MailRow> = emptyList(),
+        val nextPageToken: String = "",
+    )
 
     @Serializable
     private data class MailRow(
