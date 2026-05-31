@@ -31,6 +31,8 @@ import kai.composeapp.generated.resources.ic_volume_up
 import kai.composeapp.generated.resources.new_chat_content_description
 import kai.composeapp.generated.resources.sandbox_content_description
 import kai.composeapp.generated.resources.toggle_speech_output_content_description
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import nl.marc_apps.tts.TextToSpeechInstance
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.resources.vectorResource
@@ -48,6 +50,9 @@ internal fun TopBar(
     isShellExecuting: Boolean,
     onToggleSandbox: () -> Unit,
     navigationTabBar: (@Composable () -> Unit)? = null,
+    topics: ImmutableList<TopicTab> = persistentListOf(),
+    selectedTopicKey: String? = null,
+    onSelectTopic: (String) -> Unit = {},
 ) {
     if (navigationTabBar != null) {
         Box(
@@ -60,10 +65,14 @@ internal fun TopBar(
             Box(modifier = Modifier.align(Alignment.Center)) {
                 navigationTabBar()
             }
-            Row(modifier = Modifier.align(Alignment.CenterEnd)) {
+            Row(
+                modifier = Modifier.align(Alignment.CenterEnd),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 if (textToSpeech != null) {
                     SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
                 }
+                DenebTopicMenu(topics, selectedTopicKey, onSelectTopic)
             }
         }
     } else {
@@ -74,8 +83,10 @@ internal fun TopBar(
             if (textToSpeech != null) {
                 SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
             }
-            // 검색 / 메일 / 일정 / 사람 / 카테고리 / 대화 기록 / 설정 all live in the
-            // left drawer (DenebDrawerSheet) now — the top bar stays chat-only.
+            // Search / mail / calendar / people / categories / history / settings
+            // all live in the left drawer; the topic menu takes the spot where
+            // the settings icon used to sit.
+            DenebTopicMenu(topics, selectedTopicKey, onSelectTopic)
         }
     }
 }

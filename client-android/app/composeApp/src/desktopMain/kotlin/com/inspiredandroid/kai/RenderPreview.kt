@@ -5,6 +5,8 @@ package com.inspiredandroid.kai
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ColorScheme
@@ -13,15 +15,20 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.deneb.DenebMarkdown
 import com.inspiredandroid.kai.deneb.MailMessage
 import com.inspiredandroid.kai.deneb.MailRow
 import com.inspiredandroid.kai.ui.DarkColorScheme
+import com.inspiredandroid.kai.ui.DenebRow
+import com.inspiredandroid.kai.ui.DenebScreenScaffold
+import com.inspiredandroid.kai.ui.DenebType
 import com.inspiredandroid.kai.ui.LightColorScheme
+import com.inspiredandroid.kai.ui.denebHint
 import com.inspiredandroid.kai.ui.chat.composables.DenebDrawerSheet
-import com.inspiredandroid.kai.ui.chat.composables.DenebTopicSwitcher
+import com.inspiredandroid.kai.ui.chat.composables.DenebTopicMenu
 import com.inspiredandroid.kai.ui.chat.composables.TopicTab
 import kotlinx.collections.immutable.persistentListOf
 import org.jetbrains.skia.EncodedImageFormat
@@ -57,7 +64,51 @@ fun main() {
     renderMarkdown("markdown_dark.png", DarkColorScheme)
     renderChrome("chrome_dark.png", DarkColorScheme)
     renderChrome("chrome_light.png", LightColorScheme)
+    renderDesignSample("design_dark.png", DarkColorScheme)
+    renderDesignSample("design_light.png", LightColorScheme)
     println("rendered -> /tmp/deneb-render/")
+}
+
+private val sampleMail = listOf(
+    Triple("김민준 부장", "내일 회의 자료 검토 부탁드립니다", true),
+    Triple("GitHub", "[deneb] PR #1853 merged into main", false),
+    Triple("에코프로 구매팀", "모듈 견적 회신 요청 — 6월말 납기", false),
+    Triple("이서연", "(제목 없음)", false),
+)
+
+// Validates the Deneb design system (DenebScreenScaffold + DenebRow + DenebType)
+// on a mock mail list: English chrome, hairline rows, no Material cards.
+private fun renderDesignSample(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 760, height = 1300, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "mail", onBack = {}) {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    sampleMail.forEach { (from, subject, unread) ->
+                        DenebRow(onClick = {}) {
+                            Text(
+                                text = from,
+                                style = if (unread) DenebType.rowTitleStrong else DenebType.rowTitle,
+                                color = MaterialTheme.colorScheme.onBackground,
+                            )
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                text = subject,
+                                style = DenebType.snippet,
+                                color = denebHint(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
 }
 
 // Renders the redesigned chat chrome — the left drawer (분석 + 기록·설정 groups)
@@ -88,11 +139,11 @@ private fun renderChrome(name: String, scheme: ColorScheme) {
                     }
                     Column(Modifier.padding(top = 28.dp)) {
                         Text(
-                            "토픽 스위처 — 선택: 잡담",
+                            "토픽 메뉴 (상단바) — 선택: 잡담",
                             style = MaterialTheme.typography.titleSmall,
                             modifier = Modifier.padding(16.dp),
                         )
-                        DenebTopicSwitcher(topics = topics, selectedKey = "chat", onSelectTopic = {})
+                        DenebTopicMenu(topics = topics, selectedKey = "chat", onSelectTopic = {})
                     }
                 }
             }
