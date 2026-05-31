@@ -99,6 +99,10 @@ class DenebGatewayClient(
     private val _denebMail = MutableStateFlow<List<MailMessage>>(emptyList())
     val denebMail: StateFlow<List<MailMessage>> = _denebMail
 
+    // Upcoming calendar events surfaced in the native calendar screen.
+    private val _denebCalendar = MutableStateFlow<List<CalendarEvent>>(emptyList())
+    val denebCalendar: StateFlow<List<CalendarEvent>> = _denebCalendar
+
     private var sessionKey: String = "client:main"
 
     private val gatewayUrl: String
@@ -268,6 +272,19 @@ class DenebGatewayClient(
         _denebMail.value = payload.messages
             .filter { it.id.isNotBlank() }
             .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread) }
+    }
+
+    suspend fun refreshCalendar() {
+        val payload = callRpc<CalListPayload>(
+            "miniapp.calendar.list_upcoming",
+            buildJsonObject {
+                put("hoursAhead", 168) // one week ahead
+                put("limit", 50)
+            },
+        ) ?: return
+        _denebCalendar.value = payload.events
+            .filter { it.id.isNotBlank() }
+            .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.hasMeet) }
     }
 
     private suspend fun send(message: String): String {
@@ -445,6 +462,20 @@ class DenebGatewayClient(
         val isUnread: Boolean = false,
     )
 
+    @Serializable
+    private data class CalListPayload(val events: List<CalRow> = emptyList())
+
+    @Serializable
+    private data class CalRow(
+        val id: String = "",
+        val summary: String = "",
+        val location: String = "",
+        val start: String = "",
+        val end: String = "",
+        val allDay: Boolean = false,
+        val hasMeet: Boolean = false,
+    )
+
     private companion object {
         const val CLIENT_TOKEN_HEADER = "X-Deneb-Client-Token"
         const val KEY_URL = "deneb.gatewayUrl"
@@ -473,4 +504,15 @@ data class MailMessage(
     val snippet: String,
     val date: String,
     val unread: Boolean,
+)
+
+/** An upcoming calendar event shown in the native calendar screen. */
+data class CalendarEvent(
+    val id: String,
+    val title: String,
+    val location: String,
+    val start: String,
+    val end: String,
+    val allDay: Boolean,
+    val hasMeet: Boolean,
 )

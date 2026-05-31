@@ -38,6 +38,7 @@ import com.inspiredandroid.kai.data.ThemeMode
 import com.inspiredandroid.kai.data.DataRepository
 import com.inspiredandroid.kai.deneb.DenebConfigScreen
 import com.inspiredandroid.kai.deneb.DenebGatewayClient
+import com.inspiredandroid.kai.deneb.DenebCalendarScreen
 import com.inspiredandroid.kai.deneb.DenebMailScreen
 import com.inspiredandroid.kai.tools.CalendarPermissionController
 import com.inspiredandroid.kai.tools.NotificationPermissionController
@@ -84,6 +85,10 @@ object DenebConfig
 @Serializable
 @SerialName("deneb_mail")
 object DenebMail
+
+@Serializable
+@SerialName("deneb_calendar")
+object DenebCalendar
 
 @Composable
 fun App(
@@ -254,6 +259,7 @@ private fun AppContent(
                             appSettings = appSettings,
                             denebClient = denebClient,
                             onBack = { navController.navigateUp() },
+                            onOpenCalendar = { navController.navigate(DenebCalendar) },
                             onOpenMail = { navController.navigate(DenebMail) },
                             onOpenKaiSettings = { navController.navigate(Settings) },
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
@@ -262,6 +268,15 @@ private fun AppContent(
                     composable<DenebMail> {
                         denebClient?.let { client ->
                             DenebMailScreen(
+                                client = client,
+                                onBack = { navController.navigateUp() },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebCalendar> {
+                        denebClient?.let { client ->
+                            DenebCalendarScreen(
                                 client = client,
                                 onBack = { navController.navigateUp() },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,

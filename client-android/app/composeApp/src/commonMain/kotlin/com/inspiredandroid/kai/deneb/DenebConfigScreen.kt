@@ -43,6 +43,7 @@ fun DenebConfigScreen(
     appSettings: AppSettings,
     onBack: () -> Unit,
     denebClient: DenebGatewayClient? = null,
+    onOpenCalendar: () -> Unit = {},
     onOpenMail: () -> Unit = {},
     onOpenKaiSettings: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
@@ -104,6 +105,8 @@ fun DenebConfigScreen(
         if (denebClient != null) {
             Spacer(Modifier.height(28.dp))
             Text("Deneb", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onOpenCalendar, modifier = Modifier.fillMaxWidth()) { Text("🗓️  일정") }
             Spacer(Modifier.height(8.dp))
             Button(onClick = onOpenMail, modifier = Modifier.fillMaxWidth()) { Text("📧  받은 메일") }
             ModelSection(denebClient)
