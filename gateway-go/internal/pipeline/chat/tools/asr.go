@@ -212,12 +212,24 @@ func mmss(sec float64) string {
 // VibeVoice-ASR and returns a ready-to-read diarized transcript. mimeType is a
 // hint used only to pick the multipart filename extension. There is no local
 // fallback — an unreachable server surfaces as an error the caller reports.
-func transcribeAudioText(ctx context.Context, audio []byte, mimeType string) (string, error) {
-	r, err := transcribeAudio(ctx, audio, audioFilename(mimeType), asrHotwords())
+func transcribeAudioText(ctx context.Context, audio []byte, mimeType, extraHotwords string) (string, error) {
+	r, err := transcribeAudio(ctx, audio, audioFilename(mimeType), mergeHotwords(extraHotwords, asrHotwords()))
 	if err != nil {
 		return "", err
 	}
 	return formatTranscript(r), nil
+}
+
+// mergeHotwords joins caller-supplied hotwords (e.g. wiki proper nouns) with the
+// operator's DENEB_ASR_HOTWORDS, dropping blanks. Caller hints come first.
+func mergeHotwords(parts ...string) string {
+	var kept []string
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, ", ")
 }
 
 // audioFilename maps a mime type to a plausible multipart filename. The server
