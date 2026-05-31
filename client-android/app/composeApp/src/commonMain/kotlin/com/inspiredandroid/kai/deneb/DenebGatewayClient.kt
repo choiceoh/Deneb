@@ -231,22 +231,30 @@ class DenebGatewayClient(
 
     /** Fetch the configured topics and default to General (threadId "0"). */
     fun loadTopics() {
-        scope.launch {
-            val payload = callRpc<TopicsListPayload>("miniapp.topics.list", buildJsonObject {})
-            val topics = payload?.topics
-                ?.filter { it.key.isNotBlank() }
-                ?.map { DenebTopic(key = it.key, threadId = it.threadId) }
-                ?: emptyList()
-            _topics.value = topics
-            // Only auto-select when a General (forum threadId "0", i.e. 업무)
-            // topic is configured — that maps to the legacy "client:main" home,
-            // so the default view is unchanged. Without a General topic the
-            // named topics stay opt-in and chat stays on "client:main", so a
-            // returning user keeps their existing conversation on first open.
-            if (_selectedTopic.value == null) {
-                topics.firstOrNull { it.threadId == "0" }?.let { selectTopic(it.key) }
-            }
+        scope.launch { refreshTopics() }
+    }
+
+    /**
+     * Loads the configured topics, defaults to General, and returns them. The
+     * suspend form lets the share flow await the list before showing its topic
+     * picker — a cold share has no chat open to have loaded them yet.
+     */
+    suspend fun refreshTopics(): List<DenebTopic> {
+        val payload = callRpc<TopicsListPayload>("miniapp.topics.list", buildJsonObject {})
+        val topics = payload?.topics
+            ?.filter { it.key.isNotBlank() }
+            ?.map { DenebTopic(key = it.key, threadId = it.threadId) }
+            ?: emptyList()
+        _topics.value = topics
+        // Only auto-select when a General (forum threadId "0", i.e. 업무)
+        // topic is configured — that maps to the legacy "client:main" home,
+        // so the default view is unchanged. Without a General topic the
+        // named topics stay opt-in and chat stays on "client:main", so a
+        // returning user keeps their existing conversation on first open.
+        if (_selectedTopic.value == null) {
+            topics.firstOrNull { it.threadId == "0" }?.let { selectTopic(it.key) }
         }
+        return topics
     }
 
     /** Switch the active topic: repoint the session and load its transcript. */

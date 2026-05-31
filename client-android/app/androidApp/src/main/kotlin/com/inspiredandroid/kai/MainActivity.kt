@@ -201,6 +201,30 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // shareToTopic asks which topic a shared item should land in (when more than
+    // one is configured) and routes the capture there. A cold share has no chat
+    // open to have picked a topic, so without this every share lands in the
+    // default (업무 / client:main) session — the reported bug.
+    private fun shareToTopic(send: suspend (DenebGatewayClient) -> Unit) {
+        val client = get<DataRepository>() as? DenebGatewayClient ?: return
+        lifecycleScope.launch {
+            val topics = client.refreshTopics()
+            if (topics.size < 2) {
+                send(client)
+                return@launch
+            }
+            val labels = topics.map { it.key }.toTypedArray()
+            android.app.AlertDialog.Builder(this@MainActivity)
+                .setTitle("어느 토픽으로 보낼까요?")
+                .setItems(labels) { _, which ->
+                    client.selectTopic(topics[which].key)
+                    lifecycleScope.launch { send(client) }
+                }
+                .setNegativeButton("취소", null)
+                .show()
+        }
+    }
+
     private fun handleDeepLinkIntent(intent: Intent?) {
         if (intent?.getBooleanExtra(EXTRA_OPEN_HEARTBEAT, false) == true) {
             val dataRepository: DataRepository = get()
@@ -229,8 +253,7 @@ class MainActivity : ComponentActivity() {
         if (text.isEmpty()) return
         val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)?.trim().orEmpty()
         val captured = if (subject.isNotEmpty()) "📥 공유: $subject\n\n$text" else "📥 공유됨\n\n$text"
-        val dataRepository: DataRepository = get()
-        lifecycleScope.launch { dataRepository.ask(captured, emptyList(), null) }
+        shareToTopic { it.ask(captured, emptyList(), null) }
         // Clear so a configuration change doesn't re-send the capture.
         intent.removeExtra(Intent.EXTRA_TEXT)
     }
@@ -248,8 +271,8 @@ class MainActivity : ComponentActivity() {
         if (uri == null) return
         val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
         if (bytes == null || bytes.isEmpty()) return
-        val client = get<DataRepository>() as? DenebGatewayClient ?: return
-        lifecycleScope.launch { client.captureImage(bytes, intent.type ?: "image/*") }
+        val mime = intent.type ?: "image/*"
+        shareToTopic { it.captureImage(bytes, mime) }
         intent.removeExtra(Intent.EXTRA_STREAM)
     }
 
@@ -269,8 +292,8 @@ class MainActivity : ComponentActivity() {
         if (uri == null) return
         val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
         if (bytes == null || bytes.isEmpty()) return
-        val client = get<DataRepository>() as? DenebGatewayClient ?: return
-        lifecycleScope.launch { client.captureAudio(bytes, intent.type ?: "audio/*") }
+        val mime = intent.type ?: "audio/*"
+        shareToTopic { it.captureAudio(bytes, mime) }
         intent.removeExtra(Intent.EXTRA_STREAM)
     }
 }
