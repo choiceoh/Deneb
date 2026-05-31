@@ -88,6 +88,7 @@ fun DenebMailScreen(
         }
     }
 
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         if (navigationTabBar != null) {
             Spacer(Modifier.height(8.dp))
@@ -201,6 +202,7 @@ fun DenebMailScreen(
                 }
             }
         }
+    }
     }
 }
 
