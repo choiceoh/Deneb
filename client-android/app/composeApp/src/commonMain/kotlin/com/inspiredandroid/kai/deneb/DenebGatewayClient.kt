@@ -840,6 +840,33 @@ class DenebGatewayClient(
     @Serializable
     private data class CaptureImagePayload(val text: String = "")
 
+    /**
+     * Transcribe a shared audio recording (voice memo, meeting audio) via the
+     * gateway's VibeVoice-ASR sidecar and run one agent turn over the diarized
+     * transcript (speaker labels + timestamps). The native client's "share a
+     * recording to Deneb" path — capture the Telegram bot can't do on Android.
+     */
+    @OptIn(ExperimentalEncodingApi::class)
+    suspend fun captureAudio(bytes: ByteArray, mimeType: String) {
+        if (clientToken.isEmpty() || bytes.isEmpty()) return
+        _chatHistory.update { it + History(role = History.Role.USER, content = "🎙️ 녹음 공유됨 (전사 중…)") }
+        val reply = runCatching {
+            val payload = callRpc<CaptureAudioPayload>(
+                "miniapp.capture.audio",
+                buildJsonObject {
+                    put("audio", Base64.encode(bytes))
+                    put("mimeType", mimeType)
+                    put("sessionKey", sessionKey)
+                },
+            )
+            payload?.text?.ifBlank { null } ?: "녹음에서 음성을 인식하지 못했거나 전사에 실패했습니다."
+        }.getOrElse { "⚠️ ${it.message ?: "녹음 캡처 실패"}" }
+        _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
+    }
+
+    @Serializable
+    private data class CaptureAudioPayload(val text: String = "")
+
     private suspend fun send(message: String): GatewayReply {
         if (clientToken.isEmpty()) {
             return GatewayReply("⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요.")

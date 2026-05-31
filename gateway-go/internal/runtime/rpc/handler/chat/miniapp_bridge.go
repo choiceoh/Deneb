@@ -40,6 +40,11 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 	if deps.OcrImage != nil {
 		m["miniapp.capture.image"] = handleMiniappCaptureImage(deps)
 	}
+	// Audio capture (share a voice memo / meeting recording to Deneb) needs the
+	// VibeVoice-ASR sidecar wired; skip the method cleanly when it isn't.
+	if deps.Transcribe != nil {
+		m["miniapp.capture.audio"] = handleMiniappCaptureAudio(deps)
+	}
 	return m
 }
 
@@ -95,6 +100,67 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"text":       res.Text,
 			"ocr":        strings.TrimSpace(text),
+			"model":      res.Model,
+			"sessionKey": sessionKey,
+		})
+	}
+}
+
+// handleMiniappCaptureAudio transcribes a directly-shared audio recording (a
+// voice memo or meeting audio) via VibeVoice-ASR and runs one agent turn over
+// the diarized transcript — the native client's "share a recording to Deneb"
+// path. The transcript carries speaker labels and timestamps, so the agent can
+// summarize, pull action items, or capture it to the wiki.
+//
+// Params:
+//   - audio      (base64, required; an optional `data:...;base64,` prefix is stripped)
+//   - mimeType   (string, optional): codec hint (server sniffs the real codec)
+//   - sessionKey (string, optional): defaults to "client:main"
+func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		p, errResp := rpcutil.DecodeParams[struct {
+			Audio      string `json:"audio"`
+			MimeType   string `json:"mimeType"`
+			SessionKey string `json:"sessionKey"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		raw := strings.TrimSpace(p.Audio)
+		if strings.HasPrefix(raw, "data:") {
+			if i := strings.IndexByte(raw, ','); i > 0 {
+				raw = raw[i+1:]
+			}
+		}
+		if raw == "" {
+			return rpcerr.MissingParam("audio").Response(req.ID)
+		}
+		audio, err := base64.StdEncoding.DecodeString(raw)
+		if err != nil || len(audio) == 0 {
+			return rpcerr.InvalidParams(fmt.Errorf("audio is not valid base64")).Response(req.ID)
+		}
+		transcript, err := deps.Transcribe(ctx, audio, p.MimeType)
+		if err != nil {
+			return rpcerr.WrapDependencyFailed("audio transcription failed", err).Response(req.ID)
+		}
+		if strings.TrimSpace(transcript) == "" {
+			return rpcerr.Unavailable("no speech found in audio").Response(req.ID)
+		}
+		sessionKey := strings.TrimSpace(p.SessionKey)
+		if sessionKey == "" {
+			sessionKey = nativeClientChannel + ":main"
+		}
+		message := "🎙️ 공유 녹음에서 받아쓴 내용 (화자분리·타임스탬프):\n\n" + strings.TrimSpace(transcript)
+		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
+			Delivery:            &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
+			AutoDeliveredOutput: true,
+		})
+		if err != nil {
+			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"text":       res.Text,
+			"transcript": strings.TrimSpace(transcript),
 			"model":      res.Model,
 			"sessionKey": sessionKey,
 		})

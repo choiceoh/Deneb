@@ -23,6 +23,10 @@ type Deps struct {
 	// OcrImage OCRs a directly-shared image (native-client image capture).
 	// Optional; nil disables miniapp.capture.image.
 	OcrImage func(ctx context.Context, img []byte) (string, error)
+	// Transcribe transcribes a directly-shared audio recording (native-client
+	// voice/meeting capture) via the VibeVoice-ASR sidecar. Optional; nil
+	// disables miniapp.capture.audio.
+	Transcribe func(ctx context.Context, audio []byte, mimeType string) (string, error)
 }
 
 // BtwDeps holds the dependencies for the chat.btw side-question RPC method.
