@@ -509,9 +509,10 @@ func pptxToText(data []byte) (string, error) {
 // project's Korean-first business documents.
 const ocrLangs = "kor+eng"
 
-// imageOCR runs tesseract on raw image bytes.
+// imageOCR recognizes text in raw image bytes via PaddleOCR-VL, falling back
+// to tesseract when the local model server is unavailable.
 func imageOCR(ctx context.Context, img []byte) (string, error) {
-	return tesseract(ctx, img)
+	return ocrImageBytes(ctx, img)
 }
 
 // pdfOCR rasterizes a PDF with pdftoppm and OCRs each page. It is the fallback
@@ -560,7 +561,7 @@ func pdfOCR(ctx context.Context, pdf []byte) (string, error) {
 		if err != nil {
 			continue
 		}
-		text, err := tesseract(runCtx, img)
+		text, err := ocrImageBytes(runCtx, img)
 		if err != nil || strings.TrimSpace(text) == "" {
 			continue
 		}
