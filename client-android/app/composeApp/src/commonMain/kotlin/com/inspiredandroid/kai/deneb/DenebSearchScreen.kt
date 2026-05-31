@@ -76,6 +76,7 @@ fun DenebSearchScreen(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
+                TextButton(onClick = { onOpenWiki("") }) { Text("+ 새 위키") }
                 TextButton(onClick = onBack) { Text("닫기") }
             }
             Spacer(Modifier.height(8.dp))

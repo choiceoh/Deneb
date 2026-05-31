@@ -12,6 +12,7 @@ import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.deneb.DenebMarkdown
 import com.inspiredandroid.kai.deneb.MailMessage
 import com.inspiredandroid.kai.deneb.MailRow
 import com.inspiredandroid.kai.ui.DarkColorScheme
@@ -29,11 +30,40 @@ private val sample = listOf(
     MailMessage("3", "이영희 <lee@example.com>", "(제목 없음)", "", "2026-05-30T22:05:00Z", false),
 )
 
+private val markdownSample = """
+    # 프로젝트 X 개요
+    **상태:** 진행 중 · 담당 김철수
+
+    ## 핵심 결정
+    - NVFP4 MTP graft 적용 (mean accept ~2.5)
+    - `--speculative-config` 로 드래프터 강제
+
+    ### 다음 단계
+    1. 라이브 검증
+    2. PR 병합
+""".trimIndent()
+
 fun main() {
     System.setProperty("java.awt.headless", "true")
     render("mail_dark.png", DarkColorScheme)
     render("mail_light.png", LightColorScheme)
+    renderMarkdown("markdown_dark.png", DarkColorScheme)
     println("rendered -> /tmp/deneb-render/")
+}
+
+private fun renderMarkdown(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 840, height = 700, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                DenebMarkdown(markdownSample, Modifier.padding(20.dp))
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
 }
 
 private fun render(name: String, scheme: ColorScheme) {

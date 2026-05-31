@@ -172,7 +172,7 @@ fun DenebMailDetailScreen(
                                 )
                             }
                         } else {
-                            Text(analysis ?: "", style = MaterialTheme.typography.bodyMedium)
+                            DenebMarkdown(analysis ?: "")
                         }
                     }
                 }
@@ -245,7 +245,7 @@ fun DenebMailDetailScreen(
                 Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
                     Text("Q. $question", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(2.dp))
-                    Text(answer, style = MaterialTheme.typography.bodyMedium)
+                    DenebMarkdown(answer)
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {

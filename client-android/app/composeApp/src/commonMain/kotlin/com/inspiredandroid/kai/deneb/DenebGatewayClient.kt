@@ -492,6 +492,39 @@ class DenebGatewayClient(
         )
     }
 
+    /** Overwrite a wiki page body (`miniapp.memory.write_page`). */
+    suspend fun saveWikiPage(path: String, body: String): Boolean =
+        callRpc<JsonObject>(
+            "miniapp.memory.write_page",
+            buildJsonObject { put("path", path); put("body", body) },
+        ) != null
+
+    /** Create a new wiki page (`miniapp.memory.create_page`); returns its path. */
+    suspend fun createWikiPage(title: String, category: String, body: String): String? =
+        callRpc<WikiPagePayload>(
+            "miniapp.memory.create_page",
+            buildJsonObject {
+                put("title", title)
+                put("category", category)
+                put("body", body)
+            },
+        )?.path
+
+    /** Write (or create) a topic doc (`miniapp.topicdocs.write_file`). */
+    suspend fun saveTopicDoc(name: String, content: String, create: Boolean): Boolean =
+        callRpc<JsonObject>(
+            "miniapp.topicdocs.write_file",
+            buildJsonObject {
+                put("name", name)
+                put("content", content)
+                put("create", create)
+            },
+        ) != null
+
+    /** Trigger a cron job immediately (`miniapp.crons.run`). */
+    suspend fun runCron(id: String): Boolean =
+        callRpc<JsonObject>("miniapp.crons.run", buildJsonObject { put("id", id) }) != null
+
     private suspend fun send(message: String): String {
         if (clientToken.isEmpty()) {
             return "⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요."

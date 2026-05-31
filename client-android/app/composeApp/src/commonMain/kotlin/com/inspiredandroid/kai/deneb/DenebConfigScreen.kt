@@ -235,6 +235,7 @@ private fun CronTab(client: DenebGatewayClient) {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
+                TextButton(onClick = { scope.launch { client.runCron(cron.id) } }) { Text("실행") }
                 TextButton(onClick = { scope.launch { client.cancelScheduledTask(cron.id) } }) { Text("삭제") }
             }
             HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
@@ -246,7 +247,25 @@ private fun CronTab(client: DenebGatewayClient) {
 private fun TopicDocsTab(client: DenebGatewayClient, onOpenTopicDoc: (String) -> Unit) {
     var docs by remember { mutableStateOf<List<TopicDocFile>?>(null) }
     LaunchedEffect(Unit) { docs = client.fetchTopicDocs() }
-    val list = docs
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "토픽별 주입 문서",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { onOpenTopicDoc("") }) { Text("+ 새 문서") }
+        }
+        TopicDocsList(docs, onOpenTopicDoc)
+    }
+}
+
+@Composable
+private fun TopicDocsList(list: List<TopicDocFile>?, onOpenTopicDoc: (String) -> Unit) {
     when {
         list == null -> DenebLoading()
         list.isEmpty() -> EmptyTab("토픽 문서가 없습니다.")
