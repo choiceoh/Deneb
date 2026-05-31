@@ -28,6 +28,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.toRoute
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.compose.setSingletonImageLoaderFactory
@@ -39,6 +40,7 @@ import com.inspiredandroid.kai.data.DataRepository
 import com.inspiredandroid.kai.deneb.DenebConfigScreen
 import com.inspiredandroid.kai.deneb.DenebGatewayClient
 import com.inspiredandroid.kai.deneb.DenebCalendarScreen
+import com.inspiredandroid.kai.deneb.DenebMailDetailScreen
 import com.inspiredandroid.kai.deneb.DenebMailScreen
 import com.inspiredandroid.kai.tools.CalendarPermissionController
 import com.inspiredandroid.kai.tools.NotificationPermissionController
@@ -89,6 +91,10 @@ object DenebMail
 @Serializable
 @SerialName("deneb_calendar")
 object DenebCalendar
+
+@Serializable
+@SerialName("deneb_mail_detail")
+data class DenebMailDetail(val id: String)
 
 @Composable
 fun App(
@@ -270,6 +276,7 @@ private fun AppContent(
                             DenebMailScreen(
                                 client = client,
                                 onBack = { navController.navigateUp() },
+                                onOpenDetail = { id -> navController.navigate(DenebMailDetail(id)) },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }
@@ -278,6 +285,16 @@ private fun AppContent(
                         denebClient?.let { client ->
                             DenebCalendarScreen(
                                 client = client,
+                                onBack = { navController.navigateUp() },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebMailDetail> { entry ->
+                        denebClient?.let { client ->
+                            DenebMailDetailScreen(
+                                client = client,
+                                messageId = entry.toRoute<DenebMailDetail>().id,
                                 onBack = { navController.navigateUp() },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )

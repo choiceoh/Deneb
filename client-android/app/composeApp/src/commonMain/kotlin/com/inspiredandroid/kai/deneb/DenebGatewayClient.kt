@@ -274,6 +274,52 @@ class DenebGatewayClient(
             .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread) }
     }
 
+    suspend fun fetchMailDetail(id: String): MailDetail? {
+        val row = callRpc<MailDetailRow>(
+            "miniapp.gmail.get",
+            buildJsonObject { put("id", id) },
+        ) ?: return null
+        return MailDetail(
+            id = row.id,
+            from = row.from,
+            to = row.to,
+            cc = row.cc,
+            subject = row.subject,
+            date = row.date,
+            body = row.body,
+            bodyTotal = row.bodyTotal,
+            attachments = row.attachments.map { it.filename.ifBlank { it.mimeType } },
+        )
+    }
+
+    /** Mark read on the server and optimistically clear the unread dot in the list. */
+    suspend fun markMailRead(id: String): Boolean {
+        val ok = callRpc<OkPayload>("miniapp.gmail.mark_read", buildJsonObject { put("id", id) })?.ok == true
+        if (ok) {
+            _denebMail.update { list -> list.map { if (it.id == id) it.copy(unread = false) else it } }
+        }
+        return ok
+    }
+
+    /** Archive (drop from inbox); refreshes the list so the row disappears. */
+    suspend fun archiveMail(id: String): Boolean {
+        val ok = callRpc<OkPayload>("miniapp.gmail.archive", buildJsonObject { put("id", id) })?.ok == true
+        if (ok) refreshMail()
+        return ok
+    }
+
+    /** Move to Trash; refreshes the list so the row disappears. */
+    suspend fun trashMail(id: String): Boolean {
+        val ok = callRpc<OkPayload>("miniapp.gmail.trash", buildJsonObject { put("id", id) })?.ok == true
+        if (ok) refreshMail()
+        return ok
+    }
+
+    /** Run (or fetch cached) AI analysis for a message; returns the analysis text. */
+    suspend fun analyzeMail(id: String): String? =
+        callRpc<AnalyzePayload>("miniapp.gmail.analyze", buildJsonObject { put("id", id) })
+            ?.analysis?.ifBlank { null }
+
     suspend fun refreshCalendar() {
         val payload = callRpc<CalListPayload>(
             "miniapp.calendar.list_upcoming",
@@ -463,6 +509,33 @@ class DenebGatewayClient(
     )
 
     @Serializable
+    private data class MailDetailRow(
+        val id: String = "",
+        val from: String = "",
+        val to: String = "",
+        val cc: String = "",
+        val subject: String = "",
+        val date: String = "",
+        val body: String = "",
+        val bodyTotal: Int = 0,
+        val attachments: List<MailAttachmentRow> = emptyList(),
+    )
+
+    @Serializable
+    private data class MailAttachmentRow(
+        val id: String = "",
+        val filename: String = "",
+        val mimeType: String = "",
+        val size: Int = 0,
+    )
+
+    @Serializable
+    private data class OkPayload(val ok: Boolean = false)
+
+    @Serializable
+    private data class AnalyzePayload(val analysis: String = "", val cached: Boolean = false)
+
+    @Serializable
     private data class CalListPayload(val events: List<CalRow> = emptyList())
 
     @Serializable
@@ -504,6 +577,19 @@ data class MailMessage(
     val snippet: String,
     val date: String,
     val unread: Boolean,
+)
+
+/** Full Gmail message for the native detail screen. */
+data class MailDetail(
+    val id: String,
+    val from: String,
+    val to: String,
+    val cc: String,
+    val subject: String,
+    val date: String,
+    val body: String,
+    val bodyTotal: Int,
+    val attachments: List<String>,
 )
 
 /** An upcoming calendar event shown in the native calendar screen. */

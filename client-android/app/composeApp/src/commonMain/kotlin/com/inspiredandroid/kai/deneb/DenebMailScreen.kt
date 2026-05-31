@@ -1,5 +1,6 @@
 package com.inspiredandroid.kai.deneb
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.dp
 fun DenebMailScreen(
     client: DenebGatewayClient,
     onBack: () -> Unit,
+    onOpenDetail: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     val mail by client.denebMail.collectAsState()
@@ -69,7 +71,11 @@ fun DenebMailScreen(
             )
         } else {
             mail.forEach { m ->
-                Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                Column(
+                    Modifier.fillMaxWidth()
+                        .clickable { onOpenDetail(m.id) }
+                        .padding(vertical = 10.dp),
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (m.unread) {
                             Text("● ", color = MaterialTheme.colorScheme.primary)
