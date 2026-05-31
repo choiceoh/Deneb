@@ -45,6 +45,8 @@ import com.inspiredandroid.kai.deneb.DenebMailDetailScreen
 import com.inspiredandroid.kai.deneb.DenebMailScreen
 import com.inspiredandroid.kai.deneb.DenebPeopleScreen
 import com.inspiredandroid.kai.deneb.DenebPersonScreen
+import com.inspiredandroid.kai.deneb.DenebCategoriesScreen
+import com.inspiredandroid.kai.deneb.DenebCategoryPagesScreen
 import com.inspiredandroid.kai.deneb.DenebSearchScreen
 import com.inspiredandroid.kai.deneb.DenebCronScreen
 import com.inspiredandroid.kai.deneb.DenebTopicDocScreen
@@ -126,6 +128,14 @@ data class DenebPerson(val sender: String)
 @Serializable
 @SerialName("deneb_topic_doc")
 data class DenebTopicDoc(val name: String)
+
+@Serializable
+@SerialName("deneb_categories")
+object DenebCategories
+
+@Serializable
+@SerialName("deneb_category_pages")
+data class DenebCategoryPages(val category: String)
 
 @Serializable
 @SerialName("deneb_cron")
@@ -350,6 +360,7 @@ private fun AppContent(
                                 onBack = { navController.navigateUp() },
                                 onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
                                 onOpenPerson = { sender -> navController.navigate(DenebPerson(sender)) },
+                                onOpenCategories = { navController.navigate(DenebCategories) },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }
@@ -360,6 +371,27 @@ private fun AppContent(
                                 client = client,
                                 path = entry.toRoute<DenebWiki>().path,
                                 onBack = { navController.navigateUp() },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebCategories> {
+                        denebClient?.let { client ->
+                            DenebCategoriesScreen(
+                                client = client,
+                                onBack = { navController.navigateUp() },
+                                onOpenCategory = { cat -> navController.navigate(DenebCategoryPages(cat)) },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebCategoryPages> { entry ->
+                        denebClient?.let { client ->
+                            DenebCategoryPagesScreen(
+                                client = client,
+                                category = entry.toRoute<DenebCategoryPages>().category,
+                                onBack = { navController.navigateUp() },
+                                onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }

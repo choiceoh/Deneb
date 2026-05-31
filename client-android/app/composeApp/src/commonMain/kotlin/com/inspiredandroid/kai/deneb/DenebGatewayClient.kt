@@ -220,6 +220,30 @@ class DenebGatewayClient(
             }
     }
 
+    /** All wiki categories with page counts + corpus totals (`memory.categories`). */
+    suspend fun fetchCategories(): WikiCategories? {
+        val p = callRpc<CategoriesPayload>("miniapp.memory.categories", buildJsonObject {}) ?: return null
+        return WikiCategories(
+            categories = p.categories.map { WikiCategory(it.name, it.pageCount) },
+            totalPages = p.totalPages,
+            totalBytes = p.totalBytes,
+        )
+    }
+
+    /** Pages within one category (`memory.list_in_category`); blank lists all. */
+    suspend fun fetchCategoryPages(category: String): List<WikiPageRef> {
+        val p = callRpc<MemoryListPayload>(
+            "miniapp.memory.list_in_category",
+            buildJsonObject {
+                put("category", category)
+                put("limit", 200)
+            },
+        ) ?: return emptyList()
+        return p.pages
+            .filter { it.path.isNotBlank() }
+            .map { WikiPageRef(it.path, it.title.ifBlank { it.path }, it.summary, it.updated) }
+    }
+
     // --- Scheduler screen → Deneb cron --------------------------------------
 
     override fun isSchedulingEnabled(): Boolean = true
@@ -836,6 +860,16 @@ class DenebGatewayClient(
     )
 
     @Serializable
+    private data class MemoryCategoryRow(val name: String = "", val pageCount: Int = 0)
+
+    @Serializable
+    private data class CategoriesPayload(
+        val categories: List<MemoryCategoryRow> = emptyList(),
+        val totalPages: Int = 0,
+        val totalBytes: Long = 0,
+    )
+
+    @Serializable
     private data class CronListPayload(val jobs: List<CronRow> = emptyList())
 
     @Serializable
@@ -1176,4 +1210,22 @@ data class WikiPage(
     val tags: List<String>,
     val updated: String,
     val body: String,
+)
+
+/** A wiki category with its page count, for the category browser. */
+data class WikiCategory(val name: String, val pageCount: Int)
+
+/** All wiki categories plus corpus totals. */
+data class WikiCategories(
+    val categories: List<WikiCategory>,
+    val totalPages: Int,
+    val totalBytes: Long,
+)
+
+/** A page reference within a category listing (tap -> wiki page). */
+data class WikiPageRef(
+    val path: String,
+    val title: String,
+    val summary: String,
+    val updated: String,
 )
