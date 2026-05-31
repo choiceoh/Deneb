@@ -194,6 +194,18 @@ func (s *Server) authenticateMiniappRequest(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) authenticateMiniappDownloadRequest(w http.ResponseWriter, r *http.Request) (*telegram.InitData, bool) {
+	// Standalone native client: a browser opening a download link cannot set the
+	// X-Deneb-Client-Token header, so the static client token may ride in the
+	// query string. Verified the same constant-time way as the header path;
+	// present-but-invalid is rejected (a native client has no initData fallback).
+	if tok := strings.TrimSpace(r.URL.Query().Get("clientToken")); tok != "" {
+		if clientauth.Verify(tok) {
+			return syntheticOperatorInitData(), true
+		}
+		s.writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "invalid client token"})
+		return nil, false
+	}
+
 	raw := strings.TrimSpace(r.URL.Query().Get("initData"))
 	if raw == "" {
 		var err error
