@@ -35,10 +35,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.data.AppSettings
+import com.inspiredandroid.kai.ui.settings.SettingsCard
 import kotlinx.coroutines.launch
 
 /**
@@ -78,7 +80,7 @@ fun DenebConfigScreen(
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (tab) {
-                    0 -> GatewayTab(appSettings, onBack, onOpenKaiSettings)
+                    0 -> GatewayTab(appSettings, onBack, onOpenKaiSettings, denebClient)
                     1 -> denebClient?.let { ModelTab(it) }
                     2 -> denebClient?.let { PeopleTab(it, onOpenPerson) }
                     3 -> denebClient?.let { CronTab(it) }
@@ -90,43 +92,140 @@ fun DenebConfigScreen(
 }
 
 @Composable
-private fun GatewayTab(appSettings: AppSettings, onBack: () -> Unit, onOpenKaiSettings: () -> Unit) {
+private fun GatewayTab(
+    appSettings: AppSettings,
+    onBack: () -> Unit,
+    onOpenKaiSettings: () -> Unit,
+    denebClient: DenebGatewayClient?,
+) {
     var url by remember { mutableStateOf(appSettings.settings.getString(KEY_URL, "")) }
     var token by remember { mutableStateOf(appSettings.settings.getString(KEY_TOKEN, "")) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-        OutlinedTextField(
-            value = url,
-            onValueChange = { url = it },
-            label = { Text("Gateway URL") },
-            placeholder = { Text("http://100.x.x.x:18789") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = token,
-            onValueChange = { token = it },
-            label = { Text("Client Token") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "게이트웨이 호스트에서 deneb-client-token으로 생성한 값을 붙여넣으세요.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(20.dp))
-        Button(
-            onClick = {
-                appSettings.settings.putString(KEY_URL, url.trim())
-                appSettings.settings.putString(KEY_TOKEN, token.trim())
-                onBack()
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("저장") }
-        Spacer(Modifier.height(24.dp))
-        TextButton(onClick = onOpenKaiSettings) { Text("고급 설정 (Kai)") }
+    val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
+    var checking by remember { mutableStateOf(false) }
+    var checked by remember { mutableStateOf(false) }
+    var update by remember { mutableStateOf<UpdateInfo?>(null) }
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SettingsCard {
+            Text(
+                "게이트웨이 연결",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = url,
+                onValueChange = { url = it },
+                label = { Text("Gateway URL") },
+                placeholder = { Text("http://100.x.x.x:18789") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = token,
+                onValueChange = { token = it },
+                label = { Text("Client Token") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "게이트웨이 호스트에서 deneb-client-token으로 생성한 값을 붙여넣으세요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(16.dp))
+            Button(
+                onClick = {
+                    appSettings.settings.putString(KEY_URL, url.trim())
+                    appSettings.settings.putString(KEY_TOKEN, token.trim())
+                    onBack()
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("저장") }
+        }
+        SettingsCard(onClick = onOpenKaiSettings) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "고급 설정 (Kai)",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    Text(
+                        "제공자 · MCP · 추론 등 Kai 원본 설정",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    "›",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        SettingsCard {
+            Text(
+                "버전",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "현재 v$DENEB_VERSION_NAME ($DENEB_VERSION_CODE)",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            val info = update
+            if (info != null) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "새 버전 v${info.versionName} 사용 가능",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                if (info.notes.isNotBlank()) {
+                    Text(
+                        info.notes,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = { uriHandler.openUri(info.apkUrl) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("다운로드 후 설치")
+                }
+            } else if (checked && !checking) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "최신 버전입니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = {
+                    val c = denebClient ?: return@OutlinedButton
+                    scope.launch {
+                        checking = true
+                        update = c.checkUpdate()
+                        checked = true
+                        checking = false
+                    }
+                },
+                enabled = !checking && denebClient != null,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (checking) "확인 중…" else "업데이트 확인") }
+        }
     }
 }
 
@@ -139,31 +238,41 @@ private fun ModelTab(client: DenebGatewayClient) {
         DenebLoading()
         return
     }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         Text(
             "기본 채팅 모델 — 모든 채널에 공통 적용됩니다.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(8.dp))
-        models.forEach { model ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(enabled = !model.current) { scope.launch { client.setMainModel(model.id) } }
-                    .padding(vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    if (model.current) "● " else "○ ",
-                    color = if (model.current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Column(Modifier.weight(1f)) {
-                    Text(model.display, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+        SettingsCard(innerPadding = false) {
+            models.forEachIndexed { i, model ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !model.current) { scope.launch { client.setMainModel(model.id) } }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
-                        model.id + if (model.health.equals("offline", ignoreCase = true)) "  ·  오프라인" else "",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        if (model.current) "● " else "○ ",
+                        color = if (model.current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(model.display, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                        Text(
+                            model.id + if (model.health.equals("offline", ignoreCase = true)) "  ·  오프라인" else "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (i < models.lastIndex) {
+                    HorizontalDivider(
+                        Modifier.padding(start = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                     )
                 }
             }
