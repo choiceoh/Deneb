@@ -472,8 +472,8 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 
 		choice := chunk.Choices[0]
 
-		// Emit reasoning content as thinking block (OpenAI reasoning models).
-		if choice.Delta.ReasoningContent != "" {
+		// Emit reasoning content as thinking block (OpenAI/vLLM reasoning models).
+		if rtext := choice.Delta.reasoningText(); rtext != "" {
 			if !thinkingBlockOpen {
 				thinkingBlockOpen = true
 				p, _ := json.Marshal(ContentBlockStart{
@@ -485,7 +485,7 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 					nextBlockIndex = 1 // reserve 0 for thinking
 				}
 			}
-			emitDelta(0, "thinking_delta", choice.Delta.ReasoningContent, "")
+			emitDelta(0, "thinking_delta", rtext, "")
 		}
 
 		// Emit text delta — open text block lazily on first text content.
