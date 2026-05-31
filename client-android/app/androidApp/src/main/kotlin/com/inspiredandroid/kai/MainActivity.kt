@@ -180,6 +180,10 @@ class MainActivity : ComponentActivity() {
             handleSharedImage(intent)
             return
         }
+        if (intent.type?.startsWith("audio/") == true) {
+            handleSharedAudio(intent)
+            return
+        }
         val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
         if (text.isEmpty()) return
         val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)?.trim().orEmpty()
@@ -205,6 +209,27 @@ class MainActivity : ComponentActivity() {
         if (bytes == null || bytes.isEmpty()) return
         val client = get<DataRepository>() as? DenebGatewayClient ?: return
         lifecycleScope.launch { client.captureImage(bytes, intent.type ?: "image/*") }
+        intent.removeExtra(Intent.EXTRA_STREAM)
+    }
+
+    // Shared audio -> gateway VibeVoice-ASR -> chat. Reads the recording bytes (a
+    // temporary read grant rides with the share) and hands them to the gateway,
+    // which transcribes via the ASR sidecar (speaker labels + timestamps) and runs
+    // one agent turn over the transcript. A voice memo or a meeting recording
+    // shared from a recorder/files app — long-form capture the on-device speech
+    // shortcut (음성 캡처) and the Telegram bot can't do.
+    private fun handleSharedAudio(intent: Intent) {
+        @Suppress("DEPRECATION")
+        val uri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        }
+        if (uri == null) return
+        val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+        if (bytes == null || bytes.isEmpty()) return
+        val client = get<DataRepository>() as? DenebGatewayClient ?: return
+        lifecycleScope.launch { client.captureAudio(bytes, intent.type ?: "audio/*") }
         intent.removeExtra(Intent.EXTRA_STREAM)
     }
 }

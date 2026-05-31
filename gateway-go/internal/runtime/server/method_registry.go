@@ -432,8 +432,9 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		// standalone app drive a turn over the miniapp.* RPC surface via
 		// SendSync, with kai-ui emission enabled (channel "client").
 		handlerchat.MiniappMethods(handlerchat.Deps{
-			Chat:     hub.Chat(),
-			OcrImage: tools.OcrImageBytes,
+			Chat:       hub.Chat(),
+			OcrImage:   tools.OcrImageBytes,
+			Transcribe: tools.TranscribeAudio,
 		}),
 		handlersession.ExecMethods(handlersession.ExecDeps{
 			Chat:       hub.Chat(),
