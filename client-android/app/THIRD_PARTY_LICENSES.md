@@ -23,3 +23,14 @@ The full GPL-2.0 license text is available at: https://www.gnu.org/licenses/old-
 talloc is a hierarchical memory allocator used as a dependency of PRoot. It is dynamically linked.
 
 The full LGPL-3.0 license text is available at: https://www.gnu.org/licenses/lgpl-3.0.html
+
+## Pretendard
+
+- **Files:** `composeApp/src/commonMain/composeResources/font/pretendard_*.otf`
+- **Source:** https://github.com/orioncactus/pretendard
+- **License:** SIL Open Font License 1.1
+- **Copyright:** Copyright (c) 2021 Kil Hyung-jin, with Reserved Font Name Pretendard
+
+Pretendard is the bundled UI typeface, used app-wide for all non-monospace text. The static OTF weights (Light, Regular, Medium, SemiBold, Bold) are embedded as Compose resources and loaded at runtime.
+
+The full SIL Open Font License 1.1 text is available at: https://openfontlicense.org/open-font-license-official-text/

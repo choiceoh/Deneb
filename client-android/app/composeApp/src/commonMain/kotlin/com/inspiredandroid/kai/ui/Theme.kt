@@ -186,6 +186,7 @@ fun Theme(
 ) {
     MaterialTheme(
         colorScheme = colorScheme,
+        typography = pretendardTypography(),
     ) {
         content()
     }
