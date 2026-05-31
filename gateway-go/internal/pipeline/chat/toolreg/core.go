@@ -24,7 +24,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	RegisterWebTools(registry, deps.SpilloverStore)
 	RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
-	RegisterMediaTools(registry)
+	RegisterMediaTools(registry, deps.WorkspaceDir)
 	var diaryDir string
 	if deps.Wiki.Store != nil {
 		diaryDir = deps.Wiki.Store.DiaryDir()
@@ -268,13 +268,25 @@ func RegisterSkillsTools(registry toolctx.ToolRegistrar, getSnapshot tools.Skill
 	})
 }
 
-// RegisterMediaTools registers media delivery tools.
-func RegisterMediaTools(registry toolctx.ToolRegistrar) {
+// RegisterMediaTools registers media tools: file delivery (send_file) and
+// video watching (watch). workspaceDir bounds the watch tool's local-file
+// access; an empty string restricts watch to YouTube URLs only.
+func RegisterMediaTools(registry toolctx.ToolRegistrar, workspaceDir string) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "send_file",
 		Description: "Send a file to the user (auto-detects: photo/video/audio/document). Max 50 MB",
 		InputSchema: sendFileToolSchema(),
 		Fn:          tools.ToolSendFile(),
+		Deferred:    true,
+	})
+	registry.RegisterTool(toolctx.ToolDef{
+		Name: "watch",
+		Description: "Watch a video: extract frames + subtitles from a YouTube URL or local video file, " +
+			"then analyze with the vision model so you can actually SEE and HEAR the content. " +
+			"Use for analyzing video structure/hooks, diagnosing bugs from screen recordings, or summarizing long videos. " +
+			"Supports start/end to focus on a time window.",
+		InputSchema: watchToolSchema(),
+		Fn:          tools.ToolWatch(workspaceDir),
 		Deferred:    true,
 	})
 }
