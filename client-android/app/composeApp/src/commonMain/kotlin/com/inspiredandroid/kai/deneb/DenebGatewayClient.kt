@@ -450,6 +450,17 @@ class DenebGatewayClient(
         )
     }
 
+    /** People ranked by recent message volume (`miniapp.people.list`). */
+    suspend fun fetchPeople(): List<PersonHit> {
+        val p = callRpc<PeopleListPayload>(
+            "miniapp.people.list",
+            buildJsonObject { put("limit", 60) },
+        ) ?: return emptyList()
+        return p.people
+            .filter { it.email.isNotBlank() || it.name.isNotBlank() }
+            .map { PersonHit(it.name.ifBlank { it.email }, it.email, it.messageCount, it.lastSubject) }
+    }
+
     /** Full wiki/memory page by path (`miniapp.memory.get_page`). */
     suspend fun fetchWikiPage(path: String): WikiPage? {
         val p = callRpc<WikiPagePayload>(
@@ -755,6 +766,9 @@ class DenebGatewayClient(
         val messageCount: Int = 0,
         val lastSubject: String = "",
     )
+
+    @Serializable
+    private data class PeopleListPayload(val people: List<SearchPersonRow> = emptyList())
 
     @Serializable
     private data class WikiPagePayload(

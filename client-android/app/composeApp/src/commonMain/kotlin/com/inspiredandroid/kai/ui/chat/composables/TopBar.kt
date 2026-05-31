@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,6 +54,7 @@ internal fun TopBar(
     onOpenMail: () -> Unit = {},
     onOpenCalendar: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
+    onOpenPeople: () -> Unit = {},
     isSandboxAvailable: Boolean,
     isSandboxOpen: Boolean,
     isShellExecuting: Boolean,
@@ -90,6 +92,16 @@ internal fun TopBar(
                 Icon(
                     imageVector = Icons.Filled.Search,
                     contentDescription = "검색",
+                    tint = MaterialTheme.colorScheme.onBackground,
+                )
+            }
+            IconButton(
+                modifier = Modifier.handCursor(),
+                onClick = onOpenPeople,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Group,
+                    contentDescription = "사람",
                     tint = MaterialTheme.colorScheme.onBackground,
                 )
             }
