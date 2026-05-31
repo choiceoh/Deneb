@@ -103,6 +103,10 @@ class DenebGatewayClient(
     private val _denebModels = MutableStateFlow<List<ModelOption>>(emptyList())
     val denebModels: StateFlow<List<ModelOption>> = _denebModels
 
+    // Current model id per role (main / lightweight / fallback) for the model tab.
+    private val _denebRoleModels = MutableStateFlow<Map<String, String>>(emptyMap())
+    val denebRoleModels: StateFlow<Map<String, String>> = _denebRoleModels
+
     // Recent Gmail surfaced in the native mail screen.
     private val _denebMail = MutableStateFlow<List<MailMessage>>(emptyList())
     val denebMail: StateFlow<List<MailMessage>> = _denebMail
@@ -295,14 +299,18 @@ class DenebGatewayClient(
             .flatMap { it.models }
             .distinctBy { it.id }
             .map { ModelOption(it.id, it.display.ifBlank { it.label.ifBlank { it.id } }, it.id == payload.current, it.health) }
+        _denebRoleModels.value = payload.roles.associate { it.role to it.model }
     }
 
-    suspend fun setMainModel(id: String) {
+    suspend fun setMainModel(id: String) = setRoleModel(id, "main")
+
+    /** Set the model for a specific role (main / lightweight / fallback). */
+    suspend fun setRoleModel(id: String, role: String) {
         callRpc<JsonObject>(
             "miniapp.models.set",
             buildJsonObject {
                 put("id", id)
-                put("role", "main")
+                put("role", role)
             },
         )
         refreshModels()
@@ -885,7 +893,14 @@ class DenebGatewayClient(
     )
 
     @Serializable
-    private data class ModelsPayload(val current: String = "", val sections: List<ModelSection> = emptyList())
+    private data class ModelsPayload(
+        val current: String = "",
+        val roles: List<RoleModelRow> = emptyList(),
+        val sections: List<ModelSection> = emptyList(),
+    )
+
+    @Serializable
+    private data class RoleModelRow(val role: String = "", val model: String = "")
 
     @Serializable
     private data class ModelSection(val title: String = "", val models: List<ModelRow> = emptyList())

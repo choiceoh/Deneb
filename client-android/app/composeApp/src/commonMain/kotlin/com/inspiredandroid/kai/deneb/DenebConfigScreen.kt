@@ -22,6 +22,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -261,36 +265,58 @@ private fun GatewayTab(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ModelTab(client: DenebGatewayClient) {
     val models by client.denebModels.collectAsState()
+    val roleModels by client.denebRoleModels.collectAsState()
     val scope = rememberCoroutineScope()
+    var role by remember { mutableStateOf("main") }
     LaunchedEffect(Unit) { client.refreshModels() }
     if (models.isEmpty()) {
         DenebLoading()
         return
     }
+    val roleLabels = listOf("main" to "메인", "lightweight" to "경량", "fallback" to "폴백")
+    val currentForRole = roleModels[role]
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            "기본 채팅 모델 — 모든 채널에 공통 적용됩니다.",
+            "역할별 모델 — 메인=채팅, 경량=메일 분석·요약, 폴백=메인 실패 시",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            roleLabels.forEachIndexed { i, (key, label) ->
+                SegmentedButton(
+                    selected = role == key,
+                    onClick = { role = key },
+                    shape = SegmentedButtonDefaults.itemShape(i, roleLabels.size),
+                ) { Text(label) }
+            }
+        }
+        if (currentForRole != null) {
+            Text(
+                "현재: $currentForRole",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
         SettingsCard(innerPadding = false) {
             models.forEachIndexed { i, model ->
+                val isCurrent = model.id == currentForRole
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(enabled = !model.current) { scope.launch { client.setMainModel(model.id) } }
+                        .clickable(enabled = !isCurrent) { scope.launch { client.setRoleModel(model.id, role) } }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        if (model.current) "● " else "○ ",
-                        color = if (model.current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        if (isCurrent) "● " else "○ ",
+                        color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Column(Modifier.weight(1f)) {
                         Text(model.display, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
