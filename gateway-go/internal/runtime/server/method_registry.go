@@ -459,8 +459,13 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				if s.modelRegistry == nil {
 					return nil, handlerminiapp.ErrAnalyzeNoLLM
 				}
-				llmClient := s.modelRegistry.Client(modelrole.RoleMain)
-				model := s.modelRegistry.Model(modelrole.RoleMain)
+				// step3.7 (the local vLLM behind the main + lightweight roles)
+				// does unstoppable extended thinking and streams no answer text
+				// for the free-text analysis prompt — disabling thinking (#1816)
+				// did not propagate to vLLM. Route analysis to the fallback role
+				// (a cloud chat model that reliably emits text) instead.
+				llmClient := s.modelRegistry.Client(modelrole.RoleFallback)
+				model := s.modelRegistry.Model(modelrole.RoleFallback)
 				gmailClient, err := gmail.DefaultClient()
 				if err != nil {
 					return nil, err
