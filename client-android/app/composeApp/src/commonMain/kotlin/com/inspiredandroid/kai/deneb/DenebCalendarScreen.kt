@@ -33,8 +33,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
+import kotlinx.datetime.todayIn
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
 import kotlin.time.Instant
 
 /**
@@ -146,14 +150,21 @@ internal data class CalStamp(val dayKey: String, val dayLabel: String, val time:
 /** Parse an RFC3339 UTC instant into a local day-grouping key + label + HH:mm (or 종일). */
 internal fun stampOf(rfc3339: String, allDay: Boolean): CalStamp? {
     if (rfc3339.isBlank()) return null
+    val tz = TimeZone.currentSystemDefault()
     val local = runCatching {
-        Instant.parse(rfc3339).toLocalDateTime(TimeZone.currentSystemDefault())
+        Instant.parse(rfc3339).toLocalDateTime(tz)
     }.getOrNull() ?: return null
     val month = local.month.ordinal + 1
     val dow = koreanDayOfWeek.getOrElse(local.dayOfWeek.ordinal) { "" }
+    val today = Clock.System.todayIn(tz)
+    val dayLabel = when (local.date) {
+        today -> "오늘"
+        today.plus(1, DateTimeUnit.DAY) -> "내일"
+        else -> "${month}월 ${local.day}일 ($dow)"
+    }
     return CalStamp(
         dayKey = "${local.year}-$month-${local.day}",
-        dayLabel = "${month}월 ${local.day}일 ($dow)",
+        dayLabel = dayLabel,
         time = if (allDay) {
             "종일"
         } else {

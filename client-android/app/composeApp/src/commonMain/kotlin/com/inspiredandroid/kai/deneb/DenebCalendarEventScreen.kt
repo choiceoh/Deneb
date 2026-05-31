@@ -82,6 +82,10 @@ fun DenebCalendarEventScreen(
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
+                statusLabel(ev.status)?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
 
                 if (ev.location.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
@@ -98,6 +102,12 @@ fun DenebCalendarEventScreen(
                         Text("📹 Meet 참가")
                     }
                 }
+                if (ev.htmlLink.isNotBlank()) {
+                    Spacer(Modifier.height(if (ev.meetUri.isNotBlank()) 2.dp else 12.dp))
+                    TextButton(onClick = { uriHandler.openUri(ev.htmlLink) }) {
+                        Text("Google 캘린더에서 열기")
+                    }
+                }
 
                 if (ev.attendees.isNotEmpty()) {
                     Spacer(Modifier.height(16.dp))
@@ -107,12 +117,19 @@ fun DenebCalendarEventScreen(
                         color = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(Modifier.height(4.dp))
-                    ev.attendees.forEach { name ->
-                        Text(
-                            "· $name",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
+                    ev.attendees.forEach { a ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                rsvpBadge(a.responseStatus),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.width(22.dp),
+                            )
+                            Text(
+                                a.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
                     }
                 }
 
@@ -148,6 +165,21 @@ private fun InfoRow(label: String, value: String) {
             modifier = Modifier.weight(1f),
         )
     }
+}
+
+/** Google responseStatus -> a compact RSVP glyph. */
+private fun rsvpBadge(status: String): String = when (status) {
+    "accepted" -> "✓"
+    "declined" -> "✗"
+    "tentative" -> "?"
+    else -> "·" // needsAction / unknown
+}
+
+/** Event status -> a Korean label, or null when confirmed (no banner needed). */
+private fun statusLabel(status: String): String? = when (status) {
+    "tentative" -> "미확정"
+    "cancelled" -> "취소됨"
+    else -> null
 }
 
 /** "5월 31일 (토) 14:00 – 15:00" or "5월 31일 (토) · 종일". */
