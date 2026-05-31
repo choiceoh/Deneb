@@ -108,12 +108,15 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 //   - message    (string, required): the user message
 //   - sessionKey  (string, optional): conversation key; defaults to "client:main"
 //   - model       (string, optional): model override; empty uses the default
+//   - topicKey    (string, optional): per-topic knowledge selector (see
+//     miniapp.topics.list); empty means no per-topic injection
 func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
 			SessionKey string `json:"sessionKey"`
 			Message    string `json:"message"`
 			Model      string `json:"model"`
+			TopicKey   string `json:"topicKey"`
 		}](req)
 		if errResp != nil {
 			return errResp
@@ -129,6 +132,9 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 		res, err := deps.Chat.SendSync(ctx, sessionKey, p.Message, strings.TrimSpace(p.Model), &chatpkg.SyncOptions{
 			// Channel "client" flips on kai-ui emission (richUIChannel).
 			Delivery: &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
+			// Per-topic knowledge selector: the gateway maps this key back to its
+			// forum threadID so injection matches the Telegram surface exactly.
+			TopicKey: strings.TrimSpace(p.TopicKey),
 			// The reply text is returned here, not pushed via the message tool.
 			AutoDeliveredOutput: true,
 		})

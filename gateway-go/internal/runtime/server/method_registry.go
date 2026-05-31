@@ -333,6 +333,11 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return s.appSettings.ActiveHome().ChatID
 			},
+			// Per-topic knowledge list (miniapp.topics.list) so the native
+			// client can render one topic switch per configured topic and
+			// echo the key back on chat.send. Sourced from deneb.json
+			// topics.map — the same config the injection resolver snapshots.
+			KnowledgeTopics: topicEntriesFromConfig,
 		}),
 
 		// Mini App Gmail sender context (miniapp.gmail.sender_context).

@@ -56,6 +56,15 @@ type SyncOptions struct {
 	// replies that the cron delivery layer may not route correctly.
 	Delivery *DeliveryContext
 
+	// TopicKey selects per-topic knowledge for surfaces that speak topic keys
+	// instead of Telegram forum threadIDs (the native client). When set and the
+	// handler has a TopicResolver, prepareSyncRun maps the key back to its
+	// threadID and stamps it onto Delivery so the shared threadID-driven
+	// injection path (run_exec → TopicResolver.TopicKey → <key>.md) fires
+	// identically to Telegram, sharing the same per-topic Static cache block.
+	// Unknown keys are ignored (no injection) rather than mis-resolving.
+	TopicKey string
+
 	// EphemeralUser suppresses persistence of the inbound user-role message —
 	// see RunParams.EphemeralUser. Set by autonomous triggers (heartbeat) so
 	// recurring self-triggers do not crowd out the recent-history window.
@@ -114,6 +123,20 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 		}
 		if opts.Delivery != nil {
 			params.Delivery = opts.Delivery
+		}
+		// Native-client topic selection: map the topic key back to its forum
+		// threadID and stamp it onto a per-request Delivery copy so the shared
+		// per-topic injection path fires. Copy (not mutate opts.Delivery) keeps
+		// the caller's DeliveryContext untouched. Unknown keys are skipped.
+		if opts.TopicKey != "" && h.topicResolver != nil {
+			if threadID, ok := h.topicResolver.ThreadIDForKey(opts.TopicKey); ok {
+				dc := DeliveryContext{}
+				if params.Delivery != nil {
+					dc = *params.Delivery
+				}
+				dc.ThreadID = threadID
+				params.Delivery = &dc
+			}
 		}
 		params.EphemeralUser = opts.EphemeralUser
 		params.EphemeralAssistant = opts.EphemeralAssistant
