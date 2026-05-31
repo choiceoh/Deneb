@@ -73,6 +73,7 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"text":       res.Text,
 			"model":      res.Model,
+			"fellBack":   res.FellBack,
 			"sessionKey": sessionKey,
 			"usage": map[string]int{
 				"inputTokens":  res.InputTokens,

@@ -133,8 +133,16 @@ class DenebGatewayClient(
             _chatHistory.update { it + History(role = History.Role.USER, content = displayText) }
         }
         val reply = runCatching { send(sendText) }
-            .getOrElse { "⚠️ ${it.message ?: "gateway request failed"}" }
-        _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
+            .getOrElse { GatewayReply("⚠️ ${it.message ?: "gateway request failed"}") }
+        _chatHistory.update {
+            it + History(
+                role = History.Role.ASSISTANT,
+                content = reply.text,
+                // Mirrors Kai's fallback badge: show which model answered when the
+                // gateway fell back from its main model to a fallback role.
+                fallbackServiceName = if (reply.fellBack && reply.model.isNotBlank()) reply.model else null,
+            )
+        }
     }
 
     private fun formatCallback(submission: UiSubmission): String = buildString {
@@ -611,9 +619,9 @@ class DenebGatewayClient(
         }
     }.getOrNull()
 
-    private suspend fun send(message: String): String {
+    private suspend fun send(message: String): GatewayReply {
         if (clientToken.isEmpty()) {
-            return "⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요."
+            return GatewayReply("⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요.")
         }
         val resp: RpcResponse = http.post("$gatewayUrl/api/v1/miniapp/rpc") {
             header(CLIENT_TOKEN_HEADER, clientToken)
@@ -626,7 +634,12 @@ class DenebGatewayClient(
                 ),
             )
         }.body()
-        return if (resp.ok && resp.payload != null) resp.payload.text else "⚠️ 게이트웨이 오류"
+        val payload = resp.payload
+        return if (resp.ok && payload != null) {
+            GatewayReply(text = payload.text, model = payload.model, fellBack = payload.fellBack)
+        } else {
+            GatewayReply("⚠️ 게이트웨이 오류")
+        }
     }
 
     private suspend fun fetchRecentSessions(): List<Conversation> {
@@ -705,7 +718,21 @@ class DenebGatewayClient(
     private data class RpcResponse(val ok: Boolean = false, val payload: SendPayload? = null)
 
     @Serializable
-    private data class SendPayload(val text: String = "", val model: String = "", val sessionKey: String = "")
+    private data class SendPayload(
+        val text: String = "",
+        val model: String = "",
+        val sessionKey: String = "",
+        // True when the gateway's model fallback chain fired (main → fallback);
+        // `model` is then the model that actually answered. Surfaced as a badge.
+        val fellBack: Boolean = false,
+    )
+
+    /** Internal result of one gateway chat turn (text + which model answered). */
+    private data class GatewayReply(
+        val text: String,
+        val model: String = "",
+        val fellBack: Boolean = false,
+    )
 
     @Serializable
     private data class RpcReq(val id: String, val method: String, val params: JsonObject)
