@@ -21,6 +21,11 @@ func readToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Read only this function/method/type. For .go files uses AST; for others uses regex. Overrides offset/limit",
 			},
+			"hashes": map[string]any{
+				"type":        "boolean",
+				"description": "Prefix each line with a short content-hash anchor (columns: line<TAB>anchor<TAB>content). Pass an anchor to edit's anchor= to replace that line without reproducing it as old_string (saves output tokens). Default: false",
+				"default":     false,
+			},
 			"limit": map[string]any{
 				"type":        "number",
 				"description": "The number of lines to read (default: 2000)",
@@ -71,6 +76,14 @@ func editToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"anchor": map[string]any{
+				"type":        "string",
+				"description": "Content-hash anchor from read(hashes=true) identifying the line to replace. Replaces the whole anchored line with new_string — no old_string needed. Errors if the anchor matches zero or multiple (identical) lines",
+			},
+			"anchor_end": map[string]any{
+				"type":        "string",
+				"description": "Optional second anchor. With anchor set, replaces the inclusive line range anchor..anchor_end with new_string (which may span multiple lines)",
+			},
 			"file_path": map[string]any{
 				"type":        "string",
 				"description": "The absolute path to the file to modify",
@@ -99,7 +112,7 @@ func editToolSchema() map[string]any {
 				"default":     false,
 			},
 		},
-		"required": []string{"file_path", "old_string", "new_string"},
+		"required": []string{"file_path", "new_string"},
 	}
 }
 
