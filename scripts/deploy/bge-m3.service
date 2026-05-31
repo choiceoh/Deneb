@@ -7,14 +7,18 @@ StartLimitBurst=5
 [Service]
 Type=simple
 User=choiceoh
-ExecStart=/home/choiceoh/sglang-env/bin/python3 /home/choiceoh/deneb/scripts/deploy/bge-m3-server.py --port 8001 --host 127.0.0.1
+# CPU inference (--gpu-layers 0): keeps the GPU's unified memory for the main
+# LLM and PaddleOCR-VL, which otherwise CUDA-OOM the BGE-M3 GPU buffers on this
+# box. /usr/bin/python3 carries the llama-cpp-python + fastapi/uvicorn deps.
+ExecStart=/usr/bin/python3 /home/choiceoh/deneb/scripts/deploy/bge-m3-server.py --port 8001 --host 127.0.0.1 --gpu-layers 0
 WorkingDirectory=/home/choiceoh/deneb
 Restart=on-failure
 RestartSec=5
 
-# OOM protection: 2GB limit (model ~446MB + overhead).
-MemoryMax=2G
-MemoryHigh=1500M
+# OOM protection. CPU inference needs the model (~446MB) plus the n_ctx=8192
+# compute + logits buffers, which exceed 2GB; 4GB gives safe headroom.
+MemoryMax=4G
+MemoryHigh=3G
 
 # Graceful shutdown.
 TimeoutStopSec=10
