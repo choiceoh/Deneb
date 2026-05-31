@@ -11,7 +11,15 @@ set -euo pipefail
 
 PORT="${BGE_M3_PORT:-8001}"
 HOST="${BGE_M3_HOST:-127.0.0.1}"
-DEVICE="${BGE_M3_DEVICE:-cuda}"
+# GPU offload. Default 0 (CPU): BGE-M3 is tiny (~446MB) and only an occasional
+# Polaris compaction fallback, so we leave the GPU's unified memory for the main
+# LLM and PaddleOCR-VL. On this box GPU offload CUDA-OOMs once those are resident.
+# Set BGE_M3_GPU_LAYERS=99 (or BGE_M3_DEVICE=cuda) to force GPU offload.
+# The server takes --gpu-layers, not --device.
+GPU_LAYERS="${BGE_M3_GPU_LAYERS:-0}"
+if [[ "${BGE_M3_DEVICE:-}" == "cuda" ]]; then
+    GPU_LAYERS="${BGE_M3_GPU_LAYERS:-99}"
+fi
 LOG_FILE="/tmp/bge-m3-server.log"
 PID_FILE="/tmp/bge-m3-server.pid"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -23,9 +31,9 @@ start() {
         return 0
     fi
 
-    echo "starting BGE-M3 server on $HOST:$PORT (device=$DEVICE)..."
+    echo "starting BGE-M3 server on $HOST:$PORT (gpu-layers=$GPU_LAYERS)..."
     nohup python3 "$SERVER_SCRIPT" \
-        --port "$PORT" --host "$HOST" --device "$DEVICE" \
+        --port "$PORT" --host "$HOST" --gpu-layers "$GPU_LAYERS" \
         > "$LOG_FILE" 2>&1 &
 
     local pid=$!
