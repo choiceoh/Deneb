@@ -39,9 +39,15 @@ import com.inspiredandroid.kai.data.ThemeMode
 import com.inspiredandroid.kai.data.DataRepository
 import com.inspiredandroid.kai.deneb.DenebConfigScreen
 import com.inspiredandroid.kai.deneb.DenebGatewayClient
+import com.inspiredandroid.kai.deneb.DenebCalendarEventScreen
 import com.inspiredandroid.kai.deneb.DenebCalendarScreen
 import com.inspiredandroid.kai.deneb.DenebMailDetailScreen
 import com.inspiredandroid.kai.deneb.DenebMailScreen
+import com.inspiredandroid.kai.deneb.DenebPeopleScreen
+import com.inspiredandroid.kai.deneb.DenebPersonScreen
+import com.inspiredandroid.kai.deneb.DenebSearchScreen
+import com.inspiredandroid.kai.deneb.DenebTopicDocScreen
+import com.inspiredandroid.kai.deneb.DenebWikiPageScreen
 import com.inspiredandroid.kai.tools.CalendarPermissionController
 import com.inspiredandroid.kai.tools.NotificationPermissionController
 import com.inspiredandroid.kai.tools.SetupCalendarPermissionHandler
@@ -95,6 +101,30 @@ object DenebCalendar
 @Serializable
 @SerialName("deneb_mail_detail")
 data class DenebMailDetail(val id: String)
+
+@Serializable
+@SerialName("deneb_calendar_event")
+data class DenebCalendarEvent(val id: String)
+
+@Serializable
+@SerialName("deneb_search")
+object DenebSearch
+
+@Serializable
+@SerialName("deneb_wiki")
+data class DenebWiki(val path: String)
+
+@Serializable
+@SerialName("deneb_people")
+object DenebPeople
+
+@Serializable
+@SerialName("deneb_person")
+data class DenebPerson(val sender: String)
+
+@Serializable
+@SerialName("deneb_topic_doc")
+data class DenebTopicDoc(val name: String)
 
 @Composable
 fun App(
@@ -236,11 +266,17 @@ private fun AppContent(
                     composable<Home> {
                         ChatScreen(
                             viewModel = chatViewModel,
-                            textToSpeech = textToSpeech,
+                            // TTS removed for Deneb — text-first client.
+                            textToSpeech = null,
                             onNavigateToSettings = {
                                 navController.navigate(DenebConfig)
                             },
-                            isSandboxAvailable = currentPlatform is Platform.Mobile.Android,
+                            onOpenMail = { navController.navigate(DenebMail) },
+                            onOpenCalendar = { navController.navigate(DenebCalendar) },
+                            onOpenSearch = { navController.navigate(DenebSearch) },
+                            onOpenPeople = { navController.navigate(DenebPeople) },
+                            // Deneb runs tools on the gateway; the local terminal/sandbox is irrelevant.
+                            isSandboxAvailable = false,
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
                         )
                     }
@@ -265,8 +301,8 @@ private fun AppContent(
                             appSettings = appSettings,
                             denebClient = denebClient,
                             onBack = { navController.navigateUp() },
-                            onOpenCalendar = { navController.navigate(DenebCalendar) },
-                            onOpenMail = { navController.navigate(DenebMail) },
+                            onOpenPerson = { sender -> navController.navigate(DenebPerson(sender)) },
+                            onOpenTopicDoc = { name -> navController.navigate(DenebTopicDoc(name)) },
                             onOpenKaiSettings = { navController.navigate(Settings) },
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
                         )
@@ -285,6 +321,67 @@ private fun AppContent(
                         denebClient?.let { client ->
                             DenebCalendarScreen(
                                 client = client,
+                                onBack = { navController.navigateUp() },
+                                onOpenEvent = { id -> navController.navigate(DenebCalendarEvent(id)) },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebCalendarEvent> { entry ->
+                        denebClient?.let { client ->
+                            DenebCalendarEventScreen(
+                                client = client,
+                                eventId = entry.toRoute<DenebCalendarEvent>().id,
+                                onBack = { navController.navigateUp() },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebSearch> {
+                        denebClient?.let { client ->
+                            DenebSearchScreen(
+                                client = client,
+                                onBack = { navController.navigateUp() },
+                                onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebWiki> { entry ->
+                        denebClient?.let { client ->
+                            DenebWikiPageScreen(
+                                client = client,
+                                path = entry.toRoute<DenebWiki>().path,
+                                onBack = { navController.navigateUp() },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebPeople> {
+                        denebClient?.let { client ->
+                            DenebPeopleScreen(
+                                client = client,
+                                onBack = { navController.navigateUp() },
+                                onOpenPerson = { sender -> navController.navigate(DenebPerson(sender)) },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebPerson> { entry ->
+                        denebClient?.let { client ->
+                            DenebPersonScreen(
+                                client = client,
+                                sender = entry.toRoute<DenebPerson>().sender,
+                                onBack = { navController.navigateUp() },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebTopicDoc> { entry ->
+                        denebClient?.let { client ->
+                            DenebTopicDocScreen(
+                                client = client,
+                                name = entry.toRoute<DenebTopicDoc>().name,
                                 onBack = { navController.navigateUp() },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )

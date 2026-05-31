@@ -255,3 +255,16 @@ class VersionGeneratorPlugin : Plugin<Project> {
 }
 
 apply<VersionGeneratorPlugin>()
+
+// Off-screen render harness (desktopMain/.../RenderPreview.kt): renders Deneb
+// composables to PNG via Skia so the UI can be inspected headlessly without
+// building + installing the APK. Run: ./gradlew :composeApp:renderPreviews
+tasks.register<JavaExec>("renderPreviews") {
+    group = "deneb"
+    description = "Render Deneb composable previews to /tmp/deneb-render/*.png"
+    val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
+    dependsOn(desktopMain.compileTaskProvider)
+    classpath = files(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles)
+    mainClass.set("com.inspiredandroid.kai.RenderPreviewKt")
+    systemProperty("java.awt.headless", "true")
+}

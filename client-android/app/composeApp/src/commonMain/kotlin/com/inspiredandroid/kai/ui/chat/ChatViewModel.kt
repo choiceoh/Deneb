@@ -9,6 +9,7 @@ import com.inspiredandroid.kai.data.Service
 import com.inspiredandroid.kai.data.ServiceEntry
 import com.inspiredandroid.kai.data.TaskScheduler
 import com.inspiredandroid.kai.data.UiSubmission
+import com.inspiredandroid.kai.deneb.DenebGatewayClient
 import com.inspiredandroid.kai.getBackgroundDispatcher
 import com.inspiredandroid.kai.network.toUiError
 import com.inspiredandroid.kai.ui.markdown.KaiUiBlock
@@ -29,6 +30,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -82,6 +84,14 @@ class ChatViewModel(
 
     init {
         updateAvailableServices()
+        // Deneb: the chat-input model switcher lists gateway models; rebuild it
+        // whenever the model registry changes (after a switch or on first load).
+        if (dataRepository is DenebGatewayClient) {
+            dataRepository.refreshModelsAsync()
+            viewModelScope.launch {
+                dataRepository.denebModels.collect { updateAvailableServices() }
+            }
+        }
 
         // Keep restoreCurrentConversation off the main thread; see issue #197 (large persisted
         // tool outputs caused ANRs when JSON-decoded synchronously during VM construction).
@@ -306,6 +316,10 @@ class ChatViewModel(
     }
 
     private fun selectService(instanceId: String) {
+        if (dataRepository is DenebGatewayClient) {
+            dataRepository.selectDenebModelInstance(instanceId)
+            return
+        }
         val freeMode = FREE_MODE_INSTANCE_IDS[instanceId]
         if (freeMode != null) {
             dataRepository.setFreeMode(freeMode)
@@ -324,6 +338,16 @@ class ChatViewModel(
     }
 
     private fun updateAvailableServices() {
+        if (dataRepository is DenebGatewayClient) {
+            _state.update {
+                it.copy(
+                    availableServices = dataRepository.denebServiceEntries().toImmutableList(),
+                    warning = null,
+                    showPrivacyInfo = false,
+                )
+            }
+            return
+        }
         val configuredEntries = dataRepository.getServiceEntries()
         val currentFreeMode = dataRepository.getFreeMode()
         val freeIsPrimary = dataRepository.isFreeServicePrimary() || configuredEntries.isEmpty()

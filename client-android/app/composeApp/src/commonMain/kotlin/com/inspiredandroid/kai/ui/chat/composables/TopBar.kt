@@ -9,7 +9,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -47,6 +51,10 @@ internal fun TopBar(
     isChatHistoryEmpty: Boolean,
     hasSavedConversations: Boolean,
     onNavigateToSettings: () -> Unit,
+    onOpenMail: () -> Unit = {},
+    onOpenCalendar: () -> Unit = {},
+    onOpenSearch: () -> Unit = {},
+    onOpenPeople: () -> Unit = {},
     isSandboxAvailable: Boolean,
     isSandboxOpen: Boolean,
     isShellExecuting: Boolean,
@@ -76,6 +84,36 @@ internal fun TopBar(
             Spacer(Modifier.weight(1f))
             if (textToSpeech != null) {
                 SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
+            }
+            IconButton(
+                modifier = Modifier.handCursor(),
+                onClick = onOpenSearch,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Search,
+                    contentDescription = "검색",
+                    tint = MaterialTheme.colorScheme.onBackground,
+                )
+            }
+            IconButton(
+                modifier = Modifier.handCursor(),
+                onClick = onOpenMail,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Email,
+                    contentDescription = "받은 메일",
+                    tint = MaterialTheme.colorScheme.onBackground,
+                )
+            }
+            IconButton(
+                modifier = Modifier.handCursor(),
+                onClick = onOpenCalendar,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.DateRange,
+                    contentDescription = "일정",
+                    tint = MaterialTheme.colorScheme.onBackground,
+                )
             }
             IconButton(
                 modifier = Modifier.handCursor(),

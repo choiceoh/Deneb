@@ -6,11 +6,14 @@ import com.inspiredandroid.kai.data.DataRepository
 import com.inspiredandroid.kai.data.MemoryEntry
 import com.inspiredandroid.kai.data.RemoteDataRepository
 import com.inspiredandroid.kai.data.ScheduledTask
+import com.inspiredandroid.kai.data.ServiceEntry
 import com.inspiredandroid.kai.data.TaskStatus
 import com.inspiredandroid.kai.data.TaskTrigger
 import com.inspiredandroid.kai.data.UiSubmission
 import com.inspiredandroid.kai.httpClient
 import com.inspiredandroid.kai.ui.chat.History
+import kai.composeapp.generated.resources.Res
+import kai.composeapp.generated.resources.ic_refresh
 import io.github.vinceglb.filekit.PlatformFile
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
@@ -98,6 +101,10 @@ class DenebGatewayClient(
     // Recent Gmail surfaced in the native mail screen.
     private val _denebMail = MutableStateFlow<List<MailMessage>>(emptyList())
     val denebMail: StateFlow<List<MailMessage>> = _denebMail
+
+    // Pagination cursor for the inbox; null when there are no more pages.
+    private val _denebMailNextToken = MutableStateFlow<String?>(null)
+    val denebMailNextToken: StateFlow<String?> = _denebMailNextToken
 
     // Upcoming calendar events surfaced in the native calendar screen.
     private val _denebCalendar = MutableStateFlow<List<CalendarEvent>>(emptyList())
@@ -264,6 +271,34 @@ class DenebGatewayClient(
         refreshModels()
     }
 
+    // --- Chat-input model switcher → Deneb registry --------------------------
+    // Kai's chat input has a service/model switcher (ServiceSelector) driven by
+    // ChatUiState.availableServices. When this client is active, ChatViewModel
+    // sources that list from here so the switcher changes the gateway main model
+    // instead of Kai's local providers.
+
+    /** Gateway models as switcher entries, current model first (it renders as selected). */
+    fun denebServiceEntries(): List<ServiceEntry> {
+        val models = _denebModels.value
+        val ordered = models.filter { it.current } + models.filterNot { it.current }
+        return ordered.map { model ->
+            ServiceEntry(
+                instanceId = DENEB_MODEL_PREFIX + model.id,
+                serviceId = "deneb",
+                serviceName = model.display,
+                modelId = model.id,
+                icon = Res.drawable.ic_refresh,
+            )
+        }
+    }
+
+    /** Switch the gateway main model from a switcher tap (instanceId = prefixed model id). */
+    fun selectDenebModelInstance(instanceId: String) {
+        val modelId = instanceId.removePrefix(DENEB_MODEL_PREFIX)
+        if (modelId.isBlank() || modelId == instanceId) return
+        scope.launch { setMainModel(modelId) }
+    }
+
     suspend fun refreshMail() {
         val payload = callRpc<MailListPayload>(
             "miniapp.gmail.list_recent",
@@ -272,6 +307,24 @@ class DenebGatewayClient(
         _denebMail.value = payload.messages
             .filter { it.id.isNotBlank() }
             .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread) }
+        _denebMailNextToken.value = payload.nextPageToken.ifBlank { null }
+    }
+
+    /** Append the next inbox page (if any) to the current list. */
+    suspend fun loadMoreMail() {
+        val token = _denebMailNextToken.value ?: return
+        val payload = callRpc<MailListPayload>(
+            "miniapp.gmail.list_recent",
+            buildJsonObject {
+                put("limit", 25)
+                put("pageToken", token)
+            },
+        ) ?: return
+        val seen = _denebMail.value.mapTo(HashSet()) { it.id }
+        _denebMail.value = _denebMail.value + payload.messages
+            .filter { it.id.isNotBlank() && it.id !in seen }
+            .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread) }
+        _denebMailNextToken.value = payload.nextPageToken.ifBlank { null }
     }
 
     suspend fun fetchMailDetail(id: String): MailDetail? {
@@ -301,17 +354,17 @@ class DenebGatewayClient(
         return ok
     }
 
-    /** Archive (drop from inbox); refreshes the list so the row disappears. */
+    /** Archive (drop from inbox); optimistically removes the row from the list. */
     suspend fun archiveMail(id: String): Boolean {
         val ok = callRpc<OkPayload>("miniapp.gmail.archive", buildJsonObject { put("id", id) })?.ok == true
-        if (ok) refreshMail()
+        if (ok) _denebMail.update { list -> list.filterNot { it.id == id } }
         return ok
     }
 
-    /** Move to Trash; refreshes the list so the row disappears. */
+    /** Move to Trash; optimistically removes the row from the list. */
     suspend fun trashMail(id: String): Boolean {
         val ok = callRpc<OkPayload>("miniapp.gmail.trash", buildJsonObject { put("id", id) })?.ok == true
-        if (ok) refreshMail()
+        if (ok) _denebMail.update { list -> list.filterNot { it.id == id } }
         return ok
     }
 
@@ -319,6 +372,32 @@ class DenebGatewayClient(
     suspend fun analyzeMail(id: String): String? =
         callRpc<AnalyzePayload>("miniapp.gmail.analyze", buildJsonObject { put("id", id) })
             ?.analysis?.ifBlank { null }
+
+    /** Ask a free-form question about a message; returns the answer text. */
+    suspend fun askMail(id: String, question: String): String? =
+        callRpc<AskPayload>(
+            "miniapp.gmail.ask",
+            buildJsonObject {
+                put("id", id)
+                put("question", question)
+            },
+        )?.answer?.ifBlank { null }
+
+    /** Fetch wiki / relationship context for a message's sender. */
+    suspend fun fetchSenderContext(sender: String): SenderContext? {
+        val p = callRpc<SenderContextPayload>(
+            "miniapp.gmail.sender_context",
+            buildJsonObject { put("sender", sender) },
+        ) ?: return null
+        return SenderContext(
+            displayName = p.displayName.ifBlank { p.sender },
+            email = p.email,
+            recentCount = p.recent?.count ?: 0,
+            windowDays = p.recent?.windowDays ?: 0,
+            wikiHits = p.wikiHits.map { SenderWikiHit(it.title.ifBlank { it.path }, it.summary, it.category) },
+            wikiFacts = p.wikiFacts,
+        )
+    }
 
     suspend fun refreshCalendar() {
         val payload = callRpc<CalListPayload>(
@@ -332,6 +411,119 @@ class DenebGatewayClient(
             .filter { it.id.isNotBlank() }
             .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.hasMeet) }
     }
+
+    /** Full calendar event (attendees, Meet link, description) for the detail screen. */
+    suspend fun fetchCalendarEvent(id: String): CalendarEventDetail? {
+        val p = callRpc<CalEventPayload>(
+            "miniapp.calendar.get",
+            buildJsonObject { put("id", id) },
+        ) ?: return null
+        return CalendarEventDetail(
+            id = p.id,
+            title = p.summary,
+            description = p.description,
+            location = p.location,
+            start = p.start,
+            end = p.end,
+            allDay = p.allDay,
+            organizer = p.organizer?.let { it.displayName.ifBlank { it.email } }.orEmpty(),
+            attendees = p.attendees.mapNotNull { (it.displayName.ifBlank { it.email }).ifBlank { null } },
+            meetUri = p.conference?.uri.orEmpty(),
+        )
+    }
+
+    /** Unified search across wiki, diary and people (`miniapp.search.all`). */
+    suspend fun searchAll(query: String): SearchResults? {
+        val p = callRpc<SearchPayload>(
+            "miniapp.search.all",
+            buildJsonObject {
+                put("query", query)
+                put("limit", 20)
+            },
+        ) ?: return null
+        return SearchResults(
+            wiki = p.wiki.filter { it.path.isNotBlank() }
+                .map { SearchHit(it.path, it.title.ifBlank { it.path }, it.snippet.ifBlank { it.summary }, it.category) },
+            diary = p.diary.map { SearchHit("", it.header.ifBlank { "일기" }, it.content, "diary") },
+            people = p.people.filter { it.email.isNotBlank() || it.name.isNotBlank() }
+                .map { PersonHit(it.name.ifBlank { it.email }, it.email, it.messageCount, it.lastSubject) },
+        )
+    }
+
+    /** Topic doc files (`miniapp.topicdocs.list_files`). */
+    suspend fun fetchTopicDocs(): List<TopicDocFile> {
+        val p = callRpc<TopicDocsListPayload>("miniapp.topicdocs.list_files", buildJsonObject {}) ?: return emptyList()
+        return p.files.filter { it.name.isNotBlank() }.map { TopicDocFile(it.name, it.modified) }
+    }
+
+    /** Read one topic doc (`miniapp.topicdocs.read_file`). */
+    suspend fun readTopicDoc(name: String): TopicDocContent? {
+        val p = callRpc<TopicDocReadPayload>(
+            "miniapp.topicdocs.read_file",
+            buildJsonObject { put("name", name) },
+        ) ?: return null
+        return TopicDocContent(p.name.ifBlank { name }, p.content, p.modified)
+    }
+
+    /** People ranked by recent message volume (`miniapp.people.list`). */
+    suspend fun fetchPeople(): List<PersonHit> {
+        val p = callRpc<PeopleListPayload>(
+            "miniapp.people.list",
+            buildJsonObject { put("limit", 60) },
+        ) ?: return emptyList()
+        return p.people
+            .filter { it.email.isNotBlank() || it.name.isNotBlank() }
+            .map { PersonHit(it.name.ifBlank { it.email }, it.email, it.messageCount, it.lastSubject) }
+    }
+
+    /** Full wiki/memory page by path (`miniapp.memory.get_page`). */
+    suspend fun fetchWikiPage(path: String): WikiPage? {
+        val p = callRpc<WikiPagePayload>(
+            "miniapp.memory.get_page",
+            buildJsonObject { put("path", path) },
+        ) ?: return null
+        return WikiPage(
+            path = p.path,
+            title = p.title.ifBlank { p.path },
+            category = p.category,
+            tags = p.tags,
+            updated = p.updated,
+            body = p.body,
+        )
+    }
+
+    /** Overwrite a wiki page body (`miniapp.memory.write_page`). */
+    suspend fun saveWikiPage(path: String, body: String): Boolean =
+        callRpc<JsonObject>(
+            "miniapp.memory.write_page",
+            buildJsonObject { put("path", path); put("body", body) },
+        ) != null
+
+    /** Create a new wiki page (`miniapp.memory.create_page`); returns its path. */
+    suspend fun createWikiPage(title: String, category: String, body: String): String? =
+        callRpc<WikiPagePayload>(
+            "miniapp.memory.create_page",
+            buildJsonObject {
+                put("title", title)
+                put("category", category)
+                put("body", body)
+            },
+        )?.path
+
+    /** Write (or create) a topic doc (`miniapp.topicdocs.write_file`). */
+    suspend fun saveTopicDoc(name: String, content: String, create: Boolean): Boolean =
+        callRpc<JsonObject>(
+            "miniapp.topicdocs.write_file",
+            buildJsonObject {
+                put("name", name)
+                put("content", content)
+                put("create", create)
+            },
+        ) != null
+
+    /** Trigger a cron job immediately (`miniapp.crons.run`). */
+    suspend fun runCron(id: String): Boolean =
+        callRpc<JsonObject>("miniapp.crons.run", buildJsonObject { put("id", id) }) != null
 
     private suspend fun send(message: String): String {
         if (clientToken.isEmpty()) {
@@ -496,7 +688,10 @@ class DenebGatewayClient(
     )
 
     @Serializable
-    private data class MailListPayload(val messages: List<MailRow> = emptyList())
+    private data class MailListPayload(
+        val messages: List<MailRow> = emptyList(),
+        val nextPageToken: String = "",
+    )
 
     @Serializable
     private data class MailRow(
@@ -536,6 +731,30 @@ class DenebGatewayClient(
     private data class AnalyzePayload(val analysis: String = "", val cached: Boolean = false)
 
     @Serializable
+    private data class AskPayload(val answer: String = "")
+
+    @Serializable
+    private data class SenderContextPayload(
+        val sender: String = "",
+        val email: String = "",
+        val displayName: String = "",
+        val recent: MailSenderRecent? = null,
+        val wikiHits: List<MailWikiHit> = emptyList(),
+        val wikiFacts: String = "",
+    )
+
+    @Serializable
+    private data class MailSenderRecent(val count: Int = 0, val lastReceivedAt: String = "", val windowDays: Int = 0)
+
+    @Serializable
+    private data class MailWikiHit(
+        val path: String = "",
+        val title: String = "",
+        val summary: String = "",
+        val category: String = "",
+    )
+
+    @Serializable
     private data class CalListPayload(val events: List<CalRow> = emptyList())
 
     @Serializable
@@ -549,8 +768,80 @@ class DenebGatewayClient(
         val hasMeet: Boolean = false,
     )
 
+    @Serializable
+    private data class CalEventPayload(
+        val id: String = "",
+        val summary: String = "",
+        val description: String = "",
+        val location: String = "",
+        val start: String = "",
+        val end: String = "",
+        val allDay: Boolean = false,
+        val organizer: CalAttendee? = null,
+        val attendees: List<CalAttendee> = emptyList(),
+        val conference: CalConference? = null,
+    )
+
+    @Serializable
+    private data class CalAttendee(val email: String = "", val displayName: String = "", val responseStatus: String = "")
+
+    @Serializable
+    private data class CalConference(val solution: String = "", val uri: String = "")
+
+    @Serializable
+    private data class SearchPayload(
+        val wiki: List<SearchWikiRow> = emptyList(),
+        val diary: List<SearchDiaryRow> = emptyList(),
+        val people: List<SearchPersonRow> = emptyList(),
+    )
+
+    @Serializable
+    private data class SearchWikiRow(
+        val path: String = "",
+        val title: String = "",
+        val summary: String = "",
+        val category: String = "",
+        val snippet: String = "",
+    )
+
+    @Serializable
+    private data class SearchDiaryRow(val file: String = "", val header: String = "", val content: String = "")
+
+    @Serializable
+    private data class SearchPersonRow(
+        val email: String = "",
+        val name: String = "",
+        val messageCount: Int = 0,
+        val lastSubject: String = "",
+    )
+
+    @Serializable
+    private data class PeopleListPayload(val people: List<SearchPersonRow> = emptyList())
+
+    @Serializable
+    private data class TopicDocsListPayload(val files: List<TopicDocRow> = emptyList())
+
+    @Serializable
+    private data class TopicDocRow(val name: String = "", val size: Long = 0, val modified: String = "")
+
+    @Serializable
+    private data class TopicDocReadPayload(val name: String = "", val content: String = "", val modified: String = "")
+
+    @Serializable
+    private data class WikiPagePayload(
+        val path: String = "",
+        val title: String = "",
+        val summary: String = "",
+        val category: String = "",
+        val tags: List<String> = emptyList(),
+        val related: List<String> = emptyList(),
+        val updated: String = "",
+        val body: String = "",
+    )
+
     private companion object {
         const val CLIENT_TOKEN_HEADER = "X-Deneb-Client-Token"
+        const val DENEB_MODEL_PREFIX = "deneb-model:"
         const val KEY_URL = "deneb.gatewayUrl"
         const val KEY_TOKEN = "deneb.clientToken"
 
@@ -592,6 +883,18 @@ data class MailDetail(
     val attachments: List<String>,
 )
 
+/** Sender relationship context (recent volume + cited wiki pages). */
+data class SenderContext(
+    val displayName: String,
+    val email: String,
+    val recentCount: Int,
+    val windowDays: Int,
+    val wikiHits: List<SenderWikiHit>,
+    val wikiFacts: String,
+)
+
+data class SenderWikiHit(val title: String, val summary: String, val category: String)
+
 /** An upcoming calendar event shown in the native calendar screen. */
 data class CalendarEvent(
     val id: String,
@@ -601,4 +904,45 @@ data class CalendarEvent(
     val end: String,
     val allDay: Boolean,
     val hasMeet: Boolean,
+)
+
+/** Full calendar event for the detail screen. */
+data class CalendarEventDetail(
+    val id: String,
+    val title: String,
+    val description: String,
+    val location: String,
+    val start: String,
+    val end: String,
+    val allDay: Boolean,
+    val organizer: String,
+    val attendees: List<String>,
+    val meetUri: String,
+)
+
+/** Unified search results across wiki, diary and people. */
+data class SearchResults(
+    val wiki: List<SearchHit>,
+    val diary: List<SearchHit>,
+    val people: List<PersonHit>,
+)
+
+data class SearchHit(val path: String, val title: String, val snippet: String, val category: String)
+
+data class PersonHit(val name: String, val email: String, val messageCount: Int, val lastSubject: String)
+
+/** A topic doc file in the hub list. */
+data class TopicDocFile(val name: String, val modified: String)
+
+/** A topic doc's content for the read view. */
+data class TopicDocContent(val name: String, val content: String, val modified: String)
+
+/** Full wiki/memory page for the page view. */
+data class WikiPage(
+    val path: String,
+    val title: String,
+    val category: String,
+    val tags: List<String>,
+    val updated: String,
+    val body: String,
 )
