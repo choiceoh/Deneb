@@ -34,13 +34,16 @@ func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 			return "", err
 		}
 
+		p.Query = strings.TrimSpace(p.Query)
 		if len(p.Names) == 0 && p.Query == "" {
 			return "", fmt.Errorf("names or query is required")
 		}
 
 		// If query is provided, search deferred tools by keyword. Rank with
 		// BM25 over name + description + parameter names so the most relevant
-		// tools come first; fall back to substring match when no token hits.
+		// tools come first, then union in any literal substring matches so the
+		// recall floor of the old substring search is preserved (e.g. query
+		// "mail" still surfaces "gmail", which BM25's whole-token match misses).
 		if p.Query != "" && len(p.Names) == 0 {
 			summaries := registry.DeferredSummaries()
 			docs := make([]searchDoc, 0, len(summaries))
@@ -59,14 +62,17 @@ func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 			}
 
 			p.Names = bm25Rank(p.Query, docs)
-			if len(p.Names) == 0 {
-				// Zero-IDF fallback: literal substring match catches substrings
-				// BM25's whole-token match misses (e.g. "mail" -> "gmail").
-				q := strings.ToLower(p.Query)
-				for _, d := range docs {
-					if strings.Contains(d.fallback, q) {
-						p.Names = append(p.Names, d.name)
-					}
+			// Append substring matches not already surfaced by BM25, ordered
+			// after the ranked hits.
+			seen := make(map[string]bool, len(p.Names))
+			for _, name := range p.Names {
+				seen[name] = true
+			}
+			q := strings.ToLower(p.Query)
+			for _, d := range docs {
+				if !seen[d.name] && strings.Contains(d.fallback, q) {
+					p.Names = append(p.Names, d.name)
+					seen[d.name] = true
 				}
 			}
 			if len(p.Names) == 0 {
