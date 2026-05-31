@@ -39,6 +39,7 @@ import com.inspiredandroid.kai.data.ThemeMode
 import com.inspiredandroid.kai.data.DataRepository
 import com.inspiredandroid.kai.deneb.DenebConfigScreen
 import com.inspiredandroid.kai.deneb.DenebGatewayClient
+import com.inspiredandroid.kai.deneb.DenebTopic
 import com.inspiredandroid.kai.deneb.DenebCalendarEventScreen
 import com.inspiredandroid.kai.deneb.DenebCalendarScreen
 import com.inspiredandroid.kai.deneb.DenebMailDetailScreen
@@ -64,6 +65,7 @@ import com.inspiredandroid.kai.ui.LightColorScheme
 import com.inspiredandroid.kai.ui.Theme
 import com.inspiredandroid.kai.ui.chat.ChatScreen
 import com.inspiredandroid.kai.ui.chat.ChatViewModel
+import com.inspiredandroid.kai.ui.chat.composables.TopicTab
 import com.inspiredandroid.kai.ui.components.FullScreenImageHost
 import com.inspiredandroid.kai.ui.handCursor
 import com.inspiredandroid.kai.ui.settings.SettingsScreen
@@ -71,6 +73,8 @@ import com.inspiredandroid.kai.ui.withBlackBackground
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.tab_chat
 import kai.composeapp.generated.resources.tab_settings
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import nl.marc_apps.tts.TextToSpeechInstance
@@ -240,6 +244,18 @@ private fun AppContent(
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val isHome = currentBackStackEntry?.destination?.route == "home"
 
+                // Deneb topic switcher: load once, then observe the client's
+                // topic state. Fallback flows keep the hooks unconditional when
+                // the repository isn't the Deneb gateway client (other builds).
+                LaunchedEffect(denebClient) { denebClient?.loadTopics() }
+                val emptyTopics = remember { MutableStateFlow(emptyList<DenebTopic>()) }
+                val emptySelectedTopic = remember { MutableStateFlow<String?>(null) }
+                val denebTopics by (denebClient?.topics ?: emptyTopics).collectAsStateWithLifecycle()
+                val selectedTopicKey by (denebClient?.selectedTopic ?: emptySelectedTopic).collectAsStateWithLifecycle()
+                val topicTabs = remember(denebTopics) {
+                    denebTopics.map { TopicTab(key = it.key, label = it.key) }.toImmutableList()
+                }
+
                 val navigationTabBar: @Composable () -> Unit = {
                     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
                     val count = 2
@@ -290,6 +306,10 @@ private fun AppContent(
                             onOpenCalendar = { navController.navigate(DenebCalendar) },
                             onOpenSearch = { navController.navigate(DenebSearch) },
                             onOpenPeople = { navController.navigate(DenebPeople) },
+                            onOpenCategories = { navController.navigate(DenebCategories) },
+                            topics = topicTabs,
+                            selectedTopicKey = selectedTopicKey,
+                            onSelectTopic = { key -> denebClient?.selectTopic(key) },
                             // Deneb runs tools on the gateway; the local terminal/sandbox is irrelevant.
                             isSandboxAvailable = false,
                             navigationTabBar = if (showTabBar) navigationTabBar else null,

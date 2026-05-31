@@ -9,11 +9,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -51,10 +48,7 @@ internal fun TopBar(
     isChatHistoryEmpty: Boolean,
     hasSavedConversations: Boolean,
     onNavigateToSettings: () -> Unit,
-    onOpenMail: () -> Unit = {},
-    onOpenCalendar: () -> Unit = {},
-    onOpenSearch: () -> Unit = {},
-    onOpenPeople: () -> Unit = {},
+    onOpenDrawer: (() -> Unit)? = null,
     isSandboxAvailable: Boolean,
     isSandboxOpen: Boolean,
     isShellExecuting: Boolean,
@@ -67,6 +61,7 @@ internal fun TopBar(
             modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 64.dp),
         ) {
             Row(modifier = Modifier.align(Alignment.CenterStart)) {
+                DrawerButton(onOpenDrawer)
                 LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty, hasSavedConversations, onShowHistory, isSandboxAvailable, isSandboxOpen, isShellExecuting, onToggleSandbox)
             }
             Box(modifier = Modifier.align(Alignment.Center)) {
@@ -80,41 +75,14 @@ internal fun TopBar(
         }
     } else {
         Row {
+            DrawerButton(onOpenDrawer)
             LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty, hasSavedConversations, onShowHistory, isSandboxAvailable, isSandboxOpen, isShellExecuting, onToggleSandbox)
             Spacer(Modifier.weight(1f))
             if (textToSpeech != null) {
                 SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
             }
-            IconButton(
-                modifier = Modifier.handCursor(),
-                onClick = onOpenSearch,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Search,
-                    contentDescription = "검색",
-                    tint = MaterialTheme.colorScheme.onBackground,
-                )
-            }
-            IconButton(
-                modifier = Modifier.handCursor(),
-                onClick = onOpenMail,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Email,
-                    contentDescription = "받은 메일",
-                    tint = MaterialTheme.colorScheme.onBackground,
-                )
-            }
-            IconButton(
-                modifier = Modifier.handCursor(),
-                onClick = onOpenCalendar,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.DateRange,
-                    contentDescription = "일정",
-                    tint = MaterialTheme.colorScheme.onBackground,
-                )
-            }
+            // 검색 / 메일 / 일정 / 사람 / 카테고리 moved into the left drawer
+            // (DenebDrawerSheet); only settings stays pinned in the top bar.
             IconButton(
                 modifier = Modifier.handCursor(),
                 onClick = onNavigateToSettings,
@@ -126,6 +94,23 @@ internal fun TopBar(
                 )
             }
         }
+    }
+}
+
+// DrawerButton renders the hamburger that opens the left navigation drawer.
+// Null callback (e.g. previews) renders nothing so layout stays unchanged.
+@Composable
+private fun DrawerButton(onOpenDrawer: (() -> Unit)?) {
+    if (onOpenDrawer == null) return
+    IconButton(
+        modifier = Modifier.handCursor(),
+        onClick = onOpenDrawer,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Menu,
+            contentDescription = "메뉴",
+            tint = MaterialTheme.colorScheme.onBackground,
+        )
     }
 }
 
