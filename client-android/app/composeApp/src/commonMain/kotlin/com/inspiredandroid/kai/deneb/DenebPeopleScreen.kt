@@ -3,6 +3,7 @@ package com.inspiredandroid.kai.deneb
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,6 +42,7 @@ fun DenebPeopleScreen(
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var people by remember { mutableStateOf<List<PersonHit>?>(null) }
+    val haptics = rememberHaptics()
     LaunchedEffect(Unit) { people = client.fetchPeople() }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -75,8 +77,9 @@ fun DenebPeopleScreen(
                     items(list, key = { it.email.ifBlank { it.name } }) { person ->
                         Column(
                             Modifier
+                                .animateItem()
                                 .fillMaxWidth()
-                                .clickable { onOpenPerson(person.email.ifBlank { person.name }) }
+                                .clickable { haptics.tap(); onOpenPerson(person.email.ifBlank { person.name }) }
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {

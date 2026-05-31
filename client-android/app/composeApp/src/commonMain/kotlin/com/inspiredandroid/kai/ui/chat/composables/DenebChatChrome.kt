@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.handCursor
 import kotlinx.collections.immutable.ImmutableList
 
@@ -204,11 +205,12 @@ private fun DrawerItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit,
 ) {
+    val haptics = rememberHaptics()
     NavigationDrawerItem(
         label = { Text(label) },
         icon = { Icon(icon, contentDescription = null) },
         selected = false,
-        onClick = onClick,
+        onClick = { haptics.tap(); onClick() },
         modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding).handCursor(),
     )
 }

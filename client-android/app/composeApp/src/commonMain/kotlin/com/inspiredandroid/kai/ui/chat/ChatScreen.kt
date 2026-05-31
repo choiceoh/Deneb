@@ -867,6 +867,7 @@ private fun ChatModeScreen(
                                                             null
                                                         },
                                                         reasoningSegments = reasoningSegmentsByAssistantId[history.id] ?: persistentListOf(),
+                                                        isStreaming = isLastAssistant && uiState.isLoading,
                                                     )
                                                     if (history.fallbackServiceName != null) {
                                                         androidx.compose.material3.Text(
