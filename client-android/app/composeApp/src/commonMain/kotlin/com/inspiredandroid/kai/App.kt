@@ -65,6 +65,8 @@ import com.inspiredandroid.kai.ui.LightColorScheme
 import com.inspiredandroid.kai.ui.Theme
 import com.inspiredandroid.kai.ui.chat.ChatScreen
 import com.inspiredandroid.kai.ui.chat.ChatViewModel
+import com.inspiredandroid.kai.ui.chat.composables.CaptureActions
+import com.inspiredandroid.kai.ui.chat.composables.LocalCaptureActions
 import com.inspiredandroid.kai.ui.chat.composables.TopicTab
 import com.inspiredandroid.kai.ui.components.FullScreenImageHost
 import com.inspiredandroid.kai.ui.handCursor
@@ -153,6 +155,7 @@ fun App(
     textToSpeech: TextToSpeechInstance? = null,
     isKoinStarted: Boolean = false,
     onAppOpens: ((Int) -> Unit)? = null,
+    captureActions: CaptureActions? = null,
 ) {
     setSingletonImageLoaderFactory { context: PlatformContext ->
         ImageLoader.Builder(context)
@@ -165,15 +168,17 @@ fun App(
 
     // Reuse global Koin if already started (Android Application class),
     // otherwise create a new instance (iOS, Desktop, Wasm).
-    if (isKoinStarted) {
-        AppContent(navController, lightColorScheme, darkColorScheme, textToSpeech, onAppOpens)
-    } else {
-        KoinApplication(
-            configuration = koinConfiguration {
-                modules(appModule)
-            },
-        ) {
+    CompositionLocalProvider(LocalCaptureActions provides captureActions) {
+        if (isKoinStarted) {
             AppContent(navController, lightColorScheme, darkColorScheme, textToSpeech, onAppOpens)
+        } else {
+            KoinApplication(
+                configuration = koinConfiguration {
+                    modules(appModule)
+                },
+            ) {
+                AppContent(navController, lightColorScheme, darkColorScheme, textToSpeech, onAppOpens)
+            }
         }
     }
 }

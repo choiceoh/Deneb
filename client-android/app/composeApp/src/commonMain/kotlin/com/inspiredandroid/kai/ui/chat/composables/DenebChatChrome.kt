@@ -17,7 +17,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -30,6 +33,7 @@ import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +53,21 @@ import kotlinx.collections.immutable.ImmutableList
 
 /** One topic tab in the switcher: [key] is sent back on select, [label] shown. */
 data class TopicTab(val key: String, val label: String)
+
+/**
+ * Platform capture actions surfaced in the drawer's 캡처 group: pick an image to
+ * OCR, pick a recording to transcribe, or speak. Provided by the Android entry
+ * point via [LocalCaptureActions]; null (the default) hides the group on
+ * platforms (desktop/iOS) without these system launchers.
+ */
+data class CaptureActions(
+    val onCaptureImage: () -> Unit,
+    val onCaptureAudio: () -> Unit,
+    val onVoiceInput: () -> Unit,
+)
+
+/** Ambient capture actions for the drawer; null hides the 캡처 group. */
+val LocalCaptureActions = compositionLocalOf<CaptureActions?> { null }
 
 /**
  * Topic switcher rendered just under the top bar — a compact, centered pill
@@ -154,6 +173,18 @@ fun DenebDrawerSheet(
             DrawerItem("대화 기록", Icons.Filled.History) { onShowHistory(); onClose() }
         }
         DrawerItem("설정", Icons.Filled.Settings) { onNavigateToSettings(); onClose() }
+
+        // Capture group (Android only): in-app entry points to the OCR / ASR /
+        // STT flows that otherwise need the share sheet or an app shortcut.
+        val capture = LocalCaptureActions.current
+        if (capture != null) {
+            Spacer(Modifier.height(8.dp))
+            HorizontalDivider()
+            DrawerSectionLabel("캡처")
+            DrawerItem("이미지 OCR", Icons.Filled.Image) { capture.onCaptureImage(); onClose() }
+            DrawerItem("녹음 전사", Icons.Filled.GraphicEq) { capture.onCaptureAudio(); onClose() }
+            DrawerItem("음성 입력", Icons.Filled.Mic) { capture.onVoiceInput(); onClose() }
+        }
     }
 }
 

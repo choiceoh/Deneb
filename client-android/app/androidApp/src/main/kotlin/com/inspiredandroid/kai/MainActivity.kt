@@ -8,6 +8,7 @@ import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -29,6 +30,7 @@ import com.inspiredandroid.kai.data.AppSettings
 import com.inspiredandroid.kai.data.DataRepository
 import com.inspiredandroid.kai.data.ThemeMode
 import com.inspiredandroid.kai.deneb.DenebGatewayClient
+import com.inspiredandroid.kai.ui.chat.composables.CaptureActions
 import com.inspiredandroid.kai.ui.DarkColorScheme
 import com.inspiredandroid.kai.ui.LightColorScheme
 import io.github.vinceglb.filekit.FileKit
@@ -51,6 +53,18 @@ class MainActivity : ComponentActivity() {
             if (spoken.isNotEmpty()) {
                 lifecycleScope.launch { get<DataRepository>().ask("🎤 $spoken", emptyList(), null) }
             }
+        }
+
+    // In-app image picker -> gateway OCR (the drawer's 이미지 OCR action).
+    private val pickImageLauncher =
+        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            uri?.let { captureFromUri(it, "image/*", audio = false) }
+        }
+
+    // In-app audio-file picker -> gateway VibeVoice-ASR (the drawer's 녹음 전사 action).
+    private val pickAudioLauncher =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            uri?.let { captureFromUri(it, "audio/*", audio = true) }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -114,6 +128,15 @@ class MainActivity : ComponentActivity() {
                         requestReview(this@MainActivity)
                     }
                 },
+                captureActions = CaptureActions(
+                    onCaptureImage = {
+                        pickImageLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                        )
+                    },
+                    onCaptureAudio = { pickAudioLauncher.launch("audio/*") },
+                    onVoiceInput = { launchVoiceCapture() },
+                ),
             )
         }
     }
@@ -146,18 +169,36 @@ class MainActivity : ComponentActivity() {
         handleVoiceIntent(intent)
     }
 
-    // Voice capture (음성 캡처 app shortcut): launch the system speech recognizer;
-    // its transcript is sent to the Deneb chat by speechLauncher. No RECORD_AUDIO
-    // permission needed — the recognizer activity handles capture.
+    // Voice capture (음성 캡처 app shortcut): launch the system speech recognizer.
     private fun handleVoiceIntent(intent: Intent?) {
         if (intent?.data?.toString() != "deneb://voice") return
         intent.data = null // consume so a configuration change doesn't re-launch
+        launchVoiceCapture()
+    }
+
+    // launchVoiceCapture fires the system speech recognizer; its transcript is
+    // sent to the Deneb chat by speechLauncher. No RECORD_AUDIO permission needed —
+    // shared by the 음성 캡처 app shortcut and the drawer's 음성 입력 action.
+    private fun launchVoiceCapture() {
         val recognize = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
             putExtra(RecognizerIntent.EXTRA_PROMPT, "Deneb에게 말하세요")
         }
         runCatching { speechLauncher.launch(recognize) }
+    }
+
+    // captureFromUri reads a picked file's bytes and routes them to the gateway:
+    // image -> PaddleOCR, audio -> VibeVoice-ASR. Backs the drawer's 이미지 OCR /
+    // 녹음 전사 actions, reusing the same capture paths as the share sheet.
+    private fun captureFromUri(uri: Uri, fallbackMime: String, audio: Boolean) {
+        val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+        if (bytes == null || bytes.isEmpty()) return
+        val client = get<DataRepository>() as? DenebGatewayClient ?: return
+        val mime = contentResolver.getType(uri) ?: fallbackMime
+        lifecycleScope.launch {
+            if (audio) client.captureAudio(bytes, mime) else client.captureImage(bytes, mime)
+        }
     }
 
     private fun handleDeepLinkIntent(intent: Intent?) {
