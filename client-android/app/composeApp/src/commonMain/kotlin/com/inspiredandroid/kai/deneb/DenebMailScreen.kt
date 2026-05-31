@@ -20,11 +20,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -38,18 +40,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 /**
- * Native inbox triage backed by `miniapp.gmail.list_recent`. Long-press a row
- * to multi-select; a tonal bottom bar runs bulk read / archive / trash, and
- * "더 보기" pages through nextPageToken. Tapping a row opens the detail screen.
- * Rows carry a sender monogram + type hierarchy so the list reads with weight.
+ * Native inbox triage backed by `miniapp.gmail.list_recent`. Pull to refresh;
+ * long-press a row (with haptic) to multi-select; a tonal bottom bar runs bulk
+ * read / archive / trash, and "더 보기" pages through nextPageToken. Tapping a
+ * row opens the detail screen.
  */
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DenebMailScreen(
     client: DenebGatewayClient,
@@ -60,8 +64,10 @@ fun DenebMailScreen(
     val mail by client.denebMail.collectAsState()
     val nextToken by client.denebMailNextToken.collectAsState()
     val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
 
     var loaded by remember { mutableStateOf(false) }
+    var refreshing by remember { mutableStateOf(false) }
     var selecting by remember { mutableStateOf(false) }
     val selected = remember { mutableStateListOf<String>() }
     var busy by remember { mutableStateOf(false) }
@@ -79,6 +85,7 @@ fun DenebMailScreen(
 
     fun bulk(action: suspend (String) -> Unit) {
         if (busy) return
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         val ids = selected.toList()
         scope.launch {
             busy = true
@@ -89,120 +96,113 @@ fun DenebMailScreen(
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-    Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        if (navigationTabBar != null) {
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (selecting) {
-                Text(
-                    "${selected.size}개 선택",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = { clearSelection() }) { Text("취소") }
-            } else {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "받은 메일",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    if (mail.isNotEmpty()) {
-                        Text(
-                            "${mail.size}통 · 안 읽음 ${mail.count { it.unread }}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                TextButton(onClick = onBack) { Text("닫기") }
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            if (navigationTabBar != null) {
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
             }
-        }
-
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (!loaded && mail.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { DenebLoading() }
-            } else if (mail.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (selecting) {
                     Text(
-                        "최근 7일 메일 없음",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        "${selected.size}개 선택",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
                     )
-                }
-            } else {
-                LazyColumn(Modifier.fillMaxSize()) {
-                    items(mail, key = { it.id }) { m ->
-                        MailRow(
-                            message = m,
-                            selecting = selecting,
-                            isSelected = m.id in selected,
-                            onTap = {
-                                if (selecting) {
-                                    if (m.id in selected) selected.remove(m.id) else selected.add(m.id)
-                                    if (selected.isEmpty()) selecting = false
-                                } else {
-                                    onOpenDetail(m.id)
-                                }
-                            },
-                            onLongPress = {
-                                selecting = true
-                                if (m.id !in selected) selected.add(m.id)
-                            },
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = 68.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                        )
+                    TextButton(onClick = { clearSelection() }) { Text("취소") }
+                } else {
+                    Column(Modifier.weight(1f)) {
+                        Text("받은 메일", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+                        if (mail.isNotEmpty()) {
+                            Text(
+                                "${mail.size}통 · 안 읽음 ${mail.count { it.unread }}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
-                    if (nextToken != null) {
-                        item {
-                            Box(
-                                Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                if (loadingMore) {
-                                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                                } else {
-                                    TextButton(onClick = {
-                                        scope.launch {
-                                            loadingMore = true
-                                            client.loadMoreMail()
-                                            loadingMore = false
+                    TextButton(onClick = onBack) { Text("닫기") }
+                }
+            }
+
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                if (!loaded && mail.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { DenebLoading() }
+                } else if (mail.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("최근 7일 메일 없음", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    PullToRefreshBox(
+                        isRefreshing = refreshing,
+                        onRefresh = { scope.launch { refreshing = true; client.refreshMail(); refreshing = false } },
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        LazyColumn(Modifier.fillMaxSize()) {
+                            items(mail, key = { it.id }) { m ->
+                                MailRow(
+                                    message = m,
+                                    selecting = selecting,
+                                    isSelected = m.id in selected,
+                                    onTap = {
+                                        if (selecting) {
+                                            if (m.id in selected) selected.remove(m.id) else selected.add(m.id)
+                                            if (selected.isEmpty()) selecting = false
+                                        } else {
+                                            onOpenDetail(m.id)
                                         }
-                                    }) { Text("더 보기") }
+                                    },
+                                    onLongPress = {
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        selecting = true
+                                        if (m.id !in selected) selected.add(m.id)
+                                    },
+                                )
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(start = 68.dp),
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                                )
+                            }
+                            if (nextToken != null) {
+                                item {
+                                    Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
+                                        if (loadingMore) {
+                                            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                                        } else {
+                                            TextButton(onClick = {
+                                                scope.launch {
+                                                    loadingMore = true
+                                                    client.loadMoreMail()
+                                                    loadingMore = false
+                                                }
+                                            }) { Text("더 보기") }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-        }
 
-        if (selecting && selected.isNotEmpty()) {
-            Surface(tonalElevation = 3.dp, shadowElevation = 6.dp) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "${selected.size}개 선택",
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = { bulk { client.markMailRead(it) } }, enabled = !busy) { Text("읽음") }
-                    TextButton(onClick = { bulk { client.archiveMail(it) } }, enabled = !busy) { Text("보관") }
-                    TextButton(onClick = { bulk { client.trashMail(it) } }, enabled = !busy) { Text("휴지통") }
+            if (selecting && selected.isNotEmpty()) {
+                Surface(tonalElevation = 3.dp, shadowElevation = 6.dp) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("${selected.size}개 선택", style = MaterialTheme.typography.titleSmall)
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { bulk { client.markMailRead(it) } }, enabled = !busy) { Text("읽음") }
+                        TextButton(onClick = { bulk { client.archiveMail(it) } }, enabled = !busy) { Text("보관") }
+                        TextButton(onClick = { bulk { client.trashMail(it) } }, enabled = !busy) { Text("휴지통") }
+                    }
                 }
             }
         }
-    }
     }
 }
 
@@ -230,11 +230,7 @@ internal fun MailRow(
         verticalAlignment = Alignment.Top,
     ) {
         if (selecting) {
-            Checkbox(
-                checked = isSelected,
-                onCheckedChange = null,
-                modifier = Modifier.padding(end = 10.dp),
-            )
+            Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.padding(end = 10.dp))
         }
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
