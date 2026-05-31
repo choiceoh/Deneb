@@ -10,10 +10,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.layout.Arrangement
@@ -102,6 +100,7 @@ import com.inspiredandroid.kai.ui.chat.composables.TrailingIcon
 import com.inspiredandroid.kai.ui.chat.composables.UserMessage
 import com.inspiredandroid.kai.ui.chat.composables.WaitingResponseRow
 import com.inspiredandroid.kai.ui.chat.composables.uiErrorText
+import com.inspiredandroid.kai.ui.components.animatedGradientBorder
 import com.inspiredandroid.kai.ui.components.LogoAnimation
 import com.inspiredandroid.kai.ui.components.VerticalScrollbarForList
 import com.inspiredandroid.kai.ui.dynamicui.FrozenSubmission
@@ -319,7 +318,6 @@ private fun InteractiveModeScreen(uiState: ChatUiState) {
 
         // Collapsed pill floats over content at the bottom-end
         if (!showFullInput) {
-            val gradientBrush = com.inspiredandroid.kai.ui.gradientBrush
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -327,10 +325,7 @@ private fun InteractiveModeScreen(uiState: ChatUiState) {
                     .height(56.dp)
                     .clip(RoundedCornerShape(28.dp))
                     .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(28.dp))
-                    .border(
-                        BorderStroke(2.dp, gradientBrush),
-                        RoundedCornerShape(28.dp),
-                    )
+                    .animatedGradientBorder(cornerRadius = 28.dp, borderWidth = 2.dp)
                     .handCursor()
                     .padding(horizontal = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,

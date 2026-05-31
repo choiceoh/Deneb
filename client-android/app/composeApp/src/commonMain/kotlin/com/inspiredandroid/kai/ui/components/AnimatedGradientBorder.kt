@@ -17,14 +17,41 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.inspiredandroid.kai.ui.gradientMagenta
-import com.inspiredandroid.kai.ui.gradientPurple
-import com.inspiredandroid.kai.ui.gradientViolet
+import com.inspiredandroid.kai.ui.auroraAzure
+import com.inspiredandroid.kai.ui.auroraCyan
+import com.inspiredandroid.kai.ui.auroraPeriwinkle
+import com.inspiredandroid.kai.ui.auroraViolet
 
-private const val STOP_A = 0f
-private const val STOP_B = 0.33f
-private const val STOP_C = 0.66f
+// Closed aurora loop: four evenly spaced cool-spectrum colors that the border
+// sweep rotates through. Treating it as a continuous, periodic function (see
+// [auroraAt]) lets the sweep spin with no visible seam at the 0deg/360deg wrap.
+private val auroraLoop = listOf(auroraAzure, auroraCyan, auroraPeriwinkle, auroraViolet)
 
+// Sweep samples placed at evenly spaced angles around the border. More samples
+// make the rotation look smoother; 13 keeps each aurora transition buttery at no
+// real cost. The first sample equals the last, which is what closes the loop.
+private const val SWEEP_SAMPLES = 13
+
+// One full revolution every 6s — a slow, flowing sheen rather than a fast spin.
+private const val SWEEP_DURATION_MS = 6000
+
+// Sample the aurora loop at phase [t]. [t] wraps modulo 1 so the function is
+// periodic: auroraAt(x) == auroraAt(x + 1).
+private fun auroraAt(t: Float): Color {
+    val n = auroraLoop.size
+    val phase = ((t % 1f) + 1f) % 1f
+    val scaled = phase * n
+    val index = scaled.toInt() % n
+    val frac = scaled - scaled.toInt()
+    return lerp(auroraLoop[index], auroraLoop[(index + 1) % n], frac)
+}
+
+/**
+ * Draws a slowly rotating iridescent "aurora" gradient border (azure -> cyan ->
+ * periwinkle -> violet). When [backgroundColor] is set it is filled behind the
+ * content first, so a single modifier can supply both the surface and the
+ * animated edge.
+ */
 @Composable
 fun Modifier.animatedGradientBorder(
     cornerRadius: Dp,
@@ -36,77 +63,31 @@ fun Modifier.animatedGradientBorder(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2000, easing = LinearEasing),
+            animation = tween(durationMillis = SWEEP_DURATION_MS, easing = LinearEasing),
         ),
     )
-    // Reuse the same color-stops array across frames; only the pair positions
-    // are mutated per frame so no allocations happen in the animated draw loop.
-    val colorStops = remember {
-        arrayOf(
-            0f to Color.Transparent,
-            0f to gradientPurple,
-            0f to gradientViolet,
-            0f to gradientMagenta,
-            1f to Color.Transparent,
-        )
-    }
+    // Reused across frames: the perpetual animation overwrites these colors in
+    // place each draw instead of allocating a fresh list every frame.
+    val sweepColors = remember { MutableList(SWEEP_SAMPLES) { Color.Transparent } }
     return this.drawWithCache {
-        val borderPx = borderWidth.toPx()
         val cr = CornerRadius(cornerRadius.toPx())
-        val strokeStyle = Stroke(width = borderPx)
+        val strokeStyle = Stroke(width = borderWidth.toPx())
         onDrawWithContent {
             if (backgroundColor != null) {
                 drawRoundRect(color = backgroundColor, cornerRadius = cr)
             }
             drawContent()
 
-            // Shift the three base stops by `progress`, wrap into [0,1), then
-            // sort ascending. Three comparisons ≪ the previous list map+sort.
+            // Shift every sample by `progress` so the whole spectrum rotates.
+            // Sample 0 and sample `last` land on the same phase, so the sweep is
+            // seamless where it wraps.
             val p = progress
-            var posA = (STOP_A - p + 1f) % 1f
-            var posB = (STOP_B - p + 1f) % 1f
-            var posC = (STOP_C - p + 1f) % 1f
-            var colA = gradientPurple
-            var colB = gradientViolet
-            var colC = gradientMagenta
-            if (posA > posB) {
-                val tp = posA
-                posA = posB
-                posB = tp
-                val tc = colA
-                colA = colB
-                colB = tc
+            val last = SWEEP_SAMPLES - 1
+            for (k in 0..last) {
+                sweepColors[k] = auroraAt(k.toFloat() / last + p)
             }
-            if (posB > posC) {
-                val tp = posB
-                posB = posC
-                posC = tp
-                val tc = colB
-                colB = colC
-                colC = tc
-            }
-            if (posA > posB) {
-                val tp = posA
-                posA = posB
-                posB = tp
-                val tc = colA
-                colA = colB
-                colB = tc
-            }
-
-            // Boundary color so the wrap-around at 0 and 1 matches seamlessly.
-            val wrapDist = 1f - posC + posA
-            val t = if (wrapDist > 0f) (1f - posC) / wrapDist else 0f
-            val boundary = lerp(colC, colA, t)
-
-            colorStops[0] = 0f to boundary
-            colorStops[1] = posA to colA
-            colorStops[2] = posB to colB
-            colorStops[3] = posC to colC
-            colorStops[4] = 1f to boundary
-
             drawRoundRect(
-                brush = Brush.sweepGradient(colorStops = colorStops),
+                brush = Brush.sweepGradient(sweepColors),
                 cornerRadius = cr,
                 style = strokeStyle,
             )
