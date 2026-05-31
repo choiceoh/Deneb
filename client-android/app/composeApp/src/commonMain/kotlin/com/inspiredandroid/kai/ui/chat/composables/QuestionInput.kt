@@ -6,9 +6,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,6 +58,7 @@ import com.inspiredandroid.kai.Platform
 import com.inspiredandroid.kai.currentPlatform
 import com.inspiredandroid.kai.data.ServiceEntry
 import com.inspiredandroid.kai.data.imageExtensions
+import com.inspiredandroid.kai.ui.components.animatedGradientBorder
 import com.inspiredandroid.kai.ui.gradientBrush
 import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.handCursor
@@ -169,10 +168,7 @@ fun QuestionInput(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(28.dp))
                 .background(MaterialTheme.colorScheme.background)
-                .border(
-                    BorderStroke(width = 2.dp, brush = gradientBrush),
-                    shape = RoundedCornerShape(28.dp),
-                )
+                .animatedGradientBorder(cornerRadius = 28.dp, borderWidth = 2.dp)
                 .onPreviewKeyEvent { event ->
                     // Only handle hardware keyboard on desktop/web platforms
                     if (currentPlatform !is Platform.Mobile && event.key.keyCode == Key.Enter.keyCode && event.type == KeyEventType.KeyDown) {

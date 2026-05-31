@@ -36,17 +36,23 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
-// Deneb Prussian-blue palette — a deep navy brand color (Deneb is a bright star
-// against the night sky). Variable names are retained from the vendored Kai
-// theme to keep the rebrand diff small.
+// Deneb brand color — a deep Prussian navy (Deneb is a bright star against the
+// night sky). Used as the Material primary in the light theme. The name is
+// retained from the vendored Kai theme to keep the rebrand diff small.
 val darkPurple = Color(0xFF003153)
-val lightPurple = Color(0xFF2C5F8F)
-val gradientBrush = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(darkPurple, lightPurple))
 
-// Animated border gradient colors (Prussian-blue sweep).
-val gradientPurple = Color(0xFF001F3D)
-val gradientViolet = Color(0xFF003153)
-val gradientMagenta = Color(0xFF2C5F8F)
+// Deneb aurora palette — an iridescent cool-spectrum loop (azure → cyan/teal →
+// periwinkle → soft violet). Drives the animated brand border (a slow rotating
+// sheen) on the chat input, center button, collapsed pill, and history rows.
+// See AnimatedGradientBorder.kt.
+val auroraAzure = Color(0xFF2C6FB5)
+val auroraCyan = Color(0xFF2FB6C9)
+val auroraPeriwinkle = Color(0xFF6E8FE0)
+val auroraViolet = Color(0xFF9B7FE0)
+
+// Filled brand brush (send button, circular icon buttons) — a 2-stop slice of
+// the aurora spectrum so solid surfaces stay cohesive with the animated border.
+val gradientBrush = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(auroraAzure, auroraViolet))
 
 fun Modifier.handCursor() = pointerHoverIcon(PointerIcon.Hand, overrideDescendants = true)
 
