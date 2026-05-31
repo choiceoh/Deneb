@@ -39,6 +39,7 @@ import com.inspiredandroid.kai.data.ThemeMode
 import com.inspiredandroid.kai.data.DataRepository
 import com.inspiredandroid.kai.deneb.DenebConfigScreen
 import com.inspiredandroid.kai.deneb.DenebGatewayClient
+import com.inspiredandroid.kai.deneb.DenebCalendarEventScreen
 import com.inspiredandroid.kai.deneb.DenebCalendarScreen
 import com.inspiredandroid.kai.deneb.DenebMailDetailScreen
 import com.inspiredandroid.kai.deneb.DenebMailScreen
@@ -95,6 +96,10 @@ object DenebCalendar
 @Serializable
 @SerialName("deneb_mail_detail")
 data class DenebMailDetail(val id: String)
+
+@Serializable
+@SerialName("deneb_calendar_event")
+data class DenebCalendarEvent(val id: String)
 
 @Composable
 fun App(
@@ -287,6 +292,17 @@ private fun AppContent(
                         denebClient?.let { client ->
                             DenebCalendarScreen(
                                 client = client,
+                                onBack = { navController.navigateUp() },
+                                onOpenEvent = { id -> navController.navigate(DenebCalendarEvent(id)) },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebCalendarEvent> { entry ->
+                        denebClient?.let { client ->
+                            DenebCalendarEventScreen(
+                                client = client,
+                                eventId = entry.toRoute<DenebCalendarEvent>().id,
                                 onBack = { navController.navigateUp() },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )

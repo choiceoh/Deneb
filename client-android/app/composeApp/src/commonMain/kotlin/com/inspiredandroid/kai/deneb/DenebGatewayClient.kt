@@ -412,6 +412,26 @@ class DenebGatewayClient(
             .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.hasMeet) }
     }
 
+    /** Full calendar event (attendees, Meet link, description) for the detail screen. */
+    suspend fun fetchCalendarEvent(id: String): CalendarEventDetail? {
+        val p = callRpc<CalEventPayload>(
+            "miniapp.calendar.get",
+            buildJsonObject { put("id", id) },
+        ) ?: return null
+        return CalendarEventDetail(
+            id = p.id,
+            title = p.summary,
+            description = p.description,
+            location = p.location,
+            start = p.start,
+            end = p.end,
+            allDay = p.allDay,
+            organizer = p.organizer?.let { it.displayName.ifBlank { it.email } }.orEmpty(),
+            attendees = p.attendees.mapNotNull { (it.displayName.ifBlank { it.email }).ifBlank { null } },
+            meetUri = p.conference?.uri.orEmpty(),
+        )
+    }
+
     private suspend fun send(message: String): String {
         if (clientToken.isEmpty()) {
             return "⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요."
@@ -655,6 +675,26 @@ class DenebGatewayClient(
         val hasMeet: Boolean = false,
     )
 
+    @Serializable
+    private data class CalEventPayload(
+        val id: String = "",
+        val summary: String = "",
+        val description: String = "",
+        val location: String = "",
+        val start: String = "",
+        val end: String = "",
+        val allDay: Boolean = false,
+        val organizer: CalAttendee? = null,
+        val attendees: List<CalAttendee> = emptyList(),
+        val conference: CalConference? = null,
+    )
+
+    @Serializable
+    private data class CalAttendee(val email: String = "", val displayName: String = "", val responseStatus: String = "")
+
+    @Serializable
+    private data class CalConference(val solution: String = "", val uri: String = "")
+
     private companion object {
         const val CLIENT_TOKEN_HEADER = "X-Deneb-Client-Token"
         const val DENEB_MODEL_PREFIX = "deneb-model:"
@@ -720,4 +760,18 @@ data class CalendarEvent(
     val end: String,
     val allDay: Boolean,
     val hasMeet: Boolean,
+)
+
+/** Full calendar event for the detail screen. */
+data class CalendarEventDetail(
+    val id: String,
+    val title: String,
+    val description: String,
+    val location: String,
+    val start: String,
+    val end: String,
+    val allDay: Boolean,
+    val organizer: String,
+    val attendees: List<String>,
+    val meetUri: String,
 )
