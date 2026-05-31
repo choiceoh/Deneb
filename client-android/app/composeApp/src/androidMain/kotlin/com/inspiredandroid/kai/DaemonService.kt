@@ -68,19 +68,23 @@ class DaemonService : Service() {
         val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
+        val pendingIntent = intent?.let {
+            PendingIntent.getActivity(
+                this,
+                0,
+                it,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        }
 
-        return builder
+        val notificationBuilder = builder
             .setContentTitle(getString(R.string.app_name))
             .setContentText(getString(R.string.daemon_notification_text))
             .setSmallIcon(android.R.drawable.ic_popup_sync)
-            .setContentIntent(pendingIntent)
             .setOngoing(true)
-            .build()
+
+        pendingIntent?.let { notificationBuilder.setContentIntent(it) }
+
+        return notificationBuilder.build()
     }
 }
