@@ -24,9 +24,12 @@ type Deps struct {
 	// Optional; nil disables miniapp.capture.image.
 	OcrImage func(ctx context.Context, img []byte) (string, error)
 	// Transcribe transcribes a directly-shared audio recording (native-client
-	// voice/meeting capture) via the VibeVoice-ASR sidecar. Optional; nil
-	// disables miniapp.capture.audio.
-	Transcribe func(ctx context.Context, audio []byte, mimeType string) (string, error)
+	// voice/meeting capture) via the VibeVoice-ASR sidecar. hotwords is an
+	// optional proper-noun bias list. Optional; nil disables miniapp.capture.audio.
+	Transcribe func(ctx context.Context, audio []byte, mimeType, hotwords string) (string, error)
+	// Hotwords supplies proper-noun bias (wiki people/companies/domain terms)
+	// for audio-capture transcription. Optional; nil or "" means no bias.
+	Hotwords func() string
 }
 
 // BtwDeps holds the dependencies for the chat.btw side-question RPC method.

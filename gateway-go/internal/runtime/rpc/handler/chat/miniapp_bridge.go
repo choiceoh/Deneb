@@ -139,7 +139,13 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 		if err != nil || len(audio) == 0 {
 			return rpcerr.InvalidParams(fmt.Errorf("audio is not valid base64")).Response(req.ID)
 		}
-		transcript, err := deps.Transcribe(ctx, audio, p.MimeType)
+		// Bias ASR toward the user's wiki proper nouns (people, companies, deals,
+		// domain terms) so Korean names aren't mis-heard.
+		var hotwords string
+		if deps.Hotwords != nil {
+			hotwords = deps.Hotwords()
+		}
+		transcript, err := deps.Transcribe(ctx, audio, p.MimeType, hotwords)
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("audio transcription failed", err).Response(req.ID)
 		}

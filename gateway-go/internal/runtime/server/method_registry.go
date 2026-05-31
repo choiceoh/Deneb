@@ -435,6 +435,15 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			Chat:       hub.Chat(),
 			OcrImage:   tools.OcrImageBytes,
 			Transcribe: tools.TranscribeAudio,
+			// Proper-noun bias for audio transcription, sourced from the wiki
+			// (people/companies/deals/domain terms). Empty when no wiki.
+			Hotwords: func() string {
+				ws := hub.WikiStore()
+				if ws == nil {
+					return ""
+				}
+				return ws.HotwordHints(200)
+			},
 		}),
 		handlersession.ExecMethods(handlersession.ExecDeps{
 			Chat:       hub.Chat(),

@@ -27,7 +27,7 @@ func TestTranscribeAudio_Live(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	out, err := transcribeAudioText(ctx, audio, "audio/wav")
+	out, err := transcribeAudioText(ctx, audio, "audio/wav", "")
 	if err != nil {
 		t.Fatalf("transcribeAudioText: %v", err)
 	}
