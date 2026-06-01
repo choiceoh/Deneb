@@ -55,12 +55,16 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 //   - image      (base64, required; an optional `data:...;base64,` prefix is stripped)
 //   - mimeType   (string, optional)
 //   - sessionKey (string, optional): defaults to "client:main"
+//   - caption    (string, optional): source context the image alone lacks — e.g.
+//     the originating notification's app/sender/text. Prepended to the OCR turn
+//     so the agent sees both the picture and where it came from.
 func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
 			Image      string `json:"image"`
 			MimeType   string `json:"mimeType"`
 			SessionKey string `json:"sessionKey"`
+			Caption    string `json:"caption"`
 		}](req)
 		if errResp != nil {
 			return errResp
@@ -90,6 +94,12 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 			sessionKey = nativeClientChannel + ":main"
 		}
 		message := "📷 공유 이미지에서 추출한 텍스트 (OCR):\n\n" + strings.TrimSpace(text)
+		if c := strings.TrimSpace(p.Caption); c != "" {
+			// The caption carries context the image itself can't (which app/sender
+			// the picture came from, the notification body). Lead with it so the
+			// turn analyzes the photo in light of where it originated.
+			message = "📲 공유 맥락:\n" + c + "\n\n" + message
+		}
 		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
 			Delivery:            &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
