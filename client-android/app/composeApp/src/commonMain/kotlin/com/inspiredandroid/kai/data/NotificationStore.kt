@@ -1,5 +1,7 @@
 package com.inspiredandroid.kai.data
 
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.ListSerializer
@@ -32,9 +34,23 @@ class NotificationStore(private val appSettings: AppSettings) {
         keyOf = { it.id },
     )
 
+    /**
+     * Fires once per newly captured notification so the scheduler can run a
+     * heartbeat immediately instead of waiting for the next poll. Buffered +
+     * DROP_OLDEST so a burst never blocks the listener; the scheduler debounces.
+     */
+    private val _captured = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 16,
+        onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
+    )
+    val captured: SharedFlow<Unit> = _captured
+
     fun getPending(): List<NotificationRecord> = pendingQueue.get()
 
-    suspend fun addPending(record: NotificationRecord) = pendingQueue.add(listOf(record))
+    suspend fun addPending(record: NotificationRecord) {
+        pendingQueue.add(listOf(record))
+        _captured.tryEmit(Unit)
+    }
 
     suspend fun removePending(records: List<NotificationRecord>) = pendingQueue.remove(records)
 

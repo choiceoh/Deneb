@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.13",
+        code = 136,
+        highlights = listOf(
+            "캡처한 알림(카톡·메일 등)을 즉시 처리 — 60초 폴링 대기 없이 바로 트리아지",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.12",
         code = 135,
         highlights = listOf(
