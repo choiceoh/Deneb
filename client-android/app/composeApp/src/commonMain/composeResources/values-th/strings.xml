@@ -14,7 +14,6 @@
     <string name="settings_content_description">การตั้งค่า</string>
     <string name="bot_message_speech_content_description">เสียงพูด</string>
     <string name="bot_message_copy_content_description">คัดลอก</string>
-    <string name="settings_free_tier_title">ระดับฟรี</string>
     <string name="settings_status_error_invalid_key">คีย์ API ไม่ถูกต้อง</string>
     <string name="settings_status_error_quota_exhausted">โควต้าหมด</string>
     <string name="settings_status_error_rate_limited">ถึงขีดจำกัดอัตรา</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">บริการ</string>
     <string name="settings_tab_tools">เครื่องมือ</string>
     <string name="tools_count">%1$d เครื่องมือ</string>
-    <string name="privacy_agree_prefix">การใช้บริการถือว่าคุณยอมรับ</string>
-    <string name="privacy_policy">นโยบายความเป็นส่วนตัว</string>
     <string name="settings_tab_general">ทั่วไป</string>
     <string name="settings_tab_agent">เอเจนต์</string>
     <string name="tool_set_alarm_name">ตั้งปลุก</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">การตรวจสอบครั้งล่าสุดล้มเหลว %1$s</string>
     <string name="settings_email_refresh">รีเฟรชบัญชี</string>
     <string name="settings_add_service">เพิ่มบริการ</string>
-    <string name="settings_free_fallback">ใช้เป็นทางเลือกสำรอง</string>
-    <string name="service_free_fast">ฟรีเร็ว</string>
-    <string name="service_free_expert">ฟรีผู้เชี่ยวชาญ</string>
     <string name="settings_heartbeat">จังหวะหัวใจ</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] นี่คือการตรวจสอบตนเองอัตโนมัติ ตรวจสอบความทรงจำและงานที่รอดำเนินการ หากทุกอย่างเรียบร้อยและไม่มีอะไรต้องดูแล ให้ตอบด้วยคำว่า: HEARTBEAT_OK\nหากมีสิ่งที่ต้องดูแล (ความทรงจำเก่า งานที่ครบกำหนด การติดตามผู้ใช้) ให้จัดการ</string>
     <string name="settings_heartbeat_description">การตรวจสอบตนเองเป็นระยะที่ให้ AI ตรวจสอบความทรงจำและงานโดยไม่ต้องมีข้อมูลจากผู้ใช้ ทำงานทุก %1$d นาทีในช่วงเวลาที่ใช้งาน</string>

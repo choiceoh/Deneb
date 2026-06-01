@@ -14,7 +14,6 @@
     <string name="settings_content_description">설정</string>
     <string name="bot_message_speech_content_description">음성</string>
     <string name="bot_message_copy_content_description">복사</string>
-    <string name="settings_free_tier_title">무료 티어</string>
     <string name="settings_status_error_invalid_key">유효하지 않은 API 키</string>
     <string name="settings_status_error_quota_exhausted">할당량 소진</string>
     <string name="settings_status_error_rate_limited">요청 한도 초과</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">서비스</string>
     <string name="settings_tab_tools">도구</string>
     <string name="tools_count">%1$d 도구</string>
-    <string name="privacy_agree_prefix">서비스를 사용함으로써 </string>
-    <string name="privacy_policy">개인정보 처리방침</string>
     <string name="settings_tab_general">일반</string>
     <string name="settings_tab_agent">에이전트</string>
     <string name="tool_set_alarm_name">알람 설정</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">마지막 확인 실패 %1$s</string>
     <string name="settings_email_refresh">계정 새로고침</string>
     <string name="settings_add_service">서비스 추가</string>
-    <string name="settings_free_fallback">대체로 사용</string>
-    <string name="service_free_fast">무료 빠른</string>
-    <string name="service_free_expert">무료 전문가</string>
     <string name="settings_heartbeat">하트비트</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] 이것은 자동 자가 점검입니다. 기억과 대기 중인 작업을 검토하세요. 모든 것이 괜찮고 주의가 필요한 것이 없다면 정확히 다음과 같이 응답하세요: HEARTBEAT_OK
 주의가 필요한 것이 있다면(오래된 기억, 만료된 작업, 사용자 후속 조치) 처리하세요.</string>

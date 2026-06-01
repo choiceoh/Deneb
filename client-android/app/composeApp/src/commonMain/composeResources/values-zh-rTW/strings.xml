@@ -14,7 +14,6 @@
     <string name="settings_content_description">設定</string>
     <string name="bot_message_speech_content_description">語音</string>
     <string name="bot_message_copy_content_description">複製</string>
-    <string name="settings_free_tier_title">免費版</string>
     <string name="settings_status_error_invalid_key">API 金鑰無效</string>
     <string name="settings_status_error_quota_exhausted">配額已用完</string>
     <string name="settings_status_error_rate_limited">達到速率限制</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">服務</string>
     <string name="settings_tab_tools">工具</string>
     <string name="tools_count">%1$d 個工具</string>
-    <string name="privacy_agree_prefix">使用本服務即表示您同意</string>
-    <string name="privacy_policy">隱私權政策</string>
     <string name="settings_tab_general">一般</string>
     <string name="settings_tab_agent">代理程式</string>
     <string name="tool_set_alarm_name">設定鬧鐘</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">上次取得失敗 %1$s</string>
     <string name="settings_email_refresh">重新整理帳戶</string>
     <string name="settings_add_service">新增服務</string>
-    <string name="settings_free_fallback">用作備選</string>
-    <string name="service_free_fast">免費快速</string>
-    <string name="service_free_expert">免費專家</string>
     <string name="settings_heartbeat">心跳</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] 這是一次自動自我檢查。檢查你的記憶和待處理任務。如果一切正常且無需關注，請準確回覆：HEARTBEAT_OK
 如果有需要關注的事項（過時的記憶、到期的任務、使用者跟進），請處理。</string>

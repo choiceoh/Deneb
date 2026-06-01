@@ -14,7 +14,6 @@
     <string name="settings_content_description">Tetapan</string>
     <string name="bot_message_speech_content_description">Pertuturan</string>
     <string name="bot_message_copy_content_description">Salin</string>
-    <string name="settings_free_tier_title">Peringkat Percuma</string>
     <string name="settings_status_error_invalid_key">Kunci API tidak sah</string>
     <string name="settings_status_error_quota_exhausted">Kuota habis</string>
     <string name="settings_status_error_rate_limited">Had kadar tercapai</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">Perkhidmatan</string>
     <string name="settings_tab_tools">Alat</string>
     <string name="tools_count">%1$d Alat</string>
-    <string name="privacy_agree_prefix">Dengan menggunakan perkhidmatan, anda bersetuju dengan </string>
-    <string name="privacy_policy">Dasar Privasi</string>
     <string name="settings_tab_general">Umum</string>
     <string name="settings_tab_agent">Ejen</string>
     <string name="tool_set_alarm_name">Tetapkan Penggera</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Pengambilan terakhir gagal %1$s</string>
     <string name="settings_email_refresh">Segarkan akaun</string>
     <string name="settings_add_service">Tambah perkhidmatan</string>
-    <string name="settings_free_fallback">Gunakan sebagai sandaran</string>
-    <string name="service_free_fast">Percuma Pantas</string>
-    <string name="service_free_expert">Percuma Pakar</string>
     <string name="settings_heartbeat">Degupan Jantung</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Ini adalah semakan kendiri automatik. Semak ingatan dan tugas tertangguh anda. Jika semuanya baik dan tiada yang memerlukan perhatian, balas dengan tepat: HEARTBEAT_OK\nJika sesuatu memerlukan perhatian (ingatan lapuk, tugas tertunggak, susulan pengguna), tanganinya.</string>
     <string name="settings_heartbeat_description">Semakan kendiri berkala yang membolehkan AI menyemak ingatan dan tugas tanpa input pengguna. Berjalan setiap %1$d minit semasa waktu aktif.</string>

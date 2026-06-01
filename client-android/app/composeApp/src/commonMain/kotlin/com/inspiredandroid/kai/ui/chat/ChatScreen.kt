@@ -711,7 +711,6 @@ private fun ChatModeScreen(
                                 ?.let { Service.fromId(it.serviceId).isOnDevice } == true
                             EmptyState(
                                 modifier = Modifier.fillMaxWidth().weight(1f),
-                                isUsingSharedKey = uiState.showPrivacyInfo,
                                 onStartInteractiveMode = uiState.actions.enterInteractiveMode
                                     .takeUnless { primaryIsOnDevice },
                             )

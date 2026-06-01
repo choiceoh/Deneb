@@ -16,19 +16,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.LinkAnnotation
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withLink
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.ui.components.LogoAnimation
 import com.inspiredandroid.kai.ui.components.animatedGradientBorder
 import com.inspiredandroid.kai.ui.handCursor
 import kai.composeapp.generated.resources.Res
-import kai.composeapp.generated.resources.privacy_agree_prefix
-import kai.composeapp.generated.resources.privacy_policy
 import kai.composeapp.generated.resources.start_interactive_ui
 import kotlin.time.Clock
 import kotlinx.datetime.TimeZone
@@ -38,7 +31,6 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun EmptyState(
     modifier: Modifier,
-    isUsingSharedKey: Boolean,
     onStartInteractiveMode: (() -> Unit)? = null,
 ) {
     Column(
@@ -77,28 +69,6 @@ internal fun EmptyState(
                 onClick = onStartInteractiveMode,
             )
             Spacer(Modifier.height(8.dp))
-        }
-        if (isUsingSharedKey) {
-            val linkColor = MaterialTheme.colorScheme.primary
-            val prefixText = stringResource(Res.string.privacy_agree_prefix)
-            val policyText = stringResource(Res.string.privacy_policy)
-            val annotatedString = remember(prefixText, policyText, linkColor) {
-                buildAnnotatedString {
-                    append(prefixText)
-                    withLink(LinkAnnotation.Url(url = "https://schubert-simon.de/privacy/kai.txt")) {
-                        withStyle(style = SpanStyle(color = linkColor)) {
-                            append(policyText)
-                        }
-                    }
-                }
-            }
-            Text(
-                annotatedString,
-                modifier = Modifier.padding(horizontal = 16.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
         }
     }
 }

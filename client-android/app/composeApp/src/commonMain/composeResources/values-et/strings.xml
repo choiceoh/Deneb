@@ -14,7 +14,6 @@
     <string name="settings_content_description">Seaded</string>
     <string name="bot_message_speech_content_description">Kõne</string>
     <string name="bot_message_copy_content_description">Kopeeri</string>
-    <string name="settings_free_tier_title">Tasuta tase</string>
     <string name="settings_base_url_label">Serveri URL</string>
     <string name="settings_status_checking">Ühenduse kontrollimine...</string>
     <string name="settings_status_connected">Ühendatud</string>
@@ -36,8 +35,6 @@
     <string name="settings_tab_services">Teenused</string>
     <string name="settings_tab_tools">Tööriistad</string>
     <string name="tools_count">%1$d Tööriistad</string>
-    <string name="privacy_agree_prefix">Teenuse kasutamisega nõustute </string>
-    <string name="privacy_policy">Privaatsuspoliitikaga</string>
     <string name="tool_get_local_time_name">Hangi kohalik aeg</string>
     <string name="tool_get_local_time_description">Hangi praegune kohalik kuupäev ja kellaaeg suhteliste kuupäevade tõlgendamiseks</string>
     <string name="tool_get_location_name">Hangi asukoht</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Viimane kontroll ebaõnnestus %1$s</string>
     <string name="settings_email_refresh">Värskenda kontot</string>
     <string name="settings_add_service">Lisa teenus</string>
-    <string name="settings_free_fallback">Kasuta varuvarjandina</string>
-    <string name="service_free_fast">Tasuta kiire</string>
-    <string name="service_free_expert">Tasuta ekspert</string>
     <string name="settings_heartbeat">Südamelöök</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] See on automaatne enesekontroll. Vaata üle oma mälestused ja ootel ülesanded. Kui kõik on korras ja miski ei vaja tähelepanu, vasta täpselt: HEARTBEAT_OK\nKui miski vajab tähelepanu (aegunud mälestused, tähtaegsed ülesanded, kasutaja järelpärimised), tegele sellega.</string>
     <string name="settings_heartbeat_description">Perioodilised enesekontrollid, mis võimaldavad AI-l vaadata üle mälestused ja ülesanded ilma kasutaja sisendita. Käivitub iga %1$d minuti järel aktiivsetel tundidel.</string>

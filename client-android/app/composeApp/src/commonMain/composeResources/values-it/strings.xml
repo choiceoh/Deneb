@@ -14,7 +14,6 @@
     <string name="settings_content_description">Impostazioni</string>
     <string name="bot_message_speech_content_description">Voce</string>
     <string name="bot_message_copy_content_description">Copia</string>
-    <string name="settings_free_tier_title">Livello Gratuito</string>
     <string name="settings_status_error_invalid_key">Chiave API non valida</string>
     <string name="settings_status_error_quota_exhausted">Quota esaurita</string>
     <string name="settings_status_error_rate_limited">Limite di richieste raggiunto</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">Servizi</string>
     <string name="settings_tab_tools">Strumenti</string>
     <string name="tools_count">%1$d Strumenti</string>
-    <string name="privacy_agree_prefix">Utilizzando il servizio, accetti la </string>
-    <string name="privacy_policy">Informativa sulla privacy</string>
     <string name="settings_tab_general">Generali</string>
     <string name="settings_tab_agent">Agente</string>
     <string name="tool_set_alarm_name">Imposta sveglia</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Ultimo controllo fallito %1$s</string>
     <string name="settings_email_refresh">Aggiorna account</string>
     <string name="settings_add_service">Aggiungi servizio</string>
-    <string name="settings_free_fallback">Usa come riserva</string>
-    <string name="service_free_fast">Gratuito veloce</string>
-    <string name="service_free_expert">Gratuito esperto</string>
     <string name="settings_heartbeat">Battito cardiaco</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Questo è un controllo automatico. Rivedi i tuoi ricordi e le attività in sospeso. Se tutto sembra a posto e nulla richiede attenzione, rispondi esattamente: HEARTBEAT_OK
 Se qualcosa richiede attenzione (ricordi obsoleti, attività scadute, follow-up dell'utente), occupatene.</string>

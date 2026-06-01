@@ -14,7 +14,6 @@
     <string name="settings_content_description">Параметрлер</string>
     <string name="bot_message_speech_content_description">Сөйлеу</string>
     <string name="bot_message_copy_content_description">Көшіру</string>
-    <string name="settings_free_tier_title">Тегін деңгей</string>
     <string name="settings_base_url_label">Сервер URL</string>
     <string name="settings_status_checking">Қосылым тексерілуде...</string>
     <string name="settings_status_connected">Қосылды</string>
@@ -36,8 +35,6 @@
     <string name="settings_tab_services">Қызметтер</string>
     <string name="settings_tab_tools">Құралдар</string>
     <string name="tools_count">%1$d Құрал</string>
-    <string name="privacy_agree_prefix">Қызметті пайдалана отырып, сіз келесімен келісесіз </string>
-    <string name="privacy_policy">Құпиялылық саясаты</string>
     <string name="tool_get_local_time_name">Жергілікті уақытты алу</string>
     <string name="tool_get_local_time_description">Салыстырмалы күндерді түсіндіру үшін ағымдағы жергілікті күн мен уақытты алу</string>
     <string name="tool_get_location_name">Орналасқан жерді алу</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Соңғы тексеру сәтсіз %1$s</string>
     <string name="settings_email_refresh">Аккаунтты жаңарту</string>
     <string name="settings_add_service">Қызметті қосу</string>
-    <string name="settings_free_fallback">Қосалқы ретінде пайдалану</string>
-    <string name="service_free_fast">Тегін жылдам</string>
-    <string name="service_free_expert">Тегін сарапшы</string>
     <string name="settings_heartbeat">Жүрек соғысы</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Бұл автоматты өзін-өзі тексеру. Естеліктеріңіз бен күтудегі тапсырмаларды қарап шығыңыз. Егер бәрі жақсы болса және ешнәрсе назар аударуды қажет етпесе, дәл осылай жауап беріңіз: HEARTBEAT_OK\nЕгер бірнәрсе назар аударуды қажет етсе (ескірген естеліктер, мерзімі келген тапсырмалар, пайдаланушы кейінгі әрекеттері), оны шешіңіз.</string>
     <string name="settings_heartbeat_description">AI-ға пайдаланушы енгізуінсіз естеліктер мен тапсырмаларды қарауға мүмкіндік беретін мерзімді өзін-өзі тексерулер. Белсенді сағаттарда әр %1$d минут сайын іске қосылады.</string>

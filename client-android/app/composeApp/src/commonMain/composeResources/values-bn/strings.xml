@@ -14,7 +14,6 @@
     <string name="settings_content_description">সেটিংস</string>
     <string name="bot_message_speech_content_description">স্পিচ</string>
     <string name="bot_message_copy_content_description">কপি</string>
-    <string name="settings_free_tier_title">বিনামূল্যে স্তর</string>
     <string name="settings_status_error_invalid_key">অবৈধ API কী</string>
     <string name="settings_status_error_quota_exhausted">কোটা শেষ</string>
     <string name="settings_status_error_rate_limited">রেট সীমায় পৌঁছেছে</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">সেবাসমূহ</string>
     <string name="settings_tab_tools">টুলস</string>
     <string name="tools_count">%1$d টুল</string>
-    <string name="privacy_agree_prefix">পরিষেবা ব্যবহার করে, আপনি সম্মত হচ্ছেন </string>
-    <string name="privacy_policy">গোপনীয়তা নীতি</string>
     <string name="settings_tab_general">সাধারণ</string>
     <string name="settings_tab_agent">এজেন্ট</string>
     <string name="tool_set_alarm_name">অ্যালার্ম সেট করুন</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">শেষ পরীক্ষা ব্যর্থ %1$s</string>
     <string name="settings_email_refresh">অ্যাকাউন্ট রিফ্রেশ করুন</string>
     <string name="settings_add_service">পরিষেবা যোগ করুন</string>
-    <string name="settings_free_fallback">ফলব্যাক হিসেবে ব্যবহার করুন</string>
-    <string name="service_free_fast">ফ্রি ফাস্ট</string>
-    <string name="service_free_expert">ফ্রি এক্সপার্ট</string>
     <string name="settings_heartbeat">হৃৎস্পন্দন</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] এটি একটি স্বয়ংক্রিয় আত্ম-পরীক্ষা। তোমার স্মৃতি এবং মুলতুবি কাজগুলি পর্যালোচনা করো। যদি সবকিছু ঠিক থাকে এবং কোনো কিছুতে মনোযোগের প্রয়োজন না হয়, ঠিক এইভাবে উত্তর দাও: HEARTBEAT_OK\nযদি কিছুতে মনোযোগের প্রয়োজন হয় (পুরানো স্মৃতি, বকেয়া কাজ, ব্যবহারকারীর ফলো-আপ), সেটি সমাধান করো।</string>
     <string name="settings_heartbeat_description">পর্যায়ক্রমিক আত্ম-পরীক্ষা যা AI-কে ব্যবহারকারীর ইনপুট ছাড়াই স্মৃতি এবং কাজ পর্যালোচনা করতে দেয়। সক্রিয় সময়ে প্রতি %1$d মিনিটে চলে।</string>

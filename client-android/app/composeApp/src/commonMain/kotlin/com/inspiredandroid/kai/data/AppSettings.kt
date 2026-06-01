@@ -5,9 +5,7 @@ import com.russhwolf.settings.Settings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -108,7 +106,7 @@ fun detectExportableSections(json: JsonObject): Map<ImportSection, String?> {
 
 fun detectImportSections(json: JsonObject): Map<ImportSection, String?> {
     val sections = mutableMapOf<ImportSection, String?>()
-    if (json["configured_services"] != null || json["current_service_id"] != null || json["free_fallback_enabled"] != null || json["instance_settings"] != null) {
+    if (json["configured_services"] != null || json["current_service_id"] != null || json["instance_settings"] != null) {
         val count = json["configured_services"]?.jsonArray?.size
         sections[ImportSection.SERVICES] = count?.let { "$it" }
     }
@@ -216,28 +214,6 @@ class AppSettings(internal val settings: Settings) {
         } catch (_: Exception) {
             null
         }
-    }
-
-    // Free fallback
-    fun isFreeFallbackEnabled(): Boolean = settings.getBoolean(KEY_FREE_FALLBACK_ENABLED, true)
-
-    fun setFreeFallbackEnabled(enabled: Boolean) {
-        settings.putBoolean(KEY_FREE_FALLBACK_ENABLED, enabled)
-    }
-
-    fun getFreeMode(): FreeMode {
-        val stored = settings.getStringOrNull(KEY_FREE_MODE) ?: return FreeMode.FAST
-        return FreeMode.entries.find { it.name == stored } ?: FreeMode.FAST
-    }
-
-    fun setFreeMode(mode: FreeMode) {
-        settings.putString(KEY_FREE_MODE, mode.name)
-    }
-
-    fun isFreeServicePrimary(): Boolean = settings.getBoolean(KEY_FREE_SERVICE_PRIMARY, false)
-
-    fun setFreeServicePrimary(primary: Boolean) {
-        settings.putBoolean(KEY_FREE_SERVICE_PRIMARY, primary)
     }
 
     // Soul (system prompt)
@@ -552,9 +528,6 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_NOTIFICATIONS_STORE = "notifications_store"
         const val KEY_NOTIFICATIONS_SYNC_STATE = "notifications_sync_state"
         const val KEY_CONFIGURED_SERVICES = "configured_services"
-        const val KEY_FREE_FALLBACK_ENABLED = "free_fallback_enabled"
-        const val KEY_FREE_MODE = "free_mode"
-        const val KEY_FREE_SERVICE_PRIMARY = "free_service_primary"
         const val KEY_SERVICES_MIGRATION_COMPLETE = "services_migration_complete_v1"
         const val KEY_UI_SCALE = "ui_scale"
         const val KEY_MCP_SERVERS = "mcp_servers"

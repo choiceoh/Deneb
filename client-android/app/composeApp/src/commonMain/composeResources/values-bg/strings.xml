@@ -14,7 +14,6 @@
     <string name="settings_content_description">Настройки</string>
     <string name="bot_message_speech_content_description">Реч</string>
     <string name="bot_message_copy_content_description">Копирай</string>
-    <string name="settings_free_tier_title">Безплатно ниво</string>
     <string name="settings_base_url_label">URL на сървъра</string>
     <string name="settings_status_checking">Проверка на връзката...</string>
     <string name="settings_status_connected">Свързан</string>
@@ -36,8 +35,6 @@
     <string name="settings_tab_services">Услуги</string>
     <string name="settings_tab_tools">Инструменти</string>
     <string name="tools_count">%1$d Инструмента</string>
-    <string name="privacy_agree_prefix">Използвайки услугата, вие се съгласявате с </string>
-    <string name="privacy_policy">Политика за поверителност</string>
     <string name="tool_get_local_time_name">Вземи местно време</string>
     <string name="tool_get_local_time_description">Вземи текущата местна дата и час за интерпретиране на относителни дати</string>
     <string name="tool_get_location_name">Вземи местоположение</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Последна проверка неуспешна %1$s</string>
     <string name="settings_email_refresh">Опресни акаунта</string>
     <string name="settings_add_service">Добавяне на услуга</string>
-    <string name="settings_free_fallback">Използвай като резервен</string>
-    <string name="service_free_fast">Безплатен бърз</string>
-    <string name="service_free_expert">Безплатен експерт</string>
     <string name="settings_heartbeat">Сърцебиене</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Това е автоматична самопроверка. Прегледай спомените и чакащите задачи. Ако всичко изглежда наред и нищо не изисква внимание, отговори точно с: HEARTBEAT_OK\nАко нещо изисква внимание (остарели спомени, дължими задачи, последващи действия от потребителя), обърни му внимание.</string>
     <string name="settings_heartbeat_description">Периодични самопроверки, които позволяват на AI да преглежда спомени и задачи без потребителски вход. Изпълнява се на всеки %1$d минути в активните часове.</string>

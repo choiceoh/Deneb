@@ -14,7 +14,6 @@
     <string name="settings_content_description">Asetukset</string>
     <string name="bot_message_speech_content_description">Puhe</string>
     <string name="bot_message_copy_content_description">Kopioi</string>
-    <string name="settings_free_tier_title">Ilmainen taso</string>
     <string name="settings_base_url_label">Palvelimen URL</string>
     <string name="settings_status_checking">Tarkistetaan yhteytt\u00e4...</string>
     <string name="settings_status_connected">Yhdistetty</string>
@@ -36,8 +35,6 @@
     <string name="settings_tab_services">Palvelut</string>
     <string name="settings_tab_tools">Ty\u00f6kalut</string>
     <string name="tools_count">%1$d Työkalua</string>
-    <string name="privacy_agree_prefix">K\u00e4ytt\u00e4m\u00e4ll\u00e4 palvelua hyv\u00e4ksyt </string>
-    <string name="privacy_policy">Tietosuojak\u00e4yt\u00e4nn\u00f6n</string>
     <string name="tool_get_local_time_name">Hae paikallinen aika</string>
     <string name="tool_get_local_time_description">Hae nykyinen paikallinen p\u00e4iv\u00e4m\u00e4\u00e4r\u00e4 ja aika suhteellisten p\u00e4iv\u00e4m\u00e4\u00e4rien tulkitsemiseksi</string>
     <string name="tool_get_location_name">Hae sijainti</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Viimeinen tarkistus epäonnistui %1$s</string>
     <string name="settings_email_refresh">Päivitä tili</string>
     <string name="settings_add_service">Lisää palvelu</string>
-    <string name="settings_free_fallback">Käytä varavaihtoehtona</string>
-    <string name="service_free_fast">Ilmainen nopea</string>
-    <string name="service_free_expert">Ilmainen asiantuntija</string>
     <string name="settings_heartbeat">Syke</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Tämä on automaattinen itsetarkistus. Tarkista muistisi ja odottavat tehtävät. Jos kaikki näyttää hyvältä eikä mikään vaadi huomiota, vastaa tarkasti: HEARTBEAT_OK
 Jos jokin vaatii huomiota (vanhentuneet muistot, erääntyneet tehtävät, käyttäjän seurannat), hoida se.</string>

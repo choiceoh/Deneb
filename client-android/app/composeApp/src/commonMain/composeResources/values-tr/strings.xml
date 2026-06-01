@@ -14,7 +14,6 @@
     <string name="settings_content_description">Ayarlar</string>
     <string name="bot_message_speech_content_description">Konuşma</string>
     <string name="bot_message_copy_content_description">Kopyala</string>
-    <string name="settings_free_tier_title">Ücretsiz Katman</string>
     <string name="settings_status_error_invalid_key">Geçersiz API anahtarı</string>
     <string name="settings_status_error_quota_exhausted">Kota tükendi</string>
     <string name="settings_status_error_rate_limited">İstek limiti aşıldı</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">Hizmetler</string>
     <string name="settings_tab_tools">Araçlar</string>
     <string name="tools_count">%1$d Araç</string>
-    <string name="privacy_agree_prefix">Hizmeti kullanarak </string>
-    <string name="privacy_policy">Gizlilik Politikası</string>
     <string name="settings_tab_general">Genel</string>
     <string name="settings_tab_agent">Ajan</string>
     <string name="tool_set_alarm_name">Alarm Kur</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Son kontrol başarısız %1$s</string>
     <string name="settings_email_refresh">Hesabı yenile</string>
     <string name="settings_add_service">Hizmet ekle</string>
-    <string name="settings_free_fallback">Yedek olarak kullan</string>
-    <string name="service_free_fast">Ücretsiz hızlı</string>
-    <string name="service_free_expert">Ücretsiz uzman</string>
     <string name="settings_heartbeat">Kalp atışı</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Bu otomatik bir öz kontroldür. Anılarınızı ve bekleyen görevleri gözden geçirin. Her şey yolunda görünüyorsa ve hiçbir şey dikkat gerektirmiyorsa, tam olarak şunu yanıtlayın: HEARTBEAT_OK
 Bir şey dikkat gerektiriyorsa (eski anılar, vadesi geçmiş görevler, kullanıcı takipleri), bununla ilgilenin.</string>

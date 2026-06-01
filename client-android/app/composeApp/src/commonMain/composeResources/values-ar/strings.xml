@@ -14,7 +14,6 @@
     <string name="settings_content_description">الإعدادات</string>
     <string name="bot_message_speech_content_description">صوت</string>
     <string name="bot_message_copy_content_description">نسخ</string>
-    <string name="settings_free_tier_title">الباقة المجانية</string>
     <string name="settings_status_error_invalid_key">مفتاح API غير صالح</string>
     <string name="settings_status_error_quota_exhausted">نفدت الحصة</string>
     <string name="settings_status_error_rate_limited">تم الوصول لحد المعدل</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">الخدمات</string>
     <string name="settings_tab_tools">الأدوات</string>
     <string name="tools_count">%1$d أدوات</string>
-    <string name="privacy_agree_prefix">باستخدام الخدمة، فإنك توافق على </string>
-    <string name="privacy_policy">سياسة الخصوصية</string>
     <string name="settings_tab_general">عام</string>
     <string name="settings_tab_agent">العميل</string>
     <string name="tool_set_alarm_name">ضبط المنبه</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">فشل آخر استطلاع %1$s</string>
     <string name="settings_email_refresh">تحديث الحساب</string>
     <string name="settings_add_service">إضافة خدمة</string>
-    <string name="settings_free_fallback">استخدام كاحتياطي</string>
-    <string name="service_free_fast">مجاني سريع</string>
-    <string name="service_free_expert">مجاني خبير</string>
     <string name="settings_heartbeat">نبض القلب</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] هذا فحص ذاتي تلقائي. راجع ذكرياتك والمهام المعلقة. إذا كان كل شيء على ما يرام ولا شيء يحتاج اهتمامًا، أجب بالضبط: HEARTBEAT_OK
 إذا كان شيء ما يحتاج اهتمامًا (ذكريات قديمة، مهام مستحقة، متابعات المستخدم)، عالجه.</string>

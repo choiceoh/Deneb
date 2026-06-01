@@ -173,8 +173,6 @@ import kai.composeapp.generated.resources.settings_export
 import kai.composeapp.generated.resources.settings_export_import_description
 import kai.composeapp.generated.resources.settings_export_import_title
 import kai.composeapp.generated.resources.settings_export_preview_title
-import kai.composeapp.generated.resources.settings_free_fallback
-import kai.composeapp.generated.resources.settings_free_tier_title
 import kai.composeapp.generated.resources.settings_heartbeat_recent
 import kai.composeapp.generated.resources.settings_import
 import kai.composeapp.generated.resources.settings_import_error

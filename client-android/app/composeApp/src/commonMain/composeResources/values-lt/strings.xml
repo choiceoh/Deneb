@@ -14,7 +14,6 @@
     <string name="settings_content_description">Nustatymai</string>
     <string name="bot_message_speech_content_description">Kalba</string>
     <string name="bot_message_copy_content_description">Kopijuoti</string>
-    <string name="settings_free_tier_title">Nemokamas planas</string>
     <string name="settings_base_url_label">Serverio URL</string>
     <string name="settings_status_checking">Tikrinamas ryšys...</string>
     <string name="settings_status_connected">Prisijungta</string>
@@ -36,8 +35,6 @@
     <string name="settings_tab_services">Paslaugos</string>
     <string name="settings_tab_tools">Įrankiai</string>
     <string name="tools_count">%1$d Įrankiai</string>
-    <string name="privacy_agree_prefix">Naudodami paslaugą, sutinkate su </string>
-    <string name="privacy_policy">Privatumo politika</string>
     <string name="tool_get_local_time_name">Gauti vietinį laiką</string>
     <string name="tool_get_local_time_description">Gauti dabartinę vietinę datą ir laiką santykinėms datoms interpretuoti</string>
     <string name="tool_get_location_name">Gauti vietovę</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Paskutinis tikrinimas nepavyko %1$s</string>
     <string name="settings_email_refresh">Atnaujinti paskyrą</string>
     <string name="settings_add_service">Pridėti paslaugą</string>
-    <string name="settings_free_fallback">Naudoti kaip atsarginį</string>
-    <string name="service_free_fast">Nemokamas greitas</string>
-    <string name="service_free_expert">Nemokamas ekspertas</string>
     <string name="settings_heartbeat">Širdies ritmas</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Tai automatinė savipatikra. Peržiūrėk savo prisiminimus ir laukiančias užduotis. Jei viskas gerai ir nieko nereikia dėmesio, atsakyk tiksliai: HEARTBEAT_OK\nJei kažkas reikalauja dėmesio (pasenę prisiminimai, terminuotos užduotys, vartotojo sekimai), pasirūpink tuo.</string>
     <string name="settings_heartbeat_description">Periodinės savipatikros, leidžiančios DI peržiūrėti prisiminimus ir užduotis be vartotojo įvesties. Vykdoma kas %1$d minučių aktyviomis valandomis.</string>
