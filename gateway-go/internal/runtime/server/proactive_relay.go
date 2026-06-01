@@ -45,6 +45,12 @@ type proactiveRelayDeps struct {
 	// proactive notifiers. May be nil (older wiring / tests); the sentinel then
 	// stays unresolved and the relay no-ops.
 	activeHome func() int64
+
+	// pushHub fans a {title, body} frame out to connected native clients when a
+	// report mirrors to the 업무 topic, so the app raises a notification live
+	// instead of waiting for its next heartbeat poll. nil in older wiring/tests;
+	// the push is then skipped (the report still lands in the transcript).
+	pushHub *clientPushHub
 }
 
 // relay delivers content to sessionKey's channel and records it in the
@@ -109,9 +115,32 @@ func (d proactiveRelayDeps) relay(ctx context.Context, sessionKey, content strin
 				d.logger.Error("proactive relay: native mirror append failed",
 					"sessionKey", nativeWorkSessionKey, "error", err)
 			}
+			// Live push to connected native clients so the app notifies now,
+			// not at the next heartbeat. Best-effort: an asleep/disconnected
+			// client misses this and picks the report up from the transcript.
+			if d.pushHub != nil {
+				d.pushHub.publish(clientPushEvent{
+					Title: "Deneb",
+					Body:  pushPreview(content),
+				})
+			}
 		}
 	}
 	return true, nil
+}
+
+// pushPreview trims a relayed body to a notification-sized single line. The full
+// report is in the transcript; the push is just the nudge to open it.
+func pushPreview(content string) string {
+	s := strings.TrimSpace(content)
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = strings.TrimSpace(s[:i])
+	}
+	const max = 140
+	if len([]rune(s)) > max {
+		s = string([]rune(s)[:max]) + "…"
+	}
+	return s
 }
 
 // nativeWorkSessionKey is the session the Android client's 업무 (General) topic

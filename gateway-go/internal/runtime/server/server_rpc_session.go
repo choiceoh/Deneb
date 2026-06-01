@@ -243,6 +243,7 @@ func (s *Server) registerSessionRPCMethods() {
 		telegramPlug:    s.telegramPlug,
 		transcriptStore: transcriptStore,
 		logger:          s.logger,
+		pushHub:         s.pushHub,
 		// Resolve the homeSessionKey sentinel to the live active home:
 		// ActiveHome (/use-forum) first, else the static telegram.chatID.
 		// Read lazily so a mid-session migration is followed without re-wiring.
