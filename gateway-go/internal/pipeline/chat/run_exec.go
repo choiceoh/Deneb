@@ -29,6 +29,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
 // chatRunResult wraps the agent result with chat-layer metadata.
@@ -90,7 +91,11 @@ func executeAgentRun(
 		// so subsequent turns load a consistent history prefix — flipping
 		// to per-request hook injection would desync transcript history
 		// from what the LLM saw on prior turns and miss the cache.
-		now := time.Now()
+		// dentime.Now() (not time.Now()) so the baked offset matches the
+		// configured zone — on a UTC container with timezone set via
+		// deneb.json, time.Now() would stamp "...Z" while the system prompt
+		// and the rest of Deneb run in KST (see prompt-cache.md § 1).
+		now := dentime.Now()
 		formattedMessage := "[" + now.Format(time.RFC3339) + "] " + params.Message
 		userMsg := NewTextChatMessage("user", formattedMessage, now.UnixMilli())
 		if err := deps.transcript.Append(params.SessionKey, userMsg); err != nil {

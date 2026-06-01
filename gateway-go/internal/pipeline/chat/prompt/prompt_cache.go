@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
 // PromptCache consolidates all prompt-related caches into a single manager.
@@ -155,13 +157,18 @@ func (c *PromptCache) ClearSession(key string) {
 // --- One-time values ---
 
 // Timezone returns the resolved timezone string and location.
+//
+// Both come from pkg/dentime — the canonical Deneb clock that honors
+// DENEB_TIMEZONE and the config "timezone" key — so the system prompt's
+// date line agrees with logs, cron, and the calendar briefing. The display
+// name and the location are read from the same source to keep them
+// consistent (a zone abbreviation like "KST" is not a valid LoadLocation
+// argument, which previously left the location nil and silently fell back
+// to the server-local zone).
 func (c *PromptCache) Timezone() (string, *time.Location) {
 	c.timezoneOnce.Do(func() {
 		c.timezone = resolveTimezone()
-		loc, err := time.LoadLocation(c.timezone)
-		if err == nil {
-			c.timezoneLoc = loc
-		}
+		c.timezoneLoc = dentime.Location() // never nil
 	})
 	return c.timezone, c.timezoneLoc
 }
