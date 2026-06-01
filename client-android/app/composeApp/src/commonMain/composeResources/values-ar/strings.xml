@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">صوت</string>
     <string name="bot_message_copy_content_description">نسخ</string>
     <string name="settings_free_tier_title">الباقة المجانية</string>
-    <string name="settings_free_tier_description">مع نمو قاعدة المستخدمين، يساعد الرعاية في توسيع البنية التحتية وزيادة حدود الطلبات للجميع والحفاظ على نشاط التطوير.</string>
-    <string name="settings_become_sponsor">كن راعياً على GitHub</string>
-    <string name="settings_business_partnerships">شراكات الأعمال</string>
-    <string name="settings_business_partnerships_description">هل ترغب في عرض شعار شركتك أو مناقشة شراكة استراتيجية؟</string>
-    <string name="settings_contact_sponsorship">تواصل للرعاية الاستراتيجية</string>
     <string name="settings_status_error_invalid_key">مفتاح API غير صالح</string>
     <string name="settings_status_error_quota_exhausted">نفدت الحصة</string>
     <string name="settings_status_error_rate_limited">تم الوصول لحد المعدل</string>
@@ -46,7 +41,6 @@
     <string name="settings_tools_none_available">لا توجد أدوات متاحة على هذه المنصة.</string>
     <string name="settings_tab_services">الخدمات</string>
     <string name="settings_tab_tools">الأدوات</string>
-    <string name="settings_tab_integrations">التكاملات</string>
     <string name="tools_count">%1$d أدوات</string>
     <string name="privacy_agree_prefix">باستخدام الخدمة، فإنك توافق على </string>
     <string name="privacy_policy">سياسة الخصوصية</string>
@@ -147,7 +141,6 @@
     <string name="error_all_services_failed">فشلت جميع الخدمات.</string>
     <string name="settings_heartbeat_interval">الفاصل الزمني</string>
     <string name="settings_heartbeat_active_hours">ساعات النشاط</string>
-    <string name="settings_documentation">التوثيق</string>
     <string name="waiting_thinking">يفكر…</string>
     <string name="waiting_working">يعمل…</string>
     <string name="waiting_brewing">يُحضّر…</string>
@@ -208,9 +201,6 @@
     <string name="error_context_window_exceeded">نافذة السياق كبيرة جدًا لخدمة الاحتياط. جرّب بدء محادثة جديدة أو استخدام نموذج بنافذة سياق أكبر.</string>
     <string name="error_insufficient_credits">رصيد غير كافٍ</string>
     <string name="error_quota_exhausted">تم استنفاد الحصة</string>
-    <string name="settings_request_integration_title">طلب تكامل</string>
-    <string name="settings_request_integration_description">هل لديك فكرة لأتمتة أو تكامل؟ أخبرنا بفتح مشكلة على GitHub.</string>
-    <string name="settings_open_github_issue">فتح مشكلة GitHub</string>
     <string name="notification_channel_name">إشعارات الذكاء الاصطناعي</string>
     <string name="notification_channel_description">إشعارات مرسلة من مساعد الذكاء الاصطناعي</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -232,8 +222,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">الخروج من الوضع التفاعلي</string>
     <string name="interactive_ui_parsing_failed">فشل تحليل واجهة المستخدم، جارٍ إعادة المحاولة…</string>
-    <string name="settings_sponsors_monthly">الرعاة الشهريون</string>
-    <string name="settings_sponsors_past">الرعاة السابقون</string>
     <string name="snackbar_undo">تراجع</string>
     <string name="snackbar_memory_deleted">تم حذف الذاكرة</string>
     <string name="snackbar_task_cancelled">تم إلغاء المهمة</string>

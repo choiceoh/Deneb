@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Voz</string>
     <string name="bot_message_copy_content_description">Copiar</string>
     <string name="settings_free_tier_title">Nivel Gratuito</string>
-    <string name="settings_free_tier_description">A medida que crece la base de usuarios, el patrocinio ayuda a escalar la infraestructura, aumentar los límites de solicitudes para todos y mantener el desarrollo activo.</string>
-    <string name="settings_become_sponsor">Conviértete en patrocinador de GitHub</string>
-    <string name="settings_business_partnerships">Asociaciones Empresariales</string>
-    <string name="settings_business_partnerships_description">¿Quieres mostrar el logo de tu empresa o discutir una asociación estratégica?</string>
-    <string name="settings_contact_sponsorship">Contacto para patrocinio estratégico</string>
     <string name="settings_status_error_invalid_key">Clave API inválida</string>
     <string name="settings_status_error_quota_exhausted">Cuota agotada</string>
     <string name="settings_status_error_rate_limited">Límite de tasa alcanzado</string>
@@ -46,7 +41,6 @@
     <string name="settings_tools_none_available">No hay herramientas disponibles en esta plataforma.</string>
     <string name="settings_tab_services">Servicios</string>
     <string name="settings_tab_tools">Herramientas</string>
-    <string name="settings_tab_integrations">Integraciones</string>
     <string name="tools_count">%1$d Herramientas</string>
     <string name="privacy_agree_prefix">Al usar el servicio, aceptas la </string>
     <string name="privacy_policy">Política de privacidad</string>
@@ -147,7 +141,6 @@ Si algo necesita atención (memorias obsoletas, tareas vencidas, seguimientos de
     <string name="error_all_services_failed">Todos los servicios fallaron.</string>
     <string name="settings_heartbeat_interval">Intervalo</string>
     <string name="settings_heartbeat_active_hours">Horas Activas</string>
-    <string name="settings_documentation">Documentación</string>
     <string name="waiting_thinking">Pensando…</string>
     <string name="waiting_working">Trabajando…</string>
     <string name="waiting_brewing">Preparando…</string>
@@ -208,9 +201,6 @@ Si algo necesita atención (memorias obsoletas, tareas vencidas, seguimientos de
     <string name="error_context_window_exceeded">Ventana de contexto demasiado grande para el servicio de respaldo. Intenta iniciar un nuevo chat o usar un modelo con una ventana de contexto más grande.</string>
     <string name="error_insufficient_credits">Créditos insuficientes</string>
     <string name="error_quota_exhausted">Cuota agotada</string>
-    <string name="settings_request_integration_title">Solicitar una integración</string>
-    <string name="settings_request_integration_description">¿Tienes una idea para una automatización o integración? Cuéntanos abriendo un issue en GitHub.</string>
-    <string name="settings_open_github_issue">Abrir issue en GitHub</string>
     <string name="notification_channel_name">Notificaciones de IA</string>
     <string name="notification_channel_description">Notificaciones enviadas por el asistente de IA</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -232,8 +222,6 @@ Si algo necesita atención (memorias obsoletas, tareas vencidas, seguimientos de
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Salir del modo interactivo</string>
     <string name="interactive_ui_parsing_failed">Error al analizar la UI, reintentando…</string>
-    <string name="settings_sponsors_monthly">Patrocinadores mensuales</string>
-    <string name="settings_sponsors_past">Patrocinadores anteriores</string>
     <string name="snackbar_undo">Deshacer</string>
     <string name="snackbar_memory_deleted">Recuerdo eliminado</string>
     <string name="snackbar_task_cancelled">Tarea cancelada</string>

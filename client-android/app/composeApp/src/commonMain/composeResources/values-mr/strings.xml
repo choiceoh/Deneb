@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">स्पीच</string>
     <string name="bot_message_copy_content_description">कॉपी</string>
     <string name="settings_free_tier_title">मोफत स्तर</string>
-    <string name="settings_free_tier_description">वापरकर्त्यांची संख्या वाढत असताना, प्रायोजकत्व पायाभूत सुविधा वाढवण्यात, सर्वांसाठी दर मर्यादा वाढवण्यात आणि विकास सक्रिय ठेवण्यात मदत करते.</string>
-    <string name="settings_become_sponsor">GitHub प्रायोजक व्हा</string>
-    <string name="settings_business_partnerships">व्यावसायिक भागीदारी</string>
-    <string name="settings_business_partnerships_description">तुमच्या कंपनीचा लोगो प्रदर्शित करायचा आहे किंवा धोरणात्मक भागीदारीवर चर्चा करायची आहे?</string>
-    <string name="settings_contact_sponsorship">धोरणात्मक प्रायोजकत्वासाठी संपर्क साधा</string>
     <string name="settings_status_error_invalid_key">अवैध API की</string>
     <string name="settings_status_error_quota_exhausted">कोटा संपला</string>
     <string name="settings_status_error_rate_limited">दर मर्यादा ओलांडली</string>
@@ -46,7 +41,6 @@
     <string name="settings_tools_none_available">या प्लॅटफॉर्मवर कोणतीही साधने उपलब्ध नाहीत.</string>
     <string name="settings_tab_services">सेवा</string>
     <string name="settings_tab_tools">साधने</string>
-    <string name="settings_tab_integrations">एकत्रीकरणे</string>
     <string name="tools_count">%1$d साधने</string>
     <string name="privacy_agree_prefix">सेवा वापरून, तुम्ही सहमत आहात </string>
     <string name="privacy_policy">गोपनीयता धोरण</string>
@@ -146,7 +140,6 @@
     <string name="error_all_services_failed">सर्व सेवा अयशस्वी झाल्या.</string>
     <string name="settings_heartbeat_interval">मध्यांतर</string>
     <string name="settings_heartbeat_active_hours">सक्रिय तास</string>
-    <string name="settings_documentation">दस्तऐवजीकरण</string>
     <string name="waiting_thinking">विचार करत आहे…</string>
     <string name="waiting_working">काम करत आहे…</string>
     <string name="waiting_brewing">तयार करत आहे…</string>
@@ -207,9 +200,6 @@
     <string name="error_context_window_exceeded">फॉलबॅक सेवेसाठी कॉन्टेक्स्ट विंडो खूप मोठी आहे. नवीन चॅट सुरू करण्याचा किंवा मोठ्या कॉन्टेक्स्ट विंडो असलेल्या मॉडेलचा वापर करण्याचा प्रयत्न करा.</string>
     <string name="error_insufficient_credits">अपुरे क्रेडिट्स</string>
     <string name="error_quota_exhausted">कोटा संपला</string>
-    <string name="settings_request_integration_title">एकत्रीकरणाची विनंती करा</string>
-    <string name="settings_request_integration_description">ऑटोमेशन किंवा एकत्रीकरणासाठी कल्पना आहे? GitHub समस्या उघडून आम्हाला कळवा.</string>
-    <string name="settings_open_github_issue">GitHub समस्या उघडा</string>
     <string name="notification_channel_name">AI सूचना</string>
     <string name="notification_channel_description">AI सहाय्यकाने पाठवलेल्या सूचना</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -231,8 +221,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">इंटरॅक्टिव्ह मोडमधून बाहेर पडा</string>
     <string name="interactive_ui_parsing_failed">UI पार्सिंग अयशस्वी, पुन्हा प्रयत्न करत आहे…</string>
-    <string name="settings_sponsors_monthly">मासिक प्रायोजक</string>
-    <string name="settings_sponsors_past">मागील प्रायोजक</string>
     <string name="snackbar_undo">पूर्ववत करा</string>
     <string name="snackbar_memory_deleted">स्मृती हटवली</string>
     <string name="snackbar_task_cancelled">कार्य रद्द केले</string>

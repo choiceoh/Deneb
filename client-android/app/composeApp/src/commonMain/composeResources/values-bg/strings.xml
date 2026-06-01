@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Реч</string>
     <string name="bot_message_copy_content_description">Копирай</string>
     <string name="settings_free_tier_title">Безплатно ниво</string>
-    <string name="settings_free_tier_description">С нарастването на потребителската база спонсорството помага за мащабиране на инфраструктурата, увеличаване на лимитите на заявките за всички и поддържане на активната разработка.</string>
-    <string name="settings_become_sponsor">Станете спонсор в GitHub</string>
-    <string name="settings_business_partnerships">Бизнес партньорства</string>
-    <string name="settings_business_partnerships_description">Искате да покажете логото на компанията си или да обсъдите стратегическо партньорство?</string>
-    <string name="settings_contact_sponsorship">Свържете се за стратегическо спонсорство</string>
     <string name="settings_base_url_label">URL на сървъра</string>
     <string name="settings_status_checking">Проверка на връзката...</string>
     <string name="settings_status_connected">Свързан</string>
@@ -40,7 +35,6 @@
     <string name="settings_tab_agent">Агент</string>
     <string name="settings_tab_services">Услуги</string>
     <string name="settings_tab_tools">Инструменти</string>
-    <string name="settings_tab_integrations">Интеграции</string>
     <string name="tools_count">%1$d Инструмента</string>
     <string name="privacy_agree_prefix">Използвайки услугата, вие се съгласявате с </string>
     <string name="privacy_policy">Политика за поверителност</string>
@@ -146,7 +140,6 @@
     <string name="error_all_services_failed">Всички услуги се провалиха.</string>
     <string name="settings_heartbeat_interval">Интервал</string>
     <string name="settings_heartbeat_active_hours">Активни часове</string>
-    <string name="settings_documentation">Документация</string>
     <string name="waiting_thinking">Мисля…</string>
     <string name="waiting_working">Работя…</string>
     <string name="waiting_brewing">Подготвям…</string>
@@ -207,9 +200,6 @@
     <string name="error_context_window_exceeded">Контекстният прозорец е твърде голям за резервната услуга. Опитайте да започнете нов чат или да използвате модел с по-голям контекстен прозорец.</string>
     <string name="error_insufficient_credits">Недостатъчен кредит</string>
     <string name="error_quota_exhausted">Квотата е изчерпана</string>
-    <string name="settings_request_integration_title">Заявка за интеграция</string>
-    <string name="settings_request_integration_description">Имате идея за автоматизация или интеграция? Уведомете ни, като отворите GitHub проблем.</string>
-    <string name="settings_open_github_issue">Отворете GitHub проблем</string>
     <string name="notification_channel_name">AI известия</string>
     <string name="notification_channel_description">Известия, изпратени от AI асистент</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -231,8 +221,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Изход от интерактивен режим</string>
     <string name="interactive_ui_parsing_failed">Анализът на UI се провали, нов опит…</string>
-    <string name="settings_sponsors_monthly">Месечни спонсори</string>
-    <string name="settings_sponsors_past">Предишни спонсори</string>
     <string name="snackbar_undo">Отмяна</string>
     <string name="snackbar_memory_deleted">Споменът е изтрит</string>
     <string name="snackbar_task_cancelled">Задачата е отменена</string>

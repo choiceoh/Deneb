@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Tal</string>
     <string name="bot_message_copy_content_description">Kopiera</string>
     <string name="settings_free_tier_title">Kostnadsfri nivå</string>
-    <string name="settings_free_tier_description">I takt med att användarbasen växer hjälper sponsring till att skala infrastrukturen, öka hastighetsgränserna för alla och hålla utvecklingen aktiv.</string>
-    <string name="settings_become_sponsor">Bli en GitHub-sponsor</string>
-    <string name="settings_business_partnerships">Affärspartnerskap</string>
-    <string name="settings_business_partnerships_description">Vill du visa ditt företags logotyp eller diskutera ett strategiskt partnerskap?</string>
-    <string name="settings_contact_sponsorship">Kontakta för strategiskt sponsorskap</string>
     <string name="settings_base_url_label">Server-URL</string>
     <string name="settings_status_checking">Kontrollerar anslutning...</string>
     <string name="settings_status_connected">Ansluten</string>
@@ -40,7 +35,6 @@
     <string name="settings_tab_agent">Agent</string>
     <string name="settings_tab_services">Tjänster</string>
     <string name="settings_tab_tools">Verktyg</string>
-    <string name="settings_tab_integrations">Integrationer</string>
     <string name="tools_count">%1$d Verktyg</string>
     <string name="privacy_agree_prefix">Genom att använda tjänsten godkänner du </string>
     <string name="privacy_policy">Integritetspolicyn</string>
@@ -147,7 +141,6 @@ Om något behöver uppmärksamhet (föråldrade minnen, förfallna uppgifter, an
     <string name="error_all_services_failed">Alla tjänster misslyckades.</string>
     <string name="settings_heartbeat_interval">Intervall</string>
     <string name="settings_heartbeat_active_hours">Aktiva timmar</string>
-    <string name="settings_documentation">Dokumentation</string>
     <string name="waiting_thinking">Tänker…</string>
     <string name="waiting_working">Arbetar…</string>
     <string name="waiting_brewing">Brygger…</string>
@@ -208,9 +201,6 @@ Om något behöver uppmärksamhet (föråldrade minnen, förfallna uppgifter, an
     <string name="error_context_window_exceeded">Kontextfönstret är för stort för reservtjänsten. Försök starta en ny chatt eller använd en modell med ett större kontextfönster.</string>
     <string name="error_insufficient_credits">Otillräckliga krediter</string>
     <string name="error_quota_exhausted">Kvoten är förbrukad</string>
-    <string name="settings_request_integration_title">Begär en integration</string>
-    <string name="settings_request_integration_description">Har du en idé för en automatisering eller integration? Meddela oss genom att öppna en GitHub-issue.</string>
-    <string name="settings_open_github_issue">Öppna GitHub Issue</string>
     <string name="notification_channel_name">AI-aviseringar</string>
     <string name="notification_channel_description">Aviseringar skickade av AI-assistenten</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -232,8 +222,6 @@ Om något behöver uppmärksamhet (föråldrade minnen, förfallna uppgifter, an
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Lämna interaktivt läge</string>
     <string name="interactive_ui_parsing_failed">UI-analys misslyckades, försöker igen…</string>
-    <string name="settings_sponsors_monthly">Månatliga sponsorer</string>
-    <string name="settings_sponsors_past">Tidigare sponsorer</string>
     <string name="snackbar_undo">Ångra</string>
     <string name="snackbar_memory_deleted">Minne raderat</string>
     <string name="snackbar_task_cancelled">Uppgift avbruten</string>

@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Sprache</string>
     <string name="bot_message_copy_content_description">Kopieren</string>
     <string name="settings_free_tier_title">Kostenlose Stufe</string>
-    <string name="settings_free_tier_description">Mit wachsender Nutzerbasis hilft Sponsoring dabei, die Infrastruktur zu skalieren, die Rate-Limits für alle zu erhöhen und die Entwicklung aktiv zu halten.</string>
-    <string name="settings_become_sponsor">GitHub-Sponsor werden</string>
-    <string name="settings_business_partnerships">Geschäftspartnerschaften</string>
-    <string name="settings_business_partnerships_description">Möchtest du dein Firmenlogo präsentieren oder eine strategische Partnerschaft besprechen?</string>
-    <string name="settings_contact_sponsorship">Kontakt für strategisches Sponsoring</string>
     <string name="settings_status_error_invalid_key">Ungültiger API-Schlüssel</string>
     <string name="settings_status_error_quota_exhausted">Kontingent erschöpft</string>
     <string name="settings_status_error_rate_limited">Rate-Limit erreicht</string>
@@ -46,7 +41,6 @@
     <string name="settings_tools_none_available">Keine Werkzeuge auf dieser Plattform verfügbar.</string>
     <string name="settings_tab_services">Dienste</string>
     <string name="settings_tab_tools">Werkzeuge</string>
-    <string name="settings_tab_integrations">Integrationen</string>
     <string name="tools_count">%1$d Werkzeuge</string>
     <string name="privacy_agree_prefix">Mit der Nutzung des Dienstes stimmst du der </string>
     <string name="privacy_policy">Datenschutzrichtlinie</string>
@@ -147,7 +141,6 @@ Wenn etwas Aufmerksamkeit erfordert (veraltete Erinnerungen, fällige Aufgaben, 
     <string name="error_all_services_failed">Alle Dienste sind fehlgeschlagen.</string>
     <string name="settings_heartbeat_interval">Intervall</string>
     <string name="settings_heartbeat_active_hours">Aktive Stunden</string>
-    <string name="settings_documentation">Dokumentation</string>
     <string name="waiting_thinking">Denke nach…</string>
     <string name="waiting_working">Arbeite…</string>
     <string name="waiting_brewing">Braue…</string>
@@ -208,9 +201,6 @@ Wenn etwas Aufmerksamkeit erfordert (veraltete Erinnerungen, fällige Aufgaben, 
     <string name="error_context_window_exceeded">Kontextfenster zu groß für den Ersatzdienst. Versuche einen neuen Chat zu starten oder verwende ein Modell mit einem größeren Kontextfenster.</string>
     <string name="error_insufficient_credits">Unzureichendes Guthaben</string>
     <string name="error_quota_exhausted">Kontingent erschöpft</string>
-    <string name="settings_request_integration_title">Integration anfragen</string>
-    <string name="settings_request_integration_description">Hast du eine Idee für eine Automatisierung oder Integration? Lass es uns wissen, indem du ein GitHub-Issue erstellst.</string>
-    <string name="settings_open_github_issue">GitHub-Issue öffnen</string>
     <string name="notification_channel_name">KI-Benachrichtigungen</string>
     <string name="notification_channel_description">Benachrichtigungen vom KI-Assistenten</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -232,8 +222,6 @@ Wenn etwas Aufmerksamkeit erfordert (veraltete Erinnerungen, fällige Aufgaben, 
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Interaktiven Modus verlassen</string>
     <string name="interactive_ui_parsing_failed">UI-Analyse fehlgeschlagen, erneuter Versuch…</string>
-    <string name="settings_sponsors_monthly">Monatliche Sponsoren</string>
-    <string name="settings_sponsors_past">Frühere Sponsoren</string>
     <string name="snackbar_undo">Rückgängig</string>
     <string name="snackbar_memory_deleted">Erinnerung gelöscht</string>
     <string name="snackbar_task_cancelled">Aufgabe abgebrochen</string>

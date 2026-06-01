@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Pertuturan</string>
     <string name="bot_message_copy_content_description">Salin</string>
     <string name="settings_free_tier_title">Peringkat Percuma</string>
-    <string name="settings_free_tier_description">Apabila pangkalan pengguna berkembang, penajaan membantu meningkatkan infrastruktur, menambah had kadar untuk semua orang, dan mengekalkan pembangunan aktif.</string>
-    <string name="settings_become_sponsor">Jadilah Penaja GitHub</string>
-    <string name="settings_business_partnerships">Perkongsian Perniagaan</string>
-    <string name="settings_business_partnerships_description">Ingin memaparkan logo syarikat anda atau membincangkan perkongsian strategik?</string>
-    <string name="settings_contact_sponsorship">Hubungi untuk Penajaan Strategik</string>
     <string name="settings_status_error_invalid_key">Kunci API tidak sah</string>
     <string name="settings_status_error_quota_exhausted">Kuota habis</string>
     <string name="settings_status_error_rate_limited">Had kadar tercapai</string>
@@ -46,7 +41,6 @@
     <string name="settings_tools_none_available">Tiada alat tersedia pada platform ini.</string>
     <string name="settings_tab_services">Perkhidmatan</string>
     <string name="settings_tab_tools">Alat</string>
-    <string name="settings_tab_integrations">Integrasi</string>
     <string name="tools_count">%1$d Alat</string>
     <string name="privacy_agree_prefix">Dengan menggunakan perkhidmatan, anda bersetuju dengan </string>
     <string name="privacy_policy">Dasar Privasi</string>
@@ -146,7 +140,6 @@
     <string name="error_all_services_failed">Semua perkhidmatan gagal.</string>
     <string name="settings_heartbeat_interval">Selang masa</string>
     <string name="settings_heartbeat_active_hours">Waktu Aktif</string>
-    <string name="settings_documentation">Dokumentasi</string>
     <string name="waiting_thinking">Berfikir…</string>
     <string name="waiting_working">Bekerja…</string>
     <string name="waiting_brewing">Menyediakan…</string>
@@ -207,9 +200,6 @@
     <string name="error_context_window_exceeded">Tetingkap konteks terlalu besar untuk perkhidmatan sandaran. Cuba mulakan sembang baharu atau gunakan model dengan tetingkap konteks yang lebih besar.</string>
     <string name="error_insufficient_credits">Kredit tidak mencukupi</string>
     <string name="error_quota_exhausted">Kuota habis</string>
-    <string name="settings_request_integration_title">Minta Integrasi</string>
-    <string name="settings_request_integration_description">Ada idea untuk automasi atau integrasi? Beritahu kami dengan membuka isu GitHub.</string>
-    <string name="settings_open_github_issue">Buka Isu GitHub</string>
     <string name="notification_channel_name">Pemberitahuan AI</string>
     <string name="notification_channel_description">Pemberitahuan yang dihantar oleh pembantu AI</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -231,8 +221,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Keluar daripada mod interaktif</string>
     <string name="interactive_ui_parsing_failed">Penghuraian UI gagal, mencuba semula…</string>
-    <string name="settings_sponsors_monthly">Penaja Bulanan</string>
-    <string name="settings_sponsors_past">Penaja Terdahulu</string>
     <string name="snackbar_undo">Buat asal</string>
     <string name="snackbar_memory_deleted">Memori dipadam</string>
     <string name="snackbar_task_cancelled">Tugasan dibatalkan</string>

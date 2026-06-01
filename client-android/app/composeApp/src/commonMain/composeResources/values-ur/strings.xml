@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">تقریر</string>
     <string name="bot_message_copy_content_description">کاپی</string>
     <string name="settings_free_tier_title">مفت درجہ</string>
-    <string name="settings_free_tier_description">جیسے جیسے صارفین کی تعداد بڑھتی ہے، سرپرستی بنیادی ڈھانچے کو بڑھانے، سب کے لیے شرح کی حدود بڑھانے اور ترقی کو فعال رکھنے میں مدد کرتی ہے۔</string>
-    <string name="settings_become_sponsor">GitHub سرپرست بنیں</string>
-    <string name="settings_business_partnerships">کاروباری شراکت داری</string>
-    <string name="settings_business_partnerships_description">اپنی کمپنی کا لوگو دکھانا چاہتے ہیں یا اسٹریٹجک شراکت داری پر بات کرنا چاہتے ہیں؟</string>
-    <string name="settings_contact_sponsorship">اسٹریٹجک سرپرستی کے لیے رابطہ کریں</string>
     <string name="settings_status_error_invalid_key">غلط API کلید</string>
     <string name="settings_status_error_quota_exhausted">کوٹہ ختم ہو گیا</string>
     <string name="settings_status_error_rate_limited">شرح کی حد تک پہنچ گئی</string>
@@ -46,7 +41,6 @@
     <string name="settings_tools_none_available">اس پلیٹ فارم پر کوئی ٹولز دستیاب نہیں ہیں۔</string>
     <string name="settings_tab_services">خدمات</string>
     <string name="settings_tab_tools">ٹولز</string>
-    <string name="settings_tab_integrations">انٹیگریشنز</string>
     <string name="tools_count">%1$d ٹولز</string>
     <string name="privacy_agree_prefix">سروس استعمال کرکے، آپ اتفاق کرتے ہیں </string>
     <string name="privacy_policy">رازداری کی پالیسی</string>
@@ -146,7 +140,6 @@
     <string name="error_all_services_failed">تمام خدمات ناکام ہو گئیں۔</string>
     <string name="settings_heartbeat_interval">وقفہ</string>
     <string name="settings_heartbeat_active_hours">فعال اوقات</string>
-    <string name="settings_documentation">دستاویزات</string>
     <string name="waiting_thinking">سوچ رہا ہے…</string>
     <string name="waiting_working">کام کر رہا ہے…</string>
     <string name="waiting_brewing">تیار کر رہا ہے…</string>
@@ -207,9 +200,6 @@
     <string name="error_context_window_exceeded">فال بیک سروس کے لیے سیاق و سباق کی ونڈو بہت بڑی ہے۔ نئی چیٹ شروع کرنے یا بڑی سیاق و سباق ونڈو والے ماڈل کا استعمال کرنے کی کوشش کریں۔</string>
     <string name="error_insufficient_credits">ناکافی کریڈٹس</string>
     <string name="error_quota_exhausted">کوٹا ختم ہو گیا</string>
-    <string name="settings_request_integration_title">انٹیگریشن کی درخواست کریں</string>
-    <string name="settings_request_integration_description">آٹومیشن یا انٹیگریشن کا کوئی آئیڈیا ہے؟ GitHub پر ایک issue کھول کر ہمیں بتائیں۔</string>
-    <string name="settings_open_github_issue">GitHub Issue کھولیں</string>
     <string name="notification_channel_name">AI اطلاعات</string>
     <string name="notification_channel_description">AI اسسٹنٹ کی طرف سے بھیجی گئی اطلاعات</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -231,8 +221,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">انٹرایکٹو موڈ سے باہر نکلیں</string>
     <string name="interactive_ui_parsing_failed">UI تجزیہ ناکام، دوبارہ کوشش ہو رہی ہے…</string>
-    <string name="settings_sponsors_monthly">ماہانہ سپانسرز</string>
-    <string name="settings_sponsors_past">سابقہ سپانسرز</string>
     <string name="snackbar_undo">واپس کریں</string>
     <string name="snackbar_memory_deleted">یادداشت حذف ہو گئی</string>
     <string name="snackbar_task_cancelled">ٹاسک منسوخ ہو گیا</string>

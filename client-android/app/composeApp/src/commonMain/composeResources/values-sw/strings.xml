@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Hotuba</string>
     <string name="bot_message_copy_content_description">Nakili</string>
     <string name="settings_free_tier_title">Kiwango cha Bure</string>
-    <string name="settings_free_tier_description">Kadri msingi wa watumiaji unavyokua, udhamini husaidia kupanua miundombinu, kuongeza vikomo vya maombi kwa kila mtu, na kuweka maendeleo yakiendelea.</string>
-    <string name="settings_become_sponsor">Kuwa Mdhamini wa GitHub</string>
-    <string name="settings_business_partnerships">Ushirikiano wa Biashara</string>
-    <string name="settings_business_partnerships_description">Ungependa kuonyesha nembo ya kampuni yako au kujadili ushirikiano wa kimkakati?</string>
-    <string name="settings_contact_sponsorship">Wasiliana kwa Udhamini wa Kimkakati</string>
     <string name="settings_status_error_invalid_key">Ufunguo wa API si sahihi</string>
     <string name="settings_status_error_quota_exhausted">Kiwango kimeisha</string>
     <string name="settings_status_error_rate_limited">Kikomo cha kiwango kimefikiwa</string>
@@ -46,7 +41,6 @@
     <string name="settings_tools_none_available">Hakuna zana zinazopatikana kwenye jukwaa hili.</string>
     <string name="settings_tab_services">Huduma</string>
     <string name="settings_tab_tools">Zana</string>
-    <string name="settings_tab_integrations">Muunganisho</string>
     <string name="tools_count">%1$d Zana</string>
     <string name="privacy_agree_prefix">Kwa kutumia huduma, unakubali </string>
     <string name="privacy_policy">Sera ya Faragha</string>
@@ -146,7 +140,6 @@
     <string name="error_all_services_failed">Huduma zote zimeshindwa.</string>
     <string name="settings_heartbeat_interval">Muda</string>
     <string name="settings_heartbeat_active_hours">Masaa ya Shughuli</string>
-    <string name="settings_documentation">Nyaraka</string>
     <string name="waiting_thinking">Nafikiri…</string>
     <string name="waiting_working">Nafanya kazi…</string>
     <string name="waiting_brewing">Naandaa…</string>
@@ -207,9 +200,6 @@
     <string name="error_context_window_exceeded">Dirisha la muktadha ni kubwa sana kwa huduma ya akiba. Jaribu kuanza mazungumzo mapya au tumia modeli yenye dirisha kubwa zaidi la muktadha.</string>
     <string name="error_insufficient_credits">Mikopo haitoshi</string>
     <string name="error_quota_exhausted">Kiwango kimekwisha</string>
-    <string name="settings_request_integration_title">Omba Muunganisho</string>
-    <string name="settings_request_integration_description">Una wazo la otomatiki au muunganisho? Tufahamishe kwa kufungua GitHub issue.</string>
-    <string name="settings_open_github_issue">Fungua GitHub Issue</string>
     <string name="notification_channel_name">Arifa za AI</string>
     <string name="notification_channel_description">Arifa zilizotumwa na msaidizi wa AI</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -231,8 +221,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Ondoka hali ya mwingiliano</string>
     <string name="interactive_ui_parsing_failed">Uchambuzi wa UI umeshindwa, inajaribu tena…</string>
-    <string name="settings_sponsors_monthly">Wadhamini wa kila mwezi</string>
-    <string name="settings_sponsors_past">Wadhamini wa awali</string>
     <string name="snackbar_undo">Tendua</string>
     <string name="snackbar_memory_deleted">Kumbukumbu imefutwa</string>
     <string name="snackbar_task_cancelled">Kazi imeghairiwa</string>

@@ -840,24 +840,6 @@ class AppSettingsExportImportTest {
     }
 
     @Test
-    fun `detectExportableSections hides Splinterlands without account`() {
-        val appSettings = createAppSettings()
-        appSettings.setSplinterlandsEnabled(true)
-        val json = appSettings.exportToJson(toolIds)
-        val sections = detectExportableSections(json)
-        assertFalse(ImportSection.SPLINTERLANDS in sections)
-    }
-
-    @Test
-    fun `detectExportableSections shows Splinterlands when account is configured`() {
-        val appSettings = createAppSettings()
-        appSettings.setSplinterlandsAccountJson("""{"username":"alice"}""")
-        val json = appSettings.exportToJson(toolIds)
-        val sections = detectExportableSections(json)
-        assertTrue(ImportSection.SPLINTERLANDS in sections)
-    }
-
-    @Test
     fun `detectExportableSections hides MCP when server list is empty`() {
         val appSettings = createAppSettings()
         appSettings.setMcpServersJson("[]")

@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">เสียงพูด</string>
     <string name="bot_message_copy_content_description">คัดลอก</string>
     <string name="settings_free_tier_title">ระดับฟรี</string>
-    <string name="settings_free_tier_description">เมื่อฐานผู้ใช้เติบโต การสนับสนุนช่วยในการขยายโครงสร้างพื้นฐาน เพิ่มขีดจำกัดอัตราสำหรับทุกคน และรักษาการพัฒนาให้ดำเนินต่อไป</string>
-    <string name="settings_become_sponsor">เป็นผู้สนับสนุน GitHub</string>
-    <string name="settings_business_partnerships">พันธมิตรทางธุรกิจ</string>
-    <string name="settings_business_partnerships_description">ต้องการแสดงโลโก้บริษัทของคุณหรือหารือเกี่ยวกับพันธมิตรเชิงกลยุทธ์หรือไม่?</string>
-    <string name="settings_contact_sponsorship">ติดต่อสำหรับการสนับสนุนเชิงกลยุทธ์</string>
     <string name="settings_status_error_invalid_key">คีย์ API ไม่ถูกต้อง</string>
     <string name="settings_status_error_quota_exhausted">โควต้าหมด</string>
     <string name="settings_status_error_rate_limited">ถึงขีดจำกัดอัตรา</string>
@@ -46,7 +41,6 @@
     <string name="settings_tools_none_available">ไม่มีเครื่องมือที่พร้อมใช้งานบนแพลตฟอร์มนี้</string>
     <string name="settings_tab_services">บริการ</string>
     <string name="settings_tab_tools">เครื่องมือ</string>
-    <string name="settings_tab_integrations">การเชื่อมต่อ</string>
     <string name="tools_count">%1$d เครื่องมือ</string>
     <string name="privacy_agree_prefix">การใช้บริการถือว่าคุณยอมรับ</string>
     <string name="privacy_policy">นโยบายความเป็นส่วนตัว</string>
@@ -146,7 +140,6 @@
     <string name="error_all_services_failed">บริการทั้งหมดล้มเหลว</string>
     <string name="settings_heartbeat_interval">ช่วงเวลา</string>
     <string name="settings_heartbeat_active_hours">ชั่วโมงที่ใช้งาน</string>
-    <string name="settings_documentation">เอกสาร</string>
     <string name="waiting_thinking">กำลังคิด…</string>
     <string name="waiting_working">กำลังทำงาน…</string>
     <string name="waiting_brewing">กำลังเตรียม…</string>
@@ -207,9 +200,6 @@
     <string name="error_context_window_exceeded">หน้าต่างบริบทใหญ่เกินไปสำหรับบริการสำรอง ลองเริ่มแชทใหม่หรือใช้โมเดลที่มีหน้าต่างบริบทขนาดใหญ่กว่า</string>
     <string name="error_insufficient_credits">เครดิตไม่เพียงพอ</string>
     <string name="error_quota_exhausted">โควตาหมดแล้ว</string>
-    <string name="settings_request_integration_title">ขอการเชื่อมต่อ</string>
-    <string name="settings_request_integration_description">มีไอเดียสำหรับระบบอัตโนมัติหรือการเชื่อมต่อ? แจ้งเราได้โดยเปิด Issue บน GitHub</string>
-    <string name="settings_open_github_issue">เปิด Issue บน GitHub</string>
     <string name="notification_channel_name">การแจ้งเตือน AI</string>
     <string name="notification_channel_description">การแจ้งเตือนที่ส่งโดยผู้ช่วย AI</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -231,8 +221,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">ออกจากโหมดอินเทอร์แอคทีฟ</string>
     <string name="interactive_ui_parsing_failed">วิเคราะห์ UI ล้มเหลว กำลังลองใหม่…</string>
-    <string name="settings_sponsors_monthly">ผู้สนับสนุนรายเดือน</string>
-    <string name="settings_sponsors_past">ผู้สนับสนุนก่อนหน้า</string>
     <string name="snackbar_undo">เลิกทำ</string>
     <string name="snackbar_memory_deleted">ลบความทรงจำแล้ว</string>
     <string name="snackbar_task_cancelled">ยกเลิกงานแล้ว</string>

@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Discurs</string>
     <string name="bot_message_copy_content_description">Copiar</string>
     <string name="settings_free_tier_title">Nivel gratuit</string>
-    <string name="settings_free_tier_description">Cun la crescha da la basa d'utilisaders, il sponsoring gida ad augmentar l'infrastructura, augmentar ils limits da dumondas per tuts e mantegnair il svilup activ.</string>
-    <string name="settings_become_sponsor">Daventai in sponsor da GitHub</string>
-    <string name="settings_business_partnerships">Partenariads commerziala</string>
-    <string name="settings_business_partnerships_description">Vulais mussar il logo da Vossa firma u discutar ina partenariada strategica?</string>
-    <string name="settings_contact_sponsorship">Contact per sponsoring strategic</string>
     <string name="settings_base_url_label">URL dal server</string>
     <string name="settings_status_checking">Controllar la connexiun...</string>
     <string name="settings_status_connected">Connectà</string>
@@ -40,7 +35,6 @@
     <string name="settings_tab_agent">Agent</string>
     <string name="settings_tab_services">Servetschs</string>
     <string name="settings_tab_tools">Utensils</string>
-    <string name="settings_tab_integrations">Integraziuns</string>
     <string name="tools_count">%1$d utensils</string>
     <string name="privacy_agree_prefix">Cun utilisar il servetsch, acceptais Vus la </string>
     <string name="privacy_policy">Directiva da protecziun da datas</string>
@@ -146,7 +140,6 @@
     <string name="error_all_services_failed">Tut ils servetschs èn fallids.</string>
     <string name="settings_heartbeat_interval">Interval</string>
     <string name="settings_heartbeat_active_hours">Uras activas</string>
-    <string name="settings_documentation">Documentaziun</string>
     <string name="waiting_thinking">Pens…</string>
     <string name="waiting_working">Lavur…</string>
     <string name="waiting_brewing">Prepar…</string>
@@ -207,9 +200,6 @@
     <string name="error_context_window_exceeded">La fanestra da context è memia gronda per il servetsch da reserva. Emprova da cumenzar in nov chat u dad utilisar in model cun ina fanestra da context pli gronda.</string>
     <string name="error_insufficient_credits">Betg avunda credit</string>
     <string name="error_quota_exhausted">Quota exhaurida</string>
-    <string name="settings_request_integration_title">Dumandar ina integraziun</string>
-    <string name="settings_request_integration_description">Avais Vus ina idea per ina automatisaziun u integraziun? Laschai ans savair cun avrir in GitHub-issue.</string>
-    <string name="settings_open_github_issue">Avrir GitHub-issue</string>
     <string name="notification_channel_name">Notificaziuns da IA</string>
     <string name="notification_channel_description">Notificaziuns tramessas da l'assistent da IA</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -231,8 +221,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Bandunar il modus interactiv</string>
     <string name="interactive_ui_parsing_failed">L'analisa da l'UI n'è betg reussida, emprova danovamain…</string>
-    <string name="settings_sponsors_monthly">Sponsurs mensils</string>
-    <string name="settings_sponsors_past">Sponsurs precedents</string>
     <string name="snackbar_undo">Revocar</string>
     <string name="snackbar_memory_deleted">Regurdanza stizzada</string>
     <string name="snackbar_task_cancelled">Incumbensa annullada</string>

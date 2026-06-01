@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">ਬੋਲੀ</string>
     <string name="bot_message_copy_content_description">ਕਾਪੀ</string>
     <string name="settings_free_tier_title">ਮੁਫ਼ਤ ਪੱਧਰ</string>
-    <string name="settings_free_tier_description">ਜਿਵੇਂ-ਜਿਵੇਂ ਉਪਭੋਗਤਾ ਅਧਾਰ ਵਧਦਾ ਹੈ, ਸਪਾਂਸਰਸ਼ਿਪ ਬੁਨਿਆਦੀ ਢਾਂਚੇ ਨੂੰ ਵਧਾਉਣ, ਸਭ ਲਈ ਦਰ ਸੀਮਾਵਾਂ ਵਧਾਉਣ ਅਤੇ ਵਿਕਾਸ ਨੂੰ ਸਰਗਰਮ ਰੱਖਣ ਵਿੱਚ ਮਦਦ ਕਰਦੀ ਹੈ।</string>
-    <string name="settings_become_sponsor">GitHub ਸਪਾਂਸਰ ਬਣੋ</string>
-    <string name="settings_business_partnerships">ਵਪਾਰਕ ਭਾਈਵਾਲੀ</string>
-    <string name="settings_business_partnerships_description">ਆਪਣੀ ਕੰਪਨੀ ਦਾ ਲੋਗੋ ਦਿਖਾਉਣਾ ਚਾਹੁੰਦੇ ਹੋ ਜਾਂ ਰਣਨੀਤਕ ਭਾਈਵਾਲੀ ਬਾਰੇ ਚਰਚਾ ਕਰਨਾ ਚਾਹੁੰਦੇ ਹੋ?</string>
-    <string name="settings_contact_sponsorship">ਰਣਨੀਤਕ ਸਪਾਂਸਰਸ਼ਿਪ ਲਈ ਸੰਪਰਕ ਕਰੋ</string>
     <string name="settings_status_error_invalid_key">ਅਵੈਧ API ਕੁੰਜੀ</string>
     <string name="settings_status_error_quota_exhausted">ਕੋਟਾ ਖਤਮ</string>
     <string name="settings_status_error_rate_limited">ਦਰ ਸੀਮਾ ਪਾਰ</string>
@@ -46,7 +41,6 @@
     <string name="settings_tools_none_available">ਇਸ ਪਲੇਟਫਾਰਮ 'ਤੇ ਕੋਈ ਟੂਲ ਉਪਲਬਧ ਨਹੀਂ ਹਨ।</string>
     <string name="settings_tab_services">ਸੇਵਾਵਾਂ</string>
     <string name="settings_tab_tools">ਟੂਲ</string>
-    <string name="settings_tab_integrations">ਏਕੀਕਰਨ</string>
     <string name="tools_count">%1$d ਟੂਲ</string>
     <string name="privacy_agree_prefix">ਸੇਵਾ ਦੀ ਵਰਤੋਂ ਕਰਕੇ, ਤੁਸੀਂ ਸਹਿਮਤ ਹੋ </string>
     <string name="privacy_policy">ਗੋਪਨੀਯਤਾ ਨੀਤੀ</string>
@@ -146,7 +140,6 @@
     <string name="error_all_services_failed">ਸਾਰੀਆਂ ਸੇਵਾਵਾਂ ਅਸਫਲ ਹੋਈਆਂ।</string>
     <string name="settings_heartbeat_interval">ਅੰਤਰਾਲ</string>
     <string name="settings_heartbeat_active_hours">ਸਰਗਰਮ ਘੰਟੇ</string>
-    <string name="settings_documentation">ਦਸਤਾਵੇਜ਼ੀਕਰਨ</string>
     <string name="waiting_thinking">ਸੋਚ ਰਿਹਾ ਹੈ…</string>
     <string name="waiting_working">ਕੰਮ ਕਰ ਰਿਹਾ ਹੈ…</string>
     <string name="waiting_brewing">ਤਿਆਰ ਕਰ ਰਿਹਾ ਹੈ…</string>
@@ -207,9 +200,6 @@
     <string name="error_context_window_exceeded">ਫਾਲਬੈਕ ਸੇਵਾ ਲਈ ਕੰਟੈਕਸਟ ਵਿੰਡੋ ਬਹੁਤ ਵੱਡੀ ਹੈ। ਨਵੀਂ ਚੈਟ ਸ਼ੁਰੂ ਕਰਨ ਜਾਂ ਵੱਡੀ ਕੰਟੈਕਸਟ ਵਿੰਡੋ ਵਾਲੇ ਮਾਡਲ ਦੀ ਵਰਤੋਂ ਕਰਨ ਦੀ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</string>
     <string name="error_insufficient_credits">ਨਾਕਾਫ਼ੀ ਕ੍ਰੈਡਿਟ</string>
     <string name="error_quota_exhausted">ਕੋਟਾ ਖਤਮ ਹੋ ਗਿਆ</string>
-    <string name="settings_request_integration_title">ਇੰਟੀਗ੍ਰੇਸ਼ਨ ਦੀ ਬੇਨਤੀ ਕਰੋ</string>
-    <string name="settings_request_integration_description">ਕੀ ਤੁਹਾਡੇ ਕੋਲ ਆਟੋਮੇਸ਼ਨ ਜਾਂ ਇੰਟੀਗ੍ਰੇਸ਼ਨ ਦਾ ਵਿਚਾਰ ਹੈ? GitHub ਇਸ਼ੂ ਖੋਲ੍ਹ ਕੇ ਸਾਨੂੰ ਦੱਸੋ।</string>
-    <string name="settings_open_github_issue">GitHub ਇਸ਼ੂ ਖੋਲ੍ਹੋ</string>
     <string name="notification_channel_name">AI ਸੂਚਨਾਵਾਂ</string>
     <string name="notification_channel_description">AI ਸਹਾਇਕ ਦੁਆਰਾ ਭੇਜੀਆਂ ਸੂਚਨਾਵਾਂ</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -231,8 +221,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">ਇੰਟਰੈਕਟਿਵ ਮੋਡ ਤੋਂ ਬਾਹਰ ਨਿਕਲੋ</string>
     <string name="interactive_ui_parsing_failed">UI ਪਾਰਸਿੰਗ ਅਸਫਲ, ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕੀਤੀ ਜਾ ਰਹੀ ਹੈ…</string>
-    <string name="settings_sponsors_monthly">ਮਹੀਨਾਵਾਰ ਸਪਾਂਸਰ</string>
-    <string name="settings_sponsors_past">ਪਿਛਲੇ ਸਪਾਂਸਰ</string>
     <string name="snackbar_undo">ਵਾਪਸ ਕਰੋ</string>
     <string name="snackbar_memory_deleted">ਯਾਦ ਮਿਟਾਈ ਗਈ</string>
     <string name="snackbar_task_cancelled">ਕੰਮ ਰੱਦ ਕੀਤਾ ਗਿਆ</string>

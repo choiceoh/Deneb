@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Voix</string>
     <string name="bot_message_copy_content_description">Copier</string>
     <string name="settings_free_tier_title">Niveau Gratuit</string>
-    <string name="settings_free_tier_description">À mesure que la base d'utilisateurs grandit, le parrainage aide à mettre à l'échelle l'infrastructure, à augmenter les limites de requêtes pour tous et à maintenir le développement actif.</string>
-    <string name="settings_become_sponsor">Devenir sponsor GitHub</string>
-    <string name="settings_business_partnerships">Partenariats Commerciaux</string>
-    <string name="settings_business_partnerships_description">Vous souhaitez afficher le logo de votre entreprise ou discuter d'un partenariat stratégique ?</string>
-    <string name="settings_contact_sponsorship">Contact pour parrainage stratégique</string>
     <string name="settings_status_error_invalid_key">Clé API invalide</string>
     <string name="settings_status_error_quota_exhausted">Quota épuisé</string>
     <string name="settings_status_error_rate_limited">Limite de taux atteinte</string>
@@ -46,7 +41,6 @@
     <string name="settings_tools_none_available">Aucun outil disponible sur cette plateforme.</string>
     <string name="settings_tab_services">Services</string>
     <string name="settings_tab_tools">Outils</string>
-    <string name="settings_tab_integrations">Intégrations</string>
     <string name="tools_count">%1$d Outils</string>
     <string name="privacy_agree_prefix">En utilisant le service, vous acceptez la </string>
     <string name="privacy_policy">Politique de confidentialité</string>
@@ -147,7 +141,6 @@ Si quelque chose nécessite de l'attention (souvenirs obsolètes, tâches échue
     <string name="error_all_services_failed">Tous les services ont échoué.</string>
     <string name="settings_heartbeat_interval">Intervalle</string>
     <string name="settings_heartbeat_active_hours">Heures Actives</string>
-    <string name="settings_documentation">Documentation</string>
     <string name="waiting_thinking">Réflexion…</string>
     <string name="waiting_working">En cours…</string>
     <string name="waiting_brewing">Préparation…</string>
@@ -208,9 +201,6 @@ Si quelque chose nécessite de l'attention (souvenirs obsolètes, tâches échue
     <string name="error_context_window_exceeded">Fenêtre de contexte trop grande pour le service de secours. Essayez de démarrer une nouvelle conversation ou d'utiliser un modèle avec une fenêtre de contexte plus grande.</string>
     <string name="error_insufficient_credits">Crédits insuffisants</string>
     <string name="error_quota_exhausted">Quota épuisé</string>
-    <string name="settings_request_integration_title">Demander une intégration</string>
-    <string name="settings_request_integration_description">Vous avez une idée d'automatisation ou d'intégration ? Faites-le nous savoir en ouvrant un ticket GitHub.</string>
-    <string name="settings_open_github_issue">Ouvrir un ticket GitHub</string>
     <string name="notification_channel_name">Notifications IA</string>
     <string name="notification_channel_description">Notifications envoyées par l'assistant IA</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -232,8 +222,6 @@ Si quelque chose nécessite de l'attention (souvenirs obsolètes, tâches échue
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Quitter le mode interactif</string>
     <string name="interactive_ui_parsing_failed">Échec de l'analyse de l'interface, nouvel essai…</string>
-    <string name="settings_sponsors_monthly">Sponsors mensuels</string>
-    <string name="settings_sponsors_past">Anciens sponsors</string>
     <string name="snackbar_undo">Annuler</string>
     <string name="snackbar_memory_deleted">Souvenir supprimé</string>
     <string name="snackbar_task_cancelled">Tâche annulée</string>

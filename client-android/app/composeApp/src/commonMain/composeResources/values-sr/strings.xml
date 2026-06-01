@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Говор</string>
     <string name="bot_message_copy_content_description">Копирај</string>
     <string name="settings_free_tier_title">Бесплатни ниво</string>
-    <string name="settings_free_tier_description">Са растом корисничке базе, спонзорство помаже у проширењу инфраструктуре, повећању ограничења захтева за све и одржавању активног развоја.</string>
-    <string name="settings_become_sponsor">Постаните GitHub спонзор</string>
-    <string name="settings_business_partnerships">Пословна партнерства</string>
-    <string name="settings_business_partnerships_description">Желите да прикажете логотип своје компаније или да разговарате о стратешком партнерству?</string>
-    <string name="settings_contact_sponsorship">Контакт за стратешко спонзорство</string>
     <string name="settings_base_url_label">URL сервера</string>
     <string name="settings_status_checking">Провера везе...</string>
     <string name="settings_status_connected">Повезано</string>
@@ -40,7 +35,6 @@
     <string name="settings_tab_agent">Агент</string>
     <string name="settings_tab_services">Сервиси</string>
     <string name="settings_tab_tools">Алатке</string>
-    <string name="settings_tab_integrations">Интеграције</string>
     <string name="tools_count">%1$d алатки</string>
     <string name="privacy_agree_prefix">Коришћењем сервиса, прихватате </string>
     <string name="privacy_policy">Политику приватности</string>
@@ -146,7 +140,6 @@
     <string name="error_all_services_failed">Све услуге нису успеле.</string>
     <string name="settings_heartbeat_interval">Интервал</string>
     <string name="settings_heartbeat_active_hours">Активни сати</string>
-    <string name="settings_documentation">Документација</string>
     <string name="waiting_thinking">Размишљам…</string>
     <string name="waiting_working">Радим…</string>
     <string name="waiting_brewing">Припремам…</string>
@@ -207,9 +200,6 @@
     <string name="error_context_window_exceeded">Контекстни прозор је превелик за резервну услугу. Покушајте да започнете нови ћаскање или да користите модел са већим контекстним прозором.</string>
     <string name="error_insufficient_credits">Недовољно кредита</string>
     <string name="error_quota_exhausted">Квота је исцрпљена</string>
-    <string name="settings_request_integration_title">Затражите интеграцију</string>
-    <string name="settings_request_integration_description">Имате идеју за аутоматизацију или интеграцију? Јавите нам отварањем GitHub issue-а.</string>
-    <string name="settings_open_github_issue">Отвори GitHub Issue</string>
     <string name="notification_channel_name">AI обавештења</string>
     <string name="notification_channel_description">Обавештења послата од стране AI асистента</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -231,8 +221,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Изађи из интерактивног режима</string>
     <string name="interactive_ui_parsing_failed">Рашчлањивање корисничког интерфејса није успело, покушавам поново…</string>
-    <string name="settings_sponsors_monthly">Месечни спонзори</string>
-    <string name="settings_sponsors_past">Претходни спонзори</string>
     <string name="snackbar_undo">Опозови</string>
     <string name="snackbar_memory_deleted">Сећање обрисано</string>
     <string name="snackbar_task_cancelled">Задатак отказан</string>

@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Spraak</string>
     <string name="bot_message_copy_content_description">Kopieer</string>
     <string name="settings_free_tier_title">Gratis Vlak</string>
-    <string name="settings_free_tier_description">Soos die gebruikersbasis groei, help borgskappe om infrastruktuur te skaal, tarieklimiet vir almal te verhoog, en ontwikkeling aktief te hou.</string>
-    <string name="settings_become_sponsor">Word 'n GitHub-borg</string>
-    <string name="settings_business_partnerships">Sakevennootskappe</string>
-    <string name="settings_business_partnerships_description">Wil jy jou maatskappy se logo vertoon of 'n strategiese vennootskap bespreek?</string>
-    <string name="settings_contact_sponsorship">Kontak vir Strategiese Borgskappe</string>
     <string name="settings_base_url_label">Bediener-URL</string>
     <string name="settings_status_checking">Kontroleer verbinding...</string>
     <string name="settings_status_connected">Verbind</string>
@@ -40,7 +35,6 @@
     <string name="settings_tab_agent">Agent</string>
     <string name="settings_tab_services">Dienste</string>
     <string name="settings_tab_tools">Gereedskap</string>
-    <string name="settings_tab_integrations">Integrasies</string>
     <string name="tools_count">%1$d Gereedskap</string>
     <string name="privacy_agree_prefix">Deur die diens te gebruik, stem jy in tot die </string>
     <string name="privacy_policy">Privaatheidsbeleid</string>
@@ -147,7 +141,6 @@ As iets aandag nodig het (verouderde herinneringe, verskuldigde take, gebruiker-
     <string name="error_all_services_failed">Alle dienste het misluk.</string>
     <string name="settings_heartbeat_interval">Interval</string>
     <string name="settings_heartbeat_active_hours">Aktiewe Ure</string>
-    <string name="settings_documentation">Dokumentasie</string>
     <string name="waiting_thinking">Dink…</string>
     <string name="waiting_working">Werk…</string>
     <string name="waiting_brewing">Brou…</string>
@@ -208,9 +201,6 @@ As iets aandag nodig het (verouderde herinneringe, verskuldigde take, gebruiker-
     <string name="error_context_window_exceeded">Context-venster te groot vir terugvaldens. Probeer 'n nuwe klets begin of gebruik 'n model met 'n groter konteksvenster.</string>
     <string name="error_insufficient_credits">Onvoldoende krediete</string>
     <string name="error_quota_exhausted">Kwota uitgeput</string>
-    <string name="settings_request_integration_title">Versoek 'n integrasie</string>
-    <string name="settings_request_integration_description">Het jy 'n idee vir 'n outomatisering of integrasie? Laat ons weet deur 'n GitHub-kwessie oop te maak.</string>
-    <string name="settings_open_github_issue">Maak GitHub-kwessie oop</string>
     <string name="notification_channel_name">KI-kennisgewings</string>
     <string name="notification_channel_description">Kennisgewings gestuur deur KI-assistent</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -232,8 +222,6 @@ As iets aandag nodig het (verouderde herinneringe, verskuldigde take, gebruiker-
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Verlaat interaktiewe modus</string>
     <string name="interactive_ui_parsing_failed">UI-ontleding het misluk, probeer weer…</string>
-    <string name="settings_sponsors_monthly">Maandelikse borge</string>
-    <string name="settings_sponsors_past">Vorige borge</string>
     <string name="snackbar_undo">Ontdoen</string>
     <string name="snackbar_memory_deleted">Herinnering verwyder</string>
     <string name="snackbar_task_cancelled">Taak gekanselleer</string>

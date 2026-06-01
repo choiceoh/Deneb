@@ -7,7 +7,6 @@
     <string name="error_unknown">An unknown error occurred.</string>
     <string name="settings_ai_mistakes_warning">AI makes mistakes, double check and don't share sensitive information.</string>
     <string name="settings_version">Version: %1$s</string>
-    <string name="settings_documentation">Documentation</string>
     <string name="settings_api_key_label">API Key</string>
     <string name="settings_api_key_optional_label">API Key (optional)</string>
     <string name="settings_sign_in_copy_api_key_from">Sign in and copy your API key from</string>
@@ -19,13 +18,6 @@
     <string name="bot_message_copy_content_description">Copy</string>
     <string name="bot_message_regenerate_content_description">Regenerate</string>
     <string name="settings_free_tier_title">Free Tier</string>
-    <string name="settings_free_tier_description">As the user base grows, sponsorship helps to scale infrastructure, increase rate limits for everyone, and keep development active.</string>
-    <string name="settings_become_sponsor">Become a GitHub Sponsor</string>
-    <string name="settings_sponsors_monthly">Monthly Sponsors</string>
-    <string name="settings_sponsors_past">Previous Sponsors</string>
-    <string name="settings_business_partnerships">Business Partnerships</string>
-    <string name="settings_business_partnerships_description">Want to feature your company logo or discuss a strategic partnership?</string>
-    <string name="settings_contact_sponsorship">Contact for Strategic Sponsorship</string>
     <string name="settings_base_url_label">Server URL</string>
     <string name="settings_status_checking">Checking connection...</string>
     <string name="settings_status_connected">Connected</string>
@@ -54,7 +46,6 @@
     <string name="settings_tab_services">Services</string>
     <string name="settings_tab_tools">Tools</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
-    <string name="settings_tab_integrations">Integrations</string>
     <string name="tools_count">%1$d Tools</string>
     <string name="waiting_thinking">Thinking…</string>
     <string name="waiting_working">Working…</string>
@@ -310,9 +301,6 @@
     <string name="error_provider_error">The model provider returned an error</string>
     <string name="error_service_unavailable">Service temporarily unavailable. Try again later.</string>
     <string name="error_bad_request">Bad request</string>
-    <string name="settings_request_integration_title">Request an Integration</string>
-    <string name="settings_request_integration_description">Have an idea for an automation or integration? Let us know by opening a GitHub issue.</string>
-    <string name="settings_open_github_issue">Open GitHub Issue</string>
     <string name="notification_channel_name">AI Notifications</string>
     <string name="notification_channel_description">Notifications sent by AI assistant</string>
     <string name="settings_sandbox_description">Install a Linux environment so the AI can run shell commands, scripts, and tools on your behalf. Runs securely inside the app. ~3 MB download.</string>

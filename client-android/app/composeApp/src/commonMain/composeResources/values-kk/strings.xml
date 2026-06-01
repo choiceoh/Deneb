@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Сөйлеу</string>
     <string name="bot_message_copy_content_description">Көшіру</string>
     <string name="settings_free_tier_title">Тегін деңгей</string>
-    <string name="settings_free_tier_description">Пайдаланушылар базасы өскен сайын, демеушілік инфрақұрылымды кеңейтуге, барлығы үшін сұрау лимиттерін арттыруға және әзірлеуді белсенді ұстауға көмектеседі.</string>
-    <string name="settings_become_sponsor">GitHub демеушісі болыңыз</string>
-    <string name="settings_business_partnerships">Бизнес серіктестіктер</string>
-    <string name="settings_business_partnerships_description">Компанияңыздың логотипін көрсеткіңіз келе ме немесе стратегиялық серіктестікті талқылағыңыз келе ме?</string>
-    <string name="settings_contact_sponsorship">Стратегиялық демеушілік үшін байланысыңыз</string>
     <string name="settings_base_url_label">Сервер URL</string>
     <string name="settings_status_checking">Қосылым тексерілуде...</string>
     <string name="settings_status_connected">Қосылды</string>
@@ -40,7 +35,6 @@
     <string name="settings_tab_agent">Агент</string>
     <string name="settings_tab_services">Қызметтер</string>
     <string name="settings_tab_tools">Құралдар</string>
-    <string name="settings_tab_integrations">Интеграциялар</string>
     <string name="tools_count">%1$d Құрал</string>
     <string name="privacy_agree_prefix">Қызметті пайдалана отырып, сіз келесімен келісесіз </string>
     <string name="privacy_policy">Құпиялылық саясаты</string>
@@ -146,7 +140,6 @@
     <string name="error_all_services_failed">Барлық қызметтер сәтсіз аяқталды.</string>
     <string name="settings_heartbeat_interval">Аралық</string>
     <string name="settings_heartbeat_active_hours">Белсенді сағаттар</string>
-    <string name="settings_documentation">Құжаттама</string>
     <string name="waiting_thinking">Ойланамын…</string>
     <string name="waiting_working">Жұмыс істеймін…</string>
     <string name="waiting_brewing">Дайындаймын…</string>
@@ -207,9 +200,6 @@
     <string name="error_context_window_exceeded">Контекст терезесі сақтық қызмет үшін тым үлкен. Жаңа чат бастауды немесе үлкенірек контекст терезесі бар модельді пайдалануды көріңіз.</string>
     <string name="error_insufficient_credits">Кредиттер жеткіліксіз</string>
     <string name="error_quota_exhausted">Квота таусылды</string>
-    <string name="settings_request_integration_title">Интеграция сұрау</string>
-    <string name="settings_request_integration_description">Автоматтандыру немесе интеграция идеясы бар ма? GitHub-та issue ашу арқылы бізге хабарлаңыз.</string>
-    <string name="settings_open_github_issue">GitHub issue ашу</string>
     <string name="notification_channel_name">AI хабарландырулары</string>
     <string name="notification_channel_description">AI көмекшісі жіберген хабарландырулар</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -231,8 +221,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Интерактивті режимнен шығу</string>
     <string name="interactive_ui_parsing_failed">UI талдауы сәтсіз аяқталды, қайта әрекет жасалуда…</string>
-    <string name="settings_sponsors_monthly">Ай сайынғы демеушілер</string>
-    <string name="settings_sponsors_past">Бұрынғы демеушілер</string>
     <string name="snackbar_undo">Болдырмау</string>
     <string name="snackbar_memory_deleted">Естелік жойылды</string>
     <string name="snackbar_task_cancelled">Тапсырма бас тартылды</string>

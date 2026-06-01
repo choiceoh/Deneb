@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Mowa</string>
     <string name="bot_message_copy_content_description">Kopiuj</string>
     <string name="settings_free_tier_title">Poziom Darmowy</string>
-    <string name="settings_free_tier_description">Wraz ze wzrostem bazy użytkowników, sponsoring pomaga skalować infrastrukturę, zwiększać limity żądań dla wszystkich i utrzymywać aktywny rozwój.</string>
-    <string name="settings_become_sponsor">Zostań sponsorem GitHub</string>
-    <string name="settings_business_partnerships">Partnerstwa Biznesowe</string>
-    <string name="settings_business_partnerships_description">Chcesz wyświetlić logo swojej firmy lub omówić partnerstwo strategiczne?</string>
-    <string name="settings_contact_sponsorship">Kontakt w sprawie sponsoringu strategicznego</string>
     <string name="settings_status_error_invalid_key">Nieprawidłowy klucz API</string>
     <string name="settings_status_error_quota_exhausted">Limit wyczerpany</string>
     <string name="settings_status_error_rate_limited">Limit żądań osiągnięty</string>
@@ -46,7 +41,6 @@
     <string name="settings_tools_none_available">Brak dostępnych narzędzi na tej platformie.</string>
     <string name="settings_tab_services">Usługi</string>
     <string name="settings_tab_tools">Narzędzia</string>
-    <string name="settings_tab_integrations">Integracje</string>
     <string name="tools_count">%1$d Narzędzia</string>
     <string name="privacy_agree_prefix">Korzystając z usługi, zgadzasz się z </string>
     <string name="privacy_policy">Polityką prywatności</string>
@@ -147,7 +141,6 @@ Jeśli coś wymaga uwagi (przestarzałe wspomnienia, zaległe zadania, dalsze dz
     <string name="error_all_services_failed">Wszystkie usługi zawiodły.</string>
     <string name="settings_heartbeat_interval">Interwał</string>
     <string name="settings_heartbeat_active_hours">Aktywne godziny</string>
-    <string name="settings_documentation">Dokumentacja</string>
     <string name="waiting_thinking">Myślę…</string>
     <string name="waiting_working">Pracuję…</string>
     <string name="waiting_brewing">Przygotowuję…</string>
@@ -208,9 +201,6 @@ Jeśli coś wymaga uwagi (przestarzałe wspomnienia, zaległe zadania, dalsze dz
     <string name="error_context_window_exceeded">Okno kontekstu zbyt duże dla usługi zapasowej. Spróbuj rozpocząć nowy czat lub użyj modelu z większym oknem kontekstu.</string>
     <string name="error_insufficient_credits">Niewystarczające środki</string>
     <string name="error_quota_exhausted">Limit wyczerpany</string>
-    <string name="settings_request_integration_title">Poproś o integrację</string>
-    <string name="settings_request_integration_description">Masz pomysł na automatyzację lub integrację? Daj nam znać, otwierając zgłoszenie na GitHubie.</string>
-    <string name="settings_open_github_issue">Otwórz zgłoszenie na GitHubie</string>
     <string name="notification_channel_name">Powiadomienia AI</string>
     <string name="notification_channel_description">Powiadomienia wysyłane przez asystenta AI</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -232,8 +222,6 @@ Jeśli coś wymaga uwagi (przestarzałe wspomnienia, zaległe zadania, dalsze dz
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Wyjdź z trybu interaktywnego</string>
     <string name="interactive_ui_parsing_failed">Analiza UI nie powiodła się, ponawiam próbę…</string>
-    <string name="settings_sponsors_monthly">Miesięczni sponsorzy</string>
-    <string name="settings_sponsors_past">Poprzedni sponsorzy</string>
     <string name="snackbar_undo">Cofnij</string>
     <string name="snackbar_memory_deleted">Wspomnienie usunięte</string>
     <string name="snackbar_task_cancelled">Zadanie anulowane</string>

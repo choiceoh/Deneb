@@ -22,9 +22,6 @@ import com.inspiredandroid.kai.notifications.NotificationReader
 import com.inspiredandroid.kai.sms.SmsPoller
 import com.inspiredandroid.kai.sms.SmsReader
 import com.inspiredandroid.kai.sms.SmsSender
-import com.inspiredandroid.kai.splinterlands.SplinterlandsApi
-import com.inspiredandroid.kai.splinterlands.SplinterlandsBattleRunner
-import com.inspiredandroid.kai.splinterlands.SplinterlandsStore
 import com.inspiredandroid.kai.tools.CalendarPermissionController
 import com.inspiredandroid.kai.tools.NotificationListenerController
 import com.inspiredandroid.kai.tools.NotificationPermissionController
@@ -36,7 +33,6 @@ import com.inspiredandroid.kai.ui.sandbox.SandboxPackagesViewModel
 import com.inspiredandroid.kai.ui.sandbox.SandboxSessionViewModel
 import com.inspiredandroid.kai.ui.settings.SandboxViewModel
 import com.inspiredandroid.kai.ui.settings.SettingsViewModel
-import com.inspiredandroid.kai.ui.settings.SplinterlandsViewModel
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
@@ -87,12 +83,6 @@ val appModule = module {
     single<NotificationStore> {
         NotificationStore(get())
     }
-    single<SplinterlandsStore> {
-        SplinterlandsStore(get())
-    }
-    single<SplinterlandsApi> {
-        SplinterlandsApi()
-    }
     single<HeartbeatManager> {
         HeartbeatManager(get(), get(), get(), get())
     }
@@ -128,9 +118,6 @@ val appModule = module {
         )
     }
     single<DataRepository> { DenebGatewayClient(get<RemoteDataRepository>(), get<AppSettings>()) }
-    single<SplinterlandsBattleRunner> {
-        SplinterlandsBattleRunner(get(), get(), get<DataRepository>(), get<DaemonController>())
-    }
     single<TaskScheduler> {
         // Deneb scheduling, heartbeats, mail polling, and model work live on the
         // gateway. The native app only needs the scheduler shell for the
@@ -147,6 +134,5 @@ val appModule = module {
     viewModel { SandboxFileBrowserViewModel(get<SandboxController>()) }
     viewModel { SandboxPackagesViewModel(get<SandboxController>()) }
     viewModel { SandboxSessionViewModel(get<SandboxController>(), get<DataRepository>()) }
-    viewModel { SplinterlandsViewModel(get<DataRepository>(), get(), get(), get<SplinterlandsApi>()) }
     viewModel { ChatViewModel(get<DataRepository>(), get<TaskScheduler>()) }
 }

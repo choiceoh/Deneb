@@ -89,7 +89,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -126,7 +125,6 @@ import com.inspiredandroid.kai.inference.LocalModel
 import com.inspiredandroid.kai.inference.calculateDevicePerformance
 import com.inspiredandroid.kai.inference.estimateGpuMemoryMb
 import com.inspiredandroid.kai.mcp.PopularMcpServer
-import com.inspiredandroid.kai.network.dtos.SponsorsResponseDto
 import com.inspiredandroid.kai.network.tools.ToolInfo
 import com.inspiredandroid.kai.saveFileToDevice
 import com.inspiredandroid.kai.ui.KaiClearableTextField
@@ -148,7 +146,6 @@ import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
 import io.github.vinceglb.filekit.readBytes
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.default_soul
-import kai.composeapp.generated.resources.github_mark
 import kai.composeapp.generated.resources.ic_arrow_drop_down
 import kai.composeapp.generated.resources.litert_cancel
 import kai.composeapp.generated.resources.litert_context_size
@@ -168,13 +165,8 @@ import kai.composeapp.generated.resources.settings_ai_mistakes_warning
 import kai.composeapp.generated.resources.settings_api_key_label
 import kai.composeapp.generated.resources.settings_api_key_optional_label
 import kai.composeapp.generated.resources.settings_base_url_label
-import kai.composeapp.generated.resources.settings_become_sponsor
-import kai.composeapp.generated.resources.settings_business_partnerships
-import kai.composeapp.generated.resources.settings_business_partnerships_description
-import kai.composeapp.generated.resources.settings_contact_sponsorship
 import kai.composeapp.generated.resources.settings_daemon_mode
 import kai.composeapp.generated.resources.settings_daemon_mode_description
-import kai.composeapp.generated.resources.settings_documentation
 import kai.composeapp.generated.resources.settings_dynamic_ui
 import kai.composeapp.generated.resources.settings_dynamic_ui_description
 import kai.composeapp.generated.resources.settings_export
@@ -182,7 +174,6 @@ import kai.composeapp.generated.resources.settings_export_import_description
 import kai.composeapp.generated.resources.settings_export_import_title
 import kai.composeapp.generated.resources.settings_export_preview_title
 import kai.composeapp.generated.resources.settings_free_fallback
-import kai.composeapp.generated.resources.settings_free_tier_description
 import kai.composeapp.generated.resources.settings_free_tier_title
 import kai.composeapp.generated.resources.settings_heartbeat_recent
 import kai.composeapp.generated.resources.settings_import
@@ -210,14 +201,11 @@ import kai.composeapp.generated.resources.settings_memories_edit_cancel
 import kai.composeapp.generated.resources.settings_memories_edit_save
 import kai.composeapp.generated.resources.settings_memories_edit_title
 import kai.composeapp.generated.resources.settings_memories_show_all
-import kai.composeapp.generated.resources.settings_open_github_issue
 import kai.composeapp.generated.resources.settings_openai_compatible_or_other_service
 import kai.composeapp.generated.resources.settings_openai_compatible_providers
 import kai.composeapp.generated.resources.settings_openai_compatible_setup_ollama
 import kai.composeapp.generated.resources.settings_remove_service
 import kai.composeapp.generated.resources.settings_reorder_content_description
-import kai.composeapp.generated.resources.settings_request_integration_description
-import kai.composeapp.generated.resources.settings_request_integration_title
 import kai.composeapp.generated.resources.settings_sandbox_cancel
 import kai.composeapp.generated.resources.settings_sandbox_description
 import kai.composeapp.generated.resources.settings_sandbox_disk_usage
@@ -239,8 +227,6 @@ import kai.composeapp.generated.resources.settings_soul_reset
 import kai.composeapp.generated.resources.settings_soul_reset_cancel
 import kai.composeapp.generated.resources.settings_soul_reset_confirm
 import kai.composeapp.generated.resources.settings_soul_save
-import kai.composeapp.generated.resources.settings_sponsors_monthly
-import kai.composeapp.generated.resources.settings_sponsors_past
 import kai.composeapp.generated.resources.settings_status_checking
 import kai.composeapp.generated.resources.settings_status_connected
 import kai.composeapp.generated.resources.settings_status_error
@@ -250,7 +236,6 @@ import kai.composeapp.generated.resources.settings_status_error_quota_exhausted
 import kai.composeapp.generated.resources.settings_status_error_rate_limited
 import kai.composeapp.generated.resources.settings_tab_agent
 import kai.composeapp.generated.resources.settings_tab_general
-import kai.composeapp.generated.resources.settings_tab_integrations
 import kai.composeapp.generated.resources.settings_tab_sandbox
 import kai.composeapp.generated.resources.settings_tab_services
 import kai.composeapp.generated.resources.settings_tab_tools
@@ -290,7 +275,6 @@ import kotlinx.datetime.offsetAt
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.jsonObject
 import org.jetbrains.compose.resources.StringResource
-import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.resources.vectorResource
 import org.koin.compose.koinInject
@@ -460,10 +444,6 @@ fun SettingsScreenContent(
                                 ServicesContent(uiState = filteredUiState, actions = actions)
                             }
 
-                            SettingsTab.Integrations -> {
-                                IntegrationsContent()
-                            }
-
                             SettingsTab.Tools -> {
                                 ToolsContent(
                                     tools = filteredUiState.tools,
@@ -566,7 +546,6 @@ private fun SettingsTabSelector(
                             SettingsTab.Services -> stringResource(Res.string.settings_tab_services)
                             SettingsTab.Tools -> stringResource(Res.string.settings_tab_tools)
                             SettingsTab.Sandbox -> stringResource(Res.string.settings_tab_sandbox)
-                            SettingsTab.Integrations -> stringResource(Res.string.settings_tab_integrations)
                         },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         color = MaterialTheme.colorScheme.primary,
@@ -590,8 +569,6 @@ private fun BottomInfo() {
 
     Spacer(Modifier.height(8.dp))
 
-    val uriHandler = LocalUriHandler.current
-
     Row(
         modifier = Modifier.padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -600,32 +577,6 @@ private fun BottomInfo() {
             stringResource(Res.string.settings_version, Version.appVersion),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground,
-        )
-
-        Spacer(Modifier.width(8.dp))
-
-        Icon(
-            modifier = Modifier
-                .clip(CircleShape)
-                .size(24.dp)
-                .clickable(onClick = {
-                    uriHandler.openUri("https://github.com/SimonSchubert/Kai")
-                })
-                .handCursor(),
-            painter = painterResource(Res.drawable.github_mark),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onBackground,
-        )
-
-        Spacer(Modifier.width(12.dp))
-
-        Text(
-            text = stringResource(Res.string.settings_documentation),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .clickable { uriHandler.openUri("https://kai9000.com/docs/") }
-                .handCursor(),
         )
     }
 

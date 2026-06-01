@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Spraak</string>
     <string name="bot_message_copy_content_description">Kopiëren</string>
     <string name="settings_free_tier_title">Gratis Niveau</string>
-    <string name="settings_free_tier_description">Naarmate het gebruikersbestand groeit, helpt sponsoring om de infrastructuur op te schalen, de aanvraaglimieten voor iedereen te verhogen en de ontwikkeling actief te houden.</string>
-    <string name="settings_become_sponsor">Word een GitHub-sponsor</string>
-    <string name="settings_business_partnerships">Zakelijke Partnerschappen</string>
-    <string name="settings_business_partnerships_description">Wilt u uw bedrijfslogo tonen of een strategisch partnerschap bespreken?</string>
-    <string name="settings_contact_sponsorship">Contact voor strategische sponsoring</string>
     <string name="settings_status_error_invalid_key">Ongeldige API-sleutel</string>
     <string name="settings_status_error_quota_exhausted">Quotum uitgeput</string>
     <string name="settings_status_error_rate_limited">Aanvraaglimiet bereikt</string>
@@ -46,7 +41,6 @@
     <string name="settings_tools_none_available">Geen hulpmiddelen beschikbaar op dit platform.</string>
     <string name="settings_tab_services">Diensten</string>
     <string name="settings_tab_tools">Hulpmiddelen</string>
-    <string name="settings_tab_integrations">Integraties</string>
     <string name="tools_count">%1$d Hulpmiddelen</string>
     <string name="privacy_agree_prefix">Door de service te gebruiken, gaat u akkoord met het </string>
     <string name="privacy_policy">Privacybeleid</string>
@@ -147,7 +141,6 @@ Als iets aandacht nodig heeft (verouderde herinneringen, verlopen taken, gebruik
     <string name="error_all_services_failed">Alle diensten zijn mislukt.</string>
     <string name="settings_heartbeat_interval">Interval</string>
     <string name="settings_heartbeat_active_hours">Actieve uren</string>
-    <string name="settings_documentation">Documentatie</string>
     <string name="waiting_thinking">Denken…</string>
     <string name="waiting_working">Werken…</string>
     <string name="waiting_brewing">Brouwen…</string>
@@ -208,9 +201,6 @@ Als iets aandacht nodig heeft (verouderde herinneringen, verlopen taken, gebruik
     <string name="error_context_window_exceeded">Contextvenster te groot voor de terugvaldienst. Probeer een nieuw gesprek te starten of gebruik een model met een groter contextvenster.</string>
     <string name="error_insufficient_credits">Onvoldoende tegoed</string>
     <string name="error_quota_exhausted">Quotum uitgeput</string>
-    <string name="settings_request_integration_title">Een integratie aanvragen</string>
-    <string name="settings_request_integration_description">Heeft u een idee voor een automatisering of integratie? Laat het ons weten door een GitHub-issue aan te maken.</string>
-    <string name="settings_open_github_issue">GitHub-issue openen</string>
     <string name="notification_channel_name">AI-meldingen</string>
     <string name="notification_channel_description">Meldingen verzonden door AI-assistent</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -232,8 +222,6 @@ Als iets aandacht nodig heeft (verouderde herinneringen, verlopen taken, gebruik
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Interactieve modus verlaten</string>
     <string name="interactive_ui_parsing_failed">UI-analyse mislukt, opnieuw proberen…</string>
-    <string name="settings_sponsors_monthly">Maandelijkse sponsors</string>
-    <string name="settings_sponsors_past">Vorige sponsors</string>
     <string name="snackbar_undo">Ongedaan maken</string>
     <string name="snackbar_memory_deleted">Herinnering verwijderd</string>
     <string name="snackbar_task_cancelled">Taak geannuleerd</string>

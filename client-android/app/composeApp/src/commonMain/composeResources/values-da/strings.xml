@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Tale</string>
     <string name="bot_message_copy_content_description">Kopier</string>
     <string name="settings_free_tier_title">Gratis niveau</string>
-    <string name="settings_free_tier_description">Efterhånden som brugergruppen vokser, hjælper sponsorater med at skalere infrastrukturen, øge hastighedsgrænserne for alle og holde udviklingen aktiv.</string>
-    <string name="settings_become_sponsor">Bliv GitHub-sponsor</string>
-    <string name="settings_business_partnerships">Forretningspartnerskaber</string>
-    <string name="settings_business_partnerships_description">Vil du vise dit firmalogo eller drøfte et strategisk partnerskab?</string>
-    <string name="settings_contact_sponsorship">Kontakt for strategisk sponsorat</string>
     <string name="settings_base_url_label">Server-URL</string>
     <string name="settings_status_checking">Tjekker forbindelse...</string>
     <string name="settings_status_connected">Forbundet</string>
@@ -40,7 +35,6 @@
     <string name="settings_tab_agent">Agent</string>
     <string name="settings_tab_services">Tjenester</string>
     <string name="settings_tab_tools">Værktøjer</string>
-    <string name="settings_tab_integrations">Integrationer</string>
     <string name="tools_count">%1$d Værktøjer</string>
     <string name="privacy_agree_prefix">Ved at bruge tjenesten accepterer du </string>
     <string name="privacy_policy">Privatlivspolitikken</string>
@@ -147,7 +141,6 @@ Hvis noget kræver opmærksomhed (forældede erindringer, forfaldne opgaver, bru
     <string name="error_all_services_failed">Alle tjenester mislykkedes.</string>
     <string name="settings_heartbeat_interval">Interval</string>
     <string name="settings_heartbeat_active_hours">Aktive timer</string>
-    <string name="settings_documentation">Dokumentation</string>
     <string name="waiting_thinking">Tænker…</string>
     <string name="waiting_working">Arbejder…</string>
     <string name="waiting_brewing">Brygger…</string>
@@ -208,9 +201,6 @@ Hvis noget kræver opmærksomhed (forældede erindringer, forfaldne opgaver, bru
     <string name="error_context_window_exceeded">Kontekstvinduet er for stort til reservetjenesten. Prøv at starte en ny chat eller brug en model med et større kontekstvindue.</string>
     <string name="error_insufficient_credits">Utilstrækkelig kredit</string>
     <string name="error_quota_exhausted">Kvote opbrugt</string>
-    <string name="settings_request_integration_title">Anmod om en integration</string>
-    <string name="settings_request_integration_description">Har du en idé til en automatisering eller integration? Lad os vide ved at oprette en GitHub-issue.</string>
-    <string name="settings_open_github_issue">Opret GitHub-issue</string>
     <string name="notification_channel_name">AI-notifikationer</string>
     <string name="notification_channel_description">Notifikationer sendt af AI-assistent</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -232,8 +222,6 @@ Hvis noget kræver opmærksomhed (forældede erindringer, forfaldne opgaver, bru
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Forlad interaktiv tilstand</string>
     <string name="interactive_ui_parsing_failed">UI-analyse mislykkedes, prøver igen…</string>
-    <string name="settings_sponsors_monthly">Månedlige sponsorer</string>
-    <string name="settings_sponsors_past">Tidligere sponsorer</string>
     <string name="snackbar_undo">Fortryd</string>
     <string name="snackbar_memory_deleted">Erindring slettet</string>
     <string name="snackbar_task_cancelled">Opgave annulleret</string>

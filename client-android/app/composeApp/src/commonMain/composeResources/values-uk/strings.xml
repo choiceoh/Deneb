@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Мовлення</string>
     <string name="bot_message_copy_content_description">Копіювати</string>
     <string name="settings_free_tier_title">Безкоштовний рівень</string>
-    <string name="settings_free_tier_description">У міру зростання бази користувачів спонсорство допомагає масштабувати інфраструктуру, збільшувати ліміти запитів для всіх і підтримувати активну розробку.</string>
-    <string name="settings_become_sponsor">Стати спонсором GitHub</string>
-    <string name="settings_business_partnerships">Бізнес-партнерство</string>
-    <string name="settings_business_partnerships_description">Хочете розмістити логотип своєї компанії або обговорити стратегічне партнерство?</string>
-    <string name="settings_contact_sponsorship">Зв'язатися щодо стратегічного спонсорства</string>
     <string name="settings_status_error_invalid_key">Недійсний ключ API</string>
     <string name="settings_status_error_quota_exhausted">Квоту вичерпано</string>
     <string name="settings_status_error_rate_limited">Перевищено ліміт запитів</string>
@@ -46,7 +41,6 @@
     <string name="settings_tools_none_available">На цій платформі немає доступних інструментів.</string>
     <string name="settings_tab_services">Сервіси</string>
     <string name="settings_tab_tools">Інструменти</string>
-    <string name="settings_tab_integrations">Інтеграції</string>
     <string name="tools_count">%1$d інструментів</string>
     <string name="privacy_agree_prefix">Використовуючи сервіс, ви погоджуєтесь з </string>
     <string name="privacy_policy">Політикою конфіденційності</string>
@@ -147,7 +141,6 @@
     <string name="error_all_services_failed">Усі сервіси не вдалися.</string>
     <string name="settings_heartbeat_interval">Інтервал</string>
     <string name="settings_heartbeat_active_hours">Активні години</string>
-    <string name="settings_documentation">Документація</string>
     <string name="waiting_thinking">Думаю…</string>
     <string name="waiting_working">Працюю…</string>
     <string name="waiting_brewing">Готую…</string>
@@ -208,9 +201,6 @@
     <string name="error_context_window_exceeded">Вікно контексту занадто велике для резервного сервісу. Спробуйте розпочати новий чат або використати модель із більшим вікном контексту.</string>
     <string name="error_insufficient_credits">Недостатньо кредитів</string>
     <string name="error_quota_exhausted">Квоту вичерпано</string>
-    <string name="settings_request_integration_title">Запросити інтеграцію</string>
-    <string name="settings_request_integration_description">Маєте ідею для автоматизації або інтеграції? Повідомте нас, створивши issue на GitHub.</string>
-    <string name="settings_open_github_issue">Відкрити GitHub Issue</string>
     <string name="notification_channel_name">Сповіщення ШІ</string>
     <string name="notification_channel_description">Сповіщення, надіслані ШІ-помічником</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -232,8 +222,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Вийти з інтерактивного режиму</string>
     <string name="interactive_ui_parsing_failed">Не вдалося розібрати UI, повторна спроба…</string>
-    <string name="settings_sponsors_monthly">Щомісячні спонсори</string>
-    <string name="settings_sponsors_past">Попередні спонсори</string>
     <string name="snackbar_undo">Скасувати</string>
     <string name="snackbar_memory_deleted">Спогад видалено</string>
     <string name="snackbar_task_cancelled">Завдання скасовано</string>

@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">స్పీచ్</string>
     <string name="bot_message_copy_content_description">కాపీ</string>
     <string name="settings_free_tier_title">ఉచిత స్థాయి</string>
-    <string name="settings_free_tier_description">వినియోగదారు బేస్ పెరుగుతున్నప్పుడు, స్పాన్సర్‌షిప్ మౌలిక సదుపాయాలను పెంచడానికి, అందరికీ రేట్ పరిమితులను పెంచడానికి మరియు అభివృద్ధిని చురుగ్గా ఉంచడానికి సహాయపడుతుంది.</string>
-    <string name="settings_become_sponsor">GitHub స్పాన్సర్ అవ్వండి</string>
-    <string name="settings_business_partnerships">వ్యాపార భాగస్వామ్యాలు</string>
-    <string name="settings_business_partnerships_description">మీ కంపెనీ లోగోను ప్రదర్శించాలనుకుంటున్నారా లేదా వ్యూహాత్మక భాగస్వామ్యం గురించి చర్చించాలనుకుంటున్నారా?</string>
-    <string name="settings_contact_sponsorship">వ్యూహాత్మక స్పాన్సర్‌షిప్ కోసం సంప్రదించండి</string>
     <string name="settings_status_error_invalid_key">చెల్లని API కీ</string>
     <string name="settings_status_error_quota_exhausted">కోటా అయిపోయింది</string>
     <string name="settings_status_error_rate_limited">రేట్ పరిమితి చేరుకుంది</string>
@@ -46,7 +41,6 @@
     <string name="settings_tools_none_available">ఈ ప్లాట్‌ఫారమ్‌లో టూల్స్ అందుబాటులో లేవు.</string>
     <string name="settings_tab_services">సేవలు</string>
     <string name="settings_tab_tools">టూల్స్</string>
-    <string name="settings_tab_integrations">ఇంటిగ్రేషన్లు</string>
     <string name="tools_count">%1$d సాధనాలు</string>
     <string name="privacy_agree_prefix">సేవను ఉపయోగించడం ద్వారా, మీరు అంగీకరిస్తారు </string>
     <string name="privacy_policy">గోప్యతా విధానం</string>
@@ -146,7 +140,6 @@
     <string name="error_all_services_failed">అన్ని సేవలు విఫలమయ్యాయి.</string>
     <string name="settings_heartbeat_interval">విరామం</string>
     <string name="settings_heartbeat_active_hours">క్రియాశీల గంటలు</string>
-    <string name="settings_documentation">డాక్యుమెంటేషన్</string>
     <string name="waiting_thinking">ఆలోచిస్తోంది…</string>
     <string name="waiting_working">పని చేస్తోంది…</string>
     <string name="waiting_brewing">తయారు చేస్తోంది…</string>
@@ -207,9 +200,6 @@
     <string name="error_context_window_exceeded">ఫాల్‌బ్యాక్ సేవకు కాంటెక్స్ట్ విండో చాలా పెద్దది. కొత్త చాట్ ప్రారంభించడానికి లేదా పెద్ద కాంటెక్స్ట్ విండో ఉన్న మోడల్‌ను ఉపయోగించడానికి ప్రయత్నించండి.</string>
     <string name="error_insufficient_credits">తగినంత క్రెడిట్లు లేవు</string>
     <string name="error_quota_exhausted">కోటా అయిపోయింది</string>
-    <string name="settings_request_integration_title">ఇంటిగ్రేషన్ అభ్యర్థించండి</string>
-    <string name="settings_request_integration_description">ఆటోమేషన్ లేదా ఇంటిగ్రేషన్ కోసం ఆలోచన ఉందా? GitHub issue తెరిచి మాకు తెలియజేయండి.</string>
-    <string name="settings_open_github_issue">GitHub Issue తెరువు</string>
     <string name="notification_channel_name">AI నోటిఫికేషన్లు</string>
     <string name="notification_channel_description">AI అసిస్టెంట్ పంపిన నోటిఫికేషన్లు</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -231,8 +221,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">ఇంటరాక్టివ్ మోడ్ నుండి నిష్క్రమించు</string>
     <string name="interactive_ui_parsing_failed">UI పార్సింగ్ విఫలమైంది, మళ్ళీ ప్రయత్నిస్తోంది…</string>
-    <string name="settings_sponsors_monthly">నెలవారీ స్పాన్సర్లు</string>
-    <string name="settings_sponsors_past">మునుపటి స్పాన్సర్లు</string>
     <string name="snackbar_undo">రద్దు చేయి</string>
     <string name="snackbar_memory_deleted">జ్ఞాపకం తొలగించబడింది</string>
     <string name="snackbar_task_cancelled">టాస్క్ రద్దు చేయబడింది</string>

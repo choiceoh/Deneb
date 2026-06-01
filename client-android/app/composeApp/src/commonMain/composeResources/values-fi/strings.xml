@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Puhe</string>
     <string name="bot_message_copy_content_description">Kopioi</string>
     <string name="settings_free_tier_title">Ilmainen taso</string>
-    <string name="settings_free_tier_description">K\u00e4ytt\u00e4j\u00e4m\u00e4\u00e4r\u00e4n kasvaessa sponsorointi auttaa skaalaamaan infrastruktuuria, nostamaan pyynt\u00f6rajoja kaikille ja pit\u00e4m\u00e4\u00e4n kehityksen aktiivisena.</string>
-    <string name="settings_become_sponsor">Ryhdy GitHub-sponsoriksi</string>
-    <string name="settings_business_partnerships">Yrityskumppanuudet</string>
-    <string name="settings_business_partnerships_description">Haluatko esitell\u00e4 yrityksesi logon tai keskustella strategisesta kumppanuudesta?</string>
-    <string name="settings_contact_sponsorship">Ota yhteytt\u00e4 strategista sponsorointia varten</string>
     <string name="settings_base_url_label">Palvelimen URL</string>
     <string name="settings_status_checking">Tarkistetaan yhteytt\u00e4...</string>
     <string name="settings_status_connected">Yhdistetty</string>
@@ -40,7 +35,6 @@
     <string name="settings_tab_agent">Agentti</string>
     <string name="settings_tab_services">Palvelut</string>
     <string name="settings_tab_tools">Ty\u00f6kalut</string>
-    <string name="settings_tab_integrations">Integraatiot</string>
     <string name="tools_count">%1$d Työkalua</string>
     <string name="privacy_agree_prefix">K\u00e4ytt\u00e4m\u00e4ll\u00e4 palvelua hyv\u00e4ksyt </string>
     <string name="privacy_policy">Tietosuojak\u00e4yt\u00e4nn\u00f6n</string>
@@ -147,7 +141,6 @@ Jos jokin vaatii huomiota (vanhentuneet muistot, erääntyneet tehtävät, käyt
     <string name="error_all_services_failed">Kaikki palvelut epäonnistuivat.</string>
     <string name="settings_heartbeat_interval">Väli</string>
     <string name="settings_heartbeat_active_hours">Aktiiviset tunnit</string>
-    <string name="settings_documentation">Dokumentaatio</string>
     <string name="waiting_thinking">Mietin…</string>
     <string name="waiting_working">Työskentelen…</string>
     <string name="waiting_brewing">Valmistelen…</string>
@@ -208,9 +201,6 @@ Jos jokin vaatii huomiota (vanhentuneet muistot, erääntyneet tehtävät, käyt
     <string name="error_context_window_exceeded">Konteksti-ikkuna on liian suuri varapalvelulle. Yritä aloittaa uusi keskustelu tai käytä mallia, jossa on suurempi konteksti-ikkuna.</string>
     <string name="error_insufficient_credits">Riittämätön saldo</string>
     <string name="error_quota_exhausted">Kiintiö loppunut</string>
-    <string name="settings_request_integration_title">Pyydä integraatiota</string>
-    <string name="settings_request_integration_description">Onko sinulla idea automaatioon tai integraatioon? Kerro meille avaamalla GitHub-issue.</string>
-    <string name="settings_open_github_issue">Avaa GitHub-issue</string>
     <string name="notification_channel_name">Tekoäly-ilmoitukset</string>
     <string name="notification_channel_description">Tekoälyavustajan lähettämät ilmoitukset</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -232,8 +222,6 @@ Jos jokin vaatii huomiota (vanhentuneet muistot, erääntyneet tehtävät, käyt
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Poistu vuorovaikutustilasta</string>
     <string name="interactive_ui_parsing_failed">Käyttöliittymän jäsennys epäonnistui, yritetään uudelleen…</string>
-    <string name="settings_sponsors_monthly">Kuukausittaiset sponsorit</string>
-    <string name="settings_sponsors_past">Aiemmat sponsorit</string>
     <string name="snackbar_undo">Kumoa</string>
     <string name="snackbar_memory_deleted">Muisto poistettu</string>
     <string name="snackbar_task_cancelled">Tehtävä peruutettu</string>

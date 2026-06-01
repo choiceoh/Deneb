@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Runa</string>
     <string name="bot_message_copy_content_description">Kopēt</string>
     <string name="settings_free_tier_title">Bezmaksas līmenis</string>
-    <string name="settings_free_tier_description">Pieaugot lietotāju bāzei, sponsorēšana palīdz paplašināt infrastruktūru, palielināt pieprasījumu limitus visiem un uzturēt aktīvu izstrādi.</string>
-    <string name="settings_become_sponsor">Kļūstiet par GitHub sponsoru</string>
-    <string name="settings_business_partnerships">Biznesa partnerības</string>
-    <string name="settings_business_partnerships_description">Vai vēlaties parādīt sava uzņēmuma logotipu vai apspriest stratēģisku partnerību?</string>
-    <string name="settings_contact_sponsorship">Sazināties par stratēģisko sponsorēšanu</string>
     <string name="settings_base_url_label">Servera URL</string>
     <string name="settings_status_checking">Pārbauda savienojumu...</string>
     <string name="settings_status_connected">Savienots</string>
@@ -40,7 +35,6 @@
     <string name="settings_tab_agent">Aģents</string>
     <string name="settings_tab_services">Pakalpojumi</string>
     <string name="settings_tab_tools">Rīki</string>
-    <string name="settings_tab_integrations">Integrācijas</string>
     <string name="tools_count">%1$d Rīki</string>
     <string name="privacy_agree_prefix">Izmantojot pakalpojumu, jūs piekrītat </string>
     <string name="privacy_policy">Privātuma politika</string>
@@ -146,7 +140,6 @@
     <string name="error_all_services_failed">Visi pakalpojumi neizdevās.</string>
     <string name="settings_heartbeat_interval">Intervāls</string>
     <string name="settings_heartbeat_active_hours">Aktīvās stundas</string>
-    <string name="settings_documentation">Dokumentācija</string>
     <string name="waiting_thinking">Domāju…</string>
     <string name="waiting_working">Strādāju…</string>
     <string name="waiting_brewing">Gatavoju…</string>
@@ -207,9 +200,6 @@
     <string name="error_context_window_exceeded">Konteksta logs ir pārāk liels rezerves pakalpojumam. Mēģiniet sākt jaunu sarunu vai izmantojiet modeli ar lielāku konteksta logu.</string>
     <string name="error_insufficient_credits">Nepietiekami kredīti</string>
     <string name="error_quota_exhausted">Kvota izsmelta</string>
-    <string name="settings_request_integration_title">Pieprasīt integrāciju</string>
-    <string name="settings_request_integration_description">Vai jums ir ideja automatizācijai vai integrācijai? Paziņojiet mums, izveidojot GitHub problēmu.</string>
-    <string name="settings_open_github_issue">Atvērt GitHub problēmu</string>
     <string name="notification_channel_name">MI paziņojumi</string>
     <string name="notification_channel_description">Paziņojumi, ko nosūta MI asistents</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -231,8 +221,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Iziet no interaktīvā režīma</string>
     <string name="interactive_ui_parsing_failed">UI analīze neizdevās, mēģinu vēlreiz…</string>
-    <string name="settings_sponsors_monthly">Ikmēneša sponsori</string>
-    <string name="settings_sponsors_past">Iepriekšējie sponsori</string>
     <string name="snackbar_undo">Atsaukt</string>
     <string name="snackbar_memory_deleted">Atmiņa dzēsta</string>
     <string name="snackbar_task_cancelled">Uzdevums atcelts</string>

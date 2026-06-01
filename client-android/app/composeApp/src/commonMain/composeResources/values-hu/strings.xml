@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Beszéd</string>
     <string name="bot_message_copy_content_description">Másolás</string>
     <string name="settings_free_tier_title">Ingyenes szint</string>
-    <string name="settings_free_tier_description">A felhasználói bázis növekedésével a szponzorálás segít az infrastruktúra bővítésében, a kérési limitek növelésében mindenki számára, és a fejlesztés aktívan tartásában.</string>
-    <string name="settings_become_sponsor">Légy GitHub szponzor</string>
-    <string name="settings_business_partnerships">Üzleti partnerségek</string>
-    <string name="settings_business_partnerships_description">Szeretnéd megjeleníteni a céged logóját vagy stratégiai partnerségről tárgyalni?</string>
-    <string name="settings_contact_sponsorship">Kapcsolatfelvétel stratégiai szponzorációért</string>
     <string name="settings_base_url_label">Szerver URL</string>
     <string name="settings_status_checking">Kapcsolat ellenőrzése…</string>
     <string name="settings_status_connected">Csatlakozva</string>
@@ -40,7 +35,6 @@
     <string name="settings_tab_agent">Ügynök</string>
     <string name="settings_tab_services">Szolgáltatások</string>
     <string name="settings_tab_tools">Eszközök</string>
-    <string name="settings_tab_integrations">Integrációk</string>
     <string name="tools_count">%1$d Eszköz</string>
     <string name="privacy_agree_prefix">A szolgáltatás használatával elfogadod az </string>
     <string name="privacy_policy">Adatvédelmi irányelveket</string>
@@ -146,7 +140,6 @@
     <string name="error_all_services_failed">Minden szolgáltatás sikertelen volt.</string>
     <string name="settings_heartbeat_interval">Időköz</string>
     <string name="settings_heartbeat_active_hours">Aktív órák</string>
-    <string name="settings_documentation">Dokumentáció</string>
     <string name="waiting_thinking">Gondolkodom…</string>
     <string name="waiting_working">Dolgozom…</string>
     <string name="waiting_brewing">Készítem…</string>
@@ -207,9 +200,6 @@
     <string name="error_context_window_exceeded">A kontextusablak túl nagy a tartalék szolgáltatáshoz. Próbálj meg új csevegést indítani, vagy használj nagyobb kontextusablakú modellt.</string>
     <string name="error_insufficient_credits">Nincs elég kredit</string>
     <string name="error_quota_exhausted">Kvóta kimerítve</string>
-    <string name="settings_request_integration_title">Integráció kérése</string>
-    <string name="settings_request_integration_description">Van ötlete automatizálásra vagy integrációra? Tudassa velünk egy GitHub issue megnyitásával.</string>
-    <string name="settings_open_github_issue">GitHub Issue megnyitása</string>
     <string name="notification_channel_name">AI-értesítések</string>
     <string name="notification_channel_description">Az AI-asszisztens által küldött értesítések</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -231,8 +221,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Kilépés az interaktív módból</string>
     <string name="interactive_ui_parsing_failed">A felhasználói felület elemzése sikertelen, újrapróbálás…</string>
-    <string name="settings_sponsors_monthly">Havi szponzorok</string>
-    <string name="settings_sponsors_past">Korábbi szponzorok</string>
     <string name="snackbar_undo">Visszavonás</string>
     <string name="snackbar_memory_deleted">Emlék törölve</string>
     <string name="snackbar_task_cancelled">Feladat visszavonva</string>

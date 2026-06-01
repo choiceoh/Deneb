@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Kalba</string>
     <string name="bot_message_copy_content_description">Kopijuoti</string>
     <string name="settings_free_tier_title">Nemokamas planas</string>
-    <string name="settings_free_tier_description">Augant vartotojų bazei, rėmimas padeda plėsti infrastruktūrą, didinti užklausų limitus visiems ir palaikyti aktyvų kūrimą.</string>
-    <string name="settings_become_sponsor">Tapkite GitHub rėmėju</string>
-    <string name="settings_business_partnerships">Verslo partnerystės</string>
-    <string name="settings_business_partnerships_description">Norite parodyti savo įmonės logotipą arba aptarti strateginę partnerystę?</string>
-    <string name="settings_contact_sponsorship">Susisiekite dėl strateginio rėmimo</string>
     <string name="settings_base_url_label">Serverio URL</string>
     <string name="settings_status_checking">Tikrinamas ryšys...</string>
     <string name="settings_status_connected">Prisijungta</string>
@@ -40,7 +35,6 @@
     <string name="settings_tab_agent">Agentas</string>
     <string name="settings_tab_services">Paslaugos</string>
     <string name="settings_tab_tools">Įrankiai</string>
-    <string name="settings_tab_integrations">Integracijos</string>
     <string name="tools_count">%1$d Įrankiai</string>
     <string name="privacy_agree_prefix">Naudodami paslaugą, sutinkate su </string>
     <string name="privacy_policy">Privatumo politika</string>
@@ -146,7 +140,6 @@
     <string name="error_all_services_failed">Visos paslaugos nepavyko.</string>
     <string name="settings_heartbeat_interval">Intervalas</string>
     <string name="settings_heartbeat_active_hours">Aktyvios valandos</string>
-    <string name="settings_documentation">Dokumentacija</string>
     <string name="waiting_thinking">Galvoju…</string>
     <string name="waiting_working">Dirbu…</string>
     <string name="waiting_brewing">Ruošiu…</string>
@@ -207,9 +200,6 @@
     <string name="error_context_window_exceeded">Konteksto langas per didelis atsarginei paslaugai. Pabandykite pradėti naują pokalbį arba naudokite modelį su didesniu konteksto langu.</string>
     <string name="error_insufficient_credits">Nepakanka kreditų</string>
     <string name="error_quota_exhausted">Kvota išnaudota</string>
-    <string name="settings_request_integration_title">Paprašyti integracijos</string>
-    <string name="settings_request_integration_description">Turite idėją automatizavimui ar integracijai? Praneškite mums sukurdami „GitHub" klausimą.</string>
-    <string name="settings_open_github_issue">Atidaryti „GitHub" klausimą</string>
     <string name="notification_channel_name">DI pranešimai</string>
     <string name="notification_channel_description">Pranešimai, siunčiami DI asistento</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -231,8 +221,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Išeiti iš interaktyvaus režimo</string>
     <string name="interactive_ui_parsing_failed">UI analizė nepavyko, bandoma iš naujo…</string>
-    <string name="settings_sponsors_monthly">Mėnesiniai rėmėjai</string>
-    <string name="settings_sponsors_past">Ankstesni rėmėjai</string>
     <string name="snackbar_undo">Anuliuoti</string>
     <string name="snackbar_memory_deleted">Prisiminimas ištrintas</string>
     <string name="snackbar_task_cancelled">Užduotis atšaukta</string>

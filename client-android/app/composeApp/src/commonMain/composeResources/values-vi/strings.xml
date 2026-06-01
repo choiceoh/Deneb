@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Giọng nói</string>
     <string name="bot_message_copy_content_description">Sao chép</string>
     <string name="settings_free_tier_title">Gói Miễn Phí</string>
-    <string name="settings_free_tier_description">Khi cơ sở người dùng phát triển, tài trợ giúp mở rộng cơ sở hạ tầng, tăng giới hạn yêu cầu cho tất cả mọi người và duy trì hoạt động phát triển.</string>
-    <string name="settings_become_sponsor">Trở thành Nhà tài trợ GitHub</string>
-    <string name="settings_business_partnerships">Quan hệ Đối tác Kinh doanh</string>
-    <string name="settings_business_partnerships_description">Bạn muốn hiển thị logo công ty hoặc thảo luận về quan hệ đối tác chiến lược?</string>
-    <string name="settings_contact_sponsorship">Liên hệ Tài trợ Chiến lược</string>
     <string name="settings_status_error_invalid_key">Khóa API không hợp lệ</string>
     <string name="settings_status_error_quota_exhausted">Đã hết hạn mức</string>
     <string name="settings_status_error_rate_limited">Đạt giới hạn tốc độ</string>
@@ -46,7 +41,6 @@
     <string name="settings_tools_none_available">Không có công cụ nào khả dụng trên nền tảng này.</string>
     <string name="settings_tab_services">Dịch vụ</string>
     <string name="settings_tab_tools">Công cụ</string>
-    <string name="settings_tab_integrations">Tích hợp</string>
     <string name="tools_count">%1$d Công cụ</string>
     <string name="privacy_agree_prefix">Bằng cách sử dụng dịch vụ, bạn đồng ý với </string>
     <string name="privacy_policy">Chính sách quyền riêng tư</string>
@@ -146,7 +140,6 @@
     <string name="error_all_services_failed">Tất cả dịch vụ đều thất bại.</string>
     <string name="settings_heartbeat_interval">Khoảng thời gian</string>
     <string name="settings_heartbeat_active_hours">Giờ hoạt động</string>
-    <string name="settings_documentation">Tài liệu</string>
     <string name="waiting_thinking">Đang suy nghĩ…</string>
     <string name="waiting_working">Đang xử lý…</string>
     <string name="waiting_brewing">Đang chuẩn bị…</string>
@@ -207,9 +200,6 @@
     <string name="error_context_window_exceeded">Cửa sổ ngữ cảnh quá lớn cho dịch vụ dự phòng. Hãy thử bắt đầu cuộc trò chuyện mới hoặc sử dụng mô hình có cửa sổ ngữ cảnh lớn hơn.</string>
     <string name="error_insufficient_credits">Không đủ tín dụng</string>
     <string name="error_quota_exhausted">Đã hết hạn mức</string>
-    <string name="settings_request_integration_title">Yêu cầu tích hợp</string>
-    <string name="settings_request_integration_description">Bạn có ý tưởng cho tự động hóa hoặc tích hợp? Hãy cho chúng tôi biết bằng cách mở issue trên GitHub.</string>
-    <string name="settings_open_github_issue">Mở GitHub Issue</string>
     <string name="notification_channel_name">Thông báo AI</string>
     <string name="notification_channel_description">Thông báo được gửi bởi trợ lý AI</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
@@ -231,8 +221,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Thoát chế độ tương tác</string>
     <string name="interactive_ui_parsing_failed">Phân tích UI thất bại, đang thử lại…</string>
-    <string name="settings_sponsors_monthly">Nhà tài trợ hàng tháng</string>
-    <string name="settings_sponsors_past">Nhà tài trợ trước đây</string>
     <string name="snackbar_undo">Hoàn tác</string>
     <string name="snackbar_memory_deleted">Ký ức đã xóa</string>
     <string name="snackbar_task_cancelled">Tác vụ đã hủy</string>
