@@ -10,8 +10,8 @@ import kotlinx.serialization.Serializable
 // IMPORTANT: bump BOTH of these together with the Gradle versionCode/appVersion
 // every time a new APK is published, otherwise the running app can't tell it's
 // out of date. version.json's "code" must match the new APK's code.
-const val DENEB_VERSION_CODE = 135
-const val DENEB_VERSION_NAME = "2.9.12"
+const val DENEB_VERSION_CODE = 136
+const val DENEB_VERSION_NAME = "2.9.13"
 
 /** Parsed update manifest (version.json served next to the APK). */
 @Serializable
