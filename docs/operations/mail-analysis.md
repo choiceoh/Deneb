@@ -52,6 +52,11 @@ before you ask.
   prioritized report, grouped the way that day's mail calls for — by project,
   timeline, stakeholder, or urgency — leading with whatever matters most rather
   than a fixed template.
+- **Reasoning stays internal.** Polling keeps the model's extended thinking on
+  because it sharpens the analysis, but the delivered summary never shows it.
+  Reasoning is dropped on the normal path, and a guard strips any
+  chain-of-thought markers that leak into the text before it is sent — so a poll
+  summary is the conclusion, never the model thinking out loud.
 
 <Note>
   **Polling analyzes, it does not mark mail read.** The poller tracks which
