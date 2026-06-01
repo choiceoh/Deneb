@@ -381,9 +381,24 @@ class ChatViewModel(
         private val FREE_MODE_INSTANCE_IDS = FreeMode.entries.associateBy { it.instanceId }
     }
 
+    // Regenerate = re-ask the last user turn. Drop the last user+assistant pair,
+    // then re-send the same user text through the normal ask() path so it streams
+    // and shows the loading/cursor UI.
+    //
+    // The previous `dataRepository.regenerate(); ask(null)` did nothing in
+    // gateway mode: regenerate() wasn't overridden by the gateway client (it
+    // truncated a different chatHistory instance), and ask(null) sends empty text
+    // which the gateway client drops at its `sendText.isEmpty()` guard. Re-asking
+    // the captured last-user text fixes the button.
     private fun regenerate() {
-        dataRepository.regenerate()
-        ask(null)
+        if (_state.value.isLoading) return
+        val lastUser = dataRepository.chatHistory.value
+            .lastOrNull { it.role == History.Role.USER }
+            ?.content
+            ?.takeIf { it.isNotBlank() }
+            ?: return
+        dataRepository.popLastExchange()
+        ask(lastUser)
     }
 
     private fun loadConversation(id: String) {

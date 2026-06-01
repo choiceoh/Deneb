@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.8",
+        code = 131,
+        highlights = listOf(
+            "재생성(regen) 버튼 수정 — 마지막 답변을 다시 생성하도록 동작",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.7",
         code = 130,
         highlights = listOf(

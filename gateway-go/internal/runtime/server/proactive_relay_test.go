@@ -28,6 +28,26 @@ func TestResolveHome(t *testing.T) {
 	}
 }
 
+func TestMirrorsToNativeWork(t *testing.T) {
+	cases := []struct {
+		name, channel, target string
+		want                  bool
+	}{
+		{"telegram general (no thread)", "telegram", "-1003946703971", true},
+		{"telegram general (thread 0)", "telegram", "-1003946703971:thread:0", true},
+		{"telegram named topic", "telegram", "-1003946703971:thread:5", false},
+		{"non-telegram channel", "client", "main", false},
+		{"empty channel", "", "x", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mirrorsToNativeWork(tc.channel, tc.target); got != tc.want {
+				t.Fatalf("mirrorsToNativeWork(%q,%q) = %v, want %v", tc.channel, tc.target, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSplitSessionKey(t *testing.T) {
 	cases := []struct {
 		name, key, wantCh, wantTgt string

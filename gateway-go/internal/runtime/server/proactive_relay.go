@@ -96,8 +96,40 @@ func (d proactiveRelayDeps) relay(ctx context.Context, sessionKey, content strin
 			d.logger.Error("proactive relay: transcript append failed",
 				"sessionKey", sessionKey, "error", err)
 		}
+		// Mirror into the native client's 업무 topic. The Android client reads
+		// the General/업무 forum thread (threadID 0, i.e. no ":thread:" suffix)
+		// from the "client:main" session, separate from the Telegram-keyed
+		// transcript above. Surfaces proactive reports (morning-letter,
+		// email-analysis) in the app's 업무 chat in addition to Telegram —
+		// no second send, no LLM. Named topics (코딩/잡담) are excluded so work
+		// reports don't pollute them. See DenebGatewayClient.topicSessionKey:
+		// threadId "0" → "client:main".
+		if mirrorsToNativeWork(channel, target) {
+			if err := d.transcriptStore.Append(nativeWorkSessionKey, msg); err != nil && d.logger != nil {
+				d.logger.Error("proactive relay: native mirror append failed",
+					"sessionKey", nativeWorkSessionKey, "error", err)
+			}
+		}
 	}
 	return true, nil
+}
+
+// nativeWorkSessionKey is the session the Android client's 업무 (General) topic
+// reads — mirror target for proactive reports so they appear in the app's work
+// chat alongside Telegram. Kept in sync with DenebGatewayClient.topicSessionKey
+// (threadId "0" → "client:main").
+const nativeWorkSessionKey = "client:main"
+
+// mirrorsToNativeWork reports whether a relayed body should also be appended to
+// the native client's 업무 transcript. True only for a Telegram General-topic
+// target (no ":thread:" suffix, or thread 0) — named forum topics (코딩/잡담)
+// map to their own native sessions and must not receive work reports.
+func mirrorsToNativeWork(channel, target string) bool {
+	if channel != "telegram" {
+		return false
+	}
+	_, threadPart := splitTelegramTarget(target)
+	return threadPart == "" || threadPart == "0"
 }
 
 // splitSessionKey parses "channel:target" (e.g. "telegram:7074071666").

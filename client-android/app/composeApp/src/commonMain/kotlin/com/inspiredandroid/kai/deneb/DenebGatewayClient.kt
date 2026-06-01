@@ -215,6 +215,17 @@ class DenebGatewayClient(
         _chatHistory.value = emptyList()
     }
 
+    // Drop the last user message and everything after it (its assistant reply).
+    // The gateway client renders from its own [_chatHistory], so the base
+    // implementation — which mutates RemoteDataRepository's separate flow — has
+    // no visible effect here. Used by regenerate() before it re-asks.
+    override fun popLastExchange() {
+        _chatHistory.update { history ->
+            val lastUserIndex = history.indexOfLast { it.role == History.Role.USER }
+            if (lastUserIndex >= 0) history.take(lastUserIndex) else history
+        }
+    }
+
     override fun startNewChat() {
         _chatHistory.value = emptyList()
         // Scope the fresh conversation to the active topic so its transcript and
