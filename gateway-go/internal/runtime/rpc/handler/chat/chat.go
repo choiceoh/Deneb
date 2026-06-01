@@ -7,6 +7,7 @@ package chat
 import (
 	"context"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	chatpkg "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -30,6 +31,11 @@ type Deps struct {
 	// Hotwords supplies proper-noun bias (wiki people/companies/domain terms)
 	// for audio-capture transcription. Optional; nil or "" means no bias.
 	Hotwords func() string
+	// EnrichContacts merges a shared address book into EXISTING wiki 사람 pages —
+	// it creates no pages, only enriches people already in the wiki with their
+	// phone/email/org (native-client contacts sync). Optional; nil disables
+	// miniapp.capture.contacts.
+	EnrichContacts func(contactsJSON []byte) (wiki.ContactEnrichResult, error)
 }
 
 // BtwDeps holds the dependencies for the chat.btw side-question RPC method.

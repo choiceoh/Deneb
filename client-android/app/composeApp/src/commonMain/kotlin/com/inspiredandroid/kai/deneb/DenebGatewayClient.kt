@@ -11,6 +11,7 @@ import com.inspiredandroid.kai.data.TaskStatus
 import com.inspiredandroid.kai.data.TaskTrigger
 import com.inspiredandroid.kai.data.UiSubmission
 import com.inspiredandroid.kai.httpClient
+import com.inspiredandroid.kai.contacts.ContactData
 import com.inspiredandroid.kai.ui.chat.History
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.ic_service_anthropic
@@ -1059,6 +1060,41 @@ class DenebGatewayClient(
 
     @Serializable
     private data class CaptureAudioPayload(val text: String = "")
+
+    /**
+     * Sync the device address book into the gateway. The gateway enriches ONLY the
+     * people already in its wiki (it creates no pages) with phone/email/org — so a
+     * sync both sharpens ASR proper-noun bias and powers "whose number is this?"
+     * lookups, without uploading the whole phone book as new entries. Runs one
+     * gateway turn and shows the Korean summary in the chat transcript.
+     */
+    suspend fun captureContacts(contacts: List<ContactData>) {
+        if (clientToken.isEmpty() || contacts.isEmpty()) return
+        _chatHistory.update { it + History(role = History.Role.USER, content = "📇 주소록 ${contacts.size}개 동기화 중…") }
+        val reply = runCatching {
+            val payload = callRpc<CaptureContactsPayload>(
+                "miniapp.capture.contacts",
+                buildJsonObject {
+                    putJsonArray("contacts") {
+                        contacts.forEach { contact ->
+                            addJsonObject {
+                                put("name", contact.name)
+                                putJsonArray("phones") { contact.phones.forEach { add(it) } }
+                                putJsonArray("emails") { contact.emails.forEach { add(it) } }
+                                put("org", contact.org)
+                            }
+                        }
+                    }
+                    put("sessionKey", sessionKey)
+                },
+            )
+            payload?.text?.ifBlank { null } ?: "주소록 동기화에 실패했습니다."
+        }.getOrElse { "⚠️ ${it.message ?: "주소록 동기화 실패"}" }
+        _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
+    }
+
+    @Serializable
+    private data class CaptureContactsPayload(val text: String = "")
 
     private suspend fun send(message: String): GatewayReply {
         if (clientToken.isEmpty()) {

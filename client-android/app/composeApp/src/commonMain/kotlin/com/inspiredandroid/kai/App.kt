@@ -53,8 +53,10 @@ import com.inspiredandroid.kai.deneb.DenebCronScreen
 import com.inspiredandroid.kai.deneb.DenebTopicDocScreen
 import com.inspiredandroid.kai.deneb.DenebWikiPageScreen
 import com.inspiredandroid.kai.tools.CalendarPermissionController
+import com.inspiredandroid.kai.tools.ContactsPermissionController
 import com.inspiredandroid.kai.tools.NotificationPermissionController
 import com.inspiredandroid.kai.tools.SetupCalendarPermissionHandler
+import com.inspiredandroid.kai.tools.SetupContactsPermissionHandler
 import com.inspiredandroid.kai.tools.SetupNotificationPermissionHandler
 import com.inspiredandroid.kai.tools.SetupSmsPermissionHandler
 import com.inspiredandroid.kai.tools.SetupSmsSendPermissionHandler
@@ -207,6 +209,9 @@ private fun AppContent(
 
     val notificationPermissionController = koinInject<NotificationPermissionController>()
     SetupNotificationPermissionHandler(notificationPermissionController)
+
+    val contactsPermissionController = koinInject<ContactsPermissionController>()
+    SetupContactsPermissionHandler(contactsPermissionController)
 
     val smsPermissionController = koinInject<SmsPermissionController>()
     SetupSmsPermissionHandler(smsPermissionController)

@@ -56,6 +56,8 @@ import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.data.AppSettings
 import com.inspiredandroid.kai.data.NotificationRecord
 import com.inspiredandroid.kai.data.NotificationStore
+import com.inspiredandroid.kai.contacts.ContactsReader
+import com.inspiredandroid.kai.tools.ContactsPermissionController
 import com.inspiredandroid.kai.tools.NotificationListenerController
 import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.handCursor
@@ -264,9 +266,84 @@ private fun GatewayTab(
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(if (checking) "확인 중…" else "업데이트 확인") }
         }
+        val contactsPermission = koinInject<ContactsPermissionController>()
+        val contactsReader = koinInject<ContactsReader>()
+        // Hidden on builds that don't declare READ_CONTACTS (everything but the
+        // Android foss flavor): isSupported() probes the merged manifest.
+        if (contactsReader.isSupported()) {
+            ContactsSyncCard(denebClient, contactsPermission, contactsReader)
+        }
     }
     if (showPatchNotes) {
         PatchNotesSheet(onDismiss = { showPatchNotes = false })
+    }
+}
+
+/**
+ * "주소록 동기화" card: requests READ_CONTACTS, reads the device address book, and
+ * ships it to the gateway. The gateway enriches only people already in its wiki
+ * (phone/email/org) — it never creates pages — so this sharpens ASR proper-noun
+ * bias and "whose number is this?" lookups. The reply lands in the chat transcript.
+ */
+@Composable
+private fun ContactsSyncCard(
+    denebClient: DenebGatewayClient?,
+    permission: ContactsPermissionController,
+    reader: ContactsReader,
+) {
+    val scope = rememberCoroutineScope()
+    var syncing by remember { mutableStateOf(false) }
+    var syncMsg by remember { mutableStateOf<String?>(null) }
+    SettingsCard {
+        Text(
+            "주소록 동기화",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "이 기기 연락처 중 위키에 이미 등록된 인물의 전화·이메일·회사를 보강합니다. " +
+                "회의 전사 고유명사 교정과 인물 조회에 쓰입니다. 전체 주소록을 새로 저장하지는 않습니다.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = {
+                val c = denebClient ?: return@Button
+                scope.launch {
+                    syncing = true
+                    syncMsg = null
+                    val granted = permission.requestPermission()
+                    if (!granted) {
+                        syncMsg = "연락처 권한이 거부되었습니다."
+                        syncing = false
+                        return@launch
+                    }
+                    val contacts = reader.readAll()
+                    if (contacts.isEmpty()) {
+                        syncMsg = "읽을 연락처가 없습니다."
+                        syncing = false
+                        return@launch
+                    }
+                    c.captureContacts(contacts)
+                    syncMsg = "${contacts.size}개 연락처를 게이트웨이로 보냈습니다. 결과는 대화에 표시됩니다."
+                    syncing = false
+                }
+            },
+            enabled = !syncing && denebClient != null,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(if (syncing) "동기화 중…" else "주소록 동기화") }
+        val msg = syncMsg
+        if (msg != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                msg,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

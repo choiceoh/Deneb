@@ -13,6 +13,15 @@
     <uses-permission android:name="android.permission.SEND_SMS"/>
 
     <!--
+      Contacts read is FOSS-only for the same privacy reason as SMS. It enriches
+      people already in the wiki (phone/email/org) and feeds the ASR proper-noun
+      bias; it never uploads the whole address book as new entries. The feature
+      gates itself at runtime by probing for READ_CONTACTS in the merged manifest,
+      so the Play Store variant never shows it.
+    -->
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
+
+    <!--
       Notification reading is FOSS-only for the same reason as SMS: Play Store policy
       restricts BIND_NOTIFICATION_LISTENER_SERVICE to a narrow set of approved use
       cases. The feature gates itself at runtime by probing for the listener service

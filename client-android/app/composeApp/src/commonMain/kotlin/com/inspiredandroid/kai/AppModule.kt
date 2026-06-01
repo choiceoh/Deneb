@@ -18,11 +18,13 @@ import com.inspiredandroid.kai.deneb.DenebGatewayClient
 import com.inspiredandroid.kai.email.EmailPoller
 import com.inspiredandroid.kai.mcp.McpServerManager
 import com.inspiredandroid.kai.network.Requests
+import com.inspiredandroid.kai.contacts.ContactsReader
 import com.inspiredandroid.kai.notifications.NotificationReader
 import com.inspiredandroid.kai.sms.SmsPoller
 import com.inspiredandroid.kai.sms.SmsReader
 import com.inspiredandroid.kai.sms.SmsSender
 import com.inspiredandroid.kai.tools.CalendarPermissionController
+import com.inspiredandroid.kai.tools.ContactsPermissionController
 import com.inspiredandroid.kai.tools.NotificationListenerController
 import com.inspiredandroid.kai.tools.NotificationPermissionController
 import com.inspiredandroid.kai.tools.SmsPermissionController
@@ -38,6 +40,8 @@ import org.koin.dsl.module
 
 val appModule = module {
     single<CalendarPermissionController> { CalendarPermissionController() }
+    single<ContactsPermissionController> { ContactsPermissionController() }
+    single<ContactsReader> { ContactsReader() }
     single<NotificationPermissionController> { NotificationPermissionController() }
     single<SmsPermissionController> { SmsPermissionController() }
     single<SmsSendPermissionController> { SmsSendPermissionController() }
