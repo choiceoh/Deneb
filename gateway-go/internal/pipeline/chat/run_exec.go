@@ -996,6 +996,17 @@ func buildAgentConfig(
 			ctx = WithToolPreset(ctx, sessionToolPreset)
 			ctx = WithDeferredActivation(ctx, deferredActivation)
 			ctx = WithSpawnFlag(ctx, spawnFlag)
+			// Cron/scheduled runs deliver their final text via the run-completion
+			// layer, so an in-loop message-tool send is a benign no-op rather than
+			// an outage. Without this flag on the tool context, the message tool
+			// returns an error the model translates into a "전송이 안 됐네요, 직접
+			// 전달드릴게요" apology that then leaks into the delivered report.
+			// runAgentAsync sets this on its own ctx, but the SendSync/cron path
+			// reaches RunAgent only through this OnTurnInit — so it must be set
+			// here too. See message.go's AutoDeliveryFromContext branch.
+			if params.AutoDeliveredOutput {
+				ctx = WithAutoDelivery(ctx)
+			}
 			return ctx
 		},
 		DynamicToolsProvider: func() []llm.Tool {
