@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.18",
+        code = 141,
+        highlights = listOf(
+            "모델 아이콘 추가 — Qwen·StepFun·Xiaomi MiMo 브랜드 마크가 모델 전환기에 표시",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.17",
         code = 140,
         highlights = listOf(
