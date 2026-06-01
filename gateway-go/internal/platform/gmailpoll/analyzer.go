@@ -15,17 +15,22 @@ import (
 // DefaultPrompt is the default email analysis prompt.
 //
 // This is the single-email, no-tools analysis path (autonomous Gmail poll).
-// It mirrors the email-analysis skill's lens, scoped to what one email allows:
-// summary, stakeholders, risk/deadline flags, next steps.
-const DefaultPrompt = `다음 이메일을 업무 관점에서 분석해주세요:
+// It mirrors the email-analysis skill's *stance* (not a fixed form): the email
+// decides what leads and how deep to go. The lens — why now, stakeholders,
+// risk/deadline, next steps — is offered as things worth considering, not as
+// mandatory sections to fill in order.
+const DefaultPrompt = `다음 이메일을 업무 관점에서 깊이 읽어주세요. 이건 채워야 할
+양식이 아니라 분석 자세입니다.
 
-1. 핵심 요약 — 발신자가 무엇을 요청/통보하는지 2-3문장
-2. 이해관계자 — 핵심 인물과 직책·역할, 의사결정권자
-3. 중요도 — 높음/보통/낮음 (판단 근거 한 줄)
-4. 리스크·기한 — 결제 기한, 마감일, 금액, 미해결 이슈가 있으면 ⚠️로 표시
-5. 다음 단계 — 필요한 조치 1-3개, 가능하면 담당자 명시
+먼저 이 메일이 왜 지금 왔는지 생각하고, 그 사안에서 가장 중요한 것부터 풀어내세요.
+다루면 좋은 것들: 발신자가 무엇을 요청·통보하는지, 핵심 인물과 의사결정권자,
+결제 기한·마감·금액처럼 시간과 돈에 민감한 것(있으면 ⚠️로 표시), 그리고 추측이
+아닌 구체적인 다음 행동.
 
-간결하게 핵심만, 한국어로 작성해주세요.`
+무엇을 앞세우고 어떻게 묶을지는 그 메일이 정합니다. 고정된 섹션 틀에 끼워 맞추지
+말고 — 어떤 메일은 한 사람의 결정이 핵심이고, 어떤 메일은 타임라인이 전부입니다 —
+짧으면 짧게 복잡하면 깊게 쓰세요. 근거 있는 것만 말하고, 모르는 건 추측으로 메우지
+마세요. 한국어로 작성합니다.`
 
 const analysisSystemPrompt = "당신은 업무 메일 분석 어시스턴트입니다. 제공된 이메일을 업무 관점에서 분석합니다 — 맥락, 이해관계자, 리스크·기한, 다음 단계."
 

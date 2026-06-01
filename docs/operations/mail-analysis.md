@@ -49,8 +49,9 @@ before you ask.
   per cycle, every 30 minutes. All three are configurable (see below).
 - **Single vs batch.** A single new message gets an individual analysis. When
   several arrive together, the poller analyzes each and then synthesizes one
-  prioritized report grouped by project, with urgency markers (urgent /
-  important / normal / informational).
+  prioritized report, grouped the way that day's mail calls for — by project,
+  timeline, stakeholder, or urgency — leading with whatever matters most rather
+  than a fixed template.
 
 <Note>
   **Polling analyzes, it does not mark mail read.** The poller tracks which
