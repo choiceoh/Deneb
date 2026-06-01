@@ -4,7 +4,6 @@ package com.inspiredandroid.kai.ui.chat.composables
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,10 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Tag
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,10 +22,6 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -63,46 +55,85 @@ data class CaptureActions(
 val LocalCaptureActions = compositionLocalOf<CaptureActions?> { null }
 
 /**
- * Top-bar topic selector: an icon-only button (a hashtag, matching the other
- * top-bar icons) that opens a dropdown of the Telegram forum topics
- * (업무 / 잡담 / 코딩) with the active one check-marked. Renders nothing with
- * fewer than two topics.
+ * Top-bar topic button: an icon-only hashtag (matching the other top-bar icons)
+ * that opens the right-side topic drawer ([DenebTopicDrawerSheet]). The caller
+ * decides whether to show it at all — it is only meaningful with two or more
+ * topics.
  */
 @Composable
-fun DenebTopicMenu(
+fun DenebTopicButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(onClick = onClick, modifier = modifier.handCursor()) {
+        Icon(
+            imageVector = Icons.Filled.Tag,
+            contentDescription = "토픽 선택",
+            tint = MaterialTheme.colorScheme.onBackground,
+        )
+    }
+}
+
+/**
+ * The right-side drawer that picks the active Telegram forum topic
+ * (업무 / 잡담 / 코딩). Same typographic idiom as the left navigation drawer —
+ * big ultralight rows, no icons, no dividers — with the active topic rendered in
+ * full weight so it reads as a place you already are, not a button to press.
+ * Opened from the top-bar hashtag; the caller mirrors it to the right edge with a
+ * layout-direction flip.
+ */
+@Composable
+fun DenebTopicDrawerSheet(
     topics: ImmutableList<TopicTab>,
     selectedKey: String?,
     onSelectTopic: (String) -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    if (topics.size < 2) return
-    var expanded by remember { mutableStateOf(false) }
-    Box(modifier) {
-        IconButton(onClick = { expanded = true }, modifier = Modifier.handCursor()) {
-            Icon(
-                imageVector = Icons.Filled.Tag,
-                contentDescription = "토픽 선택",
-                tint = MaterialTheme.colorScheme.onBackground,
+    ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.background) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 28.dp, vertical = 40.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = "topics",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Normal,
+                letterSpacing = 0.01.em,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 14.dp),
             )
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             topics.forEach { topic ->
-                DropdownMenuItem(
-                    text = { Text(topic.label) },
-                    onClick = {
-                        onSelectTopic(topic.key)
-                        expanded = false
-                    },
-                    leadingIcon = {
-                        if (topic.key == selectedKey) {
-                            Icon(Icons.Filled.Check, contentDescription = null)
-                        }
-                    },
-                    modifier = Modifier.handCursor(),
-                )
+                TopicMenuItem(
+                    label = topic.label,
+                    selected = topic.key == selectedKey,
+                ) { onSelectTopic(topic.key) }
             }
         }
     }
+}
+
+@Composable
+private fun TopicMenuItem(label: String, selected: Boolean, onClick: () -> Unit) {
+    val haptics = rememberHaptics()
+    Text(
+        text = label,
+        fontSize = 32.sp,
+        lineHeight = 42.sp,
+        fontWeight = if (selected) FontWeight.Normal else FontWeight.ExtraLight,
+        letterSpacing = (-0.03).em,
+        color = if (selected) {
+            MaterialTheme.colorScheme.onBackground
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { haptics.tap(); onClick() }
+            .handCursor()
+            .padding(vertical = 5.dp),
+    )
 }
 
 /**
