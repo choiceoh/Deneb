@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.16",
+        code = 139,
+        highlights = listOf(
+            "모델 전환기에 모델별 실제 브랜드 아이콘(흑백) — Claude·GPT·Gemini·Kimi·DeepSeek 등을 한눈에 구분",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.15",
         code = 138,
         highlights = listOf(

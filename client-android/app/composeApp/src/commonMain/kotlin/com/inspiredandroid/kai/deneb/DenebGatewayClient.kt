@@ -13,7 +13,19 @@ import com.inspiredandroid.kai.data.UiSubmission
 import com.inspiredandroid.kai.httpClient
 import com.inspiredandroid.kai.ui.chat.History
 import kai.composeapp.generated.resources.Res
+import kai.composeapp.generated.resources.ic_service_anthropic
+import kai.composeapp.generated.resources.ic_service_deepseek
+import kai.composeapp.generated.resources.ic_service_gemini
 import kai.composeapp.generated.resources.ic_service_litert
+import kai.composeapp.generated.resources.ic_service_longcat
+import kai.composeapp.generated.resources.ic_service_minimax
+import kai.composeapp.generated.resources.ic_service_mistral
+import kai.composeapp.generated.resources.ic_service_moonshot
+import kai.composeapp.generated.resources.ic_service_nvidia
+import kai.composeapp.generated.resources.ic_service_openai
+import kai.composeapp.generated.resources.ic_service_openai_compatible
+import kai.composeapp.generated.resources.ic_service_xai
+import kai.composeapp.generated.resources.ic_service_zai
 import io.github.vinceglb.filekit.PlatformFile
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
@@ -522,8 +534,36 @@ class DenebGatewayClient(
                 serviceId = "deneb",
                 serviceName = model.display,
                 modelId = model.id,
-                icon = Res.drawable.ic_service_litert,
+                icon = denebModelIcon(model),
             )
+        }
+    }
+
+    /**
+     * Best-effort brand icon for a gateway model. The gateway exposes no provider
+     * field per model, so match well-known families on the id + display string.
+     * Rendered monochrome (the switcher tints every icon), so these read as the
+     * black-and-white brand marks rather than a single generic chip. Unknown or
+     * local models fall back to the generic OpenAI-compatible mark.
+     */
+    private fun denebModelIcon(model: ModelOption) = with("${model.id} ${model.display}".lowercase()) {
+        when {
+            contains("claude") || contains("anthropic") -> Res.drawable.ic_service_anthropic
+            contains("gemini") || contains("gemma") -> Res.drawable.ic_service_gemini
+            contains("gpt") || contains("openai") || contains("chatgpt") ||
+                contains("o1-") || contains("o3") || contains("o4") -> Res.drawable.ic_service_openai
+            contains("deepseek") -> Res.drawable.ic_service_deepseek
+            contains("kimi") || contains("moonshot") -> Res.drawable.ic_service_moonshot
+            contains("mistral") || contains("mixtral") || contains("magistral") ||
+                contains("ministral") || contains("codestral") || contains("devstral") -> Res.drawable.ic_service_mistral
+            contains("grok") || contains("x-ai") || contains("xai") -> Res.drawable.ic_service_xai
+            contains("glm") || contains("zai") || contains("z-ai") || contains("chatglm") -> Res.drawable.ic_service_zai
+            contains("minimax") -> Res.drawable.ic_service_minimax
+            contains("longcat") -> Res.drawable.ic_service_longcat
+            contains("llama") || contains("nemotron") || contains("nvidia") -> Res.drawable.ic_service_nvidia
+            // Local/on-device runtimes (vLLM-served small models) keep the edge mark.
+            contains("litert") -> Res.drawable.ic_service_litert
+            else -> Res.drawable.ic_service_openai_compatible
         }
     }
 
