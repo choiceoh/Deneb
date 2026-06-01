@@ -1,5 +1,7 @@
 package com.inspiredandroid.kai.deneb
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -11,11 +13,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -353,6 +357,15 @@ private fun ModelTab(client: DenebGatewayClient) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        // Legend for the per-model response-status dot.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            HealthLegendItem("online", "응답 가능")
+            HealthLegendItem("offline", "응답 없음")
+            HealthLegendItem("unknown", "미확인")
+        }
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             roleLabels.forEachIndexed { i, (key, label) ->
                 SegmentedButton(
@@ -379,14 +392,19 @@ private fun ModelTab(client: DenebGatewayClient) {
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        if (isCurrent) "● " else "○ ",
-                        color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    // Color = response status (online/offline/unknown); filled = the
+                    // model currently selected for this role, ring = not selected.
+                    HealthDot(health = model.health, selected = isCurrent)
+                    Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(model.display, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
                         Text(
-                            model.id + if (model.health.equals("offline", ignoreCase = true)) "  ·  오프라인" else "",
+                            model.display,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            model.id + modelHealthSuffix(model.health),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -401,6 +419,43 @@ private fun ModelTab(client: DenebGatewayClient) {
             }
         }
     }
+}
+
+// Response-status dot. Color = health (online/offline/unknown); a filled circle
+// marks the model currently selected for the role, a ring marks the rest.
+@Composable
+private fun HealthDot(health: String, selected: Boolean) {
+    val color = modelHealthColor(health)
+    val base = Modifier.size(10.dp)
+    Box(
+        modifier = if (selected) {
+            base.clip(CircleShape).background(color)
+        } else {
+            base.border(1.5.dp, color, CircleShape)
+        },
+    )
+}
+
+@Composable
+private fun HealthLegendItem(health: String, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).clip(CircleShape).background(modelHealthColor(health)))
+        Spacer(Modifier.width(5.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+// online → green, offline → red, unknown/unprobed → amber.
+private fun modelHealthColor(health: String): Color = when (health.lowercase()) {
+    "online" -> Color(0xFF4CAF50)
+    "offline" -> Color(0xFFE53935)
+    else -> Color(0xFFFFB300)
+}
+
+private fun modelHealthSuffix(health: String): String = when (health.lowercase()) {
+    "offline" -> "  ·  응답 없음"
+    "unknown", "" -> "  ·  상태 미확인"
+    else -> ""
 }
 
 @Composable

@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.17",
+        code = 140,
+        highlights = listOf(
+            "설정 모델 탭에 응답 상태 색상 점 — 초록=응답 가능, 빨강=응답 없음, 노랑=미확인 (채움=현재 선택)",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.16",
         code = 139,
         highlights = listOf(
