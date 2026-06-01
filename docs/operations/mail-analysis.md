@@ -62,9 +62,9 @@ before you ask.
   **Polling analyzes, it does not mark mail read.** The poller tracks which
   messages it has already seen with its own list and never touches Gmail's
   UNREAD label, so a polled-and-analyzed message still shows as unread in your
-  inbox. Marking read, archiving, and trashing happen only through Mini App
-  actions. In the Mini App's mail list, unread messages carry a single circle
-  marker.
+  inbox. Marking read, archiving, and trashing happen only through the native
+  client. In the native client's mail list, unread messages carry a single
+  circle marker.
 </Note>
 
 Where the analysis is delivered (which chat or forum topic) is covered in
@@ -75,7 +75,7 @@ Where the analysis is delivered (which chat or forum topic) is covered in
 **Persistence.** Each analyzed message is stored in two places, keyed by
 message ID: a disk cache under the Deneb data directory, and a wiki page at
 `mail-analyses/<message-id>.md` (category `mail-analysis`, type `log`). Because
-of this, a polled message opens in the Mini App already analyzed, with no tap
+of this, a polled message opens in the native client already analyzed, with no tap
 required. The cache carries a prompt version, so when the analysis prompt
 changes the old entries miss and are re-analyzed.
 
@@ -119,7 +119,7 @@ per-message analyses as Markdown.
 <Warning>
   The `gmail` tool path does not wire up the project candidate list, so
   analyses run through the tool do **not** include related-project citations.
-  The Mini App and the background poller do. If citations matter, prefer those
+  The native client and the background poller do. If citations matter, prefer those
   paths.
 </Warning>
 

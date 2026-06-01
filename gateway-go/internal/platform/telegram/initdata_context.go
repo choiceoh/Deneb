@@ -6,9 +6,9 @@ import "context"
 // so callers cannot accidentally collide with another package's context keys.
 type initDataContextKey struct{}
 
-// WithInitDataContext returns a copy of ctx carrying the verified InitData.
-// The HTTP middleware in front of the Mini App RPC endpoint calls this after
-// VerifyInitData succeeds; downstream RPC handlers then retrieve it with
+// WithInitDataContext returns a copy of ctx carrying the operator InitData.
+// The HTTP bridge in front of the miniapp.* RPC endpoint calls this after
+// client-token auth succeeds; downstream RPC handlers then retrieve it with
 // InitDataFromContext.
 func WithInitDataContext(ctx context.Context, data *InitData) context.Context {
 	if data == nil {
