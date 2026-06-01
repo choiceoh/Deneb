@@ -49,61 +49,45 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 	if err != nil {
 		return "", err
 	}
-	// Pick the deliverable:
-	//   - Default: the final turn's text (result.Text). This is what a natural
-	//     end_turn run is expected to produce.
-	//   - Fallback A (empty final text): the agent ended with NO_REPLY or a bare
-	//     acknowledgement. Use AllText so the earlier body survives.
-	//   - Fallback B (truncated): stopReason != end_turn (max_turns, max_tokens)
-	//     means the last turn is mid-stream planning like "이제 위키 업데이트하고
-	//     텔레그램으로 전송할게", not the deliverable. Use AllText.
-	//   - Fallback C (final text is much shorter than AllText): the agent
-	//     composed the body in an earlier turn and closed with a short status
-	//     line like "프로젝트 위키 4개 업데이트 완료" while turning an
-	//     end_turn stop. We saw exactly this in production (19:35
-	//     email-analysis-full delivered a 131-byte wiki-update status instead
-	//     of the 922-char analysis). Prefer AllText whenever it is meaningfully
-	//     larger — the 3× threshold keeps normal single-turn replies on Text.
+	// Pick the deliverable. Prefer DeliverableText: it accumulates every
+	// substantial answer turn (a detailed report plus its wrap-up) while
+	// dropping the short "이제 위키 검색부터 할게요" progress narration the model
+	// emits before tool calls. That working narration was leaking into cron
+	// reports — the final turn alone is often a short status ("위키 업데이트 완료")
+	// so the old heuristic fell back to the full AllText, narration and all.
+	// Fall back to the final turn, then the raw accumulation, only when no
+	// deliverable survived (e.g. a run aborted after emitting only narration).
 	// NO_REPLY is stripped so the marker does not leak into Telegram.
 	text := strings.TrimSpace(result.Text)
+	deliverable := strings.TrimSpace(tokens.StripSilentToken(result.DeliverableText, tokens.SilentReplyToken))
 	allText := strings.TrimSpace(tokens.StripSilentToken(result.AllText, tokens.SilentReplyToken))
-	truncated := result.StopReason != "" && result.StopReason != "end_turn"
-	shortWrapUp := allText != "" && len(allText) >= 3*len(text)+200
-	source := "text"
-	output := text
-	if text == "" || truncated || shortWrapUp {
-		if allText != "" {
-			source = "allText"
-			output = allText
-		} else if text == "" {
-			source = "empty"
-		}
+	source := "deliverable"
+	output := deliverable
+	switch {
+	case output != "":
+		// keep the narration-free deliverable
+	case text != "":
+		source = "text"
+		output = text
+	case allText != "":
+		source = "allText"
+		output = allText
+	default:
+		source = "empty"
 	}
-	// Log the delivery choice so postmortems can see (a) which bucket the run
-	// landed in and (b) whether the threshold heuristic fired. Without this,
-	// diagnosing "why did the user get a short wrap-up instead of the body"
-	// requires reconstructing from per-turn tokens alone.
+	// Log the delivery choice so postmortems can see which bucket the run landed
+	// in. Without this, diagnosing "why did the user get a short wrap-up instead
+	// of the body" requires reconstructing from per-turn tokens alone.
 	logger := a.logger
 	if logger == nil {
 		logger = slog.Default()
-	}
-	reason := "default"
-	switch {
-	case text == "" && source == "allText":
-		reason = "empty-text"
-	case truncated:
-		reason = "truncated:" + result.StopReason
-	case shortWrapUp:
-		reason = "short-wrap-up"
-	case source == "empty":
-		reason = "both-empty"
 	}
 	logger.Info("cron agent output chosen",
 		"jobId", params.AgentID,
 		"sessionKey", params.SessionKey,
 		"source", source,
-		"reason", reason,
 		"textLen", len(text),
+		"deliverableLen", len(deliverable),
 		"allTextLen", len(allText),
 		"chosenLen", len(output),
 		"stopReason", result.StopReason)
