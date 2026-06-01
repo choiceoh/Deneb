@@ -4,12 +4,41 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
+
+func TestIsInterimNarration(t *testing.T) {
+	atThreshold := strings.Repeat("가", deliverableNarrationMaxRunes)
+	underThreshold := strings.Repeat("나", deliverableNarrationMaxRunes-1)
+	cases := []struct {
+		name      string
+		text      string
+		toolCalls int
+		want      bool
+	}{
+		{"short narration alongside tools", "위키 맥락 확보 완료. 이제 메일 읽을게요.", 6, true},
+		{"empty text alongside tools", "", 3, true},
+		{"terminal turn (no tools) is answer", "위키에 기록했습니다.", 0, false},
+		{"long content with tools is answer (report saved to wiki)", atThreshold, 2, false},
+		{"long content no tools is answer", atThreshold, 0, false},
+		{"one rune under threshold with tools is narration", underThreshold, 1, true},
+		{"CJK counted by rune not byte", "가나다라마바사", 1, true}, // 7 runes, 21 bytes
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := isInterimNarration(c.text, c.toolCalls); got != c.want {
+				t.Fatalf("isInterimNarration(%d runes, %d tools) = %v, want %v",
+					utf8.RuneCountInString(c.text), c.toolCalls, got, c.want)
+			}
+		})
+	}
+}
 
 func TestExtractThinkingText_Basic(t *testing.T) {
 	blocks := []llm.ContentBlock{

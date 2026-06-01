@@ -176,12 +176,19 @@ type ToolActivity struct {
 
 // AgentResult is the outcome of an agent run.
 type AgentResult struct {
-	Text       string // last turn's text (for channel reply — avoids duplicating streamed content)
-	AllText    string // accumulated text from ALL turns (for transcript persistence + session memory)
-	Thinking   string // accumulated thinking text from ALL turns (interleaved + final). Empty when extended thinking is disabled.
-	StopReason string // "end_turn", "max_tokens", "timeout", "aborted", "max_turns", "max_turns_graceful"
-	Usage      llm.TokenUsage
-	Turns      int
+	Text    string // last turn's text (for channel reply — avoids duplicating streamed content)
+	AllText string // accumulated text from ALL turns (for transcript persistence + session memory)
+	// DeliverableText is AllText minus the brief progress narration a model emits
+	// alongside tool calls ("이제 위키 검색부터 할게요"). A turn that calls tools and
+	// says only a short line is interim narration, not the answer; a terminal turn
+	// (no tools) or a long content turn is the deliverable. Used by proactive/cron
+	// delivery so multi-turn reports don't ship the agent's working narration. See
+	// the accumulation in executor.go and deliverableNarrationMaxRunes.
+	DeliverableText string
+	Thinking        string // accumulated thinking text from ALL turns (interleaved + final). Empty when extended thinking is disabled.
+	StopReason      string // "end_turn", "max_tokens", "timeout", "aborted", "max_turns", "max_turns_graceful"
+	Usage           llm.TokenUsage
+	Turns           int
 
 	// BudgetExhaustedInjected is true once the one-time grace-call user message
 	// has been appended to the history after MaxTurns exhaustion. Guards against

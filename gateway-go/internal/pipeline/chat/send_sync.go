@@ -12,38 +12,42 @@ import (
 
 // SyncResult holds the outcome of a synchronous agent run.
 type SyncResult struct {
-	Text         string
-	AllText      string // accumulated text from all turns; used by cron delivery as a fallback when the final turn is NO_REPLY
-	Model        string
-	FellBack     bool // true when the model fallback chain fired (Model is the model that actually answered)
-	InputTokens  int
-	OutputTokens int
-	StopReason   string // "end_turn", "max_tokens", "tool_use", etc.
+	Text    string
+	AllText string // accumulated text from all turns; used by cron delivery as a fallback when the final turn is NO_REPLY
+	// DeliverableText is AllText minus the brief progress narration the model
+	// emits alongside tool calls. Preferred by proactive/cron delivery so a
+	// multi-turn report ships its answer turns without the "이제 위키 검색부터
+	// 할게요" working narration. See agent.AgentResult.DeliverableText.
+	DeliverableText string
+	Model           string
+	FellBack        bool // true when the model fallback chain fired (Model is the model that actually answered)
+	InputTokens     int
+	OutputTokens    int
+	StopReason      string // "end_turn", "max_tokens", "tool_use", etc.
 }
 
-// BestText returns the answer to surface to the user, choosing between the
-// final-turn Text and the all-turns AllText. The final turn is often a short
-// wrap-up rather than the deliverable — e.g. when the agent writes the answer to
-// the wiki mid-run, the last turn is "위키에 기록했습니다" while the actual body
-// was produced earlier. Trusting Text alone makes the answer appear to vanish.
+// BestText returns the answer to surface to the user. It prefers DeliverableText
+// — the accumulation of every substantial answer turn with the interim
+// "이제 ~할게요" tool-call narration removed — which fixes two failure modes at
+// once: a short wrap-up final turn (the agent writes the body mid-run, then
+// closes with "위키에 기록했습니다") no longer makes the answer vanish, and the
+// working narration the model emits before tool calls never reaches the surface.
 //
-// Rules (mirroring cronChatAdapter so every surface agrees):
-//   - Text empty → AllText (the run ended on NO_REPLY / a bare ack).
-//   - Truncated (StopReason not end_turn) → AllText, since the last turn is
-//     mid-stream planning, not the deliverable.
-//   - AllText much larger than Text (short wrap-up) → AllText.
-//   - otherwise → Text (normal single-turn case; keeps gateway-side cleaning).
+// Mirrors cronChatAdapter so every proactive surface agrees:
+//   - DeliverableText present → use it (the common multi-turn case).
+//   - else Text (the final turn) → use it.
+//   - else AllText (last resort: a run that produced only narration before
+//     aborting).
 //
-// NO_REPLY is stripped from AllText so the marker never leaks to the client.
+// NO_REPLY is stripped so the marker never leaks to the client.
 func (r *SyncResult) BestText() string {
-	text := strings.TrimSpace(r.Text)
-	allText := strings.TrimSpace(StripSilentToken(r.AllText))
-	truncated := r.StopReason != "" && r.StopReason != "end_turn"
-	shortWrapUp := allText != "" && len(allText) >= 3*len(text)+200
-	if (text == "" || truncated || shortWrapUp) && allText != "" {
-		return allText
+	if d := strings.TrimSpace(StripSilentToken(r.DeliverableText)); d != "" {
+		return d
 	}
-	return text
+	if t := strings.TrimSpace(r.Text); t != "" {
+		return t
+	}
+	return strings.TrimSpace(StripSilentToken(r.AllText))
 }
 
 // SyncOptions holds optional parameters for synchronous agent runs.
@@ -201,13 +205,14 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 	// reasoning_leak.go). The block regex matches here because the full assembled
 	// text is available. TrimSpace cleans the gap a removed leading block leaves.
 	return &SyncResult{
-		Text:         strings.TrimSpace(stripReasoningLeak(result.Text)),
-		AllText:      strings.TrimSpace(stripReasoningLeak(result.AllText)),
-		Model:        resolvedModel,
-		FellBack:     result.FellBack,
-		InputTokens:  result.Usage.InputTokens,
-		OutputTokens: result.Usage.OutputTokens,
-		StopReason:   result.StopReason,
+		Text:            strings.TrimSpace(stripReasoningLeak(result.Text)),
+		AllText:         strings.TrimSpace(stripReasoningLeak(result.AllText)),
+		DeliverableText: strings.TrimSpace(stripReasoningLeak(result.DeliverableText)),
+		Model:           resolvedModel,
+		FellBack:        result.FellBack,
+		InputTokens:     result.Usage.InputTokens,
+		OutputTokens:    result.Usage.OutputTokens,
+		StopReason:      result.StopReason,
 	}, nil
 }
 

@@ -158,3 +158,43 @@ func TestSendSyncStream_StreamsDeltaAndPreservesExplicitModel(t *testing.T) {
 		t.Fatalf("deltas = %#v, want %#v", deltas, []string{"stream reply"})
 	}
 }
+
+func TestBestText(t *testing.T) {
+	cases := []struct {
+		name string
+		r    SyncResult
+		want string
+	}{
+		{
+			name: "deliverable preferred over short final-turn and raw accumulation",
+			r: SyncResult{
+				Text:            "위키 업데이트 완료.",
+				DeliverableText: "## 메일 종합 분석\n본문",
+				AllText:         "이제 위키 검색부터 할게요.\n\n## 메일 종합 분석\n본문",
+			},
+			want: "## 메일 종합 분석\n본문",
+		},
+		{
+			name: "falls back to final turn when deliverable empty",
+			r:    SyncResult{Text: "마지막 답변", DeliverableText: "", AllText: "누적"},
+			want: "마지막 답변",
+		},
+		{
+			name: "falls back to AllText when deliverable and final turn empty",
+			r:    SyncResult{Text: "", DeliverableText: "", AllText: "누적 텍스트"},
+			want: "누적 텍스트",
+		},
+		{
+			name: "strips trailing NO_REPLY from the chosen deliverable",
+			r:    SyncResult{DeliverableText: "답변 본문 " + SilentReplyToken},
+			want: "답변 본문",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.r.BestText(); got != c.want {
+				t.Fatalf("BestText() = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
