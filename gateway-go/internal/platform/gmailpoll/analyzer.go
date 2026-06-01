@@ -136,7 +136,7 @@ func AnalyzeEmail(ctx context.Context, client *llm.Client, model, prompt string,
 		}
 	}
 
-	result := strings.TrimSpace(sb.String())
+	result := strings.TrimSpace(stripReasoningLeak(sb.String()))
 	if result == "" {
 		return "", fmt.Errorf("LLM 응답이 비어있습니다")
 	}

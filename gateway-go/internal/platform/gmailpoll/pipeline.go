@@ -312,6 +312,9 @@ func synthesizeBatchReport(ctx context.Context, deps PipelineDeps, items []Batch
 
 	userPrompt := fmt.Sprintf(batchAnalysisPrompt, len(items), sb.String())
 
+	// Thinking stays ON (see synthesizeAnalysis); the reasoning just never
+	// reaches the report. thinking_delta is excluded by collectStreamText, and
+	// any leaked chain-of-thought markers are scrubbed by stripReasoningLeak.
 	req := llm.ChatRequest{
 		Model:     deps.MainModel,
 		Messages:  []llm.Message{llm.NewTextMessage("user", userPrompt)},
@@ -325,7 +328,11 @@ func synthesizeBatchReport(ctx context.Context, deps PipelineDeps, items []Batch
 		return "", fmt.Errorf("batch analysis LLM call failed: %w", err)
 	}
 
-	return collectStreamText(ctx, events)
+	report, err := collectStreamText(ctx, events)
+	if err != nil {
+		return "", err
+	}
+	return stripReasoningLeak(report), nil
 }
 
 // extractThreadContext fetches related emails and extracts thread context via local LLM.
@@ -537,6 +544,12 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	userPrompt := fmt.Sprintf(finalAnalysisPrompt, emailText, threadSection, memorySection)
 	userPrompt += projectSelectionSuffix(candidates)
 
+	// Extended thinking stays ON — reasoning improves analysis quality. The
+	// reasoning just must never reach the delivered text: properly-channeled
+	// thinking arrives as thinking_delta (collectStreamText reads only text
+	// deltas, so it is already excluded), and any chain-of-thought the local
+	// vLLM leaks into the answer body as literal [thinking]/<think> markers is
+	// scrubbed by stripReasoningLeak below.
 	req := llm.ChatRequest{
 		Model:     deps.MainModel,
 		Messages:  []llm.Message{llm.NewTextMessage("user", userPrompt)},
@@ -554,6 +567,7 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	if err != nil {
 		return AnalysisResult{}, err
 	}
+	analysis = stripReasoningLeak(analysis)
 
 	// Parse + strip the RELATED_PROJECTS tag before appending the facts
 	// block, so the tag stays at the analysis tail where the parser expects
