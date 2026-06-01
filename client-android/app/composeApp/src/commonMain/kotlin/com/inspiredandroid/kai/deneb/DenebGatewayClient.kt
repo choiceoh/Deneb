@@ -1034,7 +1034,7 @@ class DenebGatewayClient(
     @OptIn(ExperimentalEncodingApi::class)
     suspend fun captureAudio(bytes: ByteArray, mimeType: String) {
         if (clientToken.isEmpty() || bytes.isEmpty()) return
-        _chatHistory.update { it + History(role = History.Role.USER, content = "🎙️ 녹음 공유됨 (전사 중…)") }
+        _chatHistory.update { it + History(role = History.Role.USER, content = "🎙️ 녹음 공유됨 (전사·회의록 분석 중…)") }
         val reply = runCatching {
             val payload = callRpc<CaptureAudioPayload>(
                 "miniapp.capture.audio",
