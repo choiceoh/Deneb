@@ -16,7 +16,6 @@ import com.inspiredandroid.kai.data.ToolExecutor
 import com.inspiredandroid.kai.data.runMigrations
 import com.inspiredandroid.kai.deneb.DenebGatewayClient
 import com.inspiredandroid.kai.email.EmailPoller
-import com.inspiredandroid.kai.inference.createLocalInferenceEngine
 import com.inspiredandroid.kai.mcp.McpServerManager
 import com.inspiredandroid.kai.network.Requests
 import com.inspiredandroid.kai.notifications.NotificationReader
@@ -122,7 +121,10 @@ val appModule = module {
             notificationListenerController = get(),
             mcpServerManager = get(),
             sandboxController = get(),
-            localInferenceEngine = createLocalInferenceEngine(),
+            // Deneb delegates inference to the gateway. Keeping Kai's LiteRT
+            // engine cold avoids loading the on-device model stack during normal
+            // native-client startup.
+            localInferenceEngine = null,
         )
     }
     single<DataRepository> { DenebGatewayClient(get<RemoteDataRepository>(), get<AppSettings>()) }
@@ -130,16 +132,12 @@ val appModule = module {
         SplinterlandsBattleRunner(get(), get(), get<DataRepository>(), get<DaemonController>())
     }
     single<TaskScheduler> {
+        // Deneb scheduling, heartbeats, mail polling, and model work live on the
+        // gateway. The native app only needs the scheduler shell for the
+        // gateway event subscription that backs Android push notifications.
         TaskScheduler(
             get<DataRepository>(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get<EmailPoller>(),
-            get<SmsStore>(),
-            get<SmsPoller>(),
-            get<NotificationStore>(),
+            notificationStore = get<NotificationStore>(),
         )
     }
     single<DaemonController> { createDaemonController() }

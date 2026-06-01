@@ -153,10 +153,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun autoStartDaemon() {
-        if (get<DataRepository>() is DenebGatewayClient) return
-
         val daemonController: DaemonController = get()
-        if (daemonController is AndroidDaemonController && daemonController.shouldAutoStart()) {
+        val repository: DataRepository = get()
+        val shouldStart = repository is DenebGatewayClient ||
+            (daemonController is AndroidDaemonController && daemonController.shouldAutoStart())
+        if (shouldStart) {
             daemonController.start()
         }
     }

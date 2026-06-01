@@ -343,7 +343,6 @@ private fun AppContent(
                             onBack = { navController.navigateUp() },
                             onOpenTopicDoc = { name -> navController.navigate(DenebTopicDoc(name)) },
                             onOpenCron = { id -> navController.navigate(DenebCron(id)) },
-                            onOpenKaiSettings = { navController.navigate(Settings) },
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
                         )
                     }
