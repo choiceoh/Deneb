@@ -14,7 +14,6 @@
     <string name="settings_content_description">Postavke</string>
     <string name="bot_message_speech_content_description">Govor</string>
     <string name="bot_message_copy_content_description">Kopiraj</string>
-    <string name="settings_free_tier_title">Besplatna razina</string>
     <string name="settings_base_url_label">URL poslužitelja</string>
     <string name="settings_status_checking">Provjera veze...</string>
     <string name="settings_status_connected">Povezano</string>
@@ -36,8 +35,6 @@
     <string name="settings_tab_services">Usluge</string>
     <string name="settings_tab_tools">Alati</string>
     <string name="tools_count">%1$d Alati</string>
-    <string name="privacy_agree_prefix">Korištenjem usluge pristajete na </string>
-    <string name="privacy_policy">Pravila o privatnosti</string>
     <string name="tool_get_local_time_name">Dohvati lokalno vrijeme</string>
     <string name="tool_get_local_time_description">Dohvatite trenutni lokalni datum i vrijeme za tumačenje relativnih datuma</string>
     <string name="tool_get_location_name">Dohvati lokaciju</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Zadnja provjera neuspjela %1$s</string>
     <string name="settings_email_refresh">Osvježi račun</string>
     <string name="settings_add_service">Dodaj uslugu</string>
-    <string name="settings_free_fallback">Koristi kao zamjenu</string>
-    <string name="service_free_fast">Besplatno brzo</string>
-    <string name="service_free_expert">Besplatno stručnjak</string>
     <string name="settings_heartbeat">Otkucaj srca</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Ovo je automatska samoprovjera. Pregledaj svoja sjećanja i zadatke na čekanju. Ako je sve u redu i ništa ne zahtijeva pažnju, odgovori točno s: HEARTBEAT_OK\nAko nešto zahtijeva pažnju (zastarjela sjećanja, dospjeli zadaci, korisničke nadopune), pozabavi se time.</string>
     <string name="settings_heartbeat_description">Periodične samoprovjere koje omogućuju AI-ju pregled sjećanja i zadataka bez korisničkog unosa. Pokreće se svakih %1$d minuta tijekom aktivnih sati.</string>

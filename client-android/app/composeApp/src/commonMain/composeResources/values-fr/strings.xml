@@ -14,7 +14,6 @@
     <string name="settings_content_description">Paramètres</string>
     <string name="bot_message_speech_content_description">Voix</string>
     <string name="bot_message_copy_content_description">Copier</string>
-    <string name="settings_free_tier_title">Niveau Gratuit</string>
     <string name="settings_status_error_invalid_key">Clé API invalide</string>
     <string name="settings_status_error_quota_exhausted">Quota épuisé</string>
     <string name="settings_status_error_rate_limited">Limite de taux atteinte</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">Services</string>
     <string name="settings_tab_tools">Outils</string>
     <string name="tools_count">%1$d Outils</string>
-    <string name="privacy_agree_prefix">En utilisant le service, vous acceptez la </string>
-    <string name="privacy_policy">Politique de confidentialité</string>
     <string name="settings_tab_general">Général</string>
     <string name="settings_tab_agent">Agent</string>
     <string name="tool_set_alarm_name">Régler une alarme</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Dernière vérification échouée %1$s</string>
     <string name="settings_email_refresh">Actualiser le compte</string>
     <string name="settings_add_service">Ajouter un service</string>
-    <string name="settings_free_fallback">Utiliser comme secours</string>
-    <string name="service_free_fast">Gratuit rapide</string>
-    <string name="service_free_expert">Gratuit expert</string>
     <string name="settings_heartbeat">Battement de cœur</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Ceci est une vérification automatique. Passez en revue vos souvenirs et tâches en attente. Si tout semble correct et rien ne nécessite d'attention, répondez exactement : HEARTBEAT_OK
 Si quelque chose nécessite de l'attention (souvenirs obsolètes, tâches échues, suivis utilisateur), traitez-le.</string>

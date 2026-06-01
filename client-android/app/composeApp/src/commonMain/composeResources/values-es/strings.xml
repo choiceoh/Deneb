@@ -14,7 +14,6 @@
     <string name="settings_content_description">Configuración</string>
     <string name="bot_message_speech_content_description">Voz</string>
     <string name="bot_message_copy_content_description">Copiar</string>
-    <string name="settings_free_tier_title">Nivel Gratuito</string>
     <string name="settings_status_error_invalid_key">Clave API inválida</string>
     <string name="settings_status_error_quota_exhausted">Cuota agotada</string>
     <string name="settings_status_error_rate_limited">Límite de tasa alcanzado</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">Servicios</string>
     <string name="settings_tab_tools">Herramientas</string>
     <string name="tools_count">%1$d Herramientas</string>
-    <string name="privacy_agree_prefix">Al usar el servicio, aceptas la </string>
-    <string name="privacy_policy">Política de privacidad</string>
     <string name="settings_tab_general">General</string>
     <string name="settings_tab_agent">Agente</string>
     <string name="tool_set_alarm_name">Configurar alarma</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Última consulta fallida %1$s</string>
     <string name="settings_email_refresh">Actualizar cuenta</string>
     <string name="settings_add_service">Añadir servicio</string>
-    <string name="settings_free_fallback">Usar como respaldo</string>
-    <string name="service_free_fast">Gratis rápido</string>
-    <string name="service_free_expert">Gratis experto</string>
     <string name="settings_heartbeat">Latido</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Esta es una autoverificación automática. Revisa tus memorias y tareas pendientes. Si todo se ve bien y nada necesita atención, responde exactamente: HEARTBEAT_OK
 Si algo necesita atención (memorias obsoletas, tareas vencidas, seguimientos del usuario), atiéndelo.</string>

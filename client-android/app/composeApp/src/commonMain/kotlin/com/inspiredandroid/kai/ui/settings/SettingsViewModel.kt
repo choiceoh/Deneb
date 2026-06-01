@@ -115,7 +115,6 @@ class SettingsViewModel(
             notificationListenerAccessGranted = dataRepository.isNotificationListenerAccessGranted(),
             notificationListenerBound = dataRepository.getNotificationSyncState().listenerBound,
             notificationPendingCount = dataRepository.getPendingNotificationCount(),
-            isFreeFallbackEnabled = dataRepository.isFreeFallbackEnabled(),
             uiScale = dataRepository.getUiScale(),
             showUiScale = currentPlatform is Platform.Desktop,
             mcpServers = buildMcpServerEntries().toImmutableList(),
@@ -169,7 +168,6 @@ class SettingsViewModel(
         onToggleNotifications = ::onToggleNotifications,
         onOpenNotificationListenerSettings = ::onOpenNotificationListenerSettings,
         onClearPendingNotifications = ::onClearPendingNotifications,
-        onToggleFreeFallback = ::onToggleFreeFallback,
         onChangeUiScale = ::onChangeUiScale,
         onAddMcpServer = ::onAddMcpServer,
         onRemoveMcpServer = ::onRemoveMcpServer,
@@ -272,12 +270,11 @@ class SettingsViewModel(
     }
 
     private fun computeAvailableServices(): List<Service> {
-        // Allow all non-Free services (multiple instances of same type are allowed)
+        // Allow multiple instances of the same service type.
         // Pin OpenAI-Compatible and LiteRT (Local Model) to the top, then the featured Atlas Cloud
         // provider, then sort the rest alphabetically
         // Hide on-device services on platforms that don't support them
         return Service.all
-            .filter { it != Service.Free }
             .filter { !it.isOnDevice || dataRepository.isLocalInferenceAvailable() }
             .sortedWith(
                 compareBy<Service> {
@@ -632,11 +629,6 @@ class SettingsViewModel(
         }
     }
 
-    private fun onToggleFreeFallback(enabled: Boolean) {
-        dataRepository.setFreeFallbackEnabled(enabled)
-        _state.update { it.copy(isFreeFallbackEnabled = enabled) }
-    }
-
     private fun onDownloadLocalModel(model: LocalModel) {
         dataRepository.startLocalModelDownload(model)
     }
@@ -913,10 +905,6 @@ class SettingsViewModel(
     }
 
     private fun checkConnection(instanceId: String, service: Service) {
-        if (service == Service.Free) {
-            updateConnectionStatus(instanceId, ConnectionStatus.Connected)
-            return
-        }
         if (service.isOnDevice) {
             validateConnectionWithStatus(instanceId, service)
             return

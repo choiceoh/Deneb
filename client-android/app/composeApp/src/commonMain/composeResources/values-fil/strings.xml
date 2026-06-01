@@ -14,7 +14,6 @@
     <string name="settings_content_description">Mga Setting</string>
     <string name="bot_message_speech_content_description">Pagsasalita</string>
     <string name="bot_message_copy_content_description">Kopyahin</string>
-    <string name="settings_free_tier_title">Libreng Tier</string>
     <string name="settings_base_url_label">URL ng Server</string>
     <string name="settings_status_checking">Sinusuri ang koneksyon...</string>
     <string name="settings_status_connected">Nakakonekta</string>
@@ -36,8 +35,6 @@
     <string name="settings_tab_services">Mga Serbisyo</string>
     <string name="settings_tab_tools">Mga Tool</string>
     <string name="tools_count">%1$d Mga Tool</string>
-    <string name="privacy_agree_prefix">Sa paggamit ng serbisyo, sumasang-ayon ka sa </string>
-    <string name="privacy_policy">Patakaran sa Privacy</string>
     <string name="tool_get_local_time_name">Kunin ang Lokal na Oras</string>
     <string name="tool_get_local_time_description">Kunin ang kasalukuyang lokal na petsa at oras para sa pag-interpret ng mga relative na petsa</string>
     <string name="tool_get_location_name">Kunin ang Lokasyon</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Huling pagkuha ay nabigo %1$s</string>
     <string name="settings_email_refresh">I-refresh ang account</string>
     <string name="settings_add_service">Magdagdag ng serbisyo</string>
-    <string name="settings_free_fallback">Gamitin bilang fallback</string>
-    <string name="service_free_fast">Libreng Mabilis</string>
-    <string name="service_free_expert">Libreng Eksperto</string>
     <string name="settings_heartbeat">Tibok ng Puso</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Ito ay isang awtomatikong self-check. Suriin ang iyong mga alaala at mga nakabinbing gawain. Kung mukhang maayos ang lahat at walang nangangailangan ng atensyon, tumugon nang eksakto: HEARTBEAT_OK\nKung may nangangailangan ng atensyon (lumang mga alaala, mga takdang gawain, mga follow-up ng user), tugunan ito.</string>
     <string name="settings_heartbeat_description">Mga peryodikong self-check na nagpapahintulot sa AI na suriin ang mga alaala at gawain nang walang input mula sa user. Tumatakbo tuwing %1$d minuto sa mga aktibong oras.</string>

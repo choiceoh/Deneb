@@ -37,7 +37,7 @@ fun main() {
         Window(
             onCloseRequest = ::exitApplication,
             state = windowState,
-            title = "Kai 9000",
+            title = "Deneb",
             icon = painterResource(Res.drawable.logo),
         ) {
             // Defer TTS initialization until after the first frame

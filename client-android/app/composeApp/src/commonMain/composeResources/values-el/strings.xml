@@ -14,7 +14,6 @@
     <string name="settings_content_description">Ρυθμίσεις</string>
     <string name="bot_message_speech_content_description">Ομιλία</string>
     <string name="bot_message_copy_content_description">Αντιγραφή</string>
-    <string name="settings_free_tier_title">Δωρεάν Βαθμίδα</string>
     <string name="settings_base_url_label">URL Διακομιστή</string>
     <string name="settings_status_checking">Έλεγχος σύνδεσης...</string>
     <string name="settings_status_connected">Συνδεδεμένο</string>
@@ -36,8 +35,6 @@
     <string name="settings_tab_services">Υπηρεσίες</string>
     <string name="settings_tab_tools">Εργαλεία</string>
     <string name="tools_count">%1$d Εργαλεία</string>
-    <string name="privacy_agree_prefix">Χρησιμοποιώντας την υπηρεσία, συμφωνείτε με την </string>
-    <string name="privacy_policy">Πολιτική Απορρήτου</string>
     <string name="tool_get_local_time_name">Λήψη Τοπικής Ώρας</string>
     <string name="tool_get_local_time_description">Λήψη της τρέχουσας τοπικής ημερομηνίας και ώρας για ερμηνεία σχετικών ημερομηνιών</string>
     <string name="tool_get_location_name">Λήψη Τοποθεσίας</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Τελευταίος έλεγχος απέτυχε %1$s</string>
     <string name="settings_email_refresh">Ανανέωση λογαριασμού</string>
     <string name="settings_add_service">Προσθήκη υπηρεσίας</string>
-    <string name="settings_free_fallback">Χρήση ως εφεδρικό</string>
-    <string name="service_free_fast">Δωρεάν γρήγορο</string>
-    <string name="service_free_expert">Δωρεάν ειδικός</string>
     <string name="settings_heartbeat">Παλμός</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Αυτός είναι ένας αυτόματος αυτοέλεγχος. Εξέτασε τις αναμνήσεις και τις εκκρεμείς εργασίες σου. Αν όλα φαίνονται εντάξει και τίποτα δεν χρειάζεται προσοχή, απάντησε ακριβώς: HEARTBEAT_OK\nΑν κάτι χρειάζεται προσοχή (παλιές αναμνήσεις, εκκρεμείς εργασίες, ερωτήματα χρήστη), ασχολήσου με αυτό.</string>
     <string name="settings_heartbeat_description">Περιοδικοί αυτοέλεγχοι που επιτρέπουν στην AI να ελέγχει αναμνήσεις και εργασίες χωρίς είσοδο χρήστη. Εκτελείται κάθε %1$d λεπτά κατά τις ενεργές ώρες.</string>

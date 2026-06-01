@@ -14,7 +14,6 @@
     <string name="settings_content_description">تنظیمات</string>
     <string name="bot_message_speech_content_description">گفتار</string>
     <string name="bot_message_copy_content_description">کپی</string>
-    <string name="settings_free_tier_title">سطح رایگان</string>
     <string name="settings_status_error_invalid_key">کلید API نامعتبر</string>
     <string name="settings_status_error_quota_exhausted">سهمیه تمام شد</string>
     <string name="settings_status_error_rate_limited">به حد نرخ رسید</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">سرویس‌ها</string>
     <string name="settings_tab_tools">ابزارها</string>
     <string name="tools_count">%1$d ابزار</string>
-    <string name="privacy_agree_prefix">با استفاده از سرویس، شما با </string>
-    <string name="privacy_policy">سیاست حفظ حریم خصوصی</string>
     <string name="settings_tab_general">عمومی</string>
     <string name="settings_tab_agent">نماینده</string>
     <string name="tool_set_alarm_name">تنظیم زنگ هشدار</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">آخرین بررسی ناموفق %1$s</string>
     <string name="settings_email_refresh">بازخوانی حساب</string>
     <string name="settings_add_service">افزودن سرویس</string>
-    <string name="settings_free_fallback">استفاده به عنوان پشتیبان</string>
-    <string name="service_free_fast">رایگان سریع</string>
-    <string name="service_free_expert">رایگان متخصص</string>
     <string name="settings_heartbeat">ضربان قلب</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] این یک خودبررسی خودکار است. خاطرات و وظایف معلق خود را بررسی کن. اگر همه چیز خوب به نظر می‌رسد و چیزی نیاز به توجه ندارد، دقیقاً پاسخ بده: HEARTBEAT_OK\nاگر چیزی نیاز به توجه دارد (خاطرات قدیمی، وظایف سررسید شده، پیگیری‌های کاربر)، به آن رسیدگی کن.</string>
     <string name="settings_heartbeat_description">خودبررسی‌های دوره‌ای که به هوش مصنوعی اجازه می‌دهد خاطرات و وظایف را بدون ورودی کاربر بررسی کند. هر %1$d دقیقه در ساعات فعال اجرا می‌شود.</string>

@@ -14,7 +14,6 @@
     <string name="settings_content_description">Nastavitve</string>
     <string name="bot_message_speech_content_description">Govor</string>
     <string name="bot_message_copy_content_description">Kopiraj</string>
-    <string name="settings_free_tier_title">Brezplačna raven</string>
     <string name="settings_base_url_label">URL strežnika</string>
     <string name="settings_status_checking">Preverjanje povezave...</string>
     <string name="settings_status_connected">Povezano</string>
@@ -36,8 +35,6 @@
     <string name="settings_tab_services">Storitve</string>
     <string name="settings_tab_tools">Orodja</string>
     <string name="tools_count">%1$d orodij</string>
-    <string name="privacy_agree_prefix">Z uporabo storitve se strinjate s </string>
-    <string name="privacy_policy">Pravilnik o zasebnosti</string>
     <string name="tool_get_local_time_name">Pridobi lokalni čas</string>
     <string name="tool_get_local_time_description">Pridobi trenutni lokalni datum in čas za razlago relativnih datumov</string>
     <string name="tool_get_location_name">Pridobi lokacijo</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Zadnje preverjanje neuspešno %1$s</string>
     <string name="settings_email_refresh">Osveži račun</string>
     <string name="settings_add_service">Dodaj storitev</string>
-    <string name="settings_free_fallback">Uporabi kot rezervo</string>
-    <string name="service_free_fast">Brezplačno hitro</string>
-    <string name="service_free_expert">Brezplačno strokovnjak</string>
     <string name="settings_heartbeat">Srčni utrip</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] To je samodejno samopreverjanje. Preglej svoje spomine in čakajoče naloge. Če je vse v redu in nič ne zahteva pozornosti, odgovori natančno z: HEARTBEAT_OK\nČe nekaj zahteva pozornost (zastareli spomini, zapadle naloge, uporabniška spremljanja), se tega loti.</string>
     <string name="settings_heartbeat_description">Periodična samopreverjanja, ki UI omogočajo pregled spominov in nalog brez uporabniškega vnosa. Izvaja se vsakih %1$d minut med aktivnimi urami.</string>

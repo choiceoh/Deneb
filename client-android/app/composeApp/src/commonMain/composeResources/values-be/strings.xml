@@ -14,7 +14,6 @@
     <string name="settings_content_description">Налады</string>
     <string name="bot_message_speech_content_description">Маўленне</string>
     <string name="bot_message_copy_content_description">Капіяваць</string>
-    <string name="settings_free_tier_title">Бясплатны ўзровень</string>
     <string name="settings_base_url_label">URL сервера</string>
     <string name="settings_status_checking">Праверка злучэння...</string>
     <string name="settings_status_connected">Злучана</string>
@@ -36,8 +35,6 @@
     <string name="settings_tab_services">Сэрвісы</string>
     <string name="settings_tab_tools">Інструменты</string>
     <string name="tools_count">%1$d Інструментаў</string>
-    <string name="privacy_agree_prefix">Выкарыстоўваючы сэрвіс, вы згаджаецеся з </string>
-    <string name="privacy_policy">Палітыка прыватнасці</string>
     <string name="tool_get_local_time_name">Атрымаць мясцовы час</string>
     <string name="tool_get_local_time_description">Атрымаць бягучую мясцовую дату і час для інтэрпрэтацыі адносных дат</string>
     <string name="tool_get_location_name">Атрымаць месцазнаходжанне</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Апошняя праверка не ўдалася %1$s</string>
     <string name="settings_email_refresh">Абнавіць уліковы запіс</string>
     <string name="settings_add_service">Дадаць сэрвіс</string>
-    <string name="settings_free_fallback">Выкарыстоўваць як рэзерв</string>
-    <string name="service_free_fast">Бясплатны хуткі</string>
-    <string name="service_free_expert">Бясплатны эксперт</string>
     <string name="settings_heartbeat">Сэрцабіццё</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Гэта аўтаматычная самаправерка. Праглядзі свае ўспаміны і незавершаныя задачы. Калі ўсё ў парадку і нічога не патрабуе ўвагі, адкажы дакладна: HEARTBEAT_OK\nКалі нешта патрабуе ўвагі (састарэлыя ўспаміны, тэрміновыя задачы, зваротная сувязь ад карыстальніка), займіся гэтым.</string>
     <string name="settings_heartbeat_description">Перыядычныя самаправеркі, якія дазваляюць AI праглядаць успаміны і задачы без удзелу карыстальніка. Запускаецца кожныя %1$d хвілін у актыўныя гадзіны.</string>

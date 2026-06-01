@@ -14,7 +14,6 @@
     <string name="settings_content_description">సెట్టింగ్‌లు</string>
     <string name="bot_message_speech_content_description">స్పీచ్</string>
     <string name="bot_message_copy_content_description">కాపీ</string>
-    <string name="settings_free_tier_title">ఉచిత స్థాయి</string>
     <string name="settings_status_error_invalid_key">చెల్లని API కీ</string>
     <string name="settings_status_error_quota_exhausted">కోటా అయిపోయింది</string>
     <string name="settings_status_error_rate_limited">రేట్ పరిమితి చేరుకుంది</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">సేవలు</string>
     <string name="settings_tab_tools">టూల్స్</string>
     <string name="tools_count">%1$d సాధనాలు</string>
-    <string name="privacy_agree_prefix">సేవను ఉపయోగించడం ద్వారా, మీరు అంగీకరిస్తారు </string>
-    <string name="privacy_policy">గోప్యతా విధానం</string>
     <string name="settings_tab_general">సాధారణ</string>
     <string name="settings_tab_agent">ఏజెంట్</string>
     <string name="tool_set_alarm_name">అలారం సెట్ చేయి</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">చివరి తనిఖీ విఫలమైంది %1$s</string>
     <string name="settings_email_refresh">ఖాతాను రిఫ్రెష్ చేయండి</string>
     <string name="settings_add_service">సేవను జోడించు</string>
-    <string name="settings_free_fallback">ఫాల్‌బ్యాక్‌గా ఉపయోగించు</string>
-    <string name="service_free_fast">ఉచిత వేగం</string>
-    <string name="service_free_expert">ఉచిత నిపుణుడు</string>
     <string name="settings_heartbeat">హృదయ స్పందన</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] ఇది ఆటోమేటిక్ స్వీయ తనిఖీ. మీ జ్ఞాపకాలు మరియు పెండింగ్ టాస్క్‌లను సమీక్షించండి. అంతా బాగున్నట్లయితే మరియు ఏదీ శ్రద్ధ అవసరం లేకపోతే, సరిగ్గా ఇలా సమాధానం ఇవ్వండి: HEARTBEAT_OK\nఏదైనా శ్రద్ధ అవసరమైతే (పాత జ్ఞాపకాలు, గడువు తీరిన టాస్క్‌లు, వినియోగదారు ఫాలో-అప్‌లు), దాన్ని పరిష్కరించండి.</string>
     <string name="settings_heartbeat_description">వినియోగదారు ఇన్‌పుట్ లేకుండా AI జ్ఞాపకాలు మరియు టాస్క్‌లను సమీక్షించడానికి అనుమతించే ఆవర్తన స్వీయ తనిఖీలు. సక్రియ గంటల్లో ప్రతి %1$d నిమిషాలకు అమలవుతుంది.</string>

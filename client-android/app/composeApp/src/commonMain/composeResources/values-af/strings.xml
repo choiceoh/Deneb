@@ -14,7 +14,6 @@
     <string name="settings_content_description">Instellings</string>
     <string name="bot_message_speech_content_description">Spraak</string>
     <string name="bot_message_copy_content_description">Kopieer</string>
-    <string name="settings_free_tier_title">Gratis Vlak</string>
     <string name="settings_base_url_label">Bediener-URL</string>
     <string name="settings_status_checking">Kontroleer verbinding...</string>
     <string name="settings_status_connected">Verbind</string>
@@ -36,8 +35,6 @@
     <string name="settings_tab_services">Dienste</string>
     <string name="settings_tab_tools">Gereedskap</string>
     <string name="tools_count">%1$d Gereedskap</string>
-    <string name="privacy_agree_prefix">Deur die diens te gebruik, stem jy in tot die </string>
-    <string name="privacy_policy">Privaatheidsbeleid</string>
     <string name="tool_get_local_time_name">Kry Plaaslike Tyd</string>
     <string name="tool_get_local_time_description">Kry die huidige plaaslike datum en tyd om relatiewe datums te interpreteer</string>
     <string name="tool_get_location_name">Kry Ligging</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Laaste nagaan het misluk %1$s</string>
     <string name="settings_email_refresh">Verfris rekening</string>
     <string name="settings_add_service">Voeg diens by</string>
-    <string name="settings_free_fallback">Gebruik as terugval</string>
-    <string name="service_free_fast">Gratis Vinnig</string>
-    <string name="service_free_expert">Gratis Kenner</string>
     <string name="settings_heartbeat">Hartklop</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Dit is 'n outomatiese selfkontrole. Hersien jou herinneringe en hangende take. As alles goed lyk en niks aandag nodig het nie, antwoord met presies: HEARTBEAT_OK
 As iets aandag nodig het (verouderde herinneringe, verskuldigde take, gebruiker-opvolgings), spreek dit aan.</string>

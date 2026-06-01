@@ -14,7 +14,6 @@
     <string name="settings_content_description">Mipangilio</string>
     <string name="bot_message_speech_content_description">Hotuba</string>
     <string name="bot_message_copy_content_description">Nakili</string>
-    <string name="settings_free_tier_title">Kiwango cha Bure</string>
     <string name="settings_status_error_invalid_key">Ufunguo wa API si sahihi</string>
     <string name="settings_status_error_quota_exhausted">Kiwango kimeisha</string>
     <string name="settings_status_error_rate_limited">Kikomo cha kiwango kimefikiwa</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">Huduma</string>
     <string name="settings_tab_tools">Zana</string>
     <string name="tools_count">%1$d Zana</string>
-    <string name="privacy_agree_prefix">Kwa kutumia huduma, unakubali </string>
-    <string name="privacy_policy">Sera ya Faragha</string>
     <string name="settings_tab_general">Jumla</string>
     <string name="settings_tab_agent">Wakala</string>
     <string name="tool_set_alarm_name">Weka Kengele</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Uchunguzi wa mwisho umeshindwa %1$s</string>
     <string name="settings_email_refresh">Onyesha upya akaunti</string>
     <string name="settings_add_service">Ongeza huduma</string>
-    <string name="settings_free_fallback">Tumia kama mbadala</string>
-    <string name="service_free_fast">Bure Haraka</string>
-    <string name="service_free_expert">Bure Mtaalamu</string>
     <string name="settings_heartbeat">Mapigo ya moyo</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Hii ni ukaguzi wa kiotomatiki. Kagua kumbukumbu zako na kazi zinazosubiri. Ikiwa kila kitu kiko sawa na hakuna kinachohitaji umakini, jibu kwa usahihi: HEARTBEAT_OK\nIkiwa kitu kinahitaji umakini (kumbukumbu za zamani, kazi zilizofika, ufuatiliaji wa mtumiaji), shughulikia.</string>
     <string name="settings_heartbeat_description">Ukaguzi wa kiotomatiki unaoruhusu AI kukagua kumbukumbu na kazi bila mchango wa mtumiaji. Inafanya kazi kila dakika %1$d wakati wa masaa ya shughuli.</string>

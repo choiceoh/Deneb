@@ -14,7 +14,7 @@ fun AppSettings.selectService(service: Service) {
 }
 
 fun AppSettings.currentService(): Service {
-    val id = settings.getString(KEY_CURRENT_SERVICE_ID, Service.Free.id)
+    val id = settings.getString(KEY_CURRENT_SERVICE_ID, Service.OpenAI.id)
     return Service.fromId(id)
 }
 
@@ -51,6 +51,7 @@ fun AppSettings.getConfiguredServiceInstances(): List<ServiceInstance> {
     val json = settings.getString(KEY_CONFIGURED_SERVICES, "")
     if (json.isBlank()) return emptyList()
     return try {
+        val validServiceIds = Service.all.map { it.id }.toSet()
         val array = Json.parseToJsonElement(json).jsonArray
         array.map { element ->
             if (element is JsonObject) {
@@ -62,7 +63,7 @@ fun AppSettings.getConfiguredServiceInstances(): List<ServiceInstance> {
                 val id = element.jsonPrimitive.content
                 ServiceInstance(instanceId = id, serviceId = id)
             }
-        }.filter { it.instanceId.isNotBlank() && it.serviceId.isNotBlank() }
+        }.filter { it.instanceId.isNotBlank() && it.serviceId in validServiceIds }
     } catch (_: Exception) {
         emptyList()
     }

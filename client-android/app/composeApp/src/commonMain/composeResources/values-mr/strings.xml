@@ -14,7 +14,6 @@
     <string name="settings_content_description">सेटिंग्ज</string>
     <string name="bot_message_speech_content_description">स्पीच</string>
     <string name="bot_message_copy_content_description">कॉपी</string>
-    <string name="settings_free_tier_title">मोफत स्तर</string>
     <string name="settings_status_error_invalid_key">अवैध API की</string>
     <string name="settings_status_error_quota_exhausted">कोटा संपला</string>
     <string name="settings_status_error_rate_limited">दर मर्यादा ओलांडली</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">सेवा</string>
     <string name="settings_tab_tools">साधने</string>
     <string name="tools_count">%1$d साधने</string>
-    <string name="privacy_agree_prefix">सेवा वापरून, तुम्ही सहमत आहात </string>
-    <string name="privacy_policy">गोपनीयता धोरण</string>
     <string name="settings_tab_general">सामान्य</string>
     <string name="settings_tab_agent">एजंट</string>
     <string name="tool_set_alarm_name">अलार्म सेट करा</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">शेवटची तपासणी अयशस्वी %1$s</string>
     <string name="settings_email_refresh">खाते रीफ्रेश करा</string>
     <string name="settings_add_service">सेवा जोडा</string>
-    <string name="settings_free_fallback">फॉलबॅक म्हणून वापरा</string>
-    <string name="service_free_fast">मोफत जलद</string>
-    <string name="service_free_expert">मोफत तज्ञ</string>
     <string name="settings_heartbeat">हृदयस्पंदन</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] ही एक स्वयंचलित स्व-तपासणी आहे. तुमच्या आठवणी आणि प्रलंबित कार्ये तपासा. सर्व काही ठीक असल्यास आणि काहीही लक्ष देण्याची गरज नसल्यास, नेमके हे उत्तर द्या: HEARTBEAT_OK\nजर काहीतरी लक्ष देण्याची गरज असेल (जुन्या आठवणी, देय कार्ये, वापरकर्ता फॉलो-अप), त्यावर कार्यवाही करा.</string>
     <string name="settings_heartbeat_description">नियतकालिक स्व-तपासण्या ज्या AI ला वापरकर्ता इनपुटशिवाय आठवणी आणि कार्ये तपासू देतात. सक्रिय तासांमध्ये दर %1$d मिनिटांनी चालते.</string>

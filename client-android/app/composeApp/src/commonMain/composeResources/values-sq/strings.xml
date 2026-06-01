@@ -14,7 +14,6 @@
     <string name="settings_content_description">Cilësimet</string>
     <string name="bot_message_speech_content_description">Të folurit</string>
     <string name="bot_message_copy_content_description">Kopjo</string>
-    <string name="settings_free_tier_title">Niveli falas</string>
     <string name="settings_base_url_label">URL e serverit</string>
     <string name="settings_status_checking">Po kontrollohet lidhja...</string>
     <string name="settings_status_connected">I lidhur</string>
@@ -36,8 +35,6 @@
     <string name="settings_tab_services">Shërbimet</string>
     <string name="settings_tab_tools">Mjetet</string>
     <string name="tools_count">%1$d mjete</string>
-    <string name="privacy_agree_prefix">Duke përdorur shërbimin, ju pranoni </string>
-    <string name="privacy_policy">Politikën e privatësisë</string>
     <string name="tool_get_local_time_name">Merr orën lokale</string>
     <string name="tool_get_local_time_description">Merr datën dhe orën aktuale lokale për interpretimin e datave relative</string>
     <string name="tool_get_location_name">Merr vendndodhjen</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Kontrolli i fundit dështoi %1$s</string>
     <string name="settings_email_refresh">Rifresko llogarinë</string>
     <string name="settings_add_service">Shto shërbim</string>
-    <string name="settings_free_fallback">Përdor si rezervë</string>
-    <string name="service_free_fast">Falas i shpejtë</string>
-    <string name="service_free_expert">Falas ekspert</string>
     <string name="settings_heartbeat">Rrahjet e zemrës</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Kjo është një vetëkontroll automatik. Shqyrto kujtimet dhe detyrat në pritje. Nëse gjithçka duket mirë dhe asgjë nuk kërkon vëmendje, përgjigju me saktësisht: HEARTBEAT_OK\nNëse diçka kërkon vëmendje (kujtime të vjetruara, detyra të vonuara, ndjekje përdoruesi), merru me të.</string>
     <string name="settings_heartbeat_description">Vetëkontrolle periodike që lejojnë AI-n të shqyrtojë kujtimet dhe detyrat pa ndërhyrje të përdoruesit. Ekzekutohet çdo %1$d minuta gjatë orëve aktive.</string>

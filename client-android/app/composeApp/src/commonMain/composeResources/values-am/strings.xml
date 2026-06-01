@@ -14,7 +14,6 @@
     <string name="settings_content_description">ቅንብሮች</string>
     <string name="bot_message_speech_content_description">ንግግር</string>
     <string name="bot_message_copy_content_description">ቅዳ</string>
-    <string name="settings_free_tier_title">ነፃ ደረጃ</string>
     <string name="settings_base_url_label">የአገልጋይ URL</string>
     <string name="settings_status_checking">ግንኙነት በማረጋገጥ ላይ...</string>
     <string name="settings_status_connected">ተገናኝቷል</string>
@@ -36,8 +35,6 @@
     <string name="settings_tab_services">አገልግሎቶች</string>
     <string name="settings_tab_tools">መሳሪያዎች</string>
     <string name="tools_count">%1$d መሳሪያዎች</string>
-    <string name="privacy_agree_prefix">አገልግሎቱን በመጠቀም፣ የሚከተለውን ይቀበላሉ </string>
-    <string name="privacy_policy">የግላዊነት ፖሊሲ</string>
     <string name="tool_get_local_time_name">የአካባቢ ሰዓት ያግኙ</string>
     <string name="tool_get_local_time_description">አንጻራዊ ቀኖችን ለመተርጎም የአሁኑን የአካባቢ ቀን እና ሰዓት ያግኙ</string>
     <string name="tool_get_location_name">አካባቢ ያግኙ</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">የመጨረሻ ፍተሻ አልተሳካም %1$s</string>
     <string name="settings_email_refresh">መለያን አድስ</string>
     <string name="settings_add_service">አገልግሎት ጨምር</string>
-    <string name="settings_free_fallback">እንደ ተተኪ ተጠቀም</string>
-    <string name="service_free_fast">ነጻ ፈጣን</string>
-    <string name="service_free_expert">ነጻ ባለሙያ</string>
     <string name="settings_heartbeat">የልብ ምት</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] ይህ ራስ-ሰር ራስ-ምርመራ ነው። ትውስታዎችዎን እና በመጠባበቅ ላይ ያሉ ስራዎችን ይገምግሙ። ሁሉም ነገር ጥሩ ከሆነ እና ምንም ትኩረት ካልፈለገ በትክክል ይመልሱ: HEARTBEAT_OK
 አንድ ነገር ትኩረት ከፈለገ (ያረጁ ትውስታዎች፣ የተጠናቀቁ ስራዎች፣ የተጠቃሚ ክትትሎች) ያስተናግዱት።</string>

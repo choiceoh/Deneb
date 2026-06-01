@@ -14,7 +14,6 @@
     <string name="settings_content_description">Nastavenia</string>
     <string name="bot_message_speech_content_description">Reč</string>
     <string name="bot_message_copy_content_description">Kopírovať</string>
-    <string name="settings_free_tier_title">Bezplatná úroveň</string>
     <string name="settings_base_url_label">URL servera</string>
     <string name="settings_status_checking">Kontrola pripojenia...</string>
     <string name="settings_status_connected">Pripojené</string>
@@ -36,8 +35,6 @@
     <string name="settings_tab_services">Služby</string>
     <string name="settings_tab_tools">Nástroje</string>
     <string name="tools_count">%1$d nástrojov</string>
-    <string name="privacy_agree_prefix">Používaním služby súhlasíte s </string>
-    <string name="privacy_policy">Zásadami ochrany osobných údajov</string>
     <string name="tool_get_local_time_name">Zistiť miestny čas</string>
     <string name="tool_get_local_time_description">Získať aktuálny miestny dátum a čas na interpretáciu relatívnych dátumov</string>
     <string name="tool_get_location_name">Zistiť polohu</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Posledná kontrola zlyhala %1$s</string>
     <string name="settings_email_refresh">Obnoviť účet</string>
     <string name="settings_add_service">Pridať službu</string>
-    <string name="settings_free_fallback">Použiť ako zálohu</string>
-    <string name="service_free_fast">Zadarmo rýchly</string>
-    <string name="service_free_expert">Zadarmo expert</string>
     <string name="settings_heartbeat">Tep srdca</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Toto je automatická sebakontrola. Skontroluj svoje spomienky a čakajúce úlohy. Ak je všetko v poriadku a nič nevyžaduje pozornosť, odpovedz presne: HEARTBEAT_OK\nAk niečo vyžaduje pozornosť (zastarané spomienky, splatné úlohy, následné kroky používateľa), vyrieš to.</string>
     <string name="settings_heartbeat_description">Periodické sebakontroly, ktoré umožňujú AI kontrolovať spomienky a úlohy bez vstupu používateľa. Spúšťa sa každých %1$d minút počas aktívnych hodín.</string>

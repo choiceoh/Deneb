@@ -14,7 +14,6 @@
     <string name="settings_content_description">Inställningar</string>
     <string name="bot_message_speech_content_description">Tal</string>
     <string name="bot_message_copy_content_description">Kopiera</string>
-    <string name="settings_free_tier_title">Kostnadsfri nivå</string>
     <string name="settings_base_url_label">Server-URL</string>
     <string name="settings_status_checking">Kontrollerar anslutning...</string>
     <string name="settings_status_connected">Ansluten</string>
@@ -36,8 +35,6 @@
     <string name="settings_tab_services">Tjänster</string>
     <string name="settings_tab_tools">Verktyg</string>
     <string name="tools_count">%1$d Verktyg</string>
-    <string name="privacy_agree_prefix">Genom att använda tjänsten godkänner du </string>
-    <string name="privacy_policy">Integritetspolicyn</string>
     <string name="tool_get_local_time_name">Hämta lokal tid</string>
     <string name="tool_get_local_time_description">Hämta aktuellt lokalt datum och tid för att tolka relativa datum</string>
     <string name="tool_get_location_name">Hämta plats</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Senaste kontroll misslyckades %1$s</string>
     <string name="settings_email_refresh">Uppdatera konto</string>
     <string name="settings_add_service">Lägg till tjänst</string>
-    <string name="settings_free_fallback">Använd som reserv</string>
-    <string name="service_free_fast">Gratis snabb</string>
-    <string name="service_free_expert">Gratis expert</string>
     <string name="settings_heartbeat">Hjärtslag</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Detta är en automatisk självkontroll. Granska dina minnen och väntande uppgifter. Om allt ser bra ut och inget behöver uppmärksamhet, svara exakt: HEARTBEAT_OK
 Om något behöver uppmärksamhet (föråldrade minnen, förfallna uppgifter, användaruppföljningar), åtgärda det.</string>

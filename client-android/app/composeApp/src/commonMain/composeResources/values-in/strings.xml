@@ -14,7 +14,6 @@
     <string name="settings_content_description">Pengaturan</string>
     <string name="bot_message_speech_content_description">Suara</string>
     <string name="bot_message_copy_content_description">Salin</string>
-    <string name="settings_free_tier_title">Tingkat Gratis</string>
     <string name="settings_status_error_invalid_key">Kunci API tidak valid</string>
     <string name="settings_status_error_quota_exhausted">Kuota habis</string>
     <string name="settings_status_error_rate_limited">Batas kecepatan tercapai</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">Layanan</string>
     <string name="settings_tab_tools">Alat</string>
     <string name="tools_count">%1$d Alat</string>
-    <string name="privacy_agree_prefix">Dengan menggunakan layanan, Anda menyetujui </string>
-    <string name="privacy_policy">Kebijakan Privasi</string>
     <string name="settings_tab_general">Umum</string>
     <string name="settings_tab_agent">Agen</string>
     <string name="tool_set_alarm_name">Setel Alarm</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Pengambilan terakhir gagal %1$s</string>
     <string name="settings_email_refresh">Segarkan akun</string>
     <string name="settings_add_service">Tambah layanan</string>
-    <string name="settings_free_fallback">Gunakan sebagai cadangan</string>
-    <string name="service_free_fast">Gratis Cepat</string>
-    <string name="service_free_expert">Gratis Ahli</string>
     <string name="settings_heartbeat">Detak Jantung</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Ini adalah pemeriksaan mandiri otomatis. Tinjau memori dan tugas yang tertunda. Jika semuanya baik dan tidak ada yang perlu perhatian, jawab dengan tepat: HEARTBEAT_OK\nJika sesuatu memerlukan perhatian (memori usang, tugas jatuh tempo, tindak lanjut pengguna), tangani hal tersebut.</string>
     <string name="settings_heartbeat_description">Pemeriksaan mandiri berkala yang memungkinkan AI meninjau memori dan tugas tanpa masukan pengguna. Berjalan setiap %1$d menit selama jam aktif.</string>

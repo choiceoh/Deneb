@@ -4,9 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.inspiredandroid.kai.data.Conversation
 import com.inspiredandroid.kai.data.DataRepository
-import com.inspiredandroid.kai.data.FreeMode
 import com.inspiredandroid.kai.data.Service
-import com.inspiredandroid.kai.data.ServiceEntry
 import com.inspiredandroid.kai.data.TaskScheduler
 import com.inspiredandroid.kai.data.UiSubmission
 import com.inspiredandroid.kai.deneb.DenebGatewayClient
@@ -72,13 +70,11 @@ class ChatViewModel(
         sendSmsDraft = ::sendSmsDraft,
         discardSmsDraft = ::discardSmsDraft,
     )
-    private val freeModeNames: Map<FreeMode, String> = FreeMode.entries.associateWith { "Free ${it.modelId.replaceFirstChar { c -> c.uppercase() }}" }
     private var currentJob: Job? = null
     private var pendingConversationDeleteJob: Job? = null
     private val _state = MutableStateFlow(
         ChatUiState(
             actions = actions,
-            showPrivacyInfo = dataRepository.isUsingSharedKey(),
         ),
     )
 
@@ -333,15 +329,6 @@ class ChatViewModel(
             dataRepository.selectDenebModelInstance(instanceId)
             return
         }
-        val freeMode = FREE_MODE_INSTANCE_IDS[instanceId]
-        if (freeMode != null) {
-            dataRepository.setFreeMode(freeMode)
-            dataRepository.setFreeServicePrimary(true)
-            updateAvailableServices()
-            return
-        }
-
-        dataRepository.setFreeServicePrimary(false)
         val instances = dataRepository.getConfiguredServiceInstances()
         val currentIds = instances.map { it.instanceId }
         if (instanceId !in currentIds) return
@@ -356,30 +343,11 @@ class ChatViewModel(
                 it.copy(
                     availableServices = dataRepository.denebServiceEntries().toImmutableList(),
                     warning = null,
-                    showPrivacyInfo = false,
                 )
             }
             return
         }
-        val configuredEntries = dataRepository.getServiceEntries()
-        val currentFreeMode = dataRepository.getFreeMode()
-        val freeIsPrimary = dataRepository.isFreeServicePrimary() || configuredEntries.isEmpty()
-
-        val freeModes = (listOf(currentFreeMode) + FreeMode.entries.filter { it != currentFreeMode }).map { mode ->
-            ServiceEntry(
-                instanceId = mode.instanceId,
-                serviceId = Service.Free.id,
-                serviceName = freeModeNames.getValue(mode),
-                modelId = "",
-                icon = mode.icon,
-            )
-        }
-
-        val entries = if (freeIsPrimary) {
-            freeModes + configuredEntries
-        } else {
-            configuredEntries + freeModes
-        }.toImmutableList()
+        val entries = dataRepository.getServiceEntries().toImmutableList()
 
         val primaryService = entries.firstOrNull()?.let { Service.fromId(it.serviceId) }
         val warning = if (primaryService?.isOnDevice == true && dataRepository.getLocalDownloadedModels().isEmpty()) {
@@ -387,11 +355,7 @@ class ChatViewModel(
         } else {
             null
         }
-        _state.update { it.copy(availableServices = entries, warning = warning, showPrivacyInfo = dataRepository.isUsingSharedKey()) }
-    }
-
-    companion object {
-        private val FREE_MODE_INSTANCE_IDS = FreeMode.entries.associateBy { it.instanceId }
+        _state.update { it.copy(availableServices = entries, warning = warning) }
     }
 
     // Regenerate = re-ask the last user turn. Drop the last user+assistant pair,

@@ -1,7 +1,6 @@
 package com.inspiredandroid.kai.ui.chat
 
 import app.cash.turbine.test
-import com.inspiredandroid.kai.data.Service
 import com.inspiredandroid.kai.data.TaskScheduler
 import com.inspiredandroid.kai.network.AnthropicInsufficientCreditsException
 import com.inspiredandroid.kai.network.AnthropicInvalidApiKeyException
@@ -68,17 +67,6 @@ class ChatViewModelTest {
 
             assertFalse(awaitItem().isRestoring)
             cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    @Test
-    fun `initial state reflects isUsingSharedKey from repository`() = runTest {
-        fakeRepository.setCurrentService(Service.Free)
-        val viewModel = createViewModel()
-
-        viewModel.state.test {
-            val state = awaitItem()
-            assertTrue(state.showPrivacyInfo)
         }
     }
 

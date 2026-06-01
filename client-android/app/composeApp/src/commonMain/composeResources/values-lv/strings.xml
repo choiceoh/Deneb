@@ -14,7 +14,6 @@
     <string name="settings_content_description">Iestatījumi</string>
     <string name="bot_message_speech_content_description">Runa</string>
     <string name="bot_message_copy_content_description">Kopēt</string>
-    <string name="settings_free_tier_title">Bezmaksas līmenis</string>
     <string name="settings_base_url_label">Servera URL</string>
     <string name="settings_status_checking">Pārbauda savienojumu...</string>
     <string name="settings_status_connected">Savienots</string>
@@ -36,8 +35,6 @@
     <string name="settings_tab_services">Pakalpojumi</string>
     <string name="settings_tab_tools">Rīki</string>
     <string name="tools_count">%1$d Rīki</string>
-    <string name="privacy_agree_prefix">Izmantojot pakalpojumu, jūs piekrītat </string>
-    <string name="privacy_policy">Privātuma politika</string>
     <string name="tool_get_local_time_name">Iegūt vietējo laiku</string>
     <string name="tool_get_local_time_description">Iegūt pašreizējo vietējo datumu un laiku relatīvo datumu interpretācijai</string>
     <string name="tool_get_location_name">Iegūt atrašanās vietu</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Pēdējā pārbaude neizdevās %1$s</string>
     <string name="settings_email_refresh">Atsvaidzināt kontu</string>
     <string name="settings_add_service">Pievienot pakalpojumu</string>
-    <string name="settings_free_fallback">Izmantot kā rezervi</string>
-    <string name="service_free_fast">Bezmaksas ātrs</string>
-    <string name="service_free_expert">Bezmaksas eksperts</string>
     <string name="settings_heartbeat">Sirdspuksts</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] Šī ir automātiska pašpārbaude. Pārskatiet savas atmiņas un neizpildītos uzdevumus. Ja viss ir kārtībā un nekas neprasa uzmanību, atbildiet precīzi ar: HEARTBEAT_OK\nJa kaut kas prasa uzmanību (novecojušas atmiņas, termiņa uzdevumi, lietotāju sekošanas), risiniet to.</string>
     <string name="settings_heartbeat_description">Periodiskas pašpārbaudes, kas ļauj AI pārskatīt atmiņas un uzdevumus bez lietotāja ievades. Darbojas ik pēc %1$d minūtēm aktīvajās stundās.</string>

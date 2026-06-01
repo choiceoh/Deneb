@@ -14,7 +14,6 @@
     <string name="settings_content_description">设置</string>
     <string name="bot_message_speech_content_description">语音</string>
     <string name="bot_message_copy_content_description">复制</string>
-    <string name="settings_free_tier_title">免费版</string>
     <string name="settings_status_error_invalid_key">API 密钥无效</string>
     <string name="settings_status_error_quota_exhausted">配额已用完</string>
     <string name="settings_status_error_rate_limited">达到速率限制</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">服务</string>
     <string name="settings_tab_tools">工具</string>
     <string name="tools_count">%1$d 个工具</string>
-    <string name="privacy_agree_prefix">使用本服务即表示您同意</string>
-    <string name="privacy_policy">隐私政策</string>
     <string name="settings_tab_general">通用</string>
     <string name="settings_tab_agent">代理</string>
     <string name="tool_set_alarm_name">设置闹钟</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">上次获取失败 %1$s</string>
     <string name="settings_email_refresh">刷新账户</string>
     <string name="settings_add_service">添加服务</string>
-    <string name="settings_free_fallback">用作备选</string>
-    <string name="service_free_fast">免费快速</string>
-    <string name="service_free_expert">免费专家</string>
     <string name="settings_heartbeat">心跳</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] 这是一次自动自检。检查你的记忆和待处理任务。如果一切正常且无需关注，请准确回复：HEARTBEAT_OK
 如果有需要关注的事项（过时的记忆、到期的任务、用户跟进），请处理。</string>

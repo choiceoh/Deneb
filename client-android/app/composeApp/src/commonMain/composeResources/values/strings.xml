@@ -4,6 +4,7 @@
     <string name="error_invalid_api_key">Invalid API Key. Please check your settings.</string>
     <string name="error_rate_limit_exceeded">Rate limit exceeded. Please try again later.</string>
     <string name="error_empty_response">No response received. Try starting a new chat or shortening your message.</string>
+    <string name="error_no_service_configured">Add a service in Settings before chatting.</string>
     <string name="error_unknown">An unknown error occurred.</string>
     <string name="settings_ai_mistakes_warning">AI makes mistakes, double check and don't share sensitive information.</string>
     <string name="settings_version">Version: %1$s</string>
@@ -17,7 +18,6 @@
     <string name="bot_message_speech_content_description">Speech</string>
     <string name="bot_message_copy_content_description">Copy</string>
     <string name="bot_message_regenerate_content_description">Regenerate</string>
-    <string name="settings_free_tier_title">Free Tier</string>
     <string name="settings_base_url_label">Server URL</string>
     <string name="settings_status_checking">Checking connection...</string>
     <string name="settings_status_connected">Connected</string>
@@ -51,8 +51,6 @@
     <string name="waiting_working">Working…</string>
     <string name="waiting_brewing">Brewing…</string>
     <string name="waiting_content_description">Waiting for response</string>
-    <string name="privacy_agree_prefix">By using the service, you agree to the </string>
-    <string name="privacy_policy">Privacy Policy</string>
     <string name="tool_get_local_time_name">Get Local Time</string>
     <string name="tool_get_local_time_description">Get the current local date and time for interpreting relative dates</string>
     <string name="tool_get_location_name">Get Location</string>
@@ -222,9 +220,6 @@
     <string name="litert_error_download_incomplete">Download incomplete. Please try again.</string>
     <string name="settings_add_service">Add Service</string>
     <string name="settings_remove_service">Remove</string>
-    <string name="settings_free_fallback">Use as fallback</string>
-    <string name="service_free_fast">Free Fast</string>
-    <string name="service_free_expert">Free Expert</string>
     <string name="settings_ui_scale">UI Scale</string>
     <string name="settings_mcp_servers">MCP Servers</string>
     <string name="settings_mcp_servers_description">Connect to external tool servers using the Model Context Protocol.</string>

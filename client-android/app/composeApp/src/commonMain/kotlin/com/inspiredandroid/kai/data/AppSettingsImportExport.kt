@@ -4,7 +4,6 @@ package com.inspiredandroid.kai.data
 
 import com.inspiredandroid.kai.data.AppSettings.Companion.KEY_CONFIGURED_SERVICES
 import com.inspiredandroid.kai.data.AppSettings.Companion.KEY_CURRENT_SERVICE_ID
-import com.inspiredandroid.kai.data.AppSettings.Companion.KEY_FREE_FALLBACK_ENABLED
 import com.inspiredandroid.kai.data.AppSettings.Companion.KEY_TOOL_PREFIX
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -29,8 +28,7 @@ fun AppSettings.exportToJson(
         if (configuredJson.isNotBlank()) {
             map["configured_services"] = Json.parseToJsonElement(configuredJson)
         }
-        map["current_service_id"] = JsonPrimitive(settings.getString(KEY_CURRENT_SERVICE_ID, Service.Free.id))
-        map["free_fallback_enabled"] = JsonPrimitive(isFreeFallbackEnabled())
+        map["current_service_id"] = JsonPrimitive(settings.getString(KEY_CURRENT_SERVICE_ID, Service.OpenAI.id))
 
         val instances = getConfiguredServiceInstances()
         if (instances.isNotEmpty()) {
@@ -165,8 +163,7 @@ fun AppSettings.importFromJson(
     if (ImportSection.SERVICES in sections) {
         try {
             settings.putString(KEY_CONFIGURED_SERVICES, json["configured_services"]?.toString() ?: "")
-            settings.putString(KEY_CURRENT_SERVICE_ID, json["current_service_id"]?.jsonPrimitive?.content ?: Service.Free.id)
-            settings.putBoolean(KEY_FREE_FALLBACK_ENABLED, json["free_fallback_enabled"]?.jsonPrimitive?.content?.toBoolean() ?: true)
+            settings.putString(KEY_CURRENT_SERVICE_ID, json["current_service_id"]?.jsonPrimitive?.content ?: Service.OpenAI.id)
         } catch (_: Exception) {
             errors++
         }
@@ -194,8 +191,7 @@ fun AppSettings.importFromJson(
         }
     } else if (replace) {
         settings.putString(KEY_CONFIGURED_SERVICES, "")
-        settings.putString(KEY_CURRENT_SERVICE_ID, Service.Free.id)
-        settings.putBoolean(KEY_FREE_FALLBACK_ENABLED, true)
+        settings.putString(KEY_CURRENT_SERVICE_ID, Service.OpenAI.id)
         oldInstances.forEach { removeInstanceSettings(it.instanceId) }
     }
 

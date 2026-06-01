@@ -14,7 +14,6 @@
     <string name="settings_content_description">Ustawienia</string>
     <string name="bot_message_speech_content_description">Mowa</string>
     <string name="bot_message_copy_content_description">Kopiuj</string>
-    <string name="settings_free_tier_title">Poziom Darmowy</string>
     <string name="settings_status_error_invalid_key">Nieprawidłowy klucz API</string>
     <string name="settings_status_error_quota_exhausted">Limit wyczerpany</string>
     <string name="settings_status_error_rate_limited">Limit żądań osiągnięty</string>
@@ -42,8 +41,6 @@
     <string name="settings_tab_services">Usługi</string>
     <string name="settings_tab_tools">Narzędzia</string>
     <string name="tools_count">%1$d Narzędzia</string>
-    <string name="privacy_agree_prefix">Korzystając z usługi, zgadzasz się z </string>
-    <string name="privacy_policy">Polityką prywatności</string>
     <string name="settings_tab_general">Ogólne</string>
     <string name="settings_tab_agent">Agent</string>
     <string name="tool_set_alarm_name">Ustaw alarm</string>
@@ -107,9 +104,6 @@
     <string name="settings_email_poll_failed">Ostatnie pobranie nieudane %1$s</string>
     <string name="settings_email_refresh">Odśwież konto</string>
     <string name="settings_add_service">Dodaj usługę</string>
-    <string name="settings_free_fallback">Użyj jako zapasowy</string>
-    <string name="service_free_fast">Darmowy szybki</string>
-    <string name="service_free_expert">Darmowy ekspert</string>
     <string name="settings_heartbeat">Puls</string>
     <string name="settings_heartbeat_default_prompt">[HEARTBEAT] To jest automatyczna samokontrola. Przejrzyj swoje wspomnienia i oczekujące zadania. Jeśli wszystko wygląda dobrze i nic nie wymaga uwagi, odpowiedz dokładnie: HEARTBEAT_OK
 Jeśli coś wymaga uwagi (przestarzałe wspomnienia, zaległe zadania, dalsze działania użytkownika), zajmij się tym.</string>

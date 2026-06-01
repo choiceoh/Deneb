@@ -8,8 +8,6 @@ import kai.composeapp.generated.resources.ic_service_cerebras
 import kai.composeapp.generated.resources.ic_service_deepinfra
 import kai.composeapp.generated.resources.ic_service_deepseek
 import kai.composeapp.generated.resources.ic_service_fireworksai
-import kai.composeapp.generated.resources.ic_service_free_expert
-import kai.composeapp.generated.resources.ic_service_free_fast
 import kai.composeapp.generated.resources.ic_service_gemini
 import kai.composeapp.generated.resources.ic_service_groqcloud
 import kai.composeapp.generated.resources.ic_service_huggingface
@@ -29,18 +27,8 @@ import kai.composeapp.generated.resources.ic_service_together
 import kai.composeapp.generated.resources.ic_service_venice
 import kai.composeapp.generated.resources.ic_service_xai
 import kai.composeapp.generated.resources.ic_service_zai
-import kai.composeapp.generated.resources.service_free_expert
-import kai.composeapp.generated.resources.service_free_fast
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.StringResource
-
-enum class FreeMode(val modelId: String, val nameRes: StringResource, val icon: DrawableResource) {
-    FAST("fast", Res.string.service_free_fast, Res.drawable.ic_service_free_fast),
-    EXPERT("expert", Res.string.service_free_expert, Res.drawable.ic_service_free_expert),
-    ;
-
-    val instanceId: String get() = "free-$modelId"
-}
 
 data class ModelDefinition(
     val id: String,
@@ -95,21 +83,6 @@ sealed class Service(
     val supportsImages: Boolean = true,
     val reasoningRequestMode: ReasoningRequestMode = ReasoningRequestMode.NONE,
 ) {
-    data object Free : Service(
-        id = "free",
-        displayName = "Free",
-        icon = Res.drawable.ic_service_free_fast,
-        requiresApiKey = false,
-        defaultModel = null,
-        settingsKeyPrefix = "",
-        chatUrl = "https://api.kai9000.com/chat/completions",
-        modelsUrl = null,
-        // The kai9000 proxy fans out to a Mistral → Groq → OpenRouter chain. The Groq
-        // fallback uses text-only models (gpt-oss-20b/120b) that reject content-parts
-        // payloads, so images can't be promised reliably on this path.
-        supportsImages = false,
-    )
-
     data object AtlasCloud : Service(
         id = "atlascloud",
         displayName = "Atlas Cloud",
@@ -489,11 +462,11 @@ sealed class Service(
     )
 
     companion object {
-        val all: List<Service> get() = listOf(Free, AtlasCloud, Gemini, Anthropic, OpenAI, DeepSeek, Mistral, XAI, OpenRouter, Groq, Nvidia, Cerebras, OllamaCloud, LongCat, Together, HuggingFace, Venice, Moonshot, Zai, ZaiCodingPlan, Minimax, AiHubMix, DeepInfra, FireworksAI, OpenCode, PublicAI, OpenAICompatible, LiteRT)
+        val all: List<Service> get() = listOf(AtlasCloud, Gemini, Anthropic, OpenAI, DeepSeek, Mistral, XAI, OpenRouter, Groq, Nvidia, Cerebras, OllamaCloud, LongCat, Together, HuggingFace, Venice, Moonshot, Zai, ZaiCodingPlan, Minimax, AiHubMix, DeepInfra, FireworksAI, OpenCode, PublicAI, OpenAICompatible, LiteRT)
 
         const val DEFAULT_OPENAI_COMPATIBLE_BASE_URL = "http://localhost:11434/v1"
 
-        fun fromId(id: String): Service = all.find { it.id == id } ?: Free
+        fun fromId(id: String): Service = all.find { it.id == id } ?: OpenAI
     }
 
     val apiKeyKey: String get() = "service_${settingsKeyPrefix}_api_key"

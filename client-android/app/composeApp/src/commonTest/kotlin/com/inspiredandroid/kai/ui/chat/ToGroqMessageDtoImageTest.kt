@@ -10,8 +10,7 @@ import kotlin.test.assertTrue
 
 /**
  * Guards the Bug A invariant: when the target service can't accept content-parts payloads
- * (the kai9000 proxy fans out to text-only Groq fallbacks on rate-limit), image attachments
- * must be dropped from the outgoing message and `content` must be a plain string.
+ * image attachments must be dropped from the outgoing message and `content` must be a plain string.
  *
  * Sending a `JsonArray` content to gpt-oss-20b/120b triggers a 400:
  * "messages[N].content must be a string".
