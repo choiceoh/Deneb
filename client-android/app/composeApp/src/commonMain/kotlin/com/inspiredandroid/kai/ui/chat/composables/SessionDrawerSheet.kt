@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -27,14 +28,13 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -73,19 +73,22 @@ private val dateFormat = Format {
     year()
 }
 
+/**
+ * The right-side session selector: recent Deneb conversations (Telegram, cron,
+ * client) as cards with the active one highlighted, tap to switch, delete + undo.
+ * Mirrors the left navigation drawer ([DenebDrawerSheet]) for a symmetric
+ * left=nav / right=sessions layout; opened from the top-bar session button.
+ * Replaces the old ChatHistorySheet bottom sheet (one tap instead of two).
+ */
 @Composable
-internal fun ChatHistorySheet(
+fun DenebSessionDrawerSheet(
     conversations: ImmutableList<ConversationSummary>,
     currentConversationId: String?,
     pendingConversationDeletion: String?,
     actions: ChatActions,
-    onDismiss: () -> Unit,
-    onConversationSelected: () -> Unit = {},
+    onClose: () -> Unit,
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
+    ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.background) {
         val snackbarHostState = remember { SnackbarHostState() }
         val deletedMessage = stringResource(Res.string.snackbar_conversation_deleted)
         val undoLabel = stringResource(Res.string.snackbar_undo)
@@ -103,15 +106,14 @@ internal fun ChatHistorySheet(
             }
         }
 
-        Box(modifier = Modifier.fillMaxWidth()) {
+        Box(modifier = Modifier.fillMaxSize()) {
             Column {
                 Text(
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
                     text = stringResource(Res.string.chat_history_title),
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
-                Spacer(Modifier.height(12.dp))
 
                 if (conversations.isEmpty()) {
                     Text(
@@ -149,9 +151,8 @@ internal fun ChatHistorySheet(
                                         .fillMaxWidth()
                                         .handCursor()
                                         .clickable {
-                                            onConversationSelected()
                                             actions.loadConversation(conversation.id)
-                                            onDismiss()
+                                            onClose()
                                         }
                                         .padding(vertical = 8.dp, horizontal = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
