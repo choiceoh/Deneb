@@ -80,14 +80,14 @@
 - **Single operator, single user.** No multi-tenant, multi-user, or team deployment. Ignore user isolation, permission separation, multi-user auth.
 - **Hardware:** NVIDIA DGX Spark (local server). All services run on this single machine.
 - **Primary I/O surface:** Telegram on Android (Samsung Galaxy S25) — the daily driver; optimize this path first.
-- **PC as a first-class surface:** the Telegram Mini App also targets Telegram Desktop / web. On desktop it presents a PC-native layout (persistent sidebar + master-detail panes); on mobile it stays the single-column touch UI. One responsive codebase, not a separate app — see `frontend/src/desktop_shell.ts`.
+- **PC as a first-class surface:** beyond Telegram on Android, the native client (`client-android/`, a Kai-fork KMP app) is the richer companion surface and targets Android, iOS, and desktop (Mac) from one codebase. It talks to the gateway over the `miniapp.*` RPC surface with an `X-Deneb-Client-Token`.
 
 ### Design Principles
 
 - **High completeness and cohesion.** Every feature must be fully finished and tightly integrated.
 - **Opinionated defaults over user configuration.** Apple-like philosophy: fewer moving parts, not more options.
 - **Narrow scope, deep quality.** Fewer things well > more things shallowly.
-- **Depth over breadth.** Optimize the narrow supported surface (Telegram + DGX Spark + single user). "Narrow" means one user + one backend — not one device class: Android (touch) and Telegram Desktop (mouse/keyboard) are both first-class via one responsive Mini App.
+- **Depth over breadth.** Optimize the narrow supported surface (Telegram + DGX Spark + single user). "Narrow" means one user + one backend — not one device class: the native client (`client-android/`) spans phone touch and desktop (mouse/keyboard) from one codebase.
 
 ### AI Agent Guidelines
 
@@ -95,11 +95,11 @@
 - Break complex logic into small, well-named functions.
 - Prefer simple sequential processing over concurrency/race-condition handling.
 
-### Telegram Optimization (Android-first, PC first-class)
+### Telegram Bot Optimization (Android-first)
 
 - Optimize for Telegram Bot API constraints: 4096-char message limit, MarkdownV2 parse mode, inline keyboards.
 - Respect Telegram file size limits (50 MB for media uploads).
-- **Mini App is responsive, not device-forked:** Android renders the single-column touch UI; Telegram Desktop / web renders a PC-native shell (sidebar + master-detail). Gate every desktop rule under `body.tg-desktop` + the `#app.desktop-shell` class (and width) so the mobile path stays byte-identical. This is orthogonal to the "UI 분리 금지" persona rule — that forbids splitting 분석/비서 *personas* into tabs, not adapting layout to screen size.
+- **Adapt layout to the screen, never split the persona:** rendering may differ by surface (Telegram bot, native client phone vs. desktop), but that is orthogonal to the "UI 분리 금지" persona rule — it forbids splitting 분석/비서 *personas* into tabs, not adapting layout to screen size.
 
 ### Korean Language First
 

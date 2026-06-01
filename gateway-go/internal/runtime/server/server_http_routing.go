@@ -18,13 +18,6 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/miniapp/events", s.handleMiniappEvents)
 	mux.HandleFunc("GET /api/v1/miniapp/gmail/attachment", s.handleMiniappGmailAttachment)
 
-	// Mini App static assets (Vite-built bundle embedded via //go:embed).
-	// Trailing slash makes this a subtree match in Go 1.22+ ServeMux, so:
-	// /app/             → index.html
-	// /app/assets/<f>   → bundled asset with immutable cache
-	// /app/<anything>   → SPA fallback to index.html
-	mux.HandleFunc("GET /app/", s.serveMiniappStatic)
-
 	// /debug/pprof/* — runtime profiling + goroutine dumps for live diagnosis.
 	// Safe to expose because the gateway binds loopback by default in
 	// production; these endpoints are never reachable from outside the host.

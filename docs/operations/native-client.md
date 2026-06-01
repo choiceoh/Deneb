@@ -9,11 +9,11 @@ read_when:
 
 # Native Android Client
 
-Deneb has two phone surfaces. The Telegram bot and its Mini App are the
-zero-install path. The native Android client is the daily driver: it adds the
-things a Telegram client cannot do — share-sheet capture from any app, a
-home-screen widget, notification ingestion, and instant proactive push — while
-the agent, tools, memory, and always-on work stay on the gateway.
+Deneb has two surfaces: the Telegram bot (the zero-install path) and the native
+Android client (the daily driver). The native client adds the things a Telegram
+client cannot do — share-sheet capture from any app, a home-screen widget,
+notification ingestion, and instant proactive push — while the agent, tools,
+memory, and always-on work stay on the gateway.
 
 ## What It Is
 
@@ -33,10 +33,9 @@ authenticated endpoint.
   Korean-first throughout.
 
 <Info>
-  This is a separate native app, not the [Mini App](/operations/mini-app-guide).
-  The Mini App runs inside Telegram as a WebView and needs no install or token;
-  the native client is a standalone APK that authenticates with a client token.
-  Both talk to the same gateway and share the same data.
+  The native client is a standalone APK that authenticates with a client token.
+  It talks to the same gateway as the Telegram bot and shares the same data, so
+  whichever surface you use, the agent, memory, and tools are identical.
 </Info>
 
 ## Connecting to the Gateway
@@ -58,9 +57,7 @@ tab: the gateway URL and a client token.
   <Step title="Make the gateway reachable from the phone">
     The gateway binds to loopback by default. Reach it from the phone over your
     private network — a Tailscale-style address such as
-    `http://100.x.x.x:18789` is typical. (The
-    [Cloudflare Tunnel](/operations/cloudflare-tunnel-setup) path is for the
-    Mini App's public HTTPS URL, not the native client.)
+    `http://100.x.x.x:18789` is typical.
   </Step>
   <Step title="Paste both into the app">
     Open settings, the 게이트웨이 tab, and paste the gateway URL and the token,
@@ -72,9 +69,8 @@ tab: the gateway URL and a client token.
 <Note>
   Client-token auth is **opt-in**. With no token file on the gateway the path is
   disabled entirely, so a stock gateway is not reachable by a standalone app
-  until you generate one. A present-but-wrong token is rejected with `401`; an
-  absent header falls through to the Mini App's Telegram `initData` path, so the
-  two surfaces never interfere.
+  until you generate one. The client token is the only credential the client API
+  accepts: a request with a wrong token — or no token — is rejected with `401`.
 </Note>
 
 ## Chat
@@ -111,8 +107,8 @@ when fewer than two topics are configured.
 ## Getting Around
 
 A left navigation drawer opens from the top-bar hamburger or a left-edge swipe.
-It is a flat, lowercase typographic menu — no icons, no group headers — matching
-the Mini App's idiom. The destinations are:
+It is a flat, lowercase typographic menu — no icons, no group headers. The
+destinations are:
 
 | Label | Goes to |
 |---|---|

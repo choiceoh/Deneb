@@ -7,7 +7,6 @@
        test clean check check-go fmt generate generate-check \
        tool-schemas tool-schemas-check \
        data-gen data-gen-check \
-       build-frontend embed-frontend frontend-clean miniapp \
        info
 
 # Version from git tags (release-please format: deneb-vX.Y.Z), injected via ldflags.
@@ -105,47 +104,12 @@ go-binary:
 
 
 # Build production gateway binary to dist/.
-#
-# Runs embed-frontend before go-binary so the Mini App bundle that
-# scripts/deploy/deploy.sh ships is always rebuilt from the current
-# frontend/ tree. Recipe-level sequencing (not a prerequisite list)
-# guarantees ordering under `make -j`.
 gateway-prod:
-	$(MAKE) embed-frontend
 	$(MAKE) go-binary
 	@echo "Production gateway ready: dist/deneb-gateway"
 
 go-clean:
 	cd gateway-go && go clean ./...
-
-# --- Mini App frontend (Vite + Vanilla TS) ---
-# Outputs to frontend/dist/, then copied into the Go package directory the
-# //go:embed directive points at (gateway-go/internal/runtime/server/miniapp_dist).
-
-MINIAPP_EMBED_DIR := gateway-go/internal/runtime/server/miniapp_dist
-
-build-frontend:
-	cd frontend && pnpm install --frozen-lockfile && pnpm build
-
-embed-frontend: build-frontend
-	@echo "==> Syncing frontend/dist/ -> $(MINIAPP_EMBED_DIR)/"
-	@rm -rf $(MINIAPP_EMBED_DIR).new
-	@mkdir -p $(MINIAPP_EMBED_DIR).new
-	@cp -R frontend/dist/. $(MINIAPP_EMBED_DIR).new/
-	# Preserve the committed placeholder.html so the embed FS always has
-	# a fallback entry point even when the Vite bundle is missing.
-	@if [ -f $(MINIAPP_EMBED_DIR)/placeholder.html ]; then \
-		cp $(MINIAPP_EMBED_DIR)/placeholder.html $(MINIAPP_EMBED_DIR).new/; \
-	fi
-	@rm -rf $(MINIAPP_EMBED_DIR)
-	@mv $(MINIAPP_EMBED_DIR).new $(MINIAPP_EMBED_DIR)
-	@echo "==> Mini App assets embedded; rerun 'make go' to rebuild the binary"
-
-# Full pipeline: frontend bundle + embed + Go build.
-miniapp: embed-frontend go
-
-frontend-clean:
-	rm -rf frontend/dist frontend/node_modules
 
 # Run Go benchmarks with memory allocation stats.
 go-bench:

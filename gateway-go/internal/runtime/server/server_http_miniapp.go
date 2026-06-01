@@ -1,31 +1,32 @@
-// server_http_miniapp.go — HTTP bridge for the Telegram Mini App RPC surface.
+// server_http_miniapp.go — HTTP bridge for the native-client RPC surface.
 //
 // Pipeline:
 //
 //	POST /api/v1/miniapp/rpc
-//	  Authorization: tma <raw initData>
-//	  Body:           protocol.RequestFrame (miniapp.* method)
+//	  X-Deneb-Client-Token: <secret>
+//	  Body:                 protocol.RequestFrame (miniapp.* method)
 //	    │
 //	    ▼
-//	  initData verification (HMAC-SHA256, TTL window)
+//	  client-token verification (constant-time compare)
 //	    │
 //	    ▼
-//	  Dispatcher.Dispatch(ctx + *telegram.InitData, frame)
+//	  Dispatcher.Dispatch(ctx + synthetic *telegram.InitData, frame)
 //	    │
 //	    ▼
 //	  protocol.ResponseFrame JSON
 //
-// Authentication uses the Telegram Mini App convention from
-// https://docs.telegram-mini-apps.com/platform/authorizing-user — the client
-// sends "Authorization: tma <raw>" where <raw> is the verbatim
-// Telegram.WebApp.initData query string.
+// The Telegram Mini App webview (which authenticated with signed initData) was
+// retired; the standalone native client is now the only caller. It presents a
+// static bearer secret in the X-Deneb-Client-Token header (see
+// internal/infra/clientauth), and the server attaches a synthetic operator
+// identity so downstream miniapp.* handlers are unchanged. The miniapp.* method
+// name and route are kept for native-client wire compatibility.
 
 package server
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"mime"
 	"net/http"
@@ -37,10 +38,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// miniappAuthScheme is the HTTP Authorization scheme Telegram clients use
-// when calling Mini App backends. The raw initData follows after a space.
-const miniappAuthScheme = "tma"
-
 type miniappGmailAttachmentClient interface {
 	GetAttachment(ctx context.Context, messageID, attachmentID string) ([]byte, error)
 }
@@ -49,10 +46,10 @@ var miniappGmailAttachmentClientFactory = func() (miniappGmailAttachmentClient, 
 	return gmail.DefaultClient()
 }
 
-// handleMiniappRPC bridges HTTP POSTs from the Mini App frontend into the
-// existing RPC dispatcher. It enforces initData auth before dispatch and
-// rejects any method outside the miniapp.* namespace so the broader RPC
-// surface stays inaccessible to browser-origin callers.
+// handleMiniappRPC bridges native-client HTTP POSTs into the existing RPC
+// dispatcher. It enforces client-token auth before dispatch and rejects any
+// method outside the miniapp.* namespace so the broader RPC surface stays
+// inaccessible to remote callers.
 func (s *Server) handleMiniappRPC(w http.ResponseWriter, r *http.Request) {
 	initData, ok := s.authenticateMiniappRequest(w, r)
 	if !ok {
@@ -87,9 +84,9 @@ func (s *Server) handleMiniappRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Confine browser-origin callers to the miniapp.* surface. Other domains
-	// are reachable from in-process callers (Telegram pipeline, cron, etc.)
-	// but should never be reachable from a Mini App webview.
+	// Confine remote callers to the miniapp.* surface. Other domains are
+	// reachable from in-process callers (Telegram pipeline, cron, etc.) but
+	// should never be reachable from the native client over HTTP.
 	if !strings.HasPrefix(frame.Method, "miniapp.") {
 		s.writeJSON(w, http.StatusForbidden, map[string]any{
 			"error": "method outside miniapp.* namespace",
@@ -108,10 +105,9 @@ func (s *Server) handleMiniappRPC(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleMiniappGmailAttachment streams a Gmail attachment over a normal
-// authenticated GET. This path exists because a Telegram WebView cannot attach
-// custom Authorization headers when opening a download link; the Mini App puts
-// the raw initData in the query string and this handler verifies it before
-// touching Gmail.
+// authenticated GET. This path exists because a browser opening a download
+// link cannot attach a custom header; the native client puts the client token
+// in the query string and this handler verifies it before touching Gmail.
 func (s *Server) handleMiniappGmailAttachment(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.authenticateMiniappDownloadRequest(w, r); !ok {
 		return
@@ -165,94 +161,43 @@ func (s *Server) handleMiniappGmailAttachment(w http.ResponseWriter, r *http.Req
 	_, _ = w.Write(data) //nolint:gosec // G705: attachment bytes come from authenticated Gmail API response
 }
 
-// authenticateMiniappRequest verifies the Authorization header against the
-// Telegram bot token. On failure it writes the HTTP error and returns
-// (nil, false); on success it returns the parsed *InitData and (data, true).
+// authenticateMiniappRequest verifies the X-Deneb-Client-Token header against
+// the stored client secret. On failure it writes the HTTP error and returns
+// (nil, false); on success it returns the synthetic operator InitData and
+// (data, true). The Telegram initData ("Authorization: tma <raw>") path was
+// retired with the Mini App webview — the native client is the only caller.
 func (s *Server) authenticateMiniappRequest(w http.ResponseWriter, r *http.Request) (*telegram.InitData, bool) {
-	// Standalone native client: a static bearer secret in a dedicated header.
-	// Present-but-invalid is rejected here (a native client has no initData to
-	// fall back to); an absent header falls through to the Telegram initData
-	// path below, so existing Mini App webview callers are unaffected.
-	if tok := strings.TrimSpace(r.Header.Get(clientauth.Header)); tok != "" {
-		if clientauth.Verify(tok) {
-			return syntheticOperatorInitData(), true
-		}
+	tok := strings.TrimSpace(r.Header.Get(clientauth.Header))
+	if tok == "" {
+		s.writeJSON(w, http.StatusUnauthorized, map[string]any{
+			"error": "missing client token",
+		})
+		return nil, false
+	}
+	if !clientauth.Verify(tok) {
 		s.writeJSON(w, http.StatusUnauthorized, map[string]any{
 			"error": "invalid client token",
 		})
 		return nil, false
 	}
-
-	raw, err := extractMiniappAuthHeader(r.Header.Get("Authorization"))
-	if err != nil {
-		s.writeJSON(w, http.StatusUnauthorized, map[string]any{
-			"error": err.Error(),
-		})
-		return nil, false
-	}
-	return s.verifyMiniappRawInitData(w, raw)
+	return syntheticOperatorInitData(), true
 }
 
+// authenticateMiniappDownloadRequest authenticates a download GET. A browser
+// opening a download link cannot set the X-Deneb-Client-Token header, so the
+// client token rides in the query string instead, verified the same
+// constant-time way as the header path.
 func (s *Server) authenticateMiniappDownloadRequest(w http.ResponseWriter, r *http.Request) (*telegram.InitData, bool) {
-	// Standalone native client: a browser opening a download link cannot set the
-	// X-Deneb-Client-Token header, so the static client token may ride in the
-	// query string. Verified the same constant-time way as the header path;
-	// present-but-invalid is rejected (a native client has no initData fallback).
-	if tok := strings.TrimSpace(r.URL.Query().Get("clientToken")); tok != "" {
-		if clientauth.Verify(tok) {
-			return syntheticOperatorInitData(), true
-		}
+	tok := strings.TrimSpace(r.URL.Query().Get("clientToken"))
+	if tok == "" {
+		s.writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "missing client token"})
+		return nil, false
+	}
+	if !clientauth.Verify(tok) {
 		s.writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "invalid client token"})
 		return nil, false
 	}
-
-	raw := strings.TrimSpace(r.URL.Query().Get("initData"))
-	if raw == "" {
-		var err error
-		raw, err = extractMiniappAuthHeader(r.Header.Get("Authorization"))
-		if err != nil {
-			s.writeJSON(w, http.StatusUnauthorized, map[string]any{
-				"error": "missing initData",
-			})
-			return nil, false
-		}
-	}
-	return s.verifyMiniappRawInitData(w, raw)
-}
-
-func (s *Server) verifyMiniappRawInitData(w http.ResponseWriter, raw string) (*telegram.InitData, bool) {
-	if s.telegramPlug == nil {
-		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error": "telegram plugin not configured",
-		})
-		return nil, false
-	}
-	cfg := s.telegramPlug.Config()
-	if cfg == nil || strings.TrimSpace(cfg.BotToken) == "" {
-		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error": "telegram bot token not configured",
-		})
-		return nil, false
-	}
-
-	data, err := telegram.VerifyInitData(raw, cfg.BotToken, telegram.DefaultInitDataTTL)
-	if err != nil {
-		// User-impacting failure is a normal client error here (forged or
-		// stale launch), so don't log as Error. Sentinel errors expose
-		// enough detail for the client to choose between "re-open the Mini
-		// App" and "your bot token rotated".
-		s.writeJSON(w, http.StatusUnauthorized, map[string]any{
-			"error": err.Error(),
-		})
-		return nil, false
-	}
-	if data.User == nil {
-		s.writeJSON(w, http.StatusUnauthorized, map[string]any{
-			"error": telegram.ErrInitDataNoUser.Error(),
-		})
-		return nil, false
-	}
-	return data, true
+	return syntheticOperatorInitData(), true
 }
 
 func sanitizeAttachmentFilename(raw string) string {
@@ -307,25 +252,4 @@ func statusForMiniappGmailAttachmentError(err error) int {
 	default:
 		return http.StatusBadGateway
 	}
-}
-
-// extractMiniappAuthHeader pulls the raw initData payload out of an
-// "Authorization: tma <raw>" header. The scheme match is case-insensitive
-// per RFC 7235.
-func extractMiniappAuthHeader(header string) (string, error) {
-	if header == "" {
-		return "", errors.New("missing authorization header")
-	}
-	parts := strings.SplitN(header, " ", 2)
-	if len(parts) != 2 {
-		return "", errors.New("malformed authorization header (want \"tma <initData>\")")
-	}
-	if !strings.EqualFold(parts[0], miniappAuthScheme) {
-		return "", errors.New("authorization scheme must be \"tma\"")
-	}
-	raw := strings.TrimSpace(parts[1])
-	if raw == "" {
-		return "", errors.New("empty initData in authorization header")
-	}
-	return raw, nil
 }

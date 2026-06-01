@@ -275,20 +275,9 @@ type InlineKeyboardMarkup struct {
 
 // InlineKeyboardButton represents one button in an inline keyboard.
 type InlineKeyboardButton struct {
-	Text         string      `json:"text"`
-	CallbackData string      `json:"callback_data,omitempty"`
-	URL          string      `json:"url,omitempty"`
-	WebApp       *WebAppInfo `json:"web_app,omitempty"`
-}
-
-// WebAppInfo is the inline-button variant that launches a Telegram
-// WebApp in-place above the chat (no browser handoff). The URL must
-// be HTTPS on the domain registered with @BotFather via /setdomain
-// — Telegram refuses to launch otherwise. Used by the /app slash
-// command so the operator can open the Mini App from any topic, not
-// just the bot's DM (where the chat menu button lives).
-type WebAppInfo struct {
-	URL string `json:"url"`
+	Text         string `json:"text"`
+	CallbackData string `json:"callback_data,omitempty"`
+	URL          string `json:"url,omitempty"`
 }
 
 // LinkPreviewOptions controls link preview behavior.

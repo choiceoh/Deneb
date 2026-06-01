@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"sync"
 	"time"
 )
@@ -151,22 +150,6 @@ func (p *Plugin) Start(ctx context.Context) error {
 		p.logger.Warn("telegram setMyCommands failed", "error", err)
 	}
 
-	// Install the WebApp chat menu button when configured. Best-effort —
-	// a failure leaves the default menu in place and does not block startup.
-	// Telegram requires the WebApp domain to be registered with @BotFather
-	// (/setdomain); a wrong URL produces a 400 here, which we surface as Warn.
-	if url := strings.TrimSpace(p.config.WebAppURL); url != "" {
-		label := strings.TrimSpace(p.config.WebAppMenuLabel)
-		if label == "" {
-			label = "Deneb"
-		}
-		if err := p.client.SetMenuButtonWebApp(ctx, 0, label, url); err != nil {
-			p.logger.Warn("telegram setChatMenuButton failed", "error", err, "url", url)
-		} else {
-			p.logger.Info("telegram WebApp menu button installed", "url", url, "label", label)
-		}
-	}
-
 	// Start polling in background.
 	// Use a detached context so polling survives beyond the RPC request that triggered Start.
 	p.bot = NewBot(p.client, p.config, p.handler, p.logger)
@@ -210,17 +193,6 @@ func (p *Plugin) Client() *Client {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.client
-}
-
-// WebAppURL returns the configured Mini App URL (empty when no web app
-// is configured). Read at runtime so callers can react when the menu
-// button wasn't installed (e.g., /app slash refuses politely instead
-// of sending a button that opens about:blank).
-func (p *Plugin) WebAppURL() string {
-	if p.config == nil {
-		return ""
-	}
-	return strings.TrimSpace(p.config.WebAppURL)
 }
 
 // Bot returns the underlying bot instance (for poll draining).
