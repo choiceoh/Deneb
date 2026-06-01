@@ -10,11 +10,14 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
@@ -86,6 +89,17 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	insightsEngine := insights.New(hub.Sessions(), s.usageTracker)
 	hub.SetInsights(insightsEngine)
 	s.insights = insightsEngine
+
+	// Device address book mirror (native-client contacts sync) — no chat dependency,
+	// so it's created here in the early phase and is ready by the time chat init wires
+	// the contacts tool. nil-tolerant: a load failure just disables the store write
+	// (the contacts tool / save path degrade to "unavailable" cleanly).
+	if cs, err := contacts.NewStore(filepath.Join(denebDir, "contacts.json")); err != nil {
+		s.logger.Warn("contacts store init failed; contacts sync disabled", "error", err)
+	} else {
+		s.contactsStore = cs
+		hub.SetContactsStore(cs)
+	}
 
 	// Create the secondary-chat notify service when the Telegram plugin
 	// has a notificationChatID configured. The service registers a tap
@@ -406,19 +420,41 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			Chat:       hub.Chat(),
 			OcrImage:   tools.OcrImageBytes,
 			Transcribe: tools.TranscribeAudio,
-			// Proper-noun bias for audio transcription, sourced from the wiki
-			// (people/companies/deals/domain terms). Empty when no wiki.
+			// Proper-noun bias for audio transcription, merged from two sources:
+			// the wiki (people/companies/deals/domain terms) and the contacts
+			// address book (every saved name + org). Either may be empty.
 			Hotwords: func() string {
-				ws := hub.WikiStore()
-				if ws == nil {
-					return ""
+				var parts []string
+				if ws := hub.WikiStore(); ws != nil {
+					if h := ws.HotwordHints(150); h != "" {
+						parts = append(parts, h)
+					}
 				}
-				return ws.HotwordHints(200)
+				if cs := hub.ContactsStore(); cs != nil {
+					if h := cs.HotwordHints(100); h != "" {
+						parts = append(parts, h)
+					}
+				}
+				return strings.Join(parts, ", ")
 			},
-			// Address-book enrichment of existing wiki people (native-client
-			// contacts sync). Enriches only 사람 pages already in the wiki — it
-			// creates none — so the phone book strengthens the curated set without
-			// flooding it.
+			// Primary contacts sync: persist the whole address book into the
+			// contacts store (phone lookup / name search / ASR hotwords).
+			SaveContacts: func(contactsJSON []byte) (int, error) {
+				cs := hub.ContactsStore()
+				if cs == nil {
+					return 0, fmt.Errorf("contacts store unavailable")
+				}
+				var p struct {
+					Contacts []contacts.Contact `json:"contacts"`
+				}
+				if err := json.Unmarshal(contactsJSON, &p); err != nil {
+					return 0, err
+				}
+				return cs.ReplaceAll(p.Contacts)
+			},
+			// Bonus: enrich existing wiki people (native-client contacts sync).
+			// Enriches only 사람 pages already in the wiki — it creates none — so
+			// the phone book strengthens the curated set without flooding it.
 			EnrichContacts: func(contactsJSON []byte) (wiki.ContactEnrichResult, error) {
 				ws := hub.WikiStore()
 				if ws == nil {

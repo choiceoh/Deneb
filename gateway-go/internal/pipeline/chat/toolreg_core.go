@@ -19,6 +19,10 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// Wiki knowledge base tools (always active when wiki is configured).
 	toolreg.RegisterWikiTools(registry, &deps.Wiki, deps.WorkspaceDir)
 
+	// Contacts address-book lookup (phone lookup + name/company search).
+	// Active when the contacts store is wired (native-client contacts sync).
+	toolreg.RegisterContactsTool(registry, &deps.Contacts)
+
 	// Deferred tool activation: fetch_tools lets the LLM load schemas on demand.
 	// Registered here (not in toolreg/) because it needs the chat-side
 	// ToolRegistry to satisfy FetchToolsRegistry (DeferredToolDef / DeferredSummaries).

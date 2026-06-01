@@ -33,9 +33,12 @@ type Deps struct {
 	Hotwords func() string
 	// EnrichContacts merges a shared address book into EXISTING wiki 사람 pages —
 	// it creates no pages, only enriches people already in the wiki with their
-	// phone/email/org (native-client contacts sync). Optional; nil disables
-	// miniapp.capture.contacts.
+	// phone/email/org (native-client contacts sync). Optional; nil disables the
+	// wiki enrichment bonus (the contacts store save is the primary path).
 	EnrichContacts func(contactsJSON []byte) (wiki.ContactEnrichResult, error)
+	// SaveContacts mirrors the synced address book into the contacts store (phone
+	// lookup, name search, ASR hotwords). Optional; nil disables the store write.
+	SaveContacts func(contactsJSON []byte) (int, error)
 }
 
 // BtwDeps holds the dependencies for the chat.btw side-question RPC method.

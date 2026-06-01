@@ -19,6 +19,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
@@ -106,6 +107,12 @@ type GatewayHub struct {
 	// Wiki knowledge base (optional, nil when wiki is disabled).
 	wikiStore *wiki.Store
 
+	// Contacts address-book mirror (optional, nil when the store failed to init).
+	// Backs phone lookup, name search, and ASR hotword bias for the native-client
+	// contacts sync — kept separate from the wiki so the bulk phone book never
+	// pollutes the curated knowledge base.
+	contactsStore *contacts.Store
+
 	// Insights engine — aggregates session/usage into usage reports.
 	insights *insights.Engine
 
@@ -153,6 +160,7 @@ func (h *GatewayHub) Tasks() *tasks.Registry                         { return h.
 func (h *GatewayHub) Approvals() *approval.Store                     { return h.approvals }
 func (h *GatewayHub) Skills() *skills.Registry                       { return h.skills }
 func (h *GatewayHub) WikiStore() *wiki.Store                         { return h.wikiStore }
+func (h *GatewayHub) ContactsStore() *contacts.Store                 { return h.contactsStore }
 func (h *GatewayHub) Insights() *insights.Engine                     { return h.insights }
 func (h *GatewayHub) Logger() *slog.Logger                           { return h.logger }
 func (h *GatewayHub) Version() string                                { return h.version }
@@ -169,6 +177,10 @@ func (h *GatewayHub) SetEmbeddingClient(c *embedding.Client) { h.embeddingClient
 
 // SetWikiStore sets the wiki knowledge base (optional, created during session phase).
 func (h *GatewayHub) SetWikiStore(s *wiki.Store) { h.wikiStore = s }
+
+// SetContactsStore sets the contacts address-book mirror (optional, created during
+// the early registration phase — it has no chat dependency).
+func (h *GatewayHub) SetContactsStore(s *contacts.Store) { h.contactsStore = s }
 
 // SetInsights sets the insights engine (created during early registration phase).
 func (h *GatewayHub) SetInsights(e *insights.Engine) { h.insights = e }

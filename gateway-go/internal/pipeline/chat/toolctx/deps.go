@@ -4,6 +4,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
@@ -18,6 +19,7 @@ type CoreToolDeps struct {
 	Sessions       SessionDeps
 	Chrono         ChronoDeps
 	Wiki           WikiDeps
+	Contacts       ContactsDeps
 	LLMClient      *llm.Client
 	DefaultModel   string
 	AgentLog       *agentlog.Writer
@@ -56,4 +58,9 @@ type ChronoDeps struct {
 // WikiDeps holds dependencies for the wiki knowledge base tool.
 type WikiDeps struct {
 	Store *wiki.Store // may be nil when wiki is not enabled
+}
+
+// ContactsDeps holds dependencies for the contacts address-book tool.
+type ContactsDeps struct {
+	Store *contacts.Store // may be nil when the contacts store failed to init
 }
