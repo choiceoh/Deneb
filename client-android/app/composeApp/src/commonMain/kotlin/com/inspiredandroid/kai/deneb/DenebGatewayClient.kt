@@ -128,19 +128,6 @@ class DenebGatewayClient(
     private val _savedConversations = MutableStateFlow<List<Conversation>>(emptyList())
     override val savedConversations: StateFlow<List<Conversation>> = _savedConversations
 
-    // Per-topic knowledge topics from the gateway (deneb.json topics.map),
-    // mirroring the Telegram forum topics. Drives the chat-screen topic switcher;
-    // empty when topics are unconfigured, in which case the switcher is hidden
-    // and chat falls back to the single "client:main" session.
-    private val _topics = MutableStateFlow<List<DenebTopic>>(emptyList())
-    val topics: StateFlow<List<DenebTopic>> = _topics
-
-    // The currently selected topic key, echoed back to the gateway on each send
-    // so per-topic knowledge injection fires exactly as it does on Telegram.
-    // null = no topic (legacy single-session chat).
-    private val _selectedTopic = MutableStateFlow<String?>(null)
-    val selectedTopic: StateFlow<String?> = _selectedTopic
-
     // Deneb wiki pages surfaced through Kai's memory screen. getMemories() returns
     // this snapshot and also kicks a refresh; SettingsViewModel observes the flow
     // to rebuild its state once the RPC lands (see SettingsViewModel.init).
@@ -283,54 +270,11 @@ class DenebGatewayClient(
 
     override fun startNewChat() {
         _chatHistory.value = emptyList()
-        // Scope the fresh conversation to the active topic so its transcript and
-        // per-topic knowledge stay separate from other topics.
-        val base = topicSessionKey(_selectedTopic.value)
-        sessionKey = "$base:${Uuid.random()}"
+        // Scope the fresh conversation to a unique session off the client:main home.
+        sessionKey = "client:main:${Uuid.random()}"
     }
 
-    // --- Topic switcher → per-topic knowledge + sessions --------------------
-    // Topics mirror the Telegram forum topics (deneb.json topics.map). Selecting
-    // one repoints sessionKey at that topic's thread and echoes the key on every
-    // send, so the gateway injects the same <key>.md knowledge it would on
-    // Telegram (see miniapp.chat.send topicKey).
-
-    /** Fetch the configured topics and default to General (threadId "0"). */
-    fun loadTopics() {
-        scope.launch { refreshTopics() }
-    }
-
-    /**
-     * Loads the configured topics, defaults to General, and returns them. The
-     * suspend form lets the share flow await the list before showing its topic
-     * picker — a cold share has no chat open to have loaded them yet.
-     */
-    suspend fun refreshTopics(): List<DenebTopic> {
-        val payload = callRpc<TopicsListPayload>("miniapp.topics.list", buildJsonObject {})
-        val topics = payload?.topics
-            ?.filter { it.key.isNotBlank() }
-            ?.map { DenebTopic(key = it.key, threadId = it.threadId) }
-            ?: emptyList()
-        _topics.value = topics
-        // Only auto-select when a General (forum threadId "0", i.e. 업무)
-        // topic is configured — that maps to the legacy "client:main" home,
-        // so the default view is unchanged. Without a General topic the
-        // named topics stay opt-in and chat stays on "client:main", so a
-        // returning user keeps their existing conversation on first open.
-        if (_selectedTopic.value == null) {
-            topics.firstOrNull { it.threadId == "0" }?.let { selectTopic(it.key) }
-        }
-        return topics
-    }
-
-    /** Switch the active topic: repoint the session and load its transcript. */
-    fun selectTopic(topicKey: String) {
-        if (_selectedTopic.value == topicKey) return
-        _selectedTopic.value = topicKey
-        val key = topicSessionKey(topicKey)
-        sessionKey = key
-        scope.launch { loadTranscriptGuarded(key) }
-    }
+    // --- Proactive-report deep link → session transcript --------------------
 
     /**
      * Fetch a session transcript and install it as the chat history UNLESS an
@@ -349,28 +293,13 @@ class DenebGatewayClient(
     }
 
     /**
-     * Open the 업무 (General) topic where proactive reports are mirrored — the
-     * deep-link target when the user taps a proactive-report push. Selects the
-     * General topic (threadId "0") when topics are configured; otherwise loads
-     * the legacy "client:main" session directly so the report is visible even
-     * without a topic map.
+     * Open the client:main home conversation where proactive reports are mirrored
+     * — the deep-link target when the user taps a proactive-report push. Guarded so
+     * a concurrent cold-start share can't be clobbered (see historyGate).
      */
     fun openWorkTopic() {
-        val general = _topics.value.firstOrNull { it.threadId == "0" }
-        if (general != null) {
-            selectTopic(general.key)
-        } else {
-            sessionKey = "client:main"
-            scope.launch { _chatHistory.value = fetchTranscript("client:main") }
-        }
-    }
-
-    // General (forum threadId "0", i.e. 업무) keeps the legacy "client:main"
-    // session so existing history carries over; named topics get their own.
-    private fun topicSessionKey(topicKey: String?): String {
-        if (topicKey.isNullOrBlank()) return "client:main"
-        val t = _topics.value.firstOrNull { it.key == topicKey }
-        return if (t != null && t.threadId == "0") "client:main" else "client:topic:$topicKey"
+        sessionKey = "client:main"
+        scope.launch { loadTranscriptGuarded("client:main") }
     }
 
     // --- Conversation drawer → Deneb sessions browser -----------------------
@@ -1072,7 +1001,6 @@ class DenebGatewayClient(
                     params = SendParams(
                         message = message,
                         sessionKey = sessionKey,
-                        topicKey = _selectedTopic.value,
                     ),
                 ),
             )
@@ -1310,9 +1238,6 @@ class DenebGatewayClient(
     private data class SendParams(
         val message: String,
         val sessionKey: String? = null,
-        // Per-topic knowledge selector (see miniapp.topics.list); null/omitted
-        // means no per-topic injection.
-        val topicKey: String? = null,
     )
 
     @Serializable
@@ -1582,11 +1507,6 @@ class DenebGatewayClient(
     @Serializable
     private data class TopicDocReadPayload(val name: String = "", val content: String = "", val modified: String = "")
 
-    @Serializable
-    private data class TopicsListPayload(val topics: List<TopicRow> = emptyList())
-
-    @Serializable
-    private data class TopicRow(val key: String = "", val threadId: String = "")
 
     @Serializable
     private data class WikiPagePayload(
@@ -1748,13 +1668,6 @@ data class PersonHit(val name: String, val email: String, val messageCount: Int,
 /** A topic doc file in the hub list. */
 data class TopicDocFile(val name: String, val modified: String)
 
-/**
- * One per-topic knowledge topic (deneb.json topics.map), rendered as a switch
- * in the chat top bar. [key] is the topic key (also the button label and the
- * value echoed to the gateway on send); [threadId] is the Telegram forum thread
- * it maps to, with "0" marking the General (업무) topic.
- */
-data class DenebTopic(val key: String, val threadId: String)
 
 /** A topic doc's content for the read view. */
 data class TopicDocContent(val name: String, val content: String, val modified: String)

@@ -28,9 +28,6 @@ import com.inspiredandroid.kai.ui.DenebType
 import com.inspiredandroid.kai.ui.LightColorScheme
 import com.inspiredandroid.kai.ui.denebHint
 import com.inspiredandroid.kai.ui.chat.composables.DenebDrawerSheet
-import com.inspiredandroid.kai.ui.chat.composables.DenebTopicDrawerSheet
-import com.inspiredandroid.kai.ui.chat.composables.TopicTab
-import kotlinx.collections.immutable.persistentListOf
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 
@@ -111,35 +108,24 @@ private fun renderDesignSample(name: String, scheme: ColorScheme) {
     scene.close()
 }
 
-// Renders the redesigned chat chrome — the left drawer (분석 + 기록·설정 groups)
-// beside the pill topic switcher (업무/잡담/코딩, 잡담 selected) — so the look can
-// be checked without an APK.
+// Renders the left navigation drawer (분석 + 기록·설정 groups) so the look can be
+// checked without an APK.
 private fun renderChrome(name: String, scheme: ColorScheme) {
-    val topics = persistentListOf(
-        TopicTab("work", "업무"),
-        TopicTab("chat", "잡담"),
-        TopicTab("coding", "코딩"),
-    )
-    val scene = ImageComposeScene(width = 980, height = 1000, density = Density(2f)) {
+    val scene = ImageComposeScene(width = 760, height = 1200, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
-                Row {
-                    Box(Modifier.width(320.dp)) {
-                        DenebDrawerSheet(
-                            onOpenSearch = {},
-                            onOpenMail = {},
-                            onOpenCalendar = {},
-                            onOpenPeople = {},
-                            onOpenCategories = {},
-                            onShowHistory = {},
-                            onNavigateToSettings = {},
-                            hasSavedConversations = true,
-                            onClose = {},
-                        )
-                    }
-                    Box(Modifier.width(320.dp)) {
-                        DenebTopicDrawerSheet(topics = topics, selectedKey = "chat", onSelectTopic = {})
-                    }
+                Box(Modifier.width(320.dp)) {
+                    DenebDrawerSheet(
+                        onOpenSearch = {},
+                        onOpenMail = {},
+                        onOpenCalendar = {},
+                        onOpenPeople = {},
+                        onOpenCategories = {},
+                        onShowHistory = {},
+                        onNavigateToSettings = {},
+                        hasSavedConversations = true,
+                        onClose = {},
+                    )
                 }
             }
         }
