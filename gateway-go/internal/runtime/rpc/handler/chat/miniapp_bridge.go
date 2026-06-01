@@ -215,7 +215,9 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 		}
 
 		return rpcutil.RespondOK(req.ID, map[string]any{
-			"text":       res.Text,
+			// BestText so a tool wrap-up final turn (e.g. "위키에 기록했습니다"
+			// after writing the answer to the wiki) doesn't replace the real body.
+			"text":       res.BestText(),
 			"model":      res.Model,
 			"fellBack":   res.FellBack,
 			"sessionKey": sessionKey,

@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.9",
+        code = 132,
+        highlights = listOf(
+            "버그 수정 — 답변을 위키에 기록할 때 스트리밍된 본문이 사라지던 문제",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.8",
         code = 131,
         highlights = listOf(
