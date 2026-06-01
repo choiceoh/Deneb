@@ -16,6 +16,7 @@ import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.ic_service_anthropic
 import kai.composeapp.generated.resources.ic_service_deepseek
 import kai.composeapp.generated.resources.ic_service_gemini
+import kai.composeapp.generated.resources.ic_service_gemma
 import kai.composeapp.generated.resources.ic_service_litert
 import kai.composeapp.generated.resources.ic_service_longcat
 import kai.composeapp.generated.resources.ic_service_minimax
@@ -552,7 +553,8 @@ class DenebGatewayClient(
     private fun denebModelIcon(model: ModelOption) = with("${model.id} ${model.display}".lowercase()) {
         when {
             contains("claude") || contains("anthropic") -> Res.drawable.ic_service_anthropic
-            contains("gemini") || contains("gemma") -> Res.drawable.ic_service_gemini
+            contains("gemma") -> Res.drawable.ic_service_gemma
+            contains("gemini") -> Res.drawable.ic_service_gemini
             contains("gpt") || contains("openai") || contains("chatgpt") ||
                 contains("o1-") || contains("o3") || contains("o4") -> Res.drawable.ic_service_openai
             contains("deepseek") -> Res.drawable.ic_service_deepseek
