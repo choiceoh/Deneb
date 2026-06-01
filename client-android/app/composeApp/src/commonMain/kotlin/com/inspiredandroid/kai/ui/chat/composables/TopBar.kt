@@ -26,6 +26,7 @@ import com.inspiredandroid.kai.ui.chat.ChatActions
 import com.inspiredandroid.kai.ui.handCursor
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.ic_add
+import kai.composeapp.generated.resources.ic_history
 import kai.composeapp.generated.resources.ic_volume_off
 import kai.composeapp.generated.resources.ic_volume_up
 import kai.composeapp.generated.resources.new_chat_content_description
@@ -48,6 +49,7 @@ internal fun TopBar(
     isShellExecuting: Boolean,
     onToggleSandbox: () -> Unit,
     navigationTabBar: (@Composable () -> Unit)? = null,
+    onOpenSessionDrawer: (() -> Unit)? = null,
 ) {
     if (navigationTabBar != null) {
         Box(
@@ -67,6 +69,7 @@ internal fun TopBar(
                 if (textToSpeech != null) {
                     SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
                 }
+                SessionButton(onOpenSessionDrawer)
             }
         }
     } else {
@@ -77,7 +80,25 @@ internal fun TopBar(
             if (textToSpeech != null) {
                 SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
             }
+            SessionButton(onOpenSessionDrawer)
         }
+    }
+}
+
+// SessionButton opens the right-side session selector ([DenebSessionDrawerSheet]),
+// mirroring the left hamburger. Null callback (e.g. previews) renders nothing.
+@Composable
+private fun SessionButton(onOpenSessionDrawer: (() -> Unit)?) {
+    if (onOpenSessionDrawer == null) return
+    IconButton(
+        modifier = Modifier.handCursor(),
+        onClick = onOpenSessionDrawer,
+    ) {
+        Icon(
+            imageVector = vectorResource(Res.drawable.ic_history),
+            contentDescription = "세션",
+            tint = MaterialTheme.colorScheme.onBackground,
+        )
     }
 }
 

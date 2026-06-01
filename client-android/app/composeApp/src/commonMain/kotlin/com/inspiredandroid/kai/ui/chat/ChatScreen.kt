@@ -54,6 +54,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -73,8 +74,10 @@ import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.inspiredandroid.kai.BackIcon
@@ -84,9 +87,9 @@ import com.inspiredandroid.kai.data.supportsAgenticFlows
 import com.inspiredandroid.kai.getBackgroundDispatcher
 import com.inspiredandroid.kai.onDragAndDropEventDropped
 import com.inspiredandroid.kai.ui.chat.composables.BotMessage
-import com.inspiredandroid.kai.ui.chat.composables.ChatHistorySheet
 import com.inspiredandroid.kai.ui.chat.composables.CircleIconButton
 import com.inspiredandroid.kai.ui.chat.composables.DenebDrawerSheet
+import com.inspiredandroid.kai.ui.chat.composables.DenebSessionDrawerSheet
 import com.inspiredandroid.kai.ui.chat.composables.EmptyState
 import com.inspiredandroid.kai.ui.chat.composables.ErrorMessage
 import com.inspiredandroid.kai.ui.chat.composables.HeartbeatBanner
@@ -486,7 +489,6 @@ private fun ChatModeScreen(
     previewSandboxState: SandboxUiState? = null,
     previewSandboxLines: ImmutableList<TerminalLine> = persistentListOf(),
 ) {
-    var showHistorySheet by remember { mutableStateOf(false) }
     var isSandboxOpen by rememberSaveable { mutableStateOf(initialSandboxOpen) }
     // Hoisted here so the draft survives toggling the sandbox/terminal view, which
     // removes QuestionInput from composition and would otherwise drop the text.
@@ -502,6 +504,13 @@ private fun ChatModeScreen(
     val drawerScope = rememberCoroutineScope()
     com.inspiredandroid.kai.PlatformBackHandler(enabled = drawerState.isOpen) {
         drawerScope.launch { drawerState.close() }
+    }
+
+    // Right-side session selector: opened by the top-bar session button only (no
+    // edge swipe, so the chat keeps its right edge); dismissed by scrim or back.
+    val sessionDrawerState = rememberDrawerState(DrawerValue.Closed)
+    com.inspiredandroid.kai.PlatformBackHandler(enabled = sessionDrawerState.isOpen) {
+        drawerScope.launch { sessionDrawerState.close() }
     }
 
     // When the active conversation changes (e.g. user starts a new chat from the
@@ -535,6 +544,23 @@ private fun ChatModeScreen(
         }
     }
 
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+    ModalNavigationDrawer(
+        drawerState = sessionDrawerState,
+        gesturesEnabled = false,
+        drawerContent = {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                DenebSessionDrawerSheet(
+                    conversations = filteredConversations,
+                    currentConversationId = uiState.currentConversationId,
+                    pendingConversationDeletion = uiState.pendingConversationDeletion,
+                    actions = uiState.actions,
+                    onClose = { drawerScope.launch { sessionDrawerState.close() } },
+                )
+            }
+        },
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -544,12 +570,7 @@ private fun ChatModeScreen(
                 onOpenCalendar = onOpenCalendar,
                 onOpenPeople = onOpenPeople,
                 onOpenCategories = onOpenCategories,
-                onShowHistory = {
-                    keyboardController?.hide()
-                    showHistorySheet = true
-                },
                 onNavigateToSettings = onNavigateToSettings,
-                hasSavedConversations = filteredConversations.any { it.id != uiState.currentConversationId },
                 onClose = { drawerScope.launch { drawerState.close() } },
             )
         },
@@ -568,6 +589,7 @@ private fun ChatModeScreen(
                 isShellExecuting = isShellExecuting,
                 onToggleSandbox = { isSandboxOpen = !isSandboxOpen },
                 navigationTabBar = navigationTabBar,
+                onOpenSessionDrawer = { drawerScope.launch { sessionDrawerState.open() } },
             )
 
             HeartbeatBanner(
@@ -957,17 +979,9 @@ private fun ChatModeScreen(
         }
     }
     } // ModalNavigationDrawer (left)
-
-    if (showHistorySheet) {
-        ChatHistorySheet(
-            conversations = filteredConversations,
-            currentConversationId = uiState.currentConversationId,
-            pendingConversationDeletion = uiState.pendingConversationDeletion,
-            actions = uiState.actions,
-            onDismiss = { showHistorySheet = false },
-            onConversationSelected = { isSandboxOpen = false },
-        )
-    }
+        } // CompositionLocalProvider Ltr (content)
+    } // ModalNavigationDrawer (right session drawer)
+    } // CompositionLocalProvider Rtl
 }
 
 private data class ExecutingToolsState(

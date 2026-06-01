@@ -121,9 +121,7 @@ private fun renderChrome(name: String, scheme: ColorScheme) {
                         onOpenCalendar = {},
                         onOpenPeople = {},
                         onOpenCategories = {},
-                        onShowHistory = {},
                         onNavigateToSettings = {},
-                        hasSavedConversations = true,
                         onClose = {},
                     )
                 }

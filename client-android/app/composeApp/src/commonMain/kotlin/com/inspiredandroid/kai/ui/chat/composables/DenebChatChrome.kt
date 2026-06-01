@@ -60,9 +60,7 @@ fun DenebDrawerSheet(
     onOpenCalendar: () -> Unit,
     onOpenPeople: () -> Unit,
     onOpenCategories: () -> Unit,
-    onShowHistory: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    hasSavedConversations: Boolean,
     onClose: () -> Unit,
 ) {
     ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.background) {
@@ -78,9 +76,6 @@ fun DenebDrawerSheet(
             TypeMenuItem("search") { onOpenSearch(); onClose() }
             TypeMenuItem("people") { onOpenPeople(); onClose() }
             TypeMenuItem("categories") { onOpenCategories(); onClose() }
-            if (hasSavedConversations) {
-                TypeMenuItem("history") { onShowHistory(); onClose() }
-            }
             TypeMenuItem("settings") { onNavigateToSettings(); onClose() }
 
             val capture = LocalCaptureActions.current
