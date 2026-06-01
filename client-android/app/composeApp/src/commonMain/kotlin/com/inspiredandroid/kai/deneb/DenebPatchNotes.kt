@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.11",
+        code = 134,
+        highlights = listOf(
+            "알림 캡처 — 설정에서 받을 앱을 직접 고를 수 있어요(비우면 전체)",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.10",
         code = 133,
         highlights = listOf(

@@ -496,12 +496,20 @@ private fun CronTab(client: DenebGatewayClient, onOpenCron: (String) -> Unit) {
 private fun NotificationsTab(client: DenebGatewayClient) {
     val controller = koinInject<NotificationListenerController>()
     val store = koinInject<NotificationStore>()
+    val appSettings = koinInject<AppSettings>()
     val scope = rememberCoroutineScope()
     var access by remember { mutableStateOf(controller.isAccessGranted()) }
     var records by remember { mutableStateOf<List<NotificationRecord>>(emptyList()) }
     var sentId by remember { mutableStateOf<String?>(null) }
+    // Capture allowlist: empty ⇒ all apps (default). Toggling a chip narrows it.
+    var allowlist by remember { mutableStateOf(appSettings.getNotificationCaptureAllowlist()) }
     LaunchedEffect(access) {
         if (access) records = store.getStore().sortedByDescending { it.postedAtEpochMs }
+    }
+    // Apps seen in capture history, for the picker (packageName → label).
+    val knownApps = remember(records) {
+        records.associate { it.packageName to it.appLabel.ifBlank { it.packageName } }
+            .toList().sortedBy { it.second.lowercase() }
     }
     when {
         !controller.isSupported() -> EmptyTab("이 빌드는 알림 캡처를 지원하지 않습니다.")
@@ -522,6 +530,68 @@ private fun NotificationsTab(client: DenebGatewayClient) {
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // Capture-allowlist picker: choose which apps Deneb captures. Empty
+            // = all apps. Listed apps are those seen in capture history.
+            if (knownApps.isNotEmpty()) {
+                SettingsCard {
+                    Text(
+                        "캡처할 앱",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        if (allowlist.isEmpty()) {
+                            "모든 앱의 알림을 받습니다. 아래에서 특정 앱만 고르면 그 앱만 받습니다."
+                        } else {
+                            "선택한 ${allowlist.size}개 앱의 알림만 받습니다."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    knownApps.forEach { (pkg, label) ->
+                        val on = allowlist.isEmpty() || pkg in allowlist
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    // Toggle: from "all" (empty) the first tap selects
+                                    // just this app; thereafter add/remove from the set.
+                                    val base = if (allowlist.isEmpty()) knownApps.map { it.first }.toSet() else allowlist
+                                    val next = if (pkg in base) base - pkg else base + pkg
+                                    // Selecting every known app collapses back to "all".
+                                    allowlist = if (next.size == knownApps.size) emptySet() else next
+                                    appSettings.setNotificationCaptureAllowlist(allowlist)
+                                }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                if (on) "☑" else "☐",
+                                modifier = Modifier.padding(end = 10.dp),
+                                color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                    if (allowlist.isNotEmpty()) {
+                        Spacer(Modifier.height(4.dp))
+                        TextButton(onClick = {
+                            allowlist = emptySet()
+                            appSettings.setNotificationCaptureAllowlist(allowlist)
+                        }) { Text("모든 앱 받기로 초기화") }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+            }
             Text(
                 "탭하면 Deneb 채팅으로 보내 트리아지합니다.",
                 style = MaterialTheme.typography.bodySmall,
