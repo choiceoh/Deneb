@@ -60,15 +60,18 @@ import org.koin.compose.koinInject
 
 /**
  * Deneb hub + settings as a tabbed screen (the "더보기" surface): gateway config
- * plus the secondary surfaces — model, people, cron, topic docs — each as its
+ * plus the secondary surfaces — model, cron, topic docs — each as its
  * own tab so they live here instead of crowding the chat top bar.
+ *
+ * People browsing is NOT a tab here: it is a content destination with its own
+ * drawer entry + full screen (DenebPeopleScreen), like mail and calendar. The
+ * settings hub stays configuration-only.
  */
 @Composable
 fun DenebConfigScreen(
     appSettings: AppSettings,
     onBack: () -> Unit,
     denebClient: DenebGatewayClient? = null,
-    onOpenPerson: (String) -> Unit = {},
     onOpenTopicDoc: (String) -> Unit = {},
     onOpenCron: (String) -> Unit = {},
     onOpenKaiSettings: () -> Unit = {},
@@ -76,7 +79,7 @@ fun DenebConfigScreen(
 ) {
     var tab by remember { mutableStateOf(0) }
     val haptics = rememberHaptics()
-    val tabs = listOf("게이트웨이", "모델", "사람", "크론", "토픽문서", "알림")
+    val tabs = listOf("게이트웨이", "모델", "크론", "토픽문서", "알림")
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -127,10 +130,9 @@ fun DenebConfigScreen(
                 when (tab) {
                     0 -> GatewayTab(appSettings, onBack, onOpenKaiSettings, denebClient)
                     1 -> denebClient?.let { ModelTab(it) }
-                    2 -> denebClient?.let { PeopleTab(it, onOpenPerson) }
-                    3 -> denebClient?.let { CronTab(it, onOpenCron) }
-                    4 -> denebClient?.let { TopicDocsTab(it, onOpenTopicDoc) }
-                    5 -> denebClient?.let { NotificationsTab(it) }
+                    2 -> denebClient?.let { CronTab(it, onOpenCron) }
+                    3 -> denebClient?.let { TopicDocsTab(it, onOpenTopicDoc) }
+                    4 -> denebClient?.let { NotificationsTab(it) }
                 }
             }
         }
@@ -418,42 +420,6 @@ private fun ModelTab(client: DenebGatewayClient) {
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PeopleTab(client: DenebGatewayClient, onOpenPerson: (String) -> Unit) {
-    var people by remember { mutableStateOf<List<PersonHit>?>(null) }
-    LaunchedEffect(Unit) { people = client.fetchPeople() }
-    val list = people
-    when {
-        list == null -> DenebLoading()
-        list.isEmpty() -> EmptyTab("최근 연락이 없습니다.")
-        else -> LazyColumn(Modifier.fillMaxSize()) {
-            items(list, key = { it.email.ifBlank { it.name } }) { person ->
-                Column(
-                    Modifier.animateItem().fillMaxWidth().clickable { onOpenPerson(person.email.ifBlank { person.name }) }
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            person.name.ifBlank { "(이름 없음)" },
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text("${person.messageCount}통", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                    }
-                    if (person.lastSubject.isNotBlank()) {
-                        Text(person.lastSubject, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-                HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
             }
         }
     }
