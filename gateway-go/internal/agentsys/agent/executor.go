@@ -563,8 +563,13 @@ type turnResult struct {
 }
 
 // defaultStreamIdleTimeout is the default maximum wait for the next SSE event
-// during LLM streaming. Matches Claude Code's CLAUDE_STREAM_IDLE_TIMEOUT_MS.
-const defaultStreamIdleTimeout = 90 * time.Second
+// during LLM streaming. Set above Claude Code's 90s default because local vLLM
+// models (step3p7) have a slow cold start (~80s) and slow prefill on large
+// contexts; at 90s their first token can miss the window and trip a false idle
+// stall, which retried and failed cron runs (email-realtime auto-disabled after
+// 10 such errors). Fast hosted APIs (GLM via Z.ai) stream well within this, so
+// the higher ceiling only delays detection of a genuine hang.
+const defaultStreamIdleTimeout = 180 * time.Second
 
 // ErrStreamIdle is returned when the LLM stream stalls (no event within the
 // idle timeout). The error is considered retryable by callers.
