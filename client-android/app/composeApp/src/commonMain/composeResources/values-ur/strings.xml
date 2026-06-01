@@ -14,7 +14,6 @@
     <string name="settings_content_description">ترتیبات</string>
     <string name="bot_message_speech_content_description">تقریر</string>
     <string name="bot_message_copy_content_description">کاپی</string>
-    <string name="bot_message_flag_content_description">مواد کو نشان زد کریں</string>
     <string name="settings_free_tier_title">مفت درجہ</string>
     <string name="settings_free_tier_description">جیسے جیسے صارفین کی تعداد بڑھتی ہے، سرپرستی بنیادی ڈھانچے کو بڑھانے، سب کے لیے شرح کی حدود بڑھانے اور ترقی کو فعال رکھنے میں مدد کرتی ہے۔</string>
     <string name="settings_become_sponsor">GitHub سرپرست بنیں</string>

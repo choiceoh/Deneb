@@ -14,7 +14,6 @@
     <string name="settings_content_description">Iestatījumi</string>
     <string name="bot_message_speech_content_description">Runa</string>
     <string name="bot_message_copy_content_description">Kopēt</string>
-    <string name="bot_message_flag_content_description">Atzīmēt saturu</string>
     <string name="settings_free_tier_title">Bezmaksas līmenis</string>
     <string name="settings_free_tier_description">Pieaugot lietotāju bāzei, sponsorēšana palīdz paplašināt infrastruktūru, palielināt pieprasījumu limitus visiem un uzturēt aktīvu izstrādi.</string>
     <string name="settings_become_sponsor">Kļūstiet par GitHub sponsoru</string>

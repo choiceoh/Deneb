@@ -14,7 +14,6 @@
     <string name="settings_content_description">הגדרות</string>
     <string name="bot_message_speech_content_description">דיבור</string>
     <string name="bot_message_copy_content_description">העתק</string>
-    <string name="bot_message_flag_content_description">דגל תוכן</string>
     <string name="settings_free_tier_title">שכבה חינמית</string>
     <string name="settings_free_tier_description">ככל שבסיס המשתמשים גדל, חסות עוזרת להרחיב את התשתית, להגדיל את מגבלות הבקשות לכולם ולשמור על פיתוח פעיל.</string>
     <string name="settings_become_sponsor">הפוך לנותן חסות ב-GitHub</string>

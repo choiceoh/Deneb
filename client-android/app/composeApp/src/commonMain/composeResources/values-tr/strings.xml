@@ -14,7 +14,6 @@
     <string name="settings_content_description">Ayarlar</string>
     <string name="bot_message_speech_content_description">Konuşma</string>
     <string name="bot_message_copy_content_description">Kopyala</string>
-    <string name="bot_message_flag_content_description">İçeriği işaretle</string>
     <string name="settings_free_tier_title">Ücretsiz Katman</string>
     <string name="settings_free_tier_description">Kullanıcı tabanı büyüdükçe, sponsorluk altyapıyı ölçeklendirmeye, herkes için istek limitlerini artırmaya ve geliştirmeyi aktif tutmaya yardımcı olur.</string>
     <string name="settings_become_sponsor">GitHub Sponsoru Olun</string>

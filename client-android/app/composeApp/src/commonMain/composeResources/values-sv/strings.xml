@@ -14,7 +14,6 @@
     <string name="settings_content_description">Inställningar</string>
     <string name="bot_message_speech_content_description">Tal</string>
     <string name="bot_message_copy_content_description">Kopiera</string>
-    <string name="bot_message_flag_content_description">Flagga innehåll</string>
     <string name="settings_free_tier_title">Kostnadsfri nivå</string>
     <string name="settings_free_tier_description">I takt med att användarbasen växer hjälper sponsring till att skala infrastrukturen, öka hastighetsgränserna för alla och hålla utvecklingen aktiv.</string>
     <string name="settings_become_sponsor">Bli en GitHub-sponsor</string>

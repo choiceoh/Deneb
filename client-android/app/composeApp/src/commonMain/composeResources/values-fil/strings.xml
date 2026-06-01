@@ -14,7 +14,6 @@
     <string name="settings_content_description">Mga Setting</string>
     <string name="bot_message_speech_content_description">Pagsasalita</string>
     <string name="bot_message_copy_content_description">Kopyahin</string>
-    <string name="bot_message_flag_content_description">I-flag ang nilalaman</string>
     <string name="settings_free_tier_title">Libreng Tier</string>
     <string name="settings_free_tier_description">Habang lumalaki ang base ng mga gumagamit, ang sponsorship ay tumutulong na palawakin ang infrastructure, dagdagan ang rate limits para sa lahat, at panatilihing aktibo ang development.</string>
     <string name="settings_become_sponsor">Maging GitHub Sponsor</string>

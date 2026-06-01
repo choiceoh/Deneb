@@ -43,7 +43,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -55,13 +54,11 @@ import com.inspiredandroid.kai.ui.markdown.MarkdownContent
 import com.inspiredandroid.kai.ui.markdown.parseMarkdown
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.bot_message_copy_content_description
-import kai.composeapp.generated.resources.bot_message_flag_content_description
 import kai.composeapp.generated.resources.bot_message_regenerate_content_description
 import kai.composeapp.generated.resources.bot_message_speech_content_description
 import kai.composeapp.generated.resources.bot_message_thinking_expand_content_description
 import kai.composeapp.generated.resources.bot_message_thinking_label
 import kai.composeapp.generated.resources.ic_copy
-import kai.composeapp.generated.resources.ic_flag
 import kai.composeapp.generated.resources.ic_refresh
 import kai.composeapp.generated.resources.ic_stop
 import kai.composeapp.generated.resources.ic_volume_up
@@ -187,16 +184,6 @@ internal fun BotMessage(
                 clipboardManager.setText(buildAnnotatedString { append(message) })
             },
         )
-        run {
-            val uriHandler = LocalUriHandler.current
-            SmallIconButton(
-                iconResource = Res.drawable.ic_flag,
-                contentDescription = stringResource(Res.string.bot_message_flag_content_description),
-                onClick = {
-                    uriHandler.openUri("https://form.jotform.com/250014908169355")
-                },
-            )
-        }
         if (onRegenerate != null) {
             SmallIconButton(
                 iconResource = Res.drawable.ic_refresh,

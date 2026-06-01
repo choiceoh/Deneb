@@ -14,7 +14,6 @@
     <string name="settings_content_description">Impostazioni</string>
     <string name="bot_message_speech_content_description">Voce</string>
     <string name="bot_message_copy_content_description">Copia</string>
-    <string name="bot_message_flag_content_description">Segnala contenuto</string>
     <string name="settings_free_tier_title">Livello Gratuito</string>
     <string name="settings_free_tier_description">Man mano che la base utenti cresce, la sponsorizzazione aiuta a scalare l'infrastruttura, aumentare i limiti di richieste per tutti e mantenere attivo lo sviluppo.</string>
     <string name="settings_become_sponsor">Diventa sponsor GitHub</string>

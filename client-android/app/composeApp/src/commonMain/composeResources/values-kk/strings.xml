@@ -14,7 +14,6 @@
     <string name="settings_content_description">Параметрлер</string>
     <string name="bot_message_speech_content_description">Сөйлеу</string>
     <string name="bot_message_copy_content_description">Көшіру</string>
-    <string name="bot_message_flag_content_description">Мазмұнды белгілеу</string>
     <string name="settings_free_tier_title">Тегін деңгей</string>
     <string name="settings_free_tier_description">Пайдаланушылар базасы өскен сайын, демеушілік инфрақұрылымды кеңейтуге, барлығы үшін сұрау лимиттерін арттыруға және әзірлеуді белсенді ұстауға көмектеседі.</string>
     <string name="settings_become_sponsor">GitHub демеушісі болыңыз</string>

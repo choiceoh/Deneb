@@ -14,7 +14,6 @@
     <string name="settings_content_description">Nastavenia</string>
     <string name="bot_message_speech_content_description">Reč</string>
     <string name="bot_message_copy_content_description">Kopírovať</string>
-    <string name="bot_message_flag_content_description">Nahlásiť obsah</string>
     <string name="settings_free_tier_title">Bezplatná úroveň</string>
     <string name="settings_free_tier_description">S rastom používateľskej základne sponzorstvo pomáha škálovať infraštruktúru, zvyšovať limity požiadaviek pre všetkých a udržiavať aktívny vývoj.</string>
     <string name="settings_become_sponsor">Staňte sa sponzorom na GitHub</string>

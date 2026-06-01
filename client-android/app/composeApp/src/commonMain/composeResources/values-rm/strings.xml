@@ -14,7 +14,6 @@
     <string name="settings_content_description">Parameters</string>
     <string name="bot_message_speech_content_description">Discurs</string>
     <string name="bot_message_copy_content_description">Copiar</string>
-    <string name="bot_message_flag_content_description">Marcar il cuntegn</string>
     <string name="settings_free_tier_title">Nivel gratuit</string>
     <string name="settings_free_tier_description">Cun la crescha da la basa d'utilisaders, il sponsoring gida ad augmentar l'infrastructura, augmentar ils limits da dumondas per tuts e mantegnair il svilup activ.</string>
     <string name="settings_become_sponsor">Daventai in sponsor da GitHub</string>

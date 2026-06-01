@@ -14,7 +14,6 @@
     <string name="settings_content_description">Setări</string>
     <string name="bot_message_speech_content_description">Voce</string>
     <string name="bot_message_copy_content_description">Copiază</string>
-    <string name="bot_message_flag_content_description">Raportează conținutul</string>
     <string name="settings_free_tier_title">Nivel gratuit</string>
     <string name="settings_free_tier_description">Pe măsură ce baza de utilizatori crește, sponsorizarea ajută la extinderea infrastructurii, la creșterea limitelor de utilizare pentru toți și la menținerea dezvoltării active.</string>
     <string name="settings_become_sponsor">Devino sponsor pe GitHub</string>

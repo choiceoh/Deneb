@@ -14,7 +14,6 @@
     <string name="settings_content_description">सेटिंग्स</string>
     <string name="bot_message_speech_content_description">बोलें</string>
     <string name="bot_message_copy_content_description">कॉपी करें</string>
-    <string name="bot_message_flag_content_description">सामग्री रिपोर्ट करें</string>
     <string name="settings_free_tier_title">मुफ्त स्तर</string>
     <string name="settings_free_tier_description">जैसे-जैसे उपयोगकर्ता आधार बढ़ता है, प्रायोजन बुनियादी ढांचे को बढ़ाने, सभी के लिए दर सीमाएं बढ़ाने और विकास को सक्रिय रखने में मदद करता है।</string>
     <string name="settings_become_sponsor">GitHub प्रायोजक बनें</string>

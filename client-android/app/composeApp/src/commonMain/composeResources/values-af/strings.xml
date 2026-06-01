@@ -14,7 +14,6 @@
     <string name="settings_content_description">Instellings</string>
     <string name="bot_message_speech_content_description">Spraak</string>
     <string name="bot_message_copy_content_description">Kopieer</string>
-    <string name="bot_message_flag_content_description">Merk inhoud</string>
     <string name="settings_free_tier_title">Gratis Vlak</string>
     <string name="settings_free_tier_description">Soos die gebruikersbasis groei, help borgskappe om infrastruktuur te skaal, tarieklimiet vir almal te verhoog, en ontwikkeling aktief te hou.</string>
     <string name="settings_become_sponsor">Word 'n GitHub-borg</string>

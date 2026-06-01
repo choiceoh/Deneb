@@ -14,7 +14,6 @@
     <string name="settings_content_description">Ρυθμίσεις</string>
     <string name="bot_message_speech_content_description">Ομιλία</string>
     <string name="bot_message_copy_content_description">Αντιγραφή</string>
-    <string name="bot_message_flag_content_description">Αναφορά περιεχομένου</string>
     <string name="settings_free_tier_title">Δωρεάν Βαθμίδα</string>
     <string name="settings_free_tier_description">Καθώς η βάση χρηστών μεγαλώνει, η χορηγία βοηθά στην κλιμάκωση της υποδομής, στην αύξηση των ορίων αιτημάτων για όλους και στη διατήρηση της ενεργής ανάπτυξης.</string>
     <string name="settings_become_sponsor">Γίνετε Χορηγός στο GitHub</string>

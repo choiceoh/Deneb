@@ -14,7 +14,6 @@
     <string name="settings_content_description">Nastavitve</string>
     <string name="bot_message_speech_content_description">Govor</string>
     <string name="bot_message_copy_content_description">Kopiraj</string>
-    <string name="bot_message_flag_content_description">Prijavi vsebino</string>
     <string name="settings_free_tier_title">Brezplačna raven</string>
     <string name="settings_free_tier_description">Z rastjo uporabniške baze sponzorstvo pomaga pri širitvi infrastrukture, povečanju omejitev zahtev za vse in ohranjanju aktivnega razvoja.</string>
     <string name="settings_become_sponsor">Postanite GitHub sponzor</string>
