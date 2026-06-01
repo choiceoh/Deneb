@@ -108,7 +108,10 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			return nil, err
 		}
-		return &chatStreamResult{Text: res.Text, Model: res.Model, FellBack: res.FellBack}, nil
+		// BestText (not res.Text) so a tool wrap-up final turn — e.g. the agent
+		// writing its answer to the wiki and closing with "위키에 기록했습니다" —
+		// doesn't replace the streamed body in the client's done frame.
+		return &chatStreamResult{Text: res.BestText(), Model: res.Model, FellBack: res.FellBack}, nil
 	}
 	writeChatStreamSSE(ctx, w, sessionKey, runner, s.logger)
 }

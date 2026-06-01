@@ -21,6 +21,31 @@ type SyncResult struct {
 	StopReason   string // "end_turn", "max_tokens", "tool_use", etc.
 }
 
+// BestText returns the answer to surface to the user, choosing between the
+// final-turn Text and the all-turns AllText. The final turn is often a short
+// wrap-up rather than the deliverable — e.g. when the agent writes the answer to
+// the wiki mid-run, the last turn is "위키에 기록했습니다" while the actual body
+// was produced earlier. Trusting Text alone makes the answer appear to vanish.
+//
+// Rules (mirroring cronChatAdapter so every surface agrees):
+//   - Text empty → AllText (the run ended on NO_REPLY / a bare ack).
+//   - Truncated (StopReason not end_turn) → AllText, since the last turn is
+//     mid-stream planning, not the deliverable.
+//   - AllText much larger than Text (short wrap-up) → AllText.
+//   - otherwise → Text (normal single-turn case; keeps gateway-side cleaning).
+//
+// NO_REPLY is stripped from AllText so the marker never leaks to the client.
+func (r *SyncResult) BestText() string {
+	text := strings.TrimSpace(r.Text)
+	allText := strings.TrimSpace(StripSilentToken(r.AllText))
+	truncated := r.StopReason != "" && r.StopReason != "end_turn"
+	shortWrapUp := allText != "" && len(allText) >= 3*len(text)+200
+	if (text == "" || truncated || shortWrapUp) && allText != "" {
+		return allText
+	}
+	return text
+}
+
 // SyncOptions holds optional parameters for synchronous agent runs.
 // Used by the OpenAI-compatible HTTP endpoints to pass through sampling
 // parameters and conversation context.
