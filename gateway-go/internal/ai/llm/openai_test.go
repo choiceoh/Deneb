@@ -73,6 +73,25 @@ func TestApplySamplingParams_MaxTokensRemap(t *testing.T) {
 	})
 }
 
+// TestApplySamplingParams_ReasoningDisabled guards that an explicit disabled
+// thinking config maps to reasoning_effort="none" on the openai-compatible path.
+// vLLM models (step3p7) honor this to suppress a multi-thousand-char chain-of-
+// thought that would otherwise eat the max_tokens budget and truncate the answer.
+// The gmailpoll analysis path sets Thinking{Type:"disabled"} for exactly this.
+func TestApplySamplingParams_ReasoningDisabled(t *testing.T) {
+	oai := &openAIRequest{MaxTokens: 1536}
+	applySamplingParams(oai, &ChatRequest{Model: "step3p7", Thinking: &ThinkingConfig{Type: "disabled"}})
+	if oai.ReasoningEffort != "none" {
+		t.Errorf("ReasoningEffort = %q, want \"none\"", oai.ReasoningEffort)
+	}
+	if oai.MaxTokens != 1536 {
+		t.Errorf("MaxTokens = %d, want 1536 (preserved, not remapped)", oai.MaxTokens)
+	}
+	if oai.MaxCompletionTokens != nil {
+		t.Errorf("MaxCompletionTokens = %v, want nil for disabled", oai.MaxCompletionTokens)
+	}
+}
+
 func TestComplete_OmitsAuthorizationHeaderWhenAPIKeyEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "" {
