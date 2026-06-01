@@ -472,6 +472,28 @@ class AppSettings(internal val settings: Settings) {
         settings.putString(KEY_NOTIFICATIONS_SYNC_STATE, json)
     }
 
+    /**
+     * Package names the user chose to capture notifications from. An empty set
+     * means "capture all" (the default and prior behavior) — the allowlist only
+     * narrows once the user picks specific apps. Persisted as a newline-joined
+     * string (package names can't contain newlines).
+     */
+    fun getNotificationCaptureAllowlist(): Set<String> {
+        val raw = settings.getString(KEY_NOTIFICATIONS_ALLOWLIST, "")
+        if (raw.isBlank()) return emptySet()
+        return raw.split('\n').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    }
+
+    fun setNotificationCaptureAllowlist(packages: Set<String>) {
+        settings.putString(KEY_NOTIFICATIONS_ALLOWLIST, packages.filter { it.isNotBlank() }.joinToString("\n"))
+    }
+
+    /** True when [packageName] should be captured: allowlist empty ⇒ all apps. */
+    fun isNotificationPackageAllowed(packageName: String): Boolean {
+        val allow = getNotificationCaptureAllowlist()
+        return allow.isEmpty() || packageName in allow
+    }
+
     // Local model context size
     fun getModelContextTokens(modelId: String): Int = settings.getInt("$KEY_MODEL_CONTEXT_PREFIX$modelId", 0)
 
@@ -559,6 +581,7 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_SMS_DRAFTS = "sms_drafts"
 
         const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled"
+        const val KEY_NOTIFICATIONS_ALLOWLIST = "notifications_capture_allowlist"
         const val KEY_NOTIFICATIONS_PENDING = "notifications_pending"
         const val KEY_NOTIFICATIONS_STORE = "notifications_store"
         const val KEY_NOTIFICATIONS_SYNC_STATE = "notifications_sync_state"

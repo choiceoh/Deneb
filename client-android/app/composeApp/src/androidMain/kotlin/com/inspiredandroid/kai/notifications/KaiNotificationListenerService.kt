@@ -75,6 +75,9 @@ class KaiNotificationListenerService : NotificationListenerService() {
         if (!appSettings.isNotificationsEnabled()) return
         val pkg = sbn.packageName ?: return
         if (pkg in HARD_BLOCKED_PACKAGES || pkg == applicationContext.packageName) return
+        // User-chosen capture allowlist (empty ⇒ capture all). Narrows the OS
+        // Notification-Access app picker further, from inside the app.
+        if (!appSettings.isNotificationPackageAllowed(pkg)) return
 
         val notification = sbn.notification ?: return
         if (notification.flags and Notification.FLAG_ONGOING_EVENT != 0) return
