@@ -21,6 +21,13 @@ var (
 	_ gmailpoll.Notifier  = (*relayNotifier)(nil)
 )
 
+// proactiveNativeOnly routes all proactive reports (cron jobs, gmail poll, wiki
+// dreaming) to the native client only: the operator's decision (2026-06-01,
+// after retiring the Telegram Mini App) is that proactive output lands in the
+// app's 업무 chat (client:main transcript + live push) and never in Telegram.
+// Flip to false to restore Telegram proactive delivery.
+const proactiveNativeOnly = true
+
 // proactiveRelayDeps delivers a pre-composed body to a user's channel
 // without routing through the LLM.
 //
@@ -51,6 +58,11 @@ type proactiveRelayDeps struct {
 	// instead of waiting for its next heartbeat poll. nil in older wiring/tests;
 	// the push is then skipped (the report still lands in the transcript).
 	pushHub *clientPushHub
+
+	// nativeOnly routes every proactive report to the native client only (the
+	// 업무/client:main transcript + a live push) and skips Telegram entirely.
+	// Set from proactiveNativeOnly at construction.
+	nativeOnly bool
 }
 
 // relay delivers content to sessionKey's channel and records it in the
@@ -60,6 +72,12 @@ type proactiveRelayDeps struct {
 func (d proactiveRelayDeps) relay(ctx context.Context, sessionKey, content string) (bool, error) {
 	if strings.TrimSpace(content) == "" {
 		return false, nil
+	}
+	if d.nativeOnly {
+		// All proactive output goes to the native client's 업무 chat only. The
+		// Telegram target (sessionKey) is intentionally ignored — every
+		// proactive report is a work report and lands in client:main.
+		return d.relayNative(content)
 	}
 	sessionKey, ok := d.resolveHome(sessionKey)
 	if !ok {
@@ -125,6 +143,32 @@ func (d proactiveRelayDeps) relay(ctx context.Context, sessionKey, content strin
 				})
 			}
 		}
+	}
+	return true, nil
+}
+
+// relayNative delivers a proactive report to the native client only: it appends
+// the body to the 업무 (client:main) transcript so the app shows it, and live-
+// pushes a one-line preview so a connected app notifies immediately. No Telegram
+// send. Returns (false, nil) when no transcript store is wired (older wiring or
+// tests) so the caller treats it as not-delivered.
+func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
+	if d.transcriptStore == nil {
+		return false, nil
+	}
+	msg := toolctx.NewTextChatMessage("assistant", content, time.Now().UnixMilli())
+	if err := d.transcriptStore.Append(nativeWorkSessionKey, msg); err != nil {
+		if d.logger != nil {
+			d.logger.Error("proactive native relay: transcript append failed",
+				"sessionKey", nativeWorkSessionKey, "error", err)
+		}
+		return false, err
+	}
+	if d.pushHub != nil {
+		d.pushHub.publish(clientPushEvent{
+			Title: "Deneb",
+			Body:  pushPreview(content),
+		})
 	}
 	return true, nil
 }
@@ -231,7 +275,9 @@ func (n *relayNotifier) Notify(ctx context.Context, message string) error {
 // caller can skip wiring instead of attaching a notifier that will
 // always no-op.
 func (d proactiveRelayDeps) notifierForSession(sessionKey string) *relayNotifier {
-	if d.telegramPlug == nil {
+	// In native-only mode delivery doesn't need the Telegram plugin; otherwise a
+	// nil plugin means there's no channel to reach, so skip wiring.
+	if !d.nativeOnly && d.telegramPlug == nil {
 		return nil
 	}
 	return &relayNotifier{deps: d, sessionKey: sessionKey}
