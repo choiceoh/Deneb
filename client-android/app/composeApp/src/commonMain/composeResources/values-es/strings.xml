@@ -41,7 +41,6 @@
     <string name="settings_tools_none_available">No hay herramientas disponibles en esta plataforma.</string>
     <string name="settings_tab_services">Servicios</string>
     <string name="settings_tab_tools">Herramientas</string>
-    <string name="settings_tab_integrations">Integraciones</string>
     <string name="tools_count">%1$d Herramientas</string>
     <string name="privacy_agree_prefix">Al usar el servicio, aceptas la </string>
     <string name="privacy_policy">Política de privacidad</string>
@@ -202,9 +201,6 @@ Si algo necesita atención (memorias obsoletas, tareas vencidas, seguimientos de
     <string name="error_context_window_exceeded">Ventana de contexto demasiado grande para el servicio de respaldo. Intenta iniciar un nuevo chat o usar un modelo con una ventana de contexto más grande.</string>
     <string name="error_insufficient_credits">Créditos insuficientes</string>
     <string name="error_quota_exhausted">Cuota agotada</string>
-    <string name="settings_request_integration_title">Solicitar una integración</string>
-    <string name="settings_request_integration_description">¿Tienes una idea para una automatización o integración? Cuéntanos abriendo un issue en GitHub.</string>
-    <string name="settings_open_github_issue">Abrir issue en GitHub</string>
     <string name="notification_channel_name">Notificaciones de IA</string>
     <string name="notification_channel_description">Notificaciones enviadas por el asistente de IA</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

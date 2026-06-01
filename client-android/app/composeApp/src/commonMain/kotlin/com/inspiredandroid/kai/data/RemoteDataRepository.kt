@@ -454,7 +454,7 @@ class RemoteDataRepository(
         }
 
         // Callers pass either a CHAT_LOCAL system prompt (chat + silent paths) or null
-        // (Splinterlands via `askSilentlyWithInstance`, where the caller owns the full
+        // (callers using `askSilentlyWithInstance`, where the caller owns the full
         // prompt shape). We hand whichever one through to the engine unchanged.
         // Native litert-lm `automaticToolCalling` owns the tool loop — our allowlisted
         // tools are passed once via [localToolDescriptionJson] and the engine drives them.

@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">Aģents</string>
     <string name="settings_tab_services">Pakalpojumi</string>
     <string name="settings_tab_tools">Rīki</string>
-    <string name="settings_tab_integrations">Integrācijas</string>
     <string name="tools_count">%1$d Rīki</string>
     <string name="privacy_agree_prefix">Izmantojot pakalpojumu, jūs piekrītat </string>
     <string name="privacy_policy">Privātuma politika</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">Konteksta logs ir pārāk liels rezerves pakalpojumam. Mēģiniet sākt jaunu sarunu vai izmantojiet modeli ar lielāku konteksta logu.</string>
     <string name="error_insufficient_credits">Nepietiekami kredīti</string>
     <string name="error_quota_exhausted">Kvota izsmelta</string>
-    <string name="settings_request_integration_title">Pieprasīt integrāciju</string>
-    <string name="settings_request_integration_description">Vai jums ir ideja automatizācijai vai integrācijai? Paziņojiet mums, izveidojot GitHub problēmu.</string>
-    <string name="settings_open_github_issue">Atvērt GitHub problēmu</string>
     <string name="notification_channel_name">MI paziņojumi</string>
     <string name="notification_channel_description">Paziņojumi, ko nosūta MI asistents</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

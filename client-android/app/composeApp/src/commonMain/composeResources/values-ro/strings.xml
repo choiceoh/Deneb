@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">Agent</string>
     <string name="settings_tab_services">Servicii</string>
     <string name="settings_tab_tools">Instrumente</string>
-    <string name="settings_tab_integrations">Integrări</string>
     <string name="tools_count">%1$d instrumente</string>
     <string name="privacy_agree_prefix">Prin utilizarea serviciului, sunteți de acord cu </string>
     <string name="privacy_policy">Politica de confidențialitate</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">Fereastra de context este prea mare pentru serviciul de rezervă. Încercați să începeți un chat nou sau să utilizați un model cu o fereastră de context mai mare.</string>
     <string name="error_insufficient_credits">Credit insuficient</string>
     <string name="error_quota_exhausted">Cotă epuizată</string>
-    <string name="settings_request_integration_title">Solicită o integrare</string>
-    <string name="settings_request_integration_description">Aveți o idee pentru o automatizare sau integrare? Spuneți-ne deschizând un issue pe GitHub.</string>
-    <string name="settings_open_github_issue">Deschide issue pe GitHub</string>
     <string name="notification_channel_name">Notificări AI</string>
     <string name="notification_channel_description">Notificări trimise de asistentul AI</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

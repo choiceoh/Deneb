@@ -41,7 +41,6 @@
     <string name="settings_tools_none_available">Tiada alat tersedia pada platform ini.</string>
     <string name="settings_tab_services">Perkhidmatan</string>
     <string name="settings_tab_tools">Alat</string>
-    <string name="settings_tab_integrations">Integrasi</string>
     <string name="tools_count">%1$d Alat</string>
     <string name="privacy_agree_prefix">Dengan menggunakan perkhidmatan, anda bersetuju dengan </string>
     <string name="privacy_policy">Dasar Privasi</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">Tetingkap konteks terlalu besar untuk perkhidmatan sandaran. Cuba mulakan sembang baharu atau gunakan model dengan tetingkap konteks yang lebih besar.</string>
     <string name="error_insufficient_credits">Kredit tidak mencukupi</string>
     <string name="error_quota_exhausted">Kuota habis</string>
-    <string name="settings_request_integration_title">Minta Integrasi</string>
-    <string name="settings_request_integration_description">Ada idea untuk automasi atau integrasi? Beritahu kami dengan membuka isu GitHub.</string>
-    <string name="settings_open_github_issue">Buka Isu GitHub</string>
     <string name="notification_channel_name">Pemberitahuan AI</string>
     <string name="notification_channel_description">Pemberitahuan yang dihantar oleh pembantu AI</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

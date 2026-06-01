@@ -41,7 +41,6 @@
     <string name="settings_tools_none_available">இந்த தளத்தில் கருவிகள் எதுவும் கிடைக்கவில்லை.</string>
     <string name="settings_tab_services">சேவைகள்</string>
     <string name="settings_tab_tools">கருவிகள்</string>
-    <string name="settings_tab_integrations">ஒருங்கிணைப்புகள்</string>
     <string name="tools_count">%1$d கருவிகள்</string>
     <string name="privacy_agree_prefix">சேவையைப் பயன்படுத்துவதன் மூலம், நீங்கள் ஒப்புக்கொள்கிறீர்கள் </string>
     <string name="privacy_policy">தனியுரிமைக் கொள்கை</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">பின்னடைவு சேவைக்கு சூழல் சாளரம் மிகவும் பெரியது. புதிய அரட்டையைத் தொடங்கவும் அல்லது பெரிய சூழல் சாளரம் கொண்ட மாதிரியைப் பயன்படுத்தவும்.</string>
     <string name="error_insufficient_credits">போதுமான கிரெடிட்கள் இல்லை</string>
     <string name="error_quota_exhausted">ஒதுக்கீடு தீர்ந்தது</string>
-    <string name="settings_request_integration_title">ஒரு ஒருங்கிணைப்பைக் கோரு</string>
-    <string name="settings_request_integration_description">தானியங்கி அல்லது ஒருங்கிணைப்புக்கான யோசனை உள்ளதா? GitHub issue திறந்து எங்களுக்குத் தெரிவியுங்கள்.</string>
-    <string name="settings_open_github_issue">GitHub Issue திற</string>
     <string name="notification_channel_name">AI அறிவிப்புகள்</string>
     <string name="notification_channel_description">AI உதவியாளரால் அனுப்பப்பட்ட அறிவிப்புகள்</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

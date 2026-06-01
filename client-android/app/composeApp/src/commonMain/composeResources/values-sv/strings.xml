@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">Agent</string>
     <string name="settings_tab_services">Tjänster</string>
     <string name="settings_tab_tools">Verktyg</string>
-    <string name="settings_tab_integrations">Integrationer</string>
     <string name="tools_count">%1$d Verktyg</string>
     <string name="privacy_agree_prefix">Genom att använda tjänsten godkänner du </string>
     <string name="privacy_policy">Integritetspolicyn</string>
@@ -202,9 +201,6 @@ Om något behöver uppmärksamhet (föråldrade minnen, förfallna uppgifter, an
     <string name="error_context_window_exceeded">Kontextfönstret är för stort för reservtjänsten. Försök starta en ny chatt eller använd en modell med ett större kontextfönster.</string>
     <string name="error_insufficient_credits">Otillräckliga krediter</string>
     <string name="error_quota_exhausted">Kvoten är förbrukad</string>
-    <string name="settings_request_integration_title">Begär en integration</string>
-    <string name="settings_request_integration_description">Har du en idé för en automatisering eller integration? Meddela oss genom att öppna en GitHub-issue.</string>
-    <string name="settings_open_github_issue">Öppna GitHub Issue</string>
     <string name="notification_channel_name">AI-aviseringar</string>
     <string name="notification_channel_description">Aviseringar skickade av AI-assistenten</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

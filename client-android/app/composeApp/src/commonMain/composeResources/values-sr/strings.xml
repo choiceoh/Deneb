@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">Агент</string>
     <string name="settings_tab_services">Сервиси</string>
     <string name="settings_tab_tools">Алатке</string>
-    <string name="settings_tab_integrations">Интеграције</string>
     <string name="tools_count">%1$d алатки</string>
     <string name="privacy_agree_prefix">Коришћењем сервиса, прихватате </string>
     <string name="privacy_policy">Политику приватности</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">Контекстни прозор је превелик за резервну услугу. Покушајте да започнете нови ћаскање или да користите модел са већим контекстним прозором.</string>
     <string name="error_insufficient_credits">Недовољно кредита</string>
     <string name="error_quota_exhausted">Квота је исцрпљена</string>
-    <string name="settings_request_integration_title">Затражите интеграцију</string>
-    <string name="settings_request_integration_description">Имате идеју за аутоматизацију или интеграцију? Јавите нам отварањем GitHub issue-а.</string>
-    <string name="settings_open_github_issue">Отвори GitHub Issue</string>
     <string name="notification_channel_name">AI обавештења</string>
     <string name="notification_channel_description">Обавештења послата од стране AI асистента</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

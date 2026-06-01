@@ -41,7 +41,6 @@
     <string name="settings_tools_none_available">هیچ ابزاری در این پلتفرم موجود نیست.</string>
     <string name="settings_tab_services">سرویس‌ها</string>
     <string name="settings_tab_tools">ابزارها</string>
-    <string name="settings_tab_integrations">یکپارچه‌سازی‌ها</string>
     <string name="tools_count">%1$d ابزار</string>
     <string name="privacy_agree_prefix">با استفاده از سرویس، شما با </string>
     <string name="privacy_policy">سیاست حفظ حریم خصوصی</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">پنجره زمینه برای سرویس پشتیبان بیش از حد بزرگ است. سعی کنید یک چت جدید شروع کنید یا از مدلی با پنجره زمینه بزرگتر استفاده کنید.</string>
     <string name="error_insufficient_credits">اعتبار ناکافی</string>
     <string name="error_quota_exhausted">سهمیه به پایان رسیده است</string>
-    <string name="settings_request_integration_title">درخواست یکپارچه‌سازی</string>
-    <string name="settings_request_integration_description">ایده‌ای برای اتوماسیون یا یکپارچه‌سازی دارید؟ با ایجاد یک issue در GitHub به ما اطلاع دهید.</string>
-    <string name="settings_open_github_issue">ایجاد issue در GitHub</string>
     <string name="notification_channel_name">اعلان‌های هوش مصنوعی</string>
     <string name="notification_channel_description">اعلان‌های ارسال‌شده توسط دستیار هوش مصنوعی</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

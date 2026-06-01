@@ -41,7 +41,6 @@
     <string name="settings_tools_none_available">Không có công cụ nào khả dụng trên nền tảng này.</string>
     <string name="settings_tab_services">Dịch vụ</string>
     <string name="settings_tab_tools">Công cụ</string>
-    <string name="settings_tab_integrations">Tích hợp</string>
     <string name="tools_count">%1$d Công cụ</string>
     <string name="privacy_agree_prefix">Bằng cách sử dụng dịch vụ, bạn đồng ý với </string>
     <string name="privacy_policy">Chính sách quyền riêng tư</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">Cửa sổ ngữ cảnh quá lớn cho dịch vụ dự phòng. Hãy thử bắt đầu cuộc trò chuyện mới hoặc sử dụng mô hình có cửa sổ ngữ cảnh lớn hơn.</string>
     <string name="error_insufficient_credits">Không đủ tín dụng</string>
     <string name="error_quota_exhausted">Đã hết hạn mức</string>
-    <string name="settings_request_integration_title">Yêu cầu tích hợp</string>
-    <string name="settings_request_integration_description">Bạn có ý tưởng cho tự động hóa hoặc tích hợp? Hãy cho chúng tôi biết bằng cách mở issue trên GitHub.</string>
-    <string name="settings_open_github_issue">Mở GitHub Issue</string>
     <string name="notification_channel_name">Thông báo AI</string>
     <string name="notification_channel_description">Thông báo được gửi bởi trợ lý AI</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

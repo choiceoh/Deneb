@@ -117,22 +117,6 @@ fun AppSettings.exportToJson(
         map["sms_send_enabled"] = JsonPrimitive(isSmsSendEnabled())
     }
 
-    if (ImportSection.SPLINTERLANDS in sections) {
-        map["splinterlands_enabled"] = JsonPrimitive(isSplinterlandsEnabled())
-        val splinterlandsAccountJson = getSplinterlandsAccountJson()
-        if (splinterlandsAccountJson.isNotBlank()) {
-            map["splinterlands_account"] = Json.parseToJsonElement(splinterlandsAccountJson)
-        }
-        val splinterlandsInstanceIdsJson = getSplinterlandsInstanceIdsJson()
-        if (splinterlandsInstanceIdsJson.isNotBlank()) {
-            map["splinterlands_instance_ids"] = Json.parseToJsonElement(splinterlandsInstanceIdsJson)
-        }
-        val splinterlandsBattleLogJson = getSplinterlandsBattleLogJson()
-        if (splinterlandsBattleLogJson.isNotBlank()) {
-            map["splinterlands_battle_log"] = Json.parseToJsonElement(splinterlandsBattleLogJson)
-        }
-    }
-
     if (ImportSection.TOOLS in sections) {
         val toolStates = mutableMapOf<String, JsonElement>()
         for (toolId in toolIds) {
@@ -297,22 +281,6 @@ fun AppSettings.importFromJson(
         setSmsEnabled(false)
         setSmsPollIntervalMinutes(15)
         setSmsSendEnabled(false)
-    }
-
-    if (ImportSection.SPLINTERLANDS in sections) {
-        try {
-            setSplinterlandsEnabled(json["splinterlands_enabled"]?.jsonPrimitive?.content?.toBoolean() ?: false)
-            setSplinterlandsAccountJson(json["splinterlands_account"]?.toString() ?: "")
-            setSplinterlandsInstanceIdsJson(json["splinterlands_instance_ids"]?.toString() ?: "")
-            setSplinterlandsBattleLogJson(json["splinterlands_battle_log"]?.toString() ?: "")
-        } catch (_: Exception) {
-            errors++
-        }
-    } else if (replace) {
-        setSplinterlandsEnabled(false)
-        setSplinterlandsAccountJson("")
-        setSplinterlandsInstanceIdsJson("")
-        setSplinterlandsBattleLogJson("")
     }
 
     if (ImportSection.TOOLS in sections) {

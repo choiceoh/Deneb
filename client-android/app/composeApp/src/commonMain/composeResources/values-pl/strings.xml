@@ -41,7 +41,6 @@
     <string name="settings_tools_none_available">Brak dostępnych narzędzi na tej platformie.</string>
     <string name="settings_tab_services">Usługi</string>
     <string name="settings_tab_tools">Narzędzia</string>
-    <string name="settings_tab_integrations">Integracje</string>
     <string name="tools_count">%1$d Narzędzia</string>
     <string name="privacy_agree_prefix">Korzystając z usługi, zgadzasz się z </string>
     <string name="privacy_policy">Polityką prywatności</string>
@@ -202,9 +201,6 @@ Jeśli coś wymaga uwagi (przestarzałe wspomnienia, zaległe zadania, dalsze dz
     <string name="error_context_window_exceeded">Okno kontekstu zbyt duże dla usługi zapasowej. Spróbuj rozpocząć nowy czat lub użyj modelu z większym oknem kontekstu.</string>
     <string name="error_insufficient_credits">Niewystarczające środki</string>
     <string name="error_quota_exhausted">Limit wyczerpany</string>
-    <string name="settings_request_integration_title">Poproś o integrację</string>
-    <string name="settings_request_integration_description">Masz pomysł na automatyzację lub integrację? Daj nam znać, otwierając zgłoszenie na GitHubie.</string>
-    <string name="settings_open_github_issue">Otwórz zgłoszenie na GitHubie</string>
     <string name="notification_channel_name">Powiadomienia AI</string>
     <string name="notification_channel_description">Powiadomienia wysyłane przez asystenta AI</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

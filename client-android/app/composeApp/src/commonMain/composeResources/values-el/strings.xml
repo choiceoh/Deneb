@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">Πράκτορας</string>
     <string name="settings_tab_services">Υπηρεσίες</string>
     <string name="settings_tab_tools">Εργαλεία</string>
-    <string name="settings_tab_integrations">Ενσωματώσεις</string>
     <string name="tools_count">%1$d Εργαλεία</string>
     <string name="privacy_agree_prefix">Χρησιμοποιώντας την υπηρεσία, συμφωνείτε με την </string>
     <string name="privacy_policy">Πολιτική Απορρήτου</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">Το παράθυρο περιβάλλοντος είναι πολύ μεγάλο για την εφεδρική υπηρεσία. Δοκιμάστε να ξεκινήσετε μια νέα συνομιλία ή χρησιμοποιήστε ένα μοντέλο με μεγαλύτερο παράθυρο περιβάλλοντος.</string>
     <string name="error_insufficient_credits">Ανεπαρκές υπόλοιπο</string>
     <string name="error_quota_exhausted">Το όριο χρήσης εξαντλήθηκε</string>
-    <string name="settings_request_integration_title">Αίτημα ενσωμάτωσης</string>
-    <string name="settings_request_integration_description">Έχετε μια ιδέα για αυτοματισμό ή ενσωμάτωση; Ενημερώστε μας ανοίγοντας ένα ζήτημα στο GitHub.</string>
-    <string name="settings_open_github_issue">Άνοιγμα ζητήματος GitHub</string>
     <string name="notification_channel_name">Ειδοποιήσεις AI</string>
     <string name="notification_channel_description">Ειδοποιήσεις που αποστέλλονται από τον βοηθό AI</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

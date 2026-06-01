@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">ወኪል</string>
     <string name="settings_tab_services">አገልግሎቶች</string>
     <string name="settings_tab_tools">መሳሪያዎች</string>
-    <string name="settings_tab_integrations">ውህደቶች</string>
     <string name="tools_count">%1$d መሳሪያዎች</string>
     <string name="privacy_agree_prefix">አገልግሎቱን በመጠቀም፣ የሚከተለውን ይቀበላሉ </string>
     <string name="privacy_policy">የግላዊነት ፖሊሲ</string>
@@ -202,9 +201,6 @@
     <string name="error_context_window_exceeded">የአውድ መስኮት ለተተኪ አገልግሎት በጣም ትልቅ ነው። አዲስ ውይይት ለመጀመር ይሞክሩ ወይም ትልቅ የአውድ መስኮት ያለው ሞዴል ይጠቀሙ።</string>
     <string name="error_insufficient_credits">በቂ ክሬዲቶች የሉም</string>
     <string name="error_quota_exhausted">ኮታ ተሟጥጧል</string>
-    <string name="settings_request_integration_title">ውህደት ይጠይቁ</string>
-    <string name="settings_request_integration_description">ለአውቶሜሽን ወይም ውህደት ሀሳብ አለዎት? GitHub ጉዳይ በመክፈት ያሳውቁን።</string>
-    <string name="settings_open_github_issue">GitHub ጉዳይ ይክፈቱ</string>
     <string name="notification_channel_name">የ AI ማሳወቂያዎች</string>
     <string name="notification_channel_description">በ AI ረዳት የተላኩ ማሳወቂያዎች</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

@@ -201,14 +201,11 @@ import kai.composeapp.generated.resources.settings_memories_edit_cancel
 import kai.composeapp.generated.resources.settings_memories_edit_save
 import kai.composeapp.generated.resources.settings_memories_edit_title
 import kai.composeapp.generated.resources.settings_memories_show_all
-import kai.composeapp.generated.resources.settings_open_github_issue
 import kai.composeapp.generated.resources.settings_openai_compatible_or_other_service
 import kai.composeapp.generated.resources.settings_openai_compatible_providers
 import kai.composeapp.generated.resources.settings_openai_compatible_setup_ollama
 import kai.composeapp.generated.resources.settings_remove_service
 import kai.composeapp.generated.resources.settings_reorder_content_description
-import kai.composeapp.generated.resources.settings_request_integration_description
-import kai.composeapp.generated.resources.settings_request_integration_title
 import kai.composeapp.generated.resources.settings_sandbox_cancel
 import kai.composeapp.generated.resources.settings_sandbox_description
 import kai.composeapp.generated.resources.settings_sandbox_disk_usage
@@ -239,7 +236,6 @@ import kai.composeapp.generated.resources.settings_status_error_quota_exhausted
 import kai.composeapp.generated.resources.settings_status_error_rate_limited
 import kai.composeapp.generated.resources.settings_tab_agent
 import kai.composeapp.generated.resources.settings_tab_general
-import kai.composeapp.generated.resources.settings_tab_integrations
 import kai.composeapp.generated.resources.settings_tab_sandbox
 import kai.composeapp.generated.resources.settings_tab_services
 import kai.composeapp.generated.resources.settings_tab_tools
@@ -448,10 +444,6 @@ fun SettingsScreenContent(
                                 ServicesContent(uiState = filteredUiState, actions = actions)
                             }
 
-                            SettingsTab.Integrations -> {
-                                IntegrationsContent()
-                            }
-
                             SettingsTab.Tools -> {
                                 ToolsContent(
                                     tools = filteredUiState.tools,
@@ -554,7 +546,6 @@ private fun SettingsTabSelector(
                             SettingsTab.Services -> stringResource(Res.string.settings_tab_services)
                             SettingsTab.Tools -> stringResource(Res.string.settings_tab_tools)
                             SettingsTab.Sandbox -> stringResource(Res.string.settings_tab_sandbox)
-                            SettingsTab.Integrations -> stringResource(Res.string.settings_tab_integrations)
                         },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         color = MaterialTheme.colorScheme.primary,

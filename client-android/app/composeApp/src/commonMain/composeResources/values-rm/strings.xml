@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">Agent</string>
     <string name="settings_tab_services">Servetschs</string>
     <string name="settings_tab_tools">Utensils</string>
-    <string name="settings_tab_integrations">Integraziuns</string>
     <string name="tools_count">%1$d utensils</string>
     <string name="privacy_agree_prefix">Cun utilisar il servetsch, acceptais Vus la </string>
     <string name="privacy_policy">Directiva da protecziun da datas</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">La fanestra da context è memia gronda per il servetsch da reserva. Emprova da cumenzar in nov chat u dad utilisar in model cun ina fanestra da context pli gronda.</string>
     <string name="error_insufficient_credits">Betg avunda credit</string>
     <string name="error_quota_exhausted">Quota exhaurida</string>
-    <string name="settings_request_integration_title">Dumandar ina integraziun</string>
-    <string name="settings_request_integration_description">Avais Vus ina idea per ina automatisaziun u integraziun? Laschai ans savair cun avrir in GitHub-issue.</string>
-    <string name="settings_open_github_issue">Avrir GitHub-issue</string>
     <string name="notification_channel_name">Notificaziuns da IA</string>
     <string name="notification_channel_description">Notificaziuns tramessas da l'assistent da IA</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

@@ -41,7 +41,6 @@
     <string name="settings_tools_none_available">Nenhuma ferramenta disponível nesta plataforma.</string>
     <string name="settings_tab_services">Serviços</string>
     <string name="settings_tab_tools">Ferramentas</string>
-    <string name="settings_tab_integrations">Integrações</string>
     <string name="tools_count">%1$d Ferramentas</string>
     <string name="privacy_agree_prefix">Ao usar o serviço, você concorda com a </string>
     <string name="privacy_policy">Política de Privacidade</string>
@@ -202,9 +201,6 @@ Se algo precisar de atenção (memórias desatualizadas, tarefas vencidas, acomp
     <string name="error_context_window_exceeded">Janela de contexto grande demais para o serviço de reserva. Tente iniciar um novo chat ou usar um modelo com uma janela de contexto maior.</string>
     <string name="error_insufficient_credits">Créditos insuficientes</string>
     <string name="error_quota_exhausted">Quota esgotada</string>
-    <string name="settings_request_integration_title">Solicitar uma integração</string>
-    <string name="settings_request_integration_description">Tem uma ideia para uma automatização ou integração? Informe-nos abrindo um issue no GitHub.</string>
-    <string name="settings_open_github_issue">Abrir issue no GitHub</string>
     <string name="notification_channel_name">Notificações de IA</string>
     <string name="notification_channel_description">Notificações enviadas pelo assistente de IA</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

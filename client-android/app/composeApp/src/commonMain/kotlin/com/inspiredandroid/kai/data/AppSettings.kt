@@ -24,7 +24,6 @@ enum class ImportSection {
     HEARTBEAT,
     EMAIL,
     SMS,
-    SPLINTERLANDS,
     TOOLS,
     MCP,
     CONVERSATIONS,
@@ -40,7 +39,7 @@ enum class ThemeMode {
 /**
  * Stricter than [detectImportSections]: only includes sections that contain actual user data,
  * skipping ones that exist purely because of default feature-toggle flags (e.g. `sms_enabled = false`,
- * `splinterlands_enabled = false`, `mcp_servers = []`). Used to drive the Export preview dialog.
+ * `mcp_servers = []`). Used to drive the Export preview dialog.
  */
 fun detectExportableSections(json: JsonObject): Map<ImportSection, String?> {
     val sections = mutableMapOf<ImportSection, String?>()
@@ -80,10 +79,6 @@ fun detectExportableSections(json: JsonObject): Map<ImportSection, String?> {
     val smsSendEnabled = json["sms_send_enabled"]?.jsonPrimitive?.content?.toBoolean() == true
     if (smsEnabled || smsSendEnabled) {
         sections[ImportSection.SMS] = null
-    }
-
-    if (json["splinterlands_account"] != null) {
-        sections[ImportSection.SPLINTERLANDS] = null
     }
 
     val toolOverrides = json["tool_overrides"]?.jsonObject
@@ -137,9 +132,6 @@ fun detectImportSections(json: JsonObject): Map<ImportSection, String?> {
     }
     if (json["sms_enabled"] != null || json["sms_poll_interval"] != null || json["sms_send_enabled"] != null) {
         sections[ImportSection.SMS] = null
-    }
-    if (json["splinterlands_enabled"] != null || json["splinterlands_account"] != null) {
-        sections[ImportSection.SPLINTERLANDS] = null
     }
     if (json["tool_overrides"] != null) {
         val enabled = json["tool_overrides"]?.jsonObject?.count { (_, v) ->
@@ -514,46 +506,6 @@ class AppSettings(internal val settings: Settings) {
         settings.putInt("$KEY_MODEL_CONTEXT_PREFIX$modelId", contextTokens)
     }
 
-    // Splinterlands
-    fun isSplinterlandsEnabled(): Boolean = settings.getBoolean(KEY_SPLINTERLANDS_ENABLED, false)
-
-    fun setSplinterlandsEnabled(enabled: Boolean) {
-        settings.putBoolean(KEY_SPLINTERLANDS_ENABLED, enabled)
-    }
-
-    fun getSplinterlandsAccountJson(): String = settings.getString(KEY_SPLINTERLANDS_ACCOUNT, "")
-
-    fun setSplinterlandsAccountJson(json: String) {
-        settings.putString(KEY_SPLINTERLANDS_ACCOUNT, json)
-    }
-
-    fun getSplinterlandsPostingKey(): String = settings.getString(KEY_SPLINTERLANDS_POSTING_KEY, "")
-
-    fun getSplinterlandsPostingKey(accountId: String): String = settings.getString("${KEY_SPLINTERLANDS_POSTING_KEY}_$accountId", "")
-        .ifEmpty { getSplinterlandsPostingKey() } // fallback to legacy key
-
-    fun setSplinterlandsPostingKey(accountId: String, key: String) {
-        settings.putString("${KEY_SPLINTERLANDS_POSTING_KEY}_$accountId", key)
-    }
-
-    fun getSplinterlandsInstanceId(): String = settings.getString(KEY_SPLINTERLANDS_INSTANCE_ID, "")
-
-    fun setSplinterlandsInstanceId(instanceId: String) {
-        settings.putString(KEY_SPLINTERLANDS_INSTANCE_ID, instanceId)
-    }
-
-    fun getSplinterlandsInstanceIdsJson(): String = settings.getString(KEY_SPLINTERLANDS_INSTANCE_IDS, "")
-
-    fun setSplinterlandsInstanceIdsJson(json: String) {
-        settings.putString(KEY_SPLINTERLANDS_INSTANCE_IDS, json)
-    }
-
-    fun getSplinterlandsBattleLogJson(): String = settings.getString(KEY_SPLINTERLANDS_BATTLE_LOG, "")
-
-    fun setSplinterlandsBattleLogJson(json: String) {
-        settings.putString(KEY_SPLINTERLANDS_BATTLE_LOG, json)
-    }
-
     companion object {
         const val KEY_CURRENT_SERVICE_ID = "current_service_id"
         const val KEY_APP_OPENS = "app_opens"
@@ -608,13 +560,6 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_MCP_SERVERS = "mcp_servers"
         const val KEY_INSTANCE_MIGRATION_COMPLETE = "instance_migration_complete_v1"
         const val KEY_BASE_URL_V1_MIGRATION_COMPLETE = "base_url_v1_migration_complete"
-
-        const val KEY_SPLINTERLANDS_ENABLED = "splinterlands_enabled"
-        const val KEY_SPLINTERLANDS_ACCOUNT = "splinterlands_account"
-        const val KEY_SPLINTERLANDS_POSTING_KEY = "splinterlands_posting_key"
-        const val KEY_SPLINTERLANDS_BATTLE_LOG = "splinterlands_battle_log"
-        const val KEY_SPLINTERLANDS_INSTANCE_ID = "splinterlands_instance_id"
-        const val KEY_SPLINTERLANDS_INSTANCE_IDS = "splinterlands_instance_ids"
 
         const val KEY_MODEL_CONTEXT_PREFIX = "model_context_"
 

@@ -41,7 +41,6 @@
     <string name="settings_tools_none_available">Geen hulpmiddelen beschikbaar op dit platform.</string>
     <string name="settings_tab_services">Diensten</string>
     <string name="settings_tab_tools">Hulpmiddelen</string>
-    <string name="settings_tab_integrations">Integraties</string>
     <string name="tools_count">%1$d Hulpmiddelen</string>
     <string name="privacy_agree_prefix">Door de service te gebruiken, gaat u akkoord met het </string>
     <string name="privacy_policy">Privacybeleid</string>
@@ -202,9 +201,6 @@ Als iets aandacht nodig heeft (verouderde herinneringen, verlopen taken, gebruik
     <string name="error_context_window_exceeded">Contextvenster te groot voor de terugvaldienst. Probeer een nieuw gesprek te starten of gebruik een model met een groter contextvenster.</string>
     <string name="error_insufficient_credits">Onvoldoende tegoed</string>
     <string name="error_quota_exhausted">Quotum uitgeput</string>
-    <string name="settings_request_integration_title">Een integratie aanvragen</string>
-    <string name="settings_request_integration_description">Heeft u een idee voor een automatisering of integratie? Laat het ons weten door een GitHub-issue aan te maken.</string>
-    <string name="settings_open_github_issue">GitHub-issue openen</string>
     <string name="notification_channel_name">AI-meldingen</string>
     <string name="notification_channel_description">Meldingen verzonden door AI-assistent</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

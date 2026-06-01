@@ -41,7 +41,6 @@
     <string name="settings_tools_none_available">此平台上沒有可用的工具。</string>
     <string name="settings_tab_services">服務</string>
     <string name="settings_tab_tools">工具</string>
-    <string name="settings_tab_integrations">整合</string>
     <string name="tools_count">%1$d 個工具</string>
     <string name="privacy_agree_prefix">使用本服務即表示您同意</string>
     <string name="privacy_policy">隱私權政策</string>
@@ -202,9 +201,6 @@
     <string name="error_context_window_exceeded">上下文視窗對於備用服務而言太大了。請嘗試開始新的聊天或使用具有更大上下文視窗的模型。</string>
     <string name="error_insufficient_credits">額度不足</string>
     <string name="error_quota_exhausted">配額已用盡</string>
-    <string name="settings_request_integration_title">請求整合</string>
-    <string name="settings_request_integration_description">有自動化或整合的想法？請透過提交 GitHub Issue 告訴我們。</string>
-    <string name="settings_open_github_issue">開啟 GitHub Issue</string>
     <string name="notification_channel_name">AI 通知</string>
     <string name="notification_channel_description">由 AI 助理傳送的通知</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

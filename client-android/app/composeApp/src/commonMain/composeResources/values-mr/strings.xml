@@ -41,7 +41,6 @@
     <string name="settings_tools_none_available">या प्लॅटफॉर्मवर कोणतीही साधने उपलब्ध नाहीत.</string>
     <string name="settings_tab_services">सेवा</string>
     <string name="settings_tab_tools">साधने</string>
-    <string name="settings_tab_integrations">एकत्रीकरणे</string>
     <string name="tools_count">%1$d साधने</string>
     <string name="privacy_agree_prefix">सेवा वापरून, तुम्ही सहमत आहात </string>
     <string name="privacy_policy">गोपनीयता धोरण</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">फॉलबॅक सेवेसाठी कॉन्टेक्स्ट विंडो खूप मोठी आहे. नवीन चॅट सुरू करण्याचा किंवा मोठ्या कॉन्टेक्स्ट विंडो असलेल्या मॉडेलचा वापर करण्याचा प्रयत्न करा.</string>
     <string name="error_insufficient_credits">अपुरे क्रेडिट्स</string>
     <string name="error_quota_exhausted">कोटा संपला</string>
-    <string name="settings_request_integration_title">एकत्रीकरणाची विनंती करा</string>
-    <string name="settings_request_integration_description">ऑटोमेशन किंवा एकत्रीकरणासाठी कल्पना आहे? GitHub समस्या उघडून आम्हाला कळवा.</string>
-    <string name="settings_open_github_issue">GitHub समस्या उघडा</string>
     <string name="notification_channel_name">AI सूचना</string>
     <string name="notification_channel_description">AI सहाय्यकाने पाठवलेल्या सूचना</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

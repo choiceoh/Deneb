@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">סוכן</string>
     <string name="settings_tab_services">שירותים</string>
     <string name="settings_tab_tools">כלים</string>
-    <string name="settings_tab_integrations">אינטגרציות</string>
     <string name="tools_count">%1$d כלים</string>
     <string name="privacy_agree_prefix">בשימוש בשירות, אתה מסכים ל</string>
     <string name="privacy_policy">מדיניות הפרטיות</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">חלון ההקשר גדול מדי עבור שירות הגיבוי. נסה להתחיל צ'אט חדש או להשתמש במודל עם חלון הקשר גדול יותר.</string>
     <string name="error_insufficient_credits">אין מספיק קרדיטים</string>
     <string name="error_quota_exhausted">המכסה נוצלה</string>
-    <string name="settings_request_integration_title">בקש אינטגרציה</string>
-    <string name="settings_request_integration_description">יש לך רעיון לאוטומציה או אינטגרציה? ספר לנו על ידי פתיחת issue ב-GitHub.</string>
-    <string name="settings_open_github_issue">פתח issue ב-GitHub</string>
     <string name="notification_channel_name">התראות AI</string>
     <string name="notification_channel_description">התראות שנשלחו על ידי עוזר AI</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">Agent</string>
     <string name="settings_tab_services">Teenused</string>
     <string name="settings_tab_tools">Tööriistad</string>
-    <string name="settings_tab_integrations">Integratsioonid</string>
     <string name="tools_count">%1$d Tööriistad</string>
     <string name="privacy_agree_prefix">Teenuse kasutamisega nõustute </string>
     <string name="privacy_policy">Privaatsuspoliitikaga</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">Kontekstiaken on varuteenuse jaoks liiga suur. Proovi alustada uut vestlust või kasuta suurema kontekstiaknaga mudelit.</string>
     <string name="error_insufficient_credits">Ebapiisav krediidijääk</string>
     <string name="error_quota_exhausted">Limiit on ammendatud</string>
-    <string name="settings_request_integration_title">Taotle integratsiooni</string>
-    <string name="settings_request_integration_description">Kas sul on idee automatiseerimise või integratsiooni jaoks? Anna meile teada, avades GitHubis probleemiteate.</string>
-    <string name="settings_open_github_issue">Ava GitHubi probleemiteade</string>
     <string name="notification_channel_name">AI teavitused</string>
     <string name="notification_channel_description">AI assistendi saadetud teavitused</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

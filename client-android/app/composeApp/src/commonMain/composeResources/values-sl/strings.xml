@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">Agent</string>
     <string name="settings_tab_services">Storitve</string>
     <string name="settings_tab_tools">Orodja</string>
-    <string name="settings_tab_integrations">Integracije</string>
     <string name="tools_count">%1$d orodij</string>
     <string name="privacy_agree_prefix">Z uporabo storitve se strinjate s </string>
     <string name="privacy_policy">Pravilnik o zasebnosti</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">Kontekstno okno je preveliko za nadomestno storitev. Poskusite začeti nov klepet ali uporabite model z večjim kontekstnim oknom.</string>
     <string name="error_insufficient_credits">Nezadostno število kreditov</string>
     <string name="error_quota_exhausted">Kvota izčrpana</string>
-    <string name="settings_request_integration_title">Zahtevaj integracijo</string>
-    <string name="settings_request_integration_description">Imate idejo za avtomatizacijo ali integracijo? Sporočite nam z odprtjem issue na GitHubu.</string>
-    <string name="settings_open_github_issue">Odpri issue na GitHubu</string>
     <string name="notification_channel_name">Obvestila UI</string>
     <string name="notification_channel_description">Obvestila, ki jih pošlje pomočnik z umetno inteligenco</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

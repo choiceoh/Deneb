@@ -46,7 +46,6 @@
     <string name="settings_tab_services">Services</string>
     <string name="settings_tab_tools">Tools</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
-    <string name="settings_tab_integrations">Integrations</string>
     <string name="tools_count">%1$d Tools</string>
     <string name="waiting_thinking">Thinking…</string>
     <string name="waiting_working">Working…</string>
@@ -302,9 +301,6 @@
     <string name="error_provider_error">The model provider returned an error</string>
     <string name="error_service_unavailable">Service temporarily unavailable. Try again later.</string>
     <string name="error_bad_request">Bad request</string>
-    <string name="settings_request_integration_title">Request an Integration</string>
-    <string name="settings_request_integration_description">Have an idea for an automation or integration? Let us know by opening a GitHub issue.</string>
-    <string name="settings_open_github_issue">Open GitHub Issue</string>
     <string name="notification_channel_name">AI Notifications</string>
     <string name="notification_channel_description">Notifications sent by AI assistant</string>
     <string name="settings_sandbox_description">Install a Linux environment so the AI can run shell commands, scripts, and tools on your behalf. Runs securely inside the app. ~3 MB download.</string>

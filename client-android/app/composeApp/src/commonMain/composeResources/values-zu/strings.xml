@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">I-ejenti</string>
     <string name="settings_tab_services">Amasevisi</string>
     <string name="settings_tab_tools">Amathuluzi</string>
-    <string name="settings_tab_integrations">Ukuhlanganiswa</string>
     <string name="tools_count">Amathuluzi angu-%1$d</string>
     <string name="privacy_agree_prefix">Ngokusebenzisa isevisi, uyavumelana ne-</string>
     <string name="privacy_policy">Inqubomgomo yobumfihlo</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">Iwindi lomongo likhulu kakhulu lesevisi yokubuyela emuva. Zama ukuqala ingxoxo entsha noma usebenzise imodeli enewindi lomongo elikhulu.</string>
     <string name="error_insufficient_credits">Amakredit anganele</string>
     <string name="error_quota_exhausted">Ikota iphelile</string>
-    <string name="settings_request_integration_title">Cela Ukuhlanganiswa</string>
-    <string name="settings_request_integration_description">Unombono wokuzenzakalela noma ukuhlanganiswa? Sazise ngokuvula i-issue ku-GitHub.</string>
-    <string name="settings_open_github_issue">Vula i-GitHub Issue</string>
     <string name="notification_channel_name">Izaziso ze-AI</string>
     <string name="notification_channel_description">Izaziso ezithunyelwe umsizi we-AI</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

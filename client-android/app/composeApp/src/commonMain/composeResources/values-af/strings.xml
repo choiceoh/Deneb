@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">Agent</string>
     <string name="settings_tab_services">Dienste</string>
     <string name="settings_tab_tools">Gereedskap</string>
-    <string name="settings_tab_integrations">Integrasies</string>
     <string name="tools_count">%1$d Gereedskap</string>
     <string name="privacy_agree_prefix">Deur die diens te gebruik, stem jy in tot die </string>
     <string name="privacy_policy">Privaatheidsbeleid</string>
@@ -202,9 +201,6 @@ As iets aandag nodig het (verouderde herinneringe, verskuldigde take, gebruiker-
     <string name="error_context_window_exceeded">Context-venster te groot vir terugvaldens. Probeer 'n nuwe klets begin of gebruik 'n model met 'n groter konteksvenster.</string>
     <string name="error_insufficient_credits">Onvoldoende krediete</string>
     <string name="error_quota_exhausted">Kwota uitgeput</string>
-    <string name="settings_request_integration_title">Versoek 'n integrasie</string>
-    <string name="settings_request_integration_description">Het jy 'n idee vir 'n outomatisering of integrasie? Laat ons weet deur 'n GitHub-kwessie oop te maak.</string>
-    <string name="settings_open_github_issue">Maak GitHub-kwessie oop</string>
     <string name="notification_channel_name">KI-kennisgewings</string>
     <string name="notification_channel_description">Kennisgewings gestuur deur KI-assistent</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

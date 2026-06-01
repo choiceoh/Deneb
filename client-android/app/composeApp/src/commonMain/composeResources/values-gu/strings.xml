@@ -41,7 +41,6 @@
     <string name="settings_tools_none_available">આ પ્લેટફોર્મ પર કોઈ ટૂલ્સ ઉપલબ્ધ નથી.</string>
     <string name="settings_tab_services">સેવાઓ</string>
     <string name="settings_tab_tools">ટૂલ્સ</string>
-    <string name="settings_tab_integrations">એકીકરણો</string>
     <string name="tools_count">%1$d ટૂલ્સ</string>
     <string name="privacy_agree_prefix">સેવાનો ઉપયોગ કરીને, તમે સંમત થાઓ છો </string>
     <string name="privacy_policy">ગોપનીયતા નીતિ</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">ફોલબેક સેવા માટે સંદર્ભ વિન્ડો ખૂબ મોટી છે. નવી ચેટ શરૂ કરવાનો અથવા મોટી સંદર્ભ વિન્ડો ધરાવતા મોડેલનો ઉપયોગ કરવાનો પ્રયાસ કરો.</string>
     <string name="error_insufficient_credits">અપૂરતા ક્રેડિટ્સ</string>
     <string name="error_quota_exhausted">ક્વોટા સમાપ્ત</string>
-    <string name="settings_request_integration_title">ઇન્ટિગ્રેશનની વિનંતી કરો</string>
-    <string name="settings_request_integration_description">ઓટોમેશન અથવા ઇન્ટિગ્રેશન માટે કોઈ વિચાર છે? GitHub issue ખોલીને અમને જણાવો.</string>
-    <string name="settings_open_github_issue">GitHub Issue ખોલો</string>
     <string name="notification_channel_name">AI સૂચનાઓ</string>
     <string name="notification_channel_description">AI સહાયક દ્વારા મોકલવામાં આવેલી સૂચનાઓ</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

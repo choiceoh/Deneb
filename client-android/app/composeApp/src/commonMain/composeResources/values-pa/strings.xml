@@ -41,7 +41,6 @@
     <string name="settings_tools_none_available">ਇਸ ਪਲੇਟਫਾਰਮ 'ਤੇ ਕੋਈ ਟੂਲ ਉਪਲਬਧ ਨਹੀਂ ਹਨ।</string>
     <string name="settings_tab_services">ਸੇਵਾਵਾਂ</string>
     <string name="settings_tab_tools">ਟੂਲ</string>
-    <string name="settings_tab_integrations">ਏਕੀਕਰਨ</string>
     <string name="tools_count">%1$d ਟੂਲ</string>
     <string name="privacy_agree_prefix">ਸੇਵਾ ਦੀ ਵਰਤੋਂ ਕਰਕੇ, ਤੁਸੀਂ ਸਹਿਮਤ ਹੋ </string>
     <string name="privacy_policy">ਗੋਪਨੀਯਤਾ ਨੀਤੀ</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">ਫਾਲਬੈਕ ਸੇਵਾ ਲਈ ਕੰਟੈਕਸਟ ਵਿੰਡੋ ਬਹੁਤ ਵੱਡੀ ਹੈ। ਨਵੀਂ ਚੈਟ ਸ਼ੁਰੂ ਕਰਨ ਜਾਂ ਵੱਡੀ ਕੰਟੈਕਸਟ ਵਿੰਡੋ ਵਾਲੇ ਮਾਡਲ ਦੀ ਵਰਤੋਂ ਕਰਨ ਦੀ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</string>
     <string name="error_insufficient_credits">ਨਾਕਾਫ਼ੀ ਕ੍ਰੈਡਿਟ</string>
     <string name="error_quota_exhausted">ਕੋਟਾ ਖਤਮ ਹੋ ਗਿਆ</string>
-    <string name="settings_request_integration_title">ਇੰਟੀਗ੍ਰੇਸ਼ਨ ਦੀ ਬੇਨਤੀ ਕਰੋ</string>
-    <string name="settings_request_integration_description">ਕੀ ਤੁਹਾਡੇ ਕੋਲ ਆਟੋਮੇਸ਼ਨ ਜਾਂ ਇੰਟੀਗ੍ਰੇਸ਼ਨ ਦਾ ਵਿਚਾਰ ਹੈ? GitHub ਇਸ਼ੂ ਖੋਲ੍ਹ ਕੇ ਸਾਨੂੰ ਦੱਸੋ।</string>
-    <string name="settings_open_github_issue">GitHub ਇਸ਼ੂ ਖੋਲ੍ਹੋ</string>
     <string name="notification_channel_name">AI ਸੂਚਨਾਵਾਂ</string>
     <string name="notification_channel_description">AI ਸਹਾਇਕ ਦੁਆਰਾ ਭੇਜੀਆਂ ਸੂਚਨਾਵਾਂ</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">Agentti</string>
     <string name="settings_tab_services">Palvelut</string>
     <string name="settings_tab_tools">Ty\u00f6kalut</string>
-    <string name="settings_tab_integrations">Integraatiot</string>
     <string name="tools_count">%1$d Työkalua</string>
     <string name="privacy_agree_prefix">K\u00e4ytt\u00e4m\u00e4ll\u00e4 palvelua hyv\u00e4ksyt </string>
     <string name="privacy_policy">Tietosuojak\u00e4yt\u00e4nn\u00f6n</string>
@@ -202,9 +201,6 @@ Jos jokin vaatii huomiota (vanhentuneet muistot, erääntyneet tehtävät, käyt
     <string name="error_context_window_exceeded">Konteksti-ikkuna on liian suuri varapalvelulle. Yritä aloittaa uusi keskustelu tai käytä mallia, jossa on suurempi konteksti-ikkuna.</string>
     <string name="error_insufficient_credits">Riittämätön saldo</string>
     <string name="error_quota_exhausted">Kiintiö loppunut</string>
-    <string name="settings_request_integration_title">Pyydä integraatiota</string>
-    <string name="settings_request_integration_description">Onko sinulla idea automaatioon tai integraatioon? Kerro meille avaamalla GitHub-issue.</string>
-    <string name="settings_open_github_issue">Avaa GitHub-issue</string>
     <string name="notification_channel_name">Tekoäly-ilmoitukset</string>
     <string name="notification_channel_description">Tekoälyavustajan lähettämät ilmoitukset</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

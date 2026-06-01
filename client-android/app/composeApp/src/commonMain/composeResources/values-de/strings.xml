@@ -41,7 +41,6 @@
     <string name="settings_tools_none_available">Keine Werkzeuge auf dieser Plattform verfügbar.</string>
     <string name="settings_tab_services">Dienste</string>
     <string name="settings_tab_tools">Werkzeuge</string>
-    <string name="settings_tab_integrations">Integrationen</string>
     <string name="tools_count">%1$d Werkzeuge</string>
     <string name="privacy_agree_prefix">Mit der Nutzung des Dienstes stimmst du der </string>
     <string name="privacy_policy">Datenschutzrichtlinie</string>
@@ -202,9 +201,6 @@ Wenn etwas Aufmerksamkeit erfordert (veraltete Erinnerungen, fällige Aufgaben, 
     <string name="error_context_window_exceeded">Kontextfenster zu groß für den Ersatzdienst. Versuche einen neuen Chat zu starten oder verwende ein Modell mit einem größeren Kontextfenster.</string>
     <string name="error_insufficient_credits">Unzureichendes Guthaben</string>
     <string name="error_quota_exhausted">Kontingent erschöpft</string>
-    <string name="settings_request_integration_title">Integration anfragen</string>
-    <string name="settings_request_integration_description">Hast du eine Idee für eine Automatisierung oder Integration? Lass es uns wissen, indem du ein GitHub-Issue erstellst.</string>
-    <string name="settings_open_github_issue">GitHub-Issue öffnen</string>
     <string name="notification_channel_name">KI-Benachrichtigungen</string>
     <string name="notification_channel_description">Benachrichtigungen vom KI-Assistenten</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

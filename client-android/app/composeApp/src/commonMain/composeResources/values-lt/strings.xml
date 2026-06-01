@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">Agentas</string>
     <string name="settings_tab_services">Paslaugos</string>
     <string name="settings_tab_tools">Įrankiai</string>
-    <string name="settings_tab_integrations">Integracijos</string>
     <string name="tools_count">%1$d Įrankiai</string>
     <string name="privacy_agree_prefix">Naudodami paslaugą, sutinkate su </string>
     <string name="privacy_policy">Privatumo politika</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">Konteksto langas per didelis atsarginei paslaugai. Pabandykite pradėti naują pokalbį arba naudokite modelį su didesniu konteksto langu.</string>
     <string name="error_insufficient_credits">Nepakanka kreditų</string>
     <string name="error_quota_exhausted">Kvota išnaudota</string>
-    <string name="settings_request_integration_title">Paprašyti integracijos</string>
-    <string name="settings_request_integration_description">Turite idėją automatizavimui ar integracijai? Praneškite mums sukurdami „GitHub" klausimą.</string>
-    <string name="settings_open_github_issue">Atidaryti „GitHub" klausimą</string>
     <string name="notification_channel_name">DI pranešimai</string>
     <string name="notification_channel_description">Pranešimai, siunčiami DI asistento</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

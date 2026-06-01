@@ -70,8 +70,6 @@ expect val isSmsSupported: Boolean
  */
 expect val isNotificationsSupported: Boolean
 
-expect val isSplinterlandsSupported: Boolean
-
 expect suspend fun compressImageBytes(bytes: ByteArray, mimeType: String): ByteArray
 
 expect fun openUrl(url: String): Boolean

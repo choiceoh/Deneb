@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">Агент</string>
     <string name="settings_tab_services">Услуги</string>
     <string name="settings_tab_tools">Инструменти</string>
-    <string name="settings_tab_integrations">Интеграции</string>
     <string name="tools_count">%1$d Инструмента</string>
     <string name="privacy_agree_prefix">Използвайки услугата, вие се съгласявате с </string>
     <string name="privacy_policy">Политика за поверителност</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">Контекстният прозорец е твърде голям за резервната услуга. Опитайте да започнете нов чат или да използвате модел с по-голям контекстен прозорец.</string>
     <string name="error_insufficient_credits">Недостатъчен кредит</string>
     <string name="error_quota_exhausted">Квотата е изчерпана</string>
-    <string name="settings_request_integration_title">Заявка за интеграция</string>
-    <string name="settings_request_integration_description">Имате идея за автоматизация или интеграция? Уведомете ни, като отворите GitHub проблем.</string>
-    <string name="settings_open_github_issue">Отворете GitHub проблем</string>
     <string name="notification_channel_name">AI известия</string>
     <string name="notification_channel_description">Известия, изпратени от AI асистент</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

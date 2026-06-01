@@ -41,7 +41,6 @@
     <string name="settings_tools_none_available">На этой платформе нет доступных инструментов.</string>
     <string name="settings_tab_services">Сервисы</string>
     <string name="settings_tab_tools">Инструменты</string>
-    <string name="settings_tab_integrations">Интеграции</string>
     <string name="tools_count">%1$d инструментов</string>
     <string name="privacy_agree_prefix">Используя сервис, вы соглашаетесь с </string>
     <string name="privacy_policy">Политикой конфиденциальности</string>
@@ -202,9 +201,6 @@
     <string name="error_context_window_exceeded">Окно контекста слишком велико для резервного сервиса. Попробуйте начать новый чат или использовать модель с большим окном контекста.</string>
     <string name="error_insufficient_credits">Недостаточно кредитов</string>
     <string name="error_quota_exhausted">Квота исчерпана</string>
-    <string name="settings_request_integration_title">Запросить интеграцию</string>
-    <string name="settings_request_integration_description">Есть идея для автоматизации или интеграции? Сообщите нам, создав issue на GitHub.</string>
-    <string name="settings_open_github_issue">Открыть issue на GitHub</string>
     <string name="notification_channel_name">Уведомления ИИ</string>
     <string name="notification_channel_description">Уведомления, отправленные ИИ-ассистентом</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

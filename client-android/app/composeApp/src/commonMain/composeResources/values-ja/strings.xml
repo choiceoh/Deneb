@@ -41,7 +41,6 @@
     <string name="settings_tools_none_available">このプラットフォームでは利用可能なツールがありません。</string>
     <string name="settings_tab_services">サービス</string>
     <string name="settings_tab_tools">ツール</string>
-    <string name="settings_tab_integrations">連携</string>
     <string name="tools_count">%1$d ツール</string>
     <string name="privacy_agree_prefix">サービスを利用することで、</string>
     <string name="privacy_policy">プライバシーポリシー</string>
@@ -202,9 +201,6 @@
     <string name="error_context_window_exceeded">フォールバックサービスにはコンテキストウィンドウが大きすぎます。新しいチャットを開始するか、より大きなコンテキストウィンドウを持つモデルを使用してください。</string>
     <string name="error_insufficient_credits">クレジットが不足しています</string>
     <string name="error_quota_exhausted">クォータを超過しました</string>
-    <string name="settings_request_integration_title">インテグレーションをリクエスト</string>
-    <string name="settings_request_integration_description">自動化やインテグレーションのアイデアがありますか？GitHubでissueを作成してお知らせください。</string>
-    <string name="settings_open_github_issue">GitHub issueを開く</string>
     <string name="notification_channel_name">AI通知</string>
     <string name="notification_channel_description">AIアシスタントから送信された通知</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

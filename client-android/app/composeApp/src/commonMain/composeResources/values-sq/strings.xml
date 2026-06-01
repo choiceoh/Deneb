@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">Agjent</string>
     <string name="settings_tab_services">Shërbimet</string>
     <string name="settings_tab_tools">Mjetet</string>
-    <string name="settings_tab_integrations">Integrimet</string>
     <string name="tools_count">%1$d mjete</string>
     <string name="privacy_agree_prefix">Duke përdorur shërbimin, ju pranoni </string>
     <string name="privacy_policy">Politikën e privatësisë</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">Dritarja e kontekstit është shumë e madhe për shërbimin rezervë. Provoni të filloni një bisedë të re ose të përdorni një model me dritare konteksti më të madhe.</string>
     <string name="error_insufficient_credits">Kredite të pamjaftueshme</string>
     <string name="error_quota_exhausted">Kuota u ezaurua</string>
-    <string name="settings_request_integration_title">Kërko një integrim</string>
-    <string name="settings_request_integration_description">Keni një ide për një automatizim ose integrim? Na tregoni duke hapur një issue në GitHub.</string>
-    <string name="settings_open_github_issue">Hap issue në GitHub</string>
     <string name="notification_channel_name">Njoftimet e AI</string>
     <string name="notification_channel_description">Njoftimet e dërguara nga asistenti AI</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

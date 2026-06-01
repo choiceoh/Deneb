@@ -41,7 +41,6 @@
     <string name="settings_tools_none_available">ไม่มีเครื่องมือที่พร้อมใช้งานบนแพลตฟอร์มนี้</string>
     <string name="settings_tab_services">บริการ</string>
     <string name="settings_tab_tools">เครื่องมือ</string>
-    <string name="settings_tab_integrations">การเชื่อมต่อ</string>
     <string name="tools_count">%1$d เครื่องมือ</string>
     <string name="privacy_agree_prefix">การใช้บริการถือว่าคุณยอมรับ</string>
     <string name="privacy_policy">นโยบายความเป็นส่วนตัว</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">หน้าต่างบริบทใหญ่เกินไปสำหรับบริการสำรอง ลองเริ่มแชทใหม่หรือใช้โมเดลที่มีหน้าต่างบริบทขนาดใหญ่กว่า</string>
     <string name="error_insufficient_credits">เครดิตไม่เพียงพอ</string>
     <string name="error_quota_exhausted">โควตาหมดแล้ว</string>
-    <string name="settings_request_integration_title">ขอการเชื่อมต่อ</string>
-    <string name="settings_request_integration_description">มีไอเดียสำหรับระบบอัตโนมัติหรือการเชื่อมต่อ? แจ้งเราได้โดยเปิด Issue บน GitHub</string>
-    <string name="settings_open_github_issue">เปิด Issue บน GitHub</string>
     <string name="notification_channel_name">การแจ้งเตือน AI</string>
     <string name="notification_channel_description">การแจ้งเตือนที่ส่งโดยผู้ช่วย AI</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>

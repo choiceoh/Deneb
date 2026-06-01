@@ -35,7 +35,6 @@
     <string name="settings_tab_agent">Agent</string>
     <string name="settings_tab_services">Slu\u017eby</string>
     <string name="settings_tab_tools">N\u00e1stroje</string>
-    <string name="settings_tab_integrations">Integrace</string>
     <string name="tools_count">%1$d Nástrojů</string>
     <string name="privacy_agree_prefix">Pou\u017e\u00edv\u00e1n\u00edm slu\u017eby souhlas\u00edte se </string>
     <string name="privacy_policy">Z\u00e1sadami ochrany osobn\u00edch \u00fadaj\u016f</string>
@@ -201,9 +200,6 @@
     <string name="error_context_window_exceeded">Kontextové okno je příliš velké pro záložní službu. Zkuste zahájit nový chat nebo použijte model s větším kontextovým oknem.</string>
     <string name="error_insufficient_credits">Nedostatečný kredit</string>
     <string name="error_quota_exhausted">Kvóta vyčerpána</string>
-    <string name="settings_request_integration_title">Požádat o integraci</string>
-    <string name="settings_request_integration_description">Máte nápad na automatizaci nebo integraci? Dejte nám vědět otevřením GitHub issue.</string>
-    <string name="settings_open_github_issue">Otevřít GitHub issue</string>
     <string name="notification_channel_name">AI oznámení</string>
     <string name="notification_channel_description">Oznámení odeslaná AI asistentem</string>
     <string name="settings_tab_sandbox">Linux Sandbox</string>
