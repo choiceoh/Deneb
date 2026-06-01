@@ -54,6 +54,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -73,8 +74,10 @@ import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.inspiredandroid.kai.BackIcon
@@ -87,6 +90,7 @@ import com.inspiredandroid.kai.ui.chat.composables.BotMessage
 import com.inspiredandroid.kai.ui.chat.composables.ChatHistorySheet
 import com.inspiredandroid.kai.ui.chat.composables.CircleIconButton
 import com.inspiredandroid.kai.ui.chat.composables.DenebDrawerSheet
+import com.inspiredandroid.kai.ui.chat.composables.DenebTopicDrawerSheet
 import com.inspiredandroid.kai.ui.chat.composables.EmptyState
 import com.inspiredandroid.kai.ui.chat.composables.ErrorMessage
 import com.inspiredandroid.kai.ui.chat.composables.HeartbeatBanner
@@ -520,6 +524,14 @@ private fun ChatModeScreen(
         drawerScope.launch { drawerState.close() }
     }
 
+    // Right-side topic drawer (Telegram forum topic switcher): opened by the
+    // top-bar hashtag only — no edge swipe, so the chat keeps its right edge —
+    // and dismissed by tapping the scrim or system back.
+    val topicDrawerState = rememberDrawerState(DrawerValue.Closed)
+    com.inspiredandroid.kai.PlatformBackHandler(enabled = topicDrawerState.isOpen) {
+        drawerScope.launch { topicDrawerState.close() }
+    }
+
     // When the active conversation changes (e.g. user starts a new chat from the
     // top bar or taps the heartbeat banner), collapse the sandbox view so the
     // user lands on the chat they just opened. Tracking the previous id avoids
@@ -551,6 +563,29 @@ private fun ChatModeScreen(
         }
     }
 
+    // Right-side topic drawer wraps everything: flipping the layout direction to
+    // RTL slides this drawer in from the right edge; the content (including the
+    // left drawer below) is flipped back to LTR so the chat layout is unchanged.
+    // gesturesEnabled=false keeps the chat's right edge free — the hashtag button
+    // is the only opener; the scrim/back close it.
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+    ModalNavigationDrawer(
+        drawerState = topicDrawerState,
+        gesturesEnabled = false,
+        drawerContent = {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                DenebTopicDrawerSheet(
+                    topics = topics,
+                    selectedKey = selectedTopicKey,
+                    onSelectTopic = {
+                        onSelectTopic(it)
+                        drawerScope.launch { topicDrawerState.close() }
+                    },
+                )
+            }
+        },
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -585,8 +620,7 @@ private fun ChatModeScreen(
                 onToggleSandbox = { isSandboxOpen = !isSandboxOpen },
                 navigationTabBar = navigationTabBar,
                 topics = topics,
-                selectedTopicKey = selectedTopicKey,
-                onSelectTopic = onSelectTopic,
+                onOpenTopicDrawer = { drawerScope.launch { topicDrawerState.open() } },
             )
 
             HeartbeatBanner(
@@ -976,7 +1010,10 @@ private fun ChatModeScreen(
             Snackbar(snackbarData = data)
         }
     }
-    } // ModalNavigationDrawer
+    } // ModalNavigationDrawer (left)
+        } // CompositionLocalProvider Ltr (content)
+    } // ModalNavigationDrawer (right topic drawer)
+    } // CompositionLocalProvider Rtl
 
     if (showHistorySheet) {
         ChatHistorySheet(

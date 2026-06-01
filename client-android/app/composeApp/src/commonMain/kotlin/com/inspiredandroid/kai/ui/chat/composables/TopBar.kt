@@ -51,8 +51,7 @@ internal fun TopBar(
     onToggleSandbox: () -> Unit,
     navigationTabBar: (@Composable () -> Unit)? = null,
     topics: ImmutableList<TopicTab> = persistentListOf(),
-    selectedTopicKey: String? = null,
-    onSelectTopic: (String) -> Unit = {},
+    onOpenTopicDrawer: (() -> Unit)? = null,
 ) {
     if (navigationTabBar != null) {
         Box(
@@ -72,7 +71,9 @@ internal fun TopBar(
                 if (textToSpeech != null) {
                     SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
                 }
-                DenebTopicMenu(topics, selectedTopicKey, onSelectTopic)
+                if (topics.size >= 2 && onOpenTopicDrawer != null) {
+                    DenebTopicButton(onClick = onOpenTopicDrawer)
+                }
             }
         }
     } else {
@@ -84,9 +85,11 @@ internal fun TopBar(
                 SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
             }
             // Search / mail / calendar / people / categories / history / settings
-            // all live in the left drawer; the topic menu takes the spot where
-            // the settings icon used to sit.
-            DenebTopicMenu(topics, selectedTopicKey, onSelectTopic)
+            // all live in the left drawer; the hashtag opens the right-side topic
+            // drawer, taking the spot where the settings icon used to sit.
+            if (topics.size >= 2 && onOpenTopicDrawer != null) {
+                DenebTopicButton(onClick = onOpenTopicDrawer)
+            }
         }
     }
 }

@@ -28,7 +28,7 @@ import com.inspiredandroid.kai.ui.DenebType
 import com.inspiredandroid.kai.ui.LightColorScheme
 import com.inspiredandroid.kai.ui.denebHint
 import com.inspiredandroid.kai.ui.chat.composables.DenebDrawerSheet
-import com.inspiredandroid.kai.ui.chat.composables.DenebTopicMenu
+import com.inspiredandroid.kai.ui.chat.composables.DenebTopicDrawerSheet
 import com.inspiredandroid.kai.ui.chat.composables.TopicTab
 import kotlinx.collections.immutable.persistentListOf
 import org.jetbrains.skia.EncodedImageFormat
@@ -137,13 +137,8 @@ private fun renderChrome(name: String, scheme: ColorScheme) {
                             onClose = {},
                         )
                     }
-                    Column(Modifier.padding(top = 28.dp)) {
-                        Text(
-                            "토픽 메뉴 (상단바) — 선택: 잡담",
-                            style = MaterialTheme.typography.titleSmall,
-                            modifier = Modifier.padding(16.dp),
-                        )
-                        DenebTopicMenu(topics = topics, selectedKey = "chat", onSelectTopic = {})
+                    Box(Modifier.width(320.dp)) {
+                        DenebTopicDrawerSheet(topics = topics, selectedKey = "chat", onSelectTopic = {})
                     }
                 }
             }

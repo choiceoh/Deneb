@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.15",
+        code = 138,
+        highlights = listOf(
+            "토픽 전환을 오른쪽 드로어로 — 상단바 해시태그(#)를 누르면 업무·잡담·코딩을 한눈에 보고 고를 수 있어요",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.14",
         code = 137,
         highlights = listOf(
