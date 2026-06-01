@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"time"
 
 	"log/slog"
 
@@ -118,6 +119,7 @@ func (p *InboundProcessor) buildCommandDeps(sessionKey string) *handlers.Command
 		SubagentRuns:        subagentRunsFn,
 		ZeroCallsFn:         zeroCallsFn,
 		MorningLetterDataFn: p.buildMorningLetterDataFn(),
+		WeeklyReportFn:      p.buildWeeklyReportFn(),
 		BtwFn:               btwFn,
 	}
 }
@@ -135,6 +137,19 @@ func (p *InboundProcessor) buildMorningLetterDataFn() func(ctx context.Context) 
 	}
 	return func(ctx context.Context) (string, error) {
 		return tools.CollectMorningLetterDataWithOpts(ctx, opts)
+	}
+}
+
+// buildWeeklyReportFn returns the /weekly builder: it scans the project wiki,
+// composes the report form, and renders a PDF — degrading to a text fallback
+// when Chromium can't render (e.g. low memory headroom).
+func (p *InboundProcessor) buildWeeklyReportFn() func(ctx context.Context) (string, string, bool) {
+	var opts tools.WeeklyReportOpts
+	if p.server.wikiStore != nil {
+		opts.WikiDir = p.server.wikiStore.Dir()
+	}
+	return func(ctx context.Context) (string, string, bool) {
+		return tools.BuildWeeklyReportPDF(ctx, opts, time.Now())
 	}
 }
 

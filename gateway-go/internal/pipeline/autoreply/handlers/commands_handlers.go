@@ -48,6 +48,7 @@ type CommandDeps struct {
 	Status              *StatusDeps                                                     // Server-level data for /status command.
 	ZeroCallsFn         func() *RPCZeroCallsReport                                      // for /zerocalls
 	MorningLetterDataFn func(ctx context.Context) (string, error)                       // for /morning — collects raw JSON data
+	WeeklyReportFn      func(ctx context.Context) (pdfPath, text string, rendered bool) // for /weekly — builds the report PDF (or text fallback)
 	BtwFn               func(ctx context.Context, sessionKey, q string) (string, error) // for /btw — side question without touching main session
 }
 
@@ -139,6 +140,7 @@ func (r *CommandRouter) registerBuiltinHandlers() {
 
 	// Routine shortcuts (rewrite → agent passthrough)
 	r.Handle("morning", handleMorningCommand)
+	r.Handle("weekly", handleWeeklyCommand)
 
 	// Side question (chat.btw passthrough, never touches main session)
 	r.Handle("btw", handleBtwCommand)
