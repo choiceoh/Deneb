@@ -20,6 +20,11 @@ authenticated endpoint and is Korean-first throughout.
   agent and the Mini App share the same data (wiki, mail analysis, sessions)
   but are different surfaces. To make the bot menu button appear and serve the
   app over HTTPS, see [Cloudflare Tunnel Setup](/operations/cloudflare-tunnel-setup).
+
+  Deneb also ships a [native Android client](/operations/native-client) — a
+  separate installable app that adds capture, a home-screen widget, and instant
+  push. The Mini App needs no install and runs inside Telegram; pick whichever
+  fits the moment, since both talk to the same gateway.
 </Info>
 
 ## What the Mini App Is

@@ -54,6 +54,27 @@ home** — the chat that owns the bot conversation.
   delete — the most restructure-proof target.
 </Note>
 
+## Native Client Instant Push
+
+When a proactive 업무 report lands in the General topic, the gateway also pushes
+it to any connected [native client](/operations/native-client) the instant it is
+produced, instead of waiting for the client's next poll.
+
+- **The stream.** The native app holds open an authenticated SSE subscription at
+  `GET /api/v1/miniapp/events`. Each report is published as a small
+  `{title, body}` frame — `body` is a one-line preview — and the app raises a
+  local notification for it (only while backgrounded; in the foreground the
+  report just lands in chat).
+- **General only.** Only reports delivered to the General (업무) topic are
+  mirrored and pushed. Named topics like 코딩 and 잡담 are deliberately excluded so
+  work reports never pollute them. The mirrored copy lands in the `client:main`
+  session, which is why **tapping a push opens the 업무 topic**.
+- **Best effort.** The push hub drops a frame for a slow or sleeping client
+  rather than blocking — there is no delivery guarantee, and none is needed: the
+  same content is in the Telegram topic and the session transcript regardless.
+- **Sources.** The morning letter (overnight wiki synthesis) and mail analyses
+  are the reports wired through this push.
+
 ## Delivery Targets
 
 **Gmail poll summaries.** Set `gmailPoll.deliverTo` in the config to override
