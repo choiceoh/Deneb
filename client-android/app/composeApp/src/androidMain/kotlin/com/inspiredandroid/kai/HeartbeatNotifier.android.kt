@@ -32,12 +32,13 @@ const val EXTRA_OPEN_WORK_TOPIC = "com.inspiredandroid.kai.OPEN_WORK_TOPIC"
 
 /**
  * Fixed ID so a new heartbeat report replaces any earlier unread one in the tray
- * instead of piling up. The app only ever has one pending heartbeat conversation.
+ * instead of piling up. Android notification IDs are app-wide, so keep this
+ * distinct from foreground-service and proactive-report IDs.
  */
-private const val HEARTBEAT_NOTIFICATION_ID = 9002
+private const val HEARTBEAT_NOTIFICATION_ID = 9003
 
 /** Separate tray ID so a proactive report doesn't replace an unread heartbeat. */
-private const val PROACTIVE_NOTIFICATION_ID = 9003
+private const val PROACTIVE_NOTIFICATION_ID = 9004
 
 actual fun sendHeartbeatNotification(title: String, body: String) {
     postNotification(title, body, EXTRA_OPEN_HEARTBEAT, HEARTBEAT_NOTIFICATION_ID)
@@ -63,24 +64,28 @@ private fun postNotification(title: String, body: String, deepLinkExtra: String,
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         putExtra(deepLinkExtra, true)
     }
-    val pendingIntent = PendingIntent.getActivity(
-        context,
-        notificationId,
-        intent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-    )
+    val pendingIntent = intent?.let {
+        PendingIntent.getActivity(
+            context,
+            notificationId,
+            it,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
 
-    val notification = NotificationCompat.Builder(context, AI_NOTIFICATION_CHANNEL_ID)
+    val notificationBuilder = NotificationCompat.Builder(context, AI_NOTIFICATION_CHANNEL_ID)
         .setSmallIcon(R.drawable.ic_notification)
         .setContentTitle(title)
         .setContentText(body)
         .setStyle(NotificationCompat.BigTextStyle().bigText(body))
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-        .setContentIntent(pendingIntent)
         .setAutoCancel(true)
-        .build()
 
-    notificationManager.notify(notificationId, notification)
+    pendingIntent?.let { notificationBuilder.setContentIntent(it) }
+
+    val notification = notificationBuilder.build()
+
+    runCatching { notificationManager.notify(notificationId, notification) }
 }
 
 private fun ensureChannel(manager: NotificationManager) {

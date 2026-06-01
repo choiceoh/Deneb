@@ -60,22 +60,26 @@ class NotificationHelper(
             val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
-            val pendingIntent = PendingIntent.getActivity(
-                context,
-                notificationId,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
+            val pendingIntent = intent?.let {
+                PendingIntent.getActivity(
+                    context,
+                    notificationId,
+                    it,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            }
 
-            val notification = NotificationCompat.Builder(context, AI_NOTIFICATION_CHANNEL_ID)
+            val notificationBuilder = NotificationCompat.Builder(context, AI_NOTIFICATION_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
                 .setContentText(message)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
-                .build()
+
+            pendingIntent?.let { notificationBuilder.setContentIntent(it) }
+
+            val notification = notificationBuilder.build()
 
             notificationManager.notify(notificationId, notification)
 
