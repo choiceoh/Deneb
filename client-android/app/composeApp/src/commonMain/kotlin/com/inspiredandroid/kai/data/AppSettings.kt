@@ -454,6 +454,19 @@ class AppSettings(internal val settings: Settings) {
         settings.putBoolean(KEY_NOTIFICATIONS_ENABLED, enabled)
     }
 
+    /**
+     * Whether a captured notification triages itself immediately (auto-inject)
+     * or just queues until the user taps it in the Notifications tab (manual).
+     * Default on — the proactive-assistant stance. When off, capture still fills
+     * the queue and the user injects on demand; the next poll's heartbeat also
+     * still drains the queue.
+     */
+    fun isNotificationAutoInjectEnabled(): Boolean = settings.getBoolean(KEY_NOTIFICATIONS_AUTO_INJECT, true)
+
+    fun setNotificationAutoInjectEnabled(enabled: Boolean) {
+        settings.putBoolean(KEY_NOTIFICATIONS_AUTO_INJECT, enabled)
+    }
+
     fun getNotificationsPendingJson(): String = settings.getString(KEY_NOTIFICATIONS_PENDING, "")
 
     fun setNotificationsPendingJson(json: String) {
@@ -581,6 +594,7 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_SMS_DRAFTS = "sms_drafts"
 
         const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled"
+        const val KEY_NOTIFICATIONS_AUTO_INJECT = "notifications_auto_inject"
         const val KEY_NOTIFICATIONS_ALLOWLIST = "notifications_capture_allowlist"
         const val KEY_NOTIFICATIONS_PENDING = "notifications_pending"
         const val KEY_NOTIFICATIONS_STORE = "notifications_store"

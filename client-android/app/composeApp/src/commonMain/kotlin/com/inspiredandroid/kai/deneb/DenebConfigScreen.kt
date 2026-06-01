@@ -29,6 +29,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -469,6 +470,9 @@ private fun NotificationsTab(client: DenebGatewayClient) {
     var sentId by remember { mutableStateOf<String?>(null) }
     // Capture allowlist: empty ⇒ all apps (default). Toggling a chip narrows it.
     var allowlist by remember { mutableStateOf(appSettings.getNotificationCaptureAllowlist()) }
+    // Auto-inject: on ⇒ a captured notification triages itself immediately;
+    // off ⇒ it only queues until the user taps it below (manual injection).
+    var autoInject by remember { mutableStateOf(appSettings.isNotificationAutoInjectEnabled()) }
     LaunchedEffect(access) {
         if (access) records = store.getStore().sortedByDescending { it.postedAtEpochMs }
     }
@@ -491,11 +495,48 @@ private fun NotificationsTab(client: DenebGatewayClient) {
             Button(onClick = { controller.openAccessSettings() }, modifier = Modifier.fillMaxWidth()) { Text("알림 접근 권한 열기") }
             OutlinedButton(onClick = { access = controller.isAccessGranted() }, modifier = Modifier.fillMaxWidth()) { Text("권한 부여 후 새로고침") }
         }
-        records.isEmpty() -> EmptyTab("캡처된 알림이 없습니다.")
         else -> Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // Auto-inject toggle: shown whenever access is granted, even before
+            // any notification is captured.
+            SettingsCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "도착 즉시 주입",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            if (autoInject) {
+                                "캡처된 알림을 도착 즉시 에이전트에게 보내 트리아지합니다."
+                            } else {
+                                "캡처만 하고, 아래 목록에서 직접 탭할 때만 채팅으로 보냅니다."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = autoInject,
+                        onCheckedChange = {
+                            autoInject = it
+                            appSettings.setNotificationAutoInjectEnabled(it)
+                        },
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            if (records.isEmpty()) {
+                Text(
+                    "캡처된 알림이 없습니다.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             // Capture-allowlist picker: choose which apps Deneb captures. Empty
             // = all apps. Listed apps are those seen in capture history.
             if (knownApps.isNotEmpty()) {

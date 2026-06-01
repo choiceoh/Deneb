@@ -144,6 +144,9 @@ class TaskScheduler(
         if (captureJob?.isActive == true) return
         captureJob = schedulerScope.launch {
             store.captured.collect {
+                // Manual-only mode: capture fills the queue but the user injects
+                // on demand by tapping a notification in the Notifications tab.
+                if (appSettings?.isNotificationAutoInjectEnabled() != true) return@collect
                 // Debounce: wait out a burst, then run once. Further signals that
                 // arrive during the heartbeat are picked up on the next emission.
                 delay(CAPTURE_DEBOUNCE_MS.milliseconds)
@@ -214,7 +217,14 @@ class TaskScheduler(
         val manager = heartbeatManager ?: return
         val pendingEmails = emailStore?.getPending().orEmpty()
         val pendingSms = smsStore?.getPending().orEmpty()
-        val pendingNotifications = notificationStore?.getPending().orEmpty()
+        // In manual-only mode, captured notifications wait in the queue for the
+        // user to tap-inject — the regular heartbeat poll must not auto-drain
+        // them either (null/default => auto-inject on).
+        val pendingNotifications = if (appSettings?.isNotificationAutoInjectEnabled() != false) {
+            notificationStore?.getPending().orEmpty()
+        } else {
+            emptyList()
+        }
         try {
             val recentResponses = dataRepository.savedConversations.value
                 .find { it.type == Conversation.TYPE_HEARTBEAT }
