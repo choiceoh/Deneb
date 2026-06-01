@@ -312,15 +312,18 @@ func synthesizeBatchReport(ctx context.Context, deps PipelineDeps, items []Batch
 
 	userPrompt := fmt.Sprintf(batchAnalysisPrompt, len(items), sb.String())
 
-	// Thinking stays ON (see synthesizeAnalysis); the reasoning just never
-	// reaches the report. thinking_delta is excluded by collectStreamText, and
-	// any leaked chain-of-thought markers are scrubbed by stripReasoningLeak.
+	// Reasoning OFF. GLM-5.1 (Z.ai anthropic endpoint) defaults reasoning ON and
+	// streams its chain-of-thought into the answer body as ordinary text, which
+	// collectStreamText can't tell apart from real content. Sending
+	// {"type":"disabled"} (see anthropic.go) turns it off at the source;
+	// stripReasoningLeak below still scrubs any stray marker.
 	req := llm.ChatRequest{
 		Model:     deps.MainModel,
 		Messages:  []llm.Message{llm.NewTextMessage("user", userPrompt)},
 		System:    llm.SystemString(batchAnalysisSystem),
 		MaxTokens: batchStage2Tokens,
 		Stream:    true,
+		Thinking:  &llm.ThinkingConfig{Type: "disabled"},
 	}
 
 	events, err := deps.LLMClient.StreamChat(ctx, req)
@@ -544,18 +547,19 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	userPrompt := fmt.Sprintf(finalAnalysisPrompt, emailText, threadSection, memorySection)
 	userPrompt += projectSelectionSuffix(candidates)
 
-	// Extended thinking stays ON — reasoning improves analysis quality. The
-	// reasoning just must never reach the delivered text: properly-channeled
-	// thinking arrives as thinking_delta (collectStreamText reads only text
-	// deltas, so it is already excluded), and any chain-of-thought the local
-	// vLLM leaks into the answer body as literal [thinking]/<think> markers is
-	// scrubbed by stripReasoningLeak below.
+	// Reasoning OFF. GLM-5.1 (Z.ai anthropic endpoint) defaults reasoning ON and
+	// streams its chain-of-thought into the answer body as ordinary text —
+	// "사용자가 준 이메일 분석 요청이네. 먼저 ... Wait ..." — which collectStreamText
+	// can't tell apart from the analysis, so the report shipped the model's raw
+	// thinking. Sending {"type":"disabled"} (see anthropic.go) turns it off at the
+	// source; stripReasoningLeak below still scrubs any stray marker.
 	req := llm.ChatRequest{
 		Model:     deps.MainModel,
 		Messages:  []llm.Message{llm.NewTextMessage("user", userPrompt)},
 		System:    llm.SystemString(finalAnalysisSystem),
 		MaxTokens: stage2MaxTokens,
 		Stream:    true,
+		Thinking:  &llm.ThinkingConfig{Type: "disabled"},
 	}
 
 	events, err := deps.LLMClient.StreamChat(ctx, req)
@@ -777,6 +781,9 @@ func callLocalLLMJSON[T any](ctx context.Context, client *llm.Client, model, sys
 			MaxTokens:      maxTokens,
 			Stream:         true,
 			ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
+			// Reasoning OFF — chain-of-thought streamed into the body corrupts the
+			// JSON this helper parses. See anthropic.go's disabled handling.
+			Thinking: &llm.ThinkingConfig{Type: "disabled"},
 		})
 		if err != nil {
 			return zero, err
@@ -827,10 +834,16 @@ func collectStreamText(ctx context.Context, events <-chan llm.StreamEvent) (stri
 			case "content_block_delta":
 				var delta struct {
 					Delta struct {
+						Type string `json:"type"`
 						Text string `json:"text"`
 					} `json:"delta"`
 				}
-				if json.Unmarshal(ev.Payload, &delta) == nil && delta.Delta.Text != "" {
+				// Skip thinking_delta: OpenAI-translated streams carry chain-of-
+				// thought in .text, so the delta type is the reliable signal.
+				// Reasoning is also disabled at the request level (analysis reqs
+				// above); this is the belt-and-suspenders guard.
+				if json.Unmarshal(ev.Payload, &delta) == nil &&
+					delta.Delta.Type != "thinking_delta" && delta.Delta.Text != "" {
 					sb.WriteString(delta.Delta.Text)
 				}
 			case "error":
