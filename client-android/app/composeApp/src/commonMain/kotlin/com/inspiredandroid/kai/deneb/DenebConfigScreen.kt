@@ -74,7 +74,6 @@ fun DenebConfigScreen(
     denebClient: DenebGatewayClient? = null,
     onOpenTopicDoc: (String) -> Unit = {},
     onOpenCron: (String) -> Unit = {},
-    onOpenKaiSettings: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var tab by remember { mutableStateOf(0) }
@@ -128,7 +127,7 @@ fun DenebConfigScreen(
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (tab) {
-                    0 -> GatewayTab(appSettings, onBack, onOpenKaiSettings, denebClient)
+                    0 -> GatewayTab(appSettings, onBack, denebClient)
                     1 -> denebClient?.let { ModelTab(it) }
                     2 -> denebClient?.let { CronTab(it, onOpenCron) }
                     3 -> denebClient?.let { TopicDocsTab(it, onOpenTopicDoc) }
@@ -143,7 +142,6 @@ fun DenebConfigScreen(
 private fun GatewayTab(
     appSettings: AppSettings,
     onBack: () -> Unit,
-    onOpenKaiSettings: () -> Unit,
     denebClient: DenebGatewayClient?,
 ) {
     var url by remember { mutableStateOf(appSettings.settings.getString(KEY_URL, "")) }
@@ -197,27 +195,6 @@ private fun GatewayTab(
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("저장") }
-        }
-        SettingsCard(onClick = onOpenKaiSettings) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "고급 설정 (Kai)",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
-                    Text(
-                        "제공자 · MCP · 추론 등 Kai 원본 설정",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    "›",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
         }
         SettingsCard {
             Text(

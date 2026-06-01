@@ -104,7 +104,9 @@ class ChatViewModel(
         }
 
         viewModelScope.launch(backgroundDispatcher) {
-            dataRepository.connectEnabledMcpServers()
+            if (dataRepository !is DenebGatewayClient) {
+                dataRepository.connectEnabledMcpServers()
+            }
         }
         viewModelScope.launch {
             dataRepository.fallbackStatus.collect { status ->
