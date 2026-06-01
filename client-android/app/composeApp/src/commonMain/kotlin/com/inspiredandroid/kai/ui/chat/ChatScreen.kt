@@ -506,8 +506,8 @@ private fun ChatModeScreen(
         drawerScope.launch { drawerState.close() }
     }
 
-    // Right-side session selector: opened by the top-bar session button only (no
-    // edge swipe, so the chat keeps its right edge); dismissed by scrim or back.
+    // Right-side session selector: opened by the top-bar session button or a
+    // right-edge swipe (mirroring the left drawer); dismissed by scrim or back.
     val sessionDrawerState = rememberDrawerState(DrawerValue.Closed)
     com.inspiredandroid.kai.PlatformBackHandler(enabled = sessionDrawerState.isOpen) {
         drawerScope.launch { sessionDrawerState.close() }
@@ -547,7 +547,6 @@ private fun ChatModeScreen(
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
     ModalNavigationDrawer(
         drawerState = sessionDrawerState,
-        gesturesEnabled = false,
         drawerContent = {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 DenebSessionDrawerSheet(
