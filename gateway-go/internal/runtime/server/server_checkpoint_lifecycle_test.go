@@ -24,10 +24,10 @@ func TestShouldReleaseCheckpoints(t *testing.T) {
 		want  bool
 	}{
 		{"delete always releases", session.Event{Kind: session.EventDeleted, Key: "k"}, true},
-		{"status → done releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusDone}, true},
-		{"status → failed releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusFailed}, true},
-		{"status → killed releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusKilled}, true},
-		{"status → timeout releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusTimeout}, true},
+		{"status → done keeps checkpoints", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusDone}, false},
+		{"status → failed keeps checkpoints", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusFailed}, false},
+		{"status → killed keeps checkpoints", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusKilled}, false},
+		{"status → timeout keeps checkpoints", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusTimeout}, false},
 		{"reset (empty status) releases", session.Event{Kind: session.EventStatusChanged, NewStatus: ""}, true},
 		{"status → running does NOT release", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusRunning}, false},
 		{"create does NOT release", session.Event{Kind: session.EventCreated}, false},
@@ -41,13 +41,13 @@ func TestShouldReleaseCheckpoints(t *testing.T) {
 	}
 }
 
-// TestCheckpointLifecycle_RemovesOnTerminal builds the minimum wiring needed
+// TestCheckpointLifecycle_KeepsOnTerminal builds the minimum wiring needed
 // to exercise the real subscription path: a session.Manager, a real
 // checkpoint Manager, and the subscriber installed via initCheckpointLifecycle.
 // When the session transitions to a terminal phase, the checkpoint directory
-// must be removed within a short timeout — proving the hook fires and the
-// removal runs end to end.
-func TestCheckpointLifecycle_RemovesOnTerminal(t *testing.T) {
+// must remain so the post-run /rollback workflow can still list/diff/restore
+// the snapshots from the just-finished run.
+func TestCheckpointLifecycle_KeepsOnTerminal(t *testing.T) {
 	root := t.TempDir()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -89,8 +89,18 @@ func TestCheckpointLifecycle_RemovesOnTerminal(t *testing.T) {
 	s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{Phase: session.PhaseStart, Ts: 1})
 	s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{Phase: session.PhaseEnd, Ts: 2})
 
-	if !waitForMissing(sessionDir, 2*time.Second) {
-		t.Fatalf("checkpoint dir %s still exists after terminal transition", sessionDir)
+	// Give the async subscriber time to fire; terminal completion must not
+	// remove the directory.
+	time.Sleep(300 * time.Millisecond)
+	if _, err := os.Stat(sessionDir); err != nil {
+		t.Fatalf("checkpoint dir %s should persist after terminal transition: %v", sessionDir, err)
+	}
+	snaps, err := cpm.List("", 5)
+	if err != nil {
+		t.Fatalf("list snapshots after terminal: %v", err)
+	}
+	if len(snaps) != 1 {
+		t.Fatalf("snapshot count after terminal = %d, want 1", len(snaps))
 	}
 }
 
