@@ -40,11 +40,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 
 /**
@@ -64,19 +63,17 @@ fun DenebMailScreen(
     val mail by client.denebMail.collectAsState()
     val nextToken by client.denebMailNextToken.collectAsState()
     val scope = rememberCoroutineScope()
-    val haptics = LocalHapticFeedback.current
+    val haptics = rememberHaptics()
 
-    var loaded by remember { mutableStateOf(false) }
+    // null = first load in flight, true = loaded ok, false = fetch failed.
+    var loadOk by remember { mutableStateOf<Boolean?>(null) }
     var refreshing by remember { mutableStateOf(false) }
     var selecting by remember { mutableStateOf(false) }
     val selected = remember { mutableStateListOf<String>() }
     var busy by remember { mutableStateOf(false) }
     var loadingMore by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        client.refreshMail()
-        loaded = true
-    }
+    LaunchedEffect(Unit) { loadOk = client.refreshMail() }
 
     fun clearSelection() {
         selecting = false
@@ -85,7 +82,7 @@ fun DenebMailScreen(
 
     fun bulk(action: suspend (String) -> Unit) {
         if (busy) return
-        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        haptics.confirm()
         val ids = selected.toList()
         scope.launch {
             busy = true
@@ -129,8 +126,15 @@ fun DenebMailScreen(
             }
 
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                if (!loaded && mail.isEmpty()) {
+                if (mail.isEmpty() && loadOk == null) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { DenebLoading() }
+                } else if (mail.isEmpty() && loadOk == false) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        DenebError(
+                            "메일을 불러오지 못했어요.",
+                            onRetry = { scope.launch { loadOk = null; loadOk = client.refreshMail() } },
+                        )
+                    }
                 } else if (mail.isEmpty()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("최근 7일 메일 없음", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -138,33 +142,36 @@ fun DenebMailScreen(
                 } else {
                     PullToRefreshBox(
                         isRefreshing = refreshing,
-                        onRefresh = { scope.launch { refreshing = true; client.refreshMail(); refreshing = false } },
+                        onRefresh = { scope.launch { refreshing = true; loadOk = client.refreshMail(); refreshing = false } },
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         LazyColumn(Modifier.fillMaxSize()) {
                             items(mail, key = { it.id }) { m ->
-                                MailRow(
-                                    message = m,
-                                    selecting = selecting,
-                                    isSelected = m.id in selected,
-                                    onTap = {
-                                        if (selecting) {
-                                            if (m.id in selected) selected.remove(m.id) else selected.add(m.id)
-                                            if (selected.isEmpty()) selecting = false
-                                        } else {
-                                            onOpenDetail(m.id)
-                                        }
-                                    },
-                                    onLongPress = {
-                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        selecting = true
-                                        if (m.id !in selected) selected.add(m.id)
-                                    },
-                                )
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(start = 68.dp),
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                                )
+                                Column(Modifier.animateItem()) {
+                                    MailRow(
+                                        message = m,
+                                        selecting = selecting,
+                                        isSelected = m.id in selected,
+                                        onTap = {
+                                            haptics.tap()
+                                            if (selecting) {
+                                                if (m.id in selected) selected.remove(m.id) else selected.add(m.id)
+                                                if (selected.isEmpty()) selecting = false
+                                            } else {
+                                                onOpenDetail(m.id)
+                                            }
+                                        },
+                                        onLongPress = {
+                                            haptics.confirm()
+                                            selecting = true
+                                            if (m.id !in selected) selected.add(m.id)
+                                        },
+                                    )
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(start = 68.dp),
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                                    )
+                                }
                             }
                             if (nextToken != null) {
                                 item {

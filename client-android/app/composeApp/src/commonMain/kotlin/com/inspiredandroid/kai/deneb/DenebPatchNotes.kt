@@ -21,6 +21,14 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.23",
+        code = 146,
+        highlights = listOf(
+            "메일·일정·사람·검색 화면의 로딩·오류·빈 상태 정리 — 스켈레톤 로딩, 실패 시 '다시 시도' 버튼, 내용이 없을 땐 안내 문구",
+            "메일을 읽음·보관·삭제하면 목록에서 부드럽게 사라지고, 탭·길게누르기 햅틱을 통일",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.22",
         code = 145,
         highlights = listOf(

@@ -57,14 +57,16 @@ fun DenebWikiPageScreen(
     var status by remember(path) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(path) {
-        if (!creating) {
-            val p = client.fetchWikiPage(path)
-            page = p
-            loadFailed = p == null
-            if (p != null) draftBody = p.body
-        }
+    suspend fun loadPage() {
+        if (creating) return
+        loadFailed = false
+        page = null
+        val p = client.fetchWikiPage(path)
+        page = p
+        loadFailed = p == null
+        if (p != null) draftBody = p.body
     }
+    LaunchedEffect(path) { loadPage() }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -102,7 +104,11 @@ fun DenebWikiPageScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
             } else if (pg == null) {
-                if (loadFailed) DenebError("페이지를 불러오지 못했습니다.") else DenebLoading()
+                if (loadFailed) {
+                    DenebError("페이지를 불러오지 못했습니다.", onRetry = { scope.launch { loadPage() } })
+                } else {
+                    DenebLoading()
+                }
                 return@Column
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {

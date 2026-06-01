@@ -23,12 +23,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
 /**
  * People ranked by recent message volume (`miniapp.people.list`). Tapping a
@@ -42,8 +44,18 @@ fun DenebPeopleScreen(
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var people by remember { mutableStateOf<List<PersonHit>?>(null) }
+    var failed by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
-    LaunchedEffect(Unit) { people = client.fetchPeople() }
+    val scope = rememberCoroutineScope()
+    // people: null = first load in flight, list = loaded. failed takes priority so a
+    // fetch error offers retry instead of the misleading "no contacts" empty line.
+    suspend fun load() {
+        failed = false
+        people = null
+        val fetched = client.fetchPeople()
+        if (fetched == null) failed = true else people = fetched
+    }
+    LaunchedEffect(Unit) { load() }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -66,13 +78,12 @@ fun DenebPeopleScreen(
 
             val list = people
             when {
-                list == null -> DenebLoading()
-                list.isEmpty() -> Text(
-                    "최근 연락이 없습니다.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(16.dp),
+                failed -> DenebError(
+                    "연락처를 불러오지 못했어요.",
+                    onRetry = { scope.launch { load() } },
                 )
+                list == null -> DenebLoading()
+                list.isEmpty() -> DenebEmpty("최근 연락이 없습니다.")
                 else -> LazyColumn(Modifier.fillMaxSize()) {
                     items(list, key = { it.email.ifBlank { it.name } }) { person ->
                         Column(

@@ -52,6 +52,7 @@ fun DenebSearchScreen(
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<SearchResults?>(null) }
     var searching by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     fun run() {
@@ -59,7 +60,10 @@ fun DenebSearchScreen(
         if (q.isEmpty() || searching) return
         scope.launch {
             searching = true
-            results = client.searchAll(q)
+            failed = false
+            val r = client.searchAll(q)
+            failed = r == null
+            results = r
             searching = false
         }
     }
@@ -102,16 +106,16 @@ fun DenebSearchScreen(
             val r = results
             when {
                 searching && r == null -> DenebLoading("검색 중…")
+                failed -> DenebError(
+                    "검색에 실패했어요.",
+                    onRetry = { run() },
+                )
                 r == null -> Text(
                     "위키 · 일기 · 사람을 한 번에 검색합니다.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                r.wiki.isEmpty() && r.diary.isEmpty() && r.people.isEmpty() -> Text(
-                    "결과 없음",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                r.wiki.isEmpty() && r.diary.isEmpty() && r.people.isEmpty() -> DenebEmpty("결과 없음")
                 else -> {
                     if (r.wiki.isNotEmpty()) {
                         GroupHeader("위키 ${r.wiki.size}")

@@ -512,15 +512,18 @@ class DenebGatewayClient(
         scope.launch { setMainModel(modelId) }
     }
 
-    suspend fun refreshMail() {
+    /** Refresh the recent inbox. Returns false on a fetch failure so the screen can
+     *  show a retry instead of a misleading "no mail" empty state. */
+    suspend fun refreshMail(): Boolean {
         val payload = callRpc<MailListPayload>(
             "miniapp.gmail.list_recent",
             buildJsonObject { put("limit", 25) },
-        ) ?: return
+        ) ?: return false
         _denebMail.value = payload.messages
             .filter { it.id.isNotBlank() }
             .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread) }
         _denebMailNextToken.value = payload.nextPageToken.ifBlank { null }
+        return true
     }
 
     /** Append the next inbox page (if any) to the current list. */
@@ -671,17 +674,20 @@ class DenebGatewayClient(
             .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread) }
     }
 
-    suspend fun refreshCalendar() {
+    /** Refresh upcoming events. Returns false on a fetch failure so the screen can
+     *  tell a real "no events" from a network error instead of spinning forever. */
+    suspend fun refreshCalendar(): Boolean {
         val payload = callRpc<CalListPayload>(
             "miniapp.calendar.list_upcoming",
             buildJsonObject {
                 put("hoursAhead", 168) // one week ahead
                 put("limit", 50)
             },
-        ) ?: return
+        ) ?: return false
         _denebCalendar.value = payload.events
             .filter { it.id.isNotBlank() }
             .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.hasMeet) }
+        return true
     }
 
     /**
@@ -782,12 +788,13 @@ class DenebGatewayClient(
         return TopicDocContent(p.name.ifBlank { name }, p.content, p.modified)
     }
 
-    /** People ranked by recent message volume (`miniapp.people.list`). */
-    suspend fun fetchPeople(): List<PersonHit> {
+    /** People ranked by recent message volume (`miniapp.people.list`). Null on a
+     *  fetch failure so the screen can offer retry instead of a misleading "empty". */
+    suspend fun fetchPeople(): List<PersonHit>? {
         val p = callRpc<PeopleListPayload>(
             "miniapp.people.list",
             buildJsonObject { put("limit", 60) },
-        ) ?: return emptyList()
+        ) ?: return null
         return p.people
             .filter { it.email.isNotBlank() || it.name.isNotBlank() }
             .map { PersonHit(it.name.ifBlank { it.email }, it.email, it.messageCount, it.lastSubject) }
