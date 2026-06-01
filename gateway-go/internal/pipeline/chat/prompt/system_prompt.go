@@ -2,12 +2,12 @@ package prompt
 
 import (
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
 // SilentReplyToken is the token that suppresses message delivery when the LLM
@@ -649,13 +649,22 @@ func buildRuntimeLine(info *RuntimeInfo, channel string) string {
 	return strings.Join(parts, " ")
 }
 
-// resolveTimezone returns the system timezone.
+// resolveTimezone returns the display name for the system prompt's date line.
+//
+// It defers to pkg/dentime, the canonical Deneb clock, which resolves the zone
+// from DENEB_TIMEZONE then the config "timezone" key then the server-local
+// zone. The earlier implementation read only the TZ env var and the local zone
+// abbreviation, so a deployment that set its zone via deneb.json (the
+// documented path) — common on UTC containers — showed the wrong date/zone here
+// while logs, cron, and the calendar briefing (all dentime-based) used the
+// right one.
 func resolveTimezone() string {
-	if tz := os.Getenv("TZ"); tz != "" {
-		return tz
+	if name := dentime.Name(); name != "" && name != "Local" {
+		return name // IANA name, e.g. "Asia/Seoul"
 	}
-	zone, _ := time.Now().Zone()
-	if zone != "" && zone != "UTC" {
+	// Fell back to the server-local zone. Prefer a human abbreviation over the
+	// opaque "Local"; LoadLocation is no longer used on this value.
+	if zone, _ := dentime.Now().Zone(); zone != "" && zone != "UTC" {
 		return zone
 	}
 	return "UTC"

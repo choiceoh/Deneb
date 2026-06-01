@@ -3,6 +3,9 @@ package prompt
 import (
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
 func TestBuildSystemPromptContainsSections(t *testing.T) {
@@ -277,6 +280,44 @@ func TestBuildSystemPromptNoPilotSection(t *testing.T) {
 	prompt := BuildSystemPrompt(params)
 	if strings.Contains(prompt, "pilot") {
 		t.Error("pilot references should not appear in system prompt")
+	}
+}
+
+// TestResolveTimezone_HonorsConfiguredZone is a regression guard for the
+// timezone mismatch where resolveTimezone() read only the TZ env var and the
+// server-local zone abbreviation, ignoring DENEB_TIMEZONE and the config
+// "timezone" key. On a UTC container (the common deployment) that made the
+// system prompt show UTC while logs, cron, and the calendar briefing — all
+// dentime-based — ran in the configured zone (typically KST). resolveTimezone
+// must now agree with pkg/dentime.
+func TestResolveTimezone_HonorsConfiguredZone(t *testing.T) {
+	t.Setenv("DENEB_TIMEZONE", "Asia/Seoul")
+	dentime.ResetCache()
+	t.Cleanup(dentime.ResetCache)
+
+	if got := resolveTimezone(); got != "Asia/Seoul" {
+		t.Fatalf("resolveTimezone() = %q, want %q (must defer to dentime, not server-local UTC)", got, "Asia/Seoul")
+	}
+}
+
+// TestBuildSystemPromptDateInConfiguredZone verifies the rendered date line
+// uses the configured zone, not the server-local zone. With an explicit
+// UserTimezone the prompt must render "now" in that zone — proving the
+// day-only date can flip a calendar day relative to UTC.
+func TestBuildSystemPromptDateInConfiguredZone(t *testing.T) {
+	params := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs:     []ToolDef{{Name: "read"}},
+		UserTimezone: "Asia/Seoul",
+	}
+	prompt := BuildSystemPrompt(params)
+
+	if !strings.Contains(prompt, "(timezone: Asia/Seoul)") {
+		t.Fatalf("system prompt missing configured timezone label; got:\n%s", prompt)
+	}
+	wantDate := time.Now().In(time.FixedZone("KST", 9*60*60)).Format("Monday, January 2, 2006")
+	if !strings.Contains(prompt, wantDate) {
+		t.Errorf("system prompt date not rendered in Asia/Seoul; want %q in prompt", wantDate)
 	}
 }
 
