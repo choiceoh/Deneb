@@ -203,6 +203,17 @@ interface DataRepository {
     fun requestOpenHeartbeat()
     fun consumeOpenHeartbeatRequest()
 
+    /**
+     * Pulse that fires when the user taps a proactive-report push notification
+     * (morning-letter, email-analysis). Those reports are mirrored to the 업무
+     * (General) topic, not the heartbeat conversation, so this opens the work
+     * topic instead. `true` means "switch to the 업무 topic now, then call
+     * [consumeOpenWorkTopicRequest]". Collected by `ChatViewModel`.
+     */
+    val openWorkTopicRequested: StateFlow<Boolean>
+    fun requestOpenWorkTopic()
+    fun consumeOpenWorkTopicRequest()
+
     // On-device inference (LiteRT)
     fun isLocalInferenceAvailable(): Boolean
     fun getLocalEngineState(): StateFlow<EngineState>?

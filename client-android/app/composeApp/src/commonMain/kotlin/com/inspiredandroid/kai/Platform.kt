@@ -90,3 +90,12 @@ expect suspend fun saveFileToDevice(bytes: ByteArray, baseName: String, extensio
  * without deep-linking back to the conversation. No-op on web.
  */
 expect fun sendHeartbeatNotification(title: String, body: String)
+
+/**
+ * Like [sendHeartbeatNotification] but for proactive gateway reports
+ * (morning-letter, email-analysis) pushed over the events stream. On Android,
+ * tapping it deep-links to the 업무 (General) topic — where the report was
+ * mirrored — rather than the heartbeat conversation. Other platforms surface it
+ * the same way as a heartbeat notification.
+ */
+expect fun sendProactiveReportNotification(title: String, body: String)

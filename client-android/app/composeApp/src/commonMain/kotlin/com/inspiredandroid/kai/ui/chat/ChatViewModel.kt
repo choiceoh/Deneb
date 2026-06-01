@@ -133,6 +133,17 @@ class ChatViewModel(
                     dataRepository.consumeOpenHeartbeatRequest()
                 }
         }
+
+        // Tapping a proactive-report push opens the 업무 (General) topic, where
+        // the report was mirrored — not the heartbeat conversation.
+        viewModelScope.launch {
+            dataRepository.openWorkTopicRequested
+                .filter { it }
+                .collect {
+                    (dataRepository as? DenebGatewayClient)?.openWorkTopic()
+                    dataRepository.consumeOpenWorkTopicRequest()
+                }
+        }
     }
 
     val state = combine(
