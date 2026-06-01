@@ -20,10 +20,13 @@ import kai.composeapp.generated.resources.ic_service_litert
 import kai.composeapp.generated.resources.ic_service_longcat
 import kai.composeapp.generated.resources.ic_service_minimax
 import kai.composeapp.generated.resources.ic_service_mistral
+import kai.composeapp.generated.resources.ic_service_mimo
 import kai.composeapp.generated.resources.ic_service_moonshot
 import kai.composeapp.generated.resources.ic_service_nvidia
 import kai.composeapp.generated.resources.ic_service_openai
 import kai.composeapp.generated.resources.ic_service_openai_compatible
+import kai.composeapp.generated.resources.ic_service_qwen
+import kai.composeapp.generated.resources.ic_service_step
 import kai.composeapp.generated.resources.ic_service_xai
 import kai.composeapp.generated.resources.ic_service_zai
 import io.github.vinceglb.filekit.PlatformFile
@@ -561,6 +564,9 @@ class DenebGatewayClient(
             contains("minimax") -> Res.drawable.ic_service_minimax
             contains("longcat") -> Res.drawable.ic_service_longcat
             contains("llama") || contains("nemotron") || contains("nvidia") -> Res.drawable.ic_service_nvidia
+            contains("qwen") || contains("qwq") || contains("tongyi") -> Res.drawable.ic_service_qwen
+            contains("mimo") || contains("xiaomi") -> Res.drawable.ic_service_mimo
+            contains("step") || contains("stepfun") -> Res.drawable.ic_service_step
             // Local/on-device runtimes (vLLM-served small models) keep the edge mark.
             contains("litert") -> Res.drawable.ic_service_litert
             else -> Res.drawable.ic_service_openai_compatible
