@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.22",
+        code = 145,
+        highlights = listOf(
+            "메일 분석 리포트에서 모델의 추론 과정이 그대로 노출되던 문제 수정",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.19",
         code = 142,
         highlights = listOf(

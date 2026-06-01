@@ -13,6 +13,7 @@ import kai.composeapp.generated.resources.error_file_too_large
 import kai.composeapp.generated.resources.error_image_too_large
 import kai.composeapp.generated.resources.error_insufficient_credits
 import kai.composeapp.generated.resources.error_invalid_api_key
+import kai.composeapp.generated.resources.error_no_service_configured
 import kai.composeapp.generated.resources.error_openai_compatible_connection
 import kai.composeapp.generated.resources.error_openai_compatible_model_not_found
 import kai.composeapp.generated.resources.error_provider_error
