@@ -59,12 +59,14 @@ fun DenebCalendarScreen(
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
     var refreshing by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { client.refreshCalendar() }
+    // null = first load in flight, true = loaded ok, false = fetch failed.
+    var loadOk by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(Unit) { loadOk = client.refreshCalendar() }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         PullToRefreshBox(
             isRefreshing = refreshing,
-            onRefresh = { scope.launch { refreshing = true; client.refreshCalendar(); refreshing = false } },
+            onRefresh = { scope.launch { refreshing = true; loadOk = client.refreshCalendar(); refreshing = false } },
             modifier = Modifier.fillMaxSize(),
         ) {
             Column(
@@ -85,56 +87,58 @@ fun DenebCalendarScreen(
                 }
                 Spacer(Modifier.height(8.dp))
 
-                if (events.isEmpty()) {
-                    Text(
-                        "불러오는 중…",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                when {
+                    events.isEmpty() && loadOk == null -> DenebLoading()
+                    events.isEmpty() && loadOk == false -> DenebError(
+                        "일정을 불러오지 못했어요.",
+                        onRetry = { scope.launch { loadOk = null; loadOk = client.refreshCalendar() } },
                     )
-                } else {
-                    var lastDayKey: String? = null
-                    events.sortedBy { it.start }.forEach { event ->
-                        val stamp = stampOf(event.start, event.allDay)
-                        if (stamp?.dayKey != lastDayKey) {
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                stamp?.dayLabel ?: "날짜 미정",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                            lastDayKey = stamp?.dayKey
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth().clickable { haptics.tap(); onOpenEvent(event.id) }.padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.Top,
-                        ) {
-                            Text(
-                                stamp?.time ?: "—",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.width(56.dp),
-                            )
-                            Column(Modifier.weight(1f)) {
+                    events.isEmpty() -> DenebEmpty("예정된 일정이 없어요.")
+                    else -> {
+                        var lastDayKey: String? = null
+                        events.sortedBy { it.start }.forEach { event ->
+                            val stamp = stampOf(event.start, event.allDay)
+                            if (stamp?.dayKey != lastDayKey) {
+                                Spacer(Modifier.height(12.dp))
                                 Text(
-                                    event.title.ifBlank { "(제목 없음)" },
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 2,
+                                    stamp?.dayLabel ?: "날짜 미정",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.primary,
                                 )
-                                val sub = buildList {
-                                    if (event.location.isNotBlank()) add(event.location)
-                                    if (event.hasMeet) add("📹 Meet")
-                                }.joinToString("  ·  ")
-                                if (sub.isNotEmpty()) {
+                                Spacer(Modifier.height(4.dp))
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                lastDayKey = stamp?.dayKey
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clickable { haptics.tap(); onOpenEvent(event.id) }.padding(vertical = 12.dp),
+                                verticalAlignment = Alignment.Top,
+                            ) {
+                                Text(
+                                    stamp?.time ?: "—",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.width(56.dp),
+                                )
+                                Column(Modifier.weight(1f)) {
                                     Text(
-                                        sub,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
+                                        event.title.ifBlank { "(제목 없음)" },
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 2,
                                     )
+                                    val sub = buildList {
+                                        if (event.location.isNotBlank()) add(event.location)
+                                        if (event.hasMeet) add("📹 Meet")
+                                    }.joinToString("  ·  ")
+                                    if (sub.isNotEmpty()) {
+                                        Text(
+                                            sub,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                        )
+                                    }
                                 }
                             }
                         }

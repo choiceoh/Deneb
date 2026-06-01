@@ -83,9 +83,8 @@ fun DenebConfigScreen(
     onOpenCron: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
-    var tab by remember { mutableStateOf(0) }
+    var tab by remember { mutableStateOf(ConfigTab.GATEWAY) }
     val haptics = rememberHaptics()
-    val tabs = listOf("게이트웨이", "모델", "크론", "토픽문서", "알림")
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -108,13 +107,13 @@ fun DenebConfigScreen(
                     .padding(horizontal = 12.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                tabs.forEachIndexed { i, label ->
-                    val isSelected = tab == i
+                ConfigTab.entries.forEach { entry ->
+                    val isSelected = tab == entry
                     Surface(
                         modifier = Modifier
                             .handCursor()
                             .clip(RoundedCornerShape(50))
-                            .clickable { haptics.tap(); tab = i },
+                            .clickable { haptics.tap(); tab = entry },
                         shape = RoundedCornerShape(50),
                         color = if (isSelected) {
                             MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
@@ -123,7 +122,7 @@ fun DenebConfigScreen(
                         },
                     ) {
                         Text(
-                            text = label,
+                            text = entry.label,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                             color = MaterialTheme.colorScheme.primary,
                             style = MaterialTheme.typography.labelLarge,
@@ -134,11 +133,11 @@ fun DenebConfigScreen(
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (tab) {
-                    0 -> GatewayTab(appSettings, onBack, denebClient)
-                    1 -> denebClient?.let { ModelTab(it) }
-                    2 -> denebClient?.let { CronTab(it, onOpenCron) }
-                    3 -> denebClient?.let { TopicDocsTab(it, onOpenTopicDoc) }
-                    4 -> denebClient?.let { NotificationsTab(it) }
+                    ConfigTab.GATEWAY -> GatewayTab(appSettings, onBack, denebClient)
+                    ConfigTab.MODEL -> denebClient?.let { ModelTab(it) }
+                    ConfigTab.CRON -> denebClient?.let { CronTab(it, onOpenCron) }
+                    ConfigTab.TOPIC_DOCS -> denebClient?.let { TopicDocsTab(it, onOpenTopicDoc) }
+                    ConfigTab.NOTIFICATIONS -> denebClient?.let { NotificationsTab(it) }
                 }
             }
         }
@@ -174,7 +173,7 @@ private fun GatewayTab(
             OutlinedTextField(
                 value = url,
                 onValueChange = { url = it },
-                label = { Text("Gateway URL") },
+                label = { Text("게이트웨이 주소") },
                 placeholder = { Text("http://100.x.x.x:18789") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -183,7 +182,7 @@ private fun GatewayTab(
             OutlinedTextField(
                 value = token,
                 onValueChange = { token = it },
-                label = { Text("Client Token") },
+                label = { Text("클라이언트 토큰") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -417,14 +416,13 @@ private fun ModelTab(client: DenebGatewayClient) {
     val models by client.denebModels.collectAsState()
     val roleModels by client.denebRoleModels.collectAsState()
     val scope = rememberCoroutineScope()
-    var role by remember { mutableStateOf("main") }
+    var role by remember { mutableStateOf(ModelRole.MAIN) }
     LaunchedEffect(Unit) { client.refreshModels() }
     if (models.isEmpty()) {
         DenebLoading()
         return
     }
-    val roleLabels = listOf("main" to "메인", "lightweight" to "경량", "fallback" to "폴백")
-    val currentForRole = roleModels[role]
+    val currentForRole = roleModels[role.wire]
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -444,12 +442,12 @@ private fun ModelTab(client: DenebGatewayClient) {
             HealthLegendItem("unknown", "미확인")
         }
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            roleLabels.forEachIndexed { i, (key, label) ->
+            ModelRole.entries.forEachIndexed { i, r ->
                 SegmentedButton(
-                    selected = role == key,
-                    onClick = { role = key },
-                    shape = SegmentedButtonDefaults.itemShape(i, roleLabels.size),
-                ) { Text(label) }
+                    selected = role == r,
+                    onClick = { role = r },
+                    shape = SegmentedButtonDefaults.itemShape(i, ModelRole.entries.size),
+                ) { Text(r.label) }
             }
         }
         if (currentForRole != null) {
@@ -465,7 +463,7 @@ private fun ModelTab(client: DenebGatewayClient) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(enabled = !isCurrent) { scope.launch { client.setRoleModel(model.id, role) } }
+                        .clickable(enabled = !isCurrent) { scope.launch { client.setRoleModel(model.id, role.wire) } }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -819,6 +817,24 @@ private fun EmptyTab(text: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+/** The settings-hub tabs, in display order. The screen renders [entries] as the
+ *  pill row and switches content by enum, so a reorder/rename happens in one place. */
+private enum class ConfigTab(val label: String) {
+    GATEWAY("게이트웨이"),
+    MODEL("모델"),
+    CRON("크론"),
+    TOPIC_DOCS("토픽문서"),
+    NOTIFICATIONS("알림"),
+}
+
+/** Model-assignment roles. [wire] is the gateway's role key (sent on the RPC and
+ *  used to look up the current model); [label] is the Korean segmented-button text. */
+private enum class ModelRole(val wire: String, val label: String) {
+    MAIN("main", "메인"),
+    LIGHTWEIGHT("lightweight", "경량"),
+    FALLBACK("fallback", "폴백"),
 }
 
 private const val KEY_URL = "deneb.gatewayUrl"

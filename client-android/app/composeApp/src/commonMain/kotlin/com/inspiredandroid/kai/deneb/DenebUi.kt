@@ -114,6 +114,22 @@ fun DenebError(text: String, onRetry: (() -> Unit)? = null) {
 }
 
 /**
+ * Empty-state placeholder: a quiet line with an optional call-to-action, so an
+ * empty list guides the user instead of looking broken or still-loading. Shared
+ * by every Deneb screen.
+ */
+@Composable
+fun DenebEmpty(text: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 24.dp)) {
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        if (actionLabel != null && onAction != null) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onAction) { Text(actionLabel) }
+        }
+    }
+}
+
+/**
  * Convenience scaffold for simple scrolling surfaces. List-heavy screens
  * (mail, search) build their own LazyColumn scaffold instead.
  */

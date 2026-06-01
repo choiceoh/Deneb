@@ -22,11 +22,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.ui.components.rememberHaptics
+import kotlinx.coroutines.launch
 
 /**
  * Wiki category browser (`miniapp.memory.categories`): every category with its
@@ -42,12 +45,17 @@ fun DenebCategoriesScreen(
 ) {
     var data by remember { mutableStateOf<WikiCategories?>(null) }
     var loadFailed by remember { mutableStateOf(false) }
+    val haptics = rememberHaptics()
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
+    suspend fun load() {
+        loadFailed = false
+        data = null
         val d = client.fetchCategories()
         data = d
         loadFailed = d == null
     }
+    LaunchedEffect(Unit) { load() }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -70,13 +78,12 @@ fun DenebCategoriesScreen(
 
             val d = data
             when {
-                d == null && loadFailed -> DenebError("카테고리를 불러오지 못했습니다.")
-                d == null -> DenebLoading()
-                d.categories.isEmpty() -> Text(
-                    "위키 페이지가 없습니다.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                d == null && loadFailed -> DenebError(
+                    "카테고리를 불러오지 못했습니다.",
+                    onRetry = { scope.launch { load() } },
                 )
+                d == null -> DenebLoading()
+                d.categories.isEmpty() -> DenebEmpty("위키 페이지가 없습니다.")
                 else -> {
                     Text(
                         "${d.totalPages}개 페이지 · ${humanBytes(d.totalBytes)}",
@@ -88,7 +95,7 @@ fun DenebCategoriesScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onOpenCategory(cat.name) }
+                                .clickable { haptics.tap(); onOpenCategory(cat.name) }
                                 .padding(vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
