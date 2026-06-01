@@ -3,9 +3,11 @@ package chat
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	chatpkg "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -44,6 +46,11 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 	// VibeVoice-ASR sidecar wired; skip the method cleanly when it isn't.
 	if deps.Transcribe != nil {
 		m["miniapp.capture.audio"] = handleMiniappCaptureAudio(deps)
+	}
+	// Contacts sync (enrich existing wiki people with phone/email from the shared
+	// address book) needs the wiki store wired; skip the method cleanly otherwise.
+	if deps.EnrichContacts != nil {
+		m["miniapp.capture.contacts"] = handleMiniappCaptureContacts(deps)
 	}
 	return m
 }
@@ -190,6 +197,70 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 			"sessionKey": sessionKey,
 		})
 	}
+}
+
+// handleMiniappCaptureContacts merges a shared address book into EXISTING wiki
+// 사람 (people) pages — the native client's "sync my contacts" path. For each
+// contact whose name matches a person already in the wiki, the phone/email/org
+// is written into that page's "## 연락처" section; the hundreds of unmatched
+// numbers in a phone book are ignored by design. This enriches "whose number is
+// this?" / meeting-prep lookups and strengthens the ASR proper-noun bias (drawn
+// from wiki titles + tags). No agent turn runs; the reply is a short Korean
+// summary the native client shows inline.
+//
+// Params:
+//   - contacts ([]{name, phones[], emails[], org}, required)
+func handleMiniappCaptureContacts(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		p, errResp := rpcutil.DecodeParams[struct {
+			Contacts json.RawMessage `json:"contacts"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		if len(p.Contacts) == 0 {
+			return rpcerr.MissingParam("contacts").Response(req.ID)
+		}
+		// Re-wrap the array into the {"contacts": ...} envelope EnrichContacts parses.
+		payload := make([]byte, 0, len(p.Contacts)+13)
+		payload = append(payload, []byte(`{"contacts":`)...)
+		payload = append(payload, p.Contacts...)
+		payload = append(payload, '}')
+		res, err := deps.EnrichContacts(payload)
+		if err != nil {
+			return rpcerr.WrapDependencyFailed("contacts enrich failed", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"text":    contactsSummary(res),
+			"matched": res.Matched,
+			"updated": res.Updated,
+			"total":   res.Total,
+		})
+	}
+}
+
+// contactsSummary renders a short Korean summary of an address-book sync for the
+// native client to show inline.
+func contactsSummary(res wiki.ContactEnrichResult) string {
+	if res.Updated == 0 {
+		if res.Matched == 0 {
+			return fmt.Sprintf("📇 주소록 %d개를 확인했지만 위키에 등록된 인물과 일치하는 연락처가 없어 새로 반영한 정보는 없습니다. (위키에 이미 있는 사람만 보강합니다.)", res.Total)
+		}
+		return fmt.Sprintf("📇 주소록 %d개 확인 — 위키 인물 %d명과 매칭됐고 이미 최신이라 변경은 없습니다.", res.Total, res.Matched)
+	}
+	const maxShown = 6
+	shown := res.Names
+	extra := 0
+	if len(shown) > maxShown {
+		extra = len(shown) - maxShown
+		shown = shown[:maxShown]
+	}
+	tail := ""
+	if extra > 0 {
+		tail = fmt.Sprintf(" 외 %d명", extra)
+	}
+	return fmt.Sprintf("📇 주소록 %d개 중 위키 인물 %d명의 연락처를 보강했습니다: %s%s. 회의 전사 고유명사 교정과 인물 조회에 반영됩니다.",
+		res.Total, res.Updated, strings.Join(shown, ", "), tail)
 }
 
 // handleMiniappChatSend drives one synchronous agent turn for the native client

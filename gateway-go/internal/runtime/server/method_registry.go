@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
@@ -443,6 +444,17 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 					return ""
 				}
 				return ws.HotwordHints(200)
+			},
+			// Address-book enrichment of existing wiki people (native-client
+			// contacts sync). Enriches only 사람 pages already in the wiki — it
+			// creates none — so the phone book strengthens the curated set without
+			// flooding it.
+			EnrichContacts: func(contactsJSON []byte) (wiki.ContactEnrichResult, error) {
+				ws := hub.WikiStore()
+				if ws == nil {
+					return wiki.ContactEnrichResult{}, fmt.Errorf("wiki store unavailable")
+				}
+				return ws.EnrichContacts(contactsJSON)
 			},
 		}),
 		handlersession.ExecMethods(handlersession.ExecDeps{
