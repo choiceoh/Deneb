@@ -6,6 +6,7 @@ import com.inspiredandroid.kai.isEmailSupported
 import com.inspiredandroid.kai.isNotificationsSupported
 import com.inspiredandroid.kai.isSmsSupported
 import com.inspiredandroid.kai.sendHeartbeatNotification
+import com.inspiredandroid.kai.sendProactiveReportNotification
 import com.inspiredandroid.kai.sms.SmsPoller
 import com.inspiredandroid.kai.ui.markdown.parseMarkdown
 import com.inspiredandroid.kai.ui.markdown.toSpeakableText
@@ -113,7 +114,9 @@ class TaskScheduler(
         pushJob = schedulerScope.launch {
             gateway.subscribeEvents { title, body ->
                 if (!appInForeground) {
-                    sendHeartbeatNotification(title = title, body = body)
+                    // Proactive reports live in the 업무 topic — use the variant
+                    // whose tap deep-links there, not to the heartbeat conversation.
+                    sendProactiveReportNotification(title = title, body = body)
                 }
             }
         }

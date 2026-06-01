@@ -2003,6 +2003,17 @@ class RemoteDataRepository(
         _openHeartbeatRequested.value = false
     }
 
+    private val _openWorkTopicRequested = MutableStateFlow(false)
+    override val openWorkTopicRequested: StateFlow<Boolean> = _openWorkTopicRequested
+
+    override fun requestOpenWorkTopic() {
+        _openWorkTopicRequested.value = true
+    }
+
+    override fun consumeOpenWorkTopicRequest() {
+        _openWorkTopicRequested.value = false
+    }
+
     override suspend fun addAssistantMessage(content: String) {
         val now = Clock.System.now().toEpochMilliseconds()
 

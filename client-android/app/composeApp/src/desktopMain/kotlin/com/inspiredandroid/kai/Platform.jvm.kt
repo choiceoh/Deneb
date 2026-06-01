@@ -238,3 +238,6 @@ actual fun sendHeartbeatNotification(title: String, body: String) {
         // notify-send missing, AWT headless, sandboxed osascript, etc. — fall back silently.
     }
 }
+
+// Desktop has no deep-link target; surface proactive reports like a heartbeat.
+actual fun sendProactiveReportNotification(title: String, body: String) = sendHeartbeatNotification(title, body)

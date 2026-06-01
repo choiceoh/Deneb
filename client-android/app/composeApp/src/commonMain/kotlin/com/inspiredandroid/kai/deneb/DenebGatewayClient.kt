@@ -294,6 +294,23 @@ class DenebGatewayClient(
         scope.launch { _chatHistory.value = fetchTranscript(key) }
     }
 
+    /**
+     * Open the 업무 (General) topic where proactive reports are mirrored — the
+     * deep-link target when the user taps a proactive-report push. Selects the
+     * General topic (threadId "0") when topics are configured; otherwise loads
+     * the legacy "client:main" session directly so the report is visible even
+     * without a topic map.
+     */
+    fun openWorkTopic() {
+        val general = _topics.value.firstOrNull { it.threadId == "0" }
+        if (general != null) {
+            selectTopic(general.key)
+        } else {
+            sessionKey = "client:main"
+            scope.launch { _chatHistory.value = fetchTranscript("client:main") }
+        }
+    }
+
     // General (forum threadId "0", i.e. 업무) keeps the legacy "client:main"
     // session so existing history carries over; named topics get their own.
     private fun topicSessionKey(topicKey: String?): String {

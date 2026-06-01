@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.12",
+        code = 135,
+        highlights = listOf(
+            "능동 알림을 탭하면 보고가 있는 업무 토픽으로 바로 이동",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.11",
         code = 134,
         highlights = listOf(

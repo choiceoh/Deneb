@@ -233,6 +233,12 @@ class MainActivity : ComponentActivity() {
             // the deep-link after ChatViewModel has already consumed it.
             intent.removeExtra(EXTRA_OPEN_HEARTBEAT)
         }
+        // Proactive report push → open the 업무 (General) topic where it was mirrored.
+        if (intent?.getBooleanExtra(EXTRA_OPEN_WORK_TOPIC, false) == true) {
+            val dataRepository: DataRepository = get()
+            dataRepository.requestOpenWorkTopic()
+            intent.removeExtra(EXTRA_OPEN_WORK_TOPIC)
+        }
     }
 
     // Share-sheet capture: text shared from any app (a KakaoTalk message, a URL,
