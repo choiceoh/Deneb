@@ -341,7 +341,6 @@ private fun AppContent(
                             appSettings = appSettings,
                             denebClient = denebClient,
                             onBack = { navController.navigateUp() },
-                            onOpenPerson = { sender -> navController.navigate(DenebPerson(sender)) },
                             onOpenTopicDoc = { name -> navController.navigate(DenebTopicDoc(name)) },
                             onOpenCron = { id -> navController.navigate(DenebCron(id)) },
                             onOpenKaiSettings = { navController.navigate(Settings) },
