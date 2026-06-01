@@ -31,8 +31,6 @@ import kai.composeapp.generated.resources.ic_volume_up
 import kai.composeapp.generated.resources.new_chat_content_description
 import kai.composeapp.generated.resources.sandbox_content_description
 import kai.composeapp.generated.resources.toggle_speech_output_content_description
-import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.persistentListOf
 import nl.marc_apps.tts.TextToSpeechInstance
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.resources.vectorResource
@@ -50,8 +48,6 @@ internal fun TopBar(
     isShellExecuting: Boolean,
     onToggleSandbox: () -> Unit,
     navigationTabBar: (@Composable () -> Unit)? = null,
-    topics: ImmutableList<TopicTab> = persistentListOf(),
-    onOpenTopicDrawer: (() -> Unit)? = null,
 ) {
     if (navigationTabBar != null) {
         Box(
@@ -71,9 +67,6 @@ internal fun TopBar(
                 if (textToSpeech != null) {
                     SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
                 }
-                if (topics.size >= 2 && onOpenTopicDrawer != null) {
-                    DenebTopicButton(onClick = onOpenTopicDrawer)
-                }
             }
         }
     } else {
@@ -83,12 +76,6 @@ internal fun TopBar(
             Spacer(Modifier.weight(1f))
             if (textToSpeech != null) {
                 SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
-            }
-            // Search / mail / calendar / people / categories / history / settings
-            // all live in the left drawer; the hashtag opens the right-side topic
-            // drawer, taking the spot where the settings icon used to sit.
-            if (topics.size >= 2 && onOpenTopicDrawer != null) {
-                DenebTopicButton(onClick = onOpenTopicDrawer)
             }
         }
     }
