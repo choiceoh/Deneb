@@ -654,7 +654,7 @@ func gmailToolSchema() map[string]any {
 			},
 			"to": map[string]any{
 				"type":        "string",
-				"description": "Recipient email or contact alias (auto-resolved from KV store gmail.contacts.<alias>)",
+				"description": "Recipient email or contact alias (auto-resolved from KV store gmail.contacts.<alias>). Use 'self' (or me/나/본인) to send to your own tracked mailbox.",
 			},
 		},
 		"required": []string{"action"},
