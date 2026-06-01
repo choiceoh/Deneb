@@ -239,6 +239,16 @@ func gmailSend(ctx context.Context, client *gmail.Client, p GmailParams) (string
 	if p.Body == "" {
 		return "", fmt.Errorf("body는 send 액션에 필수입니다")
 	}
+	// "self"/"me"/"나"/"본인" addresses the tracked mailbox itself — resolve it
+	// to the authenticated account so callers can send to self (e.g. archiving
+	// meeting minutes to your own Gmail) without knowing the literal address.
+	if isSelfRecipient(p.To) {
+		self, err := client.AccountEmail(ctx)
+		if err != nil {
+			return fmt.Sprintf("본인 메일 주소 조회 실패: %s", err), nil
+		}
+		p.To = self
+	}
 
 	to := resolveRecipient(p.To)
 	cc := ""
@@ -401,6 +411,17 @@ func gmailAnalyze(ctx context.Context, client *gmail.Client, deps GmailPipelineD
 
 // resolveRecipient resolves a contact alias to an email address via KV store.
 // If the input already contains '@', it is returned as-is.
+// isSelfRecipient reports whether a recipient string means "the tracked mailbox
+// itself" (so gmailSend resolves it to the authenticated account address).
+func isSelfRecipient(to string) bool {
+	switch strings.ToLower(strings.TrimSpace(to)) {
+	case "self", "me", "나", "나에게", "내게", "내 메일", "내메일", "본인":
+		return true
+	default:
+		return false
+	}
+}
+
 func resolveRecipient(to string) string {
 	if strings.Contains(to, "@") {
 		return to

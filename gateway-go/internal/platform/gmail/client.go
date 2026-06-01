@@ -54,6 +54,36 @@ type Client struct {
 	expiry       time.Time
 	tokenPath    string
 	httpClient   *http.Client
+	accountEmail string // cached authenticated address (users/me/profile)
+}
+
+// AccountEmail returns the authenticated account's own address (the tracked
+// mailbox), fetched once from users/me/profile and cached. Lets callers send to
+// "self" without knowing the literal address. The cache is read/written under
+// mu, but the network read runs WITHOUT mu held (doAPI→validToken takes mu, and
+// sync.Mutex is not reentrant).
+func (c *Client) AccountEmail(ctx context.Context) (string, error) {
+	c.mu.Lock()
+	cached := c.accountEmail
+	c.mu.Unlock()
+	if cached != "" {
+		return cached, nil
+	}
+
+	var profile struct {
+		EmailAddress string `json:"emailAddress"`
+	}
+	if err := c.readJSON(ctx, "/profile", &profile); err != nil {
+		return "", err
+	}
+	if profile.EmailAddress == "" {
+		return "", fmt.Errorf("Gmail 프로필에 이메일 주소가 없습니다") //nolint:staticcheck // ST1005 — Korean error message
+	}
+
+	c.mu.Lock()
+	c.accountEmail = profile.EmailAddress
+	c.mu.Unlock()
+	return profile.EmailAddress, nil
 }
 
 var (
