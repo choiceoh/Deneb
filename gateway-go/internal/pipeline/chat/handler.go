@@ -110,13 +110,6 @@ type TopicResolver interface {
 	// General topic (empty threadID) is normalized to "0". Must be cheap (an
 	// in-memory map lookup) — it runs on the agent goroutine each turn.
 	TopicKey(threadID string) string
-	// ThreadIDForKey is the reverse of TopicKey: given a topic key it returns
-	// the forum threadID that maps to it, with ok=false when the key is not
-	// configured. Surfaces (like the native client) that speak topic keys
-	// instead of Telegram threadIDs use this to rejoin the shared threadID-
-	// driven injection path — ok=false lets callers skip injection rather than
-	// mis-resolving an unknown key to General.
-	ThreadIDForKey(key string) (threadID string, ok bool)
 	// Dir returns the configured knowledge directory (TopicsConfig.Dir); may
 	// be empty, in which case the loader applies the "topics" default.
 	Dir() string
