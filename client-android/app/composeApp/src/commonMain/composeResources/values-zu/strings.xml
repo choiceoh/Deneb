@@ -14,7 +14,6 @@
     <string name="settings_content_description">Izilungiselelo</string>
     <string name="bot_message_speech_content_description">Inkulumo</string>
     <string name="bot_message_copy_content_description">Kopisha</string>
-    <string name="bot_message_flag_content_description">Bika okuqukethwe</string>
     <string name="settings_free_tier_title">Izinga lamahhala</string>
     <string name="settings_free_tier_description">Njengoba isisekelo sabasebenzisi sikhula, ukuxhaswa kusiza ukwandisa ingqalasizinda, ukukhuphula imikhawulo yezicelo kubo bonke, nokugcina ukuthuthukiswa kusebenza.</string>
     <string name="settings_become_sponsor">Yiba umxhasi we-GitHub</string>

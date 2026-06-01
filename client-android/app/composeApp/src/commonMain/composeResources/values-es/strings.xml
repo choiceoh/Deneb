@@ -14,7 +14,6 @@
     <string name="settings_content_description">Configuración</string>
     <string name="bot_message_speech_content_description">Voz</string>
     <string name="bot_message_copy_content_description">Copiar</string>
-    <string name="bot_message_flag_content_description">Reportar contenido</string>
     <string name="settings_free_tier_title">Nivel Gratuito</string>
     <string name="settings_free_tier_description">A medida que crece la base de usuarios, el patrocinio ayuda a escalar la infraestructura, aumentar los límites de solicitudes para todos y mantener el desarrollo activo.</string>
     <string name="settings_become_sponsor">Conviértete en patrocinador de GitHub</string>

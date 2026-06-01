@@ -14,7 +14,6 @@
     <string name="settings_content_description">Pengaturan</string>
     <string name="bot_message_speech_content_description">Suara</string>
     <string name="bot_message_copy_content_description">Salin</string>
-    <string name="bot_message_flag_content_description">Laporkan konten</string>
     <string name="settings_free_tier_title">Tingkat Gratis</string>
     <string name="settings_free_tier_description">Seiring bertambahnya basis pengguna, sponsor membantu meningkatkan infrastruktur, menambah batas permintaan untuk semua orang, dan menjaga pengembangan tetap aktif.</string>
     <string name="settings_become_sponsor">Jadilah Sponsor GitHub</string>

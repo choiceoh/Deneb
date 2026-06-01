@@ -14,7 +14,6 @@
     <string name="settings_content_description">Nustatymai</string>
     <string name="bot_message_speech_content_description">Kalba</string>
     <string name="bot_message_copy_content_description">Kopijuoti</string>
-    <string name="bot_message_flag_content_description">Pažymėti turinį</string>
     <string name="settings_free_tier_title">Nemokamas planas</string>
     <string name="settings_free_tier_description">Augant vartotojų bazei, rėmimas padeda plėsti infrastruktūrą, didinti užklausų limitus visiems ir palaikyti aktyvų kūrimą.</string>
     <string name="settings_become_sponsor">Tapkite GitHub rėmėju</string>

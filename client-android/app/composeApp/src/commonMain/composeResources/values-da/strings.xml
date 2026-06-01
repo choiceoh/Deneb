@@ -14,7 +14,6 @@
     <string name="settings_content_description">Indstillinger</string>
     <string name="bot_message_speech_content_description">Tale</string>
     <string name="bot_message_copy_content_description">Kopier</string>
-    <string name="bot_message_flag_content_description">Rapporter indhold</string>
     <string name="settings_free_tier_title">Gratis niveau</string>
     <string name="settings_free_tier_description">Efterhånden som brugergruppen vokser, hjælper sponsorater med at skalere infrastrukturen, øge hastighedsgrænserne for alle og holde udviklingen aktiv.</string>
     <string name="settings_become_sponsor">Bliv GitHub-sponsor</string>

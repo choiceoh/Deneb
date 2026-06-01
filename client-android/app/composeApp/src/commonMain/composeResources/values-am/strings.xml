@@ -14,7 +14,6 @@
     <string name="settings_content_description">ቅንብሮች</string>
     <string name="bot_message_speech_content_description">ንግግር</string>
     <string name="bot_message_copy_content_description">ቅዳ</string>
-    <string name="bot_message_flag_content_description">ይዘት አመልክት</string>
     <string name="settings_free_tier_title">ነፃ ደረጃ</string>
     <string name="settings_free_tier_description">የተጠቃሚ መሰረቱ ሲያድግ፣ ድጋፍ መሰረተ ልማትን ለማስፋት፣ ለሁሉም የተጠቀሙበት ገደብን ለማሳደግ እና ልማቱን ንቁ ለማድረግ ይረዳል።</string>
     <string name="settings_become_sponsor">የ GitHub ስፖንሰር ይሁኑ</string>

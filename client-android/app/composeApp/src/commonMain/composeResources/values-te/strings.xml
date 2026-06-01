@@ -14,7 +14,6 @@
     <string name="settings_content_description">సెట్టింగ్‌లు</string>
     <string name="bot_message_speech_content_description">స్పీచ్</string>
     <string name="bot_message_copy_content_description">కాపీ</string>
-    <string name="bot_message_flag_content_description">కంటెంట్‌ను ఫ్లాగ్ చేయండి</string>
     <string name="settings_free_tier_title">ఉచిత స్థాయి</string>
     <string name="settings_free_tier_description">వినియోగదారు బేస్ పెరుగుతున్నప్పుడు, స్పాన్సర్‌షిప్ మౌలిక సదుపాయాలను పెంచడానికి, అందరికీ రేట్ పరిమితులను పెంచడానికి మరియు అభివృద్ధిని చురుగ్గా ఉంచడానికి సహాయపడుతుంది.</string>
     <string name="settings_become_sponsor">GitHub స్పాన్సర్ అవ్వండి</string>

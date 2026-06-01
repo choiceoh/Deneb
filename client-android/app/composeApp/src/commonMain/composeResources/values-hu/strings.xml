@@ -14,7 +14,6 @@
     <string name="settings_content_description">Beállítások</string>
     <string name="bot_message_speech_content_description">Beszéd</string>
     <string name="bot_message_copy_content_description">Másolás</string>
-    <string name="bot_message_flag_content_description">Tartalom jelölése</string>
     <string name="settings_free_tier_title">Ingyenes szint</string>
     <string name="settings_free_tier_description">A felhasználói bázis növekedésével a szponzorálás segít az infrastruktúra bővítésében, a kérési limitek növelésében mindenki számára, és a fejlesztés aktívan tartásában.</string>
     <string name="settings_become_sponsor">Légy GitHub szponzor</string>

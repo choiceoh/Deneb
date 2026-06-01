@@ -14,7 +14,6 @@
     <string name="settings_content_description">Seaded</string>
     <string name="bot_message_speech_content_description">Kõne</string>
     <string name="bot_message_copy_content_description">Kopeeri</string>
-    <string name="bot_message_flag_content_description">Märgi sisu</string>
     <string name="settings_free_tier_title">Tasuta tase</string>
     <string name="settings_free_tier_description">Kasutajaskonna kasvades aitab sponsorlus laiendada infrastruktuuri, suurendada päringute limiite kõigile ja hoida arendust aktiivsena.</string>
     <string name="settings_become_sponsor">Hakka GitHub sponsoriks</string>

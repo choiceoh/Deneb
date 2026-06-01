@@ -14,7 +14,6 @@
     <string name="settings_content_description">Nastaven\u00ed</string>
     <string name="bot_message_speech_content_description">P\u0159e\u010d\u00edst</string>
     <string name="bot_message_copy_content_description">Kop\u00edrovat</string>
-    <string name="bot_message_flag_content_description">Nahl\u00e1sit obsah</string>
     <string name="settings_free_tier_title">Bezplatn\u00e1 \u00farove\u0148</string>
     <string name="settings_free_tier_description">S r\u016fstem u\u017eivatelsk\u00e9 z\u00e1kladny pom\u00e1h\u00e1 sponzorstv\u00ed \u0161k\u00e1lovat infrastrukturu, zvy\u0161ovat limity po\u017eadavk\u016f pro v\u0161echny a udr\u017eovat aktivn\u00ed v\u00fdvoj.</string>
     <string name="settings_become_sponsor">Sta\u0148te se sponzorem na GitHubu</string>

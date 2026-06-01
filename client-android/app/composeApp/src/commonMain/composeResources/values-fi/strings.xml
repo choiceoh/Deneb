@@ -14,7 +14,6 @@
     <string name="settings_content_description">Asetukset</string>
     <string name="bot_message_speech_content_description">Puhe</string>
     <string name="bot_message_copy_content_description">Kopioi</string>
-    <string name="bot_message_flag_content_description">Ilmianna sis\u00e4lt\u00f6</string>
     <string name="settings_free_tier_title">Ilmainen taso</string>
     <string name="settings_free_tier_description">K\u00e4ytt\u00e4j\u00e4m\u00e4\u00e4r\u00e4n kasvaessa sponsorointi auttaa skaalaamaan infrastruktuuria, nostamaan pyynt\u00f6rajoja kaikille ja pit\u00e4m\u00e4\u00e4n kehityksen aktiivisena.</string>
     <string name="settings_become_sponsor">Ryhdy GitHub-sponsoriksi</string>

@@ -14,7 +14,6 @@
     <string name="settings_content_description">การตั้งค่า</string>
     <string name="bot_message_speech_content_description">เสียงพูด</string>
     <string name="bot_message_copy_content_description">คัดลอก</string>
-    <string name="bot_message_flag_content_description">แจ้งเนื้อหา</string>
     <string name="settings_free_tier_title">ระดับฟรี</string>
     <string name="settings_free_tier_description">เมื่อฐานผู้ใช้เติบโต การสนับสนุนช่วยในการขยายโครงสร้างพื้นฐาน เพิ่มขีดจำกัดอัตราสำหรับทุกคน และรักษาการพัฒนาให้ดำเนินต่อไป</string>
     <string name="settings_become_sponsor">เป็นผู้สนับสนุน GitHub</string>

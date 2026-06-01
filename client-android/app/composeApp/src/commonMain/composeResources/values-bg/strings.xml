@@ -14,7 +14,6 @@
     <string name="settings_content_description">Настройки</string>
     <string name="bot_message_speech_content_description">Реч</string>
     <string name="bot_message_copy_content_description">Копирай</string>
-    <string name="bot_message_flag_content_description">Маркирай съдържание</string>
     <string name="settings_free_tier_title">Безплатно ниво</string>
     <string name="settings_free_tier_description">С нарастването на потребителската база спонсорството помага за мащабиране на инфраструктурата, увеличаване на лимитите на заявките за всички и поддържане на активната разработка.</string>
     <string name="settings_become_sponsor">Станете спонсор в GitHub</string>

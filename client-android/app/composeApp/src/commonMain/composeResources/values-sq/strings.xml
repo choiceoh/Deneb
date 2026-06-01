@@ -14,7 +14,6 @@
     <string name="settings_content_description">Cilësimet</string>
     <string name="bot_message_speech_content_description">Të folurit</string>
     <string name="bot_message_copy_content_description">Kopjo</string>
-    <string name="bot_message_flag_content_description">Raporto përmbajtjen</string>
     <string name="settings_free_tier_title">Niveli falas</string>
     <string name="settings_free_tier_description">Me rritjen e bazës së përdoruesve, sponsorizimi ndihmon në zgjerimin e infrastrukturës, rritjen e kufijve të kërkesave për të gjithë dhe mbajtjen aktive të zhvillimit.</string>
     <string name="settings_become_sponsor">Bëhuni sponsor në GitHub</string>

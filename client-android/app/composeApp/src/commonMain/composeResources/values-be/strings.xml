@@ -14,7 +14,6 @@
     <string name="settings_content_description">Налады</string>
     <string name="bot_message_speech_content_description">Маўленне</string>
     <string name="bot_message_copy_content_description">Капіяваць</string>
-    <string name="bot_message_flag_content_description">Паведаміць пра змесціва</string>
     <string name="settings_free_tier_title">Бясплатны ўзровень</string>
     <string name="settings_free_tier_description">Па меры росту базы карыстальнікаў спансарства дапамагае маштабаваць інфраструктуру, павялічваць ліміты запытаў для ўсіх і падтрымліваць актыўную распрацоўку.</string>
     <string name="settings_become_sponsor">Стаць спонсарам GitHub</string>
