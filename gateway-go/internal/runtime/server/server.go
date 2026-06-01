@@ -116,6 +116,11 @@ type Server struct {
 	publisher   *events.Publisher
 	processes   *process.Manager
 	daemon      *daemon.Daemon
+
+	// pushHub fans proactive 업무-topic reports out to connected native clients
+	// over their long-lived SSE connection (GET /api/v1/miniapp/events). Created
+	// in New so it's non-nil before any handler or relay touches it.
+	pushHub *clientPushHub
 	runtimeCfg  *config.GatewayRuntimeConfig
 	version     string
 	logColor    bool // true when ANSI color output is enabled
@@ -242,6 +247,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		GenesisSubsystem:    &GenesisSubsystem{},
 		version:             "0.1.0-go",
 		logger:              slog.Default(),
+		pushHub:             newClientPushHub(),
 		SessionManager: &SessionManager{
 			sessions:       session.NewManager(),
 			abortMemory:    arSession.NewAbortMemory(2000),
