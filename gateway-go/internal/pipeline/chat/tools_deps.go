@@ -18,3 +18,6 @@ type ChronoDeps = toolctx.ChronoDeps
 
 // WikiDeps holds dependencies for the wiki knowledge base tool.
 type WikiDeps = toolctx.WikiDeps
+
+// ContactsDeps holds dependencies for the contacts address-book tool.
+type ContactsDeps = toolctx.ContactsDeps

@@ -47,9 +47,10 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 	if deps.Transcribe != nil {
 		m["miniapp.capture.audio"] = handleMiniappCaptureAudio(deps)
 	}
-	// Contacts sync (enrich existing wiki people with phone/email from the shared
-	// address book) needs the wiki store wired; skip the method cleanly otherwise.
-	if deps.EnrichContacts != nil {
+	// Contacts sync stores the whole address book (phone lookup / name search / ASR
+	// hotwords) and, as a bonus, enriches existing wiki people. Either dependency is
+	// enough to register; skip the method cleanly only when both are absent.
+	if deps.SaveContacts != nil || deps.EnrichContacts != nil {
 		m["miniapp.capture.contacts"] = handleMiniappCaptureContacts(deps)
 	}
 	return m
@@ -199,14 +200,14 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 	}
 }
 
-// handleMiniappCaptureContacts merges a shared address book into EXISTING wiki
-// 사람 (people) pages — the native client's "sync my contacts" path. For each
-// contact whose name matches a person already in the wiki, the phone/email/org
-// is written into that page's "## 연락처" section; the hundreds of unmatched
-// numbers in a phone book are ignored by design. This enriches "whose number is
-// this?" / meeting-prep lookups and strengthens the ASR proper-noun bias (drawn
-// from wiki titles + tags). No agent turn runs; the reply is a short Korean
-// summary the native client shows inline.
+// handleMiniappCaptureContacts stores a shared address book into the contacts
+// mirror — the native client's "sync my contacts" path. The full book (thousands
+// of entries) is saved so the agent can answer "whose number is this?", run name
+// search, and bias ASR toward the user's proper nouns. As a bonus it also enriches
+// EXISTING wiki 사람 (people) pages whose name matches a contact, writing the
+// phone/email/org into that page's "## 연락처" section (the wiki itself stays
+// curated — no contact pages are created). No agent turn runs; the reply is a
+// short Korean summary the native client shows inline.
 //
 // Params:
 //   - contacts ([]{name, phones[], emails[], org}, required)
@@ -221,35 +222,52 @@ func handleMiniappCaptureContacts(deps Deps) rpcutil.HandlerFunc {
 		if len(p.Contacts) == 0 {
 			return rpcerr.MissingParam("contacts").Response(req.ID)
 		}
-		// Re-wrap the array into the {"contacts": ...} envelope EnrichContacts parses.
+		// Re-wrap the array into the {"contacts": ...} envelope both SaveContacts
+		// and EnrichContacts parse.
 		payload := make([]byte, 0, len(p.Contacts)+13)
 		payload = append(payload, []byte(`{"contacts":`)...)
 		payload = append(payload, p.Contacts...)
 		payload = append(payload, '}')
-		res, err := deps.EnrichContacts(payload)
-		if err != nil {
-			return rpcerr.WrapDependencyFailed("contacts enrich failed", err).Response(req.ID)
+
+		// Primary path: persist the whole book to the contacts store.
+		saved := 0
+		if deps.SaveContacts != nil {
+			n, err := deps.SaveContacts(payload)
+			if err != nil {
+				return rpcerr.WrapDependencyFailed("contacts save failed", err).Response(req.ID)
+			}
+			saved = n
 		}
+
+		// Bonus path: enrich matching wiki people. Best-effort — a wiki failure
+		// must not fail the sync once the book is already stored.
+		var enrich wiki.ContactEnrichResult
+		if deps.EnrichContacts != nil {
+			if res, err := deps.EnrichContacts(payload); err == nil {
+				enrich = res
+			}
+		}
+
 		return rpcutil.RespondOK(req.ID, map[string]any{
-			"text":    contactsSummary(res),
-			"matched": res.Matched,
-			"updated": res.Updated,
-			"total":   res.Total,
+			"text":     contactsSummary(saved, enrich),
+			"saved":    saved,
+			"enriched": enrich.Updated,
+			"matched":  enrich.Matched,
+			"total":    enrich.Total,
 		})
 	}
 }
 
 // contactsSummary renders a short Korean summary of an address-book sync for the
-// native client to show inline.
-func contactsSummary(res wiki.ContactEnrichResult) string {
-	if res.Updated == 0 {
-		if res.Matched == 0 {
-			return fmt.Sprintf("📇 주소록 %d개를 확인했지만 위키에 등록된 인물과 일치하는 연락처가 없어 새로 반영한 정보는 없습니다. (위키에 이미 있는 사람만 보강합니다.)", res.Total)
-		}
-		return fmt.Sprintf("📇 주소록 %d개 확인 — 위키 인물 %d명과 매칭됐고 이미 최신이라 변경은 없습니다.", res.Total, res.Matched)
+// native client to show inline. The store save is the headline; wiki enrichment,
+// when any people were updated, is appended as a parenthetical bonus.
+func contactsSummary(saved int, enrich wiki.ContactEnrichResult) string {
+	msg := fmt.Sprintf("📇 주소록 %d개를 저장했습니다. 이제 '이 번호 누구?' 검색과 회의 전사 고유명사 교정에 활용됩니다.", saved)
+	if enrich.Updated == 0 {
+		return msg
 	}
 	const maxShown = 6
-	shown := res.Names
+	shown := enrich.Names
 	extra := 0
 	if len(shown) > maxShown {
 		extra = len(shown) - maxShown
@@ -259,8 +277,7 @@ func contactsSummary(res wiki.ContactEnrichResult) string {
 	if extra > 0 {
 		tail = fmt.Sprintf(" 외 %d명", extra)
 	}
-	return fmt.Sprintf("📇 주소록 %d개 중 위키 인물 %d명의 연락처를 보강했습니다: %s%s. 회의 전사 고유명사 교정과 인물 조회에 반영됩니다.",
-		res.Total, res.Updated, strings.Join(shown, ", "), tail)
+	return msg + fmt.Sprintf(" (위키 인물 %d명 보강: %s%s)", enrich.Updated, strings.Join(shown, ", "), tail)
 }
 
 // handleMiniappChatSend drives one synchronous agent turn for the native client

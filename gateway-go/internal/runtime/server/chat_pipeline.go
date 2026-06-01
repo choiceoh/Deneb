@@ -121,6 +121,11 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		Wiki: chat.WikiDeps{
 			Store: chatCfg.WikiStore,
 		},
+		Contacts: chat.ContactsDeps{
+			// Created during registerEarlyMethods (no chat dep), so it's already
+			// wired by the time chat init runs.
+			Store: s.contactsStore,
+		},
 		LLMClient:    reg.Client(modelrole.RoleLightweight),
 		DefaultModel: reg.Model(modelrole.RoleLightweight),
 		AgentLog:     agentLogWriter,

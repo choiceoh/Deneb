@@ -80,18 +80,35 @@ func (s *Store) EnrichContacts(contactsJSON []byte) (ContactEnrichResult, error)
 		return res, nil
 	}
 
-	// Candidate people: the 사람 category pages. Snapshot (path, title) under the
-	// read lock, then release it before enriching — WritePage takes the write lock
-	// itself, so holding RLock across the loop would deadlock.
+	// Candidate people: the 사람 category pages, listed straight off disk via the
+	// 사람/ directory rather than the in-memory index. The index can be stale or
+	// miss the category for older pages (it's rebuilt on startup), which silently
+	// dropped every candidate; ListPages + ReadPage is authoritative. ReadPage and
+	// WritePage take the store's lock themselves, so this loop holds no lock.
 	type person struct{ path, title string }
-	s.mu.RLock()
-	people := make([]person, 0, len(s.index.Entries))
-	for path, e := range s.index.Entries {
-		if e.Category == "사람" {
-			people = append(people, person{path: path, title: e.Title})
-		}
+	relPaths, err := s.ListPages("사람")
+	if err != nil {
+		// Missing 사람/ directory (no people yet) or an unreadable tree: nothing to
+		// enrich, but the save path already succeeded — not an error for the caller.
+		return res, nil
 	}
-	s.mu.RUnlock()
+	people := make([]person, 0, len(relPaths))
+	for _, path := range relPaths {
+		page, err := s.ReadPage(path)
+		if err != nil {
+			continue // unreadable page — skip, don't abort the whole sync
+		}
+		// Defensive: only enrich pages that are actually people. A stray non-person
+		// .md under 사람/ shouldn't be treated as a contact.
+		if page.Meta.Category != "" && page.Meta.Category != "사람" {
+			continue
+		}
+		title := strings.TrimSpace(page.Meta.Title)
+		if title == "" {
+			continue // no title to match an address-book name against
+		}
+		people = append(people, person{path: path, title: title})
+	}
 
 	for _, p := range people {
 		pk := normalizePersonName(p.title)

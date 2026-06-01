@@ -795,6 +795,24 @@ func wikiToolSchema() map[string]any {
 	}
 }
 
+func contactsToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "lookup: 전화번호로 인물 찾기 (정규화·+82↔0·뒷자리 폴백). search: 이름·회사·이메일·번호 부분일치 검색 (최대 20건).",
+				"enum":        []string{"lookup", "search"},
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "조회할 전화번호 (lookup) 또는 검색어 — 이름/회사/이메일/번호 일부 (search).",
+			},
+		},
+		"required": []string{"action", "query"},
+	}
+}
+
 func polarisToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -1012,7 +1030,8 @@ func watchToolSchema() map[string]any {
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {
 	return map[string]int{
-		"exec": 32000,
-		"wiki": 20000,
+		"contacts": 8000,
+		"exec":     32000,
+		"wiki":     20000,
 	}
 }

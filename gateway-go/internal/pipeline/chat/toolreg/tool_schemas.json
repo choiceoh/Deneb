@@ -897,6 +897,28 @@
     ]
   },
   {
+    "name": "contacts",
+    "max_output": 8000,
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "lookup",
+          "search"
+        ],
+        "description": "lookup: 전화번호로 인물 찾기 (정규화·+82↔0·뒷자리 폴백). search: 이름·회사·이메일·번호 부분일치 검색 (최대 20건)."
+      },
+      "query": {
+        "type": "string",
+        "description": "조회할 전화번호 (lookup) 또는 검색어 — 이름/회사/이메일/번호 일부 (search)."
+      }
+    },
+    "required": [
+      "action",
+      "query"
+    ]
+  },
+  {
     "name": "polaris",
     "properties": {
       "action": {

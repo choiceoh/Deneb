@@ -291,6 +291,24 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar, workspaceDir string) {
 	})
 }
 
+// RegisterContactsTool registers the address-book lookup tool (phone lookup +
+// name/company search) over the contacts store mirrored from the native client's
+// contacts sync. Skipped when the store isn't wired so the agent doesn't see a
+// dead surface; a nil/empty store would otherwise reply "주소록이 비어 있습니다".
+func RegisterContactsTool(registry toolctx.ToolRegistrar, contactsDeps *toolctx.ContactsDeps) {
+	if contactsDeps.Store == nil {
+		return
+	}
+	registry.RegisterTool(toolctx.ToolDef{
+		Name: "contacts",
+		Description: "주소록(연락처 DB)에서 전화번호로 인물을 찾거나(lookup) 이름·회사로 검색(search). " +
+			"네이티브 클라이언트가 동기화한 연락처 전체를 조회한다. " +
+			"사용자가 '이 번호 누구?', '010-xxxx 누구야', 'OOO 연락처/번호' 같이 물으면 짐작하지 말고 호출하라.",
+		InputSchema: contactsToolSchema(),
+		Fn:          tools.ToolContacts(contactsDeps),
+	})
+}
+
 // RegisterWikiTools registers wiki knowledge base tools for long-term knowledge
 // access (search, read, write, log). Project-specific tools provide structured
 // access to the "프로젝트" wiki category.
