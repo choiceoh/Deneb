@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.14",
+        code = 137,
+        highlights = listOf(
+            "알림 주입 방식 선택 — 도착 즉시 자동 주입(기본)과 탭해서 보내는 수동 주입을 설정에서 전환",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.13",
         code = 136,
         highlights = listOf(
