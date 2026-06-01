@@ -2,8 +2,12 @@ package com.inspiredandroid.kai.notifications
 
 import android.app.Notification
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.os.Build
+import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import java.io.ByteArrayOutputStream
 import com.inspiredandroid.kai.data.AppSettings
 import com.inspiredandroid.kai.data.NotificationRecord
 import com.inspiredandroid.kai.data.NotificationStore
@@ -94,6 +98,7 @@ class KaiNotificationListenerService : NotificationListenerService() {
         if (title.isBlank() && text.isBlank()) return
 
         val appLabel = lookupAppLabel(pkg)
+        val imageBytes = extractPictureBytes(extras)
         val record = NotificationRecord(
             id = sbn.key ?: "$pkg|${sbn.id}|${sbn.postTime}",
             packageName = pkg,
@@ -105,11 +110,37 @@ class KaiNotificationListenerService : NotificationListenerService() {
             isOngoing = false,
             category = notification.category.orEmpty(),
             preview = text.take(NotificationRecord.PREVIEW_CHARS),
+            hasImage = imageBytes != null,
         )
 
         scope.launch {
             store.addRecord(record)
             store.addPending(record)
+            if (imageBytes != null) store.putImage(record.id, imageBytes)
+        }
+    }
+
+    // BigPictureStyle notifications (e.g. a photo in a KakaoTalk/messaging
+    // notification) carry the image in EXTRA_PICTURE. Pull it as JPEG bytes so a
+    // manual forward can send it through the gateway OCR capture path. Returns
+    // null when there is no picture (the common case) or it can't be read — the
+    // record then stays text-only. Large icons (usually a sender avatar) are
+    // intentionally ignored; only the meaningful big picture is captured.
+    private fun extractPictureBytes(extras: Bundle): ByteArray? {
+        val bitmap: Bitmap? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            extras.getParcelable(Notification.EXTRA_PICTURE, Bitmap::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            extras.getParcelable(Notification.EXTRA_PICTURE)
+        }
+        bitmap ?: return null
+        return try {
+            ByteArrayOutputStream().use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, IMAGE_JPEG_QUALITY, out)
+                out.toByteArray()
+            }.takeIf { it.isNotEmpty() }
+        } catch (_: Throwable) {
+            null
         }
     }
 
@@ -128,5 +159,6 @@ class KaiNotificationListenerService : NotificationListenerService() {
             "android",
             "com.android.systemui",
         )
+        private const val IMAGE_JPEG_QUALITY = 85
     }
 }

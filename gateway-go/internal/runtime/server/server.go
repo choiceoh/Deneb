@@ -120,11 +120,11 @@ type Server struct {
 	// pushHub fans proactive 업무-topic reports out to connected native clients
 	// over their long-lived SSE connection (GET /api/v1/miniapp/events). Created
 	// in New so it's non-nil before any handler or relay touches it.
-	pushHub *clientPushHub
-	runtimeCfg  *config.GatewayRuntimeConfig
-	version     string
-	logColor    bool // true when ANSI color output is enabled
-	logger      *slog.Logger
+	pushHub    *clientPushHub
+	runtimeCfg *config.GatewayRuntimeConfig
+	version    string
+	logColor   bool // true when ANSI color output is enabled
+	logger     *slog.Logger
 
 	// insights aggregates session/usage data for /insights reports.
 	// Created during registerEarlyMethods; nil until then.

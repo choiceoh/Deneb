@@ -956,9 +956,15 @@ class DenebGatewayClient(
      * Deneb" path — the gateway uses the PaddleOCR sidecar (tesseract fallback).
      */
     @OptIn(ExperimentalEncodingApi::class)
-    suspend fun captureImage(bytes: ByteArray, mimeType: String) {
+    suspend fun captureImage(bytes: ByteArray, mimeType: String, caption: String = "") {
         if (clientToken.isEmpty() || bytes.isEmpty()) return
-        _chatHistory.update { it + History(role = History.Role.USER, content = "📷 이미지 공유됨 (OCR 분석 중…)") }
+        val trimmedCaption = caption.trim()
+        val label = if (trimmedCaption.isNotBlank()) {
+            trimmedCaption + "\n📷 이미지 OCR 분석 중…"
+        } else {
+            "📷 이미지 공유됨 (OCR 분석 중…)"
+        }
+        _chatHistory.update { it + History(role = History.Role.USER, content = label) }
         val reply = runCatching {
             val payload = callRpc<CaptureImagePayload>(
                 "miniapp.capture.image",
@@ -966,6 +972,9 @@ class DenebGatewayClient(
                     put("image", Base64.encode(bytes))
                     put("mimeType", mimeType)
                     put("sessionKey", sessionKey)
+                    // Source context the image alone lacks (originating app/sender/
+                    // notification text); the gateway prepends it to the OCR turn.
+                    if (trimmedCaption.isNotBlank()) put("caption", trimmedCaption)
                 },
             )
             payload?.text?.ifBlank { null } ?: "이미지에서 텍스트를 찾지 못했거나 분석에 실패했습니다."
