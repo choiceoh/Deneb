@@ -84,7 +84,7 @@ the target:
 - `"<chat-id>"` — a specific chat.
 - `"<chat-id>:thread:<n>"` — a specific forum topic.
 
-The value is validated on startup; an unparseable target logs a warning and
+The value is validated on startup; an unparsable target logs a warning and
 falls back to the active home rather than dropping summaries.
 
 **Forum topic routing.** When a message arrives in a forum topic, its thread ID
