@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Tale</string>
     <string name="bot_message_copy_content_description">Kopier</string>
     <string name="settings_free_tier_title">Gratis niveau</string>
-    <string name="settings_free_tier_description">Efterhånden som brugergruppen vokser, hjælper sponsorater med at skalere infrastrukturen, øge hastighedsgrænserne for alle og holde udviklingen aktiv.</string>
-    <string name="settings_become_sponsor">Bliv GitHub-sponsor</string>
-    <string name="settings_business_partnerships">Forretningspartnerskaber</string>
-    <string name="settings_business_partnerships_description">Vil du vise dit firmalogo eller drøfte et strategisk partnerskab?</string>
-    <string name="settings_contact_sponsorship">Kontakt for strategisk sponsorat</string>
     <string name="settings_base_url_label">Server-URL</string>
     <string name="settings_status_checking">Tjekker forbindelse...</string>
     <string name="settings_status_connected">Forbundet</string>
@@ -147,7 +142,6 @@ Hvis noget kræver opmærksomhed (forældede erindringer, forfaldne opgaver, bru
     <string name="error_all_services_failed">Alle tjenester mislykkedes.</string>
     <string name="settings_heartbeat_interval">Interval</string>
     <string name="settings_heartbeat_active_hours">Aktive timer</string>
-    <string name="settings_documentation">Dokumentation</string>
     <string name="waiting_thinking">Tænker…</string>
     <string name="waiting_working">Arbejder…</string>
     <string name="waiting_brewing">Brygger…</string>
@@ -232,8 +226,6 @@ Hvis noget kræver opmærksomhed (forældede erindringer, forfaldne opgaver, bru
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Forlad interaktiv tilstand</string>
     <string name="interactive_ui_parsing_failed">UI-analyse mislykkedes, prøver igen…</string>
-    <string name="settings_sponsors_monthly">Månedlige sponsorer</string>
-    <string name="settings_sponsors_past">Tidligere sponsorer</string>
     <string name="snackbar_undo">Fortryd</string>
     <string name="snackbar_memory_deleted">Erindring slettet</string>
     <string name="snackbar_task_cancelled">Opgave annulleret</string>

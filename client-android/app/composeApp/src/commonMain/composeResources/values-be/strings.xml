@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Маўленне</string>
     <string name="bot_message_copy_content_description">Капіяваць</string>
     <string name="settings_free_tier_title">Бясплатны ўзровень</string>
-    <string name="settings_free_tier_description">Па меры росту базы карыстальнікаў спансарства дапамагае маштабаваць інфраструктуру, павялічваць ліміты запытаў для ўсіх і падтрымліваць актыўную распрацоўку.</string>
-    <string name="settings_become_sponsor">Стаць спонсарам GitHub</string>
-    <string name="settings_business_partnerships">Дзелавое партнёрства</string>
-    <string name="settings_business_partnerships_description">Жадаеце размясціць лагатып сваёй кампаніі або абмеркаваць стратэгічнае партнёрства?</string>
-    <string name="settings_contact_sponsorship">Звязацца па пытаннях стратэгічнага спансарства</string>
     <string name="settings_base_url_label">URL сервера</string>
     <string name="settings_status_checking">Праверка злучэння...</string>
     <string name="settings_status_connected">Злучана</string>
@@ -146,7 +141,6 @@
     <string name="error_all_services_failed">Усе сэрвісы пацярпелі няўдачу.</string>
     <string name="settings_heartbeat_interval">Інтэрвал</string>
     <string name="settings_heartbeat_active_hours">Актыўныя гадзіны</string>
-    <string name="settings_documentation">Дакументацыя</string>
     <string name="waiting_thinking">Думаю…</string>
     <string name="waiting_working">Працую…</string>
     <string name="waiting_brewing">Гатую…</string>
@@ -231,8 +225,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Выйсці з інтэрактыўнага рэжыму</string>
     <string name="interactive_ui_parsing_failed">Не ўдалося разабраць UI, паўторная спроба…</string>
-    <string name="settings_sponsors_monthly">Штомесячныя спонсары</string>
-    <string name="settings_sponsors_past">Папярэднія спонсары</string>
     <string name="snackbar_undo">Адмяніць</string>
     <string name="snackbar_memory_deleted">Успамін выдалены</string>
     <string name="snackbar_task_cancelled">Задача скасавана</string>

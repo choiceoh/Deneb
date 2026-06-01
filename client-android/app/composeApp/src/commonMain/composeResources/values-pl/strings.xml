@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Mowa</string>
     <string name="bot_message_copy_content_description">Kopiuj</string>
     <string name="settings_free_tier_title">Poziom Darmowy</string>
-    <string name="settings_free_tier_description">Wraz ze wzrostem bazy użytkowników, sponsoring pomaga skalować infrastrukturę, zwiększać limity żądań dla wszystkich i utrzymywać aktywny rozwój.</string>
-    <string name="settings_become_sponsor">Zostań sponsorem GitHub</string>
-    <string name="settings_business_partnerships">Partnerstwa Biznesowe</string>
-    <string name="settings_business_partnerships_description">Chcesz wyświetlić logo swojej firmy lub omówić partnerstwo strategiczne?</string>
-    <string name="settings_contact_sponsorship">Kontakt w sprawie sponsoringu strategicznego</string>
     <string name="settings_status_error_invalid_key">Nieprawidłowy klucz API</string>
     <string name="settings_status_error_quota_exhausted">Limit wyczerpany</string>
     <string name="settings_status_error_rate_limited">Limit żądań osiągnięty</string>
@@ -147,7 +142,6 @@ Jeśli coś wymaga uwagi (przestarzałe wspomnienia, zaległe zadania, dalsze dz
     <string name="error_all_services_failed">Wszystkie usługi zawiodły.</string>
     <string name="settings_heartbeat_interval">Interwał</string>
     <string name="settings_heartbeat_active_hours">Aktywne godziny</string>
-    <string name="settings_documentation">Dokumentacja</string>
     <string name="waiting_thinking">Myślę…</string>
     <string name="waiting_working">Pracuję…</string>
     <string name="waiting_brewing">Przygotowuję…</string>
@@ -232,8 +226,6 @@ Jeśli coś wymaga uwagi (przestarzałe wspomnienia, zaległe zadania, dalsze dz
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Wyjdź z trybu interaktywnego</string>
     <string name="interactive_ui_parsing_failed">Analiza UI nie powiodła się, ponawiam próbę…</string>
-    <string name="settings_sponsors_monthly">Miesięczni sponsorzy</string>
-    <string name="settings_sponsors_past">Poprzedni sponsorzy</string>
     <string name="snackbar_undo">Cofnij</string>
     <string name="snackbar_memory_deleted">Wspomnienie usunięte</string>
     <string name="snackbar_task_cancelled">Zadanie anulowane</string>

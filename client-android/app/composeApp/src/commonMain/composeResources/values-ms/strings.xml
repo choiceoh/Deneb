@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Pertuturan</string>
     <string name="bot_message_copy_content_description">Salin</string>
     <string name="settings_free_tier_title">Peringkat Percuma</string>
-    <string name="settings_free_tier_description">Apabila pangkalan pengguna berkembang, penajaan membantu meningkatkan infrastruktur, menambah had kadar untuk semua orang, dan mengekalkan pembangunan aktif.</string>
-    <string name="settings_become_sponsor">Jadilah Penaja GitHub</string>
-    <string name="settings_business_partnerships">Perkongsian Perniagaan</string>
-    <string name="settings_business_partnerships_description">Ingin memaparkan logo syarikat anda atau membincangkan perkongsian strategik?</string>
-    <string name="settings_contact_sponsorship">Hubungi untuk Penajaan Strategik</string>
     <string name="settings_status_error_invalid_key">Kunci API tidak sah</string>
     <string name="settings_status_error_quota_exhausted">Kuota habis</string>
     <string name="settings_status_error_rate_limited">Had kadar tercapai</string>
@@ -146,7 +141,6 @@
     <string name="error_all_services_failed">Semua perkhidmatan gagal.</string>
     <string name="settings_heartbeat_interval">Selang masa</string>
     <string name="settings_heartbeat_active_hours">Waktu Aktif</string>
-    <string name="settings_documentation">Dokumentasi</string>
     <string name="waiting_thinking">Berfikir…</string>
     <string name="waiting_working">Bekerja…</string>
     <string name="waiting_brewing">Menyediakan…</string>
@@ -231,8 +225,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Keluar daripada mod interaktif</string>
     <string name="interactive_ui_parsing_failed">Penghuraian UI gagal, mencuba semula…</string>
-    <string name="settings_sponsors_monthly">Penaja Bulanan</string>
-    <string name="settings_sponsors_past">Penaja Terdahulu</string>
     <string name="snackbar_undo">Buat asal</string>
     <string name="snackbar_memory_deleted">Memori dipadam</string>
     <string name="snackbar_task_cancelled">Tugasan dibatalkan</string>

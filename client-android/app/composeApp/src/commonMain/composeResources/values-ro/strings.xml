@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Voce</string>
     <string name="bot_message_copy_content_description">Copiază</string>
     <string name="settings_free_tier_title">Nivel gratuit</string>
-    <string name="settings_free_tier_description">Pe măsură ce baza de utilizatori crește, sponsorizarea ajută la extinderea infrastructurii, la creșterea limitelor de utilizare pentru toți și la menținerea dezvoltării active.</string>
-    <string name="settings_become_sponsor">Devino sponsor pe GitHub</string>
-    <string name="settings_business_partnerships">Parteneriate de afaceri</string>
-    <string name="settings_business_partnerships_description">Doriți să afișați logo-ul companiei dvs. sau să discutați un parteneriat strategic?</string>
-    <string name="settings_contact_sponsorship">Contactați-ne pentru sponsorizare strategică</string>
     <string name="settings_base_url_label">URL server</string>
     <string name="settings_status_checking">Se verifică conexiunea...</string>
     <string name="settings_status_connected">Conectat</string>
@@ -146,7 +141,6 @@
     <string name="error_all_services_failed">Toate serviciile au eșuat.</string>
     <string name="settings_heartbeat_interval">Interval</string>
     <string name="settings_heartbeat_active_hours">Ore active</string>
-    <string name="settings_documentation">Documentație</string>
     <string name="waiting_thinking">Gândesc…</string>
     <string name="waiting_working">Lucrez…</string>
     <string name="waiting_brewing">Pregătesc…</string>
@@ -231,8 +225,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Ieșire din modul interactiv</string>
     <string name="interactive_ui_parsing_failed">Analiza UI a eșuat, se încearcă din nou…</string>
-    <string name="settings_sponsors_monthly">Sponsori lunari</string>
-    <string name="settings_sponsors_past">Sponsori anteriori</string>
     <string name="snackbar_undo">Anulare</string>
     <string name="snackbar_memory_deleted">Amintire ștearsă</string>
     <string name="snackbar_task_cancelled">Sarcină anulată</string>

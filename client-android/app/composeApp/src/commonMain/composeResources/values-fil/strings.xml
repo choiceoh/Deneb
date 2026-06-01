@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Pagsasalita</string>
     <string name="bot_message_copy_content_description">Kopyahin</string>
     <string name="settings_free_tier_title">Libreng Tier</string>
-    <string name="settings_free_tier_description">Habang lumalaki ang base ng mga gumagamit, ang sponsorship ay tumutulong na palawakin ang infrastructure, dagdagan ang rate limits para sa lahat, at panatilihing aktibo ang development.</string>
-    <string name="settings_become_sponsor">Maging GitHub Sponsor</string>
-    <string name="settings_business_partnerships">Mga Business Partnership</string>
-    <string name="settings_business_partnerships_description">Gustong ipakita ang logo ng iyong kumpanya o talakayin ang isang strategic partnership?</string>
-    <string name="settings_contact_sponsorship">Makipag-ugnayan para sa Strategic Sponsorship</string>
     <string name="settings_base_url_label">URL ng Server</string>
     <string name="settings_status_checking">Sinusuri ang koneksyon...</string>
     <string name="settings_status_connected">Nakakonekta</string>
@@ -146,7 +141,6 @@
     <string name="error_all_services_failed">Nabigo ang lahat ng serbisyo.</string>
     <string name="settings_heartbeat_interval">Pagitan</string>
     <string name="settings_heartbeat_active_hours">Mga Aktibong Oras</string>
-    <string name="settings_documentation">Dokumentasyon</string>
     <string name="waiting_thinking">Nag-iisip…</string>
     <string name="waiting_working">Nagtatrabaho…</string>
     <string name="waiting_brewing">Naghahanda…</string>
@@ -231,8 +225,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Lumabas sa interactive mode</string>
     <string name="interactive_ui_parsing_failed">Nabigo ang pag-parse ng UI, sinusubukan muli…</string>
-    <string name="settings_sponsors_monthly">Buwanang mga sponsor</string>
-    <string name="settings_sponsors_past">Mga nakaraang sponsor</string>
     <string name="snackbar_undo">I-undo</string>
     <string name="snackbar_memory_deleted">Alaala na-delete</string>
     <string name="snackbar_task_cancelled">Gawain na-cancel</string>

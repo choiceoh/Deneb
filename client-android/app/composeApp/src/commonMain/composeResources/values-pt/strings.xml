@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Fala</string>
     <string name="bot_message_copy_content_description">Copiar</string>
     <string name="settings_free_tier_title">Nível Gratuito</string>
-    <string name="settings_free_tier_description">À medida que a base de usuários cresce, o patrocínio ajuda a escalar a infraestrutura, aumentar os limites de requisições para todos e manter o desenvolvimento ativo.</string>
-    <string name="settings_become_sponsor">Torne-se um patrocinador do GitHub</string>
-    <string name="settings_business_partnerships">Parcerias Empresariais</string>
-    <string name="settings_business_partnerships_description">Quer exibir o logo da sua empresa ou discutir uma parceria estratégica?</string>
-    <string name="settings_contact_sponsorship">Contato para patrocínio estratégico</string>
     <string name="settings_status_error_invalid_key">Chave de API inválida</string>
     <string name="settings_status_error_quota_exhausted">Cota esgotada</string>
     <string name="settings_status_error_rate_limited">Limite de taxa atingido</string>
@@ -147,7 +142,6 @@ Se algo precisar de atenção (memórias desatualizadas, tarefas vencidas, acomp
     <string name="error_all_services_failed">Todos os serviços falharam.</string>
     <string name="settings_heartbeat_interval">Intervalo</string>
     <string name="settings_heartbeat_active_hours">Horas Ativas</string>
-    <string name="settings_documentation">Documentação</string>
     <string name="waiting_thinking">Pensando…</string>
     <string name="waiting_working">Trabalhando…</string>
     <string name="waiting_brewing">Preparando…</string>
@@ -232,8 +226,6 @@ Se algo precisar de atenção (memórias desatualizadas, tarefas vencidas, acomp
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Sair do modo interativo</string>
     <string name="interactive_ui_parsing_failed">Falha na análise da UI, tentando novamente…</string>
-    <string name="settings_sponsors_monthly">Patrocinadores Mensais</string>
-    <string name="settings_sponsors_past">Patrocinadores Anteriores</string>
     <string name="snackbar_undo">Desfazer</string>
     <string name="snackbar_memory_deleted">Memória excluída</string>
     <string name="snackbar_task_cancelled">Tarefa cancelada</string>

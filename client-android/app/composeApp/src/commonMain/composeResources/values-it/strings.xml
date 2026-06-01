@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Voce</string>
     <string name="bot_message_copy_content_description">Copia</string>
     <string name="settings_free_tier_title">Livello Gratuito</string>
-    <string name="settings_free_tier_description">Man mano che la base utenti cresce, la sponsorizzazione aiuta a scalare l'infrastruttura, aumentare i limiti di richieste per tutti e mantenere attivo lo sviluppo.</string>
-    <string name="settings_become_sponsor">Diventa sponsor GitHub</string>
-    <string name="settings_business_partnerships">Partnership Commerciali</string>
-    <string name="settings_business_partnerships_description">Vuoi mostrare il logo della tua azienda o discutere una partnership strategica?</string>
-    <string name="settings_contact_sponsorship">Contatta per sponsorizzazione strategica</string>
     <string name="settings_status_error_invalid_key">Chiave API non valida</string>
     <string name="settings_status_error_quota_exhausted">Quota esaurita</string>
     <string name="settings_status_error_rate_limited">Limite di richieste raggiunto</string>
@@ -147,7 +142,6 @@ Se qualcosa richiede attenzione (ricordi obsoleti, attività scadute, follow-up 
     <string name="error_all_services_failed">Tutti i servizi non sono riusciti.</string>
     <string name="settings_heartbeat_interval">Intervallo</string>
     <string name="settings_heartbeat_active_hours">Ore Attive</string>
-    <string name="settings_documentation">Documentazione</string>
     <string name="waiting_thinking">Penso…</string>
     <string name="waiting_working">Lavoro…</string>
     <string name="waiting_brewing">Preparo…</string>
@@ -232,8 +226,6 @@ Se qualcosa richiede attenzione (ricordi obsoleti, attività scadute, follow-up 
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Esci dalla modalità interattiva</string>
     <string name="interactive_ui_parsing_failed">Analisi dell'interfaccia non riuscita, nuovo tentativo…</string>
-    <string name="settings_sponsors_monthly">Sponsor mensili</string>
-    <string name="settings_sponsors_past">Sponsor precedenti</string>
     <string name="snackbar_undo">Annulla</string>
     <string name="snackbar_memory_deleted">Ricordo eliminato</string>
     <string name="snackbar_task_cancelled">Attività annullata</string>

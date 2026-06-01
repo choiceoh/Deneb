@@ -7,7 +7,6 @@
     <string name="error_unknown">An unknown error occurred.</string>
     <string name="settings_ai_mistakes_warning">AI makes mistakes, double check and don't share sensitive information.</string>
     <string name="settings_version">Version: %1$s</string>
-    <string name="settings_documentation">Documentation</string>
     <string name="settings_api_key_label">API Key</string>
     <string name="settings_api_key_optional_label">API Key (optional)</string>
     <string name="settings_sign_in_copy_api_key_from">Sign in and copy your API key from</string>
@@ -19,13 +18,6 @@
     <string name="bot_message_copy_content_description">Copy</string>
     <string name="bot_message_regenerate_content_description">Regenerate</string>
     <string name="settings_free_tier_title">Free Tier</string>
-    <string name="settings_free_tier_description">As the user base grows, sponsorship helps to scale infrastructure, increase rate limits for everyone, and keep development active.</string>
-    <string name="settings_become_sponsor">Become a GitHub Sponsor</string>
-    <string name="settings_sponsors_monthly">Monthly Sponsors</string>
-    <string name="settings_sponsors_past">Previous Sponsors</string>
-    <string name="settings_business_partnerships">Business Partnerships</string>
-    <string name="settings_business_partnerships_description">Want to feature your company logo or discuss a strategic partnership?</string>
-    <string name="settings_contact_sponsorship">Contact for Strategic Sponsorship</string>
     <string name="settings_base_url_label">Server URL</string>
     <string name="settings_status_checking">Checking connection...</string>
     <string name="settings_status_connected">Connected</string>

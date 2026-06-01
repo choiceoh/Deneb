@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Konuşma</string>
     <string name="bot_message_copy_content_description">Kopyala</string>
     <string name="settings_free_tier_title">Ücretsiz Katman</string>
-    <string name="settings_free_tier_description">Kullanıcı tabanı büyüdükçe, sponsorluk altyapıyı ölçeklendirmeye, herkes için istek limitlerini artırmaya ve geliştirmeyi aktif tutmaya yardımcı olur.</string>
-    <string name="settings_become_sponsor">GitHub Sponsoru Olun</string>
-    <string name="settings_business_partnerships">İş Ortaklıkları</string>
-    <string name="settings_business_partnerships_description">Şirketinizin logosunu göstermek veya stratejik bir ortaklık görüşmek ister misiniz?</string>
-    <string name="settings_contact_sponsorship">Stratejik Sponsorluk için İletişime Geçin</string>
     <string name="settings_status_error_invalid_key">Geçersiz API anahtarı</string>
     <string name="settings_status_error_quota_exhausted">Kota tükendi</string>
     <string name="settings_status_error_rate_limited">İstek limiti aşıldı</string>
@@ -147,7 +142,6 @@ Bir şey dikkat gerektiriyorsa (eski anılar, vadesi geçmiş görevler, kullan�
     <string name="error_all_services_failed">Tüm hizmetler başarısız oldu.</string>
     <string name="settings_heartbeat_interval">Aralık</string>
     <string name="settings_heartbeat_active_hours">Aktif Saatler</string>
-    <string name="settings_documentation">Dokümantasyon</string>
     <string name="waiting_thinking">Düşünüyor…</string>
     <string name="waiting_working">Çalışıyor…</string>
     <string name="waiting_brewing">Hazırlıyor…</string>
@@ -232,8 +226,6 @@ Bir şey dikkat gerektiriyorsa (eski anılar, vadesi geçmiş görevler, kullan�
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Etkileşimli moddan çık</string>
     <string name="interactive_ui_parsing_failed">UI ayrıştırma başarısız oldu, tekrar deneniyor…</string>
-    <string name="settings_sponsors_monthly">Aylık Sponsorlar</string>
-    <string name="settings_sponsors_past">Önceki Sponsorlar</string>
     <string name="snackbar_undo">Geri al</string>
     <string name="snackbar_memory_deleted">Anı silindi</string>
     <string name="snackbar_task_cancelled">Görev iptal edildi</string>

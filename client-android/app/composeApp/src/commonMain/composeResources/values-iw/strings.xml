@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">דיבור</string>
     <string name="bot_message_copy_content_description">העתק</string>
     <string name="settings_free_tier_title">שכבה חינמית</string>
-    <string name="settings_free_tier_description">ככל שבסיס המשתמשים גדל, חסות עוזרת להרחיב את התשתית, להגדיל את מגבלות הבקשות לכולם ולשמור על פיתוח פעיל.</string>
-    <string name="settings_become_sponsor">הפוך לנותן חסות ב-GitHub</string>
-    <string name="settings_business_partnerships">שותפויות עסקיות</string>
-    <string name="settings_business_partnerships_description">רוצה להציג את הלוגו של החברה שלך או לדון בשותפות אסטרטגית?</string>
-    <string name="settings_contact_sponsorship">צור קשר לחסות אסטרטגית</string>
     <string name="settings_base_url_label">כתובת שרת</string>
     <string name="settings_status_checking">בודק חיבור...</string>
     <string name="settings_status_connected">מחובר</string>
@@ -146,7 +141,6 @@
     <string name="error_all_services_failed">כל השירותים נכשלו.</string>
     <string name="settings_heartbeat_interval">מרווח</string>
     <string name="settings_heartbeat_active_hours">שעות פעילות</string>
-    <string name="settings_documentation">תיעוד</string>
     <string name="waiting_thinking">חושב…</string>
     <string name="waiting_working">עובד…</string>
     <string name="waiting_brewing">מכין…</string>
@@ -231,8 +225,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">יציאה ממצב אינטראקטיבי</string>
     <string name="interactive_ui_parsing_failed">ניתוח ממשק המשתמש נכשל, מנסה שוב…</string>
-    <string name="settings_sponsors_monthly">נותני חסות חודשיים</string>
-    <string name="settings_sponsors_past">נותני חסות קודמים</string>
     <string name="snackbar_undo">בטל</string>
     <string name="snackbar_memory_deleted">הזיכרון נמחק</string>
     <string name="snackbar_task_cancelled">המשימה בוטלה</string>

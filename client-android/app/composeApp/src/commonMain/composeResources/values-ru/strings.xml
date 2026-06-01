@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Речь</string>
     <string name="bot_message_copy_content_description">Копировать</string>
     <string name="settings_free_tier_title">Бесплатный уровень</string>
-    <string name="settings_free_tier_description">По мере роста базы пользователей спонсорство помогает масштабировать инфраструктуру, увеличивать лимиты запросов для всех и поддерживать активную разработку.</string>
-    <string name="settings_become_sponsor">Стать спонсором GitHub</string>
-    <string name="settings_business_partnerships">Бизнес-партнёрство</string>
-    <string name="settings_business_partnerships_description">Хотите разместить логотип своей компании или обсудить стратегическое партнёрство?</string>
-    <string name="settings_contact_sponsorship">Связаться для стратегического спонсорства</string>
     <string name="settings_status_error_invalid_key">Недействительный ключ API</string>
     <string name="settings_status_error_quota_exhausted">Квота исчерпана</string>
     <string name="settings_status_error_rate_limited">Превышен лимит запросов</string>
@@ -147,7 +142,6 @@
     <string name="error_all_services_failed">Все сервисы недоступны.</string>
     <string name="settings_heartbeat_interval">Интервал</string>
     <string name="settings_heartbeat_active_hours">Активные часы</string>
-    <string name="settings_documentation">Документация</string>
     <string name="waiting_thinking">Думаю…</string>
     <string name="waiting_working">Работаю…</string>
     <string name="waiting_brewing">Готовлю…</string>
@@ -232,8 +226,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Выйти из интерактивного режима</string>
     <string name="interactive_ui_parsing_failed">Не удалось разобрать UI, повторная попытка…</string>
-    <string name="settings_sponsors_monthly">Ежемесячные спонсоры</string>
-    <string name="settings_sponsors_past">Предыдущие спонсоры</string>
     <string name="snackbar_undo">Отменить</string>
     <string name="snackbar_memory_deleted">Воспоминание удалено</string>
     <string name="snackbar_task_cancelled">Задача отменена</string>

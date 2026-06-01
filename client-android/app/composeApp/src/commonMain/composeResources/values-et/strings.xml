@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Kõne</string>
     <string name="bot_message_copy_content_description">Kopeeri</string>
     <string name="settings_free_tier_title">Tasuta tase</string>
-    <string name="settings_free_tier_description">Kasutajaskonna kasvades aitab sponsorlus laiendada infrastruktuuri, suurendada päringute limiite kõigile ja hoida arendust aktiivsena.</string>
-    <string name="settings_become_sponsor">Hakka GitHub sponsoriks</string>
-    <string name="settings_business_partnerships">Äripartnerlused</string>
-    <string name="settings_business_partnerships_description">Soovite esitleda oma ettevõtte logo või arutada strateegilist partnerlust?</string>
-    <string name="settings_contact_sponsorship">Võtke ühendust strateegilise sponsorluse osas</string>
     <string name="settings_base_url_label">Serveri URL</string>
     <string name="settings_status_checking">Ühenduse kontrollimine...</string>
     <string name="settings_status_connected">Ühendatud</string>
@@ -146,7 +141,6 @@
     <string name="error_all_services_failed">Kõik teenused ebaõnnestusid.</string>
     <string name="settings_heartbeat_interval">Intervall</string>
     <string name="settings_heartbeat_active_hours">Aktiivsed tunnid</string>
-    <string name="settings_documentation">Dokumentatsioon</string>
     <string name="waiting_thinking">Mõtlen…</string>
     <string name="waiting_working">Töötan…</string>
     <string name="waiting_brewing">Valmistan…</string>
@@ -231,8 +225,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Välju interaktiivsest režiimist</string>
     <string name="interactive_ui_parsing_failed">UI analüüs ebaõnnestus, proovin uuesti…</string>
-    <string name="settings_sponsors_monthly">Igakuised sponsorid</string>
-    <string name="settings_sponsors_past">Varasemad sponsorid</string>
     <string name="snackbar_undo">Võta tagasi</string>
     <string name="snackbar_memory_deleted">Mälestus kustutatud</string>
     <string name="snackbar_task_cancelled">Ülesanne tühistatud</string>

@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Puhe</string>
     <string name="bot_message_copy_content_description">Kopioi</string>
     <string name="settings_free_tier_title">Ilmainen taso</string>
-    <string name="settings_free_tier_description">K\u00e4ytt\u00e4j\u00e4m\u00e4\u00e4r\u00e4n kasvaessa sponsorointi auttaa skaalaamaan infrastruktuuria, nostamaan pyynt\u00f6rajoja kaikille ja pit\u00e4m\u00e4\u00e4n kehityksen aktiivisena.</string>
-    <string name="settings_become_sponsor">Ryhdy GitHub-sponsoriksi</string>
-    <string name="settings_business_partnerships">Yrityskumppanuudet</string>
-    <string name="settings_business_partnerships_description">Haluatko esitell\u00e4 yrityksesi logon tai keskustella strategisesta kumppanuudesta?</string>
-    <string name="settings_contact_sponsorship">Ota yhteytt\u00e4 strategista sponsorointia varten</string>
     <string name="settings_base_url_label">Palvelimen URL</string>
     <string name="settings_status_checking">Tarkistetaan yhteytt\u00e4...</string>
     <string name="settings_status_connected">Yhdistetty</string>
@@ -147,7 +142,6 @@ Jos jokin vaatii huomiota (vanhentuneet muistot, erääntyneet tehtävät, käyt
     <string name="error_all_services_failed">Kaikki palvelut epäonnistuivat.</string>
     <string name="settings_heartbeat_interval">Väli</string>
     <string name="settings_heartbeat_active_hours">Aktiiviset tunnit</string>
-    <string name="settings_documentation">Dokumentaatio</string>
     <string name="waiting_thinking">Mietin…</string>
     <string name="waiting_working">Työskentelen…</string>
     <string name="waiting_brewing">Valmistelen…</string>
@@ -232,8 +226,6 @@ Jos jokin vaatii huomiota (vanhentuneet muistot, erääntyneet tehtävät, käyt
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Poistu vuorovaikutustilasta</string>
     <string name="interactive_ui_parsing_failed">Käyttöliittymän jäsennys epäonnistui, yritetään uudelleen…</string>
-    <string name="settings_sponsors_monthly">Kuukausittaiset sponsorit</string>
-    <string name="settings_sponsors_past">Aiemmat sponsorit</string>
     <string name="snackbar_undo">Kumoa</string>
     <string name="snackbar_memory_deleted">Muisto poistettu</string>
     <string name="snackbar_task_cancelled">Tehtävä peruutettu</string>

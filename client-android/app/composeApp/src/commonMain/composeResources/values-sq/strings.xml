@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Të folurit</string>
     <string name="bot_message_copy_content_description">Kopjo</string>
     <string name="settings_free_tier_title">Niveli falas</string>
-    <string name="settings_free_tier_description">Me rritjen e bazës së përdoruesve, sponsorizimi ndihmon në zgjerimin e infrastrukturës, rritjen e kufijve të kërkesave për të gjithë dhe mbajtjen aktive të zhvillimit.</string>
-    <string name="settings_become_sponsor">Bëhuni sponsor në GitHub</string>
-    <string name="settings_business_partnerships">Partneritete biznesi</string>
-    <string name="settings_business_partnerships_description">Dëshironi të shfaqni logon e kompanisë suaj ose të diskutoni për një partneritet strategjik?</string>
-    <string name="settings_contact_sponsorship">Kontaktoni për sponsorizim strategjik</string>
     <string name="settings_base_url_label">URL e serverit</string>
     <string name="settings_status_checking">Po kontrollohet lidhja...</string>
     <string name="settings_status_connected">I lidhur</string>
@@ -146,7 +141,6 @@
     <string name="error_all_services_failed">Të gjitha shërbimet dështuan.</string>
     <string name="settings_heartbeat_interval">Intervali</string>
     <string name="settings_heartbeat_active_hours">Orët Aktive</string>
-    <string name="settings_documentation">Dokumentacioni</string>
     <string name="waiting_thinking">Po mendoj…</string>
     <string name="waiting_working">Po punoj…</string>
     <string name="waiting_brewing">Po përgatis…</string>
@@ -231,8 +225,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Dil nga mënyra ndërvepruese</string>
     <string name="interactive_ui_parsing_failed">Analizimi i UI dështoi, po provohet përsëri…</string>
-    <string name="settings_sponsors_monthly">Sponsorë mujorë</string>
-    <string name="settings_sponsors_past">Sponsorë të mëparshëm</string>
     <string name="snackbar_undo">Zhbëj</string>
     <string name="snackbar_memory_deleted">Kujtesa u fshi</string>
     <string name="snackbar_task_cancelled">Detyra u anulua</string>

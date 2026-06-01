@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Voix</string>
     <string name="bot_message_copy_content_description">Copier</string>
     <string name="settings_free_tier_title">Niveau Gratuit</string>
-    <string name="settings_free_tier_description">À mesure que la base d'utilisateurs grandit, le parrainage aide à mettre à l'échelle l'infrastructure, à augmenter les limites de requêtes pour tous et à maintenir le développement actif.</string>
-    <string name="settings_become_sponsor">Devenir sponsor GitHub</string>
-    <string name="settings_business_partnerships">Partenariats Commerciaux</string>
-    <string name="settings_business_partnerships_description">Vous souhaitez afficher le logo de votre entreprise ou discuter d'un partenariat stratégique ?</string>
-    <string name="settings_contact_sponsorship">Contact pour parrainage stratégique</string>
     <string name="settings_status_error_invalid_key">Clé API invalide</string>
     <string name="settings_status_error_quota_exhausted">Quota épuisé</string>
     <string name="settings_status_error_rate_limited">Limite de taux atteinte</string>
@@ -147,7 +142,6 @@ Si quelque chose nécessite de l'attention (souvenirs obsolètes, tâches échue
     <string name="error_all_services_failed">Tous les services ont échoué.</string>
     <string name="settings_heartbeat_interval">Intervalle</string>
     <string name="settings_heartbeat_active_hours">Heures Actives</string>
-    <string name="settings_documentation">Documentation</string>
     <string name="waiting_thinking">Réflexion…</string>
     <string name="waiting_working">En cours…</string>
     <string name="waiting_brewing">Préparation…</string>
@@ -232,8 +226,6 @@ Si quelque chose nécessite de l'attention (souvenirs obsolètes, tâches échue
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Quitter le mode interactif</string>
     <string name="interactive_ui_parsing_failed">Échec de l'analyse de l'interface, nouvel essai…</string>
-    <string name="settings_sponsors_monthly">Sponsors mensuels</string>
-    <string name="settings_sponsors_past">Anciens sponsors</string>
     <string name="snackbar_undo">Annuler</string>
     <string name="snackbar_memory_deleted">Souvenir supprimé</string>
     <string name="snackbar_task_cancelled">Tâche annulée</string>

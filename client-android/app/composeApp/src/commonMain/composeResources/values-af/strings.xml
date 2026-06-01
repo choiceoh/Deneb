@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Spraak</string>
     <string name="bot_message_copy_content_description">Kopieer</string>
     <string name="settings_free_tier_title">Gratis Vlak</string>
-    <string name="settings_free_tier_description">Soos die gebruikersbasis groei, help borgskappe om infrastruktuur te skaal, tarieklimiet vir almal te verhoog, en ontwikkeling aktief te hou.</string>
-    <string name="settings_become_sponsor">Word 'n GitHub-borg</string>
-    <string name="settings_business_partnerships">Sakevennootskappe</string>
-    <string name="settings_business_partnerships_description">Wil jy jou maatskappy se logo vertoon of 'n strategiese vennootskap bespreek?</string>
-    <string name="settings_contact_sponsorship">Kontak vir Strategiese Borgskappe</string>
     <string name="settings_base_url_label">Bediener-URL</string>
     <string name="settings_status_checking">Kontroleer verbinding...</string>
     <string name="settings_status_connected">Verbind</string>
@@ -147,7 +142,6 @@ As iets aandag nodig het (verouderde herinneringe, verskuldigde take, gebruiker-
     <string name="error_all_services_failed">Alle dienste het misluk.</string>
     <string name="settings_heartbeat_interval">Interval</string>
     <string name="settings_heartbeat_active_hours">Aktiewe Ure</string>
-    <string name="settings_documentation">Dokumentasie</string>
     <string name="waiting_thinking">Dink…</string>
     <string name="waiting_working">Werk…</string>
     <string name="waiting_brewing">Brou…</string>
@@ -232,8 +226,6 @@ As iets aandag nodig het (verouderde herinneringe, verskuldigde take, gebruiker-
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Verlaat interaktiewe modus</string>
     <string name="interactive_ui_parsing_failed">UI-ontleding het misluk, probeer weer…</string>
-    <string name="settings_sponsors_monthly">Maandelikse borge</string>
-    <string name="settings_sponsors_past">Vorige borge</string>
     <string name="snackbar_undo">Ontdoen</string>
     <string name="snackbar_memory_deleted">Herinnering verwyder</string>
     <string name="snackbar_task_cancelled">Taak gekanselleer</string>

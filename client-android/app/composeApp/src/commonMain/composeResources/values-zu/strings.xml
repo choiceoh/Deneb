@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Inkulumo</string>
     <string name="bot_message_copy_content_description">Kopisha</string>
     <string name="settings_free_tier_title">Izinga lamahhala</string>
-    <string name="settings_free_tier_description">Njengoba isisekelo sabasebenzisi sikhula, ukuxhaswa kusiza ukwandisa ingqalasizinda, ukukhuphula imikhawulo yezicelo kubo bonke, nokugcina ukuthuthukiswa kusebenza.</string>
-    <string name="settings_become_sponsor">Yiba umxhasi we-GitHub</string>
-    <string name="settings_business_partnerships">Ubuhlakani bebhizinisi</string>
-    <string name="settings_business_partnerships_description">Ufuna ukubonisa ilogo yenkampani yakho noma ukuxoxa ngobuhlakani besu?</string>
-    <string name="settings_contact_sponsorship">Xhumana ngokuxhaswa okuhlelelwe</string>
     <string name="settings_base_url_label">URL yeseva</string>
     <string name="settings_status_checking">Ihlola ukuxhumana...</string>
     <string name="settings_status_connected">Kuxhunyiwe</string>
@@ -146,7 +141,6 @@
     <string name="error_all_services_failed">Zonke izinsizakalo zihlulekile.</string>
     <string name="settings_heartbeat_interval">Isikhathi</string>
     <string name="settings_heartbeat_active_hours">Amahora Asebenzayo</string>
-    <string name="settings_documentation">Ukubhaliwe</string>
     <string name="waiting_thinking">Ngicabanga…</string>
     <string name="waiting_working">Ngiyasebenza…</string>
     <string name="waiting_brewing">Ngiyalungiselela…</string>
@@ -231,8 +225,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Phuma kumodi yokuxhumana</string>
     <string name="interactive_ui_parsing_failed">Ukuhlaziya kwe-UI kuhlulekile, kuzanywa futhi…</string>
-    <string name="settings_sponsors_monthly">Abaxhasi Banyanga Zonke Izinyanga</string>
-    <string name="settings_sponsors_past">Abaxhasi Bangaphambili</string>
     <string name="snackbar_undo">Hlehlisa</string>
     <string name="snackbar_memory_deleted">Inkumbulo isusiwe</string>
     <string name="snackbar_task_cancelled">Umsebenzi ukhanseliwe</string>

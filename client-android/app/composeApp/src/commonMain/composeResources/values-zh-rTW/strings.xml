@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">語音</string>
     <string name="bot_message_copy_content_description">複製</string>
     <string name="settings_free_tier_title">免費版</string>
-    <string name="settings_free_tier_description">隨著使用者群的成長，贊助有助於擴展基礎設施、提高所有人的請求限制並保持開發活躍。</string>
-    <string name="settings_become_sponsor">成為 GitHub 贊助者</string>
-    <string name="settings_business_partnerships">商業合作</string>
-    <string name="settings_business_partnerships_description">想展示您的公司標誌或討論策略合作夥伴關係？</string>
-    <string name="settings_contact_sponsorship">聯繫策略贊助</string>
     <string name="settings_status_error_invalid_key">API 金鑰無效</string>
     <string name="settings_status_error_quota_exhausted">配額已用完</string>
     <string name="settings_status_error_rate_limited">達到速率限制</string>
@@ -147,7 +142,6 @@
     <string name="error_all_services_failed">所有服務皆失敗。</string>
     <string name="settings_heartbeat_interval">間隔</string>
     <string name="settings_heartbeat_active_hours">活躍時段</string>
-    <string name="settings_documentation">文件</string>
     <string name="waiting_thinking">思考中…</string>
     <string name="waiting_working">處理中…</string>
     <string name="waiting_brewing">準備中…</string>
@@ -232,8 +226,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">退出互動模式</string>
     <string name="interactive_ui_parsing_failed">UI 解析失敗，正在重試…</string>
-    <string name="settings_sponsors_monthly">每月贊助者</string>
-    <string name="settings_sponsors_past">先前贊助者</string>
     <string name="snackbar_undo">復原</string>
     <string name="snackbar_memory_deleted">記憶已刪除</string>
     <string name="snackbar_task_cancelled">任務已取消</string>

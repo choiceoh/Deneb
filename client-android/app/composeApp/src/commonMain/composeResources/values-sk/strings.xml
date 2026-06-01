@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Reč</string>
     <string name="bot_message_copy_content_description">Kopírovať</string>
     <string name="settings_free_tier_title">Bezplatná úroveň</string>
-    <string name="settings_free_tier_description">S rastom používateľskej základne sponzorstvo pomáha škálovať infraštruktúru, zvyšovať limity požiadaviek pre všetkých a udržiavať aktívny vývoj.</string>
-    <string name="settings_become_sponsor">Staňte sa sponzorom na GitHub</string>
-    <string name="settings_business_partnerships">Obchodné partnerstvá</string>
-    <string name="settings_business_partnerships_description">Chcete zobraziť logo vašej spoločnosti alebo prediskutovať strategické partnerstvo?</string>
-    <string name="settings_contact_sponsorship">Kontaktujte nás ohľadom strategického sponzorstva</string>
     <string name="settings_base_url_label">URL servera</string>
     <string name="settings_status_checking">Kontrola pripojenia...</string>
     <string name="settings_status_connected">Pripojené</string>
@@ -146,7 +141,6 @@
     <string name="error_all_services_failed">Všetky služby zlyhali.</string>
     <string name="settings_heartbeat_interval">Interval</string>
     <string name="settings_heartbeat_active_hours">Aktívne hodiny</string>
-    <string name="settings_documentation">Dokumentácia</string>
     <string name="waiting_thinking">Premýšľam…</string>
     <string name="waiting_working">Pracujem…</string>
     <string name="waiting_brewing">Pripravujem…</string>
@@ -231,8 +225,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Ukončiť interaktívny režim</string>
     <string name="interactive_ui_parsing_failed">Analýza používateľského rozhrania zlyhala, skúšam znova…</string>
-    <string name="settings_sponsors_monthly">Mesační sponzori</string>
-    <string name="settings_sponsors_past">Predchádzajúci sponzori</string>
     <string name="snackbar_undo">Späť</string>
     <string name="snackbar_memory_deleted">Spomienka vymazaná</string>
     <string name="snackbar_task_cancelled">Úloha zrušená</string>

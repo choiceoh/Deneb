@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Sprache</string>
     <string name="bot_message_copy_content_description">Kopieren</string>
     <string name="settings_free_tier_title">Kostenlose Stufe</string>
-    <string name="settings_free_tier_description">Mit wachsender Nutzerbasis hilft Sponsoring dabei, die Infrastruktur zu skalieren, die Rate-Limits für alle zu erhöhen und die Entwicklung aktiv zu halten.</string>
-    <string name="settings_become_sponsor">GitHub-Sponsor werden</string>
-    <string name="settings_business_partnerships">Geschäftspartnerschaften</string>
-    <string name="settings_business_partnerships_description">Möchtest du dein Firmenlogo präsentieren oder eine strategische Partnerschaft besprechen?</string>
-    <string name="settings_contact_sponsorship">Kontakt für strategisches Sponsoring</string>
     <string name="settings_status_error_invalid_key">Ungültiger API-Schlüssel</string>
     <string name="settings_status_error_quota_exhausted">Kontingent erschöpft</string>
     <string name="settings_status_error_rate_limited">Rate-Limit erreicht</string>
@@ -147,7 +142,6 @@ Wenn etwas Aufmerksamkeit erfordert (veraltete Erinnerungen, fällige Aufgaben, 
     <string name="error_all_services_failed">Alle Dienste sind fehlgeschlagen.</string>
     <string name="settings_heartbeat_interval">Intervall</string>
     <string name="settings_heartbeat_active_hours">Aktive Stunden</string>
-    <string name="settings_documentation">Dokumentation</string>
     <string name="waiting_thinking">Denke nach…</string>
     <string name="waiting_working">Arbeite…</string>
     <string name="waiting_brewing">Braue…</string>
@@ -232,8 +226,6 @@ Wenn etwas Aufmerksamkeit erfordert (veraltete Erinnerungen, fällige Aufgaben, 
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Interaktiven Modus verlassen</string>
     <string name="interactive_ui_parsing_failed">UI-Analyse fehlgeschlagen, erneuter Versuch…</string>
-    <string name="settings_sponsors_monthly">Monatliche Sponsoren</string>
-    <string name="settings_sponsors_past">Frühere Sponsoren</string>
     <string name="snackbar_undo">Rückgängig</string>
     <string name="snackbar_memory_deleted">Erinnerung gelöscht</string>
     <string name="snackbar_task_cancelled">Aufgabe abgebrochen</string>

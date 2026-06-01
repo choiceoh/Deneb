@@ -29,7 +29,6 @@ import com.inspiredandroid.kai.network.OpenAICompatibleConnectionException
 import com.inspiredandroid.kai.network.OpenAICompatibleInvalidApiKeyException
 import com.inspiredandroid.kai.network.OpenAICompatibleQuotaExhaustedException
 import com.inspiredandroid.kai.network.OpenAICompatibleRateLimitExceededException
-import com.inspiredandroid.kai.network.dtos.SponsorsResponseDto
 import com.inspiredandroid.kai.tools.NotificationPermissionController
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -245,7 +244,6 @@ class SettingsViewModel(
             hasCheckedInitialConnection = true
             checkAllConnections()
             connectEnabledMcpServers()
-            fetchSponsors()
         }
         // Re-read notification listener state every time the screen becomes visible:
         // the user may have toggled access in system settings while we were backgrounded.
@@ -256,30 +254,6 @@ class SettingsViewModel(
                     notificationListenerBound = dataRepository.getNotificationSyncState().listenerBound,
                     notificationPendingCount = dataRepository.getPendingNotificationCount(),
                 )
-            }
-        }
-    }
-
-    private fun fetchSponsors() {
-        viewModelScope.launch(backgroundDispatcher) {
-            try {
-                val client = httpClient {
-                    install(ContentNegotiation) {
-                        json(Json { ignoreUnknownKeys = true })
-                    }
-                }
-                val response = client.get("https://ghs.vercel.app/v3/sponsors/SimonSchubert")
-                if (response.status.isSuccess()) {
-                    val dto = response.body<SponsorsResponseDto>()
-                    _state.update {
-                        it.copy(
-                            currentSponsors = dto.sponsors.current.toImmutableList(),
-                            pastSponsors = dto.sponsors.past.toImmutableList(),
-                        )
-                    }
-                }
-            } catch (_: Exception) {
-                // Silently ignore - sponsors are non-critical
             }
         }
     }

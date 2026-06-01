@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Ομιλία</string>
     <string name="bot_message_copy_content_description">Αντιγραφή</string>
     <string name="settings_free_tier_title">Δωρεάν Βαθμίδα</string>
-    <string name="settings_free_tier_description">Καθώς η βάση χρηστών μεγαλώνει, η χορηγία βοηθά στην κλιμάκωση της υποδομής, στην αύξηση των ορίων αιτημάτων για όλους και στη διατήρηση της ενεργής ανάπτυξης.</string>
-    <string name="settings_become_sponsor">Γίνετε Χορηγός στο GitHub</string>
-    <string name="settings_business_partnerships">Επιχειρηματικές Συνεργασίες</string>
-    <string name="settings_business_partnerships_description">Θέλετε να προβάλετε το λογότυπο της εταιρείας σας ή να συζητήσετε μια στρατηγική συνεργασία;</string>
-    <string name="settings_contact_sponsorship">Επικοινωνία για Στρατηγική Χορηγία</string>
     <string name="settings_base_url_label">URL Διακομιστή</string>
     <string name="settings_status_checking">Έλεγχος σύνδεσης...</string>
     <string name="settings_status_connected">Συνδεδεμένο</string>
@@ -146,7 +141,6 @@
     <string name="error_all_services_failed">Όλες οι υπηρεσίες απέτυχαν.</string>
     <string name="settings_heartbeat_interval">Διάστημα</string>
     <string name="settings_heartbeat_active_hours">Ενεργές Ώρες</string>
-    <string name="settings_documentation">Τεκμηρίωση</string>
     <string name="waiting_thinking">Σκέφτομαι…</string>
     <string name="waiting_working">Εργάζομαι…</string>
     <string name="waiting_brewing">Ετοιμάζω…</string>
@@ -231,8 +225,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Έξοδος από τη διαδραστική λειτουργία</string>
     <string name="interactive_ui_parsing_failed">Η ανάλυση UI απέτυχε, νέα προσπάθεια…</string>
-    <string name="settings_sponsors_monthly">Μηνιαίοι χορηγοί</string>
-    <string name="settings_sponsors_past">Προηγούμενοι χορηγοί</string>
     <string name="snackbar_undo">Αναίρεση</string>
     <string name="snackbar_memory_deleted">Η μνήμη διαγράφηκε</string>
     <string name="snackbar_task_cancelled">Η εργασία ακυρώθηκε</string>

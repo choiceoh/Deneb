@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Suara</string>
     <string name="bot_message_copy_content_description">Salin</string>
     <string name="settings_free_tier_title">Tingkat Gratis</string>
-    <string name="settings_free_tier_description">Seiring bertambahnya basis pengguna, sponsor membantu meningkatkan infrastruktur, menambah batas permintaan untuk semua orang, dan menjaga pengembangan tetap aktif.</string>
-    <string name="settings_become_sponsor">Jadilah Sponsor GitHub</string>
-    <string name="settings_business_partnerships">Kemitraan Bisnis</string>
-    <string name="settings_business_partnerships_description">Ingin menampilkan logo perusahaan Anda atau mendiskusikan kemitraan strategis?</string>
-    <string name="settings_contact_sponsorship">Hubungi untuk Sponsor Strategis</string>
     <string name="settings_status_error_invalid_key">Kunci API tidak valid</string>
     <string name="settings_status_error_quota_exhausted">Kuota habis</string>
     <string name="settings_status_error_rate_limited">Batas kecepatan tercapai</string>
@@ -146,7 +141,6 @@
     <string name="error_all_services_failed">Semua layanan gagal.</string>
     <string name="settings_heartbeat_interval">Interval</string>
     <string name="settings_heartbeat_active_hours">Jam Aktif</string>
-    <string name="settings_documentation">Dokumentasi</string>
     <string name="waiting_thinking">Berpikir…</string>
     <string name="waiting_working">Bekerja…</string>
     <string name="waiting_brewing">Menyiapkan…</string>
@@ -231,8 +225,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Keluar dari mode interaktif</string>
     <string name="interactive_ui_parsing_failed">Penguraian UI gagal, mencoba lagi…</string>
-    <string name="settings_sponsors_monthly">Sponsor Bulanan</string>
-    <string name="settings_sponsors_past">Sponsor Sebelumnya</string>
     <string name="snackbar_undo">Urungkan</string>
     <string name="snackbar_memory_deleted">Memori dihapus</string>
     <string name="snackbar_task_cancelled">Tugas dibatalkan</string>

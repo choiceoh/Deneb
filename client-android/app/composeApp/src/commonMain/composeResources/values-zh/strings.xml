@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">语音</string>
     <string name="bot_message_copy_content_description">复制</string>
     <string name="settings_free_tier_title">免费版</string>
-    <string name="settings_free_tier_description">随着用户群的增长，赞助有助于扩展基础设施、提高所有人的请求限制并保持开发活跃。</string>
-    <string name="settings_become_sponsor">成为 GitHub 赞助者</string>
-    <string name="settings_business_partnerships">商业合作</string>
-    <string name="settings_business_partnerships_description">想展示您的公司标志或讨论战略合作伙伴关系？</string>
-    <string name="settings_contact_sponsorship">联系战略赞助</string>
     <string name="settings_status_error_invalid_key">API 密钥无效</string>
     <string name="settings_status_error_quota_exhausted">配额已用完</string>
     <string name="settings_status_error_rate_limited">达到速率限制</string>
@@ -147,7 +142,6 @@
     <string name="error_all_services_failed">所有服务均失败。</string>
     <string name="settings_heartbeat_interval">间隔</string>
     <string name="settings_heartbeat_active_hours">活跃时段</string>
-    <string name="settings_documentation">文档</string>
     <string name="waiting_thinking">思考中…</string>
     <string name="waiting_working">处理中…</string>
     <string name="waiting_brewing">准备中…</string>
@@ -232,8 +226,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">退出交互模式</string>
     <string name="interactive_ui_parsing_failed">UI 解析失败，正在重试…</string>
-    <string name="settings_sponsors_monthly">月度赞助者</string>
-    <string name="settings_sponsors_past">往期赞助者</string>
     <string name="snackbar_undo">撤销</string>
     <string name="snackbar_memory_deleted">记忆已删除</string>
     <string name="snackbar_task_cancelled">任务已取消</string>

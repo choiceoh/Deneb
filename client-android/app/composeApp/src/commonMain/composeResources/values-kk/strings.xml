@@ -15,11 +15,6 @@
     <string name="bot_message_speech_content_description">Сөйлеу</string>
     <string name="bot_message_copy_content_description">Көшіру</string>
     <string name="settings_free_tier_title">Тегін деңгей</string>
-    <string name="settings_free_tier_description">Пайдаланушылар базасы өскен сайын, демеушілік инфрақұрылымды кеңейтуге, барлығы үшін сұрау лимиттерін арттыруға және әзірлеуді белсенді ұстауға көмектеседі.</string>
-    <string name="settings_become_sponsor">GitHub демеушісі болыңыз</string>
-    <string name="settings_business_partnerships">Бизнес серіктестіктер</string>
-    <string name="settings_business_partnerships_description">Компанияңыздың логотипін көрсеткіңіз келе ме немесе стратегиялық серіктестікті талқылағыңыз келе ме?</string>
-    <string name="settings_contact_sponsorship">Стратегиялық демеушілік үшін байланысыңыз</string>
     <string name="settings_base_url_label">Сервер URL</string>
     <string name="settings_status_checking">Қосылым тексерілуде...</string>
     <string name="settings_status_connected">Қосылды</string>
@@ -146,7 +141,6 @@
     <string name="error_all_services_failed">Барлық қызметтер сәтсіз аяқталды.</string>
     <string name="settings_heartbeat_interval">Аралық</string>
     <string name="settings_heartbeat_active_hours">Белсенді сағаттар</string>
-    <string name="settings_documentation">Құжаттама</string>
     <string name="waiting_thinking">Ойланамын…</string>
     <string name="waiting_working">Жұмыс істеймін…</string>
     <string name="waiting_brewing">Дайындаймын…</string>
@@ -231,8 +225,6 @@
     <string name="interactive_title">Deneb</string>
     <string name="interactive_exit_content_description">Интерактивті режимнен шығу</string>
     <string name="interactive_ui_parsing_failed">UI талдауы сәтсіз аяқталды, қайта әрекет жасалуда…</string>
-    <string name="settings_sponsors_monthly">Ай сайынғы демеушілер</string>
-    <string name="settings_sponsors_past">Бұрынғы демеушілер</string>
     <string name="snackbar_undo">Болдырмау</string>
     <string name="snackbar_memory_deleted">Естелік жойылды</string>
     <string name="snackbar_task_cancelled">Тапсырма бас тартылды</string>
