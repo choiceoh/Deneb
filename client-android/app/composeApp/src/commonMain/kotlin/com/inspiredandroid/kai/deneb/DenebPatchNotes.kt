@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.19",
+        code = 142,
+        highlights = listOf(
+            "모델 아이콘 추가 — Gemma 전용 마크와 MiniMax 실제 로고를 모델 전환기에 표시",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.18",
         code = 141,
         highlights = listOf(
