@@ -43,6 +43,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -96,6 +98,17 @@ class DenebGatewayClient(
 
     private val _chatHistory = MutableStateFlow<List<History>>(emptyList())
     override val chatHistory: StateFlow<List<History>> = _chatHistory
+
+    // Guards _chatHistory against a background transcript load clobbering an
+    // in-flight optimistic send. A cold-start share (onCreate, before the chat
+    // UI exists) appends its message and starts streaming while a topic
+    // auto-select is still fetching that topic's transcript; without this gate
+    // the late fetch overwrote both the shared message and its streaming reply,
+    // so the share showed NO response until the user sent another message.
+    // ask() bumps the epoch when it appends; loadTranscriptGuarded only installs
+    // its result when the epoch is unchanged, making the two order-independent.
+    private val historyGate = Mutex()
+    private var historyEpoch = 0L
 
     private val _savedConversations = MutableStateFlow<List<Conversation>>(emptyList())
     override val savedConversations: StateFlow<List<Conversation>> = _savedConversations
@@ -159,14 +172,24 @@ class DenebGatewayClient(
         // the event (per the kai-ui prompt contract) plus the collected inputs.
         val sendText = if (uiSubmission != null) formatCallback(uiSubmission) else displayText
         if (sendText.isEmpty()) return
-        if (displayText.isNotEmpty()) {
-            _chatHistory.update { it + History(role = History.Role.USER, content = displayText) }
-        }
 
-        // Append a placeholder assistant bubble and grow it as deltas stream in.
-        // Replacement is keyed by id so concurrent history edits stay safe.
+        // Append the user message + a placeholder assistant bubble (grown as
+        // deltas stream in; replacement is keyed by id so concurrent history
+        // edits stay safe). Bump the epoch and append under historyGate so a
+        // background transcript load in flight — the cold-start topic
+        // auto-select — can't overwrite them (see historyGate).
         val assistantId = Uuid.random().toString()
-        _chatHistory.update { it + History(id = assistantId, role = History.Role.ASSISTANT, content = "") }
+        historyGate.withLock {
+            historyEpoch++
+            _chatHistory.update { list ->
+                val withUser = if (displayText.isNotEmpty()) {
+                    list + History(role = History.Role.USER, content = displayText)
+                } else {
+                    list
+                }
+                withUser + History(id = assistantId, role = History.Role.ASSISTANT, content = "")
+            }
+        }
         val accumulated = StringBuilder()
         val replaceAssistant: (String, String?) -> Unit = { text, fallback ->
             _chatHistory.update { list ->
@@ -291,7 +314,23 @@ class DenebGatewayClient(
         _selectedTopic.value = topicKey
         val key = topicSessionKey(topicKey)
         sessionKey = key
-        scope.launch { _chatHistory.value = fetchTranscript(key) }
+        scope.launch { loadTranscriptGuarded(key) }
+    }
+
+    /**
+     * Fetch a session transcript and install it as the chat history UNLESS an
+     * optimistic send (ask()) appended while we were fetching. Closes the
+     * cold-start share race: the topic auto-select's transcript fetch used to
+     * overwrite the just-shared message and its streaming reply, so the share
+     * appeared to get no response until the next message was sent. Epoch-checked
+     * under historyGate, so it is safe whichever of load / send finishes first.
+     */
+    private suspend fun loadTranscriptGuarded(key: String) {
+        val startEpoch = historyGate.withLock { historyEpoch }
+        val transcript = fetchTranscript(key)
+        historyGate.withLock {
+            if (historyEpoch == startEpoch) _chatHistory.value = transcript
+        }
     }
 
     /**
@@ -330,7 +369,7 @@ class DenebGatewayClient(
 
     override fun loadConversation(id: String) {
         sessionKey = id
-        scope.launch { _chatHistory.value = fetchTranscript(id) }
+        scope.launch { loadTranscriptGuarded(id) }
     }
 
     override suspend fun deleteConversation(id: String) {
