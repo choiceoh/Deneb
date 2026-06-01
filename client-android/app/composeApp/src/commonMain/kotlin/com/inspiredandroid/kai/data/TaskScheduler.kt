@@ -92,7 +92,35 @@ class TaskScheduler(
      * calls (e.g. from both `DaemonService.onCreate` and `ChatViewModel.init`) return
      * immediately if the loop is already running.
      */
+    private var pushJob: Job? = null
+
+    /**
+     * Long-lived subscription to the gateway's proactive-event SSE stream. The
+     * gateway pushes a {title, body} frame the moment a 업무-topic report
+     * (morning-letter, email-analysis) is produced; we raise a notification
+     * immediately instead of waiting for the next [POLL_INTERVAL_MS] heartbeat.
+     * Only meaningful for the gateway-backed client; on other repositories
+     * subscribeEvents isn't available so this stays a no-op.
+     *
+     * Started alongside [start] and torn down by [stop]. The subscription itself
+     * reconnects on drops (see DenebGatewayClient.subscribeEvents), so this just
+     * owns its lifetime. Notifications fire only while backgrounded — a
+     * foreground user already sees the report land in the chat.
+     */
+    private fun startPushSubscription() {
+        val gateway = dataRepository as? com.inspiredandroid.kai.deneb.DenebGatewayClient ?: return
+        if (pushJob?.isActive == true) return
+        pushJob = schedulerScope.launch {
+            gateway.subscribeEvents { title, body ->
+                if (!appInForeground) {
+                    sendHeartbeatNotification(title = title, body = body)
+                }
+            }
+        }
+    }
+
     fun start() {
+        startPushSubscription()
         if (!enabled || taskStore == null || appSettings == null) return
         if (activeJob?.isActive == true) return
         activeJob = schedulerScope.launch {

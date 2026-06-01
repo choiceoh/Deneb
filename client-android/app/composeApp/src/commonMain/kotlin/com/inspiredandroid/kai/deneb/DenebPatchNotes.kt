@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.10",
+        code = 133,
+        highlights = listOf(
+            "능동 알림 — 모닝레터·메일분석을 게이트웨이가 만든 즉시 푸시(주기 대기 없이)",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.9",
         code = 132,
         highlights = listOf(

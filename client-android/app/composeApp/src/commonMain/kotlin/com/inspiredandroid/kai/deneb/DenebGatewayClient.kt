@@ -20,6 +20,7 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
+import io.ktor.client.request.prepareGet
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.preparePost
@@ -35,9 +36,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -1051,6 +1055,77 @@ class DenebGatewayClient(
         return GatewayReply(text = doneText ?: "", model = model, fellBack = fellBack)
     }
 
+    /**
+     * Holds one long-lived SSE connection to the gateway's proactive-event
+     * endpoint and invokes [onPush] for each {title, body} frame. Used by the
+     * foreground daemon to raise a local notification the moment the gateway
+     * produces a 업무-topic report (morning-letter, email-analysis), instead of
+     * waiting for the next heartbeat poll.
+     *
+     * Reconnects with a small backoff after any drop (network change, server
+     * restart, Android killing then restarting the daemon). Returns only when
+     * the caller's coroutine is cancelled; missed frames while disconnected are
+     * not replayed — the report is always also in the client:main transcript.
+     */
+    suspend fun subscribeEvents(onPush: (title: String, body: String) -> Unit) {
+        var backoffMs = 2_000L
+        while (currentCoroutineContext().isActive) {
+            if (clientToken.isEmpty() || gatewayUrl.isBlank()) {
+                delay(10_000)
+                continue
+            }
+            try {
+                http.prepareGet("$gatewayUrl/api/v1/miniapp/events") {
+                    header(CLIENT_TOKEN_HEADER, clientToken)
+                    header("Accept", "text/event-stream")
+                    timeout {
+                        // Long-lived: no overall cap. The 30s server keepalive
+                        // keeps the socket under STREAM_SOCKET_TIMEOUT_MS.
+                        requestTimeoutMillis = Long.MAX_VALUE
+                        socketTimeoutMillis = STREAM_SOCKET_TIMEOUT_MS
+                    }
+                }.execute { response ->
+                    if (!response.status.isSuccess()) {
+                        throw IllegalStateException("events HTTP ${response.status.value}")
+                    }
+                    backoffMs = 2_000L // connected — reset backoff
+                    val channel = response.bodyAsChannel()
+                    var event = ""
+                    val data = StringBuilder()
+                    while (!channel.isClosedForRead) {
+                        val line = channel.readUTF8Line() ?: break
+                        when {
+                            line.startsWith(":") -> Unit // keepalive comment
+                            line.startsWith("event:") -> event = line.removePrefix("event:").trim()
+                            line.startsWith("data:") -> {
+                                if (data.isNotEmpty()) data.append('\n')
+                                data.append(line.removePrefix("data:").trimStart())
+                            }
+                            line.isEmpty() -> {
+                                if (event == "push") {
+                                    runCatching {
+                                        jsonCodec.decodeFromString(PushEvent.serializer(), data.toString())
+                                    }.getOrNull()?.let { p ->
+                                        if (p.body.isNotBlank()) onPush(p.title.ifBlank { "Deneb" }, p.body)
+                                    }
+                                }
+                                event = ""
+                                data.clear()
+                            }
+                        }
+                    }
+                }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Throwable) {
+                // Drop/refused/timeout — back off and retry. Capped so a long
+                // outage doesn't busy-loop but recovery stays reasonably quick.
+                delay(backoffMs)
+                backoffMs = (backoffMs * 2).coerceAtMost(60_000L)
+            }
+        }
+    }
+
     private suspend fun fetchRecentSessions(): List<Conversation> {
         val payload = callRpc<RecentPayload>(
             "miniapp.sessions.recent",
@@ -1158,6 +1233,9 @@ class DenebGatewayClient(
 
     @Serializable
     private data class ErrorEvent(val error: String = "")
+
+    @Serializable
+    private data class PushEvent(val title: String = "", val body: String = "")
 
     @Serializable
     private data class RpcReq(val id: String, val method: String, val params: JsonObject)
