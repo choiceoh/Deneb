@@ -956,9 +956,10 @@ class DenebGatewayClient(
      * Deneb" path — the gateway uses the PaddleOCR sidecar (tesseract fallback).
      */
     @OptIn(ExperimentalEncodingApi::class)
-    suspend fun captureImage(bytes: ByteArray, mimeType: String) {
+    suspend fun captureImage(bytes: ByteArray, mimeType: String, caption: String = "") {
         if (clientToken.isEmpty() || bytes.isEmpty()) return
-        _chatHistory.update { it + History(role = History.Role.USER, content = "📷 이미지 공유됨 (OCR 분석 중…)") }
+        val label = caption.trim().ifBlank { "📷 이미지 공유됨" } + " (OCR 분석 중…)"
+        _chatHistory.update { it + History(role = History.Role.USER, content = label) }
         val reply = runCatching {
             val payload = callRpc<CaptureImagePayload>(
                 "miniapp.capture.image",

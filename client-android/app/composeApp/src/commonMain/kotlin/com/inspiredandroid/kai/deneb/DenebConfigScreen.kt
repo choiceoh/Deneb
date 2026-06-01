@@ -567,7 +567,16 @@ private fun NotificationsTab(client: DenebGatewayClient) {
                 SettingsCard(
                     onClick = {
                         scope.launch {
-                            client.ask("📲 ${rec.appLabel} 알림 — ${rec.title}\n${rec.text}".trim(), emptyList(), null)
+                            // A captured BigPicture image rides the OCR capture
+                            // path; text-only notifications send as text. The
+                            // bytes live in the in-memory cache, so a record that
+                            // outlived them (process restart) falls back to text.
+                            val image = if (rec.hasImage) store.getImage(rec.id) else null
+                            if (image != null) {
+                                client.captureImage(image, "image/jpeg", caption = "📲 ${rec.appLabel} — ${rec.title}".trim())
+                            } else {
+                                client.ask("📲 ${rec.appLabel} 알림 — ${rec.title}\n${rec.text}".trim(), emptyList(), null)
+                            }
                             sentId = rec.id
                         }
                     },

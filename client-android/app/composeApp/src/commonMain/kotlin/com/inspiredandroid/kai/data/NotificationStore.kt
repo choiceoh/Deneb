@@ -45,6 +45,27 @@ class NotificationStore(private val appSettings: AppSettings) {
     )
     val captured: SharedFlow<Unit> = _captured
 
+    // In-memory cache of captured notification images (BigPictureStyle
+    // EXTRA_PICTURE), keyed by record id. Kept OUT of the persisted store so
+    // base64 bitmaps don't bloat prefs; the listener fills it and the manual-
+    // send tab drains it through the OCR capture path. Lost on process death
+    // (then a record's hasImage just falls back to text-only). Bounded so a
+    // burst of image notifications can't grow memory without limit.
+    private val imageMutex = Mutex()
+    private val images = LinkedHashMap<String, ByteArray>()
+
+    suspend fun putImage(id: String, bytes: ByteArray) = imageMutex.withLock {
+        if (bytes.isEmpty()) return@withLock
+        images.remove(id) // re-insert so this id becomes the most-recent entry
+        images[id] = bytes
+        while (images.size > MAX_IMAGES) {
+            val oldest = images.keys.firstOrNull() ?: break
+            images.remove(oldest)
+        }
+    }
+
+    suspend fun getImage(id: String): ByteArray? = imageMutex.withLock { images[id] }
+
     fun getPending(): List<NotificationRecord> = pendingQueue.get()
 
     suspend fun addPending(record: NotificationRecord) {
@@ -89,6 +110,10 @@ class NotificationStore(private val appSettings: AppSettings) {
             .flatMap { (_, msgs) -> msgs.sortedByDescending { it.postedAtEpochMs }.take(MAX_PER_PACKAGE) }
             .sortedByDescending { it.postedAtEpochMs }
         appSettings.setNotificationsStoreJson(json.encodeToString(swept))
+        // Drop cached images whose record was swept out, so the image cache
+        // tracks the visible store rather than growing until the cap evicts.
+        val liveIds = swept.mapTo(HashSet()) { it.id }
+        imageMutex.withLock { images.keys.retainAll(liveIds) }
     }
 
     fun getSyncState(): NotificationSyncState {
@@ -108,5 +133,8 @@ class NotificationStore(private val appSettings: AppSettings) {
     companion object {
         private const val MAX_PER_PACKAGE = 50
         private const val MAX_AGE_MS = 24L * 60L * 60L * 1000L
+        // Cap on cached notification images (memory only). A small ceiling is
+        // plenty — images are forwarded manually, soon after they arrive.
+        private const val MAX_IMAGES = 30
     }
 }
