@@ -191,9 +191,22 @@ class DenebGatewayClient(
             }
         }
 
-        // Finalize: canonical text + fallback badge. Fall back to the streamed
-        // accumulation if the gateway returned empty terminal text.
-        val finalText = reply.text.ifBlank { accumulated.toString() }
+        // Finalize: pick text + fallback badge.
+        //
+        // `accumulated` holds every streamed delta — the full visible answer.
+        // `reply.text` is the gateway terminal text (now BestText-corrected, but
+        // keep this guard belt-and-suspenders): when the agent runs a tool
+        // mid-answer (e.g. writing the reply to the wiki) the final turn is a
+        // short wrap-up, so trusting it alone would erase the streamed body. Keep
+        // the streamed accumulation when it's meaningfully longer than the
+        // terminal text; otherwise use reply.text so the gateway's canonical
+        // answer wins.
+        val streamed = accumulated.toString()
+        val finalText = when {
+            streamed.length > reply.text.length + 40 -> streamed
+            reply.text.isNotBlank() -> reply.text
+            else -> streamed
+        }
         replaceAssistant(
             finalText.ifBlank { "⚠️ 빈 응답" },
             // Mirrors Kai's fallback badge: show which model answered when the
