@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.29",
+        code = 152,
+        highlights = listOf(
+            "우측 세션 드로어 열기 제스처를 화면 오른쪽 끝 '살짝 안쪽'에서 왼쪽으로 미는 방식으로 — 안드로이드 뒤로가기 제스처가 맨 끝을 먹어서 안 되던 문제 우회",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.28",
         code = 151,
         highlights = listOf(
