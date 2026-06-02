@@ -30,6 +30,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
+	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
 // chatRunResult wraps the agent result with chat-layer metadata.
@@ -370,7 +371,7 @@ func prepareContextAndPrompt(
 
 	// Tier-1 wiki auto-injection (parallel).
 	prepWg.Add(1)
-	go func() {
+	safego.GoWithSlog(logger, "prep-tier1-wiki", func() {
 		defer prepWg.Done()
 		var tier1 string
 		if deps.wikiStore != nil {
@@ -380,7 +381,7 @@ func prepareContextAndPrompt(
 		resultMu.Lock()
 		result.Tier1Wiki = tier1
 		resultMu.Unlock()
-	}()
+	})
 
 	// Recall preflight (parallel): inject focused memory before the LLM call.
 	//
@@ -395,7 +396,7 @@ func prepareContextAndPrompt(
 	//     turn's message is a distinct query the "" fingerprint cannot
 	//     disambiguate. /reset clears every slot. See chat/recall_cache.go.
 	prepWg.Add(1)
-	go func() {
+	safego.GoWithSlog(logger, "prep-recall", func() {
 		defer prepWg.Done()
 		// Ephemeral turns (autonomous heartbeat self-triggers) never run
 		// recall — there is no real user message to recall against.
@@ -429,11 +430,11 @@ func prepareContextAndPrompt(
 		resultMu.Lock()
 		result.RecallMemory = recallMemory
 		resultMu.Unlock()
-	}()
+	})
 
 	// Context assembly (parallel).
 	prepWg.Add(1)
-	go func() {
+	safego.GoWithSlog(logger, "prep-context", func() {
 		defer prepWg.Done()
 
 		var messages []llm.Message
@@ -463,11 +464,11 @@ func prepareContextAndPrompt(
 		result.Messages = messages
 		result.ContextErr = contextErr
 		resultMu.Unlock()
-	}()
+	})
 
 	// System prompt build (parallel).
 	prepWg.Add(1)
-	go func() {
+	safego.GoWithSlog(logger, "prep-sysprompt", func() {
 		defer prepWg.Done()
 		var systemPrompt json.RawMessage
 		if params.System != "" {
@@ -558,7 +559,7 @@ func prepareContextAndPrompt(
 		resultMu.Lock()
 		result.SystemPrompt = systemPrompt
 		resultMu.Unlock()
-	}()
+	})
 
 	prepWg.Wait()
 	return result

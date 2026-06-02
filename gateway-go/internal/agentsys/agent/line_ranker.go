@@ -156,6 +156,15 @@ func RankLines(content string, budget int) string {
 func scoreLine(line, lower string, idx, total int) int {
 	score := 1
 
+	// Spillover recovery handle: a tool result truncated to disk carries a
+	// "use read_spillover(...)" reference line. This handle must survive
+	// compaction — drop it and the LLM permanently loses the way to retrieve
+	// the full content in later turns. Score it well above anchorThreshold so
+	// it is always preserved.
+	if strings.Contains(lower, "read_spillover") {
+		score += 20
+	}
+
 	// Severity keywords.
 	if strings.Contains(lower, "panic") || strings.Contains(lower, "fatal") {
 		score += 15
