@@ -74,17 +74,18 @@ func TestApplySamplingParams_MaxTokensRemap(t *testing.T) {
 }
 
 // TestApplySamplingParams_ReasoningDisabled guards that an explicit disabled
-// thinking config maps to reasoning_effort="minimal" on the openai-compatible
-// path. vLLM models (step3p7) treat "minimal" as the shortest chain-of-thought;
-// "none" is a valid enum value but does NOT actually reduce reasoning, so it must
-// not be used here. Minimizing the chain-of-thought stops it from eating the
-// max_tokens budget and truncating the answer. The gmailpoll analysis path sets
-// Thinking{Type:"disabled"} for exactly this.
+// thinking config maps to reasoning_effort="low" on the openai-compatible path.
+// step3p7 cannot truly disable thinking, so "disabled" maps to the effort level
+// that empirically produces the shortest chain-of-thought. Counter-intuitively
+// that is "low", not "minimal" or "none": over N=4 deterministic samples "low"
+// reasoned ~half of "none"/"minimal" with a non-overlapping range. Minimizing the
+// chain-of-thought keeps it from eating the max_tokens budget and truncating the
+// answer. The gmailpoll analysis path sets Thinking{Type:"disabled"} for this.
 func TestApplySamplingParams_ReasoningDisabled(t *testing.T) {
 	oai := &openAIRequest{MaxTokens: 1536}
 	applySamplingParams(oai, &ChatRequest{Model: "step3p7", Thinking: &ThinkingConfig{Type: "disabled"}})
-	if oai.ReasoningEffort != "minimal" {
-		t.Errorf("ReasoningEffort = %q, want \"minimal\"", oai.ReasoningEffort)
+	if oai.ReasoningEffort != "low" {
+		t.Errorf("ReasoningEffort = %q, want \"low\"", oai.ReasoningEffort)
 	}
 	if oai.MaxTokens != 1536 {
 		t.Errorf("MaxTokens = %d, want 1536 (preserved, not remapped)", oai.MaxTokens)
