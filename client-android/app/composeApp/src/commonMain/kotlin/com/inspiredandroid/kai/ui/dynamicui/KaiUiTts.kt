@@ -99,5 +99,10 @@ private fun KaiUiNode.walk(parts: MutableList<String>) {
         is IconNode -> Unit
 
         is DividerNode -> Unit
+
+        is ChartNode -> {
+            label?.let { parts += it }
+            if (labels.isNotEmpty()) parts += labels.joinToString(", ")
+        }
     }
 }

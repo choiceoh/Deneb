@@ -126,6 +126,48 @@ class KaiUiParserTest {
     }
 
     @Test
+    fun `recovers completed children from truncated json`() {
+        // Stream cut partway through the third button; the first two completed.
+        val json =
+            """{"type":"column","children":[{"type":"button","label":"One","action":{"type":"callback","event":"one"}},{"type":"button","label":"Two","action":{"type":"callback","event":"two"}},{"type":"button","label":"Th"""
+        val node = assertIs<ColumnNode>(parseUi(json))
+        assertTrue(node.children.count { it is ButtonNode } >= 2, "expected at least two recovered buttons")
+    }
+
+    @Test
+    fun `bare json without fence is wrapped into a ui block`() {
+        val bare = """{"type":"text","value":"Hi"}"""
+        assertFalse(hasUiBlocks(bare), "bare JSON is plain text without wrapping")
+        assertTrue(hasUiBlocks(KaiUiParser.wrapBareKaiUiContent(bare)), "wrapping yields a kai-ui block")
+    }
+
+    @Test
+    fun `wrapBareKaiUiContent is a no-op for fenced or prose content`() {
+        val fenced = "```kai-ui\n{\"type\":\"text\",\"value\":\"x\"}\n```"
+        assertEquals(fenced, KaiUiParser.wrapBareKaiUiContent(fenced))
+        val prose = "Just a sentence."
+        assertEquals(prose, KaiUiParser.wrapBareKaiUiContent(prose))
+    }
+
+    @Test
+    fun `parses chart node`() {
+        val json = """{"type":"chart","chartType":"line","labels":["A","B","C"],"values":[1,2.5,3],"label":"Trend"}"""
+        val chart = assertIs<ChartNode>(parseUi(json))
+        assertEquals("line", chart.chartType)
+        assertEquals(listOf("A", "B", "C"), chart.labels)
+        assertEquals(listOf(1f, 2.5f, 3f), chart.values)
+        assertEquals("Trend", chart.label)
+    }
+
+    @Test
+    fun `chart defaults to bar and coerces string values`() {
+        val json = """{"type":"chart","values":["10","20"]}"""
+        val chart = assertIs<ChartNode>(parseUi(json))
+        assertEquals("bar", chart.chartType)
+        assertEquals(listOf(10f, 20f), chart.values)
+    }
+
+    @Test
     fun `handles extra trailing braces from LLM`() {
         val json = """{"type":"text","value":"Hi"}}"""
         val node = assertIs<TextNode>(parseUi(json))

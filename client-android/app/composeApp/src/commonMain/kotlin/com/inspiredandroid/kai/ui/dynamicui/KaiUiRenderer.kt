@@ -11,6 +11,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -199,7 +200,11 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -370,6 +375,74 @@ private fun RenderNode(
         is BadgeNode -> RenderBadge(node)
         is StatNode -> RenderStat(node)
         is AvatarNode -> RenderAvatar(node)
+        is ChartNode -> RenderChart(node)
+    }
+}
+
+/**
+ * Single-series bar or line chart drawn on a Canvas. Display-only (no interaction). Values are
+ * normalized to the series max; an empty series renders nothing.
+ */
+@Composable
+private fun RenderChart(node: ChartNode) {
+    val values = node.values
+    if (values.isEmpty()) return
+    val maxValue = values.maxOrNull()?.takeIf { it > 0f } ?: 1f
+    val chartColor = MaterialTheme.colorScheme.primary
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        node.label?.takeIf { it.isNotBlank() }?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
+        Canvas(modifier = Modifier.fillMaxWidth().height(160.dp)) {
+            val w = size.width
+            val h = size.height
+            if (node.chartType == "line") {
+                if (values.size >= 2) {
+                    val stepX = w / (values.size - 1)
+                    val path = Path()
+                    values.forEachIndexed { index, v ->
+                        val x = index * stepX
+                        val y = h - (v / maxValue) * h
+                        if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    }
+                    drawPath(path, color = chartColor, style = Stroke(width = 3.dp.toPx()))
+                } else {
+                    val y = h - (values.first() / maxValue) * h
+                    drawCircle(chartColor, radius = 4.dp.toPx(), center = Offset(w / 2f, y))
+                }
+            } else {
+                val count = values.size
+                val gap = w * 0.02f
+                val barWidth = ((w - gap * (count + 1)) / count).coerceAtLeast(1f)
+                values.forEachIndexed { index, v ->
+                    val barHeight = (v / maxValue) * h
+                    val x = gap + index * (barWidth + gap)
+                    drawRect(
+                        color = chartColor,
+                        topLeft = Offset(x, h - barHeight),
+                        size = Size(barWidth, barHeight),
+                    )
+                }
+            }
+        }
+        if (node.labels.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                node.labels.forEach { lbl ->
+                    Text(
+                        text = lbl,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
     }
 }
 

@@ -64,6 +64,7 @@ private fun parseObjectNode(obj: JsonObject): KaiUiNode? = when (obj.readNullabl
     "avatar" -> parseAvatarNode(obj)
     "list" -> parseListNode(obj)
     "table" -> parseTableNode(obj)
+    "chart" -> parseChartNode(obj)
     "tabs" -> parseTabsNode(obj)
     "accordion" -> parseAccordionNode(obj)
     null -> inferBareObject(obj)
@@ -573,6 +574,26 @@ private fun parseTableNode(obj: JsonObject): TableNode = TableNode(
     headers = obj.readStringList("headers"),
     rows = obj.readTableRows("rows"),
 )
+
+private fun parseChartNode(obj: JsonObject): ChartNode = ChartNode(
+    id = obj.readId(),
+    chartType = obj.readString("chartType").ifEmpty { "bar" },
+    labels = obj.readStringList("labels"),
+    values = obj.readFloatList("values"),
+    label = obj.readNullableString("label"),
+)
+
+/**
+ * Read a numeric list for a chart series. Accepts a JSON array of numbers or numeric strings;
+ * non-numeric entries are dropped. Missing/non-array → empty.
+ */
+internal fun JsonObject.readFloatList(key: String): ImmutableList<Float> {
+    val array = this[key] as? JsonArray ?: return persistentListOf()
+    return array.mapNotNull { (it as? JsonPrimitive)?.floatLike() }.toImmutableList()
+}
+
+private fun JsonPrimitive.floatLike(): Float? =
+    doubleOrNull?.toFloat() ?: longOrNull?.toFloat() ?: content.toFloatOrNull()
 
 private fun parseTabsNode(obj: JsonObject): TabsNode = TabsNode(
     id = obj.readId(),
