@@ -122,7 +122,6 @@ private val sampleEvent = CalendarEventDetail(
     allDay = false,
     organizer = "오선택 전무",
     attendees = listOf("김민준 부장", "이서연 차장", "에코프로 구매팀"),
-    meetUri = "https://meet.google.com/abc-defg-hij",
     status = "confirmed",
 )
 
@@ -133,7 +132,7 @@ private fun renderCalendarEvent(name: String, scheme: ColorScheme) {
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "일정", onBack = {}) {
                 Column(Modifier.padding(horizontal = 24.dp)) {
-                    CalendarEventContent(ev = sampleEvent, onJoinMeet = {})
+                    CalendarEventContent(ev = sampleEvent)
                 }
             }
         }

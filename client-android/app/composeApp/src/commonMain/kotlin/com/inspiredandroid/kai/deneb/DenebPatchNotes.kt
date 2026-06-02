@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.26",
+        code = 149,
+        highlights = listOf(
+            "안 쓰는 화상회의(Meet) 참가 버튼과 일정 목록의 Meet 배지 제거",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.25",
         code = 148,
         highlights = listOf(

@@ -131,7 +131,6 @@ fun DenebCalendarScreen(
                                     )
                                     val sub = buildList {
                                         if (event.location.isNotBlank()) add(event.location)
-                                        if (event.hasMeet) add("📹 Meet")
                                     }.joinToString("  ·  ")
                                     if (sub.isNotEmpty()) {
                                         Text(
