@@ -22,10 +22,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.ui.components.rememberHaptics
+import kotlinx.coroutines.launch
 
 /**
  * Person dossier (`miniapp.gmail.sender_context` + `list_recent from:`): recent
@@ -44,14 +47,19 @@ fun DenebPersonScreen(
     var ctx by remember(sender) { mutableStateOf<SenderContext?>(null) }
     var loadFailed by remember(sender) { mutableStateOf(false) }
     var recent by remember(sender) { mutableStateOf<List<MailMessage>?>(null) }
+    val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
 
-    LaunchedEffect(sender) {
+    suspend fun load() {
+        loadFailed = false
+        ctx = null
         val c = client.fetchSenderContext(sender)
         ctx = c
         loadFailed = c == null
         val email = c?.email?.ifBlank { sender } ?: sender
         recent = client.fetchRecentFromSender(email)
     }
+    LaunchedEffect(sender) { load() }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -66,7 +74,11 @@ fun DenebPersonScreen(
 
             val c = ctx
             if (c == null) {
-                if (loadFailed) DenebError("정보를 불러오지 못했습니다.") else DenebLoading()
+                if (loadFailed) {
+                    DenebError("정보를 불러오지 못했습니다.", onRetry = { scope.launch { load() } })
+                } else {
+                    DenebLoading()
+                }
                 return@Column
             }
 
@@ -101,7 +113,7 @@ fun DenebPersonScreen(
                     Column(
                         Modifier
                             .fillMaxWidth()
-                            .then(if (hit.path.isNotBlank()) Modifier.clickable { onOpenWiki(hit.path) } else Modifier)
+                            .then(if (hit.path.isNotBlank()) Modifier.clickable { haptics.tap(); onOpenWiki(hit.path) } else Modifier)
                             .padding(vertical = 8.dp),
                     ) {
                         Text(hit.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
@@ -124,7 +136,7 @@ fun DenebPersonScreen(
                         message = m,
                         selecting = false,
                         isSelected = false,
-                        onTap = { onOpenMail(m.id) },
+                        onTap = { haptics.tap(); onOpenMail(m.id) },
                         onLongPress = {},
                     )
                 }

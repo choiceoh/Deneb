@@ -26,11 +26,14 @@ fun DenebMarkdown(text: String, modifier: Modifier = Modifier) {
     Column(modifier) {
         var inFence = false
         text.split("\n").forEach { raw ->
-            val line = raw.trimEnd()
+            // Classify on the leading-trimmed line so an indented heading/bullet/fence
+            // (common in real wiki + analysis bodies) isn't misread as plain text.
+            val line = raw.trim()
+            val ordered = ORDERED_ITEM.find(line)
             when {
                 line.startsWith("```") -> inFence = !inFence
                 inFence -> Text(
-                    line,
+                    raw.trimEnd(), // keep code indentation
                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                     color = onSurface,
                 )
@@ -38,6 +41,8 @@ fun DenebMarkdown(text: String, modifier: Modifier = Modifier) {
                 line.startsWith("## ") -> Heading(line.removePrefix("## "), MaterialTheme.typography.titleMedium.fontSize)
                 line.startsWith("# ") -> Heading(line.removePrefix("# "), MaterialTheme.typography.titleLarge.fontSize)
                 line.startsWith("- ") || line.startsWith("* ") -> Row2("•  ", line.drop(2), onSurface)
+                ordered != null -> Row2("${ordered.groupValues[1]}.  ", ordered.groupValues[2], onSurface)
+                line.startsWith("> ") -> Row2("│  ", line.drop(2), onSurface)
                 line.isBlank() -> Spacer(Modifier.height(8.dp))
                 else -> Text(inline(line), style = MaterialTheme.typography.bodyMedium, color = onSurface)
             }
@@ -67,6 +72,9 @@ private fun Row2(prefix: String, body: String, color: androidx.compose.ui.graphi
         color = color,
     )
 }
+
+// Ordered-list item: "1. text" / "23. text" -> (number, body).
+private val ORDERED_ITEM = Regex("^(\\d+)\\.\\s+(.*)")
 
 /** Parse inline **bold** and `code` into an AnnotatedString. */
 private fun inline(text: String): AnnotatedString = buildAnnotatedString {

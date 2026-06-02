@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
@@ -48,9 +50,13 @@ fun DenebCronScreen(
     var loadFailed by remember(cronId) { mutableStateOf(false) }
     var busy by remember(cronId) { mutableStateOf(false) }
     var status by remember(cronId) { mutableStateOf<String?>(null) }
+    var confirmDelete by remember(cronId) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
 
     suspend fun reload() {
+        loadFailed = false
+        cron = null
         val c = client.fetchCron(cronId)
         cron = c
         loadFailed = c == null
@@ -70,7 +76,11 @@ fun DenebCronScreen(
 
             val c = cron
             if (c == null) {
-                if (loadFailed) DenebError("크론을 불러오지 못했습니다.") else DenebLoading()
+                if (loadFailed) {
+                    DenebError("크론을 불러오지 못했습니다.", onRetry = { scope.launch { reload() } })
+                } else {
+                    DenebLoading()
+                }
                 return@Column
             }
 
@@ -84,7 +94,16 @@ fun DenebCronScreen(
                 )
                 Switch(
                     checked = c.enabled,
-                    onCheckedChange = { e -> scope.launch { busy = true; client.setCronEnabled(c.id, e); reload(); busy = false } },
+                    onCheckedChange = { e ->
+                        scope.launch {
+                            busy = true
+                            haptics.tap()
+                            val ok = client.setCronEnabled(c.id, e)
+                            reload()
+                            if (!ok) status = "변경 실패"
+                            busy = false
+                        }
+                    },
                     enabled = !busy,
                 )
             }
@@ -137,6 +156,7 @@ fun DenebCronScreen(
                 Button(
                     enabled = !busy,
                     onClick = {
+                        haptics.tap()
                         scope.launch {
                             busy = true
                             status = if (client.runCron(c.id)) "실행 요청됨" else "실행 실패"
@@ -146,12 +166,37 @@ fun DenebCronScreen(
                 ) { Text("지금 실행") }
                 OutlinedButton(
                     enabled = !busy,
-                    onClick = { scope.launch { client.cancelScheduledTask(c.id); onBack() } },
+                    onClick = { haptics.confirm(); confirmDelete = true },
                 ) { Text("삭제") }
             }
             status?.let {
                 Spacer(Modifier.height(8.dp))
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
+            if (confirmDelete) {
+                AlertDialog(
+                    onDismissRequest = { confirmDelete = false },
+                    title = { Text("크론 삭제") },
+                    text = { Text("이 예약 작업을 삭제할까요? 되돌릴 수 없습니다.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            confirmDelete = false
+                            scope.launch {
+                                busy = true
+                                if (client.removeCron(c.id)) {
+                                    onBack()
+                                } else {
+                                    status = "삭제 실패"
+                                    busy = false
+                                }
+                            }
+                        }) { Text("삭제") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmDelete = false }) { Text("취소") }
+                    },
+                )
             }
             Spacer(Modifier.height(24.dp))
         }

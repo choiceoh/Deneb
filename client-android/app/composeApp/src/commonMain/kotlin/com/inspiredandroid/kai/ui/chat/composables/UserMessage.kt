@@ -70,12 +70,12 @@ internal fun UserMessage(
                     if (imageBitmap != null) {
                         Image(
                             bitmap = imageBitmap,
-                            contentDescription = null,
+                            contentDescription = "첨부 이미지",
                             modifier = Modifier
                                 .widthIn(max = 200.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .handCursor()
-                                .clickable { showFullScreen(imageBitmap) },
+                                .clickable(onClickLabel = "확대") { showFullScreen(imageBitmap) },
                             contentScale = ContentScale.FillWidth,
                         )
                         Spacer(Modifier.height(8.dp))

@@ -158,3 +158,12 @@ fun DenebSurface(
         content()
     }
 }
+
+/** Bytes -> short human size (integer units; KMP-safe). Shared by the mail and
+ *  category screens so the formatter lives in one place. */
+internal fun humanBytes(bytes: Long): String = when {
+    bytes <= 0 -> "0B"
+    bytes < 1024 -> "${bytes}B"
+    bytes < 1024 * 1024 -> "${bytes / 1024}KB"
+    else -> "${bytes / (1024 * 1024)}MB"
+}

@@ -51,7 +51,7 @@ internal fun SmallIconButton(
 @Composable
 private fun SmallIconButtonBox(onClick: () -> Unit, content: @Composable () -> Unit) {
     Box(
-        modifier = Modifier.size(36.dp).clip(CircleShape).handCursor().clickable { onClick() },
+        modifier = Modifier.size(48.dp).clip(CircleShape).handCursor().clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) { content() }
 }

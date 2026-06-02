@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -56,10 +57,10 @@ internal fun ServiceSelector(
     Box {
         Box(
             modifier = Modifier
-                .size(42.dp)
+                .size(48.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
-                .clickable { expanded = true }
+                .clickable(onClickLabel = "서비스 선택", role = Role.DropdownList) { expanded = true }
                 .handCursor(),
             contentAlignment = Alignment.Center,
         ) {

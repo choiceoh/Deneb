@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 
 /**
@@ -57,6 +58,7 @@ fun DenebMailDetailScreen(
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
     val uriHandler = LocalUriHandler.current
     var detail by remember(messageId) { mutableStateOf<MailDetail?>(null) }
     var analysis by remember(messageId) { mutableStateOf<MailAnalysis?>(null) }
@@ -68,8 +70,11 @@ fun DenebMailDetailScreen(
     var asking by remember(messageId) { mutableStateOf(false) }
     val qa = remember(messageId) { mutableStateListOf<Pair<String, String>>() }
     var loadFailed by remember(messageId) { mutableStateOf(false) }
+    var actionMsg by remember(messageId) { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(messageId) {
+    suspend fun load() {
+        loadFailed = false
+        detail = null
         val d = client.fetchMailDetail(messageId)
         detail = d
         loadFailed = d == null
@@ -79,6 +84,7 @@ fun DenebMailDetailScreen(
             analysis = client.fetchCachedAnalysis(messageId)
         }
     }
+    LaunchedEffect(messageId) { load() }
 
     fun runAnalysis(force: Boolean) {
         scope.launch {
@@ -103,7 +109,11 @@ fun DenebMailDetailScreen(
 
             val mail = detail
             if (mail == null) {
-                if (loadFailed) DenebError("메일을 불러오지 못했습니다.") else DenebLoading()
+                if (loadFailed) {
+                    DenebError("메일을 불러오지 못했습니다.", onRetry = { scope.launch { load() } })
+                } else {
+                    DenebLoading()
+                }
                 return@Column
             }
 
@@ -126,23 +136,34 @@ fun DenebMailDetailScreen(
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(
-                    onClick = { scope.launch { if (client.archiveMail(mail.id)) onBack() } },
+                    onClick = {
+                        haptics.confirm()
+                        scope.launch { if (client.archiveMail(mail.id)) onBack() else actionMsg = "보관 실패" }
+                    },
                     modifier = Modifier.weight(1f),
                 ) { Text("보관") }
                 FilledTonalButton(
-                    onClick = { scope.launch { if (client.trashMail(mail.id)) onBack() } },
+                    onClick = {
+                        haptics.confirm()
+                        scope.launch { if (client.trashMail(mail.id)) onBack() else actionMsg = "휴지통 이동 실패" }
+                    },
                     modifier = Modifier.weight(1f),
                 ) { Text("휴지통") }
+            }
+            actionMsg?.let {
+                Spacer(Modifier.height(6.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
-                    onClick = { runAnalysis(force = false) },
+                    onClick = { haptics.tap(); runAnalysis(force = false) },
                     enabled = !analyzing,
                     modifier = Modifier.weight(1f),
                 ) { Text(if (analyzing) "분석 중…" else "AI 분석") }
                 OutlinedButton(
                     onClick = {
+                        haptics.tap()
                         scope.launch {
                             loadingSender = true
                             senderCtx = client.fetchSenderContext(mail.from)
@@ -172,7 +193,7 @@ fun DenebMailDetailScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                TextButton(onClick = { runAnalysis(force = true) }, enabled = !analyzing) { Text("다시") }
+                                TextButton(onClick = { haptics.tap(); runAnalysis(force = true) }, enabled = !analyzing) { Text("다시") }
                             }
                         }
                         Spacer(Modifier.height(6.dp))
@@ -263,7 +284,7 @@ fun DenebMailDetailScreen(
                     mail.attachments.forEach { att ->
                         AssistChip(
                             onClick = { uriHandler.openUri(client.attachmentUrl(mail.id, att)) },
-                            label = { Text(att.filename + "  " + humanSize(att.size)) },
+                            label = { Text(att.filename + "  " + humanBytes(att.size.toLong())) },
                         )
                     }
                 }
@@ -292,6 +313,7 @@ fun DenebMailDetailScreen(
                     onClick = {
                         val q = askText.trim()
                         if (q.isNotEmpty() && !asking) {
+                            haptics.tap()
                             askText = ""
                             scope.launch {
                                 asking = true
@@ -308,12 +330,4 @@ fun DenebMailDetailScreen(
             Spacer(Modifier.height(24.dp))
         }
     }
-}
-
-/** Bytes -> short human size for attachment chips (integer units; KMP-safe). */
-private fun humanSize(bytes: Int): String = when {
-    bytes <= 0 -> ""
-    bytes < 1024 -> "${bytes}B"
-    bytes < 1024 * 1024 -> "${bytes / 1024}KB"
-    else -> "${bytes / (1024 * 1024)}MB"
 }
