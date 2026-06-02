@@ -67,7 +67,7 @@ before you ask.
   circle marker.
 </Note>
 
-Where the analysis is delivered (which chat or forum topic) is covered in
+Where the analysis is delivered (the native client's 업무 session) is covered in
 [Proactive Delivery](/operations/proactive-delivery).
 
 ## Storage, Citations, and Cleanup

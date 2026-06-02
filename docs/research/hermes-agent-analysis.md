@@ -2185,7 +2185,7 @@ hermes doctor — 어느 환경에서도 동일 진단
 |---|---|---|
 | 언어 | Go (gateway-go) | Python |
 | 타겟 | DGX Spark 단일 기계 | 5$ VPS / GPU 클러스터 / 서버리스 |
-| UI | Telegram 전용 (안드로이드 S25 최적화) | Telegram/Discord/Slack/… 17+ 플랫폼 |
+| UI | 네이티브 클라 전용 (안드로이드/iOS/데스크톱, 안드로이드 S25 최적화) | Telegram/Discord/Slack/… 17+ 플랫폼 |
 | 툴 | 150+ (내장) | 40+ 빌트인 + 스킬 + MCP + 플러그인 |
 | LLM 통합 | 자체 pipeline | OpenAI-style unified protocol |
 | 메모리 | vega (자체) | 8개 플러그인 + 빌트인 MEMORY.md/USER.md |
@@ -2213,7 +2213,7 @@ hermes doctor — 어느 환경에서도 동일 진단
 
 ### 25.3 Deneb이 Hermes보다 우월한 지점
 
-- **단일 플랫폼 최적화** — Telegram MarkdownV2, 4096자 제한, inline keyboard, 50MB 미디어 제약을 수용한 **completeness**. Hermes는 breadth 우선 / depth는 plugin/skill에 위임
+- **단일 표면 최적화** — 네이티브 클라이언트(안드로이드/iOS/데스크톱) 단일 표면에 깊게 맞춘 **completeness**. Hermes는 breadth 우선 / depth는 plugin/skill에 위임
 - **Korean-first** — i18n 프레임워크 없이 자연스러운 한국어. Hermes는 영어 중심
 - **DGX Spark 특화** — 로컬 GPU 추론 우선, 외부 API 호출 최소화. Hermes는 provider 선택이 목표
 - **Go 런타임** — Python 부팅 오버헤드 없음, 동시성 직관적 (goroutine/channel)

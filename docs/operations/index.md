@@ -31,7 +31,7 @@ proactive delivery).
     analyze tool.
   </Card>
   <Card title="Proactive Delivery" icon="send" href="/operations/proactive-delivery">
-    Active home, delivery targets, forum topic routing, native-client push, and
+    The verbatim relay, the 업무 session target, native-client push, and
     heartbeat versus cron.
   </Card>
 </CardGroup>

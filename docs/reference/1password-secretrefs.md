@@ -35,23 +35,6 @@ Use `apiKeyRef` instead of `apiKey` under `models.providers`.
 If `apiKeyRef` is present, it wins over `apiKey`. Remove plaintext `apiKey`
 after migration.
 
-## Telegram Config
-
-Use `botTokenRef` instead of `botToken` under `channels.telegram`.
-
-```json
-{
-  "channels": {
-    "telegram": {
-      "botTokenRef": "op://Deneb/Telegram/bot_token",
-      "chatID": 123456789
-    }
-  }
-}
-```
-
-`botTokenRef` wins over `botToken` when both are present.
-
 ## Gateway Environment
 
 For service account auth, put only the service account token in
@@ -67,8 +50,7 @@ Deneb resolves `apiKeyRef` by running:
 op read op://Deneb/OpenRouter/api_key
 ```
 
-Deneb resolves `botTokenRef` the same way, using the configured Telegram
-reference. The resolved values are used only at runtime for authentication.
+The resolved values are used only at runtime for authentication.
 
 ## Verify
 
@@ -76,7 +58,6 @@ Check that the CLI can read the reference before restarting Deneb:
 
 ```sh
 op read op://Deneb/OpenRouter/api_key
-op read op://Deneb/Telegram/bot_token
 ```
 
 Then restart the Gateway so provider configs are reloaded.
