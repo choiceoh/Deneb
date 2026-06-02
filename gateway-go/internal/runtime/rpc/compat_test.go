@@ -9,7 +9,6 @@ import (
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
 	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/gateway"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
-	handlertelegram "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlertelegram"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/provider"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/session"
@@ -23,7 +22,6 @@ import (
 type ChatDeps = handlerchat.Deps
 type ChatBtwDeps = handlerchat.BtwDeps
 type SessionExecDeps = handlersession.ExecDeps
-type ChannelLifecycleDeps = handlertelegram.LifecycleDeps
 type EventsDeps = handlerevents.EventsDeps
 type ACPDeps = handlerprocess.ACPDeps
 type CronAdvancedDeps = handlerprocess.CronAdvancedDeps
@@ -41,7 +39,6 @@ type ConfigReloadDeps = handlersystem.ConfigReloadDeps
 type ConfigAdvancedDeps = handlersystem.ConfigAdvancedDeps
 type ExtendedDeps = handleragent.ExtendedDeps
 type SessionDeps = handlersession.Deps
-type TelegramStatusDeps = handlertelegram.StatusDeps
 type SystemHealthDeps = handlersystem.HealthDeps
 type GatewayRuntimeDeps = handlergateway.Deps
 
@@ -57,9 +54,6 @@ func RegisterSessionMethods(d *Dispatcher, deps SessionDeps) {
 func RegisterSessionCRUDMethods(d *Dispatcher, deps SessionDeps) {
 	d.RegisterDomain(handlersession.CRUDMethods(deps))
 }
-func RegisterTelegramStatusMethods(d *Dispatcher, deps TelegramStatusDeps) {
-	d.RegisterDomain(handlertelegram.StatusMethods(deps))
-}
 func RegisterHealthMethods(d *Dispatcher, deps SystemHealthDeps) {
 	d.RegisterDomain(handlersystem.HealthMethods(deps))
 }
@@ -68,9 +62,6 @@ func RegisterSessionExecMethods(d *Dispatcher, deps SessionExecDeps) {
 }
 func RegisterExtendedMethods(d *Dispatcher, deps ExtendedDeps) {
 	d.RegisterDomain(handleragent.ExtendedMethods(deps))
-}
-func RegisterChannelLifecycleMethods(d *Dispatcher, deps ChannelLifecycleDeps) {
-	d.RegisterDomain(handlertelegram.LifecycleMethods(deps))
 }
 func RegisterEventsMethods(d *Dispatcher, deps EventsDeps) {
 	d.RegisterDomain(handlerevents.EventsMethods(deps))

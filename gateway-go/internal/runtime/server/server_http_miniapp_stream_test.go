@@ -125,7 +125,7 @@ func TestHandleMiniappChatStream_GuardPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate client token: %v", err)
 	}
-	s := newServerWithTelegram(t)
+	s := newTestServer(t)
 
 	// Bad token → 401 (handled before any SSE bytes).
 	rec := postMiniappChatStream(t, s, token+"x", map[string]any{"message": "hi"})

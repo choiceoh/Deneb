@@ -31,7 +31,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
@@ -103,10 +102,10 @@ type activityEntry struct {
 	updated time.Time // wall-clock time of the last update
 }
 
-// notifyService composes the status-snapshot, error-mirror, in-flight
-// activity tracking, operator log forwarding, and self-health probing
-// behaviors against a single Telegram plugin. Constructed once during
-// early registration; lifecycle bound to the server's ShutdownCtx.
+// notifyService composes the error-mirror, in-flight activity tracking, and
+// self-health probing behaviors. Critical events (delivery failures, compaction
+// stuck) are pushed to connected native clients via clientPushHub and logged at
+// Error. The Telegram secondary-chat monitoring was retired with the bot.
 //
 // Lock hierarchy (acquire in this order; never reverse):
 //
@@ -115,7 +114,7 @@ type activityEntry struct {
 //
 // The two mutexes are never held simultaneously.
 type notifyService struct {
-	plugin   *telegram.Plugin
+	pushHub  *clientPushHub
 	sessions *session.Manager
 	logger   *slog.Logger
 
@@ -150,19 +149,14 @@ type notifyEvent struct {
 	payload any
 }
 
-// newNotifyService builds the service. Returns nil when the plugin has no
-// configured notification chat ID — disables monitoring entirely without
-// allocating a worker goroutine. Callers must nil-check before use.
-//
-// boundAddr is invoked on each heartbeat tick to resolve the gateway's
-// own /health URL. May be nil to disable self-poll entirely (useful for
-// tests).
-func newNotifyService(plug *telegram.Plugin, sessions *session.Manager, logger *slog.Logger, boundAddr func() string) *notifyService {
-	if plug == nil || plug.NotificationChatID() == 0 {
+// newNotifyService builds the service. Returns nil only when sessions is nil
+// (nothing useful to monitor). boundAddr is invoked on each heartbeat self-poll.
+func newNotifyService(sessions *session.Manager, logger *slog.Logger, pushHub *clientPushHub, boundAddr func() string) *notifyService {
+	if sessions == nil {
 		return nil
 	}
 	return &notifyService{
-		plugin:    plug,
+		pushHub:   pushHub,
 		sessions:  sessions,
 		logger:    logger,
 		boundAddr: boundAddr,
@@ -632,72 +626,57 @@ func (n *notifyService) markSent(event string) {
 	n.debounceMu.Unlock()
 }
 
-// deliver formats the event into Korean prose and sends it via the plugin.
-// Failures are logged at Error per logging.md (this IS the user-monitoring
-// surface — its own failures are real). Bounded sub-timeout (10s) keeps a
-// stuck Telegram API from blocking the worker's queue indefinitely.
-//
-// Two event flavors:
-//   - broadcast events (chat.*) → formatErrorEvent renders the payload
-//   - "_slog" events → payload is the already-formatted body string
-//   - "_heartbeat" events → payload is the already-formatted body string
-func (n *notifyService) deliver(ctx context.Context, ev notifyEvent) {
+// deliver formats the event and delivers it: heartbeats/slog events go to the
+// logger (Error for hang alerts, Info otherwise); user-impacting broadcast
+// events are pushed to connected native clients via pushHub and logged at Error.
+func (n *notifyService) deliver(_ context.Context, ev notifyEvent) {
 	switch ev.name {
-	case "_slog", "_heartbeat":
+	case "_heartbeat":
 		body, _ := ev.payload.(string)
 		if body == "" {
 			return
 		}
-		sendCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-		if _, err := n.plugin.SendNotification(sendCtx, body); err != nil {
-			n.logger.Error("notify send failed", "event", ev.name, "error", err)
+		// Hang alerts prefix with 🚨 — log at Error so they surface in
+		// journald monitoring without spamming the native client with
+		// every 5-min liveness ping.
+		if strings.HasPrefix(body, "🚨") {
+			n.logger.Error("gateway health alert", "body", body)
+		} else {
+			n.logger.Info("gateway heartbeat", "body", body)
+		}
+		return
+	case "_slog":
+		body, _ := ev.payload.(string)
+		if body != "" {
+			n.logger.Error("notify slog forwarded", "body", body)
 		}
 		return
 	}
-
-	sendCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
 
 	body := formatErrorEvent(ev.name, ev.payload)
 	if body == "" {
 		return
 	}
-	sent, err := n.plugin.SendNotification(sendCtx, body)
-	if err != nil {
-		n.logger.Error("notify send failed", "event", ev.name, "error", err)
-		return
-	}
-	if !sent {
-		// Plugin reported "monitoring disabled" — config likely changed
-		// mid-run. Log Debug; the next event will hit the same branch
-		// until reconfigured.
-		n.logger.Debug("notify skipped (monitoring disabled)", "event", ev.name)
+	// Log the error and push a preview to connected native clients.
+	n.logger.Error("gateway error event", "event", ev.name, "body", body)
+	if n.pushHub != nil {
+		n.pushHub.publish(clientPushEvent{
+			Title: "⚠️ Deneb 오류",
+			Body:  truncate(body, 120),
+		})
 	}
 }
 
-// notifyStatusSnapshotFunc returns a closure suitable for
-// handlertelegram.NotifyDeps.SendStatusSnapshot. Returns nil when n is nil,
-// so NotifyMethods declines to register telegram.notify_status entirely
-// when monitoring is disabled.
-func notifyStatusSnapshotFunc(n *notifyService) func(context.Context) (bool, error) {
-	if n == nil {
-		return nil
-	}
-	return n.SendStatusSnapshot
-}
-
-// SendStatusSnapshot composes a Korean status report and pushes it to the
-// monitoring chat. Returns (delivered=true, nil) on success; (false, nil)
-// when monitoring is disabled (no chat ID, plugin not running). Errors
-// surface real send failures so the RPC caller sees them.
-func (n *notifyService) SendStatusSnapshot(ctx context.Context) (bool, error) {
+// SendStatusSnapshot composes a Korean status report and pushes it to connected
+// native clients. Returns (delivered=true, nil) when push was attempted;
+// (false, nil) when no push hub is wired.
+func (n *notifyService) SendStatusSnapshot(_ context.Context) (bool, error) {
 	body := n.buildStatusReport(time.Now())
-	sent, err := n.plugin.SendNotification(ctx, body)
-	if err != nil {
-		return false, err
+	if n.pushHub == nil {
+		return false, nil
 	}
-	return sent, nil
+	n.pushHub.publish(clientPushEvent{Title: "📡 게이트웨이 상태", Body: truncate(body, 140)})
+	return true, nil
 }
 
 // buildStatusReport formats the current session manager state as a Korean

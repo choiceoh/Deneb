@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
 
 // ChannelCallbacks holds late-bind callback functions for channel integration.
@@ -40,9 +39,6 @@ type ChannelCallbacks struct {
 
 	// defaultModel can be updated at runtime via SetDefaultModel.
 	defaultModel string
-
-	// runStateMachine tracks active agent runs for status broadcasting.
-	runStateMachine *telegram.RunStateMachine
 
 	// statusDepsFunc returns server-level status data for /status command.
 	statusDepsFunc StatusDepsFunc
@@ -169,12 +165,6 @@ func (cb *ChannelCallbacks) SetShutdownCtx(ctx context.Context) {
 	cb.mu.Unlock()
 }
 
-func (cb *ChannelCallbacks) SetRunStateMachine(sm *telegram.RunStateMachine) {
-	cb.mu.Lock()
-	cb.runStateMachine = sm
-	cb.mu.Unlock()
-}
-
 func (cb *ChannelCallbacks) SetStatusDepsFunc(fn StatusDepsFunc) {
 	cb.mu.Lock()
 	cb.statusDepsFunc = fn
@@ -231,13 +221,6 @@ func (cb *ChannelCallbacks) DefaultModel() string {
 	m := cb.defaultModel
 	cb.mu.RUnlock()
 	return m
-}
-
-func (cb *ChannelCallbacks) RunStateMachine() *telegram.RunStateMachine {
-	cb.mu.RLock()
-	sm := cb.runStateMachine
-	cb.mu.RUnlock()
-	return sm
 }
 
 func (cb *ChannelCallbacks) StatusDeps() StatusDepsFunc {

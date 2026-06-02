@@ -33,21 +33,15 @@ package server
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/gateway"
 )
 
 func (s *Server) registerBuiltinMethods() {
 	s.dispatcher.RegisterDomain(handlergateway.RuntimeMethods(handlergateway.Deps{
-		Version:   s.version,
-		StartedAt: s.startedAt,
-		ChannelsStatus: func() any {
-			if s.telegramPlug != nil {
-				return map[string]telegram.Status{"telegram": s.telegramPlug.Status()}
-			}
-			return map[string]telegram.Status{}
-		},
-		SessionCount: s.sessions.Count,
+		Version:        s.version,
+		StartedAt:      s.startedAt,
+		ChannelsStatus: func() any { return map[string]any{} },
+		SessionCount:   s.sessions.Count,
 		LastHeartbeatMs: func() int64 {
 			if s.activity == nil {
 				return 0

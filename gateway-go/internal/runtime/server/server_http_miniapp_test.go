@@ -12,22 +12,15 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
 
-const testBotToken = "123456:test-token"
-
-// newServerWithTelegram builds a server with a (non-started) Telegram plugin
-// attached. Shared with client_auth_test.go and server_http_miniapp_stream_test.go.
-// The native-client auth path no longer needs the bot token, but some miniapp
-// handlers still read the plugin config, so we keep it wired.
-func newServerWithTelegram(t *testing.T) *Server {
+// newTestServer builds a minimal server for tests.
+func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	s, err := New(":0")
 	if err != nil {
 		t.Fatalf("server.New: %v", err)
 	}
-	s.telegramPlug = telegram.NewPlugin(&telegram.Config{BotToken: testBotToken}, s.logger)
 	return s
 }
 
@@ -108,7 +101,7 @@ func withMiniappAttachmentClientFactory(t *testing.T, factory func() (miniappGma
 
 func TestHandleMiniappRPC_ValidClientToken_Whoami(t *testing.T) {
 	token := withClientToken(t)
-	s := newServerWithTelegram(t)
+	s := newTestServer(t)
 
 	rec := postMiniappRPC(t, s, token, map[string]any{
 		"type":   "req",
@@ -141,7 +134,7 @@ func TestHandleMiniappRPC_ValidClientToken_Whoami(t *testing.T) {
 
 func TestHandleMiniappGmailAttachment_ValidClientTokenStreamsBytes(t *testing.T) {
 	token := withClientToken(t)
-	s := newServerWithTelegram(t)
+	s := newTestServer(t)
 	client := &fakeMiniappAttachmentClient{data: []byte("%PDF")}
 	withMiniappAttachmentClientFactory(t, func() (miniappGmailAttachmentClient, error) {
 		return client, nil
@@ -173,7 +166,7 @@ func TestHandleMiniappGmailAttachment_ValidClientTokenStreamsBytes(t *testing.T)
 
 func TestHandleMiniappGmailAttachment_MissingToken(t *testing.T) {
 	withClientToken(t) // enable standalone auth, but send no token
-	s := newServerWithTelegram(t)
+	s := newTestServer(t)
 	rec := getMiniappAttachment(t, s, "", map[string]string{
 		"messageId":    "m1",
 		"attachmentId": "att1",
@@ -185,7 +178,7 @@ func TestHandleMiniappGmailAttachment_MissingToken(t *testing.T) {
 
 func TestHandleMiniappGmailAttachment_MissingParams(t *testing.T) {
 	token := withClientToken(t)
-	s := newServerWithTelegram(t)
+	s := newTestServer(t)
 	rec := getMiniappAttachment(t, s, token, map[string]string{
 		"messageId": "m1",
 	})
@@ -196,7 +189,7 @@ func TestHandleMiniappGmailAttachment_MissingParams(t *testing.T) {
 
 func TestHandleMiniappGmailAttachment_ClientUnavailable(t *testing.T) {
 	token := withClientToken(t)
-	s := newServerWithTelegram(t)
+	s := newTestServer(t)
 	withMiniappAttachmentClientFactory(t, func() (miniappGmailAttachmentClient, error) {
 		return nil, errors.New("OAuth not configured")
 	})
@@ -212,7 +205,7 @@ func TestHandleMiniappGmailAttachment_ClientUnavailable(t *testing.T) {
 
 func TestHandleMiniappGmailAttachment_GmailNotFound(t *testing.T) {
 	token := withClientToken(t)
-	s := newServerWithTelegram(t)
+	s := newTestServer(t)
 	withMiniappAttachmentClientFactory(t, func() (miniappGmailAttachmentClient, error) {
 		return &fakeMiniappAttachmentClient{err: errors.New("Gmail API error (HTTP 404): not found")}, nil
 	})
@@ -228,7 +221,7 @@ func TestHandleMiniappGmailAttachment_GmailNotFound(t *testing.T) {
 
 func TestHandleMiniappRPC_MissingToken(t *testing.T) {
 	withClientToken(t) // enable standalone auth, but send no token
-	s := newServerWithTelegram(t)
+	s := newTestServer(t)
 	rec := postMiniappRPC(t, s, "", map[string]any{
 		"type": "req", "id": "1", "method": "miniapp.ping",
 	})
@@ -239,7 +232,7 @@ func TestHandleMiniappRPC_MissingToken(t *testing.T) {
 
 func TestHandleMiniappRPC_InvalidToken(t *testing.T) {
 	token := withClientToken(t)
-	s := newServerWithTelegram(t)
+	s := newTestServer(t)
 	rec := postMiniappRPC(t, s, token+"x", map[string]any{
 		"type": "req", "id": "1", "method": "miniapp.ping",
 	})
@@ -253,7 +246,7 @@ func TestHandleMiniappRPC_InvalidToken(t *testing.T) {
 
 func TestHandleMiniappRPC_RejectsNonMiniappNamespace(t *testing.T) {
 	token := withClientToken(t)
-	s := newServerWithTelegram(t)
+	s := newTestServer(t)
 	rec := postMiniappRPC(t, s, token, map[string]any{
 		"type": "req", "id": "1", "method": "chat.send",
 	})
@@ -264,7 +257,7 @@ func TestHandleMiniappRPC_RejectsNonMiniappNamespace(t *testing.T) {
 
 func TestHandleMiniappRPC_EmptyBody(t *testing.T) {
 	token := withClientToken(t)
-	s := newServerWithTelegram(t)
+	s := newTestServer(t)
 	rec := postMiniappRPC(t, s, token, nil)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
@@ -273,7 +266,7 @@ func TestHandleMiniappRPC_EmptyBody(t *testing.T) {
 
 func TestHandleMiniappRPC_FrameMissingMethod(t *testing.T) {
 	token := withClientToken(t)
-	s := newServerWithTelegram(t)
+	s := newTestServer(t)
 	rec := postMiniappRPC(t, s, token, map[string]any{
 		"type": "req", "id": "1",
 		// method missing

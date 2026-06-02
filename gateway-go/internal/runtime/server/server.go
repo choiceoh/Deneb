@@ -26,7 +26,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/middleware"
 	arSession "github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
@@ -80,15 +79,12 @@ type ServerRPC struct {
 
 // ServerRuntime owns long-running runtime health/activity trackers.
 type ServerRuntime struct {
-	ready           atomic.Bool
-	shutdownOnce    sync.Once
-	gatewaySubs     *events.GatewayEventSubscriptions
-	channelHealth   *monitoring.ChannelHealthMonitor
-	activity        *monitoring.ActivityTracker
-	channelEvents   *monitoring.ChannelEventTracker
-	snapshotStore   *telegram.SnapshotStore
-	runStateMachine *telegram.RunStateMachine
-
+	ready         atomic.Bool
+	shutdownOnce  sync.Once
+	gatewaySubs   *events.GatewayEventSubscriptions
+	channelHealth *monitoring.ChannelHealthMonitor
+	activity      *monitoring.ActivityTracker
+	channelEvents *monitoring.ChannelEventTracker
 	// Auto-resume state: the marker store persists "run active at T"
 	// records across gateway restarts. See auto_resume.go for the
 	// resume policy and file layout. resumeMu guards markerStore's
@@ -130,15 +126,14 @@ type Server struct {
 	// Created during registerEarlyMethods; nil until then.
 	insights *insights.Engine
 
-	// notify pushes status snapshots and user-impacting error mirrors to a
-	// secondary "monitoring" Telegram chat. Created during registerEarlyMethods
-	// only when telegram.notificationChatID is configured; nil otherwise (the
-	// telegram.notify_status RPC is not registered in that case).
+	// notify mirrors user-impacting error events and status snapshots to the
+	// native client (live push) and the operator log. Created during
+	// registerEarlyMethods.
 	notify *notifyService
 
-	// calendarBriefing is the D-15min meeting push service. nil when
-	// calendar OAuth tokens or Telegram main chat aren't configured —
-	// safe to call start() unconditionally; the service is a no-op.
+	// calendarBriefing is the D-15min meeting push service, delivered to the
+	// native client. nil when calendar OAuth tokens aren't configured — safe to
+	// call start() unconditionally; the service is a no-op.
 	calendarBriefing *calendarBriefingService
 
 	// logSwap wraps the gateway logger so the notify service can install
@@ -161,7 +156,7 @@ type Server struct {
 
 	// Session, chat, and hook subsystems — logically grouped to reduce God-Object growth.
 	*SessionManager // sessions, transcript
-	*ChatManager    // chatHandler, toolDeps, telegramPlug
+	*ChatManager    // chatHandler, toolDeps, modelRegistry
 	*HookManager    // hooks, cron, cronRunLog
 
 	// lifecycleCtx is cancelled by doShutdown() so background goroutines
@@ -306,43 +301,23 @@ func New(addr string, opts ...Option) (*Server, error) {
 		// Parse directly off snap.Raw to avoid 1Password resolution on the
 		// startup path; the real secret resolve still happens later in
 		// registerEarlyMethods when the plugin is constructed.
-		defaultTo := ""
 		if snap, err := config.LoadConfigFromDefaultPath(); err == nil && snap != nil {
 			if snap.Config.Cron != nil && snap.Config.Cron.Enabled != nil && !*snap.Config.Cron.Enabled {
 				cronEnabled = false
 			}
-			// Mirror loadTelegramConfig: a snapshot that failed validation
-			// will not produce a Telegram plugin, so seeding DefaultTo from
-			// it would leave cron resolving a target with no actual delivery
-			// path — runs would skip delivery silently and still be recorded
-			// as ok. Only seed when the snapshot is also Valid.
-			if snap.Valid {
-				defaultTo = extractCronDefaultTo(snap.Raw)
-			}
 		}
 		storePath := cron.DefaultCronStorePath(homeDir)
 		s.cronRunLog = cron.NewPersistentRunLog(storePath)
-		// Cron delivery defaults. In native-only proactive mode every cron
-		// report is routed to the native client's 업무 chat (client:main) via
-		// MainSessionHandoff regardless of the per-job target, so default
-		// delivery-less jobs straight to that native sentinel. Without this a
-		// job with no explicit Delivery.To fails ResolveDeliveryTarget ("no
-		// delivery recipient configured") before its agent even runs — and once
-		// Telegram is removed, extractCronDefaultTo yields "" so EVERY
-		// targetless job breaks. The Telegram operator chat ID is only a
-		// meaningful default while proactive output still goes to Telegram.
-		// "main" is non-empty, so the SetTelegramPlugin late-bind (which only
-		// fills DefaultTo when empty) leaves it intact.
-		defaultChannel := "telegram"
-		defaultDeliverTo := defaultTo
-		if proactiveNativeOnly {
-			defaultChannel = "client"
-			defaultDeliverTo = nativeWorkSessionKeyTo
-		}
+		// Cron delivery defaults: every report routes to the native client's
+		// 업무 chat (client:main) via MainSessionHandoff regardless of the
+		// per-job target. Default targetless jobs straight to that native
+		// sentinel — without it a job with no explicit Delivery.To fails
+		// ResolveDeliveryTarget ("no delivery recipient configured") before its
+		// agent even runs, and with Telegram retired there is no other channel.
 		s.cronService = cron.NewService(cron.ServiceConfig{
 			StorePath:      storePath,
-			DefaultChannel: defaultChannel,
-			DefaultTo:      defaultDeliverTo,
+			DefaultChannel: "client",
+			DefaultTo:      nativeWorkSessionKeyTo,
 			Enabled:        cronEnabled,
 			Sessions:       s.sessions,
 		}, nil, s.logger) // agent runner wired later during chat handler setup
@@ -350,7 +325,6 @@ func New(addr string, opts ...Option) (*Server, error) {
 			s.logger.Info("cron service disabled by config")
 		}
 	}
-	s.snapshotStore = telegram.NewSnapshotStore()
 	s.activity = monitoring.NewActivityTracker()
 	s.channelEvents = monitoring.NewChannelEventTracker()
 

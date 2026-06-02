@@ -144,7 +144,7 @@ func concatMergeBody(target, source *wiki.Page) string {
 // the same proactive relay cron uses. Best-effort: a delivery failure is logged
 // (the merge itself already succeeded or failed on its own merits).
 func (s *Server) notifyMergeResult(ctx context.Context, message string) {
-	if _, err := s.proactiveRelay.relay(ctx, homeSessionKey, message); err != nil {
+	if _, err := s.proactiveRelay.relay(ctx, nativeWorkSessionKey, message); err != nil {
 		s.logger.Error("wiki merge: completion notify failed", "error", err)
 	}
 }
