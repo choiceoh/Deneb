@@ -32,6 +32,22 @@ object KaiUiParser {
     }
 
     /**
+     * Interactive UI mode requires the entire reply to be one kai-ui block, but models
+     * sometimes omit the kai-ui fence and emit the JSON bare. If [content] is fenceless JSON,
+     * wrap it in a kai-ui fence so the markdown scanner recognizes it as a UI block. No-op when
+     * the content is already fenced or isn't JSON. Shared by the renderer and the
+     * retry/no-valid-ui check so both agree on what counts as a valid UI.
+     */
+    fun wrapBareKaiUiContent(content: String): String {
+        val trimmed = content.trim()
+        if (trimmed.startsWith("```")) return content
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            return "```kai-ui\n$trimmed\n```"
+        }
+        return content
+    }
+
+    /**
      * Decode the raw body of a kai-ui fence (everything between the opening and closing triple
      * backticks). Returns either a decoded [KaiUiNode] or an [UiBlockResult.Error] carrying the
      * repaired JSON so callers can display it as a code block.
@@ -57,9 +73,12 @@ object KaiUiParser {
         val json = sanitizeJson(repaired)
         return try {
             parseSingleNode(json)?.let { UiBlockResult.Ui(it, json) }
+                ?: UiBlockResult.Error(json)
         } catch (e: Exception) {
-            println("kai-ui parse error: ${e.message} | ${json.take(500)}")
-            UiBlockResult.Error(json)
+            salvageToResult(json) ?: run {
+                println("kai-ui parse error: ${e.message} | ${json.take(500)}")
+                UiBlockResult.Error(json)
+            }
         }
     }
 
@@ -77,6 +96,86 @@ object KaiUiParser {
 
     /** Parse a repaired JSON string into a [KaiUiNode] via the direct builder pipeline. */
     private fun parseSingleNode(json: String): KaiUiNode? = parseNode(SharedJson.parseToJsonElement(json))
+
+    // =========================================================================================
+    // Stage 4: partial recovery (salvage)
+    // =========================================================================================
+
+    /**
+     * Notice prepended to a partially-recovered screen so the user knows content is missing.
+     * Korean-first (single-user deployment); not localized because the parser isn't Composable.
+     */
+    private val TRUNCATION_NOTICE = AlertNode(
+        message = "응답이 잘려 화면 일부만 표시됩니다. 다시 시도해 주세요.",
+        severity = AlertSeverity.WARNING,
+    )
+
+    /**
+     * Last-resort recovery when a single kai-ui object won't parse as one tree (typically the
+     * stream was cut mid-structure). Wraps every salvageable top-level child in a column with a
+     * truncation notice, or returns null if nothing could be recovered.
+     */
+    private fun salvageToResult(json: String): UiBlockResult? {
+        val salvaged = salvageChildren(json)
+        if (salvaged.isEmpty()) return null
+        val children = (listOf<KaiUiNode>(TRUNCATION_NOTICE) + salvaged).toImmutableList()
+        return UiBlockResult.Ui(ColumnNode(children = children), json)
+    }
+
+    /**
+     * Scan [json] and collect every balanced object nested at least one level deep (inside the
+     * outer object/array), parsing each independently. Objects truncated before they close are
+     * skipped — this recovers the children that finished streaming before the cut. String
+     * contents (which may contain braces) are ignored via the inString/escaped tracking.
+     */
+    private fun salvageChildren(json: String): List<KaiUiNode> {
+        val nodes = mutableListOf<KaiUiNode>()
+        var depth = 0
+        var objStart = -1
+        var startDepth = -1
+        var inString = false
+        var escaped = false
+        for (i in json.indices) {
+            val c = json[i]
+            if (escaped) {
+                escaped = false
+                continue
+            }
+            if (c == '\\') {
+                if (inString) escaped = true
+                continue
+            }
+            if (c == '"') {
+                inString = !inString
+                continue
+            }
+            if (inString) continue
+            when (c) {
+                '{' -> {
+                    if (depth >= 1 && objStart == -1) {
+                        objStart = i
+                        startDepth = depth
+                    }
+                    depth++
+                }
+
+                '[' -> depth++
+
+                '}' -> {
+                    depth--
+                    if (objStart != -1 && depth == startDepth) {
+                        runCatching { parseSingleNode(json.substring(objStart, i + 1)) }
+                            .getOrNull()?.let { nodes.add(it) }
+                        objStart = -1
+                        startDepth = -1
+                    }
+                }
+
+                ']' -> depth--
+            }
+        }
+        return nodes
+    }
 
     // =========================================================================================
     // Stage 2: syntax repair

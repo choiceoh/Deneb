@@ -315,6 +315,18 @@ data class TableNode(
     @Contextual val rows: ImmutableList<@Contextual ImmutableList<String>> = persistentListOf(),
 ) : KaiUiNode
 
+@Immutable
+@Serializable
+@SerialName("chart")
+data class ChartNode(
+    override val id: String? = null,
+    /** "bar" (default) or "line". */
+    val chartType: String = "bar",
+    @Contextual val labels: ImmutableList<String> = persistentListOf(),
+    @Contextual val values: ImmutableList<Float> = persistentListOf(),
+    val label: String? = null,
+) : KaiUiNode
+
 // --- Enums ---
 
 @Serializable

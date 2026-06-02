@@ -183,6 +183,7 @@ class Requests {
         customHeaders: Map<String, String> = emptyMap(),
         requestTimeoutMs: Long? = null,
         maxTokens: Int? = null,
+        reasoningEffort: String? = null,
     ): Result<OpenAICompatibleChatResponseDto> = try {
         val apiKey = getApiKeyOrThrow(service, credentials)
         val model = credentials.modelId.ifEmpty { null }
@@ -205,6 +206,7 @@ class Requests {
                         tools = tools.mapNotNull { runCatching { it.toRequestTool() }.getOrNull() }
                             .ifEmpty { null },
                         maxTokens = maxTokens,
+                        reasoningEffort = reasoningEffort,
                     ),
                 )
             }

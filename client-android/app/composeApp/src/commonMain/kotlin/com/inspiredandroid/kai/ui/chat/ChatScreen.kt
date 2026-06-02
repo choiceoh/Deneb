@@ -111,6 +111,7 @@ import com.inspiredandroid.kai.ui.components.animatedGradientBorder
 import com.inspiredandroid.kai.ui.components.LogoAnimation
 import com.inspiredandroid.kai.ui.components.VerticalScrollbarForList
 import com.inspiredandroid.kai.ui.dynamicui.FrozenSubmission
+import com.inspiredandroid.kai.ui.dynamicui.KaiUiParser
 import com.inspiredandroid.kai.ui.dynamicui.KaiUiRenderer
 import com.inspiredandroid.kai.ui.dynamicui.toSpeakableText
 import com.inspiredandroid.kai.ui.handCursor
@@ -430,7 +431,7 @@ private fun InteractiveModeContent(
                 transitionSpec = { fadeIn() togetherWith fadeOut() },
                 modifier = Modifier.fillMaxSize(),
             ) { _ ->
-                val blocks = remember(lastAssistant.content) { parseMarkdown(lastAssistant.content).blocks }
+                val blocks = remember(lastAssistant.content) { parseMarkdown(KaiUiParser.wrapBareKaiUiContent(lastAssistant.content)).blocks }
                 val uiBlocks = blocks.filterIsInstance<KaiUiBlock>()
 
                 if (uiBlocks.isNotEmpty()) {

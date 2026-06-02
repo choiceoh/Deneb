@@ -30,6 +30,9 @@ import com.inspiredandroid.kai.ui.DenebType
 import com.inspiredandroid.kai.ui.LightColorScheme
 import com.inspiredandroid.kai.ui.denebHint
 import com.inspiredandroid.kai.ui.chat.composables.DenebDrawerSheet
+import com.inspiredandroid.kai.ui.dynamicui.ChartNode
+import com.inspiredandroid.kai.ui.dynamicui.KaiUiRenderer
+import kotlinx.collections.immutable.persistentListOf
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 
@@ -67,6 +70,8 @@ fun main() {
     renderDesignSample("design_light.png", LightColorScheme)
     renderCalendarEvent("calendar_event_dark.png", DarkColorScheme)
     renderCalendarEvent("calendar_event_light.png", LightColorScheme)
+    renderChart("chart_dark.png", DarkColorScheme)
+    renderChart("chart_light.png", LightColorScheme)
     println("rendered -> /tmp/deneb-render/")
 }
 
@@ -176,6 +181,45 @@ private fun renderMarkdown(name: String, scheme: ColorScheme) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 DenebMarkdown(markdownSample, Modifier.padding(20.dp))
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+private fun renderChart(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 840, height = 1000, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.padding(20.dp)) {
+                    KaiUiRenderer(
+                        node = ChartNode(
+                            chartType = "bar",
+                            labels = persistentListOf("1월", "2월", "3월", "4월"),
+                            values = persistentListOf(12f, 28f, 19f, 34f),
+                            label = "월별 매출",
+                        ),
+                        isInteractive = false,
+                        onCallback = { _, _ -> },
+                        wrapInCard = false,
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    KaiUiRenderer(
+                        node = ChartNode(
+                            chartType = "line",
+                            labels = persistentListOf("월", "화", "수", "목", "금"),
+                            values = persistentListOf(5f, 15f, 9f, 22f, 14f),
+                            label = "주간 추세",
+                        ),
+                        isInteractive = false,
+                        onCallback = { _, _ -> },
+                        wrapInCard = false,
+                    )
+                }
             }
         }
     }

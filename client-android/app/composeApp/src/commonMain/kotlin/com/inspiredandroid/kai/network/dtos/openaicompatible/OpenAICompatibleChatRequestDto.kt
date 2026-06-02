@@ -14,6 +14,11 @@ data class OpenAICompatibleChatRequestDto(
     // JSON block. explicitNulls=false in the request Json drops this when null.
     @SerialName("max_tokens")
     val maxTokens: Int? = null,
+    // Reasoning budget hint (OpenAI o-series, local vLLM such as step3p7). Null in normal chat;
+    // set to "low" in interactive UI mode so thinking doesn't eat the kai-ui JSON budget.
+    // Providers that don't recognize it ignore it. Dropped when null (explicitNulls=false).
+    @SerialName("reasoning_effort")
+    val reasoningEffort: String? = null,
 ) {
     @Serializable
     data class Message(

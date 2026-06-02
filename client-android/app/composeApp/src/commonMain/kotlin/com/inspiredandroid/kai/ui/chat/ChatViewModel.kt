@@ -10,6 +10,7 @@ import com.inspiredandroid.kai.data.UiSubmission
 import com.inspiredandroid.kai.deneb.DenebGatewayClient
 import com.inspiredandroid.kai.getBackgroundDispatcher
 import com.inspiredandroid.kai.network.toUiError
+import com.inspiredandroid.kai.ui.dynamicui.KaiUiParser
 import com.inspiredandroid.kai.ui.markdown.KaiUiBlock
 import com.inspiredandroid.kai.ui.markdown.KaiUiError
 import com.inspiredandroid.kai.ui.markdown.parseMarkdown
@@ -245,7 +246,7 @@ class ChatViewModel(
             currentCoroutineContext().ensureActive()
             val lastAssistant = dataRepository.chatHistory.value.lastRenderedAssistant() ?: return
 
-            val blocks = parseMarkdown(lastAssistant.content).blocks
+            val blocks = parseMarkdown(KaiUiParser.wrapBareKaiUiContent(lastAssistant.content)).blocks
             val hasValidUi = blocks.any { it is KaiUiBlock }
             if (hasValidUi) return
 

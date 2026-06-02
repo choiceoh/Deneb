@@ -149,6 +149,15 @@ private enum class BailoutReason { LIMIT_REACHED, REPEATING }
  */
 private const val INTERACTIVE_UI_MAX_TOKENS = 16384
 
+/**
+ * reasoning_effort sent on the OpenAI-compatible path in interactive UI mode. Models that
+ * "think" before answering spend part of the budget reasoning, which is a main cause of a
+ * first-turn kai-ui JSON arriving empty or truncated. "low" is the minimal-reasoning setting
+ * that local vLLM (e.g. step3p7) and OpenAI o-series both accept; providers that don't
+ * recognize the field ignore it. Null in normal chat, so reasoning is untouched there.
+ */
+private const val INTERACTIVE_REASONING_EFFORT = "low"
+
 private interface ToolLoopStrategy {
     suspend fun chat(history: List<History>, systemPrompt: String?): LoopChatResult
     suspend fun bailout(history: List<History>, systemPrompt: String?, reason: BailoutReason): String
@@ -828,6 +837,7 @@ class RemoteDataRepository(
                         msgs,
                         tools,
                         maxTokens = INTERACTIVE_UI_MAX_TOKENS.takeIf { interactiveModeFlag },
+                        reasoningEffort = INTERACTIVE_REASONING_EFFORT.takeIf { interactiveModeFlag },
                     ).getOrThrow()
                 }
                 val message = response.choices.firstOrNull()?.message ?: throw OpenAICompatibleEmptyResponseException()
