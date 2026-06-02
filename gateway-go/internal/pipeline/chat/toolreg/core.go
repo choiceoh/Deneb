@@ -150,7 +150,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 func RegisterProcessTools(registry toolctx.ToolRegistrar, d *toolctx.ProcessDeps) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "exec",
-		Description: "Run a shell command (bash -c). Default timeout 30s, max 5min. Use background=true for long tasks, then process to check",
+		Description: "Run a shell command (bash -c). Default timeout 60s, max 10min. Use background=true for long tasks, then process to check",
 		InputSchema: execToolSchema(),
 		Fn:          tools.ToolExec(d.Mgr, d.WorkspaceDir),
 	})
@@ -234,7 +234,7 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel, diaryDir string) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "cron",
-		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, wake",
+		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, get, runs, wake",
 		InputSchema: cronToolSchema(),
 		Fn:          tools.ToolCron(chrono),
 	})

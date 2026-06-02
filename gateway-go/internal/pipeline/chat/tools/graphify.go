@@ -91,7 +91,8 @@ func ToolGraphify(workspaceDir string) ToolFunc {
 }
 
 // resolveGraphifyPath resolves the user-supplied graph hint to an absolute path.
-// Accepts: "" (defaults to wiki), "wiki", a relative path (resolved from
+// Accepts: "" (defaults to wiki), "wiki", "code" (the workspace code graph at
+// workspace/graphify-out/graph.json), a relative path (resolved from
 // workspaceDir), or an absolute path. The wiki graph follows the graphify CLI
 // convention of <root>/graphify-out/graph.json.
 func resolveGraphifyPath(hint, workspaceDir string) (string, error) {
@@ -102,6 +103,10 @@ func resolveGraphifyPath(hint, workspaceDir string) (string, error) {
 			return "", fmt.Errorf("resolve home for wiki graph: %w", err)
 		}
 		return filepath.Join(home, ".deneb", "wiki-graph", "graphify-out", "graph.json"), nil
+	case "code":
+		// Code call/import graph built by `graphify update .` in the workspace.
+		// Matches the system prompt's graph="code" guidance.
+		return filepath.Join(workspaceDir, "graphify-out", "graph.json"), nil
 	}
 	if filepath.IsAbs(hint) {
 		return hint, nil
