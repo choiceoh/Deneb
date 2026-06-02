@@ -419,6 +419,22 @@ class DenebGatewayClient(
             .map { WikiPageRef(it.path, it.title.ifBlank { it.path }, it.summary, it.updated) }
     }
 
+    /** Delete one or more wiki pages by path (`miniapp.memory.delete_pages`).
+     *  The backend deletes best-effort and reports a per-page failure list, so
+     *  this returns true only when every requested page was actually removed —
+     *  letting the category screen surface a partial failure instead of
+     *  silently dropping unselected rows. */
+    suspend fun deleteCategoryPages(paths: List<String>): Boolean {
+        if (paths.isEmpty()) return true
+        val resp = callRpc<DeletePagesPayload>(
+            "miniapp.memory.delete_pages",
+            buildJsonObject {
+                putJsonArray("paths") { paths.forEach { add(it) } }
+            },
+        ) ?: return false
+        return resp.ok && resp.deleted == paths.size
+    }
+
     // --- Scheduler screen → Deneb cron --------------------------------------
 
     override fun isSchedulingEnabled(): Boolean = true
@@ -1402,6 +1418,9 @@ class DenebGatewayClient(
         val summary: String = "",
         val updated: String = "",
     )
+
+    @Serializable
+    private data class DeletePagesPayload(val ok: Boolean = false, val deleted: Int = 0)
 
     @Serializable
     private data class MemoryCategoryRow(val name: String = "", val pageCount: Int = 0)
