@@ -154,6 +154,14 @@ func (d proactiveRelayDeps) relay(ctx context.Context, sessionKey, content strin
 // tests) so the caller treats it as not-delivered.
 func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
 	if d.transcriptStore == nil {
+		// No transcript store wired means every proactive report (morning
+		// letter, mail analysis) is silently dropped in native-only mode — the
+		// user observes nothing arriving. Surface it so a misconfigured startup
+		// is diagnosable instead of mysteriously quiet.
+		if d.logger != nil {
+			d.logger.Error("proactive native relay: no transcript store wired — report dropped",
+				"sessionKey", nativeWorkSessionKey)
+		}
 		return false, nil
 	}
 	msg := toolctx.NewTextChatMessage("assistant", content, time.Now().UnixMilli())
