@@ -306,13 +306,19 @@ func applySamplingParams(oaiReq *openAIRequest, req *ChatRequest) {
 			oaiReq.MaxTokens = 0
 		}
 	} else if req.Thinking != nil && req.Thinking.Type == "disabled" {
-		// Suppress reasoning on openai-compatible reasoning models. vLLM-served
-		// models like step3p7 honor reasoning_effort="none"; without it they emit
-		// a multi-thousand-char chain-of-thought that eats the max_tokens budget
-		// (truncating the real answer) and that the thinking-block path then has
-		// to strip. anthropic.go sends the native {"type":"disabled"} for the GLM
-		// path; this is the openai-compatible equivalent.
-		oaiReq.ReasoningEffort = "none"
+		// Minimize reasoning on openai-compatible reasoning models. vLLM accepts
+		// reasoning_effort in {none, minimal, low, medium, high}; "minimal"
+		// produces the shortest chain-of-thought. NOTE: "none" is a valid enum
+		// value but does NOT suppress reasoning on step3p7 — the chat template
+		// injects "Reasoning: none" and the model still reasons at roughly
+		// default length (measured: none≈182 chars vs minimal≈47 on a trivial
+		// prompt), so "minimal" is the correct choice here. Without any value the
+		// model emits a multi-thousand-char chain-of-thought that eats the
+		// max_tokens budget (truncating the real answer) and that the
+		// thinking-block path then has to strip. anthropic.go sends the native
+		// {"type":"disabled"} for the GLM path; this is the openai-compatible
+		// equivalent.
+		oaiReq.ReasoningEffort = "minimal"
 	}
 }
 
