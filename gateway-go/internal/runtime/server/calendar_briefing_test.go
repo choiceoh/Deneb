@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -208,34 +207,6 @@ func TestFormatBriefing_HandlesMissingTitle(t *testing.T) {
 	}
 }
 
-// HTML escape: telegram.Plugin sends the briefing with ParseMode "HTML"
-// (plugin.go), so any raw "<"/">"/"&" in calendar fields would make
-// Telegram reject the message with an entity-parse error and the D-15
-// push would silently fail every tick. The escape must happen inside
-// formatBriefing — anything that survives to the wire breaks delivery.
-func TestFormatBriefing_EscapesHTMLEntities(t *testing.T) {
-	s := makeService(t)
-	ev := calendar.Event{
-		Summary:  "Q1 <리뷰> & 계획",
-		Location: "회의실 A <3F>",
-		Start:    time.Date(2026, 5, 26, 14, 0, 0, 0, s.displayLoc),
-		Attendees: []calendar.Attendee{
-			{DisplayName: "이름 <bracket>", ResponseStatus: "accepted"},
-		},
-	}
-	body := s.formatBriefing(ev)
-	for _, leak := range []string{"<리뷰>", "<3F>", "<bracket>"} {
-		if strings.Contains(body, leak) {
-			t.Errorf("raw HTML entity %q must be escaped, got:\n%s", leak, body)
-		}
-	}
-	for _, must := range []string{"&lt;리뷰&gt;", "&lt;3F&gt;", "&lt;bracket&gt;"} {
-		if !strings.Contains(body, must) {
-			t.Errorf("expected escaped %q in:\n%s", must, body)
-		}
-	}
-}
-
 // FixedZone fallback: when LoadLocation fails, the service uses a
 // +09:00 offset, so a 14:00 KST event renders as "14:00" — never UTC.
 func TestFormatBriefing_FixedZoneFallbackRendersKSTWallClock(t *testing.T) {
@@ -256,9 +227,9 @@ func TestFormatBriefing_FixedZoneFallbackRendersKSTWallClock(t *testing.T) {
 func TestNewCalendarBriefingService_NilDepsAreNoOp(t *testing.T) {
 	got := newCalendarBriefingService(nil, func() (briefingCalendarClient, error) { return nil, nil }, nil)
 	if got != nil {
-		t.Error("expected nil service when telegram plugin missing")
+		t.Error("expected nil service when deliver callback missing")
 	}
-	got = newCalendarBriefingService(nil, nil, nil)
+	got = newCalendarBriefingService(func(string) (bool, error) { return true, nil }, nil, nil)
 	if got != nil {
 		t.Error("expected nil service when resolver missing")
 	}
@@ -315,17 +286,5 @@ func TestBriefing_ResolveFailureThrottle(t *testing.T) {
 	s.resolveFailureMu.Unlock()
 	if !third {
 		t.Fatal("post-recovery failure should be 'first' again")
-	}
-}
-
-func TestIsTelegramNotReady(t *testing.T) {
-	if !isTelegramNotReady(errors.New("telegram client not initialized")) {
-		t.Error("expected match for production error string")
-	}
-	if !isTelegramNotReady(errTelegramNotReady) {
-		t.Error("expected match for sentinel via errors.Is")
-	}
-	if isTelegramNotReady(errors.New("send text: HTTP 500")) {
-		t.Error("unrelated error should not match")
 	}
 }

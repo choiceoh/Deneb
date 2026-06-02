@@ -537,12 +537,11 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		}
 	}
 
-	// Wire agent runner, Telegram plugin, and subagent poller to cron service.
+	// Wire agent runner and subagent poller to cron service. Cron output is
+	// delivered to the native client via the main-session handoff wired in
+	// registerSessionRPCMethods (proactive relay), not Telegram.
 	if s.cronService != nil {
 		s.cronService.SetAgentRunner(&cronChatAdapter{chat: s.chatHandler, logger: s.logger})
-		if s.telegramPlug != nil {
-			s.cronService.SetTelegramPlugin(s.telegramPlug)
-		}
 		if s.acpDeps != nil {
 			s.cronService.SetSubagentPoller(&acpSubagentPoller{
 				registry: s.acpDeps.Registry,

@@ -452,10 +452,11 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	s.initGmailPoll()
 
 	// Calendar briefing service: D-15min push for upcoming meetings.
-	// Returns nil and is a no-op when calendar OAuth / Telegram main
-	// chat aren't both configured, so safe to wire unconditionally.
+	// Delivers to the native client (업무 transcript + live push) via the
+	// shared proactive relay. Returns nil and is a no-op when calendar OAuth
+	// isn't configured, so safe to wire unconditionally.
 	s.calendarBriefing = newCalendarBriefingService(
-		hub.Telegram(),
+		func(text string) (bool, error) { return s.proactiveRelay.relayNative(text) },
 		resolveBriefingCalendarClient,
 		s.logger,
 	)

@@ -257,8 +257,10 @@ func (s *Service) executeJobFullWithTrigger(ctx context.Context, job StoreJob, t
 	// Apply result to job state; run-level details live in the session.
 	s.applyJobResult(job, outcome, sessionKey, trigger)
 
-	// Send failure alert if configured and conditions are met.
-	if s.cfg.TelegramPlugin != nil && ShouldSendFailureAlert(job.State, job.FailureAlert, outcome.Status, time.Now().UnixMilli()) {
+	// Send failure alert if configured and conditions are met. Delivery goes
+	// through the main-session handoff (native client), so it requires that
+	// callback to be wired rather than a Telegram plugin.
+	if s.cfg.MainSessionHandoff != nil && ShouldSendFailureAlert(job.State, job.FailureAlert, outcome.Status, time.Now().UnixMilli()) {
 		s.sendFailureAlert(ctx, job, outcome)
 	}
 
@@ -410,15 +412,14 @@ func (s *Service) sendFailureAlert(ctx context.Context, job StoreJob, outcome Ru
 	}
 
 	text := fmt.Sprintf("⚠️ 크론 작업 '%s' 실행 실패 (연속 %d회): %s", job.Name, job.State.ConsecutiveErrors, outcome.Error)
-	target := DeliveryTarget{Channel: ch, To: to, AccountID: alert.AccountID}
-	payloads := []types.ReplyPayload{{Text: text}}
 
-	dr := DeliverCronOutput(ctx, s.cfg.TelegramPlugin, target, payloads, DeliverOutputOptions{
-		BestEffort: true,
-		Logger:     s.logger,
-	})
-	if !dr.Delivered {
-		s.logger.Warn("failure alert delivery failed", "jobID", job.ID, "error", dr.Error)
+	// Deliver via the main-session handoff (native client 업무 transcript +
+	// push), the same path regular cron output uses. ch/to are passed for the
+	// legacy relay signature but ignored in native-only mode.
+	handled, err := s.cfg.MainSessionHandoff(ctx, ch, to, job.ID, text)
+	if err != nil || !handled {
+		s.logger.Warn("failure alert delivery failed",
+			"jobID", job.ID, "handled", handled, "error", err)
 	}
 
 	// Update last failure alert timestamp so the cooldown window works.
