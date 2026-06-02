@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
@@ -186,17 +187,20 @@ func BuildWeeklyReportPDF(ctx context.Context, opts WeeklyReportOpts, now time.T
 	if err != nil {
 		return "", textFallback, false
 	}
-	dir := os.TempDir()
+	dir := weeklyOutputDir()
 	htmlPath := filepath.Join(dir, "deneb-weekly-report.html")
 	pdfPath = filepath.Join(dir, "deneb-weekly-report.pdf")
 	if err := os.WriteFile(htmlPath, []byte(html), 0o644); err != nil { //nolint:gosec // report html, not secret
 		return "", textFallback, false
 	}
 	_ = os.Remove(pdfPath) // clear stale output so a failed render can't ship last week's file
-	// On this unified-memory host, headless Chromium can't reserve its address
-	// space when commit headroom is low (vLLM-loaded) — it hangs to timeout.
-	// Skip the render attempt below a safe threshold and degrade to text directly.
-	if weeklyCommitHeadroomMB() < weeklyMinHeadroomMB {
+	// Headless Chromium needs two scarce resources on this host; running out of
+	// either silently degrades the PDF to text. Guard both before attempting:
+	//   1. RAM: on this unified-memory node Chromium can't reserve its address
+	//      space when commit headroom is low (vLLM-loaded) — it hangs to timeout.
+	//   2. Disk: it writes a font cache / shared memory under the output dir; a
+	//      full filesystem makes it abort with ENOSPC before producing a page.
+	if weeklyCommitHeadroomMB() < weeklyMinHeadroomMB || weeklyFreeDiskMB(dir) < weeklyMinDiskMB {
 		return "", textFallback, false
 	}
 	if err := weeklyRenderPDF(ctx, htmlPath, pdfPath); err != nil {
@@ -209,6 +213,37 @@ func BuildWeeklyReportPDF(ctx context.Context, opts WeeklyReportOpts, now time.T
 // not even attempted (it would hang). Empirically render succeeds with multi-GB
 // headroom and hangs near ~1GB on the gx10 head node.
 const weeklyMinHeadroomMB = 2048
+
+// weeklyMinDiskMB is the free space (on the output filesystem) below which a
+// Chromium render is skipped. Chromium needs scratch space for its font cache
+// and shared memory; with less it aborts (ENOSPC) instead of producing a PDF.
+const weeklyMinDiskMB = 256
+
+// weeklyOutputDir returns a real-disk directory for the report's HTML/PDF and
+// for Chromium's own scratch files. os.TempDir() is /tmp, which on the gx10
+// head node is a small tmpfs that routinely fills up (vLLM build trees, large
+// media) — a full /tmp makes Chromium abort with ENOSPC mid-render and the
+// report silently degrades to text every time. Prefer ~/.cache/deneb-visual on
+// the NVMe disk; fall back to os.TempDir() only when that can't be created.
+func weeklyOutputDir() string {
+	if home, err := os.UserHomeDir(); err == nil {
+		dir := filepath.Join(home, ".cache", "deneb-visual")
+		if err := os.MkdirAll(dir, 0o755); err == nil {
+			return dir
+		}
+	}
+	return os.TempDir()
+}
+
+// weeklyFreeDiskMB returns the available space on dir's filesystem in MB.
+// Returns a large value if it can't stat, so a render still attempts.
+func weeklyFreeDiskMB(dir string) int {
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(dir, &st); err != nil {
+		return 1 << 20
+	}
+	return int(st.Bavail * uint64(st.Bsize) / (1024 * 1024)) //nolint:gosec // sizes well within int
+}
 
 // weeklyCommitHeadroomMB returns (CommitLimit - Committed_AS) in MB from
 // /proc/meminfo. Returns a large value if unreadable so the render still attempts.
@@ -354,13 +389,25 @@ func weeklyRenderPDF(ctx context.Context, htmlPath, pdfPath string) error {
 	if bin == "" {
 		return fmt.Errorf("chromium not found")
 	}
+	// Chromium writes its user profile, font cache, shared memory and crash
+	// dumps under TMPDIR / the user-data-dir. Keep all of that on the same
+	// real-disk dir as the output — defaulting to the /tmp tmpfs (often full on
+	// this host) makes it abort with ENOSPC before producing a page.
+	workDir := filepath.Dir(pdfPath)
+	udd, err := os.MkdirTemp(workDir, "chrome-")
+	if err != nil {
+		return fmt.Errorf("chromium scratch dir: %w", err)
+	}
+	defer os.RemoveAll(udd)
 	rctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(rctx, bin,
 		"--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--hide-scrollbars",
 		"--no-pdf-header-footer", "--virtual-time-budget=4000",
+		"--user-data-dir="+udd, "--crash-dumps-dir="+udd,
 		"--print-to-pdf="+pdfPath, "file://"+htmlPath,
 	)
+	cmd.Env = append(os.Environ(), "TMPDIR="+udd)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("chromium print-to-pdf: %w (%s)", err, weeklyClip(string(out), 200))
 	}
