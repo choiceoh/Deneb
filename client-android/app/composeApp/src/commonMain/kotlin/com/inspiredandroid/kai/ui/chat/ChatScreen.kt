@@ -36,6 +36,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -74,6 +76,8 @@ import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -588,7 +592,39 @@ private fun ChatModeScreen(
             )
         },
     ) {
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).navigationBarsPadding().statusBarsPadding().imePadding()) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .navigationBarsPadding()
+            .statusBarsPadding()
+            .imePadding()
+            // Right-edge swipe → open the session drawer. The two nested
+            // ModalNavigationDrawers fight over horizontal drags (the inner left
+            // drawer swallows them), so detect the right edge explicitly here. This
+            // sits on the content's parent, so the chat list still scrolls vertically
+            // and taps (FAB etc.) pass through — we only consume a leftward edge drag.
+            .pointerInput(Unit) {
+                val edgePx = 32.dp.toPx()
+                val triggerPx = 24.dp.toPx()
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    if (down.position.x < size.width - edgePx) return@awaitEachGesture
+                    if (!sessionDrawerState.isClosed || !drawerState.isClosed) return@awaitEachGesture
+                    var dx = 0f
+                    while (true) {
+                        val change = awaitPointerEvent().changes.firstOrNull() ?: return@awaitEachGesture
+                        dx += change.positionChange().x
+                        if (dx <= -triggerPx) {
+                            change.consume()
+                            drawerScope.launch { sessionDrawerState.open() }
+                            return@awaitEachGesture
+                        }
+                        if (!change.pressed) return@awaitEachGesture
+                    }
+                }
+            },
+    ) {
         Column(Modifier.fillMaxSize()) {
             TopBar(
                 textToSpeech = textToSpeech,
