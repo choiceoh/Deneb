@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
@@ -104,6 +105,8 @@ fun DenebCategoriesScreen(
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                             Text(
                                 "${cat.pageCount}",
@@ -118,12 +121,4 @@ fun DenebCategoriesScreen(
             }
         }
     }
-}
-
-/** Bytes -> short human size (integer units; KMP-safe). */
-internal fun humanBytes(bytes: Long): String = when {
-    bytes <= 0 -> "0B"
-    bytes < 1024 -> "${bytes}B"
-    bytes < 1024 * 1024 -> "${bytes / 1024}KB"
-    else -> "${bytes / (1024 * 1024)}MB"
 }

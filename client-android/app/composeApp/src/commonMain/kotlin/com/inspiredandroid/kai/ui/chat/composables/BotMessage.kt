@@ -133,7 +133,7 @@ internal fun BotMessage(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(8.dp)
-                    .size(28.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceContainer)
                     .handCursor()
@@ -142,7 +142,7 @@ internal fun BotMessage(
             ) {
                 Icon(
                     imageVector = if (isEditing) Icons.Default.Close else Icons.Default.Edit,
-                    contentDescription = if (isEditing) "Cancel edit" else "Edit submission",
+                    contentDescription = if (isEditing) "편집 취소" else "제출 편집",
                     modifier = Modifier.size(16.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

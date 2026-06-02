@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
@@ -126,6 +127,7 @@ fun DenebCalendarScreen(
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.onSurface,
                                         maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                     val sub = buildList {
                                         if (event.location.isNotBlank()) add(event.location)

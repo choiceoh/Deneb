@@ -23,12 +23,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.ui.components.rememberHaptics
+import kotlinx.coroutines.launch
 
 /**
  * Calendar event detail (`miniapp.calendar.get`): when, location, a Meet join
@@ -45,12 +48,17 @@ fun DenebCalendarEventScreen(
     var event by remember(eventId) { mutableStateOf<CalendarEventDetail?>(null) }
     var loadFailed by remember(eventId) { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
+    val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
 
-    LaunchedEffect(eventId) {
+    suspend fun load() {
+        loadFailed = false
+        event = null
         val e = client.fetchCalendarEvent(eventId)
         event = e
         loadFailed = e == null
     }
+    LaunchedEffect(eventId) { load() }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -68,7 +76,11 @@ fun DenebCalendarEventScreen(
 
             val ev = event
             if (ev == null) {
-                if (loadFailed) DenebError("일정을 불러오지 못했습니다.") else DenebLoading()
+                if (loadFailed) {
+                    DenebError("일정을 불러오지 못했습니다.", onRetry = { scope.launch { load() } })
+                } else {
+                    DenebLoading()
+                }
             } else {
                 Text(
                     ev.title.ifBlank { "(제목 없음)" },
@@ -98,7 +110,7 @@ fun DenebCalendarEventScreen(
 
                 if (ev.meetUri.isNotBlank()) {
                     Spacer(Modifier.height(16.dp))
-                    FilledTonalButton(onClick = { uriHandler.openUri(ev.meetUri) }) {
+                    FilledTonalButton(onClick = { haptics.tap(); uriHandler.openUri(ev.meetUri) }) {
                         Text("📹 Meet 참가")
                     }
                 }

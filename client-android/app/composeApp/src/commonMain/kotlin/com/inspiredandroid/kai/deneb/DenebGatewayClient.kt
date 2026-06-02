@@ -371,14 +371,16 @@ class DenebGatewayClient(
     }
 
     /** Pages within one category (`memory.list_in_category`); blank lists all. */
-    suspend fun fetchCategoryPages(category: String): List<WikiPageRef> {
+    /** Pages in a wiki category. Null on a fetch failure so the screen can offer
+     *  retry instead of showing a misleading "empty category". */
+    suspend fun fetchCategoryPages(category: String): List<WikiPageRef>? {
         val p = callRpc<MemoryListPayload>(
             "miniapp.memory.list_in_category",
             buildJsonObject {
                 put("category", category)
                 put("limit", 200)
             },
-        ) ?: return emptyList()
+        ) ?: return null
         return p.pages
             .filter { it.path.isNotBlank() }
             .map { WikiPageRef(it.path, it.title.ifBlank { it.path }, it.summary, it.updated) }
@@ -393,16 +395,26 @@ class DenebGatewayClient(
         return _denebScheduledTasks.value
     }
 
+    /** Suspend refresh that reports success, for screens that want an error state. */
+    suspend fun loadScheduledTasks(): Boolean = refreshScheduledTasks()
+
     override suspend fun cancelScheduledTask(id: String) {
-        callRpc<JsonObject>("miniapp.crons.remove", buildJsonObject { put("id", id) })
-        refreshScheduledTasks()
+        removeCron(id)
     }
 
-    private suspend fun refreshScheduledTasks() {
+    /** Delete a cron, reporting success so the screen can confirm the delete landed
+     *  before navigating away instead of popping back on a failed remove. */
+    suspend fun removeCron(id: String): Boolean {
+        val ok = callRpc<JsonObject>("miniapp.crons.remove", buildJsonObject { put("id", id) }) != null
+        refreshScheduledTasks()
+        return ok
+    }
+
+    private suspend fun refreshScheduledTasks(): Boolean {
         val payload = callRpc<CronListPayload>(
             "miniapp.crons.list",
             buildJsonObject { put("includeDisabled", true) },
-        ) ?: return
+        ) ?: return false
         _denebScheduledTasks.value = payload.jobs
             .filter { it.id.isNotBlank() }
             .map { j ->
@@ -419,6 +431,7 @@ class DenebGatewayClient(
                     consecutiveFailures = j.consecutiveErrors ?: 0,
                 )
             }
+        return true
     }
 
     // --- Model switcher → Deneb registry ------------------------------------
@@ -438,18 +451,20 @@ class DenebGatewayClient(
         _denebRoleModels.value = payload.roles.associate { it.role to it.model }
     }
 
-    suspend fun setMainModel(id: String) = setRoleModel(id, "main")
+    suspend fun setMainModel(id: String): Boolean = setRoleModel(id, "main")
 
-    /** Set the model for a specific role (main / lightweight / fallback). */
-    suspend fun setRoleModel(id: String, role: String) {
-        callRpc<JsonObject>(
+    /** Set the model for a specific role (main / lightweight / fallback). Returns
+     *  false on a failed switch so the screen can surface it instead of a silent no-op. */
+    suspend fun setRoleModel(id: String, role: String): Boolean {
+        val ok = callRpc<JsonObject>(
             "miniapp.models.set",
             buildJsonObject {
                 put("id", id)
                 put("role", role)
             },
-        )
+        ) != null
         refreshModels()
+        return ok
     }
 
     // --- Chat-input model switcher → Deneb registry --------------------------
@@ -774,8 +789,9 @@ class DenebGatewayClient(
     }
 
     /** Topic doc files (`miniapp.topicdocs.list_files`). */
-    suspend fun fetchTopicDocs(): List<TopicDocFile> {
-        val p = callRpc<TopicDocsListPayload>("miniapp.topicdocs.list_files", buildJsonObject {}) ?: return emptyList()
+    /** Topic doc files. Null on a fetch failure so the tab can offer retry. */
+    suspend fun fetchTopicDocs(): List<TopicDocFile>? {
+        val p = callRpc<TopicDocsListPayload>("miniapp.topicdocs.list_files", buildJsonObject {}) ?: return null
         return p.files.filter { it.name.isNotBlank() }.map { TopicDocFile(it.name, it.modified) }
     }
 
@@ -941,8 +957,8 @@ class DenebGatewayClient(
      * Deneb" path — the gateway uses the PaddleOCR sidecar (tesseract fallback).
      */
     @OptIn(ExperimentalEncodingApi::class)
-    suspend fun captureImage(bytes: ByteArray, mimeType: String, caption: String = "") {
-        if (clientToken.isEmpty() || bytes.isEmpty()) return
+    suspend fun captureImage(bytes: ByteArray, mimeType: String, caption: String = ""): Boolean {
+        if (clientToken.isEmpty() || bytes.isEmpty()) return false
         val trimmedCaption = caption.trim()
         val label = if (trimmedCaption.isNotBlank()) {
             trimmedCaption + "\n📷 이미지 OCR 분석 중…"
@@ -965,6 +981,7 @@ class DenebGatewayClient(
             payload?.text?.ifBlank { null } ?: "이미지에서 텍스트를 찾지 못했거나 분석에 실패했습니다."
         }.getOrElse { "⚠️ ${it.message ?: "이미지 캡처 실패"}" }
         _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
+        return true
     }
 
     @Serializable

@@ -120,7 +120,7 @@ fun QuestionInput(
                             Icon(
                                 modifier = Modifier.size(16.dp),
                                 painter = painterResource(icon),
-                                contentDescription = null,
+                                contentDescription = "첨부 제거",
                                 tint = MaterialTheme.colorScheme.onBackground,
                             )
                         },

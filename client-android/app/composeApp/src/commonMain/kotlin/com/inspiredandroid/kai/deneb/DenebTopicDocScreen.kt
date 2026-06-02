@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 
 /**
@@ -51,15 +52,18 @@ fun DenebTopicDocScreen(
     var saving by remember(name) { mutableStateOf(false) }
     var status by remember(name) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
 
-    LaunchedEffect(name) {
-        if (!creating) {
-            val d = client.readTopicDoc(name)
-            doc = d
-            loadFailed = d == null
-            if (d != null) draft = d.content
-        }
+    suspend fun loadDoc() {
+        if (creating) return
+        loadFailed = false
+        doc = null
+        val d = client.readTopicDoc(name)
+        doc = d
+        loadFailed = d == null
+        if (d != null) draft = d.content
     }
+    LaunchedEffect(name) { loadDoc() }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -89,7 +93,11 @@ fun DenebTopicDocScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
             } else if (d == null) {
-                if (loadFailed) DenebError("문서를 불러오지 못했습니다.") else DenebLoading()
+                if (loadFailed) {
+                    DenebError("문서를 불러오지 못했습니다.", onRetry = { scope.launch { loadDoc() } })
+                } else {
+                    DenebLoading()
+                }
                 return@Column
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -100,7 +108,7 @@ fun DenebTopicDocScreen(
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = { editing = !editing; if (!editing) draft = d.content; status = null }) {
+                    TextButton(onClick = { haptics.tap(); editing = !editing; if (!editing) draft = d.content; status = null }) {
                         Text(if (editing) "취소" else "편집")
                     }
                 }
@@ -128,6 +136,7 @@ fun DenebTopicDocScreen(
                 Button(
                     enabled = !saving && (!creating || draftName.isNotBlank()),
                     onClick = {
+                        haptics.tap()
                         scope.launch {
                             saving = true
                             status = null
@@ -135,6 +144,7 @@ fun DenebTopicDocScreen(
                             val ok = client.saveTopicDoc(target, draft, creating)
                             saving = false
                             if (ok) {
+                                haptics.confirm()
                                 if (creating) {
                                     onBack()
                                 } else {

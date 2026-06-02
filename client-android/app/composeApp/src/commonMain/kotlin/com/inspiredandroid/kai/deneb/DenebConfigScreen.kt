@@ -19,10 +19,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -50,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -113,7 +117,11 @@ fun DenebConfigScreen(
                         modifier = Modifier
                             .handCursor()
                             .clip(RoundedCornerShape(50))
-                            .clickable { haptics.tap(); tab = entry },
+                            .selectable(
+                                selected = isSelected,
+                                role = Role.Tab,
+                                onClick = { haptics.tap(); tab = entry },
+                            ),
                         shape = RoundedCornerShape(50),
                         color = if (isSelected) {
                             MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
@@ -123,9 +131,10 @@ fun DenebConfigScreen(
                     ) {
                         Text(
                             text = entry.label,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                             maxLines = 1,
                         )
                     }
@@ -416,7 +425,10 @@ private fun ModelTab(client: DenebGatewayClient) {
     val models by client.denebModels.collectAsState()
     val roleModels by client.denebRoleModels.collectAsState()
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
     var role by remember { mutableStateOf(ModelRole.MAIN) }
+    var switching by remember { mutableStateOf(false) }
+    var switchFailed by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { client.refreshModels() }
     if (models.isEmpty()) {
         DenebLoading()
@@ -437,9 +449,9 @@ private fun ModelTab(client: DenebGatewayClient) {
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            HealthLegendItem("online", "응답 가능")
-            HealthLegendItem("offline", "응답 없음")
-            HealthLegendItem("unknown", "미확인")
+            HealthLegendItem(ModelHealth.ONLINE, "응답 가능")
+            HealthLegendItem(ModelHealth.OFFLINE, "응답 없음")
+            HealthLegendItem(ModelHealth.UNKNOWN, "미확인")
         }
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             ModelRole.entries.forEachIndexed { i, r ->
@@ -457,19 +469,33 @@ private fun ModelTab(client: DenebGatewayClient) {
                 color = MaterialTheme.colorScheme.primary,
             )
         }
+        if (switchFailed) {
+            Text(
+                "모델 전환에 실패했어요. 다시 시도해 주세요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         SettingsCard(innerPadding = false) {
             models.forEachIndexed { i, model ->
                 val isCurrent = model.id == currentForRole
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(enabled = !isCurrent) { scope.launch { client.setRoleModel(model.id, role.wire) } }
+                        .clickable(enabled = !isCurrent && !switching) {
+                            haptics.tap()
+                            scope.launch {
+                                switching = true
+                                switchFailed = !client.setRoleModel(model.id, role.wire)
+                                switching = false
+                            }
+                        }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     // Color = response status (online/offline/unknown); filled = the
                     // model currently selected for this role, ring = not selected.
-                    HealthDot(health = model.health, selected = isCurrent)
+                    HealthDot(health = ModelHealth.parse(model.health), selected = isCurrent)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
@@ -479,7 +505,7 @@ private fun ModelTab(client: DenebGatewayClient) {
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            model.id + modelHealthSuffix(model.health),
+                            model.id + ModelHealth.parse(model.health).suffix,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -499,8 +525,8 @@ private fun ModelTab(client: DenebGatewayClient) {
 // Response-status dot. Color = health (online/offline/unknown); a filled circle
 // marks the model currently selected for the role, a ring marks the rest.
 @Composable
-private fun HealthDot(health: String, selected: Boolean) {
-    val color = modelHealthColor(health)
+private fun HealthDot(health: ModelHealth, selected: Boolean) {
+    val color = health.color
     val base = Modifier.size(10.dp)
     Box(
         modifier = if (selected) {
@@ -512,53 +538,65 @@ private fun HealthDot(health: String, selected: Boolean) {
 }
 
 @Composable
-private fun HealthLegendItem(health: String, label: String) {
+private fun HealthLegendItem(health: ModelHealth, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(modelHealthColor(health)))
+        Box(Modifier.size(8.dp).clip(CircleShape).background(health.color))
         Spacer(Modifier.width(5.dp))
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
-// online → green, offline → red, unknown/unprobed → amber.
-private fun modelHealthColor(health: String): Color = when (health.lowercase()) {
-    "online" -> Color(0xFF4CAF50)
-    "offline" -> Color(0xFFE53935)
-    else -> Color(0xFFFFB300)
-}
+/** Model response status. Color: online → green, offline → red, unknown/unprobed → amber.
+ *  [suffix] is appended to the model id line. Parsed once from the wire string. */
+private enum class ModelHealth(val color: Color, val suffix: String) {
+    ONLINE(Color(0xFF4CAF50), ""),
+    OFFLINE(Color(0xFFE53935), "  ·  응답 없음"),
+    UNKNOWN(Color(0xFFFFB300), "  ·  상태 미확인"),
+    ;
 
-private fun modelHealthSuffix(health: String): String = when (health.lowercase()) {
-    "offline" -> "  ·  응답 없음"
-    "unknown", "" -> "  ·  상태 미확인"
-    else -> ""
+    companion object {
+        fun parse(health: String): ModelHealth = when (health.lowercase()) {
+            "online" -> ONLINE
+            "offline" -> OFFLINE
+            else -> UNKNOWN
+        }
+    }
 }
 
 @Composable
 private fun CronTab(client: DenebGatewayClient, onOpenCron: (String) -> Unit) {
     val crons by client.denebScheduledTasks.collectAsState()
-    LaunchedEffect(Unit) { client.getScheduledTasks() }
-    if (crons.isEmpty()) {
-        EmptyTab("예약된 작업이 없습니다.")
-        return
-    }
-    LazyColumn(Modifier.fillMaxSize()) {
-        items(crons, key = { it.id }) { cron ->
-            Column(
-                Modifier.animateItem().fillMaxWidth().clickable { onOpenCron(cron.id) }.padding(horizontal = 16.dp, vertical = 14.dp),
-            ) {
-                Text(
-                    cron.description.ifBlank { cron.id },
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                cron.cron?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
+    var loadFailed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { loadFailed = !client.loadScheduledTasks() }
+    when {
+        crons.isEmpty() && loadFailed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            DenebError(
+                "예약 작업을 불러오지 못했습니다.",
+                onRetry = { scope.launch { loadFailed = !client.loadScheduledTasks() } },
+            )
+        }
+        crons.isEmpty() -> EmptyTab("예약된 작업이 없습니다.")
+        else -> LazyColumn(Modifier.fillMaxSize()) {
+            items(crons, key = { it.id }) { cron ->
+                Column(
+                    Modifier.animateItem().fillMaxWidth().clickable { haptics.tap(); onOpenCron(cron.id) }.padding(horizontal = 16.dp, vertical = 14.dp),
+                ) {
+                    Text(
+                        cron.description.ifBlank { cron.id },
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    cron.cron?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
+                HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
             }
-            HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         }
     }
 }
@@ -572,6 +610,7 @@ private fun NotificationsTab(client: DenebGatewayClient) {
     val store = koinInject<NotificationStore>()
     val appSettings = koinInject<AppSettings>()
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
     var access by remember { mutableStateOf(controller.isAccessGranted()) }
     var records by remember { mutableStateOf<List<NotificationRecord>>(emptyList()) }
     var sentId by remember { mutableStateOf<String?>(null) }
@@ -669,22 +708,27 @@ private fun NotificationsTab(client: DenebGatewayClient) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    // Toggle: from "all" (empty) the first tap selects
-                                    // just this app; thereafter add/remove from the set.
-                                    val base = if (allowlist.isEmpty()) knownApps.map { it.first }.toSet() else allowlist
-                                    val next = if (pkg in base) base - pkg else base + pkg
-                                    // Selecting every known app collapses back to "all".
-                                    allowlist = if (next.size == knownApps.size) emptySet() else next
-                                    appSettings.setNotificationCaptureAllowlist(allowlist)
-                                }
+                                .toggleable(
+                                    value = on,
+                                    role = Role.Checkbox,
+                                    onValueChange = {
+                                        haptics.tap()
+                                        // Toggle: from "all" (empty) the first tap selects
+                                        // just this app; thereafter add/remove from the set.
+                                        val base = if (allowlist.isEmpty()) knownApps.map { it.first }.toSet() else allowlist
+                                        val next = if (pkg in base) base - pkg else base + pkg
+                                        // Selecting every known app collapses back to "all".
+                                        allowlist = if (next.size == knownApps.size) emptySet() else next
+                                        appSettings.setNotificationCaptureAllowlist(allowlist)
+                                    },
+                                )
                                 .padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                if (on) "☑" else "☐",
+                            Checkbox(
+                                checked = on,
+                                onCheckedChange = null,
                                 modifier = Modifier.padding(end = 10.dp),
-                                color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
                                 label,
@@ -714,6 +758,7 @@ private fun NotificationsTab(client: DenebGatewayClient) {
             records.forEach { rec ->
                 SettingsCard(
                     onClick = {
+                        haptics.tap()
                         scope.launch {
                             // A captured BigPicture image rides the OCR capture
                             // path; text-only notifications send as text. The
@@ -721,14 +766,17 @@ private fun NotificationsTab(client: DenebGatewayClient) {
                             // outlived them (process restart) falls back to text.
                             val image = if (rec.hasImage) store.getImage(rec.id) else null
                             val context = "📲 ${rec.appLabel} 알림 — ${rec.title}\n${rec.text}".trim()
-                            if (image != null) {
+                            val dispatched = if (image != null) {
                                 // Forward the picture AND the notification's text
                                 // context (sender/title/body) so the OCR turn sees both.
                                 client.captureImage(image, "image/jpeg", caption = context)
                             } else {
                                 client.ask(context, emptyList(), null)
+                                true
                             }
-                            sentId = rec.id
+                            // Only mark "보냄" when it actually dispatched (image path
+                            // returns false when the gateway token is unset).
+                            if (dispatched) sentId = rec.id
                         }
                     },
                 ) {
@@ -764,8 +812,17 @@ private fun NotificationsTab(client: DenebGatewayClient) {
 
 @Composable
 private fun TopicDocsTab(client: DenebGatewayClient, onOpenTopicDoc: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
     var docs by remember { mutableStateOf<List<TopicDocFile>?>(null) }
-    LaunchedEffect(Unit) { docs = client.fetchTopicDocs() }
+    var loadFailed by remember { mutableStateOf(false) }
+    suspend fun load() {
+        loadFailed = false
+        docs = null
+        val fetched = client.fetchTopicDocs()
+        if (fetched == null) loadFailed = true else docs = fetched
+    }
+    LaunchedEffect(Unit) { load() }
     Column(Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 4.dp),
@@ -777,21 +834,30 @@ private fun TopicDocsTab(client: DenebGatewayClient, onOpenTopicDoc: (String) ->
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
             )
-            TextButton(onClick = { onOpenTopicDoc("") }) { Text("+ 새 문서") }
+            TextButton(onClick = { haptics.tap(); onOpenTopicDoc("") }) { Text("+ 새 문서") }
         }
-        TopicDocsList(docs, onOpenTopicDoc)
+        TopicDocsList(docs, loadFailed, onRetry = { scope.launch { load() } }, onOpenTopicDoc = onOpenTopicDoc)
     }
 }
 
 @Composable
-private fun TopicDocsList(list: List<TopicDocFile>?, onOpenTopicDoc: (String) -> Unit) {
+private fun TopicDocsList(
+    list: List<TopicDocFile>?,
+    loadFailed: Boolean,
+    onRetry: () -> Unit,
+    onOpenTopicDoc: (String) -> Unit,
+) {
+    val haptics = rememberHaptics()
     when {
+        loadFailed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            DenebError("토픽 문서를 불러오지 못했습니다.", onRetry = onRetry)
+        }
         list == null -> DenebLoading()
         list.isEmpty() -> EmptyTab("토픽 문서가 없습니다.")
         else -> LazyColumn(Modifier.fillMaxSize()) {
             items(list, key = { it.name }) { doc ->
                 Row(
-                    modifier = Modifier.animateItem().fillMaxWidth().clickable { onOpenTopicDoc(doc.name) }.padding(horizontal = 16.dp, vertical = 14.dp),
+                    modifier = Modifier.animateItem().fillMaxWidth().clickable { haptics.tap(); onOpenTopicDoc(doc.name) }.padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(

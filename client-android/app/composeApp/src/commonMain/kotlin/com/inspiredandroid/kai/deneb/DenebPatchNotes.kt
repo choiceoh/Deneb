@@ -21,6 +21,15 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.24",
+        code = 147,
+        highlights = listOf(
+            "상세 화면(메일·크론·사람·일정·문서·카테고리)의 로딩 실패에 '다시 시도' 버튼 — 한 번 실패해도 빠져나갈 필요 없이 바로 재시도",
+            "조용히 실패하던 동작 교정 — 크론 삭제 확인 + 실패 알림, 메일 보관·삭제·모델 전환 실패 표시",
+            "접근성 — 알림 캡처 체크박스·설정 탭·삭제 버튼에 스크린리더 라벨과 더 큰 터치 영역, 본문 마크다운의 들여쓴/번호 목록 표시 수정",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.23",
         code = 146,
         highlights = listOf(

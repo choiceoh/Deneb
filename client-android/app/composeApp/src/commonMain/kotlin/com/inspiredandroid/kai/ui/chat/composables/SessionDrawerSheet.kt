@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -29,6 +30,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -190,16 +192,22 @@ private fun SessionItem(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             )
         }
-        // Faint × to delete (undo via snackbar), keeping the row text-first.
-        Text(
-            text = "×",
-            fontSize = 18.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+        // Faint × to delete (undo via snackbar), keeping the row text-first. The 44dp
+        // box gives a real touch target + a TalkBack label without a Material icon.
+        Box(
             modifier = Modifier
-                .clickable { onDelete() }
-                .handCursor()
-                .padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
-        )
+                .padding(start = 8.dp)
+                .size(44.dp)
+                .clickable(onClickLabel = "대화 삭제", role = Role.Button) { onDelete() }
+                .handCursor(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "×",
+                fontSize = 18.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+            )
+        }
     }
 }
 

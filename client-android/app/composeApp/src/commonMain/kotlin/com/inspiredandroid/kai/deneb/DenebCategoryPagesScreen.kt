@@ -22,11 +22,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.ui.components.rememberHaptics
+import kotlinx.coroutines.launch
 
 /**
  * Pages within one wiki category (`miniapp.memory.list_in_category`). Tap a page
@@ -41,10 +44,17 @@ fun DenebCategoryPagesScreen(
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var pages by remember(category) { mutableStateOf<List<WikiPageRef>?>(null) }
+    var loadFailed by remember(category) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
 
-    LaunchedEffect(category) {
-        pages = client.fetchCategoryPages(category)
+    suspend fun load() {
+        loadFailed = false
+        pages = null
+        val fetched = client.fetchCategoryPages(category)
+        if (fetched == null) loadFailed = true else pages = fetched
     }
+    LaunchedEffect(category) { load() }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -67,23 +77,26 @@ fun DenebCategoryPagesScreen(
 
             val p = pages
             when {
+                loadFailed -> {
+                    Spacer(Modifier.height(12.dp))
+                    DenebError(
+                        "페이지를 불러오지 못했습니다.",
+                        onRetry = { scope.launch { load() } },
+                    )
+                }
                 p == null -> {
                     Spacer(Modifier.height(12.dp))
                     DenebLoading()
                 }
                 p.isEmpty() -> {
                     Spacer(Modifier.height(12.dp))
-                    Text(
-                        "이 카테고리에 페이지가 없습니다.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    DenebEmpty("이 카테고리에 페이지가 없습니다.")
                 }
                 else -> p.forEach { page ->
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onOpenWiki(page.path) }
+                            .clickable { haptics.tap(); onOpenWiki(page.path) }
                             .padding(vertical = 12.dp),
                     ) {
                         Text(
