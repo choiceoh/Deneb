@@ -431,8 +431,8 @@ func gatewayToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Gateway action. Destructive actions (restart/update/config_set) require approval: the first call returns a needs_approval envelope; after the user confirms, call the .confirmed variant with the same action_token.",
-				"enum":        []string{"status", "config_get", "config_set", "config_set.confirmed", "update", "update.confirmed", "restart", "restart.confirmed", "config.get", "config.schema.lookup", "config.apply", "config.patch", "update.run"},
+				"description": "Gateway action. config_get/config_set: read or write a single dotted path. config.get: full config snapshot. config.apply: replace the whole config. config.patch: merge a patch object. config.schema.lookup: schema for a path. Destructive actions (restart/update/config_set/config.apply/config.patch) require approval: the first call returns a needs_approval envelope; after the user confirms, call the .confirmed variant with the same action_token.",
+				"enum":        []string{"status", "config_get", "config_set", "config_set.confirmed", "update", "update.confirmed", "restart", "restart.confirmed", "config.get", "config.schema.lookup", "config.apply", "config.patch"},
 			},
 			"action_token": map[string]any{
 				"type":        "string",
@@ -969,7 +969,7 @@ func graphifyToolSchema() map[string]any {
 			},
 			"graph": map[string]any{
 				"type":        "string",
-				"description": "Which graph to query. \"wiki\" (default, ~/.deneb/wiki-graph/graph.json — concept/entity knowledge from the wiki dreamer) or an absolute/relative path to a custom graph.json",
+				"description": "Which graph to query. \"wiki\" (default, ~/.deneb/wiki-graph/graph.json — concept/entity knowledge from the wiki dreamer), \"code\" (workspace/graphify-out/graph.json — call/import graph built by graphify update), or an absolute/relative path to a custom graph.json",
 			},
 			"node": map[string]any{
 				"type":        "string",

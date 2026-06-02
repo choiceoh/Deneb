@@ -216,11 +216,6 @@ func ToolGatewayWithDeps(repoDir string, deps GatewayDeps) ToolFunc {
 			}
 			return "게이트웨이 재시작 신호를 전송했습니다 (SIGUSR1). 곧 재시작됩니다.", nil
 
-		case "update.run":
-			// Legacy path — behaves like the confirmed update. Kept for
-			// backward compatibility with older system prompts.
-			return gatewayUpdate(ctx, deps, repoDir, true)
-
 		default:
 			return fmt.Sprintf("알 수 없는 gateway action: %q. 지원 action: status, config_get, config_set, update, restart, config.get, config.schema.lookup, config.patch, config.apply.", p.Action), nil
 		}
