@@ -159,10 +159,9 @@ func TestBriefing_PruneRemovesStaleEntries(t *testing.T) {
 func TestFormatBriefing_KoreanShape(t *testing.T) {
 	s := makeService(t)
 	ev := calendar.Event{
-		Summary:    "박YY 미팅",
-		Location:   "강남 본사",
-		Start:      time.Date(2026, 5, 26, 14, 0, 0, 0, s.displayLoc),
-		Conference: &calendar.ConferenceInfo{URI: "https://meet.google.com/abc"},
+		Summary:  "박YY 미팅",
+		Location: "강남 본사",
+		Start:    time.Date(2026, 5, 26, 14, 0, 0, 0, s.displayLoc),
 		Attendees: []calendar.Attendee{
 			{Email: "self@example.com", Self: true, DisplayName: "Me"},
 			{Email: "p@example.com", DisplayName: "박YY", ResponseStatus: "accepted"},
@@ -171,7 +170,7 @@ func TestFormatBriefing_KoreanShape(t *testing.T) {
 	}
 	body := s.formatBriefing(ev)
 
-	for _, must := range []string{"D-15분", "박YY 미팅", "14:00", "강남 본사", "meet.google.com/abc", "박YY", "김ZZ"} {
+	for _, must := range []string{"D-15분", "박YY 미팅", "14:00", "강남 본사", "박YY", "김ZZ"} {
 		if !strings.Contains(body, must) {
 			t.Errorf("briefing missing %q in:\n%s", must, body)
 		}
@@ -217,10 +216,9 @@ func TestFormatBriefing_HandlesMissingTitle(t *testing.T) {
 func TestFormatBriefing_EscapesHTMLEntities(t *testing.T) {
 	s := makeService(t)
 	ev := calendar.Event{
-		Summary:    "Q1 <리뷰> & 계획",
-		Location:   "회의실 A <3F>",
-		Start:      time.Date(2026, 5, 26, 14, 0, 0, 0, s.displayLoc),
-		Conference: &calendar.ConferenceInfo{URI: "https://example.com/?a=1&b=2"},
+		Summary:  "Q1 <리뷰> & 계획",
+		Location: "회의실 A <3F>",
+		Start:    time.Date(2026, 5, 26, 14, 0, 0, 0, s.displayLoc),
 		Attendees: []calendar.Attendee{
 			{DisplayName: "이름 <bracket>", ResponseStatus: "accepted"},
 		},
@@ -230,9 +228,6 @@ func TestFormatBriefing_EscapesHTMLEntities(t *testing.T) {
 		if strings.Contains(body, leak) {
 			t.Errorf("raw HTML entity %q must be escaped, got:\n%s", leak, body)
 		}
-	}
-	if strings.Contains(body, "?a=1&b=2") && !strings.Contains(body, "?a=1&amp;b=2") {
-		t.Errorf("conference URL ampersand not escaped, got:\n%s", body)
 	}
 	for _, must := range []string{"&lt;리뷰&gt;", "&lt;3F&gt;", "&lt;bracket&gt;"} {
 		if !strings.Contains(body, must) {
