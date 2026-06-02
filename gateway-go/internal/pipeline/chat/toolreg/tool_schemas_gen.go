@@ -724,7 +724,7 @@ func wikiToolSchema() map[string]any {
 			"category": map[string]any{
 				"type":        "string",
 				"description": "Wiki category for write action or index filter",
-				"enum":        []string{"사람", "프로젝트", "거래", "기술", "업무", "결정", "선호"},
+				"enum":        []string{"프로젝트", "인물", "운영시스템"},
 			},
 			"confidence": map[string]any{
 				"type":        "string",
@@ -737,7 +737,7 @@ func wikiToolSchema() map[string]any {
 			},
 			"due": map[string]any{
 				"type":        "string",
-				"description": "Upcoming deadline in YYYY-MM-DD (write action, 거래 category): payment due, delivery, or milestone date. Surfaced by the morning letter deadline scan.",
+				"description": "Upcoming deadline in YYYY-MM-DD (write action): payment due, delivery, or milestone date. Surfaced by the morning letter deadline scan.",
 			},
 			"id": map[string]any{
 				"type":        "string",
@@ -863,7 +863,7 @@ func knowledgeToolSchema() map[string]any {
 			},
 			"category": map[string]any{
 				"type":        "string",
-				"description": "프론트매터 카테고리 (op=record) — 인물·거래·프로젝트·기술·결정·업무 등",
+				"description": "프론트매터 카테고리 (op=record) — 프로젝트·인물·운영시스템",
 			},
 			"importance": map[string]any{
 				"type":        "number",
@@ -885,7 +885,7 @@ func knowledgeToolSchema() map[string]any {
 			},
 			"page": map[string]any{
 				"type":        "string",
-				"description": "wiki 페이지 상대 경로 (op=record). 카테고리/이름 형식 — 예: `인물/박부장`, `거래/ABC상사-NDA`",
+				"description": "wiki 페이지 상대 경로 (op=record). 카테고리/이름 형식 — 예: `인물/박부장`, `운영시스템/ABC상사-NDA`",
 			},
 			"query": map[string]any{
 				"type":        "string",

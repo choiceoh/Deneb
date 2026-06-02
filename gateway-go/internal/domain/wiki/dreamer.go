@@ -701,11 +701,11 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 		if !strings.HasSuffix(u.Path, ".md") {
 			u.Path += ".md"
 		}
-		// Validate category; remap invalid ones to "업무" as fallback.
+		// Validate category; remap invalid ones to "운영시스템" as fallback.
 		if u.Category != "" && !ValidateCategory(u.Category) {
-			wd.logger.Warn("wiki-dream: invalid category, remapping to 업무",
+			wd.logger.Warn("wiki-dream: invalid category, remapping to 운영시스템",
 				"category", u.Category, "path", u.Path)
-			u.Category = "업무"
+			u.Category = "운영시스템"
 			// Fix path prefix to match corrected category.
 			parts := strings.SplitN(u.Path, "/", 2)
 			if len(parts) == 2 {

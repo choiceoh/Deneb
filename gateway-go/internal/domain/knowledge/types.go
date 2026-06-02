@@ -41,7 +41,7 @@ type RecordOptions struct {
 	Page string
 	// Title overrides page Meta.Title; defaults to the last path segment.
 	Title string
-	// Category groups the page (e.g. "인물", "거래", "프로젝트", "기술").
+	// Category groups the page (e.g. "프로젝트", "인물", "운영시스템").
 	Category string
 	// Body is the markdown content.
 	Body string
