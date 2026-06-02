@@ -8,22 +8,22 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-// EnrichContacts must touch ONLY existing 사람 pages whose name matches a
-// contact — never a non-사람 page, never an unmatched contact, and never a new
+// EnrichContacts must touch ONLY existing 인물 pages whose name matches a
+// contact — never a non-인물 page, never an unmatched contact, and never a new
 // page.
 func TestEnrichContacts_MatchesExistingPeopleOnly(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
-	person := NewPage("김민준", "사람", []string{"탑솔라"})
+	person := NewPage("김민준", "인물", []string{"탑솔라"})
 	person.Body = "# 김민준\n\n## 메모\n탑솔라 구매팀 담당."
-	if err := store.WritePage("사람/김민준.md", person); err != nil {
+	if err := store.WritePage("인물/김민준.md", person); err != nil {
 		t.Fatalf("WritePage person: %v", err)
 	}
-	// A non-사람 page must never be enriched even if a contact name collides.
-	tech := NewPage("DGX Spark", "기술", nil)
-	if err := store.WritePage("기술/dgx-spark.md", tech); err != nil {
+	// A non-인물 page must never be enriched even if a contact name collides.
+	tech := NewPage("DGX Spark", "운영시스템", nil)
+	if err := store.WritePage("운영시스템/dgx-spark.md", tech); err != nil {
 		t.Fatalf("WritePage tech: %v", err)
 	}
 
@@ -46,7 +46,7 @@ func TestEnrichContacts_MatchesExistingPeopleOnly(t *testing.T) {
 		t.Errorf("Names = %v, want [김민준]", res.Names)
 	}
 
-	got := testutil.Must(store.ReadPage("사람/김민준.md"))
+	got := testutil.Must(store.ReadPage("인물/김민준.md"))
 	if !strings.Contains(got.Body, "010-1234-5678") {
 		t.Errorf("phone not written into page: %q", got.Body)
 	}
@@ -60,10 +60,10 @@ func TestEnrichContacts_MatchesExistingPeopleOnly(t *testing.T) {
 		t.Errorf("pre-existing section was clobbered: %q", got.Body)
 	}
 
-	// The non-사람 page must be byte-identical (no enrichment).
-	techGot := testutil.Must(store.ReadPage("기술/dgx-spark.md"))
+	// The non-인물 page must be byte-identical (no enrichment).
+	techGot := testutil.Must(store.ReadPage("운영시스템/dgx-spark.md"))
 	if strings.Contains(techGot.Body, "010-0000-0000") {
-		t.Errorf("non-사람 page was enriched")
+		t.Errorf("non-인물 page was enriched")
 	}
 }
 
@@ -74,9 +74,9 @@ func TestEnrichContacts_Idempotent(t *testing.T) {
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
-	person := NewPage("이서연", "사람", nil)
+	person := NewPage("이서연", "인물", nil)
 	person.Body = "## 메모\n비고."
-	if err := store.WritePage("사람/이서연.md", person); err != nil {
+	if err := store.WritePage("인물/이서연.md", person); err != nil {
 		t.Fatalf("WritePage: %v", err)
 	}
 
@@ -89,7 +89,7 @@ func TestEnrichContacts_Idempotent(t *testing.T) {
 	if r1.Updated != 1 {
 		t.Fatalf("first sync Updated = %d, want 1", r1.Updated)
 	}
-	before := testutil.Must(store.ReadPage("사람/이서연.md"))
+	before := testutil.Must(store.ReadPage("인물/이서연.md"))
 
 	r2, err := store.EnrichContacts(payload)
 	if err != nil {
@@ -101,7 +101,7 @@ func TestEnrichContacts_Idempotent(t *testing.T) {
 	if r2.Updated != 0 {
 		t.Errorf("second sync Updated = %d, want 0 (idempotent)", r2.Updated)
 	}
-	after := testutil.Must(store.ReadPage("사람/이서연.md"))
+	after := testutil.Must(store.ReadPage("인물/이서연.md"))
 	if before.Meta.Updated != after.Meta.Updated {
 		t.Errorf("Updated date churned: %q -> %q", before.Meta.Updated, after.Meta.Updated)
 	}

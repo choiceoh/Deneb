@@ -80,15 +80,15 @@ func (s *Store) EnrichContacts(contactsJSON []byte) (ContactEnrichResult, error)
 		return res, nil
 	}
 
-	// Candidate people: the 사람 category pages, listed straight off disk via the
-	// 사람/ directory rather than the in-memory index. The index can be stale or
+	// Candidate people: the 인물 category pages, listed straight off disk via the
+	// 인물/ directory rather than the in-memory index. The index can be stale or
 	// miss the category for older pages (it's rebuilt on startup), which silently
 	// dropped every candidate; ListPages + ReadPage is authoritative. ReadPage and
 	// WritePage take the store's lock themselves, so this loop holds no lock.
 	type person struct{ path, title string }
-	relPaths, err := s.ListPages("사람")
+	relPaths, err := s.ListPages("인물")
 	if err != nil {
-		// Missing 사람/ directory (no people yet) or an unreadable tree: nothing to
+		// Missing 인물/ directory (no people yet) or an unreadable tree: nothing to
 		// enrich, but the save path already succeeded — not an error for the caller.
 		return res, nil
 	}
@@ -99,8 +99,8 @@ func (s *Store) EnrichContacts(contactsJSON []byte) (ContactEnrichResult, error)
 			continue // unreadable page — skip, don't abort the whole sync
 		}
 		// Defensive: only enrich pages that are actually people. A stray non-person
-		// .md under 사람/ shouldn't be treated as a contact.
-		if page.Meta.Category != "" && page.Meta.Category != "사람" {
+		// .md under 인물/ shouldn't be treated as a contact.
+		if page.Meta.Category != "" && page.Meta.Category != "인물" {
 			continue
 		}
 		title := strings.TrimSpace(page.Meta.Title)

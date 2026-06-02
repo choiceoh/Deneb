@@ -15,13 +15,9 @@ import (
 
 // Categories are the top-level wiki directories.
 var Categories = []string{
-	"사람",
 	"프로젝트",
-	"거래",
-	"기술",
-	"업무",
-	"결정",
-	"선호",
+	"인물",
+	"운영시스템",
 }
 
 // ValidateCategory returns true if cat is one of the allowed wiki categories.
