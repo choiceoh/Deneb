@@ -379,12 +379,12 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("- type: concept(개념), entity(인물/조직), source(출처/레퍼런스), comparison(비교), log(이력)\n")
 		d.WriteString("- confidence: high(검증됨), medium(합리적 추론), low(불확실)\n\n")
 
-		d.WriteString("### 읽기 (Query)\n")
-		d.WriteString("- 과거 맥락/지식 조회 → wiki search / wiki read\n")
-		d.WriteString("- 위키 목차 확인 → wiki index → wiki read\n")
-		d.WriteString("- 키워드 검색 → wiki search\n")
-		d.WriteString("- 최근 일지 확인 → wiki daily\n")
-		d.WriteString("- **관계·맥락·연쇄 추론 → graphify** (단순 키워드 룩업이 아닌, \"누가 어떤 결정에 엮였나\", \"이 함수가 어떤 개념을 구현하나\" 같은 그래프 탐색).\n\n")
+		d.WriteString("### 읽기 (Query) — 검색 도구 선택\n")
+		d.WriteString("회상/검색 도구가 여럿이다. 겹치지 않게 **용도로** 구분하라:\n")
+		d.WriteString("- **과거 맥락·지식 회상 → knowledge(op=recall)**: wiki(큐레이션 페이지)와 hindsight(자동 누적 cross-session)를 한 번에 federated 검색. 어디 있는지 모를 때 1순위.\n")
+		d.WriteString("- **위키 페이지 직접 조작 → wiki**: 목차(index)·특정 페이지(read)·키워드 검색(search)·최근 일지(daily). 쓰기(write)도 여기.\n")
+		d.WriteString("- **이번 세션의 사라진 대화 → polaris**: 컨텍스트에서 압축돼 사라진 '아까 그거'·합의·숫자·결정. 현재 세션 한정.\n")
+		d.WriteString("- **관계·맥락·연쇄 추론 → graphify**: 단순 키워드 룩업이 아닌 \"누가 어떤 결정에 엮였나\", \"이 함수가 어떤 개념을 구현하나\" 같은 그래프 탐색.\n\n")
 
 		d.WriteString("### 그래프 추론 (graphify)\n")
 		d.WriteString("위키와 코드는 graphify 도구를 통해 **그래프**로도 질의 가능하다. 매 dream cycle마다 위키 페이지가 자동으로 graph.json으로 갱신되고, 코드는 `graphify update .`로 빌드된 호출/import 그래프를 사용한다.\n")
