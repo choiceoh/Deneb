@@ -201,6 +201,12 @@ func pushPreview(content string) string {
 // (threadId "0" → "client:main").
 const nativeWorkSessionKey = "client:main"
 
+// nativeWorkSessionKeyTo is the "to" half of nativeWorkSessionKey ("client:main").
+// Used as the cron DefaultTo in native-only mode so a job without an explicit
+// delivery target resolves to a valid recipient — the handoff then rebuilds
+// "client:" + "main" = client:main and the relay routes it to the native 업무 chat.
+const nativeWorkSessionKeyTo = "main"
+
 // mirrorsToNativeWork reports whether a relayed body should also be appended to
 // the native client's 업무 transcript. True only for a Telegram General-topic
 // target (no ":thread:" suffix, or thread 0) — named forum topics (코딩/잡담)

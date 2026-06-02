@@ -322,10 +322,27 @@ func New(addr string, opts ...Option) (*Server, error) {
 		}
 		storePath := cron.DefaultCronStorePath(homeDir)
 		s.cronRunLog = cron.NewPersistentRunLog(storePath)
+		// Cron delivery defaults. In native-only proactive mode every cron
+		// report is routed to the native client's 업무 chat (client:main) via
+		// MainSessionHandoff regardless of the per-job target, so default
+		// delivery-less jobs straight to that native sentinel. Without this a
+		// job with no explicit Delivery.To fails ResolveDeliveryTarget ("no
+		// delivery recipient configured") before its agent even runs — and once
+		// Telegram is removed, extractCronDefaultTo yields "" so EVERY
+		// targetless job breaks. The Telegram operator chat ID is only a
+		// meaningful default while proactive output still goes to Telegram.
+		// "main" is non-empty, so the SetTelegramPlugin late-bind (which only
+		// fills DefaultTo when empty) leaves it intact.
+		defaultChannel := "telegram"
+		defaultDeliverTo := defaultTo
+		if proactiveNativeOnly {
+			defaultChannel = "client"
+			defaultDeliverTo = nativeWorkSessionKeyTo
+		}
 		s.cronService = cron.NewService(cron.ServiceConfig{
 			StorePath:      storePath,
-			DefaultChannel: "telegram",
-			DefaultTo:      defaultTo,
+			DefaultChannel: defaultChannel,
+			DefaultTo:      defaultDeliverTo,
 			Enabled:        cronEnabled,
 			Sessions:       s.sessions,
 		}, nil, s.logger) // agent runner wired later during chat handler setup
