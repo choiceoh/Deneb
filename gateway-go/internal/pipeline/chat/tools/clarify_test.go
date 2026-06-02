@@ -30,8 +30,8 @@ func (f *fakeReply) replyFn(_ context.Context, d *toolctx.DeliveryContext, text 
 }
 
 // ctxWithReply wires the delivery + replyFn the clarify tool expects.
-// Channel defaults to "telegram" because that is the only supported channel
-// (all other channels are rejected up front by the tool).
+// Telegram renders inline-keyboard buttons; other channels receive a
+// plain-text numbered fallback.
 func ctxWithReply(t *testing.T, channel string, f *fakeReply) context.Context {
 	t.Helper()
 	ctx := toolctx.WithDeliveryContext(context.Background(), &toolctx.DeliveryContext{
@@ -108,19 +108,23 @@ func TestClarifyAcceptsKoreanAtRuneBoundary(t *testing.T) {
 	}
 }
 
-func TestClarifyRejectsNonTelegramChannel(t *testing.T) {
+func TestClarifyFallsBackToTextOnNonTelegram(t *testing.T) {
 	tool := ToolClarify()
 	fr := newFakeReply()
 	ctx := ctxWithReply(t, "whatsapp", fr)
-	_, err := tool(ctx, []byte(`{"question":"q","options":["A","B"]}`))
-	if err == nil {
-		t.Fatal("expected error on non-telegram channel")
+	out, err := tool(ctx, []byte(`{"question":"q","options":["A","B"]}`))
+	if err != nil {
+		t.Fatalf("non-telegram should fall back to plain text, got error %v", err)
 	}
-	if !strings.Contains(err.Error(), "only supported on Telegram") {
-		t.Fatalf("got %q, want telegram-only error", err)
+	if fr.called != 1 {
+		t.Fatalf("replyFn should be invoked once for the text fallback, got %d", fr.called)
 	}
-	if fr.called != 0 {
-		t.Fatal("replyFn must not be invoked when channel is unsupported")
+	// The fallback is plain text and must not carry the Telegram button directive.
+	if strings.Contains(fr.text, "<!-- buttons:") {
+		t.Fatalf("text fallback must not contain the button directive, got %q", fr.text)
+	}
+	if !strings.Contains(out, "텍스트 모드") {
+		t.Fatalf("result should mention text mode, got %q", out)
 	}
 }
 

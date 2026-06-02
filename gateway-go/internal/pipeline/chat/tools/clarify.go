@@ -59,6 +59,21 @@ func buildClarifyMessage(question string, options []string) (string, error) {
 	return body.String(), nil
 }
 
+// buildClarifyText formats just the question + numbered options, without the
+// Telegram button directive. Used as a fallback on channels that don't render
+// inline keyboards (e.g. the native client) so the agent can still ask — the
+// user replies in free text and the agent reads it on the next turn.
+func buildClarifyText(question string, options []string) string {
+	var body strings.Builder
+	body.WriteString(strings.TrimSpace(question))
+	body.WriteString("\n\n")
+	for i, opt := range options {
+		fmt.Fprintf(&body, "%d. %s\n", i+1, opt)
+	}
+	body.WriteString("\n번호나 내용으로 답해 주세요.")
+	return body.String()
+}
+
 // ToolClarify implements the clarify tool: the agent asks the user to resolve
 // an ambiguity and receives the answer through a Telegram inline-keyboard
 // button click. The tool sends the question + buttons via the current
@@ -116,12 +131,20 @@ func ToolClarify() ToolFunc {
 		if delivery == nil || delivery.Channel == "" || delivery.To == "" {
 			return "", fmt.Errorf("clarify: no active delivery target; cannot send button prompt")
 		}
-		// Inline keyboards are a Telegram-specific affordance. On other
-		// channels the directive is stripped silently by parseReplyButtons
-		// (since only the Telegram reply path parses it), so we reject
-		// up-front with a clear error rather than sending a broken prompt.
+		// Inline keyboards are a Telegram-specific affordance. On other channels
+		// the button directive is stripped by parseReplyButtons (only the
+		// Telegram reply path parses it), so fall back to a plain-text numbered
+		// question — the user replies in free text and the agent reads it next turn.
 		if delivery.Channel != "telegram" {
-			return "", fmt.Errorf("clarify: buttons are only supported on Telegram (current channel: %s)", delivery.Channel)
+			sendCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			if err := replyFn(sendCtx, delivery, buildClarifyText(q, cleaned)); err != nil {
+				return "", fmt.Errorf("clarify: failed to send prompt: %w", err)
+			}
+			return fmt.Sprintf(
+				"질문 전송됨 (선택지 %d개, 텍스트 모드 — %s 채널은 버튼 미지원). 이 턴을 종료하라 — 사용자 답변은 다음 턴에서 받는다.",
+				len(cleaned), delivery.Channel,
+			), nil
 		}
 
 		msg, err := buildClarifyMessage(q, cleaned)
