@@ -58,8 +58,8 @@ const (
 	// itself crashes does not loop.
 	resumeMaxAttempts = 1
 
-	// resumeDispatchDelay gives the channel plugins (Telegram in particular)
-	// time to finish connecting before we inject the resume message.
+	// resumeDispatchDelay gives channel-facing startup hooks time to settle
+	// before we inject the resume message.
 	// Otherwise the first run would start with replyFunc == nil and fail
 	// delivery immediately.
 	resumeDispatchDelay = 3 * time.Second
@@ -279,7 +279,7 @@ type autoResumeOptions struct {
 	Now         func() time.Time
 	// DispatchFn is the async resume sender. Defaulted to chatHandler.Send
 	// in production; swappable in tests.
-	DispatchFn func(ctx context.Context, sessionKey, channel, chatID string) error
+	DispatchFn func(ctx context.Context, sessionKey, channel, to string) error
 }
 
 // autoResumeEnabled returns the opt-out flag from deneb.json. Default = true.
@@ -359,11 +359,12 @@ func (s *Server) autoResumeInterruptedRunsWithOpts(ctx context.Context, opts aut
 			continue
 		}
 
-		// Only Telegram direct sessions are resumable for now. Other
-		// channels (cron, btw, subagent) have their own recovery paths.
-		chatID, ok := parseTelegramChatID(m.SessionKey)
+		// Only native client sessions and legacy Telegram direct sessions
+		// are resumable here. Other channels (cron, btw, subagent) have their
+		// own recovery paths or are intentionally transient.
+		target, ok := resumableSessionForMarker(m.SessionKey)
 		if !ok {
-			logger.Debug("auto-resume: non-telegram session, skipping",
+			logger.Debug("auto-resume: non-resumable session, skipping",
 				"session", m.SessionKey)
 			_ = store.Delete(m.SessionKey)
 			continue
@@ -404,16 +405,16 @@ func (s *Server) autoResumeInterruptedRunsWithOpts(ctx context.Context, opts aut
 		// Dispatch async so we do not block the startup path. Each dispatch
 		// runs in its own safego to isolate panics.
 		markerCopy := m
-		chatIDCopy := chatID
+		targetCopy := target
 		shapeCopy := shape
 		safego.GoWithSlog(logger, "auto-resume-dispatch", func() {
-			// Brief sleep to let telegram plugin finish starting.
+			// Brief sleep to let channel-facing startup hooks settle.
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(resumeDispatchDelay):
 			}
-			if err := opts.DispatchFn(ctx, markerCopy.SessionKey, markerCopy.Channel, chatIDCopy); err != nil {
+			if err := opts.DispatchFn(ctx, markerCopy.SessionKey, targetCopy.Channel, targetCopy.To); err != nil {
 				logger.Error("auto-resume: dispatch failed",
 					"session", markerCopy.SessionKey,
 					"tail", tailShapeString(shapeCopy),
@@ -430,10 +431,11 @@ func (s *Server) autoResumeInterruptedRunsWithOpts(ctx context.Context, opts aut
 }
 
 // dispatchResumeMessage builds a synthetic chat.send for the session and
-// invokes the chat handler. Delivery context is reconstructed from the
-// telegram session key; other channels would need their own reconstruction
-// logic if resumable in the future.
-func (s *Server) dispatchResumeMessage(ctx context.Context, sessionKey, channel, chatID string) error {
+// invokes the chat handler. Native client sessions resume directly into their
+// transcript. Legacy Telegram sessions still get a reconstructed delivery
+// target so the final reply can reach the old channel while those transcripts
+// remain restorable.
+func (s *Server) dispatchResumeMessage(ctx context.Context, sessionKey, channel, to string) error {
 	if s.chatHandler == nil {
 		return errors.New("chat handler not initialized")
 	}
@@ -443,10 +445,10 @@ func (s *Server) dispatchResumeMessage(ctx context.Context, sessionKey, channel,
 		"clientRunId": shortid.New("resume"),
 		"skipMerge":   true, // synthetic dispatch — do not collapse with real user input
 	}
-	if channel == "telegram" && chatID != "" {
+	if channel == "telegram" && to != "" {
 		params["delivery"] = map[string]any{
 			"channel": "telegram",
-			"to":      chatID,
+			"to":      to,
 		}
 	}
 	req, err := protocol.NewRequestFrame(

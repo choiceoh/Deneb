@@ -5,11 +5,11 @@
 // Users write tasks into HEARTBEAT.md and the agent picks them up autonomously.
 // Outside active hours, or if the file is missing/empty, the task is a no-op.
 //
-// The heartbeat turn is dispatched into the user's most recently active
-// telegram session (tracked via ActivityTracker.LastSessionKey). Sharing the
-// session means the agent sees prior commitments and user replies in the same
-// transcript, instead of running in an isolated stateless channel. When no
-// telegram session has been seen yet, the task is a no-op.
+// The heartbeat turn is dispatched into the user's most recently active native
+// client session (tracked via ActivityTracker.LastSessionKey), falling back to
+// client:main when no native session has been seen yet. Sharing the session
+// means the agent sees prior commitments and user replies in the same
+// transcript, instead of running in an isolated stateless channel.
 //
 // Persistence is isolated from the chat transcript:
 //   - EphemeralUser=true   → the trigger user-role message is NOT persisted
@@ -107,27 +107,25 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 		return nil
 	}
 
-	// Resolve the target session: latest active telegram session. Heartbeat
-	// piggybacks on the user's session so prior commitments and replies are
-	// visible to the agent. Without an active session, skip entirely instead
-	// of falling back to an isolated channel.
-	if t.activity == nil {
-		t.logger.Debug("heartbeat: skipped, no activity tracker")
-		return nil
+	// Resolve the target session: latest active native session, or the native
+	// work home if the app has not recorded a session yet. Heartbeat piggybacks
+	// on the user's native transcript so prior commitments and replies are
+	// visible to the agent.
+	lastSessionKey := ""
+	if t.activity != nil {
+		lastSessionKey = t.activity.LastSessionKey()
 	}
-	sessionKey := t.activity.LastSessionKey()
-	if !strings.HasPrefix(sessionKey, "telegram:") {
-		t.logger.Debug("heartbeat: skipped, no active telegram session", "sessionKey", sessionKey)
-		return nil
-	}
+	sessionKey := heartbeatTargetSessionKey(lastSessionKey)
 
 	// Skip if user is actively using the system. Avoids racing a turn that
 	// is in flight or interrupting the user mid-conversation.
-	idleMs := time.Now().UnixMilli() - t.activity.LastActivityAt()
-	idle := time.Duration(idleMs) * time.Millisecond
-	if idle < 1*time.Minute {
-		t.logger.Debug("heartbeat: skipped, user active", "idle", idle.Round(time.Second))
-		return nil
+	if t.activity != nil {
+		idleMs := time.Now().UnixMilli() - t.activity.LastActivityAt()
+		idle := time.Duration(idleMs) * time.Millisecond
+		if idle < 1*time.Minute {
+			t.logger.Debug("heartbeat: skipped, user active", "idle", idle.Round(time.Second))
+			return nil
+		}
 	}
 
 	triggerMsg := fmt.Sprintf(heartbeatTriggerTemplate, content)

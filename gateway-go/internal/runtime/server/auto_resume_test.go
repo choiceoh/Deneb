@@ -180,13 +180,13 @@ type fakeDispatcher struct {
 type dispatchCall struct {
 	SessionKey string
 	Channel    string
-	ChatID     string
+	To         string
 }
 
-func (f *fakeDispatcher) fn(ctx context.Context, sessionKey, channel, chatID string) error {
+func (f *fakeDispatcher) fn(ctx context.Context, sessionKey, channel, to string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.calls = append(f.calls, dispatchCall{SessionKey: sessionKey, Channel: channel, ChatID: chatID})
+	f.calls = append(f.calls, dispatchCall{SessionKey: sessionKey, Channel: channel, To: to})
 	return nil
 }
 
@@ -282,12 +282,58 @@ func TestAutoResume_ResumesInterruptedUserTurn(t *testing.T) {
 	waitForCondition(t, 5*time.Second, func() bool { return fd.count() == 1 })
 
 	calls := fd.snapshot()
-	if calls[0].SessionKey != "telegram:42" || calls[0].ChatID != "42" || calls[0].Channel != "telegram" {
+	if calls[0].SessionKey != "telegram:42" || calls[0].To != "42" || calls[0].Channel != "telegram" {
 		t.Errorf("unexpected dispatch: %+v", calls[0])
 	}
 
 	// Marker should now have ResumeAttempts==1 (bumped BEFORE dispatch fires).
 	m, _ := store.Read("telegram:42")
+	if m == nil || m.ResumeAttempts != 1 {
+		t.Errorf("expected attempts=1 on persisted marker, got %+v", m)
+	}
+}
+
+// Test: a fresh native client marker + user-text tail → resume fires without
+// Telegram delivery reconstruction.
+func TestAutoResume_ResumesInterruptedNativeClientTurn(t *testing.T) {
+	tmpHome := t.TempDir()
+	srv := newAutoResumeTestServer(t, tmpHome)
+
+	sessionKey := "client:main:fresh-chat"
+	writeTranscriptLine(t, tmpHome, sessionKey,
+		`{"role":"user","content":"이어 해줘","timestamp":1700000001000}`,
+	)
+	store := srv.runMarkerStore()
+	if err := store.Write(session.RunMarker{
+		SessionKey:     sessionKey,
+		StartedAt:      time.Now().UnixMilli(),
+		LastActivityAt: time.Now().UnixMilli(),
+		Channel:        "client",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	fd := &fakeDispatcher{}
+	opts := autoResumeOptions{
+		Enabled:     true,
+		MaxAge:      resumeMaxAge,
+		MaxAttempts: 1,
+		Now:         time.Now,
+		DispatchFn:  fd.fn,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	srv.autoResumeInterruptedRunsWithOpts(ctx, opts)
+
+	waitForCondition(t, 5*time.Second, func() bool { return fd.count() == 1 })
+
+	calls := fd.snapshot()
+	if calls[0].SessionKey != sessionKey || calls[0].Channel != "client" || calls[0].To != "" {
+		t.Errorf("unexpected dispatch: %+v", calls[0])
+	}
+
+	m, _ := store.Read(sessionKey)
 	if m == nil || m.ResumeAttempts != 1 {
 		t.Errorf("expected attempts=1 on persisted marker, got %+v", m)
 	}
@@ -427,8 +473,8 @@ func TestAutoResume_DisabledDrainsMarkers(t *testing.T) {
 	}
 }
 
-// Test: non-telegram session keys (cron, btw) are skipped.
-func TestAutoResume_SkipsNonTelegramSessions(t *testing.T) {
+// Test: non-user session keys (cron, btw) are skipped.
+func TestAutoResume_SkipsNonUserSessions(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
@@ -451,7 +497,7 @@ func TestAutoResume_SkipsNonTelegramSessions(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 	if fd.count() != 0 {
-		t.Errorf("expected no dispatch for non-telegram sessions, got %d", fd.count())
+		t.Errorf("expected no dispatch for non-user sessions, got %d", fd.count())
 	}
 }
 

@@ -68,6 +68,34 @@ func TestSendSync_UsesDefaultModelWhenRequestModelEmpty(t *testing.T) {
 	}
 }
 
+func TestSendSync_RecordActivitySkipsEphemeralUser(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, sseResponse("sync reply", "end_turn"))
+	}))
+	defer server.Close()
+
+	var recorded []string
+	h := newSyncTestHandler(server, NewMemoryTranscriptStore())
+	h.recordActivity = func(sessionKey string) {
+		recorded = append(recorded, sessionKey)
+	}
+	defer h.Close()
+
+	_, err := h.SendSync(context.Background(), "client:main", "hello", "", nil)
+	testutil.NoError(t, err)
+	if !reflect.DeepEqual(recorded, []string{"client:main"}) {
+		t.Fatalf("recorded = %#v, want client:main", recorded)
+	}
+
+	_, err = h.SendSync(context.Background(), "client:main", "heartbeat", "", &SyncOptions{EphemeralUser: true})
+	testutil.NoError(t, err)
+	if !reflect.DeepEqual(recorded, []string{"client:main"}) {
+		t.Fatalf("ephemeral user should not record activity, got %#v", recorded)
+	}
+}
+
 func TestSendSyncStream_StreamsDeltaAndPreservesExplicitModel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

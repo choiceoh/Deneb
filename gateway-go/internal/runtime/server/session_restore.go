@@ -10,7 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
-// restoreAndWakeSessions scans the transcript directory for persisted Telegram
+// restoreAndWakeSessions scans the transcript directory for persisted user
 // sessions and restores them to the in-memory session manager.
 //
 // Called once at startup after all channel plugins have had a chance to start.
@@ -33,16 +33,12 @@ func (s *Server) restoreAndWakeSessions(_ context.Context) {
 	var restored int
 	for _, entry := range entries {
 		name := entry.Name()
-		// Only restore Telegram sessions; other kinds (cron:, btw:, etc.) are transient.
-		if !strings.HasPrefix(name, "telegram:") || !strings.HasSuffix(name, ".jsonl") {
+		if !strings.HasSuffix(name, ".jsonl") {
 			continue
 		}
 		sessionKey := strings.TrimSuffix(name, ".jsonl")
-
-		// Only restore main sessions (telegram:<chatID>), not sub-sessions
-		// (telegram:<chatID>:<name>:<ts>) which are transient agent tasks.
-		chatID := strings.TrimPrefix(sessionKey, "telegram:")
-		if strings.Contains(chatID, ":") {
+		channel, ok := restorableTranscriptSession(sessionKey)
+		if !ok {
 			continue
 		}
 
@@ -64,7 +60,7 @@ func (s *Server) restoreAndWakeSessions(_ context.Context) {
 			Key:       sessionKey,
 			Kind:      session.KindDirect,
 			Status:    session.StatusDone,
-			Channel:   "telegram",
+			Channel:   channel,
 			UpdatedAt: updatedAt,
 		}); err != nil {
 			s.logger.Warn("session restore: failed to restore session",

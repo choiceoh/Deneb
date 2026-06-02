@@ -243,7 +243,7 @@ func (t *ActivityTracker) Touch() {
 }
 
 // TouchSession updates both the timestamp and the last active session key.
-// Pass the session key associated with the activity (e.g. "telegram:1234567").
+// Pass the session key associated with the activity (e.g. "client:main").
 func (t *ActivityTracker) TouchSession(sessionKey string) {
 	t.lastActivityMs.Store(time.Now().UnixMilli())
 	if sessionKey != "" {
