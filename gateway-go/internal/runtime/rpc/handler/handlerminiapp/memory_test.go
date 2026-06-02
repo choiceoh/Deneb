@@ -17,6 +17,7 @@ type fakeMemoryStore struct {
 	searchDiaryFn func(ctx context.Context, q string, limit int) ([]wiki.DiaryHit, error)
 	readPageFn    func(relPath string) (*wiki.Page, error)
 	writePageFn   func(relPath string, page *wiki.Page) error
+	deletePageFn  func(relPath string) error
 	statsFn       func() wiki.StoreStats
 	listPagesFn   func(category string) ([]string, error)
 	diaryRecentFn func(limit int) []wiki.DiaryHit
@@ -48,6 +49,13 @@ func (f *fakeMemoryStore) WritePage(relPath string, page *wiki.Page) error {
 		return errors.New("WritePage not stubbed")
 	}
 	return f.writePageFn(relPath, page)
+}
+
+func (f *fakeMemoryStore) DeletePage(relPath string) error {
+	if f.deletePageFn == nil {
+		return errors.New("DeletePage not stubbed")
+	}
+	return f.deletePageFn(relPath)
 }
 
 func (f *fakeMemoryStore) Stats() wiki.StoreStats {
@@ -1111,6 +1119,86 @@ func TestMemoryMerge_RequiresAuth(t *testing.T) {
 			"targetPath": "프로젝트/a.md",
 			"sourcePath": "프로젝트/b.md",
 		}))
+	if resp.OK {
+		t.Errorf("expected auth rejection, got OK")
+	}
+}
+
+func TestMemoryDeletePages_HappyPath(t *testing.T) {
+	var deleted []string
+	store := &fakeMemoryStore{
+		deletePageFn: func(rel string) error {
+			deleted = append(deleted, rel)
+			return nil
+		},
+	}
+	h := memoryDeletePages(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.delete_pages", map[string]any{
+		"paths": []string{"프로젝트/a.md", "프로젝트/b.md"},
+	}))
+
+	var got struct {
+		OK      bool             `json:"ok"`
+		Deleted int              `json:"deleted"`
+		Failed  []map[string]any `json:"failed"`
+	}
+	decode(t, resp, &got)
+	if !got.OK || got.Deleted != 2 || len(got.Failed) != 0 {
+		t.Fatalf("got %+v, want ok/deleted=2/no failures", got)
+	}
+	if len(deleted) != 2 || deleted[0] != "프로젝트/a.md" || deleted[1] != "프로젝트/b.md" {
+		t.Errorf("DeletePage calls = %v", deleted)
+	}
+}
+
+func TestMemoryDeletePages_PartialFailure(t *testing.T) {
+	// A traversal-unsafe path is rejected before reaching the store, and a
+	// store error on one page is reported without aborting the others.
+	store := &fakeMemoryStore{
+		deletePageFn: func(rel string) error {
+			if rel == "프로젝트/bad.md" {
+				return errors.New("disk error")
+			}
+			return nil
+		},
+	}
+	h := memoryDeletePages(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.delete_pages", map[string]any{
+		"paths": []string{"프로젝트/ok.md", "../escape.md", "프로젝트/bad.md"},
+	}))
+
+	var got struct {
+		OK      bool             `json:"ok"`
+		Deleted int              `json:"deleted"`
+		Failed  []map[string]any `json:"failed"`
+	}
+	decode(t, resp, &got)
+	if got.OK {
+		t.Errorf("expected ok=false on partial failure")
+	}
+	if got.Deleted != 1 {
+		t.Errorf("deleted = %d, want 1", got.Deleted)
+	}
+	if len(got.Failed) != 2 {
+		t.Fatalf("failed = %+v, want 2 entries (traversal + disk error)", got.Failed)
+	}
+}
+
+func TestMemoryDeletePages_EmptyPaths(t *testing.T) {
+	h := memoryDeletePages(memoryDepsFor(&fakeMemoryStore{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.delete_pages", map[string]any{
+		"paths": []string{},
+	}))
+	if resp.OK || resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("expected MISSING_PARAM for empty paths: %+v", resp)
+	}
+}
+
+func TestMemoryDeletePages_RequiresAuth(t *testing.T) {
+	h := memoryDeletePages(memoryDepsFor(&fakeMemoryStore{}))
+	resp := h(context.Background(), reqWith(t, "miniapp.memory.delete_pages", map[string]any{
+		"paths": []string{"a.md"},
+	}))
 	if resp.OK {
 		t.Errorf("expected auth rejection, got OK")
 	}

@@ -32,6 +32,7 @@ type MemorySearcher interface {
 	SearchDiary(ctx context.Context, query string, limit int) ([]wiki.DiaryHit, error)
 	ReadPage(relPath string) (*wiki.Page, error)
 	WritePage(relPath string, page *wiki.Page) error
+	DeletePage(relPath string) error
 	Stats() wiki.StoreStats
 	ListPages(category string) ([]string, error)
 	RecentDiaryEntries(limit int) []wiki.DiaryHit
@@ -83,6 +84,7 @@ func MemoryMethods(deps MemoryDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.memory.write_page":       memoryWritePage(deps),
 		"miniapp.memory.create_page":      memoryCreatePage(deps),
 		"miniapp.memory.merge":            memoryMergePage(deps),
+		"miniapp.memory.delete_pages":     memoryDeletePages(deps),
 		"miniapp.memory.categories":       memoryCategories(deps),
 		"miniapp.memory.list_in_category": memoryListInCategory(deps),
 		"miniapp.memory.diary_recent":     memoryDiaryRecent(deps),
@@ -508,6 +510,70 @@ func memoryMergePage(deps MemoryDeps) rpcutil.HandlerFunc {
 			TargetPath:  target,
 			MergedTitle: targetPage.Meta.Title,
 		})
+	}
+}
+
+// memoryDeletePages deletes one or more wiki pages by path. Drives the
+// category-page multi-select delete in the native client / Mini App. Each
+// path runs through the same traversal guard as get_page; deletes are
+// best-effort per page so one bad/missing path doesn't abort the rest, and
+// the response reports both the deleted count and any per-path failures so
+// the client can tell a partial success from a clean sweep.
+//
+// Single-operator, last-write-wins — deletes are recoverable from the wiki's
+// git history, so there's no soft-delete / undo layer here.
+func memoryDeletePages(deps MemoryDeps) rpcutil.HandlerFunc {
+	type params struct {
+		Paths []string `json:"paths"`
+	}
+	type failure struct {
+		Path  string `json:"path"`
+		Error string `json:"error"`
+	}
+	type out struct {
+		OK      bool      `json:"ok"`
+		Deleted int       `json:"deleted"`
+		Failed  []failure `json:"failed,omitempty"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		if len(p.Paths) == 0 {
+			return rpcerr.MissingParam("paths").Response(req.ID)
+		}
+
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.WrapUnavailable("memory store unavailable", err).Response(req.ID)
+		}
+
+		result := out{OK: true}
+		for _, raw := range p.Paths {
+			rel := strings.TrimSpace(raw)
+			if rel == "" {
+				continue
+			}
+			if verr := validateWikiPath(rel); verr != nil {
+				result.Failed = append(result.Failed, failure{Path: rel, Error: verr.Error()})
+				continue
+			}
+			if derr := store.DeletePage(rel); derr != nil {
+				result.Failed = append(result.Failed, failure{Path: rel, Error: derr.Error()})
+				continue
+			}
+			result.Deleted++
+		}
+		if len(result.Failed) > 0 {
+			result.OK = false
+		}
+		return rpcutil.RespondOK(req.ID, result)
 	}
 }
 
