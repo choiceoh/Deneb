@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.30",
+        code = 153,
+        highlights = listOf(
+            "우측 세션 드로어 열기 스와이프를 화면 오른쪽 절반(가운데~오른쪽)에서 왼쪽으로 밀면 되도록 넓힘",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.29",
         code = 152,
         highlights = listOf(

@@ -600,20 +600,20 @@ private fun ChatModeScreen(
             .navigationBarsPadding()
             .statusBarsPadding()
             .imePadding()
-            // Right-to-left swipe → open the session drawer. Android reserves the very
-            // screen edge for its "back" gesture, so a true right-EDGE swipe never reaches
-            // the app (that was the bug). Instead detect a leftward drag that STARTS just
-            // inside the right edge (a ~28-140dp band), dodging the OS gesture. On the
-            // content's parent, so the chat list still scrolls and taps/FAB pass through —
-            // only a clearly-horizontal leftward swipe in the band is consumed.
+            // Right-to-left swipe → open the session drawer. A leftward, horizontal-dominant
+            // drag that STARTS in the right half of the screen (from center up to just inside
+            // the right edge) opens it. The very right edge is excluded because Android owns it
+            // for the system "back" gesture; the left half is excluded so this doesn't clash
+            // with the left drawer or text selection / input-cursor drags. On the content's
+            // parent, so vertical scroll and taps/FAB pass through — only a clear leftward
+            // swipe in the right half is consumed.
             .pointerInput(Unit) {
                 val osEdgePx = 28.dp.toPx()
-                val bandPx = 140.dp.toPx()
                 val triggerPx = 24.dp.toPx()
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val startX = down.position.x
-                    if (startX < size.width - bandPx || startX > size.width - osEdgePx) return@awaitEachGesture
+                    if (startX < size.width / 2f || startX > size.width - osEdgePx) return@awaitEachGesture
                     if (!sessionDrawerState.isClosed || !drawerState.isClosed) return@awaitEachGesture
                     var dx = 0f
                     var dy = 0f
