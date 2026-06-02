@@ -308,9 +308,6 @@ func (s *calendarBriefingService) formatBriefing(ev calendar.Event) string {
 	if location := strings.TrimSpace(ev.Location); location != "" {
 		fmt.Fprintf(&b, "\n📍 %s", html.EscapeString(location))
 	}
-	if ev.Conference != nil && ev.Conference.URI != "" {
-		fmt.Fprintf(&b, "\n🔗 %s", html.EscapeString(ev.Conference.URI))
-	}
 	if names := attendeeNames(ev.Attendees, 4); names != "" {
 		fmt.Fprintf(&b, "\n👤 %s", html.EscapeString(names))
 	}
