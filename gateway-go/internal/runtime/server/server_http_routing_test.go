@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -46,6 +47,36 @@ func TestBuildMux_RegistersExpectedRoutes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildMux_PprofOnlyOnLoopback(t *testing.T) {
+	t.Run("loopback bind keeps pprof", func(t *testing.T) {
+		srv := testutil.Must(New(":0", WithConfig(&config.GatewayRuntimeConfig{
+			BindHost: "127.0.0.1",
+		})))
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/debug/pprof/", nil)
+		rec := httptest.NewRecorder()
+
+		srv.buildMux().ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+		}
+	})
+
+	t.Run("network bind hides pprof", func(t *testing.T) {
+		srv := testutil.Must(New(":0", WithConfig(&config.GatewayRuntimeConfig{
+			BindHost: "0.0.0.0",
+		})))
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/debug/pprof/", nil)
+		rec := httptest.NewRecorder()
+
+		srv.buildMux().ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
+		}
+	})
 }
 
 // TestHandleRoot_ResponseShape verifies that the root handler returns a
