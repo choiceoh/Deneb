@@ -31,7 +31,8 @@ globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/inte
 ### 서버 (상주)
 - 런처: **`~/start-paddleocr-vl.sh`** (호스트, **레포 밖** — 배포 머신 로컬 파일). 컨테이너 `paddleocr-vl`, port **18011**, `--restart unless-stopped`.
 - 이미지: 로컬 `vllm-node:latest` (vLLM 0.21.1, 2026-05-26 빌드) 가 `PaddleOCRVLForConditionalGeneration` 을 **네이티브 등록** → PaddlePaddle 프레임워크 불필요. 순수 OpenAI 호환.
-- 가중치: `~/models/PaddleOCR-VL-1.6` (hf download). `--gpu-memory-utilization 0.15` 로 충분.
+- 가중치: `~/models/PaddleOCR-VL-1.6` (hf download). 1.82 GiB BF16.
+- **메모리 예산 (2026-06-02 하향)**: `--gpu-memory-utilization 0.03` + `--max-model-len 8192`. unified 점유 **~2.8GB** (이전 0.15 는 122GB 의 15% ≈ **16GB 를 통째로 KV 풀로 선점** → 0.3B 급 디코더엔 10GB+ 가 빈 예약 낭비였음). 0.03 budget(~3.6GB) − 가중치 1.82 − 비-torch 오버헤드 ~1.6 = KV ~0.47GB → 8192 토큰 한 시퀀스(~0.14GB)에 동시 3.37x. OCR 은 페이지 단위라 16384 컨텍스트 불필요. ⚠️ **0.03 에서 max-model-len 16384 는 기동 실패** (KV 0.28GB < 필요 0.28GB, 간발의 차) — 8192 로 낮춰야 들어맞음. 런처가 `GPU_MEM_UTIL`·`PADDLEOCR_MAX_MODEL_LEN` env override 지원.
 
 ### 코드 통합
 - `gateway-go/internal/pipeline/chat/tools/paddleocr.go`:
