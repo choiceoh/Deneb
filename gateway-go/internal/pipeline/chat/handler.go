@@ -25,9 +25,10 @@ type Handler struct {
 	// Embedded channel callbacks — all Set*/Get methods are promoted.
 	*ChannelCallbacks
 
-	sessions  *session.Manager
-	broadcast BroadcastFunc
-	logger    *slog.Logger
+	sessions       *session.Manager
+	broadcast      BroadcastFunc
+	logger         *slog.Logger
+	recordActivity func(sessionKey string)
 
 	// Native agent execution deps.
 	llmClient         *llm.Client
@@ -188,6 +189,11 @@ type HandlerConfig struct {
 	// TopicResolver maps a forum threadID to a per-topic knowledge key.
 	// Optional: nil disables per-topic knowledge injection.
 	TopicResolver TopicResolver
+
+	// RecordActivity is called for user-originating chat turns so the server
+	// can remember the latest active channel session for autonomous follow-ups.
+	// The server owns filtering; chat only reports the session key.
+	RecordActivity func(sessionKey string)
 }
 
 // DefaultHandlerConfig returns sensible defaults.
@@ -249,6 +255,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		sessions:             sessions,
 		broadcast:            broadcast,
 		logger:               logger,
+		recordActivity:       cfg.RecordActivity,
 		llmClient:            cfg.LLMClient,
 		transcript:           cfg.Transcript,
 		tools:                cfg.Tools,

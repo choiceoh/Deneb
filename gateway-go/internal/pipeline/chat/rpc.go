@@ -41,6 +41,9 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 	if len(p.Message) > h.maxMessageBytes {
 		return rpcerr.Newf(protocol.ErrInvalidRequest, "message too large: %d bytes exceeds limit of %d", len(p.Message), h.maxMessageBytes).Response(req.ID)
 	}
+	if h.recordActivity != nil && !p.SkipMerge {
+		h.recordActivity(p.SessionKey)
+	}
 
 	// Pre-process slash commands before dispatching to agent.
 	if slashResult := ParseSlashCommand(p.Message); slashResult != nil && slashResult.Handled {
@@ -154,6 +157,9 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 	if p.Key == "" {
 		return rpcerr.MissingParam("key").Response(req.ID)
 	}
+	if h.recordActivity != nil {
+		h.recordActivity(p.Key)
+	}
 
 	// Interrupt any active run and clear the pending queue for this session.
 	// Without clearPending, queued user messages survive the interrupt and
@@ -198,6 +204,9 @@ func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *
 	}
 	if p.Key == "" {
 		return rpcerr.MissingParam("key").Response(req.ID)
+	}
+	if h.recordActivity != nil {
+		h.recordActivity(p.Key)
 	}
 
 	// Interrupt any active run and clear the pending queue for this session.

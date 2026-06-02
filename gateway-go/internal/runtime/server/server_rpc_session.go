@@ -168,6 +168,7 @@ func (s *Server) registerSessionRPCMethods() {
 			s.autonomousSvc.IncrementDreamTurn(ctx)
 		}
 	}
+	chatCfg.RecordActivity = s.recordChatActivity
 
 	s.chatHandler = chat.NewHandler(
 		s.sessions,
@@ -268,9 +269,9 @@ func (s *Server) registerSessionRPCMethods() {
 		// Moving delivery out of the LLM's control fixes this class of
 		// deviation structurally — no prompt-level instruction to obey.
 		//
-		// Channels without a wired plugin (non-telegram, plugin not yet
-		// connected) decline the handoff and cron falls back to its own
-		// direct delivery path so the user still receives the message.
+		// The native relay mirrors every proactive report into client:main.
+		// If the transcript relay is not wired, decline the handoff and let
+		// cron fall back to its own delivery accounting path.
 		s.cronService.SetMainSessionHandoff(func(ctx context.Context, channel, to, jobID, analysis string) (bool, error) {
 			if to == "" || strings.TrimSpace(analysis) == "" {
 				return false, nil
@@ -390,14 +391,10 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		hub.Broadcast("dreaming.cycle", event)
 	})
 
-	// Wire proactive relay as the dreaming notifier. Going through the
-	// relay (vs. a plain telegram send) mirrors the body into the user's
-	// session transcript, so a follow-up message after a dream
-	// completion ("방금 뭔 얘기야?") is answered in a session that knows
-	// what was just delivered.
-	// Wire with the home sentinel so dreaming delivery follows the active home
-	// (resolved at send time) instead of a static config chatID that goes stale
-	// after /use-forum or a topic restructure.
+	// Wire proactive relay as the dreaming notifier. Going through the native
+	// relay mirrors the body into the user's session transcript, so a follow-up
+	// message after a dream completion ("방금 뭔 얘기야?") is answered in a
+	// session that knows what was just delivered.
 	if n := s.proactiveRelay.notifierForSession(nativeWorkSessionKey); n != nil {
 		s.autonomousSvc.SetNotifier(n)
 	}

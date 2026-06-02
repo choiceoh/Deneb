@@ -154,6 +154,9 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 	if opts != nil && opts.MaxHistoryTokens > 0 {
 		deps.contextCfg.MemoryTokenBudget = uint64(opts.MaxHistoryTokens)
 	}
+	if h.recordActivity != nil && !params.EphemeralUser {
+		h.recordActivity(sessionKey)
+	}
 
 	return params, deps, nil
 }

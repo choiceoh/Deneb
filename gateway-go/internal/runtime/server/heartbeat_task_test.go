@@ -121,6 +121,29 @@ func TestHeartbeatSyncOptionsAreTranscriptIsolated(t *testing.T) {
 	}
 }
 
+func TestHeartbeatTargetSessionKey_NativePreferredWithWorkFallback(t *testing.T) {
+	cases := []struct {
+		name string
+		last string
+		want string
+	}{
+		{name: "native work home", last: "client:main", want: "client:main"},
+		{name: "native topic", last: "client:coding", want: "client:coding"},
+		{name: "native fresh chat", last: "client:main:abc123", want: "client:main:abc123"},
+		{name: "legacy telegram falls back", last: "telegram:42", want: "client:main"},
+		{name: "empty falls back", last: "", want: "client:main"},
+		{name: "invalid native falls back", last: "client:", want: "client:main"},
+		{name: "system session falls back", last: "cron:nightly", want: "client:main"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := heartbeatTargetSessionKey(tc.last); got != tc.want {
+				t.Fatalf("heartbeatTargetSessionKey(%q) = %q, want %q", tc.last, got, tc.want)
+			}
+		})
+	}
+}
+
 // The agent's default file-write tool (fs.write) is clamped to its workspace,
 // so the template MUST steer it to the dedicated heartbeat_update tool.
 // Reverting to fs.write — even as a fallback — would silently break self-edit.
