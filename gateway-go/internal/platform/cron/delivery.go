@@ -1,16 +1,8 @@
 package cron
 
 import (
-	"context"
 	"fmt"
-	"log/slog"
 	"strings"
-	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/chunk"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/tokens"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
 
 // DeliveryTarget specifies where to deliver cron job output.
@@ -40,9 +32,10 @@ type JobDeliveryConfig struct {
 	BestEffort bool   `json:"bestEffort,omitempty"` // don't fail job on delivery error
 }
 
-// ResolveDeliveryTarget resolves the delivery target for a cron job.
-// In the Telegram-only DGX Spark deployment, this is straightforward:
-// default to the Telegram channel with the configured chat ID.
+// ResolveDeliveryTarget resolves the delivery target for a cron job. Output is
+// delivered to the native client via the main-session handoff (see
+// service_execution.go); this only resolves the channel/recipient metadata
+// recorded with the run.
 func ResolveDeliveryTarget(
 	jobDelivery *JobDeliveryConfig,
 	defaultChannel string,
@@ -117,130 +110,4 @@ func stripTopicSuffix(to string) string {
 		return to[:idx]
 	}
 	return to
-}
-
-// DeliverCronOutput delivers the output of a cron job run to the resolved target.
-// This is the Go equivalent of dispatchCronDelivery() from the TS codebase.
-func DeliverCronOutput(
-	ctx context.Context,
-	tgPlugin *telegram.Plugin,
-	target DeliveryTarget,
-	payloads []types.ReplyPayload,
-	opts DeliverOutputOptions,
-) DeliveryResult {
-	start := time.Now()
-	result := DeliveryResult{
-		Channel: target.Channel,
-		To:      target.To,
-	}
-
-	if len(payloads) == 0 {
-		result.Delivered = true
-		return result
-	}
-
-	if target.Channel != "telegram" || tgPlugin == nil {
-		result.Error = fmt.Sprintf("channel %q not available", target.Channel)
-		result.LatencyMs = time.Since(start).Milliseconds()
-		return result
-	}
-
-	chunkLimit := opts.ChunkLimit
-	if chunkLimit <= 0 {
-		chunkLimit = chunk.DefaultLimit
-	}
-
-	for _, payload := range payloads {
-		// Skip silent replies.
-		if tokens.IsSilentReplyText(payload.Text, "") {
-			continue
-		}
-
-		// Chunk text if needed.
-		texts := []string{payload.Text}
-		if len(payload.Text) > chunkLimit {
-			texts = chunk.TextWithMode(payload.Text, chunkLimit, chunk.Mode(opts.ChunkMode))
-		}
-
-		for i, text := range texts {
-			msg := telegram.OutboundMessage{
-				To:       target.To,
-				Text:     text,
-				ThreadID: parseThreadID(target.ThreadID),
-			}
-			if i == len(texts)-1 {
-				if payload.MediaURL != "" {
-					msg.Media = []string{payload.MediaURL}
-				} else if len(payload.MediaURLs) > 0 {
-					msg.Media = payload.MediaURLs
-				}
-			}
-
-			if err := tgPlugin.SendMessage(ctx, msg); err != nil {
-				result.Error = err.Error()
-				result.LatencyMs = time.Since(start).Milliseconds()
-				if opts.Logger != nil {
-					opts.Logger.Warn("cron delivery error",
-						"channel", target.Channel,
-						"to", target.To,
-						"error", err,
-					)
-				}
-				if !opts.BestEffort {
-					return result
-				}
-			}
-
-			// Small delay between chunks.
-			if i < len(texts)-1 {
-				select {
-				case <-ctx.Done():
-					result.Error = ctx.Err().Error()
-					result.LatencyMs = time.Since(start).Milliseconds()
-					return result
-				case <-time.After(200 * time.Millisecond):
-				}
-			}
-		}
-	}
-
-	result.Delivered = true
-	result.LatencyMs = time.Since(start).Milliseconds()
-	return result
-}
-
-// DeliverOutputOptions configures cron output delivery.
-type DeliverOutputOptions struct {
-	ChunkLimit int
-	ChunkMode  string // "length" or "newline"
-	BestEffort bool
-	Logger     *slog.Logger
-}
-
-// parseThreadID converts the string form used on disk into the int64 the
-// Telegram API expects. Empty or malformed strings yield 0, which the Bot
-// API treats as "no thread" — safer than failing delivery on a corrupt
-// stored value.
-func parseThreadID(s string) int64 {
-	if s == "" {
-		return 0
-	}
-	// strconv.ParseInt is imported via the strings/time pair; isolate the
-	// dependency by inlining the simple base-10 case rather than adding
-	// strconv to a delivery file that didn't need it before.
-	var n int64
-	for i := range len(s) {
-		c := s[i]
-		if c < '0' || c > '9' {
-			if i == 0 && c == '-' {
-				continue
-			}
-			return 0
-		}
-		n = n*10 + int64(c-'0')
-	}
-	if s[0] == '-' {
-		return -n
-	}
-	return n
 }

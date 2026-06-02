@@ -3,7 +3,6 @@ package cron
 import (
 	"context"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
@@ -63,8 +62,7 @@ type ServiceConfig struct {
 	DefaultChannel string
 	DefaultTo      string
 	Enabled        bool
-	RetentionMs    int64 // session retention (0 = default 24h)
-	TelegramPlugin *telegram.Plugin
+	RetentionMs    int64            // session retention (0 = default 24h)
 	Sessions       *session.Manager // session manager for cron run sessions
 
 	// When MainSessionKey and TranscriptCloner are set,

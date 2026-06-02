@@ -6,30 +6,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-// TestParseThreadID locks in the malformed-input safety: cron job
-// definitions live on disk and may be hand-edited or migrated. A bad
-// thread ID must degrade silently to 0 ("no thread" in Telegram terms)
-// rather than panic or fail-closed on delivery.
-func TestParseThreadID(t *testing.T) {
-	tests := []struct {
-		in   string
-		want int64
-	}{
-		{"", 0},
-		{"42", 42},
-		{"-100", -100},
-		{"0", 0},
-		{"not-a-number", 0},
-		{"42abc", 0},
-		{" 42", 0}, // strict: no whitespace tolerance, callers should TrimSpace
-	}
-	for _, tt := range tests {
-		if got := parseThreadID(tt.in); got != tt.want {
-			t.Errorf("parseThreadID(%q) = %d, want %d", tt.in, got, tt.want)
-		}
-	}
-}
-
 // TestResolveDeliveryTarget_ThreadID is the cron-defined-in-topic happy
 // path: when a job's stored Delivery has a ThreadID, the resolved
 // DeliveryTarget must carry it forward so executeJobFullWithTrigger →

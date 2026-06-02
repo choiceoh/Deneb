@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/chunk"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/tokens"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
@@ -185,19 +183,17 @@ func (s *Service) executeJobFullWithTrigger(ctx context.Context, job StoreJob, t
 						deliveryText = stripped.Text
 					}
 
-					handoffTaken := false
 					if s.cfg.MainSessionHandoff != nil {
 						handled, herr := s.cfg.MainSessionHandoff(runCtx, target.Channel, target.To, job.ID, deliveryText)
 						if herr != nil {
-							s.logger.Warn("cron main-session handoff failed, falling back to direct delivery",
+							s.logger.Warn("cron main-session handoff failed",
 								"jobId", job.ID,
 								"channel", target.Channel,
 								"to", target.To,
 								"error", herr)
 						}
 						if handled {
-							handoffTaken = true
-							// Main session will deliver to the user. Record
+							// Main session delivered to the user. Record
 							// delivery as successful from cron's point of
 							// view — the main session owns retry/visibility
 							// from here.
@@ -207,18 +203,6 @@ func (s *Service) executeJobFullWithTrigger(ctx context.Context, job StoreJob, t
 								To:        target.To,
 							}
 						}
-					}
-
-					if !handoffTaken && s.cfg.TelegramPlugin != nil {
-						payloads := []types.ReplyPayload{{Text: deliveryText}}
-						bestEffort := isBestEffort(deliveryCfg)
-						dr := DeliverCronOutput(runCtx, s.cfg.TelegramPlugin, *target, payloads, DeliverOutputOptions{
-							ChunkLimit: chunk.DefaultLimit,
-							ChunkMode:  "length",
-							BestEffort: bestEffort,
-							Logger:     s.logger,
-						})
-						deliveryResult = &dr
 					}
 				}
 			}
