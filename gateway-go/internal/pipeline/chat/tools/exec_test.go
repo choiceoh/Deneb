@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
@@ -51,50 +50,6 @@ func TestFormatExecResult(t *testing.T) {
 		got := formatExecResult(r)
 		if got != "\nExit code: 127" {
 			t.Errorf("got %q", got)
-		}
-	})
-}
-
-func TestTruncateForLLM(t *testing.T) {
-	t.Run("short string unchanged", func(t *testing.T) {
-		s := "hello world"
-		got := TruncateForLLM(s)
-		if got != s {
-			t.Errorf("got %q, want %q", got, s)
-		}
-	})
-
-	t.Run("exact limit unchanged", func(t *testing.T) {
-		s := string(make([]rune, maxOutputRunes))
-		got := TruncateForLLM(s)
-		if len([]rune(got)) != maxOutputRunes {
-			t.Errorf("got %d, want %d runes", len([]rune(got)), maxOutputRunes)
-		}
-	})
-
-	t.Run("over limit truncated with marker", func(t *testing.T) {
-		runes := make([]rune, maxOutputRunes+1000)
-		for i := range runes {
-			runes[i] = 'A'
-		}
-		s := string(runes)
-		got := TruncateForLLM(s)
-		if len([]rune(got)) >= len(runes) {
-			t.Error("expected truncation")
-		}
-		if !strings.Contains(got, "omitted") {
-			t.Error("expected elision marker")
-		}
-	})
-
-	t.Run("korean multibyte safe", func(t *testing.T) {
-		runes := make([]rune, maxOutputRunes+500)
-		for i := range runes {
-			runes[i] = '가'
-		}
-		got := TruncateForLLM(string(runes))
-		if !strings.Contains(got, "omitted") {
-			t.Error("expected elision marker for Korean text")
 		}
 	})
 }

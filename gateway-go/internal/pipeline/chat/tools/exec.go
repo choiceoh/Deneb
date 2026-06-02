@@ -15,23 +15,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// maxOutputRunes caps tool output sent to the LLM to avoid wasting tokens.
-// Head and tail are preserved for context; the middle is elided.
-const maxOutputRunes = 50000
-
-// TruncateForLLM keeps the first half and last half of output when it exceeds
-// maxOutputRunes, inserting a clear elision marker in the middle.
-func TruncateForLLM(s string) string {
-	runes := []rune(s)
-	if len(runes) <= maxOutputRunes {
-		return s
-	}
-	half := maxOutputRunes / 2
-	head := string(runes[:half])
-	tail := string(runes[len(runes)-half:])
-	omitted := len(runes) - maxOutputRunes
-	return fmt.Sprintf("%s\n\n... [%d chars omitted] ...\n\n%s", head, omitted, tail)
-}
+// Note: exec returns full output. Head/tail truncation and disk spillover are
+// handled once by the tool registry (ToolRegistry.Execute) so the spillover
+// store receives the *original* output — truncating here would offload only the
+// already-cut text and orphan the middle. See chat/tools.go.
 
 type workdirCacheEntry struct {
 	exists  bool
@@ -126,7 +113,7 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 
 			result := procMgr.Execute(ctx, req)
 			if p.Structured {
-				return TruncateForLLM(formatExecResultJSON(result)), nil
+				return formatExecResultJSON(result), nil
 			}
 			out := formatExecResult(result)
 			// Annotate non-error exit codes with command-specific context.
@@ -139,7 +126,7 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 			if destructiveWarning != "" {
 				out = destructiveWarning + "\n" + out
 			}
-			return TruncateForLLM(out), nil
+			return out, nil
 		}
 
 		// Fallback: direct exec without process manager.
@@ -169,13 +156,13 @@ func ToolExec(procMgr *process.Manager, defaultDir string) ToolFunc {
 				"timed_out":  execCtx.Err() != nil,
 			}
 			data, _ := json.MarshalIndent(result, "", "  ")
-			return TruncateForLLM(string(data)), nil
+			return string(data), nil
 		}
 
 		if err != nil {
-			return TruncateForLLM(fmt.Sprintf("%s\n\nError: %s", string(out), err.Error())), nil
+			return fmt.Sprintf("%s\n\nError: %s", string(out), err.Error()), nil
 		}
-		return TruncateForLLM(string(out)), nil
+		return string(out), nil
 	}
 }
 
