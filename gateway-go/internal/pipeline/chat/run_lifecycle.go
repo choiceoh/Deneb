@@ -278,6 +278,16 @@ func handleRunSuccess(
 				}
 			}
 			replyCancel()
+		} else if deps.broadcast != nil {
+			// No user-facing fallback (e.g. end_turn with empty text, which can
+			// be a legitimate tool-only turn). Still surface to monitoring so a
+			// silent no-reply is observable instead of being buried in a Warn.
+			deps.broadcast("chat.empty_response", map[string]any{
+				"session":    params.SessionKey,
+				"channel":    params.Delivery.Channel,
+				"stopReason": result.StopReason,
+				"turns":      result.Turns,
+			})
 		}
 	}
 	if params.Delivery != nil && result.Text != "" && deps.chatport.ParseReplyDirectives == nil {
