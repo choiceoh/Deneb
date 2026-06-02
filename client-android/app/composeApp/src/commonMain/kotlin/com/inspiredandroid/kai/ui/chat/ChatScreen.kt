@@ -600,23 +600,29 @@ private fun ChatModeScreen(
             .navigationBarsPadding()
             .statusBarsPadding()
             .imePadding()
-            // Right-edge swipe → open the session drawer. The two nested
-            // ModalNavigationDrawers fight over horizontal drags (the inner left
-            // drawer swallows them), so detect the right edge explicitly here. This
-            // sits on the content's parent, so the chat list still scrolls vertically
-            // and taps (FAB etc.) pass through — we only consume a leftward edge drag.
+            // Right-to-left swipe → open the session drawer. Android reserves the very
+            // screen edge for its "back" gesture, so a true right-EDGE swipe never reaches
+            // the app (that was the bug). Instead detect a leftward drag that STARTS just
+            // inside the right edge (a ~28-140dp band), dodging the OS gesture. On the
+            // content's parent, so the chat list still scrolls and taps/FAB pass through —
+            // only a clearly-horizontal leftward swipe in the band is consumed.
             .pointerInput(Unit) {
-                val edgePx = 32.dp.toPx()
+                val osEdgePx = 28.dp.toPx()
+                val bandPx = 140.dp.toPx()
                 val triggerPx = 24.dp.toPx()
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    if (down.position.x < size.width - edgePx) return@awaitEachGesture
+                    val startX = down.position.x
+                    if (startX < size.width - bandPx || startX > size.width - osEdgePx) return@awaitEachGesture
                     if (!sessionDrawerState.isClosed || !drawerState.isClosed) return@awaitEachGesture
                     var dx = 0f
+                    var dy = 0f
                     while (true) {
                         val change = awaitPointerEvent().changes.firstOrNull() ?: return@awaitEachGesture
-                        dx += change.positionChange().x
-                        if (dx <= -triggerPx) {
+                        val moved = change.positionChange()
+                        dx += moved.x
+                        dy += moved.y
+                        if (dx <= -triggerPx && -dx > kotlin.math.abs(dy)) {
                             change.consume()
                             drawerScope.launch { sessionDrawerState.open() }
                             return@awaitEachGesture
