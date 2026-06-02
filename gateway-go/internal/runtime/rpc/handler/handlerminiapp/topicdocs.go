@@ -1,6 +1,6 @@
 // topicdocs.go — miniapp.topicdocs.* RPC handlers.
 //
-// "Topic docs" are the per-forum-topic knowledge files under
+// "Topic docs" are the per-topic knowledge files under
 // <workspace>/topics/*.md (e.g. coding.md, work.md) that get injected into the
 // system prompt for that topic's sessions (see config.TopicsConfig). These RPCs
 // let the operator list/read/write/create them from the Mini App instead of
@@ -11,7 +11,7 @@
 // wiki.Store would inject a frontmatter block and corrupt the file. We borrow
 // only memory.go's handler *shape* (lazy-factory Deps, requireAuth, RespondOK),
 // not its storage. Namespace is "topicdocs", distinct from miniapp.topics.*
-// which creates Telegram forum topics.
+// which exposes the native-client topic/session contract.
 
 package handlerminiapp
 

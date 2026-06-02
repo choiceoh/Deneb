@@ -1,7 +1,7 @@
-// Package handlerminiapp implements RPC handlers for the Telegram Mini App
-// surface (miniapp.* methods). Every method assumes the request has already
-// passed initData verification, so the handlers can pull the authenticated
-// Telegram user straight from the context via telegram.InitDataFromContext.
+// Package handlerminiapp implements RPC handlers for the native-client surface
+// (miniapp.* methods). Every method assumes the request has already passed
+// client-token verification, so handlers can pull the authenticated operator
+// identity straight from context via clientauth.FromContext.
 //
 // The current method set is intentionally minimal — just enough to prove the
 // HTTP → middleware → dispatcher → handler path end-to-end. Real domain
@@ -28,15 +28,20 @@ type Deps struct {
 	// created after early-phase registration. May be nil; returns "" when
 	// no model is resolvable.
 	CurrentModel func() string
+	// Capabilities resolves the native-client feature flags currently available
+	// on this gateway. Called lazily because several subsystems are wired after
+	// early miniapp method registration.
+	Capabilities func() map[string]bool
 }
 
-// Methods returns the miniapp.* handler map. All methods require initData
-// verification — the calling middleware must have stored the verified
-// *telegram.InitData on the context.
+// Methods returns the miniapp.* handler map. All methods require client-token
+// verification — the HTTP bridge must have stored a clientauth.Identity on the
+// context before dispatch.
 func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.ping":   ping(deps),
-		"miniapp.whoami": whoami(),
+		"miniapp.ping":         ping(deps),
+		"miniapp.whoami":       whoami(),
+		"miniapp.client.hello": clientHello(deps),
 	}
 }
 
@@ -45,7 +50,7 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 func ping(deps Deps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if clientauth.FromContext(ctx) == nil {
-			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.ping requires initData context").Response(req.ID)
+			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.ping requires client identity context").Response(req.ID)
 		}
 		payload := map[string]any{
 			"ok":      true,
@@ -61,17 +66,52 @@ func ping(deps Deps) rpcutil.HandlerFunc {
 	}
 }
 
-// whoami echoes back the Telegram user the middleware authenticated. The
-// client uses this to render "Hello, <firstName>" and confirm that initData
-// verification is intact.
+// clientHello returns the native-client contract snapshot in one cheap call:
+// version, current model, known endpoint paths, and feature flags. The Android
+// app uses this to show accurate gateway status and gate native-only surfaces
+// without probing multiple domain RPCs.
+func clientHello(deps Deps) rpcutil.HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if clientauth.FromContext(ctx) == nil {
+			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.client.hello requires client identity context").Response(req.ID)
+		}
+		caps := map[string]bool{"rpc": true}
+		if deps.Capabilities != nil {
+			for k, v := range deps.Capabilities() {
+				caps[k] = v
+			}
+		}
+		payload := map[string]any{
+			"ok":               true,
+			"version":          deps.Version,
+			"nativeApiVersion": 1,
+			"tsMs":             time.Now().UnixMilli(),
+			"capabilities":     caps,
+			"endpoints": map[string]string{
+				"rpc":        "/api/v1/miniapp/rpc",
+				"chatStream": "/api/v1/miniapp/chat/stream",
+				"events":     "/api/v1/miniapp/events",
+			},
+		}
+		if deps.CurrentModel != nil {
+			if m := deps.CurrentModel(); m != "" {
+				payload["model"] = m
+			}
+		}
+		return rpcutil.RespondOK(req.ID, payload)
+	}
+}
+
+// whoami echoes back the native operator identity the middleware authenticated.
+// The client uses this to confirm that client-token verification is intact.
 func whoami() rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		data := clientauth.FromContext(ctx)
 		if data == nil {
-			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.whoami requires initData context").Response(req.ID)
+			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.whoami requires client identity context").Response(req.ID)
 		}
 		if data.User == nil {
-			return rpcerr.New(protocol.ErrUnauthorized, "initData missing user (channel-bot launch?)").Response(req.ID)
+			return rpcerr.New(protocol.ErrUnauthorized, "client identity missing user").Response(req.ID)
 		}
 		u := data.User
 		return rpcutil.RespondOK(req.ID, map[string]any{

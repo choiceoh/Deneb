@@ -49,8 +49,9 @@ type MemoryDeps struct {
 	// immediately. The slow part — synthesizing the combined body with the
 	// lightweight model — runs off the request path with a generous timeout;
 	// when it finishes (or falls back to concatenation, or fails) the user is
-	// notified via Telegram. The handler hands over the two already-read pages
-	// so the synthesizer has the original bodies before the source is deleted.
+	// notified through the native client. The handler hands over the two
+	// already-read pages so the synthesizer has the original bodies before the
+	// source is deleted.
 	// Wired by the server (see makeWikiMergeStarter); nil in tests / when the
 	// merge worker is unavailable, in which case merge requests get UNAVAILABLE.
 	StartMerge func(targetPath, sourcePath string, target, source *wiki.Page)
@@ -429,7 +430,7 @@ func memoryCreatePage(deps MemoryDeps) rpcutil.HandlerFunc {
 // deps.StartMerge, and replies "started"; when the background job completes
 // (combined body written, every referencing page repointed, source deleted —
 // or a concatenation fallback if the model is unavailable) the user gets a
-// Telegram completion notice.
+// native completion notice.
 //
 // Drives the Mini App's "두 프로젝트 병합" action (category-page multi-select).
 // Single-operator, last-write-wins, recoverable from git history.

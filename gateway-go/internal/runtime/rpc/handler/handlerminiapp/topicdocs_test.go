@@ -147,9 +147,9 @@ func TestTopicDocs_RejectsBadNames(t *testing.T) {
 func TestTopicDocs_RequiresAuth(t *testing.T) {
 	methods := TopicDocsMethods(topicDocsTestDeps(t.TempDir()))
 	for name, h := range methods {
-		resp := h(context.Background(), newReq(t, name)) // no initData
+		resp := h(context.Background(), newReq(t, name)) // no client identity
 		if resp.OK {
-			t.Errorf("%s allowed without initData", name)
+			t.Errorf("%s allowed without client identity", name)
 		}
 		if resp.Error.Code != protocol.ErrUnauthorized {
 			t.Errorf("%s code = %s, want %s", name, resp.Error.Code, protocol.ErrUnauthorized)

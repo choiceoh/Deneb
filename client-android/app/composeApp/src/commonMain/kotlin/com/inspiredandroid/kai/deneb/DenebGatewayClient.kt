@@ -161,7 +161,19 @@ class DenebGatewayClient(
     private val _denebCalendar = MutableStateFlow<List<CalendarEvent>>(emptyList())
     val denebCalendar: StateFlow<List<CalendarEvent>> = _denebCalendar
 
+    // Native-client handshake snapshot: gateway version, active model, and
+    // feature flags exposed by miniapp.client.hello.
+    private val _clientStatus = MutableStateFlow<ClientStatus?>(null)
+    val clientStatus: StateFlow<ClientStatus?> = _clientStatus
+
+    // Native topics surfaced by miniapp.topics.list. Each row carries the
+    // gateway session key the chat stream should continue.
+    private val _denebTopics = MutableStateFlow<List<ClientTopic>>(emptyList())
+    val denebTopics: StateFlow<List<ClientTopic>> = _denebTopics
+
     private var sessionKey: String = "client:main"
+    private val _currentConversationId = MutableStateFlow<String?>(sessionKey)
+    override val currentConversationId: StateFlow<String?> = _currentConversationId
 
     private val gatewayUrl: String
         get() = appSettings.settings.getString(KEY_URL, DEFAULT_URL).trimEnd('/')
@@ -273,7 +285,7 @@ class DenebGatewayClient(
     override fun startNewChat() {
         _chatHistory.value = emptyList()
         // Scope the fresh conversation to a unique session off the client:main home.
-        sessionKey = "client:main:${Uuid.random()}"
+        switchSession("client:main:${Uuid.random()}")
     }
 
     // --- Proactive-report deep link → session transcript --------------------
@@ -300,7 +312,7 @@ class DenebGatewayClient(
      * a concurrent cold-start share can't be clobbered (see historyGate).
      */
     fun openWorkTopic() {
-        sessionKey = "client:main"
+        switchSession("client:main")
         scope.launch { loadTranscriptGuarded("client:main") }
     }
 
@@ -338,7 +350,8 @@ class DenebGatewayClient(
     }
 
     // --- Conversation drawer → Deneb sessions browser -----------------------
-    // The drawer lists every recent Deneb session (Telegram, cron, client …).
+    // The drawer lists native topics first, then every recent Deneb session
+    // (client, cron, system, legacy imports).
     // Tapping one loads its transcript AND repoints sessionKey at it, so the
     // next message continues that very conversation through the gateway.
 
@@ -347,7 +360,7 @@ class DenebGatewayClient(
     }
 
     override fun loadConversation(id: String) {
-        sessionKey = id
+        switchSession(id)
         scope.launch { loadTranscriptGuarded(id) }
     }
 
@@ -485,7 +498,7 @@ class DenebGatewayClient(
 
     // --- Model switcher → Deneb registry ------------------------------------
     // models.set updates the gateway's default model, so switching here changes
-    // chat across every Deneb surface (Telegram, Mini App, this client).
+    // chat across the native app and every gateway-run automation.
 
     fun refreshModelsAsync() {
         scope.launch { refreshModels() }
@@ -498,6 +511,51 @@ class DenebGatewayClient(
             .distinctBy { it.id }
             .map { ModelOption(it.id, it.display.ifBlank { it.label.ifBlank { it.id } }, it.id == payload.current, it.health) }
         _denebRoleModels.value = payload.roles.associate { it.role to it.model }
+    }
+
+    fun refreshClientStatusAsync() {
+        scope.launch { refreshClientStatus() }
+    }
+
+    suspend fun refreshClientStatus(): ClientStatus? {
+        val payload = callRpc<ClientHelloPayload>("miniapp.client.hello", buildJsonObject {}) ?: run {
+            _clientStatus.value = null
+            return null
+        }
+        val status = ClientStatus(
+            version = payload.version,
+            nativeApiVersion = payload.nativeApiVersion,
+            model = payload.model,
+            capabilities = payload.capabilities,
+            endpoints = payload.endpoints,
+            timestampMs = payload.tsMs,
+        )
+        _clientStatus.value = status
+        return status
+    }
+
+    fun refreshTopicsAsync() {
+        scope.launch { refreshTopics() }
+    }
+
+    suspend fun refreshTopics(): List<ClientTopic>? {
+        val payload = callRpc<TopicsPayload>("miniapp.topics.list", buildJsonObject {}) ?: return null
+        val topics = payload.topics
+            .filter { it.sessionKey.isNotBlank() }
+            .map { t ->
+                ClientTopic(
+                    key = t.key.ifBlank { t.sessionKey },
+                    label = t.label.ifBlank { t.key.ifBlank { "토픽" } },
+                    sessionKey = t.sessionKey,
+                    isDefault = t.isDefault,
+                )
+            }
+        _denebTopics.value = topics
+        return topics
+    }
+
+    fun openTopic(topic: ClientTopic) {
+        loadConversation(topic.sessionKey)
     }
 
     suspend fun setMainModel(id: String): Boolean = setRoleModel(id, "main")
@@ -1038,8 +1096,8 @@ class DenebGatewayClient(
     /**
      * Transcribe a shared audio recording (voice memo, meeting audio) via the
      * gateway's VibeVoice-ASR sidecar and run one agent turn over the diarized
-     * transcript (speaker labels + timestamps). The native client's "share a
-     * recording to Deneb" path — capture the Telegram bot can't do on Android.
+     * transcript (speaker labels + timestamps). This is the native client's
+     * "share a recording to Deneb" path.
      */
     @OptIn(ExperimentalEncodingApi::class)
     suspend fun captureAudio(bytes: ByteArray, mimeType: String) {
@@ -1276,12 +1334,25 @@ class DenebGatewayClient(
     }
 
     private suspend fun fetchRecentSessions(): List<Conversation> {
+        val topics = refreshTopics()
+            ?: _denebTopics.value.ifEmpty { listOf(defaultClientTopic()) }
+        val topicSessionKeys = topics.mapTo(HashSet()) { it.sessionKey }
+        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        val topicConversations = topics.mapIndexed { index, topic ->
+            Conversation(
+                id = topic.sessionKey,
+                messages = emptyList(),
+                createdAt = 0,
+                updatedAt = now + 10_000L - index,
+                title = topic.label,
+            )
+        }
         val payload = callRpc<RecentPayload>(
             "miniapp.sessions.recent",
             buildJsonObject { put("limit", 50) },
-        ) ?: return emptyList()
-        return payload.sessions
-            .filter { it.key.isNotBlank() }
+        ) ?: return topicConversations
+        val recent = payload.sessions
+            .filter { it.key.isNotBlank() && it.key !in topicSessionKeys }
             .map { s ->
                 Conversation(
                     id = s.key,
@@ -1291,12 +1362,13 @@ class DenebGatewayClient(
                     title = conversationTitle(s),
                 )
             }
+        return topicConversations + recent
     }
 
     private fun conversationTitle(s: SessionRow): String {
         if (s.label.isNotBlank()) return s.label
         val friendly = when (s.key.substringBefore(':', "")) {
-            "telegram" -> "텔레그램"
+            "telegram" -> "이전 대화"
             "client" -> "내 대화"
             "system" -> "시스템"
             "cron" -> "예약 작업"
@@ -1305,6 +1377,14 @@ class DenebGatewayClient(
         val shortId = s.key.substringAfterLast(':').take(8)
         return if (shortId.isNotBlank()) "$friendly · $shortId" else friendly
     }
+
+    private fun switchSession(key: String) {
+        sessionKey = key
+        _currentConversationId.value = key
+    }
+
+    private fun defaultClientTopic(): ClientTopic =
+        ClientTopic(key = "main", label = "업무", sessionKey = "client:main", isDefault = true)
 
     private suspend fun fetchTranscript(sessionKey: String): List<History> {
         val payload = callRpc<TranscriptPayload>(
@@ -1452,6 +1532,30 @@ class DenebGatewayClient(
         val current: String = "",
         val roles: List<RoleModelRow> = emptyList(),
         val sections: List<ModelSection> = emptyList(),
+    )
+
+    @Serializable
+    private data class ClientHelloPayload(
+        val version: String = "",
+        val nativeApiVersion: Int = 0,
+        val model: String = "",
+        val capabilities: Map<String, Boolean> = emptyMap(),
+        val endpoints: Map<String, String> = emptyMap(),
+        val tsMs: Long = 0,
+    )
+
+    @Serializable
+    private data class TopicsPayload(
+        val topics: List<TopicRow> = emptyList(),
+        val defaultSessionKey: String = "",
+    )
+
+    @Serializable
+    private data class TopicRow(
+        val key: String = "",
+        val label: String = "",
+        val sessionKey: String = "",
+        val isDefault: Boolean = false,
     )
 
     @Serializable
@@ -1651,6 +1755,24 @@ data class ModelOption(
     val display: String,
     val current: Boolean,
     val health: String,
+)
+
+/** Gateway/native API status returned by `miniapp.client.hello`. */
+data class ClientStatus(
+    val version: String,
+    val nativeApiVersion: Int,
+    val model: String,
+    val capabilities: Map<String, Boolean>,
+    val endpoints: Map<String, String>,
+    val timestampMs: Long,
+)
+
+/** A native Deneb topic and the gateway session key it opens. */
+data class ClientTopic(
+    val key: String,
+    val label: String,
+    val sessionKey: String,
+    val isDefault: Boolean,
 )
 
 /** A recent Gmail message shown in the native mail screen. */

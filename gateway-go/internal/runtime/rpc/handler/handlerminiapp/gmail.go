@@ -8,9 +8,9 @@
 //	miniapp.gmail.archive      — remove the INBOX label
 //	miniapp.gmail.trash        — move the message to Gmail's Trash folder
 //
-// Every method assumes the request already passed initData verification
+// Every method assumes the request already passed client-token verification
 // (the HTTP bridge in server_http_miniapp.go enforces that before the
-// dispatcher is reached), so handlers only re-check that the InitData is
+// dispatcher is reached), so handlers only re-check that the client identity is
 // actually attached and return UNAUTHORIZED if it is missing.
 //
 // The handlers depend on a GmailClient interface rather than the concrete
@@ -99,11 +99,11 @@ func GmailMethods(deps GmailDeps) map[string]rpcutil.HandlerFunc {
 	}
 }
 
-// requireAuth enforces that an InitData has been attached upstream by the
-// HTTP bridge. All Mini App handlers share this guard.
+// requireAuth enforces that a native client identity has been attached
+// upstream by the HTTP bridge. All Mini App handlers share this guard.
 func requireAuth(ctx context.Context, reqID string) *protocol.ResponseFrame {
 	if clientauth.FromContext(ctx) == nil {
-		return rpcerr.New(protocol.ErrUnauthorized, "miniapp request missing initData context").Response(reqID)
+		return rpcerr.New(protocol.ErrUnauthorized, "miniapp request missing client identity context").Response(reqID)
 	}
 	return nil
 }

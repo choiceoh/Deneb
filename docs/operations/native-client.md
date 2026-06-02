@@ -9,11 +9,10 @@ read_when:
 
 # Native Android Client
 
-Deneb has two surfaces: the Telegram bot (the zero-install path) and the native
-Android client (the daily driver). The native client adds the things a Telegram
-client cannot do — share-sheet capture from any app, a home-screen widget,
-notification ingestion, and instant proactive push — while the agent, tools,
-memory, and always-on work stay on the gateway.
+Deneb's user surface is the native Android client. The app owns daily chat,
+share-sheet capture from any app, the home-screen widget, notification
+ingestion, and instant proactive push, while the agent, tools, memory, and
+always-on work stay on the gateway.
 
 ## What It Is
 
@@ -34,8 +33,9 @@ authenticated endpoint.
 
 <Info>
   The native client is a standalone APK that authenticates with a client token.
-  It talks to the same gateway as the Telegram bot and shares the same data, so
-  whichever surface you use, the agent, memory, and tools are identical.
+  It talks to the gateway over the native `miniapp.*` API. A generated client
+  token is the credential; the phone never receives provider keys or tool
+  credentials.
 </Info>
 
 ## Connecting to the Gateway
@@ -91,18 +91,17 @@ The chat path is built for long agent turns, not just quick replies.
 
 ## Topics
 
-A `#` button in the chat top bar opens a topic switcher — a dropdown of the
-gateway's Telegram forum topics with the active one check-marked. It is hidden
-when fewer than two topics are configured.
+The conversation drawer lists native topics first, followed by recent sessions.
+Topics come from the gateway's `miniapp.topics.list` contract and carry the
+session key the app should open.
 
 - **Labels come from the gateway.** The entries and their names (in practice
-  **업무 / 잡담 / 코딩**) are whatever the gateway's `deneb.json` topics map
-  defines; the client just renders them.
-- **업무 is General.** The 업무 (work) topic is the supergroup's General topic
-  (forum thread `0`) and maps to the legacy `client:main` session, so existing
-  history carries over.
+  **업무 / 잡담 / 코딩**) are derived from the gateway's `deneb.json` topics map;
+  the client renders them without knowing any legacy transport details.
+- **업무 is the home topic.** The 업무 (work) topic maps to `client:main`, so
+  proactive reports and existing home history carry over.
 - Selecting a topic repoints the session, loads that topic's transcript, and
-  fires the same per-topic knowledge injection as on Telegram.
+  uses the same per-topic knowledge injection as the gateway.
 
 ## Getting Around
 
@@ -140,16 +139,18 @@ glance: the next meeting (`M/D HH:mm · title`, from the upcoming calendar) and
 the unread-mail count (`받은편지함 미읽음 N`). Tapping anywhere on it opens the
 Deneb chat. It refreshes on the system's roughly 30-minute cycle. The widget is
 composed client-side from the calendar and Gmail data the gateway already
-serves — it is one of the surfaces the Telegram bot cannot put on a home screen.
+serves.
 
 ## Settings
 
 The 설정 hub has five tabs:
 
-- **게이트웨이** — the gateway URL and client token, a link to the surviving
-  upstream Kai settings (providers, MCP, inference), and a version card with a
-  **패치노트 보기** (view patch notes) sheet and an **업데이트 확인** (check for
-  update) button that offers an in-place APK download when a newer build exists.
+- **게이트웨이** — the gateway URL and client token, a live gateway status card
+  (version, native API version, current model, capabilities, topics), a link to
+  the surviving upstream Kai settings (providers, MCP, inference), and a version
+  card with a **패치노트 보기** (view patch notes) sheet and an **업데이트 확인**
+  (check for update) button that offers an in-place APK download when a newer
+  build exists.
 - **모델** — per-role model pickers. A **메인 / 경량 / 폴백** selector
   (main / lightweight / fallback) with the gateway's models listed below it;
   picking one binds that model to the selected role and takes effect without a

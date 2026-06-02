@@ -194,6 +194,32 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return ""
 			},
+			Capabilities: func() map[string]bool {
+				wikiReady := hub.WikiStore() != nil
+				chatReady := s.chatHandler != nil
+				return map[string]bool{
+					"rpc":             true,
+					"chat":            chatReady,
+					"chatStream":      chatReady,
+					"events":          s.pushHub != nil,
+					"models":          s.modelRegistry != nil,
+					"gmail":           true,
+					"calendar":        true,
+					"wiki":            wikiReady,
+					"search":          wikiReady,
+					"people":          true,
+					"crons":           hub.CronService() != nil,
+					"topicDocs":       true,
+					"captureImage":    chatReady,
+					"captureAudio":    chatReady,
+					"captureContacts": hub.ContactsStore() != nil,
+					"gmailAttachment": true,
+					"updateManifest":  true,
+				}
+			},
+		}),
+		handlerminiapp.TopicsMethods(handlerminiapp.TopicsDeps{
+			TopicMap: configuredTopicMap,
 		}),
 		s.miniappModelMethods(),
 

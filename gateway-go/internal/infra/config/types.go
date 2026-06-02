@@ -320,17 +320,18 @@ type CronConfig struct {
 	Enabled *bool `json:"enabled,omitempty"`
 }
 
-// TopicsConfig configures per-forum-topic knowledge injection into the system
-// prompt's Static (cached) block. It maps a Telegram forum threadID to a topic
-// key; the agent then loads <Dir>/<topicKey>.md and injects it for that topic's
-// sessions. Unmapped topics get no injection (graceful no-op).
+// TopicsConfig configures per-topic knowledge injection into the system
+// prompt's Static (cached) block. It maps a transport/source topic ID to a
+// topic key; the agent then loads <Dir>/<topicKey>.md and injects it for that
+// topic's sessions. Unmapped topics get no injection (graceful no-op).
 type TopicsConfig struct {
 	// Dir holds the <topicKey>.md knowledge files. Relative paths resolve
 	// against the agent workspace dir; absolute paths are used as-is. Empty
 	// defaults to "topics".
 	Dir string `json:"dir,omitempty"`
-	// Map maps a Telegram forum threadID (as a string) to a topic key. The
-	// General topic (no message_thread_id) uses the "0" key.
+	// Map maps a source topic ID (as a string) to a topic key. The default
+	// native topic uses the "0" key. Older configs may still contain
+	// Telegram forum thread IDs here.
 	// Example: {"42": "coding", "57": "work", "0": "general"}.
 	Map map[string]string `json:"map,omitempty"`
 }

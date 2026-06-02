@@ -80,7 +80,7 @@ func ModelMethods(deps ModelDeps) map[string]rpcutil.HandlerFunc {
 func modelsList(deps ModelDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if clientauth.FromContext(ctx) == nil {
-			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.models.list requires initData context").Response(req.ID)
+			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.models.list requires client identity context").Response(req.ID)
 		}
 		if deps.ListModels == nil {
 			return rpcerr.Unavailable("model list is unavailable").Response(req.ID)
@@ -112,7 +112,7 @@ func modelsSet(deps ModelDeps) rpcutil.HandlerFunc {
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if clientauth.FromContext(ctx) == nil {
-			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.models.set requires initData context").Response(req.ID)
+			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.models.set requires client identity context").Response(req.ID)
 		}
 		return rpcutil.BindCtx[params](ctx, req, func(ctx context.Context, p params) (any, error) {
 			id := strings.TrimSpace(p.ID)
@@ -146,7 +146,7 @@ func modelsAddCustom(deps ModelDeps) rpcutil.HandlerFunc {
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if clientauth.FromContext(ctx) == nil {
-			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.models.add_custom requires initData context").Response(req.ID)
+			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.models.add_custom requires client identity context").Response(req.ID)
 		}
 		return rpcutil.BindCtx[params](ctx, req, func(ctx context.Context, p params) (any, error) {
 			endpoint := strings.TrimSpace(p.Endpoint)
@@ -176,7 +176,7 @@ func modelsDeleteCustom(deps ModelDeps) rpcutil.HandlerFunc {
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if clientauth.FromContext(ctx) == nil {
-			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.models.delete_custom requires initData context").Response(req.ID)
+			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.models.delete_custom requires client identity context").Response(req.ID)
 		}
 		return rpcutil.BindCtx[params](ctx, req, func(ctx context.Context, p params) (any, error) {
 			id := strings.TrimSpace(p.ID)
