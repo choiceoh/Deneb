@@ -44,11 +44,11 @@ const defaultBootPrompt = `[시스템 부트 — 게이트웨이 시작됨]
 
 게이트웨이가 방금 시작되었습니다. 다음 작업을 수행하세요:
 
-1. 시스템 상태 확인 (health 도구 사용)
-2. 최근 메모리 확인 — 마지막 세션 이후 기억해야 할 것이 있는지
-3. 중요한 변화가 있으면 사용자에게 간략히 알림 (memory log로 기록)
+1. 시스템 상태 확인 (gateway 도구의 action=status)
+2. 최근 메모리/지식 확인 — 마지막 세션 이후 기억해야 할 것이 있는지 (wiki 또는 knowledge 도구)
+3. 중요한 변화가 있으면 사용자에게 간략히 알림 (message 도구)
 
-아무 이상 없으면 memory(action=log, title="부트 완료", query="정상 시작, 이상 없음") 으로 기록.`
+특이사항이 없으면 사용자에게 불필요한 알림을 보내지 말고 조용히 종료하세요.`
 
 func (t *bootTask) Run(ctx context.Context) error {
 	if t.chatHandler == nil {

@@ -18,10 +18,16 @@ var conversationTools = toSet(
 	"web", "wiki", "fetch_tools",
 )
 
-// bootTools are the minimal set for startup and daily-check agent turns.
-// kv for persistent memory/logging.
+// bootTools are the tools available to startup and daily-check agent turns.
+// The boot turn checks system status, reviews overnight mail/schedule, inspects
+// memory, and proactively notifies the user. gateway and gmail are deferred, so
+// they are listed here only to pass the Execute allow-list — the LLM loads their
+// schemas on demand via fetch_tools.
 var bootTools = toSet(
-	"kv",
+	"gateway", "gmail", // deferred — loaded via fetch_tools
+	"wiki", "knowledge", // memory / knowledge inspection
+	"cron", "message", "read", // schedule review, user notification, file reads
+	"fetch_tools", // loads the deferred tools above
 )
 
 // selfReviewTools are the Hermes-style allow-list for autonomous skill review.
