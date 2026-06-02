@@ -7,13 +7,18 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 )
 
-// topicResolver maps a Telegram forum threadID to a per-topic knowledge key,
+// topicResolver maps a delivery topic ID to a per-topic knowledge key,
 // implementing chat.TopicResolver. It snapshots deneb.json topics.map at boot
 // so per-turn lookups are pure in-memory map reads (prompt-cache Rule C: no
 // per-request config reload).
 type topicResolver struct {
 	dir string
-	m   map[string]string // threadID → key
+	m   map[string]string // source topic ID -> key
+}
+
+type topicConfigSnapshot struct {
+	dir string
+	m   map[string]string
 }
 
 // newTopicResolver reads topics config from deneb.json once. It returns nil
@@ -25,21 +30,44 @@ func newTopicResolver(logger *slog.Logger) chat.TopicResolver {
 		return nil
 	}
 	tc := snapshot.Config.Topics
-	if len(tc.Map) == 0 {
+	topicSnapshot := topicSnapshotFromConfig(tc)
+	if topicSnapshot == nil {
+		return nil
+	}
+	if logger != nil {
+		logger.Info("topics: per-topic knowledge enabled", "topics", len(topicSnapshot.m), "dir", topicSnapshot.dir)
+	}
+	return &topicResolver{dir: topicSnapshot.dir, m: topicSnapshot.m}
+}
+
+// configuredTopicMap reloads topics.map for native-client discovery calls.
+// Unlike topicResolver, this path is not used per model turn, so reflecting
+// deneb.json edits without restart is more useful than holding a boot snapshot.
+func configuredTopicMap() (map[string]string, error) {
+	snapshot, err := config.LoadConfigFromDefaultPath()
+	if err != nil || snapshot == nil || snapshot.Config.Topics == nil {
+		return nil, err
+	}
+	topicSnapshot := topicSnapshotFromConfig(snapshot.Config.Topics)
+	if topicSnapshot == nil {
+		return nil, nil
+	}
+	return topicSnapshot.m, nil
+}
+
+func topicSnapshotFromConfig(tc *config.TopicsConfig) *topicConfigSnapshot {
+	if tc == nil || len(tc.Map) == 0 {
 		return nil
 	}
 	m := make(map[string]string, len(tc.Map))
-	for threadID, key := range tc.Map {
-		m[threadID] = key
+	for sourceID, key := range tc.Map {
+		m[sourceID] = key
 	}
-	if logger != nil {
-		logger.Info("topics: per-topic knowledge enabled", "topics", len(m), "dir", tc.Dir)
-	}
-	return &topicResolver{dir: tc.Dir, m: m}
+	return &topicConfigSnapshot{dir: tc.Dir, m: m}
 }
 
-// TopicKey returns the topic key for a threadID, or "" when unmapped. The
-// General topic (empty threadID) is normalized to "0".
+// TopicKey returns the topic key for a delivery topic ID, or "" when unmapped.
+// The default topic (empty ID) is normalized to "0".
 func (r *topicResolver) TopicKey(threadID string) string {
 	if threadID == "" {
 		threadID = "0"

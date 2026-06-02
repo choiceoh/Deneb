@@ -167,6 +167,13 @@ private fun GatewayTab(
     var checked by remember { mutableStateOf(false) }
     var update by remember { mutableStateOf<UpdateInfo?>(null) }
     var showPatchNotes by remember { mutableStateOf(false) }
+    var statusChecking by remember { mutableStateOf(false) }
+    val gatewayStatus = if (denebClient != null) denebClient.clientStatus.collectAsState().value else null
+    val topics = if (denebClient != null) denebClient.denebTopics.collectAsState().value else emptyList()
+    LaunchedEffect(denebClient) {
+        denebClient?.refreshClientStatus()
+        denebClient?.refreshTopics()
+    }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -211,6 +218,25 @@ private fun GatewayTab(
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("저장") }
         }
+        GatewayStatusCard(
+            status = gatewayStatus,
+            topics = topics,
+            checking = statusChecking,
+            enabled = denebClient != null,
+            onRefresh = {
+                denebClient?.let { c ->
+                    scope.launch {
+                        statusChecking = true
+                        try {
+                            c.refreshClientStatus()
+                            c.refreshTopics()
+                        } finally {
+                            statusChecking = false
+                        }
+                    }
+                }
+            },
+        )
         SettingsCard {
             Text(
                 "버전",
@@ -284,6 +310,77 @@ private fun GatewayTab(
     }
     if (showPatchNotes) {
         PatchNotesSheet(onDismiss = { showPatchNotes = false })
+    }
+}
+
+@Composable
+private fun GatewayStatusCard(
+    status: ClientStatus?,
+    topics: List<ClientTopic>,
+    checking: Boolean,
+    enabled: Boolean,
+    onRefresh: () -> Unit,
+) {
+    SettingsCard {
+        Text(
+            "게이트웨이 상태",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.height(8.dp))
+        if (status == null) {
+            Text(
+                "아직 확인되지 않았습니다.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                "Gateway v${status.version.ifBlank { "unknown" }} · Native API ${status.nativeApiVersion}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (status.model.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "현재 모델: ${status.model}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            val active = status.capabilities
+                .filterValues { it }
+                .keys
+                .sorted()
+                .joinToString(" · ")
+            if (active.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    active,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (topics.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "토픽: " + topics.take(5).joinToString(" · ") { it.label },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        OutlinedButton(
+            onClick = onRefresh,
+            enabled = enabled && !checking,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(if (checking) "확인 중…" else "상태 새로고침") }
     }
 }
 
@@ -634,7 +731,7 @@ private fun NotificationsTab(client: DenebGatewayClient) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                "타 앱 알림(카톡·메일·캘린더 등)을 Deneb가 읽으려면 '알림 접근' 권한이 필요합니다. Telegram이 못 하는 네이티브 기능입니다.",
+                "타 앱 알림(카톡·메일·캘린더 등)을 Deneb가 읽으려면 '알림 접근' 권한이 필요합니다. 네이티브 앱에서만 가능한 기기 통합 기능입니다.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

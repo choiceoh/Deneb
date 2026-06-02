@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "name": "Deneb",
-  "description": "Personal AI gateway for NVIDIA DGX Spark — a chief-of-staff-style single agent for business analysis (mail, projects, deals) and proactive ops, reachable from Telegram and a native Android client.",
+  "description": "Personal AI gateway for NVIDIA DGX Spark — a chief-of-staff-style single agent for business analysis (mail, projects, deals) and proactive ops, reachable from the native Android client.",
   "theme": "mint",
   "icons": {
     "library": "lucide"

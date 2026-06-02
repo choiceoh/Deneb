@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-func TestModelsList_WithInitData(t *testing.T) {
+func TestModelsList_WithIdentity(t *testing.T) {
 	h := modelsList(ModelDeps{
 		CurrentModel: func() string { return "zai/glm-5.1" },
 		ListModels: func(context.Context) ([]ModelSection, error) {
@@ -24,7 +24,7 @@ func TestModelsList_WithInitData(t *testing.T) {
 			}}, nil
 		},
 	})
-	ctx := clientauth.WithContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleIdentity())
 
 	got := decodePayload(t, h(ctx, newReq(t, "miniapp.models.list")))
 	if got["current"] != "zai/glm-5.1" {
@@ -36,10 +36,10 @@ func TestModelsList_WithInitData(t *testing.T) {
 	}
 }
 
-func TestModelsList_NoInitData(t *testing.T) {
+func TestModelsList_NoIdentity(t *testing.T) {
 	h := modelsList(ModelDeps{
 		ListModels: func(context.Context) ([]ModelSection, error) {
-			t.Fatal("ListModels should not be called without initData")
+			t.Fatal("ListModels should not be called without client identity")
 			return nil, nil
 		},
 	})
@@ -53,7 +53,7 @@ func TestModelsList_NoInitData(t *testing.T) {
 	}
 }
 
-func TestModelsSet_WithInitData(t *testing.T) {
+func TestModelsSet_WithIdentity(t *testing.T) {
 	var requested, gotRole string
 	h := modelsSet(ModelDeps{
 		SetModel: func(_ context.Context, role, id string) (string, error) {
@@ -63,7 +63,7 @@ func TestModelsSet_WithInitData(t *testing.T) {
 		},
 	})
 	req := reqWith(t, "miniapp.models.set", map[string]any{"id": " zai/glm-5.1 "})
-	ctx := clientauth.WithContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleIdentity())
 
 	got := decodePayload(t, h(ctx, req))
 	if requested != "zai/glm-5.1" {
@@ -89,7 +89,7 @@ func TestModelsSet_WithRole(t *testing.T) {
 		},
 	})
 	req := reqWith(t, "miniapp.models.set", map[string]any{"id": "vllm/qwen", "role": "lightweight"})
-	ctx := clientauth.WithContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleIdentity())
 
 	got := decodePayload(t, h(ctx, req))
 	if gotRole != "lightweight" {
@@ -105,7 +105,7 @@ func TestModelsSet_WithRole(t *testing.T) {
 
 func TestModelsSet_MissingID(t *testing.T) {
 	h := modelsSet(ModelDeps{})
-	ctx := clientauth.WithContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleIdentity())
 	resp := h(ctx, reqWith(t, "miniapp.models.set", map[string]any{"id": "   "}))
 
 	if resp.OK {
@@ -116,7 +116,7 @@ func TestModelsSet_MissingID(t *testing.T) {
 	}
 }
 
-func TestModelsAddCustom_WithInitData(t *testing.T) {
+func TestModelsAddCustom_WithIdentity(t *testing.T) {
 	var gotEndpoint, gotModel string
 	h := modelsAddCustom(ModelDeps{
 		AddModel: func(_ context.Context, endpoint, model string) (ModelAddResult, error) {
@@ -135,7 +135,7 @@ func TestModelsAddCustom_WithInitData(t *testing.T) {
 		"endpoint": " http://127.0.0.1:8000/v1 ",
 		"model":    " qwen3.6-35b-a3b ",
 	})
-	ctx := clientauth.WithContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleIdentity())
 
 	got := decodePayload(t, h(ctx, req))
 	if gotEndpoint != "http://127.0.0.1:8000/v1" {
@@ -157,7 +157,7 @@ func TestModelsAddCustom_WithInitData(t *testing.T) {
 
 func TestModelsAddCustom_MissingEndpoint(t *testing.T) {
 	h := modelsAddCustom(ModelDeps{})
-	ctx := clientauth.WithContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleIdentity())
 	resp := h(ctx, reqWith(t, "miniapp.models.add_custom", map[string]any{
 		"endpoint": "   ",
 		"model":    "qwen3.6-35b-a3b",
@@ -173,7 +173,7 @@ func TestModelsAddCustom_MissingEndpoint(t *testing.T) {
 
 func TestModelsAddCustom_MissingModel(t *testing.T) {
 	h := modelsAddCustom(ModelDeps{})
-	ctx := clientauth.WithContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleIdentity())
 	resp := h(ctx, reqWith(t, "miniapp.models.add_custom", map[string]any{
 		"endpoint": "http://127.0.0.1:8000/v1",
 		"model":    "   ",
@@ -187,7 +187,7 @@ func TestModelsAddCustom_MissingModel(t *testing.T) {
 	}
 }
 
-func TestModelsDeleteCustom_WithInitData(t *testing.T) {
+func TestModelsDeleteCustom_WithIdentity(t *testing.T) {
 	var gotID string
 	h := modelsDeleteCustom(ModelDeps{
 		DeleteModel: func(_ context.Context, id string) (ModelDeleteResult, error) {
@@ -201,7 +201,7 @@ func TestModelsDeleteCustom_WithInitData(t *testing.T) {
 		},
 	})
 	req := reqWith(t, "miniapp.models.delete_custom", map[string]any{"id": " custom/typo-model "})
-	ctx := clientauth.WithContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleIdentity())
 
 	got := decodePayload(t, h(ctx, req))
 	if gotID != "custom/typo-model" {
@@ -224,7 +224,7 @@ func TestModelsDeleteCustom_WithInitData(t *testing.T) {
 
 func TestModelsDeleteCustom_MissingID(t *testing.T) {
 	h := modelsDeleteCustom(ModelDeps{})
-	ctx := clientauth.WithContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleIdentity())
 	resp := h(ctx, reqWith(t, "miniapp.models.delete_custom", map[string]any{"id": "   "}))
 
 	if resp.OK {
@@ -235,10 +235,10 @@ func TestModelsDeleteCustom_MissingID(t *testing.T) {
 	}
 }
 
-func TestModelsDeleteCustom_NoInitData(t *testing.T) {
+func TestModelsDeleteCustom_NoIdentity(t *testing.T) {
 	h := modelsDeleteCustom(ModelDeps{
 		DeleteModel: func(context.Context, string) (ModelDeleteResult, error) {
-			t.Fatal("DeleteModel should not be called without initData")
+			t.Fatal("DeleteModel should not be called without client identity")
 			return ModelDeleteResult{}, nil
 		},
 	})
