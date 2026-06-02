@@ -10,7 +10,7 @@
 //	  client-token verification (constant-time compare)
 //	    │
 //	    ▼
-//	  Dispatcher.Dispatch(ctx + synthetic *telegram.InitData, frame)
+//	  Dispatcher.Dispatch(ctx + synthetic *clientauth.Identity, frame)
 //	    │
 //	    ▼
 //	  protocol.ResponseFrame JSON
@@ -34,7 +34,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -51,7 +50,7 @@ var miniappGmailAttachmentClientFactory = func() (miniappGmailAttachmentClient, 
 // method outside the miniapp.* namespace so the broader RPC surface stays
 // inaccessible to remote callers.
 func (s *Server) handleMiniappRPC(w http.ResponseWriter, r *http.Request) {
-	initData, ok := s.authenticateMiniappRequest(w, r)
+	identity, ok := s.authenticateMiniappRequest(w, r)
 	if !ok {
 		return
 	}
@@ -94,7 +93,7 @@ func (s *Server) handleMiniappRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := telegram.WithInitDataContext(r.Context(), initData)
+	ctx := clientauth.WithContext(r.Context(), identity)
 	resp := s.dispatcher.Dispatch(ctx, &frame)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -163,10 +162,10 @@ func (s *Server) handleMiniappGmailAttachment(w http.ResponseWriter, r *http.Req
 
 // authenticateMiniappRequest verifies the X-Deneb-Client-Token header against
 // the stored client secret. On failure it writes the HTTP error and returns
-// (nil, false); on success it returns the synthetic operator InitData and
+// (nil, false); on success it returns the synthetic operator Identity and
 // (data, true). The Telegram initData ("Authorization: tma <raw>") path was
 // retired with the Mini App webview — the native client is the only caller.
-func (s *Server) authenticateMiniappRequest(w http.ResponseWriter, r *http.Request) (*telegram.InitData, bool) {
+func (s *Server) authenticateMiniappRequest(w http.ResponseWriter, r *http.Request) (*clientauth.Identity, bool) {
 	tok := strings.TrimSpace(r.Header.Get(clientauth.Header))
 	if tok == "" {
 		s.writeJSON(w, http.StatusUnauthorized, map[string]any{
@@ -180,14 +179,14 @@ func (s *Server) authenticateMiniappRequest(w http.ResponseWriter, r *http.Reque
 		})
 		return nil, false
 	}
-	return syntheticOperatorInitData(), true
+	return syntheticOperatorIdentity(), true
 }
 
 // authenticateMiniappDownloadRequest authenticates a download GET. A browser
 // opening a download link cannot set the X-Deneb-Client-Token header, so the
 // client token rides in the query string instead, verified the same
 // constant-time way as the header path.
-func (s *Server) authenticateMiniappDownloadRequest(w http.ResponseWriter, r *http.Request) (*telegram.InitData, bool) {
+func (s *Server) authenticateMiniappDownloadRequest(w http.ResponseWriter, r *http.Request) (*clientauth.Identity, bool) {
 	tok := strings.TrimSpace(r.URL.Query().Get("clientToken"))
 	if tok == "" {
 		s.writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "missing client token"})
@@ -197,7 +196,7 @@ func (s *Server) authenticateMiniappDownloadRequest(w http.ResponseWriter, r *ht
 		s.writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "invalid client token"})
 		return nil, false
 	}
-	return syntheticOperatorInitData(), true
+	return syntheticOperatorIdentity(), true
 }
 
 func sanitizeAttachmentFilename(raw string) string {

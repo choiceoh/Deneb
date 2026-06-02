@@ -12,7 +12,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -44,7 +44,7 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 // without waiting on a domain query.
 func ping(deps Deps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if telegram.InitDataFromContext(ctx) == nil {
+		if clientauth.FromContext(ctx) == nil {
 			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.ping requires initData context").Response(req.ID)
 		}
 		payload := map[string]any{
@@ -66,7 +66,7 @@ func ping(deps Deps) rpcutil.HandlerFunc {
 // verification is intact.
 func whoami() rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		data := telegram.InitDataFromContext(ctx)
+		data := clientauth.FromContext(ctx)
 		if data == nil {
 			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.whoami requires initData context").Response(req.ID)
 		}

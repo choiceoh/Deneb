@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -76,8 +76,8 @@ func depsFor(client GmailClient) GmailDeps {
 }
 
 func authedCtx() context.Context {
-	return telegram.WithInitDataContext(context.Background(), &telegram.InitData{
-		User: &telegram.WebAppUser{ID: 42, FirstName: "Tester"},
+	return clientauth.WithContext(context.Background(), &clientauth.Identity{
+		User: &clientauth.User{ID: 42, FirstName: "Tester"},
 	})
 }
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -79,7 +79,7 @@ func ModelMethods(deps ModelDeps) map[string]rpcutil.HandlerFunc {
 
 func modelsList(deps ModelDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if telegram.InitDataFromContext(ctx) == nil {
+		if clientauth.FromContext(ctx) == nil {
 			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.models.list requires initData context").Response(req.ID)
 		}
 		if deps.ListModels == nil {
@@ -111,7 +111,7 @@ func modelsSet(deps ModelDeps) rpcutil.HandlerFunc {
 		Role string `json:"role"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if telegram.InitDataFromContext(ctx) == nil {
+		if clientauth.FromContext(ctx) == nil {
 			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.models.set requires initData context").Response(req.ID)
 		}
 		return rpcutil.BindCtx[params](ctx, req, func(ctx context.Context, p params) (any, error) {
@@ -145,7 +145,7 @@ func modelsAddCustom(deps ModelDeps) rpcutil.HandlerFunc {
 		Model    string `json:"model"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if telegram.InitDataFromContext(ctx) == nil {
+		if clientauth.FromContext(ctx) == nil {
 			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.models.add_custom requires initData context").Response(req.ID)
 		}
 		return rpcutil.BindCtx[params](ctx, req, func(ctx context.Context, p params) (any, error) {
@@ -175,7 +175,7 @@ func modelsDeleteCustom(deps ModelDeps) rpcutil.HandlerFunc {
 		ID string `json:"id"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if telegram.InitDataFromContext(ctx) == nil {
+		if clientauth.FromContext(ctx) == nil {
 			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.models.delete_custom requires initData context").Response(req.ID)
 		}
 		return rpcutil.BindCtx[params](ctx, req, func(ctx context.Context, p params) (any, error) {

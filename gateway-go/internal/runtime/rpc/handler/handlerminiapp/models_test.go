@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -24,7 +24,7 @@ func TestModelsList_WithInitData(t *testing.T) {
 			}}, nil
 		},
 	})
-	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleInitData())
 
 	got := decodePayload(t, h(ctx, newReq(t, "miniapp.models.list")))
 	if got["current"] != "zai/glm-5.1" {
@@ -63,7 +63,7 @@ func TestModelsSet_WithInitData(t *testing.T) {
 		},
 	})
 	req := reqWith(t, "miniapp.models.set", map[string]any{"id": " zai/glm-5.1 "})
-	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleInitData())
 
 	got := decodePayload(t, h(ctx, req))
 	if requested != "zai/glm-5.1" {
@@ -89,7 +89,7 @@ func TestModelsSet_WithRole(t *testing.T) {
 		},
 	})
 	req := reqWith(t, "miniapp.models.set", map[string]any{"id": "vllm/qwen", "role": "lightweight"})
-	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleInitData())
 
 	got := decodePayload(t, h(ctx, req))
 	if gotRole != "lightweight" {
@@ -105,7 +105,7 @@ func TestModelsSet_WithRole(t *testing.T) {
 
 func TestModelsSet_MissingID(t *testing.T) {
 	h := modelsSet(ModelDeps{})
-	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleInitData())
 	resp := h(ctx, reqWith(t, "miniapp.models.set", map[string]any{"id": "   "}))
 
 	if resp.OK {
@@ -135,7 +135,7 @@ func TestModelsAddCustom_WithInitData(t *testing.T) {
 		"endpoint": " http://127.0.0.1:8000/v1 ",
 		"model":    " qwen3.6-35b-a3b ",
 	})
-	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleInitData())
 
 	got := decodePayload(t, h(ctx, req))
 	if gotEndpoint != "http://127.0.0.1:8000/v1" {
@@ -157,7 +157,7 @@ func TestModelsAddCustom_WithInitData(t *testing.T) {
 
 func TestModelsAddCustom_MissingEndpoint(t *testing.T) {
 	h := modelsAddCustom(ModelDeps{})
-	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleInitData())
 	resp := h(ctx, reqWith(t, "miniapp.models.add_custom", map[string]any{
 		"endpoint": "   ",
 		"model":    "qwen3.6-35b-a3b",
@@ -173,7 +173,7 @@ func TestModelsAddCustom_MissingEndpoint(t *testing.T) {
 
 func TestModelsAddCustom_MissingModel(t *testing.T) {
 	h := modelsAddCustom(ModelDeps{})
-	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleInitData())
 	resp := h(ctx, reqWith(t, "miniapp.models.add_custom", map[string]any{
 		"endpoint": "http://127.0.0.1:8000/v1",
 		"model":    "   ",
@@ -201,7 +201,7 @@ func TestModelsDeleteCustom_WithInitData(t *testing.T) {
 		},
 	})
 	req := reqWith(t, "miniapp.models.delete_custom", map[string]any{"id": " custom/typo-model "})
-	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleInitData())
 
 	got := decodePayload(t, h(ctx, req))
 	if gotID != "custom/typo-model" {
@@ -224,7 +224,7 @@ func TestModelsDeleteCustom_WithInitData(t *testing.T) {
 
 func TestModelsDeleteCustom_MissingID(t *testing.T) {
 	h := modelsDeleteCustom(ModelDeps{})
-	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleInitData())
 	resp := h(ctx, reqWith(t, "miniapp.models.delete_custom", map[string]any{"id": "   "}))
 
 	if resp.OK {
