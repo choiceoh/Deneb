@@ -1975,6 +1975,20 @@ class RemoteDataRepository(
         _openWorkTopicRequested.value = false
     }
 
+    private val _hasUnreadWorkReport = MutableStateFlow(false)
+    override val hasUnreadWorkReport: StateFlow<Boolean> = _hasUnreadWorkReport
+
+    override fun clearUnreadWorkReport() {
+        _hasUnreadWorkReport.value = false
+    }
+
+    // Base behavior: raise the unread badge. The gateway client overrides this to
+    // live-refresh the home transcript when the user is already viewing it, and
+    // only falls back to this badge when they are looking elsewhere.
+    override fun onProactiveReportForeground() {
+        _hasUnreadWorkReport.value = true
+    }
+
     override suspend fun addAssistantMessage(content: String) {
         val now = Clock.System.now().toEpochMilliseconds()
 

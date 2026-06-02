@@ -83,6 +83,7 @@ data class ChatUiState(
     val savedConversations: ImmutableList<ConversationSummary> = persistentListOf(),
     val currentConversationId: String? = null,
     val hasUnreadHeartbeat: Boolean = false,
+    val hasUnreadWorkReport: Boolean = false,
     val smsDrafts: ImmutableList<SmsDraft> = persistentListOf(),
     val snackbarMessage: StringResource? = null,
     val pendingConversationDeletion: String? = null,

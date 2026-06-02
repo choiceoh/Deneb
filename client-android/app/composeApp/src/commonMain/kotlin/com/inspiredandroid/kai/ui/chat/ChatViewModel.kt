@@ -60,6 +60,8 @@ class ChatViewModel(
         loadConversation = ::loadConversation,
         deleteConversation = ::deleteConversation,
         clearUnreadHeartbeat = ::clearUnreadHeartbeat,
+        clearUnreadWorkReport = ::clearUnreadWorkReport,
+        openWorkReport = ::openWorkReport,
         clearSnackbar = ::clearSnackbar,
         undoDeleteConversation = ::undoDeleteConversation,
         submitUiCallback = ::submitUiCallback,
@@ -149,8 +151,10 @@ class ChatViewModel(
         dataRepository.chatHistory,
         dataRepository.savedConversations,
         dataRepository.currentConversationId,
-        dataRepository.hasUnreadHeartbeat,
-    ) { state, history, conversations, conversationId, hasUnreadHeartbeat ->
+        // Two unread flags folded into a Pair to stay within combine's 5-arg overload.
+        combine(dataRepository.hasUnreadHeartbeat, dataRepository.hasUnreadWorkReport) { hb, wr -> hb to wr },
+    ) { state, history, conversations, conversationId, unread ->
+        val (hasUnreadHeartbeat, hasUnreadWorkReport) = unread
         val summaries = conversations
             .sortedByDescending { it.updatedAt }
             .map {
@@ -170,6 +174,7 @@ class ChatViewModel(
             savedConversations = summaries.toImmutableList(),
             currentConversationId = conversationId,
             hasUnreadHeartbeat = hasUnreadHeartbeat,
+            hasUnreadWorkReport = hasUnreadWorkReport,
         )
     }.distinctUntilChanged().stateIn(
         scope = viewModelScope,
@@ -429,6 +434,17 @@ class ChatViewModel(
 
     private fun clearUnreadHeartbeat() {
         dataRepository.clearUnreadHeartbeat()
+    }
+
+    private fun clearUnreadWorkReport() {
+        dataRepository.clearUnreadWorkReport()
+    }
+
+    // In-app work-report banner tap: open the 업무 (client:main) home where the
+    // proactive report was mirrored, and clear the unread badge.
+    private fun openWorkReport() {
+        (dataRepository as? DenebGatewayClient)?.openWorkTopic()
+        dataRepository.clearUnreadWorkReport()
     }
 
     private fun sendSmsDraft(draftId: String) {

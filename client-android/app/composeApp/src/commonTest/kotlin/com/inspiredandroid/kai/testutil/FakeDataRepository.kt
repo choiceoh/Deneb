@@ -434,6 +434,22 @@ class FakeDataRepository : DataRepository {
         openHeartbeatRequested.value = false
     }
 
+    override val openWorkTopicRequested: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    override fun requestOpenWorkTopic() {
+        openWorkTopicRequested.value = true
+    }
+    override fun consumeOpenWorkTopicRequest() {
+        openWorkTopicRequested.value = false
+    }
+
+    override val hasUnreadWorkReport: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    override fun clearUnreadWorkReport() {
+        hasUnreadWorkReport.value = false
+    }
+    override fun onProactiveReportForeground() {
+        hasUnreadWorkReport.value = true
+    }
+
     // Email management
     private var emailEnabled = true
     private val emailAccounts = mutableListOf<EmailAccount>()

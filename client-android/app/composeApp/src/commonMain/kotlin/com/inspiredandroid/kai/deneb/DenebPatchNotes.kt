@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.28",
+        code = 151,
+        highlights = listOf(
+            "모닝레터·개별 메일분석 등 능동형 리포트가 네이티브 앱에 제대로 도착 — 앱을 켜면 업무 홈으로 바로 들어가고, 켜둔 상태에서도 새 리포트가 실시간 반영(다른 대화를 보고 있으면 '새 업무 리포트' 배너로 안내)",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.27",
         code = 150,
         highlights = listOf(

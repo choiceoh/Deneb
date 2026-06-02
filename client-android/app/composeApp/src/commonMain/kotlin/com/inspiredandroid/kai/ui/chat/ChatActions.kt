@@ -19,6 +19,8 @@ data class ChatActions(
     val loadConversation: (String) -> Unit,
     val deleteConversation: (String) -> Unit,
     val clearUnreadHeartbeat: () -> Unit,
+    val clearUnreadWorkReport: () -> Unit,
+    val openWorkReport: () -> Unit,
     val clearSnackbar: () -> Unit,
     val undoDeleteConversation: () -> Unit,
     val submitUiCallback: (event: String, data: Map<String, String>) -> Unit,
