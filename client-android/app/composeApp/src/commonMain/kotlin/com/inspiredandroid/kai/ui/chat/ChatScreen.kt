@@ -64,6 +64,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Alignment.Companion.BottomCenter
 import androidx.compose.ui.Alignment.Companion.CenterEnd
@@ -128,6 +129,7 @@ import kai.composeapp.generated.resources.scroll_to_bottom_content_description
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import nl.marc_apps.tts.TextToSpeechInstance
 import nl.marc_apps.tts.errors.TextToSpeechSynthesisInterruptedError
@@ -511,6 +513,18 @@ private fun ChatModeScreen(
     val sessionDrawerState = rememberDrawerState(DrawerValue.Closed)
     com.inspiredandroid.kai.PlatformBackHandler(enabled = sessionDrawerState.isOpen) {
         drawerScope.launch { sessionDrawerState.close() }
+    }
+
+    // An edge-swipe opens either drawer without touching the input field, so the
+    // soft keyboard would otherwise linger over the drawer content. Hide it the
+    // moment either drawer starts opening (targetValue flips to Open) — this
+    // covers both the swipe gesture and the top-bar buttons.
+    LaunchedEffect(drawerState, sessionDrawerState) {
+        snapshotFlow {
+            drawerState.targetValue == DrawerValue.Open || sessionDrawerState.targetValue == DrawerValue.Open
+        }.collect { opening ->
+            if (opening) keyboardController?.hide()
+        }
     }
 
     // When the active conversation changes (e.g. user starts a new chat from the
