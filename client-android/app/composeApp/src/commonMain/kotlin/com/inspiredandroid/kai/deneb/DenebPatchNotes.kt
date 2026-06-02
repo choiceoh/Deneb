@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.25",
+        code = 148,
+        highlights = listOf(
+            "일정 상세 화면을 새 타이포그래픽 디자인으로 정돈 — 큰 제목·섹션 라벨·깔끔한 정보 행 (다른 화면도 순차 적용 예정)",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.24",
         code = 147,
         highlights = listOf(

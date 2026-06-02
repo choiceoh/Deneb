@@ -1,8 +1,10 @@
 package com.inspiredandroid.kai.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -86,6 +88,7 @@ fun DenebScreenScaffold(
     title: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    tabBar: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.background, modifier = modifier.fillMaxSize()) {
@@ -95,6 +98,12 @@ fun DenebScreenScaffold(
                 .statusBarsPadding()
                 .navigationBarsPadding(),
         ) {
+            if (tabBar != null) {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                ) { tabBar() }
+            }
             Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 6.dp)) {
                 Text(
                     text = "←",

@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.deneb.CalendarEventContent
+import com.inspiredandroid.kai.deneb.CalendarEventDetail
 import com.inspiredandroid.kai.deneb.DenebMarkdown
 import com.inspiredandroid.kai.deneb.MailMessage
 import com.inspiredandroid.kai.deneb.MailRow
@@ -63,6 +65,8 @@ fun main() {
     renderChrome("chrome_light.png", LightColorScheme)
     renderDesignSample("design_dark.png", DarkColorScheme)
     renderDesignSample("design_light.png", LightColorScheme)
+    renderCalendarEvent("calendar_event_dark.png", DarkColorScheme)
+    renderCalendarEvent("calendar_event_light.png", LightColorScheme)
     println("rendered -> /tmp/deneb-render/")
 }
 
@@ -97,6 +101,39 @@ private fun renderDesignSample(name: String, scheme: ColorScheme) {
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+private val sampleEvent = CalendarEventDetail(
+    id = "e1",
+    title = "기획조정실 주간 회의 — 3분기 루프탑·RE100 진행 점검",
+    description = "- 남도에코 모듈 입고 일정 공유\n- RE100 고객사 계약 진행률\n- 주차장 태양광 견적 리뷰",
+    location = "본사 3층 대회의실",
+    start = "2026-06-03T14:00:00Z",
+    end = "2026-06-03T15:00:00Z",
+    allDay = false,
+    organizer = "오선택 전무",
+    attendees = listOf("김민준 부장", "이서연 차장", "에코프로 구매팀"),
+    meetUri = "https://meet.google.com/abc-defg-hij",
+    status = "confirmed",
+)
+
+// Validates the calendar-event detail in the hybrid idiom: Deneb type skin
+// (subject + section labels + body) with the Meet join as a Material button.
+private fun renderCalendarEvent(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 760, height = 1100, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "일정", onBack = {}) {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    CalendarEventContent(ev = sampleEvent, onJoinMeet = {})
                 }
             }
         }
