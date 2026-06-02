@@ -138,6 +138,17 @@ private data class AssistantTurn(
 
 private enum class BailoutReason { LIMIT_REACHED, REPEATING }
 
+/**
+ * Output-token headroom for interactive UI mode, which must emit the entire screen as one
+ * un-truncated kai-ui JSON block — and reasoning models spend part of the budget thinking
+ * first, so a turn that renders fine in plain chat can truncate mid-JSON and surface as a
+ * "parsing failed" screen. Applied to the OpenAI-compatible path only (normal chat there
+ * sends no ceiling at all). The Anthropic path keeps its fixed 8192: there's no per-model
+ * output-cap data here, and Anthropic 400s when max_tokens exceeds a model's cap (e.g.
+ * Claude 3.5 Sonnet = 8192), so a blanket raise would be unsafe.
+ */
+private const val INTERACTIVE_UI_MAX_TOKENS = 16384
+
 private interface ToolLoopStrategy {
     suspend fun chat(history: List<History>, systemPrompt: String?): LoopChatResult
     suspend fun bailout(history: List<History>, systemPrompt: String?, reason: BailoutReason): String
@@ -811,7 +822,13 @@ class RemoteDataRepository(
             override suspend fun chat(history: List<History>, systemPrompt: String?): LoopChatResult {
                 val msgs = trimMessagesForContext(buildOpenAIMessages(service, history, systemPrompt, declaredToolNames), contextWindowTokens)
                 val response = retryApiCall {
-                    requests.openAICompatibleChat(service, credentials, msgs, tools).getOrThrow()
+                    requests.openAICompatibleChat(
+                        service,
+                        credentials,
+                        msgs,
+                        tools,
+                        maxTokens = INTERACTIVE_UI_MAX_TOKENS.takeIf { interactiveModeFlag },
+                    ).getOrThrow()
                 }
                 val message = response.choices.firstOrNull()?.message ?: throw OpenAICompatibleEmptyResponseException()
                 var calls = message.toolCalls.orEmpty().map { tc ->

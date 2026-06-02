@@ -9,6 +9,11 @@ data class OpenAICompatibleChatRequestDto(
     val messages: List<Message>,
     val model: String? = null,
     val tools: List<Tool>? = null,
+    // Output-token ceiling. Left null for normal chat (provider default applies); set only
+    // for interactive UI mode, where the whole screen must arrive as one un-truncated kai-ui
+    // JSON block. explicitNulls=false in the request Json drops this when null.
+    @SerialName("max_tokens")
+    val maxTokens: Int? = null,
 ) {
     @Serializable
     data class Message(
