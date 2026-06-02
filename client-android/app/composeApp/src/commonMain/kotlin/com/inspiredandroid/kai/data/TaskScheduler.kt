@@ -112,17 +112,20 @@ class TaskScheduler(
      *
      * Started alongside [start] and torn down by [stop]. The subscription itself
      * reconnects on drops (see DenebGatewayClient.subscribeEvents), so this just
-     * owns its lifetime. Notifications fire only while backgrounded — a
-     * foreground user already sees the report land in the chat.
+     * owns its lifetime. Backgrounded → raise a notification whose tap deep-links
+     * into the 업무 topic. Foregrounded → hand off to the repository, which
+     * live-refreshes the home transcript (or raises an in-app banner) — the push
+     * frame is only a preview, so a foreground report would otherwise be invisible
+     * until the user manually reloaded.
      */
     private fun startPushSubscription() {
         val gateway = dataRepository as? com.inspiredandroid.kai.deneb.DenebGatewayClient ?: return
         if (pushJob?.isActive == true) return
         pushJob = schedulerScope.launch {
             gateway.subscribeEvents { title, body ->
-                if (!appInForeground) {
-                    // Proactive reports live in the 업무 topic — use the variant
-                    // whose tap deep-links there, not to the heartbeat conversation.
+                if (appInForeground) {
+                    dataRepository.onProactiveReportForeground()
+                } else {
                     sendProactiveReportNotification(title = title, body = body)
                 }
             }

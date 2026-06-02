@@ -187,6 +187,8 @@
     <string name="chat_history_heartbeat_label">하트비트</string>
     <string name="heartbeat_banner_message">하트비트에 보고할 내용이 있습니다</string>
     <string name="heartbeat_banner_dismiss">닫기</string>
+    <string name="work_report_banner_message">새 업무 리포트가 도착했습니다</string>
+    <string name="work_report_banner_dismiss">닫기</string>
     <string name="scroll_to_bottom_content_description">맨 아래로 스크롤</string>
     <string name="conversation_untitled">제목 없음</string>
     <string name="error_unsupported_file_type">이 파일 형식은 지원되지 않습니다. 이미지, 텍스트 파일, PDF를 첨부할 수 있습니다.</string>

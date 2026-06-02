@@ -304,6 +304,39 @@ class DenebGatewayClient(
         scope.launch { loadTranscriptGuarded("client:main") }
     }
 
+    /**
+     * Cold-start home = the client:main 업무 topic, where proactive reports
+     * (morning-letter, mail-analysis) are mirrored. Open it so those reports are
+     * visible by default instead of an empty chat. base.restoreCurrentConversation
+     * targets RemoteDataRepository's own history flow (not ours), so it has no
+     * visible effect for the gateway client — this is the real restore.
+     *
+     * Guarded so a settings refresh (refreshSettings re-calls this) or a
+     * cold-start share can't yank the user out of what they're viewing: only
+     * open the home when nothing is loaded yet and we are still on the default
+     * home session.
+     */
+    override fun restoreCurrentConversation() {
+        if (_chatHistory.value.isEmpty() && sessionKey == "client:main") {
+            openWorkTopic()
+        }
+    }
+
+    /**
+     * A proactive report just landed in client:main while the app is foregrounded
+     * (so the scheduler raised no notification). If the user is already on the
+     * home transcript, reload it so the report appears live — the SSE push frame
+     * carries only a one-line preview, not the body. Otherwise fall back to the
+     * base unread badge so the in-app banner points them at the work topic.
+     */
+    override fun onProactiveReportForeground() {
+        if (sessionKey == "client:main") {
+            scope.launch { loadTranscriptGuarded("client:main") }
+        } else {
+            base.onProactiveReportForeground()
+        }
+    }
+
     // --- Conversation drawer → Deneb sessions browser -----------------------
     // The drawer lists every recent Deneb session (Telegram, cron, client …).
     // Tapping one loads its transcript AND repoints sessionKey at it, so the

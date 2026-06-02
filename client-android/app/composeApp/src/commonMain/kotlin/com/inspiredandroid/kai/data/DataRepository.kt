@@ -207,6 +207,23 @@ interface DataRepository {
     fun requestOpenWorkTopic()
     fun consumeOpenWorkTopicRequest()
 
+    /**
+     * Unread badge for a proactive report (morning-letter, mail-analysis) that
+     * landed in the 업무 (client:main) topic while the user was looking at a
+     * different conversation. Surfaced as an in-app banner; tapping it opens the
+     * work topic. Distinct from [hasUnreadHeartbeat] (the heartbeat conversation).
+     */
+    val hasUnreadWorkReport: StateFlow<Boolean>
+    fun clearUnreadWorkReport()
+
+    /**
+     * Called by the scheduler when a proactive-report push arrives while the app
+     * is foregrounded (so no system notification fires). Implementations refresh
+     * the home transcript if it is the current view, or raise the unread badge
+     * otherwise. Default no-op for repositories without a gateway-backed home.
+     */
+    fun onProactiveReportForeground()
+
     // On-device inference (LiteRT)
     fun isLocalInferenceAvailable(): Boolean
     fun getLocalEngineState(): StateFlow<EngineState>?
