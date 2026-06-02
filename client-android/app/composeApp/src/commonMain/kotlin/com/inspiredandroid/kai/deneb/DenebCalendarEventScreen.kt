@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,24 +20,22 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.ui.DenebScreenScaffold
 import com.inspiredandroid.kai.ui.DenebSectionLabel
 import com.inspiredandroid.kai.ui.DenebType
-import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.denebHint
 import kotlinx.coroutines.launch
 
 /**
- * Calendar event detail (`miniapp.calendar.get`): when, location, a Meet join
- * button, organizer, attendees and description.
+ * Calendar event detail (`miniapp.calendar.get`): when, location, organizer,
+ * attendees and description.
  *
  * Design split (see .claude/rules/native-design-system.md): the frame + type are
- * the Deneb typographic skin (DenebScreenScaffold + DenebType + DenebSectionLabel),
- * while the Meet join stays a Material button. The loaded-event presentation lives
- * in [CalendarEventContent] — a stateless body the render harness previews with
- * mock data; this composable is the stateful shell (load + loading/error states).
+ * the Deneb typographic skin (DenebScreenScaffold + DenebType + DenebSectionLabel).
+ * The loaded-event presentation lives in [CalendarEventContent] — a stateless body
+ * the render harness previews with mock data; this composable is the stateful shell
+ * (load + loading/error states).
  */
 @Composable
 fun DenebCalendarEventScreen(
@@ -49,9 +46,7 @@ fun DenebCalendarEventScreen(
 ) {
     var event by remember(eventId) { mutableStateOf<CalendarEventDetail?>(null) }
     var loadFailed by remember(eventId) { mutableStateOf(false) }
-    val uriHandler = LocalUriHandler.current
     val scope = rememberCoroutineScope()
-    val haptics = rememberHaptics()
 
     suspend fun load() {
         loadFailed = false
@@ -74,10 +69,7 @@ fun DenebCalendarEventScreen(
                 ev == null && loadFailed ->
                     DenebError("일정을 불러오지 못했습니다.", onRetry = { scope.launch { load() } })
                 ev == null -> DenebLoading()
-                else -> CalendarEventContent(
-                    ev = ev,
-                    onJoinMeet = { haptics.tap(); uriHandler.openUri(ev.meetUri) },
-                )
+                else -> CalendarEventContent(ev = ev)
             }
         }
     }
@@ -85,10 +77,10 @@ fun DenebCalendarEventScreen(
 
 /**
  * Stateless presentation of a loaded event — extracted so [RenderPreview] can render
- * it with mock data. Pure Deneb type skin; the Meet join is a Material button.
+ * it with mock data. Pure Deneb type skin.
  */
 @Composable
-internal fun CalendarEventContent(ev: CalendarEventDetail, onJoinMeet: () -> Unit) {
+internal fun CalendarEventContent(ev: CalendarEventDetail) {
     Spacer(Modifier.height(8.dp))
     Text(
         ev.title.ifBlank { "(제목 없음)" },
@@ -109,11 +101,6 @@ internal fun CalendarEventContent(ev: CalendarEventDetail, onJoinMeet: () -> Uni
     if (ev.organizer.isNotBlank()) {
         Spacer(Modifier.height(4.dp))
         InfoRow("주최", ev.organizer)
-    }
-
-    if (ev.meetUri.isNotBlank()) {
-        Spacer(Modifier.height(16.dp))
-        FilledTonalButton(onClick = onJoinMeet) { Text("📹 Meet 참가") }
     }
 
     if (ev.attendees.isNotEmpty()) {

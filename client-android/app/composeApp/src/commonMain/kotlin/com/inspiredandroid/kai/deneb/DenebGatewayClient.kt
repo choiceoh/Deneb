@@ -701,7 +701,7 @@ class DenebGatewayClient(
         ) ?: return false
         _denebCalendar.value = payload.events
             .filter { it.id.isNotBlank() }
-            .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.hasMeet) }
+            .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay) }
         return true
     }
 
@@ -765,7 +765,6 @@ class DenebGatewayClient(
             allDay = p.allDay,
             organizer = p.organizer?.let { it.displayName.ifBlank { it.email } }.orEmpty(),
             attendees = p.attendees.mapNotNull { (it.displayName.ifBlank { it.email }).ifBlank { null } },
-            meetUri = p.conference?.uri.orEmpty(),
             status = p.status,
         )
     }
@@ -1505,7 +1504,6 @@ class DenebGatewayClient(
         val start: String = "",
         val end: String = "",
         val allDay: Boolean = false,
-        val hasMeet: Boolean = false,
     )
 
     @Serializable
@@ -1519,16 +1517,12 @@ class DenebGatewayClient(
         val allDay: Boolean = false,
         val organizer: CalAttendee? = null,
         val attendees: List<CalAttendee> = emptyList(),
-        val conference: CalConference? = null,
         val htmlLink: String = "",
         val status: String = "",
     )
 
     @Serializable
     private data class CalAttendee(val email: String = "", val displayName: String = "", val responseStatus: String = "")
-
-    @Serializable
-    private data class CalConference(val solution: String = "", val uri: String = "")
 
     @Serializable
     private data class SearchPayload(
@@ -1678,7 +1672,6 @@ data class CalendarEvent(
     val start: String,
     val end: String,
     val allDay: Boolean,
-    val hasMeet: Boolean,
 )
 
 /** Full calendar event for the detail screen. */
@@ -1692,7 +1685,6 @@ data class CalendarEventDetail(
     val allDay: Boolean,
     val organizer: String,
     val attendees: List<String>,
-    val meetUri: String,
     val status: String,
 )
 
