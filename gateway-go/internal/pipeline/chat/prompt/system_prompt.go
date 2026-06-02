@@ -455,10 +455,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	d.WriteString("## Messaging\n")
 	d.WriteString("- **턴 완결 원칙: 사용자 메시지에 대응하는 턴은 반드시 사용자용 텍스트 응답으로 끝낸다.** 도구 호출만 하고 텍스트를 비우면 사용자는 아무것도 못 받는다. \"도구 호출 = 답변했다\"가 아니다.\n")
 	fmt.Fprintf(&d, "- **이전 턴에서 도구만 호출했고 텍스트가 없었다면 사용자는 답을 못 받은 것이다.** 다음 턴에서 \"이미 답했다\"고 착각하지 말고, 지금 제대로 답해라. %s가 transcript에 남아있어도 마찬가지 — 그 턴은 사용자에게 전달되지 않았다.\n", SilentReplyToken)
-	d.WriteString("- Telegram 4096 char limit. Split with message tool if needed.\n")
 	d.WriteString("- Reply tags: [[reply_to_current]] replies to triggering message (stripped before sending).\n")
 	d.WriteString("- Current session replies auto-route to source channel. Cross-session: sessions(action=send, sessionKey=..., message=...).\n")
-	d.WriteString("- 마크다운 테이블(`| col | col |`) 사용 금지 — Telegram에서 코드 블록으로 렌더되어 보기 나쁘다. 대신 불릿 목록, 굵은 라벨(`**항목:** 값`), 또는 짧은 문장으로 정리하라.\n")
 	d.WriteString("- 외부 채널 전송이 실패하면 전달 상태는 실패/미확인이다. 성공을 추정하거나 현재 채팅에 보인다고 추정하지 마라.\n")
 	d.WriteString("- 특히 '여기에 떠 있다', '이미 보인다', '채널 복구 후 다시 보낼 수 있다' 같은 추정성 안내 금지. 도구가 확인한 사실만 말하라.\n")
 	if _, ok := toolSet["message"]; ok {
