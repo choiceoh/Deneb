@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"html"
 	"strings"
 )
 
@@ -19,30 +18,17 @@ func showThinkingInChat(deps runDeps, sessionKey string) bool {
 	return *sess.ShowThinkingInChat
 }
 
-// formatThinkingForChannel renders the raw thinking text into a channel-
-// appropriate prefix block. Returns "" when the input is blank.
-//
-// Telegram (HTML mode): wraps the text in an expandable blockquote so it
-// collapses by default and does not blow past the 4096-char message limit
-// on long reasoning traces. HTML-escapes the body so model markup
-// (`<thinking>`, `<example>`, etc.) cannot break parse_mode=HTML.
-//
-// Other channels: falls back to a markdown blockquote prefix.
-func formatThinkingForChannel(channel, thinking string) string {
+// formatThinkingForChannel renders the raw thinking text as a markdown
+// blockquote prefix suitable for the native client. Returns "" when blank.
+// The Telegram expandable-blockquote variant was retired with the bot.
+func formatThinkingForChannel(_, thinking string) string {
 	thinking = strings.TrimSpace(thinking)
 	if thinking == "" {
 		return ""
 	}
-	switch strings.ToLower(channel) {
-	case "telegram":
-		// Telegram <blockquote expandable> renders as a collapsed block with
-		// "Show more" affordance; long traces stay scannable.
-		return "<blockquote expandable>🧠 " + html.EscapeString(thinking) + "</blockquote>"
-	default:
-		var b strings.Builder
-		b.Grow(len(thinking) + 8)
-		b.WriteString("> 🧠 ")
-		b.WriteString(strings.ReplaceAll(thinking, "\n", "\n> "))
-		return b.String()
-	}
+	var b strings.Builder
+	b.Grow(len(thinking) + 8)
+	b.WriteString("> 🧠 ")
+	b.WriteString(strings.ReplaceAll(thinking, "\n", "\n> "))
+	return b.String()
 }

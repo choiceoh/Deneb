@@ -27,7 +27,6 @@ import (
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
@@ -55,7 +54,7 @@ func executeAgentRun(
 	deps runDeps,
 	broadcaster *streaming.Broadcaster,
 	typingSignaler chatport.TypingSignaler,
-	statusCtrl *telegram.StatusReactionController,
+	statusCtrl statusReactor,
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,
 ) (*chatRunResult, error) {
@@ -224,43 +223,7 @@ func executeAgentRun(
 	var hc agent.HookCompositor
 	wireStreamHooks(&hc, params, deps, broadcaster, typingSignaler, statusCtrl)
 
-	// Draft stream hook: real-time message editing during LLM streaming.
-	var draftCtrl *telegram.DraftStreamLoop
-	var draftMsgIDFn func() string // retrieves current draft message ID
-	if deps.callbacks.draftEditFn != nil && params.Delivery != nil && params.Delivery.Channel == "telegram" {
-		draftCtrl, draftMsgIDFn = wireDraftStreamHook(ctx, &hc, params, deps, logger)
-	}
 	hooks := hc.Build()
-
-	// Defer cleanup so the draft is stopped on all exit paths.
-	//
-	// On a clean completion we stash the draft message ID into Delivery so
-	// SetReplyFunc can edit it in place with the final response (no
-	// flicker). On a cancellation — especially the quick-fire merge path
-	// — the draft is an orphan that would otherwise linger forever in the
-	// chat, so we delete it via the channel-side MessageDeleter callback.
-	// We use context.WithoutCancel because the run ctx is already dead.
-	if draftCtrl != nil {
-		defer func() {
-			draftCtrl.StopForClear()
-			msgID := draftMsgIDFn()
-			if msgID == "" || params.Delivery == nil {
-				return
-			}
-			if ctx.Err() != nil {
-				if del := deps.callbacks.deleteMsgFn; del != nil {
-					cleanCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-					defer cancel()
-					if err := del(cleanCtx, params.Delivery, msgID); err != nil {
-						logger.Warn("draft cleanup on cancel failed",
-							"msgId", msgID, "error", err)
-					}
-				}
-				return
-			}
-			params.Delivery.DraftMsgID = msgID
-		}()
-	}
 
 	logger.Info("pipeline: prep complete, starting agent loop",
 		"prepMs", time.Since(runStart).Milliseconds(),
@@ -362,7 +325,7 @@ func prepareContextAndPrompt(
 	deps runDeps,
 	workspaceDir string,
 	sessionToolPreset string,
-	statusCtrl *telegram.StatusReactionController,
+	statusCtrl statusReactor,
 	logger *slog.Logger,
 ) prepResult {
 	var result prepResult
@@ -1041,76 +1004,6 @@ func shouldEnableSkillNudger(nudger SkillNudger, params RunParams, sessionToolPr
 		return false
 	}
 	return !strings.HasPrefix(params.SessionKey, "system:")
-}
-
-// wireDraftStreamHook sets up the draft stream loop on the compositor and returns
-// the DraftStreamLoop controller. The caller must defer Ctrl.StopForClear().
-func wireDraftStreamHook(
-	ctx context.Context,
-	hc *agent.HookCompositor,
-	params RunParams,
-	deps runDeps,
-	logger *slog.Logger,
-) (*telegram.DraftStreamLoop, func() string) {
-	delivery := params.Delivery
-	var draftMu sync.Mutex
-	var draftMsgID string
-
-	draftCtrl := telegram.NewDraftStreamLoop(800, func(text string) (bool, error) {
-		draftMu.Lock()
-		currentID := draftMsgID
-		draftMu.Unlock()
-
-		editCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-		defer cancel()
-
-		newID, err := deps.callbacks.draftEditFn(editCtx, delivery, currentID, text)
-		if err != nil {
-			logger.Warn("draft stream send/edit failed", "error", err)
-			return false, err
-		}
-		draftMu.Lock()
-		draftMsgID = newID
-		draftMu.Unlock()
-		return true, nil
-	})
-
-	getMsgID := func() string {
-		draftMu.Lock()
-		defer draftMu.Unlock()
-		return draftMsgID
-	}
-
-	// Section-based streaming: update on paragraph breaks or 500+ char accumulation.
-	var accum strings.Builder
-	var lastUpdateLen int
-	hc.OnTextDelta(func(text string) {
-		accum.WriteString(text)
-		current := accum.String()
-		delta := len(current) - lastUpdateLen
-		if delta < 100 {
-			return
-		}
-		newContent := current[lastUpdateLen:]
-		if strings.Contains(newContent, "\n\n") || delta >= 500 {
-			sanitized := current
-			if deps.chatport.SanitizeDraft != nil {
-				sanitized = deps.chatport.SanitizeDraft(current)
-			}
-			if sanitized == "" {
-				return
-			}
-			draftCtrl.Update(sanitized)
-			lastUpdateLen = len(current)
-		}
-	})
-
-	// Stop draft loop on tool start so no more edits are pushed.
-	hc.OnToolStart(func(_ string, _ string, _ []byte) {
-		draftCtrl.StopForClear()
-	})
-
-	return draftCtrl, getMsgID
 }
 
 // ---------------------------------------------------------------------------

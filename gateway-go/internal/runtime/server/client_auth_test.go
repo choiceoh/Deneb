@@ -33,7 +33,7 @@ func TestMiniappRPC_ClientToken(t *testing.T) {
 		t.Fatalf("generate client token: %v", err)
 	}
 
-	s := newServerWithTelegram(t)
+	s := newTestServer(t)
 	frame := map[string]any{"id": "1", "method": "miniapp.ping", "params": map[string]any{}}
 
 	// Valid token authenticates: the request gets past auth into dispatch, so it
@@ -57,7 +57,7 @@ func TestMiniappRPC_ClientToken_DisabledWhenNoToken(t *testing.T) {
 	// No token file → standalone auth disabled → a client-token header is
 	// rejected (cannot fall through to initData, which the native client lacks).
 	t.Setenv("DENEB_STATE_DIR", t.TempDir())
-	s := newServerWithTelegram(t)
+	s := newTestServer(t)
 	frame := map[string]any{"id": "1", "method": "miniapp.ping", "params": map[string]any{}}
 
 	rec := postMiniappClientToken(t, s, "any-token", frame)

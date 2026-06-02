@@ -83,12 +83,7 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 	// child completion notifications via DeferredSystemText.
 	deps.subagentNotifyCh = h.subagent.NotifyCh(params.SessionKey)
 
-	rsm := h.RunStateMachine()
 	go func() {
-		if rsm != nil {
-			rsm.StartRun()
-			defer rsm.EndRun()
-		}
 		defer runCancel(nil)
 		defer h.abort.Cleanup(params.ClientRunID)
 		defer func() {

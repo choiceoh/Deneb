@@ -26,7 +26,6 @@ func testDispatcher() *Dispatcher {
 	sm := session.NewManager()
 	RegisterBuiltinMethods(d)
 	RegisterSessionCRUDMethods(d, SessionDeps{Sessions: sm})
-	RegisterTelegramStatusMethods(d, TelegramStatusDeps{})
 	RegisterHealthMethods(d, SystemHealthDeps{})
 	return d
 }
@@ -45,14 +44,12 @@ func dispatch(t *testing.T, d *Dispatcher, method string, params any) *protocol.
 func TestBuiltinMethodsRegistered(t *testing.T) {
 	d := testDispatcher()
 	methods := d.Methods()
-	if len(methods) < 10 {
-		t.Errorf("got %d: %v, want at least 10 built-in methods", len(methods), methods)
+	if len(methods) < 5 {
+		t.Errorf("got %d: %v, want at least 5 built-in methods", len(methods), methods)
 	}
 	expected := []string{
 		"health.check", "sessions.get", "sessions.list", "sessions.delete",
-		"telegram.list", "telegram.get", "telegram.status", "telegram.health",
 		"system.info",
-		// Tools catalog (static core).
 		"tools.catalog",
 	}
 	set := make(map[string]struct{})
@@ -107,17 +104,6 @@ func TestRPCSmokeFrequentMethods(t *testing.T) {
 			name:     "sessions list",
 			method:   "sessions.list",
 			expectOK: true,
-		},
-		{
-			name:     "telegram status",
-			method:   "telegram.status",
-			expectOK: true,
-		},
-		{
-			name:         "telegram health",
-			method:       "telegram.health",
-			expectOK:     true,
-			expectFields: []string{"channels"},
 		},
 		{
 			name:      "unknown method",

@@ -29,8 +29,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -102,7 +102,7 @@ func GmailMethods(deps GmailDeps) map[string]rpcutil.HandlerFunc {
 // requireAuth enforces that an InitData has been attached upstream by the
 // HTTP bridge. All Mini App handlers share this guard.
 func requireAuth(ctx context.Context, reqID string) *protocol.ResponseFrame {
-	if telegram.InitDataFromContext(ctx) == nil {
+	if clientauth.FromContext(ctx) == nil {
 		return rpcerr.New(protocol.ErrUnauthorized, "miniapp request missing initData context").Response(reqID)
 	}
 	return nil

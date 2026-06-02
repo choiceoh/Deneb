@@ -23,7 +23,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
@@ -31,7 +30,6 @@ import (
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
 	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 	handlertask "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlertask"
-	handlertelegram "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlertelegram"
 	handlerinsights "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/insights"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/provider"
@@ -69,20 +67,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		return fmt.Errorf("server init: hub validation: %w", err)
 	}
 
-	// Create Telegram plugin from config if available.
-	if s.runtimeCfg != nil {
-		tgCfg := loadTelegramConfig(s.runtimeCfg)
-		switch {
-		case tgCfg == nil:
-			s.logger.Warn("telegram channel not configured (config missing or invalid)")
-		case tgCfg.BotToken == "":
-			s.logger.Warn("telegram channel config found but botToken is empty")
-		default:
-			s.telegramPlug = telegram.NewPlugin(tgCfg, s.logger)
-			hub.SetTelegram(s.telegramPlug)
-		}
-	}
-
 	// Create the insights engine. Read-only — aggregates session manager
 	// snapshots and usage tracker state. Stored on both the hub (for RPC
 	// handlers) and the server (so the chat dispatcher can wire /insights).
@@ -101,24 +85,11 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		hub.SetContactsStore(cs)
 	}
 
-	// Create the secondary-chat notify service when the Telegram plugin
-	// has a notificationChatID configured. The service registers a tap
-	// on the broadcaster so user-impacting events (delivery failures,
-	// compaction stuck) are mirrored to the monitoring chat, and exposes
-	// a status-snapshot sender that the telegram.notify_status RPC drives.
-	// When nil (no Telegram plugin or no monitoring chat configured), the
-	// telegram.notify_status method is not registered.
-	s.notify = newNotifyService(hub.Telegram(), hub.Sessions(), hub.Logger(), s.BoundAddr)
+	// Monitoring notify service (error mirrors + status snapshots → native push).
+	s.notify = newNotifyService(hub.Sessions(), hub.Logger(), s.pushHub, s.BoundAddr)
 	if s.notify != nil {
 		s.broadcaster.RegisterTap(s.notify.tap)
 		s.notify.start(s.ShutdownCtx())
-		// Install the slog forwarder by swapping the swappable handler's
-		// inner. Captured s.logger references in subsystems transparently
-		// route through the new wrapping handler. Skipped silently when
-		// the swappable wasn't created (logger==nil at startup).
-		if s.logSwap != nil {
-			s.logSwap.Swap(newNotifySlogHandler(s.logSwap.currentInner(), s.notify))
-		}
 	}
 
 	// Table-driven domain registration: one slice, one loop.
@@ -133,24 +104,17 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// --- Health and system info ---
 		handlersystem.HealthMethods(handlersystem.HealthDeps{
 			SessionCount: hub.Sessions().Count,
-			HasTelegram:  func() bool { return hub.Telegram() != nil },
+			HasTelegram:  func() bool { return false },
 			Version:      hub.Version(),
-		}),
-
-		// --- Telegram status (list/get/status/health) ---
-		handlertelegram.StatusMethods(handlertelegram.StatusDeps{
-			TelegramPlugin: hub.Telegram(),
-			SnapshotStore:  s.snapshotStore,
 		}),
 
 		// --- Agent orchestration ---
 		handleragent.ExtendedMethods(handleragent.ExtendedDeps{
-			Sessions:       hub.Sessions(),
-			TelegramPlugin: hub.Telegram(),
-			GatewaySubs:    hub.GatewaySubs(),
-			Processes:      hub.Processes(),
-			CronService:    hub.CronService(),
-			Broadcaster:    hub.Broadcast,
+			Sessions:    hub.Sessions(),
+			GatewaySubs: hub.GatewaySubs(),
+			Processes:   hub.Processes(),
+			CronService: hub.CronService(),
+			Broadcaster: hub.Broadcast,
 		}),
 		handlerprocess.ACPMethods(s.acpDeps),
 
@@ -171,14 +135,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			Logger:      hub.Logger(),
 		}),
 
-		// --- Telegram lifecycle and messaging ---
-		handlertelegram.LifecycleMethods(handlertelegram.LifecycleDeps{
-			TelegramPlugin: hub.Telegram(),
-			Broadcaster:    hub.Broadcaster(),
-		}),
-		handlertelegram.NotifyMethods(handlertelegram.NotifyDeps{
-			SendStatusSnapshot: notifyStatusSnapshotFunc(s.notify),
-		}),
 		// --- Scheduling ---
 		handlerprocess.CronAdvancedMethods(handlerprocess.CronAdvancedDeps{
 			Service:     hub.CronService(),
@@ -218,11 +174,11 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlersystem.MaintenanceMethods(handlersystem.MaintenanceDeps{Runner: s.maintRunner}),
 		handlersystem.UpdateMethods(handlersystem.UpdateDeps{DenebDir: denebDir}),
 
-		// --- Telegram Mini App (HTTP-exposed via /api/v1/miniapp/rpc) ---
-		// Requires initData verification, enforced by the HTTP bridge in
+		// --- Native client miniapp.* RPC (HTTP-exposed via /api/v1/miniapp/rpc) ---
+		// Requires client-token auth, enforced by the HTTP bridge in
 		// server_http_miniapp.go before the dispatcher is reached. The
-		// methods read the authenticated user from context via
-		// telegram.InitDataFromContext.
+		// methods read the authenticated operator from context via
+		// clientauth.FromContext.
 		handlerminiapp.Methods(handlerminiapp.Deps{
 			Version: hub.Version(),
 			CurrentModel: func() string {
@@ -526,23 +482,11 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		}
 	}
 
-	// Wire Telegram → chat pipeline now that both are ready.
-	if s.telegramPlug != nil && s.chatHandler != nil {
-		s.wireTelegramChatHandler()
-		// Fail-fast: if wiring forgot replyFunc, every Telegram reply would
-		// drop silently. Better to refuse to start than to silently ignore users.
-		if err := s.chatHandler.Validate(); err != nil {
-			s.logger.Error("chat handler validation failed — refusing to serve", "error", err)
-			panic(fmt.Errorf("chat handler misconfigured: %w", err))
-		}
-	}
-
-	// Wire agent runner, Telegram plugin, and subagent poller to cron service.
+	// Wire agent runner and subagent poller to cron service. Cron output is
+	// delivered to the native client via the main-session handoff wired in
+	// registerSessionRPCMethods (proactive relay), not Telegram.
 	if s.cronService != nil {
 		s.cronService.SetAgentRunner(&cronChatAdapter{chat: s.chatHandler, logger: s.logger})
-		if s.telegramPlug != nil {
-			s.cronService.SetTelegramPlugin(s.telegramPlug)
-		}
 		if s.acpDeps != nil {
 			s.cronService.SetSubagentPoller(&acpSubagentPoller{
 				registry: s.acpDeps.Registry,

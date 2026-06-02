@@ -7,7 +7,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coresecurity"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
@@ -20,12 +19,11 @@ import (
 // agent.status, sessions.create, sessions.lifecycle, plus
 // process and cron management.
 type ExtendedDeps struct {
-	Sessions       *session.Manager
-	TelegramPlugin *telegram.Plugin
-	GatewaySubs    *events.GatewayEventSubscriptions
-	Processes      *process.Manager
-	CronService    *cron.Service
-	Broadcaster    rpcutil.BroadcastFunc
+	Sessions    *session.Manager
+	GatewaySubs *events.GatewayEventSubscriptions
+	Processes   *process.Manager
+	CronService *cron.Service
+	Broadcaster rpcutil.BroadcastFunc
 }
 
 // ExtendedMethods returns the extended agent/session/process/cron/hooks handlers.
@@ -170,12 +168,7 @@ func agentStatus(deps ExtendedDeps) rpcutil.HandlerFunc {
 		result := map[string]any{
 			"activeSessions": activeSessions,
 			"totalSessions":  deps.Sessions.Count(),
-			"channels": func() []string {
-				if deps.TelegramPlugin != nil {
-					return []string{"telegram"}
-				}
-				return nil
-			}(),
+			"channels":       []string{},
 		}
 
 		if deps.Processes != nil {

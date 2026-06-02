@@ -18,7 +18,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
@@ -287,39 +286,11 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		typingSignaler.SignalRunStart()
 	}
 
-	// Set up status reaction controller for phase-aware emoji on the user's message.
-	// Shows: 👀 queued → 📚 preparing → 🧠 recalling? → 🤔 thinking → 🔥/⚡ tool → 👍 done.
-	var statusCtrl *telegram.StatusReactionController
-	if deps.callbacks.reactionFn != nil && params.Delivery != nil && params.Delivery.MessageID != "" {
-		delivery := params.Delivery
-		phaseEmojis := telegram.StatusReactionEmojis{
-			Queued:     "👀",
-			Preparing:  "📚",
-			Recalling:  "🧠",
-			Thinking:   "🤔",
-			Tool:       "🔥",
-			Coding:     "🔥",
-			Web:        "⚡",
-			Done:       "👍",
-			Error:      "😱",
-			StallSoft:  "🥱",
-			StallHard:  "😨",
-			Compacting: "🤔",
-		}
-		statusCtrl = telegram.NewStatusReactionController(telegram.StatusReactionControllerParams{
-			Enabled: true,
-			SetReaction: func(emoji string) error {
-				rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-				defer cancel()
-				return deps.callbacks.reactionFn(rctx, delivery, emoji)
-			},
-			Emojis: &phaseEmojis,
-			OnError: func(err error) {
-				logger.Warn("status reaction failed", "error", err)
-			},
-		})
-		statusCtrl.SetQueued()
-	}
+	// Status reactions (phase-aware emoji on the user's message) were a
+	// Telegram-only affordance, retired with the bot. statusCtrl stays nil and
+	// the guarded calls downstream are inert; the native client surfaces run
+	// phase via structured WebSocket/SSE events instead of message reactions.
+	var statusCtrl statusReactor
 
 	// Create agent detail logger for this run.
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)

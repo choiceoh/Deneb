@@ -6,7 +6,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
 
 // wireStreamHooks registers all non-draft streaming hooks on the compositor:
@@ -19,7 +18,7 @@ func wireStreamHooks(
 	deps runDeps,
 	broadcaster *streaming.Broadcaster,
 	typingSignaler chatport.TypingSignaler,
-	statusCtrl *telegram.StatusReactionController,
+	statusCtrl statusReactor,
 ) {
 	// Broadcaster: WebSocket streaming deltas.
 	if broadcaster != nil {

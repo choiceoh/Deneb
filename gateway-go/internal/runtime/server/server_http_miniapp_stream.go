@@ -32,8 +32,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
 
 // nativeClientChannel mirrors the constant of the same name in the blocking
@@ -64,7 +64,7 @@ type chatStreamRunner func(ctx context.Context, onDelta func(string)) (*chatStre
 // the assistant text back as SSE. Auth and the session/channel wiring mirror
 // the blocking miniapp.chat.send bridge.
 func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request) {
-	initData, ok := s.authenticateMiniappRequest(w, r)
+	identity, ok := s.authenticateMiniappRequest(w, r)
 	if !ok {
 		return
 	}
@@ -97,7 +97,7 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 	}
 
 	// From here on the response is SSE — no more writeJSON.
-	ctx := telegram.WithInitDataContext(r.Context(), initData)
+	ctx := clientauth.WithContext(r.Context(), identity)
 	runner := func(ctx context.Context, onDelta func(string)) (*chatStreamResult, error) {
 		res, err := s.chatHandler.SendSyncStream(ctx, sessionKey, reqBody.Message, strings.TrimSpace(reqBody.Model), &chat.SyncOptions{
 			// Channel "client" flips on kai-ui emission (richUIChannel).

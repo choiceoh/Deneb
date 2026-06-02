@@ -12,7 +12,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/logging"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
 
 // initAndListen creates the HTTP server, binds to the address, and starts
@@ -73,16 +72,6 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		s.chatHandler.SetShutdownCtx(ctx)
 	}
 
-	// Start the Telegram plugin synchronously so that RPC serving only
-	// becomes available after the channel is ready.
-	if s.telegramPlug != nil {
-		if err := s.telegramPlug.Start(ctx); err != nil {
-			s.logger.Warn("telegram start failed", "error", err)
-		} else {
-			s.logger.Info("telegram channel started")
-		}
-	}
-
 	// Start persistent cron service (loads jobs from disk, schedules with delivery).
 	if s.cronService != nil {
 		s.safeGo("cron-service-start", func() {
@@ -94,19 +83,6 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 
 	// Cron session GC is handled by session.Manager's Kind-based retention
 	// (KindCron → 24h) via evictStale(); no separate reaper needed.
-
-	// Create the run state machine to track active agent runs.
-	s.runStateMachine = telegram.NewRunStateMachine(ctx, func(patch telegram.StatusPatch) {
-		// Skip logging for periodic heartbeat ticks — only log real transitions.
-		if s.snapshotStore != nil && patch.ActiveRuns != nil && !patch.Heartbeat {
-			s.logger.Debug("run state changed", "activeRuns", *patch.ActiveRuns)
-		}
-	}, 30*time.Second)
-
-	// Wire the run state machine to the chat handler.
-	if s.chatHandler != nil {
-		s.chatHandler.SetRunStateMachine(s.runStateMachine)
-	}
 
 	// Mark ready only after all channel plugins have had a chance to start.
 	s.ready.Store(true)
@@ -265,19 +241,7 @@ func (s *Server) doShutdown() error {
 
 	// Gmail polling is stopped by autonomous service (registered as periodic task).
 
-	// 9. Stop Telegram plugin.
-	if s.telegramPlug != nil {
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		s.telegramPlug.Stop(stopCtx)
-		stopCancel()
-	}
-
-	// 11. Close run state machine.
-	if s.runStateMachine != nil {
-		stopWithTimeout(5*time.Second, "runStateMachine.Close", s.logger, s.runStateMachine.Close)
-	}
-
-	// 12. Close chat handler.
+	// 11. Close chat handler.
 	if s.chatHandler != nil {
 		stopWithTimeout(5*time.Second, "chatHandler.Close", s.logger, s.chatHandler.Close)
 	}

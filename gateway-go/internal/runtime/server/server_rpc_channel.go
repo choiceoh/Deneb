@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"sync"
 	"time"
 
@@ -56,21 +55,6 @@ func (s *Server) propagateConfigReload(_ *config.ConfigSnapshot, deferralTimeout
 		s.processes.InvalidateEnvCache()
 	}
 
-	// Restart Telegram to pick up config changes, bounded by deferralTimeoutMs.
-	if s.telegramPlug != nil {
-		s.safeGo("config:restart-telegram", func() {
-			timeout := time.Duration(deferralTimeoutMs) * time.Millisecond
-			reloadCtx, cancel := context.WithTimeout(context.Background(), timeout)
-			defer cancel()
-			if err := s.telegramPlug.Stop(reloadCtx); err != nil {
-				s.logger.Warn("config reload: telegram stop failed", "error", err)
-			}
-			if err := s.telegramPlug.Start(reloadCtx); err != nil {
-				s.logger.Warn("config reload: telegram start failed", "error", err)
-			}
-			s.logger.Info("config reload: telegram restarted")
-		})
-	}
 	// Restart autonomous service so periodic tasks pick up config changes.
 	if s.autonomousSvc != nil {
 		s.safeGo("config:restart-autonomous", func() {

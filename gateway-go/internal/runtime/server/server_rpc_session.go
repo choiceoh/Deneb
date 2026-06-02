@@ -240,27 +240,9 @@ func (s *Server) registerSessionRPCMethods() {
 	// cron handoff below, wiki dreaming in registerWorkflowSideEffects,
 	// and gmail polling in initGmailPoll.
 	s.proactiveRelay = proactiveRelayDeps{
-		telegramPlug:    s.telegramPlug,
 		transcriptStore: transcriptStore,
 		logger:          s.logger,
 		pushHub:         s.pushHub,
-		nativeOnly:      proactiveNativeOnly,
-		// Resolve the homeSessionKey sentinel to the live active home:
-		// ActiveHome (/use-forum) first, else the static telegram.chatID.
-		// Read lazily so a mid-session migration is followed without re-wiring.
-		activeHome: func() int64 {
-			if s.appSettings != nil {
-				if id := s.appSettings.ActiveHome().ChatID; id != 0 {
-					return id
-				}
-			}
-			if s.telegramPlug != nil {
-				if tg := s.telegramPlug.Config(); tg != nil {
-					return tg.ChatID
-				}
-			}
-			return 0
-		},
 	}
 
 	// Wire transcript cloner for subagent cron session support.
@@ -416,7 +398,7 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// Wire with the home sentinel so dreaming delivery follows the active home
 	// (resolved at send time) instead of a static config chatID that goes stale
 	// after /use-forum or a topic restructure.
-	if n := s.proactiveRelay.notifierForSession(homeSessionKey); n != nil {
+	if n := s.proactiveRelay.notifierForSession(nativeWorkSessionKey); n != nil {
 		s.autonomousSvc.SetNotifier(n)
 	}
 
@@ -452,10 +434,11 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	s.initGmailPoll()
 
 	// Calendar briefing service: D-15min push for upcoming meetings.
-	// Returns nil and is a no-op when calendar OAuth / Telegram main
-	// chat aren't both configured, so safe to wire unconditionally.
+	// Delivers to the native client (업무 transcript + live push) via the
+	// shared proactive relay. Returns nil and is a no-op when calendar OAuth
+	// isn't configured, so safe to wire unconditionally.
 	s.calendarBriefing = newCalendarBriefingService(
-		hub.Telegram(),
+		func(text string) (bool, error) { return s.proactiveRelay.relayNative(text) },
 		resolveBriefingCalendarClient,
 		s.logger,
 	)

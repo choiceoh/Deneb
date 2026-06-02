@@ -1,15 +1,18 @@
-// calendar_briefing.go — sends a Telegram "meeting in 15 min" push when
-// any calendar event's start falls inside the lead-time window.
+// calendar_briefing.go — sends a "meeting in 15 min" push to the native
+// client when any calendar event's start falls inside the lead-time window.
+//
+// Delivery is native-only: the briefing body is appended to the client:main
+// (업무) transcript and live-pushed to connected native clients via the same
+// proactive-relay path that gmail polling and wiki dreaming use. There is no
+// Telegram send — the bot has been retired.
 //
 // Lifecycle:
-//   - newCalendarBriefingService() returns nil only when the Telegram
-//     plugin or Calendar resolver are wholly missing. ChatID is resolved
-//     PER TICK (not at construction) so an operator configuring the
-//     primary chat after start still gets briefings.
-//   - start(ctx) launches a single polling goroutine bound to the
-//     server's ShutdownCtx; the goroutine exits cleanly on ctx.Done().
+//   - newCalendarBriefingService() returns nil only when the native deliver
+//     callback or Calendar resolver are wholly missing.
+//   - start(ctx) launches a single polling goroutine bound to the server's
+//     ShutdownCtx; the goroutine exits cleanly on ctx.Done().
 //   - The goroutine has a defer-recover via pkg/safego so a panic in any
-//     downstream call (Calendar refresh, Telegram send) cannot crash the
+//     downstream call (Calendar refresh, native delivery) cannot crash the
 //     gateway.
 //
 // Dedup:
@@ -28,9 +31,6 @@
 //   - briefingDecision is computed in a pure function (decidePushes) so
 //     test and production share the exact same logic — no test "mirror"
 //     to drift.
-//   - "telegram client not initialized" during the startup race (briefing
-//     fires before Plugin.Start binds the client) is Warn, not Error, and
-//     markSent is skipped so the next tick retries.
 //   - Repeated client-unavailable failures (no OAuth tokens) are Warn the
 //     first time, then suppressed until tokens land — no per-minute log
 //     spam over a day.
@@ -41,14 +41,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"html"
 	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
@@ -65,6 +63,11 @@ const (
 	// time.Local which silently equals UTC on stripped images.
 	kstFallbackOffset = 9 * 60 * 60
 )
+
+// errBriefingUndelivered is returned by sendBriefing when the native relay
+// reports the body was not delivered (no transcript store wired). Surfaced so
+// tick() skips markSent and retries on the next poll.
+var errBriefingUndelivered = errors.New("calendar briefing: native delivery not wired")
 
 // briefingCalendarClient is the slice of *calendar.Client we depend on.
 // Function-typed factory matches the lazy resolver in method_registry.go
@@ -85,7 +88,11 @@ func resolveBriefingCalendarClient() (briefingCalendarClient, error) {
 }
 
 type calendarBriefingService struct {
-	plugin    *telegram.Plugin
+	// deliver sends a pre-formatted briefing body to the native client (업무
+	// transcript + live push). Returns (delivered, err); (false, nil) means
+	// the relay had nothing to write to (no transcript store), treated as a
+	// soft "not ready" so the next tick retries.
+	deliver   func(text string) (bool, error)
 	resolve   func() (briefingCalendarClient, error)
 	logger    *slog.Logger
 	leadTime  time.Duration
@@ -109,24 +116,16 @@ type calendarBriefingService struct {
 	// operator who hasn't configured OAuth yet.
 	resolveFailureMu sync.Mutex
 	resolveFailing   bool
-
-	// startupRaceMu guards the "telegram client not initialized" throttle
-	// (same shape as resolveFailing but for the briefing-fires-before-
-	// Plugin.Start race in registerWorkflowSideEffects).
-	startupRaceMu     sync.Mutex
-	startupRaceLogged bool
 }
 
-// newCalendarBriefingService returns nil only when the Telegram plugin
-// or resolver are absent — both are structural prerequisites. ChatID is
-// resolved per-tick so an operator setting up Telegram after gateway
-// start still gets briefings without a restart.
+// newCalendarBriefingService returns nil only when the native deliver
+// callback or resolver are absent — both are structural prerequisites.
 func newCalendarBriefingService(
-	plug *telegram.Plugin,
+	deliver func(text string) (bool, error),
 	resolve func() (briefingCalendarClient, error),
 	logger *slog.Logger,
 ) *calendarBriefingService {
-	if plug == nil || resolve == nil {
+	if deliver == nil || resolve == nil {
 		return nil
 	}
 	if logger == nil {
@@ -143,7 +142,7 @@ func newCalendarBriefingService(
 		loc = time.FixedZone("KST", kstFallbackOffset)
 	}
 	return &calendarBriefingService{
-		plugin:     plug,
+		deliver:    deliver,
 		resolve:    resolve,
 		logger:     logger,
 		leadTime:   calendarLeadTime,
@@ -158,7 +157,7 @@ func newCalendarBriefingService(
 //
 // The nil-receiver guard MUST stay the first statement: production
 // wiring calls s.calendarBriefing.start(...) unconditionally so that
-// a nil service (no Telegram plugin) is a safe no-op rather than a
+// a nil service (no deliver callback) is a safe no-op rather than a
 // nil-deref crash inside safego's panic-recovery.
 func (s *calendarBriefingService) start(ctx context.Context) {
 	if s == nil {
@@ -190,13 +189,6 @@ func (s *calendarBriefingService) run(ctx context.Context) {
 }
 
 func (s *calendarBriefingService) tick(ctx context.Context) {
-	chatID := s.plugin.PrimaryChatID()
-	if chatID == "" {
-		// Telegram primary chat not yet configured — silent no-op. No
-		// log because this is a steady-state config, not an event.
-		return
-	}
-
 	client, err := s.resolve()
 	if err != nil {
 		s.logResolveFailure(err)
@@ -217,17 +209,7 @@ func (s *calendarBriefingService) tick(ctx context.Context) {
 
 	pushes := decidePushes(now, s.leadTime, events, s.alreadySent)
 	for _, ev := range pushes {
-		if err := s.sendBriefing(ctx, chatID, ev); err != nil {
-			if isTelegramNotReady(err) {
-				// Startup race: registerWorkflowSideEffects starts the
-				// briefing goroutine in Server.New(), but plugin.Start
-				// (which creates the client) runs later in
-				// Server.Start(). The first tick may fire before the
-				// client exists. Warn-once + skip markSent so the next
-				// tick retries when the plugin is ready.
-				s.logStartupRaceOnce(ev)
-				continue
-			}
+		if err := s.sendBriefing(ev); err != nil {
 			s.logger.Error("calendar briefing: push failed",
 				"eventId", ev.ID, "summary", ev.Summary, "error", err)
 			continue
@@ -276,24 +258,23 @@ func dedupKey(ev calendar.Event) string {
 	return ev.ID + "|" + fmt.Sprintf("%d", ev.Start.Unix())
 }
 
-// sendBriefing assembles and posts the briefing message. telegram.Plugin
-// sends every Text with ParseMode "HTML", so formatBriefing escapes all
-// calendar-provided fields before interpolation — a "<" in a meeting
-// title would otherwise cause Telegram to reject the message with an
-// entity-parse error and the D-15 push would silently fail every tick.
-func (s *calendarBriefingService) sendBriefing(ctx context.Context, chatID string, ev calendar.Event) error {
-	sendCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	return s.plugin.SendMessage(sendCtx, telegram.OutboundMessage{
-		To:   chatID,
-		Text: s.formatBriefing(ev),
-	})
+// sendBriefing assembles and delivers the briefing to the native client.
+// Plain text (no HTML escaping) because the native client renders the
+// transcript body directly — unlike the retired Telegram HTML parse mode.
+func (s *calendarBriefingService) sendBriefing(ev calendar.Event) error {
+	delivered, err := s.deliver(s.formatBriefing(ev))
+	if err != nil {
+		return err
+	}
+	if !delivered {
+		return errBriefingUndelivered
+	}
+	return nil
 }
 
-// formatBriefing builds the Telegram message body. Korean-first per
-// project convention; time rendered in the cached displayLoc. All
-// calendar-provided strings are HTML-escaped so the message survives
-// Telegram's HTML parse mode (see sendBriefing note).
+// formatBriefing builds the briefing body. Korean-first per project
+// convention; time rendered in the cached displayLoc. Plain text — the
+// native client renders it directly, so no markup escaping is needed.
 func (s *calendarBriefingService) formatBriefing(ev calendar.Event) string {
 	start := ev.Start.In(s.displayLoc).Format("15:04")
 
@@ -303,13 +284,13 @@ func (s *calendarBriefingService) formatBriefing(ev calendar.Event) string {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "🕒 D-%d분  %s\n", int(s.leadTime.Minutes()), html.EscapeString(title))
+	fmt.Fprintf(&b, "🕒 D-%d분  %s\n", int(s.leadTime.Minutes()), title)
 	fmt.Fprintf(&b, "시작: %s", start)
 	if location := strings.TrimSpace(ev.Location); location != "" {
-		fmt.Fprintf(&b, "\n📍 %s", html.EscapeString(location))
+		fmt.Fprintf(&b, "\n📍 %s", location)
 	}
 	if names := attendeeNames(ev.Attendees, 4); names != "" {
-		fmt.Fprintf(&b, "\n👤 %s", html.EscapeString(names))
+		fmt.Fprintf(&b, "\n👤 %s", names)
 	}
 	return b.String()
 }
@@ -387,27 +368,3 @@ func (s *calendarBriefingService) clearResolveFailure() {
 	defer s.resolveFailureMu.Unlock()
 	s.resolveFailing = false
 }
-
-func (s *calendarBriefingService) logStartupRaceOnce(ev calendar.Event) {
-	s.startupRaceMu.Lock()
-	defer s.startupRaceMu.Unlock()
-	if s.startupRaceLogged {
-		return
-	}
-	s.startupRaceLogged = true
-	s.logger.Warn("calendar briefing: telegram plugin not initialized yet, will retry next tick",
-		"eventId", ev.ID)
-}
-
-// isTelegramNotReady detects the specific Plugin.SendMessage error
-// returned when the plugin's Bot API client is nil (the startup race).
-// Substring match is fine because the error is a hand-rolled errors.New
-// in plugin.go that we control.
-func isTelegramNotReady(err error) bool {
-	return err != nil && errors.Is(err, errTelegramNotReady) ||
-		(err != nil && strings.Contains(err.Error(), "telegram client not initialized"))
-}
-
-// errTelegramNotReady is a sentinel for the test path; production
-// SendMessage returns the equivalent errors.New value.
-var errTelegramNotReady = errors.New("telegram client not initialized")

@@ -22,7 +22,6 @@ import (
 var tsBaseMethods = []string{
 	"health",
 	"logs.tail",
-	"telegram.status",
 	"telegram.logout",
 	"status",
 	"usage.status",
@@ -82,7 +81,6 @@ func fullDispatcher() *Dispatcher {
 	sm := session.NewManager()
 	RegisterBuiltinMethods(d)
 	RegisterSessionCRUDMethods(d, SessionDeps{Sessions: sm})
-	RegisterTelegramStatusMethods(d, TelegramStatusDeps{})
 	RegisterHealthMethods(d, SystemHealthDeps{})
 	testCronService := cron.NewService(cron.ServiceConfig{StorePath: "/tmp/deneb-cron-test-ext"}, nil, testLogger())
 	RegisterExtendedMethods(d, ExtendedDeps{
@@ -182,9 +180,9 @@ func TestTSBaseMethodParity(t *testing.T) {
 func TestMethodCount(t *testing.T) {
 	d := fullDispatcher()
 	methods := d.Methods()
-	// We expect at least 80 methods (after removing approval, doctor, monitoring.activity, inject, preview, resolve).
-	if len(methods) < 80 {
-		t.Errorf("got %d, want at least 80 registered methods", len(methods))
+	// We expect at least 75 methods (after removing Telegram bot methods).
+	if len(methods) < 75 {
+		t.Errorf("got %d, want at least 75 registered methods", len(methods))
 	}
 	t.Logf("total registered methods: %d", len(methods))
 }

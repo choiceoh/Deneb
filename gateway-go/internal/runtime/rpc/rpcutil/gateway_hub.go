@@ -25,7 +25,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
@@ -79,9 +79,6 @@ type GatewayHub struct {
 	// Session and process management.
 	sessions  *session.Manager
 	processes *process.Manager
-
-	// Channel plugins.
-	telegram *telegram.Plugin // nil until SetTelegram (early phase).
 
 	// Agent pipeline.
 	chat       *chat.Handler // nil until SetChat (late phase).
@@ -151,7 +148,6 @@ func (h *GatewayHub) Broadcaster() *events.Broadcaster               { return h.
 func (h *GatewayHub) GatewaySubs() *events.GatewayEventSubscriptions { return h.gatewaySubs }
 func (h *GatewayHub) Sessions() *session.Manager                     { return h.sessions }
 func (h *GatewayHub) Processes() *process.Manager                    { return h.processes }
-func (h *GatewayHub) Telegram() *telegram.Plugin                     { return h.telegram }
 func (h *GatewayHub) Chat() *chat.Handler                            { return h.chat }
 func (h *GatewayHub) JobTracker() *agent.JobTracker                  { return h.jobTracker }
 func (h *GatewayHub) CronService() *cron.Service                     { return h.cronService }
@@ -184,9 +180,6 @@ func (h *GatewayHub) SetContactsStore(s *contacts.Store) { h.contactsStore = s }
 
 // SetInsights sets the insights engine (created during early registration phase).
 func (h *GatewayHub) SetInsights(e *insights.Engine) { h.insights = e }
-
-// SetTelegram sets the Telegram plugin (created during early registration phase).
-func (h *GatewayHub) SetTelegram(p *telegram.Plugin) { h.telegram = p }
 
 // SetChat sets the chat handler. Panics if called before PhaseSession,
 // ensuring the chat handler is actually created before being wired.

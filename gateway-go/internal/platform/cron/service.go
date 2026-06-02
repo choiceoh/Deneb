@@ -11,8 +11,6 @@ import (
 	"log/slog"
 	"sync"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
 )
 
 // Service manages the full cron job lifecycle: CRUD, scheduling, execution, delivery.
@@ -93,20 +91,6 @@ func (s *Service) SetAgentRunner(agent AgentRunner) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.agent = agent
-}
-
-// SetTelegramPlugin sets the Telegram plugin for cron output delivery.
-// Called after the Telegram plugin is created (late-bind pattern).
-// Also sets DefaultTo from the plugin's primary chat ID if not already set.
-func (s *Service) SetTelegramPlugin(plugin *telegram.Plugin) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.cfg.TelegramPlugin = plugin
-	if s.cfg.DefaultTo == "" {
-		if chatID := plugin.PrimaryChatID(); chatID != "" {
-			s.cfg.DefaultTo = chatID
-		}
-	}
 }
 
 // SetSubagentPoller sets the poller for detecting descendant subagent completion.

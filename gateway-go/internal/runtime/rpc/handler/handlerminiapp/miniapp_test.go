@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/telegram"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -34,10 +34,9 @@ func decodePayload(t *testing.T, resp *protocol.ResponseFrame) map[string]any {
 	return got
 }
 
-func sampleInitData() *telegram.InitData {
-	return &telegram.InitData{
-		QueryID: "AAH-1",
-		User: &telegram.WebAppUser{
+func sampleInitData() *clientauth.Identity {
+	return &clientauth.Identity{
+		User: &clientauth.User{
 			ID:           42,
 			FirstName:    "오선택",
 			Username:     "choiceoh",
@@ -50,7 +49,7 @@ func sampleInitData() *telegram.InitData {
 
 func TestPing_WithInitData(t *testing.T) {
 	h := ping(Deps{Version: "4.22.3"})
-	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleInitData())
 
 	resp := h(ctx, newReq(t, "miniapp.ping"))
 	got := decodePayload(t, resp)
@@ -71,7 +70,7 @@ func TestPing_IncludesModelWhenResolvable(t *testing.T) {
 		Version:      "4.22.3",
 		CurrentModel: func() string { return "vllm/gemma4" },
 	})
-	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleInitData())
 
 	got := decodePayload(t, h(ctx, newReq(t, "miniapp.ping")))
 	if got["model"] != "vllm/gemma4" {
@@ -90,7 +89,7 @@ func TestPing_OmitsModelWhenUnresolved(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			h := ping(tc.deps)
-			ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+			ctx := clientauth.WithContext(context.Background(), sampleInitData())
 			got := decodePayload(t, h(ctx, newReq(t, "miniapp.ping")))
 			if _, ok := got["model"]; ok {
 				t.Errorf("model key present in payload, want absent: %#v", got)
@@ -113,7 +112,7 @@ func TestPing_NoInitData(t *testing.T) {
 
 func TestWhoami_WithInitData(t *testing.T) {
 	h := whoami()
-	ctx := telegram.WithInitDataContext(context.Background(), sampleInitData())
+	ctx := clientauth.WithContext(context.Background(), sampleInitData())
 
 	resp := h(ctx, newReq(t, "miniapp.whoami"))
 	got := decodePayload(t, resp)
@@ -148,7 +147,7 @@ func TestWhoami_NoUser(t *testing.T) {
 	data := sampleInitData()
 	data.User = nil
 	h := whoami()
-	ctx := telegram.WithInitDataContext(context.Background(), data)
+	ctx := clientauth.WithContext(context.Background(), data)
 
 	resp := h(ctx, newReq(t, "miniapp.whoami"))
 	if resp.OK {
