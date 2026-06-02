@@ -21,6 +21,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.27",
+        code = 150,
+        highlights = listOf(
+            "우측 세션 드로어를 화면 오른쪽 끝에서 왼쪽으로 밀어서 열기 — 중첩 드로어 제스처 충돌로 안 먹던 문제 수정",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.26",
         code = 149,
         highlights = listOf(
