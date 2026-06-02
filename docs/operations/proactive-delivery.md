@@ -1,18 +1,20 @@
 ---
 title: "Proactive Delivery"
-summary: "How Deneb sends mail summaries and scheduled output: active home, delivery targets, forum topics, and heartbeat versus cron."
+summary: "How Deneb sends mail summaries and scheduled output to the native client's work session: the verbatim relay, instant push, and heartbeat versus cron."
 read_when:
-  - You want proactive messages to land in a specific chat or forum topic
-  - You ran use-forum and want to know what it changed
-  - You are setting the gmail poll delivery target or a cron job target
+  - You want to know where proactive messages (mail summaries, cron output) land
+  - You are setting the gmail poll cadence or a cron job schedule
+  - You want to understand heartbeat versus cron
 ---
 
 # Proactive Delivery
 
 Deneb sends things you did not ask for in the moment — mail summaries,
 scheduled cron output, overnight wiki synthesis. The design goal is simple to
-state and easy to get wrong: the actual content has to arrive, in the right
-chat. This page covers how delivery works and where it lands.
+state and easy to get wrong: the actual content has to arrive, intact, in the
+right place. With the [native client](/operations/native-client) as the sole
+surface, that place is the 업무 (work) session. This page covers how delivery
+works and where it lands.
 
 ## How Delivery Works
 
@@ -27,89 +29,62 @@ context.
 There are two delivery paths:
 
 - **Proactive relay (verbatim).** Used by gmail poll summaries, wiki dreaming,
-  and cron handoff. It resolves the target chat, sends the text as-is over
-  Telegram, and records it in the transcript.
-- **Direct cron delivery (fallback).** If a cron run cannot hand off to the
-  main session, it delivers its output directly, splitting long output into
-  chunks and attaching any media to the last one.
+  the morning letter, and the calendar briefing. It appends the text as-is to
+  the 업무 (`client:main`) transcript and live-pushes it to any connected
+  native client.
+- **Cron handoff (fallback to direct).** A completed cron run hands its output
+  off to the main session through the same relay. If no handoff is available,
+  it falls back to recording the output directly with the run.
 
-## Active Home
+## Where It Lands: the 업무 Session
 
-The central concept for "where do proactive messages go" is the **active
-home** — the chat that owns the bot conversation.
-
-- **Setting it.** Run `/use-forum` inside a Telegram supergroup. Deneb records
-  that supergroup as the active home and persists it (separately from the
-  deployment config), so it survives restarts. Running it in a one-to-one chat
-  is rejected.
-- **How it is used.** Proactive senders are wired to a `telegram:home`
-  sentinel and resolve it to the active home's chat ID at send time. If no
-  active home is set, delivery falls back to the static configured chat ID; if
-  that is also missing, it is a no-op.
-
-<Note>
-  The no-op-when-unresolved behavior is deliberate: it stops proactive messages
-  from being sent to a stale chat ID left in config. By default messages land
-  in the supergroup's General topic, which Telegram does not allow you to
-  delete — the most restructure-proof target.
-</Note>
+Proactive output is **always delivered to the native client's 업무 (work)
+session** — the `client:main` transcript. There is no per-recipient routing to
+configure: the relay lands everything in `client:main`, which is the session
+the native client's 업무 (General) tab opens. Now that the native client is the
+sole surface, this is the single, restructure-proof target.
 
 ## Native Client Instant Push
 
-When a proactive 업무 report lands in the General topic, the gateway also pushes
-it to any connected [native client](/operations/native-client) the instant it is
-produced, instead of waiting for the client's next poll.
+When a proactive 업무 report is produced, the gateway pushes it to any connected
+native client the instant it is produced, instead of waiting for the client's
+next poll.
 
 - **The stream.** The native app holds open an authenticated SSE subscription at
   `GET /api/v1/miniapp/events`. Each report is published as a small
   `{title, body}` frame — `body` is a one-line preview — and the app raises a
   local notification for it (only while backgrounded; in the foreground the
   report just lands in chat).
-- **General only.** Only reports delivered to the General (업무) topic are
-  mirrored and pushed. Named topics like 코딩 and 잡담 are deliberately excluded so
-  work reports never pollute them. The mirrored copy lands in the `client:main`
-  session, which is why **tapping a push opens the 업무 topic**.
+- **업무 only.** Reports are mirrored into the `client:main` session, which is
+  why **tapping a push opens the 업무 tab**.
 - **Best effort.** The push hub drops a frame for a slow or sleeping client
   rather than blocking — there is no delivery guarantee, and none is needed: the
-  same content is in the Telegram topic and the session transcript regardless.
-- **Sources.** The morning letter (overnight wiki synthesis) and mail analyses
-  are the reports wired through this push.
+  same content is in the `client:main` transcript regardless.
+- **Sources.** The morning letter (overnight wiki synthesis), mail analyses, and
+  the calendar briefing are the reports wired through this push.
 
-## Delivery Targets
+## Schedules and Targets
 
-**Gmail poll summaries.** Set `gmailPoll.deliverTo` in the config to override
-the target:
+**Gmail poll summaries.** `gmailPoll.intervalMin` sets the cadence; summaries
+are delivered to the 업무 session through the verbatim relay.
 
-- empty — use the active home (follows `/use-forum`). Recommended.
-- `"<chat-id>"` — a specific chat.
-- `"<chat-id>:thread:<n>"` — a specific forum topic.
-
-The value is validated on startup; an unparsable target logs a warning and
-falls back to the active home rather than dropping summaries.
-
-**Forum topic routing.** When a message arrives in a forum topic, its thread ID
-flows through the whole pipeline — into the session key, the delivery context,
-and any cron job created there — and back out to Telegram's
-`message_thread_id`. The practical result: **a cron job you create inside a
-forum topic sends its output back to that same topic**, instead of leaking into
-General.
-
-<Warning>
-  Non-General topic IDs can change if a topic is recreated, which makes a
-  pinned `:thread:<n>` target go stale. If stability matters more than
-  precision, leave `deliverTo` empty and let it ride the active home.
-</Warning>
+**Cron jobs.** Each cron job carries a `delivery` section (`channel`, `to`,
+`bestEffort`), but proactive output routes to the native client's 업무 session
+via the main-session handoff regardless of the per-job target. A job with no
+explicit target defaults to the native work session (`channel: "client"`,
+`to: "main"`).
 
 ## Heartbeat and Cron
 
 Two mechanisms drive proactive behavior, and they differ in important ways.
 
-- **Heartbeat.** A fixed 30-minute pulse during active hours (roughly 08:00 to
-  23:00). It reads `HEARTBEAT.md` and runs a full agent turn in the user's most
-  recent active Telegram session, so it shares the context of recent promises.
-  It is ephemeral (neither the trigger nor the reply is persisted), stays
-  silent when there is nothing new, and skips if you are actively typing. Its
-  schedule is fixed in code, not configured.
+- **Heartbeat.** A fixed 30-minute pulse during active hours (08:00 to 23:00
+  Asia/Seoul). It reads `HEARTBEAT.md` and runs a full agent turn in the user's
+  most recent active session, so it shares the context of recent promises. It is
+  ephemeral (neither the trigger nor the reply is persisted) and stays silent
+  when there is nothing new (it emits `NO_REPLY`). Its schedule is fixed in
+  code, not configured, and its progress state lives in `HEARTBEAT.md` itself —
+  updated through the `heartbeat_update` tool, not ordinary file writes.
 - **Cron.** User-defined schedules (at / every / cron expression). Each job
   carries its own delivery config, and its output goes through the verbatim
   relay (with a transcript record) so follow-up replies answer in the right
@@ -117,22 +92,17 @@ Two mechanisms drive proactive behavior, and they differ in important ways.
 
 ## Configuration
 
-There are three levers, by scope:
+There are two levers, by scope:
 
-1. **Global home** — run `/use-forum` in the target supergroup. Dreaming,
-   heartbeat, and cron defaults all follow it.
-2. **Gmail poll delivery** — `gmailPoll.deliverTo` (target) and
-   `gmailPoll.intervalMin` (cadence) in `~/.deneb/deneb.json`:
+1. **Gmail poll cadence** — `gmailPoll.intervalMin` in `~/.deneb/deneb.json`:
 
    ```json5
    {
      gmailPoll: {
        intervalMin: 30,
-       deliverTo: "",   // "" = active home; "<chat-id>:thread:<n>" for a topic
      },
    }
    ```
 
-3. **Per-job cron target** — a cron job's `delivery` section (`channel`, `to`,
-   `threadId`, `bestEffort`). A job created inside a forum topic captures that
-   topic automatically.
+2. **Per-job cron target** — a cron job's `delivery` section (`channel`, `to`,
+   `bestEffort`). Targetless jobs default to the native 업무 session.

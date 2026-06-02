@@ -81,7 +81,7 @@
 | 23 | `mcp_serve.py` — MCP 서버 모드 | Hermes 자체가 MCP 서버 | 없음 | ⚠️ | 현재 N/A, 향후 Claude Desktop / Claude Code 통합 시 가치. |
 | 24 | `mini_swe_runner.py` | SWE-bench 외부 벤치 런처 | 없음 | 🚫 | 벤치마크 참여 의도 없음. |
 | 25 | `rl_cli.py` | RL 훈련 런처 | 없음 | 🚫 | 연구 스택 거부. |
-| 26 | `hermes` CLI (`hermes_cli/main.py`) | 인터랙티브 CLI | 없음 (`cmd/gateway/` 서버 only) | 🚫 | Telegram 전용. |
+| 26 | `hermes` CLI (`hermes_cli/main.py`) | 인터랙티브 CLI | 없음 (`cmd/gateway/` 서버 only) | 🚫 | 네이티브 클라 전용. |
 | 27 | `tests/conftest.py` — `_isolate_hermes_home` autouse fixture | 테스트 간 상태 격리 | `internal/testutil/` + `t.TempDir()` | ✅ | Go idiom. |
 
 ### 5F. 빌드 & 배포
@@ -93,7 +93,7 @@
 | 30 | `nix/packages.nix` + `nixosModules.nix` + `checks.nix` + `devShell.nix` | Nix 모듈들 | 없음 | 🚫 | 위와 동일. |
 | 31 | `scripts/install.sh` / `install.cmd` / `install.ps1` | 원라이너 cross-platform 설치 | `Makefile` + `scripts/dev/live-test.sh` | 🔄 | 오퍼레이터가 git pull + `make go`. 단순. |
 | 32 | `setup-hermes.sh` (uv venv + `.[all]` + symlink) | 개발자 셋업 | 없음 (`make go` 직접) | 🚫 | Go 빌드 더 간단. |
-| 33 | `scripts/run_tests.sh` — hermetic CI parity wrapper | 로컬↔CI drift 방지 | `scripts/dev/live-test.sh` | 🔄 | Deneb: 목 Telegram 서버까지 띄워 E2E. **Hermes 수준보다 실전 검증 우월**. |
+| 33 | `scripts/run_tests.sh` — hermetic CI parity wrapper | 로컬↔CI drift 방지 | `scripts/dev/live-test.sh` | 🔄 | Deneb: 라이브 게이트웨이를 띄워 E2E. **Hermes 수준보다 실전 검증 우월**. |
 | 34 | `scripts/release.py` | 릴리스 자동화 | 수동 / `scripts/` 내 별도 | ⚠️ | 릴리스 빈도 낮으면 수동 OK. |
 | 35 | `packaging/homebrew/*` | macOS Homebrew 포뮬러 | 없음 | 🚫 | Deneb 사용자 풀 단일. |
 | 36 | `pyproject.toml` — 23 optional extras | 세분화된 의존성 | `go.mod` | ✅ | Go 의존성이 더 flat. |
@@ -126,7 +126,7 @@
 |---|---|---|---|---|---|
 | 49 | `hermes_cli/plugins.py` PluginManager + `register(ctx)` | 일반 플러그인 훅 | 없음 (통합 설계) | 🚫 | Deneb 철학: 플러그인 거부, 모든 도메인 폐쇄. |
 | 50 | `plugins/context_engine/*` | 컨텍스트 엔진 플러그인 | 없음 | 🚫 | 동일. |
-| 51 | `plugins/image_gen/*` | 이미지 생성 백엔드 | 없음 | 🚫 | Telegram 텍스트 중심. |
+| 51 | `plugins/image_gen/*` | 이미지 생성 백엔드 | 없음 | 🚫 | 텍스트 중심 surface. |
 | 52 | `plugins/disk-cleanup/`, `example-dashboard/`, `strike-freedom-cockpit/` | 기타 플러그인 예시 | 없음 | 🚫 | 확장성은 RPC 추가로만. |
 
 ### 5J. 문서 & 테스트
@@ -141,7 +141,7 @@
 | 58 | `website/` Docusaurus 사이트 | 공식 문서 배포 | `docs/` (Mintlify 설정) | 🔄 | Deneb은 Mintlify, Hermes는 Docusaurus. 기능 동등. |
 | 59 | `tests/` + `conftest.py` hermetic isolation | pytest 단위/통합/E2E | `**/*_test.go` + `scripts/dev/live-test.sh` | ✅ | Go 관용. |
 | 60 | `tests/gateway/`, `tests/agent/`, `tests/cli/` 구조 | 모듈별 테스트 분리 | `internal/*/{pkg}/*_test.go` colocation | 🔄 | Go는 코드와 동위치 테스트가 관용. |
-| 61 | `tests/integration/` marker | 외부 서비스 필요 테스트 | `scripts/dev/live-test.sh` | 🔄 | Deneb 라이브 테스트가 훨씬 실전적 (목 Telegram 서버). |
+| 61 | `tests/integration/` marker | 외부 서비스 필요 테스트 | `scripts/dev/live-test.sh` | 🔄 | Deneb 라이브 테스트가 훨씬 실전적 (라이브 게이트웨이 E2E). |
 | 62 | "Don't write change-detector tests" 정책 (AGENTS.md) | 카탈로그 스냅샷 금지 | `.claude/rules/testing.md` | ✅ | Deneb도 유사 원칙. |
 | 63 | CI 워크플로우 (`.github/workflows/*`) | GHA CI | `.github/workflows/*` | ✅ | 동등. |
 
@@ -192,7 +192,7 @@
 - **새 패키지**: `gateway-go/internal/runtime/insights/` (engine.go 367 LOC, render.go 233 LOC, engine_test.go, render_test.go)
 - **새 핸들러**: `gateway-go/internal/runtime/rpc/handler/insights/` (handler.go, handler_test.go) — `insights.generate` RPC
 - **Hub 와이어링**: `gateway_hub.go` 에 `Insights()` accessor 추가, `method_registry.go` 에서 `insights.New(hub.Sessions(), s.usageTracker)` 생성
-- **슬래시**: `/insights [days]` + 한국어 별칭 `/사용량` (Telegram MarkdownV2, 3800-char soft cap)
+- **슬래시**: `/insights [days]` + 한국어 별칭 `/사용량` (마크다운, 3800-char soft cap)
 - **스키마 gap 대응**: Deneb에 `messages` 테이블/비용 추적 부재 → `SchemaNotes` 로 표시 ("비용 추적 미지원 — 토큰만 표시합니다")
 - **테스트**: 16+3 통과 (-race), `TestMethodRegistry_RequiredMethodsRegistered` 에 `insights.generate` 추가
 
@@ -292,7 +292,7 @@
 14. ⚠️ **Approval 시스템 간소화 버전** (`tools/approval.py`)
     - 단일 오퍼레이터라 Hermes 의 full 1200 LOC 는 과잉
     - 그러나 "`rm -rf /`, `dd if=/dev/zero`, `chmod 777 /etc`" 같은 **파괴적 명령 패턴 감지** 은 실수 방지에 가치
-    - **제안**: `gateway-go/pkg/cmdsafety/` 에 ~30 패턴 감지기만 추가. 유저 승인 프롬프트 생략 (단일 오퍼레이터, Telegram 버튼은 무겁)
+    - **제안**: `gateway-go/pkg/cmdsafety/` 에 ~30 패턴 감지기만 추가. 유저 승인 프롬프트 생략 (단일 오퍼레이터, 승인 버튼 UX는 무겁)
     - **가치**: 실수로 홈 디렉터리 지우는 명령 로그 전에 차단. 싱글 유저라도 가치 있음.
 
 ### Tier 4 — **선택적** (ROI 판단 필요)
@@ -304,9 +304,9 @@
 
 ### Tier 5 — **거부** (Deneb 철학과 부합 X, 사용자 지침 확인됨)
 
-19. 🚫 17+ 메시징 플랫폼 어댑터 (Telegram 전용 유지)
+19. 🚫 17+ 메시징 플랫폼 어댑터 (네이티브 클라 단일 표면 유지)
 20. 🚫 6개 터미널 백엔드 (local DGX Spark 전용)
-21. 🚫 TUI Ink/React (Telegram 유일 UI)
+21. 🚫 TUI Ink/React (네이티브 클라가 유일 UI)
 22. 🚫 CLI 75 슬래시 명령 (Deneb 7개 유지, vibe coder 원칙)
 23. 🚫 Atropos/Tinker/RL 인프라 (연구 제품 아님)
 24. 🚫 agentskills.io 공개 허브 (싱글 오퍼레이터)
@@ -328,7 +328,7 @@
    scripts/dev/live-test.sh quality
    scripts/dev/live-test.sh logs-errors
    ```
-   특히 P1 `/steer`, P4 `/insights` / `/사용량` 의 Telegram UX 실제 확인.
+   특히 P1 `/steer`, P4 `/insights` / `/사용량` 의 네이티브 클라 UX 실제 확인.
 
 3. **Checkpoint 와이어링 마무리** (P3 TODO):
    - 세션 부트스트랩에서 `Manager` 생성 + `ctx = toolctx.WithCheckpointer(ctx, adapter)` 삽입

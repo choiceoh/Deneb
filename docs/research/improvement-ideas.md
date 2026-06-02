@@ -18,7 +18,7 @@
 | 3 | Polaris bootstrap & session-reopen 라운드트립 테스트 | P1 | S |
 | 4 | CJK rune boundary 테스트 (`compaction/restore.go`) | P1 | S |
 | 5 | Dreamer 단위 테스트 (`domain/wiki/dreamer.go`) | P2 | M |
-| 6 | Telegram 슬래시 명령 디스커버리 (`/?`, autocomplete 힌트) | P2 | S |
+| 6 | 슬래시 명령 디스커버리 (`/?`, 네이티브 클라 autocomplete 힌트) | P2 | S |
 | 7 | 모닝 레터/이브닝 레터 통일된 cadence editor | P2 | M |
 | 8 | Gmail 라벨/스레드 기반 우선순위 큐 | P3 | L |
 | 9 | Tool histogram → 세션 종료 요약 카드 | P3 | S |
@@ -27,12 +27,12 @@
 | 12 | DGX Spark GPU pool 헬스 페이지 (/health/gpu) | P2 | S |
 | 13 | "왜 그 도구를 골랐는지" 1-line trace 로그 | P2 | S |
 | 14 | 한국어 응답 품질 자동 회귀 (quality baseline → CI gate) | P1 | M |
-| 15 | Telegram inline 키보드 "더보기/요약/원문" 액션셋 | P3 | M |
+| 15 | 네이티브 클라 "더보기/요약/원문" 액션셋 | P3 | M |
 | 16 | 캐시 히트율 ops 대시보드 (`cache_read_input_tokens` 누적) | P2 | S |
 | 17 | 멀티턴 컨텍스트 휘발 방지: per-session "pinned facts" 슬롯 | P3 | M |
 | 18 | `executeAgentRun` 12개 파라미터 → struct 압축 | P2 | S |
 | 19 | Skill SKILL.md schema lint + CI | P3 | S |
-| 20 | Telegram 대용량 파일(>50MB) 분할 전송 폴백 | P3 | M |
+| 20 | 대용량 파일 전송 처리 (다운로드 링크 폴백) | P3 | M |
 
 ---
 
@@ -58,7 +58,7 @@
 
 **무엇.** `gateway-go/internal/runtime/server/notify_relay.go` 는 세 가지 무관한 책임을 묶고 있다:
 1. **Status snapshot** — on-demand 세션 상태 조회
-2. **Error mirror** — broadcast tap → telegram error notify
+2. **Error mirror** — broadcast tap → 네이티브 클라 error notify
 3. **Health heartbeat** — periodic self-poll
 
 **어디서.** `notify_snapshots.go` / `notify_errors.go` / `notify_heartbeat.go` 로 분리. 공통 helpers 만 `notify_relay.go` 잔존. Test 도 같은 분할.
@@ -100,7 +100,7 @@
 **어디서.**
 - `gateway-go/internal/ai/llm/openai.go` 응답 처리 부분에서 `cache_read_input_tokens`, `cache_creation_input_tokens` 헤더/필드를 metric counter 로 누적
 - `/health` 응답에 24h rolling cache hit ratio 노출 (또는 `gateway.cache_stats` RPC)
-- Telegram `/status` 슬래시에 한 줄 표시: `📦 캐시: 78% hit (24h)`
+- `/status` 슬래시에 한 줄 표시: `📦 캐시: 78% hit (24h)`
 
 **왜.** 캐시 doctrine 의 5가지 금지 (시스템 프롬프트 재구성, 매 턴 툴셋 rebuild 등) 위반이 슬그머니 일어나도 현재는 알 수 없다. 히트율 대시보드가 곧 regression alarm.
 
@@ -211,32 +211,32 @@
 - `nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total --format=csv` 1초 간격 캐시
 - localai client latency p50/p95
 
-**왜.** "왜 답이 느리지" 의 1차 진단. 현재는 로그 grep 필요. `/health/gpu` 또는 Telegram `/status` 에 한 줄.
+**왜.** "왜 답이 느리지" 의 1차 진단. 현재는 로그 grep 필요. `/health/gpu` 또는 `/status` 슬래시에 한 줄.
 
 ---
 
-### 3.6 Telegram 대용량 파일 분할 전송 폴백 — **P3 / M**
+### 3.6 대용량 파일 전송 처리 — **P3 / M**
 
-**현황.** Bot API 50MB 제한 (CLAUDE.md 명시). 50MB 초과 파일 send 시 현재 동작 불명확.
+**현황.** 대용량 파일 send 시 현재 동작 불명확.
 
 **제안.**
-- `pipeline/chat/tools/send_file.go` 에서 size check → 50MB 초과 시 (a) auto-split (b) 다운로드 링크 + 1회용 토큰 전송
+- `pipeline/chat/tools/send_file.go` 에서 size check → 임계값 초과 시 (a) auto-split (b) 다운로드 링크 + 1회용 토큰 전송
 - 옵션 (b) 는 gateway 가 임시 HTTP endpoint expose (DGX Spark 의 NAT 통과 가능한 경우만)
 
 ---
 
 ## 4. 제품/UX (Product)
 
-### 4.1 Telegram 슬래시 명령 디스커버리 — **P2 / S**
+### 4.1 슬래시 명령 디스커버리 — **P2 / S**
 
 **현황.** `/reset`, `/status`, `/kill`, `/model`, `/think`, `/steer` 등 존재. 사용자가 외워야 함.
 
 **제안.**
 - `/?` 또는 `/help` → 모든 슬래시 + 1줄 설명 (한국어)
-- Telegram BotFather `setMyCommands` 자동 동기화 (입력창에서 `/` 치면 autocomplete)
+- 네이티브 클라 입력창에서 `/` 치면 autocomplete 힌트 노출
 - 새 슬래시 추가 시 `slash_commands.go` 의 metadata 가 single source
 
-**어디서.** `gateway-go/internal/pipeline/chat/slash_commands.go` + `internal/platform/telegram/slash_commands.go`. 두 파일이 분리돼 있는데 metadata 통일.
+**어디서.** `gateway-go/internal/pipeline/chat/slash_commands.go` 의 metadata 를 single source 로 두고, 네이티브 클라가 이를 읽어 힌트로 노출.
 
 ---
 
@@ -263,7 +263,7 @@
 
 **현황.** `<thinking>` 블록은 시스템 프롬프트에서 silent. 사용자는 도구가 왜 불렸는지 모름. 디버깅 시 로그 grep.
 
-**제안.** Anthropic extended thinking 의 첫 sentence 만 추출 → `slog.Debug` + (opt-in) Telegram inline. 캐시에 영향 없음 (thinking 은 메시지 본문 외부).
+**제안.** Anthropic extended thinking 의 첫 sentence 만 추출 → `slog.Debug` + (opt-in) 네이티브 클라 inline. 캐시에 영향 없음 (thinking 은 메시지 본문 외부).
 
 ---
 
@@ -280,15 +280,15 @@
 
 ---
 
-### 4.5 Telegram inline 키보드 "더보기/요약/원문" — **P3 / M**
+### 4.5 네이티브 클라 "더보기/요약/원문" 액션셋 — **P3 / M**
 
-**무엇.** 긴 응답 (4096자 근접) 시 자동으로 요약 + "원문 보기" 인라인 버튼.
+**무엇.** 아주 긴 응답일 때 자동으로 요약 + "원문 보기" 액션을 제공.
 
-**현황.** 단순 truncate or split. 사용자 액션 없음.
+**현황.** 단순 출력. 사용자 액션 없음.
 
-**제안.** `internal/platform/telegram/send.go` 에서 length > 3500 chars 감지 → 요약 (2-3 문장) + `[원문 전체 보기]` 콜백. 콜백 시 원문 send.
+**제안.** 게이트웨이가 긴 응답을 감지 → 요약 (2-3 문장) + 원문을 함께 내려보내고, 네이티브 클라가 "원문 전체 보기" 토글로 펼친다.
 
-**왜.** Telegram on Android 의 좁은 화면에서 4096자 메시지는 스크롤 지옥. 요약 → 필요시 펼침이 모바일 UX 정답.
+**왜.** 모바일 화면에서 아주 긴 메시지는 스크롤 지옥. 요약 → 필요시 펼침이 모바일 UX 정답.
 
 ---
 
@@ -398,7 +398,7 @@
 - 2.2 Embedding-aware tool routing
 - 2.3 Polaris semantic-anchor
 - 4.2 Tool histogram 카드
-- 4.5 Telegram inline "더보기" 키보드
+- 4.5 네이티브 클라 "더보기" 액션셋
 - 4.6 Pinned facts
 - 5.2 Email priority queue
 - 5.3 Skill schema lint
@@ -412,7 +412,7 @@
 다음은 **하지 말자** 로 명시:
 
 - ❌ **Multi-user / multi-tenant.** CLAUDE.md philosophy 위반. 단일 사용자 가정이 코드 단순성의 핵심.
-- ❌ **Web UI / desktop client.** Telegram-only optimization 원칙. Surface 추가 = 광범위 회귀 위험.
+- ❌ **추가 메시징 surface (Telegram/Slack/Discord 등).** 네이티브 클라이언트 단일 표면 원칙 (PR 1922). Surface 추가 = 광범위 회귀 위험.
 - ❌ **External-facing API.** Gateway 는 loopback bind 가 정답. 외부 노출은 attack surface 만 늘림.
 - ❌ **새 LLM provider 추가 (Claude/OpenAI/local 외).** 현재 3개 라인 유지보수도 충분. Provider 다양성보다 deep quality.
 - ❌ **i18n.** Korean-first 원칙. 영어/타국어 추가 = string 관리 비용.
@@ -425,6 +425,7 @@
 | 날짜 | 작성자 | 내용 |
 |---|---|---|
 | 2026-05-25 | Claude (claude-opus-4-7) | 초안 작성 |
+| 2026-06-02 | Claude | PR 1922 (Telegram 봇 제거) 반영 — 표면 참조를 네이티브 클라로 정정 |
 
 ---
 
