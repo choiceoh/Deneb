@@ -206,7 +206,11 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	if err != nil {
 		return nil, err
 	}
-	return h.buildSyncResult(model, result)
+	res, err := h.buildSyncResult(model, result)
+	if err == nil {
+		h.autoTitleSessionAsync(sessionKey, message, res)
+	}
+	return res, err
 }
 
 // SendSyncStream runs the agent loop, calling onDelta for each text chunk,
@@ -234,5 +238,9 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 	if err != nil {
 		return nil, err
 	}
-	return h.buildSyncResult(model, result)
+	res, err := h.buildSyncResult(model, result)
+	if err == nil {
+		h.autoTitleSessionAsync(sessionKey, message, res)
+	}
+	return res, err
 }
