@@ -117,14 +117,14 @@ func TestRunCache_invalidateByPath_unscopedEntriesRemoved(t *testing.T) {
 }
 
 func TestIsCacheableTool(t *testing.T) {
-	cacheable := []string{"tree", "grep", "analyze"}
+	cacheable := []string{"grep"}
 	for _, name := range cacheable {
 		if !IsCacheableTool(name) {
 			t.Errorf("IsCacheableTool(%q) = false, want true", name)
 		}
 	}
 
-	notCacheable := []string{"find", "write", "exec", "edit", "git", "unknown"}
+	notCacheable := []string{"find", "write", "exec", "edit", "git", "tree", "analyze", "unknown"}
 	for _, name := range notCacheable {
 		if IsCacheableTool(name) {
 			t.Errorf("IsCacheableTool(%q) = true, want false", name)
@@ -133,14 +133,14 @@ func TestIsCacheableTool(t *testing.T) {
 }
 
 func TestIsMutationTool(t *testing.T) {
-	mutations := []string{"write", "edit", "multi_edit", "git"}
+	mutations := []string{"write", "edit"}
 	for _, name := range mutations {
 		if !IsMutationTool(name) {
 			t.Errorf("IsMutationTool(%q) = false, want true", name)
 		}
 	}
 
-	nonMutations := []string{"find", "grep", "tree", "analyze", "read", "unknown"}
+	nonMutations := []string{"find", "grep", "tree", "analyze", "read", "multi_edit", "git", "unknown"}
 	for _, name := range nonMutations {
 		if IsMutationTool(name) {
 			t.Errorf("IsMutationTool(%q) = true, want false", name)

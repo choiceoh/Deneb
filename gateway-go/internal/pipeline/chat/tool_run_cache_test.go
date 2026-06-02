@@ -179,9 +179,6 @@ func TestBuildCacheKey_DifferentTools(t *testing.T) {
 }
 
 func TestIsCacheableTool(t *testing.T) {
-	if !IsCacheableTool("tree") {
-		t.Fatal("tree should be cacheable")
-	}
 	if !IsCacheableTool("grep") {
 		t.Fatal("grep should be cacheable")
 	}
@@ -194,7 +191,7 @@ func TestIsCacheableTool(t *testing.T) {
 }
 
 func TestIsMutationTool(t *testing.T) {
-	for _, name := range []string{"write", "edit", "multi_edit", "git"} {
+	for _, name := range []string{"write", "edit"} {
 		if !IsMutationTool(name) {
 			t.Fatalf("%s should be a mutation tool", name)
 		}

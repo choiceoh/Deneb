@@ -99,16 +99,12 @@ func (rc *RunCache) Len() int {
 }
 
 var cacheableTools = map[string]struct{}{
-	"tree":    {},
-	"grep":    {},
-	"analyze": {},
+	"grep": {},
 }
 
 var mutationTools = map[string]struct{}{
-	"write":      {},
-	"edit":       {},
-	"multi_edit": {},
-	"git":        {},
+	"write": {},
+	"edit":  {},
 }
 
 // IsCacheableTool returns true if the named tool's results can be cached.

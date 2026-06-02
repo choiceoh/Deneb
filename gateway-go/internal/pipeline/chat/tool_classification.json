@@ -8,9 +8,7 @@
     "_values": {
       "edit": true,
       "write": true,
-      "exec": true,
-      "git": true,
-      "multi_edit": true
+      "exec": true
     }
   },
   "channelSilentTools": {
@@ -23,8 +21,6 @@
         "sessions",
         "sessions_spawn",
         "subagents",
-        "kv",
-        "bridge",
         "skills",
         "skill_lifecycle"
       ]
@@ -35,11 +31,7 @@
     "_doc": "toolCompressSkipSet contains tools whose output should not be compressed.\nStructured-output tools are already handled by post-processors.\nInternal / already-small tools add no compression value.",
     "_values": {
       "grep": true,
-      "tree": true,
-      "git": true,
-      "analyze": true,
       "wiki": true,
-      "kv": true,
       "sessions": true,
       "skill_lifecycle": true
     }
