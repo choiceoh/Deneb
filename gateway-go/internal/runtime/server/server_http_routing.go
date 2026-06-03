@@ -17,6 +17,8 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/v1/miniapp/chat/stream", s.handleMiniappChatStream)
 	mux.HandleFunc("GET /api/v1/miniapp/events", s.handleMiniappEvents)
 	mux.HandleFunc("GET /api/v1/miniapp/gmail/attachment", s.handleMiniappGmailAttachment)
+	mux.HandleFunc("GET /api/v1/app/update/manifest", s.handleAppUpdateManifest)
+	mux.HandleFunc("GET /api/v1/app/update/download", s.handleAppUpdateDownload)
 
 	// /debug/pprof/* — runtime profiling + goroutine dumps for live diagnosis.
 	// Safe to expose because the gateway binds loopback by default in
