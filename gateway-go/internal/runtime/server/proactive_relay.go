@@ -9,6 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 )
@@ -67,6 +68,14 @@ func (d proactiveRelayDeps) relay(_ context.Context, _, content string) (bool, e
 // (false, nil) when no transcript store is wired (older wiring or tests) so
 // the caller treats it as not-delivered.
 func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
+	// Respect the NO_REPLY silent-reply contract: a proactive turn that correctly
+	// signals "nothing to report" with the token (alone or trailing) must be
+	// suppressed — not delivered as a literal "NO_REPLY" work-feed card + push.
+	// isContentlessProactive below only catches the chatty prose variants
+	// ("메일이 없습니다" etc.); the bare token needs this explicit strip.
+	if content = chat.StripSilentToken(content); strings.TrimSpace(content) == "" {
+		return false, nil
+	}
 	// Floor: drop "nothing to report" pings before they reach the transcript,
 	// work feed, or push. A proactive agent turn that ignores its NO_REPLY
 	// contract and writes a chatty "읽지 않은 메일이 없습니다" (an email-check cron
