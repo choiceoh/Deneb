@@ -66,6 +66,8 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.utils.io.readUTF8Line
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
@@ -122,7 +124,13 @@ class DenebGatewayClient(
 
     private val http = httpClient {
         install(ContentNegotiation) { json(jsonCodec) }
-        install(HttpTimeout) { requestTimeoutMillis = REQUEST_TIMEOUT_MS }
+        install(HttpTimeout) {
+            requestTimeoutMillis = REQUEST_TIMEOUT_MS
+            // Fail fast when the gateway is unreachable instead of hanging the
+            // full 180s request budget on a dead TCP connect. Streaming calls
+            // set their own timeout{} and are unaffected.
+            connectTimeoutMillis = CONNECT_TIMEOUT_MS
+        }
     }
 
     // Background scope for fire-and-forget refreshes behind synchronous
@@ -440,18 +448,6 @@ class DenebGatewayClient(
         scope.launch { loadTranscriptGuarded(target) }
     }
 
-    suspend fun ackWorkFeedItem(id: String): Boolean {
-        if (id.isBlank()) return false
-        val ok = callRpc<JsonObject>(
-            "miniapp.workfeed.ack",
-            buildJsonObject { put("id", id) },
-        ) != null
-        if (ok) {
-            _denebWorkFeed.update { items -> items.filterNot { it.id == id } }
-        }
-        return ok
-    }
-
     suspend fun runWorkFeedAction(itemId: String, actionId: String): String? {
         if (itemId.isBlank() || actionId.isBlank()) return null
         val payload = callRpc<WorkFeedActionRunPayload>(
@@ -685,10 +681,6 @@ class DenebGatewayClient(
         _denebRoleModels.value = payload.roles.associate { it.role to it.model }
     }
 
-    fun refreshClientStatusAsync() {
-        scope.launch { refreshClientStatus() }
-    }
-
     suspend fun refreshClientStatus(): ClientStatus? {
         val payload = callRpc<ClientHelloPayload>("miniapp.client.hello", buildJsonObject {}) ?: run {
             _clientStatus.value = null
@@ -706,10 +698,6 @@ class DenebGatewayClient(
         return status
     }
 
-    fun refreshTopicsAsync() {
-        scope.launch { refreshTopics() }
-    }
-
     suspend fun refreshTopics(): List<ClientTopic>? {
         val payload = callRpc<TopicsPayload>("miniapp.topics.list", buildJsonObject {}) ?: return null
         val topics = payload.topics
@@ -724,10 +712,6 @@ class DenebGatewayClient(
             }
         _denebTopics.value = topics
         return topics
-    }
-
-    fun openTopic(topic: ClientTopic) {
-        loadConversation(topic.sessionKey)
     }
 
     suspend fun setMainModel(id: String): Boolean = setRoleModel(id, "main")
@@ -1022,23 +1006,31 @@ class DenebGatewayClient(
             return WidgetSummary(configured = false)
         }
         return runCatching {
-            val cal = callRpc<CalListPayload>(
-                "miniapp.calendar.list_upcoming",
-                buildJsonObject {
-                    put("hoursAhead", 168)
-                    put("limit", 5)
-                },
-            )
-            val next = cal?.events?.firstOrNull { it.id.isNotBlank() }
-            val meeting = next?.let { formatMeeting(it.summary, it.start, it.allDay) }.orEmpty()
-
-            val mail = callRpc<MailListPayload>(
-                "miniapp.gmail.list_recent",
-                buildJsonObject { put("limit", 25) },
-            )
-            val unread = mail?.messages?.count { it.isUnread } ?: 0
-
-            WidgetSummary(meeting = meeting, unread = unread)
+            // Calendar and mail are independent — fetch them concurrently so the
+            // widget refresh costs one RTT instead of the sum of two.
+            coroutineScope {
+                val calDeferred = async {
+                    callRpc<CalListPayload>(
+                        "miniapp.calendar.list_upcoming",
+                        buildJsonObject {
+                            put("hoursAhead", 168)
+                            put("limit", 5)
+                        },
+                    )
+                }
+                val mailDeferred = async {
+                    callRpc<MailListPayload>(
+                        "miniapp.gmail.list_recent",
+                        buildJsonObject { put("limit", 25) },
+                    )
+                }
+                val cal = calDeferred.await()
+                val mail = mailDeferred.await()
+                val next = cal?.events?.firstOrNull { it.id.isNotBlank() }
+                val meeting = next?.let { formatMeeting(it.summary, it.start, it.allDay) }.orEmpty()
+                val unread = mail?.messages?.count { it.isUnread } ?: 0
+                WidgetSummary(meeting = meeting, unread = unread)
+            }
         }.getOrElse { WidgetSummary(ok = false) }
     }
 
@@ -1909,6 +1901,10 @@ class DenebGatewayClient(
         // LAN/Tailscale URL under KEY_URL.
         const val DEFAULT_URL = "http://10.0.2.2:18789"
         const val REQUEST_TIMEOUT_MS = 180_000L
+
+        // TCP connect budget. A reachable gateway on LAN/Tailscale connects well
+        // under this; a dead one fails fast instead of waiting out REQUEST_TIMEOUT_MS.
+        const val CONNECT_TIMEOUT_MS = 5_000L
 
         // Max idle between bytes on the chat SSE stream. The server emits a
         // keepalive comment every 15s, so this only trips on a real stall.

@@ -20,6 +20,7 @@ import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.conversation_untitled
 import kai.composeapp.generated.resources.error_unsupported_file_type
 import kai.composeapp.generated.resources.litert_no_model_warning
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
@@ -155,6 +156,13 @@ class ChatViewModel(
         }
     }
 
+    // savedConversations summary is recomputed only when the conversation-list
+    // reference changes. Streaming emits chatHistory per token, re-running this
+    // combine; re-sorting + mapping the whole list every token was wasted work.
+    // Safe as plain fields — the combine has a single collector on viewModelScope.
+    private var cachedConversationsRef: List<Conversation>? = null
+    private var cachedSummaries: ImmutableList<ConversationSummary> = persistentListOf()
+
     val state = combine(
         _state,
         dataRepository.chatHistory,
@@ -164,23 +172,27 @@ class ChatViewModel(
         combine(dataRepository.hasUnreadHeartbeat, dataRepository.hasUnreadWorkReport) { hb, wr -> hb to wr },
     ) { state, history, conversations, conversationId, unread ->
         val (hasUnreadHeartbeat, hasUnreadWorkReport) = unread
-        val summaries = conversations
-            .sortedByDescending { it.updatedAt }
-            .map {
-                val isHeartbeat = it.type == Conversation.TYPE_HEARTBEAT
-                val isInteractive = it.type == Conversation.TYPE_INTERACTIVE
-                ConversationSummary(
-                    id = it.id,
-                    title = if (isHeartbeat) "" else it.title.ifEmpty { getString(Res.string.conversation_untitled) },
-                    updatedAt = it.updatedAt,
-                    isHeartbeat = isHeartbeat,
-                    isInteractive = isInteractive,
-                )
-            }
+        if (conversations !== cachedConversationsRef) {
+            cachedConversationsRef = conversations
+            cachedSummaries = conversations
+                .sortedByDescending { it.updatedAt }
+                .map {
+                    val isHeartbeat = it.type == Conversation.TYPE_HEARTBEAT
+                    val isInteractive = it.type == Conversation.TYPE_INTERACTIVE
+                    ConversationSummary(
+                        id = it.id,
+                        title = if (isHeartbeat) "" else it.title.ifEmpty { getString(Res.string.conversation_untitled) },
+                        updatedAt = it.updatedAt,
+                        isHeartbeat = isHeartbeat,
+                        isInteractive = isInteractive,
+                    )
+                }
+                .toImmutableList()
+        }
         state.copy(
             history = history.toImmutableList(),
             supportedFileExtensions = dataRepository.supportedFileExtensions().toImmutableList(),
-            savedConversations = summaries.toImmutableList(),
+            savedConversations = cachedSummaries,
             currentConversationId = conversationId,
             hasUnreadHeartbeat = hasUnreadHeartbeat,
             hasUnreadWorkReport = hasUnreadWorkReport,

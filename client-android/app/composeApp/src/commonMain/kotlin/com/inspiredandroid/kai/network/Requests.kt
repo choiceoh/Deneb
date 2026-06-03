@@ -62,7 +62,7 @@ class Requests {
         install(ContentNegotiation) {
             json(
                 Json {
-                    prettyPrint = true
+                    prettyPrint = isDebugBuild
                     isLenient = true
                     ignoreUnknownKeys = true
                     encodeDefaults = true

@@ -3,6 +3,7 @@ package com.inspiredandroid.kai.ui.markdown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -29,9 +30,14 @@ internal fun InlineContent(
     modifier: Modifier = Modifier,
     textAlign: TextAlign = TextAlign.Unspecified,
 ) {
+    val colors = MaterialTheme.colorScheme
     if (!containsMath(inlines)) {
+        // Cache the AnnotatedString: without this it was rebuilt on every streaming
+        // token (every recomposition). Keyed by inlines + colors so a theme change
+        // still refreshes it.
+        val annotated = remember(inlines, colors) { inlines.toAnnotatedString(colors) }
         Text(
-            text = inlines.toAnnotatedString(),
+            text = annotated,
             style = style,
             textAlign = textAlign,
             modifier = modifier,
@@ -51,7 +57,9 @@ internal fun InlineContent(
         for (seg in segments) {
             when (seg) {
                 is InlineSegment.TextRun -> Text(
-                    text = seg.nodes.toAnnotatedString().flattenNewlines(),
+                    text = remember(seg, colors) {
+                        seg.nodes.toAnnotatedString(colors).flattenNewlines()
+                    },
                     style = style,
                     textAlign = textAlign,
                 )
