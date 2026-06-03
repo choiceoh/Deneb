@@ -126,3 +126,46 @@ func firstN(s string, n int) string {
 	}
 	return s[:n]
 }
+
+// TestToolRegistry_ReRegisterReplaces verifies the documented collision
+// behavior: re-registering an existing name replaces the prior definition
+// (last-writer-wins) and does NOT duplicate the name in registration order.
+// See docs/research/tool-interception-gap.md and gateway-go/CLAUDE.md
+// (Tool Interception & Safety). RegisterTool also logs a slog.Warn on replace.
+func TestToolRegistry_ReRegisterReplaces(t *testing.T) {
+	reg := NewToolRegistry()
+
+	reg.RegisterTool(ToolDef{
+		Name:        "dup",
+		Description: "first",
+		InputSchema: map[string]any{"type": "object"},
+		Fn: func(_ context.Context, _ json.RawMessage) (string, error) {
+			return "first", nil
+		},
+	})
+	reg.RegisterTool(ToolDef{
+		Name:        "dup",
+		Description: "second",
+		InputSchema: map[string]any{"type": "object"},
+		Fn: func(_ context.Context, _ json.RawMessage) (string, error) {
+			return "second", nil
+		},
+	})
+
+	// Latest registration wins.
+	got := testutil.Must(reg.Execute(context.Background(), "dup", json.RawMessage(`{}`)))
+	if got != "second" {
+		t.Errorf("Execute = %q, want %q (last writer should win)", got, "second")
+	}
+
+	// Registration order must not contain the name twice.
+	count := 0
+	for _, n := range reg.order {
+		if n == "dup" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("order has %q %d times, want 1 (re-register must not duplicate)", "dup", count)
+	}
+}
