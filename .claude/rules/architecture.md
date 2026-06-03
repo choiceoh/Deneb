@@ -18,7 +18,7 @@ globs: ["cmd/**", "internal/**", "pkg/**"]
 
 ## Key Architectural Flows
 
-1. **Gateway startup:** `gateway-go/cmd/gateway/main.go` -> `internal/runtime/server` (HTTP/WS) -> `internal/runtime/rpc` (dispatch) -> `internal/runtime/session` (state) -> `internal/platform/telegram` (plugin).
+1. **Gateway startup:** `gateway-go/cmd/gateway/main.go` -> `internal/runtime/server` (HTTP/WS) -> `internal/runtime/rpc` (dispatch) -> `internal/runtime/session` (state). The native client connects over the `miniapp.*` RPC surface; there is no channel plugin (the Telegram bot was retired in PR #1922).
 
 ## Cross-Cutting Concerns
 

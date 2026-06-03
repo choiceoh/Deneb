@@ -28,7 +28,7 @@ type JobDeliveryConfig struct {
 	Channel    string `json:"channel,omitempty"`    // channel ID or "last"
 	To         string `json:"to,omitempty"`         // recipient
 	AccountID  string `json:"accountId,omitempty"`  // explicit account override
-	ThreadID   string `json:"threadId,omitempty"`   // forum topic ID; empty for non-forum chats
+	ThreadID   string `json:"threadId,omitempty"`   // native client topic ID for per-topic knowledge routing; empty for the 업무 home
 	BestEffort bool   `json:"bestEffort,omitempty"` // don't fail job on delivery error
 }
 

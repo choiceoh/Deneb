@@ -7,8 +7,8 @@
 // Built once in server.New() via NewGatewayHub(), passed to method registration.
 // Handler packages never import this type; they receive Deps structs instead.
 //
-// Fields are private; read-only accessors are provided. Only Telegram and Chat
-// have setters (late-bound during registration phases).
+// Fields are private; read-only accessors are provided. Only Chat has a setter
+// (late-bound during registration phases).
 package rpcutil
 
 import (
@@ -252,7 +252,6 @@ func (h *GatewayHub) Validate() error {
 	// Optional (nil-safe or late-bound):
 	//   InternalHooks — explicitly nil-safe in handlers
 	//   CronPersistLog — optional run log
-	//   Telegram — late-bound via SetTelegram
 	//   Chat — late-bound via SetChat
 	//   Version — empty string is valid
 

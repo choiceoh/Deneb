@@ -1,8 +1,8 @@
 # Deneb
 
-**Chief-of-Staff–style single AI agent for NVIDIA DGX Spark (비서실장형 단일 에이전트).** One persona that performs **업무분석** (deep context — mail, projects, people, deals) and **업무비서** (proactive ops — calendar, meeting prep, capture) in lockstep — same head, two hands. Telegram bot interface → Go gateway server. Single-user, single-machine deployment. Korean-first. General assistant capabilities are preserved.
+**Chief-of-Staff–style single AI agent for NVIDIA DGX Spark (비서실장형 단일 에이전트).** One persona that performs **업무분석** (deep context — mail, projects, people, deals) and **업무비서** (proactive ops — calendar, meeting prep, capture) in lockstep — same head, two hands. Native client → Go gateway server. Single-user, single-machine deployment. Korean-first. General assistant capabilities are preserved.
 
-- **Go gateway** (`gateway-go/`): HTTP/WS server, RPC dispatch, session management, chat/LLM pipeline, 150+ tool integrations, Telegram bot plugin.
+- **Go gateway** (`gateway-go/`): HTTP/WS server, RPC dispatch, session management, chat/LLM pipeline, 150+ tool integrations, native-client `miniapp.*` RPC surface.
 
 ---
 
@@ -80,15 +80,14 @@
 
 - **Single operator, single user.** No multi-tenant, multi-user, or team deployment. Ignore user isolation, permission separation, multi-user auth.
 - **Hardware:** NVIDIA DGX Spark (local server). All services run on this single machine.
-- **Primary I/O surface:** Telegram on Android (Samsung Galaxy S25) — the daily driver; optimize this path first.
-- **PC as a first-class surface:** beyond Telegram on Android, the native client (`client-android/`, a Kai-fork KMP app) is the richer companion surface and targets Android, iOS, and desktop (Mac) from one codebase. It talks to the gateway over the `miniapp.*` RPC surface with an `X-Deneb-Client-Token`.
+- **Primary I/O surface:** the native client (`client-android/`, a Kai-fork KMP app) — the sole user surface since the Telegram bot was retired (PR #1922). It runs on Android (Samsung Galaxy S25, the daily driver), iOS, and desktop (Mac) from one codebase, and talks to the gateway over the `miniapp.*` RPC surface with an `X-Deneb-Client-Token`. Optimize this path first.
 
 ### Design Principles
 
 - **High completeness and cohesion.** Every feature must be fully finished and tightly integrated.
 - **Opinionated defaults over user configuration.** Apple-like philosophy: fewer moving parts, not more options.
 - **Narrow scope, deep quality.** Fewer things well > more things shallowly.
-- **Depth over breadth.** Optimize the narrow supported surface (Telegram + DGX Spark + single user). "Narrow" means one user + one backend — not one device class: the native client (`client-android/`) spans phone touch and desktop (mouse/keyboard) from one codebase.
+- **Depth over breadth.** Optimize the narrow supported surface (native client + DGX Spark + single user). "Narrow" means one user + one backend — not one device class: the native client (`client-android/`) spans phone touch and desktop (mouse/keyboard) from one codebase.
 
 ### AI Agent Guidelines
 
@@ -96,11 +95,11 @@
 - Break complex logic into small, well-named functions.
 - Prefer simple sequential processing over concurrency/race-condition handling.
 
-### Telegram Bot Optimization (Android-first)
+### Native Client Optimization (Android-first)
 
-- Optimize for Telegram Bot API constraints: 4096-char message limit, MarkdownV2 parse mode, inline keyboards.
-- Respect Telegram file size limits (50 MB for media uploads).
-- **Adapt layout to the screen, never split the persona:** rendering may differ by surface (Telegram bot, native client phone vs. desktop), but that is orthogonal to the "UI 분리 금지" persona rule — it forbids splitting 분석/비서 *personas* into tabs, not adapting layout to screen size.
+- Optimize for the native client's `miniapp.*` RPC surface and rich rendering (Markdown, native lists/cards) — no Telegram-style hard 4096-char cap or MarkdownV2 escaping.
+- Design system: controls = Material, presentation = Deneb typography (see `.claude/rules/native-design-system.md`).
+- **Adapt layout to the screen, never split the persona:** rendering may differ by surface (native client phone vs. desktop), but that is orthogonal to the "UI 분리 금지" persona rule — it forbids splitting 분석/비서 *personas* into tabs, not adapting layout to screen size.
 
 ### Korean Language First
 
@@ -134,22 +133,25 @@
 
 ## Live Testing Hard Gate
 
-> 단위 테스트 통과 ≠ 제품 품질. 코드 변경 후 반드시 라이브 검증.
+> 단위 테스트 통과 ≠ 제품 품질. 코드 변경 후 가능한 한 라이브 검증.
 
-**필수 흐름** (코드 수정 완료 후):
+**현재 enforced 게이트는 `make check`** (build + `-race` 단위 테스트). 커밋 전 반드시 통과.
+
 ```bash
-scripts/dev/live-test.sh restart    # 빌드 + dev 게이트웨이 + 목 텔레그램 재시작
-scripts/dev/live-test.sh smoke      # Health + Ready 확인
-scripts/dev/live-test.sh quality    # 전체 품질 테스트 (목 텔레그램 경유, 한국어/도구/포맷/에지)
+scripts/dev/live-test.sh restart    # 빌드 + dev 게이트웨이 재시작
+scripts/dev/live-test.sh smoke      # Health + Ready 확인 (HTTP /health — 동작함)
 scripts/dev/live-test.sh logs-errors  # 숨은 에러 확인
-scripts/dev/live-test.sh stop       # 정리 (게이트웨이 + 목 서버)
+scripts/dev/live-test.sh stop       # 정리
 ```
 
-라이브 테스트는 `scripts/mock_telegram_server.py`(stdlib HTTP 서버)가
-제공하는 로컬 Bot API 목 환경을 통해 실행된다. 게이트웨이는 `TELEGRAM_API_BASE`로
-이 목 서버를 바라보므로 `api.telegram.org`나 실제 봇 토큰/세션이 필요 없다.
+> **⚠️ 채팅 기반 라이브 테스트(`chat`/`quality`/`chat-check`)는 현재 동작하지 않는다.**
+> 이 경로는 목 텔레그램 서버(`scripts/mock_telegram_server.py`)에 메시지를 주입하고
+> 게이트웨이의 Telegram 플러그인이 `TELEGRAM_API_BASE`로 폴링하는 구조였다.
+> PR #1922로 Telegram 플러그인이 제거되어 게이트웨이는 더 이상 `TELEGRAM_API_BASE`를
+> 읽지 않으므로 주입된 메시지가 파이프라인에 도달하지 않는다. 네이티브 클라이언트
+> 주입 경로(`miniapp.*` RPC)로의 재작성이 필요하다 (후속 과제). 그 전까지는
+> `make check` + `smoke` + `logs-errors`로 검증한다.
 
-- **quality test 실패 시 "완료"라고 하지 마라** — 수정 → 재시작 → 재검증.
 - **로그에서 에러/경고 없는 것까지 확인**해야 진짜 완료.
 - 포트: dev=18790, iterate=18791, prod=18789 (프로덕션 영향 없음).
 - 상세 절차/명령어: `.claude/rules/live-testing.md` 참조.
@@ -164,4 +166,4 @@ All commits MUST use Conventional Commit format:
 **Incorrect:** `chat: add send_file tool` ❌ (module-only prefix dropped from changelogs)
 
 **Allowed types:** feat, fix, perf, refactor, docs, test, chore, ci, build
-**Allowed scopes:** any module name (chat, pilot, memory, vega, aurora, telegram, etc.)
+**Allowed scopes:** any module name (chat, pilot, memory, vega, aurora, miniapp, etc.)

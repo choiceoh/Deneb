@@ -18,11 +18,11 @@ func TestChannelHealthMonitor_HealthSnapshot(t *testing.T) {
 	if len(snap) != 1 {
 		t.Fatalf("got %d, want 1 result", len(snap))
 	}
-	if snap[0].ChannelID != "telegram" {
-		t.Errorf("got %q, want channelId telegram", snap[0].ChannelID)
+	if snap[0].ChannelID != "client" {
+		t.Errorf("got %q, want channelId client", snap[0].ChannelID)
 	}
 	if !snap[0].Healthy {
-		t.Error("telegram should be healthy")
+		t.Error("client channel should be healthy")
 	}
 }
 
@@ -53,7 +53,7 @@ func TestChannelHealthMonitor_StaleChannelRestart(t *testing.T) {
 	m.check()
 
 	if !restarted {
-		t.Error("expected telegram to be restarted")
+		t.Error("expected channel to be restarted")
 	}
 }
 

@@ -22,7 +22,7 @@ Go HTTP/WS gateway server — the primary Deneb runtime.
 | `internal/runtime/session/` | Session lifecycle state machine (`IDLE → RUNNING → DONE/FAILED/KILLED/TIMEOUT`) |
 | `internal/pipeline/chat/` | System prompt, tool registration, context files, slash commands |
 | `internal/ai/llm/` | LLM client, sampling parameters, multimodal types |
-| `internal/platform/telegram/` | Telegram channel plugin (primary deployment target) |
+| `internal/platform/` | Channel-side integrations (gmail, gmailpoll, calendar, cron, media) |
 | `pkg/protocol/` | Hand-written JSON wire types |
 
 ## Common Tasks
