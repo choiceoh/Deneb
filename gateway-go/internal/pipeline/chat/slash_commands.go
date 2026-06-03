@@ -47,6 +47,13 @@ func ParseSlashCommand(text string) *SlashResult {
 
 	// Fall back to hardcoded builtins.
 	switch cmd {
+	case "help", "도움말", "?":
+		// Discovery: list the builtin slash commands. Response is filled by the
+		// dispatcher from slashHelpText() so the listing has a single source.
+		return &SlashResult{
+			Handled: true,
+			Command: "help",
+		}
 	case "reset":
 		return &SlashResult{
 			Handled:  true,
