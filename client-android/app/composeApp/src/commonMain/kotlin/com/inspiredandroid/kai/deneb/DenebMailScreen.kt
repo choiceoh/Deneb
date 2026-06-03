@@ -1,5 +1,9 @@
 package com.inspiredandroid.kai.deneb
 
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -290,6 +294,14 @@ private fun senderName(from: String): String {
     return if (lt > 0) from.substring(0, lt).trim().trim('"') else from.trim()
 }
 
-/** "2026-05-30T12:41:31Z" -> "05-30 12:41". */
-private fun shortDate(date: String): String =
-    if (date.length >= 16) date.substring(5, 16).replace('T', ' ') else date
+/**
+ * UTC ISO-8601 from the gateway (e.g. "2026-05-30T12:41:31Z") -> local "MM-dd HH:mm".
+ * The gateway sends UTC (gmail.go normalizeDate uses t.UTC()), so we MUST convert to the
+ * device zone before display — otherwise a 10:49 KST mail showed as 01:49. Raw-substring
+ * fallback only if parsing fails.
+ */
+internal fun shortDate(date: String): String = runCatching {
+    val t = Instant.parse(date).toLocalDateTime(TimeZone.currentSystemDefault())
+    fun p(n: Int) = n.toString().padStart(2, '0')
+    "${p(t.monthNumber)}-${p(t.dayOfMonth)} ${p(t.hour)}:${p(t.minute)}"
+}.getOrElse { if (date.length >= 16) date.substring(5, 16).replace('T', ' ') else date }
