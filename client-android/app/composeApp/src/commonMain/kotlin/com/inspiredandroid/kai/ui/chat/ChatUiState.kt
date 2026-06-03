@@ -17,6 +17,7 @@ import io.github.vinceglb.filekit.PlatformFile
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -68,6 +69,19 @@ data class ConversationSummary(
 )
 
 @Immutable
+@Serializable
+data class WorkFeedItem(
+    val id: String,
+    val source: String = "",
+    val title: String = "",
+    val summary: String = "",
+    val body: String = "",
+    val sessionKey: String = "",
+    val status: String = "",
+    val createdAtMs: Long = 0,
+)
+
+@Immutable
 data class ChatUiState(
     val actions: ChatActions,
     val history: ImmutableList<History> = persistentListOf(),
@@ -84,6 +98,7 @@ data class ChatUiState(
     val currentConversationId: String? = null,
     val hasUnreadHeartbeat: Boolean = false,
     val hasUnreadWorkReport: Boolean = false,
+    val workFeed: ImmutableList<WorkFeedItem> = persistentListOf(),
     val smsDrafts: ImmutableList<SmsDraft> = persistentListOf(),
     val snackbarMessage: StringResource? = null,
     val pendingConversationDeletion: String? = null,

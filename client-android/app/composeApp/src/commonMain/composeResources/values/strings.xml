@@ -41,6 +41,8 @@
     <string name="heartbeat_banner_dismiss">Dismiss</string>
     <string name="work_report_banner_message">New work report arrived</string>
     <string name="work_report_banner_dismiss">Dismiss</string>
+    <string name="work_feed_title">Work feed</string>
+    <string name="work_feed_ack_content_description">Mark work item done</string>
     <string name="settings_tools_description">Enable or disable AI tools that can perform actions on your behalf.</string>
     <string name="settings_tools_none_available">No tools available on this platform.</string>
     <string name="settings_tab_general">General</string>

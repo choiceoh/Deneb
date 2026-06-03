@@ -13,6 +13,7 @@ import com.inspiredandroid.kai.data.UiSubmission
 import com.inspiredandroid.kai.httpClient
 import com.inspiredandroid.kai.contacts.ContactData
 import com.inspiredandroid.kai.ui.chat.History
+import com.inspiredandroid.kai.ui.chat.WorkFeedItem
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.ic_service_anthropic
 import kai.composeapp.generated.resources.ic_service_deepseek
@@ -171,6 +172,10 @@ class DenebGatewayClient(
     private val _denebTopics = MutableStateFlow<List<ClientTopic>>(emptyList())
     val denebTopics: StateFlow<List<ClientTopic>> = _denebTopics
 
+    // Native work feed: proactive reports and native shares as actionable rows.
+    private val _denebWorkFeed = MutableStateFlow<List<WorkFeedItem>>(emptyList())
+    val denebWorkFeed: StateFlow<List<WorkFeedItem>> = _denebWorkFeed
+
     private var sessionKey: String = "client:main"
     private val _currentConversationId = MutableStateFlow<String?>(sessionKey)
     override val currentConversationId: StateFlow<String?> = _currentConversationId
@@ -313,6 +318,7 @@ class DenebGatewayClient(
      */
     fun openWorkTopic() {
         switchSession("client:main")
+        refreshWorkFeedAsync()
         scope.launch { loadTranscriptGuarded("client:main") }
     }
 
@@ -342,11 +348,49 @@ class DenebGatewayClient(
      * base unread badge so the in-app banner points them at the work topic.
      */
     override fun onProactiveReportForeground() {
+        refreshWorkFeedAsync()
         if (sessionKey == "client:main") {
             scope.launch { loadTranscriptGuarded("client:main") }
         } else {
             base.onProactiveReportForeground()
         }
+    }
+
+    fun refreshWorkFeedAsync() {
+        scope.launch { refreshWorkFeed() }
+    }
+
+    suspend fun refreshWorkFeed(): Boolean {
+        val payload = callRpc<WorkFeedPayload>(
+            "miniapp.workfeed.list",
+            buildJsonObject {
+                put("limit", 20)
+            },
+        ) ?: return false
+        _denebWorkFeed.value = payload.items.filter { it.id.isNotBlank() }
+        return true
+    }
+
+    fun openWorkFeedItem(id: String) {
+        val item = _denebWorkFeed.value.firstOrNull { it.id == id }
+        val target = item?.sessionKey?.takeIf { it.isNotBlank() } ?: "client:main"
+        switchSession(target)
+        scope.launch {
+            ackWorkFeedItem(id)
+            loadTranscriptGuarded(target)
+        }
+    }
+
+    suspend fun ackWorkFeedItem(id: String): Boolean {
+        if (id.isBlank()) return false
+        val ok = callRpc<JsonObject>(
+            "miniapp.workfeed.ack",
+            buildJsonObject { put("id", id) },
+        ) != null
+        if (ok) {
+            _denebWorkFeed.update { items -> items.filterNot { it.id == id } }
+        }
+        return ok
     }
 
     // --- Conversation drawer → Deneb sessions browser -----------------------
@@ -1087,6 +1131,7 @@ class DenebGatewayClient(
             payload?.text?.ifBlank { null } ?: "이미지에서 텍스트를 찾지 못했거나 분석에 실패했습니다."
         }.getOrElse { "⚠️ ${it.message ?: "이미지 캡처 실패"}" }
         _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
+        refreshWorkFeedAsync()
         return true
     }
 
@@ -1115,6 +1160,7 @@ class DenebGatewayClient(
             payload?.text?.ifBlank { null } ?: "녹음에서 음성을 인식하지 못했거나 전사에 실패했습니다."
         }.getOrElse { "⚠️ ${it.message ?: "녹음 캡처 실패"}" }
         _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
+        refreshWorkFeedAsync()
     }
 
     @Serializable
@@ -1150,6 +1196,7 @@ class DenebGatewayClient(
             payload?.text?.ifBlank { null } ?: "주소록 동기화에 실패했습니다."
         }.getOrElse { "⚠️ ${it.message ?: "주소록 동기화 실패"}" }
         _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
+        refreshWorkFeedAsync()
     }
 
     @Serializable
@@ -1487,6 +1534,9 @@ class DenebGatewayClient(
 
     @Serializable
     private data class TranscriptMsg(val role: String = "", val content: String = "", val timestampMs: Long = 0)
+
+    @Serializable
+    private data class WorkFeedPayload(val items: List<WorkFeedItem> = emptyList())
 
     @Serializable
     private data class MemoryListPayload(val pages: List<MemoryPageRow> = emptyList())

@@ -19,6 +19,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
@@ -84,6 +85,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		s.contactsStore = cs
 		hub.SetContactsStore(cs)
 	}
+	s.workFeedStore = workfeed.NewStore(filepath.Join(denebDir, "workfeed.jsonl"))
 
 	// Monitoring notify service (error mirrors + status snapshots → native push).
 	s.notify = newNotifyService(hub.Sessions(), hub.Logger(), s.pushHub, s.BoundAddr)
@@ -212,10 +214,14 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 					"captureImage":    chatReady,
 					"captureAudio":    chatReady,
 					"captureContacts": hub.ContactsStore() != nil,
+					"workFeed":        s.workFeedStore != nil,
 					"gmailAttachment": true,
 					"updateManifest":  true,
 				}
 			},
+		}),
+		handlerminiapp.WorkFeedMethods(handlerminiapp.WorkFeedDeps{
+			Store: s.workFeedStore,
 		}),
 		handlerminiapp.TopicsMethods(handlerminiapp.TopicsDeps{
 			TopicMap: configuredTopicMap,
@@ -443,6 +449,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				}
 				return ws.EnrichContacts(contactsJSON)
 			},
+			WorkFeed: s.workFeedStore,
 		}),
 		handlersession.ExecMethods(handlersession.ExecDeps{
 			Chat:       hub.Chat(),

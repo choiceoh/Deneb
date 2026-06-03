@@ -63,6 +63,8 @@ class ChatViewModel(
         clearUnreadHeartbeat = ::clearUnreadHeartbeat,
         clearUnreadWorkReport = ::clearUnreadWorkReport,
         openWorkReport = ::openWorkReport,
+        openWorkFeedItem = ::openWorkFeedItem,
+        ackWorkFeedItem = ::ackWorkFeedItem,
         clearSnackbar = ::clearSnackbar,
         undoDeleteConversation = ::undoDeleteConversation,
         submitUiCallback = ::submitUiCallback,
@@ -87,8 +89,14 @@ class ChatViewModel(
         // whenever the model registry changes (after a switch or on first load).
         if (dataRepository is DenebGatewayClient) {
             dataRepository.refreshModelsAsync()
+            dataRepository.refreshWorkFeedAsync()
             viewModelScope.launch {
                 dataRepository.denebModels.collect { updateAvailableServices() }
+            }
+            viewModelScope.launch {
+                dataRepository.denebWorkFeed.collect { feed ->
+                    _state.update { it.copy(workFeed = feed.toImmutableList()) }
+                }
             }
         }
 
@@ -446,6 +454,17 @@ class ChatViewModel(
     private fun openWorkReport() {
         (dataRepository as? DenebGatewayClient)?.openWorkTopic()
         dataRepository.clearUnreadWorkReport()
+    }
+
+    private fun openWorkFeedItem(id: String) {
+        (dataRepository as? DenebGatewayClient)?.openWorkFeedItem(id)
+        dataRepository.clearUnreadWorkReport()
+    }
+
+    private fun ackWorkFeedItem(id: String) {
+        viewModelScope.launch(backgroundDispatcher) {
+            (dataRepository as? DenebGatewayClient)?.ackWorkFeedItem(id)
+        }
     }
 
     private fun sendSmsDraft(draftId: String) {

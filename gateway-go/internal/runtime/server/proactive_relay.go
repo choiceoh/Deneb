@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 )
@@ -33,6 +34,12 @@ type proactiveRelayDeps struct {
 	// for its next heartbeat poll. nil in older wiring/tests; the push is then
 	// skipped (the report still lands in the transcript).
 	pushHub *clientPushHub
+
+	// workFeed records each proactive report as a first-class native work item.
+	// Best-effort only: transcript delivery remains the source of truth.
+	workFeed interface {
+		Append(workfeed.Item) (workfeed.Item, error)
+	}
 }
 
 // relay delivers content to the native client (업무 transcript + live push).
@@ -70,6 +77,18 @@ func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
 				"sessionKey", nativeWorkSessionKey, "error", err)
 		}
 		return false, err
+	}
+	if d.workFeed != nil {
+		if _, err := d.workFeed.Append(workfeed.Item{
+			Source:     workfeed.SourceProactive,
+			Title:      "업무 리포트",
+			Summary:    workfeed.Preview(content, 180),
+			Body:       content,
+			SessionKey: nativeWorkSessionKey,
+		}); err != nil && d.logger != nil {
+			d.logger.Error("proactive native relay: work feed append failed",
+				"sessionKey", nativeWorkSessionKey, "error", err)
+		}
 	}
 	if d.pushHub != nil {
 		d.pushHub.publish(clientPushEvent{
