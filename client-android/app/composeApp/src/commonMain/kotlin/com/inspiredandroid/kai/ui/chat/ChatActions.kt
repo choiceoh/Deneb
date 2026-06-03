@@ -32,4 +32,7 @@ data class ChatActions(
     val goBackInteractiveMode: () -> Unit,
     val sendSmsDraft: (String) -> Unit,
     val discardSmsDraft: (String) -> Unit,
+    // Reload the session list from the gateway — fired when the drawer opens so it
+    // never shows a stale list (the list is otherwise only loaded once at startup).
+    val refreshConversations: () -> Unit,
 )

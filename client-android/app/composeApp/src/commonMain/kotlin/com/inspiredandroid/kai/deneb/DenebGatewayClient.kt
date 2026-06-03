@@ -1507,17 +1507,20 @@ class DenebGatewayClient(
                 )
             }
             .orEmpty()
-        if (recent.isNotEmpty()) return recent
-        // Empty-drawer fallback: the single client:main 업무 home.
-        return listOf(
-            Conversation(
+        // Always pin the client:main 업무 home to the top. If it's already in the
+        // recent list (it usually is), lift it there; otherwise synthesize it. The
+        // home used to appear only via the empty-list fallback, so once ANY other
+        // session existed the main 업무 conversation dropped out of the drawer —
+        // which is exactly why it looked "missing".
+        val home = recent.find { it.id == "client:main" }
+            ?: Conversation(
                 id = "client:main",
                 messages = emptyList(),
                 createdAt = 0,
                 updatedAt = kotlin.time.Clock.System.now().toEpochMilliseconds(),
                 title = "업무",
-            ),
-        )
+            )
+        return listOf(home) + recent.filterNot { it.id == "client:main" }
     }
 
     private fun conversationTitle(s: SessionRowOut): String {
