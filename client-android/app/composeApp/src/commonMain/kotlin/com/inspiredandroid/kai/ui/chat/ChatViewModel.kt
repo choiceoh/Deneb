@@ -89,7 +89,7 @@ class ChatViewModel(
         // whenever the model registry changes (after a switch or on first load).
         if (dataRepository is DenebGatewayClient) {
             dataRepository.refreshModelsAsync()
-            dataRepository.refreshWorkFeedAsync()
+            dataRepository.syncNativeStateAsync()
             viewModelScope.launch {
                 dataRepository.denebModels.collect { updateAvailableServices() }
             }

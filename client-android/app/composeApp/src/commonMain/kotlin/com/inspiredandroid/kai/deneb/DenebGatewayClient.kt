@@ -65,6 +65,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
@@ -127,6 +128,8 @@ class DenebGatewayClient(
     // its result when the epoch is unchanged, making the two order-independent.
     private val historyGate = Mutex()
     private var historyEpoch = 0L
+    private val nativeSyncGate = Mutex()
+    private var nativeSyncCursor = appSettings.settings.getLong(KEY_SYNC_CURSOR, 0L)
 
     private val _savedConversations = MutableStateFlow<List<Conversation>>(emptyList())
     override val savedConversations: StateFlow<List<Conversation>> = _savedConversations
@@ -318,7 +321,7 @@ class DenebGatewayClient(
      */
     fun openWorkTopic() {
         switchSession("client:main")
-        refreshWorkFeedAsync()
+        syncNativeStateAsync()
         scope.launch { loadTranscriptGuarded("client:main") }
     }
 
@@ -348,7 +351,7 @@ class DenebGatewayClient(
      * base unread badge so the in-app banner points them at the work topic.
      */
     override fun onProactiveReportForeground() {
-        refreshWorkFeedAsync()
+        syncNativeStateAsync()
         if (sessionKey == "client:main") {
             scope.launch { loadTranscriptGuarded("client:main") }
         } else {
@@ -358,6 +361,51 @@ class DenebGatewayClient(
 
     fun refreshWorkFeedAsync() {
         scope.launch { refreshWorkFeed() }
+    }
+
+    fun syncNativeStateAsync() {
+        scope.launch { syncNativeState() }
+    }
+
+    suspend fun syncNativeState(): Boolean {
+        val reloadSessions = linkedSetOf<String>()
+        var pulled = false
+        var eventCount = 0
+        nativeSyncGate.withLock {
+            var cursor = nativeSyncCursor
+            var keepGoing = true
+            var pages = 0
+            while (keepGoing && pages < 4) {
+                val payload = callRpc<NativeSyncPayload>(
+                    "miniapp.sync.pull",
+                    buildJsonObject {
+                        put("cursor", cursor)
+                        put("limit", 100)
+                    },
+                ) ?: break
+                pulled = true
+                eventCount += payload.events.size
+                payload.events.forEach { applyNativeSyncEvent(it, reloadSessions) }
+                val nextCursor = payload.cursor.coerceAtLeast(cursor)
+                if (nextCursor > nativeSyncCursor) {
+                    nativeSyncCursor = nextCursor
+                    appSettings.settings.putLong(KEY_SYNC_CURSOR, nextCursor)
+                }
+                keepGoing = payload.hasMore && nextCursor > cursor
+                cursor = nextCursor
+                pages++
+            }
+        }
+        reloadSessions
+            .filter { it == sessionKey }
+            .forEach { loadTranscriptGuarded(it) }
+        if (!pulled) {
+            return refreshWorkFeed()
+        }
+        if (eventCount == 0 && _denebWorkFeed.value.isEmpty()) {
+            refreshWorkFeed()
+        }
+        return true
     }
 
     suspend fun refreshWorkFeed(): Boolean {
@@ -412,6 +460,51 @@ class DenebGatewayClient(
             loadTranscriptGuarded(target)
         }
         return payload.prompt.ifBlank { null }
+    }
+
+    private fun applyNativeSyncEvent(event: NativeSyncEvent, reloadSessions: MutableSet<String>) {
+        when (event.type) {
+            "workfeed.created",
+            "workfeed.updated" -> {
+                val item = decodeWorkFeedItem(event.payload) ?: return
+                upsertSyncedWorkFeedItem(item)
+            }
+            "workfeed.action.run" -> {
+                val action = decodeWorkFeedActionRun(event.payload) ?: return
+                if (action.removeFromFeed) {
+                    _denebWorkFeed.update { items -> items.filterNot { it.id == action.item.id } }
+                } else {
+                    upsertSyncedWorkFeedItem(action.item)
+                }
+            }
+            "transcript.appended" -> {
+                if (event.sessionKey.isNotBlank()) {
+                    reloadSessions += event.sessionKey
+                }
+            }
+        }
+    }
+
+    private fun decodeWorkFeedItem(payload: JsonObject?): WorkFeedItem? {
+        val item = payload?.get("item") ?: return null
+        return runCatching { jsonCodec.decodeFromJsonElement(WorkFeedItem.serializer(), item) }.getOrNull()
+    }
+
+    private fun decodeWorkFeedActionRun(payload: JsonObject?): NativeSyncActionPayload? =
+        runCatching {
+            payload?.let { jsonCodec.decodeFromJsonElement(NativeSyncActionPayload.serializer(), it) }
+        }.getOrNull()
+
+    private fun upsertSyncedWorkFeedItem(item: WorkFeedItem) {
+        if (item.id.isBlank()) return
+        if (item.status == "acked" || item.status == "snoozed") {
+            _denebWorkFeed.update { items -> items.filterNot { it.id == item.id } }
+            return
+        }
+        _denebWorkFeed.update { items ->
+            val next = items.filterNot { it.id == item.id } + item
+            next.sortedByDescending { it.createdAtMs }
+        }
     }
 
     // --- Conversation drawer → Deneb sessions browser -----------------------
@@ -1188,7 +1281,7 @@ class DenebGatewayClient(
             payload?.text?.ifBlank { null } ?: "이미지에서 텍스트를 찾지 못했거나 분석에 실패했습니다."
         }.getOrElse { "⚠️ ${it.message ?: "이미지 캡처 실패"}" }
         _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
-        refreshWorkFeedAsync()
+        syncNativeStateAsync()
         return true
     }
 
@@ -1217,7 +1310,7 @@ class DenebGatewayClient(
             payload?.text?.ifBlank { null } ?: "녹음에서 음성을 인식하지 못했거나 전사에 실패했습니다."
         }.getOrElse { "⚠️ ${it.message ?: "녹음 캡처 실패"}" }
         _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
-        refreshWorkFeedAsync()
+        syncNativeStateAsync()
     }
 
     @Serializable
@@ -1253,7 +1346,7 @@ class DenebGatewayClient(
             payload?.text?.ifBlank { null } ?: "주소록 동기화에 실패했습니다."
         }.getOrElse { "⚠️ ${it.message ?: "주소록 동기화 실패"}" }
         _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
-        refreshWorkFeedAsync()
+        syncNativeStateAsync()
     }
 
     @Serializable
@@ -1400,6 +1493,7 @@ class DenebGatewayClient(
                         throw IllegalStateException("events HTTP ${response.status.value}")
                     }
                     backoffMs = 2_000L // connected — reset backoff
+                    syncNativeStateAsync()
                     val channel = response.bodyAsChannel()
                     var event = ""
                     val data = StringBuilder()
@@ -1417,7 +1511,10 @@ class DenebGatewayClient(
                                     runCatching {
                                         jsonCodec.decodeFromString(PushEvent.serializer(), data.toString())
                                     }.getOrNull()?.let { p ->
-                                        if (p.body.isNotBlank()) onPush(p.title.ifBlank { "Deneb" }, p.body)
+                                        if (p.body.isNotBlank()) {
+                                            syncNativeStateAsync()
+                                            onPush(p.title.ifBlank { "Deneb" }, p.body)
+                                        }
                                     }
                                 }
                                 event = ""
@@ -1611,6 +1708,31 @@ class DenebGatewayClient(
         val sessionKey: String = "",
         val prompt: String = "",
         val message: String = "",
+        val removeFromFeed: Boolean = false,
+    )
+
+    @Serializable
+    private data class NativeSyncPayload(
+        val events: List<NativeSyncEvent> = emptyList(),
+        val cursor: Long = 0,
+        val latestSeq: Long = 0,
+        val hasMore: Boolean = false,
+    )
+
+    @Serializable
+    private data class NativeSyncEvent(
+        val seq: Long = 0,
+        val type: String = "",
+        val entityId: String = "",
+        val sessionKey: String = "",
+        val workFeedItemId: String = "",
+        val timestampMs: Long = 0,
+        val payload: JsonObject? = null,
+    )
+
+    @Serializable
+    private data class NativeSyncActionPayload(
+        val item: WorkFeedItem = WorkFeedItem(),
         val removeFromFeed: Boolean = false,
     )
 
@@ -1864,6 +1986,7 @@ class DenebGatewayClient(
         const val DENEB_MODEL_PREFIX = "deneb-model:"
         const val KEY_URL = "deneb.gatewayUrl"
         const val KEY_TOKEN = "deneb.clientToken"
+        const val KEY_SYNC_CURSOR = "deneb.nativeSyncCursor"
 
         // Android emulator → host loopback. On a real device set the gateway's
         // LAN/Tailscale URL under KEY_URL.
