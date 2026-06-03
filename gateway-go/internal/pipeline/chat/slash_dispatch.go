@@ -198,7 +198,9 @@ func (h *Handler) deliverSlashResponse(delivery *DeliveryContext, text string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := fn(ctx, delivery, text); err != nil {
-		h.logger.Warn("slash command reply failed", "error", err)
+		// The user issued a slash command and got no response back — surface it
+		// as Error, not a Warn that hides the dropped reply.
+		h.logger.Error("slash command reply failed", "error", err)
 	}
 }
 
