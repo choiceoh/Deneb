@@ -51,6 +51,48 @@ type PipelineDeps struct {
 	// can cite related ones by real path. Optional; nil = no candidates
 	// offered (analysis still runs, RelatedProjects stays empty).
 	ProjectsFn func() []ProjectCandidate
+
+	// Stage2MaxTokens overrides the final-synthesis token budget. 0 → the
+	// autonomous default (stage2MaxTokens). The interactive Mini App path sets
+	// this higher so a deliberate "analyze this" tap can synthesize at depth
+	// (and leave headroom for extended thinking). Autonomous polling keeps the
+	// tighter default to bound per-cycle cost and latency.
+	Stage2MaxTokens int
+
+	// DeepThinking opts the final synthesis into extended thinking when the
+	// synthesis model's provider supports it cleanly (Anthropic Messages mode).
+	// Off by default so autonomous polling and OpenAI-mode endpoints (the local
+	// vLLM step3.7, which leaked chain-of-thought into the body — #1816) keep
+	// the safe reasoning-disabled behavior. The interactive path sets it true.
+	DeepThinking bool
+}
+
+const (
+	// analysisThinkingMinTokens is the floor below which extended thinking stays
+	// disabled even on a capable provider: a small max-tokens budget would be
+	// eaten by reasoning, leaving no room for the answer (the failure mode #1816
+	// hit on vLLM). Thinking only turns on where we've allocated real headroom.
+	analysisThinkingMinTokens = 3000
+	// analysisThinkingMaxBudget caps reasoning tokens so the answer always has
+	// room regardless of how large the caller's max-tokens budget is.
+	analysisThinkingMaxBudget = 4096
+)
+
+// analysisThinking returns the thinking config for a final-synthesis call.
+// Extended thinking deepens analysis, but it is only safe where the provider
+// emits reasoning as distinct SSE thinking blocks — Anthropic Messages mode,
+// where collectStreamText skips thinking_delta so chain-of-thought never reaches
+// the answer body. On OpenAI-mode endpoints (the local vLLM included) it leaked
+// into the body and starved the answer (#1816), so it stays disabled there.
+func analysisThinking(client *llm.Client, maxTokens int) *llm.ThinkingConfig {
+	if client == nil || client.APIMode() != llm.APIModeAnthropic || maxTokens < analysisThinkingMinTokens {
+		return &llm.ThinkingConfig{Type: "disabled"}
+	}
+	budget := maxTokens / 2
+	if budget > analysisThinkingMaxBudget {
+		budget = analysisThinkingMaxBudget
+	}
+	return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: budget}
 }
 
 // canRunPipeline returns true if we have enough deps for the multi-stage pipeline.
@@ -547,19 +589,31 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	userPrompt := fmt.Sprintf(finalAnalysisPrompt, emailText, threadSection, memorySection)
 	userPrompt += projectSelectionSuffix(candidates)
 
-	// Reasoning OFF. GLM-5.1 (Z.ai anthropic endpoint) defaults reasoning ON and
-	// streams its chain-of-thought into the answer body as ordinary text —
-	// "사용자가 준 이메일 분석 요청이네. 먼저 ... Wait ..." — which collectStreamText
-	// can't tell apart from the analysis, so the report shipped the model's raw
-	// thinking. Sending {"type":"disabled"} (see anthropic.go) turns it off at the
-	// source; stripReasoningLeak below still scrubs any stray marker.
+	// Token budget: the interactive Mini App path raises this so a deliberate
+	// analysis can synthesize at depth; autonomous polling keeps the tighter
+	// default to bound cost/latency.
+	maxTok := stage2MaxTokens
+	if deps.Stage2MaxTokens > 0 {
+		maxTok = deps.Stage2MaxTokens
+	}
+
+	// Reasoning is disabled by default: GLM-5.1 and the local vLLM (OpenAI-mode)
+	// stream chain-of-thought into the answer body as ordinary text, which
+	// collectStreamText can't tell apart from the analysis. DeepThinking flips it
+	// on ONLY when the synthesis provider emits reasoning as distinct Anthropic
+	// thinking blocks (analysisThinking gates on APIMode); stripReasoningLeak
+	// below still scrubs any stray marker as belt-and-suspenders.
+	thinking := &llm.ThinkingConfig{Type: "disabled"}
+	if deps.DeepThinking {
+		thinking = analysisThinking(deps.LLMClient, maxTok)
+	}
 	req := llm.ChatRequest{
 		Model:     deps.MainModel,
 		Messages:  []llm.Message{llm.NewTextMessage("user", userPrompt)},
 		System:    llm.SystemString(finalAnalysisSystem),
-		MaxTokens: stage2MaxTokens,
+		MaxTokens: maxTok,
 		Stream:    true,
-		Thinking:  &llm.ThinkingConfig{Type: "disabled"},
+		Thinking:  thinking,
 	}
 
 	events, err := deps.LLMClient.StreamChat(ctx, req)

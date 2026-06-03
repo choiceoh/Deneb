@@ -496,11 +496,18 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				// (a cloud chat model that reliably emits text) instead.
 				llmClient := s.modelRegistry.Client(modelrole.RoleFallback)
 				model := s.modelRegistry.Model(modelrole.RoleFallback)
+				// Stage-1 extractors (thread context + wiki fact extraction) run
+				// JSON-mode on the lightweight/local model — same role the
+				// autonomous poller uses (server_chat_config.go). This upgrades the
+				// Mini App analyze from the single-call fallback to the full 2-stage
+				// pipeline; stage-2 synthesis stays on the fallback role above.
+				localClient := s.modelRegistry.Client(modelrole.RoleLightweight)
+				localModel := s.modelRegistry.Model(modelrole.RoleLightweight)
 				gmailClient, err := gmail.DefaultClient()
 				if err != nil {
 					return nil, err
 				}
-				return handlerminiapp.PipelineFromGmailpoll(gmailClient, llmClient, model, s.projectCandidatesFn())
+				return handlerminiapp.PipelineFromGmailpoll(gmailClient, llmClient, localClient, model, localModel, s.projectCandidatesFn())
 			},
 			Cache:      handlerminiapp.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
 			SaveToWiki: makeMailAnalysisWikiSink(hub),

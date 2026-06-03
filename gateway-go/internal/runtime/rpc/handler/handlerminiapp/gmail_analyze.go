@@ -303,11 +303,25 @@ func gmailAnalysisCached(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 // any provider credentials). Surfaced as UNAVAILABLE to the client.
 var ErrAnalyzeNoLLM = errors.New("analyze pipeline: LLM client not configured")
 
+// interactiveAnalysisStage2Tokens is the final-synthesis token budget for the
+// user-initiated Mini App analyze path — larger than the autonomous poller's
+// default so a deliberate "analyze this" tap can synthesize at depth and leave
+// room for extended thinking when the synthesis model supports it.
+const interactiveAnalysisStage2Tokens = 4096
+
 // PipelineFromGmailpoll adapts gmailpoll.AnalyzeEmailPipeline to the
 // AnalyzePipeline interface. Returns ErrAnalyzeNoLLM when the inputs are
 // missing so callers can map cleanly to UNAVAILABLE without touching the
 // gmailpoll package internals.
-func PipelineFromGmailpoll(gmailClient *gmail.Client, llmClient *llm.Client, mainModel string, projectsFn func() []gmailpoll.ProjectCandidate) (AnalyzePipeline, error) {
+//
+// localClient/localModel drive the stage-1 extractors (thread context + wiki
+// fact extraction, JSON-mode on the lightweight/local model). When both are
+// supplied the Mini App analyze runs the full 2-stage pipeline — thread
+// history, sender wiki-graph facts, fact extraction — instead of the shallow
+// single-call fallback; stage-2 synthesis still runs on llmClient (the cloud
+// fallback role) so it never hits the local vLLM's free-text failure (#1816).
+// Pass nil/"" for the local pair to keep the single-call behavior.
+func PipelineFromGmailpoll(gmailClient *gmail.Client, llmClient, localClient *llm.Client, mainModel, localModel string, projectsFn func() []gmailpoll.ProjectCandidate) (AnalyzePipeline, error) {
 	if llmClient == nil || strings.TrimSpace(mainModel) == "" {
 		return nil, ErrAnalyzeNoLLM
 	}
@@ -315,8 +329,14 @@ func PipelineFromGmailpoll(gmailClient *gmail.Client, llmClient *llm.Client, mai
 		deps: gmailpoll.PipelineDeps{
 			GmailClient: gmailClient,
 			LLMClient:   llmClient,
+			LocalClient: localClient,
+			LocalModel:  localModel,
 			MainModel:   mainModel,
 			ProjectsFn:  projectsFn,
+			// Interactive path: deeper budget + extended thinking (gated to
+			// Anthropic-mode providers inside the pipeline).
+			Stage2MaxTokens: interactiveAnalysisStage2Tokens,
+			DeepThinking:    true,
 		},
 	}, nil
 }
