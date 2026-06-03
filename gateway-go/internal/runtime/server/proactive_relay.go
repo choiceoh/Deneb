@@ -67,6 +67,18 @@ func (d proactiveRelayDeps) relay(_ context.Context, _, content string) (bool, e
 // (false, nil) when no transcript store is wired (older wiring or tests) so
 // the caller treats it as not-delivered.
 func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
+	// Floor: drop "nothing to report" pings before they reach the transcript,
+	// work feed, or push. A proactive agent turn that ignores its NO_REPLY
+	// contract and writes a chatty "읽지 않은 메일이 없습니다" (an email-check cron
+	// firing every poll cycle), a dreaming "변경 없음", or a "(분석 실패)" stub would
+	// otherwise pile up as 업무 리포트 work-feed cards + pushes — the
+	// over-notification the project forbids. Reported as not-delivered
+	// (false, nil): benign for callers (cron logs "not-delivered" without
+	// erroring), and the raw agent output is still kept in the cron run log for
+	// diagnosis.
+	if isContentlessProactive(content) {
+		return false, nil
+	}
 	if d.transcriptStore == nil {
 		// No transcript store wired means every proactive report (morning
 		// letter, mail analysis) is silently dropped in native-only mode — the
@@ -121,6 +133,45 @@ func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
 		})
 	}
 	return true, nil
+}
+
+// contentlessProactiveFragments mark a proactive body as carrying nothing
+// actionable: an email-check turn that found no mail, a dreaming cycle with no
+// changes, or an analysis stub. Matched only against short single-line bodies
+// (see isContentlessProactive) so a real multi-section report that merely
+// mentions one of these is never affected.
+var contentlessProactiveFragments = []string{
+	"분석 실패",    // gmailpoll batch-analyze stub "(분석 실패)"
+	"변경 없음",    // autonomous dreaming: nothing consolidated this cycle
+	"검색 결과 없음", // "검색 결과 없음 — 읽지 않은 ... 없습니다"
+	"알림이 없",    // "읽지 않은 카카오메일 알림이 없습니다"
+	"메일이 없",    // "분석할 새 메일이 없습니다"
+	"패스할게요",    // "...없으니 패스할게요"
+}
+
+// isContentlessProactive reports whether a proactive body is a "nothing to
+// report" ping that should never reach the user. It is a backstop for proactive
+// agent turns (notably an email-check cron) that ignore the NO_REPLY contract
+// and emit a chatty "없습니다" line anyway; without it each such line lands as a
+// 업무 리포트 work-feed card + push every poll cycle.
+//
+// Conservative by design: only short (≤120 rune), single-line bodies are
+// eligible, so a genuine multi-section report that happens to contain "없음"
+// (e.g. "긴급 메일 없음, 단 X 확인 필요" inside a brief) is left untouched.
+func isContentlessProactive(content string) bool {
+	s := strings.TrimSpace(content)
+	if s == "" {
+		return true
+	}
+	if strings.Contains(s, "\n") || len([]rune(s)) > 120 {
+		return false
+	}
+	for _, frag := range contentlessProactiveFragments {
+		if strings.Contains(s, frag) {
+			return true
+		}
+	}
+	return false
 }
 
 // deliverNativeImage appends an image attachment (e.g. the rendered 주간업무보고
