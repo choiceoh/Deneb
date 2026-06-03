@@ -1,9 +1,15 @@
 package com.inspiredandroid.kai.network.dtos.anthropic
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class AnthropicDtoTest {
 
@@ -11,6 +17,30 @@ class AnthropicDtoTest {
         ignoreUnknownKeys = true
         encodeDefaults = true
         explicitNulls = false
+    }
+
+    @Test
+    fun `system splits at Context section for prompt caching`() {
+        val sys = "You are Kai.\n\n## Tool Use\nUse tools.\n\n## Context\n- Local time: 2026-06-03T10:00:00+09:00\n"
+        val content = anthropicSystemContent(sys)
+        val arr = assertIs<JsonArray>(content)
+        assertEquals(2, arr.size)
+        val first = arr[0].jsonObject
+        assertTrue(first["cache_control"] != null, "static prefix block must carry cache_control")
+        assertFalse(
+            first["text"]!!.jsonPrimitive.content.contains("## Context"),
+            "the cached prefix must end before the volatile Context section",
+        )
+        assertTrue(
+            arr[1].jsonObject["text"]!!.jsonPrimitive.content.contains("## Context"),
+            "the uncached tail holds the per-request Context",
+        )
+    }
+
+    @Test
+    fun `system without a Context section stays a single string block`() {
+        val content = anthropicSystemContent("just a prompt with no context section")
+        assertIs<JsonPrimitive>(content)
     }
 
     @Test
