@@ -70,7 +70,8 @@ scripts/dev/native-app.sh stop
 | profile 인자 | `phone`(412×915) | `desktop`(1280×800)도 가능 |
 | `NATIVE_W` / `NATIVE_H` | 프로파일값 | 더 큰 프레임(예: `NATIVE_W=480 NATIVE_H=1040`) |
 | `DENEB_GATEWAY_URL` | `http://100.105.145.6:18789` | 다른 게이트웨이로 시드 |
-| `NATIVE_DISPLAY` | `:99` | Xvfb 디스플레이 |
+| `DENEB_INSTANCE` | worktree 이름 | **인스턴스 격리 키** — 디스플레이/상태디렉토리/VNC포트가 이 값의 해시 오프셋으로 분리되어, 동시에 도는 다른 에이전트 worktree의 앱을 서로 죽이거나 잘못된 화면을 캡처하지 않는다 |
+| `NATIVE_DISPLAY` | `:99`+오프셋 | Xvfb 디스플레이 (인스턴스별 자동 산정; 직접 지정 시 우선) |
 | `NATIVE_WM` | `1` | `0`이면 WM 끔(키보드 포커스 불안정 — 비권장) |
 | `NATIVE_APP_XMX` | `1024m` | 앱 JVM 힙 캡 |
 

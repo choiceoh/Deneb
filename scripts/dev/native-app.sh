@@ -41,16 +41,29 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 APP_DIR="$REPO_ROOT/client-android/app"
-STATE_DIR="${DENEB_NATIVE_STATE:-$HOME/.cache/deneb-native}"
+
+# ── Per-instance isolation ───────────────────────────────────────────────────
+# Many agent worktrees share this host. Without isolation they'd all fight over
+# one X display (:99), one state dir, and one VNC port — so one session's
+# `restart`/`stop` would kill another session's live app, and its shots would
+# capture the wrong screen. Each instance (default: the worktree dir name) gets
+# its own display, state dir, and ports, derived from a stable hash offset. Pin
+# any of NATIVE_DISPLAY / DENEB_NATIVE_STATE / NATIVE_*_PORT to override.
+INSTANCE="${DENEB_INSTANCE:-$(basename "$REPO_ROOT")}"
+# cksum → a stable 0..39 offset; keeps displays in :99..:138 and ports clear of
+# each other. Collisions are possible but rare (few agents run the app at once).
+OFFSET=$(( $(printf '%s' "$INSTANCE" | cksum | cut -d' ' -f1) % 40 ))
+
+STATE_DIR="${DENEB_NATIVE_STATE:-$HOME/.cache/deneb-native/$INSTANCE}"
 SHOTS_DIR="$STATE_DIR/shots"
 mkdir -p "$STATE_DIR" "$SHOTS_DIR"
 
 # ── Config (override via env) ───────────────────────────────────────────────
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/android-sdk}"
-DISP="${NATIVE_DISPLAY:-:99}"
+DISP="${NATIVE_DISPLAY:-:$((99 + OFFSET))}"
 PROFILE_FILE="$STATE_DIR/profile"
-VNC_PORT="${NATIVE_VNC_PORT:-5910}"
-NOVNC_PORT="${NATIVE_NOVNC_PORT:-6080}"
+VNC_PORT="${NATIVE_VNC_PORT:-$((5910 + OFFSET))}"
+NOVNC_PORT="${NATIVE_NOVNC_PORT:-$((6080 + OFFSET))}"
 TAILNET_IP="${NATIVE_TAILNET_IP:-100.105.145.6}"
 GW_URL="${DENEB_GATEWAY_URL:-http://100.105.145.6:18789}"
 SKIKO_RENDER="${NATIVE_SKIKO:-SOFTWARE}"   # SOFTWARE is safe on headless Xvfb (no GL)
@@ -141,7 +154,9 @@ start_xvfb() {
   die "Xvfb failed to come up (see $STATE_DIR/xvfb.log)"
 }
 
-wm_pid() { { pgrep -x matchbox-window 2>/dev/null || pgrep -x fluxbox 2>/dev/null; } | head -1 || true; }
+# WM is tracked by pidfile (not a global `pgrep -x`) so stopping one instance
+# never reaps another instance's WM running on a different display.
+wm_running() { local f="$STATE_DIR/wm.pid"; [[ -f "$f" ]] && kill -0 "$(cat "$f" 2>/dev/null)" 2>/dev/null; }
 
 # A minimal window manager is what makes keyboard focus reliable: without one,
 # X input focus and Compose's in-app field focus drift apart between calls and
@@ -151,16 +166,18 @@ wm_pid() { { pgrep -x matchbox-window 2>/dev/null || pgrep -x fluxbox 2>/dev/nul
 # frame. fluxbox is the fallback (it works but paints a title bar + toolbar).
 start_wm() {
   [[ "${NATIVE_WM:-1}" == "0" ]] && return 0
-  [[ -n "$(wm_pid)" ]] && return 0
+  wm_running && return 0
   if have matchbox-window-manager; then
     log "starting matchbox window manager"
     DISPLAY="$DISP" matchbox-window-manager -use_titlebar no -use_cursor yes >"$STATE_DIR/wm.log" 2>&1 &
+    echo $! >"$STATE_DIR/wm.pid"
   elif have fluxbox; then
     local fb="$STATE_DIR/fluxbox"; mkdir -p "$fb"
     printf 'session.screen0.toolbar.visible: false\nsession.screen0.focusModel: ClickToFocus\n' >"$fb/init"
     : >"$fb/keys"; : >"$fb/menu"
     log "starting fluxbox window manager (fallback — has chrome)"
     DISPLAY="$DISP" fluxbox -rc "$fb/init" -log "$fb/fluxbox.log" >/dev/null 2>&1 &
+    echo $! >"$STATE_DIR/wm.pid"
   else
     log "no WM (matchbox/fluxbox) installed — keyboard focus may be flaky"
     return 0
@@ -215,7 +232,7 @@ cmd_start() {
   local wid=""
   for _ in $(seq 1 240); do
     wid="$(app_wid)"; [[ -n "$wid" ]] && break
-    if ! kill -0 "$(cat "$STATE_DIR/app.pid" 2>/dev/null)" 2>/dev/null && ! pgrep -f "composeApp:run" >/dev/null; then
+    if ! kill -0 "$(cat "$STATE_DIR/app.pid" 2>/dev/null)" 2>/dev/null; then
       tail -n 30 "$STATE_DIR/app.log" >&2 || true
       die "gradle :composeApp:run exited before a window appeared (see $STATE_DIR/app.log)"
     fi
@@ -320,6 +337,7 @@ cmd_view() {
 # ── Status / logs / teardown ────────────────────────────────────────────────
 cmd_status() {
   local wid; wid="$(app_wid || true)"
+  echo "instance:  $INSTANCE  (offset $OFFSET)"
   echo "display:   $DISP   (Xvfb pid: $(xvfb_pid || echo '-'))"
   if [[ -f "$PROFILE_FILE" ]]; then read -r p dpw dph s pxw pxh <"$PROFILE_FILE"; echo "profile:   $p  ${dpw}x${dph}dp @${s}x  → ${pxw}x${pxh}px"; fi
   echo "gateway:   $GW_URL"
@@ -340,8 +358,10 @@ cmd_stop() {
   kill_pidfile "$STATE_DIR/app_jvm.pid"   # the live app JVM (from the window)
   kill_pidfile "$STATE_DIR/app.pid"       # the gradlew launcher + its children
   kill_pidfile "$STATE_DIR/novnc.pid"     # websockify
-  for p in $(pgrep -x x11vnc 2>/dev/null); do kill "$p" 2>/dev/null || true; done
-  for p in $(pgrep -x matchbox-window 2>/dev/null) $(pgrep -x fluxbox 2>/dev/null); do kill "$p" 2>/dev/null || true; done
+  # Instance-scoped: x11vnc by its -display flag, WM by pidfile — never a global
+  # pgrep -x that would reap another instance's WM/vnc on a different display.
+  for p in $(pgrep -f "x11vnc -display $DISP " 2>/dev/null || true); do kill "$p" 2>/dev/null || true; done
+  kill_pidfile "$STATE_DIR/wm.pid"
   local xp; xp="$(xvfb_pid)"; [[ -n "$xp" ]] && kill "$xp" 2>/dev/null || true
   log "stopped"
 }
