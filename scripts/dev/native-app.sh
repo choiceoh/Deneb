@@ -380,6 +380,19 @@ cmd_taptext() {
   xy="$(_ocr_locate find "$want" "$tsv")" || die "taptext: \"$want\" not found"
   cmd_tap $xy
 }
+# Poll the screen until TEXT renders (or timeout). Replaces fragile fixed sleeps
+# after a navigation — a slow prod fetch no longer screenshots before paint.
+cmd_waitfor() {  # "text" [timeout_s, default 8]
+  local want="$1" timeout="${2:-8}"
+  [[ -n "$want" ]] || die "usage: wait-for \"text\" [timeout_s]"
+  local deadline=$((SECONDS + timeout)) tsv
+  while (( SECONDS < deadline )); do
+    tsv="$(ocr_tsv)"
+    if _ocr_locate assert "$want" "$tsv"; then log "wait-for ok: \"$want\""; return 0; fi
+    sleep 0.4
+  done
+  log "wait-for TIMEOUT: \"$want\" (${timeout}s)"; return 1
+}
 
 # ── Optional: let a human watch/drive over Tailscale via noVNC ───────────────
 cmd_view() {
@@ -451,6 +464,7 @@ native-app.sh — run the real native client headlessly for agent verification
   find "text"             OCR the screen → print "X Y" of that text
   assert "text"           OCR the screen → exit 0 if the text is present, else 1
   taptext "text"          OCR-find the text and tap it (robust to layout shifts)
+  wait-for "text" [secs]  poll OCR until the text renders (replaces fixed sleeps)
   view                    expose noVNC over Tailscale so a human can watch/drive
   seed [url] [token]      (re)write ~/.kai gateway settings (defaults: prod)
   status | logs [n]       inspect
@@ -475,6 +489,7 @@ case "$cmd" in
   find)    cmd_find "$@" ;;
   assert)  cmd_assert "$@" ;;
   taptext) cmd_taptext "$@" ;;
+  wait-for) cmd_waitfor "$@" ;;
   view)    cmd_view "$@" ;;
   seed)    seed_settings "$@" ;;
   status)  cmd_status ;;
