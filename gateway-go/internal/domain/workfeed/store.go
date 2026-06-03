@@ -2,12 +2,13 @@ package workfeed
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
@@ -213,11 +214,18 @@ func (s *Store) RunAction(itemID, actionID string) (ActionResult, error) {
 	return ActionResult{}, ErrNotFound
 }
 
+// idCounter disambiguates ids minted within the same millisecond. Combined with
+// the wall-clock millis prefix below, ids stay unique across restarts — unlike
+// the old shortid counter, which reset to 0 on every restart and recycled ids
+// (e.g. wf_0003). That recycling made an acked item reappear once a new proactive
+// item reused its id, and also produced duplicate ids in the same feed.
+var idCounter atomic.Uint64
+
 func normalizeNew(item Item) Item {
 	now := time.Now().UnixMilli()
 	item.ID = strings.TrimSpace(item.ID)
 	if item.ID == "" {
-		item.ID = shortid.New("wf")
+		item.ID = fmt.Sprintf("wf_%d_%04d", now, idCounter.Add(1)%10000)
 	}
 	item.Source = strings.TrimSpace(item.Source)
 	item.Title = strings.TrimSpace(item.Title)
