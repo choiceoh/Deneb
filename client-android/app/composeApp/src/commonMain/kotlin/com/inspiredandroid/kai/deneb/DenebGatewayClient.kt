@@ -14,6 +14,8 @@ import com.inspiredandroid.kai.httpClient
 import com.inspiredandroid.kai.contacts.ContactData
 import com.inspiredandroid.kai.data.Attachment
 import com.inspiredandroid.kai.deneb.generated.CalendarEventOut
+import com.inspiredandroid.kai.deneb.generated.MailMessageOut
+import com.inspiredandroid.kai.deneb.generated.MailRowOut
 import com.inspiredandroid.kai.deneb.generated.MemoryCategoryRow
 import com.inspiredandroid.kai.deneb.generated.MemoryPageRow
 import com.inspiredandroid.kai.deneb.generated.MiniappCronDetail
@@ -851,7 +853,7 @@ class DenebGatewayClient(
     }
 
     suspend fun fetchMailDetail(id: String): MailDetail? {
-        val row = callRpc<MailDetailRow>(
+        val row = callRpc<MailMessageOut>(
             "miniapp.gmail.get",
             buildJsonObject { put("id", id) },
         ) ?: return null
@@ -1786,39 +1788,8 @@ class DenebGatewayClient(
 
     @Serializable
     private data class MailListPayload(
-        val messages: List<MailRow> = emptyList(),
+        val messages: List<MailRowOut> = emptyList(),
         val nextPageToken: String = "",
-    )
-
-    @Serializable
-    private data class MailRow(
-        val id: String = "",
-        val from: String = "",
-        val subject: String = "",
-        val snippet: String = "",
-        val date: String = "",
-        val isUnread: Boolean = false,
-    )
-
-    @Serializable
-    private data class MailDetailRow(
-        val id: String = "",
-        val from: String = "",
-        val to: String = "",
-        val cc: String = "",
-        val subject: String = "",
-        val date: String = "",
-        val body: String = "",
-        val bodyTotal: Int = 0,
-        val attachments: List<MailAttachmentRow> = emptyList(),
-    )
-
-    @Serializable
-    private data class MailAttachmentRow(
-        val id: String = "",
-        val filename: String = "",
-        val mimeType: String = "",
-        val size: Int = 0,
     )
 
     @Serializable
