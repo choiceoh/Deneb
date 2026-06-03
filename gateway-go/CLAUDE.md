@@ -58,3 +58,25 @@ To modify a generated file: edit the source or generator, run the `make` target,
 ### Changing Wire Types
 - Hand-written types: `pkg/protocol/`
 
+## Tool Interception & Safety
+
+Tool dispatch is a **single flat registry lookup** — `ToolRegistry.Execute` in
+`internal/pipeline/chat/tools.go`. There is no ordered interception chain; all
+state is closed over at registration time (see `docs/research/tool-interception-gap.md`).
+
+When you need to intervene in a tool call, use the supported extension points —
+**do not add a side-chain or adapter layer**:
+
+- **Pre-execution block / audit** → `StreamHooks.OnBeforeToolCall` in
+  `internal/agentsys/agent/hooks.go`. It can only *block* a call (returns
+  `block, blockReason`), not handle it. Wire it via `HookCompositor.SetBeforeToolCall`.
+- **Post-execution side effects on specific tools** → `PostProcessRegistry`
+  (name-matched, runs after execution).
+- **Adding a tool** (including from a future plugin/provider) → `RegisterTool`.
+  The provider already owns its name; no interception is needed.
+
+Re-registering an existing tool name **silently replaces** the prior definition
+and logs a `slog.Warn` so collisions are visible in the operator log. If a plugin
+might collide with a core tool name, **namespace it** (e.g. `honcho:search`)
+rather than relying on last-writer-wins.
+
