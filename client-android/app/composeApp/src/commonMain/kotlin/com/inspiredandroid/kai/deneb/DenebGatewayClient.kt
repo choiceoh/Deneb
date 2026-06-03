@@ -27,6 +27,8 @@ import com.inspiredandroid.kai.deneb.generated.ProjectRef
 import com.inspiredandroid.kai.deneb.generated.QATurn
 import com.inspiredandroid.kai.deneb.generated.RoleModel
 import com.inspiredandroid.kai.deneb.generated.SearchAllResult
+import com.inspiredandroid.kai.deneb.generated.SessionRowOut
+import com.inspiredandroid.kai.deneb.generated.TranscriptMsgOut
 import com.inspiredandroid.kai.ui.chat.History
 import kotlinx.collections.immutable.toImmutableList
 import com.inspiredandroid.kai.ui.chat.WorkFeedItem
@@ -1538,7 +1540,7 @@ class DenebGatewayClient(
                 Conversation(
                     id = s.key,
                     messages = emptyList(),
-                    createdAt = if (s.startedAtMs > 0) s.startedAtMs else s.updatedAtMs,
+                    createdAt = s.startedAtMs?.takeIf { it > 0 } ?: s.updatedAtMs,
                     updatedAt = s.updatedAtMs,
                     title = conversationTitle(s),
                 )
@@ -1558,7 +1560,7 @@ class DenebGatewayClient(
         )
     }
 
-    private fun conversationTitle(s: SessionRow): String {
+    private fun conversationTitle(s: SessionRowOut): String {
         if (s.label.isNotBlank()) return s.label
         // The single home session keeps the familiar 업무 label (matches the
         // empty-drawer fallback and defaultClientTopic), not "내 대화 · main".
@@ -1676,38 +1678,10 @@ class DenebGatewayClient(
     private data class RpcEnv<T>(val ok: Boolean = false, val payload: T? = null)
 
     @Serializable
-    private data class RecentPayload(val sessions: List<SessionRow> = emptyList())
+    private data class RecentPayload(val sessions: List<SessionRowOut> = emptyList())
 
     @Serializable
-    private data class SessionRow(
-        val key: String = "",
-        val label: String = "",
-        val channel: String = "",
-        val kind: String = "",
-        val updatedAtMs: Long = 0,
-        val startedAtMs: Long = 0,
-    )
-
-    @Serializable
-    private data class TranscriptPayload(val messages: List<TranscriptMsg> = emptyList())
-
-    @Serializable
-    private data class TranscriptMsg(
-        val role: String = "",
-        val content: String = "",
-        val attachments: List<TranscriptAttachment> = emptyList(),
-        val timestampMs: Long = 0,
-    )
-
-    @Serializable
-    private data class TranscriptAttachment(
-        val type: String = "",
-        val mimeType: String = "",
-        val url: String = "",
-        val data: String = "",
-        val name: String = "",
-        val size: Long = 0,
-    )
+    private data class TranscriptPayload(val messages: List<TranscriptMsgOut> = emptyList())
 
     @Serializable
     private data class WorkFeedPayload(val items: List<WorkFeedItem> = emptyList())
