@@ -20,6 +20,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
@@ -87,7 +88,9 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		s.contactsStore = cs
 		hub.SetContactsStore(cs)
 	}
+	s.nativeSyncStore = nativesync.NewStore(filepath.Join(denebDir, "native_sync.jsonl"))
 	s.workFeedStore = workfeed.NewStore(filepath.Join(denebDir, "workfeed.jsonl"))
+	nativeWorkFeed := s.nativeWorkFeedStore()
 
 	// Monitoring notify service (error mirrors + status snapshots → native push).
 	s.notify = newNotifyService(hub.Sessions(), hub.Logger(), s.pushHub, s.BoundAddr)
@@ -218,13 +221,17 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 					"captureContacts": hub.ContactsStore() != nil,
 					"workFeed":        s.workFeedStore != nil,
 					"workFeedActions": s.workFeedStore != nil,
+					"nativeSync":      s.nativeSyncStore != nil,
 					"gmailAttachment": true,
 					"updateManifest":  true,
 				}
 			},
 		}),
+		handlerminiapp.SyncMethods(handlerminiapp.SyncDeps{
+			Store: s.nativeSyncStore,
+		}),
 		handlerminiapp.WorkFeedMethods(handlerminiapp.WorkFeedDeps{
-			Store: s.workFeedStore,
+			Store: nativeWorkFeed,
 		}),
 		handlerminiapp.TopicsMethods(handlerminiapp.TopicsDeps{
 			TopicMap: configuredTopicMap,
@@ -452,7 +459,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				}
 				return ws.EnrichContacts(contactsJSON)
 			},
-			WorkFeed: s.workFeedStore,
+			WorkFeed: s.nativeWorkFeedStore(),
 		}),
 		handlersession.ExecMethods(handlersession.ExecDeps{
 			Chat:       hub.Chat(),

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
@@ -40,6 +41,12 @@ type proactiveRelayDeps struct {
 	// Best-effort only: transcript delivery remains the source of truth.
 	workFeed interface {
 		Append(workfeed.Item) (workfeed.Item, error)
+	}
+
+	// nativeSync is a durable cursor-based outbox for native clients. It makes
+	// proactive transcript changes recoverable even when the SSE push is missed.
+	nativeSync interface {
+		Append(nativesync.AppendInput) (nativesync.Event, error)
 	}
 }
 
@@ -78,6 +85,22 @@ func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
 				"sessionKey", nativeWorkSessionKey, "error", err)
 		}
 		return false, err
+	}
+	if d.nativeSync != nil {
+		if _, err := d.nativeSync.Append(nativesync.AppendInput{
+			Type:       nativesync.TypeTranscriptAppended,
+			EntityID:   nativeWorkSessionKey,
+			SessionKey: nativeWorkSessionKey,
+			Payload: map[string]any{
+				"sessionKey":  nativeWorkSessionKey,
+				"role":        "assistant",
+				"preview":     pushPreview(content),
+				"timestampMs": msg.Timestamp,
+			},
+		}); err != nil && d.logger != nil {
+			d.logger.Error("proactive native relay: native sync append failed",
+				"sessionKey", nativeWorkSessionKey, "error", err)
+		}
 	}
 	if d.workFeed != nil {
 		if _, err := d.workFeed.Append(workfeed.Item{
