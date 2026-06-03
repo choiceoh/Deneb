@@ -168,4 +168,35 @@ class MiniappWireTypesTest {
         val encoded = json.encodeToString(QATurn.serializer(), QATurn(q = "질문", a = "답변"))
         assertEquals("""{"q":"질문","a":"답변"}""", encoded)
     }
+
+    @Test
+    fun `mail detail decodes with nested attachments`() {
+        val payload = """
+            {
+              "id": "m1", "threadId": "t1", "from": "a@b.kr", "to": "me@x.kr",
+              "subject": "견적", "date": "2026-06-03", "body": "본문",
+              "bodyTotal": 1200, "labels": ["INBOX"],
+              "attachments": [ { "id": "att1", "filename": "quote.pdf", "mimeType": "application/pdf", "size": 20480 } ]
+            }
+        """.trimIndent()
+
+        val m = json.decodeFromString<MailMessageOut>(payload)
+
+        assertEquals("m1", m.id)
+        assertEquals("a@b.kr", m.from)
+        assertEquals(1200, m.bodyTotal)
+        assertEquals(1, m.attachments.size)
+        assertEquals("quote.pdf", m.attachments[0].filename)
+        assertEquals(20480, m.attachments[0].size)
+    }
+
+    @Test
+    fun `mail list row decodes the fields the list view reads`() {
+        val row = json.decodeFromString<MailRowOut>(
+            """{ "id": "m2", "from": "x@y.kr", "subject": "회의", "snippet": "내일", "date": "2026-06-03", "isUnread": true }""",
+        )
+        assertEquals("m2", row.id)
+        assertEquals("회의", row.subject)
+        assertTrue(row.isUnread)
+    }
 }

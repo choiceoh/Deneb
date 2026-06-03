@@ -119,6 +119,44 @@ func gmailClientOrErr(deps GmailDeps, reqID string) (GmailClient, *protocol.Resp
 	return client, nil
 }
 
+// Wire shapes (package-scoped + marked for Kotlin codegen so the native client
+// shares them — see generated/MiniappWireTypes.kt). list_recent returns
+// {messages: []mailRowOut, nextPageToken}; get returns mailMessageOut.
+
+//deneb:wire
+type mailRowOut struct {
+	ID       string   `json:"id"`
+	ThreadID string   `json:"threadId"`
+	From     string   `json:"from"`
+	Subject  string   `json:"subject"`
+	Snippet  string   `json:"snippet"`
+	Date     string   `json:"date"`
+	IsUnread bool     `json:"isUnread"`
+	Labels   []string `json:"labels"`
+}
+
+type mailAttachmentOut struct {
+	ID       string `json:"id"`
+	Filename string `json:"filename"`
+	MimeType string `json:"mimeType"`
+	Size     int    `json:"size"`
+}
+
+//deneb:wire
+type mailMessageOut struct {
+	ID          string              `json:"id"`
+	ThreadID    string              `json:"threadId"`
+	From        string              `json:"from"`
+	To          string              `json:"to"`
+	CC          string              `json:"cc,omitempty"`
+	Subject     string              `json:"subject"`
+	Date        string              `json:"date"`
+	Body        string              `json:"body"`
+	BodyTotal   int                 `json:"bodyTotal"`
+	Labels      []string            `json:"labels"`
+	Attachments []mailAttachmentOut `json:"attachments"`
+}
+
 // --- list_recent ---------------------------------------------------------
 
 func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
@@ -126,16 +164,6 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 		Query     string `json:"query,omitempty"`
 		Limit     int    `json:"limit,omitempty"`
 		PageToken string `json:"pageToken,omitempty"`
-	}
-	type rowOut struct {
-		ID       string   `json:"id"`
-		ThreadID string   `json:"threadId"`
-		From     string   `json:"from"`
-		Subject  string   `json:"subject"`
-		Snippet  string   `json:"snippet"`
-		Date     string   `json:"date"`
-		IsUnread bool     `json:"isUnread"`
-		Labels   []string `json:"labels"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
@@ -194,9 +222,9 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 			}
 		}
 
-		out := make([]rowOut, 0, len(results))
+		out := make([]mailRowOut, 0, len(results))
 		for _, m := range results {
-			out = append(out, rowOut{
+			out = append(out, mailRowOut{
 				ID:       m.ID,
 				ThreadID: m.ThreadID,
 				From:     m.From,
@@ -221,25 +249,6 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 func gmailGet(deps GmailDeps) rpcutil.HandlerFunc {
 	type params struct {
 		ID string `json:"id"`
-	}
-	type attachmentOut struct {
-		ID       string `json:"id"`
-		Filename string `json:"filename"`
-		MimeType string `json:"mimeType"`
-		Size     int    `json:"size"`
-	}
-	type messageOut struct {
-		ID          string          `json:"id"`
-		ThreadID    string          `json:"threadId"`
-		From        string          `json:"from"`
-		To          string          `json:"to"`
-		CC          string          `json:"cc,omitempty"`
-		Subject     string          `json:"subject"`
-		Date        string          `json:"date"`
-		Body        string          `json:"body"`
-		BodyTotal   int             `json:"bodyTotal"`
-		Labels      []string        `json:"labels"`
-		Attachments []attachmentOut `json:"attachments"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
@@ -266,16 +275,16 @@ func gmailGet(deps GmailDeps) rpcutil.HandlerFunc {
 		}
 
 		body, total := truncateBody(msg.Body, maxGmailBodyChars)
-		atts := make([]attachmentOut, 0, len(msg.Attachments))
+		atts := make([]mailAttachmentOut, 0, len(msg.Attachments))
 		for _, a := range msg.Attachments {
-			atts = append(atts, attachmentOut{
+			atts = append(atts, mailAttachmentOut{
 				ID:       a.AttachmentID,
 				Filename: a.Filename,
 				MimeType: a.MimeType,
 				Size:     a.Size,
 			})
 		}
-		return rpcutil.RespondOK(req.ID, messageOut{
+		return rpcutil.RespondOK(req.ID, mailMessageOut{
 			ID:          msg.ID,
 			ThreadID:    msg.ThreadID,
 			From:        msg.From,
