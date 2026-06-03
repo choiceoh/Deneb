@@ -33,7 +33,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
@@ -432,9 +431,8 @@ func (s *Server) autoResumeInterruptedRunsWithOpts(ctx context.Context, opts aut
 
 // dispatchResumeMessage builds a synthetic chat.send for the session and
 // invokes the chat handler. Native client sessions resume directly into their
-// transcript. Legacy Telegram sessions still get a reconstructed delivery
-// target so the final reply can reach the old channel while those transcripts
-// remain restorable.
+// transcript. The channel/to params are kept only to satisfy the DispatchFn
+// signature (resumable sessions are always native `client:` keys now).
 func (s *Server) dispatchResumeMessage(ctx context.Context, sessionKey, channel, to string) error {
 	if s.chatHandler == nil {
 		return errors.New("chat handler not initialized")
@@ -444,12 +442,6 @@ func (s *Server) dispatchResumeMessage(ctx context.Context, sessionKey, channel,
 		"message":     resumeSystemNote,
 		"clientRunId": shortid.New("resume"),
 		"skipMerge":   true, // synthetic dispatch — do not collapse with real user input
-	}
-	if channel == "telegram" && to != "" {
-		params["delivery"] = map[string]any{
-			"channel": "telegram",
-			"to":      to,
-		}
 	}
 	req, err := protocol.NewRequestFrame(
 		"auto-resume-"+sessionKey,
@@ -470,23 +462,6 @@ func (s *Server) dispatchResumeMessage(ctx context.Context, sessionKey, channel,
 		return errors.New("chat.send returned !OK with no error detail")
 	}
 	return nil
-}
-
-// parseTelegramChatID extracts the numeric chat ID from a session key of
-// the form "telegram:<id>". Sub-sessions ("telegram:<id>:<task>:<ts>")
-// are rejected — they are ephemeral agent tasks, not main conversations.
-func parseTelegramChatID(sessionKey string) (string, bool) {
-	if !strings.HasPrefix(sessionKey, "telegram:") {
-		return "", false
-	}
-	rest := strings.TrimPrefix(sessionKey, "telegram:")
-	if strings.Contains(rest, ":") {
-		return "", false
-	}
-	if rest == "" {
-		return "", false
-	}
-	return rest, true
 }
 
 // transcriptBaseDir returns the directory where session transcripts live.

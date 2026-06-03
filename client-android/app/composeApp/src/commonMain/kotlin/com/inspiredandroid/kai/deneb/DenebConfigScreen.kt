@@ -179,10 +179,8 @@ private fun GatewayTab(
     var showPatchNotes by remember { mutableStateOf(false) }
     var statusChecking by remember { mutableStateOf(false) }
     val gatewayStatus = if (denebClient != null) denebClient.clientStatus.collectAsState().value else null
-    val topics = if (denebClient != null) denebClient.denebTopics.collectAsState().value else emptyList()
     LaunchedEffect(denebClient) {
         denebClient?.refreshClientStatus()
-        denebClient?.refreshTopics()
     }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -230,7 +228,6 @@ private fun GatewayTab(
         }
         GatewayStatusCard(
             status = gatewayStatus,
-            topics = topics,
             checking = statusChecking,
             enabled = denebClient != null,
             onRefresh = {
@@ -239,7 +236,6 @@ private fun GatewayTab(
                         statusChecking = true
                         try {
                             c.refreshClientStatus()
-                            c.refreshTopics()
                         } finally {
                             statusChecking = false
                         }
@@ -326,7 +322,6 @@ private fun GatewayTab(
 @Composable
 private fun GatewayStatusCard(
     status: ClientStatus?,
-    topics: List<ClientTopic>,
     checking: Boolean,
     enabled: Boolean,
     onRefresh: () -> Unit,
@@ -372,16 +367,6 @@ private fun GatewayStatusCard(
                     active,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (topics.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "토픽: " + topics.take(5).joinToString(" · ") { it.label },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

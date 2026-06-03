@@ -185,15 +185,6 @@ data class ModelSection(
 )
 
 @Serializable
-data class NativeTopic(
-    val key: String = "",
-    val label: String = "",
-    val sessionKey: String = "",
-    val sourceId: String = "",
-    val isDefault: Boolean = false,
-)
-
-@Serializable
 data class PersonRow(
     val email: String = "",
     val name: String = "",

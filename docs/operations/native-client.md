@@ -89,19 +89,20 @@ The chat path is built for long agent turns, not just quick replies.
 - **Tool and fallback cues.** Running tools surface as activity chips, and a
   small badge appears when the gateway answered with a fallback-role model.
 
-## Topics
+## Sessions
 
-The conversation drawer lists native topics first, followed by recent sessions.
-Topics come from the gateway's `miniapp.topics.list` contract and carry the
-session key the app should open.
+There is one home conversation, `client:main` (shown as **업무**), where chat and
+proactive reports all land. The app does not split the conversation by topic.
 
-- **Labels come from the gateway.** The entries and their names (in practice
-  **업무 / 잡담 / 코딩**) are derived from the gateway's `deneb.json` topics map;
-  the client renders them without knowing any legacy transport details.
-- **업무 is the home topic.** The 업무 (work) topic maps to `client:main`, so
-  proactive reports and existing home history carry over.
-- Selecting a topic repoints the session, loads that topic's transcript, and
-  uses the same per-topic knowledge injection as the gateway.
+- **One session by default.** A second session exists only when you explicitly
+  start a new chat (the **+** action), which forks `client:main:<uuid>`. The
+  conversation drawer lists `client:main` plus any such explicit sessions and
+  recent history.
+- **업무 is the home.** Proactive reports (the morning letter, a mail analysis)
+  and existing home history live in `client:main`.
+- **Topic knowledge still applies.** The home injects its default topic's
+  knowledge document. Manage those under Settings -> 토픽문서; they are background
+  knowledge merged into the prompt, not separate conversations.
 
 ## Getting Around
 
@@ -146,7 +147,7 @@ serves.
 The 설정 hub has five tabs:
 
 - **게이트웨이** — the gateway URL and client token, a live gateway status card
-  (version, native API version, current model, capabilities, topics), a link to
+  (version, native API version, current model, capabilities), a link to
   the surviving upstream Kai settings (providers, MCP, inference), and a version
   card with a **패치노트 보기** (view patch notes) sheet and an **업데이트 확인**
   (check for update) button that offers an in-place APK download when a newer
@@ -169,7 +170,7 @@ The client holds a long-lived subscription to the gateway's push stream so a
 proactive 업무 report (the morning letter, a mail analysis) raises a local
 notification the moment it is produced, instead of waiting for a poll.
 Notifications fire only while the app is backgrounded — in the foreground the
-report simply lands in chat. **Tapping a push opens the 업무 (work) topic** where
-the report was mirrored. The gateway side of this — which reports push, and why
-named topics are excluded — is in
+report simply lands in chat. **Tapping a push opens the 업무 home** (`client:main`)
+where the report was mirrored. The gateway side of this — which reports push and
+which are suppressed — is in
 [Proactive Delivery](/operations/proactive-delivery#native-client-instant-push).
