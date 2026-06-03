@@ -64,7 +64,7 @@ func TestBuildRecallPreflightInjectsHindsightEvidence(t *testing.T) {
 	}
 }
 
-func TestBuildRecallPreflightSkipsHindsightWithoutCue(t *testing.T) {
+func TestBuildRecallPreflightSearchesHindsightEveryTurn(t *testing.T) {
 	called := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		called = true
@@ -74,18 +74,18 @@ func TestBuildRecallPreflightSkipsHindsightWithoutCue(t *testing.T) {
 	defer srv.Close()
 
 	client := hindsight.NewClient(hindsight.Config{BaseURL: srv.URL, BankID: "deneb"})
-	// No cue → hindsight must not be called (cost outweighs benefit on no-recall
-	// turns). The hybrid semantic search is preserved for cue-bearing turns.
+	// Hermes-style auto_recall: every source (incl. hindsight) is searched on EVERY turn,
+	// not just cue turns. A no-cue turn with a matching hit injects evidence silently.
 	out := buildRecallPreflight(context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "오늘 저녁 뭐 먹지?"},
 		runDeps{hindsightClient: client},
 		nil,
 	)
-	if out != "" {
-		t.Fatalf("no-cue turn must inject nothing, got %q", out)
+	if !called {
+		t.Fatal("hindsight must be searched on every turn (auto_recall)")
 	}
-	if called {
-		t.Fatal("hindsight must not be called on a no-cue turn")
+	if out == "" {
+		t.Fatal("a no-cue turn with a hindsight hit must inject evidence silently, got empty")
 	}
 }
 
