@@ -131,6 +131,12 @@ func (s *Server) registerSessionRPCMethods() {
 	s.embeddingClient = embedding.New("", s.logger)
 	chatCfg.EmbeddingClient = s.embeddingClient
 
+	// Attach the same embedding client to the wiki so Search blends BM25 with
+	// semantic neighbors. Degrades to pure BM25 whenever the server is down.
+	if s.wikiStore != nil {
+		s.wikiStore.SetEmbedder(s.embeddingClient)
+	}
+
 	// Phase 2: Tool deps + registration (core, plugin).
 	s.initToolsAndDeps(&chatCfg, reg, transcriptStore, agentLogWriter)
 

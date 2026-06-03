@@ -52,6 +52,39 @@ func (wd *WikiDreamer) verifyPages(ctx context.Context) []VerifyFinding {
 	return findings
 }
 
+// enrichRelatedLinks adds semantic `related` links to pages that currently have
+// none, via Store.SuggestRelated (high cosine floor). Conservative by design:
+// only zero-related pages, at most maxEnrichPerPage each, additive only (never
+// removes). Returns the number of links added. No-op without an embedder.
+func (wd *WikiDreamer) enrichRelatedLinks(ctx context.Context) int {
+	const maxEnrichPerPage = 2
+	if wd.store == nil || wd.store.sem == nil {
+		return 0
+	}
+	relPaths, err := wd.store.ListPages("")
+	if err != nil {
+		return 0
+	}
+	added := 0
+	for _, rp := range relPaths {
+		page, perr := wd.store.ReadPage(rp)
+		if perr != nil || page == nil || len(page.Meta.Related) > 0 {
+			continue
+		}
+		sugg := wd.store.SuggestRelated(ctx, rp, maxEnrichPerPage)
+		if len(sugg) == 0 {
+			continue
+		}
+		page.Meta.Related = sugg
+		if werr := wd.store.WritePage(rp, page); werr != nil {
+			wd.logger.Warn("wiki-dream: enrich write failed", "path", rp, "error", werr)
+			continue
+		}
+		added += len(sugg)
+	}
+	return added
+}
+
 // detectStaleDeadlines flags pages whose frontmatter `due` (YYYY-MM-DD) is in
 // the past. Reads pages directly because the index doesn't carry the due field.
 // Pure computation, no LLM.

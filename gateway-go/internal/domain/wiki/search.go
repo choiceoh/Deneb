@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -109,7 +110,11 @@ func (s *searchDB) close() error {
 	return nil
 }
 
-// Search runs a full-text search across wiki pages.
+// Search runs a search across wiki pages. With no embedder configured it is
+// pure BM25 (exact prior behavior). When a semantic index is attached and the
+// embedding server is healthy, it blends BM25 with dense-vector neighbors so a
+// query also finds pages by meaning. Semantic degradation (server down, embed
+// error) silently falls back to the BM25 result.
 func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchResult, error) {
 	if s.fts == nil {
 		return nil, nil
@@ -120,7 +125,68 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 	if limit <= 0 {
 		limit = 10
 	}
-	return s.fts.search(ctx, query, limit)
+	bm25, err := s.fts.search(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	sem := s.searchSemantic(ctx, query, limit)
+	if len(sem) == 0 {
+		return bm25, nil
+	}
+	return mergeSearchResults(bm25, sem, limit), nil
+}
+
+// mergeSearchResults blends lexical (BM25) and semantic hits. Each list's score
+// is already 0-1; a page in both gets the higher single score plus a small
+// agreement bonus, so pages found by *both* signals rise to the top. BM25
+// snippets are preserved (semantic-only hits have no snippet). Order is by
+// blended score, descending; ties broken by path for determinism.
+func mergeSearchResults(bm25, sem []SearchResult, limit int) []SearchResult {
+	type merged struct {
+		res   SearchResult
+		score float64
+	}
+	byPath := make(map[string]*merged, len(bm25)+len(sem))
+	add := func(r SearchResult, bonus float64) {
+		m := byPath[r.Path]
+		if m == nil {
+			byPath[r.Path] = &merged{res: r, score: r.Score}
+			return
+		}
+		if r.Score > m.score {
+			m.score = r.Score
+		}
+		m.score += bonus // agreement: seen by both signals
+		if m.res.Content == "" && r.Content != "" {
+			m.res.Content = r.Content
+		}
+	}
+	for _, r := range bm25 {
+		add(r, 0)
+	}
+	for _, r := range sem {
+		add(r, 0.1)
+	}
+
+	out := make([]merged, 0, len(byPath))
+	for _, m := range byPath {
+		m.res.Score = m.score
+		out = append(out, *m)
+	}
+	sort.Slice(out, func(a, b int) bool {
+		if out[a].score != out[b].score {
+			return out[a].score > out[b].score
+		}
+		return out[a].res.Path < out[b].res.Path
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	results := make([]SearchResult, len(out))
+	for i := range out {
+		results[i] = out[i].res
+	}
+	return results
 }
 
 // SearchFiles returns wiki file paths matching a query.
