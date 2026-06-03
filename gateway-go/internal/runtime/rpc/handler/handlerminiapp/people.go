@@ -73,6 +73,8 @@ func PeopleMethods(deps PeopleDeps) map[string]rpcutil.HandlerFunc {
 }
 
 // PersonRow is one row in the people directory.
+//
+//deneb:wire
 type PersonRow struct {
 	Email        string `json:"email"`
 	Name         string `json:"name,omitempty"`

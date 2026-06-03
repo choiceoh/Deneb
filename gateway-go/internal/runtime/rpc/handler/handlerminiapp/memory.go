@@ -664,6 +664,8 @@ func todayDateString() string {
 // MemoryCategoryRow is a single category entry exposed via
 // miniapp.memory.categories. Defined at package scope so the sort helper
 // can refer to it without a generic wrapper.
+//
+//deneb:wire
 type MemoryCategoryRow struct {
 	Name      string `json:"name"`
 	PageCount int    `json:"pageCount"`
@@ -671,6 +673,8 @@ type MemoryCategoryRow struct {
 
 // MemoryPageRow is one row in a category page listing. Same scoping
 // reason as MemoryCategoryRow.
+//
+//deneb:wire
 type MemoryPageRow struct {
 	Path    string `json:"path"`
 	Title   string `json:"title,omitempty"`

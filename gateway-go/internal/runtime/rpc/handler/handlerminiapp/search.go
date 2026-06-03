@@ -44,6 +44,8 @@ type SearchDeps struct {
 
 // SearchWikiHit is one wiki hit row — mirrors the per-domain
 // memorySearch shape so the Mini App can reuse its memory-card renderer.
+//
+//deneb:wire
 type SearchWikiHit struct {
 	Path     string  `json:"path"`
 	Title    string  `json:"title,omitempty"`
@@ -55,6 +57,8 @@ type SearchWikiHit struct {
 
 // SearchDiaryHit is one diary hit row. Mirrors the recent-diary entry
 // shape with a Score added (search ranks by BM25 × recency).
+//
+//deneb:wire
 type SearchDiaryHit struct {
 	File    string  `json:"file"`
 	Header  string  `json:"header"`
@@ -64,6 +68,8 @@ type SearchDiaryHit struct {
 }
 
 // SearchAllResult is the unified response shape.
+//
+//deneb:wire
 type SearchAllResult struct {
 	Wiki   []SearchWikiHit  `json:"wiki"`
 	Diary  []SearchDiaryHit `json:"diary"`

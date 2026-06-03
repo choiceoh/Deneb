@@ -43,6 +43,8 @@ type AnalyzePipeline interface {
 // ProjectRef is a related project wiki page surfaced to the Mini App: the
 // path plus enriched title/summary so the client renders a chip without a
 // second round trip.
+//
+//deneb:wire
 type ProjectRef struct {
 	Path    string `json:"path"`
 	Title   string `json:"title,omitempty"`

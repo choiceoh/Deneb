@@ -58,6 +58,12 @@ type calendarConferenceOut struct {
 	URI      string `json:"uri,omitempty"`
 }
 
+// calendarEventOut is the wire shape for a calendar event, returned by both
+// miniapp.calendar.list_upcoming (list elements) and miniapp.calendar.get.
+// Marked for Kotlin codegen so the native client shares this exact shape
+// instead of hand-maintaining a partial mirror that can silently drift.
+//
+//deneb:wire
 type calendarEventOut struct {
 	ID          string                 `json:"id"`
 	Summary     string                 `json:"summary"`

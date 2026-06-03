@@ -7,6 +7,7 @@
        test clean check check-go fmt generate generate-check \
        tool-schemas tool-schemas-check \
        data-gen data-gen-check \
+       kotlin-models kotlin-models-check \
        info
 
 # Version from git tags (release-please format: deneb-vX.Y.Z), injected via ldflags.
@@ -134,16 +135,18 @@ check/fast: go-fmt go-vet go-lint
 	@echo "Fast checks passed (fmt + vet + lint, no tests)"
 
 # Run all code generation pipelines in dependency order.
-generate: tool-schemas data-gen
+generate: tool-schemas data-gen kotlin-models
 	@echo "All code generation pipelines completed"
 
 # Verify generated sources are up to date.
 # Runs each generation domain independently so failures name the broken group.
 generate-check:
-	@echo "==> [1/2] tool schemas (tool_schemas.json -> tool_schemas_gen.go)"
+	@echo "==> [1/3] tool schemas (tool_schemas.json -> tool_schemas_gen.go)"
 	@$(MAKE) tool-schemas-check
-	@echo "==> [2/2] data tables (*.json -> *_gen.go)"
+	@echo "==> [2/3] data tables (*.json -> *_gen.go)"
 	@$(MAKE) data-gen-check
+	@echo "==> [3/3] kotlin wire models (Go //deneb:wire -> MiniappWireTypes.kt)"
+	@$(MAKE) kotlin-models-check
 	@echo "All generation checks passed"
 
 fmt:
@@ -185,6 +188,30 @@ data-gen-check:
 		$(DATA_GEN) -json $${t}.json -out $${t}_gen.go; \
 	done
 	@git diff --exit-code -- $(addprefix gateway-go/,$(addsuffix _gen.go,$(DATA_GEN_TARGETS)))
+
+# --- Kotlin wire model code generation ---
+#
+# Generates the native client's @Serializable wire types from the Go miniapp
+# handler structs marked //deneb:wire, so the client and the gateway share one
+# source of truth for RPC response shapes. The check target is non-mutating
+# (compares against the committed file) and gates schema drift in CI.
+
+KOTLIN_MODELS_SRC = internal/runtime/rpc/handler/handlerminiapp
+KOTLIN_MODELS_OUT = ../client-android/app/composeApp/src/commonMain/kotlin/com/inspiredandroid/kai/deneb/generated/MiniappWireTypes.kt
+KOTLIN_MODELS_PKG = com.inspiredandroid.kai.deneb.generated
+
+kotlin-models:
+	cd gateway-go && go run cmd/kotlin-models-gen/main.go \
+		-src $(KOTLIN_MODELS_SRC) \
+		-out $(KOTLIN_MODELS_OUT) \
+		-pkg $(KOTLIN_MODELS_PKG)
+
+kotlin-models-check:
+	cd gateway-go && go run cmd/kotlin-models-gen/main.go \
+		-src $(KOTLIN_MODELS_SRC) \
+		-out $(KOTLIN_MODELS_OUT) \
+		-pkg $(KOTLIN_MODELS_PKG) \
+		-check
 
 # --- Info ---
 
