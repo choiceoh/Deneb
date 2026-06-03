@@ -1,8 +1,10 @@
 package chat
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -129,28 +131,42 @@ func firstN(s string, n int) string {
 
 // TestToolRegistry_ReRegisterReplaces verifies the documented collision
 // behavior: re-registering an existing name replaces the prior definition
-// (last-writer-wins) and does NOT duplicate the name in registration order.
+// (last-writer-wins), does NOT duplicate the name in registration order, and
+// logs a slog.Warn on the replace (but not on the first register).
 // See docs/research/tool-interception-gap.md and gateway-go/CLAUDE.md
-// (Tool Interception & Safety). RegisterTool also logs a slog.Warn on replace.
+// (Tool Interception & Safety).
 func TestToolRegistry_ReRegisterReplaces(t *testing.T) {
 	reg := NewToolRegistry()
 
-	reg.RegisterTool(ToolDef{
-		Name:        "dup",
-		Description: "first",
-		InputSchema: map[string]any{"type": "object"},
-		Fn: func(_ context.Context, _ json.RawMessage) (string, error) {
-			return "first", nil
-		},
-	})
-	reg.RegisterTool(ToolDef{
-		Name:        "dup",
-		Description: "second",
-		InputSchema: map[string]any{"type": "object"},
-		Fn: func(_ context.Context, _ json.RawMessage) (string, error) {
-			return "second", nil
-		},
-	})
+	mkTool := func(out string) ToolDef {
+		return ToolDef{
+			Name:        "dup",
+			Description: out,
+			InputSchema: map[string]any{"type": "object"},
+			Fn: func(_ context.Context, _ json.RawMessage) (string, error) {
+				return out, nil
+			},
+		}
+	}
+
+	// Capture the default logger so we can assert on the replace Warn.
+	// RegisterTool logs via the package-level slog default.
+	var logBuf bytes.Buffer
+	origLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	defer slog.SetDefault(origLogger)
+
+	// First registration: no replace, so no warning.
+	reg.RegisterTool(mkTool("first"))
+	if strings.Contains(logBuf.String(), "tool registration replaced") {
+		t.Errorf("first RegisterTool should not warn, got log: %q", logBuf.String())
+	}
+
+	// Second registration of the same name: replace, expect a Warn.
+	reg.RegisterTool(mkTool("second"))
+	if !strings.Contains(logBuf.String(), "tool registration replaced") {
+		t.Errorf("re-register should log a replace Warn, got log: %q", logBuf.String())
+	}
 
 	// Latest registration wins.
 	got := testutil.Must(reg.Execute(context.Background(), "dup", json.RawMessage(`{}`)))
@@ -158,14 +174,16 @@ func TestToolRegistry_ReRegisterReplaces(t *testing.T) {
 		t.Errorf("Execute = %q, want %q (last writer should win)", got, "second")
 	}
 
-	// Registration order must not contain the name twice.
+	// Registration order must not contain the name twice. Use the public
+	// Names() accessor (lock-safe copy in registration order) rather than
+	// reaching into the unexported order slice.
 	count := 0
-	for _, n := range reg.order {
+	for _, n := range reg.Names() {
 		if n == "dup" {
 			count++
 		}
 	}
 	if count != 1 {
-		t.Errorf("order has %q %d times, want 1 (re-register must not duplicate)", "dup", count)
+		t.Errorf("Names() has %q %d times, want 1 (re-register must not duplicate)", "dup", count)
 	}
 }
