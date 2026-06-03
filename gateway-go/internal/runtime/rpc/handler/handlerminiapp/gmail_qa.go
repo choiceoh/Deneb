@@ -27,6 +27,8 @@ import (
 // QATurn is one prior question/answer turn in a mail Q&A thread. The client
 // accumulates these and re-sends them so the backend stays stateless and the
 // Q&A never touches the main session transcript.
+//
+//deneb:wire
 type QATurn struct {
 	Q string `json:"q"`
 	A string `json:"a"`

@@ -11,6 +11,8 @@ import (
 )
 
 // ModelOption is one selectable model shown in the Mini App settings view.
+//
+//deneb:wire
 type ModelOption struct {
 	ID       string `json:"id"`
 	Label    string `json:"label"`
@@ -24,12 +26,16 @@ type ModelOption struct {
 }
 
 // ModelSection groups selectable models by role/provider.
+//
+//deneb:wire
 type ModelSection struct {
 	Title  string        `json:"title"`
 	Models []ModelOption `json:"models"`
 }
 
 // ModelAddResult is returned after a direct endpoint/model pair is stored.
+//
+//deneb:wire
 type ModelAddResult struct {
 	OK       bool   `json:"ok"`
 	ID       string `json:"id"`
@@ -40,6 +46,8 @@ type ModelAddResult struct {
 }
 
 // ModelDeleteResult is returned after a custom model entry is removed.
+//
+//deneb:wire
 type ModelDeleteResult struct {
 	OK      bool   `json:"ok"`
 	ID      string `json:"id"`
@@ -52,6 +60,8 @@ type ModelDeleteResult struct {
 
 // RoleModel reports the model bound to a registry role (main/lightweight/
 // fallback), for the per-role model picker.
+//
+//deneb:wire
 type RoleModel struct {
 	Role  string `json:"role"`
 	Model string `json:"model"`

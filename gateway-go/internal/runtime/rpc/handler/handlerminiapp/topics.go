@@ -21,6 +21,8 @@ import (
 const defaultNativeTopicSessionKey = "client:main"
 
 // NativeTopic is the native-client projection of a configured Deneb topic.
+//
+//deneb:wire
 type NativeTopic struct {
 	Key        string `json:"key"`
 	Label      string `json:"label"`

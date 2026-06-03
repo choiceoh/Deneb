@@ -68,6 +68,8 @@ func CronsMethods(deps CronsDeps) map[string]rpcutil.HandlerFunc {
 
 // MiniappCronRow is one row in a cron job listing. Exported so tests can
 // reference the field set; not consumed outside this package today.
+//
+//deneb:wire
 type MiniappCronRow struct {
 	ID                string `json:"id"`
 	Name              string `json:"name,omitempty"`
@@ -88,6 +90,8 @@ type MiniappCronRow struct {
 // execution context (agent, session target, model/thinking/timeout/retry)
 // so the operator can see exactly what a job does without dropping to the
 // operator-tool `cron.getJob` RPC. Read-only — editing still lives there.
+//
+//deneb:wire
 type MiniappCronDetail struct {
 	ID            string `json:"id"`
 	Name          string `json:"name,omitempty"`
