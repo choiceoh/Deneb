@@ -63,3 +63,49 @@ func (c *Counter) Snapshot() map[string]int64 {
 // RPCRequestsTotal counts RPC calls keyed by "method\x00status\x00code".
 // Used by monitoring.rpc_zero_calls to find never-called methods.
 var RPCRequestsTotal = NewCounter()
+
+// CacheHitTracker accumulates Anthropic-style prompt-cache token usage across
+// every LLM turn in the process. It exists so /status can surface a rolling
+// cache hit ratio — the regression alarm for the prompt-cache doctrine
+// (.claude/rules/prompt-cache.md): if a doctrine violation (system prompt
+// rebuilt per turn, toolset churn, etc.) silently breaks caching, the ratio
+// drops and the operator can see it. Safe for concurrent use.
+type CacheHitTracker struct {
+	cacheRead     atomic.Int64 // cache_read_input_tokens (served from cache)
+	cacheCreation atomic.Int64 // cache_creation_input_tokens (written to cache)
+	freshInput    atomic.Int64 // input_tokens (uncached fresh prompt)
+}
+
+// Record adds the per-turn token counts from one completed LLM turn.
+// Non-positive values are ignored.
+func (c *CacheHitTracker) Record(cacheRead, cacheCreation, freshInput int64) {
+	if cacheRead > 0 {
+		c.cacheRead.Add(cacheRead)
+	}
+	if cacheCreation > 0 {
+		c.cacheCreation.Add(cacheCreation)
+	}
+	if freshInput > 0 {
+		c.freshInput.Add(freshInput)
+	}
+}
+
+// Snapshot returns cumulative (cacheRead, cacheCreation, freshInput) totals.
+func (c *CacheHitTracker) Snapshot() (cacheRead, cacheCreation, freshInput int64) {
+	return c.cacheRead.Load(), c.cacheCreation.Load(), c.freshInput.Load()
+}
+
+// HitRatio returns the fraction of total prompt input tokens served from
+// cache: cacheRead / (cacheRead + cacheCreation + freshInput). Returns 0 when
+// no prompt tokens have been recorded yet.
+func (c *CacheHitTracker) HitRatio() float64 {
+	read := c.cacheRead.Load()
+	total := read + c.cacheCreation.Load() + c.freshInput.Load()
+	if total == 0 {
+		return 0
+	}
+	return float64(read) / float64(total)
+}
+
+// CacheHits is the process-wide prompt-cache usage tracker, read by /status.
+var CacheHits CacheHitTracker
