@@ -294,7 +294,13 @@ private fun GatewayTab(
                     )
                 }
                 Spacer(Modifier.height(8.dp))
-                Button(onClick = { uriHandler.openUri(info.apkUrl) }, modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    // OTA: download the APK in-app and launch the installer. Falls back to
+                    // opening the URL in a browser if install can't proceed (no permission,
+                    // non-Android platform).
+                    onClick = { installAppUpdate(info.apkUrl) { uriHandler.openUri(info.apkUrl) } },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text("다운로드 후 설치")
                 }
             } else if (checked && !checking) {
