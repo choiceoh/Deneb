@@ -220,6 +220,7 @@ class VersionGeneratorPlugin : Plugin<Project> {
     override fun apply(project: Project) {
         project.afterEvaluate {
             val appVersion = libs.versions.appVersion.get()
+            val appVersionCode = libs.versions.android.versionCode.get()
 
             // Generate Kotlin version file
             val versionFile =
@@ -234,6 +235,7 @@ class VersionGeneratorPlugin : Plugin<Project> {
 
                 object Version {
                     const val appVersion = "$appVersion"
+                    const val appVersionCode = $appVersionCode
                 }
                 """.trimIndent(),
             )

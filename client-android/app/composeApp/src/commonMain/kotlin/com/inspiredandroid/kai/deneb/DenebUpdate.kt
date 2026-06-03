@@ -1,5 +1,6 @@
 package com.inspiredandroid.kai.deneb
 
+import com.inspiredandroid.kai.Version
 import kotlinx.serialization.Serializable
 
 // Self-served in-app update. The gateway serves the APK + manifest on its own
@@ -8,11 +9,13 @@ import kotlinx.serialization.Serializable
 // the tunnel never routed. The client fetches the manifest, compares it to the
 // compiled-in version below, and offers a one-tap download when newer.
 //
-// IMPORTANT: bump BOTH of these together with the Gradle versionCode/appVersion
-// every time a new APK is published, otherwise the running app can't tell it's
-// out of date. version.json's "code" must match the new APK's code.
-const val DENEB_VERSION_CODE = 155
-const val DENEB_VERSION_NAME = "2.9.32"
+// Derived from the generated Version object (libs.versions.toml ->
+// VersionGeneratorPlugin in composeApp/build.gradle.kts) — the SAME values the
+// APK manifest and SettingsScreen use. Bump libs.versions.toml only; these
+// follow automatically, so the in-app version can no longer drift from the
+// installed APK (which is what made "updated but the number stayed the same").
+const val DENEB_VERSION_CODE = Version.appVersionCode
+const val DENEB_VERSION_NAME = Version.appVersion
 
 /** Parsed update manifest served by the gateway's /api/v1/app/update/manifest. */
 @Serializable
