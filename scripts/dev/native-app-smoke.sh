@@ -45,7 +45,7 @@ log_lines() { wc -l < "$LOG" 2>/dev/null || echo 0; }
 # check_screen NAME LINES_BEFORE — shot the screen, then scan the log lines that
 # appeared since LINES_BEFORE for crash signals, and confirm the app is alive.
 check_screen() {
-  local name="$1" before="$2"
+  local name="$1" before="$2" anchor="${3:-}"
   "$NA" shot "$name" >/dev/null 2>&1 || true
   local newerr
   newerr="$(tail -n "+$((before + 1))" "$LOG" 2>/dev/null | grep -nE "$ERR_RE" | head -5 || true)"
@@ -58,9 +58,16 @@ check_screen() {
     results+=("DEAD  $name")
     echo "  ✗ $name — app JVM (pid $(cat "$PIDFILE" 2>/dev/null)) is gone (hard crash?)"
     fail=1
+  elif [ -n "$anchor" ] && ! "$NA" assert "$anchor" >/dev/null 2>&1; then
+    # No crash, but the expected screen did not render — navigation went
+    # somewhere wrong or the screen came up blank. A crash-only smoke misses
+    # this (e.g. a tap that silently lands back on the chat screen).
+    results+=("WRONG $name")
+    echo "  ✗ $name — anchor \"$anchor\" not on screen (wrong screen / blank render?)"
+    fail=1
   else
     results+=("ok    $name")
-    echo "  ✓ $name"
+    echo "  ✓ $name${anchor:+  [anchor: $anchor]}"
   fi
 }
 
@@ -86,15 +93,18 @@ echo "==> walking key screens (read-only) ..."
 b="$(log_lines)"; check_screen "smoke-01-chat-workfeed" "$b"
 
 # Left drawer destinations (verified coords): mail/calendar/search/people/categories.
-nav=("smoke-02-mail:80:75" "smoke-03-calendar:80:133" "smoke-04-search:80:193" "smoke-05-people:80:253" "smoke-06-categories:80:313")
+# entry = name:x:y:anchor — anchor is OCR text that must be on the screen (empty
+# = crash/alive check only). Drawer-item coords are verified; anchors catch a
+# tap that silently lands on the wrong screen.
+nav=("smoke-02-mail:80:75:받은 메일" "smoke-03-calendar:80:133:일정" "smoke-04-search:80:193:" "smoke-05-people:80:253:" "smoke-06-categories:80:313:")
 for entry in "${nav[@]}"; do
-  IFS=: read -r nm x y <<<"$entry"
+  IFS=: read -r nm x y anchor <<<"$entry"
   "$NA" tap 25 37 >/dev/null 2>&1 || true   # open hamburger drawer
   sleep 1
   b="$(log_lines)"
   "$NA" tap "$x" "$y" >/dev/null 2>&1 || true  # open screen
   sleep 3                                       # let prod data load + list render
-  check_screen "$nm" "$b"
+  check_screen "$nm" "$b" "$anchor"
   "$NA" key Escape >/dev/null 2>&1 || true      # back to chat
   sleep 1
 done
@@ -102,14 +112,14 @@ done
 # Settings screen + tabs (gateway default, then 모델/크론/토픽문서/알림).
 "$NA" tap 235 27 >/dev/null 2>&1 || true
 sleep 2
-b="$(log_lines)"; check_screen "smoke-07-settings" "$b"
-tabs=("smoke-08-models:150:149" "smoke-09-crons:215:149" "smoke-10-topicdocs:295:149" "smoke-11-alerts:370:149")
+b="$(log_lines)"; check_screen "smoke-07-settings" "$b" "게이트웨이"
+tabs=("smoke-08-models:150:149:경량" "smoke-09-crons:215:149:" "smoke-10-topicdocs:295:149:" "smoke-11-alerts:370:149:")
 for entry in "${tabs[@]}"; do
-  IFS=: read -r nm x y <<<"$entry"
+  IFS=: read -r nm x y anchor <<<"$entry"
   b="$(log_lines)"
   "$NA" tap "$x" "$y" >/dev/null 2>&1 || true
   sleep 2
-  check_screen "$nm" "$b"
+  check_screen "$nm" "$b" "$anchor"
 done
 "$NA" tap 165 27 >/dev/null 2>&1 || true   # back to chat
 sleep 1
@@ -133,7 +143,7 @@ sleep 3
 b="$(log_lines)"
 "$NA" tap 200 185 >/dev/null 2>&1 || true  # open first message -> detail
 sleep 3
-check_screen "smoke-13-mail-detail" "$b"
+check_screen "smoke-13-mail-detail" "$b" "보관"
 "$NA" key Escape >/dev/null 2>&1 || true   # detail -> list
 sleep 1
 "$NA" key Escape >/dev/null 2>&1 || true   # list -> chat

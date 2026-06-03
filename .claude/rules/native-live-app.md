@@ -41,7 +41,9 @@ scripts/dev/native-app.sh stop
 | `key KEY [KEY…]` | 키 입력. xdotool 키심(`ctrl+a`, `Return`, `Escape`, `BackSpace`, `Tab`, `Down`). |
 | `swipe X1 Y1 X2 Y2` | 드래그(리스트 fling-scroll). |
 | `scroll up\|down [n]` | 창 중앙에서 휠 스크롤. |
-| `view` | x11vnc(loopback) + noVNC(`http://100.105.145.6:6080/vnc.html`) — 사람용. |
+| `find "텍스트"` | 화면 OCR(tesseract kor+eng) → 그 텍스트의 픽셀 좌표 `X Y` 출력. 픽셀 하드코딩 대신 **텍스트로** 탭 위치를 잡는다. |
+| `assert "텍스트"` | 화면 OCR → 텍스트 있으면 exit 0, 없으면 1. **기대 화면이 실제로 떴는지** 검증(스모크가 wrong-screen/blank-render를 잡는 근거). |
+| `taptext "텍스트"` | OCR-find 후 그 텍스트를 탭. 레이아웃이 바뀌어도 안 깨지는 네비. ★앵커는 **OCR이 실제로 읽는** 문자열로(예: `← 뒤로`는 화살표 탓에 빗나감→`보관`, `역할별`보다 `경량`이 안정적). 화살표/아이콘 인접 텍스트는 피하고 `assert`로 먼저 검증. |
 | `seed [url] [token]` | `~/.kai` 게이트웨이 설정 재기록(기본: 프로덕션). |
 | `status` / `logs [n]` | 상태 / 앱 로그. |
 | `restart [profile]` / `stop` | 재시작 / 전체 종료. |
@@ -110,7 +112,7 @@ sudo apt-get install -y xvfb x11vnc novnc websockify matchbox-window-manager \
 
 `scripts/dev/native-app-smoke.sh` 가 위 하네스를 자동으로 몰아 **핵심 화면을 한 바퀴** 돈다 — 채팅(업무 피드) → 메일 → 일정 → 검색 → 사람 → 카테고리 → 설정 4탭 → 세션 드로어(12개). `compileKotlinDesktop`·단위테스트가 못 잡는 **런타임 크래시**(예: 158/#1959 의 LazyColumn 중복키 `IllegalArgumentException` — 실데이터 렌더 때만 터짐)를 APK 게시 전에 차단하는 **수동 게이트**.
 
-- **prod 데이터라 픽셀-골든 비교 안 함.** 화면마다 ①그 화면이 렌더되는 동안 앱 로그에 새 예외/크래시 라인(`Exception`/`Caused by:`/`already used`/`*Exception` …)이 없고 ②앱 JVM(`app_jvm.pid`)이 살아있는지 검사. 스크린샷은 `shots/smoke-*.png` 로 보관(Read 로 육안 확인).
+- **prod 데이터라 픽셀-골든 비교 안 함.** 화면마다 ①그 화면이 렌더되는 동안 앱 로그에 새 예외/크래시 라인(`Exception`/`Caused by:`/`already used`/`*Exception` …)이 없고 ②앱 JVM(`app_jvm.pid`)이 살아있고 ③**그 화면의 앵커 텍스트가 OCR로 실제 보이는지**(`native-app.sh assert` — wrong-screen/blank-render 차단; 크래시 없는 **nav 실패**까지 잡는다)를 검사. 스크린샷은 `shots/smoke-*.png` 로 보관(Read 로 육안 확인).
 - **읽기 전용**: tap + Escape 로만 이동, 전송/입력/액션 버튼 안 누름 → prod 게이트웨이에 안전.
 - 네비 좌표는 phone(412×915) 픽셀 하드코딩(드로어 항목·상단바). 네비 레이아웃이 바뀌면 재매핑(`start`→`shot`→Read→새 좌표). alive 판정은 `status`(매번 윈도우 재탐색이라 tap 직후 flaky) 말고 `app_jvm.pid` `kill -0`.
 - **게시 직전 실행**: `scripts/dev/native-app-smoke.sh` → PASS 면 `publish-apk.sh`, FAIL 이면 해당 `smoke-*.png` 를 Read.

@@ -313,6 +313,74 @@ cmd_scroll() {  # up|down [clicks]
   log "scroll $dir x$n"
 }
 
+# ── OCR-driven find/assert (tesseract). Text beats hardcoded pixel coords: it
+# survives layout shifts, and lets a smoke assert the right screen actually
+# rendered (catching wrong-screen / blank-render, not just crashes). ──────────
+# ocr_tsv → capture the screen, OCR it, write the word-box TSV to a temp file,
+# and echo that path. (TSV goes to a file, not a pipe: the locator reads its
+# script from a heredoc on stdin, so it can't also read the TSV from stdin.)
+ocr_tsv() {
+  [[ -n "$(xvfb_pid)" ]] || die "nothing running — 'start' first"
+  have tesseract || die "missing 'tesseract' — sudo apt-get install -y tesseract-ocr tesseract-ocr-kor"
+  local tmp="$STATE_DIR/_ocr.png" tsv="$STATE_DIR/_ocr.tsv"
+  DISPLAY="$DISP" scrot --overwrite "$tmp" 2>/dev/null || DISPLAY="$DISP" scrot -o "$tmp"
+  tesseract "$tmp" stdout -l kor+eng --psm 11 tsv 2>/dev/null >"$tsv"
+  echo "$tsv"
+}
+
+# _ocr_locate MODE QUERY TSVFILE
+#   find   → prints "X Y" (center of the line containing QUERY), exit 0; else 1
+#   assert → exit 0 if QUERY is a substring of any OCR'd line, else 1
+_ocr_locate() {
+  python3 - "$1" "$2" "$3" <<'PY'
+import sys
+mode, query, tsvfile = sys.argv[1], sys.argv[2].strip(), sys.argv[3]
+lines = {}
+with open(tsvfile, encoding="utf-8") as f:
+    for ln in f:
+        c = ln.rstrip("\n").split("\t")
+        if len(c) < 12 or c[0] == "level":
+            continue
+        if not c[11].strip():
+            continue
+        try:
+            if float(c[10]) < 40:        # confidence
+                continue
+        except ValueError:
+            continue
+        key = (c[2], c[3], c[4])         # block, par, line
+        lines.setdefault(key, []).append((int(c[6]), int(c[7]), int(c[8]), int(c[9]), c[11]))
+for words in lines.values():
+    if query and query in " ".join(w[4] for w in words):
+        if mode == "assert":
+            sys.exit(0)
+        xs = [w[0] for w in words]; ys = [w[1] for w in words]
+        rs = [w[0] + w[2] for w in words]; bs = [w[1] + w[3] for w in words]
+        print((min(xs) + max(rs)) // 2, (min(ys) + max(bs)) // 2)
+        sys.exit(0)
+sys.exit(1)
+PY
+}
+
+cmd_find() {
+  local want="$*"; [[ -n "$want" ]] || die "usage: find \"text\""
+  local tsv xy; tsv="$(ocr_tsv)"
+  xy="$(_ocr_locate find "$want" "$tsv")" || { log "find: \"$want\" not on screen"; return 1; }
+  echo "$xy"
+}
+cmd_assert() {
+  local want="$*"; [[ -n "$want" ]] || die "usage: assert \"text\""
+  local tsv; tsv="$(ocr_tsv)"
+  if _ocr_locate assert "$want" "$tsv"; then log "assert ok: \"$want\""; return 0; fi
+  log "assert FAILED: \"$want\" not on screen"; return 1
+}
+cmd_taptext() {
+  local want="$*"; [[ -n "$want" ]] || die "usage: taptext \"text\""
+  local tsv xy; tsv="$(ocr_tsv)"
+  xy="$(_ocr_locate find "$want" "$tsv")" || die "taptext: \"$want\" not found"
+  cmd_tap $xy
+}
+
 # ── Optional: let a human watch/drive over Tailscale via noVNC ───────────────
 cmd_view() {
   [[ -n "$(xvfb_pid)" ]] || die "nothing running — 'start' first"
@@ -380,6 +448,9 @@ native-app.sh — run the real native client headlessly for agent verification
   key KEY [KEY...]        press key(s), e.g. Return / Escape / ctrl+a / BackSpace
   swipe X1 Y1 X2 Y2       drag (fling-scroll a list)
   scroll up|down [n]      mouse-wheel scroll at window center
+  find "text"             OCR the screen → print "X Y" of that text
+  assert "text"           OCR the screen → exit 0 if the text is present, else 1
+  taptext "text"          OCR-find the text and tap it (robust to layout shifts)
   view                    expose noVNC over Tailscale so a human can watch/drive
   seed [url] [token]      (re)write ~/.kai gateway settings (defaults: prod)
   status | logs [n]       inspect
@@ -401,6 +472,9 @@ case "$cmd" in
   key)     cmd_key "$@" ;;
   swipe)   cmd_swipe "$@" ;;
   scroll)  cmd_scroll "$@" ;;
+  find)    cmd_find "$@" ;;
+  assert)  cmd_assert "$@" ;;
+  taptext) cmd_taptext "$@" ;;
   view)    cmd_view "$@" ;;
   seed)    seed_settings "$@" ;;
   status)  cmd_status ;;
