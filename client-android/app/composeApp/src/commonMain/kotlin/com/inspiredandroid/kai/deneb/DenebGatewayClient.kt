@@ -1437,27 +1437,21 @@ class DenebGatewayClient(
         }
     }
 
+    // The right-side drawer is a pure session browser. It used to synthesize the
+    // configured topics (업무/잡담/코딩 from deneb.json topics.map) as pinned fake
+    // conversations at the top, but the topic switcher UI is gone and the client
+    // is a single client:main session model now — so that synthesis only leaked
+    // the retired topics back into the drawer. List real Deneb sessions only, and
+    // fall back to a lone client:main home when there are no sessions yet so the
+    // drawer is never empty.
     private suspend fun fetchRecentSessions(): List<Conversation> {
-        val topics = refreshTopics()
-            ?: _denebTopics.value.ifEmpty { listOf(defaultClientTopic()) }
-        val topicSessionKeys = topics.mapTo(HashSet()) { it.sessionKey }
-        val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
-        val topicConversations = topics.mapIndexed { index, topic ->
-            Conversation(
-                id = topic.sessionKey,
-                messages = emptyList(),
-                createdAt = 0,
-                updatedAt = now + 10_000L - index,
-                title = topic.label,
-            )
-        }
         val payload = callRpc<RecentPayload>(
             "miniapp.sessions.recent",
             buildJsonObject { put("limit", 50) },
-        ) ?: return topicConversations
-        val recent = payload.sessions
-            .filter { it.key.isNotBlank() && it.key !in topicSessionKeys }
-            .map { s ->
+        )
+        val recent = payload?.sessions
+            ?.filter { it.key.isNotBlank() }
+            ?.map { s ->
                 Conversation(
                     id = s.key,
                     messages = emptyList(),
@@ -1466,11 +1460,26 @@ class DenebGatewayClient(
                     title = conversationTitle(s),
                 )
             }
-        return topicConversations + recent
+            .orEmpty()
+        if (recent.isNotEmpty()) return recent
+        // Empty-drawer fallback: a single client:main home (no topic rows).
+        val main = defaultClientTopic()
+        return listOf(
+            Conversation(
+                id = main.sessionKey,
+                messages = emptyList(),
+                createdAt = 0,
+                updatedAt = kotlin.time.Clock.System.now().toEpochMilliseconds(),
+                title = main.label,
+            ),
+        )
     }
 
     private fun conversationTitle(s: SessionRow): String {
         if (s.label.isNotBlank()) return s.label
+        // The single home session keeps the familiar 업무 label (matches the
+        // empty-drawer fallback and defaultClientTopic), not "내 대화 · main".
+        if (s.key == "client:main") return "업무"
         val friendly = when (s.key.substringBefore(':', "")) {
             "telegram" -> "이전 대화"
             "client" -> "내 대화"
