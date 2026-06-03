@@ -14,14 +14,21 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.deneb.DenebEmpty
@@ -29,24 +36,26 @@ import com.inspiredandroid.kai.ui.chat.WorkFeedAction
 import com.inspiredandroid.kai.ui.chat.WorkFeedItem
 import com.inspiredandroid.kai.ui.handCursor
 import kai.composeapp.generated.resources.Res
-import kai.composeapp.generated.resources.ic_close
 import kai.composeapp.generated.resources.ic_file
 import kai.composeapp.generated.resources.work_feed_title
+import kotlin.time.Clock
 import kotlinx.collections.immutable.ImmutableList
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.resources.vectorResource
 
 /**
  * Bottom-sheet content for the work feed (action inbox). The [ModalBottomSheet]
- * is the container, so there is no Card wrapper here. Lists every item in a
- * scrollable LazyColumn (no 5-item cap) and shows an empty state when there is
- * nothing pending.
+ * is the container (no Card). The header shows the pending count + a close
+ * button, each row shows a relative timestamp, and actions use a distinct icon
+ * per kind. Lists every item in a scrollable LazyColumn (no 5-item cap) and
+ * shows an empty state when there is nothing pending.
  */
 @Composable
 internal fun WorkFeedPanel(
     items: ImmutableList<WorkFeedItem>,
     onOpen: (String) -> Unit,
     onRunAction: (String, String) -> Unit,
+    onClose: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -54,7 +63,7 @@ internal fun WorkFeedPanel(
             .navigationBarsPadding(),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, end = 4.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
@@ -69,6 +78,22 @@ internal fun WorkFeedPanel(
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.padding(start = 8.dp),
             )
+            if (items.isNotEmpty()) {
+                Text(
+                    text = items.size.toString(),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 6.dp),
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            IconButton(modifier = Modifier.handCursor(), onClick = onClose) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "닫기",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         if (items.isEmpty()) {
             DenebEmpty("아직 업무 알림이 없어요")
@@ -111,13 +136,25 @@ private fun WorkFeedRow(
             .clickable { onOpen(item.id) }
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            val stamp = relativeTime(item.createdAtMs)
+            if (stamp.isNotEmpty()) {
+                Text(
+                    text = stamp,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+        }
         if (item.summary.isNotBlank()) {
             Text(
                 text = item.summary,
@@ -167,20 +204,21 @@ private fun WorkFeedActionButton(
     action: WorkFeedAction,
     onClick: () -> Unit,
 ) {
-    val icon = if (action.kind == "ack" || action.kind == "snooze") {
-        Res.drawable.ic_close
-    } else {
-        Res.drawable.ic_file
+    val icon: ImageVector = when (action.kind) {
+        "ack" -> Icons.Filled.Check
+        "snooze" -> Icons.Filled.Schedule
+        "followup" -> Icons.Filled.ArrowForward
+        else -> Icons.Filled.Check
     }
     TextButton(
         modifier = Modifier.handCursor(),
         onClick = onClick,
     ) {
         Icon(
-            imageVector = vectorResource(icon),
+            imageVector = icon,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(14.dp),
+            modifier = Modifier.size(16.dp),
         )
         Spacer(Modifier.width(4.dp))
         Text(
@@ -190,5 +228,19 @@ private fun WorkFeedActionButton(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+/** Short Korean relative time ("방금" / "N분 전" / "N시간 전" / "N일 전"). Blank for
+ *  missing/future timestamps so the row simply omits the stamp. */
+private fun relativeTime(epochMs: Long): String {
+    if (epochMs <= 0L) return ""
+    val diff = Clock.System.now().toEpochMilliseconds() - epochMs
+    return when {
+        diff < 0L -> ""
+        diff < 60_000L -> "방금"
+        diff < 3_600_000L -> "${diff / 60_000L}분 전"
+        diff < 86_400_000L -> "${diff / 3_600_000L}시간 전"
+        else -> "${diff / 86_400_000L}일 전"
     }
 }

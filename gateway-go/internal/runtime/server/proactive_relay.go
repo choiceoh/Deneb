@@ -149,7 +149,9 @@ var contentlessProactiveFragments = []string{
 	"변경 없음",    // autonomous dreaming: nothing consolidated this cycle
 	"검색 결과 없음", // "검색 결과 없음 — 읽지 않은 ... 없습니다"
 	"알림이 없",    // "읽지 않은 카카오메일 알림이 없습니다"
+	"알림 없음",    // 조사 없는 변형: "읽지 않은 카카오메일 알림 없음"
 	"메일이 없",    // "분석할 새 메일이 없습니다"
+	"메일 없어요",   // 캐주얼 변형: "분석할 메일 없어요" (actionable brief는 "...필요해요"로 끝남)
 	"패스할게요",    // "...없으니 패스할게요"
 }
 
