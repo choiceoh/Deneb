@@ -291,10 +291,22 @@ func handleRunSuccess(
 		}
 	}
 	if params.Delivery != nil && result.Text != "" && deps.chatport.ParseReplyDirectives == nil {
-		logger.Warn("parseReplyDirectives is nil, channel delivery skipped",
+		// Wiring bug: with no directive parser the channel reply is silently
+		// dropped — the same broken-deploy class as replyFunc==nil below, so it
+		// escalates the same way (Error + broadcast + transcript note) instead of
+		// a Warn operators never read.
+		logger.Error("parseReplyDirectives is nil — response not delivered (wiring bug)",
 			"session", params.SessionKey,
 			"channel", params.Delivery.Channel,
 			"textLen", len(result.Text))
+		if deps.broadcast != nil {
+			deps.broadcast("chat.delivery_failed", map[string]any{
+				"session": params.SessionKey,
+				"channel": params.Delivery.Channel,
+				"reason":  "parse_directives_nil",
+			})
+		}
+		persistReplyDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, nil, logger)
 	}
 	if params.Delivery != nil && result.Text != "" && deps.chatport.ParseReplyDirectives != nil {
 		directives := deps.chatport.ParseReplyDirectives(result.Text, params.Delivery.MessageID, "")
@@ -389,11 +401,19 @@ func handleRunSuccess(
 					mediaType = "voice"
 				}
 				if err := deps.callbacks.mediaSendFn(mediaCtx, params.Delivery, mediaURL, mediaType, "", false); err != nil {
-					logger.Warn("media delivery failed", "url", mediaURL, "error", err)
+					logger.Warn("media url send failed", "url", mediaURL, "error", err)
 					failedURLs = append(failedURLs, mediaURL)
 				}
 			}
 			if len(failedURLs) > 0 {
+				// The agent intended to send this media and it did not arrive —
+				// a user-visible delivery failure → Error, alongside the existing
+				// broadcast + transcript note (per-URL detail stays at Warn above).
+				logger.Error("media delivery failed",
+					"session", params.SessionKey,
+					"channel", params.Delivery.Channel,
+					"failed", len(failedURLs),
+					"total", len(directives.MediaURLs))
 				if deps.broadcast != nil {
 					deps.broadcast("chat.media_delivery_failed", map[string]any{
 						"session": params.SessionKey,
