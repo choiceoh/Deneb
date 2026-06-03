@@ -8,6 +8,10 @@ globs: ["gateway-go/**/*.go", "proto/**/*.proto"]
 > **코드 완성도가 높아도 실제 작동 품질이 나쁘면 의미 없다.**
 > 단위 테스트 통과 ≠ 제품 품질. 반드시 실제 게이트웨이에서 작동 + 품질을 검증하라.
 
+> 이 문서는 **게이트웨이**(`gateway-go`) 라이브 검증이다. **네이티브 클라이언트
+> UI**를 실제 앱으로(스크린샷+조작) 검증하려면 `.claude/rules/native-live-app.md`
+> (`scripts/dev/native-app.sh`)를 본다.
+
 > **⚠️ 현재 채팅 기반 라이브 테스트(`chat`/`quality`/`chat-check`/`multi-chat`)는 동작하지 않는다.**
 > 이 경로는 목 텔레그램 Bot API 서버(`scripts/mock_telegram_server.py`)에 가짜 업데이트를
 > 주입하고 게이트웨이의 Telegram 플러그인이 `TELEGRAM_API_BASE`로 폴링·전송하는 구조였다.
