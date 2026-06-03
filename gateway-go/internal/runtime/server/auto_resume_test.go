@@ -146,27 +146,25 @@ func TestAnalyzeTranscriptTail_TolerantOfTrailingJunk(t *testing.T) {
 	}
 }
 
-// Test: parseTelegramChatID.
-func TestParseTelegramChatID(t *testing.T) {
+// Test: isResumableSessionKey.
+func TestIsResumableSessionKey(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		key  string
-		want string
-		ok   bool
+		key string
+		ok  bool
 	}{
-		{"telegram:42", "42", true},
-		{"telegram:7074071666", "7074071666", true},
-		{"telegram:42:some-task:1234567890", "", false}, // sub-session
-		{"cron:job1", "", false},
-		{"btw:abc", "", false},
-		{"", "", false},
-		{"telegram:", "", false},
+		{"client:main", true},
+		{"client:coding", true},
+		{"client:main:some-task:1234567890", false}, // sub-session
+		{"cron:job1", false},
+		{"btw:abc", false},
+		{"telegram:42", false}, // Telegram retired (PR #1922)
+		{"", false},
+		{"client:", false},
 	}
 	for _, tc := range cases {
-		got, ok := parseTelegramChatID(tc.key)
-		if ok != tc.ok || got != tc.want {
-			t.Errorf("parseTelegramChatID(%q): got (%q,%v) want (%q,%v)",
-				tc.key, got, ok, tc.want, tc.ok)
+		if got := isResumableSessionKey(tc.key); got != tc.ok {
+			t.Errorf("isResumableSessionKey(%q): got %v want %v", tc.key, got, tc.ok)
 		}
 	}
 }
@@ -180,13 +178,12 @@ type fakeDispatcher struct {
 type dispatchCall struct {
 	SessionKey string
 	Channel    string
-	ChatID     string
 }
 
-func (f *fakeDispatcher) fn(ctx context.Context, sessionKey, channel, chatID string) error {
+func (f *fakeDispatcher) fn(ctx context.Context, sessionKey, channel string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.calls = append(f.calls, dispatchCall{SessionKey: sessionKey, Channel: channel, ChatID: chatID})
+	f.calls = append(f.calls, dispatchCall{SessionKey: sessionKey, Channel: channel})
 	return nil
 }
 
@@ -252,15 +249,15 @@ func TestAutoResume_ResumesInterruptedUserTurn(t *testing.T) {
 	srv := newAutoResumeTestServer(t, tmpHome)
 
 	// Seed: user wrote a message, LLM never responded, gateway crashed.
-	writeTranscriptLine(t, tmpHome, "telegram:42",
+	writeTranscriptLine(t, tmpHome, "client:main",
 		`{"role":"user","content":"안녕","timestamp":1700000001000}`,
 	)
 	store := srv.runMarkerStore()
 	if err := store.Write(session.RunMarker{
-		SessionKey:     "telegram:42",
+		SessionKey:     "client:main",
 		StartedAt:      time.Now().UnixMilli(),
 		LastActivityAt: time.Now().UnixMilli(),
-		Channel:        "telegram",
+		Channel:        "client",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -282,12 +279,12 @@ func TestAutoResume_ResumesInterruptedUserTurn(t *testing.T) {
 	waitForCondition(t, 5*time.Second, func() bool { return fd.count() == 1 })
 
 	calls := fd.snapshot()
-	if calls[0].SessionKey != "telegram:42" || calls[0].ChatID != "42" || calls[0].Channel != "telegram" {
+	if calls[0].SessionKey != "client:main" || calls[0].Channel != "client" {
 		t.Errorf("unexpected dispatch: %+v", calls[0])
 	}
 
 	// Marker should now have ResumeAttempts==1 (bumped BEFORE dispatch fires).
-	m, _ := store.Read("telegram:42")
+	m, _ := store.Read("client:main")
 	if m == nil || m.ResumeAttempts != 1 {
 		t.Errorf("expected attempts=1 on persisted marker, got %+v", m)
 	}
@@ -298,14 +295,14 @@ func TestAutoResume_SkipsCleanEnd(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
-	writeTranscriptLine(t, tmpHome, "telegram:7",
+	writeTranscriptLine(t, tmpHome, "client:main",
 		`{"role":"user","content":"hi","timestamp":1700000001000}`,
 		`{"role":"assistant","content":[{"type":"text","text":"hello"}],"timestamp":1700000001500}`,
 	)
 	store := srv.runMarkerStore()
 	_ = store.Write(session.RunMarker{
-		SessionKey: "telegram:7", StartedAt: time.Now().UnixMilli(),
-		LastActivityAt: time.Now().UnixMilli(), Channel: "telegram",
+		SessionKey: "client:main", StartedAt: time.Now().UnixMilli(),
+		LastActivityAt: time.Now().UnixMilli(), Channel: "client",
 	})
 
 	fd := &fakeDispatcher{}
@@ -321,7 +318,7 @@ func TestAutoResume_SkipsCleanEnd(t *testing.T) {
 		t.Errorf("expected no dispatch, got %d calls", fd.count())
 	}
 	// Marker should be deleted.
-	m, _ := store.Read("telegram:7")
+	m, _ := store.Read("client:main")
 	if m != nil {
 		t.Errorf("expected marker to be deleted, got %+v", m)
 	}
@@ -332,15 +329,15 @@ func TestAutoResume_DiscardsStaleMarker(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
-	writeTranscriptLine(t, tmpHome, "telegram:stale",
+	writeTranscriptLine(t, tmpHome, "client:stale",
 		`{"role":"user","content":"old","timestamp":1}`,
 	)
 	store := srv.runMarkerStore()
 	// StartedAt = 10 hours ago (older than 2h default MaxAge).
 	stale := time.Now().Add(-10 * time.Hour).UnixMilli()
 	_ = store.Write(session.RunMarker{
-		SessionKey: "telegram:stale", StartedAt: stale,
-		LastActivityAt: stale, Channel: "telegram",
+		SessionKey: "client:stale", StartedAt: stale,
+		LastActivityAt: stale, Channel: "client",
 	})
 
 	fd := &fakeDispatcher{}
@@ -355,7 +352,7 @@ func TestAutoResume_DiscardsStaleMarker(t *testing.T) {
 		t.Errorf("expected no dispatch for stale marker, got %d", fd.count())
 	}
 	// Stale markers get cleaned up.
-	m, _ := store.Read("telegram:stale")
+	m, _ := store.Read("client:stale")
 	if m != nil {
 		t.Errorf("expected stale marker to be deleted, got %+v", m)
 	}
@@ -366,13 +363,13 @@ func TestAutoResume_RespectsAttemptLimit(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
-	writeTranscriptLine(t, tmpHome, "telegram:loop",
+	writeTranscriptLine(t, tmpHome, "client:loop",
 		`{"role":"user","content":"retry bait","timestamp":1}`,
 	)
 	store := srv.runMarkerStore()
 	_ = store.Write(session.RunMarker{
-		SessionKey: "telegram:loop", StartedAt: time.Now().UnixMilli(),
-		LastActivityAt: time.Now().UnixMilli(), Channel: "telegram",
+		SessionKey: "client:loop", StartedAt: time.Now().UnixMilli(),
+		LastActivityAt: time.Now().UnixMilli(), Channel: "client",
 		ResumeAttempts: 1,
 	})
 
@@ -388,7 +385,7 @@ func TestAutoResume_RespectsAttemptLimit(t *testing.T) {
 		t.Errorf("expected no dispatch when attempts exhausted, got %d", fd.count())
 	}
 	// Marker is cleared so it does not show up on future boots.
-	m, _ := store.Read("telegram:loop")
+	m, _ := store.Read("client:loop")
 	if m != nil {
 		t.Errorf("expected exhausted marker to be deleted, got %+v", m)
 	}
@@ -399,13 +396,13 @@ func TestAutoResume_DisabledDrainsMarkers(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
-	writeTranscriptLine(t, tmpHome, "telegram:1",
+	writeTranscriptLine(t, tmpHome, "client:main",
 		`{"role":"user","content":"a","timestamp":1}`,
 	)
 	store := srv.runMarkerStore()
 	_ = store.Write(session.RunMarker{
-		SessionKey: "telegram:1", StartedAt: time.Now().UnixMilli(),
-		LastActivityAt: time.Now().UnixMilli(), Channel: "telegram",
+		SessionKey: "client:main", StartedAt: time.Now().UnixMilli(),
+		LastActivityAt: time.Now().UnixMilli(), Channel: "client",
 	})
 
 	fd := &fakeDispatcher{}
@@ -421,14 +418,14 @@ func TestAutoResume_DisabledDrainsMarkers(t *testing.T) {
 	}
 	// Markers are proactively cleared even when the feature is off, so they
 	// cannot accumulate to infinity.
-	m, _ := store.Read("telegram:1")
+	m, _ := store.Read("client:main")
 	if m != nil {
 		t.Errorf("expected marker to be cleared on disabled path, got %+v", m)
 	}
 }
 
-// Test: non-telegram session keys (cron, btw) are skipped.
-func TestAutoResume_SkipsNonTelegramSessions(t *testing.T) {
+// Test: non-resumable session keys (cron, btw, legacy telegram) are skipped.
+func TestAutoResume_SkipsNonResumableSessions(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
@@ -439,6 +436,11 @@ func TestAutoResume_SkipsNonTelegramSessions(t *testing.T) {
 	})
 	_ = store.Write(session.RunMarker{
 		SessionKey: "btw:abc", StartedAt: time.Now().UnixMilli(),
+		Channel: "btw",
+	})
+	// A leftover Telegram marker from before PR #1922 must not resume.
+	_ = store.Write(session.RunMarker{
+		SessionKey: "telegram:42", StartedAt: time.Now().UnixMilli(),
 		Channel: "telegram",
 	})
 
@@ -451,7 +453,7 @@ func TestAutoResume_SkipsNonTelegramSessions(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 	if fd.count() != 0 {
-		t.Errorf("expected no dispatch for non-telegram sessions, got %d", fd.count())
+		t.Errorf("expected no dispatch for non-resumable sessions, got %d", fd.count())
 	}
 }
 

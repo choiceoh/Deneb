@@ -107,19 +107,17 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 		return nil
 	}
 
-	// Resolve the target session: latest active telegram session. Heartbeat
-	// piggybacks on the user's session so prior commitments and replies are
-	// visible to the agent. Without an active session, skip entirely instead
-	// of falling back to an isolated channel.
+	// Resolve the target session. Heartbeat piggybacks on the user's most
+	// recent native session so prior commitments and replies are visible to
+	// the agent. The Telegram bot was retired (PR #1922); native client
+	// sessions use the "client:" prefix. If there is no recent native session
+	// (e.g. before the first message of the day), fall back to the 업무 home
+	// (client:main) so the autonomous pulse still fires.
 	if t.activity == nil {
 		t.logger.Debug("heartbeat: skipped, no activity tracker")
 		return nil
 	}
-	sessionKey := t.activity.LastSessionKey()
-	if !strings.HasPrefix(sessionKey, "telegram:") {
-		t.logger.Debug("heartbeat: skipped, no active telegram session", "sessionKey", sessionKey)
-		return nil
-	}
+	sessionKey := resolveHeartbeatSession(t.activity.LastSessionKey())
 
 	// Skip if user is actively using the system. Avoids racing a turn that
 	// is in flight or interrupting the user mid-conversation.
@@ -146,6 +144,18 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 		"session", sessionKey,
 	)
 	return nil
+}
+
+// resolveHeartbeatSession picks the session the heartbeat turn runs in. It
+// prefers the most recent active native session ("client:" prefix) so prior
+// commitments and replies are visible, and falls back to the 업무 home
+// (client:main) when there is no recent native session. The Telegram bot was
+// retired in PR #1922, so legacy "telegram:" keys fall through to the home.
+func resolveHeartbeatSession(lastSessionKey string) string {
+	if strings.HasPrefix(lastSessionKey, "client:") {
+		return lastSessionKey
+	}
+	return nativeWorkSessionKey
 }
 
 func heartbeatSyncOptions() *chat.SyncOptions {

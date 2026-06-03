@@ -10,6 +10,21 @@ import (
 	"time"
 )
 
+func TestResolveHeartbeatSession(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"client:main", "client:main"},
+		{"client:coding", "client:coding"},
+		{"", nativeWorkSessionKey},
+		{"telegram:42", nativeWorkSessionKey}, // legacy — Telegram retired (PR #1922)
+		{"cron:nightly", nativeWorkSessionKey},
+	}
+	for _, c := range cases {
+		if got := resolveHeartbeatSession(c.in); got != c.want {
+			t.Errorf("resolveHeartbeatSession(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestWithinActiveHours_boundaries(t *testing.T) {
 	loc, err := time.LoadLocation("Asia/Seoul")
 	if err != nil {
