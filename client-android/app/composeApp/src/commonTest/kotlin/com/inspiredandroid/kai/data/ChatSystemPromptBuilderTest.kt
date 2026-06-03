@@ -88,6 +88,39 @@ class ChatSystemPromptBuilderTest {
     // region CHAT_REMOTE — focused tests
 
     @Test
+    fun `interactive catalog stays inside a timestamp-stable prefix`() {
+        // Two builds differing ONLY in the Context timestamp must share an identical prefix up
+        // to and including the kai-ui catalog, so vLLM prefix caching can reuse it across
+        // interactive-mode turns. If the catalog ever moves back behind the timestamp, the
+        // prefix diverges before it and this fails.
+        fun buildAt(ts: String): String = buildChatSystemPrompt(
+            variant = SystemPromptVariant.CHAT_REMOTE,
+            soul = "You are Kai.",
+            hasTools = true,
+            memoryEnabled = true,
+            schedulingEnabled = true,
+            memoryInstructions = null,
+            generalMemories = emptyList(),
+            preferenceMemories = emptyList(),
+            learningMemories = emptyList(),
+            errorMemories = emptyList(),
+            pendingTasks = emptyList(),
+            heartbeatAdditions = emptyList(),
+            emailAccounts = emptyList(),
+            runtime = runtime.copy(nowLocalIsoWithOffset = ts, nowUtcIsoString = ts),
+            uiMode = ChatPromptUiMode.INTERACTIVE_UI,
+        )
+        val a = buildAt("2026-06-03T10:00:00+09:00")
+        val b = buildAt("2026-06-03T23:59:59+09:00")
+        val catalogMarker = a.indexOf("Components: column")
+        val stablePrefixLen = a.commonPrefixWith(b).length
+        assertTrue(
+            catalogMarker in 0 until stablePrefixLen,
+            "kai-ui catalog must sit inside the byte-stable prefix; catalog at $catalogMarker, prefix diverges at $stablePrefixLen",
+        )
+    }
+
+    @Test
     fun `CHAT_REMOTE default emits soul + Structured Learning + Automation + context`() {
         val out = build(SystemPromptVariant.CHAT_REMOTE)
         assertTrue(out.startsWith("You are Kai."))
