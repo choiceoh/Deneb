@@ -744,7 +744,7 @@ private fun ChatModeScreen(
                             WorkFeedPanel(
                                 items = uiState.workFeed,
                                 onOpen = uiState.actions.openWorkFeedItem,
-                                onAck = uiState.actions.ackWorkFeedItem,
+                                onRunAction = uiState.actions.runWorkFeedAction,
                             )
                         }
                         if (uiState.history.isEmpty()) {

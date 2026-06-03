@@ -64,7 +64,7 @@ class ChatViewModel(
         clearUnreadWorkReport = ::clearUnreadWorkReport,
         openWorkReport = ::openWorkReport,
         openWorkFeedItem = ::openWorkFeedItem,
-        ackWorkFeedItem = ::ackWorkFeedItem,
+        runWorkFeedAction = ::runWorkFeedAction,
         clearSnackbar = ::clearSnackbar,
         undoDeleteConversation = ::undoDeleteConversation,
         submitUiCallback = ::submitUiCallback,
@@ -461,9 +461,12 @@ class ChatViewModel(
         dataRepository.clearUnreadWorkReport()
     }
 
-    private fun ackWorkFeedItem(id: String) {
+    private fun runWorkFeedAction(itemId: String, actionId: String) {
         viewModelScope.launch(backgroundDispatcher) {
-            (dataRepository as? DenebGatewayClient)?.ackWorkFeedItem(id)
+            val prompt = (dataRepository as? DenebGatewayClient)?.runWorkFeedAction(itemId, actionId)
+            if (!prompt.isNullOrBlank()) {
+                askInternal(prompt, null)
+            }
         }
     }
 

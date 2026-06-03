@@ -15,6 +15,9 @@ type fakeWorkFeedStore struct {
 	lastInclude bool
 	ackID       string
 	ackErr      error
+	runItemID   string
+	runActionID string
+	runErr      error
 }
 
 func (f *fakeWorkFeedStore) List(limit int, includeAcked bool) ([]workfeed.Item, int, error) {
@@ -39,6 +42,23 @@ func (f *fakeWorkFeedStore) Ack(id string) (workfeed.Item, error) {
 		}
 	}
 	return workfeed.Item{}, workfeed.ErrNotFound
+}
+
+func (f *fakeWorkFeedStore) RunAction(itemID, actionID string) (workfeed.ActionResult, error) {
+	f.runItemID = itemID
+	f.runActionID = actionID
+	if f.runErr != nil {
+		return workfeed.ActionResult{}, f.runErr
+	}
+	item := workfeed.Item{ID: itemID, SessionKey: "client:main"}
+	action := workfeed.Action{ID: actionID, Kind: actionID, Label: "Run"}
+	return workfeed.ActionResult{
+		Item:       item,
+		Action:     action,
+		SessionKey: item.SessionKey,
+		Prompt:     "follow up",
+		Message:    "prompt_created",
+	}, nil
 }
 
 func TestWorkFeedMethods_NilStoreReturnsNil(t *testing.T) {
@@ -124,5 +144,44 @@ func TestWorkFeedAckUnavailable(t *testing.T) {
 	}
 	if resp.Error.Code != protocol.ErrUnavailable {
 		t.Fatalf("code = %s, want %s", resp.Error.Code, protocol.ErrUnavailable)
+	}
+}
+
+func TestWorkFeedActionRun(t *testing.T) {
+	store := &fakeWorkFeedStore{}
+	h := workFeedActionRun(WorkFeedDeps{Store: store})
+	resp := h(authedCtx(), reqWith(t, "miniapp.workfeed.action.run", map[string]any{
+		"itemId":   "item",
+		"actionId": "followup",
+	}))
+
+	var got struct {
+		OK         bool            `json:"ok"`
+		Item       workfeed.Item   `json:"item"`
+		Action     workfeed.Action `json:"action"`
+		SessionKey string          `json:"sessionKey"`
+		Prompt     string          `json:"prompt"`
+	}
+	decode(t, resp, &got)
+	if store.runItemID != "item" || store.runActionID != "followup" {
+		t.Fatalf("run args = %q/%q", store.runItemID, store.runActionID)
+	}
+	if !got.OK || got.Prompt == "" || got.SessionKey != "client:main" {
+		t.Fatalf("payload = %+v", got)
+	}
+}
+
+func TestWorkFeedActionRunMissingAction(t *testing.T) {
+	store := &fakeWorkFeedStore{runErr: workfeed.ErrActionNotFound}
+	h := workFeedActionRun(WorkFeedDeps{Store: store})
+	resp := h(authedCtx(), reqWith(t, "miniapp.workfeed.action.run", map[string]any{
+		"itemId":   "item",
+		"actionId": "missing",
+	}))
+	if resp.OK {
+		t.Fatalf("expected not found")
+	}
+	if resp.Error.Code != protocol.ErrNotFound {
+		t.Fatalf("code = %s, want %s", resp.Error.Code, protocol.ErrNotFound)
 	}
 }

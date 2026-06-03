@@ -43,6 +43,9 @@ func TestStoreAppendListAck(t *testing.T) {
 	if items[1].Summary != "old body" {
 		t.Fatalf("summary fallback = %q, want body preview", items[1].Summary)
 	}
+	if len(items[0].Actions) == 0 {
+		t.Fatalf("expected default actions")
+	}
 
 	acked, err := store.Ack("new")
 	if err != nil {
@@ -65,6 +68,63 @@ func TestStoreAckMissing(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	if _, err := store.Ack("missing"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("ack missing err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestStoreRunActionFollowUpReturnsPrompt(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	if _, err := store.Append(Item{
+		ID:         "audio",
+		Source:     SourceCaptureAudio,
+		Title:      "Meeting",
+		Body:       "discussed launch",
+		SessionKey: "client:main",
+	}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	result, err := store.RunAction("audio", ActionFollowUp)
+	if err != nil {
+		t.Fatalf("run followup: %v", err)
+	}
+	if result.SessionKey != "client:main" {
+		t.Fatalf("sessionKey = %q, want client:main", result.SessionKey)
+	}
+	if result.Prompt == "" {
+		t.Fatalf("expected prompt")
+	}
+	if result.RemoveFromFeed {
+		t.Fatalf("followup should not remove item")
+	}
+}
+
+func TestStoreRunActionSnoozeHidesItem(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	if _, err := store.Append(Item{ID: "item", Body: "body"}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	result, err := store.RunAction("item", ActionSnooze)
+	if err != nil {
+		t.Fatalf("run snooze: %v", err)
+	}
+	if !result.RemoveFromFeed || result.Item.Status != StatusSnoozed {
+		t.Fatalf("result = %+v, want snoozed remove", result)
+	}
+	items, total, err := store.List(10, false)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if total != 0 || len(items) != 0 {
+		t.Fatalf("visible items = total %d items %+v, want none", total, items)
+	}
+}
+
+func TestStoreRunActionMissing(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	if _, err := store.Append(Item{ID: "item", Body: "body"}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	if _, err := store.RunAction("item", "missing"); !errors.Is(err, ErrActionNotFound) {
+		t.Fatalf("run missing action err = %v, want ErrActionNotFound", err)
 	}
 }
 
