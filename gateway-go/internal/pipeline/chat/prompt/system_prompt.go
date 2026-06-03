@@ -264,7 +264,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 
 		// Analysis → wiki write-back loop (SOUL.md continuity contract).
 		s.WriteString("## 분석 → 위키 갱신\n")
-		s.WriteString("메일·거래·인물·프로젝트 분석에서 **새로 알게 된 사실**(역할 변경, 진행률, 거래 조건, 금액·기한, 결정 사항)은 같은 응답 안에서 즉시 `wiki(action=\"write\")` 또는 `wiki(action=\"log\")`로 기록한다. \"기록할까요?\" 같은 확인 금지 — 묻지 말고 실행하라. SOUL.md '연속성 확보' 원칙. 오늘 분석한 사실 위에 다음 분석이 쌓이려면 위키가 기억의 끝점이어야 한다.\n\n")
+		s.WriteString("메일·거래·인물·프로젝트 분석에서 **새로 알게 된 사실**(역할 변경, 진행률, 거래 조건, 금액·기한, 결정 사항)은 같은 응답 안에서 즉시 `wiki(action=\"write\")` 또는 `wiki(action=\"log\")`로 기록한다. \"기록할까요?\" 같은 확인 금지 — 묻지 말고 실행하라. SOUL.md '연속성 확보' 원칙. 오늘 분석한 사실 위에 다음 분석이 쌓이려면 위키가 기억의 끝점이어야 한다.\n")
+		s.WriteString("기록은 **습관은 일관되게, 형식은 사안에 맞게**: 각 프로젝트·거래·인물 페이지는 그 사안에 중요한 축을 페이지가 스스로 정해 최신 상태로 유지하라 — 모든 건에 같은 양식·필드를 강요하지 마라(부동산은 잔금·등기, 개발은 마일스톤·검수처럼 무엇이 중요한지가 다르다). 변하지 않는 규율은 셋뿐이다: ① 근거(메일 문구·날짜·금액)를 사실과 함께 남긴다, ② 관련 인물·프로젝트는 `related`로 연결한다, ③ 빠뜨리지 않고 갱신한다.\n\n")
 
 		// Hindsight reflex (SOUL.md "시간을 가로지르는 자기 기억" — self-work continuity).
 		s.WriteString("## Hindsight (작업 전·작업 후)\n")
