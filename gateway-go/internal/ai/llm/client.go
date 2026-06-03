@@ -130,6 +130,13 @@ func WithAPIMode(mode string) ClientOption {
 	}
 }
 
+// APIMode reports the wire protocol this client speaks — APIModeOpenAI or
+// APIModeAnthropic. Callers use it to gate behavior that is only safe on one
+// protocol (e.g. enabling extended thinking only on Anthropic Messages mode,
+// where reasoning arrives as distinct SSE thinking blocks rather than leaking
+// into the answer body).
+func (c *Client) APIMode() string { return c.apiMode }
+
 // WithHeaders sets extra HTTP headers applied to every request this
 // client makes. Provider configs use this for endpoint-required headers
 // (e.g. a custom User-Agent). Values overwrite client defaults, so a

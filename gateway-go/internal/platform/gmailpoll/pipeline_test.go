@@ -4,8 +4,41 @@ import (
 	"context"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
+
+// TestAnalysisThinking locks the gating: extended thinking turns on ONLY for an
+// Anthropic-mode client with real token headroom. OpenAI-mode (the local vLLM
+// path that leaked CoT into the body, #1816) and tight budgets stay disabled.
+func TestAnalysisThinking(t *testing.T) {
+	anthropic := llm.NewClient("http://x", "k", llm.WithAPIMode(llm.APIModeAnthropic))
+	openai := llm.NewClient("http://x", "k", llm.WithAPIMode(llm.APIModeOpenAI))
+
+	cases := []struct {
+		name   string
+		client *llm.Client
+		maxTok int
+		wantOn bool
+	}{
+		{"anthropic + headroom → on", anthropic, 4096, true},
+		{"anthropic + tight budget → off", anthropic, stage2MaxTokens, false},
+		{"openai + headroom → off (vLLM leak guard)", openai, 4096, false},
+		{"nil client → off", nil, 4096, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := analysisThinking(tc.client, tc.maxTok)
+			on := got != nil && got.Type == "enabled"
+			if on != tc.wantOn {
+				t.Fatalf("analysisThinking on=%v, want %v (cfg=%+v)", on, tc.wantOn, got)
+			}
+			if on && got.BudgetTokens >= tc.maxTok {
+				t.Fatalf("budget %d must be < maxTokens %d to leave room for the answer", got.BudgetTokens, tc.maxTok)
+			}
+		})
+	}
+}
 
 func TestExtractDisplayName(t *testing.T) {
 	cases := []struct {
