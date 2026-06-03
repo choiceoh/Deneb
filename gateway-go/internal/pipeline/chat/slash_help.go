@@ -19,7 +19,7 @@ var slashBuiltinHelp = []slashHelpEntry{
 	{"/status", "세션 상태·토큰·캐시 히트율"},
 	{"/reset", "세션 초기화 (대화 기록 삭제)"},
 	{"/kill", "실행 중단 (`/stop`, `/cancel`)"},
-	{"/model <이름|역할>", "모델 변경 (main·lightweight·fallback)"},
+	{"/model <이름|역할>", "모델 변경 (main·lightweight·pilot·fallback)"},
 	{"/think [interleaved|show]", "확장 사고(extended thinking) 토글"},
 	{"/mode [일반|대화]", "도구 사용 모드 전환 (인자 없이 토글)"},
 	{"/mail", "메일 브리핑 (`/메일`)"},
