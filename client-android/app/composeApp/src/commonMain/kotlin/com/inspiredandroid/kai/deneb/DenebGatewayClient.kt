@@ -375,10 +375,7 @@ class DenebGatewayClient(
         val item = _denebWorkFeed.value.firstOrNull { it.id == id }
         val target = item?.sessionKey?.takeIf { it.isNotBlank() } ?: "client:main"
         switchSession(target)
-        scope.launch {
-            ackWorkFeedItem(id)
-            loadTranscriptGuarded(target)
-        }
+        scope.launch { loadTranscriptGuarded(target) }
     }
 
     suspend fun ackWorkFeedItem(id: String): Boolean {
@@ -391,6 +388,30 @@ class DenebGatewayClient(
             _denebWorkFeed.update { items -> items.filterNot { it.id == id } }
         }
         return ok
+    }
+
+    suspend fun runWorkFeedAction(itemId: String, actionId: String): String? {
+        if (itemId.isBlank() || actionId.isBlank()) return null
+        val payload = callRpc<WorkFeedActionRunPayload>(
+            "miniapp.workfeed.action.run",
+            buildJsonObject {
+                put("itemId", itemId)
+                put("actionId", actionId)
+            },
+        ) ?: return null
+        if (payload.removeFromFeed) {
+            _denebWorkFeed.update { items -> items.filterNot { it.id == itemId } }
+        } else if (payload.item.id.isNotBlank()) {
+            _denebWorkFeed.update { items ->
+                items.map { if (it.id == payload.item.id) payload.item else it }
+            }
+        }
+        val target = payload.sessionKey.ifBlank { payload.item.sessionKey }
+        if (target.isNotBlank()) {
+            switchSession(target)
+            loadTranscriptGuarded(target)
+        }
+        return payload.prompt.ifBlank { null }
     }
 
     // --- Conversation drawer → Deneb sessions browser -----------------------
@@ -1537,6 +1558,16 @@ class DenebGatewayClient(
 
     @Serializable
     private data class WorkFeedPayload(val items: List<WorkFeedItem> = emptyList())
+
+    @Serializable
+    private data class WorkFeedActionRunPayload(
+        val ok: Boolean = false,
+        val item: WorkFeedItem = WorkFeedItem(),
+        val sessionKey: String = "",
+        val prompt: String = "",
+        val message: String = "",
+        val removeFromFeed: Boolean = false,
+    )
 
     @Serializable
     private data class MemoryListPayload(val pages: List<MemoryPageRow> = emptyList())

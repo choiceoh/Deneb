@@ -22,7 +22,7 @@ data class ChatActions(
     val clearUnreadWorkReport: () -> Unit,
     val openWorkReport: () -> Unit,
     val openWorkFeedItem: (String) -> Unit,
-    val ackWorkFeedItem: (String) -> Unit,
+    val runWorkFeedAction: (String, String) -> Unit,
     val clearSnackbar: () -> Unit,
     val undoDeleteConversation: () -> Unit,
     val submitUiCallback: (event: String, data: Map<String, String>) -> Unit,

@@ -215,6 +215,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 					"captureAudio":    chatReady,
 					"captureContacts": hub.ContactsStore() != nil,
 					"workFeed":        s.workFeedStore != nil,
+					"workFeedActions": s.workFeedStore != nil,
 					"gmailAttachment": true,
 					"updateManifest":  true,
 				}

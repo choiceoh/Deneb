@@ -70,14 +70,25 @@ data class ConversationSummary(
 
 @Immutable
 @Serializable
+data class WorkFeedAction(
+    val id: String = "",
+    val kind: String = "",
+    val label: String = "",
+    val status: String = "",
+    val prompt: String = "",
+)
+
+@Immutable
+@Serializable
 data class WorkFeedItem(
-    val id: String,
+    val id: String = "",
     val source: String = "",
     val title: String = "",
     val summary: String = "",
     val body: String = "",
     val sessionKey: String = "",
     val status: String = "",
+    val actions: List<WorkFeedAction> = emptyList(),
     val createdAtMs: Long = 0,
 )
 

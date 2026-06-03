@@ -15,6 +15,7 @@ import (
 type WorkFeedStore interface {
 	List(limit int, includeAcked bool) ([]workfeed.Item, int, error)
 	Ack(id string) (workfeed.Item, error)
+	RunAction(itemID, actionID string) (workfeed.ActionResult, error)
 }
 
 type WorkFeedDeps struct {
@@ -31,8 +32,9 @@ func WorkFeedMethods(deps WorkFeedDeps) map[string]rpcutil.HandlerFunc {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.workfeed.list": workFeedList(deps),
-		"miniapp.workfeed.ack":  workFeedAck(deps),
+		"miniapp.workfeed.list":       workFeedList(deps),
+		"miniapp.workfeed.ack":        workFeedAck(deps),
+		"miniapp.workfeed.action.run": workFeedActionRun(deps),
 	}
 }
 
@@ -98,6 +100,52 @@ func workFeedAck(deps WorkFeedDeps) rpcutil.HandlerFunc {
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":   true,
 			"item": item,
+		})
+	}
+}
+
+func workFeedActionRun(deps WorkFeedDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ItemID   string `json:"itemId"`
+		ActionID string `json:"actionId"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		itemID := strings.TrimSpace(p.ItemID)
+		actionID := strings.TrimSpace(p.ActionID)
+		if itemID == "" {
+			return rpcerr.MissingParam("itemId").Response(req.ID)
+		}
+		if actionID == "" {
+			return rpcerr.MissingParam("actionId").Response(req.ID)
+		}
+		result, err := deps.Store.RunAction(itemID, actionID)
+		if err != nil {
+			switch {
+			case errors.Is(err, workfeed.ErrNotFound):
+				return rpcerr.NotFound("work feed item").Response(req.ID)
+			case errors.Is(err, workfeed.ErrActionNotFound):
+				return rpcerr.NotFound("work feed action").Response(req.ID)
+			default:
+				return rpcerr.WrapUnavailable("work feed unavailable", err).Response(req.ID)
+			}
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"ok":             true,
+			"item":           result.Item,
+			"action":         result.Action,
+			"sessionKey":     result.SessionKey,
+			"prompt":         result.Prompt,
+			"message":        result.Message,
+			"removeFromFeed": result.RemoveFromFeed,
 		})
 	}
 }
