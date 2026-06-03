@@ -64,15 +64,6 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 	s.safeGo("memory-pressure-monitor", func() { runMemPressureMonitor(ctx, s.logger) })
 }
 
-// emitChannelEvent broadcasts a telegram.changed event to WebSocket clients.
-func (s *Server) emitChannelEvent(channelID string, action string) {
-	s.broadcaster.Broadcast("telegram.changed", map[string]any{
-		"channelId": channelID,
-		"action":    action,
-		"ts":        time.Now().UnixMilli(),
-	})
-}
-
 // startProcessPruner runs a background loop that periodically prunes completed
 // processes older than 1 hour to prevent unbounded memory growth.
 func (s *Server) startProcessPruner(ctx context.Context) {

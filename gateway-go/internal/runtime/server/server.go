@@ -285,22 +285,10 @@ func New(addr string, opts ...Option) (*Server, error) {
 	s.processes = process.NewManager(s.logger)
 	if homeDir, err := os.UserHomeDir(); err == nil {
 		cronEnabled := true
-		// Seed DefaultTo from the Telegram operator chat ID at construction time so
-		// that jobs without a per-job Delivery.To still resolve to a valid target.
-		// Without this, the cron subagent's message.send tool hits "no active
-		// delivery target", the agent fabricates a Korean "텔레그램 채널이
-		// 연결되지 않아" apology, and the cron output layer then delivers that
-		// apology to Telegram — producing the self-contradicting message we saw
-		// in production. SetTelegramPlugin still fills DefaultTo as a late-bind
-		// backup, but only if the plugin is non-nil and config.ChatID != 0.
-		//
-		// Gate the seed on a usable Telegram bot token (raw or secretref) so we
-		// don't synthesize a target for environments where the plugin will not
-		// actually be created — otherwise cron runs without per-job Delivery.To
-		// would resolve a target, skip delivery silently, and be recorded as ok.
-		// Parse directly off snap.Raw to avoid 1Password resolution on the
-		// startup path; the real secret resolve still happens later in
-		// registerEarlyMethods when the plugin is constructed.
+		// Load config early just to honor a cron-disabled setting. The cron
+		// delivery default (DefaultChannel/DefaultTo below) no longer depends on
+		// any channel config: the Telegram bot was retired (PR #1922), so every
+		// job routes to the native client's 업무 session via MainSessionHandoff.
 		if snap, err := config.LoadConfigFromDefaultPath(); err == nil && snap != nil {
 			if snap.Config.Cron != nil && snap.Config.Cron.Enabled != nil && !*snap.Config.Cron.Enabled {
 				cronEnabled = false

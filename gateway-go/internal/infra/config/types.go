@@ -344,5 +344,4 @@ type GmailPollConfig struct {
 	MaxPerCycle *int   `json:"maxPerCycle,omitempty"` // max emails to process per cycle (default 5)
 	Model       string `json:"model,omitempty"`       // LLM model for analysis
 	PromptFile  string `json:"promptFile,omitempty"`  // path to custom analysis prompt (default ~/.deneb/gmail-analysis-prompt.md)
-	DeliverTo   string `json:"deliverTo,omitempty"`   // explicit proactive target ("chatID" or "chatID:thread:N"); empty = active home (follows /use-forum)
 }

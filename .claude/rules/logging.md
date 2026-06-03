@@ -11,7 +11,7 @@ globs: gateway-go/**/*.go
 
 | 레벨 | 언제 |
 |---|---|
-| **`Error`** | **사용자가 관찰하는 장애** — 응답 드롭, 상태 손상, 데이터 손실, 외부 시스템(Telegram/Gmail) 호출 영구 실패 |
+| **`Error`** | **사용자가 관찰하는 장애** — 응답 드롭, 상태 손상, 데이터 손실, 외부 시스템(네이티브 클라 push/Gmail) 호출 영구 실패 |
 | **`Warn`** | 회복 가능한 이상 — 1회 재시도 후 성공한 케이스, 선택적 기능 실패, 느린 응답 |
 | **`Info`** | 평상시 상태 변화 — agent run 시작/완료, 구독 등록, 기동 단계 |
 | **`Debug`** | 운영자가 문제 추적할 때만 필요한 상세 — 내부 상태, 토큰 카운트, 재시도 횟수 |
@@ -19,7 +19,7 @@ globs: gateway-go/**/*.go
 ## 규칙
 
 ### 1. "사용자가 응답 못 받는 사건"은 무조건 `Error`
-- replyFunc 실패, media 전송 실패, Telegram API 영구 실패 (재시도 소진)
+- replyFunc 실패, media 전송 실패, 네이티브 클라 delivery/push 영구 실패 (재시도 소진)
 - `Warn`으로 찍지 말 것 — 운영자가 평상시 로그에서 안 봄
 
 ### 2. 재시도 있는 실패는 2단계 로깅
@@ -51,7 +51,7 @@ defer func() {
 
 ### 6. 필드 네이밍
 - 세션: `session` 또는 `sessionKey`
-- 채널: `channel` (telegram 등)
+- 채널: `channel` (client 등)
 - 에러: `error` (기본)
 - ID: `runId`, `jobId`, `messageId` (camelCase 유지)
 
