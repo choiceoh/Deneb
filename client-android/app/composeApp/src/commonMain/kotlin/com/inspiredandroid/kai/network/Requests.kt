@@ -8,6 +8,7 @@ import com.inspiredandroid.kai.isDebugBuild
 import com.inspiredandroid.kai.network.dtos.anthropic.AnthropicChatRequestDto
 import com.inspiredandroid.kai.network.dtos.anthropic.AnthropicChatResponseDto
 import com.inspiredandroid.kai.network.dtos.anthropic.AnthropicModelsResponseDto
+import com.inspiredandroid.kai.network.dtos.anthropic.anthropicSystemContent
 import com.inspiredandroid.kai.network.dtos.gemini.FunctionDeclaration
 import com.inspiredandroid.kai.network.dtos.gemini.FunctionParameters
 import com.inspiredandroid.kai.network.dtos.gemini.GeminiChatRequestDto
@@ -322,7 +323,7 @@ class Requests {
                         model = credentials.modelId,
                         messages = messages,
                         max_tokens = 8192,
-                        system = systemInstruction,
+                        system = systemInstruction?.let { anthropicSystemContent(it) },
                         tools = tools.mapNotNull { runCatching { it.toAnthropicTool() }.getOrNull() }
                             .ifEmpty { null },
                     ),

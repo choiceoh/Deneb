@@ -174,6 +174,20 @@ internal fun buildChatSystemPrompt(
     if (isNotEmpty()) append("\n\n")
     append(DEFAULT_ACTING_SECTION)
 
+    // kai-ui catalog is emitted here — right after the static policy sections and BEFORE any
+    // volatile content (memory, email counts, the Context timestamp). The ~3KB catalog is
+    // static, so keeping it inside a byte-stable prefix lets vLLM automatic prefix caching
+    // reuse it across interactive-mode turns instead of re-prefilling it on every tap. If it
+    // sat after the per-request timestamp (as it used to), the prefix changed every request
+    // and the catalog was never cacheable. Mirrors the gateway's static-first cache ordering.
+    if (variant == SystemPromptVariant.CHAT_REMOTE) {
+        when (uiMode) {
+            ChatPromptUiMode.DYNAMIC_UI -> appendDynamicUiSection()
+            ChatPromptUiMode.INTERACTIVE_UI -> appendInteractiveUiSection()
+            ChatPromptUiMode.NONE -> {}
+        }
+    }
+
     if (!memoryInstructions.isNullOrEmpty()) {
         if (isNotEmpty()) append("\n\n")
         append(memoryInstructions)
@@ -223,15 +237,9 @@ internal fun buildChatSystemPrompt(
         }
     }
 
+    // Context (with the per-request timestamp) is intentionally last: it's the most volatile
+    // block, so keeping it at the tail maximizes the byte-stable prefix in front of it.
     appendContextSection(runtime)
-
-    if (variant == SystemPromptVariant.CHAT_REMOTE) {
-        when (uiMode) {
-            ChatPromptUiMode.DYNAMIC_UI -> appendDynamicUiSection()
-            ChatPromptUiMode.INTERACTIVE_UI -> appendInteractiveUiSection()
-            ChatPromptUiMode.NONE -> {}
-        }
-    }
 }
 
 /**
