@@ -665,6 +665,7 @@ private fun ChatModeScreen(
                             uiState.actions.openWorkFeedItem(id)
                         },
                         onRunAction = uiState.actions.runWorkFeedAction,
+                        onClose = { showWorkFeed = false },
                     )
                 }
             }
