@@ -35,6 +35,20 @@ import com.inspiredandroid.kai.ui.dynamicui.KaiUiRenderer
 import kotlinx.collections.immutable.persistentListOf
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 
 // Off-screen render harness: renders Deneb composables to PNG via Skia so the
 // look (and bugs like invisible text) can be inspected without building +
@@ -72,6 +86,8 @@ fun main() {
     renderCalendarEvent("calendar_event_light.png", LightColorScheme)
     renderChart("chart_dark.png", DarkColorScheme)
     renderChart("chart_light.png", LightColorScheme)
+    renderWidget("widget_loaded.png", "6/3 14:00 · 기획조정실 주간 회의 3분기 점검", "받은편지함 미읽음 3")
+    renderWidget("widget_loading.png", "불러오는 중…", "")
     println("rendered -> /tmp/deneb-render/")
 }
 
@@ -219,6 +235,73 @@ private fun renderChart(name: String, scheme: ColorScheme) {
                         onCallback = { _, _ -> },
                         wrapInCard = false,
                     )
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// --- Home widget mirror ---
+// The Android home widget is RemoteViews (androidApp/deneb_widget.xml +
+// DenebWidgetProvider.render). Paparazzi's layoutlib has no Linux-aarch64 native
+// binary, so it can't render on this host; instead we reproduce the widget's
+// exact layout, colors, and Material glyph paths in Compose/Skia. Keep these in
+// sync with deneb_widget.xml whenever the widget changes.
+private const val WIDGET_CAL_PATH =
+    "M19,3h-1V1h-2v2H8V1H6v2H5C3.89,3 3,3.9 3,5v14c0,1.1 0.89,2 2,2h14c1.1,0 2,-0.9 2,-2V5C21,3.9 20.1,3 19,3zM19,19H5V8h14V19z"
+private const val WIDGET_MAIL_PATH =
+    "M20,4H4c-1.1,0 -1.99,0.9 -1.99,2L2,18c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V6c0,-1.1 -0.9,-2 -2,-2zM20,8l-8,5 -8,-5V6l8,5 8,-5v2z"
+
+private fun widgetGlyph(pathData: String): ImageVector =
+    ImageVector.Builder(
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f,
+    ).apply {
+        addPath(PathParser().parsePathString(pathData).toNodes(), fill = SolidColor(Color.White))
+    }.build()
+
+private fun renderWidget(name: String, meeting: String, unread: String) {
+    val homeBg = Color(0xFF0B0B12)
+    val cardBg = Color(0xFF1A1B26)
+    val accent = Color(0xFF7AA2F7)
+    val titleColor = Color(0xFFE8EAF0)
+    val subColor = Color(0xFFA9B1D6)
+    val scene = ImageComposeScene(width = 640, height = 380, density = Density(2f)) {
+        Box(Modifier.fillMaxSize().background(homeBg).padding(24.dp)) {
+            Column(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(cardBg)
+                    .padding(16.dp),
+            ) {
+                Text("Deneb", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                Row {
+                    Icon(widgetGlyph(WIDGET_CAL_PATH), null, Modifier.padding(top = 2.dp).size(16.dp), tint = accent)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        meeting,
+                        color = titleColor,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (unread.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(widgetGlyph(WIDGET_MAIL_PATH), null, Modifier.size(14.dp), tint = subColor)
+                        Spacer(Modifier.width(8.dp))
+                        Text(unread, color = subColor, fontSize = 13.sp)
+                    }
                 }
             }
         }
