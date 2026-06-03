@@ -14,6 +14,7 @@ import com.inspiredandroid.kai.httpClient
 import com.inspiredandroid.kai.contacts.ContactData
 import com.inspiredandroid.kai.data.Attachment
 import com.inspiredandroid.kai.deneb.generated.CalendarEventOut
+import com.inspiredandroid.kai.deneb.generated.MailAnalysisOut
 import com.inspiredandroid.kai.deneb.generated.MailMessageOut
 import com.inspiredandroid.kai.deneb.generated.MailRowOut
 import com.inspiredandroid.kai.deneb.generated.MemoryCategoryRow
@@ -27,6 +28,8 @@ import com.inspiredandroid.kai.deneb.generated.ProjectRef
 import com.inspiredandroid.kai.deneb.generated.QATurn
 import com.inspiredandroid.kai.deneb.generated.RoleModel
 import com.inspiredandroid.kai.deneb.generated.SearchAllResult
+import com.inspiredandroid.kai.deneb.generated.SenderRecentOut
+import com.inspiredandroid.kai.deneb.generated.SenderWikiHitOut
 import com.inspiredandroid.kai.deneb.generated.SessionRowOut
 import com.inspiredandroid.kai.deneb.generated.TranscriptMsgOut
 import com.inspiredandroid.kai.ui.chat.History
@@ -899,11 +902,11 @@ class DenebGatewayClient(
 
     /** Instant cached analysis (no LLM call) if one was already produced on poll or earlier. */
     suspend fun fetchCachedAnalysis(id: String): MailAnalysis? =
-        callRpc<AnalyzePayload>("miniapp.gmail.analysis_cached", buildJsonObject { put("id", id) })?.toAnalysis()
+        callRpc<MailAnalysisOut>("miniapp.gmail.analysis_cached", buildJsonObject { put("id", id) })?.toAnalysis()
 
     /** Run AI analysis; force=true reruns the LLM instead of returning the cached result. */
     suspend fun analyzeMail(id: String, force: Boolean = false): MailAnalysis? =
-        callRpc<AnalyzePayload>(
+        callRpc<MailAnalysisOut>(
             "miniapp.gmail.analyze",
             buildJsonObject {
                 put("id", id)
@@ -911,7 +914,7 @@ class DenebGatewayClient(
             },
         )?.toAnalysis()
 
-    private fun AnalyzePayload.toAnalysis(): MailAnalysis? =
+    private fun MailAnalysisOut.toAnalysis(): MailAnalysis? =
         if (analysis.isBlank()) {
             null
         } else {
@@ -1770,15 +1773,6 @@ class DenebGatewayClient(
     private data class OkPayload(val ok: Boolean = false)
 
     @Serializable
-    private data class AnalyzePayload(
-        val analysis: String = "",
-        val relatedProjects: List<ProjectRef> = emptyList(),
-        val cached: Boolean = false,
-        val createdAt: String = "",
-        val durationMs: Long = 0,
-    )
-
-    @Serializable
     private data class AskPayload(val answer: String = "")
 
     @Serializable
@@ -1786,20 +1780,9 @@ class DenebGatewayClient(
         val sender: String = "",
         val email: String = "",
         val displayName: String = "",
-        val recent: MailSenderRecent? = null,
-        val wikiHits: List<MailWikiHit> = emptyList(),
+        val recent: SenderRecentOut? = null,
+        val wikiHits: List<SenderWikiHitOut> = emptyList(),
         val wikiFacts: String = "",
-    )
-
-    @Serializable
-    private data class MailSenderRecent(val count: Int = 0, val lastReceivedAt: String = "", val windowDays: Int = 0)
-
-    @Serializable
-    private data class MailWikiHit(
-        val path: String = "",
-        val title: String = "",
-        val summary: String = "",
-        val category: String = "",
     )
 
     // Calendar list envelope. The element shape (CalendarEventOut) and its
