@@ -6,6 +6,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.pretendard_bold
 import kai.composeapp.generated.resources.pretendard_extralight
@@ -54,7 +55,7 @@ fun pretendardTypography(): Typography {
         titleLarge = base.titleLarge.copy(fontFamily = family, letterSpacing = (-0.015).em),
         titleMedium = base.titleMedium.copy(fontFamily = family, letterSpacing = (-0.01).em),
         titleSmall = base.titleSmall.copy(fontFamily = family, letterSpacing = (-0.01).em),
-        bodyLarge = base.bodyLarge.copy(fontFamily = family, letterSpacing = (-0.005).em),
+        bodyLarge = base.bodyLarge.copy(fontFamily = family, fontSize = 15.sp, lineHeight = 22.sp, letterSpacing = (-0.005).em),
         bodyMedium = base.bodyMedium.copy(fontFamily = family, letterSpacing = (-0.005).em),
         bodySmall = base.bodySmall.copy(fontFamily = family, letterSpacing = (-0.005).em),
         labelLarge = base.labelLarge.copy(fontFamily = family, letterSpacing = (-0.005).em),
