@@ -6,7 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -14,7 +16,7 @@ import (
 
 // VerifyFinding represents a single verification issue found.
 type VerifyFinding struct {
-	Type   string `json:"type"`            // "duplicate" or "misclassified"
+	Type   string `json:"type"`            // "duplicate", "misclassified", or "stale_deadline"
 	Detail string `json:"detail"`          // human-readable description (Korean)
 	PageA  string `json:"pageA"`           // primary page path
 	PageB  string `json:"pageB,omitempty"` // secondary page path (for duplicates)
@@ -23,6 +25,11 @@ type VerifyFinding struct {
 // verifyPages runs verification on existing wiki pages:
 //  1. Duplicate detection via Levenshtein distance on titles/IDs (no LLM)
 //  2. Misclassification detection via single LLM call
+//  3. Stale-deadline detection: pages whose `due` date has already passed (no LLM)
+//
+// Detection only — no auto-fix. Stale deadlines are surfaced, never deleted, so
+// the operator (or a later analysis turn) decides whether a deal/milestone is
+// done or slipped, and analysis stops treating a passed deadline as upcoming.
 func (wd *WikiDreamer) verifyPages(ctx context.Context) []VerifyFinding {
 	idx := wd.store.Index()
 	if len(idx.Entries) < 2 {
@@ -39,6 +46,49 @@ func (wd *WikiDreamer) verifyPages(ctx context.Context) []VerifyFinding {
 		findings = append(findings, wd.detectMisclassifications(ctx, idx)...)
 	}
 
+	// 5c: Stale-deadline detection (pure computation).
+	findings = append(findings, wd.detectStaleDeadlines()...)
+
+	return findings
+}
+
+// detectStaleDeadlines flags pages whose frontmatter `due` (YYYY-MM-DD) is in
+// the past. Reads pages directly because the index doesn't carry the due field.
+// Pure computation, no LLM.
+func (wd *WikiDreamer) detectStaleDeadlines() []VerifyFinding {
+	relPaths, err := wd.store.ListPages("")
+	if err != nil {
+		return nil
+	}
+	today := time.Now()
+	var findings []VerifyFinding
+	for _, rp := range relPaths {
+		page, err := wd.store.ReadPage(rp)
+		if err != nil || page == nil {
+			continue
+		}
+		due := strings.TrimSpace(page.Meta.Due)
+		if due == "" {
+			continue
+		}
+		dueTime, perr := time.Parse("2006-01-02", due)
+		if perr != nil {
+			continue
+		}
+		days := int(today.Sub(dueTime).Hours() / 24)
+		if days <= 0 {
+			continue // deadline is today or still upcoming
+		}
+		title := page.Meta.Title
+		if title == "" {
+			title = strings.TrimSuffix(filepath.Base(rp), ".md")
+		}
+		findings = append(findings, VerifyFinding{
+			Type:   "stale_deadline",
+			Detail: fmt.Sprintf("기한 지남: %q (기한 %s, %d일 경과) — 처리 완료/갱신 필요", title, due, days),
+			PageA:  rp,
+		})
+	}
 	return findings
 }
 
