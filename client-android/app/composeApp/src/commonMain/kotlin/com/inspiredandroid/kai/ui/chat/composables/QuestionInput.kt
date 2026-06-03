@@ -195,7 +195,16 @@ fun QuestionInput(
                     }
                     return@onPreviewKeyEvent false
                 },
-            colors = outlineTextFieldColors(),
+            // A filled TextField draws a bottom indicator line from these colors. We
+            // render the outline ourselves with animatedGradientBorder (uniform on all
+            // four sides), so the indicator must be transparent — otherwise it stacks on
+            // the bottom edge and that side looks thicker than left/top/right.
+            colors = outlineTextFieldColors().copy(
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
+                errorIndicatorColor = Color.Transparent,
+            ),
             placeholder = {
                 Text(
                     stringResource(Res.string.prompt_ask_question),
