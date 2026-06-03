@@ -3,6 +3,7 @@ package server
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 )
 
 // MemorySubsystem groups the wiki knowledge base and contacts address-book mirror.
@@ -13,4 +14,5 @@ import (
 type MemorySubsystem struct {
 	wikiStore     *wiki.Store     // set during initMemorySubsystem()
 	contactsStore *contacts.Store // set during registerEarlyMethods()
+	workFeedStore *workfeed.Store // set during registerEarlyMethods()
 }

@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	chatpkg "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -39,6 +40,12 @@ type Deps struct {
 	// SaveContacts mirrors the synced address book into the contacts store (phone
 	// lookup, name search, ASR hotwords). Optional; nil disables the store write.
 	SaveContacts func(contactsJSON []byte) (int, error)
+	// WorkFeed records native-client inputs as actionable work-feed items.
+	// Optional; capture handlers ignore append failures because the chat turn is
+	// still the source of truth.
+	WorkFeed interface {
+		Append(workfeed.Item) (workfeed.Item, error)
+	}
 }
 
 // BtwDeps holds the dependencies for the chat.btw side-question RPC method.

@@ -105,6 +105,7 @@ import com.inspiredandroid.kai.ui.chat.composables.TopBar
 import com.inspiredandroid.kai.ui.chat.composables.TrailingIcon
 import com.inspiredandroid.kai.ui.chat.composables.UserMessage
 import com.inspiredandroid.kai.ui.chat.composables.WaitingResponseRow
+import com.inspiredandroid.kai.ui.chat.composables.WorkFeedPanel
 import com.inspiredandroid.kai.ui.chat.composables.WorkReportBanner
 import com.inspiredandroid.kai.ui.chat.composables.uiErrorText
 import com.inspiredandroid.kai.ui.components.animatedGradientBorder
@@ -739,6 +740,13 @@ private fun ChatModeScreen(
                                 target = dropTarget,
                             ),
                     ) {
+                        if (uiState.currentConversationId == "client:main" && uiState.workFeed.isNotEmpty()) {
+                            WorkFeedPanel(
+                                items = uiState.workFeed,
+                                onOpen = uiState.actions.openWorkFeedItem,
+                                onAck = uiState.actions.ackWorkFeedItem,
+                            )
+                        }
                         if (uiState.history.isEmpty()) {
                             // Interactive UI mode isn't offered on on-device LiteRT: the kai-ui
                             // component schema is too large for small Gemma models to coherently

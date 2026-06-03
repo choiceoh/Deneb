@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	chatpkg "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -115,6 +116,13 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
 		}
+		recordWorkFeed(deps, workfeed.Item{
+			Source:     workfeed.SourceCaptureImage,
+			Title:      "공유 이미지",
+			Summary:    workfeed.Preview(res.BestText(), 180),
+			Body:       res.BestText(),
+			SessionKey: sessionKey,
+		})
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"text":       res.Text,
 			"ocr":        strings.TrimSpace(text),
@@ -191,6 +199,13 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
 		}
+		recordWorkFeed(deps, workfeed.Item{
+			Source:     workfeed.SourceCaptureAudio,
+			Title:      "공유 녹음",
+			Summary:    workfeed.Preview(res.BestText(), 180),
+			Body:       res.BestText(),
+			SessionKey: sessionKey,
+		})
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"text":       res.Text,
 			"transcript": strings.TrimSpace(transcript),
@@ -214,7 +229,8 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 func handleMiniappCaptureContacts(deps Deps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
-			Contacts json.RawMessage `json:"contacts"`
+			Contacts   json.RawMessage `json:"contacts"`
+			SessionKey string          `json:"sessionKey"`
 		}](req)
 		if errResp != nil {
 			return errResp
@@ -247,15 +263,34 @@ func handleMiniappCaptureContacts(deps Deps) rpcutil.HandlerFunc {
 				enrich = res
 			}
 		}
+		sessionKey := strings.TrimSpace(p.SessionKey)
+		if sessionKey == "" {
+			sessionKey = nativeClientChannel + ":main"
+		}
+		text := contactsSummary(saved, enrich)
+		recordWorkFeed(deps, workfeed.Item{
+			Source:     workfeed.SourceCaptureContacts,
+			Title:      "주소록 동기화",
+			Summary:    text,
+			Body:       text,
+			SessionKey: sessionKey,
+		})
 
 		return rpcutil.RespondOK(req.ID, map[string]any{
-			"text":     contactsSummary(saved, enrich),
+			"text":     text,
 			"saved":    saved,
 			"enriched": enrich.Updated,
 			"matched":  enrich.Matched,
 			"total":    enrich.Total,
 		})
 	}
+}
+
+func recordWorkFeed(deps Deps, item workfeed.Item) {
+	if deps.WorkFeed == nil {
+		return
+	}
+	_, _ = deps.WorkFeed.Append(item)
 }
 
 // contactsSummary renders a short Korean summary of an address-book sync for the

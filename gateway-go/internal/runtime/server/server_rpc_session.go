@@ -244,6 +244,7 @@ func (s *Server) registerSessionRPCMethods() {
 		transcriptStore: transcriptStore,
 		logger:          s.logger,
 		pushHub:         s.pushHub,
+		workFeed:        s.workFeedStore,
 	}
 
 	// Wire transcript cloner for subagent cron session support.
