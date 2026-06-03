@@ -17,7 +17,9 @@ func TestCacheHitTracker(t *testing.T) {
 		t.Errorf("after ignored records Snapshot = (%d,%d,%d), want (0,0,0)", cr, cc, fi)
 	}
 
-	// Record across two turns: read=80+10, creation=10+0, fresh=10+0.
+	// Record across two turns. The 3rd arg is the DISJOINT uncached remainder
+	// (Anthropic usage.input_tokens), not a grand-total, so the buckets simply
+	// sum: read=80+10, creation=10+0, fresh=10+0.
 	c.Record(80, 10, 10)
 	c.Record(10, 0, 0)
 
@@ -30,5 +32,33 @@ func TestCacheHitTracker(t *testing.T) {
 	want := 90.0 / 110.0
 	if got := c.HitRatio(); got != want {
 		t.Errorf("HitRatio = %v, want %v", got, want)
+	}
+	// HitRatioOf on the snapshot must match the method.
+	if got := HitRatioOf(cr, cc, fi); got != want {
+		t.Errorf("HitRatioOf = %v, want %v", got, want)
+	}
+
+	// RecentRatio is an EWMA over the two positive records: first (80,10,10)
+	// ratio 0.8 seeds it, then (10,0,0) ratio 1.0 blends in:
+	// 0.1*1.0 + 0.9*0.8 = 0.82.
+	recent, ok := c.RecentRatio()
+	if !ok {
+		t.Fatal("RecentRatio ok = false, want true after positive records")
+	}
+	if diff := recent - 0.82; diff > 1e-9 || diff < -1e-9 {
+		t.Errorf("RecentRatio = %v, want 0.82", recent)
+	}
+}
+
+// TestCacheHitTracker_RecentRatioEmpty verifies RecentRatio reports not-seen
+// until a record carries prompt tokens.
+func TestCacheHitTracker_RecentRatioEmpty(t *testing.T) {
+	var c CacheHitTracker
+	if _, ok := c.RecentRatio(); ok {
+		t.Error("RecentRatio ok = true on empty tracker, want false")
+	}
+	c.Record(0, 0, 0) // no prompt tokens → must not seed the EWMA
+	if _, ok := c.RecentRatio(); ok {
+		t.Error("RecentRatio ok = true after zero-token record, want false")
 	}
 }

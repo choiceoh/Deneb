@@ -410,12 +410,20 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 	}
 
 	// Process-wide prompt-cache hit ratio — the cache-doctrine regression
-	// alarm (.claude/rules/prompt-cache.md). Cumulative since gateway start,
-	// across all sessions. Only shown once some prompt tokens are recorded.
+	// alarm (.claude/rules/prompt-cache.md), counted only for Anthropic-mode
+	// runs (non-Anthropic providers can't report cache usage). Shows a recent
+	// EWMA (surfaces a fresh regression) alongside the cumulative-since-start
+	// total. Only rendered once some prompt tokens are recorded.
 	if cr, cc, fi := metrics.CacheHits.Snapshot(); cr+cc+fi > 0 {
-		sections = append(sections, fmt.Sprintf("💾 **캐시 히트율:** %.0f%% (read %s · write %s · fresh %s)",
-			metrics.CacheHits.HitRatio()*100,
-			formatCompactTokens(cr), formatCompactTokens(cc), formatCompactTokens(fi)))
+		// Compute the cumulative ratio from this same snapshot (not a second
+		// atomic load) so the shown percentage and counts stay consistent.
+		line := fmt.Sprintf("💾 **캐시 히트율:** 누적 %.0f%%", metrics.HitRatioOf(cr, cc, fi)*100)
+		if recent, ok := metrics.CacheHits.RecentRatio(); ok {
+			line += fmt.Sprintf(" · 최근 %.0f%%", recent*100)
+		}
+		line += fmt.Sprintf(" (read %s · write %s · fresh %s)",
+			formatCompactTokens(cr), formatCompactTokens(cc), formatCompactTokens(fi))
+		sections = append(sections, line)
 	}
 
 	return strings.Join(sections, "\n")

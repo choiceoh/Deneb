@@ -19,6 +19,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
@@ -214,9 +215,10 @@ func executeAgentRun(
 	//    non-system messages (Hermes Agent's "system_and_3" pattern, scaled
 	//    to fit Anthropic's 4-breakpoint limit alongside our 2 system
 	//    markers). No-op for non-Anthropic providers.
+	apiMode := resolveAPIMode(deps, providerID)
 	cfg.BeforeAPICall = agent.ComposeBeforeAPICall(
 		buildSteerHookIfEnabled(deps.steerQueue, params.SessionKey, logger),
-		buildTrailingCacheHook(resolveAPIMode(deps, providerID)),
+		buildTrailingCacheHook(apiMode),
 	)
 
 	// Set up stream hooks via compositor: fan-out dispatch for each hook type.
@@ -268,6 +270,20 @@ func executeAgentRun(
 		"totalToolCalls", agentResult.TotalToolCalls,
 		"toolHist", toolHist,
 		"finalTextHead", finalTextHead)
+
+	// Record this run's prompt-cache usage for the /status hit-ratio alarm —
+	// but only for Anthropic-mode runs. Non-Anthropic providers (vLLM/OpenAI
+	// mode) never populate cache_* fields, so counting them would drag the
+	// process-wide ratio down with structural "misses" that have nothing to do
+	// with the prompt-cache doctrine. The three buckets are disjoint (Anthropic
+	// usage semantics): InputTokens is the uncached remainder, not a grand-total.
+	if apiMode == llm.APIModeAnthropic {
+		metrics.CacheHits.Record(
+			int64(agentResult.Usage.CacheReadInputTokens),
+			int64(agentResult.Usage.CacheCreationInputTokens),
+			int64(agentResult.Usage.InputTokens),
+		)
+	}
 
 	// Emit agent run.end event to gateway subscriptions.
 	if deps.callbacks.emitAgentFn != nil {
