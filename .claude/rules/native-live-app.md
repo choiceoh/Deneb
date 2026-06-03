@@ -44,6 +44,7 @@ scripts/dev/native-app.sh stop
 | `find "텍스트"` | 화면 OCR(tesseract kor+eng) → 그 텍스트의 픽셀 좌표 `X Y` 출력. 픽셀 하드코딩 대신 **텍스트로** 탭 위치를 잡는다. |
 | `assert "텍스트"` | 화면 OCR → 텍스트 있으면 exit 0, 없으면 1. **기대 화면이 실제로 떴는지** 검증(스모크가 wrong-screen/blank-render를 잡는 근거). |
 | `taptext "텍스트"` | OCR-find 후 그 텍스트를 탭. 레이아웃이 바뀌어도 안 깨지는 네비. ★앵커는 **OCR이 실제로 읽는** 문자열로(예: `← 뒤로`는 화살표 탓에 빗나감→`보관`, `역할별`보다 `경량`이 안정적). 화살표/아이콘 인접 텍스트는 피하고 `assert`로 먼저 검증. |
+| `wait-for "텍스트" [초]` | OCR을 폴링해 그 텍스트가 뜰 때까지 대기(기본 8초, 0.4초 간격). 고정 `sleep` 대신 **렌더 완료를 실제로 기다린다** — 화면 전환 후 정착 대기용. 뜨면 exit 0, 타임아웃 1. 콜드 첫 탭이 애니메이션 중 발사돼 빗나가는 flake를 줄인다. |
 | `seed [url] [token]` | `~/.kai` 게이트웨이 설정 재기록(기본: 프로덕션). |
 | `status` / `logs [n]` | 상태 / 앱 로그. |
 | `restart [profile]` / `stop` | 재시작 / 전체 종료. |
@@ -110,11 +111,13 @@ sudo apt-get install -y xvfb x11vnc novnc websockify matchbox-window-manager \
 
 ## 배포 전 스모크 (`native-app-smoke.sh`)
 
-`scripts/dev/native-app-smoke.sh` 가 위 하네스를 자동으로 몰아 **핵심 화면을 한 바퀴** 돈다 — 채팅(업무 피드) → 메일 → 일정 → 검색 → 사람 → 카테고리 → 설정 4탭 → 세션 드로어(12개). `compileKotlinDesktop`·단위테스트가 못 잡는 **런타임 크래시**(예: 158/#1959 의 LazyColumn 중복키 `IllegalArgumentException` — 실데이터 렌더 때만 터짐)를 APK 게시 전에 차단하는 **수동 게이트**.
+`scripts/dev/native-app-smoke.sh` 가 위 하네스를 자동으로 몰아 **핵심 화면을 한 바퀴** 돈다 — 채팅(업무 피드) → 메일 → 일정 → 검색 → 사람 → 카테고리 → 설정 4탭 → 세션 드로어 → **메일 상세**(13개). `compileKotlinDesktop`·단위테스트가 못 잡는 **런타임 크래시**(예: 158/#1959 의 LazyColumn 중복키 `IllegalArgumentException` — 실데이터 렌더 때만 터짐)를 APK 게시 전에 차단하는 **수동 게이트**.
 
 - **prod 데이터라 픽셀-골든 비교 안 함.** 화면마다 ①그 화면이 렌더되는 동안 앱 로그에 새 예외/크래시 라인(`Exception`/`Caused by:`/`already used`/`*Exception` …)이 없고 ②앱 JVM(`app_jvm.pid`)이 살아있고 ③**그 화면의 앵커 텍스트가 OCR로 실제 보이는지**(`native-app.sh assert` — wrong-screen/blank-render 차단; 크래시 없는 **nav 실패**까지 잡는다)를 검사. 스크린샷은 `shots/smoke-*.png` 로 보관(Read 로 육안 확인).
 - **읽기 전용**: tap + Escape 로만 이동, 전송/입력/액션 버튼 안 누름 → prod 게이트웨이에 안전.
-- 네비 좌표는 phone(412×915) 픽셀 하드코딩(드로어 항목·상단바). 네비 레이아웃이 바뀌면 재매핑(`start`→`shot`→Read→새 좌표). alive 판정은 `status`(매번 윈도우 재탐색이라 tap 직후 flaky) 말고 `app_jvm.pid` `kill -0`.
+- **네비는 텍스트 주도**(`taptext`): 드로어 항목·설정 탭은 라벨로 탭하고 `wait-for` 로 정착을 기다린 뒤 앵커를 `assert` → 레이아웃이 흔들려도 안 깨진다. 콜드 첫 탭이 애니메이션 중 발사돼 빗나가면 **앵커 미도달 시 1회 재탭**(`retry_nav`)으로 자가치유. 아이콘 전용 컨트롤(햄버거 `25,37`·세션 `388,37`·데이터 의존 메일 행 `200,185`)만 픽셀 탭으로 남긴다.
+- **앵커 없는 화면**: 크론·토픽문서·알림은 고유 OCR 앵커가 없어(특히 알림의 "…알림 캡처를 지원하지 않습니다"는 `캡처를→BMS`로 오독, 유일 가독어 "알림"은 게이트웨이 탭에도 존재) **크래시/생존만** 검사. 앵커 후보는 반드시 라이브 `assert`로 가독성·고유성을 먼저 확인하고 추가.
+- alive 판정은 `status`(매번 윈도우 재탐색이라 tap 직후 flaky) 말고 `app_jvm.pid` `kill -0`.
 - **게시 직전 실행**: `scripts/dev/native-app-smoke.sh` → PASS 면 `publish-apk.sh`, FAIL 이면 해당 `smoke-*.png` 를 Read.
 
 ## 한계 / 주의

@@ -5,45 +5,40 @@
 # duplicate-key IllegalArgumentException that only blew up at render time with
 # real data.
 #
-# Why not golden screenshots: the harness is prod-connected (live mail/calendar
-# data), so pixel diffs are non-deterministic. Instead, for each screen this:
-#   1. drives to it (read-only: tap + Escape, never send/type/mutate),
-#   2. screenshots it as an artifact for human review (Read the PNGs), and
-#   3. asserts no NEW exception/crash line hit the app log while it rendered,
-#      and that the app process is still alive.
+# Per screen it asserts three things:
+#   1. no NEW exception/crash line hit the app log while it rendered,
+#   2. the app JVM is still alive, and
+#   3. an OCR anchor text for that screen is actually on screen
+#      (catches wrong-screen / blank render — not just crashes).
+# Screenshots are saved as artifacts for human review (Read shots/smoke-*.png).
 #
-# Run this before publishing an APK (scripts/dev/publish-apk.sh). It needs the
-# live harness (Xvfb + prod gateway), so it is a manual pre-release gate, not CI.
+# Navigation is TEXT-DRIVEN via `native-app.sh taptext` (OCR) wherever a control
+# has a label, so it survives layout shifts; only icon-only controls (hamburger,
+# recent-sessions, a data-dependent list row) stay pixel-tapped. Settling uses
+# `wait-for` (poll until the anchor renders) instead of fixed sleeps.
 #
-# Usage:   scripts/dev/native-app-smoke.sh
-# Env:     same as native-app.sh — set DENEB_GATEWAY_URL to target a dev gateway
-#          instead of prod for deterministic runs.
+# READ-ONLY: taptext/tap + Escape only — never sends/types/mutates — so it is
+# safe against the prod gateway. Run before publishing an APK. Needs the live
+# harness (Xvfb + prod), so it is a manual pre-release gate, not CI.
 #
-# Nav coordinates below are phone-profile (412x915) pixels, mapped from the
-# drawer + top bar. If the navigation layout changes, re-map them (boot the app,
-# `native-app.sh shot`, Read the PNG, read off the new coords).
+# Usage: scripts/dev/native-app-smoke.sh
+# Env:   same as native-app.sh — DENEB_GATEWAY_URL to target a dev gateway.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NA="$HERE/native-app.sh"
-# LOG / SHOTS / PIDFILE are resolved from `native-app.sh status` after boot (see
-# below), so this follows DENEB_INSTANCE worktree isolation — the state dir is
-# namespaced per worktree, so hardcoding ~/.cache/deneb-native/ breaks there.
-# Aliveness uses app_jvm.pid (the recorded window pid) via kill -0: stable, unlike
-# `status` which re-searches the window each call and flakes right after a tap.
+# Resolved from `native-app.sh status` after boot (DENEB_INSTANCE-aware).
 LOG="" SHOTS="" PIDFILE=""
 
-# Crash-class signals. Kept specific so handled/info logging does not false-flag;
-# "already used" is the exact #1959 Compose duplicate-key signature.
+# Crash-class signals. Specific enough that handled/info logging doesn't false-
+# flag; "already used" is the exact #1959 Compose duplicate-key signature.
 ERR_RE='Exception in thread|FATAL|Caused by:|already used|IllegalArgumentException|IllegalStateException|NullPointerException|ConcurrentModification|UninitializedProperty'
 
 fail=0
 results=()
-
 log_lines() { wc -l < "$LOG" 2>/dev/null || echo 0; }
 
-# check_screen NAME LINES_BEFORE — shot the screen, then scan the log lines that
-# appeared since LINES_BEFORE for crash signals, and confirm the app is alive.
+# check_screen NAME LINES_BEFORE [ANCHOR]
 check_screen() {
   local name="$1" before="$2" anchor="${3:-}"
   "$NA" shot "$name" >/dev/null 2>&1 || true
@@ -71,6 +66,49 @@ check_screen() {
   fi
 }
 
+# settle ANCHOR — wait for ANCHOR to render (≤8s); fall back to a short sleep so
+# anchor-less screens still get a beat to paint.
+settle() {
+  [ -n "$1" ] && "$NA" wait-for "$1" 8 >/dev/null 2>&1 || sleep 2
+}
+
+# retry_nav LABEL ANCHOR — if ANCHOR didn't land, re-tap LABEL once and settle.
+# Self-heals the occasional cold-first-tap flake (the very first drawer open after
+# boot can fire taptext mid-animation). The re-tap is a no-op when nav already
+# succeeded: LABEL (the English drawer/tab word) is only on screen while the
+# drawer/tab-bar still shows it, so a successful nav leaves nothing to re-tap.
+retry_nav() {
+  local label="$1" anchor="$2"
+  [ -n "$anchor" ] || return 0
+  "$NA" assert "$anchor" >/dev/null 2>&1 && return 0
+  "$NA" taptext "$label" >/dev/null 2>&1 || true
+  settle "$anchor"
+}
+
+# go_drawer NAME DRAWER_LABEL ANCHOR — open a left-drawer screen by its label.
+go_drawer() {
+  local name="$1" label="$2" anchor="$3" b
+  "$NA" tap 25 37 >/dev/null 2>&1 || true            # hamburger (icon → pixel)
+  "$NA" wait-for "$label" 5 >/dev/null 2>&1 || true  # drawer rendered
+  b="$(log_lines)"
+  "$NA" taptext "$label" >/dev/null 2>&1 || true     # open the screen by its text
+  settle "$anchor"
+  retry_nav "$label" "$anchor"
+  check_screen "$name" "$b" "$anchor"
+  "$NA" key Escape >/dev/null 2>&1 || true            # back to chat
+  sleep 1
+}
+
+# settings_tab NAME TAB_LABEL ANCHOR — switch a settings tab by its label.
+settings_tab() {
+  local name="$1" tab="$2" anchor="$3" b
+  b="$(log_lines)"
+  "$NA" taptext "$tab" >/dev/null 2>&1 || true
+  settle "$anchor"
+  retry_nav "$tab" "$anchor"
+  check_screen "$name" "$b" "$anchor"
+}
+
 echo "==> booting live app (idempotent) ..."
 "$NA" start >/dev/null 2>&1 || { echo "native-app.sh start failed"; exit 1; }
 sleep 3
@@ -82,79 +120,68 @@ SHOTS="$(printf '%s\n' "$status_out" | sed -n 's/^shots:[[:space:]]*//p' | head 
 [ -n "$LOG" ] || { echo "could not resolve app log path from native-app.sh status"; exit 1; }
 PIDFILE="$(dirname "$LOG")/app_jvm.pid"
 
-# Known state: chat tab, dismiss any overlay/drawer.
-"$NA" tap 165 27 >/dev/null 2>&1 || true
+# Known state: chat tab (taptext the toggle; pixel fallback if OCR misses).
+"$NA" taptext "채팅" >/dev/null 2>&1 || "$NA" tap 165 27 >/dev/null 2>&1 || true
 "$NA" key Escape >/dev/null 2>&1 || true
 sleep 2
 
-echo "==> walking key screens (read-only) ..."
+echo "==> walking key screens (read-only, text-driven nav) ..."
 
-# Main/chat screen — the work feed renders here, which is exactly where #1959 hit.
+# Chat / work-feed — work feed renders here (where #1959 hit). Content varies, so
+# crash/alive only (no stable anchor).
 b="$(log_lines)"; check_screen "smoke-01-chat-workfeed" "$b"
 
-# Left drawer destinations (verified coords): mail/calendar/search/people/categories.
-# entry = name:x:y:anchor — anchor is OCR text that must be on the screen (empty
-# = crash/alive check only). Drawer-item coords are verified; anchors catch a
-# tap that silently lands on the wrong screen.
-nav=("smoke-02-mail:80:75:받은 메일" "smoke-03-calendar:80:133:일정" "smoke-04-search:80:193:" "smoke-05-people:80:253:" "smoke-06-categories:80:313:")
-for entry in "${nav[@]}"; do
-  IFS=: read -r nm x y anchor <<<"$entry"
-  "$NA" tap 25 37 >/dev/null 2>&1 || true   # open hamburger drawer
-  sleep 1
-  b="$(log_lines)"
-  "$NA" tap "$x" "$y" >/dev/null 2>&1 || true  # open screen
-  sleep 3                                       # let prod data load + list render
-  check_screen "$nm" "$b" "$anchor"
-  "$NA" key Escape >/dev/null 2>&1 || true      # back to chat
-  sleep 1
-done
+# Left-drawer screens: tap the English drawer label, assert the screen's anchor.
+go_drawer "smoke-02-mail"       "mail"       "받은 메일"
+go_drawer "smoke-03-calendar"   "calendar"   "일정"
+go_drawer "smoke-04-search"     "search"     "검색"
+go_drawer "smoke-05-people"     "people"     "사람"
+go_drawer "smoke-06-categories" "categories" "카테고리"
 
-# Settings screen + tabs (gateway default, then 모델/크론/토픽문서/알림).
-"$NA" tap 235 27 >/dev/null 2>&1 || true
-sleep 2
+# Settings screen + tabs: taptext the toggle, then each tab label.
+"$NA" taptext "설정" >/dev/null 2>&1 || "$NA" tap 235 27 >/dev/null 2>&1 || true
+"$NA" wait-for "게이트웨이" 6 >/dev/null 2>&1 || sleep 2
 b="$(log_lines)"; check_screen "smoke-07-settings" "$b" "게이트웨이"
-tabs=("smoke-08-models:150:149:경량" "smoke-09-crons:215:149:" "smoke-10-topicdocs:295:149:" "smoke-11-alerts:370:149:")
-for entry in "${tabs[@]}"; do
-  IFS=: read -r nm x y anchor <<<"$entry"
-  b="$(log_lines)"
-  "$NA" tap "$x" "$y" >/dev/null 2>&1 || true
-  sleep 2
-  check_screen "$nm" "$b" "$anchor"
-done
-"$NA" tap 165 27 >/dev/null 2>&1 || true   # back to chat
+settings_tab "smoke-08-models"    "모델"     "경량"
+settings_tab "smoke-09-crons"     "크론"     ""
+settings_tab "smoke-10-topicdocs" "토픽문서" ""
+# alerts has no reliable OCR anchor: its only distinctive text ("이 빌드는 알림
+# 캡처를 지원하지 않습니다", the desktop-unsupported notice) is OCR-hostile
+# (캡처를→"BMS", 빌드/않습니다 unread), and the lone readable word "알림" also
+# appears on the gateway tab. Crash/alive check only.
+settings_tab "smoke-11-alerts"    "알림"     ""
+"$NA" taptext "채팅" >/dev/null 2>&1 || "$NA" tap 165 27 >/dev/null 2>&1 || true
 sleep 1
 
-# Right-side recent-sessions drawer (the screen retired/leaked topics in the past).
+# Right-side recent-sessions drawer (icon → pixel).
 b="$(log_lines)"
 "$NA" tap 388 37 >/dev/null 2>&1 || true
-sleep 2
-check_screen "smoke-12-sessions" "$b"
+"$NA" wait-for "대화 기록" 5 >/dev/null 2>&1 || sleep 2
+check_screen "smoke-12-sessions" "$b" "대화 기록"
 "$NA" key Escape >/dev/null 2>&1 || true
 sleep 1
 
-# Mail DETAIL — open the first inbox message: the richest list-item screen
-# (AI-analysis card markdown, attachment chips, sender context). A detail-render
-# crash would otherwise hide behind the list-level smoke. (Calendar/cron detail
-# are intentionally skipped — empty/data-dependent and the deep nav is flaky.)
-"$NA" tap 25 37 >/dev/null 2>&1 || true   # hamburger drawer
-sleep 1
-"$NA" tap 80 75 >/dev/null 2>&1 || true   # mail list
-sleep 3
+# Mail DETAIL — open the first inbox message: richest list-item screen (AI
+# analysis markdown, attachment chips, sender context). The row itself is data-
+# dependent so it stays a pixel tap; everything around it is text-driven.
+"$NA" tap 25 37 >/dev/null 2>&1 || true
+"$NA" wait-for "mail" 5 >/dev/null 2>&1 || true
+"$NA" taptext "mail" >/dev/null 2>&1 || true
+"$NA" wait-for "받은 메일" 8 >/dev/null 2>&1 || sleep 2
 b="$(log_lines)"
-"$NA" tap 200 185 >/dev/null 2>&1 || true  # open first message -> detail
-sleep 3
+"$NA" tap 200 185 >/dev/null 2>&1 || true   # first message row
+"$NA" wait-for "보관" 8 >/dev/null 2>&1 || sleep 2
 check_screen "smoke-13-mail-detail" "$b" "보관"
-"$NA" key Escape >/dev/null 2>&1 || true   # detail -> list
-sleep 1
-"$NA" key Escape >/dev/null 2>&1 || true   # list -> chat
+"$NA" key Escape >/dev/null 2>&1 || true
+"$NA" key Escape >/dev/null 2>&1 || true
 
 echo
 echo "==> smoke summary"
 printf '   %s\n' "${results[@]}"
 echo "   shots: $SHOTS/smoke-*.png  (Read them to eyeball each screen)"
 if [ "$fail" -eq 0 ]; then
-  echo "PASS — every key screen rendered with no crash-class log lines"
+  echo "PASS — every key screen rendered (anchor-verified) with no crash-class log lines"
 else
-  echo "FAIL — a screen crashed/errored (see above); Read its smoke-*.png"
+  echo "FAIL — a screen crashed / went wrong (see above); Read its smoke-*.png"
 fi
 exit "$fail"
