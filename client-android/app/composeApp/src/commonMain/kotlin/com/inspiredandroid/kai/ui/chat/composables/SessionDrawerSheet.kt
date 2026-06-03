@@ -27,7 +27,10 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -115,11 +118,14 @@ fun DenebSessionDrawerSheet(
                         modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
                     )
                 } else {
+                    val chats = conversations.filter { !isSystemSession(it.id) }
+                    val systemSessions = conversations.filter { isSystemSession(it.id) }
+                    var systemExpanded by remember { mutableStateOf(false) }
                     LazyColumn(
                         state = rememberLazyListState(),
                         contentPadding = PaddingValues(horizontal = 28.dp),
                     ) {
-                        items(conversations, key = { it.id }) { conversation ->
+                        items(chats, key = { it.id }) { conversation ->
                             SessionItem(
                                 conversation = conversation,
                                 isActive = conversation.id == currentConversationId,
@@ -129,6 +135,30 @@ fun DenebSessionDrawerSheet(
                                 },
                                 onDelete = { actions.deleteConversation(conversation.id) },
                             )
+                        }
+                        // Machine-driven sessions (cron runs, system, boot) fold into
+                        // one collapsible group so they don't bury the real chats above.
+                        if (systemSessions.isNotEmpty()) {
+                            item(key = "__system_folder__") {
+                                SessionFolderHeader(
+                                    count = systemSessions.size,
+                                    expanded = systemExpanded,
+                                    onToggle = { systemExpanded = !systemExpanded },
+                                )
+                            }
+                            if (systemExpanded) {
+                                items(systemSessions, key = { it.id }) { conversation ->
+                                    SessionItem(
+                                        conversation = conversation,
+                                        isActive = conversation.id == currentConversationId,
+                                        onClick = {
+                                            actions.loadConversation(conversation.id)
+                                            onClose()
+                                        },
+                                        onDelete = { actions.deleteConversation(conversation.id) },
+                                    )
+                                }
+                            }
                         }
                         item { Spacer(Modifier.height(40.dp)) }
                     }
@@ -215,4 +245,47 @@ private fun formatDate(epochMillis: Long): String = try {
     kotlin.time.Instant.fromEpochMilliseconds(epochMillis).format(dateFormat)
 } catch (_: Exception) {
     ""
+}
+
+// Machine-driven sessions (cron runs, system tasks, the boot session) aren't user
+// conversations, so the drawer folds them into one collapsible group below the chats.
+private fun isSystemSession(id: String): Boolean = when (id.substringBefore(':', id)) {
+    "cron", "system" -> true
+    else -> id == "boot"
+}
+
+// Collapsible header for the machine-session folder, in the drawer's text-first
+// idiom: a ▸/▾ glyph + label + count, no Material expander chrome.
+@Composable
+private fun SessionFolderHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) {
+    val haptics = rememberHaptics()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                onClickLabel = if (expanded) "예약·시스템 세션 접기" else "예약·시스템 세션 펼치기",
+                role = Role.Button,
+            ) { haptics.tap(); onToggle() }
+            .handCursor()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = if (expanded) "▾" else "▸",
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.padding(end = 10.dp),
+        )
+        Text(
+            text = "예약·시스템 세션",
+            fontSize = 15.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = "$count",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.padding(start = 8.dp),
+        )
+    }
 }
