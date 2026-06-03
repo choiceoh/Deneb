@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -990,6 +991,15 @@ func buildAgentConfig(
 		OnMessagePersist: buildMessagePersister(deps, params, logger),
 	}
 
+	// Reasoning sandwich (docs/research/ideal-agent-environment-harness.md §11):
+	// when enabled, boost the planning (turn 0) thinking budget and keep later
+	// turns at baseline. Opt-in via DENEB_REASONING_SANDWICH and only when the
+	// session already has thinking enabled, so default behavior is unchanged.
+	// Thinking is a request-level param, so per-turn variation is cache-safe.
+	if thinkingCfg != nil && reasoningSandwichEnabled() {
+		cfg.ThinkingModulator = planningSandwichThinking(thinkingCfg)
+	}
+
 	return cfg, spawnFlag
 }
 
@@ -1305,6 +1315,59 @@ func resolveThinkingConfig(level string) *llm.ThinkingConfig {
 		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 16384}
 	default:
 		return nil
+	}
+}
+
+// reasoningSandwichEnabled reports whether the planning-phase reasoning boost
+// (the "reasoning sandwich" — docs/research/ideal-agent-environment-harness.md
+// §11) is turned on. Off by default: it changes per-turn thinking budget, and
+// the latency/quality trade-off should be validated live before defaulting on.
+// Enable with DENEB_REASONING_SANDWICH=1 (or true/on/yes).
+func reasoningSandwichEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("DENEB_REASONING_SANDWICH"))) {
+	case "1", "true", "on", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+// thinkingBudgetLadder lists the standard extended-thinking budgets in
+// increasing order (mirrors resolveThinkingConfig). boostThinkingBudget walks
+// one step up this ladder.
+var thinkingBudgetLadder = []int{1024, 4096, 10240, 32768, 65536}
+
+// boostThinkingBudget returns the next budget tier strictly above b, capped at
+// the top of the ladder. A value already at or above the top is unchanged.
+func boostThinkingBudget(b int) int {
+	for _, step := range thinkingBudgetLadder {
+		if step > b {
+			return step
+		}
+	}
+	return b
+}
+
+// planningSandwichThinking returns a per-turn thinking selector that boosts the
+// first (planning) turn one budget tier above the session baseline and uses the
+// baseline for every later turn — the "front of the reasoning sandwich" (§11).
+// Planning is where extra reasoning pays off most, while keeping middle
+// tool-execution turns at baseline avoids the timeout cost of max-everywhere
+// reasoning. Returns nil when base is nil so the caller leaves Thinking as-is.
+func planningSandwichThinking(base *llm.ThinkingConfig) func(turn int) *llm.ThinkingConfig {
+	if base == nil {
+		return nil
+	}
+	boosted := &llm.ThinkingConfig{
+		Type:         base.Type,
+		BudgetTokens: boostThinkingBudget(base.BudgetTokens),
+		Interleaved:  base.Interleaved,
+	}
+	return func(turn int) *llm.ThinkingConfig {
+		if turn == 0 {
+			return boosted
+		}
+		return base
 	}
 }
 
