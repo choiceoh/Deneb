@@ -104,7 +104,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// --- Health and system info ---
 		handlersystem.HealthMethods(handlersystem.HealthDeps{
 			SessionCount: hub.Sessions().Count,
-			HasTelegram:  func() bool { return false },
 			Version:      hub.Version(),
 		}),
 

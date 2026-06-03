@@ -10,10 +10,9 @@ import (
 )
 
 // HealthDeps holds dependencies for health.check and system.info.
-// Uses narrow types to avoid importing session/telegram packages.
+// Uses narrow types to avoid importing the session package.
 type HealthDeps struct {
-	SessionCount func() int  // session.Manager.Count
-	HasTelegram  func() bool // whether Telegram plugin is active
+	SessionCount func() int // session.Manager.Count
 	Version      string
 }
 
@@ -27,10 +26,6 @@ func HealthMethods(deps HealthDeps) map[string]rpcutil.HandlerFunc {
 
 func healthCheck(deps HealthDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		var channels []string
-		if deps.HasTelegram != nil && deps.HasTelegram() {
-			channels = []string{"telegram"}
-		}
 		sessionCount := 0
 		if deps.SessionCount != nil {
 			sessionCount = deps.SessionCount()
@@ -39,7 +34,8 @@ func healthCheck(deps HealthDeps) rpcutil.HandlerFunc {
 			"status":   "ok",
 			"runtime":  "go",
 			"sessions": sessionCount,
-			"channels": channels,
+			// No channel plugins: the native client is the sole surface (PR #1922).
+			"channels": []string{},
 		})
 	}
 }

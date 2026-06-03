@@ -1,6 +1,6 @@
-// Package monitoring implements the Telegram channel health monitor and activity trackers.
+// Package monitoring implements the channel health monitor and activity trackers.
 //
-// The health monitor detects a half-dead Telegram connection (connected but no
+// The health monitor detects a half-dead channel connection (connected but no
 // events) and restarts it without killing the entire gateway.
 package monitoring
 
@@ -13,9 +13,9 @@ import (
 	"time"
 )
 
-// --- Telegram Health Monitor ---
+// --- Channel Health Monitor ---
 
-// ChannelHealthDeps provides Telegram channel state queries.
+// ChannelHealthDeps provides channel state queries.
 type ChannelHealthDeps struct {
 	// GetChannelStatus returns "running", "stopped", or "error".
 	GetChannelStatus func() string
@@ -23,7 +23,7 @@ type ChannelHealthDeps struct {
 	GetChannelLastEventAt func() int64
 	// GetChannelStartedAt returns when the channel was started (unix ms).
 	GetChannelStartedAt func() int64
-	// RestartChannel restarts the Telegram channel.
+	// RestartChannel restarts the channel.
 	RestartChannel func() error
 }
 
@@ -49,7 +49,7 @@ func DefaultChannelHealthConfig() ChannelHealthConfig {
 	}
 }
 
-// ChannelHealthMonitor detects and restarts a half-dead Telegram channel.
+// ChannelHealthMonitor detects and restarts a half-dead channel.
 type ChannelHealthMonitor struct {
 	deps   ChannelHealthDeps
 	cfg    ChannelHealthConfig
@@ -107,7 +107,7 @@ func (m *ChannelHealthMonitor) check() {
 	m.mu.Unlock()
 }
 
-// ChannelHealthResult describes the health evaluation of the Telegram channel.
+// ChannelHealthResult describes the health evaluation of the channel.
 type ChannelHealthResult struct {
 	ChannelID string `json:"channelId"`
 	Healthy   bool   `json:"healthy"`
@@ -178,7 +178,7 @@ func (m *ChannelHealthMonitor) checkChannel(now time.Time) {
 	m.cooldown = m.cfg.CooldownCycles
 	m.mu.Unlock()
 
-	m.logger.Warn("channel health: restarting stale telegram",
+	m.logger.Warn("channel health: restarting stale channel",
 		"staleMinutes", staleMs/60000,
 	)
 
@@ -189,9 +189,9 @@ func (m *ChannelHealthMonitor) checkChannel(now time.Time) {
 	}
 }
 
-// HealthSnapshot returns the current health status of the Telegram channel.
+// HealthSnapshot returns the current health status of the channel.
 func (m *ChannelHealthMonitor) HealthSnapshot() []ChannelHealthResult {
-	result := ChannelHealthResult{ChannelID: "telegram", Healthy: true}
+	result := ChannelHealthResult{ChannelID: "client", Healthy: true}
 	now := time.Now()
 
 	status := "unknown"
@@ -243,7 +243,7 @@ func (t *ActivityTracker) Touch() {
 }
 
 // TouchSession updates both the timestamp and the last active session key.
-// Pass the session key associated with the activity (e.g. "telegram:1234567").
+// Pass the session key associated with the activity (e.g. "client:main").
 func (t *ActivityTracker) TouchSession(sessionKey string) {
 	t.lastActivityMs.Store(time.Now().UnixMilli())
 	if sessionKey != "" {

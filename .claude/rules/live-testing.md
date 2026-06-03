@@ -8,19 +8,18 @@ globs: ["gateway-go/**/*.go", "proto/**/*.proto"]
 > **코드 완성도가 높아도 실제 작동 품질이 나쁘면 의미 없다.**
 > 단위 테스트 통과 ≠ 제품 품질. 반드시 실제 게이트웨이에서 작동 + 품질을 검증하라.
 
-> **모든 채팅/품질/재현 테스트는 로컬 목 텔레그램 Bot API 서버를 통해 실행된다.**
-> 게이트웨이의 Telegram 플러그인은 `TELEGRAM_API_BASE` 환경변수로
-> `scripts/mock_telegram_server.py`를 바라보게 설정되어, 실제 `api.telegram.org`를
-> 한 번도 호출하지 않고도 플러그인·폴링·전송 코드 경로 전체가 그대로 실행된다.
-
-### 목 텔레그램 테스트 전제조건
-
-- **없음.** 실제 텔레그램 자격증명, 세션 파일, Telethon 설치, @BotFather 봇 등록이
-  모두 필요 없다.
-- 목 서버는 파이썬 stdlib(`http.server`)만 사용한다.
-- `scripts/dev/live-test.sh start`가 목 서버(기본 포트 18792)와 dev 게이트웨이(18790)를
-  함께 기동한다.
-- 포트/호스트 커스텀: `DENEB_DEV_MOCK_TELEGRAM_PORT`, `DENEB_DEV_MOCK_TELEGRAM_URL`
+> **⚠️ 현재 채팅 기반 라이브 테스트(`chat`/`quality`/`chat-check`/`multi-chat`)는 동작하지 않는다.**
+> 이 경로는 목 텔레그램 Bot API 서버(`scripts/mock_telegram_server.py`)에 가짜 업데이트를
+> 주입하고 게이트웨이의 Telegram 플러그인이 `TELEGRAM_API_BASE`로 폴링·전송하는 구조였다.
+> **PR #1922로 Telegram 플러그인이 제거**되면서 게이트웨이는 더 이상 `TELEGRAM_API_BASE`를
+> 읽지 않으므로, 주입된 메시지가 chat pipeline에 도달하지 못한다. 아래 목 텔레그램 관련
+> 섹션·명령(`chat`/`quality`/`reproduce`)은 네이티브 클라이언트(`miniapp.*` RPC) 주입
+> 경로로 **재작성 대기 중인 레거시**다.
+>
+> **그 전까지의 실효 검증:** `make check` (build + `-race` 단위 테스트) +
+> `scripts/dev/live-test.sh restart && scripts/dev/live-test.sh smoke` (HTTP `/health` — 동작함) +
+> `scripts/dev/live-test.sh logs-errors`. 채팅 품질 자동 검증은 네이티브 주입 경로가
+> 생길 때까지 일시 중단.
 
 ## 도구
 
@@ -43,7 +42,7 @@ dev 인스턴스는 항상 프로덕션 config를 기반으로 시작한다 (빈
 | Config | 프로덕션 config (config-gen.sh) | `~/.deneb/deneb.json` | 없음 |
 | Providers/Auth | 로딩 | 로딩 | 없음 |
 | Hooks/Agents | 로딩 | 로딩 | 없음 |
-| Telegram | 목 Bot API (TELEGRAM_API_BASE) | 실제 api.telegram.org | I/O 경로 (의도적) |
+| 채널 | 없음 (네이티브 클라 `miniapp.*` RPC) | 없음 (동일) | 채널 플러그인 없음 (PR #1922) |
 | Bind | loopback | config-driven | 포트만 다름 (의도적) |
 
 **환경 차이 확인:**

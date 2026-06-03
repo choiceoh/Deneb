@@ -111,7 +111,7 @@ safego.GoWithSlog(logger, "my-worker", func() { ... })
 
 ## 8. 사용자 응답 경로의 deadline
 
-Telegram inbound → chat pipeline → tool 실행 경로는 `server.DefaultTurnDeadline` (현재 5분)에 묶임.
+네이티브 클라 inbound → chat pipeline → tool 실행 경로는 `server.DefaultTurnDeadline` (현재 5분)에 묶임.
 툴이 자기 sub-timeout을 더 짧게 설정할 순 있지만, request ctx를 **절대 `context.Background()`로 대체하지 말 것.**
 
 ## PR 체크리스트
