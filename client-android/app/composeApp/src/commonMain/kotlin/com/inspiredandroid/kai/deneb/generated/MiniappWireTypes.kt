@@ -233,3 +233,36 @@ data class SearchWikiHit(
     val snippet: String = "",
     val score: Double = 0.0,
 )
+
+@Serializable
+data class SessionRowOut(
+    val key: String = "",
+    val kind: String = "",
+    val status: String = "",
+    val channel: String = "",
+    val model: String = "",
+    val label: String = "",
+    val updatedAtMs: Long = 0L,
+    val startedAtMs: Long? = null,
+    val runtimeMs: Long? = null,
+    val totalTokens: Long? = null,
+)
+
+@Serializable
+data class TranscriptAttachmentOut(
+    val type: String = "",
+    val mimeType: String = "",
+    val url: String = "",
+    val data: String = "",
+    val name: String = "",
+    val size: Long = 0L,
+)
+
+@Serializable
+data class TranscriptMsgOut(
+    val id: String = "",
+    val role: String = "",
+    val content: String = "",
+    val attachments: List<TranscriptAttachmentOut> = emptyList(),
+    val timestampMs: Long = 0L,
+)

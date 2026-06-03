@@ -68,6 +68,42 @@ func SessionsMethods(deps SessionsDeps) map[string]rpcutil.HandlerFunc {
 	return out
 }
 
+// Wire shapes (package-scoped + marked for Kotlin codegen so the native client
+// shares them — see generated/MiniappWireTypes.kt). sessions.recent returns
+// {sessions: []sessionRowOut, count}; sessions.transcript wraps []transcriptMsgOut.
+
+//deneb:wire
+type sessionRowOut struct {
+	Key         string `json:"key"`
+	Kind        string `json:"kind,omitempty"`
+	Status      string `json:"status,omitempty"`
+	Channel     string `json:"channel,omitempty"`
+	Model       string `json:"model,omitempty"`
+	Label       string `json:"label,omitempty"`
+	UpdatedAtMs int64  `json:"updatedAtMs,omitempty"`
+	StartedAtMs *int64 `json:"startedAtMs,omitempty"`
+	RuntimeMs   *int64 `json:"runtimeMs,omitempty"`
+	TotalTokens *int64 `json:"totalTokens,omitempty"`
+}
+
+type transcriptAttachmentOut struct {
+	Type     string `json:"type,omitempty"`
+	MimeType string `json:"mimeType,omitempty"`
+	URL      string `json:"url,omitempty"`
+	Data     string `json:"data,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Size     int64  `json:"size,omitempty"`
+}
+
+//deneb:wire
+type transcriptMsgOut struct {
+	ID          string                    `json:"id,omitempty"`
+	Role        string                    `json:"role"`
+	Content     string                    `json:"content"`
+	Attachments []transcriptAttachmentOut `json:"attachments,omitempty"`
+	TimestampMs int64                     `json:"timestampMs,omitempty"`
+}
+
 // sessionsTranscript returns the most recent N messages of a single
 // session. The Mini App's session detail view renders these as a
 // timeline; the rest of the chat history (compaction, system prompt,
@@ -77,25 +113,10 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 		SessionKey string `json:"sessionKey"`
 		Limit      int    `json:"limit,omitempty"`
 	}
-	type attachmentOut struct {
-		Type     string `json:"type,omitempty"`
-		MimeType string `json:"mimeType,omitempty"`
-		URL      string `json:"url,omitempty"`
-		Data     string `json:"data,omitempty"`
-		Name     string `json:"name,omitempty"`
-		Size     int64  `json:"size,omitempty"`
-	}
-	type messageOut struct {
-		ID          string          `json:"id,omitempty"`
-		Role        string          `json:"role"`
-		Content     string          `json:"content"`
-		Attachments []attachmentOut `json:"attachments,omitempty"`
-		TimestampMs int64           `json:"timestampMs,omitempty"`
-	}
 	type out struct {
-		SessionKey string       `json:"sessionKey"`
-		Messages   []messageOut `json:"messages"`
-		Total      int          `json:"total"`
+		SessionKey string             `json:"sessionKey"`
+		Messages   []transcriptMsgOut `json:"messages"`
+		Total      int                `json:"total"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
@@ -128,11 +149,11 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 			return rpcerr.WrapUnavailable("transcript load failed", err).Response(req.ID)
 		}
 
-		rows := make([]messageOut, 0, len(msgs))
+		rows := make([]transcriptMsgOut, 0, len(msgs))
 		for _, m := range msgs {
-			var atts []attachmentOut
+			var atts []transcriptAttachmentOut
 			for _, a := range m.Attachments {
-				atts = append(atts, attachmentOut{
+				atts = append(atts, transcriptAttachmentOut{
 					Type:     a.Type,
 					MimeType: a.MimeType,
 					URL:      a.URL,
@@ -141,7 +162,7 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 					Size:     a.Size,
 				})
 			}
-			rows = append(rows, messageOut{
+			rows = append(rows, transcriptMsgOut{
 				ID:          m.ID,
 				Role:        m.Role,
 				Content:     decodeChatContent(m.Content),
@@ -210,18 +231,6 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 		Limit   int    `json:"limit,omitempty"`
 		Channel string `json:"channel,omitempty"`
 	}
-	type rowOut struct {
-		Key         string `json:"key"`
-		Kind        string `json:"kind,omitempty"`
-		Status      string `json:"status,omitempty"`
-		Channel     string `json:"channel,omitempty"`
-		Model       string `json:"model,omitempty"`
-		Label       string `json:"label,omitempty"`
-		UpdatedAtMs int64  `json:"updatedAtMs,omitempty"`
-		StartedAtMs *int64 `json:"startedAtMs,omitempty"`
-		RuntimeMs   *int64 `json:"runtimeMs,omitempty"`
-		TotalTokens *int64 `json:"totalTokens,omitempty"`
-	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
 			return errResp
@@ -263,9 +272,9 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 			sessions = sessions[:limit]
 		}
 
-		out := make([]rowOut, 0, len(sessions))
+		out := make([]sessionRowOut, 0, len(sessions))
 		for _, s := range sessions {
-			out = append(out, rowOut{
+			out = append(out, sessionRowOut{
 				Key:         s.Key,
 				Kind:        string(s.Kind),
 				Status:      string(s.Status),
