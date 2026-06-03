@@ -26,12 +26,12 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NA="$HERE/native-app.sh"
-LOG="${HOME}/.cache/deneb-native/app.log"
-SHOTS="${HOME}/.cache/deneb-native/shots"
-# app_jvm.pid is the live JVM pid (from the window) — a stable aliveness probe.
-# (native-app.sh status re-searches the window each call, which flakes right
-# after a tap; kill -0 on the recorded pid does not.)
-PIDFILE="${HOME}/.cache/deneb-native/app_jvm.pid"
+# LOG / SHOTS / PIDFILE are resolved from `native-app.sh status` after boot (see
+# below), so this follows DENEB_INSTANCE worktree isolation — the state dir is
+# namespaced per worktree, so hardcoding ~/.cache/deneb-native/ breaks there.
+# Aliveness uses app_jvm.pid (the recorded window pid) via kill -0: stable, unlike
+# `status` which re-searches the window each call and flakes right after a tap.
+LOG="" SHOTS="" PIDFILE=""
 
 # Crash-class signals. Kept specific so handled/info logging does not false-flag;
 # "already used" is the exact #1959 Compose duplicate-key signature.
@@ -67,6 +67,13 @@ check_screen() {
 echo "==> booting live app (idempotent) ..."
 "$NA" start >/dev/null 2>&1 || { echo "native-app.sh start failed"; exit 1; }
 sleep 3
+
+# Resolve instance-namespaced state paths from the harness (DENEB_INSTANCE-aware).
+status_out="$("$NA" status 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')"
+LOG="$(printf '%s\n' "$status_out" | sed -n 's/^app log:[[:space:]]*//p' | head -1)"
+SHOTS="$(printf '%s\n' "$status_out" | sed -n 's/^shots:[[:space:]]*//p' | head -1)"
+[ -n "$LOG" ] || { echo "could not resolve app log path from native-app.sh status"; exit 1; }
+PIDFILE="$(dirname "$LOG")/app_jvm.pid"
 
 # Known state: chat tab, dismiss any overlay/drawer.
 "$NA" tap 165 27 >/dev/null 2>&1 || true
@@ -113,6 +120,23 @@ b="$(log_lines)"
 sleep 2
 check_screen "smoke-12-sessions" "$b"
 "$NA" key Escape >/dev/null 2>&1 || true
+sleep 1
+
+# Mail DETAIL — open the first inbox message: the richest list-item screen
+# (AI-analysis card markdown, attachment chips, sender context). A detail-render
+# crash would otherwise hide behind the list-level smoke. (Calendar/cron detail
+# are intentionally skipped — empty/data-dependent and the deep nav is flaky.)
+"$NA" tap 25 37 >/dev/null 2>&1 || true   # hamburger drawer
+sleep 1
+"$NA" tap 80 75 >/dev/null 2>&1 || true   # mail list
+sleep 3
+b="$(log_lines)"
+"$NA" tap 200 185 >/dev/null 2>&1 || true  # open first message -> detail
+sleep 3
+check_screen "smoke-13-mail-detail" "$b"
+"$NA" key Escape >/dev/null 2>&1 || true   # detail -> list
+sleep 1
+"$NA" key Escape >/dev/null 2>&1 || true   # list -> chat
 
 echo
 echo "==> smoke summary"
