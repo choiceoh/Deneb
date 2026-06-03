@@ -1,5 +1,6 @@
 @file:OptIn(
     ExperimentalFoundationApi::class,
+    ExperimentalMaterial3Api::class,
 )
 
 package com.inspiredandroid.kai.ui.chat
@@ -45,9 +46,11 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.SmallFloatingActionButton
@@ -499,6 +502,7 @@ private fun ChatModeScreen(
     previewSandboxLines: ImmutableList<TerminalLine> = persistentListOf(),
 ) {
     var isSandboxOpen by rememberSaveable { mutableStateOf(initialSandboxOpen) }
+    var showWorkFeed by rememberSaveable { mutableStateOf(false) }
     // Hoisted here so the draft survives toggling the sandbox/terminal view, which
     // removes QuestionInput from composition and would otherwise drop the text.
     var questionInputText by rememberSaveable(stateSaver = TextFieldValue.Saver) {
@@ -648,7 +652,22 @@ private fun ChatModeScreen(
                 onToggleSandbox = { isSandboxOpen = !isSandboxOpen },
                 navigationTabBar = navigationTabBar,
                 onOpenSessionDrawer = { drawerScope.launch { sessionDrawerState.open() } },
+                onOpenWorkFeed = { showWorkFeed = true },
+                workFeedCount = uiState.workFeed.size,
             )
+
+            if (showWorkFeed) {
+                ModalBottomSheet(onDismissRequest = { showWorkFeed = false }) {
+                    WorkFeedPanel(
+                        items = uiState.workFeed,
+                        onOpen = { id ->
+                            showWorkFeed = false
+                            uiState.actions.openWorkFeedItem(id)
+                        },
+                        onRunAction = uiState.actions.runWorkFeedAction,
+                    )
+                }
+            }
 
             HeartbeatBanner(
                 visible = uiState.hasUnreadHeartbeat,
@@ -740,13 +759,6 @@ private fun ChatModeScreen(
                                 target = dropTarget,
                             ),
                     ) {
-                        if (uiState.currentConversationId == "client:main" && uiState.workFeed.isNotEmpty()) {
-                            WorkFeedPanel(
-                                items = uiState.workFeed,
-                                onOpen = uiState.actions.openWorkFeedItem,
-                                onRunAction = uiState.actions.runWorkFeedAction,
-                            )
-                        }
                         if (uiState.history.isEmpty()) {
                             // Interactive UI mode isn't offered on on-device LiteRT: the kai-ui
                             // component schema is too large for small Gemma models to coherently

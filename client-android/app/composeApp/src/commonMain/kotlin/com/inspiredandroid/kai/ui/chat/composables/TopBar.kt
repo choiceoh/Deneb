@@ -11,11 +11,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -50,6 +54,8 @@ internal fun TopBar(
     onToggleSandbox: () -> Unit,
     navigationTabBar: (@Composable () -> Unit)? = null,
     onOpenSessionDrawer: (() -> Unit)? = null,
+    onOpenWorkFeed: (() -> Unit)? = null,
+    workFeedCount: Int = 0,
 ) {
     if (navigationTabBar != null) {
         Box(
@@ -69,6 +75,7 @@ internal fun TopBar(
                 if (textToSpeech != null) {
                     SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
                 }
+                WorkFeedButton(onOpenWorkFeed, workFeedCount)
                 SessionButton(onOpenSessionDrawer)
             }
         }
@@ -80,7 +87,33 @@ internal fun TopBar(
             if (textToSpeech != null) {
                 SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
             }
+            WorkFeedButton(onOpenWorkFeed, workFeedCount)
             SessionButton(onOpenSessionDrawer)
+        }
+    }
+}
+
+// WorkFeedButton opens the work-feed (action inbox) bottom sheet. A badge shows
+// the pending item count. Null callback (e.g. previews) renders nothing.
+@Composable
+private fun WorkFeedButton(onOpenWorkFeed: (() -> Unit)?, count: Int) {
+    if (onOpenWorkFeed == null) return
+    IconButton(
+        modifier = Modifier.handCursor(),
+        onClick = onOpenWorkFeed,
+    ) {
+        BadgedBox(
+            badge = {
+                if (count > 0) {
+                    Badge { Text(if (count > 9) "9+" else count.toString()) }
+                }
+            },
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Notifications,
+                contentDescription = "업무 알림",
+                tint = MaterialTheme.colorScheme.onBackground,
+            )
         }
     }
 }
