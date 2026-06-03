@@ -20,7 +20,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/pkg/promptguard"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
@@ -217,15 +216,6 @@ func RunAgent(
 		result.Usage.OutputTokens += turnRes.usage.OutputTokens
 		result.Usage.CacheReadInputTokens += turnRes.usage.CacheReadInputTokens
 		result.Usage.CacheCreationInputTokens += turnRes.usage.CacheCreationInputTokens
-
-		// Feed the process-wide cache-hit tracker so /status can surface a
-		// rolling hit ratio (cache-doctrine regression alarm). Read-only on the
-		// usage numbers — does not touch the request, so caching is unaffected.
-		metrics.CacheHits.Record(
-			int64(turnRes.usage.CacheReadInputTokens),
-			int64(turnRes.usage.CacheCreationInputTokens),
-			int64(turnRes.usage.InputTokens),
-		)
 
 		// Per-turn token logging: surface per-turn cost so multi-turn runs
 		// are transparent (the accumulated total can be misleading).
