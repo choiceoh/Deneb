@@ -525,6 +525,13 @@ private fun ChatModeScreen(
     com.inspiredandroid.kai.PlatformBackHandler(enabled = sessionDrawerState.isOpen) {
         drawerScope.launch { sessionDrawerState.close() }
     }
+    // Reload the session list whenever the session drawer starts opening, so it
+    // reflects sessions created since startup (the list is otherwise loaded once
+    // at init and never refreshed — which left a stale drawer).
+    LaunchedEffect(sessionDrawerState) {
+        snapshotFlow { sessionDrawerState.targetValue == DrawerValue.Open }
+            .collect { opening -> if (opening) uiState.actions.refreshConversations() }
+    }
 
     // An edge-swipe opens either drawer without touching the input field, so the
     // soft keyboard would otherwise linger over the drawer content. Hide it the

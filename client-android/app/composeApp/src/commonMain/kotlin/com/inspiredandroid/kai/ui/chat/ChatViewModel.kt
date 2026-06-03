@@ -75,6 +75,7 @@ class ChatViewModel(
         goBackInteractiveMode = ::goBackInteractiveMode,
         sendSmsDraft = ::sendSmsDraft,
         discardSmsDraft = ::discardSmsDraft,
+        refreshConversations = { dataRepository.loadConversations() },
     )
     private var currentJob: Job? = null
     private var pendingConversationDeleteJob: Job? = null
