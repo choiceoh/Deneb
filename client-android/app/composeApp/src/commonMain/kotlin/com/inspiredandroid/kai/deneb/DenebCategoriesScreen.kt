@@ -42,6 +42,7 @@ fun DenebCategoriesScreen(
     client: DenebGatewayClient,
     onBack: () -> Unit,
     onOpenCategory: (String) -> Unit = {},
+    onOpenDiary: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var data by remember { mutableStateOf<WikiCategories?>(null) }
@@ -75,6 +76,29 @@ fun DenebCategoriesScreen(
                 )
                 TextButton(onClick = onBack) { Text("닫기") }
             }
+            Spacer(Modifier.height(8.dp))
+
+            // Recent-diary timeline entry point ("what's been happening lately").
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { haptics.tap(); onOpenDiary() }
+                    .padding(vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "최근 일기",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    "→",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
             Spacer(Modifier.height(8.dp))
 
             val d = data

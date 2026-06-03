@@ -590,6 +590,17 @@ class DenebGatewayClient(
             .map { WikiPageRef(it.path, it.title.ifBlank { it.path }, it.summary, it.updated) }
     }
 
+    /** Recent diary entries for the timeline (`miniapp.memory.diary_recent`).
+     *  Null on a fetch failure so the screen can offer retry instead of showing
+     *  a misleading empty timeline. */
+    suspend fun fetchRecentDiary(limit: Int = 30): List<DiaryEntry>? {
+        val p = callRpc<DiaryRecentPayload>(
+            "miniapp.memory.diary_recent",
+            buildJsonObject { put("limit", limit) },
+        ) ?: return null
+        return p.entries.map { DiaryEntry(header = it.header, content = it.content, file = it.file) }
+    }
+
     /** Delete one or more wiki pages by path (`miniapp.memory.delete_pages`).
      *  The backend deletes best-effort and reports a per-page failure list, so
      *  this returns true only when every requested page was actually removed —
