@@ -58,6 +58,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.data.AppSettings
@@ -178,6 +180,7 @@ private fun GatewayTab(
     var update by remember { mutableStateOf<UpdateInfo?>(null) }
     var showPatchNotes by remember { mutableStateOf(false) }
     var statusChecking by remember { mutableStateOf(false) }
+    var tokenVisible by remember { mutableStateOf(false) }
     val gatewayStatus = if (denebClient != null) denebClient.clientStatus.collectAsState().value else null
     LaunchedEffect(denebClient) {
         denebClient?.refreshClientStatus()
@@ -208,6 +211,17 @@ private fun GatewayTab(
                 onValueChange = { token = it },
                 label = { Text("클라이언트 토큰") },
                 singleLine = true,
+                // Tokens are secrets — mask by default so the value isn't exposed
+                // over the shoulder; a 보기/숨기기 toggle reveals it for pasting.
+                visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    TextButton(onClick = { tokenVisible = !tokenVisible }) {
+                        Text(
+                            if (tokenVisible) "숨기기" else "보기",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
@@ -630,61 +644,69 @@ private fun ModelTab(client: DenebGatewayClient) {
         }
 
         // Add an OpenAI-compatible endpoint (vLLM / LM Studio / etc.) by base URL
-        // + model name. No auth key here — keyed providers go in deneb.json.
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "OpenAI 호환 모델 직접 추가",
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            "Base URL과 모델 이름으로 vLLM·LM Studio 같은 OpenAI 호환 엔드포인트를 추가합니다. 인증 키가 필요 없는 엔드포인트용입니다.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        OutlinedTextField(
-            value = addBaseUrl,
-            onValueChange = { addBaseUrl = it; addError = null },
-            label = { Text("Base URL") },
-            placeholder = { Text("http://127.0.0.1:8000/v1") },
-            singleLine = true,
-            enabled = !adding,
-            isError = addError != null,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = addModel,
-            onValueChange = { addModel = it; addError = null },
-            label = { Text("모델 이름") },
-            placeholder = { Text("예: qwen2.5-coder-7b") },
-            singleLine = true,
-            enabled = !adding,
-            isError = addError != null,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        addError?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-        }
-        Button(
-            onClick = {
-                haptics.tap()
-                scope.launch {
-                    adding = true
-                    addError = null
-                    val ok = client.addCustomModel(addBaseUrl.trim(), addModel.trim())
-                    if (ok) {
-                        addBaseUrl = ""
-                        addModel = ""
-                    } else {
-                        addError = "추가에 실패했어요. Base URL과 모델 이름을 확인해 주세요."
+        // + model name in its own card, matching the gateway-connection card so
+        // the form doesn't float on the bare background below the model list.
+        SettingsCard {
+            Text(
+                "OpenAI 호환 모델 직접 추가",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Base URL과 모델 이름으로 vLLM·LM Studio 같은 OpenAI 호환 엔드포인트를 추가합니다. 인증 키가 필요 없는 엔드포인트용입니다.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = addBaseUrl,
+                onValueChange = { addBaseUrl = it; addError = null },
+                label = { Text("Base URL") },
+                placeholder = { Text("http://127.0.0.1:8000/v1") },
+                singleLine = true,
+                enabled = !adding,
+                isError = addError != null,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = addModel,
+                onValueChange = { addModel = it; addError = null },
+                label = { Text("모델 이름") },
+                placeholder = { Text("예: qwen2.5-coder-7b") },
+                singleLine = true,
+                enabled = !adding,
+                isError = addError != null,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            addError?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = {
+                    haptics.tap()
+                    scope.launch {
+                        adding = true
+                        addError = null
+                        val ok = client.addCustomModel(addBaseUrl.trim(), addModel.trim())
+                        if (ok) {
+                            addBaseUrl = ""
+                            addModel = ""
+                        } else {
+                            addError = "추가에 실패했어요. Base URL과 모델 이름을 확인해 주세요."
+                        }
+                        adding = false
                     }
-                    adding = false
-                }
-            },
-            enabled = !adding && addBaseUrl.isNotBlank() && addModel.isNotBlank(),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (adding) "추가 중…" else "모델 추가")
+                },
+                enabled = !adding && addBaseUrl.isNotBlank() && addModel.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (adding) "추가 중…" else "모델 추가")
+            }
         }
     }
 
