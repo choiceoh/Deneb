@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
@@ -88,7 +90,8 @@ fun DenebConfigScreen(
     onOpenCron: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
-    var tab by remember { mutableStateOf(ConfigTab.GATEWAY) }
+    val pagerState = rememberPagerState(pageCount = { ConfigTab.entries.size })
+    val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -112,8 +115,8 @@ fun DenebConfigScreen(
                     .padding(horizontal = 12.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                ConfigTab.entries.forEach { entry ->
-                    val isSelected = tab == entry
+                ConfigTab.entries.forEachIndexed { idx, entry ->
+                    val isSelected = pagerState.currentPage == idx
                     Surface(
                         modifier = Modifier
                             .handCursor()
@@ -121,7 +124,7 @@ fun DenebConfigScreen(
                             .selectable(
                                 selected = isSelected,
                                 role = Role.Tab,
-                                onClick = { haptics.tap(); tab = entry },
+                                onClick = { haptics.tap(); scope.launch { pagerState.animateScrollToPage(idx) } },
                             ),
                         shape = RoundedCornerShape(50),
                         color = if (isSelected) {
@@ -141,8 +144,14 @@ fun DenebConfigScreen(
                     }
                 }
             }
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                when (tab) {
+            // Swipe left/right to move between tabs; the pager claims horizontal
+            // drags while each tab's own column keeps its vertical scroll. Tapping a
+            // pill animates here too, so the bar and pages stay in lockstep.
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            ) { page ->
+                when (ConfigTab.entries[page]) {
                     ConfigTab.GATEWAY -> GatewayTab(appSettings, onBack, denebClient)
                     ConfigTab.MODEL -> denebClient?.let { ModelTab(it) }
                     ConfigTab.CRON -> denebClient?.let { CronTab(it, onOpenCron) }
