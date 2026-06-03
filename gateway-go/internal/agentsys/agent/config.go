@@ -53,6 +53,15 @@ type AgentConfig struct {
 	// nil = disabled (default). Set via session ThinkingLevel or /think command.
 	Thinking *llm.ThinkingConfig
 
+	// ThinkingModulator, when non-nil, overrides Thinking on a per-turn basis.
+	// The executor calls it with the zero-based turn index before building each
+	// request; a non-nil return replaces Thinking for that turn, a nil return
+	// falls back to Thinking. Used by the reasoning-sandwich policy to give the
+	// planning turn a larger budget than later tool-execution turns. Like
+	// Thinking this is a request-level parameter, so varying it per turn does
+	// NOT affect prompt cache (see .claude/rules/prompt-cache.md).
+	ThinkingModulator func(turn int) *llm.ThinkingConfig
+
 	// StripImagesAfterFirstTurn drops base64 image data from the message history
 	// after the first LLM turn. On turn 0 the image is sent normally; from turn 1
 	// onward each image block is replaced with a lightweight text placeholder so

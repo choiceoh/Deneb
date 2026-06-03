@@ -157,6 +157,17 @@ func RunAgent(
 			}
 		}
 
+		// Per-turn thinking budget: the modulator (when set) lets the caller
+		// vary reasoning by turn — e.g. boost the planning turn, baseline the
+		// rest (the "reasoning sandwich"). Thinking is request-level, so this
+		// does not affect prompt cache. Falls back to cfg.Thinking.
+		turnThinking := cfg.Thinking
+		if cfg.ThinkingModulator != nil {
+			if m := cfg.ThinkingModulator(turn); m != nil {
+				turnThinking = m
+			}
+		}
+
 		req := llm.ChatRequest{
 			Model:            cfg.Model,
 			Messages:         apiMessages,
@@ -164,7 +175,7 @@ func RunAgent(
 			MaxTokens:        cfg.MaxTokens,
 			Tools:            cfg.Tools,
 			Stream:           true,
-			Thinking:         cfg.Thinking,
+			Thinking:         turnThinking,
 			Temperature:      cfg.Temperature,
 			TopP:             cfg.TopP,
 			FrequencyPenalty: cfg.FrequencyPenalty,
