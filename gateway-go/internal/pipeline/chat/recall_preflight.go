@@ -72,14 +72,12 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	if message == "" {
 		return ""
 	}
-	// All sources are cue-gated. Hindsight previously auto-recalled every turn
-	// (Hermes auto_recall pattern); the cost (1.5s HTTP per turn) outweighed the
-	// benefit (most turns have no recall intent). Cue-gating keeps hindsight's
-	// hybrid semantic+BM25 power available for the turns that actually need it.
-	// See docs/research/memory-integration-strategy.md.
-	if !shouldRunRecallPreflight(message) {
-		return ""
-	}
+	// Hermes-style auto_recall: search EVERY turn, not just cue turns. The ~1.5s
+	// preflight cost is accepted in exchange for automatic cross-session context
+	// restoration — new sessions and ordinary turns pull relevant past work without
+	// the user having to say "지난번"/"아까". cue now only affects visibility (below):
+	// explicit recall surfaces a no-evidence notice, silent auto-recall stays invisible.
+	cue := shouldRunRecallPreflight(message)
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -111,7 +109,12 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 		if logger != nil {
 			logger.Info("recall preflight: no evidence", "session", params.SessionKey)
 		}
-		return formatRecallNoEvidence()
+		// Explicit recall tells the user nothing was found; silent auto-recall on a
+		// non-cue turn stays invisible so every-turn search adds no noise.
+		if cue {
+			return formatRecallNoEvidence()
+		}
+		return ""
 	}
 
 	sort.SliceStable(evidence, func(i, j int) bool {

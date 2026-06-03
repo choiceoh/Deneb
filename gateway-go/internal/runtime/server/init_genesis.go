@@ -49,7 +49,14 @@ func (s *Server) initGenesisServices() {
 	// Iteration-based nudger (Hermes-style): fires a mid-session skill
 	// review every N tool calls. Env var DENEB_SKILL_NUDGE_INTERVAL
 	// overrides the default (10); 0 disables.
-	reviewFork := newSkillReviewFork(s.chatHandler, s.genesisTranscripts, lwModel, s.logger)
+	// The review fork dispatches through chat.SendSync, which re-resolves the model string into a
+	// provider via resolveModel — so it needs the FULL "provider/model" id. Model() returns the
+	// bare name (e.g. "step3p7"), which has no provider and fails client resolution
+	// ("no LLM client available, provider=\"\""), silently killing every nudger review and leaving
+	// the whole skill self-evolution loop dead. Generate() uses lwClient directly, so the bare name
+	// is fine there; only this SendSync path needs the prefix.
+	reviewModel := s.modelRegistry.FullModelID(modelrole.RoleLightweight)
+	reviewFork := newSkillReviewFork(s.chatHandler, s.genesisTranscripts, reviewModel, s.logger)
 	s.genesisNudger = genesis.NewNudgerFromEnvWithTrackerAndReviewer(
 		s.genesisSvc,
 		s.genesisTracker,

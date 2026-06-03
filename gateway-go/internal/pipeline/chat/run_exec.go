@@ -368,9 +368,9 @@ func prepareContextAndPrompt(
 		}
 		fingerprint := recallCueFingerprint(params.Message)
 		hasCue := fingerprint != ""
-		if !hasCue && deps.hindsightClient == nil {
-			return
-		}
+		// Hermes-style auto_recall: run the preflight every turn, not just cue turns.
+		// buildRecallPreflight searches wiki/diary/polaris/transcript/hindsight and returns
+		// "" silently when there's no evidence, so non-cue turns add latency but no noise.
 		if hasCue {
 			if cached, ok := cachedRecallMemory(params.SessionKey, fingerprint); ok {
 				resultMu.Lock()
