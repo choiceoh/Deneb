@@ -106,6 +106,15 @@ sudo apt-get install -y xvfb x11vnc novnc websockify matchbox-window-manager \
 # ANDROID_HOME=~/android-sdk, python3 cryptography (시드용) 필요
 ```
 
+## 배포 전 스모크 (`native-app-smoke.sh`)
+
+`scripts/dev/native-app-smoke.sh` 가 위 하네스를 자동으로 몰아 **핵심 화면을 한 바퀴** 돈다 — 채팅(업무 피드) → 메일 → 일정 → 검색 → 사람 → 카테고리 → 설정 4탭 → 세션 드로어(12개). `compileKotlinDesktop`·단위테스트가 못 잡는 **런타임 크래시**(예: 158/#1959 의 LazyColumn 중복키 `IllegalArgumentException` — 실데이터 렌더 때만 터짐)를 APK 게시 전에 차단하는 **수동 게이트**.
+
+- **prod 데이터라 픽셀-골든 비교 안 함.** 화면마다 ①그 화면이 렌더되는 동안 앱 로그에 새 예외/크래시 라인(`Exception`/`Caused by:`/`already used`/`*Exception` …)이 없고 ②앱 JVM(`app_jvm.pid`)이 살아있는지 검사. 스크린샷은 `shots/smoke-*.png` 로 보관(Read 로 육안 확인).
+- **읽기 전용**: tap + Escape 로만 이동, 전송/입력/액션 버튼 안 누름 → prod 게이트웨이에 안전.
+- 네비 좌표는 phone(412×915) 픽셀 하드코딩(드로어 항목·상단바). 네비 레이아웃이 바뀌면 재매핑(`start`→`shot`→Read→새 좌표). alive 판정은 `status`(매번 윈도우 재탐색이라 tap 직후 flaky) 말고 `app_jvm.pid` `kill -0`.
+- **게시 직전 실행**: `scripts/dev/native-app-smoke.sh` → PASS 면 `publish-apk.sh`, FAIL 이면 해당 `smoke-*.png` 를 Read.
+
 ## 한계 / 주의
 
 - **시스템 제스처**(엣지 스와이프 등)는 재현 불가 — 실기기 필요. 관련: [[reference_native_client_build_verify]], [[reference_native_nested_drawer_gesture]].
