@@ -218,6 +218,14 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 		wd.logger.Info("wiki-dream: verification findings", "count", len(findings))
 	}
 
+	// Phase 5.5: Densify the graph. For pages that have no related links yet,
+	// suggest a couple of semantic neighbors (high cosine floor) and wire them.
+	// Additive only — never removes a link — and a no-op without an embedder.
+	// Runs before the snapshot so the new edges land in this cycle's graph.
+	if enriched := wd.enrichRelatedLinks(ctx); enriched > 0 {
+		wd.logger.Info("wiki-dream: related-link enrichment", "linksAdded", enriched)
+	}
+
 	// Phase 6: Project the wiki into a graphify-compatible graph.json so the
 	// `graphify` tool can query, traverse, and cluster wiki concepts. No LLM
 	// call here — synthesize() already curates Related[], we just serialize.

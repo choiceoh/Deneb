@@ -39,6 +39,12 @@ type Store struct {
 	index    *Index // cached master index
 	fts      *searchDB
 	diaryFTS *diarySearchDB
+
+	// sem is the optional semantic (embedding) index. nil until SetEmbedder is
+	// called; when present, Search blends BM25 with dense-vector neighbors so a
+	// query finds pages by meaning, not just keyword overlap. Degrades silently
+	// to pure BM25 whenever the embedding server is unavailable.
+	sem *semanticIndex
 }
 
 // NewStore creates a wiki store rooted at dir.
