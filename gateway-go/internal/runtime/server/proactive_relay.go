@@ -108,17 +108,12 @@ func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
 		return false, err
 	}
 	if d.nativeSync != nil {
-		if _, err := d.nativeSync.Append(nativesync.AppendInput{
-			Type:       nativesync.TypeTranscriptAppended,
-			EntityID:   nativeWorkSessionKey,
-			SessionKey: nativeWorkSessionKey,
-			Payload: map[string]any{
-				"sessionKey":  nativeWorkSessionKey,
-				"role":        "assistant",
-				"preview":     pushPreview(content),
-				"timestampMs": msg.Timestamp,
-			},
-		}); err != nil && d.logger != nil {
+		if _, err := d.nativeSync.Append(nativesync.TranscriptAppended(
+			nativeWorkSessionKey,
+			"assistant",
+			pushPreview(content),
+			msg.Timestamp,
+		)); err != nil && d.logger != nil {
 			d.logger.Error("proactive native relay: native sync append failed",
 				"sessionKey", nativeWorkSessionKey, "error", err)
 		}

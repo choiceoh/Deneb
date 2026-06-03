@@ -27,9 +27,7 @@ func (s *nativeWorkFeedStore) Append(item workfeed.Item) (workfeed.Item, error) 
 	if err != nil {
 		return workfeed.Item{}, err
 	}
-	s.record(nativesync.TypeWorkFeedCreated, out.ID, out.SessionKey, out.ID, map[string]any{
-		"item": out,
-	})
+	s.record(nativesync.WorkFeedCreated(out))
 	return out, nil
 }
 
@@ -42,9 +40,7 @@ func (s *nativeWorkFeedStore) Ack(id string) (workfeed.Item, error) {
 	if err != nil {
 		return workfeed.Item{}, err
 	}
-	s.record(nativesync.TypeWorkFeedUpdated, item.ID, item.SessionKey, item.ID, map[string]any{
-		"item": item,
-	})
+	s.record(nativesync.WorkFeedUpdated(item))
 	return item, nil
 }
 
@@ -53,29 +49,16 @@ func (s *nativeWorkFeedStore) RunAction(itemID, actionID string) (workfeed.Actio
 	if err != nil {
 		return workfeed.ActionResult{}, err
 	}
-	s.record(nativesync.TypeWorkFeedActionRun, result.Item.ID, result.SessionKey, result.Item.ID, map[string]any{
-		"item":           result.Item,
-		"action":         result.Action,
-		"sessionKey":     result.SessionKey,
-		"prompt":         result.Prompt,
-		"message":        result.Message,
-		"removeFromFeed": result.RemoveFromFeed,
-	})
+	s.record(nativesync.WorkFeedActionRun(result))
 	return result, nil
 }
 
-func (s *nativeWorkFeedStore) record(typ, entityID, sessionKey, workFeedItemID string, payload any) {
+func (s *nativeWorkFeedStore) record(in nativesync.AppendInput) {
 	if s == nil || s.sync == nil {
 		return
 	}
-	if _, err := s.sync.Append(nativesync.AppendInput{
-		Type:           typ,
-		EntityID:       entityID,
-		SessionKey:     sessionKey,
-		WorkFeedItemID: workFeedItemID,
-		Payload:        payload,
-	}); err != nil && s.log != nil {
+	if _, err := s.sync.Append(in); err != nil && s.log != nil {
 		s.log.Error("native sync: work feed event append failed",
-			"type", typ, "entityID", entityID, "error", err)
+			"type", in.Type, "entityID", in.EntityID, "error", err)
 	}
 }
