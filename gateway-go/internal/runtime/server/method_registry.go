@@ -61,6 +61,21 @@ var errTranscriptUnavailable = errors.New("session transcript store not initiali
 // App shows a "automation not configured" banner instead of crashing.
 var errCronUnavailable = errors.New("cron service not configured")
 
+// wikiSenderFacts resolves "who is this person to us" in-process from the wiki
+// graph — used by the analyze pipeline and the sender_context card. Returns ""
+// when the wiki is unconfigured or nothing matches, so callers fall back
+// cleanly (to graphify, or to an empty card).
+func (s *Server) wikiSenderFacts(ctx context.Context, displayName string) string {
+	if s.wikiStore == nil {
+		return ""
+	}
+	facts, err := s.wikiStore.GraphContext(ctx, displayName, 0)
+	if err != nil {
+		return ""
+	}
+	return facts
+}
+
 // registerEarlyMethods registers all RPC domains that don't depend on chatHandler.
 // Called after buildHub() but before registerSessionRPCMethods().
 func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) error {
@@ -334,7 +349,14 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return store, nil
 			},
-			SenderFacts: gmailpoll.ExtractSenderFacts,
+			// In-process wiki graph first (always current); fall back to the
+			// external graphify snapshot only when nothing matches in-process.
+			SenderFacts: func(ctx context.Context, from string) string {
+				if f := s.wikiSenderFacts(ctx, from); f != "" {
+					return f
+				}
+				return gmailpoll.ExtractSenderFacts(ctx, from)
+			},
 		}),
 
 		// Mini App people directory (miniapp.people.list). Same Gmail
@@ -507,7 +529,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				if err != nil {
 					return nil, err
 				}
-				return handlerminiapp.PipelineFromGmailpoll(gmailClient, llmClient, localClient, model, localModel, s.projectCandidatesFn())
+				return handlerminiapp.PipelineFromGmailpoll(gmailClient, llmClient, localClient, model, localModel, s.projectCandidatesFn(), s.wikiSenderFacts)
 			},
 			Cache:      handlerminiapp.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
 			SaveToWiki: makeMailAnalysisWikiSink(hub),

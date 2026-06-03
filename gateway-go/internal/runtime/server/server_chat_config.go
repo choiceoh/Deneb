@@ -30,11 +30,12 @@ func (s *Server) initGmailPoll() {
 	stateDir := filepath.Join(home, ".deneb")
 
 	cfg := gmailpoll.Config{
-		StateDir:    stateDir,
-		LLMClient:   s.modelRegistry.Client(modelrole.RoleLightweight),
-		Model:       s.modelRegistry.Model(modelrole.RoleLightweight),
-		LocalClient: s.modelRegistry.Client(modelrole.RoleLightweight),
-		LocalModel:  s.modelRegistry.Model(modelrole.RoleLightweight),
+		StateDir:      stateDir,
+		LLMClient:     s.modelRegistry.Client(modelrole.RoleLightweight),
+		Model:         s.modelRegistry.Model(modelrole.RoleLightweight),
+		LocalClient:   s.modelRegistry.Client(modelrole.RoleLightweight),
+		LocalModel:    s.modelRegistry.Model(modelrole.RoleLightweight),
+		SenderFactsFn: s.wikiSenderFacts,
 	}
 
 	if pollCfg.IntervalMin != nil {

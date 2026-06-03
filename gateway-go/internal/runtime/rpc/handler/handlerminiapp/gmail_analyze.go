@@ -321,18 +321,22 @@ const interactiveAnalysisStage2Tokens = 4096
 // single-call fallback; stage-2 synthesis still runs on llmClient (the cloud
 // fallback role) so it never hits the local vLLM's free-text failure (#1816).
 // Pass nil/"" for the local pair to keep the single-call behavior.
-func PipelineFromGmailpoll(gmailClient *gmail.Client, llmClient, localClient *llm.Client, mainModel, localModel string, projectsFn func() []gmailpoll.ProjectCandidate) (AnalyzePipeline, error) {
+// senderFactsFn (optional) resolves sender context in-process from the wiki
+// graph; when supplied it is preferred over the external graphify CLI so the
+// analysis always has "who is this person to us" even on a fresh deploy.
+func PipelineFromGmailpoll(gmailClient *gmail.Client, llmClient, localClient *llm.Client, mainModel, localModel string, projectsFn func() []gmailpoll.ProjectCandidate, senderFactsFn func(ctx context.Context, displayName string) string) (AnalyzePipeline, error) {
 	if llmClient == nil || strings.TrimSpace(mainModel) == "" {
 		return nil, ErrAnalyzeNoLLM
 	}
 	return &gmailpollPipeline{
 		deps: gmailpoll.PipelineDeps{
-			GmailClient: gmailClient,
-			LLMClient:   llmClient,
-			LocalClient: localClient,
-			LocalModel:  localModel,
-			MainModel:   mainModel,
-			ProjectsFn:  projectsFn,
+			GmailClient:   gmailClient,
+			LLMClient:     llmClient,
+			LocalClient:   localClient,
+			LocalModel:    localModel,
+			MainModel:     mainModel,
+			ProjectsFn:    projectsFn,
+			SenderFactsFn: senderFactsFn,
 			// Interactive path: deeper budget + extended thinking (gated to
 			// Anthropic-mode providers inside the pipeline).
 			Stage2MaxTokens: interactiveAnalysisStage2Tokens,

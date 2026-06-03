@@ -65,6 +65,12 @@ type PipelineDeps struct {
 	// vLLM step3.7, which leaked chain-of-thought into the body — #1816) keep
 	// the safe reasoning-disabled behavior. The interactive path sets it true.
 	DeepThinking bool
+
+	// SenderFactsFn resolves "who is this person to us" for the sender display
+	// name, in-process (wiki graph traversal). When set it is preferred over the
+	// external graphify CLI, so sender context is available even when the graph
+	// was never snapshotted. nil → fall back to the graphify subprocess.
+	SenderFactsFn func(ctx context.Context, displayName string) string
 }
 
 const (
@@ -244,7 +250,7 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 	}()
 	go func() {
 		defer wg.Done()
-		memCtx = extractWikiGraphContext(stage1Ctx, msg) // best-effort
+		memCtx = extractSenderContext(stage1Ctx, deps, msg) // best-effort
 	}()
 	wg.Wait()
 
@@ -464,6 +470,27 @@ const graphifyQueryTimeout = 10 * time.Second
 
 // maxSenderFactsChars bounds graphify output so the analyze prompt stays small.
 const maxSenderFactsChars = 2000
+
+// extractSenderContext resolves "who is this person to us" for the sender.
+// Prefers the in-process wiki graph (deps.SenderFactsFn) — always current, no
+// subprocess — and falls back to the external graphify CLI snapshot only when
+// no in-process resolver is wired or it returns nothing. Best-effort: an empty
+// MemoryContext on every failure path never blocks the pipeline.
+func extractSenderContext(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail) MemoryContext {
+	name := extractDisplayName(msg.From)
+	if name == "" {
+		return MemoryContext{}
+	}
+	if deps.SenderFactsFn != nil {
+		if facts := strings.TrimSpace(deps.SenderFactsFn(ctx, name)); facts != "" {
+			if len(facts) > maxSenderFactsChars {
+				facts = facts[:maxSenderFactsChars] + "\n...(생략)"
+			}
+			return MemoryContext{SenderFacts: facts}
+		}
+	}
+	return extractWikiGraphContext(ctx, msg)
+}
 
 // extractWikiGraphContext queries the wiki knowledge graph (built by the wiki
 // dreamer at ~/.deneb/wiki-graph/graphify-out/graph.json) for the sender's

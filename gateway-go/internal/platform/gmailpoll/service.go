@@ -54,6 +54,10 @@ type Config struct {
 	// ProjectsFn lists registered project wiki pages so analysis can cite
 	// related projects by real path. Forwarded to PipelineDeps. nil = none.
 	ProjectsFn func() []ProjectCandidate
+
+	// SenderFactsFn resolves sender context in-process from the wiki graph.
+	// Forwarded to PipelineDeps; nil = fall back to the graphify subprocess.
+	SenderFactsFn func(ctx context.Context, displayName string) string
 }
 
 // Compile-time interface compliance.
@@ -277,13 +281,14 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 // caller can persist each (cache + wiki page).
 func (s *Service) batchAnalyze(ctx context.Context, gmailClient *gmail.Client, msgs []*gmail.MessageDetail) (string, []BatchItem, error) {
 	deps := PipelineDeps{
-		GmailClient: gmailClient,
-		LLMClient:   s.llmClient,
-		LocalClient: s.cfg.LocalClient,
-		LocalModel:  s.cfg.LocalModel,
-		MainModel:   s.cfg.Model,
-		Logger:      s.log,
-		ProjectsFn:  s.cfg.ProjectsFn,
+		GmailClient:   gmailClient,
+		LLMClient:     s.llmClient,
+		LocalClient:   s.cfg.LocalClient,
+		LocalModel:    s.cfg.LocalModel,
+		MainModel:     s.cfg.Model,
+		Logger:        s.log,
+		ProjectsFn:    s.cfg.ProjectsFn,
+		SenderFactsFn: s.cfg.SenderFactsFn,
 	}
 
 	s.log.Debug("batch analysis 실행", "count", len(msgs))
