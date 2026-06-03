@@ -3,6 +3,7 @@ package workfeed
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -94,6 +95,40 @@ func TestStoreRunActionFollowUpReturnsPrompt(t *testing.T) {
 	}
 	if result.RemoveFromFeed {
 		t.Fatalf("followup should not remove item")
+	}
+}
+
+func TestStoreRunActionOpenReturnsContextPrompt(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	if _, err := store.Append(Item{
+		ID:         "report",
+		Source:     SourceProactive,
+		Title:      "Daily Report",
+		Summary:    "launch summary",
+		Body:       "blocker: design review",
+		SessionKey: "client:main",
+		RefType:    "mail",
+		RefID:      "msg_1",
+	}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	result, err := store.RunAction("report", ActionOpen)
+	if err != nil {
+		t.Fatalf("run open: %v", err)
+	}
+	if result.SessionKey != "client:main" {
+		t.Fatalf("sessionKey = %q, want client:main", result.SessionKey)
+	}
+	if result.Prompt == "" {
+		t.Fatalf("expected prompt")
+	}
+	for _, want := range []string{"Daily Report", "mail / msg_1", "blocker: design review"} {
+		if !strings.Contains(result.Prompt, want) {
+			t.Fatalf("prompt = %q, want %q", result.Prompt, want)
+		}
+	}
+	if result.RemoveFromFeed {
+		t.Fatalf("open should not remove item")
 	}
 }
 

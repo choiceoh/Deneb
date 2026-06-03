@@ -448,11 +448,12 @@ class DenebGatewayClient(
         return true
     }
 
-    fun openWorkFeedItem(id: String) {
+    suspend fun openWorkFeedItem(id: String): String? {
         val item = _denebWorkFeed.value.firstOrNull { it.id == id }
         val target = item?.sessionKey?.takeIf { it.isNotBlank() } ?: "client:main"
         switchSession(target)
-        scope.launch { loadTranscriptGuarded(target) }
+        loadTranscriptGuarded(target)
+        return runWorkFeedAction(id, "open")
     }
 
     suspend fun runWorkFeedAction(itemId: String, actionId: String): String? {

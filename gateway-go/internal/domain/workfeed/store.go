@@ -237,10 +237,11 @@ func (s *Store) RunAction(itemID, actionID string) (ActionResult, error) {
 		}
 		switch action.Kind {
 		case ActionOpen:
+			result.Prompt = actionPrompt(action, openPrompt(items[i]))
 			result.Message = "opened"
 			return result, nil
 		case ActionFollowUp:
-			result.Prompt = followUpPrompt(items[i])
+			result.Prompt = actionPrompt(action, followUpPrompt(items[i]))
 			result.Message = "prompt_created"
 			return result, nil
 		case ActionSnooze:
@@ -499,11 +500,51 @@ func markActionDone(item *Item, actionID string) {
 	}
 }
 
-func followUpPrompt(item Item) string {
-	body := strings.TrimSpace(item.Body)
-	if body == "" {
-		body = strings.TrimSpace(item.Summary)
+func actionPrompt(action Action, fallback string) string {
+	if prompt := strings.TrimSpace(action.Prompt); prompt != "" {
+		return prompt
 	}
+	return fallback
+}
+
+func openPrompt(item Item) string {
+	body := contextBody(item)
+	var b strings.Builder
+	b.WriteString("이 업무 항목을 열었어. 아래 내용을 기준으로 핵심을 짧게 요약하고, 지금 바로 할 다음 행동을 3개 이하로 제안해줘. 내가 답해야 할 질문이 있으면 마지막에 모아줘.\n\n")
+	b.WriteString("## 업무 항목\n")
+	if title := strings.TrimSpace(item.Title); title != "" {
+		b.WriteString("- 제목: ")
+		b.WriteString(title)
+		b.WriteByte('\n')
+	}
+	if source := strings.TrimSpace(item.Source); source != "" {
+		b.WriteString("- 출처: ")
+		b.WriteString(source)
+		b.WriteByte('\n')
+	}
+	if refType := strings.TrimSpace(item.RefType); refType != "" {
+		b.WriteString("- 참조: ")
+		b.WriteString(refType)
+		if refID := strings.TrimSpace(item.RefID); refID != "" {
+			b.WriteString(" / ")
+			b.WriteString(refID)
+		}
+		b.WriteByte('\n')
+	}
+	if summary := strings.TrimSpace(item.Summary); summary != "" {
+		b.WriteString("- 요약: ")
+		b.WriteString(summary)
+		b.WriteByte('\n')
+	}
+	if body != "" {
+		b.WriteString("\n## 내용\n")
+		b.WriteString(body)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func followUpPrompt(item Item) string {
+	body := contextBody(item)
 	switch item.Source {
 	case SourceCaptureAudio:
 		return "이 녹음/회의 내용을 업무 관점에서 다시 정리해줘. 결정사항, 액션아이템(담당/기한), 리스크, 다음 후속을 분리하고 빠진 정보는 질문으로 남겨줘.\n\n## 내용\n" + body
@@ -514,6 +555,14 @@ func followUpPrompt(item Item) string {
 	default:
 		return "이 업무 리포트를 바탕으로 지금 바로 처리할 다음 행동을 3개 이하로 정리해줘. 막힌 항목은 질문으로 남기고, 필요한 경우 후속 작업으로 쪼개줘.\n\n## 리포트\n" + body
 	}
+}
+
+func contextBody(item Item) string {
+	body := strings.TrimSpace(item.Body)
+	if body == "" {
+		body = strings.TrimSpace(item.Summary)
+	}
+	return body
 }
 
 func Preview(text string, maxRunes int) string {

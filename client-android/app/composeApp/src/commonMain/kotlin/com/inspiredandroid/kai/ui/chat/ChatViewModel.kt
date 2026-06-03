@@ -470,8 +470,13 @@ class ChatViewModel(
     }
 
     private fun openWorkFeedItem(id: String) {
-        (dataRepository as? DenebGatewayClient)?.openWorkFeedItem(id)
-        dataRepository.clearUnreadWorkReport()
+        viewModelScope.launch(backgroundDispatcher) {
+            val prompt = (dataRepository as? DenebGatewayClient)?.openWorkFeedItem(id)
+            dataRepository.clearUnreadWorkReport()
+            if (!prompt.isNullOrBlank()) {
+                askInternal(prompt, null)
+            }
+        }
     }
 
     private fun runWorkFeedAction(itemId: String, actionId: String) {
