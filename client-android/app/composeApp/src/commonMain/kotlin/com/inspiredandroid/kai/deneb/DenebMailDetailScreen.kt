@@ -127,7 +127,7 @@ fun DenebMailDetailScreen(
             Text(mail.from, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
             if (mail.date.isNotBlank()) {
                 Text(
-                    mail.date.take(16).replace('T', ' '),
+                    shortDate(mail.date),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
