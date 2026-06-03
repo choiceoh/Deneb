@@ -1528,15 +1528,45 @@ class DenebGatewayClient(
         // The single home session keeps the familiar 업무 label (matches the
         // empty-drawer fallback), not "내 대화 · main".
         if (s.key == "client:main") return "업무"
-        val friendly = when (s.key.substringBefore(':', "")) {
+        val kind = s.key.substringBefore(':', "")
+        // cron/system/boot carry meaning in the key itself — surface the job/kind
+        // so the drawer reads "예약 · 메일 분석" / "시스템 부팅" instead of an opaque
+        // "예약 작업 · 1780452…" timestamp suffix.
+        when (kind) {
+            "cron" -> return cronSessionLabel(s.key)
+            "system" -> return systemSessionLabel(s.key)
+            "boot" -> return "시스템 부팅"
+        }
+        val friendly = when (kind) {
             "telegram" -> "이전 대화"
             "client" -> "내 대화"
-            "system" -> "시스템"
-            "cron" -> "예약 작업"
             else -> "대화"
         }
         val shortId = s.key.substringAfterLast(':').take(8)
         return if (shortId.isNotBlank()) "$friendly · $shortId" else friendly
+    }
+
+    // cron:<job>:<ts> → "예약 · <readable job>". Known jobs map to Korean; an
+    // unknown one falls back to the de-hyphenated job name so it still reads
+    // sensibly (e.g. cron:email-analysis-full:178… → "예약 · 메일 분석").
+    private fun cronSessionLabel(key: String): String {
+        val job = key.split(':').getOrNull(1).orEmpty()
+        return if (job.isBlank()) "예약 작업" else "예약 · ${prettyJobName(job)}"
+    }
+
+    // system:<name> → "시스템 · <name>" (e.g. system:heartbeat → 시스템 · 하트비트).
+    private fun systemSessionLabel(key: String): String {
+        val name = key.substringAfter(':', "")
+        return if (name.isBlank()) "시스템" else "시스템 · ${prettyJobName(name)}"
+    }
+
+    private fun prettyJobName(job: String): String = when {
+        job.startsWith("email-analysis") -> "메일 분석"
+        job.startsWith("morning") -> "모닝레터"
+        job.startsWith("weekly") -> "주간 보고"
+        job.startsWith("evening") -> "저녁 정리"
+        job.startsWith("heartbeat") -> "하트비트"
+        else -> job.replace('-', ' ')
     }
 
     private fun switchSession(key: String) {
