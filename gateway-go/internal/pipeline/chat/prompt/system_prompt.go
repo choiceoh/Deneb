@@ -318,7 +318,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		ss.WriteString("1. 작업이 스킬의 description 또는 tags와 일치\n")
 		ss.WriteString("2. 사용자가 슬래시 커맨드(`/이름`)로 스킬을 직접 호출\n")
 		ss.WriteString("3. 복합 워크플로우(빌드, 배포, 릴리스, PR, 커밋 등) — 단계를 즉흥으로 만들지 마라\n")
-		ss.WriteString("4. 위 목록에 없지만 해당할 수 있는 작업 → `skills`(action=list)로 먼저 검색\n\n")
+		ss.WriteString("4. 위 목록에 없지만 해당할 수 있는 작업 → `fetch_tools`(query=\"skills\")로 `skills`를 활성화한 뒤 `skills`(action=list, query=...)로 먼저 검색\n\n")
 		ss.WriteString("### 사용 방법\n")
 		ss.WriteString("1. <available_skills>에서 일치하는 스킬 하나 선택 (description 기준)\n")
 		ss.WriteString("2. 해당 스킬의 <location>에서 SKILL.md를 `read`\n")
@@ -329,7 +329,13 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		ss.WriteString("- 스킬이 존재하는 작업을 **스킬 없이 처리하지 마라.** 스킬이 더 정확하다.\n")
 		ss.WriteString("- 여러 개 해당하면 가장 구체적인 것 하나만 선택. 한 번에 하나만 읽어라.\n")
 		ss.WriteString("- 스킬 경로의 상대 경로는 SKILL.md 디렉토리 기준으로 해석.\n")
-		ss.WriteString("- 목록에 없는 작업도 `skills`(action=list)로 확인 — discoverable 스킬이 더 있다.\n\n")
+		ss.WriteString("- 목록에 없는 작업도 먼저 `fetch_tools`(query=\"skills\")로 `skills`를 불러온 뒤 `skills`(action=list)로 확인 — discoverable 스킬이 더 있다.\n\n")
+		ss.WriteString("### Workflow Bootstrap (Hermes loop)\n")
+		ss.WriteString("복합/반복 워크플로우(PR 리뷰·머지, 릴리스·배포, 연구 실험, CRM/엑셀/마케팅 자동화 등)는 즉흥 실행 전에 아래 순서를 따른다:\n")
+		ss.WriteString("1. `fetch_tools`(query=\"skills\") → `skills`(action=list, query=\"작업 핵심어\")로 기존 스킬을 찾고 있으면 SKILL.md를 읽는다.\n")
+		ss.WriteString("2. 스킬이 없거나 사용자가 '전처럼/지난번처럼/같은 작업'을 뜻하면 `fetch_tools`(query=\"sessions\") → `sessions`(action=search, query=\"작업 핵심어\", maxResults=10)로 과거 세션을 찾는다.\n")
+		ss.WriteString("3. 후보 세션이 있으면 `sessions`(action=history, sessionKey=..., limit=40)로 절차·검증·실패/교정 내용을 복원한 뒤 현재 작업에 적용한다.\n")
+		ss.WriteString("4. 작업이 끝나면 아래 Skill Genesis 규칙으로 저장/개선한다. `skill_lifecycle`가 보이지 않으면 `fetch_tools`(query=\"skill_lifecycle\")로 먼저 활성화한다.\n\n")
 		// Skill Genesis: instruct the agent to identify reusable patterns.
 		ss.WriteString("### Skill Genesis (경험에서 스킬 자동 생성)\n")
 		ss.WriteString("복합 워크플로우(5+ 도구, 3+ 턴)를 완료하면 시스템이 자동으로 스킬 추출을 평가합니다.\n")
@@ -352,7 +358,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		// No always-skills, but discoverable skills may still exist.
 		ss.WriteString("## 스킬 (전문 절차서)\n\n")
 		ss.WriteString("스킬은 특정 작업에 대한 검증된 절차서다.\n")
-		ss.WriteString("`skills` 도구(action=list)로 사용 가능한 스킬을 확인하라. 해당하는 스킬이 있으면 반드시 사용.\n\n")
+		ss.WriteString("복합/반복 워크플로우는 `fetch_tools`(query=\"skills\")로 `skills`를 활성화한 뒤 `skills`(action=list)로 스킬을 확인하라. 스킬이 없거나 이전 작업 반복이면 `fetch_tools`(query=\"sessions\") 후 `sessions`(action=search/history)로 과거 세션을 복원하라.\n\n")
 	}
 
 	// --- Dynamic block ---
