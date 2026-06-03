@@ -574,7 +574,7 @@ class DenebGatewayClient(
         _denebModels.value = payload.sections
             .flatMap { it.models }
             .distinctBy { it.id }
-            .map { ModelOption(it.id, it.display.ifBlank { it.label.ifBlank { it.id } }, it.id == payload.current, it.health) }
+            .map { ModelOption(it.id, it.display.ifBlank { it.label.ifBlank { it.id } }, it.id == payload.current, it.health, it.custom) }
         _denebRoleModels.value = payload.roles.associate { it.role to it.model }
     }
 
@@ -636,6 +636,35 @@ class DenebGatewayClient(
             },
         ) != null
         refreshModels()
+        return ok
+    }
+
+    /** Add an OpenAI-compatible model by base URL + model name. The gateway stores
+     *  it as a custom provider (api=openai) and reloads live, so the model appears
+     *  in [denebModels] after the refresh. Returns false when the gateway rejects
+     *  the endpoint/model so the screen can surface it instead of a silent no-op. */
+    suspend fun addCustomModel(endpoint: String, model: String): Boolean {
+        val ok = callRpc<JsonObject>(
+            "miniapp.models.add_custom",
+            buildJsonObject {
+                put("endpoint", endpoint)
+                put("model", model)
+            },
+        ) != null
+        if (ok) refreshModels()
+        return ok
+    }
+
+    /** Remove a user-added custom model. The gateway resets any role bound to it
+     *  back to the default. Returns false on failure. */
+    suspend fun deleteCustomModel(id: String): Boolean {
+        val ok = callRpc<JsonObject>(
+            "miniapp.models.delete_custom",
+            buildJsonObject {
+                put("id", id)
+            },
+        ) != null
+        if (ok) refreshModels()
         return ok
     }
 
@@ -1659,6 +1688,7 @@ class DenebGatewayClient(
         val label: String = "",
         val current: Boolean = false,
         val health: String = "",
+        val custom: Boolean = false,
     )
 
     @Serializable
@@ -1843,6 +1873,7 @@ data class ModelOption(
     val display: String,
     val current: Boolean,
     val health: String,
+    val custom: Boolean = false,
 )
 
 /** Gateway/native API status returned by `miniapp.client.hello`. */

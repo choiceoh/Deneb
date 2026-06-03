@@ -24,6 +24,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
@@ -526,6 +527,11 @@ private fun ModelTab(client: DenebGatewayClient) {
     var role by remember { mutableStateOf(ModelRole.MAIN) }
     var switching by remember { mutableStateOf(false) }
     var switchFailed by remember { mutableStateOf(false) }
+    var addBaseUrl by remember { mutableStateOf("") }
+    var addModel by remember { mutableStateOf("") }
+    var adding by remember { mutableStateOf(false) }
+    var addError by remember { mutableStateOf<String?>(null) }
+    var pendingDelete by remember { mutableStateOf<ModelOption?>(null) }
     LaunchedEffect(Unit) { client.refreshModels() }
     if (models.isEmpty()) {
         DenebLoading()
@@ -607,6 +613,18 @@ private fun ModelTab(client: DenebGatewayClient) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    // User-added models can be removed; built-in/role models can't.
+                    if (model.custom) {
+                        TextButton(
+                            onClick = {
+                                haptics.tap()
+                                pendingDelete = model
+                            },
+                            enabled = !switching,
+                        ) {
+                            Text("삭제", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
                 }
                 if (i < models.lastIndex) {
                     HorizontalDivider(
@@ -616,6 +634,84 @@ private fun ModelTab(client: DenebGatewayClient) {
                 }
             }
         }
+
+        // Add an OpenAI-compatible endpoint (vLLM / LM Studio / etc.) by base URL
+        // + model name. No auth key here — keyed providers go in deneb.json.
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "OpenAI 호환 모델 직접 추가",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            "Base URL과 모델 이름으로 vLLM·LM Studio 같은 OpenAI 호환 엔드포인트를 추가합니다. 인증 키가 필요 없는 엔드포인트용입니다.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = addBaseUrl,
+            onValueChange = { addBaseUrl = it; addError = null },
+            label = { Text("Base URL") },
+            placeholder = { Text("http://127.0.0.1:8000/v1") },
+            singleLine = true,
+            enabled = !adding,
+            isError = addError != null,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = addModel,
+            onValueChange = { addModel = it; addError = null },
+            label = { Text("모델 이름") },
+            placeholder = { Text("예: qwen2.5-coder-7b") },
+            singleLine = true,
+            enabled = !adding,
+            isError = addError != null,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        addError?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        }
+        Button(
+            onClick = {
+                haptics.tap()
+                scope.launch {
+                    adding = true
+                    addError = null
+                    val ok = client.addCustomModel(addBaseUrl.trim(), addModel.trim())
+                    if (ok) {
+                        addBaseUrl = ""
+                        addModel = ""
+                    } else {
+                        addError = "추가에 실패했어요. Base URL과 모델 이름을 확인해 주세요."
+                    }
+                    adding = false
+                }
+            },
+            enabled = !adding && addBaseUrl.isNotBlank() && addModel.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(if (adding) "추가 중…" else "모델 추가")
+        }
+    }
+
+    pendingDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("모델 삭제") },
+            text = {
+                Text("'${target.display}' 모델을 목록에서 삭제할까요? 이 모델에 연결된 역할은 기본값으로 되돌아갑니다.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = target.id
+                    pendingDelete = null
+                    scope.launch { client.deleteCustomModel(id) }
+                }) { Text("삭제", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("취소") }
+            },
+        )
     }
 }
 
