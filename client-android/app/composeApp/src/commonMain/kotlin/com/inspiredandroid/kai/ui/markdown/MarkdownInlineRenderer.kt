@@ -1,8 +1,6 @@
 package com.inspiredandroid.kai.ui.markdown
 
 import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -15,11 +13,11 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 
-@Composable
-internal fun List<InlineNode>.toAnnotatedString(): AnnotatedString {
-    val colors = MaterialTheme.colorScheme
-    return buildAnnotatedString { appendInlines(this@toAnnotatedString, colors) }
-}
+// Not @Composable: takes the resolved ColorScheme so callers can cache the result
+// with remember(inlines, colors). Building the AnnotatedString on every streaming
+// token (it was rebuilt per recomposition) was a measurable hot-path cost.
+internal fun List<InlineNode>.toAnnotatedString(colors: ColorScheme): AnnotatedString =
+    buildAnnotatedString { appendInlines(this@toAnnotatedString, colors) }
 
 private fun AnnotatedString.Builder.appendInlines(nodes: List<InlineNode>, colors: ColorScheme) {
     for (n in nodes) appendInline(n, colors)

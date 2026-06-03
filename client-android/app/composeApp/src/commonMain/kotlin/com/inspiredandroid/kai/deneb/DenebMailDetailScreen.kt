@@ -41,6 +41,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.ui.components.rememberHaptics
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 /**
@@ -75,13 +77,20 @@ fun DenebMailDetailScreen(
     suspend fun load() {
         loadFailed = false
         detail = null
-        val d = client.fetchMailDetail(messageId)
-        detail = d
-        loadFailed = d == null
-        if (d != null) {
-            client.markMailRead(messageId)
-            // Instant: show a previously-computed analysis without spending an LLM call.
-            analysis = client.fetchCachedAnalysis(messageId)
+        coroutineScope {
+            // Cached analysis only needs the messageId, not the detail body — fetch
+            // it concurrently with the detail instead of after it. markMailRead stays
+            // sequential (cheap, and its optimistic unread-clear already ran).
+            val analysisDeferred = async { client.fetchCachedAnalysis(messageId) }
+            val d = client.fetchMailDetail(messageId)
+            detail = d
+            loadFailed = d == null
+            if (d != null) {
+                client.markMailRead(messageId)
+                analysis = analysisDeferred.await()
+            } else {
+                analysisDeferred.cancel()
+            }
         }
     }
     LaunchedEffect(messageId) { load() }
