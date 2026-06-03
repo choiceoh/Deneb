@@ -128,6 +128,64 @@ func TestRelay_SuppressesContentless(t *testing.T) {
 	}
 }
 
+// TestRelay_SuppressesSilentToken verifies the proactive relay honors the
+// NO_REPLY silent-reply contract: a turn that signals "nothing to report" with
+// the bare token is dropped entirely instead of leaking a literal "NO_REPLY"
+// transcript bubble + work-feed card + push.
+func TestRelay_SuppressesSilentToken(t *testing.T) {
+	for _, body := range []string{"NO_REPLY", "NO_REPLY 🐾", "  NO_REPLY  ", "**NO_REPLY**"} {
+		store := newRecordingTranscriptStore()
+		feed := &recordingWorkFeed{}
+		hub := newClientPushHub()
+		events, unsub := hub.subscribe()
+
+		d := proactiveRelayDeps{transcriptStore: store, pushHub: hub, workFeed: feed}
+		delivered, err := d.relay(context.Background(), "ignored-session-key", body)
+		if err != nil {
+			t.Fatalf("relay(%q): %v", body, err)
+		}
+		if delivered {
+			t.Errorf("relay(%q) delivered=true, want suppressed", body)
+		}
+		if n := len(store.appends[nativeWorkSessionKey]); n != 0 {
+			t.Errorf("relay(%q) wrote %d transcript append(s), want 0", body, n)
+		}
+		if n := len(feed.items); n != 0 {
+			t.Errorf("relay(%q) wrote %d work-feed item(s), want 0", body, n)
+		}
+		select {
+		case <-events:
+			t.Errorf("relay(%q) emitted a push, want none", body)
+		default:
+		}
+		unsub()
+	}
+}
+
+// TestRelay_StripsTrailingSilentToken verifies a real report that merely ends
+// with a NO_REPLY token is still delivered — with the token stripped — rather
+// than suppressed wholesale.
+func TestRelay_StripsTrailingSilentToken(t *testing.T) {
+	store := newRecordingTranscriptStore()
+	feed := &recordingWorkFeed{}
+	hub := newClientPushHub()
+
+	d := proactiveRelayDeps{transcriptStore: store, pushHub: hub, workFeed: feed}
+	delivered, err := d.relay(context.Background(), "ignored-session-key", "긴급: 계약서 서명 필요\nNO_REPLY")
+	if err != nil {
+		t.Fatalf("relay: %v", err)
+	}
+	if !delivered {
+		t.Fatal("relay delivered=false, want delivered (real content precedes the token)")
+	}
+	if n := len(feed.items); n != 1 {
+		t.Fatalf("got %d work-feed item(s), want 1", n)
+	}
+	if got := feed.items[0].Body; strings.Contains(got, "NO_REPLY") {
+		t.Errorf("work-feed body still contains the token: %q", got)
+	}
+}
+
 func TestIsContentlessProactive(t *testing.T) {
 	contentless := []string{
 		"",
