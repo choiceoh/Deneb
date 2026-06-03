@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
@@ -406,6 +407,15 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 	// Session failure reason (from session itself).
 	if sess.FailureReason != "" && statusFn == nil {
 		sections = append(sections, fmt.Sprintf("⚠️ **마지막 오류:** %s", sess.FailureReason))
+	}
+
+	// Process-wide prompt-cache hit ratio — the cache-doctrine regression
+	// alarm (.claude/rules/prompt-cache.md). Cumulative since gateway start,
+	// across all sessions. Only shown once some prompt tokens are recorded.
+	if cr, cc, fi := metrics.CacheHits.Snapshot(); cr+cc+fi > 0 {
+		sections = append(sections, fmt.Sprintf("💾 **캐시 히트율:** %.0f%% (read %s · write %s · fresh %s)",
+			metrics.CacheHits.HitRatio()*100,
+			formatCompactTokens(cr), formatCompactTokens(cc), formatCompactTokens(fi)))
 	}
 
 	return strings.Join(sections, "\n")
