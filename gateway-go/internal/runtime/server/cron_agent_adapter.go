@@ -23,6 +23,22 @@ type cronChatAdapter struct {
 	// data inside a fixed form, instead of freestyling. nil when wiki is
 	// unwired; the command then falls through to a normal agent turn.
 	weeklyReportData func(ctx context.Context) (string, error)
+	// weeklyFormDeliver renders the formal 주간업무보고 form image and posts it to
+	// the native 업무 chat, so a "/weekly" cron delivers both the text report and
+	// the document form. Best-effort and nil-tolerant — a render failure just
+	// leaves the text report.
+	weeklyFormDeliver func(ctx context.Context) error
+}
+
+// isWeeklyReportCommand reports whether a cron payload is the weekly-report
+// routine ("/weekly" or its Korean alias).
+func isWeeklyReportCommand(command string) bool {
+	switch strings.TrimSpace(command) {
+	case "/weekly", "/주간보고":
+		return true
+	default:
+		return false
+	}
 }
 
 // weeklyReportPromptTmpl pins the 주간업무보고 FORM while leaving the writing to
@@ -87,6 +103,14 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 	// fixed form injected, so the LLM writes inside the 양식 instead of
 	// freestyling (see weeklyReportPromptTmpl). Other commands pass through.
 	command := a.resolveCronCommand(ctx, params.Command)
+	// Also post the formal form image to the 업무 chat (best-effort) so the user
+	// gets both the document form and the text report. Runs before the text turn
+	// so the form lands first in the transcript.
+	if a.weeklyFormDeliver != nil && isWeeklyReportCommand(params.Command) {
+		if err := a.weeklyFormDeliver(ctx); err != nil && a.logger != nil {
+			a.logger.Warn("weekly form image delivery failed", "error", err)
+		}
+	}
 	result, err := a.chat.SendSync(ctx, params.SessionKey, command, "", opts)
 	if err != nil {
 		return "", err
@@ -142,9 +166,7 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 // fills a locked form rather than inventing one. Unknown commands (and the
 // case where wiki/data is unavailable) pass through unchanged.
 func (a *cronChatAdapter) resolveCronCommand(ctx context.Context, command string) string {
-	switch strings.TrimSpace(command) {
-	case "/weekly", "/주간보고":
-	default:
+	if !isWeeklyReportCommand(command) {
 		return command
 	}
 	if a.weeklyReportData == nil {

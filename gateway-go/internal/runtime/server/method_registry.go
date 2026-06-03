@@ -522,15 +522,30 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 	// registerSessionRPCMethods (proactive relay), not Telegram.
 	if s.cronService != nil {
 		// Pre-collect wiki weekly-report data for "/weekly" cron payloads so the
-		// LLM writes inside a fixed 양식 (cronChatAdapter.resolveCronCommand).
+		// LLM writes inside a fixed 양식 (cronChatAdapter.resolveCronCommand), and
+		// render the formal form image to post to the 업무 chat alongside the text.
 		var weeklyDataFn func(ctx context.Context) (string, error)
+		var weeklyFormFn func(ctx context.Context) error
 		if s.wikiStore != nil {
 			wikiDir := s.wikiStore.Dir()
 			weeklyDataFn = func(ctx context.Context) (string, error) {
 				return tools.CollectWeeklyReportData(ctx, tools.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
 			}
+			weeklyFormFn = func(ctx context.Context) error {
+				img, ok := tools.BuildWeeklyReportImage(ctx, tools.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
+				if !ok {
+					return nil // render unavailable (low memory/disk) → text report only
+				}
+				_, err := s.proactiveRelay.deliverNativeImage("📋 주간업무보고 — 정식 양식", img)
+				return err
+			}
 		}
-		s.cronService.SetAgentRunner(&cronChatAdapter{chat: s.chatHandler, logger: s.logger, weeklyReportData: weeklyDataFn})
+		s.cronService.SetAgentRunner(&cronChatAdapter{
+			chat:              s.chatHandler,
+			logger:            s.logger,
+			weeklyReportData:  weeklyDataFn,
+			weeklyFormDeliver: weeklyFormFn,
+		})
 		if s.acpDeps != nil {
 			s.cronService.SetSubagentPoller(&acpSubagentPoller{
 				registry: s.acpDeps.Registry,

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"strings"
 	"time"
 
@@ -95,6 +96,37 @@ func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
 			Title: "Deneb",
 			Body:  pushPreview(content),
 		})
+	}
+	return true, nil
+}
+
+// deliverNativeImage appends an image attachment (e.g. the rendered 주간업무보고
+// form) to the native 업무 chat with a short caption, and live-pushes a
+// notification. The caption is the message body — the native chat skips
+// empty-content assistant messages, so a non-empty caption is required for the
+// bubble (and its image) to render at all. Best-effort: returns (false, nil)
+// when no transcript store is wired or the image is empty.
+func (d proactiveRelayDeps) deliverNativeImage(caption string, pngBytes []byte) (bool, error) {
+	if d.transcriptStore == nil || len(pngBytes) == 0 {
+		return false, nil
+	}
+	msg := toolctx.NewTextChatMessage("assistant", caption, time.Now().UnixMilli())
+	msg.Attachments = []toolctx.ChatAttachment{{
+		Type:     "image",
+		MimeType: "image/png",
+		Data:     base64.StdEncoding.EncodeToString(pngBytes),
+		Name:     "weekly-report.png",
+		Size:     int64(len(pngBytes)),
+	}}
+	if err := d.transcriptStore.Append(nativeWorkSessionKey, msg); err != nil {
+		if d.logger != nil {
+			d.logger.Error("proactive native image: transcript append failed",
+				"sessionKey", nativeWorkSessionKey, "error", err)
+		}
+		return false, err
+	}
+	if d.pushHub != nil {
+		d.pushHub.publish(clientPushEvent{Title: "Deneb", Body: caption})
 	}
 	return true, nil
 }
