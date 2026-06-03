@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@drawable/widget_bg"
-    android:padding="14dp"
+    android:padding="16dp"
     android:gravity="center_vertical">
 
     <TextView
@@ -17,26 +17,57 @@
         android:textStyle="bold"
         android:letterSpacing="0.08" />
 
-    <TextView
-        android:id="@+id/widget_meeting"
+    <!-- Next meeting: calendar glyph + title/time -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:text="…"
-        android:textColor="#E8EAF0"
-        android:textSize="15sp"
-        android:textStyle="bold"
-        android:maxLines="2"
-        android:ellipsize="end" />
+        android:orientation="horizontal"
+        android:layout_marginTop="10dp">
 
-    <TextView
-        android:id="@+id/widget_unread"
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginTop="2dp"
+            android:layout_marginEnd="8dp"
+            android:src="@drawable/ic_widget_calendar"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/widget_meeting"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="…"
+            android:textColor="#E8EAF0"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:maxLines="2"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <!-- Unread mail: envelope glyph + count. Row is hidden when there is no count. -->
+    <LinearLayout
+        android:id="@+id/widget_unread_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text=""
-        android:textColor="#A9B1D6"
-        android:textSize="13sp"
-        android:maxLines="1"
-        android:ellipsize="end" />
+        android:orientation="horizontal"
+        android:layout_marginTop="6dp"
+        android:gravity="center_vertical">
+
+        <ImageView
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:layout_marginEnd="8dp"
+            android:src="@drawable/ic_widget_mail"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/widget_unread"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#A9B1D6"
+            android:textSize="13sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
 </LinearLayout>
