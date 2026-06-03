@@ -118,6 +118,11 @@ func (s *Server) initRunMarkerLifecycle() func() {
 					logger.Warn("failed to write run marker",
 						"session", e.Key, "error", err)
 				}
+			case e.NewStatus == "":
+				if err := store.Delete(e.Key); err != nil {
+					logger.Warn("failed to delete run marker on session reset",
+						"session", e.Key, "error", err)
+				}
 			case session.IsTerminal(e.NewStatus):
 				if err := store.Delete(e.Key); err != nil {
 					logger.Warn("failed to delete run marker",

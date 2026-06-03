@@ -473,6 +473,38 @@ func TestRunMarkerLifecycle_WriteOnRunningDeleteOnTerminal(t *testing.T) {
 	})
 }
 
+// Test: lifecycle listener clears persisted markers when /reset resets the
+// session back to the idle state.
+func TestRunMarkerLifecycle_DeleteOnReset(t *testing.T) {
+	tmpHome := t.TempDir()
+	srv := newAutoResumeTestServer(t, tmpHome)
+	unsub := srv.initRunMarkerLifecycle()
+	defer unsub()
+
+	sm := srv.sessions
+	sm.Create("client:reset-me", session.KindDirect)
+	if err := sm.Set(&session.Session{
+		Key: "client:reset-me", Kind: session.KindDirect, Channel: "client",
+		Status: session.StatusRunning,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	store := srv.runMarkerStore()
+	waitForCondition(t, 2*time.Second, func() bool {
+		m, _ := store.Read("client:reset-me")
+		return m != nil
+	})
+
+	if reset := sm.ResetSession("client:reset-me"); reset == nil {
+		t.Fatal("ResetSession returned nil")
+	}
+	waitForCondition(t, 2*time.Second, func() bool {
+		m, _ := store.Read("client:reset-me")
+		return m == nil
+	})
+}
+
 // Test: lifecycle listener skips non-direct kinds (cron/subagent do not
 // need markers — those have their own retry paths).
 func TestRunMarkerLifecycle_SkipsNonDirectKinds(t *testing.T) {

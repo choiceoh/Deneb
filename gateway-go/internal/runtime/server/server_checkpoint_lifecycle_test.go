@@ -24,11 +24,11 @@ func TestShouldReleaseCheckpoints(t *testing.T) {
 		want  bool
 	}{
 		{"delete always releases", session.Event{Kind: session.EventDeleted, Key: "k"}, true},
-		{"status → done releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusDone}, true},
-		{"status → failed releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusFailed}, true},
-		{"status → killed releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusKilled}, true},
-		{"status → timeout releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusTimeout}, true},
-		{"reset (empty status) releases", session.Event{Kind: session.EventStatusChanged, NewStatus: ""}, true},
+		{"status → done keeps history", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusDone}, false},
+		{"status → failed keeps history", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusFailed}, false},
+		{"status → killed keeps history", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusKilled}, false},
+		{"status → timeout keeps history", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusTimeout}, false},
+		{"reset (empty status) keeps history", session.Event{Kind: session.EventStatusChanged, NewStatus: ""}, false},
 		{"status → running does NOT release", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusRunning}, false},
 		{"create does NOT release", session.Event{Kind: session.EventCreated}, false},
 	}
@@ -41,13 +41,12 @@ func TestShouldReleaseCheckpoints(t *testing.T) {
 	}
 }
 
-// TestCheckpointLifecycle_RemovesOnTerminal builds the minimum wiring needed
+// TestCheckpointLifecycle_KeepsOnTerminal builds the minimum wiring needed
 // to exercise the real subscription path: a session.Manager, a real
 // checkpoint Manager, and the subscriber installed via initCheckpointLifecycle.
 // When the session transitions to a terminal phase, the checkpoint directory
-// must be removed within a short timeout — proving the hook fires and the
-// removal runs end to end.
-func TestCheckpointLifecycle_RemovesOnTerminal(t *testing.T) {
+// must remain so /rollback can still inspect and restore snapshots.
+func TestCheckpointLifecycle_KeepsOnTerminal(t *testing.T) {
 	root := t.TempDir()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -84,20 +83,21 @@ func TestCheckpointLifecycle_RemovesOnTerminal(t *testing.T) {
 		t.Fatalf("session dir should exist before terminal: %v", err)
 	}
 
-	// Drive the session through start → end. The End event fires
-	// EventStatusChanged with NewStatus=done, which must trigger removal.
+	// Drive the session through start → end. Terminal status must not delete
+	// checkpoint history.
 	s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{Phase: session.PhaseStart, Ts: 1})
 	s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{Phase: session.PhaseEnd, Ts: 2})
 
-	if !waitForMissing(sessionDir, 2*time.Second) {
-		t.Fatalf("checkpoint dir %s still exists after terminal transition", sessionDir)
+	time.Sleep(300 * time.Millisecond)
+	if _, err := os.Stat(sessionDir); err != nil {
+		t.Fatalf("checkpoint dir %s should survive terminal transition: %v", sessionDir, err)
 	}
 }
 
-// TestCheckpointLifecycle_RemovesOnReset verifies /reset-equivalent flow:
-// ResetSession emits EventStatusChanged with NewStatus="" which should
-// trigger the removal.
-func TestCheckpointLifecycle_RemovesOnReset(t *testing.T) {
+// TestCheckpointLifecycle_KeepsOnReset verifies /reset-equivalent flow:
+// ResetSession emits EventStatusChanged with NewStatus="", but rollback data
+// must survive so the user can still inspect or restore prior snapshots.
+func TestCheckpointLifecycle_KeepsOnReset(t *testing.T) {
 	root := t.TempDir()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	s := &Server{
@@ -138,8 +138,9 @@ func TestCheckpointLifecycle_RemovesOnReset(t *testing.T) {
 		t.Fatal("ResetSession returned nil — precondition not met")
 	}
 
-	if !waitForMissing(sessionDir, 2*time.Second) {
-		t.Fatalf("checkpoint dir %s still exists after reset", sessionDir)
+	time.Sleep(300 * time.Millisecond)
+	if _, err := os.Stat(sessionDir); err != nil {
+		t.Fatalf("checkpoint dir %s should survive reset: %v", sessionDir, err)
 	}
 }
 
@@ -183,6 +184,51 @@ func TestCheckpointLifecycle_IgnoresRunningTransition(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	if _, err := os.Stat(sessionDir); err != nil {
 		t.Fatalf("dir should persist while session is running, stat err=%v", err)
+	}
+}
+
+// TestCheckpointLifecycle_RemovesOnDelete ensures the subscriber still reclaims
+// checkpoint data once the session is actually deleted.
+func TestCheckpointLifecycle_RemovesOnDelete(t *testing.T) {
+	root := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	s := &Server{
+		ServerTransport: &ServerTransport{},
+		ServerRPC:       &ServerRPC{},
+		ServerRuntime:   &ServerRuntime{},
+		SessionManager:  &SessionManager{sessions: session.NewManager()},
+		ChatManager:     &ChatManager{},
+		HookManager:     &HookManager{},
+		logger:          logger,
+	}
+	s.initCheckpointLifecycle(root)
+	t.Cleanup(func() {
+		if s.checkpointLifecycleUnsub != nil {
+			s.checkpointLifecycleUnsub()
+		}
+	})
+
+	const sessionKey = "sess-delete"
+	s.sessions.Create(sessionKey, session.KindDirect)
+
+	cpm := checkpoint.New(root, sessionKey)
+	target := filepath.Join(t.TempDir(), "file.txt")
+	if err := os.WriteFile(target, []byte("bye"), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	if _, err := cpm.Snapshot(context.Background(), target, "fs_write"); err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	sessionDir := cpm.SessionDir()
+	if _, err := os.Stat(sessionDir); err != nil {
+		t.Fatalf("session dir should exist before delete: %v", err)
+	}
+
+	if ok := s.sessions.Delete(sessionKey); !ok {
+		t.Fatal("Delete returned false")
+	}
+	if !waitForMissing(sessionDir, 2*time.Second) {
+		t.Fatalf("checkpoint dir %s still exists after delete", sessionDir)
 	}
 }
 
