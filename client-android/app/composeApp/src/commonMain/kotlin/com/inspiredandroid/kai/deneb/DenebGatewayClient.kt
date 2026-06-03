@@ -1099,24 +1099,31 @@ class DenebGatewayClient(
         val autoDisabledAtMs: Long = 0,
     )
 
-    /** APK + version.json are served on :19010 of the same host as the gateway. */
-    private val updateBaseUrl: String
-        get() {
-            val u = gatewayUrl.trim().removeSuffix("/")
-            val schemeEnd = u.indexOf("://").let { if (it >= 0) it + 3 else 0 }
-            val scheme = if (schemeEnd > 0) u.substring(0, schemeEnd) else "http://"
-            val host = u.substring(schemeEnd).substringBefore("/").substringBefore(":")
-            return "$scheme$host:19010"
-        }
-
     /**
-     * Check the self-served manifest. Returns non-null only when a strictly
-     * newer build than the compiled-in [DENEB_VERSION_CODE] is published.
+     * Check the gateway-served update manifest. The gateway exposes the APK +
+     * metadata on its own port (the same base URL used for chat), so this works
+     * over the cloudflare tunnel — unlike the old :19010 side-server the tunnel
+     * never routed. Returns non-null only when a strictly newer build than the
+     * compiled-in [DENEB_VERSION_CODE] is published.
      */
     suspend fun checkUpdate(): UpdateInfo? = runCatching {
-        val m = http.get("$updateBaseUrl/version.json").body<UpdateManifest>()
-        if (m.code > DENEB_VERSION_CODE && m.url.isNotBlank()) {
-            UpdateInfo(versionName = m.name.ifBlank { m.code.toString() }, apkUrl = m.url, notes = m.notes)
+        val base = gatewayUrl.trim().removeSuffix("/")
+        if (base.isEmpty() || clientToken.isEmpty()) return@runCatching null
+        val m = http.get("$base/api/v1/app/update/manifest") {
+            header(CLIENT_TOKEN_HEADER, clientToken)
+            // Bounded timeout: a missing or blocked gateway must fail fast
+            // instead of hanging the "check for update" spinner forever.
+            timeout {
+                requestTimeoutMillis = 10_000
+                connectTimeoutMillis = 6_000
+            }
+        }.body<UpdateManifest>()
+        if (m.code > DENEB_VERSION_CODE && m.file.isNotBlank()) {
+            // The browser opening this link can't set a header, so the client
+            // token rides in the query string (same as the Gmail attachment route).
+            val apk = "$base/api/v1/app/update/download" +
+                "?file=${m.file.encodeURLParameter()}&clientToken=${clientToken.encodeURLParameter()}"
+            UpdateInfo(versionName = m.name.ifBlank { m.code.toString() }, apkUrl = apk, notes = m.notes)
         } else {
             null
         }
