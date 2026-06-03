@@ -39,6 +39,19 @@ data class CalendarEventOut(
 )
 
 @Serializable
+data class MailAnalysisOut(
+    val id: String = "",
+    val subject: String = "",
+    val from: String = "",
+    val date: String = "",
+    val analysis: String = "",
+    val relatedProjects: List<ProjectRef> = emptyList(),
+    val durationMs: Long = 0L,
+    val cached: Boolean = false,
+    val createdAt: String = "",
+)
+
+@Serializable
 data class MailAttachmentOut(
     val id: String = "",
     val filename: String = "",
@@ -232,6 +245,22 @@ data class SearchWikiHit(
     val category: String = "",
     val snippet: String = "",
     val score: Double = 0.0,
+)
+
+@Serializable
+data class SenderRecentOut(
+    val count: Int = 0,
+    val lastReceivedAt: String = "",
+    val windowDays: Int = 0,
+    val truncated: Boolean = false,
+)
+
+@Serializable
+data class SenderWikiHitOut(
+    val path: String = "",
+    val title: String = "",
+    val summary: String = "",
+    val category: String = "",
 )
 
 @Serializable

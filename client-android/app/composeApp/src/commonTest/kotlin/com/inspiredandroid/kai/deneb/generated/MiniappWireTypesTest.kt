@@ -230,4 +230,43 @@ class MiniappWireTypesTest {
         assertEquals("image/png", msg.attachments[0].mimeType)
         assertEquals("report.png", msg.attachments[0].name)
     }
+
+    @Test
+    fun `mail analysis decodes with RFC3339 createdAt and related projects`() {
+        // createdAt is time.Time on the gateway; the generator maps it to String,
+        // so the RFC3339 wire value decodes straight into a Kotlin String.
+        val payload = """
+            {
+              "id": "m1", "subject": "견적 회신", "from": "a@b.kr",
+              "analysis": "핵심 요약", "cached": true, "durationMs": 820,
+              "createdAt": "2026-06-03T09:00:00Z",
+              "relatedProjects": [ { "path": "p/x.md", "title": "프로젝트X", "summary": "요약" } ]
+            }
+        """.trimIndent()
+
+        val a = json.decodeFromString<MailAnalysisOut>(payload)
+
+        assertEquals("핵심 요약", a.analysis)
+        assertTrue(a.cached)
+        assertEquals(820L, a.durationMs)
+        assertEquals("2026-06-03T09:00:00Z", a.createdAt)
+        assertEquals(1, a.relatedProjects.size)
+        assertEquals("프로젝트X", a.relatedProjects[0].title)
+    }
+
+    @Test
+    fun `sender context wiki hit and recent rows decode`() {
+        val hit = json.decodeFromString<SenderWikiHitOut>(
+            """{ "path": "people/김부장.md", "title": "김부장", "summary": "탑솔라 구매", "category": "people" }""",
+        )
+        assertEquals("김부장", hit.title)
+        assertEquals("people", hit.category)
+
+        val recent = json.decodeFromString<SenderRecentOut>(
+            """{ "count": 5, "lastReceivedAt": "2026-06-01", "windowDays": 30, "truncated": true }""",
+        )
+        assertEquals(5, recent.count)
+        assertEquals(30, recent.windowDays)
+        assertTrue(recent.truncated)
+    }
 }

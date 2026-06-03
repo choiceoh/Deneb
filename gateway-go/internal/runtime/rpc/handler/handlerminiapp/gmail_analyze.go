@@ -101,21 +101,27 @@ func GmailAnalyzeMethods(deps GmailAnalyzeDeps) map[string]rpcutil.HandlerFunc {
 	return m
 }
 
+// mailAnalysisOut is the wire shape for a Gmail AI-analysis result
+// (miniapp.gmail.analyze). Marked for Kotlin codegen so the native client's
+// analysis card shares it; the cached endpoint returns a subset of this shape.
+//
+//deneb:wire
+type mailAnalysisOut struct {
+	ID              string       `json:"id"`
+	Subject         string       `json:"subject,omitempty"`
+	From            string       `json:"from,omitempty"`
+	Date            string       `json:"date,omitempty"`
+	Analysis        string       `json:"analysis"`
+	RelatedProjects []ProjectRef `json:"relatedProjects,omitempty"`
+	DurationMs      int64        `json:"durationMs"`
+	Cached          bool         `json:"cached"`
+	CreatedAt       time.Time    `json:"createdAt"`
+}
+
 func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 	type params struct {
 		ID    string `json:"id"`
 		Force bool   `json:"force,omitempty"`
-	}
-	type out struct {
-		ID              string       `json:"id"`
-		Subject         string       `json:"subject,omitempty"`
-		From            string       `json:"from,omitempty"`
-		Date            string       `json:"date,omitempty"`
-		Analysis        string       `json:"analysis"`
-		RelatedProjects []ProjectRef `json:"relatedProjects,omitempty"`
-		DurationMs      int64        `json:"durationMs"`
-		Cached          bool         `json:"cached"`
-		CreatedAt       time.Time    `json:"createdAt"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
@@ -136,7 +142,7 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 		// corrupt cache file never blocks a fresh run.
 		if !p.Force && deps.Cache != nil {
 			if rec, err := deps.Cache.load(p.ID); err == nil && rec != nil {
-				return rpcutil.RespondOK(req.ID, out{
+				return rpcutil.RespondOK(req.ID, mailAnalysisOut{
 					ID:              rec.MsgID,
 					Subject:         rec.Subject,
 					From:            rec.From,
@@ -206,7 +212,7 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 			})
 		}
 
-		return rpcutil.RespondOK(req.ID, out{
+		return rpcutil.RespondOK(req.ID, mailAnalysisOut{
 			ID:              msg.ID,
 			Subject:         msg.Subject,
 			From:            msg.From,

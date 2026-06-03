@@ -273,6 +273,14 @@ func mapType(expr ast.Expr, structs map[string]*ast.StructType) (typ, def string
 			return "", "", nil, err
 		}
 		return "List<" + elem + ">", "emptyList()", refs, nil
+	case *ast.SelectorExpr:
+		// time.Time marshals to an RFC3339 string in Go's encoding/json, which
+		// the client already decodes as a String. Other qualified types (from
+		// imported packages) stay unsupported so markers only land on clean structs.
+		if pkg, ok := t.X.(*ast.Ident); ok && pkg.Name == "time" && t.Sel.Name == "Time" {
+			return "String", `""`, nil, nil
+		}
+		return "", "", nil, fmt.Errorf("unsupported qualified type .%s", t.Sel.Name)
 	default:
 		return "", "", nil, fmt.Errorf("unsupported type expression %T", expr)
 	}
