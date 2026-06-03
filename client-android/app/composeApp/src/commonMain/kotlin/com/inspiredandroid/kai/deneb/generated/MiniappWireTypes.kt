@@ -39,6 +39,41 @@ data class CalendarEventOut(
 )
 
 @Serializable
+data class MailAttachmentOut(
+    val id: String = "",
+    val filename: String = "",
+    val mimeType: String = "",
+    val size: Int = 0,
+)
+
+@Serializable
+data class MailMessageOut(
+    val id: String = "",
+    val threadId: String = "",
+    val from: String = "",
+    val to: String = "",
+    val cc: String = "",
+    val subject: String = "",
+    val date: String = "",
+    val body: String = "",
+    val bodyTotal: Int = 0,
+    val labels: List<String> = emptyList(),
+    val attachments: List<MailAttachmentOut> = emptyList(),
+)
+
+@Serializable
+data class MailRowOut(
+    val id: String = "",
+    val threadId: String = "",
+    val from: String = "",
+    val subject: String = "",
+    val snippet: String = "",
+    val date: String = "",
+    val isUnread: Boolean = false,
+    val labels: List<String> = emptyList(),
+)
+
+@Serializable
 data class MemoryCategoryRow(
     val name: String = "",
     val pageCount: Int = 0,
