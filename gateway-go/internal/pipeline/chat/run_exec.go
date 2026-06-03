@@ -1019,7 +1019,7 @@ func buildAgentConfig(
 	// session already has thinking enabled, so default behavior is unchanged.
 	// Thinking is a request-level param, so per-turn variation is cache-safe.
 	if thinkingCfg != nil && reasoningSandwichEnabled() {
-		cfg.ThinkingModulator = planningSandwichThinking(thinkingCfg)
+		cfg.ThinkingModulator = planningSandwichThinking(thinkingCfg, cfg.MaxTokens)
 	}
 
 	return cfg, spawnFlag
@@ -1354,9 +1354,12 @@ func reasoningSandwichEnabled() bool {
 	}
 }
 
-// thinkingBudgetLadder lists the standard extended-thinking budgets in
-// increasing order (mirrors resolveThinkingConfig). boostThinkingBudget walks
-// one step up this ladder.
+// thinkingBudgetLadder lists the NAMED extended-thinking tiers in increasing
+// order: minimal/low/medium/high/xhigh (see resolveThinkingConfig).
+// boostThinkingBudget walks one step up this ladder. Note "adaptive" (16384) is
+// intentionally NOT a ladder entry — it is not a named tier, so boosting from
+// adaptive lands on the next tier above it (high=32768). Do not insert 16384
+// here; that would change the boost semantics.
 var thinkingBudgetLadder = []int{1024, 4096, 10240, 32768, 65536}
 
 // boostThinkingBudget returns the next budget tier strictly above b, capped at
@@ -1370,20 +1373,38 @@ func boostThinkingBudget(b int) int {
 	return b
 }
 
+// minThinkingResponseHeadroom is the token room the planning turn must retain
+// for its own output after the (boosted) thinking budget is carved out of
+// max_tokens. Anthropic extended thinking requires budget_tokens < max_tokens,
+// so a boost that would not leave this margin is dropped rather than risking a
+// rejected request.
+const minThinkingResponseHeadroom = 4096
+
 // planningSandwichThinking returns a per-turn thinking selector that boosts the
 // first (planning) turn one budget tier above the session baseline and uses the
 // baseline for every later turn — the "front of the reasoning sandwich" (§11).
 // Planning is where extra reasoning pays off most, while keeping middle
 // tool-execution turns at baseline avoids the timeout cost of max-everywhere
-// reasoning. Returns nil when base is nil so the caller leaves Thinking as-is.
-func planningSandwichThinking(base *llm.ThinkingConfig) func(turn int) *llm.ThinkingConfig {
+// reasoning.
+//
+// The boost is applied only when the larger budget still leaves response
+// headroom under maxTokens; otherwise the planning turn falls back to the
+// baseline so it is never more likely to be rejected than a normal turn
+// (Anthropic requires budget_tokens < max_tokens). maxTokens <= 0 means
+// "unknown" and keeps the boost. Returns nil when base is nil so the caller
+// leaves Thinking as-is.
+func planningSandwichThinking(base *llm.ThinkingConfig, maxTokens int) func(turn int) *llm.ThinkingConfig {
 	if base == nil {
 		return nil
 	}
-	boosted := &llm.ThinkingConfig{
-		Type:         base.Type,
-		BudgetTokens: boostThinkingBudget(base.BudgetTokens),
-		Interleaved:  base.Interleaved,
+	boostedBudget := boostThinkingBudget(base.BudgetTokens)
+	boosted := base
+	if boostedBudget > base.BudgetTokens && (maxTokens <= 0 || boostedBudget <= maxTokens-minThinkingResponseHeadroom) {
+		boosted = &llm.ThinkingConfig{
+			Type:         base.Type,
+			BudgetTokens: boostedBudget,
+			Interleaved:  base.Interleaved,
+		}
 	}
 	return func(turn int) *llm.ThinkingConfig {
 		if turn == 0 {
