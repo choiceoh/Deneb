@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
@@ -166,6 +167,10 @@ func toolSessionsSearch(transcript toolctx.TranscriptStore) ToolFunc {
 		if transcript == nil {
 			return "Transcript store not available.", nil
 		}
+		query := strings.TrimSpace(p.Query)
+		if query == "" {
+			return "", fmt.Errorf("query is required")
+		}
 
 		maxResults := p.MaxResults
 		if maxResults <= 0 {
@@ -175,12 +180,21 @@ func toolSessionsSearch(transcript toolctx.TranscriptStore) ToolFunc {
 			maxResults = 100
 		}
 
-		results, err := transcript.Search(p.Query, maxResults)
+		results, err := transcript.Search(query, maxResults)
 		if err != nil {
 			return fmt.Sprintf("Search failed: %s", err.Error()), nil
 		}
+		expandedQueries := sessionSearchExpandedQueries(query)
+		expanded := false
+		if len(results) == 0 && len(expandedQueries) > 0 {
+			results, err = searchTranscriptExpanded(transcript, expandedQueries, maxResults)
+			if err != nil {
+				return fmt.Sprintf("Search failed: %s", err.Error()), nil
+			}
+			expanded = len(results) > 0
+		}
 		if len(results) == 0 {
-			return fmt.Sprintf("No matches found for %q across session transcripts.", p.Query), nil
+			return fmt.Sprintf("No matches found for %q across session transcripts.", query), nil
 		}
 
 		var sb strings.Builder
@@ -188,7 +202,12 @@ func toolSessionsSearch(transcript toolctx.TranscriptStore) ToolFunc {
 		for _, r := range results {
 			totalMatches += len(r.Matches)
 		}
-		fmt.Fprintf(&sb, "Found %d match(es) across %d session(s) for %q:\n\n", totalMatches, len(results), p.Query)
+		if expanded {
+			fmt.Fprintf(&sb, "Found %d match(es) across %d session(s) for %q via expanded terms (%s):\n\n",
+				totalMatches, len(results), query, strings.Join(expandedQueries, ", "))
+		} else {
+			fmt.Fprintf(&sb, "Found %d match(es) across %d session(s) for %q:\n\n", totalMatches, len(results), query)
+		}
 
 		for _, r := range results {
 			fmt.Fprintf(&sb, "### Session: %s\n", r.SessionKey)
@@ -216,6 +235,147 @@ func toolSessionsSearch(transcript toolctx.TranscriptStore) ToolFunc {
 		}
 		return sb.String(), nil
 	}
+}
+
+var sessionSearchStopWords = map[string]struct{}{
+	"그": {}, "이": {}, "저": {}, "것": {}, "거": {}, "좀": {}, "다시": {}, "관련": {}, "작업": {},
+	"같은": {}, "처럼": {}, "지난번": {}, "전에": {}, "예전에": {}, "아까": {}, "방금": {}, "해줘": {},
+	"해주세요": {}, "찾아줘": {}, "찾아": {}, "어떻게": {}, "뭐였": {}, "뭐더라": {},
+	"the": {}, "and": {}, "for": {}, "with": {}, "about": {}, "that": {}, "this": {}, "what": {},
+	"when": {}, "how": {}, "same": {}, "previous": {}, "last": {}, "again": {}, "task": {},
+}
+
+var sessionSearchShortSignalTokens = map[string]struct{}{
+	"ai": {}, "ci": {}, "pr": {}, "ui": {}, "ux": {},
+}
+
+func sessionSearchExpandedQueries(query string) []string {
+	tokens := strings.FieldsFunc(strings.ToLower(query), func(r rune) bool {
+		return !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_')
+	})
+	var out []string
+	seen := make(map[string]struct{}, len(tokens))
+	for _, token := range tokens {
+		token = normalizeSessionSearchToken(token)
+		if token == "" || !isSessionSearchSignalToken(token) {
+			continue
+		}
+		if _, stop := sessionSearchStopWords[token]; stop {
+			continue
+		}
+		if _, ok := seen[token]; ok {
+			continue
+		}
+		seen[token] = struct{}{}
+		out = append(out, token)
+		if len(out) >= 6 {
+			break
+		}
+	}
+	return out
+}
+
+func normalizeSessionSearchToken(token string) string {
+	token = strings.Trim(strings.ToLower(token), "-_")
+	if token == "" {
+		return ""
+	}
+	suffixes := []string{
+		"해주세요", "해줘요", "해줘", "했어요", "했어", "했던", "하던",
+		"하는", "하면", "해서", "해야", "해요", "하고", "해",
+		"에서", "에게", "으로", "부터", "까지", "이랑",
+		"은", "는", "이", "가", "을", "를", "에", "로", "와", "과", "도", "만", "랑",
+	}
+	for range 2 {
+		changed := false
+		for _, suffix := range suffixes {
+			if !strings.HasSuffix(token, suffix) {
+				continue
+			}
+			candidate := strings.TrimSuffix(token, suffix)
+			if len([]rune(candidate)) < 2 {
+				continue
+			}
+			token = candidate
+			changed = true
+			break
+		}
+		if !changed {
+			break
+		}
+	}
+	return token
+}
+
+func isSessionSearchSignalToken(token string) bool {
+	runes := []rune(token)
+	if len(runes) == 0 {
+		return false
+	}
+	if _, ok := sessionSearchShortSignalTokens[token]; ok {
+		return true
+	}
+	hasHangul := false
+	hasLatin := false
+	for _, r := range runes {
+		if r >= 0xAC00 && r <= 0xD7A3 {
+			hasHangul = true
+		}
+		if r <= unicode.MaxASCII && unicode.IsLetter(r) {
+			hasLatin = true
+		}
+	}
+	if hasHangul {
+		return len(runes) >= 2
+	}
+	if hasLatin {
+		return len(runes) >= 3
+	}
+	return len(runes) >= 2
+}
+
+func searchTranscriptExpanded(transcript toolctx.TranscriptStore, queries []string, maxResults int) ([]toolctx.SearchResult, error) {
+	if transcript == nil || len(queries) == 0 || maxResults <= 0 {
+		return nil, nil
+	}
+	var results []toolctx.SearchResult
+	sessionIndex := make(map[string]int)
+	seenMatches := make(map[string]struct{})
+	remaining := maxResults
+
+	for _, query := range queries {
+		if remaining <= 0 {
+			break
+		}
+		hits, err := transcript.Search(query, remaining)
+		if err != nil {
+			return nil, err
+		}
+		for _, hit := range hits {
+			if remaining <= 0 {
+				break
+			}
+			idx, ok := sessionIndex[hit.SessionKey]
+			if !ok {
+				idx = len(results)
+				sessionIndex[hit.SessionKey] = idx
+				results = append(results, toolctx.SearchResult{SessionKey: hit.SessionKey})
+			}
+			for _, match := range hit.Matches {
+				key := fmt.Sprintf("%s#%d", hit.SessionKey, match.Index)
+				if _, exists := seenMatches[key]; exists {
+					continue
+				}
+				seenMatches[key] = struct{}{}
+				results[idx].Matches = append(results[idx].Matches, match)
+				remaining--
+				if remaining <= 0 {
+					break
+				}
+			}
+		}
+	}
+	return results, nil
 }
 
 // --- sessions send sub-action ---
