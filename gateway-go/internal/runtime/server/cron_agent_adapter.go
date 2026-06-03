@@ -18,7 +18,45 @@ import (
 type cronChatAdapter struct {
 	chat   *chat.Handler
 	logger *slog.Logger
+	// weeklyReportData collects the formal weekly-report data (wiki-based JSON
+	// envelope) so a "/weekly" cron payload runs the LLM against pre-collected
+	// data inside a fixed form, instead of freestyling. nil when wiki is
+	// unwired; the command then falls through to a normal agent turn.
+	weeklyReportData func(ctx context.Context) (string, error)
 }
+
+// weeklyReportPromptTmpl pins the 주간업무보고 FORM while leaving the writing to
+// the LLM. The cron used to hand the agent a vague "topsolar-db 스킬로 weekly
+// 정리해줘" prompt and the model freestyled the format (chatty markdown off a
+// stale 3-row DB). Here the gateway pre-collects the wiki data deterministically
+// and the LLM only fills this exact form — synthesising the 실시/예정 lines and
+// 현안 from each project's timeline/next-action text, never inventing the layout.
+// The single %s is the collected JSON envelope.
+const weeklyReportPromptTmpl = `[주간업무보고 데이터 — 위키 프로젝트 기반, 이미 수집 완료. 도구로 다시 모으지 마세요.]
+
+%s
+
+위 JSON 데이터만으로 기획조정실 주간업무보고를 작성하세요. 아래 양식을 정확히 따르고, 형식·섹션·순서를 임의로 바꾸지 마세요.
+
+[양식]
+📋 주간업무보고 — 기획조정실 (보고자: 오선택 실장)
+🗓 실시 {week_done} / 예정 {week_planned}
+
+▢ <그룹 label>
+  • <프로젝트 title>(<capacity 있으면 표기>)
+     - 실시: <지난주 실제 진행 — 그 프로젝트의 timeline_raw·summary를 읽고 핵심 한 줄로>
+     - 예정: <이번주 계획 — next_actions_raw를 읽고 핵심 한 줄로>
+  (그룹 안 모든 프로젝트를 같은 형식으로)
+
+⚠️ 현안
+  - <issues 항목 그대로>
+
+[규칙]
+- 데이터에 있는 사실(프로젝트명·용량·날짜·상태)만 쓰고, 없는 내용(프로젝트·조직·인선)을 지어내지 마세요.
+- 실시/예정 한 줄은 timeline_raw·next_actions_raw를 읽고 당신이 직접 핵심만 압축하세요(기계적 복붙 금지).
+- 소관(그룹) 순서: 1팀 → 2팀 → 3팀 → 남도에코 → 개인. 빈 그룹·빈 현안 섹션은 생략.
+- 보고할 프로젝트가 하나도 없으면 "이번 주 보고할 프로젝트 활동이 없습니다"만 출력.
+- 인사·빈 서두("좋은 질문" 등)·내부 토큰(<thinking>, NO_REPLY)·채널 상태 추측 금지. 바로 양식부터.`
 
 var _ cron.AgentRunner = (*cronChatAdapter)(nil)
 
@@ -45,7 +83,11 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 			ThreadID:  params.ThreadID,
 		}
 	}
-	result, err := a.chat.SendSync(ctx, params.SessionKey, params.Command, "", opts)
+	// Routine "/weekly" cron payloads get the report data pre-collected and a
+	// fixed form injected, so the LLM writes inside the 양식 instead of
+	// freestyling (see weeklyReportPromptTmpl). Other commands pass through.
+	command := a.resolveCronCommand(ctx, params.Command)
+	result, err := a.chat.SendSync(ctx, params.SessionKey, command, "", opts)
 	if err != nil {
 		return "", err
 	}
@@ -92,6 +134,30 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 		"chosenLen", len(output),
 		"stopReason", result.StopReason)
 	return output, nil
+}
+
+// resolveCronCommand rewrites recognised routine slash-command payloads into a
+// fully-specified prompt. For "/weekly" (or "/주간보고") it pre-collects the
+// wiki-based report data and wraps it in the fixed 양식 template so the LLM
+// fills a locked form rather than inventing one. Unknown commands (and the
+// case where wiki/data is unavailable) pass through unchanged.
+func (a *cronChatAdapter) resolveCronCommand(ctx context.Context, command string) string {
+	switch strings.TrimSpace(command) {
+	case "/weekly", "/주간보고":
+	default:
+		return command
+	}
+	if a.weeklyReportData == nil {
+		return command
+	}
+	data, err := a.weeklyReportData(ctx)
+	if err != nil || strings.TrimSpace(data) == "" {
+		if a.logger != nil {
+			a.logger.Warn("weekly report data collection failed; using raw cron command", "error", err)
+		}
+		return command
+	}
+	return fmt.Sprintf(weeklyReportPromptTmpl, data)
 }
 
 // acpSubagentPoller implements cron.SubagentPoller using the ACP registry

@@ -10,11 +10,13 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
@@ -519,7 +521,16 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 	// delivered to the native client via the main-session handoff wired in
 	// registerSessionRPCMethods (proactive relay), not Telegram.
 	if s.cronService != nil {
-		s.cronService.SetAgentRunner(&cronChatAdapter{chat: s.chatHandler, logger: s.logger})
+		// Pre-collect wiki weekly-report data for "/weekly" cron payloads so the
+		// LLM writes inside a fixed 양식 (cronChatAdapter.resolveCronCommand).
+		var weeklyDataFn func(ctx context.Context) (string, error)
+		if s.wikiStore != nil {
+			wikiDir := s.wikiStore.Dir()
+			weeklyDataFn = func(ctx context.Context) (string, error) {
+				return tools.CollectWeeklyReportData(ctx, tools.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
+			}
+		}
+		s.cronService.SetAgentRunner(&cronChatAdapter{chat: s.chatHandler, logger: s.logger, weeklyReportData: weeklyDataFn})
 		if s.acpDeps != nil {
 			s.cronService.SetSubagentPoller(&acpSubagentPoller{
 				registry: s.acpDeps.Registry,
