@@ -40,21 +40,6 @@ func newTopicResolver(logger *slog.Logger) chat.TopicResolver {
 	return &topicResolver{dir: topicSnapshot.dir, m: topicSnapshot.m}
 }
 
-// configuredTopicMap reloads topics.map for native-client discovery calls.
-// Unlike topicResolver, this path is not used per model turn, so reflecting
-// deneb.json edits without restart is more useful than holding a boot snapshot.
-func configuredTopicMap() (map[string]string, error) {
-	snapshot, err := config.LoadConfigFromDefaultPath()
-	if err != nil || snapshot == nil || snapshot.Config.Topics == nil {
-		return nil, err
-	}
-	topicSnapshot := topicSnapshotFromConfig(snapshot.Config.Topics)
-	if topicSnapshot == nil {
-		return nil, nil
-	}
-	return topicSnapshot.m, nil
-}
-
 func topicSnapshotFromConfig(tc *config.TopicsConfig) *topicConfigSnapshot {
 	if tc == nil || len(tc.Map) == 0 {
 		return nil

@@ -233,9 +233,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlerminiapp.WorkFeedMethods(handlerminiapp.WorkFeedDeps{
 			Store: nativeWorkFeed,
 		}),
-		handlerminiapp.TopicsMethods(handlerminiapp.TopicsDeps{
-			TopicMap: configuredTopicMap,
-		}),
 		s.miniappModelMethods(),
 
 		// Mini App Gmail domain (miniapp.gmail.list_recent / get /

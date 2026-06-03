@@ -20,9 +20,6 @@ func restorableTranscriptSession(sessionKey string) (channel string, ok bool) {
 	if isNativeClientSessionKey(sessionKey) {
 		return "client", true
 	}
-	if _, ok := parseTelegramChatID(sessionKey); ok {
-		return "telegram", true
-	}
 	return "", false
 }
 
@@ -35,18 +32,11 @@ func resumableSessionForMarker(sessionKey string) (resumableSessionTarget, bool)
 	if isNativeClientSessionKey(sessionKey) {
 		return resumableSessionTarget{Channel: "client"}, true
 	}
-	if chatID, ok := parseTelegramChatID(sessionKey); ok {
-		return resumableSessionTarget{Channel: "telegram", To: chatID}, true
-	}
 	return resumableSessionTarget{}, false
 }
 
 func shouldRecordChatActivity(sessionKey string) bool {
-	if isNativeClientSessionKey(sessionKey) {
-		return true
-	}
-	_, ok := parseTelegramChatID(sessionKey)
-	return ok
+	return isNativeClientSessionKey(sessionKey)
 }
 
 func (s *Server) recordChatActivity(sessionKey string) {

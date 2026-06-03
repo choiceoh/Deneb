@@ -55,13 +55,13 @@ func TestAnalyzeTranscriptTail_AllShapes(t *testing.T) {
 	}{
 		{
 			name:       "empty (just header)",
-			sessionKey: "telegram:empty",
+			sessionKey: "client:empty",
 			lines:      nil,
 			want:       tailEmpty,
 		},
 		{
 			name:       "user text (LLM never replied)",
-			sessionKey: "telegram:user_text",
+			sessionKey: "client:user_text",
 			lines: []string{
 				`{"role":"user","content":"hi","timestamp":1700000001000}`,
 			},
@@ -69,7 +69,7 @@ func TestAnalyzeTranscriptTail_AllShapes(t *testing.T) {
 		},
 		{
 			name:       "assistant text only (clean end)",
-			sessionKey: "telegram:asst_text",
+			sessionKey: "client:asst_text",
 			lines: []string{
 				`{"role":"user","content":"hi","timestamp":1700000001000}`,
 				`{"role":"assistant","content":[{"type":"text","text":"hello"}],"timestamp":1700000001500}`,
@@ -78,7 +78,7 @@ func TestAnalyzeTranscriptTail_AllShapes(t *testing.T) {
 		},
 		{
 			name:       "assistant tool_use (interrupted mid-tool)",
-			sessionKey: "telegram:asst_tool",
+			sessionKey: "client:asst_tool",
 			lines: []string{
 				`{"role":"user","content":"do it","timestamp":1700000001000}`,
 				`{"role":"assistant","content":[{"type":"text","text":"ok"},{"type":"tool_use","id":"t1","name":"fs","input":{}}],"timestamp":1700000001500}`,
@@ -87,7 +87,7 @@ func TestAnalyzeTranscriptTail_AllShapes(t *testing.T) {
 		},
 		{
 			name:       "tool_result (next turn never started)",
-			sessionKey: "telegram:tool_result",
+			sessionKey: "client:tool_result",
 			lines: []string{
 				`{"role":"user","content":"do it","timestamp":1700000001000}`,
 				`{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"fs","input":{}}],"timestamp":1700000001500}`,
@@ -126,11 +126,11 @@ func TestAnalyzeTranscriptTail_AllShapes(t *testing.T) {
 func TestAnalyzeTranscriptTail_TolerantOfTrailingJunk(t *testing.T) {
 	t.Parallel()
 	tmpHome := t.TempDir()
-	key := "telegram:torn"
+	key := "client:torn"
 	dir := filepath.Join(tmpHome, ".deneb", "transcripts")
 	_ = os.MkdirAll(dir, 0o755)
 	path := filepath.Join(dir, key+".jsonl")
-	content := `{"type":"session","version":1,"id":"telegram:torn","timestamp":1}` + "\n" +
+	content := `{"type":"session","version":1,"id":"client:torn","timestamp":1}` + "\n" +
 		`{"role":"user","content":"hi","timestamp":1700000001000}` + "\n" +
 		`{"role":"assistant","content":[{"type":"tex`
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -143,31 +143,6 @@ func TestAnalyzeTranscriptTail_TolerantOfTrailingJunk(t *testing.T) {
 	// Torn trailing line is ignored; the last complete message was the user.
 	if shape != tailEndUserText {
 		t.Errorf("got %s want %s", tailShapeString(shape), tailShapeString(tailEndUserText))
-	}
-}
-
-// Test: parseTelegramChatID.
-func TestParseTelegramChatID(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		key  string
-		want string
-		ok   bool
-	}{
-		{"telegram:42", "42", true},
-		{"telegram:7074071666", "7074071666", true},
-		{"telegram:42:some-task:1234567890", "", false}, // sub-session
-		{"cron:job1", "", false},
-		{"btw:abc", "", false},
-		{"", "", false},
-		{"telegram:", "", false},
-	}
-	for _, tc := range cases {
-		got, ok := parseTelegramChatID(tc.key)
-		if ok != tc.ok || got != tc.want {
-			t.Errorf("parseTelegramChatID(%q): got (%q,%v) want (%q,%v)",
-				tc.key, got, ok, tc.want, tc.ok)
-		}
 	}
 }
 
@@ -246,53 +221,6 @@ func waitForCondition(t *testing.T, timeout time.Duration, fn func() bool) {
 	t.Fatalf("condition not met within %s", timeout)
 }
 
-// Test: a fresh marker + user-text tail → resume fires.
-func TestAutoResume_ResumesInterruptedUserTurn(t *testing.T) {
-	tmpHome := t.TempDir()
-	srv := newAutoResumeTestServer(t, tmpHome)
-
-	// Seed: user wrote a message, LLM never responded, gateway crashed.
-	writeTranscriptLine(t, tmpHome, "telegram:42",
-		`{"role":"user","content":"안녕","timestamp":1700000001000}`,
-	)
-	store := srv.runMarkerStore()
-	if err := store.Write(session.RunMarker{
-		SessionKey:     "telegram:42",
-		StartedAt:      time.Now().UnixMilli(),
-		LastActivityAt: time.Now().UnixMilli(),
-		Channel:        "telegram",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	fd := &fakeDispatcher{}
-	opts := autoResumeOptions{
-		Enabled:     true,
-		MaxAge:      resumeMaxAge,
-		MaxAttempts: 1,
-		Now:         time.Now,
-		DispatchFn:  fd.fn,
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	srv.autoResumeInterruptedRunsWithOpts(ctx, opts)
-
-	// Dispatch happens after resumeDispatchDelay in a safego — wait.
-	waitForCondition(t, 5*time.Second, func() bool { return fd.count() == 1 })
-
-	calls := fd.snapshot()
-	if calls[0].SessionKey != "telegram:42" || calls[0].To != "42" || calls[0].Channel != "telegram" {
-		t.Errorf("unexpected dispatch: %+v", calls[0])
-	}
-
-	// Marker should now have ResumeAttempts==1 (bumped BEFORE dispatch fires).
-	m, _ := store.Read("telegram:42")
-	if m == nil || m.ResumeAttempts != 1 {
-		t.Errorf("expected attempts=1 on persisted marker, got %+v", m)
-	}
-}
-
 // Test: a fresh native client marker + user-text tail → resume fires without
 // Telegram delivery reconstruction.
 func TestAutoResume_ResumesInterruptedNativeClientTurn(t *testing.T) {
@@ -344,14 +272,14 @@ func TestAutoResume_SkipsCleanEnd(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
-	writeTranscriptLine(t, tmpHome, "telegram:7",
+	writeTranscriptLine(t, tmpHome, "client:7",
 		`{"role":"user","content":"hi","timestamp":1700000001000}`,
 		`{"role":"assistant","content":[{"type":"text","text":"hello"}],"timestamp":1700000001500}`,
 	)
 	store := srv.runMarkerStore()
 	_ = store.Write(session.RunMarker{
-		SessionKey: "telegram:7", StartedAt: time.Now().UnixMilli(),
-		LastActivityAt: time.Now().UnixMilli(), Channel: "telegram",
+		SessionKey: "client:7", StartedAt: time.Now().UnixMilli(),
+		LastActivityAt: time.Now().UnixMilli(), Channel: "client",
 	})
 
 	fd := &fakeDispatcher{}
@@ -367,7 +295,7 @@ func TestAutoResume_SkipsCleanEnd(t *testing.T) {
 		t.Errorf("expected no dispatch, got %d calls", fd.count())
 	}
 	// Marker should be deleted.
-	m, _ := store.Read("telegram:7")
+	m, _ := store.Read("client:7")
 	if m != nil {
 		t.Errorf("expected marker to be deleted, got %+v", m)
 	}
@@ -378,15 +306,15 @@ func TestAutoResume_DiscardsStaleMarker(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
-	writeTranscriptLine(t, tmpHome, "telegram:stale",
+	writeTranscriptLine(t, tmpHome, "client:stale",
 		`{"role":"user","content":"old","timestamp":1}`,
 	)
 	store := srv.runMarkerStore()
 	// StartedAt = 10 hours ago (older than 2h default MaxAge).
 	stale := time.Now().Add(-10 * time.Hour).UnixMilli()
 	_ = store.Write(session.RunMarker{
-		SessionKey: "telegram:stale", StartedAt: stale,
-		LastActivityAt: stale, Channel: "telegram",
+		SessionKey: "client:stale", StartedAt: stale,
+		LastActivityAt: stale, Channel: "client",
 	})
 
 	fd := &fakeDispatcher{}
@@ -401,7 +329,7 @@ func TestAutoResume_DiscardsStaleMarker(t *testing.T) {
 		t.Errorf("expected no dispatch for stale marker, got %d", fd.count())
 	}
 	// Stale markers get cleaned up.
-	m, _ := store.Read("telegram:stale")
+	m, _ := store.Read("client:stale")
 	if m != nil {
 		t.Errorf("expected stale marker to be deleted, got %+v", m)
 	}
@@ -412,13 +340,13 @@ func TestAutoResume_RespectsAttemptLimit(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
-	writeTranscriptLine(t, tmpHome, "telegram:loop",
+	writeTranscriptLine(t, tmpHome, "client:loop",
 		`{"role":"user","content":"retry bait","timestamp":1}`,
 	)
 	store := srv.runMarkerStore()
 	_ = store.Write(session.RunMarker{
-		SessionKey: "telegram:loop", StartedAt: time.Now().UnixMilli(),
-		LastActivityAt: time.Now().UnixMilli(), Channel: "telegram",
+		SessionKey: "client:loop", StartedAt: time.Now().UnixMilli(),
+		LastActivityAt: time.Now().UnixMilli(), Channel: "client",
 		ResumeAttempts: 1,
 	})
 
@@ -434,7 +362,7 @@ func TestAutoResume_RespectsAttemptLimit(t *testing.T) {
 		t.Errorf("expected no dispatch when attempts exhausted, got %d", fd.count())
 	}
 	// Marker is cleared so it does not show up on future boots.
-	m, _ := store.Read("telegram:loop")
+	m, _ := store.Read("client:loop")
 	if m != nil {
 		t.Errorf("expected exhausted marker to be deleted, got %+v", m)
 	}
@@ -445,13 +373,13 @@ func TestAutoResume_DisabledDrainsMarkers(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
-	writeTranscriptLine(t, tmpHome, "telegram:1",
+	writeTranscriptLine(t, tmpHome, "client:1",
 		`{"role":"user","content":"a","timestamp":1}`,
 	)
 	store := srv.runMarkerStore()
 	_ = store.Write(session.RunMarker{
-		SessionKey: "telegram:1", StartedAt: time.Now().UnixMilli(),
-		LastActivityAt: time.Now().UnixMilli(), Channel: "telegram",
+		SessionKey: "client:1", StartedAt: time.Now().UnixMilli(),
+		LastActivityAt: time.Now().UnixMilli(), Channel: "client",
 	})
 
 	fd := &fakeDispatcher{}
@@ -467,7 +395,7 @@ func TestAutoResume_DisabledDrainsMarkers(t *testing.T) {
 	}
 	// Markers are proactively cleared even when the feature is off, so they
 	// cannot accumulate to infinity.
-	m, _ := store.Read("telegram:1")
+	m, _ := store.Read("client:1")
 	if m != nil {
 		t.Errorf("expected marker to be cleared on disabled path, got %+v", m)
 	}
@@ -485,7 +413,7 @@ func TestAutoResume_SkipsNonUserSessions(t *testing.T) {
 	})
 	_ = store.Write(session.RunMarker{
 		SessionKey: "btw:abc", StartedAt: time.Now().UnixMilli(),
-		Channel: "telegram",
+		Channel: "client",
 	})
 
 	fd := &fakeDispatcher{}
@@ -510,9 +438,9 @@ func TestRunMarkerLifecycle_WriteOnRunningDeleteOnTerminal(t *testing.T) {
 
 	sm := srv.sessions
 	// Create a direct session, transition to running.
-	sm.Create("telegram:99", session.KindDirect)
+	sm.Create("client:99", session.KindDirect)
 	if err := sm.Set(&session.Session{
-		Key: "telegram:99", Kind: session.KindDirect, Channel: "telegram",
+		Key: "client:99", Kind: session.KindDirect, Channel: "client",
 		Status: session.StatusRunning,
 	}); err != nil {
 		t.Fatal(err)
@@ -521,26 +449,26 @@ func TestRunMarkerLifecycle_WriteOnRunningDeleteOnTerminal(t *testing.T) {
 	// Event dispatch is async — poll for up to 2s.
 	var marker *session.RunMarker
 	waitForCondition(t, 2*time.Second, func() bool {
-		m, _ := store.Read("telegram:99")
+		m, _ := store.Read("client:99")
 		marker = m
 		return m != nil
 	})
 	if marker == nil {
 		t.Fatal("marker not written on StatusRunning")
 	}
-	if marker.Channel != "telegram" {
-		t.Errorf("marker channel = %q want telegram", marker.Channel)
+	if marker.Channel != "client" {
+		t.Errorf("marker channel = %q want client", marker.Channel)
 	}
 
 	// Terminal transition clears the marker.
 	if err := sm.Set(&session.Session{
-		Key: "telegram:99", Kind: session.KindDirect, Channel: "telegram",
+		Key: "client:99", Kind: session.KindDirect, Channel: "client",
 		Status: session.StatusDone,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	waitForCondition(t, 2*time.Second, func() bool {
-		m, _ := store.Read("telegram:99")
+		m, _ := store.Read("client:99")
 		return m == nil
 	})
 }

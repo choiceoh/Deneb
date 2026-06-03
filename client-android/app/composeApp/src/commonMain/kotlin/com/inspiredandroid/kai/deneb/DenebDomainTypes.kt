@@ -24,14 +24,6 @@ data class ClientStatus(
     val timestampMs: Long,
 )
 
-/** A native Deneb topic and the gateway session key it opens. */
-data class ClientTopic(
-    val key: String,
-    val label: String,
-    val sessionKey: String,
-    val isDefault: Boolean,
-)
-
 /** A recent Gmail message shown in the native mail screen. */
 data class MailMessage(
     val id: String,

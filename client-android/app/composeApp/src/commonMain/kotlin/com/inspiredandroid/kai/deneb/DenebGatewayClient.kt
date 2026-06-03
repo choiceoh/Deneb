@@ -187,11 +187,6 @@ class DenebGatewayClient(
     private val _clientStatus = MutableStateFlow<ClientStatus?>(null)
     val clientStatus: StateFlow<ClientStatus?> = _clientStatus
 
-    // Native topics surfaced by miniapp.topics.list. Each row carries the
-    // gateway session key the chat stream should continue.
-    private val _denebTopics = MutableStateFlow<List<ClientTopic>>(emptyList())
-    val denebTopics: StateFlow<List<ClientTopic>> = _denebTopics
-
     // Native work feed: proactive reports and native shares as actionable rows.
     private val _denebWorkFeed = MutableStateFlow<List<WorkFeedItem>>(emptyList())
     val denebWorkFeed: StateFlow<List<WorkFeedItem>> = _denebWorkFeed
@@ -691,22 +686,6 @@ class DenebGatewayClient(
         )
         _clientStatus.value = status
         return status
-    }
-
-    suspend fun refreshTopics(): List<ClientTopic>? {
-        val payload = callRpc<TopicsPayload>("miniapp.topics.list", buildJsonObject {}) ?: return null
-        val topics = payload.topics
-            .filter { it.sessionKey.isNotBlank() }
-            .map { t ->
-                ClientTopic(
-                    key = t.key.ifBlank { t.sessionKey },
-                    label = t.label.ifBlank { t.key.ifBlank { "토픽" } },
-                    sessionKey = t.sessionKey,
-                    isDefault = t.isDefault,
-                )
-            }
-        _denebTopics.value = topics
-        return topics
     }
 
     suspend fun setMainModel(id: String): Boolean = setRoleModel(id, "main")
@@ -1529,15 +1508,14 @@ class DenebGatewayClient(
             }
             .orEmpty()
         if (recent.isNotEmpty()) return recent
-        // Empty-drawer fallback: a single client:main home (no topic rows).
-        val main = defaultClientTopic()
+        // Empty-drawer fallback: the single client:main 업무 home.
         return listOf(
             Conversation(
-                id = main.sessionKey,
+                id = "client:main",
                 messages = emptyList(),
                 createdAt = 0,
                 updatedAt = kotlin.time.Clock.System.now().toEpochMilliseconds(),
-                title = main.label,
+                title = "업무",
             ),
         )
     }
@@ -1545,7 +1523,7 @@ class DenebGatewayClient(
     private fun conversationTitle(s: SessionRowOut): String {
         if (s.label.isNotBlank()) return s.label
         // The single home session keeps the familiar 업무 label (matches the
-        // empty-drawer fallback and defaultClientTopic), not "내 대화 · main".
+        // empty-drawer fallback), not "내 대화 · main".
         if (s.key == "client:main") return "업무"
         val friendly = when (s.key.substringBefore(':', "")) {
             "telegram" -> "이전 대화"
@@ -1562,9 +1540,6 @@ class DenebGatewayClient(
         sessionKey = key
         _currentConversationId.value = key
     }
-
-    private fun defaultClientTopic(): ClientTopic =
-        ClientTopic(key = "main", label = "업무", sessionKey = "client:main", isDefault = true)
 
     private suspend fun fetchTranscript(sessionKey: String): List<History> {
         val payload = callRpc<TranscriptPayload>(

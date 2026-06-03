@@ -6,7 +6,6 @@ import com.inspiredandroid.kai.deneb.generated.MemoryCategoryRow
 import com.inspiredandroid.kai.deneb.generated.MemoryPageRow
 import com.inspiredandroid.kai.deneb.generated.MiniappCronRow
 import com.inspiredandroid.kai.deneb.generated.ModelSection
-import com.inspiredandroid.kai.deneb.generated.NativeTopic
 import com.inspiredandroid.kai.deneb.generated.PersonRow
 import com.inspiredandroid.kai.deneb.generated.RoleModel
 import com.inspiredandroid.kai.deneb.generated.SenderRecentOut
@@ -100,12 +99,6 @@ internal data class ClientHelloPayload(
     val capabilities: Map<String, Boolean> = emptyMap(),
     val endpoints: Map<String, String> = emptyMap(),
     val tsMs: Long = 0,
-)
-
-@Serializable
-internal data class TopicsPayload(
-    val topics: List<NativeTopic> = emptyList(),
-    val defaultSessionKey: String = "",
 )
 
 @Serializable

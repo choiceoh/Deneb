@@ -39,7 +39,7 @@ func newTestServerForRestore(mgr *session.Manager) *Server {
 	}
 }
 
-func TestRestoreAndWakeSessions_RestoresNativeAndLegacyTelegramSessions(t *testing.T) {
+func TestRestoreAndWakeSessions_RestoresNativeSessions(t *testing.T) {
 	// Set up a temp home dir so restoreAndWakeSessions reads from it.
 	tmpHome := t.TempDir()
 	transcriptDir := filepath.Join(tmpHome, ".deneb", "transcripts")
@@ -48,15 +48,13 @@ func TestRestoreAndWakeSessions_RestoresNativeAndLegacyTelegramSessions(t *testi
 	}
 	t.Setenv("HOME", tmpHome)
 
-	// Create native transcripts, legacy Telegram transcripts, and transient
-	// sessions that must stay out of the restored user session list.
+	// Create native transcripts plus transients (cron) and a retired Telegram
+	// transcript that must all stay out of the restored user session list.
 	makeSessionTranscript(t, transcriptDir, "client:main")
 	makeSessionTranscript(t, transcriptDir, "client:coding")
 	makeSessionTranscript(t, transcriptDir, "client:main:fresh-chat")
-	makeSessionTranscript(t, transcriptDir, "telegram:111")
-	makeSessionTranscript(t, transcriptDir, "telegram:222")
-	makeSessionTranscript(t, transcriptDir, "telegram:111:some-task:1234567890") // sub-session, should not be restored
-	makeSessionTranscript(t, transcriptDir, "cron:job1")                         // should not be restored
+	makeSessionTranscript(t, transcriptDir, "cron:job1")    // should not be restored
+	makeSessionTranscript(t, transcriptDir, "telegram:111") // retired channel, should not be restored
 
 	mgr := session.NewManager()
 	srv := newTestServerForRestore(mgr)
@@ -71,17 +69,11 @@ func TestRestoreAndWakeSessions_RestoresNativeAndLegacyTelegramSessions(t *testi
 			t.Errorf("expected %s to be restored", key)
 		}
 	}
-	if got := mgr.Get("telegram:111"); got == nil {
-		t.Error("expected telegram:111 to be restored")
-	}
-	if got := mgr.Get("telegram:222"); got == nil {
-		t.Error("expected telegram:222 to be restored")
-	}
 	if got := mgr.Get("cron:job1"); got != nil {
 		t.Error("cron:job1 should not have been restored")
 	}
-	if got := mgr.Get("telegram:111:some-task:1234567890"); got != nil {
-		t.Error("sub-session telegram:111:some-task:1234567890 should not have been restored")
+	if got := mgr.Get("telegram:111"); got != nil {
+		t.Error("retired telegram:111 should not have been restored")
 	}
 
 	// Restored sessions must have DONE status and the correct channel.
@@ -95,18 +87,6 @@ func TestRestoreAndWakeSessions_RestoresNativeAndLegacyTelegramSessions(t *testi
 		}
 		if s.Channel != "client" {
 			t.Errorf("%s: got %q, want channel client", key, s.Channel)
-		}
-	}
-	for _, key := range []string{"telegram:111", "telegram:222"} {
-		s := mgr.Get(key)
-		if s == nil {
-			continue
-		}
-		if s.Status != session.StatusDone {
-			t.Errorf("%s: got %q, want status DONE", key, s.Status)
-		}
-		if s.Channel != "telegram" {
-			t.Errorf("%s: got %q, want channel telegram", key, s.Channel)
 		}
 	}
 }
