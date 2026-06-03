@@ -272,12 +272,18 @@ func executeAgentRun(
 		"finalTextHead", finalTextHead)
 
 	// Record this run's prompt-cache usage for the /status hit-ratio alarm —
-	// but only for Anthropic-mode runs. Non-Anthropic providers (vLLM/OpenAI
-	// mode) never populate cache_* fields, so counting them would drag the
-	// process-wide ratio down with structural "misses" that have nothing to do
-	// with the prompt-cache doctrine. The three buckets are disjoint (Anthropic
-	// usage semantics): InputTokens is the uncached remainder, not a grand-total.
-	if apiMode == llm.APIModeAnthropic {
+	// but only for Anthropic-mode runs that did NOT fall back. apiMode is the
+	// initial provider's mode; when runAgentWithFallback drops to a fallback
+	// role (default registry makes those vLLM), the answer came from a provider
+	// that never populates cache_* fields, so recording it would pollute the
+	// ratio with structural "misses". Skipping fallbacks is conservative: it
+	// never records a wrong provider's usage (worst case is an occasional
+	// missed sample). Non-Anthropic providers never populate cache_* fields, so
+	// counting them would drag the process-wide ratio down for reasons
+	// unrelated to the prompt-cache doctrine. The three buckets are disjoint
+	// (Anthropic usage semantics): InputTokens is the uncached remainder, not a
+	// grand-total.
+	if apiMode == llm.APIModeAnthropic && !fellBack {
 		metrics.CacheHits.Record(
 			int64(agentResult.Usage.CacheReadInputTokens),
 			int64(agentResult.Usage.CacheCreationInputTokens),
