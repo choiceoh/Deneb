@@ -59,6 +59,9 @@ func (h *Handler) handleSlashCommand(
 		})
 		h.deliverSlashResponse(delivery, "실행이 중단되었습니다.")
 
+	case "help":
+		h.deliverSlashResponse(delivery, slashHelpText())
+
 	case "status":
 		status := h.buildSessionStatus(sessionKey)
 		h.deliverSlashResponse(delivery, status)
