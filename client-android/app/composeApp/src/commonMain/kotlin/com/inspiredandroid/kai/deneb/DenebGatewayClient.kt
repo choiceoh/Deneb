@@ -16,22 +16,10 @@ import com.inspiredandroid.kai.data.Attachment
 import com.inspiredandroid.kai.deneb.generated.CalendarEventOut
 import com.inspiredandroid.kai.deneb.generated.MailAnalysisOut
 import com.inspiredandroid.kai.deneb.generated.MailMessageOut
-import com.inspiredandroid.kai.deneb.generated.MailRowOut
-import com.inspiredandroid.kai.deneb.generated.MemoryCategoryRow
-import com.inspiredandroid.kai.deneb.generated.MemoryPageRow
 import com.inspiredandroid.kai.deneb.generated.MiniappCronDetail
-import com.inspiredandroid.kai.deneb.generated.MiniappCronRow
-import com.inspiredandroid.kai.deneb.generated.ModelSection
-import com.inspiredandroid.kai.deneb.generated.NativeTopic
-import com.inspiredandroid.kai.deneb.generated.PersonRow
-import com.inspiredandroid.kai.deneb.generated.ProjectRef
 import com.inspiredandroid.kai.deneb.generated.QATurn
-import com.inspiredandroid.kai.deneb.generated.RoleModel
 import com.inspiredandroid.kai.deneb.generated.SearchAllResult
-import com.inspiredandroid.kai.deneb.generated.SenderRecentOut
-import com.inspiredandroid.kai.deneb.generated.SenderWikiHitOut
 import com.inspiredandroid.kai.deneb.generated.SessionRowOut
-import com.inspiredandroid.kai.deneb.generated.TranscriptMsgOut
 import com.inspiredandroid.kai.ui.chat.History
 import kotlinx.collections.immutable.toImmutableList
 import com.inspiredandroid.kai.ui.chat.WorkFeedItem
@@ -1276,9 +1264,6 @@ class DenebGatewayClient(
         return true
     }
 
-    @Serializable
-    private data class CaptureImagePayload(val text: String = "")
-
     /**
      * Transcribe a shared audio recording (voice memo, meeting audio) via the
      * gateway's VibeVoice-ASR sidecar and run one agent turn over the diarized
@@ -1303,9 +1288,6 @@ class DenebGatewayClient(
         _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
         syncNativeStateAsync()
     }
-
-    @Serializable
-    private data class CaptureAudioPayload(val text: String = "")
 
     /**
      * Sync the device address book into the gateway. The gateway enriches ONLY the
@@ -1339,9 +1321,6 @@ class DenebGatewayClient(
         _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
         syncNativeStateAsync()
     }
-
-    @Serializable
-    private data class CaptureContactsPayload(val text: String = "")
 
     private suspend fun send(message: String): GatewayReply {
         if (clientToken.isEmpty()) {
@@ -1679,144 +1658,6 @@ class DenebGatewayClient(
 
     @Serializable
     private data class RpcEnv<T>(val ok: Boolean = false, val payload: T? = null)
-
-    @Serializable
-    private data class RecentPayload(val sessions: List<SessionRowOut> = emptyList())
-
-    @Serializable
-    private data class TranscriptPayload(val messages: List<TranscriptMsgOut> = emptyList())
-
-    @Serializable
-    private data class WorkFeedPayload(val items: List<WorkFeedItem> = emptyList())
-
-    @Serializable
-    private data class WorkFeedActionRunPayload(
-        val ok: Boolean = false,
-        val item: WorkFeedItem = WorkFeedItem(),
-        val sessionKey: String = "",
-        val prompt: String = "",
-        val message: String = "",
-        val removeFromFeed: Boolean = false,
-    )
-
-    @Serializable
-    private data class NativeSyncPayload(
-        val events: List<NativeSyncEvent> = emptyList(),
-        val cursor: Long = 0,
-        val latestSeq: Long = 0,
-        val hasMore: Boolean = false,
-    )
-
-    @Serializable
-    private data class NativeSyncEvent(
-        val seq: Long = 0,
-        val type: String = "",
-        val entityId: String = "",
-        val sessionKey: String = "",
-        val workFeedItemId: String = "",
-        val timestampMs: Long = 0,
-        val payload: JsonObject? = null,
-    )
-
-    @Serializable
-    private data class NativeSyncActionPayload(
-        val item: WorkFeedItem = WorkFeedItem(),
-        val removeFromFeed: Boolean = false,
-    )
-
-    @Serializable
-    private data class MemoryListPayload(val pages: List<MemoryPageRow> = emptyList())
-
-    @Serializable
-    private data class DeletePagesPayload(val ok: Boolean = false, val deleted: Int = 0)
-
-    @Serializable
-    private data class CategoriesPayload(
-        val categories: List<MemoryCategoryRow> = emptyList(),
-        val totalPages: Int = 0,
-        val totalBytes: Long = 0,
-    )
-
-    @Serializable
-    private data class CronListPayload(val jobs: List<MiniappCronRow> = emptyList())
-
-    @Serializable
-    private data class ModelsPayload(
-        val current: String = "",
-        val roles: List<RoleModel> = emptyList(),
-        val sections: List<ModelSection> = emptyList(),
-    )
-
-    @Serializable
-    private data class ClientHelloPayload(
-        val version: String = "",
-        val nativeApiVersion: Int = 0,
-        val model: String = "",
-        val capabilities: Map<String, Boolean> = emptyMap(),
-        val endpoints: Map<String, String> = emptyMap(),
-        val tsMs: Long = 0,
-    )
-
-    @Serializable
-    private data class TopicsPayload(
-        val topics: List<NativeTopic> = emptyList(),
-        val defaultSessionKey: String = "",
-    )
-
-    @Serializable
-    private data class MailListPayload(
-        val messages: List<MailRowOut> = emptyList(),
-        val nextPageToken: String = "",
-    )
-
-    @Serializable
-    private data class OkPayload(val ok: Boolean = false)
-
-    @Serializable
-    private data class AskPayload(val answer: String = "")
-
-    @Serializable
-    private data class SenderContextPayload(
-        val sender: String = "",
-        val email: String = "",
-        val displayName: String = "",
-        val recent: SenderRecentOut? = null,
-        val wikiHits: List<SenderWikiHitOut> = emptyList(),
-        val wikiFacts: String = "",
-    )
-
-    // Calendar list envelope. The element shape (CalendarEventOut) and its
-    // nested attendee/conference types are generated from the Go calendarEventOut
-    // struct — see generated/MiniappWireTypes.kt — so the list and detail screens
-    // share one source of truth with the gateway instead of two partial mirrors
-    // that can silently drift. Regenerate with `make kotlin-models`.
-    @Serializable
-    private data class CalListPayload(val events: List<CalendarEventOut> = emptyList())
-
-    @Serializable
-    private data class PeopleListPayload(val people: List<PersonRow> = emptyList())
-
-    @Serializable
-    private data class TopicDocsListPayload(val files: List<TopicDocRow> = emptyList())
-
-    @Serializable
-    private data class TopicDocRow(val name: String = "", val size: Long = 0, val modified: String = "")
-
-    @Serializable
-    private data class TopicDocReadPayload(val name: String = "", val content: String = "", val modified: String = "")
-
-
-    @Serializable
-    private data class WikiPagePayload(
-        val path: String = "",
-        val title: String = "",
-        val summary: String = "",
-        val category: String = "",
-        val tags: List<String> = emptyList(),
-        val related: List<String> = emptyList(),
-        val updated: String = "",
-        val body: String = "",
-    )
 
     private companion object {
         const val CLIENT_TOKEN_HEADER = "X-Deneb-Client-Token"
