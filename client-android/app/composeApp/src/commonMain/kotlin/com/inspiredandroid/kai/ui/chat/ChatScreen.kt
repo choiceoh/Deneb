@@ -918,12 +918,13 @@ private fun ChatModeScreen(
                                             }
 
                                             History.Role.ASSISTANT -> {
-                                                if (history.content.isNotEmpty() && !history.isThinking) {
+                                                if ((history.content.isNotEmpty() || history.attachments.isNotEmpty()) && !history.isThinking) {
                                                     val isLastAssistant = history.id == lastAssistantId
                                                     val frozen = frozenByAssistantId[history.id]
                                                     val pairedUserId = userIdByAssistantId[history.id]
                                                     BotMessage(
                                                         message = history.content,
+                                                        attachments = history.attachments,
                                                         textToSpeech = textToSpeech,
                                                         isSpeaking = uiState.isSpeaking && uiState.isSpeakingContentId == history.id,
                                                         setIsSpeaking = {

@@ -77,11 +77,20 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 		SessionKey string `json:"sessionKey"`
 		Limit      int    `json:"limit,omitempty"`
 	}
+	type attachmentOut struct {
+		Type     string `json:"type,omitempty"`
+		MimeType string `json:"mimeType,omitempty"`
+		URL      string `json:"url,omitempty"`
+		Data     string `json:"data,omitempty"`
+		Name     string `json:"name,omitempty"`
+		Size     int64  `json:"size,omitempty"`
+	}
 	type messageOut struct {
-		ID          string `json:"id,omitempty"`
-		Role        string `json:"role"`
-		Content     string `json:"content"`
-		TimestampMs int64  `json:"timestampMs,omitempty"`
+		ID          string          `json:"id,omitempty"`
+		Role        string          `json:"role"`
+		Content     string          `json:"content"`
+		Attachments []attachmentOut `json:"attachments,omitempty"`
+		TimestampMs int64           `json:"timestampMs,omitempty"`
 	}
 	type out struct {
 		SessionKey string       `json:"sessionKey"`
@@ -121,10 +130,22 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 
 		rows := make([]messageOut, 0, len(msgs))
 		for _, m := range msgs {
+			var atts []attachmentOut
+			for _, a := range m.Attachments {
+				atts = append(atts, attachmentOut{
+					Type:     a.Type,
+					MimeType: a.MimeType,
+					URL:      a.URL,
+					Data:     a.Data,
+					Name:     a.Name,
+					Size:     a.Size,
+				})
+			}
 			rows = append(rows, messageOut{
 				ID:          m.ID,
 				Role:        m.Role,
 				Content:     decodeChatContent(m.Content),
+				Attachments: atts,
 				TimestampMs: m.Timestamp,
 			})
 		}
