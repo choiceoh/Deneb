@@ -17,10 +17,11 @@ import (
 
 // fakeLLMStreamer returns pre-built SSE event sequences for each turn.
 type fakeLLMStreamer struct {
-	mu    sync.Mutex
-	turns [][]llm.StreamEvent // one event sequence per turn
-	idx   int
-	delay time.Duration // optional delay before sending events
+	mu               sync.Mutex
+	turns            [][]llm.StreamEvent // one event sequence per turn
+	idx              int
+	delay            time.Duration         // optional delay before sending events
+	recordedThinking []*llm.ThinkingConfig // per-turn ChatRequest.Thinking, captured in StreamChat
 }
 
 func (f *fakeLLMStreamer) next() []llm.StreamEvent {
@@ -34,7 +35,10 @@ func (f *fakeLLMStreamer) next() []llm.StreamEvent {
 	return events
 }
 
-func (f *fakeLLMStreamer) StreamChat(_ context.Context, _ llm.ChatRequest) (<-chan llm.StreamEvent, error) {
+func (f *fakeLLMStreamer) StreamChat(_ context.Context, req llm.ChatRequest) (<-chan llm.StreamEvent, error) {
+	f.mu.Lock()
+	f.recordedThinking = append(f.recordedThinking, req.Thinking)
+	f.mu.Unlock()
 	return f.stream(), nil
 }
 
@@ -651,5 +655,52 @@ func TestRunAgent_StreamHooks_Called(t *testing.T) {
 	}
 	if atomic.LoadInt32(&toolResults) != 1 {
 		t.Errorf("OnToolResult called %d times, want 1", toolResults)
+	}
+}
+
+// TestRunAgent_ThinkingModulatorPerTurn asserts the AgentConfig.ThinkingModulator
+// contract: the executor calls it per turn and uses its return value in the
+// ChatRequest, falling back to cfg.Thinking when the modulator returns nil.
+func TestRunAgent_ThinkingModulatorPerTurn(t *testing.T) {
+	streamer := &fakeLLMStreamer{
+		turns: [][]llm.StreamEvent{
+			// Turn 0: a tool call so the loop continues to a second turn.
+			buildToolUseTurnEventsWithNames([]toolUseSpec{
+				{id: "toolu_1", name: "read", inputJSON: `{"path":"x"}`},
+			}, 100, 30),
+			// Turn 1: text end_turn.
+			buildTextTurnEvents("done", 120, 20),
+		},
+	}
+	tools := newFakeToolExecutor()
+
+	baseline := &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 5000}
+	cfg := AgentConfig{
+		MaxTurns:  10,
+		Timeout:   10 * time.Second,
+		MaxTokens: 200000,
+		Thinking:  baseline,
+		// Turn 0 is boosted; later turns return nil to exercise the fallback
+		// to cfg.Thinking.
+		ThinkingModulator: func(turn int) *llm.ThinkingConfig {
+			if turn == 0 {
+				return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 32768}
+			}
+			return nil
+		},
+	}
+
+	messages := []llm.Message{llm.NewTextMessage("user", "go")}
+	_ = testutil.Must(RunAgent(context.Background(), cfg, messages, streamer, tools, StreamHooks{}, nil, nil))
+
+	if len(streamer.recordedThinking) < 2 {
+		t.Fatalf("recorded %d turns of Thinking, want >= 2", len(streamer.recordedThinking))
+	}
+	if got := streamer.recordedThinking[0]; got == nil || got.BudgetTokens != 32768 {
+		t.Errorf("turn 0 Thinking = %+v, want budget 32768 (modulator override)", got)
+	}
+	// Turn 1 modulator returned nil → executor must fall back to cfg.Thinking.
+	if got := streamer.recordedThinking[1]; got == nil || got.BudgetTokens != 5000 {
+		t.Errorf("turn 1 Thinking = %+v, want budget 5000 (fallback to cfg.Thinking)", got)
 	}
 }
