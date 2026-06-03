@@ -199,4 +199,35 @@ class MiniappWireTypesTest {
         assertEquals("회의", row.subject)
         assertTrue(row.isUnread)
     }
+
+    @Test
+    fun `session row decodes with optional pointer fields absent as null`() {
+        // startedAtMs/runtimeMs/totalTokens are *int64 (omitempty) on the gateway,
+        // so for a not-yet-started session they are absent → null, not 0.
+        val row = json.decodeFromString<SessionRowOut>(
+            """{ "key": "client:main", "label": "업무", "channel": "client", "updatedAtMs": 1717000000000 }""",
+        )
+        assertEquals("client:main", row.key)
+        assertEquals("업무", row.label)
+        assertEquals(1717000000000L, row.updatedAtMs)
+        assertNull(row.startedAtMs)
+        assertNull(row.totalTokens)
+    }
+
+    @Test
+    fun `transcript message decodes with nested attachments`() {
+        val msg = json.decodeFromString<TranscriptMsgOut>(
+            """
+            {
+              "role": "assistant", "content": "보고서입니다",
+              "attachments": [ { "type": "image", "mimeType": "image/png", "data": "BASE64", "name": "report.png", "size": 4096 } ],
+              "timestampMs": 1717000000000
+            }
+            """.trimIndent(),
+        )
+        assertEquals("assistant", msg.role)
+        assertEquals(1, msg.attachments.size)
+        assertEquals("image/png", msg.attachments[0].mimeType)
+        assertEquals("report.png", msg.attachments[0].name)
+    }
 }
