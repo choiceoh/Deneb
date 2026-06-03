@@ -12,7 +12,9 @@ import com.inspiredandroid.kai.data.TaskTrigger
 import com.inspiredandroid.kai.data.UiSubmission
 import com.inspiredandroid.kai.httpClient
 import com.inspiredandroid.kai.contacts.ContactData
+import com.inspiredandroid.kai.data.Attachment
 import com.inspiredandroid.kai.ui.chat.History
+import kotlinx.collections.immutable.toImmutableList
 import com.inspiredandroid.kai.ui.chat.WorkFeedItem
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.ic_service_anthropic
@@ -1513,7 +1515,17 @@ class DenebGatewayClient(
                 "assistant" -> History.Role.ASSISTANT
                 else -> return@mapNotNull null
             }
-            if (m.content.isBlank()) null else History(role = role, content = m.content)
+            val attachments = m.attachments
+                .filter { it.data.isNotBlank() && it.mimeType.isNotBlank() }
+                .map { Attachment(data = it.data, mimeType = it.mimeType, fileName = it.name.ifBlank { null }) }
+                .toImmutableList()
+            // Keep image-only proactive messages (e.g. the weekly-report form) even
+            // when the caption is blank — they carry the attachment, not text.
+            if (m.content.isBlank() && attachments.isEmpty()) {
+                null
+            } else {
+                History(role = role, content = m.content, attachments = attachments)
+            }
         }
     }
 
@@ -1599,7 +1611,22 @@ class DenebGatewayClient(
     private data class TranscriptPayload(val messages: List<TranscriptMsg> = emptyList())
 
     @Serializable
-    private data class TranscriptMsg(val role: String = "", val content: String = "", val timestampMs: Long = 0)
+    private data class TranscriptMsg(
+        val role: String = "",
+        val content: String = "",
+        val attachments: List<TranscriptAttachment> = emptyList(),
+        val timestampMs: Long = 0,
+    )
+
+    @Serializable
+    private data class TranscriptAttachment(
+        val type: String = "",
+        val mimeType: String = "",
+        val url: String = "",
+        val data: String = "",
+        val name: String = "",
+        val size: Long = 0,
+    )
 
     @Serializable
     private data class WorkFeedPayload(val items: List<WorkFeedItem> = emptyList())

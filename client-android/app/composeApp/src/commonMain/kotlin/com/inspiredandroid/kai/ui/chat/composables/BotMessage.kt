@@ -8,8 +8,16 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.layout.ContentScale
+import com.inspiredandroid.kai.data.Attachment
+import com.inspiredandroid.kai.decodeToImageBitmap
+import com.inspiredandroid.kai.ui.components.LocalShowFullScreenImage
+import kotlin.io.encoding.Base64
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -83,6 +91,7 @@ internal fun BotMessage(
     onResubmit: ((event: String, data: Map<String, String>) -> Unit)? = null,
     reasoningSegments: ImmutableList<String> = persistentListOf(),
     isStreaming: Boolean = false,
+    attachments: ImmutableList<Attachment> = persistentListOf(),
 ) {
     val document = remember(message) { parseMarkdown(message) }
     var isEditing by remember(frozen) { mutableStateOf(false) }
@@ -122,6 +131,38 @@ internal fun BotMessage(
                         modifier = Modifier.fillMaxWidth()
                             .padding(start = 16.dp, top = answerTopPadding, end = 16.dp, bottom = 8.dp),
                     )
+                }
+            }
+            // Inbound image attachments (e.g. the proactive 주간업무보고 form). Tap to
+            // open full-screen. Non-image attachments are ignored here — proactive
+            // reports only ship images.
+            val imageAttachments = remember(attachments) {
+                attachments.filter { it.mimeType.startsWith("image/") }
+            }
+            if (imageAttachments.isNotEmpty()) {
+                val showFullScreen = LocalShowFullScreenImage.current
+                for (att in imageAttachments) {
+                    val imageBitmap = remember(att.data) {
+                        try {
+                            decodeToImageBitmap(Base64.decode(att.data))
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+                    if (imageBitmap != null) {
+                        Image(
+                            bitmap = imageBitmap,
+                            contentDescription = "주간업무보고 양식",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+                                .widthIn(max = 520.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .handCursor()
+                                .clickable(onClickLabel = "확대") { showFullScreen(imageBitmap) },
+                            contentScale = ContentScale.FillWidth,
+                        )
+                    }
                 }
             }
             if (isStreaming) {

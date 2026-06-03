@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"image"
+	"image/draw"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -207,6 +210,130 @@ func BuildWeeklyReportPDF(ctx context.Context, opts WeeklyReportOpts, now time.T
 		return "", textFallback, false
 	}
 	return pdfPath, textFallback, true
+}
+
+// BuildWeeklyReportImage renders the weekly-report FORM (the 실시/예정 grid) to a
+// whitespace-trimmed PNG via headless Chromium, for inline display in the native
+// client's 업무 chat (which renders image attachments). Returns the PNG bytes on
+// success; ok=false on any render failure (caller then ships text only). Same
+// RAM/disk guards as the PDF path — degrades silently rather than hanging.
+func BuildWeeklyReportImage(ctx context.Context, opts WeeklyReportOpts, now time.Time) (pngBytes []byte, ok bool) {
+	env := collectWeekly(opts, now)
+	html, err := composeWeeklyHTML(env)
+	if err != nil {
+		return nil, false
+	}
+	dir := weeklyOutputDir()
+	htmlPath := filepath.Join(dir, "deneb-weekly-form.html")
+	pngPath := filepath.Join(dir, "deneb-weekly-form.png")
+	if err := os.WriteFile(htmlPath, []byte(html), 0o644); err != nil { //nolint:gosec // report html, not secret
+		return nil, false
+	}
+	_ = os.Remove(pngPath) // clear stale output so a failed render can't ship last week's image
+	if weeklyCommitHeadroomMB() < weeklyMinHeadroomMB || weeklyFreeDiskMB(dir) < weeklyMinDiskMB {
+		return nil, false
+	}
+	if err := weeklyRenderImage(ctx, htmlPath, pngPath); err != nil {
+		return nil, false
+	}
+	trimmed, err := weeklyTrimPNG(pngPath)
+	if err != nil || len(trimmed) == 0 {
+		return nil, false
+	}
+	return trimmed, true
+}
+
+// weeklyImageWindow is the Chromium screenshot canvas: 1600px wide (the form's
+// design width) and tall enough for a busy weekly report; the surrounding
+// whitespace is trimmed afterwards. Content past this height is cropped — well
+// above any realistic active-project count.
+const weeklyImageWindow = "1600,3000"
+
+func weeklyRenderImage(ctx context.Context, htmlPath, pngPath string) error {
+	bin := weeklyFindChromium()
+	if bin == "" {
+		return fmt.Errorf("chromium not found")
+	}
+	// Same /tmp-avoidance as weeklyRenderPDF: isolate Chromium's scratch on the
+	// real-disk output dir so a full tmpfs can't abort the render with ENOSPC.
+	workDir := filepath.Dir(pngPath)
+	udd, err := os.MkdirTemp(workDir, "chrome-")
+	if err != nil {
+		return fmt.Errorf("chromium scratch dir: %w", err)
+	}
+	defer os.RemoveAll(udd)
+	rctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(rctx, bin,
+		"--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--hide-scrollbars",
+		"--virtual-time-budget=4000", "--force-device-scale-factor=1",
+		"--window-size="+weeklyImageWindow,
+		"--user-data-dir="+udd, "--crash-dumps-dir="+udd,
+		"--screenshot="+pngPath, "file://"+htmlPath,
+	)
+	cmd.Env = append(os.Environ(), "TMPDIR="+udd)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("chromium screenshot: %w (%s)", err, weeklyClip(string(out), 200))
+	}
+	if fi, err := os.Stat(pngPath); err != nil || fi.Size() == 0 {
+		return fmt.Errorf("no png produced")
+	}
+	return nil
+}
+
+// weeklyTrimPNG crops the surrounding whitespace from the rendered form (the
+// Chromium canvas is taller than the content) and returns the cropped PNG bytes.
+func weeklyTrimPNG(pngPath string) ([]byte, error) {
+	f, err := os.Open(pngPath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close() //nolint:errcheck // read-only
+	src, err := png.Decode(f)
+	if err != nil {
+		return nil, err
+	}
+	b := src.Bounds()
+	// Content bounding box: the extent of pixels darker than near-white.
+	const whiteThresh = 0xf000 // 16-bit channel; lighter counts as background
+	minX, minY := b.Max.X, b.Max.Y
+	maxX, maxY := b.Min.X, b.Min.Y
+	found := false
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			r, g, bl, _ := src.At(x, y).RGBA()
+			if r < whiteThresh || g < whiteThresh || bl < whiteThresh {
+				found = true
+				if x < minX {
+					minX = x
+				}
+				if y < minY {
+					minY = y
+				}
+				if x > maxX {
+					maxX = x
+				}
+				if y > maxY {
+					maxY = y
+				}
+			}
+		}
+	}
+	if !found {
+		return nil, fmt.Errorf("blank image")
+	}
+	const margin = 12
+	minX = max(b.Min.X, minX-margin)
+	minY = max(b.Min.Y, minY-margin)
+	maxX = min(b.Max.X, maxX+margin+1)
+	maxY = min(b.Max.Y, maxY+margin+1)
+	crop := image.NewRGBA(image.Rect(0, 0, maxX-minX, maxY-minY))
+	draw.Draw(crop, crop.Bounds(), src, image.Point{X: minX, Y: minY}, draw.Src)
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, crop); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // weeklyMinHeadroomMB is the commit headroom below which a Chromium render is
