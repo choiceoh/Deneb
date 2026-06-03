@@ -72,6 +72,17 @@ internal data class NativeSyncActionPayload(
 internal data class MemoryListPayload(val pages: List<MemoryPageRow> = emptyList())
 
 @Serializable
+internal data class DiaryRecentPayload(val entries: List<DiaryRecentRow> = emptyList())
+
+@Serializable
+internal data class DiaryRecentRow(
+    val file: String = "",
+    val header: String = "",
+    val content: String = "",
+    val at: Long = 0,
+)
+
+@Serializable
 internal data class DeletePagesPayload(val ok: Boolean = false, val deleted: Int = 0)
 
 @Serializable

@@ -176,3 +176,11 @@ data class WikiPageRef(
     val summary: String,
     val updated: String,
 )
+
+/** One diary entry for the recent-diary timeline. [header] is the entry's
+ *  heading (often a date/time); [file] is the source diary file. */
+data class DiaryEntry(
+    val header: String,
+    val content: String,
+    val file: String,
+)

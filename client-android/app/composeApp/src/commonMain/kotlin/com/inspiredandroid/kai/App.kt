@@ -47,6 +47,7 @@ import com.inspiredandroid.kai.deneb.DenebPeopleScreen
 import com.inspiredandroid.kai.deneb.DenebPersonScreen
 import com.inspiredandroid.kai.deneb.DenebCategoriesScreen
 import com.inspiredandroid.kai.deneb.DenebCategoryPagesScreen
+import com.inspiredandroid.kai.deneb.DenebDiaryScreen
 import com.inspiredandroid.kai.deneb.DenebSearchScreen
 import com.inspiredandroid.kai.deneb.DenebCronScreen
 import com.inspiredandroid.kai.deneb.DenebTopicDocScreen
@@ -136,6 +137,10 @@ data class DenebTopicDoc(val name: String)
 @Serializable
 @SerialName("deneb_categories")
 object DenebCategories
+
+@Serializable
+@SerialName("deneb_diary")
+object DenebDiary
 
 @Serializable
 @SerialName("deneb_category_pages")
@@ -390,6 +395,16 @@ private fun AppContent(
                                 client = client,
                                 onBack = { navController.navigateUp() },
                                 onOpenCategory = { cat -> navController.navigate(DenebCategoryPages(cat)) },
+                                onOpenDiary = { navController.navigate(DenebDiary) },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebDiary> {
+                        denebClient?.let { client ->
+                            DenebDiaryScreen(
+                                client = client,
+                                onBack = { navController.navigateUp() },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }
