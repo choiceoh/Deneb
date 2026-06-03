@@ -86,15 +86,27 @@ android {
     }
 }
 
-// Name build artifacts with the version so a downloaded APK is self-describing
-// (e.g. deneb-2.8.1-122-fossDebug.apk) instead of the default androidApp-foss-debug.apk.
+// Name build artifacts with the version + short commit hash so a downloaded APK
+// is self-describing (e.g. deneb-2.8.1-122-a1b2c3d4-fossDebug.apk) and, crucially,
+// concurrent builds from different agent worktrees never overwrite each other in
+// the shared publish dir. The hash comes from DENEB_BUILD_SHA, else git, else "nogit".
 androidComponents {
     val versionName = libs.versions.appVersion.get()
     val versionCode = libs.versions.android.versionCode.get()
+    val gitSha = (
+        System.getenv("DENEB_BUILD_SHA")
+            ?: runCatching {
+                ProcessBuilder("git", "rev-parse", "--short=8", "HEAD")
+                    .directory(rootDir)
+                    .start()
+                    .inputStream.bufferedReader().use { it.readText() }
+                    .trim()
+            }.getOrNull()
+        ).orEmpty().ifBlank { "nogit" }
     onVariants { variant ->
         variant.outputs.forEach { output ->
             (output as? VariantOutputImpl)?.outputFileName?.set(
-                "deneb-$versionName-$versionCode-${variant.name}.apk",
+                "deneb-$versionName-$versionCode-$gitSha-${variant.name}.apk",
             )
         }
     }
