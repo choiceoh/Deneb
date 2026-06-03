@@ -85,9 +85,41 @@ retry_nav() {
   settle "$anchor"
 }
 
-# go_drawer NAME DRAWER_LABEL ANCHOR — open a left-drawer screen by its label.
+# scroll_probe NAME — scroll the current list down a few times, re-checking the
+# log for new crash-class lines after each step. The top-of-list anchor check
+# only renders the first viewport; a #1959-style LazyColumn duplicate-key crash
+# can hide in a below-the-fold item that only composes once scrolled into view.
+# Crash/alive only — scrolling moves content so an anchor would shift. Scrolling
+# is read-only (a list "load more" is a GET), so it stays prod-safe.
+scroll_probe() {
+  local name="$1" b newerr step
+  for step in 1 2 3; do
+    b="$(log_lines)"
+    "$NA" scroll down 6 >/dev/null 2>&1 || true
+    sleep 1
+    newerr="$(tail -n "+$((b + 1))" "$LOG" 2>/dev/null | grep -nE "$ERR_RE" | head -3 || true)"
+    if [ -n "$newerr" ]; then
+      results+=("FAIL  scroll-$name (step $step)")
+      echo "  ✗ scroll-$name — crash while scrolling (step $step):"
+      echo "$newerr" | sed 's/^/        /'
+      fail=1; return
+    fi
+    if ! kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
+      results+=("DEAD  scroll-$name (step $step)")
+      echo "  ✗ scroll-$name — app died while scrolling (step $step)"
+      fail=1; return
+    fi
+  done
+  "$NA" shot "$name-scrolled" >/dev/null 2>&1 || true
+  results+=("ok    scroll-$name")
+  echo "  ✓ scroll-$name — scrolled ${step}× clean (below-the-fold items rendered)"
+}
+
+# go_drawer NAME DRAWER_LABEL ANCHOR [scroll] — open a left-drawer screen by its
+# label. Pass "scroll" as the 4th arg for list screens to also probe below the
+# fold for render crashes.
 go_drawer() {
-  local name="$1" label="$2" anchor="$3" b
+  local name="$1" label="$2" anchor="$3" do_scroll="${4:-}" b
   "$NA" tap 25 37 >/dev/null 2>&1 || true            # hamburger (icon → pixel)
   "$NA" wait-for "$label" 5 >/dev/null 2>&1 || true  # drawer rendered
   b="$(log_lines)"
@@ -95,6 +127,7 @@ go_drawer() {
   settle "$anchor"
   retry_nav "$label" "$anchor"
   check_screen "$name" "$b" "$anchor"
+  [ "$do_scroll" = "scroll" ] && scroll_probe "$name"
   "$NA" key Escape >/dev/null 2>&1 || true            # back to chat
   sleep 1
 }
@@ -128,15 +161,17 @@ sleep 2
 echo "==> walking key screens (read-only, text-driven nav) ..."
 
 # Chat / work-feed — work feed renders here (where #1959 hit). Content varies, so
-# crash/alive only (no stable anchor).
+# crash/alive only (no stable anchor). Scroll it: #1959 was a below-the-fold card.
 b="$(log_lines)"; check_screen "smoke-01-chat-workfeed" "$b"
+scroll_probe "smoke-01-chat-workfeed"
 
 # Left-drawer screens: tap the English drawer label, assert the screen's anchor.
-go_drawer "smoke-02-mail"       "mail"       "받은 메일"
+# List-heavy screens (mail/people/categories) also scroll-probe below the fold.
+go_drawer "smoke-02-mail"       "mail"       "받은 메일"  scroll
 go_drawer "smoke-03-calendar"   "calendar"   "일정"
 go_drawer "smoke-04-search"     "search"     "검색"
-go_drawer "smoke-05-people"     "people"     "사람"
-go_drawer "smoke-06-categories" "categories" "카테고리"
+go_drawer "smoke-05-people"     "people"     "사람"      scroll
+go_drawer "smoke-06-categories" "categories" "카테고리"  scroll
 
 # Settings screen + tabs: taptext the toggle, then each tab label.
 "$NA" taptext "설정" >/dev/null 2>&1 || "$NA" tap 235 27 >/dev/null 2>&1 || true
@@ -168,9 +203,16 @@ sleep 1
 "$NA" wait-for "mail" 5 >/dev/null 2>&1 || true
 "$NA" taptext "mail" >/dev/null 2>&1 || true
 "$NA" wait-for "받은 메일" 8 >/dev/null 2>&1 || sleep 2
+retry_nav "mail" "받은 메일"                  # ensure the inbox list is up before the row tap
 b="$(log_lines)"
 "$NA" tap 200 185 >/dev/null 2>&1 || true   # first message row
 "$NA" wait-for "보관" 8 >/dev/null 2>&1 || sleep 2
+# self-heal the data-dependent row tap: if the detail did not open (cold-tap
+# flake, or the list was still settling), re-tap the row once and re-settle.
+if ! "$NA" assert "보관" >/dev/null 2>&1; then
+  "$NA" tap 200 185 >/dev/null 2>&1 || true
+  "$NA" wait-for "보관" 8 >/dev/null 2>&1 || sleep 2
+fi
 check_screen "smoke-13-mail-detail" "$b" "보관"
 "$NA" key Escape >/dev/null 2>&1 || true
 "$NA" key Escape >/dev/null 2>&1 || true
