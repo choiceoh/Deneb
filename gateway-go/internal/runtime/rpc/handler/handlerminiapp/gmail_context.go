@@ -91,31 +91,39 @@ func GmailContextMethods(deps GmailContextDeps) map[string]rpcutil.HandlerFunc {
 	}
 }
 
+// senderWikiHitOut and senderRecentOut are wire shapes for the sender-context
+// card (miniapp.gmail.sender_context), marked for Kotlin codegen so the native
+// client shares them. The envelope itself stays handler-local (it is cached as
+// `any`), but its row/sub types are generated.
+
+//deneb:wire
+type senderWikiHitOut struct {
+	Path     string `json:"path"`
+	Title    string `json:"title,omitempty"`
+	Summary  string `json:"summary,omitempty"`
+	Category string `json:"category,omitempty"`
+}
+
+//deneb:wire
+type senderRecentOut struct {
+	Count          int    `json:"count"`
+	LastReceivedAt string `json:"lastReceivedAt,omitempty"` // ISO 8601
+	WindowDays     int    `json:"windowDays"`
+	// Truncated is true when Count equals the per-request cap — there could be
+	// more matching messages than reported. UI renders "5+" instead of "5".
+	Truncated bool `json:"truncated,omitempty"`
+}
+
 func senderContext(deps GmailContextDeps) rpcutil.HandlerFunc {
 	type params struct {
 		Sender string `json:"sender"`
 	}
-	type wikiHitOut struct {
-		Path     string `json:"path"`
-		Title    string `json:"title,omitempty"`
-		Summary  string `json:"summary,omitempty"`
-		Category string `json:"category,omitempty"`
-	}
-	type recentOut struct {
-		Count          int    `json:"count"`
-		LastReceivedAt string `json:"lastReceivedAt,omitempty"` // ISO 8601
-		WindowDays     int    `json:"windowDays"`
-		// Truncated is true when `Count` equals the per-request cap —
-		// there could be more matching messages than reported. UI uses
-		// this to render "5+" instead of "5".
-		Truncated bool `json:"truncated,omitempty"`
-	}
 	type out struct {
-		Sender      string       `json:"sender"`
-		Email       string       `json:"email,omitempty"`
-		DisplayName string       `json:"displayName,omitempty"`
-		Recent      *recentOut   `json:"recent,omitempty"`
-		WikiHits    []wikiHitOut `json:"wikiHits"`
+		Sender      string             `json:"sender"`
+		Email       string             `json:"email,omitempty"`
+		DisplayName string             `json:"displayName,omitempty"`
+		Recent      *senderRecentOut   `json:"recent,omitempty"`
+		WikiHits    []senderWikiHitOut `json:"wikiHits"`
 		// WikiFacts is the free-form graphify-CLI snapshot of what's
 		// known about the sender (relationships, recent deals/decisions
 		// in the wiki graph). Empty when graphify is unavailable, the
@@ -192,7 +200,7 @@ func senderContext(deps GmailContextDeps) rpcutil.HandlerFunc {
 			Sender:      raw,
 			Email:       email,
 			DisplayName: displayName,
-			WikiHits:    []wikiHitOut{},
+			WikiHits:    []senderWikiHitOut{},
 		}
 		var mu sync.Mutex
 		addNotice := func(s string) {
@@ -222,7 +230,7 @@ func senderContext(deps GmailContextDeps) rpcutil.HandlerFunc {
 					addNotice("gmail search failed: " + qerr.Error())
 					return
 				}
-				rec := &recentOut{
+				rec := &senderRecentOut{
 					Count:      len(results),
 					WindowDays: recentDays,
 					Truncated:  len(results) == maxRecent,
@@ -265,9 +273,9 @@ func senderContext(deps GmailContextDeps) rpcutil.HandlerFunc {
 					addNotice("memory search failed: " + werr.Error())
 					return
 				}
-				rows := make([]wikiHitOut, 0, len(hits))
+				rows := make([]senderWikiHitOut, 0, len(hits))
 				for _, h := range hits {
-					row := wikiHitOut{Path: h.Path}
+					row := senderWikiHitOut{Path: h.Path}
 					if page, perr := store.ReadPage(h.Path); perr == nil && page != nil {
 						row.Title = page.Meta.Title
 						row.Summary = page.Meta.Summary
