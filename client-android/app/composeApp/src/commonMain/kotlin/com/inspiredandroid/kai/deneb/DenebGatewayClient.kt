@@ -13,6 +13,18 @@ import com.inspiredandroid.kai.data.UiSubmission
 import com.inspiredandroid.kai.httpClient
 import com.inspiredandroid.kai.contacts.ContactData
 import com.inspiredandroid.kai.data.Attachment
+import com.inspiredandroid.kai.deneb.generated.CalendarEventOut
+import com.inspiredandroid.kai.deneb.generated.MemoryCategoryRow
+import com.inspiredandroid.kai.deneb.generated.MemoryPageRow
+import com.inspiredandroid.kai.deneb.generated.MiniappCronDetail
+import com.inspiredandroid.kai.deneb.generated.MiniappCronRow
+import com.inspiredandroid.kai.deneb.generated.ModelSection
+import com.inspiredandroid.kai.deneb.generated.NativeTopic
+import com.inspiredandroid.kai.deneb.generated.PersonRow
+import com.inspiredandroid.kai.deneb.generated.ProjectRef
+import com.inspiredandroid.kai.deneb.generated.QATurn
+import com.inspiredandroid.kai.deneb.generated.RoleModel
+import com.inspiredandroid.kai.deneb.generated.SearchAllResult
 import com.inspiredandroid.kai.ui.chat.History
 import kotlinx.collections.immutable.toImmutableList
 import com.inspiredandroid.kai.ui.chat.WorkFeedItem
@@ -556,8 +568,8 @@ class DenebGatewayClient(
                     cron = j.schedule.ifBlank { null },
                     trigger = TaskTrigger.CRON,
                     status = TaskStatus.PENDING,
-                    lastResult = j.lastError,
-                    consecutiveFailures = j.consecutiveErrors ?: 0,
+                    lastResult = j.lastError.ifBlank { null },
+                    consecutiveFailures = j.consecutiveErrors,
                 )
             }
         return true
@@ -838,13 +850,11 @@ class DenebGatewayClient(
             buildJsonObject {
                 put("id", id)
                 put("question", question)
+                // History items use the generated QATurn wire shape (json q/a) so the
+                // gateway's []QATurn binding actually receives them — the old hand-rolled
+                // {question, answer} keys silently dropped all prior-turn context.
                 putJsonArray("history") {
-                    history.forEach { (q, a) ->
-                        addJsonObject {
-                            put("question", q)
-                            put("answer", a)
-                        }
-                    }
+                    history.forEach { (q, a) -> add(jsonCodec.encodeToJsonElement(QATurn.serializer(), QATurn(q = q, a = a))) }
                 }
             },
         )?.answer?.ifBlank { null }
@@ -954,7 +964,7 @@ class DenebGatewayClient(
 
     /** Full calendar event (attendees, Meet link, description) for the detail screen. */
     suspend fun fetchCalendarEvent(id: String): CalendarEventDetail? {
-        val p = callRpc<CalEventPayload>(
+        val p = callRpc<CalendarEventOut>(
             "miniapp.calendar.get",
             buildJsonObject { put("id", id) },
         ) ?: return null
@@ -974,7 +984,7 @@ class DenebGatewayClient(
 
     /** Unified search across wiki, diary and people (`miniapp.search.all`). */
     suspend fun searchAll(query: String): SearchResults? {
-        val p = callRpc<SearchPayload>(
+        val p = callRpc<SearchAllResult>(
             "miniapp.search.all",
             buildJsonObject {
                 put("query", query)
@@ -1082,7 +1092,7 @@ class DenebGatewayClient(
 
     /** Full cron job detail (`miniapp.crons.get`). */
     suspend fun fetchCron(id: String): CronDetail? {
-        val p = callRpc<CronDetailPayload>("miniapp.crons.get", buildJsonObject { put("id", id) }) ?: return null
+        val p = callRpc<MiniappCronDetail>("miniapp.crons.get", buildJsonObject { put("id", id) }) ?: return null
         return CronDetail(
             id = p.id,
             name = p.name,
@@ -1109,26 +1119,6 @@ class DenebGatewayClient(
             "miniapp.crons.update",
             buildJsonObject { put("id", id); put("enabled", enabled) },
         ) != null
-
-    @Serializable
-    private data class CronDetailPayload(
-        val id: String = "",
-        val name: String = "",
-        val enabled: Boolean = false,
-        val schedule: String = "",
-        val scheduleSpec: String = "",
-        val scheduleKind: String = "",
-        val payloadKind: String = "",
-        val prompt: String = "",
-        val model: String = "",
-        val deliveryChannel: String = "",
-        val deliveryTo: String = "",
-        val nextRunAtMs: Long = 0,
-        val lastDeliveryStatus: String = "",
-        val lastError: String = "",
-        val consecutiveErrors: Int = 0,
-        val autoDisabledAtMs: Long = 0,
-    )
 
     /**
      * Check the gateway-served update manifest. The gateway exposes the APK +
@@ -1645,18 +1635,7 @@ class DenebGatewayClient(
     private data class MemoryListPayload(val pages: List<MemoryPageRow> = emptyList())
 
     @Serializable
-    private data class MemoryPageRow(
-        val path: String = "",
-        val title: String = "",
-        val summary: String = "",
-        val updated: String = "",
-    )
-
-    @Serializable
     private data class DeletePagesPayload(val ok: Boolean = false, val deleted: Int = 0)
-
-    @Serializable
-    private data class MemoryCategoryRow(val name: String = "", val pageCount: Int = 0)
 
     @Serializable
     private data class CategoriesPayload(
@@ -1666,24 +1645,12 @@ class DenebGatewayClient(
     )
 
     @Serializable
-    private data class CronListPayload(val jobs: List<CronRow> = emptyList())
-
-    @Serializable
-    private data class CronRow(
-        val id: String = "",
-        val name: String = "",
-        val enabled: Boolean = true,
-        val schedule: String = "",
-        val payloadPreview: String = "",
-        val nextRunAtMs: Long = 0,
-        val consecutiveErrors: Int? = null,
-        val lastError: String? = null,
-    )
+    private data class CronListPayload(val jobs: List<MiniappCronRow> = emptyList())
 
     @Serializable
     private data class ModelsPayload(
         val current: String = "",
-        val roles: List<RoleModelRow> = emptyList(),
+        val roles: List<RoleModel> = emptyList(),
         val sections: List<ModelSection> = emptyList(),
     )
 
@@ -1699,32 +1666,8 @@ class DenebGatewayClient(
 
     @Serializable
     private data class TopicsPayload(
-        val topics: List<TopicRow> = emptyList(),
+        val topics: List<NativeTopic> = emptyList(),
         val defaultSessionKey: String = "",
-    )
-
-    @Serializable
-    private data class TopicRow(
-        val key: String = "",
-        val label: String = "",
-        val sessionKey: String = "",
-        val isDefault: Boolean = false,
-    )
-
-    @Serializable
-    private data class RoleModelRow(val role: String = "", val model: String = "")
-
-    @Serializable
-    private data class ModelSection(val title: String = "", val models: List<ModelRow> = emptyList())
-
-    @Serializable
-    private data class ModelRow(
-        val id: String = "",
-        val display: String = "",
-        val label: String = "",
-        val current: Boolean = false,
-        val health: String = "",
-        val custom: Boolean = false,
     )
 
     @Serializable
@@ -1768,12 +1711,9 @@ class DenebGatewayClient(
     private data class OkPayload(val ok: Boolean = false)
 
     @Serializable
-    private data class ProjectRefRow(val path: String = "", val title: String = "", val summary: String = "")
-
-    @Serializable
     private data class AnalyzePayload(
         val analysis: String = "",
-        val relatedProjects: List<ProjectRefRow> = emptyList(),
+        val relatedProjects: List<ProjectRef> = emptyList(),
         val cached: Boolean = false,
         val createdAt: String = "",
         val durationMs: Long = 0,
@@ -1803,66 +1743,16 @@ class DenebGatewayClient(
         val category: String = "",
     )
 
+    // Calendar list envelope. The element shape (CalendarEventOut) and its
+    // nested attendee/conference types are generated from the Go calendarEventOut
+    // struct — see generated/MiniappWireTypes.kt — so the list and detail screens
+    // share one source of truth with the gateway instead of two partial mirrors
+    // that can silently drift. Regenerate with `make kotlin-models`.
     @Serializable
-    private data class CalListPayload(val events: List<CalRow> = emptyList())
+    private data class CalListPayload(val events: List<CalendarEventOut> = emptyList())
 
     @Serializable
-    private data class CalRow(
-        val id: String = "",
-        val summary: String = "",
-        val location: String = "",
-        val start: String = "",
-        val end: String = "",
-        val allDay: Boolean = false,
-    )
-
-    @Serializable
-    private data class CalEventPayload(
-        val id: String = "",
-        val summary: String = "",
-        val description: String = "",
-        val location: String = "",
-        val start: String = "",
-        val end: String = "",
-        val allDay: Boolean = false,
-        val organizer: CalAttendee? = null,
-        val attendees: List<CalAttendee> = emptyList(),
-        val htmlLink: String = "",
-        val status: String = "",
-    )
-
-    @Serializable
-    private data class CalAttendee(val email: String = "", val displayName: String = "", val responseStatus: String = "")
-
-    @Serializable
-    private data class SearchPayload(
-        val wiki: List<SearchWikiRow> = emptyList(),
-        val diary: List<SearchDiaryRow> = emptyList(),
-        val people: List<SearchPersonRow> = emptyList(),
-    )
-
-    @Serializable
-    private data class SearchWikiRow(
-        val path: String = "",
-        val title: String = "",
-        val summary: String = "",
-        val category: String = "",
-        val snippet: String = "",
-    )
-
-    @Serializable
-    private data class SearchDiaryRow(val file: String = "", val header: String = "", val content: String = "")
-
-    @Serializable
-    private data class SearchPersonRow(
-        val email: String = "",
-        val name: String = "",
-        val messageCount: Int = 0,
-        val lastSubject: String = "",
-    )
-
-    @Serializable
-    private data class PeopleListPayload(val people: List<SearchPersonRow> = emptyList())
+    private data class PeopleListPayload(val people: List<PersonRow> = emptyList())
 
     @Serializable
     private data class TopicDocsListPayload(val files: List<TopicDocRow> = emptyList())
