@@ -45,6 +45,8 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 		switch p.Action {
 		case "search":
 			return wikiSearch(ctx, d.Store, p.Query, p.Limit)
+		case "graph":
+			return wikiGraph(ctx, d.Store, p.Query, p.Limit)
 		case "read":
 			return wikiRead(d.Store, p.Query, p.Section)
 		case "index":
@@ -58,7 +60,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 		case "status":
 			return wikiStatus(d.Store), nil
 		default:
-			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: search, read, index, write, log, daily, status", p.Action), nil
+			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: search, graph, read, index, write, log, daily, status", p.Action), nil
 		}
 	}
 }
@@ -86,6 +88,54 @@ func wikiSearch(ctx context.Context, store *wiki.Store, query string, limit int)
 			r.Path, r.Line, r.Score, truncate(r.Content, 200))
 	}
 	return sb.String(), nil
+}
+
+// wikiGraph surfaces a page/entity's one-hop neighborhood in the wiki knowledge
+// graph — who/what is connected, via explicit Related[] links and backlinks.
+// Use it to pull relationship context (e.g. a sender's projects, a project's
+// linked deals/people) instead of re-deriving it from flat search.
+func wikiGraph(ctx context.Context, store *wiki.Store, query string, limit int) (string, error) {
+	if strings.TrimSpace(query) == "" {
+		return "query에 확장할 엔티티/페이지를 지정하세요 (예: 대한전선, 인물/김대희).", nil
+	}
+	res, err := store.GraphContext(ctx, query, limit)
+	if err != nil {
+		return fmt.Sprintf("그래프 조회 실패: %v", err), nil
+	}
+	if !res.Found {
+		return fmt.Sprintf("'%s'에 해당하는 위키 페이지를 못 찾음. wiki search로 먼저 확인하세요.", query), nil
+	}
+	if len(res.Neighbors) == 0 {
+		return fmt.Sprintf("**%s** (%s) — 연결된 페이지 없음 (그래프상 고립). 본문은 wiki read로.", res.SeedTitle, res.SeedPath), nil
+	}
+
+	// Ranked by connection score, each line showing *why* it's connected
+	// (the corroborating signals) so the precision is visible at a glance.
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "## %s — 관계망 (%d, 점수순)\n", res.SeedTitle, len(res.Neighbors))
+	for _, n := range res.Neighbors {
+		fmt.Fprintf(&sb, "- **%s** (%.1f)", n.Title, n.Score)
+		if reasons := dedupeReasons(n.Reasons); len(reasons) > 0 {
+			fmt.Fprintf(&sb, " — %s", strings.Join(reasons, " · "))
+		}
+		fmt.Fprintf(&sb, "  `%s`\n", n.Path)
+	}
+	return sb.String(), nil
+}
+
+// dedupeReasons drops repeated signal labels (e.g. both directions of a
+// bidirectional link) while preserving order.
+func dedupeReasons(reasons []string) []string {
+	seen := make(map[string]struct{}, len(reasons))
+	out := reasons[:0:0]
+	for _, r := range reasons {
+		if _, dup := seen[r]; dup {
+			continue
+		}
+		seen[r] = struct{}{}
+		out = append(out, r)
+	}
+	return out
 }
 
 func wikiRead(store *wiki.Store, path, section string) (string, error) {
