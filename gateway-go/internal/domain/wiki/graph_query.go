@@ -27,6 +27,10 @@ const (
 	// minMentionTitleLen avoids matching very short titles inside unrelated
 	// prose ("AI", "PR"), mirroring graph_snapshot.go's len<3 guard.
 	minMentionTitleLen = 3
+	// graphMentionsEnabled gates the body-mention pass in production traversal.
+	// graph_bench_test.go scores the graph against operator-graded pairs both
+	// ways; set from that evidence, not intuition.
+	graphMentionsEnabled = true
 )
 
 // graphRec is the per-page record used to build the in-memory graph.
@@ -48,20 +52,49 @@ type graphRec struct {
 // its strongest one-hop neighbors, labeled by relation. Returns "" when no page
 // matches. Pure in-process traversal — no LLM, no graphify subprocess.
 func (s *Store) GraphContext(ctx context.Context, query string, maxNeighbors int) (string, error) {
-	if s == nil {
-		return "", nil
-	}
-	q := strings.ToLower(strings.TrimSpace(stripAngleEmail(query)))
-	if q == "" {
-		return "", nil
-	}
 	if maxNeighbors <= 0 {
 		maxNeighbors = defaultGraphNeighbors
+	}
+	recs, seed, best, err := s.graphScoreMap(ctx, query, graphMentionsEnabled, "")
+	if err != nil || seed < 0 {
+		return "", err
+	}
+
+	neighbors := make([]graphNeighbor, 0, len(best))
+	for _, n := range best {
+		neighbors = append(neighbors, *n)
+	}
+	sort.Slice(neighbors, func(a, b int) bool {
+		if neighbors[a].score != neighbors[b].score {
+			return neighbors[a].score > neighbors[b].score
+		}
+		return recs[neighbors[a].idx].title < recs[neighbors[b].idx].title
+	})
+	if len(neighbors) > maxNeighbors {
+		neighbors = neighbors[:maxNeighbors]
+	}
+	return renderGraphContext(recs[seed], recs, neighbors), nil
+}
+
+// graphScoreMap builds the in-memory wiki graph for `query` and returns every
+// connected page's best one-hop neighbor (keyed by rec index), the resolved
+// recs, and the seed index (seed<0 when nothing matches). includeMentions
+// toggles the body-mention pass so its contribution can be measured and tuned
+// (graph_bench_test.go) independently of explicit Related[] edges and tags.
+// seedOverride, when non-empty, pins the seed to that exact page path instead of
+// resolving it from the query — the benchmark scores from known seeds.
+func (s *Store) graphScoreMap(ctx context.Context, query string, includeMentions bool, seedOverride string) ([]graphRec, int, map[int]*graphNeighbor, error) {
+	if s == nil {
+		return nil, -1, nil, nil
+	}
+	q := strings.ToLower(strings.TrimSpace(stripAngleEmail(query)))
+	if q == "" && seedOverride == "" {
+		return nil, -1, nil, nil
 	}
 
 	relPaths, err := s.ListPages("")
 	if err != nil {
-		return "", err
+		return nil, -1, nil, err
 	}
 
 	recs := make([]graphRec, 0, len(relPaths))
@@ -70,7 +103,7 @@ func (s *Store) GraphContext(ctx context.Context, query string, maxNeighbors int
 	byPath := make(map[string]int, len(relPaths)) // relPath (with + without .md) -> idx
 	for _, rp := range relPaths {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return nil, -1, nil, ctx.Err()
 		}
 		page, perr := s.ReadPage(rp)
 		if perr != nil || page == nil {
@@ -107,12 +140,21 @@ func (s *Store) GraphContext(ctx context.Context, query string, maxNeighbors int
 		byPath[strings.TrimSuffix(rp, ".md")] = idx
 	}
 	if len(recs) == 0 {
-		return "", nil
+		return recs, -1, nil, nil
 	}
 
-	seed := findSeed(recs, byNorm, byID, q)
+	// The benchmark scores from a known seed page (by path); production resolves
+	// the seed from the free-text query.
+	seed := -1
+	if seedOverride != "" {
+		if i, ok := byPath[seedOverride]; ok {
+			seed = i
+		}
+	} else {
+		seed = findSeed(recs, byNorm, byID, q)
+	}
 	if seed < 0 {
-		return "", nil
+		return recs, -1, nil, nil
 	}
 
 	// Tag frequency for the shared-tag pass (skip degenerate tags that span
@@ -196,36 +238,26 @@ func (s *Store) GraphContext(ctx context.Context, query string, maxNeighbors int
 	}
 
 	// Body-mention edges: seed mentions X (0.7), or X mentions seed (0.8 —
-	// being talked about is a slightly stronger signal than talking).
-	seedTitle := recs[seed].normTitle
-	for i := range recs {
-		if i == seed {
-			continue
-		}
-		other := &recs[i]
-		if len(other.normTitle) >= minMentionTitleLen && strings.Contains(recs[seed].bodyLower, other.normTitle) {
-			bump(i, 0.7, "언급")
-		}
-		if len(seedTitle) >= minMentionTitleLen && strings.Contains(other.bodyLower, seedTitle) {
-			bump(i, 0.8, "언급")
+	// being talked about is a slightly stronger signal than talking). Gated
+	// because the graded benchmark showed these mostly add false neighbors (a
+	// page sharing a site name in prose is not a real relation).
+	if includeMentions {
+		seedTitle := recs[seed].normTitle
+		for i := range recs {
+			if i == seed {
+				continue
+			}
+			other := &recs[i]
+			if len(other.normTitle) >= minMentionTitleLen && strings.Contains(recs[seed].bodyLower, other.normTitle) {
+				bump(i, 0.7, "언급")
+			}
+			if len(seedTitle) >= minMentionTitleLen && strings.Contains(other.bodyLower, seedTitle) {
+				bump(i, 0.8, "언급")
+			}
 		}
 	}
 
-	neighbors := make([]graphNeighbor, 0, len(best))
-	for _, n := range best {
-		neighbors = append(neighbors, *n)
-	}
-	sort.Slice(neighbors, func(a, b int) bool {
-		if neighbors[a].score != neighbors[b].score {
-			return neighbors[a].score > neighbors[b].score
-		}
-		return recs[neighbors[a].idx].title < recs[neighbors[b].idx].title
-	})
-	if len(neighbors) > maxNeighbors {
-		neighbors = neighbors[:maxNeighbors]
-	}
-
-	return renderGraphContext(recs[seed], recs, neighbors), nil
+	return recs, seed, best, nil
 }
 
 // findSeed picks the page that best matches the query: exact normalized title,
