@@ -119,7 +119,7 @@ sudo apt-get install -y xvfb x11vnc novnc websockify matchbox-window-manager \
 - **네비는 텍스트 주도**(`taptext`): 드로어 항목·설정 탭은 라벨로 탭하고 `wait-for` 로 정착을 기다린 뒤 앵커를 `assert` → 레이아웃이 흔들려도 안 깨진다. 콜드 첫 탭이 애니메이션 중 발사돼 빗나가면 **앵커 미도달 시 1회 재탭**(`retry_nav`)으로 자가치유. 아이콘 전용 컨트롤(햄버거 `25,37`·세션 `388,37`·데이터 의존 메일 행 `200,185`)만 픽셀 탭으로 남긴다.
 - **앵커 없는 화면**: 크론·토픽문서·알림은 고유 OCR 앵커가 없어(특히 알림의 "…알림 캡처를 지원하지 않습니다"는 `캡처를→BMS`로 오독, 유일 가독어 "알림"은 게이트웨이 탭에도 존재) **크래시/생존만** 검사. 앵커 후보는 반드시 라이브 `assert`로 가독성·고유성을 먼저 확인하고 추가.
 - alive 판정은 `status`(매번 윈도우 재탐색이라 tap 직후 flaky) 말고 `app_jvm.pid` `kill -0`.
-- **게시 직전 실행**: `scripts/dev/native-app-smoke.sh` → PASS 면 `publish-apk.sh`, FAIL 이면 해당 `smoke-*.png` 를 Read.
+- **게시 게이트(자동 강제)**: `publish-apk.sh` 가 빌드 전에 이 스모크를 **자동 실행**한다 — 크래시/wrong-screen 감지 시 publish 중단(`smoke-*.png` 보고 수정), 하네스 기동 불가 시 warn+continue(인프라 갭은 코드 결함 아님), `DENEB_SKIP_SMOKE=1` 로 우회. 게이트와 무관히 수동 단독 실행도 가능(`scripts/dev/native-app-smoke.sh`). 158/#1959 가 게시된 건 이 게이트가 **문서에만 있고 강제되지 않아서**였다.
 
 ## 한계 / 주의
 

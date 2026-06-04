@@ -10,10 +10,17 @@
 # Concurrent publishes still race on version.json itself, but every APK is
 # preserved by its hash, so any specific build stays retrievable by URL.
 #
+# Before building, it runs the native live-app smoke (native-app-smoke.sh) as a
+# gate: that smoke walks the real screens in the Compose Desktop build of the
+# same commonMain code the APK ships, catching render-time crashes that
+# compileKotlinDesktop + unit tests miss (e.g. 158/#1959). A real crash aborts
+# the publish; a harness that cannot start is a warning, not a block.
+#
 # Env:
 #   DENEB_APK_DIR       publish dir            (default: ~/.cache/deneb-apk)
 #   DENEB_APK_BASE_URL  base URL the app uses  (default: http://127.0.0.1:19010)
 #   ANDROID_HOME        Android SDK            (default: ~/android-sdk)
+#   DENEB_SKIP_SMOKE    set to skip the pre-publish smoke gate entirely
 #
 # Usage:
 #   scripts/dev/publish-apk.sh "release notes shown in the in-app updater"
@@ -35,6 +42,33 @@ SHA="$(git -C "$REPO_ROOT" rev-parse --short=8 HEAD)"
 if [ -z "$VERSION_NAME" ] || [ -z "$VERSION_CODE" ]; then
   echo "could not read appVersion/android-versionCode from libs.versions.toml" >&2
   exit 1
+fi
+
+# Pre-publish smoke gate. Render-time crashes (the #1959 class) only surface when
+# the real screens compose with real data — which neither compileKotlinDesktop nor
+# unit tests do. Run the live smoke before sinking time into the Android build and,
+# more importantly, before shipping a crash to the phone.
+SMOKE="$REPO_ROOT/scripts/dev/native-app-smoke.sh"
+NATIVE_APP="$REPO_ROOT/scripts/dev/native-app.sh"
+if [ -n "${DENEB_SKIP_SMOKE:-}" ]; then
+  echo "pre-publish smoke: SKIPPED (DENEB_SKIP_SMOKE set) — render crashes will not be caught"
+elif ! "$NATIVE_APP" start >/dev/null 2>&1; then
+  # Harness unavailable (no Xvfb, contended display, …) is an infra gap, not a
+  # code defect — warn loudly but don't block a legitimate publish on it.
+  echo "WARNING: native live-app harness could not start — skipping pre-publish smoke" >&2
+  echo "         (render crashes will NOT be caught; set DENEB_SKIP_SMOKE=1 to silence)" >&2
+else
+  echo "pre-publish smoke: walking real screens (native-app-smoke.sh) ..."
+  if ! "$SMOKE"; then
+    echo "" >&2
+    echo "PRE-PUBLISH SMOKE FAILED — a screen crashed or rendered wrong. NOT publishing." >&2
+    echo "  inspect the saved screenshots: ~/.cache/deneb-native/<instance>/shots/smoke-*.png" >&2
+    echo "  (the live app is left running so you can probe it: $NATIVE_APP shot <name>)" >&2
+    echo "  override and publish anyway: DENEB_SKIP_SMOKE=1 scripts/dev/publish-apk.sh ..." >&2
+    exit 1
+  fi
+  "$NATIVE_APP" stop >/dev/null 2>&1 || true   # free the harness JVM on success
+  echo "pre-publish smoke: PASS"
 fi
 
 echo "building deneb $VERSION_NAME ($VERSION_CODE) @ $SHA ..."

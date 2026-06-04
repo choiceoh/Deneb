@@ -25,8 +25,9 @@ globs: ["scripts/release*", "scripts/deploy*", "scripts/dev/publish-apk.sh", "cl
 - **APK 배포는 `scripts/dev/publish-apk.sh` 경유만.** 직접 `assembleFossDebug` + `cp` + 수동 `version.json` 작성 금지 — 동시 빌드가 같은 파일명을 서로 덮어쓴다 (실제로 두 세션의 155 빌드가 충돌한 이력).
 - APK 파일명에 **커밋 해시**가 박힌다 (`deneb-<ver>-<code>-<sha>-fossDebug.apk`, `androidApp/build.gradle.kts`). 다른 커밋 빌드는 안 덮어쓰고 전부 보존된다.
 - 스크립트가 빌드 + serve dir 복사 + `version.json`(실제 산출물의 code/name/url) 생성을 한 번에 한다.
-- env: `DENEB_APK_DIR`(기본 `~/.cache/deneb-apk`), `DENEB_APK_BASE_URL`(기본 localhost — 배포 머신에서 tailnet URL로 export), `ANDROID_HOME`.
-- 인앱 업데이트로 새 빌드를 띄우려면 `libs.versions.toml`의 `android-versionCode`와 `DenebUpdate.kt`의 `DENEB_VERSION_CODE`를 함께 올려야 한다 (인앱 업데이트는 strictly-greater 비교).
+- **빌드 전 스모크 게이트(자동)**: 빌드에 들어가기 전에 `native-app-smoke.sh`(라이브 화면 워크)를 돌려 런타임 렌더 크래시(#1959류)를 막는다. 크래시/wrong-screen 감지 시 publish 중단, 하네스 기동 불가 시 warn+continue, `DENEB_SKIP_SMOKE=1` 로 우회. 상세: `.claude/rules/native-live-app.md`.
+- env: `DENEB_APK_DIR`(기본 `~/.cache/deneb-apk`), `DENEB_APK_BASE_URL`(기본 localhost — 배포 머신에서 tailnet URL로 export), `ANDROID_HOME`, `DENEB_SKIP_SMOKE`(스모크 게이트 우회).
+- 인앱 업데이트로 새 빌드를 띄우려면 `libs.versions.toml`의 `android-versionCode`만 올리면 된다 — `DenebUpdate.kt`의 `DENEB_VERSION_CODE`는 생성된 `Version.appVersionCode`에서 파생되므로(PR #1965) 수동 동기가 더는 필요 없다 (인앱 업데이트는 strictly-greater 비교).
 
 ```bash
 # 새 빌드 배포 (배포 머신)
