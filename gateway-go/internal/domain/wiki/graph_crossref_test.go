@@ -1,5 +1,5 @@
 // graph_crossref_test.go — experimental body cross-reference detection,
-// evaluated (and rejected) by graph_bench_test.go.
+// evaluated by graph_bench_test.go.
 //
 // Hypothesis: the explicit Related[] graph misses links a page only states in
 // prose — "영광 BESS" lists "비금도 154kV 케이블 (ZTT)" in its body but never as a
@@ -7,13 +7,15 @@
 // detects a citation by matching several of one page's title tokens (at least
 // one distinctive) inside another page's body.
 //
-// Result (the benchmark's "+ body cross-references" row): it nudges strong-vs-
-// weak AUC up but lowers rank correlation, because site names and specs are
-// title-rare yet body-common, so no token threshold separates a real citation
-// (영광→비금도) from same-site noise (a module page that merely mentions the site
-// and a spec). It is therefore NOT wired into the production write path; this
-// file keeps the detector and its measurement so the trade-off stays on record
-// and re-runnable rather than relitigated from intuition.
+// Result (the benchmark's "+ body cross-references" row): it has the highest
+// per-seed strong-vs-weak AUC (~0.84 vs the token scorer's ~0.80), but it does
+// so by adding explicit edges to weakly-related pages too — site names and specs
+// are title-rare yet body-common, so a real citation (영광→비금도) can't be
+// cleanly separated from a module page that merely mentions the site and a spec.
+// Those show up as hard false-positive neighbors, against the precision-first
+// priority. The embedding pass reaches a similar per-seed AUC as a continuous
+// re-ranking without minting false edges, so it is the cleaner candidate; this
+// detector stays test-only and unwired, on record and re-runnable.
 package wiki
 
 import "strings"
