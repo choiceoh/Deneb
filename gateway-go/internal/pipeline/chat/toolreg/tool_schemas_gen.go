@@ -718,8 +718,8 @@ func wikiToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: search (ripgrep full-text search), read (read wiki page), index (read master/category index), write (create/update page), log (append diary entry), daily (read recent diary), status (wiki stats)",
-				"enum":        []string{"search", "read", "index", "write", "log", "daily", "status"},
+				"description": "Action: search (ripgrep full-text search), graph (one-hop relationship neighborhood of a page/entity via Related[] links and backlinks), read (read wiki page), index (read master/category index), write (create/update page), log (append diary entry), daily (read recent diary), status (wiki stats)",
+				"enum":        []string{"search", "graph", "read", "index", "write", "log", "daily", "status"},
 			},
 			"category": map[string]any{
 				"type":        "string",
@@ -757,7 +757,7 @@ func wikiToolSchema() map[string]any {
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Search query (search), page path (read/write), category name (index), or diary entry body (log)",
+				"description": "Search query (search), entity or page to expand (graph), page path (read/write), category name (index), or diary entry body (log)",
 			},
 			"related": map[string]any{
 				"type":        "array",
