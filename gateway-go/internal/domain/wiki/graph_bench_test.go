@@ -76,11 +76,12 @@ func TestGraphBench(t *testing.T) {
 		crossRefs bool
 	}{
 		{"explicit + tags + mentions (current main)", true, false},
-		{"+ body cross-references (rejected: AUC up, rank/precision down)", true, true},
+		{"+ body cross-references (per-seed AUC best, but adds false edges)", true, true},
 	}
 	for _, cfg := range configs {
 		var scoreArr, gradeArr []float64
 		gradeScores := map[int][]float64{}
+		perSeed := map[string][][2]float64{}
 		for seedPath, cands := range bySeed {
 			// Pin the seed to the exact graded page (titles can be ambiguous).
 			recs, seed, best, gerr := store.graphScoreMap(ctx, "", cfg.mentions, seedPath)
@@ -107,6 +108,7 @@ func TestGraphBench(t *testing.T) {
 				scoreArr = append(scoreArr, sc)
 				gradeArr = append(gradeArr, float64(grade))
 				gradeScores[grade] = append(gradeScores[grade], sc)
+				perSeed[seedPath] = append(perSeed[seedPath], [2]float64{sc, float64(grade)})
 				if cfg.crossRefs && grade >= 2 {
 					t.Logf("  [strong grade %d → %.2f] %s", grade, sc, strings.TrimSuffix(filepath.Base(candPath), ".md"))
 				}
@@ -123,7 +125,10 @@ func TestGraphBench(t *testing.T) {
 			}
 		}
 		t.Logf("  Spearman(score, grade)      : %+.3f", benchSpearman(scoreArr, gradeArr))
-		t.Logf("  strong(>=2) vs weak(<=1) AUC : %.3f", benchPairwiseAUC(scoreArr, gradeArr))
+		t.Logf("  strong-vs-weak AUC  global  : %.3f", benchPairwiseAUC(scoreArr, gradeArr))
+		if mAUC, ns := benchMacroAUC(perSeed); ns > 0 {
+			t.Logf("  strong-vs-weak AUC  per-seed: %.3f  (avg over %d seeds)", mAUC, ns)
+		}
 	}
 
 	if os.Getenv("DENEB_WIKI_BENCH_EMBED") == "" {
@@ -131,14 +136,16 @@ func TestGraphBench(t *testing.T) {
 	}
 	// Embedding cosine — does dense semantic similarity (BGE-M3, already wired
 	// for compaction) rank the graded pairs better than the token/edge scorer?
-	// Result: no. AUC ~0.78 < the token scorer's 0.80, because in this single-
-	// domain corpus (every page is the same solar/cable/module business) cosine
-	// has a high floor — unrelated, weak, and same-site pairs all sit near 0.78,
-	// and only grade-3 same-project pairs stand out (~0.87). A bi-encoder flags
-	// the very closest but can't resolve the unrelated/weak/same-site middle the
-	// operator cares about; a cross-encoder reranker (relevance, not similarity)
-	// is the untested candidate, but needs a sidecar Deneb doesn't run.
-	// Skipped when the embedding sidecar is absent (e.g. CI).
+	// The metric you read matters. GLOBALLY (pooling all seeds) cosine looks
+	// worse — AUC ~0.78 < the token scorer's 0.80 — because every page sits near
+	// a high 0.78 floor in this single-domain corpus, and each seed's floor
+	// differs, so pooling lets a weak pair under a high-floor seed outrank a
+	// strong pair under a low-floor seed. But PER-SEED — which is how the tool
+	// actually ranks, one seed's neighbors — the floor cancels and cosine reaches
+	// AUC ~0.82, edging out the token scorer (~0.80). So dense similarity is a
+	// real signal once measured the way it's used; a cross-encoder reranker
+	// (relevance, not similarity) would likely sharpen it further but needs a
+	// sidecar Deneb doesn't run. Skipped when the sidecar is absent (e.g. CI).
 	emb := embedding.New("", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	for i := 0; i < 50 && !emb.IsHealthy(); i++ {
 		time.Sleep(100 * time.Millisecond)
@@ -179,6 +186,7 @@ func TestGraphBench(t *testing.T) {
 	}
 	var eScore, eGrade []float64
 	eByGrade := map[int][]float64{}
+	ePerSeed := map[string][][2]float64{}
 	for seedPath, cands := range bySeed {
 		sv, ok := vecByPath[seedPath]
 		if !ok {
@@ -192,6 +200,7 @@ func TestGraphBench(t *testing.T) {
 			eScore = append(eScore, sc)
 			eGrade = append(eGrade, float64(grade))
 			eByGrade[grade] = append(eByGrade[grade], sc)
+			ePerSeed[seedPath] = append(ePerSeed[seedPath], [2]float64{sc, float64(grade)})
 		}
 	}
 	t.Logf("──────────── embedding cosine (BGE-M3, %d pairs) ────────────", len(eScore))
@@ -201,7 +210,10 @@ func TestGraphBench(t *testing.T) {
 		}
 	}
 	t.Logf("  Spearman(cosine, grade)     : %+.3f", benchSpearman(eScore, eGrade))
-	t.Logf("  strong(>=2) vs weak(<=1) AUC : %.3f", benchPairwiseAUC(eScore, eGrade))
+	t.Logf("  strong-vs-weak AUC  global  : %.3f", benchPairwiseAUC(eScore, eGrade))
+	if mAUC, ns := benchMacroAUC(ePerSeed); ns > 0 {
+		t.Logf("  strong-vs-weak AUC  per-seed: %.3f  (avg over %d seeds)", mAUC, ns)
+	}
 }
 
 func benchMean(v []float64) float64 {
@@ -266,6 +278,14 @@ func benchPearson(x, y []float64) float64 {
 // benchPairwiseAUC is the probability a strong pair (grade>=2) outscores a weak
 // one (grade<=1), ties counting half: 1 perfect separation, 0.5 random.
 func benchPairwiseAUC(score, grade []float64) float64 {
+	auc, _ := benchPairwiseAUCValid(score, grade)
+	return auc
+}
+
+// benchPairwiseAUCValid additionally reports whether the AUC is defined (the set
+// has at least one strong and one weak pair) — needed to average per-seed AUCs
+// without counting degenerate single-class seeds.
+func benchPairwiseAUCValid(score, grade []float64) (float64, bool) {
 	var strong, weak []float64
 	for i := range grade {
 		if grade[i] >= 2 {
@@ -275,7 +295,7 @@ func benchPairwiseAUC(score, grade []float64) float64 {
 		}
 	}
 	if len(strong) == 0 || len(weak) == 0 {
-		return 0
+		return 0, false
 	}
 	var wins, total float64
 	for _, s := range strong {
@@ -289,5 +309,30 @@ func benchPairwiseAUC(score, grade []float64) float64 {
 			}
 		}
 	}
-	return wins / total
+	return wins / total, true
+}
+
+// benchMacroAUC averages the strong-vs-weak AUC computed within each seed, which
+// is how the tool actually ranks (one seed's neighbors). A per-seed floor — like
+// the embedding's ~0.78 baseline — cancels here because every comparison shares
+// the same seed, unlike the global pooling that mixes seeds with different
+// floors. perSeed maps seedPath -> the (score, grade) pairs for that seed.
+func benchMacroAUC(perSeed map[string][][2]float64) (float64, int) {
+	var sum float64
+	var n int
+	for _, pairs := range perSeed {
+		sc := make([]float64, len(pairs))
+		gr := make([]float64, len(pairs))
+		for i, p := range pairs {
+			sc[i], gr[i] = p[0], p[1]
+		}
+		if auc, ok := benchPairwiseAUCValid(sc, gr); ok {
+			sum += auc
+			n++
+		}
+	}
+	if n == 0 {
+		return 0, 0
+	}
+	return sum / float64(n), n
 }
