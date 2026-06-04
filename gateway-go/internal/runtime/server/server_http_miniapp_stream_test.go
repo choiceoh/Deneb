@@ -119,6 +119,16 @@ func postMiniappChatStream(t *testing.T, s *Server, token string, body any) *htt
 	return rec
 }
 
+func postMiniappChatStreamRaw(t *testing.T, s *Server, token string, body []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/miniapp/chat/stream", bytes.NewReader(body))
+	req.Header.Set(clientauth.Header, token)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.handleMiniappChatStream(rec, req)
+	return rec
+}
+
 func TestHandleMiniappChatStream_GuardPaths(t *testing.T) {
 	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	token, err := clientauth.Generate()
@@ -148,5 +158,22 @@ func TestHandleMiniappChatStream_GuardPaths(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "chat handler not ready") {
 		t.Errorf("nil chat handler: body = %q, want 'chat handler not ready'", rec.Body.String())
+	}
+}
+
+func TestHandleMiniappChatStream_RejectsOversizeBody(t *testing.T) {
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
+	token, err := clientauth.Generate()
+	if err != nil {
+		t.Fatalf("generate client token: %v", err)
+	}
+	s := newTestServer(t)
+
+	rec := postMiniappChatStreamRaw(t, s, token, bytes.Repeat([]byte("a"), int(miniappRequestMaxBytes)+1))
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d, body = %s", rec.Code, http.StatusRequestEntityTooLarge, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "request body too large") {
+		t.Fatalf("body = %q, want size limit error", rec.Body.String())
 	}
 }

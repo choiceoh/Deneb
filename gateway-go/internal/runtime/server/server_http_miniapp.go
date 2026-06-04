@@ -27,6 +27,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime"
 	"net/http"
@@ -45,6 +46,8 @@ var miniappGmailAttachmentClientFactory = func() (miniappGmailAttachmentClient, 
 	return gmail.DefaultClient()
 }
 
+const miniappRequestMaxBytes int64 = 1 * 1024 * 1024 // 1 MiB
+
 // handleMiniappRPC bridges native-client HTTP POSTs into the existing RPC
 // dispatcher. It enforces client-token auth before dispatch and rejects any
 // method outside the miniapp.* namespace so the broader RPC surface stays
@@ -55,17 +58,8 @@ func (s *Server) handleMiniappRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		s.writeJSON(w, http.StatusBadRequest, map[string]any{
-			"error": "read body: " + err.Error(),
-		})
-		return
-	}
-	if len(body) == 0 {
-		s.writeJSON(w, http.StatusBadRequest, map[string]any{
-			"error": "empty body",
-		})
+	body, ok := s.readMiniappRequestBody(w, r)
+	if !ok {
 		return
 	}
 
@@ -180,6 +174,31 @@ func (s *Server) authenticateMiniappRequest(w http.ResponseWriter, r *http.Reque
 		return nil, false
 	}
 	return syntheticOperatorIdentity(), true
+}
+
+func (s *Server) readMiniappRequestBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, miniappRequestMaxBytes)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			s.writeJSON(w, http.StatusRequestEntityTooLarge, map[string]any{
+				"error": "request body too large",
+			})
+			return nil, false
+		}
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": "read body: " + err.Error(),
+		})
+		return nil, false
+	}
+	if len(body) == 0 {
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": "empty body",
+		})
+		return nil, false
+	}
+	return body, true
 }
 
 // authenticateMiniappDownloadRequest authenticates a download GET. A browser

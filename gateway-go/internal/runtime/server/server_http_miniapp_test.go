@@ -56,6 +56,18 @@ func postMiniappRPC(t *testing.T, s *Server, token string, body any) *httptest.R
 	return rec
 }
 
+func postMiniappRPCRaw(t *testing.T, s *Server, token string, body []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/miniapp/rpc", bytes.NewReader(body))
+	if token != "" {
+		req.Header.Set(clientauth.Header, token)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.handleMiniappRPC(rec, req)
+	return rec
+}
+
 type fakeMiniappAttachmentClient struct {
 	data          []byte
 	err           error
@@ -273,5 +285,18 @@ func TestHandleMiniappRPC_FrameMissingMethod(t *testing.T) {
 	})
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleMiniappRPC_RejectsOversizeBody(t *testing.T) {
+	token := withClientToken(t)
+	s := newTestServer(t)
+
+	rec := postMiniappRPCRaw(t, s, token, bytes.Repeat([]byte("a"), int(miniappRequestMaxBytes)+1))
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d, body = %s", rec.Code, http.StatusRequestEntityTooLarge, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "request body too large") {
+		t.Fatalf("body = %q, want size limit error", rec.Body.String())
 	}
 }

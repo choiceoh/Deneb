@@ -69,9 +69,8 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "read body: " + err.Error()})
+	body, ok := s.readMiniappRequestBody(w, r)
+	if !ok {
 		return
 	}
 	var reqBody struct {
