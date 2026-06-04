@@ -214,6 +214,38 @@ func TestGraphBench(t *testing.T) {
 	if mAUC, ns := benchMacroAUC(ePerSeed); ns > 0 {
 		t.Logf("  strong-vs-weak AUC  per-seed: %.3f  (avg over %d seeds)", mAUC, ns)
 	}
+
+	// Hybrid — token/edge structure + alpha*cosine re-ranking. Explicit edges
+	// (token 1.0) still dominate; cosine orders the rest and breaks ties. Does
+	// combining beat either signal alone, per-seed? Tunes the wiring's weight.
+	t.Logf("──────────── hybrid: token + alpha*cosine ────────────")
+	for _, alpha := range []float64{0.3, 0.5, 0.8, 1.5} {
+		hPerSeed := map[string][][2]float64{}
+		for seedPath, cands := range bySeed {
+			recs, seed, best, gerr := store.graphScoreMap(ctx, "", true, seedPath)
+			if gerr != nil || seed < 0 {
+				continue
+			}
+			tok := make(map[string]float64, len(best))
+			for idx, n := range best {
+				tok[recs[idx].relPath] = n.score
+			}
+			sv, ok := vecByPath[seedPath]
+			if !ok {
+				continue
+			}
+			for candPath, grade := range cands {
+				h := tok[candPath]
+				if cv, ok := vecByPath[candPath]; ok {
+					h += alpha * cosine(sv, cv)
+				}
+				hPerSeed[seedPath] = append(hPerSeed[seedPath], [2]float64{h, float64(grade)})
+			}
+		}
+		if mAUC, ns := benchMacroAUC(hPerSeed); ns > 0 {
+			t.Logf("  alpha=%.1f  per-seed AUC: %.3f  (over %d seeds)", alpha, mAUC, ns)
+		}
+	}
 }
 
 func benchMean(v []float64) float64 {
