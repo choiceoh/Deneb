@@ -33,9 +33,12 @@ type Embedder interface {
 // semanticMinChars guards against embedding near-empty pages.
 const semanticMinChars = 8
 
-// semanticEmbedBatch bounds how many pages we embed per request (the embedding
-// server caps batches at 256; stay well under to leave headroom).
-const semanticEmbedBatch = 128
+// semanticEmbedBatch bounds how many pages we embed per request. Kept small
+// because the CPU embedding server drops (EOF) on large batches — empirically
+// 32 and 64 texts return fine (~1.4s / ~3.3s) but a full ~110-page batch is
+// refused, which silently failed the whole refresh and left search, related-
+// link suggestion, and the graph embedding rerank with no vectors at all.
+const semanticEmbedBatch = 32
 
 // cachedVec is one page's embedding plus the content hash it was computed from.
 type cachedVec struct {
