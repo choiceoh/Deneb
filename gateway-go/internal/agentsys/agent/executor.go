@@ -731,7 +731,13 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 				if err := json.Unmarshal(ev.Payload, &md); err != nil {
 					logger.Warn("unmarshal message_delta failed", "error", err)
 				} else {
-					result.stopReason = md.Delta.StopReason
+					// Don't let a trailing usage-only message_delta (stop_reason
+					// decodes to "") clobber a real stop_reason set by an earlier
+					// delta — that would, e.g., defeat the max_tokens resume path.
+					// Mirrors the cache-token guards just below.
+					if md.Delta.StopReason != "" {
+						result.stopReason = md.Delta.StopReason
+					}
 					result.usage.OutputTokens = md.Usage.OutputTokens
 					// Some Anthropic endpoints report final cache totals only
 					// on message_delta. Accept them, but do not clobber a
