@@ -10,6 +10,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // DefaultPrompt is the default email analysis prompt.
@@ -83,7 +84,7 @@ func FormatEmailForAnalysis(msg *gmail.MessageDetail) string {
 	body := msg.Body
 	// Truncate very long bodies to keep within LLM context.
 	if len(body) > maxBodyChars {
-		body = body[:maxBodyChars] + "\n\n... (본문 생략)"
+		body = textutil.TruncateBytes(body, maxBodyChars) + "\n\n... (본문 생략)"
 	}
 	sb.WriteString(body)
 

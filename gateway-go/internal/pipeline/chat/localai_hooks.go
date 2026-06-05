@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // localai_hooks.go — local AI model hooks into the agent pipeline:
@@ -77,7 +78,7 @@ func compressToolOutput(ctx context.Context, toolName, output string, logger *sl
 
 	prompt := fmt.Sprintf("Tool: %s\nOutput (%d chars):\n%s", toolName, len(output), output)
 	if len(prompt) > 32000 {
-		prompt = prompt[:32000] + "\n[... truncated]"
+		prompt = textutil.TruncateBytes(prompt, 32000) + "\n[... truncated]"
 	}
 
 	compressed, err := pilot.CallLocalLLM(ctx, compressSystemPrompt, prompt, compressMaxTokens)

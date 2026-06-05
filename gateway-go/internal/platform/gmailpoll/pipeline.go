@@ -16,6 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // Pipeline timeouts.
@@ -950,7 +951,7 @@ func truncateBody(body string, maxChars int) string {
 	if len(body) <= maxChars {
 		return body
 	}
-	return body[:maxChars] + "\n... (생략)"
+	return textutil.TruncateBytes(body, maxChars) + "\n... (생략)"
 }
 
 // extractEmailAddr extracts the email address from a "Name <email>" string.
