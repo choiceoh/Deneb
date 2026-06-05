@@ -538,3 +538,22 @@ func TestMetadataConcurrency(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanSnippet(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"apostrophe", "You&#39;ve received new credits", "You've received new credits"},
+		{"double-encoded nbsp", "Mobile:&amp;nbsp;010-8488-1937", "Mobile: 010-8488-1937"},
+		{"standard entities", "A &amp; B &lt;tag&gt;", "A & B <tag>"},
+		{"already plain", "plain text — no entities", "plain text — no entities"},
+		{"empty", "", ""},
+	}
+	for _, tc := range cases {
+		if got := cleanSnippet(tc.in); got != tc.want {
+			t.Errorf("%s: cleanSnippet(%q) = %q, want %q", tc.name, tc.in, got, tc.want)
+		}
+	}
+}
