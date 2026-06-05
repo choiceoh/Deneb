@@ -143,6 +143,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        // Opt the window into the panel's fastest display mode for 120Hz scrolling.
+        requestHighestRefreshRate()
         // Re-assert the daemon every time the activity is brought to the foreground.
         // `onCreate`-only is not enough: aggressive OEM battery managers (MIUI,
         // EMUI/Huawei) sometimes kill the foreground service while the activity
@@ -159,6 +161,30 @@ class MainActivity : ComponentActivity() {
             (daemonController is AndroidDaemonController && daemonController.shouldAutoStart())
         if (shouldStart) {
             daemonController.start()
+        }
+    }
+
+    // 120Hz scrolling. The app otherwise makes no display-mode request, so on a
+    // high-refresh panel (Galaxy S25) the window can stay pinned to a 60Hz mode.
+    // Request the fastest mode at the current resolution; Compose scroll/animation
+    // follow Choreographer, so they then run at the panel's full rate. LTPO panels
+    // still idle down when the screen is static, so this raises the ceiling rather
+    // than pinning the rate. No effect if the system "Motion smoothness" setting is
+    // Standard — that caps every app at 60Hz and can't be overridden.
+    private fun requestHighestRefreshRate() {
+        val activeDisplay = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            display
+        } else {
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay
+        } ?: return
+        val active = activeDisplay.mode ?: return
+        val fastest = activeDisplay.supportedModes
+            .filter { it.physicalWidth == active.physicalWidth && it.physicalHeight == active.physicalHeight }
+            .maxByOrNull { it.refreshRate } ?: return
+        // Only switch when the panel genuinely offers a faster mode at this resolution.
+        if (fastest.modeId != active.modeId && fastest.refreshRate > active.refreshRate + 1f) {
+            window.attributes = window.attributes.apply { preferredDisplayModeId = fastest.modeId }
         }
     }
 
