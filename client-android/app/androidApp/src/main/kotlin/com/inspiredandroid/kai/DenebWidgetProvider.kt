@@ -49,12 +49,19 @@ class DenebWidgetProvider : AppWidgetProvider(), KoinComponent {
             else -> "예정된 일정 없음"
         }
         views.setTextViewText(R.id.widget_meeting, meeting)
-        val unreadText = if (s.configured && s.ok && s.unread >= 0) "받은편지함 미읽음 ${s.unread}" else ""
-        views.setTextViewText(R.id.widget_unread, unreadText)
-        // Hide the whole mail row (glyph + text) while loading/unconfigured so the
-        // widget doesn't show a lone envelope icon with no count.
+        // Recent-mail glance: "sender · subject" with the unread count as a sub-line.
+        // Hide the whole mail row while loading/unconfigured or when there is no mail,
+        // so the widget never shows a lone envelope with nothing beside it.
+        val latest = if (s.configured && s.ok) s.latestMail else ""
+        views.setTextViewText(R.id.widget_mail_latest, latest)
         views.setViewVisibility(
-            R.id.widget_unread_row,
+            R.id.widget_mail_row,
+            if (latest.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE,
+        )
+        val unreadText = if (s.unread > 0) "미읽음 ${s.unread}" else ""
+        views.setTextViewText(R.id.widget_mail_unread, unreadText)
+        views.setViewVisibility(
+            R.id.widget_mail_unread,
             if (unreadText.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE,
         )
         val tap = PendingIntent.getActivity(

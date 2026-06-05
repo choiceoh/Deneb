@@ -44,30 +44,48 @@
             android:ellipsize="end" />
     </LinearLayout>
 
-    <!-- Unread mail: envelope glyph + count. Row is hidden when there is no count. -->
+    <!-- Recent mail: envelope glyph + "sender · subject", with the unread count as
+         a sub-line. The whole row is hidden when there is no mail to show. -->
     <LinearLayout
-        android:id="@+id/widget_unread_row"
+        android:id="@+id/widget_mail_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginTop="6dp"
-        android:gravity="center_vertical">
+        android:layout_marginTop="10dp">
 
         <ImageView
             android:layout_width="14dp"
             android:layout_height="14dp"
+            android:layout_marginTop="1dp"
             android:layout_marginEnd="8dp"
             android:src="@drawable/ic_widget_mail"
             android:contentDescription="@null" />
 
-        <TextView
-            android:id="@+id/widget_unread"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text=""
-            android:textColor="#A9B1D6"
-            android:textSize="13sp"
-            android:maxLines="1"
-            android:ellipsize="end" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/widget_mail_latest"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textColor="#D5D8E5"
+                android:textSize="13sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/widget_mail_unread"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:text=""
+                android:textColor="#A9B1D6"
+                android:textSize="11sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

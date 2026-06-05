@@ -1013,10 +1013,24 @@ class DenebGatewayClient(
                 val mail = mailDeferred.await()
                 val next = cal?.events?.firstOrNull { it.id.isNotBlank() }
                 val meeting = next?.let { formatMeeting(it.summary, it.start, it.allDay) }.orEmpty()
-                val unread = mail?.messages?.count { it.isUnread } ?: 0
-                WidgetSummary(meeting = meeting, unread = unread)
+                val msgs = mail?.messages.orEmpty()
+                val unread = msgs.count { it.isUnread }
+                // The most recent message (read or unread) as a one-line glance.
+                val latestMail = msgs.firstOrNull { it.id.isNotBlank() }
+                    ?.let { mailGlance(it.from, it.subject) }.orEmpty()
+                WidgetSummary(meeting = meeting, unread = unread, latestMail = latestMail)
             }
         }.getOrElse { WidgetSummary(ok = false) }
+    }
+
+    // mailGlance renders "sender · subject" for the widget's recent-mail line.
+    // Sender is the display name before any <email>; subject falls back to a
+    // placeholder so the line is never just a bare name.
+    private fun mailGlance(from: String, subject: String): String {
+        val lt = from.indexOf('<')
+        val name = (if (lt > 0) from.take(lt) else from).trim().trim('"').ifBlank { from.trim() }
+        val subj = subject.trim().ifBlank { "(제목 없음)" }
+        return "$name · $subj"
     }
 
     // formatMeeting renders "M/D HH:mm · title" from an RFC3339 start using only

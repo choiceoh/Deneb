@@ -88,8 +88,8 @@ fun main() {
     renderCalendarEvent("calendar_event_light.png", LightColorScheme)
     renderChart("chart_dark.png", DarkColorScheme)
     renderChart("chart_light.png", LightColorScheme)
-    renderWidget("widget_loaded.png", "6/3 14:00 · 기획조정실 주간 회의 3분기 점검", "받은편지함 미읽음 3")
-    renderWidget("widget_loading.png", "불러오는 중…", "")
+    renderWidget("widget_loaded.png", "6/3 14:00 · 기획조정실 주간 회의 3분기 점검", "김민준 부장 · 회의 자료 검토 부탁드립니다", "미읽음 3")
+    renderWidget("widget_loading.png", "불러오는 중…", "", "")
     println("rendered -> /tmp/deneb-render/")
 }
 
@@ -299,13 +299,14 @@ private fun widgetGlyph(pathData: String): ImageVector =
         addPath(PathParser().parsePathString(pathData).toNodes(), fill = SolidColor(Color.White))
     }.build()
 
-private fun renderWidget(name: String, meeting: String, unread: String) {
+private fun renderWidget(name: String, meeting: String, latestMail: String, unread: String) {
     val homeBg = Color(0xFF0B0B12)
     val cardBg = Color(0xFF1A1B26)
     val accent = Color(0xFF7AA2F7)
     val titleColor = Color(0xFFE8EAF0)
+    val mailColor = Color(0xFFD5D8E5)
     val subColor = Color(0xFFA9B1D6)
-    val scene = ImageComposeScene(width = 640, height = 380, density = Density(2f)) {
+    val scene = ImageComposeScene(width = 640, height = 420, density = Density(2f)) {
         Box(Modifier.fillMaxSize().background(homeBg).padding(24.dp)) {
             Column(
                 Modifier.fillMaxWidth()
@@ -327,12 +328,24 @@ private fun renderWidget(name: String, meeting: String, unread: String) {
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (unread.isNotEmpty()) {
-                    Spacer(Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(widgetGlyph(WIDGET_MAIL_PATH), null, Modifier.size(14.dp), tint = subColor)
+                if (latestMail.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    Row {
+                        Icon(widgetGlyph(WIDGET_MAIL_PATH), null, Modifier.padding(top = 1.dp).size(14.dp), tint = subColor)
                         Spacer(Modifier.width(8.dp))
-                        Text(unread, color = subColor, fontSize = 13.sp)
+                        Column {
+                            Text(
+                                latestMail,
+                                color = mailColor,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (unread.isNotEmpty()) {
+                                Spacer(Modifier.height(1.dp))
+                                Text(unread, color = subColor, fontSize = 11.sp)
+                            }
+                        }
                     }
                 }
             }
