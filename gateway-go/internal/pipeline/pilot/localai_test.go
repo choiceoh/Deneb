@@ -173,6 +173,50 @@ func TestCollectStream_ErrorEvent(t *testing.T) {
 	}
 }
 
+// TestCollectStream_TopLevelErrorEvent covers the {"type":"error","message":...}
+// shape from the OpenAI translator's re-emitted errors and the SSE read-error
+// event. The previous nested-only parse swallowed these (returned partial text
+// with a nil error); they must now surface as an error.
+func TestCollectStream_TopLevelErrorEvent(t *testing.T) {
+	ch := make(chan llm.StreamEvent, 2)
+	ch <- llm.StreamEvent{
+		Type:    "content_block_delta",
+		Payload: json.RawMessage(`{"delta":{"text":"partial"}}`),
+	}
+	ch <- llm.StreamEvent{
+		Type:    "error",
+		Payload: json.RawMessage(`{"type":"error","message":"SSE stream read error: unexpected EOF"}`),
+	}
+	close(ch)
+
+	got, err := CollectStream(context.Background(), ch)
+	if err == nil {
+		t.Fatal("CollectStream must surface a top-level error event, not swallow it")
+	}
+	if !contains(err.Error(), "unexpected EOF") {
+		t.Errorf("error = %q, want to contain 'unexpected EOF'", err.Error())
+	}
+	if got != "partial" {
+		t.Errorf("partial text = %q, want %q", got, "partial")
+	}
+}
+
+// TestCollectStream_UnparseableErrorEvent ensures an error event with no
+// recognizable message field still surfaces an error (raw-payload fallback)
+// instead of being silently dropped.
+func TestCollectStream_UnparseableErrorEvent(t *testing.T) {
+	ch := make(chan llm.StreamEvent, 1)
+	ch <- llm.StreamEvent{
+		Type:    "error",
+		Payload: json.RawMessage(`{"weird":"shape"}`),
+	}
+	close(ch)
+
+	if _, err := CollectStream(context.Background(), ch); err == nil {
+		t.Fatal("an error event with no message field must still return an error")
+	}
+}
+
 func TestCollectStream_ContextCancelledWithPartial(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 

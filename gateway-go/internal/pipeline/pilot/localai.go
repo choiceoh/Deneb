@@ -260,14 +260,29 @@ func CollectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, 
 					sb.WriteString(text)
 				}
 			case "error":
+				// Error events arrive in three shapes: the upstream raw
+				// {"error":{"message"}} (openai.go passthrough) and the top-level
+				// {"type":"error","message"} re-emitted by the OpenAI translator
+				// and the SSE read-error event. The previous nested-only parse
+				// silently swallowed the latter two — including stream-stall read
+				// errors — returning partial text with a nil error. Mirror
+				// gmailpoll's collectStreamText: try both shapes, fall back to the
+				// raw payload, and always surface the error.
 				var errPayload struct {
-					Error struct {
+					Message string `json:"message"`
+					Error   struct {
 						Message string `json:"message"`
 					} `json:"error"`
 				}
-				if json.Unmarshal(ev.Payload, &errPayload) == nil && errPayload.Error.Message != "" {
-					return sb.String(), fmt.Errorf("stream error: %s", errPayload.Error.Message)
+				_ = json.Unmarshal(ev.Payload, &errPayload)
+				msg := errPayload.Message
+				if msg == "" {
+					msg = errPayload.Error.Message
 				}
+				if msg == "" {
+					msg = string(ev.Payload)
+				}
+				return sb.String(), fmt.Errorf("stream error: %s", msg)
 			}
 		}
 	}
