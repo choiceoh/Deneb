@@ -184,6 +184,13 @@ func Compact(
 		}
 	}
 
+	// Repair any tool_use↔tool_result pair the tiers split across a cut/selection
+	// boundary, so the compacted transcript never carries an orphan that Anthropic
+	// rejects with a 400 (and that re-sending would wedge into until /reset).
+	if r.LLMCompacted || r.EmbeddingCompacted || r.RecencyCompacted || r.EmergencyEvicted > 0 {
+		messages = balanceToolBlocks(messages)
+	}
+
 	r.TokensAfter = EstimateMessagesTokens(messages)
 	return messages, r
 }
