@@ -90,6 +90,11 @@ func ToolRead(defaultDir string) ToolFunc {
 
 		data, err := os.ReadFile(path)
 		if err != nil {
+			// Reading a directory is a common LLM mistake — return a clear,
+			// actionable hint instead of the raw "is a directory" errno.
+			if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
+				return "", fmt.Errorf("%q is a directory, not a file — list its contents with the exec tool (e.g. `ls %s`)", p.FilePath, p.FilePath)
+			}
 			return "", fmt.Errorf("failed to read file: %w", err)
 		}
 
