@@ -35,7 +35,10 @@ private fun AnnotatedString.Builder.appendInline(node: InlineNode, colors: Color
             appendInlines(node.children, colors)
         }
 
-        is Strike -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) {
+        is Strike -> withStyle(
+            // Struck text is "removed" — mute it so a correction's old value recedes.
+            SpanStyle(textDecoration = TextDecoration.LineThrough, color = colors.onSurfaceVariant),
+        ) {
             appendInlines(node.children, colors)
         }
 
