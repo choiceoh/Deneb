@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -19,7 +20,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -43,6 +47,15 @@ internal fun CodeFenceBlock(
         highlightCode(code, language, highlightColors)
     }
     val clipboard = LocalClipboardManager.current
+    // Brief "copied" confirmation: the icon flips to a check for ~1.5s so the tap
+    // isn't a silent no-op.
+    val copied = remember { mutableStateOf(false) }
+    LaunchedEffect(copied.value) {
+        if (copied.value) {
+            delay(1500)
+            copied.value = false
+        }
+    }
 
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -62,12 +75,16 @@ internal fun CodeFenceBlock(
                     color = colorScheme.onSurfaceVariant,
                 )
                 IconButton(
-                    onClick = { clipboard.setText(AnnotatedString(code)) },
+                    onClick = {
+                        clipboard.setText(AnnotatedString(code))
+                        copied.value = true
+                    },
                     modifier = Modifier.size(32.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.ContentCopy,
+                        imageVector = if (copied.value) Icons.Filled.Check else Icons.Filled.ContentCopy,
                         contentDescription = stringResource(Res.string.bot_message_copy_content_description),
+                        tint = if (copied.value) colorScheme.primary else colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp),
                     )
                 }
