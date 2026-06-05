@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -118,6 +119,7 @@ import com.inspiredandroid.kai.ui.dynamicui.FrozenSubmission
 import com.inspiredandroid.kai.ui.dynamicui.KaiUiParser
 import com.inspiredandroid.kai.ui.dynamicui.KaiUiRenderer
 import com.inspiredandroid.kai.ui.dynamicui.toSpeakableText
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.handCursor
 import com.inspiredandroid.kai.ui.markdown.KaiUiBlock
 import com.inspiredandroid.kai.ui.markdown.parseMarkdown
@@ -808,6 +810,16 @@ private fun ChatModeScreen(
                             }
 
                             val lastAssistantId = remember(uiState.history) { uiState.history.lastRenderedAssistant()?.id }
+                            // The streaming caret belongs only on the answer currently being written
+                            // — not on a finished reply while the NEXT turn is still thinking, when
+                            // that finished reply is still the last assistant message. True only once
+                            // an answer sits after the most recent user question.
+                            val isResponseStreaming = remember(uiState.history, uiState.isLoading) {
+                                uiState.isLoading &&
+                                    uiState.history.indexOfLast {
+                                        it.role == History.Role.ASSISTANT && !it.isThinking && it.content.isNotEmpty()
+                                    } > uiState.history.indexOfLast { it.role == History.Role.USER }
+                            }
                             // Pair every user submission with its originating assistant so the kai-ui
                             // renders once (on the assistant side) with a frozen snapshot — never as a
                             // separate user-side card. pressedEvent + values persist across the loading
@@ -918,11 +930,42 @@ private fun ChatModeScreen(
                                 }
                             }
 
+                            // A subtle buzz when a reply finishes — chief-of-staff replies can be
+                            // long, so signal "done" even if the user has looked away.
+                            val haptics = rememberHaptics()
+                            val wasLoading = remember { mutableStateOf(false) }
+                            LaunchedEffect(uiState.isLoading) {
+                                if (wasLoading.value && !uiState.isLoading) haptics.tap()
+                                wasLoading.value = uiState.isLoading
+                            }
+
+                            // Follow the stream: while a reply streams in, keep the newest tokens
+                            // in view — but only when the user is already near the bottom, so
+                            // scrolling up to re-read earlier text isn't yanked back down.
+                            val isNearBottom by remember {
+                                derivedStateOf {
+                                    val info = listState.layoutInfo
+                                    val last = info.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf true
+                                    last.index >= info.totalItemsCount - 1 &&
+                                        last.offset + last.size <= info.viewportEndOffset + 240
+                                }
+                            }
+                            val streamingLen = uiState.history.lastOrNull()?.content?.length ?: 0
+                            LaunchedEffect(streamingLen, uiState.isLoading) {
+                                if (uiState.isLoading && isNearBottom) {
+                                    val total = listState.layoutInfo.totalItemsCount
+                                    if (total > 0) listState.scrollToItem(total - 1, Int.MAX_VALUE)
+                                }
+                            }
+
                             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                                 LazyColumn(
                                     modifier = Modifier.fillMaxSize(),
                                     state = listState,
                                     horizontalAlignment = CenterHorizontally,
+                                    // Breathing room so the first message clears the top bar and the
+                                    // last clears the input bar instead of sitting flush against them.
+                                    contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp),
                                 ) {
                                     items(uiState.history, key = { it.id }, contentType = { it.role }) { history ->
                                         when (history.role) {
@@ -962,7 +1005,7 @@ private fun ChatModeScreen(
                                                             null
                                                         },
                                                         reasoningSegments = reasoningSegmentsByAssistantId[history.id] ?: persistentListOf(),
-                                                        isStreaming = isLastAssistant && uiState.isLoading,
+                                                        isStreaming = isLastAssistant && isResponseStreaming,
                                                     )
                                                     if (history.fallbackServiceName != null) {
                                                         androidx.compose.material3.Text(
