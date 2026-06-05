@@ -2,8 +2,11 @@ package autonomous
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -49,6 +52,13 @@ type Service struct {
 	tasks       []PeriodicTask
 	taskCancels []context.CancelFunc
 	taskStatus  map[string]*TaskStatus
+
+	// stateDir, when set, is the directory where task last-run times are
+	// persisted so periodic intervals survive gateway restarts. The
+	// auto-deploy timer SIGUSR1s the gateway on every main push, so without
+	// persistence every restart would re-run all tasks 30s in — making 24h
+	// (boot) and weekly (skill evolution/curator) intervals meaningless.
+	stateDir string
 }
 
 // NewService creates a new autonomous service (dreaming + periodic tasks).
@@ -73,6 +83,79 @@ func (s *Service) RegisterTask(task PeriodicTask) {
 	s.taskStatus[task.Name()] = &TaskStatus{Name: task.Name()}
 }
 
+// SetStateDir sets the directory for persisting task last-run times across
+// restarts. Must be called before Start(). When unset, persistence is disabled
+// (in-memory only) and every restart re-runs all tasks after the initial grace.
+func (s *Service) SetStateDir(dir string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stateDir = dir
+}
+
+// stateFilePath returns the persisted task-state file path, or "" when no state
+// dir is configured. Caller must hold s.mu.
+func (s *Service) stateFilePathLocked() string {
+	if s.stateDir == "" {
+		return ""
+	}
+	return filepath.Join(s.stateDir, "autonomous_state.json")
+}
+
+// loadStateLocked restores persisted LastRunAt values into taskStatus so
+// periodic intervals survive restarts. Called once from Start(). A missing file
+// is normal on first boot. Caller must hold s.mu.
+func (s *Service) loadStateLocked() {
+	path := s.stateFilePathLocked()
+	if path == "" {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			s.logger.Warn("autonomous: failed to read task-state file", "error", err)
+		}
+		return
+	}
+	var persisted map[string]int64 // task name -> lastRunAt (unix millis)
+	if err := json.Unmarshal(data, &persisted); err != nil {
+		s.logger.Warn("autonomous: failed to parse task-state file", "error", err)
+		return
+	}
+	for name, lastRun := range persisted {
+		if st, ok := s.taskStatus[name]; ok {
+			st.LastRunAt = lastRun
+		}
+	}
+}
+
+// saveState persists current LastRunAt values. Best-effort: a write failure is
+// logged but never interrupts task execution. Snapshots under the lock, then
+// writes the file without holding it.
+func (s *Service) saveState() {
+	s.mu.Lock()
+	path := s.stateFilePathLocked()
+	if path == "" {
+		s.mu.Unlock()
+		return
+	}
+	snapshot := make(map[string]int64, len(s.taskStatus))
+	for name, st := range s.taskStatus {
+		if st.LastRunAt > 0 {
+			snapshot[name] = st.LastRunAt
+		}
+	}
+	s.mu.Unlock()
+
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		s.logger.Warn("autonomous: failed to marshal task state", "error", err)
+		return
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		s.logger.Warn("autonomous: failed to write task-state file", "error", err)
+	}
+}
+
 // TaskStatus returns the status of a registered task, or nil if not found.
 func (s *Service) TaskStatus(name string) *TaskStatus {
 	s.mu.Lock()
@@ -91,6 +174,7 @@ func (s *Service) TaskStatus(name string) *TaskStatus {
 func (s *Service) Start() {
 	s.mu.Lock()
 	s.started = true
+	s.loadStateLocked() // restore LastRunAt so intervals survive restarts
 	tasks := make([]PeriodicTask, len(s.tasks))
 	copy(tasks, s.tasks)
 	s.mu.Unlock()
@@ -316,14 +400,42 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 	}
 }
 
+// initialGrace is the default delay before a task's first run, giving the
+// gateway time to finish booting.
+const initialGrace = 30 * time.Second
+
+// computeInitialDelay returns how long runTaskLoop waits before the first run.
+// Default is the grace period, but a task that ran recently (LastRunAt restored
+// from disk across a restart) waits out only the remainder of its interval — so
+// the auto-deploy SIGUSR1 storm cannot re-fire 24h/weekly tasks on every
+// restart. An overdue or never-run task uses the grace period.
+func computeInitialDelay(lastRunAt int64, interval, grace time.Duration, now time.Time) time.Duration {
+	if lastRunAt <= 0 {
+		return grace
+	}
+	elapsed := now.Sub(time.UnixMilli(lastRunAt))
+	if elapsed >= interval {
+		return grace
+	}
+	if remaining := interval - elapsed; remaining > grace {
+		return remaining
+	}
+	return grace
+}
+
 // runTaskLoop runs a periodic task with panic recovery and status tracking.
 func (s *Service) runTaskLoop(ctx context.Context, task PeriodicTask) {
 	name := task.Name()
 	interval := task.Interval()
 	s.logger.Debug("periodic task started", "task", name, "interval", interval)
 
-	// Initial grace period before first run (30 seconds).
-	initialTimer := time.NewTimer(30 * time.Second)
+	// First-run delay: the grace period, or the remainder of the interval when
+	// the task ran recently (LastRunAt persisted across a restart).
+	initialDelay := initialGrace
+	if st := s.TaskStatus(name); st != nil {
+		initialDelay = computeInitialDelay(st.LastRunAt, interval, initialGrace, time.Now())
+	}
+	initialTimer := time.NewTimer(initialDelay)
 	defer initialTimer.Stop()
 
 	ticker := time.NewTicker(interval)
@@ -392,6 +504,9 @@ func (s *Service) executeTask(ctx context.Context, task PeriodicTask) {
 		}
 	}
 	s.mu.Unlock()
+
+	// Persist LastRunAt so this run is remembered across a restart.
+	s.saveState()
 
 	if err != nil {
 		s.logger.Warn("periodic task failed", "task", name, "error", err)

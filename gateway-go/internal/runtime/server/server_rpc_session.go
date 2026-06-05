@@ -389,6 +389,14 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// AuroraDream: memory consolidation service (dreaming-only, no goal cycles).
 	s.autonomousSvc = autonomous.NewService(s.logger)
 
+	// Persist task last-run times under ~/.deneb so periodic intervals survive
+	// the frequent auto-deploy SIGUSR1 restarts. Without this, every restart
+	// re-runs all tasks 30s in, defeating 24h (boot) and weekly (evolution)
+	// schedules.
+	if home, err := os.UserHomeDir(); err == nil {
+		s.autonomousSvc.SetStateDir(filepath.Join(home, ".deneb"))
+	}
+
 	// Wire wiki dreamer for autonomous diary → wiki consolidation.
 	if s.wikiDreamer != nil {
 		s.autonomousSvc.SetDreamer(s.wikiDreamer)
