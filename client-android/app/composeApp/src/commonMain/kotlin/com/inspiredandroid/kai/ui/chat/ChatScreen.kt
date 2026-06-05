@@ -784,6 +784,13 @@ private fun ChatModeScreen(
                         } else {
                             val listState = rememberLazyListState()
                             val componentScope = rememberCoroutineScope()
+                            // Stable handle hoisted out of the volatile uiState: every streaming
+                            // token emits a new uiState, so a lambda that captures `uiState` gets a
+                            // fresh identity each token and defeats strong-skipping — every visible
+                            // message then recomposes per token while a reply streams. `actions` is a
+                            // fixed reference (created once, carried across emits by state.copy), so
+                            // capturing it instead lets unchanged messages skip during streaming.
+                            val actions = uiState.actions
 
                             LaunchedEffect(uiState.history.size) {
                                 // Capture history at effect start to prevent race conditions
@@ -991,16 +998,16 @@ private fun ChatModeScreen(
                                                         textToSpeech = textToSpeech,
                                                         isSpeaking = uiState.isSpeaking && uiState.isSpeakingContentId == history.id,
                                                         setIsSpeaking = {
-                                                            uiState.actions.setIsSpeaking(it, history.id)
+                                                            actions.setIsSpeaking(it, history.id)
                                                         },
-                                                        onRegenerate = if (isLastAssistant) uiState.actions.regenerate else null,
+                                                        onRegenerate = if (isLastAssistant) actions.regenerate else null,
                                                         isInteractive = isLastAssistant && !uiState.isLoading && frozen == null,
                                                         onUiCallback = { event, data ->
-                                                            uiState.actions.submitUiCallback(event, data)
+                                                            actions.submitUiCallback(event, data)
                                                         },
                                                         frozen = frozen,
                                                         onResubmit = if (pairedUserId != null && !uiState.isLoading) {
-                                                            { event, data -> uiState.actions.resubmit(pairedUserId, event, data) }
+                                                            { event, data -> actions.resubmit(pairedUserId, event, data) }
                                                         } else {
                                                             null
                                                         },
