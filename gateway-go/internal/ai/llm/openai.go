@@ -399,6 +399,7 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 		blockIdx int
 	}
 	toolBuilders := map[int]*toolBuilder{}
+	var toolOrder []int // tool-call indices in first-seen order, for deterministic contiguous emission at finish
 
 	closeBlock := func(idx int) {
 		p, _ := json.Marshal(ContentBlockStop{Index: idx})
@@ -525,34 +526,30 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 			emitDelta(textBlockIndex, "text_delta", choice.Delta.Content, "")
 		}
 
-		// Handle streamed tool calls.
+		// Accumulate streamed tool calls; emit each as a CONTIGUOUS block at
+		// finish (see the finish handler below). OpenAI interleaves argument
+		// fragments across tool-call indices and never closes one tool block
+		// before opening the next. The consumer (executor.consumeStreamInto)
+		// tracks a single active block, so emitting tool deltas live would route
+		// a later fragment for index N — arriving after index N+1 started — to
+		// the wrong block or drop it, and the un-stopped block N gets overwritten
+		// and lost. Buffering and emitting start → full args → stop together per
+		// tool keeps every block contiguous and correctly assembled.
 		for _, tc := range choice.Delta.ToolCalls {
 			tb, exists := toolBuilders[tc.Index]
 			if !exists {
-				// Close thinking block before tool calls if open.
+				// Close thinking/text block before the first tool call if open.
 				if thinkingBlockOpen {
 					thinkingBlockOpen = false
 					closeBlock(0)
 				}
-				// Close text block before first tool call if open.
 				if textBlockOpen {
 					textBlockOpen = false
 					closeBlock(textBlockIndex)
 				}
-
-				// New tool call — emit content_block_start for tool_use.
 				tb = &toolBuilder{id: tc.ID, name: tc.Function.Name, blockIdx: nextBlockIndex}
 				toolBuilders[tc.Index] = tb
-
-				p, _ := json.Marshal(ContentBlockStart{
-					Index: nextBlockIndex,
-					ContentBlock: ContentBlock{
-						Type: "tool_use",
-						ID:   tc.ID,
-						Name: tc.Function.Name,
-					},
-				})
-				emit(ctx, out, StreamEvent{Type: "content_block_start", Payload: p})
+				toolOrder = append(toolOrder, tc.Index)
 				nextBlockIndex++
 			} else {
 				// Update name/id if provided in subsequent chunks.
@@ -563,12 +560,7 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 					tb.name = tc.Function.Name
 				}
 			}
-
-			// Accumulate argument fragments and emit as input_json_delta.
-			if tc.Function.Arguments != "" {
-				tb.args = append(tb.args, tc.Function.Arguments...)
-				emitDelta(tb.blockIdx, "input_json_delta", "", tc.Function.Arguments)
-			}
+			tb.args = append(tb.args, tc.Function.Arguments...)
 		}
 
 		// Check finish reason (nil = not yet finished, non-nil = terminal).
@@ -585,8 +577,20 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 				closeBlock(textBlockIndex)
 			}
 
-			// Close all open tool_use blocks.
-			for _, tb := range toolBuilders {
+			// Emit each accumulated tool_use block contiguously
+			// (start → full input_json_delta → stop) in first-seen order, so the
+			// single-active-block consumer assembles every call's arguments
+			// instead of dropping interleaved or overwritten blocks.
+			for _, idx := range toolOrder {
+				tb := toolBuilders[idx]
+				startP, _ := json.Marshal(ContentBlockStart{
+					Index:        tb.blockIdx,
+					ContentBlock: ContentBlock{Type: "tool_use", ID: tb.id, Name: tb.name},
+				})
+				emit(ctx, out, StreamEvent{Type: "content_block_start", Payload: startP})
+				if len(tb.args) > 0 {
+					emitDelta(tb.blockIdx, "input_json_delta", "", string(tb.args))
+				}
 				closeBlock(tb.blockIdx)
 			}
 
