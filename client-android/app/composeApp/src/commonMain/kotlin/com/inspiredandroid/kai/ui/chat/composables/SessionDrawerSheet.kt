@@ -248,14 +248,14 @@ private fun formatDate(epochMillis: Long): String = try {
 }
 
 // A session is a real user conversation only when it's keyed under the native
-// client (client:main, client:main:<uuid>) or a legacy telegram thread. Everything
-// else is machine-driven — cron runs, the boot turn, and the system/autonomous/
-// curator/dream/genesis/heartbeat/hindsight background turns — and folds into one
-// collapsible group below the chats. Whitelisting the user prefixes (rather than
-// blacklisting known machine ones) means a newly-added background session kind can
-// never leak into the chat list, which is what made the grouping look intermittent.
+// client (client:main, client:main:<uuid>). Everything else is machine-driven —
+// cron runs, the boot turn, and the system/autonomous/curator/dream/genesis/
+// heartbeat/hindsight background turns — and folds into one collapsible group
+// below the chats. Whitelisting the user prefix (rather than blacklisting the
+// known machine ones) means a newly-added background session kind can never leak
+// into the chat list, which is what made the grouping look intermittent.
 internal fun isSystemSession(id: String): Boolean = when (id.substringBefore(':', id)) {
-    "client", "telegram" -> false
+    "client" -> false
     else -> true
 }
 

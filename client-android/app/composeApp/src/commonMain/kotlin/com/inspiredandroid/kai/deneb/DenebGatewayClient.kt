@@ -1580,7 +1580,6 @@ class DenebGatewayClient(
             "boot" -> return "시스템 부팅"
         }
         val friendly = when (kind) {
-            "telegram" -> "이전 대화"
             "client" -> "내 대화"
             else -> "대화"
         }

@@ -6,10 +6,10 @@ import kotlin.test.assertTrue
 
 class SessionDrawerGroupingTest {
 
-    // Native-client chats and legacy telegram threads stay in the chat list.
+    // Only native-client sessions stay in the chat list.
     @Test
     fun userConversationsAreNotFolded() {
-        for (id in listOf("client:main", "client:main:8f3a-uuid", "client", "telegram:7074071666")) {
+        for (id in listOf("client:main", "client:main:8f3a-uuid", "client")) {
             assertFalse(isSystemSession(id), "expected a user conversation, got folded: $id")
         }
     }

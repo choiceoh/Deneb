@@ -22,7 +22,6 @@ import (
 var tsBaseMethods = []string{
 	"health",
 	"logs.tail",
-	"telegram.logout",
 	"status",
 	"usage.status",
 	"usage.cost",
@@ -109,11 +108,6 @@ func fullDispatcher() *Dispatcher {
 	RegisterSessionExecMethods(d, SessionExecDeps{
 		Chat:       chat.NewHandler(session.NewManager(), nil, testLogger(), chat.DefaultHandlerConfig()),
 		JobTracker: agent.NewJobTracker(testLogger()),
-	})
-
-	d.Register("telegram.logout", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		resp := protocol.MustResponseOK(req.ID, map[string]any{"ok": true})
-		return resp
 	})
 
 	// Stub for methods registered outside the rpc package (events, chat, server inline).

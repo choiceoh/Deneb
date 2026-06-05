@@ -1,23 +1,27 @@
-// notify_relay.go — Secondary-chat monitoring: status snapshots + error mirror.
+// notify_relay.go — Secondary monitoring: status snapshots, error mirror, self-health heartbeat.
 //
-// When telegram.notificationChatID is configured (and differs from the main
-// chatID), the gateway routes two kinds of monitoring traffic to that chat:
+// The gateway watches itself and surfaces two kinds of monitoring signal to
+// connected native clients (via clientPushHub) plus the operator log:
 //
-//  1. Status snapshots — on demand via the telegram.notify_status RPC. The
-//     caller asks "what is the main session doing right now?" and we emit a
-//     Korean summary of running sessions to the monitoring chat.
+//  1. Status snapshots — on demand via SendStatusSnapshot. The caller asks
+//     "what is the gateway doing right now?" and we push a Korean summary of
+//     running sessions to connected native clients.
 //
 //  2. Error mirrors — automatic. The notifier registers a Broadcaster.Tap
 //     and forwards user-impacting events (chat.delivery_failed,
 //     chat.media_delivery_failed, chat.context_overflow_unrecoverable,
-//     chat.compaction_stuck) to the monitoring chat.
+//     chat.compaction_stuck) to connected native clients and logs them at Error.
 //
-// Both paths fan out asynchronously through a buffered channel + worker
-// goroutine so the broadcast hot path is never blocked on Telegram HTTP.
+// A periodic heartbeat self-polls /health so a hung HTTP mux is caught even
+// when the broadcast taps fall silent; hang alerts log at Error (not pushed
+// every tick, to avoid spamming the client with liveness pings).
 //
-// Per-event-type debounce (30s) keeps a noisy failure mode from spamming
-// the monitoring chat. The monitoring chat is meant for summary-grade
-// signals; high-frequency repeats are coalesced.
+// Both push paths fan out asynchronously through a buffered channel + worker
+// goroutine so the broadcast hot path is never blocked. Per-event-type
+// debounce (30s) coalesces a noisy failure mode into summary-grade signals.
+//
+// (The Telegram secondary-chat that originally received these was retired with
+// the bot; delivery now targets connected native clients.)
 package server
 
 import (
