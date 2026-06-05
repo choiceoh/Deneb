@@ -185,14 +185,29 @@ func (s *Service) executeJobFullWithTrigger(ctx context.Context, job StoreJob, t
 
 					if s.cfg.MainSessionHandoff != nil {
 						handled, herr := s.cfg.MainSessionHandoff(runCtx, target.Channel, target.To, job.ID, deliveryText)
-						if herr != nil {
+						switch {
+						case herr != nil:
+							// A real delivery failure — the relay errored (e.g. the
+							// transcript append failed). Record it as not-delivered so
+							// the promote-to-error path below fires: status becomes
+							// "error", consecutive failures count toward auto-disable,
+							// and a failure alert can go out. Without this the run was
+							// logged "ok" and the user silently lost the report.
+							// A bare handled=false with no error is an intentional
+							// suppression (NO_REPLY / the "nothing to report" noise
+							// floor in proactive_relay.go) and correctly stays "ok".
 							s.logger.Warn("cron main-session handoff failed",
 								"jobId", job.ID,
 								"channel", target.Channel,
 								"to", target.To,
 								"error", herr)
-						}
-						if handled {
+							deliveryResult = &DeliveryResult{
+								Delivered: false,
+								Channel:   target.Channel,
+								To:        target.To,
+								Error:     herr.Error(),
+							}
+						case handled:
 							// Main session delivered to the user. Record
 							// delivery as successful from cron's point of
 							// view — the main session owns retry/visibility
