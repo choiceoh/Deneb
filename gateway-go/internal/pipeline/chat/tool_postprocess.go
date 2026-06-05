@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // Pre-compiled regex for ExecAnnotator (avoid re-compiling on every tool call).
@@ -66,8 +68,8 @@ func OutputTrimmer(_ context.Context, _, output string) string {
 	if len(output) <= outputTrimMax {
 		return output
 	}
-	head := output[:outputTrimPreview]
-	tail := output[len(output)-outputTrimPreview:]
+	head := textutil.TruncateBytes(output, outputTrimPreview)
+	tail := textutil.TailBytes(output, outputTrimPreview)
 	return fmt.Sprintf("%s\n\n[... trimmed %d chars — showing first and last %d chars ...]\n\n%s",
 		head, len(output), outputTrimPreview, tail)
 }

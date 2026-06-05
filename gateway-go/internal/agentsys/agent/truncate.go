@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // DefaultMaxOutput is the head/tail truncation budget for tool results.
@@ -34,11 +35,12 @@ func TruncateHeadTail(content string, maxChars int, spillID string) string {
 	}
 
 	half := maxChars / 2
-	head := content[:half]
-	tail := content[len(content)-half:]
+	head := textutil.TruncateBytes(content, half)
+	tail := textutil.TailBytes(content, half)
 
-	// Count lines in the discarded middle for the marker.
-	middle := content[half : len(content)-half]
+	// Count lines in the discarded middle for the marker. Bounds follow the
+	// rune-safe head/tail so the slice never splits a multi-byte character.
+	middle := content[len(head) : len(content)-len(tail)]
 	truncatedLines := strings.Count(middle, "\n")
 
 	var marker string

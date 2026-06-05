@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // NormalizeJobInput validates and normalizes a job creation/update input.
@@ -124,7 +126,7 @@ func InferLegacyName(job StoreJob) string {
 		firstLine = strings.TrimSpace(firstLine)
 		if firstLine != "" {
 			if len(firstLine) > 60 {
-				return firstLine[:59] + "…"
+				return textutil.TruncateBytes(firstLine, 59) + "…"
 			}
 			return firstLine
 		}
@@ -136,7 +138,7 @@ func InferLegacyName(job StoreJob) string {
 		if job.Schedule.Expr != "" {
 			label := "Cron: " + job.Schedule.Expr
 			if len(label) > 58 {
-				return label[:57] + "…"
+				return textutil.TruncateBytes(label, 57) + "…"
 			}
 			return label
 		}

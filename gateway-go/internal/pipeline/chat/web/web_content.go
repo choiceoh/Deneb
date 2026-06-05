@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/liteparse"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // webFetchMeta holds machine-readable metadata about the fetched page.
@@ -201,7 +202,7 @@ func applyTruncation(result string, maxChars int) string {
 	// Split at content boundary.
 	contentStart := strings.Index(result, "<content>\n")
 	if contentStart < 0 || contentStart >= maxChars {
-		return result[:maxChars] + "\n[...truncated]"
+		return textutil.TruncateBytes(result, maxChars) + "\n[...truncated]"
 	}
 
 	metaSection := result[:contentStart+len("<content>\n")]
