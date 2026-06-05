@@ -30,7 +30,10 @@ import com.inspiredandroid.kai.ui.DenebScreenScaffold
 import com.inspiredandroid.kai.ui.DenebType
 import com.inspiredandroid.kai.ui.LightColorScheme
 import com.inspiredandroid.kai.ui.denebHint
+import com.inspiredandroid.kai.ui.chat.WorkFeedAction
+import com.inspiredandroid.kai.ui.chat.WorkFeedItem
 import com.inspiredandroid.kai.ui.chat.composables.DenebDrawerSheet
+import com.inspiredandroid.kai.ui.chat.composables.WorkFeedPanel
 import com.inspiredandroid.kai.ui.dynamicui.ChartNode
 import com.inspiredandroid.kai.ui.dynamicui.KaiUiRenderer
 import kotlinx.collections.immutable.persistentListOf
@@ -88,6 +91,8 @@ fun main() {
     renderCalendarEvent("calendar_event_light.png", LightColorScheme)
     renderChart("chart_dark.png", DarkColorScheme)
     renderChart("chart_light.png", LightColorScheme)
+    renderWorkFeed("workfeed_dark.png", DarkColorScheme)
+    renderWorkFeed("workfeed_light.png", LightColorScheme)
     renderWidget("widget_loaded.png", "6/3 14:00 · 기획조정실 주간 회의 3분기 점검", "김민준 부장 · 회의 자료 검토 부탁드립니다", "미읽음 3")
     renderWidget("widget_loading.png", "불러오는 중…", "", "")
     println("rendered -> /tmp/deneb-render/")
@@ -347,6 +352,75 @@ private fun renderWidget(name: String, meeting: String, latestMail: String, unre
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// Validates the decluttered work-feed bottom sheet: clean rows (title + relative
+// time + 2-line summary) with trailing icon-only quick actions instead of a wall
+// of labeled buttons. Renders several mock items at phone width.
+private val sampleFeed = persistentListOf(
+    WorkFeedItem(
+        id = "wf1",
+        source = "proactive",
+        title = "업무 리포트",
+        summary = "🔴 긴급: 에코프로 모듈 견적 회신 기한이 오늘까지입니다. 김민준 부장 확인 필요.",
+        status = "unread",
+        actions = listOf(
+            WorkFeedAction("open", "open", "열기"),
+            WorkFeedAction("followup", "followup", "후속 정리"),
+            WorkFeedAction("snooze", "snooze", "나중에"),
+            WorkFeedAction("ack", "ack", "완료"),
+        ),
+        createdAtMs = System.currentTimeMillis() - 15 * 60_000L,
+    ),
+    WorkFeedItem(
+        id = "wf2",
+        source = "capture_audio",
+        title = "공유 녹음",
+        summary = "기획조정실 주간 회의 — RE100 고객사 계약 진행률, 주차장 태양광 견적 리뷰를 논의했습니다.",
+        status = "unread",
+        actions = listOf(
+            WorkFeedAction("open", "open", "열기"),
+            WorkFeedAction("followup", "followup", "액션 정리"),
+            WorkFeedAction("snooze", "snooze", "나중에"),
+            WorkFeedAction("ack", "ack", "완료"),
+        ),
+        createdAtMs = System.currentTimeMillis() - 3 * 3_600_000L,
+    ),
+    WorkFeedItem(
+        id = "wf3",
+        source = "proactive",
+        title = "업무 리포트",
+        summary = "GitHub PR #1853 main 병합 완료 — 추가 조치 불필요.",
+        status = "unread",
+        actions = listOf(
+            WorkFeedAction("open", "open", "열기"),
+            WorkFeedAction("snooze", "snooze", "나중에"),
+            WorkFeedAction("ack", "ack", "완료"),
+        ),
+        createdAtMs = System.currentTimeMillis() - 26 * 3_600_000L,
+    ),
+)
+
+private fun renderWorkFeed(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 824, height = 980, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.width(412.dp)) {
+                    WorkFeedPanel(
+                        items = sampleFeed,
+                        onOpen = {},
+                        onRunAction = { _, _ -> },
+                        onClose = {},
+                    )
                 }
             }
         }
