@@ -123,7 +123,13 @@ func AnalyzeEmail(ctx context.Context, client *llm.Client, model, prompt string,
 		switch ev.Type {
 		case "content_block_delta":
 			var delta llm.ContentBlockDelta
-			if json.Unmarshal(ev.Payload, &delta) == nil && delta.Delta.Text != "" {
+			// Skip thinking_delta: vLLM/step3.7 forces a <think> block via its
+			// chat template even though thinking is disabled above, and the
+			// OpenAI-translated stream carries that reasoning in .Delta.Text. The
+			// delta type is the reliable signal — matching the multi-stage path's
+			// collectStreamText (pipeline.go), which already filters it.
+			if json.Unmarshal(ev.Payload, &delta) == nil &&
+				delta.Delta.Type != "thinking_delta" && delta.Delta.Text != "" {
 				sb.WriteString(delta.Delta.Text)
 			}
 		case "error":

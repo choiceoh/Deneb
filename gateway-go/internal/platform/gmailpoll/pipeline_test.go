@@ -83,3 +83,24 @@ func TestExtractWikiGraphContext_GracefulDegradation(t *testing.T) {
 	// and graphify on PATH; either way the call must complete without panic.
 	_ = got
 }
+
+// TestCollectStreamText_FiltersThinkingDelta locks that the shared collector
+// drops thinking_delta and keeps only the answer text. step3.7 forces a <think>
+// block through its chat template even with thinking disabled, and the
+// OpenAI-translated stream carries that reasoning in .text — so the delta type
+// is the reliable signal. The single-call AnalyzeEmail fallback applies the
+// same filter (analyzer.go), so this also guards that path's behavior.
+func TestCollectStreamText_FiltersThinkingDelta(t *testing.T) {
+	ch := make(chan llm.StreamEvent, 3)
+	ch <- llm.StreamEvent{Type: "content_block_delta", Payload: []byte(`{"delta":{"type":"thinking_delta","text":"이건 내부 추론이다"}}`)}
+	ch <- llm.StreamEvent{Type: "content_block_delta", Payload: []byte(`{"delta":{"type":"text_delta","text":"결제 기한 6월 10일."}}`)}
+	close(ch)
+
+	got, err := collectStreamText(context.Background(), ch)
+	if err != nil {
+		t.Fatalf("collectStreamText: %v", err)
+	}
+	if got != "결제 기한 6월 10일." {
+		t.Errorf("got %q, want only the text_delta (thinking_delta must be filtered)", got)
+	}
+}
