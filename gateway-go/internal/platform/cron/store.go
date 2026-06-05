@@ -94,6 +94,13 @@ func NewStore(storePath string) *Store {
 }
 
 // Load reads the cron store from disk. Returns an empty store if the file doesn't exist.
+//
+// The returned *CronStoreFile is an independent snapshot — its Jobs slice does
+// NOT alias the internal cache (s.cached). This is load-bearing for data-race
+// safety: callers read and even mutate the result without holding s.mu (List
+// returns Jobs directly, ListPage sorts it in place, the mutators below modify
+// it before Save), all concurrent with locked readers (Job/JobByName). If Load
+// returned the cache pointer, those unlocked accesses would race the cache.
 func (s *Store) Load() (*CronStoreFile, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -103,14 +110,14 @@ func (s *Store) Load() (*CronStoreFile, error) {
 // loadLocked is the lock-holding implementation of Load. Callers must hold
 // s.mu. Used by both Load (public) and lookup paths that need to populate the
 // cache before searching (e.g. JobByName called before Service.Start).
+// Returns a clone (see Load) — the cache pointer never escapes s.mu.
 func (s *Store) loadLocked() (*CronStoreFile, error) {
 	data, err := os.ReadFile(s.path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			empty := &CronStoreFile{Version: 1, Jobs: []StoreJob{}}
-			s.cached = empty
+			s.cached = &CronStoreFile{Version: 1, Jobs: []StoreJob{}}
 			s.cachedJSON = ""
-			return empty, nil
+			return cloneStoreFile(s.cached), nil
 		}
 		return nil, fmt.Errorf("read cron store: %w", err)
 	}
@@ -129,7 +136,21 @@ func (s *Store) loadLocked() (*CronStoreFile, error) {
 	serialized, _ := json.MarshalIndent(store, "", "  ")
 	s.cached = &store
 	s.cachedJSON = string(serialized)
-	return &store, nil
+	return cloneStoreFile(s.cached), nil
+}
+
+// cloneStoreFile returns a copy whose Jobs slice is independent of src's, so a
+// caller can read, sort, or mutate the result without racing the Store cache.
+// The per-job *Delivery/*FailureAlert pointers are shared by value: they are
+// set once when a job is created and never mutated in place, so the sharing is
+// safe and avoids a deeper copy on every load.
+func cloneStoreFile(src *CronStoreFile) *CronStoreFile {
+	if src == nil {
+		return nil
+	}
+	cp := *src
+	cp.Jobs = append([]StoreJob(nil), src.Jobs...)
+	return &cp
 }
 
 // Save writes the cron store to disk atomically with a backup.
