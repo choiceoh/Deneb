@@ -700,9 +700,21 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 
 			case "content_block_stop":
 				if currentBlock != nil {
-					// Finalize the block.
-					if currentBlock.block.Type == "tool_use" && len(currentBlock.jsonBuf) > 0 {
-						currentBlock.block.Input = json.RawMessage(currentBlock.jsonBuf)
+					// Finalize the block's fields BEFORE appending — result.contentBlocks
+					// takes a value copy, so any mutation after the append lands on the
+					// soon-discarded currentBlock.block and is lost.
+					switch currentBlock.block.Type {
+					case "tool_use":
+						if len(currentBlock.jsonBuf) > 0 {
+							currentBlock.block.Input = json.RawMessage(currentBlock.jsonBuf)
+						}
+					case "thinking":
+						// Extended-thinking content streams in as thinking_delta and was
+						// accumulated into Text; move it to Thinking (where the round-trip
+						// and joinAllThinkingTexts read it) and clear Text so it stays out
+						// of user-visible output. Must happen before the append.
+						currentBlock.block.Thinking = currentBlock.block.Text
+						currentBlock.block.Text = ""
 					}
 					result.contentBlocks = append(result.contentBlocks, currentBlock.block)
 					switch currentBlock.block.Type {
@@ -710,11 +722,6 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 						result.toolCalls = append(result.toolCalls, currentBlock.block)
 					case "text":
 						result.text += currentBlock.block.Text
-					case "thinking":
-						// Thinking blocks are part of extended thinking; preserve
-						// in contentBlocks but don't include in user-visible text.
-						currentBlock.block.Thinking = currentBlock.block.Text
-						currentBlock.block.Text = ""
 					}
 					currentBlock = nil
 				}
