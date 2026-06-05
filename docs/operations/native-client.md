@@ -28,7 +28,7 @@ authenticated endpoint.
 - **Text-first.** Kai's text-to-speech was removed — the client is for reading
   and capturing, not narration.
 - **Android only.** The vendored project drops the iOS, desktop, and web KMP
-  targets. The build and the daily target is a Samsung Galaxy S25; the UI is
+  targets. The build and the daily target is a Samsung Galaxy S26; the UI is
   Korean-first throughout.
 
 <Info>

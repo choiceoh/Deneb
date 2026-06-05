@@ -14,7 +14,7 @@ globs: ["client-android/**", "scripts/dev/native-app.sh"]
 | 컴파일만 | `./gradlew :composeApp:compileKotlinDesktop` | 타입/빌드 |
 | 컴포저블 외형 | `./gradlew :composeApp:renderPreviews` → `/tmp/deneb-render/*.png` | **mock** 데이터 정적 PNG |
 | **실제 앱 라이브** | **`scripts/dev/native-app.sh`** | **프로덕션 실데이터 + 상호작용 + 상태 흐름** |
-| 시스템 제스처 | 실기기 (Galaxy S25) | 엣지 스와이프 등 — 하네스로 재현 불가 |
+| 시스템 제스처 | 실기기 (Galaxy S26) | 엣지 스와이프 등 — 하네스로 재현 불가 |
 
 UI 변경(레이아웃/네비/상태/입력)을 "실제로 그렇게 보이고 동작하나"까지 봐야 할 때 이 하네스를 쓴다.
 
@@ -64,7 +64,7 @@ scripts/dev/native-app.sh type "테스트"
 scripts/dev/native-app.sh shot typed          # 입력 반영 확인
 scripts/dev/native-app.sh stop
 ```
-> **좌표 = 스크린샷 픽셀 그대로.** phone = **412×915**(갤럭시 S25 dp). Linux Compose는 density 1이라 px == dp == xdotool 좌표. 매 단계 `shot` → Read로 다음 좌표를 잡는다(앱은 매번 같은 자리에 그려진다).
+> **좌표 = 스크린샷 픽셀 그대로.** phone = **412×915**(갤럭시 S26 dp). Linux Compose는 density 1이라 px == dp == xdotool 좌표. 매 단계 `shot` → Read로 다음 좌표를 잡는다(앱은 매번 같은 자리에 그려진다).
 
 ## 환경 / 프로파일
 

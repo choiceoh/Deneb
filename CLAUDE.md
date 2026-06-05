@@ -81,7 +81,7 @@
 
 - **Single operator, single user.** No multi-tenant, multi-user, or team deployment. Ignore user isolation, permission separation, multi-user auth.
 - **Hardware:** NVIDIA DGX Spark (local server). All services run on this single machine.
-- **Primary I/O surface:** the native client (`client-android/`, a Kai-fork KMP app) — the sole user surface since the Telegram bot was retired (PR #1922). It runs on Android (Samsung Galaxy S25, the daily driver), iOS, and desktop (Mac) from one codebase, and talks to the gateway over the `miniapp.*` RPC surface with an `X-Deneb-Client-Token`. Optimize this path first.
+- **Primary I/O surface:** the native client (`client-android/`, a Kai-fork KMP app) — the sole user surface since the Telegram bot was retired (PR #1922). It runs on Android (Samsung Galaxy S26, the daily driver), iOS, and desktop (Mac) from one codebase, and talks to the gateway over the `miniapp.*` RPC surface with an `X-Deneb-Client-Token`. Optimize this path first.
 
 ### Design Principles
 
