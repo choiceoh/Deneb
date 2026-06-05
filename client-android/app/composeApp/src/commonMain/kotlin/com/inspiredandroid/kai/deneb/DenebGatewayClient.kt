@@ -85,6 +85,8 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeSource
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -235,10 +237,24 @@ class DenebGatewayClient(
             }
         }
 
+        // Coalesce streaming updates. The gateway streams tokens faster than the
+        // screen needs to repaint and faster than the 60-120Hz display; pushing every
+        // token into _chatHistory re-runs the whole chat pipeline per token (the VM
+        // combine, ChatScreen recomposition, the O(n) list copy in replaceAssistant,
+        // the scroll-follow) and competes with scroll frames. Emit at most ~30/s — the
+        // first token shows immediately, and the finalize block below always writes the
+        // complete text, so nothing is dropped.
+        val streamEmitInterval = 33.milliseconds
+        var lastStreamEmit = TimeSource.Monotonic.markNow()
+        var streamEmitted = false
         val reply = try {
             sendStreaming(sendText) { delta ->
                 accumulated.append(delta)
-                replaceAssistant(accumulated.toString(), null)
+                if (!streamEmitted || lastStreamEmit.elapsedNow() >= streamEmitInterval) {
+                    replaceAssistant(accumulated.toString(), null)
+                    lastStreamEmit = TimeSource.Monotonic.markNow()
+                    streamEmitted = true
+                }
             }
         } catch (cancel: CancellationException) {
             throw cancel
