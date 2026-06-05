@@ -76,6 +76,22 @@ func ParseSSE(r io.Reader) <-chan StreamEvent {
 				Payload: json.RawMessage(dataBuf.String()),
 			}
 		}
+
+		// Surface a scan error (a data line exceeding the 1MB cap → bufio.ErrTooLong,
+		// or a mid-stream read failure) as a terminal error event. Without this the
+		// goroutine just closes the channel, which is indistinguishable from a clean
+		// EOF: the consumer (executor) returns nil on a closed channel with no
+		// message_stop and commits the truncated-so-far text as a SUCCESSFUL turn —
+		// a user-observed failure silently buried (logging.md). Both provider
+		// translators forward a Type=="error" raw event, so the executor surfaces it
+		// as "stream error: ..." instead.
+		if err := scanner.Err(); err != nil {
+			payload, _ := json.Marshal(struct {
+				Type    string `json:"type"`
+				Message string `json:"message"`
+			}{Type: "error", Message: "SSE stream read error: " + err.Error()})
+			ch <- StreamEvent{Type: "error", Payload: payload}
+		}
 	}()
 	return ch
 }
