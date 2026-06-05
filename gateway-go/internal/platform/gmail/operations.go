@@ -178,6 +178,18 @@ func metadataConcurrency(n int) int {
 	return n
 }
 
+// cleanSnippet decodes the HTML entities Gmail returns in snippets (&#39; &quot;
+// &amp; …) so the preview reads as plain text instead of leaking raw entities
+// into the mail list. Some signatures are double-encoded (&amp;nbsp;), so a
+// single decode leaves a literal "&nbsp;" — collapse those to spaces. A second
+// blanket UnescapeString is avoided because it would corrupt intentionally
+// escaped text like "&amp;lt;". Mirrors htmlToText() for message bodies.
+func cleanSnippet(s string) string {
+	s = html.UnescapeString(s)
+	s = strings.ReplaceAll(s, "&nbsp;", " ")
+	return s
+}
+
 // fetchMessageMetadata fetches a single message with metadata format.
 func (c *Client) fetchMessageMetadata(ctx context.Context, id, _ string) (MessageSummary, error) {
 	path := "/messages/" + id + "?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date"
@@ -190,7 +202,7 @@ func (c *Client) fetchMessageMetadata(ctx context.Context, id, _ string) (Messag
 	s := MessageSummary{
 		ID:       msg.ID,
 		ThreadID: msg.ThreadID,
-		Snippet:  msg.Snippet,
+		Snippet:  cleanSnippet(msg.Snippet),
 		Labels:   msg.LabelIDs,
 	}
 	if msg.Payload != nil {
