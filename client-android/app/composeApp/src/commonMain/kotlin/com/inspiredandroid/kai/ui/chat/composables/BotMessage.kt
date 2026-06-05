@@ -41,10 +41,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,10 +75,39 @@ import kai.composeapp.generated.resources.ic_volume_up
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import nl.marc_apps.tts.TextToSpeechInstance
 import nl.marc_apps.tts.errors.TextToSpeechSynthesisInterruptedError
 import org.jetbrains.compose.resources.stringResource
+
+// During streaming the answer grows by a token every few ms, and parseMarkdown
+// re-parses the whole string each time — O(n²) over a long answer, which stalls the
+// main thread and janks both the stream and any scrolling. Sample the growing text at
+// a fixed cadence instead: the markdown reflows ~16x/second (smooth to read) while the
+// parse count is decoupled from the token rate. The finished (non-streaming) string is
+// always parsed exactly and immediately, so the completed message is byte-identical to
+// having parsed every token.
+private const val STREAM_PARSE_INTERVAL_MS = 64L
+
+@Composable
+private fun rememberStreamingParseSource(message: String, isStreaming: Boolean): String {
+    val latest = rememberUpdatedState(message)
+    var sampled by remember { mutableStateOf(message) }
+    LaunchedEffect(isStreaming) {
+        // Keyed on isStreaming: when it flips to false this effect is cancelled and
+        // relaunched, so the while-loop only runs for the lifetime of the stream.
+        if (!isStreaming) {
+            sampled = latest.value
+            return@LaunchedEffect
+        }
+        while (true) {
+            sampled = latest.value
+            delay(STREAM_PARSE_INTERVAL_MS)
+        }
+    }
+    return if (isStreaming) sampled else message
+}
 
 @Composable
 internal fun BotMessage(
@@ -93,7 +124,8 @@ internal fun BotMessage(
     isStreaming: Boolean = false,
     attachments: ImmutableList<Attachment> = persistentListOf(),
 ) {
-    val document = remember(message) { parseMarkdown(message) }
+    val parseSource = rememberStreamingParseSource(message, isStreaming)
+    val document = remember(parseSource) { parseMarkdown(parseSource) }
     var isEditing by remember(frozen) { mutableStateOf(false) }
     val effectiveFrozen = if (isEditing && frozen != null) frozen.copy(pressedEvent = null) else frozen
     val effectiveInteractive = if (frozen != null) (onResubmit != null && isEditing) else isInteractive
