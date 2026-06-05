@@ -152,7 +152,14 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 
 	deps := h.buildRunDeps()
 	if opts != nil && opts.MaxHistoryTokens > 0 {
-		deps.contextCfg.MemoryTokenBudget = uint64(opts.MaxHistoryTokens)
+		// MaxHistoryTokens is the HISTORY budget, but MemoryTokenBudget is the
+		// TOTAL (system + history) budget — run_exec derives
+		// contextBudget = MemoryTokenBudget - SystemPromptBudget. Setting total =
+		// history collapsed contextBudget to (history - system): boot's 30K-30K=0,
+		// and skill-review's 1-30K underflowed (uint64) to a giant budget. Both
+		// drove compaction to process the full uncapped transcript and stall. Add
+		// the system budget back so the requested history budget survives intact.
+		deps.contextCfg.MemoryTokenBudget = uint64(opts.MaxHistoryTokens) + deps.contextCfg.SystemPromptBudget
 	}
 	if h.recordActivity != nil && !params.EphemeralUser {
 		h.recordActivity(sessionKey)
