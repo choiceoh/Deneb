@@ -92,7 +92,7 @@ func generateSessionTitle(ctx context.Context, userMsg, reply string) string {
 	if r := strings.TrimSpace(reply); r != "" {
 		prompt += "\n어시스턴트: " + capRunes(r, sessionTitleReplyCap)
 	}
-	out, err := pilot.CallLocalLLM(ctx, sessionTitleSystemPrompt, prompt, sessionTitleMaxTokens)
+	out, err := pilot.CallTinyLLM(ctx, sessionTitleSystemPrompt, prompt, sessionTitleMaxTokens)
 	if title := cleanSessionTitle(out); err == nil && title != "" {
 		return title
 	}
