@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -101,7 +102,14 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		c.healthy.Store(false)
+		// A caller-side cancellation or timeout (e.g. recall's 1.5s preflight
+		// budget) is not a server fault. Flipping health here would disable
+		// semantic search, re-embedding, and SuggestRelated for the full
+		// healthCheckPeriod (30s) over a transient client deadline. Only a
+		// genuine transport failure marks the server unhealthy.
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			c.healthy.Store(false)
+		}
 		return nil, fmt.Errorf("embedding: request failed: %w", err)
 	}
 	defer resp.Body.Close()
