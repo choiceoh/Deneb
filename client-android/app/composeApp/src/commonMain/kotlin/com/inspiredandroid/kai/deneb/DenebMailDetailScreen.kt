@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.ui.components.rememberHaptics
+import com.inspiredandroid.kai.ui.markdown.MarkdownContent
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -213,7 +214,7 @@ fun DenebMailDetailScreen(
                                 Text("분석 중…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             analysis != null -> {
-                                DenebMarkdown(analysis!!.text)
+                                MarkdownContent(analysis!!.text)
                                 if (analysis!!.related.isNotEmpty()) {
                                     Spacer(Modifier.height(10.dp))
                                     Text("관련 프로젝트", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -254,7 +255,7 @@ fun DenebMailDetailScreen(
                         }
                         if (ctx.wikiFacts.isNotBlank()) {
                             Spacer(Modifier.height(8.dp))
-                            DenebMarkdown(ctx.wikiFacts)
+                            MarkdownContent(ctx.wikiFacts)
                         }
                         ctx.wikiHits.forEach { hit ->
                             Spacer(Modifier.height(8.dp))
@@ -306,7 +307,7 @@ fun DenebMailDetailScreen(
                 Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
                     Text("Q. $question", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(2.dp))
-                    DenebMarkdown(answer)
+                    MarkdownContent(answer)
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
