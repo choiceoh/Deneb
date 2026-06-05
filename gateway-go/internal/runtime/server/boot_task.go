@@ -77,6 +77,14 @@ func (t *bootTask) Run(ctx context.Context) error {
 	result, err := t.chatHandler.SendSync(runCtx, "boot", prompt, "", &chat.SyncOptions{
 		ToolPreset:       string(toolpreset.PresetBoot),
 		MaxHistoryTokens: 30_000,
+		// Boot is a stateless startup turn — it inspects system status and
+		// consults wiki/memory via tools, not its own past boot turns. Persisting
+		// each turn made the "boot" session grow unbounded (observed 738K tokens),
+		// so every boot loaded a giant transcript that blew the compaction
+		// deadline and stalled the model into the fallback chain. Keep it
+		// ephemeral, exactly like the heartbeat task.
+		EphemeralUser:      true,
+		EphemeralAssistant: true,
 	})
 	if err != nil {
 		return fmt.Errorf("boot: agent turn failed: %w", err)
