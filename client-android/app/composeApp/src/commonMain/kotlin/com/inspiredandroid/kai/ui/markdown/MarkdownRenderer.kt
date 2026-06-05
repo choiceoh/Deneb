@@ -4,7 +4,12 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,6 +24,7 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import kotlin.math.sqrt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -131,10 +137,19 @@ private fun HeadingBlock(block: Heading) {
         5 -> typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
         else -> typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
     }
+    // A heading opens a section: clear air above (more for higher levels) and a
+    // tight gap below, so the title visibly groups with the content it leads.
+    // Uniform 4dp let sections blur together in long analyses.
+    val topPad = when (block.level) {
+        1 -> 16.dp
+        2 -> 14.dp
+        3 -> 10.dp
+        else -> 6.dp
+    }
     InlineContent(
         inlines = block.inlines,
         style = style,
-        modifier = Modifier.padding(vertical = 4.dp),
+        modifier = Modifier.padding(top = topPad, bottom = 3.dp),
     )
 }
 
@@ -179,13 +194,22 @@ private fun BlockquoteBlock(
     onUiCallback: (String, Map<String, String>) -> Unit,
     frozen: FrozenSubmission?,
 ) {
-    Row(modifier = Modifier.padding(vertical = 4.dp).height(IntrinsicSize.Min)) {
+    // A soft callout: a thin accent bar plus a faint tinted panel reads calmer
+    // than a heavy 3dp outline rule, and groups the quote as one block.
+    Row(
+        modifier = Modifier
+            .padding(vertical = 4.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .height(IntrinsicSize.Min),
+    ) {
         VerticalDivider(
-            thickness = 3.dp,
-            color = MaterialTheme.colorScheme.outline,
+            thickness = 2.dp,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
             modifier = Modifier.fillMaxHeight(),
         )
-        Column(Modifier.padding(start = 8.dp)) {
+        Column(Modifier.padding(start = 12.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)) {
             block.children.forEach { BlockRenderer(it, isInteractive, onUiCallback, frozen) }
         }
     }
@@ -198,9 +222,14 @@ private fun BulletListBlock(
     onUiCallback: (String, Map<String, String>) -> Unit,
     frozen: FrozenSubmission?,
 ) {
-    Column(modifier = Modifier.padding(vertical = 2.dp)) {
+    Column(
+        modifier = Modifier.padding(vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
         for (item in block.items) {
-            ListItemRow("•", 16.dp, item, isInteractive, onUiCallback, frozen)
+            // The bullet is decoration, not content — mute it so the eye lands on
+            // the text, and "•" reads lighter than the body weight at this size.
+            ListItemRow("•", 16.dp, MaterialTheme.colorScheme.onSurfaceVariant, item, isInteractive, onUiCallback, frozen)
         }
     }
 }
@@ -212,9 +241,12 @@ private fun OrderedListBlock(
     onUiCallback: (String, Map<String, String>) -> Unit,
     frozen: FrozenSubmission?,
 ) {
-    Column(modifier = Modifier.padding(vertical = 2.dp)) {
+    Column(
+        modifier = Modifier.padding(vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
         block.items.forEachIndexed { index, item ->
-            ListItemRow("${block.start + index}.", 24.dp, item, isInteractive, onUiCallback, frozen)
+            ListItemRow("${block.start + index}.", 24.dp, Color.Unspecified, item, isInteractive, onUiCallback, frozen)
         }
     }
 }
@@ -223,6 +255,7 @@ private fun OrderedListBlock(
 private fun ListItemRow(
     marker: String,
     markerWidth: androidx.compose.ui.unit.Dp,
+    markerColor: Color,
     item: ListItem,
     isInteractive: Boolean,
     onUiCallback: (String, Map<String, String>) -> Unit,
@@ -232,6 +265,7 @@ private fun ListItemRow(
         Text(
             text = marker,
             style = MaterialTheme.typography.bodyLarge,
+            color = markerColor,
             modifier = Modifier.width(markerWidth).padding(end = 4.dp),
         )
         Column(Modifier.fillMaxWidth()) {
@@ -242,6 +276,22 @@ private fun ListItemRow(
 
 @Composable
 private fun TableBlock(block: Table) {
+    val numCols = maxOf(block.headers.size, block.rows.maxOfOrNull { it.size } ?: 0)
+    if (numCols == 0) return
+    // Weight each column by its widest cell so a short key column stops wasting
+    // half the width on a key/value table (the common analysis shape). sqrt
+    // compresses the extremes, so the long value column gets the room without
+    // crushing the narrow key column to nothing.
+    val weights = remember(block) {
+        FloatArray(numCols) { i ->
+            var maxLen = inlineTextLength(block.headers.getOrNull(i) ?: emptyList())
+            for (row in block.rows) {
+                maxLen = maxOf(maxLen, inlineTextLength(row.getOrNull(i) ?: emptyList()))
+            }
+            sqrt(maxLen.coerceAtLeast(1).toFloat()).coerceAtLeast(1f)
+        }
+    }
+    val rowDivider = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
     Column(Modifier.padding(vertical = 4.dp)) {
         if (block.headers.any { it.isNotEmpty() }) {
             Row {
@@ -250,26 +300,46 @@ private fun TableBlock(block: Table) {
                         inlines = cell,
                         style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                         textAlign = alignTextFor(block.alignments.getOrNull(i)),
-                        modifier = Modifier.weight(1f).padding(4.dp),
+                        modifier = Modifier.weight(weights.getOrElse(i) { 1f })
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
                     )
                 }
             }
             HorizontalDivider()
         }
-        for (row in block.rows) {
+        block.rows.forEachIndexed { rowIdx, row ->
+            if (rowIdx > 0) HorizontalDivider(thickness = 1.dp, color = rowDivider)
             Row {
                 row.forEachIndexed { i, cell ->
                     InlineContent(
                         inlines = cell,
                         style = MaterialTheme.typography.bodyLarge,
                         textAlign = alignTextFor(block.alignments.getOrNull(i)),
-                        modifier = Modifier.weight(1f).padding(4.dp),
+                        modifier = Modifier.weight(weights.getOrElse(i) { 1f })
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
                     )
                 }
             }
         }
     }
 }
+
+// inlineTextLength is the plain-text character count of a cell's inline nodes,
+// used to size table columns by content.
+private fun inlineTextLength(inlines: List<InlineNode>): Int =
+    inlines.sumOf { node ->
+        when (node) {
+            is Text -> node.value.length
+            is InlineCode -> node.code.length
+            is InlineMath -> node.latex.length
+            is Emphasis -> inlineTextLength(node.children)
+            is Strong -> inlineTextLength(node.children)
+            is Strike -> inlineTextLength(node.children)
+            is Link -> inlineTextLength(node.children)
+            is Image -> node.alt.length
+            else -> 0
+        }
+    }
 
 private fun alignTextFor(align: ColumnAlign?): TextAlign = when (align) {
     ColumnAlign.LEFT -> TextAlign.Start
