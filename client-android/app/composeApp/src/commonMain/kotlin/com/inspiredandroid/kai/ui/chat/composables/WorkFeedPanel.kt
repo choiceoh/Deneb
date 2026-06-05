@@ -1,7 +1,7 @@
 package com.inspiredandroid.kai.ui.chat.composables
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,10 +10,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
@@ -24,7 +22,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,7 +29,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.deneb.DenebEmpty
-import com.inspiredandroid.kai.ui.chat.WorkFeedAction
 import com.inspiredandroid.kai.ui.chat.WorkFeedItem
 import com.inspiredandroid.kai.ui.handCursor
 import kai.composeapp.generated.resources.Res
@@ -183,52 +179,35 @@ private fun WorkFeedActions(
         .take(3)
     if (actions.isEmpty()) return
 
+    // Icon-only and trailing: keep the quick actions but drop the per-button
+    // labels that turned every row into a wall of buttons. Each label survives
+    // as the icon's accessibility description.
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         actions.forEach { action ->
-            WorkFeedActionButton(
-                action = action,
+            IconButton(
+                modifier = Modifier.handCursor(),
                 onClick = { onRunAction(item.id, action.id) },
-            )
-            Spacer(Modifier.width(4.dp))
+            ) {
+                Icon(
+                    imageVector = actionIcon(action.kind),
+                    contentDescription = action.label.ifBlank { action.kind },
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
     }
 }
 
-@Composable
-private fun WorkFeedActionButton(
-    action: WorkFeedAction,
-    onClick: () -> Unit,
-) {
-    val icon: ImageVector = when (action.kind) {
-        "ack" -> Icons.Filled.Check
-        "snooze" -> Icons.Filled.Schedule
-        "followup" -> Icons.Filled.ArrowForward
-        else -> Icons.Filled.Check
-    }
-    TextButton(
-        modifier = Modifier.handCursor(),
-        onClick = onClick,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(16.dp),
-        )
-        Spacer(Modifier.width(4.dp))
-        Text(
-            text = action.label.ifBlank { action.kind },
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
+private fun actionIcon(kind: String): ImageVector = when (kind) {
+    "ack" -> Icons.Filled.Check
+    "snooze" -> Icons.Filled.Schedule
+    "followup" -> Icons.Filled.ArrowForward
+    else -> Icons.Filled.Check
 }
 
 /** Short Korean relative time ("방금" / "N분 전" / "N시간 전" / "N일 전"). Blank for
