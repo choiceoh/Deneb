@@ -33,6 +33,12 @@ var (
 	ErrActionNotFound = errors.New("workfeed action not found")
 )
 
+// snoozeDuration is how long a snoozed work-feed item stays hidden before it
+// re-surfaces. "나중에" (snooze) defers an item for "later today" rather than
+// dismissing it like "완료" (ack); List brings it back near the top once this
+// window elapses, restoring the distinction between the two actions.
+const snoozeDuration = 3 * time.Hour
+
 type Action struct {
 	ID     string `json:"id"`
 	Kind   string `json:"kind"`
@@ -54,6 +60,8 @@ type Item struct {
 	Actions     []Action `json:"actions,omitempty"`
 	CreatedAtMs int64    `json:"createdAtMs"`
 	UpdatedAtMs int64    `json:"updatedAtMs"`
+	// SnoozedUntilMs, when set, is the wall-clock time a snoozed item re-surfaces.
+	SnoozedUntilMs int64 `json:"snoozedUntilMs,omitempty"`
 }
 
 type ActionResult struct {
@@ -93,20 +101,38 @@ func (s *Store) List(limit int, includeAcked bool) ([]Item, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
+	now := time.Now().UnixMilli()
 	for i := range items {
 		items[i] = normalizeExisting(items[i])
 	}
+	// A snoozed item whose window has elapsed sorts by its wake time, so it
+	// re-surfaces near the top (fresh) instead of buried at its original slot.
+	effectiveTime := func(it Item) int64 {
+		if it.Status == StatusSnoozed && it.SnoozedUntilMs > 0 && it.SnoozedUntilMs <= now {
+			return it.SnoozedUntilMs
+		}
+		return it.CreatedAtMs
+	}
 	sort.SliceStable(items, func(i, j int) bool {
-		if items[i].CreatedAtMs == items[j].CreatedAtMs {
+		ti, tj := effectiveTime(items[i]), effectiveTime(items[j])
+		if ti == tj {
 			return items[i].ID > items[j].ID
 		}
-		return items[i].CreatedAtMs > items[j].CreatedAtMs
+		return ti > tj
 	})
 
 	filtered := make([]Item, 0, len(items))
 	for _, item := range items {
-		if !includeAcked && (item.Status == StatusAcked || item.Status == StatusSnoozed) {
-			continue
+		if !includeAcked {
+			if item.Status == StatusAcked {
+				continue
+			}
+			if item.Status == StatusSnoozed {
+				if item.SnoozedUntilMs > now {
+					continue // still snoozed — hidden until the window elapses
+				}
+				item.Status = StatusUnread // snooze elapsed — re-surface as actionable
+			}
 		}
 		filtered = append(filtered, item)
 	}
@@ -192,7 +218,9 @@ func (s *Store) RunAction(itemID, actionID string) (ActionResult, error) {
 		case ActionSnooze:
 			items[i].Status = StatusSnoozed
 			items[i].UpdatedAtMs = now
-			markActionDone(&items[i], action.ID)
+			items[i].SnoozedUntilMs = now + snoozeDuration.Milliseconds()
+			// Snooze is non-terminal — leave the action available so the user can
+			// snooze again after the item re-surfaces (unlike ack, which is done).
 			result.Item = items[i]
 			result.Message = "snoozed"
 			result.RemoveFromFeed = true
