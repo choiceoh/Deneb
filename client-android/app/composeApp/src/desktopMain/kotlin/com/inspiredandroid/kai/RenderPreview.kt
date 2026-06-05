@@ -23,6 +23,7 @@ import com.inspiredandroid.kai.deneb.CalendarEventDetail
 import com.inspiredandroid.kai.deneb.DenebMarkdown
 import com.inspiredandroid.kai.deneb.MailMessage
 import com.inspiredandroid.kai.deneb.MailRow
+import com.inspiredandroid.kai.ui.markdown.MarkdownContent
 import com.inspiredandroid.kai.ui.DarkColorScheme
 import com.inspiredandroid.kai.ui.DenebRow
 import com.inspiredandroid.kai.ui.DenebScreenScaffold
@@ -78,6 +79,7 @@ fun main() {
     render("mail_dark.png", DarkColorScheme)
     render("mail_light.png", LightColorScheme)
     renderMarkdown("markdown_dark.png", DarkColorScheme)
+    renderAnalysis("analysis_clip.png", DarkColorScheme)
     renderChrome("chrome_dark.png", DarkColorScheme)
     renderChrome("chrome_light.png", LightColorScheme)
     renderDesignSample("design_dark.png", DarkColorScheme)
@@ -197,6 +199,36 @@ private fun renderMarkdown(name: String, scheme: ColorScheme) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 DenebMarkdown(markdownSample, Modifier.padding(20.dp))
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// Reproduces the work-feed analysis answer (long prose paragraph + 2-col 라벨|내용
+// table) at exactly phone width (412dp = 824px @ density 2). If the prose/table
+// clip here, the bug is in the markdown component itself; if they wrap cleanly,
+// the clip is the native-app window/LazyColumn measurement (Android is fine).
+private fun renderAnalysis(name: String, scheme: ColorScheme) {
+    val analysisSample = """
+        ## 사람과 조직
+        | 구분 | 내용 |
+        |:---|:---|
+        | **발신** | 탑솔라 고건 대리(기획조정실) — 이전에도 대한전선 2차 사업 물량산출 자료를 동일 수신자에게 발송한 바 있음 |
+        | **수신** | gocharge89@taihan.com — 태한(태양광 EPC 협력사) 담당자. 동일인의 다른 계정인지 불명 |
+
+        **신호**: CC에 오선택 전무(남도에코에너지 대표 겸직)가 포함된 것은 통상적이나, 김대희·김유영은 이전 5/12 물량산출 메일에서도 CC였던 동일 인물. 에스컬레이션이나 담당자 교체 징후는 없다.
+    """.trimIndent()
+    val scene = ImageComposeScene(width = 824, height = 1400, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.width(412.dp)) {
+                    MarkdownContent(analysisSample, modifier = Modifier.fillMaxWidth().padding(16.dp))
+                }
             }
         }
     }
