@@ -48,7 +48,7 @@ var requiredMethods = []string{
 	"sessions.send",
 	"sessions.steer",
 
-	// Telegram events (telegram.start/stop/restart are conditional on Telegram config).
+	// Event broadcast + session subscription.
 	"events.broadcast",
 	"subscribe.session",
 	"subscribe.session.messages",

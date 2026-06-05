@@ -409,7 +409,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 
 	// Special-case registrations with embedded business logic.
 	s.registerConfigLifecycleMethods()
-	s.registerAuthRPCMethods()
 	return nil
 }
 
