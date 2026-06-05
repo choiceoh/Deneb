@@ -36,10 +36,15 @@ SDK="${ANDROID_HOME:-$HOME/android-sdk}"
 # signing falls back to the debug keystore when no release key is configured, so it
 # installs in place over a debug build (same signature). The serve dir is scanned across
 # both variants below so version codes stay monotonic when the two coexist.
+#
+# NOTE: AGP 9.2.1's assembleFossRelease emits a manifest-less, unsigned APK that will not
+# install ("Missing AndroidManifest.xml"). The bundle's universal APK is the valid, signed,
+# R8-minified release artifact, so fossRelease builds packageFossReleaseUniversalApk instead
+# and copies that fixed-name output below.
 VARIANT="${DENEB_APK_VARIANT:-fossDebug}"
 case "$VARIANT" in
-  fossDebug)   GRADLE_TASK="assembleFossDebug";   BUILD_TYPE_DIR="debug" ;;
-  fossRelease) GRADLE_TASK="assembleFossRelease"; BUILD_TYPE_DIR="release" ;;
+  fossDebug)   GRADLE_TASK="assembleFossDebug" ;;
+  fossRelease) GRADLE_TASK="packageFossReleaseUniversalApk" ;;
   *) echo "unknown DENEB_APK_VARIANT: $VARIANT (use fossDebug or fossRelease)" >&2; exit 1 ;;
 esac
 
@@ -107,7 +112,12 @@ echo "building deneb $VERSION_NAME ($VERSION_CODE) @ $SHA [$VARIANT] ..."
 DENEB_BUILD_SHA="$SHA" ANDROID_HOME="$SDK" ./gradlew ":androidApp:$GRADLE_TASK" -q -PdenebVersionCode="$VERSION_CODE"
 
 APK_NAME="deneb-$VERSION_NAME-$VERSION_CODE-$SHA-$VARIANT.apk"
-APK_PATH="androidApp/build/outputs/apk/foss/$BUILD_TYPE_DIR/$APK_NAME"
+if [ "$VARIANT" = "fossRelease" ]; then
+  # The bundle universal APK has a fixed name; copy + rename it to the serve name.
+  APK_PATH="androidApp/build/outputs/apk_from_bundle/fossRelease/androidApp-foss-release-universal.apk"
+else
+  APK_PATH="androidApp/build/outputs/apk/foss/debug/$APK_NAME"
+fi
 if [ ! -f "$APK_PATH" ]; then
   echo "build did not produce $APK_PATH" >&2
   exit 1
