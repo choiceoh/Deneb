@@ -79,10 +79,11 @@ data class SenderContext(
 
 data class SenderWikiHit(val title: String, val summary: String, val category: String, val path: String = "")
 
-/** Glanceable home-widget data: next-meeting line + unread-mail count. */
+/** Glanceable home-widget data: next meeting, unread count, latest-mail line. */
 data class WidgetSummary(
     val meeting: String = "",
     val unread: Int = 0,
+    val latestMail: String = "",
     val configured: Boolean = true,
     val ok: Boolean = true,
 )
