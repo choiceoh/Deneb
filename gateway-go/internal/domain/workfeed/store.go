@@ -26,6 +26,15 @@ const (
 	ActionFollowUp = "followup"
 	ActionSnooze   = "snooze"
 	ActionAck      = "ack"
+
+	// Priority levels — higher surfaces first in the feed. Inferred from the
+	// item's urgency markers/keywords when the caller doesn't set one, so the
+	// feed reads like a chief-of-staff briefing (what's urgent first) instead of
+	// a reverse-chronological log.
+	PriorityLow    = 1
+	PriorityNormal = 2
+	PriorityHigh   = 3
+	PriorityUrgent = 4
 )
 
 var (
@@ -57,6 +66,7 @@ type Item struct {
 	RefType     string   `json:"refType,omitempty"`
 	RefID       string   `json:"refId,omitempty"`
 	Status      string   `json:"status"`
+	Priority    int      `json:"priority,omitempty"`
 	Actions     []Action `json:"actions,omitempty"`
 	CreatedAtMs int64    `json:"createdAtMs"`
 	UpdatedAtMs int64    `json:"updatedAtMs"`
@@ -87,7 +97,21 @@ func (s *Store) Append(item Item) (Item, error) {
 	defer s.mu.Unlock()
 
 	item = normalizeNew(item)
-	if err := jsonlstore.Append(s.path, item); err != nil {
+	// Load + rewrite so retention can bound the file. The feed is appended to
+	// infrequently (once per proactive report / capture), so the O(n) rewrite is
+	// cheap and keeps the file — and every List — from growing without bound as
+	// the feed ages. Fall back to a plain append if the file can't be read, so a
+	// transient read error never drops the new item.
+	items, err := jsonlstore.Load[Item](s.path)
+	if err != nil {
+		if aerr := jsonlstore.Append(s.path, item); aerr != nil {
+			return Item{}, aerr
+		}
+		return item, nil
+	}
+	items = append(items, item)
+	items = pruneRetention(items)
+	if err := jsonlstore.Snapshot(s.path, items); err != nil {
 		return Item{}, err
 	}
 	return item, nil
@@ -113,7 +137,11 @@ func (s *Store) List(limit int, includeAcked bool) ([]Item, int, error) {
 		}
 		return it.CreatedAtMs
 	}
+	// Priority first (urgent stays on top until handled), then recency / wake time.
 	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].Priority != items[j].Priority {
+			return items[i].Priority > items[j].Priority
+		}
 		ti, tj := effectiveTime(items[i]), effectiveTime(items[j])
 		if ti == tj {
 			return items[i].ID > items[j].ID
@@ -249,6 +277,68 @@ func (s *Store) RunAction(itemID, actionID string) (ActionResult, error) {
 // item reused its id, and also produced duplicate ids in the same feed.
 var idCounter atomic.Uint64
 
+// Urgency markers/keywords used to infer an item's priority from its content.
+// Proactive reports tag lines with 🔴 긴급 / 🟠 중요 / 🟡 일반 / 🔵 참고; captures and
+// free-form bodies use the keyword forms. Highest match wins.
+var (
+	urgentMarkers = []string{"🔴", "긴급", "urgent", "asap", "즉시", "당장", "critical"}
+	highMarkers   = []string{"🟠", "중요", "마감", "deadline", "important", "오늘까지", "내일까지"}
+	lowMarkers    = []string{"🔵", "참고", "fyi"}
+)
+
+// inferPriority scans an item's title/summary/body for urgency markers and
+// returns the highest matching level, defaulting to PriorityNormal.
+func inferPriority(item Item) int {
+	text := strings.ToLower(item.Title + "\n" + item.Summary + "\n" + item.Body)
+	containsAny := func(markers []string) bool {
+		for _, m := range markers {
+			if strings.Contains(text, strings.ToLower(m)) {
+				return true
+			}
+		}
+		return false
+	}
+	switch {
+	case containsAny(urgentMarkers):
+		return PriorityUrgent
+	case containsAny(highMarkers):
+		return PriorityHigh
+	case containsAny(lowMarkers):
+		return PriorityLow
+	default:
+		return PriorityNormal
+	}
+}
+
+// maxRetained caps how many items the feed keeps on disk. Once exceeded, the
+// oldest acked items are dropped so the jsonl can't grow without bound and List
+// stays fast; active items (unread, or still-snoozed and due to re-surface) are
+// never dropped.
+const maxRetained = 1000
+
+func pruneRetention(items []Item) []Item {
+	if len(items) <= maxRetained {
+		return items
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		return retentionRecency(items[i]) > retentionRecency(items[j])
+	})
+	kept := make([]Item, 0, maxRetained)
+	for i, it := range items {
+		if i < maxRetained || it.Status == StatusUnread || it.Status == StatusSnoozed {
+			kept = append(kept, it)
+		}
+	}
+	return kept
+}
+
+func retentionRecency(it Item) int64 {
+	if it.UpdatedAtMs > 0 {
+		return it.UpdatedAtMs
+	}
+	return it.CreatedAtMs
+}
+
 func normalizeNew(item Item) Item {
 	now := time.Now().UnixMilli()
 	item.ID = strings.TrimSpace(item.ID)
@@ -271,6 +361,9 @@ func normalizeNew(item Item) Item {
 	}
 	if item.Summary == "" {
 		item.Summary = Preview(item.Body, 240)
+	}
+	if item.Priority <= 0 {
+		item.Priority = inferPriority(item)
 	}
 	item.Actions = normalizeActions(item)
 	if item.CreatedAtMs <= 0 {
@@ -298,6 +391,9 @@ func normalizeExisting(item Item) Item {
 	}
 	if item.Summary == "" {
 		item.Summary = Preview(item.Body, 240)
+	}
+	if item.Priority <= 0 {
+		item.Priority = inferPriority(item)
 	}
 	item.Actions = normalizeActions(item)
 	if item.UpdatedAtMs <= 0 {
