@@ -247,11 +247,16 @@ private fun formatDate(epochMillis: Long): String = try {
     ""
 }
 
-// Machine-driven sessions (cron runs, system tasks, the boot session) aren't user
-// conversations, so the drawer folds them into one collapsible group below the chats.
-private fun isSystemSession(id: String): Boolean = when (id.substringBefore(':', id)) {
-    "cron", "system" -> true
-    else -> id == "boot"
+// A session is a real user conversation only when it's keyed under the native
+// client (client:main, client:main:<uuid>) or a legacy telegram thread. Everything
+// else is machine-driven — cron runs, the boot turn, and the system/autonomous/
+// curator/dream/genesis/heartbeat/hindsight background turns — and folds into one
+// collapsible group below the chats. Whitelisting the user prefixes (rather than
+// blacklisting known machine ones) means a newly-added background session kind can
+// never leak into the chat list, which is what made the grouping look intermittent.
+internal fun isSystemSession(id: String): Boolean = when (id.substringBefore(':', id)) {
+    "client", "telegram" -> false
+    else -> true
 }
 
 // Collapsible header for the machine-session folder, in the drawer's text-first
