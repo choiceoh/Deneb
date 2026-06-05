@@ -246,11 +246,15 @@ private fun StreamingCaret() {
         animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
         label = "caret-alpha",
     )
-    Text(
-        text = "▍",
-        modifier = Modifier.padding(start = 16.dp, bottom = 8.dp).alpha(caretAlpha),
-        color = MaterialTheme.colorScheme.primary,
-        style = MaterialTheme.typography.bodyLarge,
+    // A thin rounded cursor bar reads cleaner than the "▍" glyph, which sits
+    // chunky and slightly off the text baseline.
+    Box(
+        modifier = Modifier
+            .padding(start = 16.dp, bottom = 10.dp)
+            .alpha(caretAlpha)
+            .size(width = 2.dp, height = 17.dp)
+            .clip(RoundedCornerShape(1.dp))
+            .background(MaterialTheme.colorScheme.primary),
     )
 }
 
