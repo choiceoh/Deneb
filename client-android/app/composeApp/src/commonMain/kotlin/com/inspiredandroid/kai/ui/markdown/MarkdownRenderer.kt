@@ -14,7 +14,9 @@ import androidx.compose.material3.Icon
 import kotlinx.collections.immutable.toImmutableList
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -169,7 +171,14 @@ private fun ParagraphBlock(block: Paragraph) {
         AsyncImage(
             model = img.src,
             contentDescription = img.alt,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            contentScale = ContentScale.FillWidth,
+            // Rounded + capped to match attachment images, instead of a raw
+            // edge-to-edge bitmap that can dwarf the message on a wide image.
+            modifier = Modifier
+                .padding(vertical = 4.dp)
+                .fillMaxWidth()
+                .widthIn(max = 520.dp)
+                .clip(RoundedCornerShape(8.dp)),
         )
         return
     }
