@@ -121,6 +121,31 @@ func TestSessionsRecent_ChannelFilter(t *testing.T) {
 	}
 }
 
+func TestSessionsRecent_ExcludesInternalSessions(t *testing.T) {
+	mgr := &fakeSessionsLister{
+		out: []*session.Session{
+			sample("client:main", 300, "client"),
+			{Key: "cron:daily:1", Kind: session.KindCron, Status: session.StatusDone, UpdatedAt: 400},
+			{Key: "acp:client:main:agent-1", Kind: session.KindSubagent, Status: session.StatusRunning, UpdatedAt: 500},
+			{Key: "system:skill-review:client:main", Kind: session.KindDirect, Status: session.StatusDone, UpdatedAt: 600},
+		},
+	}
+	h := sessionsRecent(SessionsDeps{Manager: mgr})
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.recent", nil))
+
+	var got struct {
+		Sessions []map[string]any `json:"sessions"`
+		Count    int              `json:"count"`
+	}
+	decode(t, resp, &got)
+	if got.Count != 1 {
+		t.Fatalf("count = %d, want 1", got.Count)
+	}
+	if got.Sessions[0]["key"] != "client:main" {
+		t.Fatalf("remaining key = %v, want client:main", got.Sessions[0]["key"])
+	}
+}
+
 func TestSessionsRecent_RequiresAuth(t *testing.T) {
 	h := sessionsRecent(SessionsDeps{Manager: &fakeSessionsLister{}})
 	resp := h(context.Background(), reqWith(t, "miniapp.sessions.recent", nil))
@@ -294,6 +319,57 @@ func TestSessionsTranscript_MissingKey(t *testing.T) {
 	}
 	if resp.Error.Code != protocol.ErrMissingParam {
 		t.Errorf("code = %s, want MISSING_PARAM", resp.Error.Code)
+	}
+}
+
+func TestSessionsTranscript_InvalidSessionKey(t *testing.T) {
+	called := false
+	loader := &fakeTranscriptLoader{
+		loadFn: func(_ string, _ int) ([]toolctx.ChatMessage, int, error) {
+			called = true
+			return nil, 0, nil
+		},
+	}
+	h := sessionsTranscript(transcriptDeps(loader))
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
+		"sessionKey": "../client:main",
+	}))
+	if resp.OK {
+		t.Fatalf("expected validation failure")
+	}
+	if resp.Error.Code != protocol.ErrValidationFailed {
+		t.Fatalf("code = %s, want %s", resp.Error.Code, protocol.ErrValidationFailed)
+	}
+	if called {
+		t.Fatal("loader must not run for invalid sessionKey")
+	}
+}
+
+func TestSessionsTranscript_BlocksInternalSessionKey(t *testing.T) {
+	called := false
+	loader := &fakeTranscriptLoader{
+		loadFn: func(_ string, _ int) ([]toolctx.ChatMessage, int, error) {
+			called = true
+			return nil, 0, nil
+		},
+	}
+	h := sessionsTranscript(SessionsDeps{
+		Manager: &fakeSessionsLister{out: []*session.Session{
+			{Key: "acp:client:main:agent-1", Kind: session.KindSubagent, Status: session.StatusDone},
+		}},
+		Transcripts: func() (TranscriptLoader, error) { return loader, nil },
+	})
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
+		"sessionKey": "acp:client:main:agent-1",
+	}))
+	if resp.OK {
+		t.Fatalf("expected not found")
+	}
+	if resp.Error.Code != protocol.ErrNotFound {
+		t.Fatalf("code = %s, want %s", resp.Error.Code, protocol.ErrNotFound)
+	}
+	if called {
+		t.Fatal("loader must not run for internal session keys")
 	}
 }
 

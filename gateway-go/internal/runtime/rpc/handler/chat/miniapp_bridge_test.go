@@ -11,6 +11,19 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+func TestNormalizeMiniappSessionKey(t *testing.T) {
+	got, err := normalizeMiniappSessionKey("")
+	if err != nil {
+		t.Fatalf("default key rejected: %v", err)
+	}
+	if got != "client:main" {
+		t.Fatalf("default key = %q, want client:main", got)
+	}
+	if _, err := normalizeMiniappSessionKey("../client:main"); err == nil {
+		t.Fatal("expected invalid traversal key to be rejected")
+	}
+}
+
 func TestMiniappCaptureContacts_Success(t *testing.T) {
 	var savedPayload, enrichPayload []byte
 	deps := Deps{
@@ -107,6 +120,30 @@ func TestMiniappCaptureContacts_MissingParam(t *testing.T) {
 	}
 	if called {
 		t.Error("SaveContacts must not run when contacts param is missing")
+	}
+}
+
+func TestMiniappCaptureContacts_InvalidSessionKey(t *testing.T) {
+	called := false
+	deps := Deps{SaveContacts: func([]byte) (int, error) {
+		called = true
+		return 0, nil
+	}}
+	handler := handleMiniappCaptureContacts(deps)
+
+	req := &protocol.RequestFrame{
+		ID:     "c-invalid-session",
+		Params: json.RawMessage(`{"contacts":[{"name":"X"}],"sessionKey":"../client:main"}`),
+	}
+	resp := handler(context.Background(), req)
+	if resp.OK {
+		t.Fatal("expected validation error for invalid sessionKey")
+	}
+	if resp.Error == nil || resp.Error.Code != protocol.ErrValidationFailed {
+		t.Fatalf("got %+v, want VALIDATION_FAILED", resp.Error)
+	}
+	if called {
+		t.Error("SaveContacts must not run when sessionKey is invalid")
 	}
 }
 

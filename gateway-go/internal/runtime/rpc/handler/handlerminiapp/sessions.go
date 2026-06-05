@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coresecurity"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -42,6 +43,28 @@ type TranscriptLoader interface {
 type SessionsDeps struct {
 	Manager     SessionsLister
 	Transcripts func() (TranscriptLoader, error)
+}
+
+func isMiniappVisibleSession(s *session.Session) bool {
+	if s == nil {
+		return false
+	}
+	if s.Kind.IsInternal() {
+		return false
+	}
+	return !strings.HasPrefix(s.Key, "system:")
+}
+
+func blocksMiniappTranscriptKey(key string, sessions []*session.Session) bool {
+	if strings.HasPrefix(key, "cron:") || strings.HasPrefix(key, "acp:") || strings.HasPrefix(key, "system:") {
+		return true
+	}
+	for _, s := range sessions {
+		if s != nil && s.Key == key && !isMiniappVisibleSession(s) {
+			return true
+		}
+	}
+	return false
 }
 
 const (
@@ -132,12 +155,18 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 		if key == "" {
 			return rpcerr.MissingParam("sessionKey").Response(req.ID)
 		}
+		if err := coresecurity.ValidateStorageSafeSessionKey(key); err != nil {
+			return rpcerr.ValidationFailed("invalid sessionKey").Response(req.ID)
+		}
 		limit := p.Limit
 		if limit <= 0 {
 			limit = defaultTranscriptLimit
 		}
 		if limit > maxTranscriptLimit {
 			limit = maxTranscriptLimit
+		}
+		if blocksMiniappTranscriptKey(key, deps.Manager.List()) {
+			return rpcerr.NotFound("session not found").Response(req.ID)
 		}
 
 		store, err := deps.Transcripts()
@@ -250,6 +279,13 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 		}
 
 		sessions := deps.Manager.List()
+		filtered := sessions[:0]
+		for _, s := range sessions {
+			if isMiniappVisibleSession(s) {
+				filtered = append(filtered, s)
+			}
+		}
+		sessions = filtered
 
 		// Filter by channel if requested.
 		if p.Channel != "" {

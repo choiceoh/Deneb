@@ -52,6 +52,21 @@ func TestValidateSessionKey_Multibyte(t *testing.T) {
 	}
 }
 
+func TestValidateStorageSafeSessionKey(t *testing.T) {
+	if err := ValidateStorageSafeSessionKey("client:main"); err != nil {
+		t.Errorf("valid key rejected: %v", err)
+	}
+	if err := ValidateStorageSafeSessionKey("client:main:fresh-chat"); err != nil {
+		t.Errorf("multi-segment key rejected: %v", err)
+	}
+	if err := ValidateStorageSafeSessionKey("../client:main"); err == nil {
+		t.Error("path traversal key accepted")
+	}
+	if err := ValidateStorageSafeSessionKey(`client\main`); err == nil {
+		t.Error("backslash key accepted")
+	}
+}
+
 // --- SanitizeHTML (Rust: test_sanitize_html) ---
 
 func TestSanitizeHTML(t *testing.T) {

@@ -32,6 +32,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coresecurity"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 )
@@ -90,6 +91,10 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 	sessionKey := strings.TrimSpace(reqBody.SessionKey)
 	if sessionKey == "" {
 		sessionKey = nativeClientChannel + ":main"
+	}
+	if err := coresecurity.ValidateStorageSafeSessionKey(sessionKey); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid sessionKey"})
+		return
 	}
 	if s.chatHandler == nil {
 		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "chat handler not ready"})

@@ -2,6 +2,7 @@ package coresecurity
 
 import (
 	"errors"
+	"strings"
 	"unicode"
 )
 
@@ -24,6 +25,19 @@ func ValidateSessionKey(key string) error {
 		if unicode.IsControl(r) && r != '\n' && r != '\t' && r != '\r' {
 			return errors.New("coresecurity: invalid session key")
 		}
+	}
+	return nil
+}
+
+// ValidateStorageSafeSessionKey rejects session keys that would alias when later
+// mapped onto filesystem paths. This keeps untrusted client keys from
+// collapsing onto another session's transcript via filepath.Base().
+func ValidateStorageSafeSessionKey(key string) error {
+	if err := ValidateSessionKey(key); err != nil {
+		return err
+	}
+	if strings.ContainsAny(key, `/\`) {
+		return errors.New("coresecurity: session key contains path separator")
 	}
 	return nil
 }

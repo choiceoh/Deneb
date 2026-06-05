@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coresecurity"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	chatpkg "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -19,6 +20,17 @@ import (
 // pipeline's richUIChannel treats this channel as rich-UI-capable, so the agent
 // emits kai-ui fences for the native app (and Telegram stays unaffected).
 const nativeClientChannel = "client"
+
+func normalizeMiniappSessionKey(raw string) (string, error) {
+	sessionKey := strings.TrimSpace(raw)
+	if sessionKey == "" {
+		sessionKey = nativeClientChannel + ":main"
+	}
+	if err := coresecurity.ValidateStorageSafeSessionKey(sessionKey); err != nil {
+		return "", err
+	}
+	return sessionKey, nil
+}
 
 // MiniappMethods returns the miniapp-namespaced chat bridge. The standalone
 // native client authenticates via the X-Deneb-Client-Token header and reaches
@@ -98,9 +110,9 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		if strings.TrimSpace(text) == "" {
 			return rpcerr.Unavailable("no text found in image").Response(req.ID)
 		}
-		sessionKey := strings.TrimSpace(p.SessionKey)
-		if sessionKey == "" {
-			sessionKey = nativeClientChannel + ":main"
+		sessionKey, err := normalizeMiniappSessionKey(p.SessionKey)
+		if err != nil {
+			return rpcerr.ValidationFailed("invalid sessionKey").Response(req.ID)
 		}
 		message := "📷 공유 이미지에서 추출한 텍스트 (OCR):\n\n" + strings.TrimSpace(text)
 		if c := strings.TrimSpace(p.Caption); c != "" {
@@ -178,9 +190,9 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 		if strings.TrimSpace(transcript) == "" {
 			return rpcerr.Unavailable("no speech found in audio").Response(req.ID)
 		}
-		sessionKey := strings.TrimSpace(p.SessionKey)
-		if sessionKey == "" {
-			sessionKey = nativeClientChannel + ":main"
+		sessionKey, err := normalizeMiniappSessionKey(p.SessionKey)
+		if err != nil {
+			return rpcerr.ValidationFailed("invalid sessionKey").Response(req.ID)
 		}
 		// Drive a meeting-minutes turn, not a bare transcript dump. The agent
 		// judges meeting vs short memo (the meeting-minutes skill carries the
@@ -238,6 +250,10 @@ func handleMiniappCaptureContacts(deps Deps) rpcutil.HandlerFunc {
 		if len(p.Contacts) == 0 {
 			return rpcerr.MissingParam("contacts").Response(req.ID)
 		}
+		sessionKey, err := normalizeMiniappSessionKey(p.SessionKey)
+		if err != nil {
+			return rpcerr.ValidationFailed("invalid sessionKey").Response(req.ID)
+		}
 		// Re-wrap the array into the {"contacts": ...} envelope both SaveContacts
 		// and EnrichContacts parse.
 		payload := make([]byte, 0, len(p.Contacts)+13)
@@ -262,10 +278,6 @@ func handleMiniappCaptureContacts(deps Deps) rpcutil.HandlerFunc {
 			if res, err := deps.EnrichContacts(payload); err == nil {
 				enrich = res
 			}
-		}
-		sessionKey := strings.TrimSpace(p.SessionKey)
-		if sessionKey == "" {
-			sessionKey = nativeClientChannel + ":main"
 		}
 		text := contactsSummary(saved, enrich)
 		recordWorkFeed(deps, workfeed.Item{
@@ -335,9 +347,9 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 		if strings.TrimSpace(p.Message) == "" {
 			return rpcerr.MissingParam("message").Response(req.ID)
 		}
-		sessionKey := strings.TrimSpace(p.SessionKey)
-		if sessionKey == "" {
-			sessionKey = nativeClientChannel + ":main"
+		sessionKey, err := normalizeMiniappSessionKey(p.SessionKey)
+		if err != nil {
+			return rpcerr.ValidationFailed("invalid sessionKey").Response(req.ID)
 		}
 
 		res, err := deps.Chat.SendSync(ctx, sessionKey, p.Message, strings.TrimSpace(p.Model), &chatpkg.SyncOptions{
