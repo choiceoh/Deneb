@@ -84,11 +84,12 @@ import org.jetbrains.compose.resources.stringResource
 // During streaming the answer grows by a token every few ms, and parseMarkdown
 // re-parses the whole string each time — O(n²) over a long answer, which stalls the
 // main thread and janks both the stream and any scrolling. Sample the growing text at
-// a fixed cadence instead: the markdown reflows ~16x/second (smooth to read) while the
-// parse count is decoupled from the token rate. The finished (non-streaming) string is
-// always parsed exactly and immediately, so the completed message is byte-identical to
-// having parsed every token.
-private const val STREAM_PARSE_INTERVAL_MS = 64L
+// a fixed cadence instead: the markdown reflows ~10x/second while the parse count is
+// decoupled from the token rate. Tuned toward smoothness over liveness — a slightly
+// chunkier reflow keeps more frame headroom for scrolling. The finished (non-streaming)
+// string is always parsed exactly and immediately, so the completed message is
+// byte-identical to having parsed every token.
+private const val STREAM_PARSE_INTERVAL_MS = 96L
 
 @Composable
 private fun rememberStreamingParseSource(message: String, isStreaming: Boolean): String {
