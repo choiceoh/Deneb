@@ -56,21 +56,14 @@ func mergeRequestBody(model string, callerExtra map[string]any) map[string]any {
 	return merged
 }
 
-// modelSamplingDefaults returns vendor-recommended sampling parameters for
-// known local models. Returns nil pointers for unknown models (use server defaults).
-// Sources:
-//   - Qwen3 non-thinking: qwen.readthedocs.io — temp 0.7, top_p 0.8, top_k 20
+// modelSamplingDefaults returns vendor-recommended sampling parameters for the
+// model, sourced from its Profile (modelrole.ProfileFor) so the hub and
+// reasoning detection share one model table. Returns nil pointers for models
+// with no published override (use server defaults).
 func modelSamplingDefaults(model string) (temp, topP *float64, topK *int) {
-	m := strings.ToLower(model)
-	switch {
-	case strings.Contains(m, "qwen3") || strings.Contains(m, "qwen36") || strings.Contains(m, "qwen35"):
-		return ptr(0.7), ptr(0.8), ptr(20)
-	default:
-		return nil, nil, nil
-	}
+	p := modelrole.ProfileFor(model)
+	return p.Temperature, p.TopP, p.TopK
 }
-
-func ptr[T any](v T) *T { return &v }
 
 // Config controls hub behavior.
 type Config struct {
