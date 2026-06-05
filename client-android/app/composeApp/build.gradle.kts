@@ -220,7 +220,11 @@ class VersionGeneratorPlugin : Plugin<Project> {
     override fun apply(project: Project) {
         project.afterEvaluate {
             val appVersion = libs.versions.appVersion.get()
-            val appVersionCode = libs.versions.android.versionCode.get()
+            // Mirror androidApp's -PdenebVersionCode override so the in-app updater's
+            // DENEB_VERSION_CODE (= Version.appVersionCode) matches the published APK's
+            // actual versionCode; falls back to libs for IDE/dev builds.
+            val appVersionCode = (project.findProperty("denebVersionCode") as? String)
+                ?: libs.versions.android.versionCode.get()
 
             // Generate Kotlin version file
             val versionFile =

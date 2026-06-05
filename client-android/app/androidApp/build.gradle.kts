@@ -6,6 +6,15 @@ plugins {
     alias(libs.plugins.composeCompiler)
 }
 
+// versionCode normally comes from libs.versions.toml, but publish-apk.sh overrides
+// it with -PdenebVersionCode=<auto>. That lets concurrent agent worktrees each get
+// a distinct, monotonically increasing code (serve-dir max + 1, flock-serialized)
+// instead of all hand-bumping libs and colliding. IDE/dev builds with no property
+// fall back to the libs value.
+val denebVersionCode: Int =
+    (findProperty("denebVersionCode") as? String)?.toIntOrNull()
+        ?: libs.versions.android.versionCode.get().toInt()
+
 android {
     namespace = "com.inspiredandroid.kai"
     compileSdk =
@@ -24,10 +33,7 @@ android {
             libs.versions.android.targetSdk
                 .get()
                 .toInt()
-        versionCode =
-            libs.versions.android.versionCode
-                .get()
-                .toInt()
+        versionCode = denebVersionCode
         versionName = libs.versions.appVersion.get()
     }
 
@@ -92,7 +98,7 @@ android {
 // the shared publish dir. The hash comes from DENEB_BUILD_SHA, else git, else "nogit".
 androidComponents {
     val versionName = libs.versions.appVersion.get()
-    val versionCode = libs.versions.android.versionCode.get()
+    val versionCode = denebVersionCode
     val gitSha = (
         System.getenv("DENEB_BUILD_SHA")
             ?: runCatching {

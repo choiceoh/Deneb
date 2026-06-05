@@ -36,13 +36,33 @@ APP_DIR="$REPO_ROOT/client-android/app"
 cd "$APP_DIR"
 
 VERSION_NAME="$(sed -n 's/^appVersion = "\(.*\)"/\1/p' gradle/libs.versions.toml)"
-VERSION_CODE="$(sed -n 's/^android-versionCode = "\(.*\)"/\1/p' gradle/libs.versions.toml)"
+LIBS_VERSION_CODE="$(sed -n 's/^android-versionCode = "\(.*\)"/\1/p' gradle/libs.versions.toml)"
 SHA="$(git -C "$REPO_ROOT" rev-parse --short=8 HEAD)"
 
-if [ -z "$VERSION_NAME" ] || [ -z "$VERSION_CODE" ]; then
+if [ -z "$VERSION_NAME" ] || [ -z "$LIBS_VERSION_CODE" ]; then
   echo "could not read appVersion/android-versionCode from libs.versions.toml" >&2
   exit 1
 fi
+
+# Auto-assign a collision-free versionCode instead of trusting a hand-bumped libs
+# value. The 155/162/164 clobbers happened because each agent worktree bumped
+# libs to whatever number it guessed, and two could pick the same. Here flock
+# serializes the read-max -> build -> publish window against the shared serve
+# dir, and each publish takes (serve-dir max + 1), never below the libs floor.
+# -PdenebVersionCode feeds the chosen code into both gradle modules (androidApp
+# versionCode + composeApp BuildKonfig), so the APK, its filename, and the in-app
+# updater's DENEB_VERSION_CODE all agree. No manual libs bump needed.
+mkdir -p "$APK_DIR"
+exec 200>"$APK_DIR/.publish.lock"
+flock 200
+SERVE_MAX="$(ls "$APK_DIR"/deneb-*-fossDebug.apk 2>/dev/null \
+  | grep -oE 'deneb-[0-9.]+-[0-9]+-' | grep -oE '[0-9]+-$' | tr -d '-' \
+  | sort -n | tail -1)"
+VERSION_CODE=$(( ${SERVE_MAX:-0} + 1 ))
+if [ "$VERSION_CODE" -lt "$LIBS_VERSION_CODE" ]; then
+  VERSION_CODE="$LIBS_VERSION_CODE"
+fi
+echo "auto-assigned versionCode $VERSION_CODE (serve max=${SERVE_MAX:-none}, libs floor=$LIBS_VERSION_CODE)"
 
 # Pre-publish smoke gate. Render-time crashes (the #1959 class) only surface when
 # the real screens compose with real data — which neither compileKotlinDesktop nor
@@ -72,7 +92,7 @@ else
 fi
 
 echo "building deneb $VERSION_NAME ($VERSION_CODE) @ $SHA ..."
-DENEB_BUILD_SHA="$SHA" ANDROID_HOME="$SDK" ./gradlew :androidApp:assembleFossDebug -q
+DENEB_BUILD_SHA="$SHA" ANDROID_HOME="$SDK" ./gradlew :androidApp:assembleFossDebug -q -PdenebVersionCode="$VERSION_CODE"
 
 APK_NAME="deneb-$VERSION_NAME-$VERSION_CODE-$SHA-fossDebug.apk"
 APK_PATH="androidApp/build/outputs/apk/foss/debug/$APK_NAME"
