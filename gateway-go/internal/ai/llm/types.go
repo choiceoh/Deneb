@@ -5,6 +5,7 @@ package llm
 import (
 	"encoding/json"
 	"strings"
+	"unicode/utf8"
 )
 
 // ChatRequest represents a streaming chat completion request.
@@ -57,35 +58,54 @@ const hexChars = "0123456789abcdef"
 // appendJSONString encodes s as a JSON string and appends it to dst.
 // It is equivalent to json.Marshal(s) but avoids the reflection path and
 // html-safe escaping of <, >, & that json.Marshal performs by default.
-// Valid UTF-8 multi-byte sequences are passed through unchanged (JSON allows UTF-8).
+// Valid UTF-8 multi-byte sequences are passed through unchanged (JSON allows
+// UTF-8); invalid bytes are replaced with U+FFFD, matching encoding/json, so the
+// request body is always valid UTF-8 and a strict provider can't reject it.
 func appendJSONString(dst []byte, s string) []byte {
 	dst = append(dst, '"')
-	for i := range len(s) {
+	for i := 0; i < len(s); {
 		c := s[i]
-		switch {
-		case c == '"':
-			dst = append(dst, '\\', '"')
-		case c == '\\':
-			dst = append(dst, '\\', '\\')
-		case c < 0x20:
-			// Control character — use short form where available, \uXXXX otherwise.
-			switch c {
-			case '\t':
-				dst = append(dst, '\\', 't')
-			case '\n':
-				dst = append(dst, '\\', 'n')
-			case '\r':
-				dst = append(dst, '\\', 'r')
-			case '\b':
-				dst = append(dst, '\\', 'b')
-			case '\f':
-				dst = append(dst, '\\', 'f')
+		if c < utf8.RuneSelf {
+			// ASCII fast path: escape control chars and " / \, pass the rest.
+			switch {
+			case c == '"':
+				dst = append(dst, '\\', '"')
+			case c == '\\':
+				dst = append(dst, '\\', '\\')
+			case c < 0x20:
+				// Control character — short form where available, \uXXXX otherwise.
+				switch c {
+				case '\t':
+					dst = append(dst, '\\', 't')
+				case '\n':
+					dst = append(dst, '\\', 'n')
+				case '\r':
+					dst = append(dst, '\\', 'r')
+				case '\b':
+					dst = append(dst, '\\', 'b')
+				case '\f':
+					dst = append(dst, '\\', 'f')
+				default:
+					dst = append(dst, '\\', 'u', '0', '0', hexChars[c>>4], hexChars[c&0x0f])
+				}
 			default:
-				dst = append(dst, '\\', 'u', '0', '0', hexChars[c>>4], hexChars[c&0x0f])
+				dst = append(dst, c)
 			}
-		default:
-			dst = append(dst, c)
+			i++
+			continue
 		}
+		// Multi-byte: keep a valid UTF-8 rune verbatim; replace an invalid byte
+		// with U+FFFD (as encoding/json does) instead of emitting it raw, which
+		// would put invalid UTF-8 on the wire.
+		_, size := utf8.DecodeRuneInString(s[i:])
+		if size == 1 {
+			// Invalid encoding (DecodeRuneInString returns RuneError, size 1).
+			dst = append(dst, "�"...)
+			i++
+			continue
+		}
+		dst = append(dst, s[i:i+size]...)
+		i += size
 	}
 	dst = append(dst, '"')
 	return dst
