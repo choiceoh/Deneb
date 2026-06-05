@@ -62,6 +62,7 @@ import com.inspiredandroid.kai.ui.dynamicui.toSpeakableText
 import com.inspiredandroid.kai.ui.handCursor
 import com.inspiredandroid.kai.ui.markdown.MarkdownContent
 import com.inspiredandroid.kai.ui.markdown.parseMarkdown
+import com.inspiredandroid.kai.ui.markdown.parseMarkdownCached
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.bot_message_copy_content_description
 import kai.composeapp.generated.resources.bot_message_regenerate_content_description
@@ -126,7 +127,11 @@ internal fun BotMessage(
     attachments: ImmutableList<Attachment> = persistentListOf(),
 ) {
     val parseSource = rememberStreamingParseSource(message, isStreaming)
-    val document = remember(parseSource) { parseMarkdown(parseSource) }
+    // Streaming bodies change every tick (don't pollute the cache); a finished body goes
+    // through the module-level cache so scrolling it back into view never re-parses.
+    val document = remember(parseSource, isStreaming) {
+        if (isStreaming) parseMarkdown(parseSource) else parseMarkdownCached(parseSource)
+    }
     var isEditing by remember(frozen) { mutableStateOf(false) }
     val effectiveFrozen = if (isEditing && frozen != null) frozen.copy(pressedEvent = null) else frozen
     val effectiveInteractive = if (frozen != null) (onResubmit != null && isEditing) else isInteractive
