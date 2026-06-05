@@ -156,28 +156,32 @@ func LightweightModel() string {
 	return getRoleModel(modelrole.RoleLightweight, modelrole.DefaultVllmModel)
 }
 
-// CallLocalLLM invokes the lightweight (local AI) model with fallback chain.
-// When the local AI hub is set, delegates to the hub for token budget management,
-// priority queuing, and zombie request prevention.
-// Optional extraBody maps are merged into the request body (e.g. for chat_template_kwargs).
-// Reasoning mode is disabled by default for all calls.
-func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
-	// Hub path: centralized token budget, priority queue, health check.
-	if pkgLocalAIHub != nil {
+// CallRoleLLM invokes a specific model role with reasoning-aware request shaping
+// and the role's fallback chain. The lightweight role routes through the
+// centralized hub (token budget, priority queue, zombie guard) when one is
+// wired; every other role (tiny, analysis) takes the direct path. Optional
+// extraBody maps merge into the request body (e.g. chat_template_kwargs).
+func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
+	// Hub path: only the lightweight role is hub-managed today.
+	if role == modelrole.RoleLightweight && pkgLocalAIHub != nil {
 		return pkgLocalAIHub.CallLocalLLM(ctx, system, userMessage, maxTokens, extraBody...)
 	}
 
-	// Legacy path: direct local AI call (used when hub is not yet wired).
+	// Direct path: tiny/analysis, or lightweight before the hub is wired.
 	ctx, cancel := context.WithTimeout(ctx, pilotTimeout)
 	defer cancel()
 
-	client := LightweightClient()
-	model := LightweightModel()
+	client := getRoleClient(role, modelrole.DefaultVllmBaseURL, "local")
+	model := getRoleModel(role, modelrole.DefaultVllmModel)
 
-	// Always disable reasoning by default; caller-supplied extraBody merges on top.
-	merged := make(map[string]any, len(localai.NoThinking))
-	for k, v := range localai.NoThinking {
-		merged[k] = v
+	// Disable reasoning only for non-reasoning models — a reasoning model's
+	// thinking-only chat template can 400 on enable_thinking (mirrors
+	// localai.Hub.mergeRequestBody). Caller-supplied extraBody merges on top.
+	merged := make(map[string]any, len(localai.NoThinking)+1)
+	if !modelrole.IsReasoningModel(model) {
+		for k, v := range localai.NoThinking {
+			merged[k] = v
+		}
 	}
 	if len(extraBody) > 0 && extraBody[0] != nil {
 		for k, v := range extraBody[0] {
@@ -206,12 +210,12 @@ func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 
 	events, err := client.StreamChat(ctx, req)
 	if err != nil {
-		// Lightweight model failed — try fallback model if registry is available.
+		// Role model failed — walk its fallback chain if the registry is available.
 		if pkgRegistry != nil {
-			fbChain := pkgRegistry.FallbackChain(modelrole.RoleLightweight)
-			for _, role := range fbChain[1:] {
-				fbCfg := pkgRegistry.Config(role)
-				fbClient := pkgRegistry.Client(role)
+			fbChain := pkgRegistry.FallbackChain(role)
+			for _, fbRole := range fbChain[1:] {
+				fbCfg := pkgRegistry.Config(fbRole)
+				fbClient := pkgRegistry.Client(fbRole)
 				if fbClient == nil {
 					continue
 				}
@@ -238,6 +242,25 @@ func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int
 		return "(no response from local model)", nil
 	}
 	return text, nil
+}
+
+// CallLocalLLM invokes the lightweight model role — the original single local-AI
+// tier, hub-managed when wired. Back-compat wrapper over CallRoleLLM.
+func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
+	return CallRoleLLM(ctx, modelrole.RoleLightweight, system, userMessage, maxTokens, extraBody...)
+}
+
+// CallTinyLLM invokes the tiny model role — the smallest model, for trivial
+// classification/extraction (session titles, gmail stage-1 extractors).
+func CallTinyLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
+	return CallRoleLLM(ctx, modelrole.RoleTiny, system, userMessage, maxTokens, extraBody...)
+}
+
+// CallAnalysisLLM invokes the analysis model role — the highest-quality local
+// model, for reasoning-grade tasks (gmail stage-2 analysis, conversation
+// compaction, transcript summary).
+func CallAnalysisLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
+	return CallRoleLLM(ctx, modelrole.RoleAnalysis, system, userMessage, maxTokens, extraBody...)
 }
 
 // CollectStream reads all events from a streaming LLM response and returns the text.

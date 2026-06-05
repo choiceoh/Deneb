@@ -30,11 +30,13 @@ func (s *Server) initGmailPoll() {
 	stateDir := filepath.Join(home, ".deneb")
 
 	cfg := gmailpoll.Config{
-		StateDir:      stateDir,
-		LLMClient:     s.modelRegistry.Client(modelrole.RoleLightweight),
-		Model:         s.modelRegistry.Model(modelrole.RoleLightweight),
-		LocalClient:   s.modelRegistry.Client(modelrole.RoleLightweight),
-		LocalModel:    s.modelRegistry.Model(modelrole.RoleLightweight),
+		StateDir: stateDir,
+		// Stage-2 final analysis is reasoning-grade → analysis role.
+		LLMClient: s.modelRegistry.Client(modelrole.RoleAnalysis),
+		Model:     s.modelRegistry.Model(modelrole.RoleAnalysis),
+		// Stage-1 extractors are trivial classification → tiny role.
+		LocalClient:   s.modelRegistry.Client(modelrole.RoleTiny),
+		LocalModel:    s.modelRegistry.Model(modelrole.RoleTiny),
 		SenderFactsFn: s.wikiSenderFacts,
 	}
 
@@ -202,6 +204,17 @@ func resolveLightweightModel(logger *slog.Logger) string {
 
 func resolveFallbackModel(logger *slog.Logger) string {
 	return resolveAgentRoleModel("fallbackModel", logger)
+}
+
+// resolveTinyModel / resolveAnalysisModel read the optional per-role overrides
+// agents.tinyModel / agents.analysisModel from deneb.json. Empty leaves the
+// registry's lightweight model for that role (the prior single-tier behavior).
+func resolveTinyModel(logger *slog.Logger) string {
+	return resolveAgentRoleModel("tinyModel", logger)
+}
+
+func resolveAnalysisModel(logger *slog.Logger) string {
+	return resolveAgentRoleModel("analysisModel", logger)
 }
 
 // resolveAgentRoleModel reads a string field directly under "agents" in

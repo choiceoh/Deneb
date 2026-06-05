@@ -26,7 +26,9 @@ type Role string
 
 const (
 	RoleMain        Role = "main"
-	RoleLightweight Role = "lightweight"
+	RoleTiny        Role = "tiny"        // smallest model: trivial classification/extraction
+	RoleLightweight Role = "lightweight" // mid model: bounded summarization
+	RoleAnalysis    Role = "analysis"    // highest-quality local model: reasoning-grade tasks
 	RoleFallback    Role = "fallback"
 )
 
@@ -54,6 +56,8 @@ type RegistryOptions struct {
 	MainModel        string // "provider/model"; empty → local vLLM
 	LocalVllmModel   string // served model name for the local vLLM default
 	LightweightModel string // override for RoleLightweight; empty → local vLLM
+	TinyModel        string // override for RoleTiny; empty → same as lightweight
+	AnalysisModel    string // override for RoleAnalysis; empty → same as lightweight
 	FallbackModel    string // override for RoleFallback; empty → local vLLM
 	// Providers is the deneb.json provider catalog (providerID → resolved
 	// endpoint/credentials). A role whose provider is present here resolves
@@ -167,11 +171,22 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	if opts.FallbackModel != "" {
 		models[RoleFallback] = resolveModelConfig(opts.FallbackModel, opts.Providers)
 	}
+	// Tiny and Analysis default to the (possibly overridden) lightweight model so
+	// an unconfigured deployment behaves exactly as before; deneb.json opts in to
+	// a smaller tiny model and a higher-quality analysis model independently.
+	models[RoleTiny] = models[RoleLightweight]
+	models[RoleAnalysis] = models[RoleLightweight]
+	if opts.TinyModel != "" {
+		models[RoleTiny] = resolveModelConfig(opts.TinyModel, opts.Providers)
+	}
+	if opts.AnalysisModel != "" {
+		models[RoleAnalysis] = resolveModelConfig(opts.AnalysisModel, opts.Providers)
+	}
 
 	// Auto-discover the actual model name the local vLLM is serving and
 	// substitute it in when config drifts. reconcileVllmModel is a no-op for
 	// non-vllm roles, so running it across all roles is safe.
-	for _, role := range []Role{RoleMain, RoleLightweight, RoleFallback} {
+	for _, role := range []Role{RoleMain, RoleTiny, RoleLightweight, RoleAnalysis, RoleFallback} {
 		cfg := models[role]
 		reconcileVllmModel(logger, &cfg)
 		models[role] = cfg
@@ -191,7 +206,9 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 
 	logger.Info("modelrole: registry initialized",
 		"main", logModelAlias(models[RoleMain]),
+		"tiny", logModelAlias(models[RoleTiny]),
 		"lightweight", logModelAlias(models[RoleLightweight]),
+		"analysis", logModelAlias(models[RoleAnalysis]),
 		"fallback", logModelAlias(models[RoleFallback]),
 	)
 
@@ -328,7 +345,7 @@ func (r *Registry) ClientForProvider(providerID string) *llm.Client {
 // This allows callers to accept either role names or raw model names.
 func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Role, ok bool) {
 	switch Role(modelOrRole) {
-	case RoleMain, RoleLightweight, RoleFallback:
+	case RoleMain, RoleTiny, RoleLightweight, RoleAnalysis, RoleFallback:
 		role = Role(modelOrRole)
 		return r.FullModelID(role), role, true
 	}
@@ -340,7 +357,11 @@ func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Ro
 func (r *Registry) RoleForModel(fullModelID string) (Role, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	for _, role := range []Role{RoleMain, RoleLightweight, RoleFallback} {
+	// Lightweight precedes tiny/analysis so a deployment that leaves them at the
+	// lightweight default maps that shared model back to the lightweight role
+	// (preserving prior behavior); an explicitly configured tiny/analysis model
+	// still matches its own role.
+	for _, role := range []Role{RoleMain, RoleLightweight, RoleTiny, RoleAnalysis, RoleFallback} {
 		cfg, ok := r.models[role]
 		if !ok {
 			continue
@@ -362,8 +383,12 @@ func (r *Registry) FallbackChain(role Role) []Role {
 	switch role {
 	case RoleMain:
 		return []Role{RoleMain, RoleLightweight, RoleFallback}
+	case RoleTiny:
+		return []Role{RoleTiny, RoleLightweight, RoleFallback}
 	case RoleLightweight:
 		return []Role{RoleLightweight, RoleFallback}
+	case RoleAnalysis:
+		return []Role{RoleAnalysis, RoleLightweight, RoleFallback}
 	case RoleFallback:
 		return []Role{RoleFallback}
 	default:

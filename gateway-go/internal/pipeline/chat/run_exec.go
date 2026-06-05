@@ -1530,7 +1530,7 @@ var _ compact.Summarizer = (*localAISummarizer)(nil)
 type localAISummarizer struct{}
 
 func (s *localAISummarizer) Summarize(ctx context.Context, system, conversation string, maxOutputTokens int) (string, error) {
-	return pilot.CallLocalLLM(ctx, system, conversation, maxOutputTokens)
+	return pilot.CallAnalysisLLM(ctx, system, conversation, maxOutputTokens)
 }
 
 // formatToolHist renders a tool-count histogram as "name:count,name:count" in
