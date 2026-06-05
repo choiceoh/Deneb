@@ -2185,7 +2185,7 @@ hermes doctor — 어느 환경에서도 동일 진단
 |---|---|---|
 | 언어 | Go (gateway-go) | Python |
 | 타겟 | DGX Spark 단일 기계 | 5$ VPS / GPU 클러스터 / 서버리스 |
-| UI | 네이티브 클라 전용 (안드로이드/iOS/데스크톱, 안드로이드 S25 최적화) | Telegram/Discord/Slack/… 17+ 플랫폼 |
+| UI | 네이티브 클라 전용 (안드로이드/iOS/데스크톱, 안드로이드 S26 최적화) | Telegram/Discord/Slack/… 17+ 플랫폼 |
 | 툴 | 150+ (내장) | 40+ 빌트인 + 스킬 + MCP + 플러그인 |
 | LLM 통합 | 자체 pipeline | OpenAI-style unified protocol |
 | 메모리 | vega (자체) | 8개 플러그인 + 빌트인 MEMORY.md/USER.md |

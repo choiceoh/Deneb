@@ -27,7 +27,7 @@ Two committed gateway PRs make the phone able to attach:
 
 ## Prerequisites
 
-- JDK 21, Android SDK, and a device/emulator (target: Galaxy S25).
+- JDK 21, Android SDK, and a device/emulator (target: Galaxy S26).
 - `git` for the vendor step.
 
 ## Step 1 — Vendor Kai

@@ -165,7 +165,7 @@ class MainActivity : ComponentActivity() {
     }
 
     // 120Hz scrolling. The app otherwise makes no display-mode request, so on a
-    // high-refresh panel (Galaxy S25) the window can stay pinned to a 60Hz mode.
+    // high-refresh panel (Galaxy S26) the window can stay pinned to a 60Hz mode.
     // Request the fastest mode at the current resolution; Compose scroll/animation
     // follow Choreographer, so they then run at the panel's full rate. LTPO panels
     // still idle down when the screen is static, so this raises the ceiling rather

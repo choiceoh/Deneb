@@ -28,7 +28,7 @@
 #   scripts/dev/native-app.sh stop            # tear everything down
 #
 # Coordinates are pixels as they appear in the screenshot (top-left origin). The
-# phone profile is 412x915 — a real Galaxy S25's dp size. Linux Compose renders at
+# phone profile is 412x915 — a real Galaxy S26's dp size. Linux Compose renders at
 # density 1, so screenshot px == dp == xdotool coords: click the pixel you see.
 #
 # Nothing here modifies the app source: the gateway URL + client token are
@@ -70,7 +70,7 @@ SKIKO_RENDER="${NATIVE_SKIKO:-SOFTWARE}"   # SOFTWARE is safe on headless Xvfb (
 
 # Profiles: NAME -> dpW dpH scale.  On Linux, Compose/Skiko ignores
 # sun.java2d.uiScale, so density is fixed at 1 → physical px == dp. We render at
-# true phone dp (a Galaxy S25 is ~412x915 dp); screenshot pixels map 1:1 to both
+# true phone dp (a Galaxy S26 is ~412x915 dp); screenshot pixels map 1:1 to both
 # dp and xdotool input coords, so "click the pixel you see" just works.
 profile_geometry() {
   case "$1" in
