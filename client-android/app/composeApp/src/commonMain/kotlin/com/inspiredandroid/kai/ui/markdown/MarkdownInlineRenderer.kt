@@ -52,9 +52,10 @@ private fun AnnotatedString.Builder.appendInline(node: InlineNode, colors: Color
             LinkAnnotation.Url(
                 url = node.href,
                 styles = TextLinkStyles(
+                    // Colour + underline is enough; bold made links shout against
+                    // the body text.
                     style = SpanStyle(
                         color = colors.primary,
-                        fontWeight = FontWeight.Bold,
                         textDecoration = TextDecoration.Underline,
                     ),
                 ),

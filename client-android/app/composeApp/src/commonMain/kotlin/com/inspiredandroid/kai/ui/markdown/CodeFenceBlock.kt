@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.bot_message_copy_content_description
 import org.jetbrains.compose.resources.stringResource
@@ -56,8 +57,9 @@ internal fun CodeFenceBlock(
                 modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp),
             ) {
                 Text(
-                    text = language?.takeIf { it.isNotBlank() } ?: "",
-                    style = MaterialTheme.typography.labelSmall,
+                    text = (language?.takeIf { it.isNotBlank() } ?: "code").uppercase(),
+                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.08.em),
+                    color = colorScheme.onSurfaceVariant,
                 )
                 IconButton(
                     onClick = { clipboard.setText(AnnotatedString(code)) },
