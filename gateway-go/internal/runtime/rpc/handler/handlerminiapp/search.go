@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -32,6 +33,12 @@ const (
 	// substring. The window is fixed (not a request parameter) so
 	// search behavior stays predictable from one query to the next.
 	unifiedPeopleWindowDays = 30
+	// People search hits Gmail (a 100-message aggregate, uncached), which can
+	// be far slower than the in-memory wiki/diary FTS. Cap it so a slow or
+	// rate-limited mailbox can't hang the whole unified search past the
+	// client's RPC timeout — wiki/diary still return on time, and people just
+	// comes back empty (people has its own dedicated screen anyway).
+	peopleSearchTimeout = 12 * time.Second
 )
 
 // SearchDeps wires the two underlying domains. Either factory may be
@@ -139,7 +146,12 @@ func searchAll(deps SearchDeps) rpcutil.HandlerFunc {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				result.People = runPeopleSearch(ctx, deps, query, limit)
+				// Bound the Gmail-backed people search so it can't hold the
+				// wg.Wait below (and the caller's RPC) hostage. wiki/diary
+				// return regardless; a timed-out people search stays empty.
+				pctx, cancel := context.WithTimeout(ctx, peopleSearchTimeout)
+				defer cancel()
+				result.People = runPeopleSearch(pctx, deps, query, limit)
 			}()
 		}
 		wg.Wait()
