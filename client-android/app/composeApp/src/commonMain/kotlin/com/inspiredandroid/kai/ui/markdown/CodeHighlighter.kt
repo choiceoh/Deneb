@@ -16,14 +16,18 @@ import androidx.compose.ui.text.withStyle
  */
 internal data class HighlightColors(
     val keyword: Color,
-    val literal: Color,
+    val string: Color,
+    val number: Color,
     val comment: Color,
 )
 
 internal fun codeHighlightColors(scheme: ColorScheme): HighlightColors = HighlightColors(
     keyword = scheme.tertiary,
-    literal = scheme.secondary,
-    comment = scheme.outline,
+    string = scheme.secondary,
+    // Numbers get their own hue, and comments move off `outline` (too faint to
+    // read) onto onSurfaceVariant — muted but legible.
+    number = scheme.primary,
+    comment = scheme.onSurfaceVariant,
 )
 
 private val KOTLIN_KEYWORDS = setOf(
@@ -153,8 +157,8 @@ internal fun highlightCode(code: String, language: String?, colors: HighlightCol
 
     commentRegex?.let { r -> r.findAll(code).forEach { spans += Span(it.range, colors.comment) } }
     BLOCK_COMMENT_REGEX.findAll(code).forEach { spans += Span(it.range, colors.comment) }
-    if (hasStrings) STRING_REGEX.findAll(code).forEach { spans += Span(it.range, colors.literal) }
-    if (hasNumbers) NUMBER_REGEX.findAll(code).forEach { spans += Span(it.range, colors.literal) }
+    if (hasStrings) STRING_REGEX.findAll(code).forEach { spans += Span(it.range, colors.string) }
+    if (hasNumbers) NUMBER_REGEX.findAll(code).forEach { spans += Span(it.range, colors.number) }
     keywordRegex?.findAll(code)?.forEach { spans += Span(it.range, colors.keyword) }
 
     spans.sortWith(compareBy({ it.range.first }, { -(it.range.last - it.range.first) }))
