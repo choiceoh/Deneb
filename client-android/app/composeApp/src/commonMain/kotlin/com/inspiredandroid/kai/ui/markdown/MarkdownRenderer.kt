@@ -6,6 +6,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
+import androidx.compose.material3.Icon
+import kotlinx.collections.immutable.toImmutableList
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
@@ -106,7 +112,10 @@ private fun BlockRenderer(
 
         is Table -> TableBlock(block)
 
-        HorizontalRule -> HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        HorizontalRule -> HorizontalDivider(
+            modifier = Modifier.padding(vertical = 10.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+        )
 
         is DisplayMath -> DisplayMathBlock(block)
 
@@ -227,9 +236,65 @@ private fun BulletListBlock(
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         for (item in block.items) {
-            // The bullet is decoration, not content — mute it so the eye lands on
-            // the text, and "•" reads lighter than the body weight at this size.
-            ListItemRow("•", 16.dp, MaterialTheme.colorScheme.onSurfaceVariant, item, isInteractive, onUiCallback, frozen)
+            val task = remember(item) { detectTask(item) }
+            if (task != null) {
+                // A GFM task item ("- [ ] …" / "- [x] …") — render a real checkbox.
+                TaskItemRow(task.first, task.second, isInteractive, onUiCallback, frozen)
+            } else {
+                // The bullet is decoration, not content — mute it so the eye lands
+                // on the text, and "•" reads lighter than the body weight here.
+                ListItemRow("•", 16.dp, MaterialTheme.colorScheme.onSurfaceVariant, item, isInteractive, onUiCallback, frozen)
+            }
+        }
+    }
+}
+
+private val taskMarker = Regex("^\\[([ xX])]\\s+")
+
+// detectTask returns (checked, item-with-marker-stripped) when a bullet item is
+// a GFM task ("[ ] …" / "[x] …"), else null. Done at render time so the parser
+// stays a plain CommonMark subset.
+private fun detectTask(item: ListItem): Pair<Boolean, ListItem>? {
+    val firstPara = item.children.firstOrNull() as? Paragraph ?: return null
+    val firstText = firstPara.inlines.firstOrNull() as? com.inspiredandroid.kai.ui.markdown.Text ?: return null
+    val match = taskMarker.find(firstText.value) ?: return null
+    val checked = firstText.value[match.range.first + 1].lowercaseChar() == 'x'
+    val rest = firstText.value.substring(match.range.last + 1)
+    val newInlines = buildList {
+        if (rest.isNotEmpty()) add(com.inspiredandroid.kai.ui.markdown.Text(rest))
+        addAll(firstPara.inlines.drop(1))
+    }.toImmutableList()
+    val newChildren = buildList {
+        add(Paragraph(newInlines))
+        addAll(item.children.drop(1))
+    }.toImmutableList()
+    return checked to ListItem(newChildren)
+}
+
+@Composable
+private fun TaskItemRow(
+    checked: Boolean,
+    item: ListItem,
+    isInteractive: Boolean,
+    onUiCallback: (String, Map<String, String>) -> Unit,
+    frozen: FrozenSubmission?,
+) {
+    Row {
+        Icon(
+            imageVector = if (checked) Icons.Filled.CheckBox else Icons.Outlined.CheckBoxOutlineBlank,
+            contentDescription = if (checked) "완료" else "미완료",
+            tint = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp).padding(end = 6.dp, top = 2.dp),
+        )
+        Column(Modifier.fillMaxWidth()) {
+            // Done items read muted so the eye skips to what's still open.
+            if (checked) {
+                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                    item.children.forEach { BlockRenderer(it, isInteractive, onUiCallback, frozen) }
+                }
+            } else {
+                item.children.forEach { BlockRenderer(it, isInteractive, onUiCallback, frozen) }
+            }
         }
     }
 }
