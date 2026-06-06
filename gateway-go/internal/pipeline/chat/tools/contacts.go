@@ -38,40 +38,42 @@ func ToolContacts(d *toolctx.ContactsDeps) toolctx.ToolFunc {
 
 		switch p.Action {
 		case "lookup":
-			return formatContacts(d.Store.LookupPhone(query), fmt.Sprintf("번호 '%s'", query)), nil
+			return formatContacts(d.Store.LookupPhone(query), query), nil
 		case "search":
-			return formatContacts(d.Store.Search(query, 20), fmt.Sprintf("'%s'", query)), nil
+			return formatContacts(d.Store.Search(query, 20), query), nil
 		default:
 			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: lookup (전화번호로 인물 찾기), search (이름·회사로 검색)", p.Action), nil
 		}
 	}
 }
 
-// formatContacts renders matched contacts as a Korean list (이름 · 번호 · 회사).
-// label describes what was looked up, for the no-match line.
-func formatContacts(matches []contacts.Contact, label string) string {
+// formatContacts renders matched contacts through the shared recall format so a
+// person (인물) result reads like wiki/knowledge/polaris hits: a "c:<이름>"
+// namespaced ref, phone/org as meta, emails as the snippet. The c: ref is a
+// locator into the address book; the curated wiki page (if any) lives at
+// w:인물/<이름>, which the trailing hint points at. query is what was looked up.
+func formatContacts(matches []contacts.Contact, query string) string {
 	if len(matches) == 0 {
-		return fmt.Sprintf("%s와 일치하는 연락처 없음.", label)
+		return fmt.Sprintf("'%s'와 일치하는 연락처 없음.", query)
 	}
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "## 주소록 조회 결과 (%d건)\n\n", len(matches))
-	for _, c := range matches {
+	sb.WriteString(recallHeader(query, len(matches), "주소록"))
+	for i, c := range matches {
 		name := strings.TrimSpace(c.Name)
 		if name == "" {
 			name = "(이름 없음)"
 		}
-		fields := []string{name}
+		var meta []string
 		if phone := strings.Join(trimNonEmpty(c.Phones), ", "); phone != "" {
-			fields = append(fields, phone)
+			meta = append(meta, phone)
 		}
 		if org := strings.TrimSpace(c.Org); org != "" {
-			fields = append(fields, org)
+			meta = append(meta, org)
 		}
-		if email := strings.Join(trimNonEmpty(c.Emails), ", "); email != "" {
-			fields = append(fields, email)
-		}
-		fmt.Fprintf(&sb, "- %s\n", strings.Join(fields, " · "))
+		emails := strings.Join(trimNonEmpty(c.Emails), ", ")
+		sb.WriteString(recallRow(i+1, RefContact+name, strings.Join(meta, " · "), emails))
 	}
+	sb.WriteString("큐레이션된 인물 정보는 `knowledge(op=\"recall\", query=\"이름\")` → `w:인물/...`.")
 	return strings.TrimRight(sb.String(), "\n")
 }
 
