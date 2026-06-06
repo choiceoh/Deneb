@@ -274,3 +274,12 @@ tasks.register<JavaExec>("renderPreviews") {
     mainClass.set("com.inspiredandroid.kai.RenderPreviewKt")
     systemProperty("java.awt.headless", "true")
 }
+
+tasks.register<JavaExec>("benchScrollRender") {
+    group = "deneb"
+    val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
+    dependsOn(desktopMain.compileTaskProvider)
+    classpath = files(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles)
+    mainClass.set("com.inspiredandroid.kai.ScrollRenderBenchKt")
+    systemProperty("java.awt.headless", "true")
+}
