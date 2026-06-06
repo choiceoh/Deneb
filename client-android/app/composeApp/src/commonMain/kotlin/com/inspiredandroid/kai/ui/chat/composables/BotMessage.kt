@@ -15,9 +15,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.layout.ContentScale
 import com.inspiredandroid.kai.data.Attachment
-import com.inspiredandroid.kai.decodeToImageBitmap
 import com.inspiredandroid.kai.ui.components.LocalShowFullScreenImage
-import kotlin.io.encoding.Base64
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -180,13 +178,8 @@ internal fun BotMessage(
             if (imageAttachments.isNotEmpty()) {
                 val showFullScreen = LocalShowFullScreenImage.current
                 for (att in imageAttachments) {
-                    val imageBitmap = remember(att.data) {
-                        try {
-                            decodeToImageBitmap(Base64.decode(att.data))
-                        } catch (_: Exception) {
-                            null
-                        }
-                    }
+                    // Module-cached so scrolling a form/receipt back into view doesn't re-decode.
+                    val imageBitmap = remember(att.data) { decodeBase64ImageCached(att.data) }
                     if (imageBitmap != null) {
                         Image(
                             bitmap = imageBitmap,

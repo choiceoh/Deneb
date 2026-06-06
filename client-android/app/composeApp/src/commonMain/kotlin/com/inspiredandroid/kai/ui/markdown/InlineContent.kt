@@ -32,10 +32,13 @@ internal fun InlineContent(
 ) {
     val colors = MaterialTheme.colorScheme
     if (!containsMath(inlines)) {
-        // Cache the AnnotatedString: without this it was rebuilt on every streaming
-        // token (every recomposition). Keyed by inlines + colors so a theme change
-        // still refreshes it.
-        val annotated = remember(inlines, colors) { inlines.toAnnotatedString(colors) }
+        // Cache the AnnotatedString. The remember() avoids a rebuild per streaming token;
+        // cachedAnnotatedString additionally survives LazyColumn item disposal, so scrolling
+        // the message back into view reuses it instead of rebuilding the spans (keyed by the
+        // cached inline-list + colors references, so a theme change still refreshes it).
+        val annotated = remember(inlines, colors) {
+            cachedAnnotatedString(inlines, colors) { inlines.toAnnotatedString(colors) }
+        }
         Text(
             text = annotated,
             style = style,
