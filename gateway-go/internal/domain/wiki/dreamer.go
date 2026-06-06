@@ -637,7 +637,7 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 - 최근 처리 이력에 이미 반영된 주제/경로는 새 사실이 추가된 경우에만 update하고, 같은 내용을 반복 생성하지 마라
 - 카테고리: 사람, 프로젝트, 거래, 기술, 업무, 결정, 선호
 - 거래 카테고리: 거래처·금액·납기가 걸린 건별 트랜잭션. 가장 임박한 결제기한/마감일은 frontmatter의 due 필드(YYYY-MM-DD)에 기록
-- content는 마크다운 형식. create 시 전체 본문, update 시 추가할 섹션/내용
+- content는 마크다운 형식. create 시 전체 본문, update 시 추가할 섹션/내용. 본문에서 다른 페이지를 언급할 때는 [[경로-또는-제목]] 형식의 위키링크를 쓰면 지식그래프 엣지가 된다 (예: [[프로젝트/dgx-spark]], [[홍길동]])
 - importance: 0.5(일반) ~ 0.9(핵심 결정)
 - type: 페이지 유형 — concept(개념), entity(인물/조직), source(출처), comparison(비교), log(이력)
 - confidence: 정보 신뢰도 — high(검증됨), medium(합리적 추론), low(불확실)

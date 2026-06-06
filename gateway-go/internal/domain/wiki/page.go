@@ -5,12 +5,54 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
+
+// wikiLinkRe matches a single Obsidian-style [[wiki-link]] target. The inner
+// group excludes brackets so nested/adjacent links each match on their own.
+var wikiLinkRe = regexp.MustCompile(`\[\[([^\[\]]+)\]\]`)
+
+// ExtractWikiLinks returns the page targets referenced via Obsidian-style
+// [[target]] links in a page body. It understands the [[target|alias]] and
+// [[target#section]] forms, returning just the target (the part before any
+// '|' or '#'). Targets are trimmed and de-duplicated in first-seen order;
+// callers resolve them to pages by path, id, or title.
+//
+// This closes a loop the wiki already half-implemented: the dreamer emits these
+// links into a page's "관련 문서" section (dreamer.go) and the graph resolvers
+// already strip "[[ ]]" when matching, but nothing parsed inline links out of a
+// body — the graph only read the parallel `related:` frontmatter. Inline links
+// are author-intended and high-precision, unlike the fuzzy body-mention pass.
+func ExtractWikiLinks(body string) []string {
+	if body == "" || !strings.Contains(body, "[[") {
+		return nil
+	}
+	matches := wikiLinkRe.FindAllStringSubmatch(body, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(matches))
+	out := make([]string, 0, len(matches))
+	for _, m := range matches {
+		target := m[1]
+		// [[target|alias]] -> target; [[target#section]] -> target.
+		if i := strings.IndexAny(target, "|#"); i >= 0 {
+			target = target[:i]
+		}
+		target = strings.TrimSpace(target)
+		if target == "" || seen[target] {
+			continue
+		}
+		seen[target] = true
+		out = append(out, target)
+	}
+	return out
+}
 
 // Page represents a single wiki page with YAML frontmatter and markdown body.
 type Page struct {

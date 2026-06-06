@@ -63,6 +63,76 @@ func TestGraphContext(t *testing.T) {
 	}
 }
 
+// TestGraphContext_InlineWikiLinks verifies that an Obsidian-style [[wiki-link]]
+// written in a page body becomes a graph edge even when there is no matching
+// `related:` frontmatter entry — the loop the dreamer's emitted links left open.
+func TestGraphContext_InlineWikiLinks(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+
+	// The deal page links to the person purely via an inline [[...]] in prose —
+	// no Related[], no shared tag. Only the inline-link pass can connect them.
+	mustWrite(t, store, "people/honggildong.md", &Page{
+		Meta: Frontmatter{ID: "honggildong", Title: "홍길동", Category: "사람", Summary: "탑솔라 구매 담당"},
+		Body: "탑솔라 거래의 핵심 의사결정권자.",
+	})
+	mustWrite(t, store, "deals/topsolar.md", &Page{
+		Meta: Frontmatter{ID: "topsolar", Title: "탑솔라 거래", Category: "거래", Summary: "연 5억 공급 계약"},
+		Body: "발주 담당자는 [[people/honggildong]] 부장.\n\n## 관련 문서\n- [[people/honggildong.md|홍길동]]\n",
+	})
+	mustWrite(t, store, "tech/dgx.md", &Page{
+		Meta: Frontmatter{ID: "dgx", Title: "DGX Spark", Category: "기술", Summary: "로컬 추론 서버"},
+		Body: "GPU 추론.",
+	})
+
+	ctx := context.Background()
+	got, err := store.GraphContext(ctx, "탑솔라 거래", 8)
+	if err != nil {
+		t.Fatalf("GraphContext: %v", err)
+	}
+	if !strings.Contains(got, "홍길동") {
+		t.Errorf("inline [[wiki-link]] neighbor missing:\n%s", got)
+	}
+	if !strings.Contains(got, "링크") {
+		t.Errorf("expected the neighbor to be labeled as a link edge:\n%s", got)
+	}
+	if strings.Contains(got, "DGX Spark") {
+		t.Errorf("unrelated page leaked into neighbors:\n%s", got)
+	}
+}
+
+func TestExtractWikiLinks(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want []string
+	}{
+		{"none", "plain prose with no links", nil},
+		{"simple", "see [[dgx-spark]] for details", []string{"dgx-spark"}},
+		{"alias", "owner is [[people/honggildong.md|홍길동]]", []string{"people/honggildong.md"}},
+		{"section", "per [[운영시스템/배포#롤백]] section", []string{"운영시스템/배포"}},
+		{"dedup", "[[a]] then [[a]] again and [[b]]", []string{"a", "b"}},
+		{"multi-line", "- [[프로젝트/x]]\n- [[프로젝트/y]]\n", []string{"프로젝트/x", "프로젝트/y"}},
+		{"empty-target", "[[]] and [[ | alias]]", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ExtractWikiLinks(tc.body)
+			if len(got) != len(tc.want) {
+				t.Fatalf("ExtractWikiLinks(%q) = %v, want %v", tc.body, got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("ExtractWikiLinks(%q)[%d] = %q, want %q", tc.body, i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
 func mustWrite(t *testing.T, store *Store, relPath string, page *Page) {
 	t.Helper()
 	if err := store.WritePage(relPath, page); err != nil {
