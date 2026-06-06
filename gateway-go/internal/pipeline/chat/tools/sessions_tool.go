@@ -11,6 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // Truncate shortens s to maxLen runes, appending "..." if truncated.
@@ -141,7 +142,9 @@ func toolSessionsHistory(transcript toolctx.TranscriptStore) ToolFunc {
 		for i, msg := range msgs {
 			content := msg.TextContent()
 			if len(content) > 500 {
-				content = content[:500] + "..."
+				// Rune-safe cut so a multi-byte char (Korean) never splits into a
+				// U+FFFD replacement char in the history preview.
+				content = textutil.TruncateBytes(content, 500) + "..."
 			}
 			fmt.Fprintf(&sb, "%d. [%s] %s\n", i+1, msg.Role, content)
 		}

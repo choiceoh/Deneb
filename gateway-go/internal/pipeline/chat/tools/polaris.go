@@ -9,6 +9,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // ToolPolaris creates the unified polaris tool with action dispatch (search/describe/expand).
@@ -122,10 +123,12 @@ func toolPolarisDescribe(store *polaris.Store) toolctx.ToolFunc {
 		sb.WriteString("### 요약 노드 목록\n\n")
 		for _, n := range filtered {
 			ts := time.UnixMilli(n.CreatedAt).Format("2006-01-02 15:04")
-			// Show first 200 chars of content as preview.
+			// Show the first ~200 bytes of content as preview. TruncateBytes backs
+			// off to a rune boundary so a multi-byte char (Korean) never splits into
+			// a U+FFFD replacement char in the preview.
 			preview := n.Content
 			if len(preview) > 200 {
-				preview = preview[:200] + "..."
+				preview = textutil.TruncateBytes(preview, 200) + "..."
 			}
 			sb.WriteString(fmt.Sprintf("- **ID %d** (level %d, 메시지 %d-%d, %s, ~%d토큰)\n  %s\n\n",
 				n.ID, n.Level, n.MsgStart, n.MsgEnd, ts, n.TokenEst, preview))

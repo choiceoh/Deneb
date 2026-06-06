@@ -32,6 +32,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // chatRunResult wraps the agent result with chat-layer metadata.
@@ -250,7 +251,9 @@ func executeAgentRun(
 	finalTextHead := ""
 	if txt := strings.TrimSpace(agentResult.Text); txt != "" {
 		if len(txt) > 200 {
-			finalTextHead = txt[:200] + "…"
+			// Rune-safe head so a multi-byte char (Korean) never splits into a
+			// U+FFFD replacement char in the postmortem log line.
+			finalTextHead = textutil.TruncateBytes(txt, 200) + "…"
 		} else {
 			finalTextHead = txt
 		}
