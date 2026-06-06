@@ -65,6 +65,44 @@ func (s *Store) GraphContext(ctx context.Context, query string, maxNeighbors int
 	// than either alone; best-effort, so no embedder means the token-only ranking.
 	s.applyEmbeddingRerank(ctx, recs, seed, best)
 
+	neighbors := rankNeighbors(recs, best, maxNeighbors)
+	return renderGraphContext(recs[seed], recs, neighbors), nil
+}
+
+// PageConnections returns a compact, one-line summary of a page's strongest
+// graph neighbors (e.g. "홍길동(링크) · 비금도 케이블(유사) · 영광 발주(태그:케이블)"),
+// seeded by the page's exact relPath rather than a free-text query. It powers
+// the "연결된 항목" footer appended when a page is read on-demand, so the agent
+// sees the connection web at the point of reading and can choose to follow it —
+// graph self-exploration without forcing neighbors into every-turn recall.
+// Returns "" when the page has no neighbors or cannot be resolved.
+func (s *Store) PageConnections(ctx context.Context, relPath string, maxNeighbors int) (string, error) {
+	if maxNeighbors <= 0 {
+		maxNeighbors = defaultGraphNeighbors
+	}
+	if !strings.HasSuffix(relPath, ".md") {
+		relPath += ".md"
+	}
+	recs, seed, best, err := s.graphScoreMap(ctx, "", graphMentionsEnabled, relPath)
+	if err != nil || seed < 0 {
+		return "", err
+	}
+	s.applyEmbeddingRerank(ctx, recs, seed, best)
+
+	neighbors := rankNeighbors(recs, best, maxNeighbors)
+	if len(neighbors) == 0 {
+		return "", nil
+	}
+	parts := make([]string, 0, len(neighbors))
+	for _, n := range neighbors {
+		parts = append(parts, recs[n.idx].title+"("+n.relation+")")
+	}
+	return strings.Join(parts, " · "), nil
+}
+
+// rankNeighbors flattens the per-candidate best-edge map into a list ordered by
+// score (title as the stable tiebreak) and truncated to maxNeighbors.
+func rankNeighbors(recs []graphRec, best map[int]*graphNeighbor, maxNeighbors int) []graphNeighbor {
 	neighbors := make([]graphNeighbor, 0, len(best))
 	for _, n := range best {
 		neighbors = append(neighbors, *n)
@@ -78,7 +116,7 @@ func (s *Store) GraphContext(ctx context.Context, query string, maxNeighbors int
 	if len(neighbors) > maxNeighbors {
 		neighbors = neighbors[:maxNeighbors]
 	}
-	return renderGraphContext(recs[seed], recs, neighbors), nil
+	return neighbors
 }
 
 // graphScoreMap builds the in-memory wiki graph for `query` and returns every
