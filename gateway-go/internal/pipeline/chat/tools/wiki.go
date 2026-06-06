@@ -80,11 +80,13 @@ func wikiSearch(ctx context.Context, store *wiki.Store, query string, limit int)
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "## 위키 검색 결과 (%d건)\n\n", len(results))
-	for _, r := range results {
-		fmt.Fprintf(&sb, "- **%s** (L%d, 관련도: %.2f)\n  %s\n\n",
-			r.Path, r.Line, r.Score, truncate(r.Content, 200))
+	sb.WriteString(recallHeader(query, len(results), "wiki"))
+	for i, r := range results {
+		ref := RefWiki + strings.TrimSuffix(r.Path, ".md")
+		meta := fmt.Sprintf("L%d · 관련도 %.2f", r.Line, r.Score)
+		sb.WriteString(recallRow(i+1, ref, meta, r.Content))
 	}
+	sb.WriteString("자세한 내용은 `wiki(action=\"read\", query=\"w:...\")` (knowledge read와 동일 ref).")
 	return sb.String(), nil
 }
 
@@ -92,6 +94,10 @@ func wikiRead(ctx context.Context, store *wiki.Store, path, section string) (str
 	if path == "" {
 		return "query에 페이지 경로를 지정하세요 (예: 기술/dgx-spark.md).", nil
 	}
+
+	// Accept a namespaced "w:" ref so a citation from wiki search or knowledge
+	// recall is interchangeable between the two tools' read paths.
+	path = strings.TrimPrefix(strings.TrimSpace(path), RefWiki)
 
 	// Ensure .md extension.
 	if !strings.HasSuffix(path, ".md") {

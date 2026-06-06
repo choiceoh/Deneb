@@ -79,11 +79,29 @@ func TestWikiSearch_ReturnsKoreanResults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("wikiSearch: %v", err)
 	}
-	if !strings.Contains(out, "위키 검색 결과") {
-		t.Errorf("expected Korean result header, got: %q", out)
+	if !strings.Contains(out, "🔍") {
+		t.Errorf("expected unified recall header, got: %q", out)
 	}
-	if !strings.Contains(out, "phase-2-summary") {
-		t.Errorf("expected phase-2-summary in results, got: %q", out)
+	// Unified ref scheme: wiki hits are cited with the shared "w:" namespace
+	// (no .md), interchangeable with knowledge recall/read.
+	if !strings.Contains(out, "w:phase-2-summary") {
+		t.Errorf("expected w:-namespaced ref in results, got: %q", out)
+	}
+}
+
+// TestWikiRead_AcceptsNamespacedRef verifies a "w:" citation (from wiki search
+// or knowledge recall) is readable through wiki read — the unified ref scheme.
+func TestWikiRead_AcceptsNamespacedRef(t *testing.T) {
+	store := newTestWikiStore(t)
+	out, err := wikiRead(context.Background(), store, "w:phase-2-summary", "")
+	if err != nil {
+		t.Fatalf("wikiRead: %v", err)
+	}
+	if strings.Contains(out, "없음") {
+		t.Errorf("w: ref should resolve to the page, got: %q", out)
+	}
+	if !strings.Contains(out, "Phase 2") {
+		t.Errorf("expected page content for w: ref, got: %q", out)
 	}
 }
 
