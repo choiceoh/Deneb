@@ -85,20 +85,13 @@ func knowledgeRecall(ctx context.Context, router *knowledge.Router, query string
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "## 🔍 %q (%d건, layers=%v)\n\n", query, len(hits), router.Layers())
+	sb.WriteString(recallHeader(query, len(hits), fmt.Sprintf("layers=%v", router.Layers())))
 	for i, h := range hits {
-		fmt.Fprintf(&sb, "%d. `%s`", i+1, h.Ref.String())
+		meta := ""
 		if h.Time > 0 {
-			fmt.Fprintf(&sb, " (%s)", time.UnixMilli(h.Time).Format("2006-01-02"))
+			meta = time.UnixMilli(h.Time).Format("2006-01-02")
 		}
-		sb.WriteString("\n")
-		snippet := strings.TrimSpace(h.Snippet)
-		if snippet != "" {
-			sb.WriteString("   ")
-			sb.WriteString(truncate(snippet, 240))
-			sb.WriteString("\n")
-		}
-		sb.WriteString("\n")
+		sb.WriteString(recallRow(i+1, h.Ref.String(), meta, h.Snippet))
 	}
 	sb.WriteString("자세한 내용은 `knowledge(op=\"read\", ref=\"...\")` 로 ref 지정.")
 	return sb.String(), nil
