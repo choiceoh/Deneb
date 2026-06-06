@@ -24,6 +24,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // subagentNotifyChCap is the buffer size for per-parent notification channels.
@@ -311,7 +312,9 @@ func writeNotifyItem(sb *strings.Builder, item notifyItem) {
 		output := item.lastOutput
 		const maxOutputLen = 2000
 		if len(output) > maxOutputLen {
-			output = output[:maxOutputLen] + "\n... (truncated)"
+			// Rune-safe cut so a multi-byte char (Korean) never splits into a
+			// U+FFFD replacement char in the sub-agent result preview.
+			output = textutil.TruncateBytes(output, maxOutputLen) + "\n... (truncated)"
 		}
 		fmt.Fprintf(sb, "- Result:\n%s\n", output)
 	}
