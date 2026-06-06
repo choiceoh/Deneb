@@ -125,6 +125,27 @@ devlib_gen_config() {
 # Server lifecycle
 # ---------------------------------------------------------------------------
 
+# Ensure {state_dir}/client_token exists so the native-client (miniapp.*) auth
+# path is enabled for the dev gateway. Generates a 64-hex-char secret (matching
+# internal/infra/clientauth.Generate) only when absent, so it survives restarts.
+#   $1 — state dir
+devlib_ensure_client_token() {
+  local state_dir="$1"
+  local token_file="$state_dir/client_token"
+  if [[ -s "$token_file" ]]; then
+    return 0
+  fi
+  mkdir -p "$state_dir"
+  local token=""
+  if command -v openssl >/dev/null 2>&1; then
+    token="$(openssl rand -hex 32)"
+  else
+    token="$(head -c32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  fi
+  printf '%s\n' "$token" > "$token_file"
+  chmod 600 "$token_file" 2>/dev/null || true
+}
+
 # Start gateway process in background.
 # Sets DEVLIB_PID to the started process PID.
 #   $1 — binary path
@@ -143,6 +164,13 @@ devlib_start_gateway() {
   local use_nohup="${6:-}"
 
   mkdir -p "$state_dir"
+
+  # Enable the native-client (miniapp.*) auth path so chat/quality tests can
+  # inject through POST /api/v1/miniapp/rpc. The gateway reads the secret from
+  # {state_dir}/client_token at request time (internal/infra/clientauth), so a
+  # token written here before launch is enough. Match the gateway's own format
+  # (64 hex chars). Idempotent: keep an existing token across restarts.
+  devlib_ensure_client_token "$state_dir"
 
   local mock_url="${DENEB_DEV_MOCK_TELEGRAM_URL:-http://127.0.0.1:${DEVLIB_MOCK_DEFAULT_PORT}}"
   # Plugin appends the bot token to TELEGRAM_API_BASE, so the base must end
