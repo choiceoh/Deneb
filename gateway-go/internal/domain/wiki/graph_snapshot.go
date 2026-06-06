@@ -201,6 +201,20 @@ func BuildGraphSnapshot(ctx context.Context, store *Store, outDir string, runClu
 		}
 	}
 
+	// Pass 2a2: inline [[wiki-link]] edges in bodies (EXTRACTED) — explicit
+	// author-intended links, as strong as Related[]. The dreamer emits these
+	// into "관련 문서" sections and agents can link in prose, so parsing them
+	// here means inline links become real graph edges, not just rendered text.
+	for _, in := range infos {
+		for _, l := range ExtractWikiLinks(in.page.Body) {
+			tgtID := resolveRelatedID(l, pathToID)
+			if tgtID == "" {
+				tgtID = titleToID[strings.ToLower(strings.TrimSpace(l))]
+			}
+			addEdge(in.id, tgtID, "link", "EXTRACTED", 1.0, 1.0, in.relPath)
+		}
+	}
+
 	// Pass 2b: shared-tag edges (INFERRED) — same tag implies a soft link.
 	tagIndex := make(map[string][]string)
 	for _, in := range infos {

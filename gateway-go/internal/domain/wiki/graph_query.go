@@ -44,6 +44,7 @@ type graphRec struct {
 	due       string
 	tags      []string // normalized
 	related   []string // raw Related[] entries
+	links     []string // inline [[wiki-link]] targets from the body
 	bodyLower string
 }
 
@@ -134,6 +135,7 @@ func (s *Store) graphScoreMap(ctx context.Context, query string, includeMentions
 			due:       page.Meta.Due,
 			tags:      tags,
 			related:   page.Meta.Related,
+			links:     ExtractWikiLinks(page.Body),
 			bodyLower: strings.ToLower(page.Body),
 		})
 		byNorm[recs[idx].normTitle] = idx
@@ -216,6 +218,25 @@ func (s *Store) graphScoreMap(ctx context.Context, query string, includeMentions
 		for _, rel := range recs[i].related {
 			if resolve(rel) == seed {
 				bump(i, 1.0, "관련")
+			}
+		}
+	}
+
+	// Inline [[wiki-link]] edges in bodies — author-intended links, as
+	// trustworthy as Related[]. The dreamer emits these into pages' "관련 문서"
+	// sections and an agent can link in prose via wiki write; parsing them here
+	// turns inline links into real graph edges instead of decoration. Forward
+	// (seed body links X) and reverse (X body links seed).
+	for _, l := range recs[seed].links {
+		bump(resolve(l), 1.0, "링크")
+	}
+	for i := range recs {
+		if i == seed {
+			continue
+		}
+		for _, l := range recs[i].links {
+			if resolve(l) == seed {
+				bump(i, 1.0, "링크")
 			}
 		}
 	}
