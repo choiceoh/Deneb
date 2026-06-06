@@ -133,6 +133,45 @@ func TestExtractWikiLinks(t *testing.T) {
 	}
 }
 
+// TestPageConnections verifies the compact neighbor footer seeds by exact path
+// and lists strongest neighbors, returning "" for an isolated page.
+func TestPageConnections(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mustWrite(t, store, "people/honggildong.md", &Page{
+		Meta: Frontmatter{ID: "honggildong", Title: "홍길동", Category: "사람", Summary: "탑솔라 구매 담당"},
+		Body: "핵심 담당자.",
+	})
+	mustWrite(t, store, "deals/topsolar.md", &Page{
+		Meta: Frontmatter{ID: "topsolar", Title: "탑솔라 거래", Category: "거래", Related: []string{"people/honggildong.md"}},
+		Body: "발주 검토 중. 참고: [[people/honggildong]].",
+	})
+	mustWrite(t, store, "tech/dgx.md", &Page{
+		Meta: Frontmatter{ID: "dgx", Title: "DGX Spark", Category: "기술"},
+		Body: "GPU.",
+	})
+
+	ctx := context.Background()
+	got, err := store.PageConnections(ctx, "deals/topsolar.md", 6)
+	if err != nil {
+		t.Fatalf("PageConnections: %v", err)
+	}
+	if !strings.Contains(got, "홍길동") {
+		t.Errorf("expected 홍길동 neighbor in footer, got: %q", got)
+	}
+	if strings.Contains(got, "DGX Spark") {
+		t.Errorf("isolated page leaked into footer: %q", got)
+	}
+
+	// Isolated page → empty footer.
+	if got, _ := store.PageConnections(ctx, "tech/dgx.md", 6); got != "" {
+		t.Errorf("expected empty footer for isolated page, got: %q", got)
+	}
+}
+
 func mustWrite(t *testing.T, store *Store, relPath string, page *Page) {
 	t.Helper()
 	if err := store.WritePage(relPath, page); err != nil {

@@ -46,7 +46,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 		case "search":
 			return wikiSearch(ctx, d.Store, p.Query, p.Limit)
 		case "read":
-			return wikiRead(d.Store, p.Query, p.Section)
+			return wikiRead(ctx, d.Store, p.Query, p.Section)
 		case "index":
 			return wikiIndex(d.Store, p.Category)
 		case "write":
@@ -88,7 +88,7 @@ func wikiSearch(ctx context.Context, store *wiki.Store, query string, limit int)
 	return sb.String(), nil
 }
 
-func wikiRead(store *wiki.Store, path, section string) (string, error) {
+func wikiRead(ctx context.Context, store *wiki.Store, path, section string) (string, error) {
 	if path == "" {
 		return "query에 페이지 경로를 지정하세요 (예: 기술/dgx-spark.md).", nil
 	}
@@ -117,8 +117,14 @@ func wikiRead(store *wiki.Store, path, section string) (string, error) {
 		return fmt.Sprintf("## %s — %s\n\n%s", page.Meta.Title, section, content), nil
 	}
 
-	// Return full page.
-	return string(page.Render()), nil
+	// Return full page, with a compact graph-neighbor footer so the agent sees
+	// what this page connects to at the point of reading and can choose to
+	// follow it — on-demand graph self-exploration, not every-turn recall.
+	out := string(page.Render())
+	if conns, err := store.PageConnections(ctx, path, 6); err == nil && conns != "" {
+		out += "\n\n---\n연결된 항목: " + conns
+	}
+	return out, nil
 }
 
 func wikiIndex(store *wiki.Store, category string) (string, error) {
