@@ -231,3 +231,38 @@ func TestEnrichPeople_EnrichExistingAndCreateLinked(t *testing.T) {
 		t.Errorf("createMissing=false must never create a page")
 	}
 }
+
+// A write-triggered contact enrichment must never truncate an existing person
+// page just because one section contains a very long single line.
+func TestEnrichPeople_PreservesLongLines(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	longLine := strings.Repeat("A", 70*1024)
+	person := NewPage("김민준", "인물", []string{"탑솔라"})
+	person.Body = "# 김민준\n\n## 메모\n" + longLine + "\n"
+	if err := store.WritePage("인물/김민준.md", person); err != nil {
+		t.Fatalf("WritePage person: %v", err)
+	}
+
+	res, err := store.EnrichPeople(
+		[]string{"김민준"},
+		[]Contact{{Name: "김민준", Phones: []string{"010-1234-5678"}}},
+		false,
+	)
+	if err != nil {
+		t.Fatalf("EnrichPeople: %v", err)
+	}
+	if len(res.Updated) != 1 || res.Updated[0] != "김민준" {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+
+	got := testutil.Must(store.ReadPage("인물/김민준.md"))
+	if !strings.Contains(got.Body, longLine) {
+		t.Fatalf("long line was truncated during enrichment")
+	}
+	if !strings.Contains(got.Body, "## 연락처") || !strings.Contains(got.Body, "010-1234-5678") {
+		t.Fatalf("contact section missing after enrichment: %q", got.Body)
+	}
+}

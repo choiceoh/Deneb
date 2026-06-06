@@ -232,6 +232,11 @@ func (p *Page) Section(name string) string {
 func (p *Page) Sections() []string {
 	var headings []string
 	scanner := bufio.NewScanner(strings.NewReader(p.Body))
+	maxTokenSize := len(p.Body) + 1
+	if maxTokenSize < bufio.MaxScanTokenSize {
+		maxTokenSize = bufio.MaxScanTokenSize
+	}
+	scanner.Buffer(make([]byte, 0, min(maxTokenSize, 1024)), maxTokenSize)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "## ") {
@@ -253,6 +258,11 @@ type H2Section struct {
 // the next H2 heading.
 func (p *Page) SplitByH2() (preamble string, sections []H2Section) {
 	scanner := bufio.NewScanner(strings.NewReader(p.Body))
+	maxTokenSize := len(p.Body) + 1
+	if maxTokenSize < bufio.MaxScanTokenSize {
+		maxTokenSize = bufio.MaxScanTokenSize
+	}
+	scanner.Buffer(make([]byte, 0, min(maxTokenSize, 1024)), maxTokenSize)
 	var current *H2Section
 	var preambleBuf, sectionBuf strings.Builder
 
