@@ -70,6 +70,17 @@ func (s *Store) Count() int {
 	return len(s.all)
 }
 
+// All returns a copy of the full address-book snapshot. Used by write-time wiki
+// enrichment, which matches referenced people against the whole book. The book
+// is single-user and bounded (hundreds of entries), so a copy is cheap.
+func (s *Store) All() []Contact {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]Contact, len(s.all))
+	copy(out, s.all)
+	return out
+}
+
 // LookupPhone returns contacts whose number matches phone. It first tries an
 // exact normalized hit, then falls back to matching the trailing local digits so
 // country-code/formatting differences (+82 vs 0, dashes/spaces) don't matter.

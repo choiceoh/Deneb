@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 )
@@ -50,7 +51,7 @@ func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
 		case "index":
 			return wikiIndex(d.Store, p.Category)
 		case "write":
-			return wikiWrite(d.Store, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Importance, p.Type, p.Confidence, p.Due)
+			return wikiWrite(d.Store, d.Contacts, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Importance, p.Type, p.Confidence, p.Due)
 		case "log":
 			return wikiLog(workspaceDir, d.Store, p.Content)
 		case "daily":
@@ -166,7 +167,7 @@ func wikiIndex(store *wiki.Store, category string) (string, error) {
 	return sb.String(), nil
 }
 
-func wikiWrite(store *wiki.Store, path, title, id, summary, category, content string, tags, related []string, importance float64, pageType, confidence, due string) (string, error) {
+func wikiWrite(store *wiki.Store, contactsStore *contacts.Store, path, title, id, summary, category, content string, tags, related []string, importance float64, pageType, confidence, due string) (string, error) {
 	if title == "" {
 		return "title은 필수입니다.", nil
 	}
@@ -252,7 +253,59 @@ func wikiWrite(store *wiki.Store, path, title, id, summary, category, content st
 	if existing != nil {
 		action = "업데이트"
 	}
-	return fmt.Sprintf("위키 페이지 %s: %s (%s)", action, path, title), nil
+	note := autoRecordPeople(store, contactsStore, page, category)
+	return fmt.Sprintf("위키 페이지 %s: %s (%s)%s", action, path, title, note), nil
+}
+
+// autoRecordPeople ties a wiki write to the device address book. After a page is
+// saved it (1) fills the page's own "## 연락처" when it is an 인물 page, and
+// (2) creates/enriches 인물 pages for every inline [[link]] target that matches
+// a contact. Returns a short Korean suffix for the write confirmation, or "".
+//
+// Runs after WritePage released its lock; the wiki Store methods it calls take
+// the lock themselves, so there is no nested locking. Best-effort: a nil/empty
+// address book or any enrichment error degrades to no note, never a failed write.
+func autoRecordPeople(store *wiki.Store, contactsStore *contacts.Store, page *wiki.Page, category string) string {
+	if store == nil || contactsStore == nil || contactsStore.Count() == 0 || page == nil {
+		return ""
+	}
+	book := contactsToWiki(contactsStore.All())
+	if len(book) == 0 {
+		return ""
+	}
+
+	var notes []string
+	// (1) The page is itself a person: record their contact details in place.
+	if category == "인물" {
+		if res, err := store.EnrichPeople([]string{page.Meta.Title}, book, false); err == nil && len(res.Updated) > 0 {
+			notes = append(notes, "연락처 기록")
+		}
+	}
+	// (2) People explicitly linked from the body: create or enrich their pages.
+	if links := wiki.ExtractWikiLinks(page.Body); len(links) > 0 {
+		if res, err := store.EnrichPeople(links, book, true); err == nil {
+			if len(res.Created) > 0 {
+				notes = append(notes, "인물 생성: "+strings.Join(res.Created, ", "))
+			}
+			if len(res.Updated) > 0 {
+				notes = append(notes, "인물 연락처: "+strings.Join(res.Updated, ", "))
+			}
+		}
+	}
+	if len(notes) == 0 {
+		return ""
+	}
+	return " · " + strings.Join(notes, " · ")
+}
+
+// contactsToWiki adapts address-book entries to the wiki package's own Contact
+// shape (the two packages keep separate types to stay decoupled).
+func contactsToWiki(in []contacts.Contact) []wiki.Contact {
+	out := make([]wiki.Contact, 0, len(in))
+	for _, c := range in {
+		out = append(out, wiki.Contact{Name: c.Name, Phones: c.Phones, Emails: c.Emails, Org: c.Org})
+	}
+	return out
 }
 
 func wikiLog(_ string, store *wiki.Store, content string) (string, error) {

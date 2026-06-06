@@ -160,3 +160,74 @@ func TestUpsertSection(t *testing.T) {
 		t.Errorf("existing section lost on append: %q", out2)
 	}
 }
+
+// EnrichPeople is the write-time path: it enriches an existing person page
+// (createMissing=false), creates a stub 인물 page for an explicitly linked
+// contact (createMissing=true), and ignores names absent from the address book.
+func TestEnrichPeople_EnrichExistingAndCreateLinked(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	person := NewPage("김민준", "인물", []string{"탑솔라"})
+	person.Body = "# 김민준\n\n## 메모\n탑솔라 구매팀 담당."
+	if err := store.WritePage("인물/김민준.md", person); err != nil {
+		t.Fatalf("WritePage person: %v", err)
+	}
+
+	book := []Contact{
+		{Name: "김민준 부장", Phones: []string{"010-1234-5678"}, Emails: []string{"minjun@topsolar.kr"}, Org: "탑솔라"},
+		{Name: "박서연", Phones: []string{"010-2222-3333"}, Org: "데네브"},
+		{Name: "낯선거래처", Phones: []string{"010-9999-9999"}},
+	}
+
+	// (1) Existing person page, createMissing=false: enrich in place, never create.
+	res, err := store.EnrichPeople([]string{"김민준"}, book, false)
+	if err != nil {
+		t.Fatalf("EnrichPeople enrich: %v", err)
+	}
+	if len(res.Created) != 0 || len(res.Updated) != 1 || res.Updated[0] != "김민준" {
+		t.Fatalf("enrich result = %+v, want Updated=[김민준]", res)
+	}
+	got := testutil.Must(store.ReadPage("인물/김민준.md"))
+	if !strings.Contains(got.Body, "010-1234-5678") || !strings.Contains(got.Body, "## 연락처") {
+		t.Errorf("contact not written into existing page: %q", got.Body)
+	}
+	if !strings.Contains(got.Body, "## 메모") {
+		t.Errorf("existing section clobbered: %q", got.Body)
+	}
+
+	// (2) Linked contact with no page, createMissing=true: create a stub 인물 page.
+	// "없는사람" is not in the book and must be ignored even though linked.
+	res, err = store.EnrichPeople([]string{"박서연", "없는사람"}, book, true)
+	if err != nil {
+		t.Fatalf("EnrichPeople create: %v", err)
+	}
+	if len(res.Created) != 1 || res.Created[0] != "박서연" {
+		t.Fatalf("create result = %+v, want Created=[박서연]", res)
+	}
+	made := testutil.Must(store.ReadPage("인물/박서연.md"))
+	if made.Meta.Category != "인물" {
+		t.Errorf("created page category = %q, want 인물", made.Meta.Category)
+	}
+	if !strings.Contains(made.Body, "010-2222-3333") || !strings.Contains(made.Body, "데네브") {
+		t.Errorf("created page missing contact details: %q", made.Body)
+	}
+
+	// "없는사람" must not have produced a page.
+	if _, err := store.ReadPage("인물/없는사람.md"); err == nil {
+		t.Errorf("unmatched linked name should not create a page")
+	}
+
+	// createMissing=false must NOT create a page for an unmade contact.
+	res, err = store.EnrichPeople([]string{"박지훈"}, []Contact{{Name: "박지훈", Phones: []string{"010-5555-6666"}}}, false)
+	if err != nil {
+		t.Fatalf("EnrichPeople no-create: %v", err)
+	}
+	if len(res.Created) != 0 || len(res.Updated) != 0 {
+		t.Errorf("createMissing=false should be a no-op for a pageless contact: %+v", res)
+	}
+	if _, err := store.ReadPage("인물/박지훈.md"); err == nil {
+		t.Errorf("createMissing=false must never create a page")
+	}
+}

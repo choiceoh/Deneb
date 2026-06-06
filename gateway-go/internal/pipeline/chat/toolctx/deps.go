@@ -58,6 +58,10 @@ type ChronoDeps struct {
 // WikiDeps holds dependencies for the wiki knowledge base tool.
 type WikiDeps struct {
 	Store *wiki.Store // may be nil when wiki is not enabled
+	// Contacts is the device address book, used at write time to auto-record a
+	// referenced person's phone/email/org into their 인물 page. May be nil when
+	// the contacts store failed to init; enrichment is simply skipped then.
+	Contacts *contacts.Store
 }
 
 // ContactsDeps holds dependencies for the contacts address-book tool.

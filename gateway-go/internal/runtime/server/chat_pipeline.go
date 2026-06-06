@@ -122,6 +122,9 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		},
 		Wiki: chat.WikiDeps{
 			Store: chatCfg.WikiStore,
+			// Same address book the contacts tool uses; lets a wiki write
+			// auto-record a referenced person's contact details.
+			Contacts: s.contactsStore,
 		},
 		Contacts: chat.ContactsDeps{
 			// Created during registerEarlyMethods (no chat dep), so it's already
