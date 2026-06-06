@@ -733,7 +733,7 @@ func wikiToolSchema() map[string]any {
 			},
 			"content": map[string]any{
 				"type":        "string",
-				"description": "Page body content in markdown (write action) or diary entry body (log action)",
+				"description": "Page body content in markdown (write action) or diary entry body (log action). In write bodies, link related pages inline with [[path-or-title]] (e.g. [[프로젝트/dgx-spark]] or [[홍길동]]); these become knowledge-graph edges, so prefer them over plain mentions.",
 			},
 			"due": map[string]any{
 				"type":        "string",
