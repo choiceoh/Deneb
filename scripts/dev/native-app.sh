@@ -66,6 +66,12 @@ VNC_PORT="${NATIVE_VNC_PORT:-$((5910 + OFFSET))}"
 NOVNC_PORT="${NATIVE_NOVNC_PORT:-$((6080 + OFFSET))}"
 TAILNET_IP="${NATIVE_TAILNET_IP:-100.105.145.6}"
 GW_URL="${DENEB_GATEWAY_URL:-http://100.105.145.6:18789}"
+# Default targets the PROD gateway. To verify a LOCAL modified build without
+# deploying, point this at a dev gateway from scripts/dev/live-test.sh:
+#   DENEB_GATEWAY_URL=http://127.0.0.1:<dev-port> scripts/dev/native-app.sh start
+# That dev gateway accepts the same client token this script seeds because
+# lib-server.sh mirrors ~/.deneb/client_token into the dev state dir on start.
+# See .claude/rules/native-live-app.md ("dev 게이트웨이 연결").
 SKIKO_RENDER="${NATIVE_SKIKO:-SOFTWARE}"   # SOFTWARE is safe on headless Xvfb (no GL)
 
 # Profiles: NAME -> dpW dpH scale.  On Linux, Compose/Skiko ignores

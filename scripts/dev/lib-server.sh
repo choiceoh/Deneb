@@ -125,6 +125,37 @@ devlib_gen_config() {
 # Server lifecycle
 # ---------------------------------------------------------------------------
 
+# Mirror the standalone native-client auth token into a dev gateway's state dir.
+#
+# clientauth (gateway-go/internal/infra/clientauth) reads the bearer secret from
+# {DENEB_STATE_DIR}/client_token fresh on every request, and standalone-client
+# auth is OFF whenever that file is absent. A dev gateway runs with
+# DENEB_STATE_DIR=<tmp state dir> (NOT ~/.deneb), so without this the file is
+# missing → clientauth disabled → every miniapp.* RPC from the native client is
+# rejected 401 ("missing/invalid client token"), which surfaces as a blank home
+# + "gateway error" in chat when scripts/dev/native-app.sh points the app at a
+# dev gateway. We therefore copy production's token — the same one native-app.sh
+# seeds into the app's encrypted settings — into the dev state dir before launch,
+# refreshing it if prod rotates. Standalone auth is opt-in: when prod never
+# generated a token we skip, leaving dev parity-off (native-app e2e against dev
+# just won't authenticate, exactly as it couldn't against a token-less prod).
+# Best-effort: never abort gateway startup on a seeding hiccup.
+#   $1 — dev state dir
+devlib_seed_client_token() {
+  local state_dir="$1"
+  local prod_token="${HOME}/.deneb/client_token"
+  local dev_token="${state_dir}/client_token"
+  [[ -f "$prod_token" ]] || return 0
+  if [[ ! -f "$dev_token" ]] || ! cmp -s "$prod_token" "$dev_token"; then
+    if cp -f "$prod_token" "$dev_token" 2>/dev/null; then
+      chmod 600 "$dev_token" 2>/dev/null || true
+    else
+      echo "warn: could not seed client_token into $state_dir (native-app e2e may 401)" >&2
+    fi
+  fi
+  return 0
+}
+
 # Start gateway process in background.
 # Sets DEVLIB_PID to the started process PID.
 #   $1 — binary path
@@ -143,6 +174,7 @@ devlib_start_gateway() {
   local use_nohup="${6:-}"
 
   mkdir -p "$state_dir"
+  devlib_seed_client_token "$state_dir"
 
   local mock_url="${DENEB_DEV_MOCK_TELEGRAM_URL:-http://127.0.0.1:${DEVLIB_MOCK_DEFAULT_PORT}}"
   # Plugin appends the bot token to TELEGRAM_API_BASE, so the base must end
