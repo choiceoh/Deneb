@@ -23,6 +23,9 @@ func (h *Handler) handleSlashCommand(
 	cmd *SlashResult,
 ) *protocol.ResponseFrame {
 	switch cmd.Command {
+	case "help":
+		h.deliverSlashResponse(delivery, renderSlashHelp())
+
 	case "reset":
 		// Abort any active run, clear transcript, and discard frozen context snapshot.
 		h.InterruptActiveRun(sessionKey)

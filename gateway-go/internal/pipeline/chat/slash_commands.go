@@ -18,6 +18,53 @@ type SlashResult struct {
 	SkillName string           // The skill name if dispatched via skill routing.
 }
 
+// SlashCommandInfo describes one builtin slash command for /help discovery.
+type SlashCommandInfo struct {
+	Name string // command without the leading slash
+	Args string // short arg hint, e.g. "<내용>" or "[일반|대화]"
+	Desc string // one-line Korean description
+}
+
+// BuiltinSlashCommands is the single source of truth for /help. The codebase has
+// no command-metadata list, so user-facing commands (notably /pin, added for the
+// long-horizon "always remember" feature) were undiscoverable. Order is display
+// order. Skill-routed commands are dynamic and listed separately by the user's
+// installed skills, so they are not enumerated here.
+func BuiltinSlashCommands() []SlashCommandInfo {
+	return []SlashCommandInfo{
+		{"help", "", "사용 가능한 명령 목록"},
+		{"status", "", "세션 상태 (모델·토큰·캐시 히트율)"},
+		{"reset", "", "세션 초기화 (대화·고정 사실 삭제)"},
+		{"kill", "", "실행 중단"},
+		{"model", "<이름|역할>", "모델 변경 (main|lightweight|fallback)"},
+		{"think", "[수준]", "사고(thinking) 수준 전환"},
+		{"mode", "[일반|대화]", "도구 사용 모드 (인자 없으면 토글)"},
+		{"mail", "", "받은 메일 요약"},
+		{"insights", "[일수]", "사용량 리포트"},
+		{"pin", "<내용>", "항상 기억할 사실 고정 (압축에도 유지)"},
+		{"unpin", "<번호>", "고정 사실 제거"},
+		{"pins", "", "고정 사실 목록"},
+		{"rollback", "[목록|비교|복원]", "변경 롤백"},
+		{"update", "[확인]", "게이트웨이 업데이트 (pull+빌드+재시작)"},
+		{"restart", "[확인]", "게이트웨이 재시작"},
+	}
+}
+
+// renderSlashHelp renders the builtin command list for /help.
+func renderSlashHelp() string {
+	var b strings.Builder
+	b.WriteString("🔧 사용 가능한 명령:\n")
+	for _, c := range BuiltinSlashCommands() {
+		name := "/" + c.Name
+		if c.Args != "" {
+			name += " " + c.Args
+		}
+		fmt.Fprintf(&b, "• `%s` — %s\n", name, c.Desc)
+	}
+	b.WriteString("\n스킬 명령은 설치된 스킬에 따라 추가로 제공됩니다.")
+	return b.String()
+}
+
 // ParseSlashCommand checks if a message starts with a slash command.
 // First tries skill-based routing (local/system types), then falls back to
 // hardcoded builtins. Returns nil if not a recognized command.
@@ -47,6 +94,8 @@ func ParseSlashCommand(text string) *SlashResult {
 
 	// Fall back to hardcoded builtins.
 	switch cmd {
+	case "help", "?", "도움말", "명령어", "commands":
+		return &SlashResult{Handled: true, Command: "help"}
 	case "reset":
 		return &SlashResult{
 			Handled:  true,
