@@ -584,16 +584,17 @@
     "properties": {
       "action": {
         "type": "string",
-        "description": "Sub-agent management action",
+        "description": "Sub-agent management action. 'result' returns a finished sub-agent's output (pull a result on demand, complementing the automatic completion notification).",
         "enum": [
           "list",
+          "result",
           "kill",
           "steer"
         ]
       },
       "target": {
         "type": "string",
-        "description": "Target sub-agent ID or label"
+        "description": "Target sub-agent index, label, or session key (for result/kill/steer). Optional when exactly one sub-agent exists."
       },
       "message": {
         "type": "string",

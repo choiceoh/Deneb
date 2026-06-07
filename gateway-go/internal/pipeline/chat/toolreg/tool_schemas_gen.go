@@ -538,8 +538,8 @@ func subagentsToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Sub-agent management action",
-				"enum":        []string{"list", "kill", "steer"},
+				"description": "Sub-agent management action. 'result' returns a finished sub-agent's output (pull a result on demand, complementing the automatic completion notification).",
+				"enum":        []string{"list", "result", "kill", "steer"},
 			},
 			"message": map[string]any{
 				"type":        "string",
@@ -547,7 +547,7 @@ func subagentsToolSchema() map[string]any {
 			},
 			"target": map[string]any{
 				"type":        "string",
-				"description": "Target sub-agent ID or label",
+				"description": "Target sub-agent index, label, or session key (for result/kill/steer). Optional when exactly one sub-agent exists.",
 			},
 		},
 	}

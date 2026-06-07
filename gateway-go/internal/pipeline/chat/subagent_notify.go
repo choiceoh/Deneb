@@ -240,6 +240,57 @@ func (sn *SubagentNotifier) triggerRun(parentKey, notification string) {
 	sn.startRun("subnotify", params, false)
 }
 
+// ReclaimOnIdle drains any completion notifications still parked in the parent's
+// channel when its run ends, and re-routes them so they are not orphaned.
+//
+// pushNotification only parks a notification in the channel while the parent is
+// running, expecting the in-flight run to drain it via DeferredSystemText on a
+// later turn (turn 1+). But if that run ends (end_turn) before draining — the
+// common case when the parent spawns and then promptly wraps up — nothing else
+// picks it up, and the result never reaches the user until some unrelated future
+// turn happens to drain the channel. Calling this AFTER the run goroutine's
+// abort-registry cleanup (so hasActiveRun is authoritative) closes that TOCTOU
+// race:
+//   - parent already has a new active run (e.g. a drained pending message):
+//     push the notification back so that run's next turn consumes it.
+//   - parent is idle: trigger a fresh run so the result reaches the user now.
+func (sn *SubagentNotifier) ReclaimOnIdle(parentKey string) {
+	sn.mu.Lock()
+	ch := sn.channels[parentKey]
+	sn.mu.Unlock()
+	if ch == nil {
+		return
+	}
+
+	var parts []string
+drain:
+	for {
+		select {
+		case n := <-ch:
+			if n != "" {
+				parts = append(parts, n)
+			}
+		default:
+			break drain
+		}
+	}
+	if len(parts) == 0 {
+		return
+	}
+
+	notification := strings.Join(parts, "\n\n")
+	if sn.hasActiveRun(parentKey) {
+		// A new run is already in flight; let it consume the notification on its
+		// next turn instead of starting another run.
+		sn.pushNotification(parentKey, notification)
+		return
+	}
+	sn.logger.Info("reclaimed orphaned subagent notification after parent run end",
+		"parent", abbreviateSession(parentKey),
+		"count", len(parts))
+	sn.triggerRun(parentKey, notification)
+}
+
 // buildNotifyItem extracts the relevant fields from a completed child session.
 func buildNotifyItem(child *session.Session) notifyItem {
 	item := notifyItem{

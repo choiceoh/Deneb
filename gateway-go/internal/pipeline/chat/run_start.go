@@ -85,6 +85,16 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 
 	go func() {
 		defer runCancel(nil)
+		// Registered before abort.Cleanup → deferred-runs-later (LIFO), so this
+		// fires AFTER the abort registry is cleared and hasActiveRun reports the
+		// parent as idle. Any child completion notification parked in this
+		// session's channel while the run was active gets re-routed instead of
+		// orphaned. Covers success, error, and panic exits.
+		defer func() {
+			if h.subagent != nil {
+				h.subagent.ReclaimOnIdle(params.SessionKey)
+			}
+		}()
 		defer h.abort.Cleanup(params.ClientRunID)
 		defer func() {
 			if r := recover(); r != nil {
