@@ -119,9 +119,10 @@ Deneb 의 proactive 트리거는 **시간 기반(매 30분, 매 24h)** 이지 **
 > (`DetectSignals` — VIP 미응답 메일·일정 충돌·임박 일정·마감 임박을 가중 점수화,
 > exhaustive 단위 테스트) + heartbeat 가산 훅(`heartbeat_task.go`, nil-safe·기존
 > HEARTBEAT.md 체크를 **억제하지 않고** 신호 요약을 앞에 덧붙임) + 캘린더 수집기
-> (`heartbeat_signals.go`, OAuth 없으면 무신호로 graceful). **남은 것:** 메일 VIP
-> 수집기(위키-VIP 룩업)·deadline 수집기, signals-only 트리거(빈 HEARTBEAT.md 에서도
-> 발화), DGX 호스트 실데이터 튜닝.
+> (`heartbeat_signals.go`, OAuth 없으면 무신호로 graceful). **signals-only 트리거 추가됨:**
+> 빈 HEARTBEAT.md 에서도 escalation-worthy 신호가 있으면 proactive turn 을 발화한다
+> (`heartbeatShouldRun`/`composeHeartbeatBody`, 순수 함수·단위 테스트). **남은 것:** 메일 VIP
+> 수집기(위키-VIP 룩업)·deadline 수집기, DGX 호스트 실데이터 임계 튜닝.
 
 heartbeat turn 이 매번 "전체를 다시 읽는" 대신, 경량 신호 추출 패스를 먼저:
 - 마지막 체크 이후 **delta** (새 메일/일정 변경/마감 임박/응답 지연 스레드) 만 후보로 모음.

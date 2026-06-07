@@ -115,9 +115,19 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 	}
 
 	content := t.readHeartbeat()
-	if content == "" {
-		// No HEARTBEAT.md or empty — skip silently.
+
+	// Proactive signal pass: cheap, runs before the LLM turn. Detected anomalies
+	// (calendar conflicts, imminent meetings, …) both enrich a HEARTBEAT.md run
+	// AND can initiate one on their own when HEARTBEAT.md is empty — the
+	// signal-driven proactivity the Claw-Anything paper calls for (finding B).
+	signalSummary := t.detectSignalSummary(ctx)
+
+	// Nothing to do: no user-configured checks and no escalation-worthy signals.
+	if !heartbeatShouldRun(content, signalSummary) {
 		return nil
+	}
+	if signalSummary != "" {
+		t.logger.Info("heartbeat: proactive signals detected", "hasHeartbeatMd", content != "")
 	}
 
 	// Resolve the target session: latest active native session, or the native
@@ -141,22 +151,7 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 		}
 	}
 
-	// Proactive signal pass: cheap, runs before the LLM turn. When anomalies
-	// cross the escalation threshold, prepend a concise summary so the agent
-	// addresses them alongside (and ahead of) the HEARTBEAT.md checks.
-	body := content
-	if t.collectSignals != nil {
-		report := autonomous.DetectSignals(t.collectSignals(ctx), t.signalConfig)
-		if report.ShouldEscalate() {
-			if summary := report.Summary(t.signalConfig.MaxReasonsPerKind); summary != "" {
-				body = summary + "\n\n---\n" + content
-				t.logger.Info("heartbeat: proactive signals detected",
-					"signals", len(report.Signals), "score", report.Score)
-			}
-		}
-	}
-
-	triggerMsg := fmt.Sprintf(heartbeatTriggerTemplate, body)
+	triggerMsg := fmt.Sprintf(heartbeatTriggerTemplate, composeHeartbeatBody(signalSummary, content))
 
 	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
@@ -172,6 +167,44 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 		"session", sessionKey,
 	)
 	return nil
+}
+
+// detectSignalSummary runs the proactive signal pass and returns a concise Korean
+// summary when escalation-worthy anomalies are found, or "" (no collector wired,
+// or nothing noteworthy).
+func (t *heartbeatTask) detectSignalSummary(ctx context.Context) string {
+	if t.collectSignals == nil {
+		return ""
+	}
+	report := autonomous.DetectSignals(t.collectSignals(ctx), t.signalConfig)
+	if !report.ShouldEscalate() {
+		return ""
+	}
+	return report.Summary(t.signalConfig.MaxReasonsPerKind)
+}
+
+// heartbeatShouldRun reports whether a heartbeat turn is warranted: either the
+// user has HEARTBEAT.md checks, or there are escalation-worthy signals to surface.
+// Pure for unit testing.
+func heartbeatShouldRun(content, signalSummary string) bool {
+	return strings.TrimSpace(content) != "" || strings.TrimSpace(signalSummary) != ""
+}
+
+// composeHeartbeatBody builds the trigger body from the (optional) signal summary
+// and (optional) HEARTBEAT.md content. Signals lead so the agent prioritizes them;
+// when there is no HEARTBEAT.md, a short note tells the agent the signals are the
+// only agenda (and to stay non-intrusive). Pure for unit testing.
+func composeHeartbeatBody(signalSummary, content string) string {
+	signalSummary = strings.TrimSpace(signalSummary)
+	content = strings.TrimSpace(content)
+	switch {
+	case signalSummary != "" && content != "":
+		return signalSummary + "\n\n---\n" + content
+	case signalSummary != "":
+		return signalSummary + "\n\n(현재 HEARTBEAT.md에 등록된 작업은 없습니다. 위 감지 신호만 검토해, 정말 알릴 가치가 있을 때만 사용자에게 간결히 알리세요.)"
+	default:
+		return content
+	}
 }
 
 func heartbeatSyncOptions() *chat.SyncOptions {
