@@ -49,6 +49,19 @@ type heartbeatTask struct {
 	activity    *monitoring.ActivityTracker
 	logger      *slog.Logger
 	homeDir     string
+
+	// collectSignals, when set, gathers a transport-agnostic snapshot of the
+	// user's recent state (calendar conflicts, imminent events, etc.) each tick.
+	// When DetectSignals finds escalation-worthy anomalies, a concise Korean
+	// summary is prepended to the trigger so the agent prioritizes them — the
+	// proactive "find the problem in the noise" layer the Claw-Anything paper
+	// (docs/research/claw-anything-always-on-assistant.md, finding B) calls for.
+	//
+	// This is purely additive: signals enrich an existing heartbeat turn but
+	// never suppress the user's HEARTBEAT.md checks. Nil → no augmentation
+	// (default), so behavior is unchanged when no collector is wired.
+	collectSignals func(ctx context.Context) autonomous.SignalInputs
+	signalConfig   autonomous.SignalConfig
 }
 
 func (t *heartbeatTask) Name() string            { return "heartbeat" }
@@ -128,7 +141,22 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 		}
 	}
 
-	triggerMsg := fmt.Sprintf(heartbeatTriggerTemplate, content)
+	// Proactive signal pass: cheap, runs before the LLM turn. When anomalies
+	// cross the escalation threshold, prepend a concise summary so the agent
+	// addresses them alongside (and ahead of) the HEARTBEAT.md checks.
+	body := content
+	if t.collectSignals != nil {
+		report := autonomous.DetectSignals(t.collectSignals(ctx), t.signalConfig)
+		if report.ShouldEscalate() {
+			if summary := report.Summary(t.signalConfig.MaxReasonsPerKind); summary != "" {
+				body = summary + "\n\n---\n" + content
+				t.logger.Info("heartbeat: proactive signals detected",
+					"signals", len(report.Signals), "score", report.Score)
+			}
+		}
+	}
+
+	triggerMsg := fmt.Sprintf(heartbeatTriggerTemplate, body)
 
 	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()

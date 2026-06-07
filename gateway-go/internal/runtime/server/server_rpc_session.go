@@ -437,6 +437,11 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 			activity:    s.activity,
 			logger:      s.logger,
 			homeDir:     homeDir,
+			// Proactive signal augmentation: surface calendar conflicts /
+			// imminent meetings into the heartbeat turn (best-effort; no-op when
+			// Calendar OAuth is absent). See heartbeat_signals.go.
+			collectSignals: newCalendarSignalCollector(resolveBriefingCalendarClient),
+			signalConfig:   autonomous.DefaultSignalConfig(),
 		})
 	}
 
