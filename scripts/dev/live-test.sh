@@ -272,6 +272,16 @@ cmd_parity() {
   echo "--- Storage ---"
   echo "  [OK]   Dev state dir: $DEV_STATE_DIR (isolated from ~/.deneb)"
   echo "  [OK]   Wiki/diary: $DEV_STATE_DIR/wiki, $DEV_STATE_DIR/memory/diary"
+  # Standalone native-client auth: lib-server.sh mirrors prod's client_token
+  # into the dev state dir on start so scripts/dev/native-app.sh e2e against this
+  # dev gateway authenticates instead of getting 401 on every miniapp.* RPC.
+  if [[ -f "$DEV_STATE_DIR/client_token" ]]; then
+    echo "  [OK]   client_token: mirrored from prod (native-app.sh e2e ready)"
+  elif [[ -f "$HOME/.deneb/client_token" ]]; then
+    echo "  [INFO] client_token: prod token present → seeded on next 'start'"
+  else
+    echo "  [INFO] client_token: none (standalone client auth opt-in/off in prod)"
+  fi
   echo ""
 
   # 6. Port/binding.

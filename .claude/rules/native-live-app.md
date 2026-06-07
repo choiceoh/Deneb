@@ -72,13 +72,34 @@ scripts/dev/native-app.sh stop
 |---|---|---|
 | profile 인자 | `phone`(412×915) | `desktop`(1280×800)도 가능 |
 | `NATIVE_W` / `NATIVE_H` | 프로파일값 | 더 큰 프레임(예: `NATIVE_W=480 NATIVE_H=1040`) |
-| `DENEB_GATEWAY_URL` | `http://100.105.145.6:18789` | 다른 게이트웨이로 시드 |
+| `DENEB_GATEWAY_URL` | `http://100.105.145.6:18789` | 다른 게이트웨이로 시드 (dev 게이트웨이 연결은 ↓ 전용 섹션 참조) |
 | `DENEB_INSTANCE` | worktree 이름 | **인스턴스 격리 키** — 디스플레이/상태디렉토리/VNC포트가 이 값의 해시 오프셋으로 분리되어, 동시에 도는 다른 에이전트 worktree의 앱을 서로 죽이거나 잘못된 화면을 캡처하지 않는다 |
 | `NATIVE_DISPLAY` | `:99`+오프셋 | Xvfb 디스플레이 (인스턴스별 자동 산정; 직접 지정 시 우선) |
 | `NATIVE_WM` | `1` | `0`이면 WM 끔(키보드 포커스 불안정 — 비권장) |
 | `NATIVE_APP_XMX` | `1024m` | 앱 JVM 힙 캡 |
 
 - **프로덕션 연결**(실데이터). 메일/일정/세션이 진짜로 보이고, **채팅을 보내면 실제 에이전트 턴이 돈다** — 입력 메커니즘만 볼 땐 Enter/전송 누르지 말 것.
+
+## dev 게이트웨이 연결 (수정 빌드를 prod 배포 없이 검증)
+
+기본은 prod(18789) 연결이지만, `scripts/dev/live-test.sh` 가 띄운 dev 게이트웨이에 붙이면 **로컬 수정 빌드를 배포 전에** native-app e2e 로 돌릴 수 있다.
+
+```bash
+# 1) dev 게이트웨이 기동 (포트 충돌 피하려 worktree별 인스턴스 격리)
+export DENEB_INSTANCE="$(basename "$PWD")"
+scripts/dev/live-test.sh restart
+scripts/dev/live-test.sh status        # ← "port NNNNN" 확인 (기본 인스턴스=18790, 명명 인스턴스는 해시 포트)
+
+# 2) 그 포트로 native-app 시드 + 기동
+DENEB_GATEWAY_URL=http://127.0.0.1:<dev-port> scripts/dev/native-app.sh start
+scripts/dev/native-app.sh shot home    # 홈 데이터가 차 있으면 인증 통과
+```
+
+- **client-token 인증은 이제 자동 시드된다.** dev 게이트웨이는 `DENEB_STATE_DIR=/tmp/deneb…-dev-state`(≠ `~/.deneb`)를 쓰므로, 예전엔 그 state dir 에 `client_token` 이 없어 `clientauth` 가 꺼진 채 모든 `miniapp.*` RPC 를 401("missing/invalid client token")로 막았다 → **홈 빈 화면 + 채팅 "게이트웨이 오류"**. `lib-server.sh:devlib_seed_client_token` 가 기동 시 **prod `~/.deneb/client_token` 을 dev state dir 로 미러링**(prod 회전 시 갱신)하므로, native-app.sh 가 앱(`~/.kai`)에 시드하는 토큰과 같은 값이라 그대로 통과한다. 예전 수동 우회(`cp ~/.deneb/client_token /tmp/…-dev-state/`)는 더 이상 필요 없다.
+- **재시작 불필요**: 서버 `clientauth.Verify` 가 토큰 파일을 매 요청 새로 읽으므로 시드만 돼 있으면 되고, `live-test.sh` 는 기동 **전에** 시드하니 신경 쓸 것 없다.
+- **opt-in 전제**: 미러링은 prod 에 `~/.deneb/client_token` 이 있을 때만 동작한다(없으면 `go run ./cmd/deneb-client-token` 으로 1회 생성). 단일 사용자 host 라 dev state dir(`/tmp`)에 토큰이 떨어지는 건 이미 거기 있는 dev config(프로바이더 키 포함)와 동일한 보안 경계.
+- **앱 설정은 host 전역**: native-app.sh 의 `~/.kai` 시드는 인스턴스 격리(디스플레이/state/포트)와 달리 **host 단일**이라, 한 host 에서 prod·dev 두 게이트웨이로 동시에 두 앱을 띄울 수는 없다(마지막 `start`/`seed` 가 `~/.kai` 를 덮어씀). prod↔dev 전환은 순차로.
+- 검증 후엔 `scripts/dev/native-app.sh stop` + `scripts/dev/live-test.sh stop` 로 정리.
 
 ## 동작 원리 (앱 코드 무수정)
 
