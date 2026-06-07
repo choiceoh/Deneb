@@ -177,5 +177,12 @@ func RegisterDefaultPostProcessors(registry *ToolRegistry) {
 		pp.Add(tool, StructuredFormatter)
 	}
 
+	// Mutation outcome verification: surface buried in-band failures (a mutation
+	// tool returning "…실패" as text with a nil error) so the agent cannot mistake
+	// them for success. See tool_mutation_verify.go (research finding A).
+	for _, tool := range mutationVerifyTools() {
+		pp.Add(tool, MutationFailureAnnotator)
+	}
+
 	registry.SetPostProcess(pp)
 }
