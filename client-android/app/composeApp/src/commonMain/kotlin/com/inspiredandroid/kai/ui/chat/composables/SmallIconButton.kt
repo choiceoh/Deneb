@@ -24,7 +24,7 @@ internal fun SmallIconButton(
 ) {
     SmallIconButtonBox(onClick) {
         Icon(
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(18.dp),
             painter = painterResource(iconResource),
             contentDescription = contentDescription,
             tint = MaterialTheme.colorScheme.onBackground,
@@ -40,7 +40,7 @@ internal fun SmallIconButton(
 ) {
     SmallIconButtonBox(onClick) {
         Icon(
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(18.dp),
             imageVector = imageVector,
             contentDescription = contentDescription,
             tint = MaterialTheme.colorScheme.onBackground,
