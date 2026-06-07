@@ -58,6 +58,8 @@ func ToolSubagents(d *toolctx.SessionDeps) ToolFunc {
 		switch p.Action {
 		case "list":
 			return subagentsList(children), nil
+		case "result":
+			return subagentsResult(d, children, p.Target)
 		case "kill":
 			return subagentsKill(d, children, p.Target)
 		case "steer":
@@ -195,6 +197,69 @@ func subagentsSteer(d *toolctx.SessionDeps, children []*session.Session, target,
 		return fmt.Sprintf("Failed to steer sub-agent %q: %s", child.Key, err.Error()), nil
 	}
 	return fmt.Sprintf("Steered sub-agent: %s\nMessage: %s", child.Key, message), nil
+}
+
+// childLabel returns a display label for a child session (label, or key).
+func childLabel(c *session.Session) string {
+	if c.Label != "" {
+		return c.Label
+	}
+	return c.Key
+}
+
+// subagentsResult returns the latest output of a sub-agent on demand. This is
+// the pull counterpart to the proactive completion notification: if the parent
+// missed the push (e.g. its turn ended before the notification channel drained),
+// it can still fetch the result here instead of re-doing the work.
+func subagentsResult(d *toolctx.SessionDeps, children []*session.Session, target string) (string, error) {
+	if len(children) == 0 {
+		return "No sub-agents.", nil
+	}
+	// Auto-target when exactly one child exists and none was specified.
+	if target == "" {
+		if len(children) == 1 {
+			target = children[0].Key
+		} else {
+			return "Multiple sub-agents. Specify a target (index, label, or key) to read its result.", nil
+		}
+	}
+
+	child, errMsg := resolveChildTarget(children, target)
+	if errMsg != "" {
+		return errMsg, nil
+	}
+
+	if child.Status == session.StatusRunning {
+		runtime := ""
+		if child.StartedAt != nil {
+			runtime = " (" + textutil.FormatDuration(time.Now().UnixMilli()-*child.StartedAt) + ")"
+		}
+		return fmt.Sprintf("Sub-agent %q is still running%s — no result yet. Check back, or use action=list.", childLabel(child), runtime), nil
+	}
+
+	// Terminal: prefer the session's stored last output.
+	if strings.TrimSpace(child.LastOutput) != "" {
+		return fmt.Sprintf("Sub-agent %q result (status: %s):\n\n%s", childLabel(child), child.Status, child.LastOutput), nil
+	}
+
+	// Fallback: last non-empty assistant message from the child's transcript.
+	if d.Transcript != nil {
+		if msgs, _, err := d.Transcript.Load(child.Key, 30); err == nil {
+			for i := len(msgs) - 1; i >= 0; i-- {
+				if msgs[i].Role != "assistant" {
+					continue
+				}
+				if txt := strings.TrimSpace(msgs[i].TextContent()); txt != "" {
+					return fmt.Sprintf("Sub-agent %q result (status: %s):\n\n%s", childLabel(child), child.Status, txt), nil
+				}
+			}
+		}
+	}
+
+	if child.FailureReason != "" {
+		return fmt.Sprintf("Sub-agent %q ended (status: %s) with no output. Reason: %s", childLabel(child), child.Status, child.FailureReason), nil
+	}
+	return fmt.Sprintf("Sub-agent %q ended (status: %s) but produced no output.", childLabel(child), child.Status), nil
 }
 
 // killSession applies the kill pattern (mirrors http_session_kill.go).
