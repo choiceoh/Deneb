@@ -64,6 +64,31 @@ func wireStreamHooks(
 		hc.OnTextDelta(func(_ string) { statusCtrl.SetThinking() })
 	}
 
+	// Mutation failure escalation: a mutation tool reported an in-band failure
+	// (banner added by MutationFailureAnnotator) that the agent loop saw as
+	// isError=false. Per .claude/rules/logging.md, a user-observable failure must
+	// surface as Error + a broadcast so the operator/UI sees the dropped action,
+	// not just the agent. Runs regardless of broadcaster wiring. (research finding A)
+	hc.OnToolResult(func(name, _ string, result string, isErr bool) {
+		if isErr || !isMutationFailureResult(result) {
+			return
+		}
+		if deps.logger != nil {
+			deps.logger.Error("mutation tool reported in-band failure",
+				"tool", name, "session", params.SessionKey, "runId", params.ClientRunID)
+		}
+		if deps.broadcast != nil {
+			deps.broadcast("chat.tool_failed", map[string]any{
+				"session":    params.SessionKey,
+				"sessionKey": params.SessionKey,
+				"runId":      params.ClientRunID,
+				"tool":       name,
+				"reason":     "mutation_tool_in_band_failure",
+				"error":      mutationFailureError(result),
+			})
+		}
+	})
+
 	// Gateway event subscription: emit tool.start / tool.end for WebSocket clients.
 	if deps.callbacks.emitAgentFn != nil {
 		hc.OnToolStart(func(name, _ string, _ []byte) {
