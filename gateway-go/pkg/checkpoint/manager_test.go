@@ -170,7 +170,7 @@ func TestRetentionKeepN(t *testing.T) {
 
 func TestRetentionMaxBytes(t *testing.T) {
 	// Force a tiny byte cap so the second snapshot should evict the first.
-	m := newTestManager(t, "session-retB", WithRetentionN(100), WithMaxBytes(10), WithGzip(false))
+	m := newTestManager(t, "session-retB", WithRetentionN(100), WithMaxBytes(75), WithGzip(false))
 	target := filepath.Join(t.TempDir(), "big.txt")
 
 	writeFile(t, target, strings.Repeat("a", 50))
@@ -237,6 +237,24 @@ func TestConcurrentSnapshotSameFile(t *testing.T) {
 	}
 	if len(list) != 1 {
 		t.Fatalf("expected 1 deduped snapshot, got %d", len(list))
+	}
+}
+
+func TestSnapshotRejectsFileLargerThanMaxBytes(t *testing.T) {
+	m := newTestManager(t, "session-too-large", WithMaxBytes(10), WithGzip(false))
+	target := filepath.Join(t.TempDir(), "huge.txt")
+	writeFile(t, target, strings.Repeat("x", 11))
+
+	if _, err := m.Snapshot(context.Background(), target, "fs_write"); err == nil {
+		t.Fatal("expected oversized snapshot to be rejected")
+	}
+
+	list, err := m.List("", 0)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("expected no snapshots recorded after rejection, got %d", len(list))
 	}
 }
 

@@ -1,43 +1,92 @@
 package chat
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 )
 
-// skillsPromptCache is a version-aware cache for the workspace skills prompt.
-// Invalidated when the skills watcher bumps the version (file changes detected).
-var skillsCache struct {
-	mu       sync.RWMutex
+type cachedSkillsEntry struct {
 	prompt   string
 	snapshot *skills.FullSkillSnapshot
+	entries  []skills.SkillEntry
 	version  int64
-	built    bool
+}
+
+// skillsPromptCache stores per-workspace/per-tool-set prompt snapshots.
+// Invalidated when the skills watcher bumps the version (file changes detected).
+var skillsCache struct {
+	mu      sync.RWMutex
+	entries map[string]*cachedSkillsEntry
 }
 
 // loadCachedSkillsPrompt returns the cached skills prompt, rebuilding it when
 // the watcher version changes or on first call.
 // availableToolNames is used for conditional activation (requires_tools/fallback_for_tools).
 func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) string {
+	entry := cachedSkillsFor(workspaceDir, availableToolNames)
+	if entry == nil {
+		return ""
+	}
+	return entry.prompt
+}
+
+// CachedSkillsSnapshot returns the cached skills snapshot for the given workspace/tool set.
+func CachedSkillsSnapshot(workspaceDir string, availableToolNames []string) *skills.FullSkillSnapshot {
+	entry := cachedSkillsFor(workspaceDir, availableToolNames)
+	if entry == nil {
+		return nil
+	}
+	return entry.snapshot
+}
+
+// CachedSkillsSnapshotFromContext resolves the current run's workspace/tool set from ctx.
+func CachedSkillsSnapshotFromContext(ctx context.Context) *skills.FullSkillSnapshot {
+	workspaceDir := toolctx.WorkspaceDirFromContext(ctx)
+	if workspaceDir == "" {
+		workspaceDir = resolveWorkspaceDirForPrompt()
+	}
+	return CachedSkillsSnapshot(workspaceDir, toolctx.AvailableToolNamesFromContext(ctx))
+}
+
+func cachedSkillEntries(workspaceDir string, availableToolNames []string) []skills.SkillEntry {
+	entry := cachedSkillsFor(workspaceDir, availableToolNames)
+	if entry == nil || len(entry.entries) == 0 {
+		return nil
+	}
+	return append([]skills.SkillEntry(nil), entry.entries...)
+}
+
+func cachedSkillsFor(workspaceDir string, availableToolNames []string) *cachedSkillsEntry {
+	if workspaceDir == "" {
+		workspaceDir = resolveWorkspaceDirForPrompt()
+	}
 	curatorVersion := skillCuratorStateVersion()
+	key := skillCacheKey(workspaceDir, availableToolNames)
+
 	skillsCache.mu.RLock()
-	if skillsCache.built && skillsCache.version == curatorVersion {
-		prompt := skillsCache.prompt
+	if entry := skillsCache.entries[key]; entry != nil && entry.version == curatorVersion {
 		skillsCache.mu.RUnlock()
-		return prompt
+		return entry
 	}
 	skillsCache.mu.RUnlock()
 
 	skillsCache.mu.Lock()
 	defer skillsCache.mu.Unlock()
+	if skillsCache.entries == nil {
+		skillsCache.entries = make(map[string]*cachedSkillsEntry)
+	}
 
 	// Double-check after acquiring write lock.
-	if skillsCache.built && skillsCache.version == curatorVersion {
-		return skillsCache.prompt
+	if entry := skillsCache.entries[key]; entry != nil && entry.version == curatorVersion {
+		return entry
 	}
 
 	// Build available tools map for conditional activation.
@@ -60,9 +109,12 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 	// Discover entries first so we can cache them for slash command routing.
 	allEntries := skills.DiscoverWorkspaceSkills(cfg.DiscoverConfig)
 	allEntries = skills.FilterExcludedSkills(allEntries, cfg.ExcludedSkills)
-	SetCachedSkillEntries(allEntries, 0)
 
 	snapshot := skills.BuildWorkspaceSkillSnapshot(cfg)
+	entry := &cachedSkillsEntry{
+		entries: append([]skills.SkillEntry(nil), allEntries...),
+		version: curatorVersion,
+	}
 	if snapshot != nil {
 		// P5 — compact-index format for the semi-static prompt block.
 		// snapshot.Prompt embeds the full XML (name + category + tags +
@@ -74,29 +126,17 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 		// category renames). Full body is loaded on demand via the
 		// skills tool's read action or the read tool against <location>.
 		indexResult := skills.BuildSkillsIndex(snapshot.ResolvedSkills, skills.DefaultSkillsLimits())
-		skillsCache.prompt = indexResult.Prompt
-		skillsCache.snapshot = snapshot
-	} else {
-		skillsCache.prompt = ""
-		skillsCache.snapshot = nil
+		entry.prompt = indexResult.Prompt
+		entry.snapshot = snapshot
 	}
-	skillsCache.built = true
-	skillsCache.version = curatorVersion
-	return skillsCache.prompt
-}
-
-// CachedSkillsSnapshot returns the last-built skills snapshot, or nil.
-func CachedSkillsSnapshot() *skills.FullSkillSnapshot {
-	skillsCache.mu.RLock()
-	defer skillsCache.mu.RUnlock()
-	return skillsCache.snapshot
+	skillsCache.entries[key] = entry
+	return entry
 }
 
 // InvalidateSkillsCache forces the skills prompt to be rebuilt on next access.
 func InvalidateSkillsCache() {
 	skillsCache.mu.Lock()
-	skillsCache.built = false
-	skillsCache.version = 0
+	skillsCache.entries = nil
 	skillsCache.mu.Unlock()
 }
 
@@ -106,6 +146,12 @@ func availableToolNames(tools *ToolRegistry) []string {
 		return nil
 	}
 	return tools.SortedNames()
+}
+
+func skillCacheKey(workspaceDir string, availableToolNames []string) string {
+	normalizedTools := append([]string(nil), availableToolNames...)
+	sort.Strings(normalizedTools)
+	return workspaceDir + "\x00" + strings.Join(normalizedTools, "\x00")
 }
 
 func skillCuratorStatePath() string {

@@ -9,7 +9,7 @@ import (
 )
 
 // SkillsSnapshotProvider returns the current cached skills snapshot.
-type SkillsSnapshotProvider func() *skills.FullSkillSnapshot
+type SkillsSnapshotProvider func(ctx context.Context) *skills.FullSkillSnapshot
 
 // toolSkillsList returns a tool function that lists discoverable skills.
 func toolSkillsList(getSnapshot SkillsSnapshotProvider) ToolFunc {
@@ -22,7 +22,7 @@ func toolSkillsList(getSnapshot SkillsSnapshotProvider) ToolFunc {
 			return "", err
 		}
 
-		snapshot := getSnapshot()
+		snapshot := getSnapshot(ctx)
 		if snapshot == nil {
 			return "No skills snapshot available.", nil
 		}

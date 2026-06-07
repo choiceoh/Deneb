@@ -112,6 +112,8 @@ func executeAgentRun(
 	if workspaceDir == "" {
 		workspaceDir = resolveWorkspaceDirForPrompt()
 	}
+	ctx = WithWorkspaceDir(ctx, workspaceDir)
+	ctx = WithAvailableToolNames(ctx, availableToolNames(deps.tools))
 
 	// Pre-warm context file snapshot for this session so disk I/O happens
 	// before the parallel prep phase (no-op if already cached from a prior turn).

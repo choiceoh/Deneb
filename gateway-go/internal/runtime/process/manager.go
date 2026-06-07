@@ -302,6 +302,7 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 
 	if err := cmd.Start(); err != nil {
 		cancel()
+		_ = stdinPipe.Close()
 		return m.failProcess(tracked, req.ID, startedAt, err.Error())
 	}
 
@@ -402,6 +403,7 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	tracked.mu.Lock()
 	tracked.Status = result.Status
 	tracked.Result = result
+	closeTrackedStdinLocked(tracked)
 	tracked.stdoutBuf = nil // release stream buffers after completion
 	tracked.stderrBuf = nil
 	tracked.mu.Unlock()
@@ -532,6 +534,7 @@ func (m *Manager) List() []ProcessSnapshot {
 func (m *Manager) failProcess(tracked *TrackedProcess, id string, startedAt int64, errMsg string) *ExecResult {
 	tracked.mu.Lock()
 	tracked.Status = StatusFailed
+	closeTrackedStdinLocked(tracked)
 	result := &ExecResult{
 		ID:        id,
 		Status:    StatusFailed,
@@ -542,6 +545,14 @@ func (m *Manager) failProcess(tracked *TrackedProcess, id string, startedAt int6
 	tracked.Result = result
 	tracked.mu.Unlock()
 	return result
+}
+
+func closeTrackedStdinLocked(tracked *TrackedProcess) {
+	if tracked.stdin == nil {
+		return
+	}
+	_ = tracked.stdin.Close()
+	tracked.stdin = nil
 }
 
 // Prune removes completed/failed processes older than the given duration.

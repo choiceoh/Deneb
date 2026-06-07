@@ -3,7 +3,6 @@ package chat
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 )
@@ -21,7 +20,7 @@ type SlashResult struct {
 // ParseSlashCommand checks if a message starts with a slash command.
 // First tries skill-based routing (local/system types), then falls back to
 // hardcoded builtins. Returns nil if not a recognized command.
-func ParseSlashCommand(text string) *SlashResult {
+func ParseSlashCommand(text, workspaceDir string, availableToolNames []string) *SlashResult {
 	trimmed := strings.TrimSpace(text)
 	if !strings.HasPrefix(trimmed, "/") {
 		return nil
@@ -41,7 +40,7 @@ func ParseSlashCommand(text string) *SlashResult {
 	}
 
 	// Try skill-based routing for local and system skills.
-	if result := trySkillCommand(cmd, args); result != nil {
+	if result := trySkillCommand(cmd, args, workspaceDir, availableToolNames); result != nil {
 		return result
 	}
 
@@ -163,8 +162,8 @@ func ParseSlashCommand(text string) *SlashResult {
 }
 
 // trySkillCommand checks the cached skills snapshot for local/system skill matches.
-func trySkillCommand(cmd, args string) *SlashResult {
-	snapshot := CachedSkillsSnapshot()
+func trySkillCommand(cmd, args, workspaceDir string, availableToolNames []string) *SlashResult {
+	snapshot := CachedSkillsSnapshot(workspaceDir, availableToolNames)
 	if snapshot == nil {
 		return nil
 	}
@@ -177,7 +176,7 @@ func trySkillCommand(cmd, args string) *SlashResult {
 		}
 
 		// Look up the full entry to get type info.
-		entry := findSkillEntryByName(snapshot, ps.Name)
+		entry := findSkillEntryByName(ps.Name, workspaceDir, availableToolNames)
 		if entry == nil {
 			continue
 		}
@@ -233,39 +232,14 @@ func trySkillCommand(cmd, args string) *SlashResult {
 	return nil
 }
 
-// findSkillEntryByName finds a skill entry from the snapshot by matching the full
-// discovery data. Since FullSkillSnapshot only stores PromptSkill (lightweight),
-// we re-discover via the cached snapshot's metadata.
-func findSkillEntryByName(_ *skills.FullSkillSnapshot, name string) *skills.SkillEntry {
-	// The snapshot stores resolved skills but not full entries with Type.
-	// We need to look up from the cached discovery. Use a simple re-discovery
-	// approach keyed by the snapshot version.
-	entries := getCachedSkillEntries()
+// findSkillEntryByName finds a skill entry from the cached discovery data for
+// the current workspace/tool set.
+func findSkillEntryByName(name, workspaceDir string, availableToolNames []string) *skills.SkillEntry {
+	entries := cachedSkillEntries(workspaceDir, availableToolNames)
 	for i := range entries {
 		if strings.EqualFold(entries[i].Skill.Name, name) {
 			return &entries[i]
 		}
 	}
 	return nil
-}
-
-// cachedSkillEntries stores the last set of discovered skill entries.
-var cachedSkillEntries struct {
-	mu      sync.RWMutex
-	entries []skills.SkillEntry
-	version int64
-}
-
-// SetCachedSkillEntries updates the cached skill entries (called during snapshot rebuild).
-func SetCachedSkillEntries(entries []skills.SkillEntry, version int64) {
-	cachedSkillEntries.mu.Lock()
-	cachedSkillEntries.entries = entries
-	cachedSkillEntries.version = version
-	cachedSkillEntries.mu.Unlock()
-}
-
-func getCachedSkillEntries() []skills.SkillEntry {
-	cachedSkillEntries.mu.RLock()
-	defer cachedSkillEntries.mu.RUnlock()
-	return cachedSkillEntries.entries
 }

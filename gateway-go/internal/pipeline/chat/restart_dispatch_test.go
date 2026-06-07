@@ -17,7 +17,7 @@ func TestParseSlashCommand_Restart(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got := ParseSlashCommand(tt.input)
+			got := ParseSlashCommand(tt.input, "", nil)
 			if got == nil {
 				t.Fatalf("ParseSlashCommand(%q) = nil, want command", tt.input)
 			}

@@ -46,7 +46,7 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 	}
 
 	// Pre-process slash commands before dispatching to agent.
-	if slashResult := ParseSlashCommand(p.Message); slashResult != nil && slashResult.Handled {
+	if slashResult := ParseSlashCommand(p.Message, p.WorkspaceDir, availableToolNames(h.tools)); slashResult != nil && slashResult.Handled {
 		return h.handleSlashCommand(req.ID, p.SessionKey, p.Delivery, slashResult)
 	}
 

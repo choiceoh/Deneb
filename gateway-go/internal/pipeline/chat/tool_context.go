@@ -36,6 +36,16 @@ func WithAutoDelivery(ctx context.Context) context.Context {
 	return toolctx.WithAutoDelivery(ctx)
 }
 
+// WithWorkspaceDir attaches the effective workspace directory to ctx.
+func WithWorkspaceDir(ctx context.Context, dir string) context.Context {
+	return toolctx.WithWorkspaceDir(ctx, dir)
+}
+
+// WorkspaceDirFromContext extracts the effective workspace directory from ctx.
+func WorkspaceDirFromContext(ctx context.Context) string {
+	return toolctx.WorkspaceDirFromContext(ctx)
+}
+
 // WithSessionKey attaches the session key to ctx.
 func WithSessionKey(ctx context.Context, key string) context.Context {
 	return toolctx.WithSessionKey(ctx, key)
@@ -65,6 +75,16 @@ func WithMaxUploadBytes(ctx context.Context, n int64) context.Context {
 // Returns 0 if not set; callers should apply a safe default.
 func MaxUploadBytesFromContext(ctx context.Context) int64 {
 	return toolctx.MaxUploadBytesFromContext(ctx)
+}
+
+// WithAvailableToolNames attaches the active tool-name set to ctx.
+func WithAvailableToolNames(ctx context.Context, names []string) context.Context {
+	return toolctx.WithAvailableToolNames(ctx, names)
+}
+
+// AvailableToolNamesFromContext extracts the active tool-name set from ctx.
+func AvailableToolNamesFromContext(ctx context.Context) []string {
+	return toolctx.AvailableToolNamesFromContext(ctx)
 }
 
 // WithTurnContext attaches a TurnContext to ctx for cross-tool result sharing.

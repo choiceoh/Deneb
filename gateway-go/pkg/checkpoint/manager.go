@@ -134,6 +134,9 @@ func (m *Manager) Snapshot(ctx context.Context, path, reason string) (*Snapshot,
 	info, statErr := os.Stat(abs)
 	switch {
 	case statErr == nil && info.Mode().IsRegular():
+		if info.Size() > m.maxBytes {
+			return nil, fmt.Errorf("checkpoint: %s exceeds snapshot size limit (%d > %d bytes)", abs, info.Size(), m.maxBytes)
+		}
 		data, err = os.ReadFile(abs)
 		if err != nil {
 			return nil, fmt.Errorf("checkpoint: read %s: %w", abs, err)

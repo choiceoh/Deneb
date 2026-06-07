@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 )
 
 // newSkillManageHarness spins up a ToolSkills function with an isolated
@@ -28,7 +29,7 @@ func newSkillManageHarness(t *testing.T) (fn ToolFunc, workspaceDir string, inva
 	})
 	// getSnapshot returns nil — list falls through gracefully in
 	// toolSkillsList when no snapshot is available.
-	snapshotFn := func() *skills.FullSkillSnapshot { return nil }
+	snapshotFn := func(context.Context) *skills.FullSkillSnapshot { return nil }
 	fn = ToolSkills(snapshotFn, workspaceDir, invalidate)
 	return fn, workspaceDir, invalidateCount
 }
@@ -57,6 +58,15 @@ func callSkillTool(t *testing.T, fn ToolFunc, args map[string]any) (string, erro
 		t.Fatalf("marshal args: %v", err)
 	}
 	return fn(context.Background(), raw)
+}
+
+func callSkillToolWithContext(t *testing.T, ctx context.Context, fn ToolFunc, args map[string]any) (string, error) {
+	t.Helper()
+	raw, err := json.Marshal(args)
+	if err != nil {
+		t.Fatalf("marshal args: %v", err)
+	}
+	return fn(ctx, raw)
 }
 
 func TestSkillManage_Create_DefersCacheByDefault(t *testing.T) {
@@ -103,6 +113,33 @@ func TestSkillManage_Create_ApplyInvalidatesCache(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(invalidateCount); got != 1 {
 		t.Errorf("expected invalidate called once, got %d", got)
+	}
+}
+
+func TestSkillManage_Create_UsesWorkspaceFromContext(t *testing.T) {
+	fn, fallbackWorkspace, _ := newSkillManageHarness(t)
+	overrideWorkspace := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(overrideWorkspace, "skills"), 0o755); err != nil {
+		t.Fatalf("prep override workspace: %v", err)
+	}
+
+	ctx := toolctx.WithWorkspaceDir(context.Background(), overrideWorkspace)
+	if _, err := callSkillToolWithContext(t, ctx, fn, map[string]any{
+		"action":   "create",
+		"name":     "contextual",
+		"category": "coding",
+		"content":  validSkillContent("contextual"),
+	}); err != nil {
+		t.Fatalf("create with context workspace: %v", err)
+	}
+
+	overridePath := filepath.Join(overrideWorkspace, "skills", "coding", "contextual", "SKILL.md")
+	if _, err := os.Stat(overridePath); err != nil {
+		t.Fatalf("expected skill in override workspace: %v", err)
+	}
+	fallbackPath := filepath.Join(fallbackWorkspace, "skills", "coding", "contextual", "SKILL.md")
+	if _, err := os.Stat(fallbackPath); !os.IsNotExist(err) {
+		t.Fatalf("expected fallback workspace to remain untouched, stat err=%v", err)
 	}
 }
 

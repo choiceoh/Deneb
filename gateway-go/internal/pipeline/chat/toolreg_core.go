@@ -13,7 +13,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	toolreg.RegisterCoreTools(registry, deps)
 
 	// Skills discovery + management: list, create, patch, delete skills at runtime.
-	toolreg.RegisterSkillsTools(registry, CachedSkillsSnapshot,
+	toolreg.RegisterSkillsTools(registry, CachedSkillsSnapshotFromContext,
 		resolveWorkspaceDirForPrompt(), InvalidateSkillsCache)
 
 	// Wiki knowledge base tools (always active when wiki is configured).

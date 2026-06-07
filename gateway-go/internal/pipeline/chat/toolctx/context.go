@@ -24,6 +24,8 @@ const (
 	ctxKeySpawnFlag
 	ctxKeyCheckpointer
 	ctxKeyAutoDelivery
+	ctxKeyWorkspaceDir
+	ctxKeyAvailableToolNames
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
@@ -62,6 +64,38 @@ func WithAutoDelivery(ctx context.Context) context.Context {
 func AutoDeliveryFromContext(ctx context.Context) bool {
 	v, _ := ctx.Value(ctxKeyAutoDelivery).(bool)
 	return v
+}
+
+// WithWorkspaceDir attaches the effective workspace directory to the context.
+func WithWorkspaceDir(ctx context.Context, dir string) context.Context {
+	if dir == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, ctxKeyWorkspaceDir, dir)
+}
+
+// WorkspaceDirFromContext extracts the effective workspace directory.
+func WorkspaceDirFromContext(ctx context.Context) string {
+	dir, _ := ctx.Value(ctxKeyWorkspaceDir).(string)
+	return dir
+}
+
+// WithAvailableToolNames attaches the active tool-name set for this run.
+func WithAvailableToolNames(ctx context.Context, names []string) context.Context {
+	if len(names) == 0 {
+		return ctx
+	}
+	cloned := append([]string(nil), names...)
+	return context.WithValue(ctx, ctxKeyAvailableToolNames, cloned)
+}
+
+// AvailableToolNamesFromContext extracts the active tool-name set for this run.
+func AvailableToolNamesFromContext(ctx context.Context) []string {
+	names, _ := ctx.Value(ctxKeyAvailableToolNames).([]string)
+	if len(names) == 0 {
+		return nil
+	}
+	return append([]string(nil), names...)
 }
 
 // WithSessionKey attaches the session key to the context.

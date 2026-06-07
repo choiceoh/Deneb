@@ -253,6 +253,50 @@ func TestExecuteBackground(t *testing.T) {
 	t.Error("background process did not complete in time")
 }
 
+func TestExecute_ClearsStdinAfterCompletion(t *testing.T) {
+	m := newTestManager(t)
+
+	result := m.Execute(context.Background(), ExecRequest{
+		ID:      "stdin-done",
+		Command: "echo",
+		Args:    []string{"done"},
+	})
+	if result.Status != StatusDone {
+		t.Fatalf("got %s, want done", result.Status)
+	}
+
+	tracked := m.processes["stdin-done"]
+	if tracked == nil {
+		t.Fatal("expected tracked process")
+	}
+	tracked.mu.Lock()
+	defer tracked.mu.Unlock()
+	if tracked.stdin != nil {
+		t.Fatal("expected stdin pipe to be closed and cleared after completion")
+	}
+}
+
+func TestExecute_ClearsStdinAfterStartFailure(t *testing.T) {
+	m := newTestManager(t)
+
+	result := m.Execute(context.Background(), ExecRequest{
+		ID:      "stdin-fail",
+		Command: "/nonexistent/binary/xyz",
+	})
+	if result.Status != StatusFailed {
+		t.Fatalf("got %s, want failed", result.Status)
+	}
+
+	tracked := m.processes["stdin-fail"]
+	if tracked == nil {
+		t.Fatal("expected tracked process")
+	}
+	tracked.mu.Lock()
+	defer tracked.mu.Unlock()
+	if tracked.stdin != nil {
+		t.Fatal("expected stdin pipe to be closed and cleared after start failure")
+	}
+}
 func TestParallelDrain_LargeOutput(t *testing.T) {
 	// Verify that large concurrent stdout+stderr doesn't deadlock.
 	m := newTestManager(t)

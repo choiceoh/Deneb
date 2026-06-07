@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -80,6 +81,7 @@ func toolSkillManage(workspaceDir string, invalidate SkillManageInvalidateFn) To
 		// Sanitize skill name: lowercase, hyphens only.
 		p.Name = sanitizeSkillName(p.Name)
 		effectiveInvalidate := cacheAwareInvalidate(invalidate, p.Apply)
+		effectiveWorkspaceDir := skillWorkspaceDir(ctx, workspaceDir)
 
 		var (
 			result string
@@ -87,19 +89,19 @@ func toolSkillManage(workspaceDir string, invalidate SkillManageInvalidateFn) To
 		)
 		switch p.Action {
 		case "create":
-			result, err = skillCreate(workspaceDir, p.Name, p.Category, p.Content, effectiveInvalidate)
+			result, err = skillCreate(effectiveWorkspaceDir, p.Name, p.Category, p.Content, effectiveInvalidate)
 		case "patch":
-			result, err = skillPatch(workspaceDir, p.Name, p.OldText, p.NewText, effectiveInvalidate)
+			result, err = skillPatch(effectiveWorkspaceDir, p.Name, p.OldText, p.NewText, effectiveInvalidate)
 		case "delete":
-			result, err = skillDelete(workspaceDir, p.Name, effectiveInvalidate)
+			result, err = skillDelete(effectiveWorkspaceDir, p.Name, effectiveInvalidate)
 		case "read":
-			return skillRead(workspaceDir, p.Name, p.FilePath)
+			return skillRead(effectiveWorkspaceDir, p.Name, p.FilePath)
 		case "list_files":
-			return skillListFiles(workspaceDir, p.Name)
+			return skillListFiles(effectiveWorkspaceDir, p.Name)
 		case "write_file":
-			result, err = skillWriteFile(workspaceDir, p.Name, p.FilePath, p.FileContent, effectiveInvalidate)
+			result, err = skillWriteFile(effectiveWorkspaceDir, p.Name, p.FilePath, p.FileContent, effectiveInvalidate)
 		case "remove_file":
-			result, err = skillRemoveFile(workspaceDir, p.Name, p.FilePath, effectiveInvalidate)
+			result, err = skillRemoveFile(effectiveWorkspaceDir, p.Name, p.FilePath, effectiveInvalidate)
 		default:
 			return "", fmt.Errorf("unknown action %q: use create, patch, delete, read, list_files, write_file, or remove_file", p.Action)
 		}
@@ -108,6 +110,13 @@ func toolSkillManage(workspaceDir string, invalidate SkillManageInvalidateFn) To
 		}
 		return result + cacheApplyNotice(p.Apply), nil
 	}
+}
+
+func skillWorkspaceDir(ctx context.Context, fallback string) string {
+	if dir := toolctx.WorkspaceDirFromContext(ctx); dir != "" {
+		return dir
+	}
+	return fallback
 }
 
 // cacheApplyNotice returns a short Korean notice the agent sees after
