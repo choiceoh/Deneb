@@ -532,7 +532,13 @@ class DenebGatewayClient(
     // next message continues that very conversation through the gateway.
 
     override fun loadConversations() {
-        scope.launch { _savedConversations.value = fetchRecentSessions() }
+        scope.launch {
+            // Keep the current list when the fetch fails (null) so a transient
+            // sessions.recent RPC error doesn't flap the drawer between the full
+            // list and just the 업무 home row.
+            val fresh = fetchRecentSessions() ?: return@launch
+            _savedConversations.value = fresh
+        }
     }
 
     override fun loadConversation(id: String) {
@@ -1533,12 +1539,14 @@ class DenebGatewayClient(
     // the retired topics back into the drawer. List real Deneb sessions only, and
     // fall back to a lone client:main home when there are no sessions yet so the
     // drawer is never empty.
-    private suspend fun fetchRecentSessions(): List<Conversation> {
+    private suspend fun fetchRecentSessions(): List<Conversation>? {
+        // null return = RPC failed (timeout/transient/load). The caller keeps the
+        // existing drawer list instead of collapsing to just the home row.
         val payload = callRpc<RecentPayload>(
             "miniapp.sessions.recent",
             buildJsonObject { put("limit", 50) },
-        )
-        val recent = payload?.sessions
+        ) ?: return null
+        val recent = payload.sessions
             ?.filter { it.key.isNotBlank() }
             ?.map { s ->
                 Conversation(
