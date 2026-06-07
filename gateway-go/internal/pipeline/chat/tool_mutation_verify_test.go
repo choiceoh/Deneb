@@ -89,6 +89,19 @@ func TestMutationFailureAnnotator_WiredViaRegistry(t *testing.T) {
 	}
 }
 
+func TestIsMutationFailureResult(t *testing.T) {
+	annotated := MutationFailureAnnotator(context.Background(), "gmail", "발송 실패: boom")
+	if !isMutationFailureResult(annotated) {
+		t.Fatal("annotated failure result must be detected for escalation")
+	}
+	if isMutationFailureResult("✉️ 메일 발송 완료") {
+		t.Fatal("success result must not be detected as failure")
+	}
+	if isMutationFailureResult("") {
+		t.Fatal("empty result must not be detected as failure")
+	}
+}
+
 func TestMutationVerifyTools_Deterministic(t *testing.T) {
 	got := mutationVerifyTools()
 	want := []string{"cron", "gateway", "gmail", "wiki"}

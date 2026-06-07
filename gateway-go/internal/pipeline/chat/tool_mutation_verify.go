@@ -66,6 +66,14 @@ func mutationOutcomeIsFailure(toolName, output string) bool {
 	return false
 }
 
+// isMutationFailureResult reports whether a finalized tool result carries the
+// mutation failure banner (i.e. MutationFailureAnnotator surfaced an in-band
+// failure the agent loop saw as isError=false). Used by the run hooks to escalate
+// to an Error log + operator broadcast per .claude/rules/logging.md.
+func isMutationFailureResult(result string) bool {
+	return strings.Contains(result, mutationFailureBanner)
+}
+
 // MutationFailureAnnotator is a per-tool PostProcessor that prepends the mutation
 // failure banner when a mutation tool's output indicates an in-band failure. It is
 // idempotent (won't double-annotate) and a no-op for success output or tools
