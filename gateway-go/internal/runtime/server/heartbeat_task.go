@@ -114,6 +114,18 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 		return nil
 	}
 
+	// Skip if the user is actively using the system — before any signal work, so
+	// we don't fetch the calendar just to discard the result. Avoids racing a
+	// turn in flight or interrupting the user mid-conversation.
+	if t.activity != nil {
+		idleMs := time.Now().UnixMilli() - t.activity.LastActivityAt()
+		idle := time.Duration(idleMs) * time.Millisecond
+		if idle < 1*time.Minute {
+			t.logger.Debug("heartbeat: skipped, user active", "idle", idle.Round(time.Second))
+			return nil
+		}
+	}
+
 	content := t.readHeartbeat()
 
 	// Proactive signal pass: cheap, runs before the LLM turn. Detected anomalies
@@ -139,17 +151,6 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 		lastSessionKey = t.activity.LastSessionKey()
 	}
 	sessionKey := heartbeatTargetSessionKey(lastSessionKey)
-
-	// Skip if user is actively using the system. Avoids racing a turn that
-	// is in flight or interrupting the user mid-conversation.
-	if t.activity != nil {
-		idleMs := time.Now().UnixMilli() - t.activity.LastActivityAt()
-		idle := time.Duration(idleMs) * time.Millisecond
-		if idle < 1*time.Minute {
-			t.logger.Debug("heartbeat: skipped, user active", "idle", idle.Round(time.Second))
-			return nil
-		}
-	}
 
 	triggerMsg := fmt.Sprintf(heartbeatTriggerTemplate, composeHeartbeatBody(signalSummary, content))
 
