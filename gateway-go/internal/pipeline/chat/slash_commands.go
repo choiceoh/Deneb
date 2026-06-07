@@ -156,6 +156,15 @@ func ParseSlashCommand(text string) *SlashResult {
 			Response: "",
 			Command:  "use-forum",
 		}
+	// /pin <fact> pins an always-remember fact into the dynamic system prompt
+	// (inevictable by compaction); /unpin <N> removes one; /pins lists them.
+	// Korean aliases route to the same handlers.
+	case "pin", "고정":
+		return &SlashResult{Handled: true, Command: "pin", Args: args}
+	case "unpin", "고정해제":
+		return &SlashResult{Handled: true, Command: "unpin", Args: args}
+	case "pins", "고정목록":
+		return &SlashResult{Handled: true, Command: "pins"}
 	default:
 		// Not a recognized slash command; pass through to LLM.
 		return nil

@@ -539,6 +539,8 @@ func prepareContextAndPrompt(
 			TopicKnowledge:      topicKnowledge,
 			TopicCacheKey:       topicCacheKey,
 			SupportsRichUI:      richUIChannel(ch),
+			// User-pinned always-remember facts (/pin) → dynamic block, inevictable.
+			PinnedFacts: formatPinnedFactsBlock(listPinnedFacts(params.SessionKey)),
 		}
 
 		systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))

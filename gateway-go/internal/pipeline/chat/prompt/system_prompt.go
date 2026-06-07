@@ -102,6 +102,12 @@ type SystemPromptParams struct {
 	// (the native Android app); Telegram leaves it false so its prompt
 	// bytes are unchanged. Dynamic (uncached) block — no prompt-cache impact.
 	SupportsRichUI bool
+
+	// PinnedFacts is the user's "/pin"-ed always-remember facts, pre-rendered as
+	// a numbered list. Injected into the Dynamic (uncached) block so they are
+	// inevictable by compaction and re-asserted every turn (research finding C).
+	// Empty = no section. No prompt-cache impact (dynamic block has no marker).
+	PinnedFacts string
 }
 
 // RuntimeInfo describes the current runtime environment for the system prompt.
@@ -424,6 +430,17 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	}
 
 	// Hindsight cross-session memory (conditional).
+	// Pinned facts: the user's explicit always-remember anchors. Placed high in
+	// the dynamic block (before recall/memory sections) so they are prominent and
+	// inevictable — they survive compaction because the dynamic block is rebuilt
+	// every turn from live session state (research finding C).
+	if strings.TrimSpace(params.PinnedFacts) != "" {
+		d.WriteString("## 고정 사실 (Pinned Facts)\n")
+		d.WriteString("사용자가 직접 고정한 항상-기억 사실이다. 매 턴 유지되며, 답변 시 반드시 반영하라. 사용자가 /unpin 하기 전까지 유효하다.\n\n")
+		d.WriteString(params.PinnedFacts)
+		d.WriteString("\n\n")
+	}
+
 	if params.HindsightEnabled {
 		d.WriteString("## 장기 기억 (Hindsight)\n")
 		d.WriteString("이전 세션을 포함한 대화가 Hindsight 메모리 뱅크에 자동 저장된다. 매 턴 관련 기억이 자동으로 검색되어 위 `<recall-context>` 블록으로 주입된다.\n")
