@@ -126,6 +126,20 @@ func TestFormatErrorEvent_UnknownReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestFormatErrorEvent_ToolFailedPayload(t *testing.T) {
+	body := formatErrorEvent("chat.tool_failed", map[string]any{
+		"sessionKey": "client:main",
+		"tool":       "gmail",
+		"reason":     "mutation_tool_in_band_failure",
+		"error":      "발송 실패: 550 mailbox unavailable",
+	})
+	for _, want := range []string{"도구 실행 실패", "client:main", "gmail", "발송 실패"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("tool_failed body missing %q:\n%s", want, body)
+		}
+	}
+}
+
 // Test newNotifyService nil-safety: missing plugin or zero ChatID returns
 // nil so callers can short-circuit registration.
 func TestNewNotifyService_NilWhenDisabled(t *testing.T) {

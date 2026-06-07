@@ -9,8 +9,9 @@
 //
 //  2. Error mirrors — automatic. The notifier registers a Broadcaster.Tap
 //     and forwards user-impacting events (chat.delivery_failed,
-//     chat.media_delivery_failed, chat.context_overflow_unrecoverable,
-//     chat.compaction_stuck) to connected native clients and logs them at Error.
+//     chat.media_delivery_failed, chat.tool_failed,
+//     chat.context_overflow_unrecoverable, chat.compaction_stuck) to connected
+//     native clients and logs them at Error.
 //
 // A periodic heartbeat self-polls /health so a hung HTTP mux is caught even
 // when the broadcast taps fall silent; hang alerts log at Error (not pushed
@@ -80,12 +81,13 @@ const allocWarnBytes = 2 * 1024 * 1024 * 1024
 
 // mirroredEvents enumerates the broadcast event names that the notifier
 // mirrors to the secondary chat. Limited to events that signal an actual
-// user-observable problem (delivery dropped, context broken, compaction
-// looping). Routine `sessions.changed` / `session.tool` traffic is
+// user-observable problem (delivery dropped, mutation failed, context broken,
+// compaction looping). Routine `sessions.changed` / `session.tool` traffic is
 // excluded — that would drown the operator in noise.
 var mirroredEvents = map[string]struct{}{
 	"chat.delivery_failed":                {},
 	"chat.media_delivery_failed":          {},
+	"chat.tool_failed":                    {},
 	"chat.context_overflow_unrecoverable": {},
 	"chat.compaction_stuck":               {},
 }
@@ -784,8 +786,15 @@ func formatErrorEvent(event string, payload any) string {
 	var b strings.Builder
 	b.WriteString("⚠️ ")
 	b.WriteString(headline)
-	if sess := stringField(fields, "session"); sess != "" {
+	sess := stringField(fields, "session")
+	if sess == "" {
+		sess = stringField(fields, "sessionKey")
+	}
+	if sess != "" {
 		fmt.Fprintf(&b, "\n세션: %s", sess)
+	}
+	if tool := stringField(fields, "tool"); tool != "" {
+		fmt.Fprintf(&b, "\n도구: %s", tool)
 	}
 	if reason := stringField(fields, "reason"); reason != "" {
 		fmt.Fprintf(&b, "\n원인: %s", reason)
@@ -805,6 +814,8 @@ func errorHeadlineKO(event string) string {
 		return "채팅 응답 전달 실패"
 	case "chat.media_delivery_failed":
 		return "미디어 전달 실패"
+	case "chat.tool_failed":
+		return "도구 실행 실패"
 	case "chat.context_overflow_unrecoverable":
 		return "컨텍스트 오버플로 (복구 불가)"
 	case "chat.compaction_stuck":

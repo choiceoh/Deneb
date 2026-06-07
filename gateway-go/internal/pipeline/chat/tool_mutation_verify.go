@@ -25,9 +25,9 @@ import (
 // failure counts or read-side errors. It is pure and unit-tested. Wiring is a
 // per-tool PostProcessor registered in RegisterDefaultPostProcessors.
 //
-// Out of scope here (documented follow-up): escalating to an Error log + operator
-// broadcast (needs broadcast plumbing into the tool layer), and converting each
-// tool's in-band failure into a real error-slot result.
+// Escalation to Error log + broadcast is handled in run_hooks.go. Remaining
+// follow-up: converting each tool's in-band failure into a real error-slot
+// result at the tool implementation boundary.
 
 // mutationFailureBanner is prepended to a mutation tool's output when the result
 // indicates the action did not succeed. The wording forbids reporting success and
@@ -64,6 +64,25 @@ func mutationOutcomeIsFailure(toolName, output string) bool {
 		}
 	}
 	return false
+}
+
+// isMutationFailureResult reports whether a finalized tool result carries the
+// mutation failure banner (i.e. MutationFailureAnnotator surfaced an in-band
+// failure the agent loop saw as isError=false). Used by the run hooks to escalate
+// to an Error log + operator broadcast per .claude/rules/logging.md.
+func isMutationFailureResult(result string) bool {
+	return strings.Contains(result, mutationFailureBanner)
+}
+
+// mutationFailureError extracts the underlying tool failure text from an
+// annotated mutation result for logs/broadcasts. The result body is still
+// truncated by the notification relay before it reaches clients.
+func mutationFailureError(result string) string {
+	trimmed := strings.TrimSpace(strings.TrimPrefix(result, mutationFailureBanner))
+	if trimmed == "" || trimmed == strings.TrimSpace(result) {
+		return "mutation tool returned an in-band failure"
+	}
+	return trimmed
 }
 
 // MutationFailureAnnotator is a per-tool PostProcessor that prepends the mutation
