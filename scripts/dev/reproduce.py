@@ -3,7 +3,7 @@
 Deneb Gateway Live Reproduction Tool.
 
 AI agents use this to reproduce user-reported symptoms live through the
-mock Telegram server. Supports single/multi-turn chat with assertions,
+native miniapp RPC surface. Supports single/multi-turn chat with assertions,
 tool verification, and symptom-based diagnosis — no real Telegram bot
 credentials required.
 
@@ -33,12 +33,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-# Add scripts dir to path for shared modules (mock_telegram_client lives
+# Add scripts dir to path for shared modules (mock_native_client lives
 # under scripts/, this file under scripts/dev/).
 _SCRIPTS_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(_SCRIPTS_ROOT))
-from mock_telegram_client import TelegramTestClient, ChatCapture, check_prerequisites  # noqa: E402
+from mock_native_client import NativeTestClient, ChatCapture, check_prerequisites  # noqa: E402
 from checks import (  # noqa: E402
     check_korean_response as _check_korean_core,
     check_no_leaked_markup as _check_no_leaked_markup_core,
@@ -59,7 +59,7 @@ TIMEOUT_CHAT = 120
 
 # --- Data Structures ---
 
-# ChatCapture is imported from mock_telegram_client.
+# ChatCapture is imported from mock_native_client.
 
 
 @dataclass
@@ -67,9 +67,12 @@ class CheckResult:
     name: str
     passed: bool
     detail: str = ""
+    # skipped checks neither pass nor fail \u2014 used for assertions the native
+    # sync surface cannot observe (e.g. per-tool introspection).
+    skipped: bool = False
 
     def __str__(self):
-        icon = "\u2713" if self.passed else "\u2717"
+        icon = "~" if self.skipped else ("\u2713" if self.passed else "\u2717")
         detail_str = f" \u2014 {self.detail}" if self.detail else ""
         return f"  {icon} {self.name}{detail_str}"
 
@@ -84,22 +87,22 @@ class TurnResult:
 
     @property
     def passed(self) -> bool:
-        return all(c.passed for c in self.checks)
+        return all(c.passed for c in self.checks if not c.skipped)
 
     @property
     def failed_checks(self) -> list:
-        return [c for c in self.checks if not c.passed]
+        return [c for c in self.checks if not c.passed and not c.skipped]
 
 
 # --- Telegram Client Wrapper ---
 
 class GatewayClient:
-    """Mock-Telegram-based test client (replaces former WebSocket client)."""
+    """Native-client test client (drives miniapp.chat.send over HTTP)."""
 
     def __init__(self, host: str, port: int, bot: str = ""):
         self.host = host
         self.port = port
-        self._tg = TelegramTestClient(bot_username=bot)
+        self._tg = NativeTestClient(host=host, port=port, bot_username=bot)
         self.session_key = ""
 
     async def connect(self) -> str:
@@ -111,7 +114,7 @@ class GatewayClient:
 
     async def chat(self, message: str, session_key: str = "",
                    timeout: float = TIMEOUT_CHAT) -> ChatCapture:
-        return await self._tg.chat(message, timeout=timeout)
+        return await self._tg.chat(message, timeout=timeout, session_key=session_key)
 
     async def rpc(self, method: str, params: dict = None,
                   timeout: float = TIMEOUT_RPC) -> dict:
@@ -143,35 +146,27 @@ def check_expect_not(text: str, pattern: str) -> CheckResult:
                        f"found: '{match.group()[:50]}'" if match else "clean")
 
 
+# The native miniapp.chat.send surface returns a final reply, not a token/tool
+# event stream, so per-tool introspection is not observable here. These checks
+# report "skipped" rather than failing — verifying tool calls needs the in-process
+# event stream, which is out of scope for the synchronous native path.
+_TOOL_INTROSPECTION_NOTE = "unsupported on native sync surface (no per-tool events)"
+
+
 def check_expect_tool(capture: ChatCapture, tool_name: str) -> CheckResult:
-    """Specific tool was called."""
-    called = [t["name"] for t in capture.tool_starts]
-    found = any(tool_name in name for name in called)
-    return CheckResult(f"expect_tool({tool_name})", found,
-                       f"called: {called}" if called else "no tools called")
+    """Specific tool was called (unobservable on the native sync surface)."""
+    return CheckResult(f"expect_tool({tool_name})", True,
+                       _TOOL_INTROSPECTION_NOTE, skipped=True)
 
 
 def check_expect_no_tool(capture: ChatCapture) -> CheckResult:
-    """No tools were called."""
-    called = [t["name"] for t in capture.tool_starts]
-    return CheckResult("expect_no_tool", len(called) == 0,
-                       f"called: {called}" if called else "no tools")
+    """No tools were called (unobservable on the native sync surface)."""
+    return CheckResult("expect_no_tool", True, _TOOL_INTROSPECTION_NOTE, skipped=True)
 
 
 def check_tool_success(capture: ChatCapture) -> CheckResult:
-    """All invoked tools completed without errors."""
-    starts = {t["name"] for t in capture.tool_starts}
-    results = {t["name"] for t in capture.tool_results}
-    errors = [t for t in capture.tool_results if t.get("isError")]
-    orphaned = starts - results
-    issues = []
-    if orphaned:
-        issues.append(f"incomplete: {orphaned}")
-    if errors:
-        issues.append(f"errors: {[t['name'] for t in errors]}")
-    passed = not issues
-    return CheckResult("tool_success", passed,
-                       "; ".join(issues) if issues else f"{len(starts)} tools OK")
+    """All invoked tools completed without errors (unobservable on native)."""
+    return CheckResult("tool_success", True, _TOOL_INTROSPECTION_NOTE, skipped=True)
 
 
 def check_latency(capture: ChatCapture, max_ms: float) -> CheckResult:
@@ -254,15 +249,15 @@ def check_expect_error(capture: ChatCapture) -> CheckResult:
 
 async def cmd_chat_check(args):
     """Send a chat message with configurable assertions."""
-    ok, detail = check_prerequisites()
+    ok, detail = check_prerequisites(HOST, args.port)
     if not ok:
-        print(f"Mock Telegram prerequisites not met: {detail}")
+        print(f"Native chat prerequisites not met: {detail}")
         return 1
 
     client = GatewayClient(HOST, args.port, bot=getattr(args, "bot", ""))
     try:
         bot_name = await client.connect()
-        print(f"Connected to {bot_name} via mock Telegram")
+        print(f"Connected to {bot_name} via native miniapp RPC")
 
         if args.session:
             await client.create_session(args.session)
@@ -308,15 +303,15 @@ async def cmd_chat_check(args):
 
 async def cmd_multi_chat(args):
     """Multi-turn chat on the same session. Tests context carryover."""
-    ok, detail = check_prerequisites()
+    ok, detail = check_prerequisites(HOST, args.port)
     if not ok:
-        print(f"Mock Telegram prerequisites not met: {detail}")
+        print(f"Native chat prerequisites not met: {detail}")
         return 1
 
     client = GatewayClient(HOST, args.port, bot=getattr(args, "bot", ""))
     try:
         bot_name = await client.connect()
-        print(f"Connected to {bot_name} via mock Telegram")
+        print(f"Connected to {bot_name} via native miniapp RPC")
 
         session_key = await client.create_session()
         print(f"Session: {session_key}")
@@ -369,15 +364,18 @@ async def cmd_multi_chat(args):
 
 async def cmd_tool_check(args):
     """Send a message designed to trigger a specific tool, verify it completes."""
-    ok, detail = check_prerequisites()
+    ok, detail = check_prerequisites(HOST, args.port)
     if not ok:
-        print(f"Mock Telegram prerequisites not met: {detail}")
+        print(f"Native chat prerequisites not met: {detail}")
         return 1
 
+    print("Note: per-tool verification is unobservable on the native sync "
+          "surface; tool checks are reported as skipped (~). Reply/error/latency "
+          "checks still apply.")
     client = GatewayClient(HOST, args.port, bot=getattr(args, "bot", ""))
     try:
         bot_name = await client.connect()
-        print(f"Connected to {bot_name} via mock Telegram")
+        print(f"Connected to {bot_name} via native miniapp RPC")
 
         capture = await client.chat(args.message, timeout=args.timeout)
 
@@ -404,7 +402,7 @@ def print_single_turn(result: TurnResult, indent: int = 0):
     """Print results for a single turn."""
     prefix = " " * indent
     for check in result.checks:
-        icon = "\u2713" if check.passed else "\u2717"
+        icon = "~" if getattr(check, "skipped", False) else ("\u2713" if check.passed else "\u2717")
         detail_str = f" \u2014 {check.detail}" if check.detail else ""
         print(f"{prefix}    {icon} {check.name}{detail_str}")
 
@@ -439,11 +437,13 @@ def print_turn_result(result: TurnResult) -> int:
     print_single_turn(result)
     print()
 
-    passed = sum(1 for c in result.checks if c.passed)
-    total = len(result.checks)
+    skipped = sum(1 for c in result.checks if getattr(c, "skipped", False))
+    passed = sum(1 for c in result.checks if c.passed and not getattr(c, "skipped", False))
+    total = len(result.checks) - skipped
     status = "PASSED" if result.passed else "FAILED"
+    skip_note = f" ({skipped} skipped)" if skipped else ""
     print(f"{'=' * 60}")
-    print(f"  {status} \u2014 {passed}/{total} checks")
+    print(f"  {status} \u2014 {passed}/{total} checks{skip_note}")
     print(f"{'=' * 60}")
     return 0 if result.passed else 1
 
@@ -451,7 +451,7 @@ def print_turn_result(result: TurnResult) -> int:
 # --- Main ---
 
 def main():
-    parser = argparse.ArgumentParser(description="Deneb Live Reproduction Tool (mock Telegram)")
+    parser = argparse.ArgumentParser(description="Deneb Live Reproduction Tool (native miniapp RPC)")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT,
                         help="Gateway HTTP port for health checks")
     parser.add_argument("--bot", type=str, default="",
