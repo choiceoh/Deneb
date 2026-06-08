@@ -307,7 +307,7 @@ internal fun CalendarAddContent(
     DenebSectionLabel("일시")
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text("종일", style = DenebType.body, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.weight(1f))
-        Switch(checked = allDay, onCheckedChange = onAllDay)
+        Switch(checked = allDay, onCheckedChange = { haptics.toggle(it); onAllDay(it) })
     }
     Spacer(Modifier.height(8.dp))
     OutlinedButton(onClick = { haptics.tap(); onPickStartDate() }, modifier = Modifier.fillMaxWidth()) { Text("시작 $startDateLabel") }

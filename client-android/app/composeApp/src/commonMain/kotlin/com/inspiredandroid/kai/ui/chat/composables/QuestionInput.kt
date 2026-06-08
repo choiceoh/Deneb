@@ -140,7 +140,7 @@ fun QuestionInput(
         fun submitQuestion() {
             val text = textState.text
             if (text.isNotBlank()) {
-                haptics.tap()
+                haptics.confirm()
                 ask(text.trim())
                 onTextStateChange(TextFieldValue(""))
             }

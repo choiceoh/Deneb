@@ -154,7 +154,7 @@ fun DenebMailDetailScreen(
                 ) { Text("보관") }
                 FilledTonalButton(
                     onClick = {
-                        haptics.confirm()
+                        haptics.reject()
                         scope.launch { if (client.trashMail(mail.id)) onBack() else actionMsg = "휴지통 이동 실패" }
                     },
                     modifier = Modifier.weight(1f),

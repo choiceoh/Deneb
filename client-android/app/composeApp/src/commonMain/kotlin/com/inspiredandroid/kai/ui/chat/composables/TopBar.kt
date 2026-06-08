@@ -204,7 +204,7 @@ private fun LeadingButtons(
         val flashContainer = primary.copy(alpha = flashAlpha.value)
         IconToggleButton(
             checked = isSandboxOpen,
-            onCheckedChange = { haptics.tap(); onToggleSandbox() },
+            onCheckedChange = { haptics.toggle(it); onToggleSandbox() },
             modifier = Modifier.handCursor(),
             colors = IconButtonDefaults.iconToggleButtonColors(
                 containerColor = flashContainer,
@@ -236,7 +236,7 @@ private fun SpeechToggleButton(
     IconButton(
         modifier = Modifier.handCursor(),
         onClick = {
-            haptics.tap()
+            haptics.toggle(!isSpeechOutputEnabled)
             if (isSpeechOutputEnabled && isSpeaking) {
                 actions.setIsSpeaking(false, "")
                 textToSpeech.stop()

@@ -108,7 +108,7 @@ fun DenebTopicDocScreen(
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = { haptics.tap(); editing = !editing; if (!editing) draft = d.content; status = null }) {
+                    TextButton(onClick = { haptics.toggle(!editing); editing = !editing; if (!editing) draft = d.content; status = null }) {
                         Text(if (editing) "취소" else "편집")
                     }
                 }
