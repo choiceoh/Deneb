@@ -31,6 +31,8 @@ import com.inspiredandroid.kai.ui.DenebType
 import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.denebHint
 import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 
 /**
  * Calendar event detail (`miniapp.calendar.get`): when, location, organizer,
@@ -207,14 +209,34 @@ private fun statusLabel(status: String): String? = when (status) {
     else -> null
 }
 
-/** "5월 31일 (토) 14:00 – 15:00" or "5월 31일 (토) · 종일". */
+/** "5월 31일 (토) 14:00 – 15:00", "5월 31일 (토) · 종일", or for a multi-day span
+ *  "5월 31일 (토) ~ 6월 2일 (월) · 종일" / "5월 31일 (토) 22:00 – 6월 1일 (일) 02:00".
+ *  Uses eventDays so the all-day exclusive end resolves to the real last day. */
 private fun whenLabel(ev: CalendarEventDetail): String {
+    val tz = TimeZone.currentSystemDefault()
+    val days = eventDays(ev.start, ev.end, ev.allDay, tz)
+    val startDate = days.firstOrNull()
+    val lastDate = days.lastOrNull()
+    val multiDay = startDate != null && lastDate != null && lastDate != startDate
+
     val start = stampOf(ev.start, ev.allDay)
-    val end = stampOf(ev.end, ev.allDay)
     val day = start?.dayLabel ?: "날짜 미정"
-    return when {
-        ev.allDay -> "$day · 종일"
-        end != null -> "$day  ${start?.time ?: ""} – ${end.time}"
-        else -> "$day  ${start?.time ?: ""}"
+
+    if (ev.allDay) {
+        return if (multiDay && lastDate != null) "$day ~ ${dayLabelOf(lastDate)} · 종일" else "$day · 종일"
     }
+    val end = stampOf(ev.end, ev.allDay)
+    val startTime = start?.time ?: ""
+    return when {
+        multiDay && lastDate != null && end != null -> "$day  $startTime – ${dayLabelOf(lastDate)} ${end.time}"
+        end != null -> "$day  $startTime – ${end.time}"
+        else -> "$day  $startTime"
+    }
+}
+
+/** "6월 11일 (수)" — an explicit endpoint label (no 오늘/내일) for a span's end day. */
+private fun dayLabelOf(d: LocalDate): String {
+    val month = d.month.ordinal + 1
+    val dow = koreanDayOfWeek.getOrElse(d.dayOfWeek.ordinal) { "" }
+    return "${month}월 ${d.day}일 ($dow)"
 }

@@ -128,6 +128,7 @@ fun DenebCalendarScreen(
     // so a span reads as one connected ribbon across the week. The day list shows
     // every event that touches the selected day, all-day/multi-day events first.
     val monthBars = remember(monthEvents, grid, tz) { layoutMonthBars(monthEvents, grid, tz) }
+    val monthDots = remember(monthEvents, tz) { timedSingleDayDots(monthEvents, tz) }
     val dayEvents = remember(monthEvents, selected, tz) {
         monthEvents
             .filter { selected in eventDays(it.start, it.end, it.allDay, tz) }
@@ -157,6 +158,7 @@ fun DenebCalendarScreen(
                     today = today,
                     selected = selected,
                     bars = monthBars,
+                    dots = monthDots,
                     onSelect = { date ->
                         // Tapping a leading/trailing cell jumps to that month too.
                         selected = date
@@ -191,22 +193,24 @@ fun DenebCalendarScreen(
 
 // --- stateless bodies (previewable) --------------------------------------
 
-/** The month grid: 7-column weeks with multi-day event ribbons under each day
- *  number, today and the selected day highlighted. Pure presentation — the shell
- *  owns selection. */
+/** The month grid: 7-column weeks. Multi-day and all-day events are ribbons under
+ *  the day number; single-day timed events are dots. Today and the selected day are
+ *  highlighted. Pure presentation — the shell owns selection. */
 @Composable
 internal fun CalendarMonthGrid(
     grid: MonthGrid,
     today: LocalDate,
     selected: LocalDate,
     bars: Map<LocalDate, List<DayBar>>,
+    dots: Map<LocalDate, Int>,
     onSelect: (LocalDate) -> Unit,
 ) {
     val haptics = rememberHaptics()
     val palette = barPalette()
-    // One lane count shared across the grid so every cell reserves equal height
-    // and bars on the same lane line up row-to-row.
+    // Shared across the grid so every cell reserves equal height: bars on the same
+    // lane line up row-to-row, and the dot row is present-or-absent grid-wide.
     val laneCount = bars.values.maxOfOrNull { day -> day.maxOfOrNull { it.lane + 1 } ?: 0 } ?: 0
+    val showDotRow = dots.isNotEmpty()
     Column(Modifier.fillMaxWidth()) {
         grid.cells.chunked(7).forEach { week ->
             Row(Modifier.fillMaxWidth()) {
@@ -220,6 +224,8 @@ internal fun CalendarMonthGrid(
                         isSelected = date == selected,
                         bars = bars[date].orEmpty(),
                         laneCount = laneCount,
+                        dotCount = dots[date] ?: 0,
+                        showDotRow = showDotRow,
                         palette = palette,
                         modifier = Modifier.weight(1f),
                         onClick = { haptics.tap(); onSelect(date) },
@@ -238,6 +244,8 @@ private fun DayCell(
     isSelected: Boolean,
     bars: List<DayBar>,
     laneCount: Int,
+    dotCount: Int,
+    showDotRow: Boolean,
     palette: List<Color>,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
@@ -280,9 +288,9 @@ private fun DayCell(
                 color = numberColor,
             )
         }
-        // Multi-day ribbons: one fixed-height lane per row. Bars run the full cell
-        // width (no horizontal inset) so a span connects across adjacent days; the
-        // first/last day get rounded outer corners, interior days stay square.
+        // Ribbons: all-day and multi-day events, one fixed-height lane per row.
+        // Bars run the full cell width (no horizontal inset) so a span connects
+        // across adjacent days; first/last day get rounded outer corners.
         if (laneCount > 0) {
             Spacer(Modifier.height(3.dp))
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -295,6 +303,20 @@ private fun DayCell(
                             .clip(barSegmentShape(bar))
                             .background(bar?.let { palette[it.colorIndex % palette.size] } ?: Color.Transparent),
                     )
+                }
+            }
+        }
+        // Dots: single-day timed events. A fixed-height row reserved grid-wide (when
+        // any day has dots) so cells stay aligned; up to three dots per day.
+        if (showDotRow) {
+            Spacer(Modifier.height(3.dp))
+            Row(
+                Modifier.fillMaxWidth().height(5.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                repeat(minOf(dotCount, 3)) {
+                    Box(Modifier.size(5.dp).clip(CircleShape).background(scheme.primary))
                 }
             }
         }
@@ -489,7 +511,7 @@ internal fun stampOf(rfc3339: String, allDay: Boolean): CalStamp? {
 /** Max event ribbon lanes drawn per week; extra concurrent spans are dropped. */
 private const val MaxBarLanes = 3
 
-private const val BarPaletteSize = 5
+private const val BarPaletteSize = 3
 
 /** A ribbon segment in one day cell: its lane (row), a stable per-event color
  *  index, and whether this day is the span's first/last (for corner rounding). */
@@ -530,7 +552,10 @@ internal fun layoutMonthBars(
     data class Span(val first: LocalDate, val last: LocalDate, val colorIndex: Int)
     val spans = events.mapNotNull { ev ->
         val days = eventDays(ev.start, ev.end, ev.allDay, tz)
-        if (days.isEmpty()) null else Span(days.first(), days.last(), colorIndexFor(ev.id))
+        if (days.isEmpty()) return@mapNotNull null
+        // Single-day timed events are dots (timedSingleDayDots), not ribbons.
+        if (!ev.allDay && days.size == 1) return@mapNotNull null
+        Span(days.first(), days.last(), colorIndexFor(ev.id))
     }
     val out = HashMap<LocalDate, MutableList<DayBar>>()
     grid.cells.chunked(7).forEach { week ->
@@ -569,14 +594,30 @@ internal fun layoutMonthBars(
     return out
 }
 
+/** Days with single-day timed events, counted — drawn as dots (not ribbons) so a
+ *  brief meeting reads lighter than an all-day or multi-day commitment. */
+internal fun timedSingleDayDots(events: List<CalendarEvent>, tz: TimeZone): Map<LocalDate, Int> {
+    val out = HashMap<LocalDate, Int>()
+    events.forEach { ev ->
+        val days = eventDays(ev.start, ev.end, ev.allDay, tz)
+        if (!ev.allDay && days.size == 1) {
+            val d = days.first()
+            out[d] = (out[d] ?: 0) + 1
+        }
+    }
+    return out
+}
+
 /** Stable palette slot for an event id, so its ribbon keeps one color. */
 private fun colorIndexFor(id: String): Int = (id.hashCode() and Int.MAX_VALUE) % BarPaletteSize
 
-/** Ribbon colors, drawn from the active scheme (+ the calendar's Saturday blue). */
+/** Ribbon colors — calm, content-only hues from the active scheme. Deliberately
+ *  excludes error red (reserved for Sunday / warnings) and the Saturday-blue header
+ *  tint, so a bar never reads as a weekday/date color. */
 @Composable
 internal fun barPalette(): List<Color> {
     val s = MaterialTheme.colorScheme
-    return listOf(s.primary, s.tertiary, saturdayBlue, s.secondary, s.error)
+    return listOf(s.primary, s.tertiary, s.secondary)
 }
 
 /** Rounds only a ribbon segment's outer corners: the start day's left, the end

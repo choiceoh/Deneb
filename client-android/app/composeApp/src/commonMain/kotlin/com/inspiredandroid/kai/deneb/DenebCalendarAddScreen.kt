@@ -82,6 +82,7 @@ fun DenebCalendarAddScreen(
     var allDay by remember { mutableStateOf(false) }
     var startDate by remember { mutableStateOf(parseDateOr(initialDateIso, now.date)) }
     var endDate by remember { mutableStateOf(parseDateOr(initialDateIso, now.date)) }
+    var multiDay by remember { mutableStateOf(false) }
     var startTime by remember { mutableStateOf(LocalTime(startHour, 0)) }
     var endTime by remember { mutableStateOf(LocalTime(startHour + 1, 0)) }
 
@@ -117,6 +118,7 @@ fun DenebCalendarAddScreen(
                     endTime = t
                 }
             }
+            multiDay = endDate != startDate
         } else {
             error = "일정을 불러오지 못했습니다."
         }
@@ -187,6 +189,11 @@ fun DenebCalendarAddScreen(
                     onTitle = { title = it },
                     allDay = allDay,
                     onAllDay = { allDay = it },
+                    multiDay = multiDay,
+                    onMultiDay = { on ->
+                        multiDay = on
+                        if (!on) endDate = startDate // collapse to a single day
+                    },
                     startDateLabel = dateLabel(startDate),
                     onPickStartDate = { showStartDatePicker = true },
                     endDateLabel = dateLabel(endDate),
@@ -218,7 +225,8 @@ fun DenebCalendarAddScreen(
                     state.selectedDateMillis?.let {
                         val picked = utcMillisToLocalDate(it)
                         startDate = picked
-                        if (endDate < picked) endDate = picked // keep end on/after start
+                        if (!multiDay) endDate = picked // single-day: end follows start
+                        else if (endDate < picked) endDate = picked
                     }
                     showStartDatePicker = false
                 }) { Text("확인") }
@@ -277,6 +285,8 @@ internal fun CalendarAddContent(
     onTitle: (String) -> Unit,
     allDay: Boolean,
     onAllDay: (Boolean) -> Unit,
+    multiDay: Boolean,
+    onMultiDay: (Boolean) -> Unit,
     startDateLabel: String,
     onPickStartDate: () -> Unit,
     endDateLabel: String,
@@ -309,10 +319,18 @@ internal fun CalendarAddContent(
         Text("종일", style = DenebType.body, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.weight(1f))
         Switch(checked = allDay, onCheckedChange = { haptics.toggle(it); onAllDay(it) })
     }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text("여러 날", style = DenebType.body, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.weight(1f))
+        Switch(checked = multiDay, onCheckedChange = onMultiDay)
+    }
     Spacer(Modifier.height(8.dp))
-    OutlinedButton(onClick = { haptics.tap(); onPickStartDate() }, modifier = Modifier.fillMaxWidth()) { Text("시작 $startDateLabel") }
-    Spacer(Modifier.height(8.dp))
-    OutlinedButton(onClick = { haptics.tap(); onPickEndDate() }, modifier = Modifier.fillMaxWidth()) { Text("종료 $endDateLabel") }
+    if (multiDay) {
+        OutlinedButton(onClick = { haptics.tap(); onPickStartDate() }, modifier = Modifier.fillMaxWidth()) { Text("시작 $startDateLabel") }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(onClick = { haptics.tap(); onPickEndDate() }, modifier = Modifier.fillMaxWidth()) { Text("종료 $endDateLabel") }
+    } else {
+        OutlinedButton(onClick = { haptics.tap(); onPickStartDate() }, modifier = Modifier.fillMaxWidth()) { Text(startDateLabel) }
+    }
     if (!allDay) {
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
