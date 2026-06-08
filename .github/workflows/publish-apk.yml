@@ -6,10 +6,11 @@ name: Publish APK (OTA)
 # and assigns the versionCode under flock, so this workflow is a thin trigger that
 # reuses the exact same path the operator runs by hand.
 #
-# Auto-runs only when a release lands on main -- i.e. when the native versionName in
-# client-android/app/gradle/libs.versions.toml changes -- so routine native commits
-# that do not bump the version never push an OTA update prompt. Also runnable on
-# demand (workflow_dispatch) with custom release notes.
+# Auto-runs when a native change lands on main (paths: client-android/**). With the
+# versionCode-only scheme there is no semantic version to gate on -- every shipped
+# native change becomes the next build (publish-apk.sh auto-increments the code under
+# flock), so merging a native PR is itself the release signal. Also runnable on demand
+# (workflow_dispatch) with custom release notes.
 #
 # Prerequisite: a self-hosted runner on gx10 labeled "gx10", running as the gateway
 # user so HOME/.cache/deneb-apk is the directory the gateway serves, with the
@@ -22,7 +23,7 @@ on:
   push:
     branches: [main]
     paths:
-      - client-android/app/gradle/libs.versions.toml
+      - client-android/**
   workflow_dispatch:
     inputs:
       notes:

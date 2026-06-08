@@ -177,7 +177,8 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.AppImage)
             packageName = "Deneb"
-            packageVersion = libs.versions.appVersion.get()
+            // versionName was removed; derive a semver-shaped package version from the build code.
+            packageVersion = "0.0.${libs.versions.android.versionCode.get()}"
 
             macOS {
                 iconFile.set(project.file("icon.icns"))
@@ -219,10 +220,11 @@ afterEvaluate {
 class VersionGeneratorPlugin : Plugin<Project> {
     override fun apply(project: Project) {
         project.afterEvaluate {
-            val appVersion = libs.versions.appVersion.get()
-            // Mirror androidApp's -PdenebVersionCode override so the in-app updater's
-            // DENEB_VERSION_CODE (= Version.appVersionCode) matches the published APK's
-            // actual versionCode; falls back to libs for IDE/dev builds.
+            // versionCode is the app's only version identity now — the semantic
+            // versionName was removed (hand-managed, caused mislabeled/duplicate
+            // publishes). Mirror androidApp's -PdenebVersionCode override so the
+            // in-app updater's DENEB_VERSION_CODE matches the published APK; falls
+            // back to libs for IDE/dev builds.
             val appVersionCode = (project.findProperty("denebVersionCode") as? String)
                 ?: libs.versions.android.versionCode.get()
 
@@ -238,7 +240,6 @@ class VersionGeneratorPlugin : Plugin<Project> {
                 package com.inspiredandroid.kai
 
                 object Version {
-                    const val appVersion = "$appVersion"
                     const val appVersionCode = $appVersionCode
                 }
                 """.trimIndent(),
@@ -247,6 +248,7 @@ class VersionGeneratorPlugin : Plugin<Project> {
             // Update iOS Config.xcconfig with version
             val xcConfigFile = rootProject.file("iosApp/Configuration/Config.xcconfig")
             if (xcConfigFile.exists()) {
+                val appVersion = "0.0.$appVersionCode"
                 val content = xcConfigFile.readText()
                 val updatedContent =
                     if (content.contains("APP_VERSION=")) {
