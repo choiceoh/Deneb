@@ -166,7 +166,7 @@ fun DenebMailScreen(
                                             }
                                         },
                                         onLongPress = {
-                                            haptics.confirm()
+                                            haptics.longPress()
                                             selecting = true
                                             if (m.id !in selected) selected.add(m.id)
                                         },

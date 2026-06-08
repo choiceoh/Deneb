@@ -166,7 +166,7 @@ fun DenebCronScreen(
                 ) { Text("지금 실행") }
                 OutlinedButton(
                     enabled = !busy,
-                    onClick = { haptics.confirm(); confirmDelete = true },
+                    onClick = { haptics.reject(); confirmDelete = true },
                 ) { Text("삭제") }
             }
             status?.let {
@@ -181,6 +181,7 @@ fun DenebCronScreen(
                     text = { Text("이 예약 작업을 삭제할까요? 되돌릴 수 없습니다.") },
                     confirmButton = {
                         TextButton(onClick = {
+                            haptics.reject()
                             confirmDelete = false
                             scope.launch {
                                 busy = true

@@ -285,7 +285,7 @@ private fun SessionFolderHeader(count: Int, expanded: Boolean, onToggle: () -> U
             .clickable(
                 onClickLabel = if (expanded) "예약·시스템 세션 접기" else "예약·시스템 세션 펼치기",
                 role = Role.Button,
-            ) { haptics.tap(); onToggle() }
+            ) { haptics.toggle(!expanded); onToggle() }
             .handCursor()
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -82,7 +82,7 @@ fun DenebCategoryPagesScreen(
 
     fun runDelete() {
         if (busy) return
-        haptics.confirm()
+        haptics.reject()
         val paths = selected.toList()
         scope.launch {
             busy = true
@@ -177,7 +177,7 @@ fun DenebCategoryPagesScreen(
                                             }
                                         },
                                         onLongClick = {
-                                            haptics.confirm()
+                                            haptics.longPress()
                                             selecting = true
                                             if (page.path !in selected) selected.add(page.path)
                                         },

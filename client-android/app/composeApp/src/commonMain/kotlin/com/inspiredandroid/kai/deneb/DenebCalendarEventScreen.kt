@@ -101,7 +101,7 @@ fun DenebCalendarEventScreen(
                 TextButton(
                     enabled = !deleting,
                     onClick = {
-                        haptics.confirm()
+                        haptics.reject()
                         scope.launch {
                             deleting = true
                             actionError = null
@@ -172,7 +172,7 @@ internal fun CalendarEventContent(
         Spacer(Modifier.height(20.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { haptics.tap(); onEdit() }) { Text("편집") }
-            OutlinedButton(onClick = { haptics.confirm(); onDelete() }) { Text("삭제") }
+            OutlinedButton(onClick = { haptics.reject(); onDelete() }) { Text("삭제") }
         }
         if (actionError != null) {
             Spacer(Modifier.height(8.dp))

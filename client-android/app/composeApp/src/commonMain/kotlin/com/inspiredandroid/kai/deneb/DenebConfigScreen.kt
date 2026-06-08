@@ -631,7 +631,7 @@ private fun ModelTab(client: DenebGatewayClient) {
                     if (model.custom) {
                         TextButton(
                             onClick = {
-                                haptics.tap()
+                                haptics.reject()
                                 pendingDelete = model
                             },
                             enabled = !switching,
@@ -694,7 +694,7 @@ private fun ModelTab(client: DenebGatewayClient) {
             Spacer(Modifier.height(12.dp))
             Button(
                 onClick = {
-                    haptics.tap()
+                    haptics.confirm()
                     scope.launch {
                         adding = true
                         addError = null
@@ -725,6 +725,7 @@ private fun ModelTab(client: DenebGatewayClient) {
             },
             confirmButton = {
                 TextButton(onClick = {
+                    haptics.reject()
                     val id = target.id
                     pendingDelete = null
                     scope.launch { client.deleteCustomModel(id) }
@@ -884,6 +885,7 @@ private fun NotificationsTab(client: DenebGatewayClient) {
                     Switch(
                         checked = autoInject,
                         onCheckedChange = {
+                            haptics.toggle(it)
                             autoInject = it
                             appSettings.setNotificationAutoInjectEnabled(it)
                         },
@@ -927,7 +929,7 @@ private fun NotificationsTab(client: DenebGatewayClient) {
                                     value = on,
                                     role = Role.Checkbox,
                                     onValueChange = {
-                                        haptics.tap()
+                                        haptics.toggle(it)
                                         // Toggle: from "all" (empty) the first tap selects
                                         // just this app; thereafter add/remove from the set.
                                         val base = if (allowlist.isEmpty()) knownApps.map { it.first }.toSet() else allowlist

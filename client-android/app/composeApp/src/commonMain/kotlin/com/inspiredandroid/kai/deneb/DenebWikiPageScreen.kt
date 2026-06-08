@@ -122,7 +122,7 @@ fun DenebWikiPageScreen(
                         modifier = Modifier.weight(1f),
                     )
                     TextButton(onClick = {
-                        haptics.tap()
+                        haptics.toggle(!editing)
                         if (!editing) {
                             draftTitle = pg.title
                             draftSummary = pg.summary

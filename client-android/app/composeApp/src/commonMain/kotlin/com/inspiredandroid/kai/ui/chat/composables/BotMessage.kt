@@ -211,7 +211,7 @@ internal fun BotMessage(
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceContainer)
                     .handCursor()
-                    .clickable { haptics.tap(); isEditing = !isEditing },
+                    .clickable { haptics.toggle(!isEditing); isEditing = !isEditing },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -311,7 +311,7 @@ private fun ReasoningBlockquote(
     Column(modifier = modifier) {
         Row(
             modifier = Modifier.fillMaxWidth()
-                .clickable { haptics.tap(); expanded = !expanded }
+                .clickable { haptics.toggle(!expanded); expanded = !expanded }
                 .handCursor(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
