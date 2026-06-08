@@ -383,7 +383,9 @@ internal object BlockScanner {
             }
 
             val children = scanLines(itemLines, 0, itemLines.size, depth + 1)
-            items += ListItem(children)
+            // GFM task items ("- [ ] …" / "- [x] …") are bullet-only here; an ordered "1. [x]"
+            // is rare and stripping the marker would drop its number, so only bullets get lifted.
+            items += if (isOrdered) ListItem(children) else makeListItem(children)
             i = j
         }
 
@@ -391,6 +393,29 @@ internal object BlockScanner {
         val immutableItems = items.toImmutableList()
         val listBlock = if (isOrdered) OrderedList(startNum, immutableItems, tight) else BulletList(immutableItems, tight)
         return listBlock to i
+    }
+
+    private val TASK_MARKER = Regex("""^\[([ xX])]\s+""")
+
+    // Lift a GFM task marker out of a freshly-scanned bullet item: when the first paragraph
+    // starts with "[ ] " / "[x] ", strip it and record the checked state on the ListItem.
+    // Done in the parser (not at render time) so the AST carries task state for every consumer
+    // — copy, TTS, search — not just the visual checkbox.
+    private fun makeListItem(children: ImmutableList<BlockNode>): ListItem {
+        val firstPara = children.firstOrNull() as? Paragraph ?: return ListItem(children)
+        val firstText = firstPara.inlines.firstOrNull() as? Text ?: return ListItem(children)
+        val match = TASK_MARKER.find(firstText.value) ?: return ListItem(children)
+        val checked = firstText.value[match.range.first + 1].lowercaseChar() == 'x'
+        val rest = firstText.value.substring(match.range.last + 1)
+        val newInlines = buildList {
+            if (rest.isNotEmpty()) add(Text(rest))
+            addAll(firstPara.inlines.drop(1))
+        }.toImmutableList()
+        val newChildren = buildList {
+            add(Paragraph(newInlines))
+            addAll(children.drop(1))
+        }.toImmutableList()
+        return ListItem(newChildren, checked)
     }
 
     private fun isSiblingOrOuterMarker(line: String, currentIndent: Int): Boolean {

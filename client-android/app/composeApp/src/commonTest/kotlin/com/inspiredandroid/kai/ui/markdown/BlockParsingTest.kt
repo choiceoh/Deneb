@@ -169,4 +169,31 @@ class BlockParsingTest {
         assertEquals(emptyList(), parseMarkdown("").blocks)
         assertEquals(emptyList(), parseMarkdown("   \n  ").blocks)
     }
+
+    @Test
+    fun `unchecked task list item carries checked=false with marker stripped`() {
+        val item = (parseMarkdown("- [ ] todo").blocks.single() as BulletList).items.single()
+        assertEquals(false, item.checked)
+        assertEquals("todo", ((item.children.single() as Paragraph).inlines.single() as Text).value)
+    }
+
+    @Test
+    fun `checked task list item carries checked=true`() {
+        val item = (parseMarkdown("- [x] done").blocks.single() as BulletList).items.single()
+        assertEquals(true, item.checked)
+        assertEquals("done", ((item.children.single() as Paragraph).inlines.single() as Text).value)
+    }
+
+    @Test
+    fun `ordinary bullet item has null checked`() {
+        val item = (parseMarkdown("- regular").blocks.single() as BulletList).items.single()
+        assertEquals(null, item.checked)
+    }
+
+    @Test
+    fun `ordered item keeps task marker as text`() {
+        // Ordered "1. [x]" is not lifted (would drop the number), so it stays literal.
+        val item = (parseMarkdown("1. [x] keep").blocks.single() as OrderedList).items.single()
+        assertEquals(null, item.checked)
+    }
 }
