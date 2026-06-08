@@ -34,7 +34,10 @@ android {
                 .get()
                 .toInt()
         versionCode = denebVersionCode
-        versionName = libs.versions.appVersion.get()
+        // versionName has no semantic meaning anymore — the app is identified by
+        // versionCode alone. Android still wants a non-empty versionName string, so
+        // mirror the code (shown as "빌드 N" in-app).
+        versionName = denebVersionCode.toString()
     }
 
     flavorDimensions += "distribution"
@@ -92,12 +95,11 @@ android {
     }
 }
 
-// Name build artifacts with the version + short commit hash so a downloaded APK
-// is self-describing (e.g. deneb-2.8.1-122-a1b2c3d4-fossDebug.apk) and, crucially,
+// Name build artifacts with the build code + short commit hash so a downloaded APK
+// is self-describing (e.g. deneb-122-a1b2c3d4-fossDebug.apk) and, crucially,
 // concurrent builds from different agent worktrees never overwrite each other in
 // the shared publish dir. The hash comes from DENEB_BUILD_SHA, else git, else "nogit".
 androidComponents {
-    val versionName = libs.versions.appVersion.get()
     val versionCode = denebVersionCode
     val gitSha = (
         System.getenv("DENEB_BUILD_SHA")
@@ -112,7 +114,7 @@ androidComponents {
     onVariants { variant ->
         variant.outputs.forEach { output ->
             (output as? VariantOutputImpl)?.outputFileName?.set(
-                "deneb-$versionName-$versionCode-$gitSha-${variant.name}.apk",
+                "deneb-$versionCode-$gitSha-${variant.name}.apk",
             )
         }
     }
