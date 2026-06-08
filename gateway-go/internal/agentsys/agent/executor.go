@@ -290,12 +290,14 @@ func RunAgent(
 		// Log LLM turn result to agent detail log.
 		if runLog != nil {
 			runLog.LogTurnLLM(agentlog.TurnLLMData{
-				Turn:         turn + 1,
-				InputTokens:  turnRes.usage.InputTokens,
-				OutputTokens: turnRes.usage.OutputTokens,
-				StopReason:   turnRes.stopReason,
-				TextLen:      len(turnRes.text),
-				ToolCalls:    len(turnRes.toolCalls),
+				Turn:                turn + 1,
+				InputTokens:         turnRes.usage.InputTokens,
+				OutputTokens:        turnRes.usage.OutputTokens,
+				StopReason:          turnRes.stopReason,
+				TextLen:             len(turnRes.text),
+				ToolCalls:           len(turnRes.toolCalls),
+				CacheReadTokens:     turnRes.usage.CacheReadInputTokens,
+				CacheCreationTokens: turnRes.usage.CacheCreationInputTokens,
 			})
 		}
 

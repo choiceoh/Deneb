@@ -90,6 +90,9 @@ func RenderMarkdownV2(r *Report) string {
 		for i := range limit {
 			t := r.Tools[i]
 			line := fmt.Sprintf("%-20s %4d회", truncate(t.Name, 20), t.Calls)
+			if t.AvgMs > 0 {
+				line += fmt.Sprintf("  평균 %dms", t.AvgMs)
+			}
 			if t.ErrorRate > 0 {
 				line += fmt.Sprintf("  에러 %.0f%%", t.ErrorRate*100)
 			}
@@ -181,7 +184,14 @@ func RenderPlain(r *Report) string {
 			if i >= 10 {
 				break
 			}
-			fmt.Fprintf(&b, "  %-20s %4d회\n", truncate(t.Name, 20), t.Calls)
+			line := fmt.Sprintf("  %-20s %4d회", truncate(t.Name, 20), t.Calls)
+			if t.AvgMs > 0 {
+				line += fmt.Sprintf("  평균 %dms", t.AvgMs)
+			}
+			if t.ErrorRate > 0 {
+				line += fmt.Sprintf("  에러 %.0f%%", t.ErrorRate*100)
+			}
+			b.WriteString(line + "\n")
 		}
 	}
 

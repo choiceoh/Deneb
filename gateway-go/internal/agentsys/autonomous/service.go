@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 )
 
 // Notifier delivers significant events to the user.
@@ -42,6 +44,12 @@ type Service struct {
 
 	listeners []EventListener
 	notifier  Notifier // optional: delivers significant events to the user
+
+	// behaviorLog records each periodic-task cycle (run/error + duration) under
+	// system:background so a background worker that silently stops running — the
+	// recurring production blind spot — shows up as a gap in the log rather than
+	// mysterious silence. nil-safe; nil disables background event logging.
+	behaviorLog *agentlog.Writer
 
 	// AuroraDream: memory consolidation.
 	dreamer          Dreamer
@@ -489,7 +497,9 @@ func (s *Service) executeTask(ctx context.Context, task PeriodicTask) {
 		}
 	}()
 
+	start := time.Now()
 	err := task.Run(ctx)
+	elapsed := time.Since(start)
 
 	s.mu.Lock()
 	if st != nil {
@@ -508,13 +518,55 @@ func (s *Service) executeTask(ctx context.Context, task PeriodicTask) {
 	// Persist LastRunAt so this run is remembered across a restart.
 	s.saveState()
 
+	// Behavioral event: record every task cycle (gmail poll, evolution, curator,
+	// heartbeat, boot) under system:background so a worker that silently stops
+	// running shows up as a gap in the log instead of mysterious silence.
+	// behaviorLog is nil-safe.
+	outcome := "ok"
+	errStr := ""
+	if err != nil {
+		outcome = "error"
+		errStr = err.Error()
+	}
+	s.behaviorLog.LogEvent(agentlog.SessionBackground, agentlog.TypeBackgroundJob, agentlog.BackgroundJobData{
+		Kind:       "autonomous",
+		Name:       name,
+		Outcome:    outcome,
+		DurationMs: elapsed.Milliseconds(),
+		Error:      errStr,
+	})
+
 	if err != nil {
 		s.logger.Warn("periodic task failed", "task", name, "error", err)
 	}
 }
 
+// SetBehaviorLog wires the behavioral event log so each periodic-task cycle is
+// recorded under system:background. Optional; nil disables background logging.
+func (s *Service) SetBehaviorLog(w *agentlog.Writer) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.behaviorLog = w
+}
+
 func (s *Service) emit(event CycleEvent) {
 	event.Ts = time.Now().UnixMilli()
+	// Mirror the dreaming lifecycle (completed/failed) into the behavioral event
+	// log so memory-consolidation cycles are observable next to the periodic
+	// tasks — "aurora-dream ran 0 times this week" should show as a gap in the
+	// log rather than be inferred from silence. "started" is omitted as noise.
+	// behaviorLog is nil-safe.
+	if event.Type == "dreaming_completed" || event.Type == "dreaming_failed" {
+		outcome := "ok"
+		if event.Type == "dreaming_failed" {
+			outcome = "error"
+		}
+		s.behaviorLog.LogEvent(agentlog.SessionBackground, agentlog.TypeBackgroundJob, agentlog.BackgroundJobData{
+			Kind:    "autonomous",
+			Name:    "aurora-dream",
+			Outcome: outcome,
+		})
+	}
 	s.mu.Lock()
 	listeners := make([]EventListener, len(s.listeners))
 	copy(listeners, s.listeners)

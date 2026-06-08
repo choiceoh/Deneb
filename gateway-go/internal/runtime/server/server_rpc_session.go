@@ -92,6 +92,36 @@ func (s *Server) registerSessionRPCMethods() {
 	if home, err := os.UserHomeDir(); err == nil {
 		agentLogWriter = agentlog.NewWriter(home + "/.deneb/agent-logs")
 	}
+	// Share with background workers (autonomous task loop) which run in a
+	// different init function (registerWorkflowSideEffects) and so cannot see
+	// this local. They emit background.job events to the same JSONL store.
+	s.agentLogWriter = agentLogWriter
+
+	// Feed the insights engine's tool aggregator from the agent log so
+	// `/insights` and the insights.generate RPC surface the cross-session
+	// tool-usage histogram (calls / error rate / avg duration). The engine was
+	// created in registerEarlyMethods with no aggregator wired, so its tool
+	// section was always empty ("도구 사용량 수집 미연결"); this lights it up from
+	// the run.end/turn.tool events the agent log already records.
+	if s.insights != nil && agentLogWriter != nil {
+		s.insights.SetToolAggregator(func(_ context.Context, since time.Time) []insights.ToolStat {
+			agg := agentLogWriter.Aggregate(since.UnixMilli())
+			out := make([]insights.ToolStat, 0, len(agg.Tools))
+			for _, t := range agg.Tools {
+				rate := 0.0
+				if t.Calls > 0 {
+					rate = float64(t.Errors) / float64(t.Calls)
+				}
+				out = append(out, insights.ToolStat{
+					Name:      t.Name,
+					Calls:     t.Calls,
+					ErrorRate: rate,
+					AvgMs:     t.AvgMs,
+				})
+			}
+			return out
+		})
+	}
 
 	chatCfg := chat.DefaultHandlerConfig()
 	chatCfg.Transcript = transcriptStore
@@ -253,6 +283,7 @@ func (s *Server) registerSessionRPCMethods() {
 		pushHub:         s.pushHub,
 		workFeed:        s.nativeWorkFeedStore(),
 		nativeSync:      s.nativeSyncStore,
+		behaviorLog:     agentLogWriter,
 	}
 
 	// Wire transcript cloner for subagent cron session support.
@@ -389,6 +420,7 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 
 	// AuroraDream: memory consolidation service (dreaming-only, no goal cycles).
 	s.autonomousSvc = autonomous.NewService(s.logger)
+	s.autonomousSvc.SetBehaviorLog(s.agentLogWriter)
 
 	// Persist task last-run times under ~/.deneb so periodic intervals survive
 	// the frequent auto-deploy SIGUSR1 restarts. Without this, every restart

@@ -192,6 +192,7 @@ func executeAgentRun(
 		SystemPromptChars: len(systemPrompt),
 		ContextMessages:   len(messages),
 		PrepMs:            time.Since(runStart).Milliseconds(),
+		RecallChars:       len(prep.RecallMemory),
 	})
 
 	// Stage 4: Build tool list and agent config.

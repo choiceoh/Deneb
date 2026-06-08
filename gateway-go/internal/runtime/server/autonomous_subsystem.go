@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
@@ -15,4 +16,10 @@ type AutonomousSubsystem struct {
 	autonomousSvc *autonomous.Service
 	wikiDreamer   *wiki.WikiDreamer // set during initMemorySubsystem()
 	gmailPollSvc  *gmailpoll.Service
+
+	// agentLogWriter is the shared behavioral event log (the same instance the
+	// chat pipeline uses). Promoted to Server so registerWorkflowSideEffects can
+	// hand it to the autonomous task loop for background.job events. Set during
+	// registerSessionRPCMethods.
+	agentLogWriter *agentlog.Writer
 }
