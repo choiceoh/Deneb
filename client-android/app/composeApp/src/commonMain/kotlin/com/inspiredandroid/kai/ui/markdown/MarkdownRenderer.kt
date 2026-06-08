@@ -86,15 +86,15 @@ fun MarkdownContent(
     MarkdownContent(doc, modifier, isInteractive, onUiCallback, frozen)
 }
 
-// The base text style for AI-answer body content. One step smaller than
-// bodyLarge (14sp vs 15sp) with a looser line-height (~1.7) so dense Korean
-// prose breathes — Hangul has below-the-line jongseong that collide with the
-// next line at the 1.47 Latin default. Headings keep their own typography
-// roles; only paragraphs, list items, and table cells share this body style.
+// The base text style for AI-answer body content. One step down from bodyLarge
+// (14sp vs 15sp) with messenger-tight line-height (18sp ≈ 1.29, inside the
+// 1.2–1.35 band Telegram/KakaoTalk use). Chat reads denser than a document —
+// the first pass's 1.71 felt like an article. Headings keep their own
+// typography roles; only paragraphs, list items, and table cells share this.
 private val markdownBodyStyle: TextStyle
     @Composable get() = MaterialTheme.typography.bodyLarge.copy(
         fontSize = 14.sp,
-        lineHeight = 24.sp,
+        lineHeight = 18.sp,
     )
 
 @Composable
