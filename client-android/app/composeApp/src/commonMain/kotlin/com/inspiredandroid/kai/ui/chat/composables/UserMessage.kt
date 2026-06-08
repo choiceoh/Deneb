@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.data.Attachment
 import com.inspiredandroid.kai.decodeToImageBitmap
 import com.inspiredandroid.kai.ui.components.LocalShowFullScreenImage
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.handCursor
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.ic_file
@@ -45,6 +46,7 @@ internal fun UserMessage(
     attachments: ImmutableList<Attachment> = persistentListOf(),
 ) {
     val showFullScreen = LocalShowFullScreenImage.current
+    val haptics = rememberHaptics()
     SelectionContainer {
         Row(Modifier.padding(16.dp)) {
             Spacer(Modifier.weight(1f))
@@ -79,7 +81,7 @@ internal fun UserMessage(
                                 .widthIn(max = 200.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .handCursor()
-                                .clickable(onClickLabel = "확대") { showFullScreen(imageBitmap) },
+                                .clickable(onClickLabel = "확대") { haptics.tap(); showFullScreen(imageBitmap) },
                             contentScale = ContentScale.FillWidth,
                         )
                         Spacer(Modifier.height(8.dp))

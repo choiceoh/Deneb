@@ -40,6 +40,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.inspiredandroid.kai.data.ServiceEntry
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.handCursor
 import kotlinx.collections.immutable.ImmutableList
 import org.jetbrains.compose.resources.vectorResource
@@ -53,6 +54,7 @@ internal fun ServiceSelector(
 
     val current = services.first()
     var expanded by remember { mutableStateOf(false) }
+    val haptics = rememberHaptics()
 
     Box {
         Box(
@@ -60,7 +62,7 @@ internal fun ServiceSelector(
                 .size(48.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
-                .clickable(onClickLabel = "서비스 선택", role = Role.DropdownList) { expanded = true }
+                .clickable(onClickLabel = "서비스 선택", role = Role.DropdownList) { haptics.tap(); expanded = true }
                 .handCursor(),
             contentAlignment = Alignment.Center,
         ) {
@@ -99,6 +101,7 @@ internal fun ServiceSelector(
                                     entry = entry,
                                     isCurrent = isCurrent,
                                     onClick = {
+                                        haptics.tap()
                                         expanded = false
                                         if (!isCurrent) {
                                             onSelectService(entry.instanceId)

@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.deneb.DenebEmpty
 import com.inspiredandroid.kai.ui.chat.WorkFeedItem
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.handCursor
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.ic_file
@@ -125,11 +126,12 @@ private fun WorkFeedRow(
     onRunAction: (String, String) -> Unit,
 ) {
     val title = if (item.title.isBlank()) stringResource(Res.string.work_feed_title) else item.title
+    val haptics = rememberHaptics()
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .handCursor()
-            .clickable { onOpen(item.id) }
+            .clickable { haptics.tap(); onOpen(item.id) }
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -177,6 +179,7 @@ private fun WorkFeedActions(
     val actions = item.actions
         .filter { it.kind != "open" && it.id.isNotBlank() }
         .take(3)
+    val haptics = rememberHaptics()
     if (actions.isEmpty()) return
 
     // Icon-only and trailing: keep the quick actions but drop the per-button
@@ -190,7 +193,7 @@ private fun WorkFeedActions(
         actions.forEach { action ->
             IconButton(
                 modifier = Modifier.handCursor(),
-                onClick = { onRunAction(item.id, action.id) },
+                onClick = { haptics.confirm(); onRunAction(item.id, action.id) },
             ) {
                 Icon(
                     imageVector = actionIcon(action.kind),
