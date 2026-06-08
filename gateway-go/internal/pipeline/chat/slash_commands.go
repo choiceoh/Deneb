@@ -66,6 +66,23 @@ func ParseSlashCommand(text string) *SlashResult {
 			Response: "", // Will be filled by the handler with actual status.
 			Command:  "status",
 		}
+	case "pin", "고정":
+		return &SlashResult{
+			Handled: true,
+			Command: "pin",
+			Args:    args,
+		}
+	case "unpin", "고정해제":
+		return &SlashResult{
+			Handled: true,
+			Command: "unpin",
+			Args:    args,
+		}
+	case "pins", "고정목록":
+		return &SlashResult{
+			Handled: true,
+			Command: "pins",
+		}
 	case "kill", "stop", "cancel":
 		return &SlashResult{
 			Handled:  true,

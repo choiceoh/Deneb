@@ -78,6 +78,29 @@ func TestBuildSystemPromptHindsightSection(t *testing.T) {
 	}
 }
 
+func TestBuildSystemPromptPinnedFactsSection(t *testing.T) {
+	base := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs:     []ToolDef{{Name: "read"}},
+	}
+
+	if got := BuildSystemPrompt(base); strings.Contains(got, "## 고정 사실") {
+		t.Error("Pinned facts section should be absent when PinnedFacts is empty")
+	}
+
+	base.PinnedFacts = "1. 거래처 X 담당자는 김부장\n2. 마감은 6/15"
+	got := BuildSystemPrompt(base)
+	if !strings.Contains(got, "## 고정 사실") {
+		t.Error("expected pinned facts section")
+	}
+	if !strings.Contains(got, "1. 거래처 X 담당자는 김부장") {
+		t.Error("expected pinned fact content")
+	}
+	if !strings.Contains(got, "<recall-context>보다 우선") {
+		t.Error("expected priority guidance over recall context")
+	}
+}
+
 func TestBuildSystemPromptCompactToolList(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
