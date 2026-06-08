@@ -76,7 +76,15 @@ fi
 # updater's DENEB_VERSION_CODE all agree. No manual libs bump needed.
 mkdir -p "$APK_DIR"
 exec 200>"$APK_DIR/.publish.lock"
-flock 200
+# Wait for the lock, but bounded: a normal publish releases it in a few minutes, so
+# a long wait means a previous publish hung holding it (it happened — stale builds
+# wedged the lock and every later publisher, incl. the CI runner, blocked until its
+# 30-min job timeout). Fail fast with an actionable message instead of hanging.
+if ! flock -w 600 200; then
+  echo "could not acquire $APK_DIR/.publish.lock within 600s — another publish is" >&2
+  echo "running or wedged. Check: fuser '$APK_DIR/.publish.lock'  (kill a hung holder)." >&2
+  exit 1
+fi
 # Accept both the new deneb-<code>-<sha> filenames and the legacy
 # deneb-<name>-<code>-<sha> ones still lingering in the serve dir: the optional
 # leading group only matches a dotted version, so <code> is the first dot-less int.
