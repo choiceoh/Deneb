@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -782,7 +783,14 @@ private fun ChatModeScreen(
                                     .takeUnless { primaryIsOnDevice },
                             )
                         } else {
-                            val listState = rememberLazyListState()
+                            // Prefetch ~half a viewport ahead so each expensive markdown item is
+                            // composed + measured before it scrolls into view (off the scroll frame).
+                            // Pausable composition (Compose 1.10+) splits that work across frames —
+                            // the measured bottleneck is markdown measure (~3x a plain Text), exactly
+                            // the "complex list item" case this targets.
+                            val listState = rememberLazyListState(
+                                cacheWindow = LazyLayoutCacheWindow(ahead = 500.dp, behind = 300.dp),
+                            )
                             val componentScope = rememberCoroutineScope()
                             // Stable handle hoisted out of the volatile uiState: every streaming
                             // token emits a new uiState, so a lambda that captures `uiState` gets a
