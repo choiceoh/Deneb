@@ -1,6 +1,7 @@
 package gmail
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 )
@@ -539,7 +540,7 @@ func TestMetadataConcurrency(t *testing.T) {
 	}
 }
 
-func TestCleanSnippet(t *testing.T) {
+func TestDecodeMailEntities(t *testing.T) {
 	cases := []struct {
 		name string
 		in   string
@@ -547,13 +548,29 @@ func TestCleanSnippet(t *testing.T) {
 	}{
 		{"apostrophe", "You&#39;ve received new credits", "You've received new credits"},
 		{"double-encoded nbsp", "Mobile:&amp;nbsp;010-8488-1937", "Mobile: 010-8488-1937"},
+		// A single &nbsp; in a text/plain body (Korean mail clients) decodes to NBSP,
+		// which we then normalize to a regular space so it reads cleanly.
+		{"single nbsp in body", "1. 주소 :&nbsp;경기 광명시", "1. 주소 : 경기 광명시"},
 		{"standard entities", "A &amp; B &lt;tag&gt;", "A & B <tag>"},
 		{"already plain", "plain text — no entities", "plain text — no entities"},
 		{"empty", "", ""},
 	}
 	for _, tc := range cases {
-		if got := cleanSnippet(tc.in); got != tc.want {
-			t.Errorf("%s: cleanSnippet(%q) = %q, want %q", tc.name, tc.in, got, tc.want)
+		if got := decodeMailEntities(tc.in); got != tc.want {
+			t.Errorf("%s: decodeMailEntities(%q) = %q, want %q", tc.name, tc.in, got, tc.want)
 		}
+	}
+}
+
+func TestExtractBody_DecodesPlainEntities(t *testing.T) {
+	// A text/plain part carrying a literal &nbsp; (the sender's mail client left
+	// the entity un-decoded) must reach the reader as a space, not "&nbsp;".
+	raw := "주소 :&nbsp;경기 광명시"
+	p := &apiPayload{
+		MimeType: "text/plain",
+		Body:     &apiBody{Data: base64.RawURLEncoding.EncodeToString([]byte(raw))},
+	}
+	if body := extractBody(p); body != "주소 : 경기 광명시" {
+		t.Errorf("body = %q, want %q", body, "주소 : 경기 광명시")
 	}
 }
