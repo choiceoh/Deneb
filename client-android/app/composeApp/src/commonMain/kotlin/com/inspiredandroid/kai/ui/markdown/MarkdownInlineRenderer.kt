@@ -48,7 +48,12 @@ private fun AnnotatedString.Builder.appendInline(node: InlineNode, colors: Color
                 background = colors.surfaceVariant,
             ),
         ) {
+            // A SpanStyle can't carry padding, so the tinted background hugs the
+            // glyphs. Hair spaces inside the span widen the chip a touch on each
+            // side so inline code (e.g. `₩142,000/장`) doesn't look cramped.
+            append(' ')
             append(node.code)
+            append(' ')
         }
 
         is Link -> withLink(
