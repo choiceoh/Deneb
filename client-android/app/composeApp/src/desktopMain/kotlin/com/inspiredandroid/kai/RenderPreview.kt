@@ -577,8 +577,8 @@ private val sampleFeed = persistentListOf(
     WorkFeedItem(
         id = "wf1",
         source = "proactive",
-        title = "업무 리포트",
-        summary = "🔴 긴급: 에코프로 모듈 견적 회신 기한이 오늘까지입니다. 김민준 부장 확인 필요.",
+        title = "📧 JOCA Cable 최신 메일 분석 보고",
+        summary = "발신 fred@jocacable.com — 2800km solar cable 대량 발주 가격 제안, 발주 수량·시점 회신 요청.",
         status = "unread",
         actions = listOf(
             WorkFeedAction("open", "open", "열기"),
@@ -590,6 +590,20 @@ private val sampleFeed = persistentListOf(
     ),
     WorkFeedItem(
         id = "wf2",
+        source = "proactive",
+        title = "분석 — 왜 지금 왔는가",
+        summary = "무림 울산공장 풍력 사업의 첫 검토안 제출 — 박종원 부장이 외부 업체 제안 자료를 전달.",
+        status = "unread",
+        actions = listOf(
+            WorkFeedAction("open", "open", "열기"),
+            WorkFeedAction("followup", "followup", "후속 정리"),
+            WorkFeedAction("snooze", "snooze", "나중에"),
+            WorkFeedAction("ack", "ack", "완료"),
+        ),
+        createdAtMs = System.currentTimeMillis() - 40 * 60_000L,
+    ),
+    WorkFeedItem(
+        id = "wf3",
         source = "capture_audio",
         title = "공유 녹음",
         summary = "기획조정실 주간 회의 — RE100 고객사 계약 진행률, 주차장 태양광 견적 리뷰를 논의했습니다.",
@@ -603,14 +617,26 @@ private val sampleFeed = persistentListOf(
         createdAtMs = System.currentTimeMillis() - 3 * 3_600_000L,
     ),
     WorkFeedItem(
-        id = "wf3",
-        source = "proactive",
-        title = "업무 리포트",
-        summary = "GitHub PR #1853 main 병합 완료 — 추가 조치 불필요.",
+        id = "wf4",
+        source = "capture_image",
+        title = "공유 이미지",
+        summary = "현대차 울산 견적서 OCR — 합계 ₩2,800,000, 납기 6/20, 결제 조건 30일.",
         status = "unread",
         actions = listOf(
             WorkFeedAction("open", "open", "열기"),
-            WorkFeedAction("snooze", "snooze", "나중에"),
+            WorkFeedAction("followup", "followup", "문서화"),
+            WorkFeedAction("ack", "ack", "완료"),
+        ),
+        createdAtMs = System.currentTimeMillis() - 5 * 3_600_000L,
+    ),
+    WorkFeedItem(
+        id = "wf5",
+        source = "proactive",
+        title = "📋 주간업무보고 — 기획조정실",
+        summary = "이번 주 사업개발 3건·모듈 견적 5건 발송, 루프탑 2건 계약 임박.",
+        status = "acked",
+        actions = listOf(
+            WorkFeedAction("open", "open", "열기"),
             WorkFeedAction("ack", "ack", "완료"),
         ),
         createdAtMs = System.currentTimeMillis() - 26 * 3_600_000L,
@@ -618,7 +644,7 @@ private val sampleFeed = persistentListOf(
 )
 
 private fun renderWorkFeed(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 824, height = 980, density = Density(2f)) {
+    val scene = ImageComposeScene(width = 824, height = 1100, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Box(Modifier.width(412.dp)) {
