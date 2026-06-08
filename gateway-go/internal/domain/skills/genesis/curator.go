@@ -111,6 +111,19 @@ func envInt(name string, fallback int) int {
 	return v
 }
 
+func envBool(name string, fallback bool) bool {
+	switch strings.TrimSpace(strings.ToLower(os.Getenv(name))) {
+	case "":
+		return fallback
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
+}
+
 func (cfg SkillCuratorConfig) withDefaults() SkillCuratorConfig {
 	def := DefaultSkillCuratorConfig()
 	if cfg.IntervalHours <= 0 {

@@ -75,7 +75,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	uptime := time.Since(s.startedAt)
-	s.writeJSON(w, http.StatusOK, map[string]any{
+	health := map[string]any{
 		"status":    "ok",
 		"version":   s.version,
 		"model":     currentModel,
@@ -93,7 +93,28 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 			"cron":      cronTasks,
 		},
 		"providers": providerCount,
-	})
+	}
+
+	// Self-evolution liveness: makes silent death of the skill loop visible.
+	// If review_age keeps growing, the nudger→review→evolve pipeline stalled.
+	if s.genesisTracker != nil {
+		live := s.genesisTracker.LivenessSnapshot()
+		se := map[string]any{
+			"last_review_ms":  live.LastReviewAt,
+			"last_review_ok":  live.LastReviewOK,
+			"last_evolve_ms":  live.LastEvolveAt,
+			"last_genesis_ms": live.LastGenesisAt,
+		}
+		if live.LastReviewAt > 0 {
+			se["review_age"] = formatUptimeHTTP(time.Since(time.UnixMilli(live.LastReviewAt)))
+		}
+		if live.LastError != "" {
+			se["last_error"] = live.LastError
+		}
+		health["self_evolution"] = se
+	}
+
+	s.writeJSON(w, http.StatusOK, health)
 }
 
 // handleReady responds with readiness status.

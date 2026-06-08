@@ -17,6 +17,7 @@ package genesis
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"strconv"
@@ -250,7 +251,13 @@ func (n *Nudger) runReviewOnce(sessionKey string, snapshot SessionContext) (bool
 			"tools", len(snapshot.ToolActivities))
 		return false, nil
 	}
-	if err := n.reviewer.RunSkillReview(ctx, sessionKey, snapshot); err != nil {
+	err := n.reviewer.RunSkillReview(ctx, sessionKey, snapshot)
+	// Record the liveness heartbeat whether or not the review succeeded — the
+	// whole point is to make a silently-dying review fork visible on /health.
+	if n.tracker != nil {
+		n.tracker.RecordEvolutionActivity(SkillActivityReview, err == nil, errString(err))
+	}
+	if err != nil {
 		n.logger.Warn("skill nudger: fenced review failed",
 			"session", sessionKey, "error", err)
 		return false, err
@@ -288,6 +295,11 @@ func (n *Nudger) runOnce(sessionKey string, snapshot SessionContext) (bool, erro
 		return false, nil
 	}
 	if err := n.svc.Persist(skill); err != nil {
+		if errors.Is(err, ErrSkillDeduped) {
+			n.logger.Info("skill nudger: skill deduplicated, skipping",
+				"session", sessionKey, "skill", skill.Name)
+			return false, nil
+		}
 		n.logger.Error("skill nudger: persist failed",
 			"session", sessionKey, "skill", skill.Name, "error", err)
 		return false, err

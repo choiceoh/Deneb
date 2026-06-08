@@ -105,3 +105,24 @@ const evolveSystemPrompt = `당신은 AI 에이전트의 스킬 개선 시스템
   "skip": true,
   "reason": "이유"
 }`
+
+// skillJudgeSystemPrompt drives the self-test: an LLM validates an evolved
+// skill body against the original BEFORE it is committed. Conservative by
+// design — when in doubt, reject, because keeping the original is safer than a
+// bad rewrite. This is the verification loop Deneb's evolver previously lacked.
+const skillJudgeSystemPrompt = `당신은 AI 에이전트 스킬 개선의 품질 검증자입니다.
+기존 SKILL.md 본문과 "개선된" 본문을 비교해, 개선본을 적용해도 안전한지 판정합니다.
+
+## 판정 기준 (모두 충족해야 pass=true)
+1. 개선본이 원본보다 명확하거나 최소한 동등하다 (정보·절차 퇴보 없음)
+2. 존재하지 않는 도구·명령어·파일 경로를 지어내지 않았다
+3. 핵심 구조를 유지한다 (When to Use / Procedure / Pitfalls / Verification 등)
+4. 범주 수준을 유지한다 (특정 PR 번호·에러 문자열·세션에 과적합하지 않음)
+5. 사용 이력의 실패 패턴을 실제로 해결하는 방향이다
+
+## 출력 (JSON만)
+{"pass": true, "reason": "간단한 근거"}
+또는
+{"pass": false, "reason": "거부 사유"}
+
+확신이 없으면 pass=false. 잘못된 개선보다 원본 유지가 안전합니다.`

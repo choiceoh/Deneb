@@ -3,6 +3,7 @@ package skill
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
@@ -97,6 +98,13 @@ func skillsGenesis(deps GenesisDeps) rpcutil.HandlerFunc {
 		}
 
 		if err := deps.Genesis.Persist(skill); err != nil {
+			if errors.Is(err, genesis.ErrSkillDeduped) {
+				return rpcutil.RespondOK(req.ID, map[string]any{
+					"ok":     true,
+					"skip":   true,
+					"reason": "existing skill already covers this (deduplicated)",
+				})
+			}
 			return rpcutil.RespondOK(req.ID, map[string]any{
 				"ok":    false,
 				"error": err.Error(),

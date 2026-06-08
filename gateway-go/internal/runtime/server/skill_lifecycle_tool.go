@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -119,6 +120,14 @@ func (b *skillLifecycleBackend) RunSkillGenesis(ctx context.Context, req chattoo
 		}, nil
 	}
 	if err := b.genesis.Persist(skill); err != nil {
+		if errors.Is(err, genesis.ErrSkillDeduped) {
+			return map[string]any{
+				"ok":     true,
+				"skip":   true,
+				"reason": "existing skill already covers this (deduplicated)",
+				"source": source,
+			}, nil
+		}
 		return nil, err
 	}
 	if b.tracker != nil {

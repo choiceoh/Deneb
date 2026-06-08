@@ -16,6 +16,7 @@ package genesis
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -23,11 +24,24 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
+
+// skillDedupThreshold is the Jaccard similarity (over name+description token
+// sets) at or above which a generated skill is treated as a duplicate of an
+// existing catalog entry and dropped. Conservative on purpose: only near-
+// identical skills are rejected.
+const skillDedupThreshold = 0.82
+
+// ErrSkillDeduped is returned by Persist when the generated skill is too
+// similar to an existing skill and was intentionally not written. Callers
+// must treat this as a no-op, not a failure.
+var ErrSkillDeduped = errors.New("genesis: skill deduplicated (too similar to existing skill)")
 
 // Config configures the genesis service.
 type Config struct {
@@ -308,6 +322,23 @@ func (s *Service) Persist(skill *GeneratedSkill) error {
 		return fmt.Errorf("genesis: invalid skill name %q", skill.Name)
 	}
 
+	// Sanitize the description before it is written to frontmatter and
+	// surfaced in the skill catalog index — which is cached in the
+	// semi-static system prompt block. Collapsing to one clean line means a
+	// generated description cannot inject newlines/control chars into the
+	// frontmatter or the prompt-cached index. (A comparable agent wraps all
+	// re-injected skill text as untrusted; Deneb keeps the index in the
+	// system block for cache stability and sanitizes at the source instead.)
+	skill.Description = sanitizeSkillDescription(skill.Description)
+
+	// Reject near-duplicates of existing skills. The generation prompt is
+	// already given the existing skill names, but the LLM can ignore that;
+	// this is the code-level backstop against runaway near-identical skills.
+	if s.isDuplicateSkill(name, skill.Description) {
+		s.logger.Info("genesis: skill deduplicated", "skill", name)
+		return ErrSkillDeduped
+	}
+
 	// Check cooldown.
 	s.mu.Lock()
 	if last, ok := s.recentSkills[name]; ok && time.Since(last) < s.cfg.CooldownPerSkill {
@@ -330,7 +361,10 @@ func (s *Service) Persist(skill *GeneratedSkill) error {
 	content := buildSkillMD(name, skill)
 
 	skillPath := filepath.Join(skillDir, "SKILL.md")
-	if err := os.WriteFile(skillPath, []byte(content), 0o644); err != nil { //nolint:gosec // G306 — world-readable skill file is intentional
+	// Atomic write: a crash mid-write must not leave a half-written SKILL.md
+	// that the catalog/loader would then parse. Perm 0o644 keeps the file
+	// world-readable as before.
+	if err := atomicfile.WriteFile(skillPath, []byte(content), &atomicfile.Options{Perm: 0o644}); err != nil {
 		return fmt.Errorf("genesis: write %s: %w", skillPath, err)
 	}
 
@@ -497,4 +531,99 @@ func truncateRunes(s string, maxLen int) string {
 		return s
 	}
 	return string(runes[:maxLen]) + "..."
+}
+
+// isDuplicateSkill reports whether a skill with this name+description is a
+// near-duplicate of an existing catalog entry. An exact name collision is
+// always a duplicate; otherwise it compares name+description token sets with
+// Jaccard similarity. Owner-agnostic — Deneb is single-user.
+func (s *Service) isDuplicateSkill(name, description string) bool {
+	if s.catalog == nil {
+		return false
+	}
+	cand := skillDedupTokens(name, description)
+	if len(cand) == 0 {
+		return false
+	}
+	for _, e := range s.catalog.List() {
+		if e.Skill.Name == name {
+			return true
+		}
+		if jaccardSimilarity(cand, skillDedupTokens(e.Skill.Name, e.Skill.Description)) >= skillDedupThreshold {
+			return true
+		}
+	}
+	return false
+}
+
+// skillDedupTokens builds a lowercase token set from a skill's name and
+// description for similarity comparison. Tokens shorter than 2 runes are
+// dropped as noise. unicode.IsLetter covers CJK, so Korean words tokenize on
+// whitespace/punctuation.
+func skillDedupTokens(name, description string) map[string]struct{} {
+	set := make(map[string]struct{})
+	addDedupTokens(set, name)
+	addDedupTokens(set, description)
+	return set
+}
+
+func addDedupTokens(set map[string]struct{}, text string) {
+	for _, tok := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	}) {
+		if len([]rune(tok)) >= 2 {
+			set[tok] = struct{}{}
+		}
+	}
+}
+
+// jaccardSimilarity returns |A∩B| / |A∪B| for two token sets (0 when either
+// is empty).
+func jaccardSimilarity(a, b map[string]struct{}) float64 {
+	if len(a) == 0 || len(b) == 0 {
+		return 0
+	}
+	inter := 0
+	for tok := range a {
+		if _, ok := b[tok]; ok {
+			inter++
+		}
+	}
+	union := len(a) + len(b) - inter
+	if union == 0 {
+		return 0
+	}
+	return float64(inter) / float64(union)
+}
+
+// sanitizeSkillDescription collapses a generated description to a single clean
+// line: newlines/tabs/control chars become spaces, whitespace runs collapse,
+// and the result is rune-length-capped. This protects both the SKILL.md
+// frontmatter and the prompt-cached skill index from structure-breaking or
+// injected text.
+func sanitizeSkillDescription(s string) string {
+	s = strings.Map(func(r rune) rune {
+		switch {
+		case r == '\n' || r == '\r' || r == '\t':
+			return ' '
+		case unicode.IsControl(r):
+			return -1
+		default:
+			return r
+		}
+	}, s)
+	s = strings.Join(strings.Fields(s), " ")
+	const maxDescRunes = 300
+	if r := []rune(s); len(r) > maxDescRunes {
+		s = string(r[:maxDescRunes]) + "…"
+	}
+	return s
+}
+
+// errString returns "" for nil so liveness callers can pass an error directly.
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
