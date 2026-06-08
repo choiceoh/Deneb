@@ -182,7 +182,7 @@ class ChatViewModelExtendedTest {
     // ---- regenerate ----
 
     @Test
-    fun `regenerate truncates to last user message and re-asks with null`() = runTest {
+    fun `regenerate drops the last exchange and re-asks the last user message`() = runTest {
         fakeRepository.chatHistory.value = listOf(
             History(role = History.Role.USER, content = "First"),
             History(role = History.Role.ASSISTANT, content = "Old answer"),
@@ -199,10 +199,14 @@ class ChatViewModelExtendedTest {
             initialState.actions.regenerate()
             testDispatcher.scheduler.advanceUntilIdle()
 
-            // Repository.regenerate must have been called
-            assertEquals(1, fakeRepository.regenerateCalls)
-            // ask was invoked again with a null question (retry semantics)
-            assertTrue(fakeRepository.askCalls.any { it.first == null })
+            // #1863: regenerate no longer uses the old `repository.regenerate(); ask(null)`
+            // path — in gateway mode that did nothing (regenerate() wasn't overridden and
+            // ask(null) was dropped at the empty-text guard). It now drops the last
+            // user+assistant pair via popLastExchange() and re-asks the captured last-user
+            // text through the normal ask() path. See ChatViewModel.regenerate().
+            assertEquals(0, fakeRepository.regenerateCalls)
+            assertEquals(1, fakeRepository.askCalls.size)
+            assertEquals("First", fakeRepository.askCalls.single().first)
             cancelAndIgnoreRemainingEvents()
         }
     }
