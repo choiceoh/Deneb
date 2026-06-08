@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.deneb.CalMonth
 import com.inspiredandroid.kai.deneb.CalendarAddContent
 import com.inspiredandroid.kai.deneb.CalendarDayList
+import com.inspiredandroid.kai.deneb.CalendarEmptyDay
 import com.inspiredandroid.kai.deneb.CalendarEvent
 import com.inspiredandroid.kai.deneb.CalendarEventContent
 import com.inspiredandroid.kai.deneb.CalendarEventDetail
@@ -109,6 +110,8 @@ fun main() {
     renderCalendarMonth("calendar_month_light.png", LightColorScheme)
     renderCalendarAdd("calendar_add_dark.png", DarkColorScheme)
     renderCalendarAdd("calendar_add_light.png", LightColorScheme)
+    renderCalendarEmpty("calendar_empty_dark.png", DarkColorScheme)
+    renderCalendarEmpty("calendar_empty_light.png", LightColorScheme)
     renderChart("chart_dark.png", DarkColorScheme)
     renderChart("chart_light.png", LightColorScheme)
     renderWorkFeed("workfeed_dark.png", DarkColorScheme)
@@ -253,6 +256,26 @@ private fun renderCalendarMonth(name: String, scheme: ColorScheme) {
                     Spacer(Modifier.height(8.dp))
                     Text("6월 3일 (수) · ${dayEvents.size}건", style = DenebType.sectionLabel, color = MaterialTheme.colorScheme.primary)
                     CalendarDayList(dayEvents, selected, tz, {})
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// Validates the empty-day state: a quiet line plus the inline "add to this day" CTA.
+private fun renderCalendarEmpty(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 824, height = 520, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "일정", onBack = {}) {
+                Column(Modifier.padding(horizontal = 16.dp)) {
+                    Text("6월 9일 (화)", style = DenebType.sectionLabel, color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.height(4.dp))
+                    CalendarEmptyDay(onAdd = {})
                 }
             }
         }
