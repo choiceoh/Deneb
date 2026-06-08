@@ -1114,7 +1114,9 @@ private enum class ConfigTab(val label: String) {
  *  used to look up the current model); [label] is the Korean segmented-button text. */
 private enum class ModelRole(val wire: String, val label: String) {
     MAIN("main", "메인"),
+    TINY("tiny", "초경량"),
     LIGHTWEIGHT("lightweight", "경량"),
+    ANALYSIS("analysis", "분석"),
     FALLBACK("fallback", "폴백"),
 }
 

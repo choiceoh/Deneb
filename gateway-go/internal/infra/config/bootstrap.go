@@ -336,7 +336,9 @@ func PersistDefaultModel(configPath, model string, logger *slog.Logger) error {
 // given modelrole role, preserving all other fields:
 //
 //	main        → agents.defaultModel
+//	tiny        → agents.tinyModel
 //	lightweight → agents.lightweightModel
+//	analysis    → agents.analysisModel
 //	fallback    → agents.fallbackModel
 //
 // Mirrors PersistDefaultModel; used by the miniapp per-role model picker.
@@ -345,8 +347,12 @@ func PersistRoleModel(configPath, role, model string, logger *slog.Logger) error
 	switch role {
 	case "main", "":
 		field = "defaultModel"
+	case "tiny":
+		field = "tinyModel"
 	case "lightweight":
 		field = "lightweightModel"
+	case "analysis":
+		field = "analysisModel"
 	case "fallback":
 		field = "fallbackModel"
 	default:
@@ -783,9 +789,9 @@ func customModelCount(providerConfig map[string]any) int {
 	return 0
 }
 
-// clearRolesReferencingModel deletes any agents.{default,lightweight,fallback}Model
-// field equal to fullModelID and returns the affected modelrole role names, so the
-// caller can reset the live registry. Mirrors PersistRoleModel's field mapping.
+// clearRolesReferencingModel deletes any agents.{default,tiny,lightweight,analysis,
+// fallback}Model field equal to fullModelID and returns the affected modelrole role
+// names, so the caller can reset the live registry. Mirrors PersistRoleModel's mapping.
 func clearRolesReferencingModel(raw map[string]any, fullModelID string) []string {
 	agents, ok := raw["agents"].(map[string]any)
 	if !ok {
@@ -793,7 +799,9 @@ func clearRolesReferencingModel(raw map[string]any, fullModelID string) []string
 	}
 	fields := []struct{ field, role string }{
 		{"defaultModel", "main"},
+		{"tinyModel", "tiny"},
 		{"lightweightModel", "lightweight"},
+		{"analysisModel", "analysis"},
 		{"fallbackModel", "fallback"},
 	}
 	var cleared []string
