@@ -251,6 +251,14 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 		Fn:          tools.ToolGmail(gmailPipelineDeps),
 		Deferred:    true,
 	})
+
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "dropbox",
+		Description: "Dropbox (native OAuth2): list, search, download (extract=true로 텍스트 추출 — PDF/이미지 OCR·Excel/Word/PowerPoint), upload, share (공유 링크), analyze (문서 가져와 내용 추출), backup (위키/주간보고/transcripts를 /Deneb-Backup/<날짜>/에 업로드). Auth: ~/.deneb/credentials/dropbox_app.json + dropbox_token.json (cmd/deneb-dropbox-auth로 발급)",
+		InputSchema: dropboxToolSchema(),
+		Fn:          tools.ToolDropbox(),
+		Deferred:    true,
+	})
 	// NOTE: morning_letter is no longer registered as a tool. The data collection
 	// function (CollectMorningLetterData) is called directly by the boot/routine handler.
 }
