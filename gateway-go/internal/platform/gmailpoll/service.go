@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/dropbox"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
 
@@ -58,6 +60,14 @@ type Config struct {
 	// SenderFactsFn resolves sender context in-process from the wiki graph.
 	// Forwarded to PipelineDeps; nil = fall back to the graphify subprocess.
 	SenderFactsFn func(ctx context.Context, displayName string) string
+
+	// ArchiveAttachments enables auto-archiving of substantive email
+	// attachments to Dropbox. Wired true by the server when a Dropbox token
+	// exists; false leaves attachments untouched.
+	ArchiveAttachments bool
+	// ArchiveFolder is the Dropbox base folder for archived attachments
+	// (default "/Deneb-Archive/메일").
+	ArchiveFolder string
 }
 
 // Compile-time interface compliance.
@@ -71,10 +81,11 @@ type Service struct {
 	cfg Config
 	log *slog.Logger
 
-	gmailClient *gmail.Client
-	llmClient   *llm.Client
-	notifier    Notifier
-	state       *stateStore
+	gmailClient   *gmail.Client
+	llmClient     *llm.Client
+	notifier      Notifier
+	state         *stateStore
+	dropboxClient *dropbox.Client // lazy, for attachment archiving
 }
 
 // NewService creates a gmail poll service.
@@ -97,6 +108,9 @@ func NewService(cfg Config, logger *slog.Logger) *Service {
 	}
 	if cfg.PromptFile == "" {
 		cfg.PromptFile = defaultPromptFile
+	}
+	if cfg.ArchiveAttachments && cfg.ArchiveFolder == "" {
+		cfg.ArchiveFolder = "/Deneb-Archive/메일"
 	}
 
 	return &Service{
@@ -250,6 +264,18 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	if err != nil {
 		s.log.Warn("배치 분석 실패", "error", err, "count", len(details))
 		report = "(분석 실패)"
+	}
+
+	// Auto-archive substantive attachments to Dropbox (best-effort) and note
+	// the archived paths in the consolidated report.
+	if archived := s.archiveAttachments(ctx, client, details); len(archived) > 0 {
+		var b strings.Builder
+		b.WriteString(report)
+		fmt.Fprintf(&b, "\n\n📎 첨부 %d개를 Dropbox에 보관했습니다:\n", len(archived))
+		for _, p := range archived {
+			fmt.Fprintf(&b, "- `%s`\n", p)
+		}
+		report = b.String()
 	}
 
 	// Persist each individual analysis (cache + per-message wiki page) so the

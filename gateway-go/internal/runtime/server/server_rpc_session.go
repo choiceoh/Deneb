@@ -450,6 +450,8 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 
 	// Gmail polling service: periodic new-email analysis via LLM.
 	s.initGmailPoll()
+	s.seedDropboxBackupJob()
+	s.initDropboxPoll()
 
 	// Calendar briefing service: D-15min push for upcoming meetings.
 	// Delivers to the native client (업무 transcript + live push) via the

@@ -2,6 +2,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/dropbox"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/dropboxpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
@@ -68,6 +72,9 @@ func (s *Server) initGmailPoll() {
 	cfg.OnAnalyzed = s.makeMailAnalysisSink()
 	cfg.ProjectsFn = s.projectCandidatesFn()
 
+	// Auto-archive substantive email attachments to Dropbox when connected.
+	cfg.ArchiveAttachments = dropbox.HasToken()
+
 	s.gmailPollSvc = gmailpoll.NewService(cfg, s.logger)
 
 	// Wire proactive relay as the gmail-poll notifier so email summaries
@@ -89,6 +96,100 @@ func (s *Server) initGmailPoll() {
 	} else {
 		s.logger.Warn("gmailpoll: autonomous service not available, polling disabled")
 	}
+}
+
+// seedDropboxBackupJob installs a weekly Dropbox backup cron job once (idempotent
+// by name). The job runs an agent turn that invokes the dropbox tool's backup
+// action. It is seeded disabled when no Dropbox token exists yet — the user
+// enables it after running cmd/deneb-dropbox-auth (via the cron tool or Mini
+// App) — and enabled otherwise. Respecting an existing job preserves the user's
+// later schedule/enabled edits across restarts.
+func (s *Server) seedDropboxBackupJob() {
+	if s.cronService == nil {
+		return
+	}
+	const jobName = "dropbox-backup-weekly"
+	if existing, _ := s.cronService.JobByName(jobName); existing != nil {
+		return
+	}
+	job := cron.StoreJob{
+		Name:    jobName,
+		AgentID: "main",
+		Enabled: dropbox.HasToken(),
+		Schedule: cron.StoreSchedule{
+			Kind: "cron",
+			Expr: "0 3 * * 0", // weekly, Sunday 03:00
+			Tz:   "Asia/Seoul",
+		},
+		Payload: cron.StorePayload{
+			Kind:    "agentTurn",
+			Message: "Dropbox에 위키·주간보고·세션기록을 백업해줘. dropbox 도구의 backup 액션(target=all)을 사용하면 된다. 조용히 처리하고 결과만 한 줄로 보고해줘.",
+		},
+	}
+	if err := s.cronService.Add(s.ShutdownCtx(), job); err != nil {
+		s.logger.Warn("dropbox backup cron seed failed", "error", err)
+		return
+	}
+	s.logger.Info("dropbox backup cron seeded", "enabled", job.Enabled, "schedule", "weekly Sun 03:00 KST")
+}
+
+// dropboxAgentAdapter adapts chat.Handler to dropboxpoll.AgentRunner, running
+// the analysis turn in an isolated "dropboxpoll" session. The agent does the
+// real work via the dropbox + wiki tools; its final text is delivered to the
+// 업무 chat by the watcher's notifier. AutoDeliveredOutput marks the run so an
+// in-loop message-send guard failure is a benign no-op (same as cron).
+type dropboxAgentAdapter struct {
+	chat *chat.Handler
+}
+
+func (a *dropboxAgentAdapter) RunAgentTurn(ctx context.Context, prompt string) (string, error) {
+	result, err := a.chat.SendSync(ctx, "dropboxpoll", prompt, "", &chat.SyncOptions{AutoDeliveredOutput: true})
+	if err != nil {
+		return "", err
+	}
+	return result.BestText(), nil
+}
+
+// initDropboxPoll wires the Dropbox folder watcher when enabled in deneb.json.
+// Mirrors initGmailPoll: detection runs here, analysis is delegated to an agent
+// turn, and the summary is delivered to the native 업무 chat via the proactive
+// relay (workfeed card + push).
+func (s *Server) initDropboxPoll() {
+	snap, err := config.LoadConfigFromDefaultPath()
+	if err != nil || snap == nil {
+		return
+	}
+	pollCfg := snap.Config.DropboxPoll
+	if pollCfg == nil || pollCfg.Enabled == nil || !*pollCfg.Enabled {
+		return
+	}
+	if s.chatHandler == nil || s.autonomousSvc == nil {
+		s.logger.Warn("dropboxpoll: chat/autonomous unavailable, watcher disabled")
+		return
+	}
+
+	home, _ := os.UserHomeDir()
+	cfg := dropboxpoll.Config{
+		StateDir:   filepath.Join(home, ".deneb"),
+		FolderPath: "/Deneb-Inbox",
+	}
+	if pollCfg.FolderPath != "" {
+		cfg.FolderPath = pollCfg.FolderPath
+	}
+	if pollCfg.IntervalMin != nil {
+		cfg.IntervalMin = *pollCfg.IntervalMin
+	}
+	if pollCfg.MaxPerCycle != nil {
+		cfg.MaxPerCycle = *pollCfg.MaxPerCycle
+	}
+
+	svc := dropboxpoll.NewService(cfg, s.logger)
+	svc.SetNotifier(s.proactiveRelay.notifierForSession(nativeWorkSessionKey))
+	svc.SetAgent(&dropboxAgentAdapter{chat: s.chatHandler})
+
+	s.autonomousSvc.RegisterTask(svc)
+	s.logger.Info("dropboxpoll registered with autonomous service",
+		"folder", cfg.FolderPath, "interval", fmt.Sprintf("%dm", cfg.IntervalMin))
 }
 
 // registerNativeSystemMethods registers native Go system RPC methods:
