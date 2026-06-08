@@ -1,18 +1,19 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="90"
-    android:viewportHeight="90">
-  <!-- Deneb mark (monochrome): five-pointed star, tinted by the system. -->
-  <group android:scaleX="0.59"
-      android:scaleY="0.59"
-      android:translateX="18.45"
-      android:translateY="18.45">
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+  <!-- Deneb mark (monochrome): same rounded-vertex star, tinted by the system. -->
+  <group android:scaleX="0.84"
+      android:scaleY="0.84"
+      android:translateX="40.96"
+      android:translateY="40.96">
     <path
-        android:pathData="M45,5 L55,31.2 L83,32.6 L61.2,50.2 L68.5,77.4 L45,62 L21.5,77.4 L28.8,50.2 L7,32.6 L35,31.2 Z"
+        android:pathData="M256,96 L293,205 L408,207 L316,276 L350,385 L256,319 L162,385 L196,276 L104,207 L219,205 Z"
         android:fillColor="#FFFFFF"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="4"
-        android:strokeLineJoin="round"/>
+        android:strokeWidth="34"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"/>
   </group>
 </vector>
