@@ -163,6 +163,57 @@ func TestStoreRunActionMissing(t *testing.T) {
 	}
 }
 
+func TestStoreRunActionAckSettlesDuplicateIDs(t *testing.T) {
+	// Legacy feeds (old restart-resetting id counter) could hold several items
+	// under one id. Acking via RunAction must settle every twin, not just the
+	// first match, or the survivors stay unread and the card re-surfaces on the
+	// next List — the "zombie" work-feed item the native app hit.
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	for _, body := range []string{"first twin", "second twin", "third twin"} {
+		if _, err := store.Append(Item{
+			ID:         "wf_0004",
+			Source:     SourceProactive,
+			Body:       body,
+			SessionKey: "client:main",
+		}); err != nil {
+			t.Fatalf("append %q: %v", body, err)
+		}
+	}
+	if _, total, err := store.List(10, false); err != nil || total != 3 {
+		t.Fatalf("pre-ack visible = total %d err %v, want 3", total, err)
+	}
+	result, err := store.RunAction("wf_0004", ActionAck)
+	if err != nil {
+		t.Fatalf("run ack: %v", err)
+	}
+	if !result.RemoveFromFeed || result.Item.Status != StatusAcked {
+		t.Fatalf("result = %+v, want acked remove", result)
+	}
+	items, total, err := store.List(10, false)
+	if err != nil {
+		t.Fatalf("post-ack list: %v", err)
+	}
+	if total != 0 || len(items) != 0 {
+		t.Fatalf("after ack, visible = total %d items %+v, want none (no zombie)", total, items)
+	}
+}
+
+func TestStoreRunActionSnoozeSettlesDuplicateIDs(t *testing.T) {
+	// Snooze, like ack, is id-scoped and must hide every twin sharing the id.
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	for _, body := range []string{"twin a", "twin b"} {
+		if _, err := store.Append(Item{ID: "wf_0007", Body: body}); err != nil {
+			t.Fatalf("append %q: %v", body, err)
+		}
+	}
+	if _, err := store.RunAction("wf_0007", ActionSnooze); err != nil {
+		t.Fatalf("run snooze: %v", err)
+	}
+	if _, total, err := store.List(10, false); err != nil || total != 0 {
+		t.Fatalf("after snooze, visible = total %d err %v, want none", total, err)
+	}
+}
+
 func TestPreviewTrimsToFirstLine(t *testing.T) {
 	got := Preview(" first line \nsecond line", 100)
 	if got != "first line" {

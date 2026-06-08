@@ -221,54 +221,75 @@ func (s *Store) RunAction(itemID, actionID string) (ActionResult, error) {
 		return ActionResult{}, err
 	}
 	now := time.Now().UnixMilli()
+	// Normalize every item, then locate the first one carrying itemID. The ack /
+	// snooze status changes below are applied to ALL items sharing the id, not
+	// just the first match. Legacy feeds minted by the old restart-resetting id
+	// counter can hold duplicate ids; settling only the first twin left the rest
+	// unread, so the card "came back" on the next List (a zombie work-feed item).
+	// Ack/snooze are id-scoped state changes, so resolve the whole id at once —
+	// this mirrors Ack(), which already settles every item with the id.
+	first := -1
 	for i := range items {
 		items[i] = normalizeExisting(items[i])
-		if items[i].ID != itemID {
-			continue
+		if items[i].ID == itemID && first < 0 {
+			first = i
 		}
-		action, ok := findAction(items[i], actionID)
-		if !ok {
-			return ActionResult{}, ErrActionNotFound
-		}
-		result := ActionResult{
-			Item:       items[i],
-			Action:     action,
-			SessionKey: items[i].SessionKey,
-		}
-		switch action.Kind {
-		case ActionOpen:
-			result.Prompt = actionPrompt(action, openPrompt(items[i]))
-			result.Message = "opened"
-			return result, nil
-		case ActionFollowUp:
-			result.Prompt = actionPrompt(action, followUpPrompt(items[i]))
-			result.Message = "prompt_created"
-			return result, nil
-		case ActionSnooze:
+	}
+	if first < 0 {
+		return ActionResult{}, ErrNotFound
+	}
+	action, ok := findAction(items[first], actionID)
+	if !ok {
+		return ActionResult{}, ErrActionNotFound
+	}
+	result := ActionResult{
+		Item:       items[first],
+		Action:     action,
+		SessionKey: items[first].SessionKey,
+	}
+	switch action.Kind {
+	case ActionOpen:
+		// Read-only: surface the item's context as a prompt, no state change.
+		result.Prompt = actionPrompt(action, openPrompt(items[first]))
+		result.Message = "opened"
+		return result, nil
+	case ActionFollowUp:
+		result.Prompt = actionPrompt(action, followUpPrompt(items[first]))
+		result.Message = "prompt_created"
+		return result, nil
+	case ActionSnooze:
+		for i := range items {
+			if items[i].ID != itemID {
+				continue
+			}
 			items[i].Status = StatusSnoozed
 			items[i].UpdatedAtMs = now
 			items[i].SnoozedUntilMs = now + snoozeDuration.Milliseconds()
-			// Snooze is non-terminal — leave the action available so the user can
-			// snooze again after the item re-surfaces (unlike ack, which is done).
-			result.Item = items[i]
-			result.Message = "snoozed"
-			result.RemoveFromFeed = true
-		case ActionAck:
+		}
+		// Snooze is non-terminal — leave the action available so the user can
+		// snooze again after the item re-surfaces (unlike ack, which is done).
+		result.Item = items[first]
+		result.Message = "snoozed"
+		result.RemoveFromFeed = true
+	case ActionAck:
+		for i := range items {
+			if items[i].ID != itemID {
+				continue
+			}
 			items[i].Status = StatusAcked
 			items[i].UpdatedAtMs = now
 			markActionDone(&items[i], action.ID)
-			result.Item = items[i]
-			result.Message = "acked"
-			result.RemoveFromFeed = true
-		default:
-			return ActionResult{}, ErrActionNotFound
 		}
-		if err := jsonlstore.Snapshot(s.path, items); err != nil {
-			return ActionResult{}, err
-		}
-		return result, nil
+		result.Item = items[first]
+		result.Message = "acked"
+		result.RemoveFromFeed = true
+	default:
+		return ActionResult{}, ErrActionNotFound
 	}
-	return ActionResult{}, ErrNotFound
+	if err := jsonlstore.Snapshot(s.path, items); err != nil {
+		return ActionResult{}, err
+	}
+	return result, nil
 }
 
 // idCounter disambiguates ids minted within the same millisecond. Combined with
