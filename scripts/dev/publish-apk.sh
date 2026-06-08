@@ -62,6 +62,20 @@ if [ -z "$VERSION_NAME" ] || [ -z "$LIBS_VERSION_CODE" ]; then
   exit 1
 fi
 
+# Guard against shipping a mislabeled build. VERSION_NAME is read from the working
+# tree's libs.versions.toml, but the filename's SHA is HEAD — so a hand-edited but
+# uncommitted appVersion publishes a "version" that lies about its contents. That
+# is exactly how a "2.9.59" APK built at commit a31ec001 actually shipped 2.9.56
+# (appVersion bumped in the working tree, never committed), which left the in-app
+# patch-notes stuck on old versions. Refuse unless the version line is committed.
+if ! git -C "$REPO_ROOT" diff --quiet HEAD -- client-android/app/gradle/libs.versions.toml 2>/dev/null; then
+  echo "REFUSING: client-android/app/gradle/libs.versions.toml has uncommitted changes." >&2
+  echo "  appVersion=$VERSION_NAME would be published against HEAD $SHA, mislabeling the build." >&2
+  echo "  Commit the version bump first (so the filename SHA matches the version), then republish." >&2
+  echo "  Override only if you understand the risk: DENEB_ALLOW_DIRTY_VERSION=1" >&2
+  [ -n "${DENEB_ALLOW_DIRTY_VERSION:-}" ] || exit 1
+fi
+
 # Auto-assign a collision-free versionCode instead of trusting a hand-bumped libs
 # value. The 155/162/164 clobbers happened because each agent worktree bumped
 # libs to whatever number it guessed, and two could pick the same. Here flock
