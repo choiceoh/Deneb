@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
@@ -45,6 +46,19 @@ func (s *Server) initGenesisServices() {
 	}
 
 	s.genesisEvolver = genesis.NewEvolver(lwClient, s.skillCatalog, s.genesisTracker, lwModel, s.logger)
+
+	// Teacher-escalation: wire the stronger main model so a rewrite that fails
+	// the lightweight self-test gets one escalated attempt (#4). The evolver
+	// calls the client directly (not SendSync), so it takes the BARE model name
+	// (Model(), not FullModelID() — the latter is only for the provider-
+	// re-resolving SendSync path, see the review-fork note above). Skipped when
+	// main is unconfigured or identical to lightweight (escalation would be a
+	// no-op).
+	mainClient := s.modelRegistry.Client(modelrole.RoleMain)
+	mainModel := s.modelRegistry.Model(modelrole.RoleMain)
+	if mainClient != nil && mainModel != "" && mainModel != lwModel {
+		s.genesisEvolver.SetTeacher(mainClient, mainModel)
+	}
 
 	// Iteration-based nudger (Hermes-style): fires a mid-session skill
 	// review every N tool calls. Env var DENEB_SKILL_NUDGE_INTERVAL
@@ -166,15 +180,27 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 	}
 
 	if s.genesisTracker != nil {
-		s.autonomousSvc.RegisterTask(&genesis.EvolutionTask{
+		evolveTask := &genesis.EvolutionTask{
 			Evolver: s.genesisEvolver,
 			Logger:  s.logger,
-		})
+		}
+		s.autonomousSvc.RegisterTask(evolveTask)
 		s.autonomousSvc.RegisterTask(&genesis.SkillCuratorTask{
 			Tracker: s.genesisTracker,
 			Logger:  s.logger,
 			Config:  genesis.SkillCuratorConfigFromEnv(),
 		})
+
+		// Event-driven evolve: after N new skills accumulate, run a cycle in
+		// the background instead of waiting for the 6h periodic task. The
+		// periodic task remains a backstop; EvolveUnderperformers is TryLock-
+		// serialized so the two paths never overlap, and minGap suppresses a
+		// re-fire too soon after a cycle.
+		s.genesisTracker.SetEvolveTrigger(func() {
+			ctx, cancel := context.WithTimeout(s.ShutdownCtx(), 10*time.Minute)
+			defer cancel()
+			_ = evolveTask.Run(ctx)
+		}, genesis.DefaultEvolveEventThreshold, 30*time.Minute)
 	}
 
 }

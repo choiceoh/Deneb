@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -9,8 +10,36 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
+
+// Self-evolution activity kinds for the liveness heartbeat.
+const (
+	SkillActivityReview  = "review"
+	SkillActivityEvolve  = "evolve"
+	SkillActivityGenesis = "genesis"
+)
+
+// SkillLivenessState is a persisted heartbeat for the self-evolution loop.
+// Its sole purpose is to make silent death observable: every past failure of
+// this loop (#1932 bare model id, #2031 token-budget underflow, #2035 restart
+// interval reset) was silent — nothing logged that an operator would notice.
+// If LastReviewAt stops advancing, the nudger→review→evolve pipeline has
+// stalled. Surfaced on /health.
+type SkillLivenessState struct {
+	LastReviewAt  int64  `json:"lastReviewAt,omitempty"`
+	LastReviewOK  bool   `json:"lastReviewOK"`
+	LastEvolveAt  int64  `json:"lastEvolveAt,omitempty"`
+	LastGenesisAt int64  `json:"lastGenesisAt,omitempty"`
+	LastError     string `json:"lastError,omitempty"`
+	LastErrorAt   int64  `json:"lastErrorAt,omitempty"`
+	UpdatedAt     int64  `json:"updatedAt"`
+	// GenesisSinceEvolve counts new skills created since the last event-driven
+	// evolve fired. Persisted so the count survives the frequent SIGUSR1
+	// restarts (the failure mode behind #2035). Event-trigger for evolve.
+	GenesisSinceEvolve int `json:"genesisSinceEvolve,omitempty"`
+}
 
 // UsageRecord represents a single skill usage event.
 type UsageRecord struct {
@@ -34,15 +63,24 @@ type UsageStats struct {
 
 // Tracker records and queries skill usage for evolution decisions.
 type Tracker struct {
-	logger      *slog.Logger
-	mu          sync.Mutex
-	usagePath   string
-	logPath     string
-	curatorPath string
+	logger       *slog.Logger
+	mu           sync.Mutex
+	usagePath    string
+	logPath      string
+	curatorPath  string
+	livenessPath string
 
 	// In-memory aggregated stats, rebuilt from JSONL on startup.
 	stats        map[string]*usageAgg
 	recentErrors map[string][]string // skill -> last 5 error messages
+
+	// Event-driven evolve trigger (set via SetEvolveTrigger). When N new
+	// skills accumulate, evolveTrigger is fired in the background. All guarded
+	// by mu.
+	evolveTrigger   func()
+	evolveThreshold int
+	evolveMinGap    time.Duration
+	triggerInflight bool
 }
 
 // usageAgg holds running aggregates per skill.
@@ -73,6 +111,7 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 		usagePath:    filepath.Join(dir, "skill_usage.jsonl"),
 		logPath:      filepath.Join(dir, "skill_genesis_log.jsonl"),
 		curatorPath:  filepath.Join(dir, "skill_curator_state.json"),
+		livenessPath: filepath.Join(dir, "skill_liveness.json"),
 		stats:        make(map[string]*usageAgg),
 		recentErrors: make(map[string][]string),
 	}
@@ -240,6 +279,8 @@ func (t *Tracker) LogGenesis(skillName, source, sessionKey, category, descriptio
 	}); err != nil {
 		return err
 	}
+	t.recordEvolutionActivityLocked(SkillActivityGenesis, true, "")
+	t.maybeFireEvolveLocked()
 	return t.markSkillAgentCreatedLocked(skillName, createdAt)
 }
 
@@ -300,6 +341,144 @@ func (t *Tracker) SkillsNeedingEvolution(minUses int, maxSuccessRate float64) ([
 		}
 	}
 	return candidates, nil
+}
+
+// RecordEvolutionActivity updates the self-evolution liveness heartbeat.
+// kind is one of SkillActivityReview/Evolve/Genesis. ok=false also records the
+// error so an operator can see WHY the loop stalled. Best-effort: a liveness
+// write failure must never break the caller (this is observability, not state).
+func (t *Tracker) RecordEvolutionActivity(kind string, ok bool, errMsg string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.recordEvolutionActivityLocked(kind, ok, errMsg)
+}
+
+func (t *Tracker) recordEvolutionActivityLocked(kind string, ok bool, errMsg string) {
+	state, err := t.loadLivenessLocked()
+	if err != nil {
+		// Start from a clean heartbeat rather than dropping the update.
+		state = &SkillLivenessState{}
+	}
+	now := time.Now().UnixMilli()
+	switch kind {
+	case SkillActivityReview:
+		state.LastReviewAt = now
+		state.LastReviewOK = ok
+	case SkillActivityEvolve:
+		state.LastEvolveAt = now
+	case SkillActivityGenesis:
+		state.LastGenesisAt = now
+	}
+	if !ok && errMsg != "" {
+		if len(errMsg) > 200 {
+			errMsg = errMsg[:200] + "..."
+		}
+		state.LastError = errMsg
+		state.LastErrorAt = now
+	}
+	if writeErr := t.saveLivenessLocked(state); writeErr != nil && t.logger != nil {
+		t.logger.Warn("genesis-tracker: liveness write failed", "error", writeErr)
+	}
+}
+
+// LivenessSnapshot returns the current self-evolution heartbeat for /health.
+func (t *Tracker) LivenessSnapshot() SkillLivenessState {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	state, err := t.loadLivenessLocked()
+	if err != nil || state == nil {
+		return SkillLivenessState{}
+	}
+	return *state
+}
+
+// SetEvolveTrigger wires the event-driven evolve. After `threshold` new skills
+// are created (counted across restarts via the persisted sidecar), `fn` runs in
+// the background; `minGap` suppresses a re-fire too soon after the previous
+// evolve. threshold<=0 disables the trigger.
+func (t *Tracker) SetEvolveTrigger(fn func(), threshold int, minGap time.Duration) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.evolveTrigger = fn
+	t.evolveThreshold = threshold
+	t.evolveMinGap = minGap
+}
+
+// maybeFireEvolveLocked bumps the genesis counter and fires the evolve trigger
+// in the background when it reaches the threshold and minGap has elapsed.
+// Caller holds t.mu. The trigger (typically EvolutionTask.Run) updates
+// LastEvolveAt itself, which feeds the next minGap check.
+func (t *Tracker) maybeFireEvolveLocked() {
+	if t.evolveTrigger == nil || t.evolveThreshold <= 0 {
+		return
+	}
+	state, err := t.loadLivenessLocked()
+	if err != nil {
+		return
+	}
+	state.GenesisSinceEvolve++
+	fire := false
+	if state.GenesisSinceEvolve >= t.evolveThreshold && !t.triggerInflight {
+		gapOK := t.evolveMinGap <= 0 || state.LastEvolveAt == 0 ||
+			time.Since(time.UnixMilli(state.LastEvolveAt)) >= t.evolveMinGap
+		if gapOK {
+			state.GenesisSinceEvolve = 0
+			t.triggerInflight = true
+			fire = true
+		}
+	}
+	if err := t.saveLivenessLocked(state); err != nil && t.logger != nil {
+		t.logger.Warn("genesis-tracker: liveness counter write failed", "error", err)
+	}
+	if !fire {
+		return
+	}
+	fn := t.evolveTrigger
+	go func() {
+		defer func() {
+			if r := recover(); r != nil && t.logger != nil {
+				t.logger.Error("genesis: evolve trigger panic", "panic", r)
+			}
+			t.mu.Lock()
+			t.triggerInflight = false
+			t.mu.Unlock()
+		}()
+		fn()
+	}()
+}
+
+func (t *Tracker) loadLivenessLocked() (*SkillLivenessState, error) {
+	state := &SkillLivenessState{}
+	if t.livenessPath == "" {
+		return state, nil
+	}
+	data, err := os.ReadFile(t.livenessPath)
+	if os.IsNotExist(err) {
+		return state, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("genesis-tracker: read liveness: %w", err)
+	}
+	if len(data) == 0 {
+		return state, nil
+	}
+	if err := json.Unmarshal(data, state); err != nil {
+		return nil, fmt.Errorf("genesis-tracker: parse liveness: %w", err)
+	}
+	return state, nil
+}
+
+func (t *Tracker) saveLivenessLocked(state *SkillLivenessState) error {
+	if t.livenessPath == "" || state == nil {
+		return nil
+	}
+	state.UpdatedAt = time.Now().UnixMilli()
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("genesis-tracker: encode liveness: %w", err)
+	}
+	data = append(data, '\n')
+	return atomicfile.WriteFile(t.livenessPath, data, &atomicfile.Options{Perm: 0o600, Fsync: true})
 }
 
 // Close is a no-op (JSONL files are opened/closed per write).

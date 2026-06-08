@@ -15,6 +15,7 @@ func newTestTracker(t *testing.T) *Tracker {
 		usagePath:    filepath.Join(dir, "skill_usage.jsonl"),
 		logPath:      filepath.Join(dir, "skill_genesis_log.jsonl"),
 		curatorPath:  filepath.Join(dir, "skill_curator_state.json"),
+		livenessPath: filepath.Join(dir, "skill_liveness.json"),
 		stats:        make(map[string]*usageAgg),
 		recentErrors: make(map[string][]string),
 	}
