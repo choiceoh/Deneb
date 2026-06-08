@@ -1358,7 +1358,7 @@ class DenebGatewayClient(
             // token rides in the query string (same as the Gmail attachment route).
             val apk = "$base/api/v1/app/update/download" +
                 "?file=${m.file.encodeURLParameter()}&clientToken=${clientToken.encodeURLParameter()}"
-            UpdateInfo(versionName = m.name.ifBlank { m.code.toString() }, apkUrl = apk, notes = m.notes)
+            UpdateInfo(buildLabel = m.code.toString(), apkUrl = apk, notes = m.notes)
         } else {
             null
         }

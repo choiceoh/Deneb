@@ -572,7 +572,7 @@ private fun BottomInfo() {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            stringResource(Res.string.settings_version, Version.appVersion),
+            stringResource(Res.string.settings_version, Version.appVersionCode.toString()),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground,
         )
