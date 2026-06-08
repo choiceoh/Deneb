@@ -27,7 +27,9 @@ import com.inspiredandroid.kai.deneb.CalendarEventDetail
 import com.inspiredandroid.kai.deneb.CalendarMonthGrid
 import com.inspiredandroid.kai.deneb.DenebMarkdown
 import com.inspiredandroid.kai.deneb.buildMonthGrid
+import com.inspiredandroid.kai.deneb.eventDays
 import com.inspiredandroid.kai.deneb.koreanDayOfWeek
+import com.inspiredandroid.kai.deneb.layoutMonthBars
 import com.inspiredandroid.kai.deneb.MailMessage
 import com.inspiredandroid.kai.deneb.MailRow
 import com.inspiredandroid.kai.ui.markdown.MarkdownContent
@@ -64,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material3.HorizontalDivider
 import com.inspiredandroid.kai.ui.denebHairline
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 
 // Off-screen render harness: renders Deneb composables to PNG via Skia so the
 // look (and bugs like invisible text) can be inspected without building +
@@ -195,14 +198,18 @@ private fun renderCalendarMonth(name: String, scheme: ColorScheme) {
     val grid = buildMonthGrid(month)
     val today = LocalDate(2026, 6, 8)
     val selected = LocalDate(2026, 6, 3)
-    val withEvents = setOf(
-        LocalDate(2026, 6, 3), LocalDate(2026, 6, 8), LocalDate(2026, 6, 12), LocalDate(2026, 6, 20),
-    )
-    val dayEvents = listOf(
+    val tz = TimeZone.UTC
+    // Mix single-day and multi-day events; the latter exercise the ribbon lanes,
+    // including one span (e4) that crosses a week boundary.
+    val events = listOf(
         CalendarEvent("e1", "기획조정실 주간 회의", "본사 3층 대회의실", "2026-06-03T05:00:00Z", "2026-06-03T06:00:00Z", false),
         CalendarEvent("e2", "에코프로 구매팀 미팅", "남도에코에너지", "2026-06-03T07:30:00Z", "2026-06-03T08:30:00Z", false),
+        CalendarEvent("e3", "출장 (서울)", "", "2026-06-10T00:00:00Z", "2026-06-13T00:00:00Z", true),
+        CalendarEvent("e4", "RE100 전시 부스", "코엑스", "2026-06-19T00:00:00Z", "2026-06-24T00:00:00Z", true),
     )
-    val scene = ImageComposeScene(width = 824, height = 1200, density = Density(2f)) {
+    val bars = layoutMonthBars(events, grid, tz)
+    val dayEvents = events.filter { selected in eventDays(it.start, it.end, it.allDay, tz) }
+    val scene = ImageComposeScene(width = 824, height = 1280, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "일정", onBack = {}) {
                 Column(Modifier.padding(horizontal = 16.dp)) {
@@ -223,12 +230,12 @@ private fun renderCalendarMonth(name: String, scheme: ColorScheme) {
                             )
                         }
                     }
-                    CalendarMonthGrid(grid, today, selected, withEvents, {})
+                    CalendarMonthGrid(grid, today, selected, bars, {})
                     Spacer(Modifier.height(12.dp))
                     HorizontalDivider(color = denebHairline())
                     Spacer(Modifier.height(8.dp))
-                    Text("6월 3일 (수) · 2건", style = DenebType.sectionLabel, color = MaterialTheme.colorScheme.primary)
-                    CalendarDayList(dayEvents, {})
+                    Text("6월 3일 (수) · ${dayEvents.size}건", style = DenebType.sectionLabel, color = MaterialTheme.colorScheme.primary)
+                    CalendarDayList(dayEvents, selected, tz, {})
                 }
             }
         }
@@ -252,8 +259,10 @@ private fun renderCalendarAdd(name: String, scheme: ColorScheme) {
                         onTitle = {},
                         allDay = false,
                         onAllDay = {},
-                        dateLabel = "2026년 6월 10일 (수)",
-                        onPickDate = {},
+                        startDateLabel = "2026년 6월 10일 (수)",
+                        onPickStartDate = {},
+                        endDateLabel = "2026년 6월 10일 (수)",
+                        onPickEndDate = {},
                         startLabel = "14:00",
                         onPickStart = {},
                         endLabel = "15:00",
