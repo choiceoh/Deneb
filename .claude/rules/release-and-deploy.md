@@ -38,11 +38,12 @@ DENEB_APK_BASE_URL=http://<gateway-host>:19010 \
 
 ## Automated OTA publish (GitHub Action)
 
-> `.github/workflows/publish-apk.yml` 는 위 `publish-apk.sh` 를 **gx10 self-hosted 러너**에서 그대로 실행한다. 빌드·스모크 게이트·flock versionCode·serve dir 동작이 수동 배포와 100% 동일한, 재구현이 아닌 얇은 트리거다 (게이트웨이가 호스트 로컬 디스크에서 APK 를 서빙하고 스모크가 그 호스트의 Xvfb+게이트웨이를 요구하므로 GitHub-hosted 러너로는 불가능 → self-hosted 필연).
+> `.github/workflows/publish-apk.yml` 는 위 `publish-apk.sh` 를 **gx10 self-hosted 러너**에서 실행하는 얇은 트리거다 (빌드·flock versionCode·serve dir 모두 수동 배포와 동일; 게이트웨이가 호스트 로컬 디스크에서 APK 를 서빙하므로 GitHub-hosted 러너로는 불가능 → self-hosted 필연). **단 CI 는 native-app 스모크 게이트를 건너뛴다**(`DENEB_SKIP_SMOKE=1`) — 무인 환경에서 픽셀탭·실데이터 의존 스모크가 잘 튀어(실제로 메일상세 단계가 세션 드로어로 빠져 멀쩡한 빌드를 막은 이력) 자동발행을 망가뜨리기 때문. 렌더 크래시 방어는 네이티브 PR 의 사전 스모크·`renderPreviews`·컴파일/유닛테스트가 맡는다.
 
 - **트리거**: main 에 `client-android/**` 변경이 머지될 때 자동. versionCode 단독화라 릴리스마다 바뀌는 버전 파일이 없어 게이트할 대상이 없다 — **네이티브 변경을 머지하는 것 자체가 새 빌드 발행 신호(연속 배포)**. 수동 `workflow_dispatch`(노트 입력)도 가능. **fork PR 로는 절대 안 돈다** (호스트 러너에서 미신뢰 코드 실행 차단).
 - **노트**: dispatch 입력 우선, 없으면 head 커밋 제목. 사용자에게 보이는 정돈된 한국어 changelog 는 어차피 컴파일된 `DenebPatchNotes` 가 오프라인으로 보여주므로 version.json 노트는 보조다.
 - **버전 bump 불필요**: versionName 제거로 릴리스 시 손댈 버전 파일이 사라졌다. `DenebPatchNotes` 는 version 라벨 없는 시간순 changelog 라 빌드마다 강제 갱신 불필요(테스트는 비어있지 않으면 통과) — **사용자 영향 변경 때만** head 에 항목 prepend. *"release/publish 는 명시 승인"* 원칙은 "네이티브 변경 PR 을 머지하는 행위" 가 그 승인.
+- **교착 방지**: `publish-apk.sh` 의 flock 은 `-w 600`(10분 대기 상한). 이전 발행이 hang 채 락을 쥐면 후속(자동·수동)이 job 30분 timeout 까지 막히던 사고(2026-06-08 좀비 publish 가 serve-dir 락 점유 → CI 포함 전 발행 블록)를 막아 빠르게 실패한다. 락 점유 의심 시 `fuser ~/.cache/deneb-apk/.publish.lock` 로 holder 확인 후 정리.
 
 ### gx10 self-hosted 러너 1회 셋업 (운영자만)
 
