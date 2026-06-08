@@ -1,11 +1,18 @@
 package chat
 
 import (
+	"context"
 	"errors"
+	"io"
+	"log/slog"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
 func TestShouldForceExternalDeliveryFailureNotice(t *testing.T) {
@@ -140,4 +147,143 @@ func errString(err error) string {
 		return "<nil>"
 	}
 	return err.Error()
+}
+
+// TestIsSubagentSession locks in the discriminator that keeps sub-agent
+// completions from raising false channel-delivery alarms. A child session
+// (SpawnedBy set) has no user-facing channel — the parent reads its result via
+// session.LastOutput — so a nil replyFunc at completion is the expected state,
+// not a wiring bug. Without this guard every sub-agent completion logged
+// Error + broadcast chat.delivery_failed (reason=reply_func_nil) as noise.
+func TestIsSubagentSession(t *testing.T) {
+	sm := session.NewManager()
+
+	// Parent / main session: no SpawnedBy → not a sub-agent.
+	sm.Create("client:main", session.KindDirect)
+
+	// Child / sub-agent session: SpawnedBy points at the parent. Create stores
+	// (and returns) a copy, so the SpawnedBy mutation must be persisted via Set.
+	const childKey = "client:main:math-test:1780851684916"
+	child := sm.Create(childKey, session.KindDirect)
+	child.SpawnedBy = "client:main"
+	if err := sm.Set(child); err != nil {
+		t.Fatalf("Set(child) failed: %v", err)
+	}
+
+	deps := runDeps{sessions: sm}
+
+	if !isSubagentSession(deps, childKey) {
+		t.Errorf("isSubagentSession(child) = false, want true (SpawnedBy=%q)", child.SpawnedBy)
+	}
+	if isSubagentSession(deps, "client:main") {
+		t.Error("isSubagentSession(main) = true, want false (no SpawnedBy)")
+	}
+	if isSubagentSession(deps, "client:does-not-exist") {
+		t.Error("isSubagentSession(unknown key) = true, want false")
+	}
+	if isSubagentSession(runDeps{sessions: nil}, childKey) {
+		t.Error("isSubagentSession(nil manager) = true, want false")
+	}
+}
+
+// TestHandleRunSuccess_SubagentReplyFuncNil drives the real handleRunSuccess to
+// prove the end-to-end behavior: a sub-agent (child) session that completes with
+// reply text but a nil channel replyFunc must NOT raise the operator-facing
+// chat.delivery_failed (reason=reply_func_nil) alarm — that nil is the expected
+// state for children (the parent reads their output via session.LastOutput). A
+// real top-level session in the same shape MUST still escalate, so the
+// suppression stays scoped to sub-agents and never hides an actual wiring bug.
+func TestHandleRunSuccess_SubagentReplyFuncNil(t *testing.T) {
+	parseDirectives := func(raw, _, _ string) chatport.ReplyDirectives {
+		return chatport.ReplyDirectives{Text: raw}
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	// run executes one completed turn through handleRunSuccess and returns every
+	// event name broadcast during it. replyFunc, transcript, tools, broadcaster,
+	// wikiStore, jobTracker, hindsightClient are all left nil — exactly the
+	// native-only production shape where no channel replyFunc is registered.
+	run := func(t *testing.T, sessionKey, spawnedBy string) []string {
+		t.Helper()
+		sm := session.NewManager()
+		s := sm.Create(sessionKey, session.KindDirect)
+		if spawnedBy != "" {
+			s.SpawnedBy = spawnedBy
+			if err := sm.Set(s); err != nil {
+				t.Fatalf("Set(%q): %v", sessionKey, err)
+			}
+		}
+
+		var mu sync.Mutex
+		var events []string
+		broadcast := func(event string, _ any) (int, []error) {
+			mu.Lock()
+			events = append(events, event)
+			mu.Unlock()
+			return 0, nil
+		}
+
+		deps := runDeps{
+			sessions:  sm,
+			broadcast: broadcast,
+			logger:    logger,
+			chatport:  chatportAdapters{ParseReplyDirectives: parseDirectives},
+		}
+		params := RunParams{
+			SessionKey:  sessionKey,
+			ClientRunID: "run-test",
+			Delivery:    deliveryFromSessionKey(sessionKey),
+		}
+		result := &agent.AgentResult{
+			Text:       "사칙연산 결과는 4입니다.",
+			AllText:    "사칙연산 결과는 4입니다.",
+			StopReason: "end_turn",
+			Turns:      1,
+		}
+		handleRunSuccess(context.Background(), params, deps, nil, logger, result, time.Now().UnixMilli(), nil)
+
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), events...)
+	}
+
+	hasEvent := func(events []string, name string) bool {
+		for _, e := range events {
+			if e == name {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Proper lineage: spawn captured a non-empty parent key, so the child key is
+	// "client:main:label:ts", Delivery.Channel="client", and SpawnedBy is set.
+	// The SpawnedBy signal must suppress the alarm.
+	t.Run("subagent with SpawnedBy suppresses delivery_failed", func(t *testing.T) {
+		events := run(t, "client:main:math-test:1780851684916", "client:main")
+		if hasEvent(events, "chat.delivery_failed") {
+			t.Errorf("sub-agent completion emitted chat.delivery_failed (false alarm); events=%v", events)
+		}
+	})
+
+	// Broken lineage (the shape actually observed live): the spawn captured an
+	// empty parent key, so the child key is ":label:ts", SpawnedBy is empty, and
+	// deliveryFromSessionKey yields an empty Delivery.Channel. The empty-channel
+	// signal must suppress the alarm even though SpawnedBy is empty.
+	t.Run("channel-less subagent (empty parent key) suppresses delivery_failed", func(t *testing.T) {
+		events := run(t, ":livetest:1780852962773", "")
+		if hasEvent(events, "chat.delivery_failed") {
+			t.Errorf("channel-less sub-agent completion emitted chat.delivery_failed (false alarm); events=%v", events)
+		}
+	})
+
+	// A real top-level channel session (non-empty channel, no SpawnedBy) with a
+	// nil replyFunc IS a wiring bug and must still escalate — the suppression
+	// must not hide genuine delivery failures.
+	t.Run("top-level channel session still escalates", func(t *testing.T) {
+		events := run(t, "client:main", "")
+		if !hasEvent(events, "chat.delivery_failed") {
+			t.Errorf("top-level session with nil replyFunc did NOT emit chat.delivery_failed; a real wiring bug must still escalate; events=%v", events)
+		}
+	})
 }
