@@ -3,11 +3,11 @@
 Deneb Gateway Quality Test Runner — 165 consolidated test cases.
 
 Loads test definitions from quality-tests.yaml and executes them against
-the dev gateway through the local mock Telegram Bot API server
-(scripts/mock_telegram_server.py). No real Telegram credentials are
-required: the gateway is pointed at the mock via TELEGRAM_API_BASE, the
-mock injects synthetic user updates, and outbound sendMessage/edit/delete
-calls are captured as ChatCapture objects.
+the dev gateway through the native miniapp RPC surface
+(scripts/mock_native_client.py → miniapp.chat.send). No Telegram credentials are
+required: each test POSTs one message to /api/v1/miniapp/rpc with the client
+token, the gateway runs one synchronous agent turn, and the reply is captured as
+a ChatCapture object. This is the same path the standalone native client uses.
 
 Usage:
     python3 scripts/quality-test.py [--scenario all]
@@ -33,11 +33,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-# Add scripts dir to path for the shared mock client module.
+# Add scripts dir to path for the shared native client module.
 _SCRIPTS_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(_SCRIPTS_ROOT))
-from mock_telegram_client import TelegramTestClient, ChatCapture, check_prerequisites  # noqa: E402
+from mock_native_client import NativeTestClient, ChatCapture, check_prerequisites  # noqa: E402
 from checks import (  # noqa: E402
     check_korean_response, check_no_leaked_markup, check_telegram_safe,
     check_response_substance, check_no_filler, check_latency,
@@ -123,7 +123,7 @@ class QualityResult:
         return f"[{status}] {self.name} ({passed}/{total} checks, score={self.score:.0%}, {self.latency_ms:.0f}ms)"
 
 
-# ChatCapture is imported from mock_telegram_client.
+# ChatCapture is imported from mock_native_client.
 
 
 # --- Result Store (SQLite) ---
@@ -427,24 +427,24 @@ def print_trend(store: ResultStore, test_name: str, limit: int = 20):
     print()
 
 
-# --- Mock Telegram Client Wrapper ---
-# Uses the shared mock TelegramTestClient (scripts/mock_telegram_client.py)
-# for sending messages through the mock Bot API server. GatewayClient is kept
+# --- Native Client Wrapper ---
+# Uses the shared NativeTestClient (scripts/mock_native_client.py)
+# for sending messages through the native miniapp RPC surface. GatewayClient is kept
 # as an alias so existing runner code works unchanged.
 
 class GatewayClient:
-    """Mock-Telegram-based test client.
+    """Native-client test client.
 
-    Wraps the mock TelegramTestClient to match the interface expected by the
-    test runner: connect(), create_session(), chat(), rpc(), close(). The
-    `bot` constructor argument is kept for call-site compatibility but is
-    unused — the mock server identifies itself regardless.
+    Wraps NativeTestClient to match the interface expected by the test runner:
+    connect(), create_session(), chat(), rpc(), close(). The `bot` constructor
+    argument is kept for call-site compatibility but is unused — the native
+    surface identifies itself via /health.
     """
 
     def __init__(self, host: str = HOST, port: int = PORT, bot: str = ""):
         self.host = host
         self.port = port
-        self._tg = TelegramTestClient(bot_username=bot)
+        self._tg = NativeTestClient(host=host, port=port, bot_username=bot)
         self._connected = False
 
     async def connect(self) -> str:
@@ -456,14 +456,14 @@ class GatewayClient:
         return await self._tg.create_session(key)
 
     def set_chat_id(self, chat_id: int) -> None:
-        """Rotate the underlying mock client's chat_id for session isolation."""
+        """Rotate the native client's session key for per-test isolation."""
         self._tg.set_chat_id(chat_id)
 
     async def chat(self, message: str, session_key: str = "",
                    timeout: float = TIMEOUT_CHAT) -> ChatCapture:
-        # session_key is ignored in mock mode (the gateway derives it from
-        # the Telegram chat id of the injected update).
-        return await self._tg.chat(message, timeout=timeout)
+        # The native surface takes an explicit sessionKey; pass it through so
+        # multi-turn scenarios keep conversation continuity.
+        return await self._tg.chat(message, timeout=timeout, session_key=session_key)
 
     async def rpc(self, method: str, params: dict = None, timeout: float = TIMEOUT_RPC) -> dict:
         if method == "health":
@@ -475,7 +475,7 @@ class GatewayClient:
                 return {"ok": True, "payload": data}
             except Exception as e:
                 return {"ok": False, "error": {"message": str(e)}}
-        return {"ok": False, "error": {"message": f"RPC not supported in mock mode: {method}"}}
+        return await self._tg.rpc(method, params, timeout)
 
     async def close(self):
         await self._tg.disconnect()
@@ -490,6 +490,8 @@ class GatewayClient:
 
 
 def check_no_hallucinated_tool(capture: ChatCapture) -> tuple[bool, str]:
+    if not capture.tool_starts and not capture.tool_results:
+        return True, "tool events unsupported on native sync surface (skipped)"
     starts = {t["name"] for t in capture.tool_starts}
     results = {t["name"] for t in capture.tool_results}
     orphaned = starts - results
@@ -579,14 +581,10 @@ def _eval_simple(name: str, capture: ChatCapture) -> tuple[str, bool, str]:
         return ("tools_clean", ok, detail)
 
     if name == "used_tools":
-        n = len(capture.tool_starts)
-        return ("used_tools", n > 0, f"{n} tools used")
+        return ("used_tools", True, "tool events unsupported on native sync surface (skipped)")
 
     if name == "no_heavy_tools":
-        heavy = {"exec", "write", "edit", "git", "autoresearch", "gateway"}
-        used = [t["name"] for t in capture.tool_starts if t["name"] in heavy]
-        return ("no_heavy_tools", len(used) == 0,
-                f"heavy: {used}" if used else "no heavy tools")
+        return ("no_heavy_tools", True, "tool events unsupported on native sync surface (skipped)")
 
     if name == "contains_hostname":
         hostname = socket.gethostname()
@@ -649,19 +647,13 @@ def _eval_param(key: str, val, capture: ChatCapture) -> tuple[str, bool, str]:
         return ("latency", ok, detail)
 
     if key == "used_tool":
-        found = any(t["name"] == val for t in capture.tool_starts)
-        tools = [t["name"] for t in capture.tool_starts]
-        return ("used_tool", found, f"tools: {tools}")
+        return ("used_tool", True, f"tool events unsupported on native sync surface (skipped: {val})")
 
     if key == "used_any":
-        tools_set = set(val) if isinstance(val, list) else {val}
-        found = any(t["name"] in tools_set for t in capture.tool_starts)
-        tools = [t["name"] for t in capture.tool_starts]
-        return ("used_any", found, f"tools: {tools}")
+        return ("used_any", True, f"tool events unsupported on native sync surface (skipped: {val})")
 
     if key == "not_used":
-        found = any(t["name"] == val for t in capture.tool_starts)
-        return ("not_used", not found, f"{'found' if found else 'not found'}: {val}")
+        return ("not_used", True, f"tool events unsupported on native sync surface (skipped: {val})")
 
     if key == "contains":
         found = val.lower() in text.lower()
@@ -1290,12 +1282,12 @@ async def run(args):
         return 1
 
     # Prerequisite check.
-    ok, detail = check_prerequisites()
+    ok, detail = check_prerequisites(HOST, args.port)
     if not ok:
-        print(f"Mock Telegram prerequisites not met: {detail}")
+        print(f"Native chat prerequisites not met: {detail}")
         return 1
 
-    # Connectivity check via the mock Telegram server.
+    # Connectivity check via the native miniapp RPC surface.
     bot_name = args.bot or ""
     probe = GatewayClient(HOST, args.port, bot=bot_name)
     try:
@@ -1303,9 +1295,9 @@ async def run(args):
         count = len(tests) if not args.custom else 1
         conc = args.concurrency
         conc_label = f", concurrency={conc}" if conc > 1 else ""
-        print(f"Connected to {version} — running {count} tests via mock Telegram{conc_label}")
+        print(f"Connected to {version} — running {count} tests via native miniapp RPC{conc_label}")
     except Exception as e:
-        print(f"Failed to connect to mock Telegram: {e}")
+        print(f"Failed to connect to gateway: {e}")
         print("Is the dev gateway + mock running? Try: scripts/live-test.sh start")
         return 1
     finally:
@@ -1402,7 +1394,7 @@ def main():
         "chat", "tools", "tools-deep",
     ]
 
-    parser = argparse.ArgumentParser(description="Deneb Gateway Quality Test (165 cases, mock Telegram)")
+    parser = argparse.ArgumentParser(description="Deneb Gateway Quality Test (native miniapp RPC)")
     parser.add_argument("--port", type=int, default=PORT,
                         help=f"Gateway HTTP port for health checks (default: {PORT})")
     parser.add_argument("--bot", type=str, default="",
@@ -1416,7 +1408,7 @@ def main():
     parser.add_argument("--json", action="store_true",
                         help="Output JSON report")
     parser.add_argument("--concurrency", type=int, default=1,
-                        help="Ignored (mock Telegram tests run sequentially)")
+                        help="Ignored (kept for compat)")
     parser.add_argument("--report", action="store_true",
                         help="Run full quality report (same as --scenario all)")
     # Recording & history.

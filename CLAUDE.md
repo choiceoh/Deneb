@@ -145,13 +145,13 @@ scripts/dev/live-test.sh logs-errors  # 숨은 에러 확인
 scripts/dev/live-test.sh stop       # 정리
 ```
 
-> **⚠️ 채팅 기반 라이브 테스트(`chat`/`quality`/`chat-check`)는 현재 동작하지 않는다.**
-> 이 경로는 목 텔레그램 서버(`scripts/mock_telegram_server.py`)에 메시지를 주입하고
-> 게이트웨이의 Telegram 플러그인이 `TELEGRAM_API_BASE`로 폴링하는 구조였다.
-> PR #1922로 Telegram 플러그인이 제거되어 게이트웨이는 더 이상 `TELEGRAM_API_BASE`를
-> 읽지 않으므로 주입된 메시지가 파이프라인에 도달하지 않는다. 네이티브 클라이언트
-> 주입 경로(`miniapp.*` RPC)로의 재작성이 필요하다 (후속 과제). 그 전까지는
-> `make check` + `smoke` + `logs-errors`로 검증한다.
+> **✅ 채팅 기반 라이브 테스트(`chat`/`quality`/`chat-check`/`multi-chat`)는 네이티브 주입 경로로 복구됨.**
+> PR #1922로 텔레그램 플러그인이 제거되며 목 텔레그램 주입이 끊겼던 것을, 실제
+> 네이티브 클라 표면(`POST /api/v1/miniapp/rpc` → `miniapp.chat.send`)으로 재작성했다
+> (`scripts/mock_native_client.py`). dev 게이트웨이는 시작 시 state dir 에 `client_token`
+> 을 자동 생성해 인증을 활성화한다. **동기 RPC**라 토큰/도구 스트리밍 이벤트는 관측되지
+> 않으므로(per-tool `--expect-tool` 은 skip 처리) 콘텐츠 품질(한국어·충실도·누출·레이턴시)
+> 위주로 검증한다. 실제 LLM 백엔드가 필요하므로 풀 검증은 DGX 호스트에서 수행.
 
 - **로그에서 에러/경고 없는 것까지 확인**해야 진짜 완료.
 - 포트: dev=18790, iterate=18791, prod=18789 (프로덕션 영향 없음).

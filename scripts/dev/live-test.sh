@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # Live test helper for Claude Code development workflow.
 #
-# All chat/quality/reproduction tests run against a local mock Telegram Bot
-# API server (scripts/mock_telegram_server.py). The dev gateway's Telegram
-# plugin is pointed at the mock via TELEGRAM_API_BASE so the full chat
-# pipeline runs unchanged — polling, sending, editing — without touching
-# api.telegram.org or needing real bot credentials.
+# Chat/quality/reproduction tests inject through the real native-client surface
+# (POST /api/v1/miniapp/rpc → miniapp.chat.send) via scripts/mock_native_client.py.
+# This is the production injection path the daily-driver app uses; it replaced the
+# mock-Telegram path that PR #1922 broke when the Telegram plugin was removed.
+# The native surface runs one synchronous agent turn and returns the reply, so
+# content quality (Korean, substance, leak-free, latency) is exercised end-to-end;
+# per-token/per-tool streaming is not observable on this surface (see
+# mock_native_client.py). The mock Telegram server is still started for legacy
+# health checks but is no longer used to drive chat.
 #
 # Usage:
 #   scripts/live-test.sh build              Build gateway from current tree
@@ -15,8 +19,8 @@
 #   scripts/live-test.sh status             Check if dev gateway is running
 #   scripts/live-test.sh health             Hit /health endpoint
 #   scripts/live-test.sh smoke              Smoke test (health + ready)
-#   scripts/live-test.sh chat MESSAGE       Send chat via mock Telegram, wait for response
-#   scripts/live-test.sh quality [SCENARIO]  Run quality tests (165 cases, mock Telegram)
+#   scripts/live-test.sh chat MESSAGE       Send chat via native miniapp RPC, wait for response
+#   scripts/live-test.sh quality [SCENARIO]  Run quality tests (native miniapp RPC)
 #   scripts/live-test.sh quality-custom MSG Quality test with custom message
 #   scripts/live-test.sh quality-list       List all available quality tests
 #   scripts/live-test.sh quality-history    Show past quality test runs
@@ -35,7 +39,7 @@
 #   scripts/live-test.sh logs-errors        Show only error/warning lines from logs
 #   scripts/live-test.sh logs-since SECS    Show logs from last N seconds
 #
-# Reproduction (AI agent reproduces user-reported symptoms via mock Telegram):
+# Reproduction (AI agent reproduces user-reported symptoms via native miniapp RPC):
 #   scripts/live-test.sh chat-check MSG [--expect PAT] [--expect-tool TOOL] ...
 #   scripts/live-test.sh multi-chat MSG1 MSG2 MSG3 [--expect-context PAT]
 #   scripts/live-test.sh tool-check TOOL_NAME MSG
@@ -70,6 +74,14 @@ DENEB_VERSION=$(devlib_version)
 MOCK_TELEGRAM_TOKEN="mock-dev-token"
 MOCK_TELEGRAM_PORT="${DENEB_DEV_MOCK_TELEGRAM_PORT:-$DEVLIB_MOCK_DEFAULT_PORT}"
 export DENEB_DEV_MOCK_TELEGRAM_URL="${DENEB_DEV_MOCK_TELEGRAM_URL:-http://$DEV_HOST:$MOCK_TELEGRAM_PORT}"
+
+# Chat/quality tests inject through the real native-client surface
+# (POST /api/v1/miniapp/rpc → miniapp.chat.send) instead of the retired
+# mock-Telegram path. The Python clients (scripts/mock_native_client.py) read
+# these to reach the dev gateway and authenticate with the client token that
+# devlib_start_gateway generates in the dev state dir.
+export DENEB_LIVETEST_GW_URL="http://$DEV_HOST:$DEV_PORT"
+export DENEB_LIVETEST_STATE_DIR="$DEV_STATE_DIR"
 
 cmd_build() {
   echo "==> Building gateway from $(basename "$REPO_DIR")..."
@@ -298,7 +310,7 @@ cmd_parity() {
   fi
 }
 
-# Send a chat message via the mock Telegram and show the response.
+# Send a chat message via the native miniapp RPC surface and show the response.
 # Usage: scripts/live-test.sh chat "hello, what can you do?"
 cmd_chat() {
   local message="${1:-}"
@@ -308,26 +320,29 @@ cmd_chat() {
   fi
 
   # Pass the message + scripts dir via env to avoid shell-quoting footguns.
-  # The scripts/ module root is needed for the mock_telegram_client import.
+  # The scripts/ module root is needed for the mock_native_client import.
   MOCK_MESSAGE="$message" \
   DENEB_SCRIPTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)" \
+  DENEB_LIVETEST_PORT="$DEV_PORT" DENEB_LIVETEST_HOST="$DEV_HOST" \
   python3 - <<'PYEOF'
 import asyncio, os, sys
 
 scripts_dir = os.environ["DENEB_SCRIPTS_DIR"]
 sys.path.insert(0, scripts_dir)
 
-from mock_telegram_client import TelegramTestClient, check_prerequisites
+from mock_native_client import NativeTestClient, check_prerequisites
 
 async def main():
-    ok, detail = check_prerequisites()
+    host = os.environ.get("DENEB_LIVETEST_HOST", "127.0.0.1")
+    port = int(os.environ.get("DENEB_LIVETEST_PORT", "18790"))
+    ok, detail = check_prerequisites(host, port)
     if not ok:
-        print(f"Mock Telegram prerequisites not met: {detail}")
+        print(f"Native chat prerequisites not met: {detail}")
         sys.exit(1)
 
-    client = TelegramTestClient()
+    client = NativeTestClient(host=host, port=port)
     bot = await client.connect()
-    print(f"Connected to {bot} (mock)")
+    print(f"Connected to {bot} (native miniapp RPC)")
     msg = os.environ.get("MOCK_MESSAGE", "")
     print(f"==> Sending: {msg[:80]}")
 
@@ -338,8 +353,7 @@ async def main():
         print()
         print(capture.reply_text[:2000])
         print()
-        print(f"==> Done ({capture.latency_ms:.0f}ms, "
-              f"{len(capture.draft_edits)} edits)")
+        print(f"==> Done ({capture.latency_ms:.0f}ms)")
     elif capture.errors:
         print(f"==> FAILED: {capture.errors}")
     else:
@@ -555,7 +569,7 @@ case "${1:-help}" in
   logs-errors) shift; cmd_logs_errors "$@" ;;
   logs-since)  shift; cmd_logs_since "$@" ;;
 
-  # --- Reproduction commands (delegate to reproduce.py via Telegram) ---
+  # --- Reproduction commands (delegate to reproduce.py via native miniapp RPC) ---
   chat-check)  shift; python3 "$SCRIPT_DIR/reproduce.py" --port "$DEV_PORT" chat-check "$@" ;;
   multi-chat)  shift; python3 "$SCRIPT_DIR/reproduce.py" --port "$DEV_PORT" multi-chat "$@" ;;
   tool-check)  shift; python3 "$SCRIPT_DIR/reproduce.py" --port "$DEV_PORT" tool-check "$@" ;;
@@ -581,10 +595,11 @@ case "${1:-help}" in
     MSG="${1:?Usage: bench-judge MESSAGE}"
     shift || true
     echo "==> LLM-as-Judge evaluation"
-    # Get response via the mock Telegram, then score with LLM judge.
+    # Get response via the native miniapp RPC, then score with LLM judge.
     MOCK_MESSAGE="$MSG" \
     DENEB_SCRIPTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)" \
     DENEB_DEV_SCRIPT_DIR="$SCRIPT_DIR" \
+    DENEB_LIVETEST_PORT="$DEV_PORT" DENEB_LIVETEST_HOST="$DEV_HOST" \
     python3 - <<'PYEOF'
 import asyncio, importlib.util, os, sys
 
@@ -592,14 +607,16 @@ scripts_dir = os.environ["DENEB_SCRIPTS_DIR"]
 dev_dir = os.environ["DENEB_DEV_SCRIPT_DIR"]
 sys.path.insert(0, scripts_dir)
 sys.path.insert(0, dev_dir)
-from mock_telegram_client import TelegramTestClient, check_prerequisites
+from mock_native_client import NativeTestClient, check_prerequisites
 
 async def main():
-    ok, d = check_prerequisites()
+    host = os.environ.get("DENEB_LIVETEST_HOST", "127.0.0.1")
+    port = int(os.environ.get("DENEB_LIVETEST_PORT", "18790"))
+    ok, d = check_prerequisites(host, port)
     if not ok:
         print(f"ERROR: {d}")
         sys.exit(1)
-    c = TelegramTestClient()
+    c = NativeTestClient(host=host, port=port)
     await c.connect()
     msg = os.environ.get("MOCK_MESSAGE", "")
     cap = await c.chat(msg)

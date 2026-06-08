@@ -156,6 +156,27 @@ devlib_seed_client_token() {
   return 0
 }
 
+# Ensure {state_dir}/client_token exists for native-RPC live tests. Prefer
+# devlib_seed_client_token's production-token mirror above; only generate a
+# dev-local secret when there is still no token in the isolated state dir.
+#   $1 — dev state dir
+devlib_ensure_client_token() {
+  local state_dir="$1"
+  local token_file="$state_dir/client_token"
+  if [[ -s "$token_file" ]]; then
+    return 0
+  fi
+  mkdir -p "$state_dir"
+  local token=""
+  if command -v openssl >/dev/null 2>&1; then
+    token="$(openssl rand -hex 32)"
+  else
+    token="$(head -c32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  fi
+  printf '%s\n' "$token" > "$token_file"
+  chmod 600 "$token_file" 2>/dev/null || true
+}
+
 # Start gateway process in background.
 # Sets DEVLIB_PID to the started process PID.
 #   $1 — binary path
@@ -175,6 +196,12 @@ devlib_start_gateway() {
 
   mkdir -p "$state_dir"
   devlib_seed_client_token "$state_dir"
+
+  # Enable the native-client (miniapp.*) auth path so chat/quality tests can
+  # inject through POST /api/v1/miniapp/rpc even when production has not yet
+  # generated ~/.deneb/client_token. Idempotent: keep an existing token across
+  # restarts and prefer devlib_seed_client_token's production-token mirror.
+  devlib_ensure_client_token "$state_dir"
 
   local mock_url="${DENEB_DEV_MOCK_TELEGRAM_URL:-http://127.0.0.1:${DEVLIB_MOCK_DEFAULT_PORT}}"
   # Plugin appends the bot token to TELEGRAM_API_BASE, so the base must end

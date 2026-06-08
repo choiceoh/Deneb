@@ -12,18 +12,24 @@ globs: ["gateway-go/**/*.go", "proto/**/*.proto"]
 > UI**를 실제 앱으로(스크린샷+조작) 검증하려면 `.claude/rules/native-live-app.md`
 > (`scripts/dev/native-app.sh`)를 본다.
 
-> **⚠️ 현재 채팅 기반 라이브 테스트(`chat`/`quality`/`chat-check`/`multi-chat`)는 동작하지 않는다.**
-> 이 경로는 목 텔레그램 Bot API 서버(`scripts/mock_telegram_server.py`)에 가짜 업데이트를
-> 주입하고 게이트웨이의 Telegram 플러그인이 `TELEGRAM_API_BASE`로 폴링·전송하는 구조였다.
-> **PR #1922로 Telegram 플러그인이 제거**되면서 게이트웨이는 더 이상 `TELEGRAM_API_BASE`를
-> 읽지 않으므로, 주입된 메시지가 chat pipeline에 도달하지 못한다. 아래 목 텔레그램 관련
-> 섹션·명령(`chat`/`quality`/`reproduce`)은 네이티브 클라이언트(`miniapp.*` RPC) 주입
-> 경로로 **재작성 대기 중인 레거시**다.
+> **✅ 채팅 기반 라이브 테스트(`chat`/`quality`/`chat-check`/`multi-chat`)는 네이티브 주입 경로로 복구됨.**
+> 목 텔레그램 주입(`scripts/mock_telegram_server.py`)이 PR #1922(Telegram 플러그인 제거)로
+> 끊겼던 것을, **실제 네이티브 클라 표면**으로 재작성했다:
+> `POST /api/v1/miniapp/rpc` → `miniapp.chat.send` (`scripts/mock_native_client.py`,
+> `NativeTestClient`). dev 게이트웨이는 시작 시 state dir 에 `client_token` 을 자동 생성
+> (`lib-server.sh:devlib_ensure_client_token`)하고, live-test.sh 가 `DENEB_LIVETEST_GW_URL`
+> /`DENEB_LIVETEST_STATE_DIR` 를 export 해 테스트가 같은 토큰으로 인증한다.
 >
-> **그 전까지의 실효 검증:** `make check` (build + `-race` 단위 테스트) +
-> `scripts/dev/live-test.sh restart && scripts/dev/live-test.sh smoke` (HTTP `/health` — 동작함) +
-> `scripts/dev/live-test.sh logs-errors`. 채팅 품질 자동 검증은 네이티브 주입 경로가
-> 생길 때까지 일시 중단.
+> **동기 RPC 의 한계:** `miniapp.chat.send` 는 한 turn 의 최종 응답만 반환하므로(토큰
+> 스트림·per-tool 이벤트 없음), 콘텐츠 품질(한국어·충실도·누출·레이턴시)은 end-to-end
+> 로 검증되지만 per-tool 검증(`--expect-tool`, `tool-check`)은 관측 불가라 **skip(`~`)**
+> 처리된다. first-token latency 는 전체 turn latency 와 같다. 아래 목 텔레그램 관련
+> 레거시 설명(목 서버 주입/폴링)은 더 이상 적용되지 않는다 — 전송 계층만 바뀌었고
+> 품질 체크/스코어링/저장은 그대로다.
+>
+> **검증 스택:** `make check` (build + `-race`) + `live-test.sh restart && smoke`
+> (`/health`) + `quality`/`chat-check` (네이티브 주입) + `logs-errors`. 풀 품질 스코어링은
+> 실제 LLM 백엔드가 필요하므로 DGX 호스트에서 수행.
 
 ## 도구
 
