@@ -196,4 +196,45 @@ class BlockParsingTest {
         val item = (parseMarkdown("1. [x] keep").blocks.single() as OrderedList).items.single()
         assertEquals(null, item.checked)
     }
+
+    @Test
+    fun `unicode bullet is a bullet list`() {
+        val list = parseMarkdown("• 첫째\n• 둘째").blocks.single() as BulletList
+        assertEquals(2, list.items.size)
+        assertEquals("첫째", ((list.items[0].children.single() as Paragraph).inlines.single() as Text).value)
+    }
+
+    @Test
+    fun `triangle bullet is a bullet list`() {
+        val list = parseMarkdown("▸ a\n▸ b").blocks.single() as BulletList
+        assertEquals(2, list.items.size)
+    }
+
+    @Test
+    fun `box-drawing runs are horizontal rules`() {
+        assertEquals(HorizontalRule, parseMarkdown("━━━━━━").blocks.single())
+        assertEquals(HorizontalRule, parseMarkdown("──────").blocks.single())
+        assertEquals(HorizontalRule, parseMarkdown("══════").blocks.single())
+    }
+
+    @Test
+    fun `mixed box-drawing tree art is not a horizontal rule`() {
+        // "├─ foo" is tree art, not a separator — must stay text, not collapse to an HR.
+        assertTrue(parseMarkdown("├─ foo").blocks.single() is Paragraph)
+    }
+
+    @Test
+    fun `circled numbers are an ordered list`() {
+        val list = parseMarkdown("① 첫째\n② 둘째\n③ 셋째").blocks.single() as OrderedList
+        assertEquals(1, list.start)
+        assertEquals(3, list.items.size)
+        assertEquals("첫째", ((list.items[0].children.single() as Paragraph).inlines.single() as Text).value)
+    }
+
+    @Test
+    fun `circled number with separator starts at its value`() {
+        val list = parseMarkdown("③. 셋\n④. 넷").blocks.single() as OrderedList
+        assertEquals(3, list.start)
+        assertEquals(2, list.items.size)
+    }
 }

@@ -33,12 +33,20 @@ internal object BlockScanner {
     private val ATX_HEADING_REGEX = Regex("""^\s{0,3}(#{1,6})(?:\s+(.*?))?\s*#*\s*$""")
     private val SETEXT_H1_REGEX = Regex("""^\s{0,3}=+\s*$""")
     private val SETEXT_H2_REGEX = Regex("""^\s{0,3}-+\s*$""")
+    // ASCII rules plus the box-drawing runs LLMs emit as separators (━━━ / ─── / ═══ —
+    // 1400+ in real logs). Same-char runs only, so mixed tree art like ┌─┐ never matches.
     private val HR_REGEX = Regex(
-        """^\s{0,3}(?:-(?:[ \t]*-){2,}|\*(?:[ \t]*\*){2,}|_(?:[ \t]*_){2,})\s*$""",
+        """^\s{0,3}(?:-(?:[ \t]*-){2,}|\*(?:[ \t]*\*){2,}|_(?:[ \t]*_){2,}|─{3,}|━{3,}|═{3,})\s*$""",
     )
     private val BLOCKQUOTE_REGEX = Regex("""^\s{0,3}>\s?(.*)$""")
-    private val BULLET_REGEX = Regex("""^(\s*)([-*+])(\s+)(.*)$""")
-    private val ORDERED_REGEX = Regex("""^(\s*)(\d{1,9})([.)])(\s+)(.*)$""")
+    // ASCII bullets plus the Unicode bullets LLMs emit directly (• ▸ ◦ ‣ — • alone is 1400+
+    // in real logs); the renderer always draws "•", so they look the same but now get real
+    // list structure (indent, spacing, nesting).
+    private val BULLET_REGEX = Regex("""^(\s*)([-*+•▸◦‣])(\s+)(.*)$""")
+    // Arabic "1." / "1)" plus circled numbers ①. The marker is captured whole in group 2, and
+    // the separator is optional for circled forms so "① foo" and "①. foo" both list. Groups now
+    // match BULLET_REGEX (1=indent, 2=marker, 3=spacing, 4=content). Circled renders as "N.".
+    private val ORDERED_REGEX = Regex("""^(\s*)(\d{1,9}[.)]|[①-⑳][.)]?)(\s+)(.*)$""")
     private val TABLE_SEPARATOR_REGEX = Regex("""^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$""")
 
     private const val MAX_BLOCK_DEPTH = 32
@@ -318,6 +326,14 @@ internal object BlockScanner {
 
     private fun isBlockquoteOpener(line: String): Boolean = BLOCKQUOTE_REGEX.matchEntire(line) != null
 
+    // Start number for an ordered marker: "12." → 12, "①"/"③." → 1/3. Circled numerals map to
+    // their value so an "① ② ③" list renders as 1. 2. 3.
+    private fun parseOrderedStart(marker: String): Int {
+        val c = marker[0]
+        if (c in '①'..'⑳') return c - '①' + 1
+        return marker.dropLast(1).toIntOrNull() ?: 1
+    }
+
     private fun parseList(
         lines: List<String>,
         start: Int,
@@ -327,7 +343,7 @@ internal object BlockScanner {
     ): Pair<BlockNode, Int> {
         val firstMatch = if (isOrdered) ORDERED_REGEX.matchEntire(lines[start])!! else BULLET_REGEX.matchEntire(lines[start])!!
         val listIndent = firstMatch.groupValues[1].length
-        val startNum = if (isOrdered) firstMatch.groupValues[2].toIntOrNull() ?: 1 else 1
+        val startNum = if (isOrdered) parseOrderedStart(firstMatch.groupValues[2]) else 1
 
         val items = mutableListOf<ListItem>()
         var i = start
@@ -349,9 +365,11 @@ internal object BlockScanner {
             val match = if (isOrdered) ORDERED_REGEX.matchEntire(line) else BULLET_REGEX.matchEntire(line)
             if (match == null || match.groupValues[1].length != listIndent) break
 
-            val marker = if (isOrdered) match.groupValues[2] + match.groupValues[3] else match.groupValues[2]
-            val spacing = if (isOrdered) match.groupValues[4] else match.groupValues[3]
-            val content = if (isOrdered) match.groupValues[5] else match.groupValues[4]
+            // BULLET_REGEX and ORDERED_REGEX share group shape (1=indent, 2=marker, 3=spacing,
+            // 4=content), so there's no per-kind index juggling.
+            val marker = match.groupValues[2]
+            val spacing = match.groupValues[3]
+            val content = match.groupValues[4]
             val contentCol = listIndent + marker.length + spacing.length
 
             val itemLines = mutableListOf(content)
