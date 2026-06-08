@@ -220,3 +220,70 @@ func TestPreviewTrimsToFirstLine(t *testing.T) {
 		t.Fatalf("Preview = %q, want first line", got)
 	}
 }
+
+func mustAppendIfNew(t *testing.T, s *Store, it Item) bool {
+	t.Helper()
+	_, created, err := s.AppendIfNew(it)
+	if err != nil {
+		t.Fatalf("AppendIfNew: %v", err)
+	}
+	return created
+}
+
+func TestStoreDedupsConsecutiveIdentical(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	item := Item{Source: SourceProactive, Body: "동일한 분석 본문"}
+
+	if created := mustAppendIfNew(t, store, item); !created {
+		t.Fatal("first append created=false, want true")
+	}
+	if created := mustAppendIfNew(t, store, item); created {
+		t.Error("second identical append created=true, want false (dedup)")
+	}
+	_, total, err := store.List(10, false)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if total != 1 {
+		t.Errorf("total = %d, want 1 (duplicate suppressed)", total)
+	}
+}
+
+func TestStoreDistinctBodiesNotDeduped(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	mustAppendIfNew(t, store, Item{Source: SourceProactive, Body: "본문 A"})
+	mustAppendIfNew(t, store, Item{Source: SourceProactive, Body: "본문 B"})
+	if _, total, _ := store.List(10, false); total != 2 {
+		t.Errorf("total = %d, want 2 (distinct bodies)", total)
+	}
+}
+
+func TestStoreDifferentSourceNotDeduped(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	mustAppendIfNew(t, store, Item{Source: SourceProactive, Body: "같은 본문"})
+	if created := mustAppendIfNew(t, store, Item{Source: SourceCaptureImage, Body: "같은 본문"}); !created {
+		t.Error("different source with identical body deduped, want created=true")
+	}
+}
+
+func TestStoreEmptyBodyNotDeduped(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	mustAppendIfNew(t, store, Item{Source: SourceCaptureImage, Title: "공유 이미지 A"})
+	if created := mustAppendIfNew(t, store, Item{Source: SourceCaptureImage, Title: "공유 이미지 B"}); !created {
+		t.Error("empty-body cards deduped, want created=true (distinct cards must not collapse)")
+	}
+}
+
+func TestStoreProactiveEmptyTitleFallsBack(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	if _, err := store.Append(Item{Source: SourceProactive, Title: "", Body: "본문"}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	items, _, err := store.List(10, false)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(items) != 1 || items[0].Title != "업무 리포트" {
+		t.Fatalf("title = %q, want 업무 리포트", items[0].Title)
+	}
+}

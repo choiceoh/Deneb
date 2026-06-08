@@ -23,11 +23,15 @@ func (s *Server) nativeWorkFeedStore() *nativeWorkFeedStore {
 }
 
 func (s *nativeWorkFeedStore) Append(item workfeed.Item) (workfeed.Item, error) {
-	out, err := s.store.Append(item)
+	out, created, err := s.store.AppendIfNew(item)
 	if err != nil {
 		return workfeed.Item{}, err
 	}
-	s.record(nativesync.WorkFeedCreated(out))
+	// A duplicate of the most recent card writes no new item; skip the "created"
+	// sync event so the client doesn't re-receive the same card.
+	if created {
+		s.record(nativesync.WorkFeedCreated(out))
+	}
 	return out, nil
 }
 

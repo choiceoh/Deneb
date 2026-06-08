@@ -21,6 +21,23 @@ var (
 	_ gmailpoll.Notifier  = (*relayNotifier)(nil)
 )
 
+const (
+	// Work-feed card sizing for proactive reports. Title is one line in the UI;
+	// the summary shows ~2 lines.
+	workFeedTitleMaxRunes   = 40
+	workFeedSummaryMaxRunes = 180
+
+	// genericTitleMaxRunes is the length below which a title (e.g. "분석", "보고")
+	// is treated as too generic on its own; extractCardTitle then folds in the
+	// next sub-heading ("분석 — 왜 지금 왔는가").
+	genericTitleMaxRunes = 6
+
+	// contentlessSubstanceMaxRunes bounds the multi-line contentless check: a
+	// body whose substantive text (markers/emoji/whitespace removed) exceeds
+	// this is treated as a real report regardless of any "없음" fragment.
+	contentlessSubstanceMaxRunes = 120
+)
+
 // proactiveRelayDeps delivers a pre-composed body to the native client's 업무
 // chat (client:main transcript + live push) without routing through the LLM.
 //
@@ -119,10 +136,15 @@ func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
 		}
 	}
 	if d.workFeed != nil {
+		// Derive a human title + summary from the body rather than the fixed
+		// "업무 리포트" + first-line slice that leaked markdown markers ("### …",
+		// "---") into every card. An empty title falls back to the store's
+		// defaultTitle ("업무 리포트"). See workfeed_extract.go.
+		title, titleLine := extractCardTitle(content)
 		if _, err := d.workFeed.Append(workfeed.Item{
 			Source:     workfeed.SourceProactive,
-			Title:      "업무 리포트",
-			Summary:    workfeed.Preview(content, 180),
+			Title:      title,
+			Summary:    extractCardSummary(content, titleLine),
 			Body:       content,
 			SessionKey: nativeWorkSessionKey,
 		}); err != nil && d.logger != nil {
@@ -161,18 +183,39 @@ var contentlessProactiveFragments = []string{
 // and emit a chatty "없습니다" line anyway; without it each such line lands as a
 // 업무 리포트 work-feed card + push every poll cycle.
 //
-// Conservative by design: only short (≤120 rune), single-line bodies are
-// eligible, so a genuine multi-section report that happens to contain "없음"
-// (e.g. "긴급 메일 없음, 단 X 확인 필요" inside a brief) is left untouched.
+// Conservative by design. A single-line body is matched on its raw text (≤120
+// rune). A multi-line body is reduced to its substantive text (markdown
+// markers, emoji, and whitespace removed) — so a "변경 없음" wrapped in headers
+// and blank lines is still caught — but only when that substance is short
+// (≤contentlessSubstanceMaxRunes). A genuine multi-section report has long
+// substance and is left untouched even if it contains "없음" somewhere (e.g.
+// "긴급 메일 없음, 단 X 확인 필요" inside a brief).
 func isContentlessProactive(content string) bool {
 	s := strings.TrimSpace(content)
 	if s == "" {
 		return true
 	}
-	if strings.Contains(s, "\n") || len([]rune(s)) > 120 {
+	if !strings.Contains(s, "\n") {
+		if len([]rune(s)) > 120 {
+			return false
+		}
+		return containsContentlessFragment(s, false)
+	}
+	body := substantiveText(s)
+	if len([]rune(body)) > contentlessSubstanceMaxRunes {
 		return false
 	}
+	return containsContentlessFragment(body, true)
+}
+
+// containsContentlessFragment reports whether s contains any "nothing to report"
+// fragment. With collapsed, fragments are compared with their spaces removed —
+// substantiveText drops whitespace, so "변경 없음" must match as "변경없음".
+func containsContentlessFragment(s string, collapsed bool) bool {
 	for _, frag := range contentlessProactiveFragments {
+		if collapsed {
+			frag = strings.ReplaceAll(frag, " ", "")
+		}
 		if strings.Contains(s, frag) {
 			return true
 		}
