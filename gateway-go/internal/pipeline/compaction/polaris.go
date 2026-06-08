@@ -252,3 +252,20 @@ func isToolResultMessage(content json.RawMessage) bool {
 	}
 	return false
 }
+
+// snapWindowStart advances a kept-window start index past any leading
+// tool_result messages so the kept window never begins with a tool_result whose
+// matching tool_use sits in the evicted/summarized region (which would orphan
+// it). Mirrors OpenClaw excluding tool_result from compaction cut points: the
+// result is pushed into the dropped/summarized side together with its
+// already-excluded tool_use, instead of surviving as an orphan that
+// balanceToolBlocks must replace with a lossy stub. balanceToolBlocks remains
+// the backstop for the tiers this does not cover (Embedding/MMR). Returns
+// len(messages) when every message from startIdx on is a tool_result — callers
+// guard against an empty window.
+func snapWindowStart(messages []llm.Message, startIdx int) int {
+	for startIdx < len(messages) && isToolResultMessage(messages[startIdx].Content) {
+		startIdx++
+	}
+	return startIdx
+}

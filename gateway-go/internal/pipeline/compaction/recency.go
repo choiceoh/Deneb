@@ -43,6 +43,15 @@ func RecencyCompact(
 		return messages, false // keeping everything already
 	}
 
+	// Snap past leading tool_result(s): the kept window must start on a clean
+	// turn boundary, otherwise a tool_result whose tool_use was just evicted
+	// survives as an orphan (balanceToolBlocks would then replace it with a
+	// lossy stub). Pushing it into the dropped region keeps the pair together.
+	startIdx = snapWindowStart(messages, startIdx)
+	if startIdx <= 0 || startIdx >= len(messages) {
+		return messages, false
+	}
+
 	evicted := startIdx
 	remaining := messages[startIdx:]
 

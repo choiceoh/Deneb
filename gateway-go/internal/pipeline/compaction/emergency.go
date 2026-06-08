@@ -38,6 +38,10 @@ func EmergencyCompact(
 
 	// Split: recent tail is always preserved.
 	recentStart := len(messages) - recentKeep
+	// Snap past leading tool_result(s) so `recent` starts on a clean turn
+	// boundary; a result whose tool_use lands in the summarized region would
+	// otherwise orphan. The pushed-back result is summarized with its tool_use.
+	recentStart = snapWindowStart(messages, recentStart)
 	recent := messages[recentStart:]
 
 	// Evict oldest messages from the old portion until budget fits.
