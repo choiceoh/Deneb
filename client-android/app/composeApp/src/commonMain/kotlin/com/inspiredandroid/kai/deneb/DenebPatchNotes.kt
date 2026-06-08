@@ -28,6 +28,12 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.63",
+        highlights = listOf(
+            "채팅 답변에서 자주 쓰는 표기를 제대로 인식 — • 글머리표를 목록으로, ━━━/─── 구분선을 가로줄로, ①②③ 동그라미 숫자를 번호 목록으로(이전엔 밋밋한 문단으로만 보이던 것)",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.62",
         highlights = listOf(
             "달력 월 보기 고정 — 일정이 많은 날을 눌러도 위쪽 달력이 사라지지 않고, 아래 일정 목록만 따로 스크롤",
