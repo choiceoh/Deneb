@@ -136,56 +136,63 @@ fun DenebCalendarScreen(
     }
 
     DenebScreenScaffold(title = "일정", onBack = onBack, tabBar = navigationTabBar) {
-        PullToRefreshBox(
-            isRefreshing = refreshing,
-            onRefresh = { scope.launch { refreshing = true; load(); refreshing = false } },
-            modifier = Modifier.fillMaxWidth().weight(1f),
-        ) {
-            Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+        // The month grid (controls + weekday header + grid + day heading) stays
+        // pinned at the top; only the selected day's event list scrolls below it.
+        // These used to share one verticalScroll, so on a packed day the long list
+        // pushed the whole grid off the top and the calendar looked like a plain
+        // list once a day had more events than fit on screen.
+        Column(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp)) {
+            MonthControls(
+                month = visible,
+                onPrev = { showMonth(visible.prev()) },
+                onNext = { showMonth(visible.next()) },
+                onToday = { showMonth(CalMonth(today.year, today.month.ordinal + 1)) },
+                onAdd = { onAddEvent(selected) },
+            )
+            Spacer(Modifier.height(8.dp))
+            WeekdayHeader()
+            CalendarMonthGrid(
+                grid = grid,
+                today = today,
+                selected = selected,
+                bars = monthBars,
+                dots = monthDots,
+                onSelect = { date ->
+                    // Tapping a leading/trailing cell jumps to that month too.
+                    selected = date
+                    if (date.year != visible.year || date.month.ordinal + 1 != visible.month) {
+                        visible = CalMonth(date.year, date.month.ordinal + 1)
+                    }
+                },
+            )
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider(color = denebHairline())
+            Spacer(Modifier.height(8.dp))
+            Text(
+                dayHeadLabel(selected, today, dayEvents.size),
+                style = DenebType.sectionLabel,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.height(4.dp))
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { scope.launch { refreshing = true; load(); refreshing = false } },
+                modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
-                MonthControls(
-                    month = visible,
-                    onPrev = { showMonth(visible.prev()) },
-                    onNext = { showMonth(visible.next()) },
-                    onToday = { showMonth(CalMonth(today.year, today.month.ordinal + 1)) },
-                    onAdd = { onAddEvent(selected) },
-                )
-                Spacer(Modifier.height(8.dp))
-                WeekdayHeader()
-                CalendarMonthGrid(
-                    grid = grid,
-                    today = today,
-                    selected = selected,
-                    bars = monthBars,
-                    dots = monthDots,
-                    onSelect = { date ->
-                        // Tapping a leading/trailing cell jumps to that month too.
-                        selected = date
-                        if (date.year != visible.year || date.month.ordinal + 1 != visible.month) {
-                            visible = CalMonth(date.year, date.month.ordinal + 1)
-                        }
-                    },
-                )
-                Spacer(Modifier.height(12.dp))
-                HorizontalDivider(color = denebHairline())
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    dayHeadLabel(selected, today, dayEvents.size),
-                    style = DenebType.sectionLabel,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-
-                when {
-                    loadOk == null && monthEvents.isEmpty() -> DenebLoading()
-                    loadOk == false && monthEvents.isEmpty() -> DenebError(
-                        "일정을 불러오지 못했어요.",
-                        onRetry = { scope.launch { loadOk = null; load() } },
-                    )
-                    dayEvents.isEmpty() -> DenebEmpty("이 날 일정이 없어요.")
-                    else -> CalendarDayList(dayEvents, selected, tz, onOpenEvent)
+                // Own scroll state so the list scrolls under the pinned grid; a
+                // fillMaxSize column keeps pull-to-refresh working when empty.
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    when {
+                        loadOk == null && monthEvents.isEmpty() -> DenebLoading()
+                        loadOk == false && monthEvents.isEmpty() -> DenebError(
+                            "일정을 불러오지 못했어요.",
+                            onRetry = { scope.launch { loadOk = null; load() } },
+                        )
+                        dayEvents.isEmpty() -> DenebEmpty("이 날 일정이 없어요.")
+                        else -> CalendarDayList(dayEvents, selected, tz, onOpenEvent)
+                    }
+                    Spacer(Modifier.height(24.dp))
                 }
-                Spacer(Modifier.height(24.dp))
             }
         }
     }
