@@ -28,6 +28,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.59",
+        highlights = listOf(
+            "여러 날에 걸친 일정 추가 — 출장·전시·워크숍처럼 며칠짜리 일정의 시작·종료 날짜를 따로 지정",
+            "월 보기에서 여러 날 일정을 걸친 모든 날에 이어진 막대로 표시 (주가 바뀌어도 연결), 어느 날을 눌러도 그 날에 걸친 일정이 목록에 표시",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.58",
         highlights = listOf(
             "채팅 답변 줄 간격을 메신저(텔레그램·카톡) 수준으로 더 촘촘하게 — 한 화면에 더 많이 담기되 읽기 흐름은 유지",
