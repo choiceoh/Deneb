@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.data.SmsDraft
 import com.inspiredandroid.kai.data.SmsDraftStatus
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.handCursor
 import com.inspiredandroid.kai.ui.kaiAdaptiveCardBorder
 import com.inspiredandroid.kai.ui.kaiAdaptiveCardColors
@@ -83,6 +84,7 @@ private fun PendingSmsBanner(
     onSend: () -> Unit,
     onDiscard: () -> Unit,
 ) {
+    val haptics = rememberHaptics()
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -141,7 +143,7 @@ private fun PendingSmsBanner(
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        TextButton(onClick = onSend) {
+                        TextButton(onClick = { haptics.confirm(); onSend() }) {
                             Text(stringResource(Res.string.sms_draft_banner_send))
                         }
                     }

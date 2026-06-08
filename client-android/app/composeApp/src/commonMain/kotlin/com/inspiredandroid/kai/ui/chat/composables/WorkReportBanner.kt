@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.handCursor
 import com.inspiredandroid.kai.ui.kaiAdaptiveCardBorder
 import com.inspiredandroid.kai.ui.kaiAdaptiveCardColors
@@ -41,6 +42,7 @@ internal fun WorkReportBanner(
     onTap: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val haptics = rememberHaptics()
     AnimatedVisibility(
         visible = visible,
         enter = slideInVertically { -it },
@@ -51,7 +53,7 @@ internal fun WorkReportBanner(
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 4.dp)
                 .handCursor()
-                .clickable { onTap() },
+                .clickable { haptics.tap(); onTap() },
             colors = kaiAdaptiveCardColors(),
             border = kaiAdaptiveCardBorder(),
         ) {

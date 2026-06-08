@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.ui.chat.ChatActions
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.handCursor
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.ic_add
@@ -97,10 +98,11 @@ internal fun TopBar(
 // the pending item count. Null callback (e.g. previews) renders nothing.
 @Composable
 private fun WorkFeedButton(onOpenWorkFeed: (() -> Unit)?, count: Int) {
+    val haptics = rememberHaptics()
     if (onOpenWorkFeed == null) return
     IconButton(
         modifier = Modifier.handCursor(),
-        onClick = onOpenWorkFeed,
+        onClick = { haptics.tap(); onOpenWorkFeed() },
     ) {
         BadgedBox(
             badge = {
@@ -122,10 +124,11 @@ private fun WorkFeedButton(onOpenWorkFeed: (() -> Unit)?, count: Int) {
 // mirroring the left hamburger. Null callback (e.g. previews) renders nothing.
 @Composable
 private fun SessionButton(onOpenSessionDrawer: (() -> Unit)?) {
+    val haptics = rememberHaptics()
     if (onOpenSessionDrawer == null) return
     IconButton(
         modifier = Modifier.handCursor(),
-        onClick = onOpenSessionDrawer,
+        onClick = { haptics.tap(); onOpenSessionDrawer() },
     ) {
         Icon(
             imageVector = vectorResource(Res.drawable.ic_history),
@@ -139,10 +142,11 @@ private fun SessionButton(onOpenSessionDrawer: (() -> Unit)?) {
 // Null callback (e.g. previews) renders nothing so layout stays unchanged.
 @Composable
 private fun DrawerButton(onOpenDrawer: (() -> Unit)?) {
+    val haptics = rememberHaptics()
     if (onOpenDrawer == null) return
     IconButton(
         modifier = Modifier.handCursor(),
-        onClick = onOpenDrawer,
+        onClick = { haptics.tap(); onOpenDrawer() },
     ) {
         Icon(
             imageVector = Icons.Filled.Menu,
@@ -164,10 +168,12 @@ private fun LeadingButtons(
     isShellExecuting: Boolean,
     onToggleSandbox: () -> Unit,
 ) {
+    val haptics = rememberHaptics()
     if (!isChatHistoryEmpty) {
         IconButton(
             modifier = Modifier.handCursor(),
             onClick = {
+                haptics.tap()
                 if (isSpeechOutputEnabled && isSpeaking) {
                     actions.setIsSpeaking(false, "")
                     textToSpeech?.stop()
@@ -198,7 +204,7 @@ private fun LeadingButtons(
         val flashContainer = primary.copy(alpha = flashAlpha.value)
         IconToggleButton(
             checked = isSandboxOpen,
-            onCheckedChange = { onToggleSandbox() },
+            onCheckedChange = { haptics.tap(); onToggleSandbox() },
             modifier = Modifier.handCursor(),
             colors = IconButtonDefaults.iconToggleButtonColors(
                 containerColor = flashContainer,
@@ -226,9 +232,11 @@ private fun SpeechToggleButton(
     isSpeaking: Boolean,
     actions: ChatActions,
 ) {
+    val haptics = rememberHaptics()
     IconButton(
         modifier = Modifier.handCursor(),
         onClick = {
+            haptics.tap()
             if (isSpeechOutputEnabled && isSpeaking) {
                 actions.setIsSpeaking(false, "")
                 textToSpeech.stop()

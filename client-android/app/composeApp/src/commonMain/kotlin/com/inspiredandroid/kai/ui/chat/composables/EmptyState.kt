@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.ui.components.LogoAnimation
 import com.inspiredandroid.kai.ui.components.animatedGradientBorder
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.handCursor
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.start_interactive_ui
@@ -78,11 +79,12 @@ private fun AnimatedBorderButton(
     text: String,
     onClick: () -> Unit,
 ) {
+    val haptics = rememberHaptics()
     Box(
         modifier = Modifier
             .handCursor()
             .clip(RoundedCornerShape(50))
-            .clickable(onClick = onClick)
+            .clickable { haptics.tap(); onClick() }
             .animatedGradientBorder(
                 cornerRadius = 50.dp,
                 borderWidth = 3.dp,

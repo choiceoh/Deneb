@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.layout.ContentScale
 import com.inspiredandroid.kai.data.Attachment
 import com.inspiredandroid.kai.ui.components.LocalShowFullScreenImage
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -124,6 +125,7 @@ internal fun BotMessage(
     isStreaming: Boolean = false,
     attachments: ImmutableList<Attachment> = persistentListOf(),
 ) {
+    val haptics = rememberHaptics()
     val parseSource = rememberStreamingParseSource(message, isStreaming)
     // Streaming bodies change every tick (don't pollute the cache); a finished body goes
     // through the module-level cache so scrolling it back into view never re-parses.
@@ -190,7 +192,7 @@ internal fun BotMessage(
                                 .widthIn(max = 520.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .handCursor()
-                                .clickable(onClickLabel = "확대") { showFullScreen(imageBitmap) },
+                                .clickable(onClickLabel = "확대") { haptics.tap(); showFullScreen(imageBitmap) },
                             contentScale = ContentScale.FillWidth,
                         )
                     }
@@ -209,7 +211,7 @@ internal fun BotMessage(
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceContainer)
                     .handCursor()
-                    .clickable { isEditing = !isEditing },
+                    .clickable { haptics.tap(); isEditing = !isEditing },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -295,6 +297,7 @@ private fun ReasoningBlockquote(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val haptics = rememberHaptics()
     // Preview always reflects the MOST RECENT thinking segment so the user gets a
     // visual update each time a new reasoning phase starts, without expanding.
     val preview = remember(segments) {
@@ -308,7 +311,7 @@ private fun ReasoningBlockquote(
     Column(modifier = modifier) {
         Row(
             modifier = Modifier.fillMaxWidth()
-                .clickable { expanded = !expanded }
+                .clickable { haptics.tap(); expanded = !expanded }
                 .handCursor(),
             verticalAlignment = Alignment.CenterVertically,
         ) {

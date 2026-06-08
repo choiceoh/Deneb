@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.network.UiError
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.handCursor
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.ic_refresh
@@ -38,6 +39,7 @@ internal fun ErrorMessage(
     retry: () -> Unit,
 ) {
     val text = uiErrorText(error)
+    val haptics = rememberHaptics()
     Surface(
         modifier = Modifier.fillMaxWidth().padding(16.dp),
         shape = RoundedCornerShape(16.dp),
@@ -62,7 +64,7 @@ internal fun ErrorMessage(
             Spacer(Modifier.height(10.dp))
             TextButton(
                 modifier = Modifier.handCursor(),
-                onClick = retry,
+                onClick = { haptics.tap(); retry() },
             ) {
                 Icon(
                     imageVector = vectorResource(Res.drawable.ic_refresh),

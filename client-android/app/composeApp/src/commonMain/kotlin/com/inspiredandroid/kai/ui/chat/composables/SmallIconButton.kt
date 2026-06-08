@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.handCursor
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
@@ -50,8 +51,9 @@ internal fun SmallIconButton(
 
 @Composable
 private fun SmallIconButtonBox(onClick: () -> Unit, content: @Composable () -> Unit) {
+    val haptics = rememberHaptics()
     Box(
-        modifier = Modifier.size(48.dp).clip(CircleShape).handCursor().clickable { onClick() },
+        modifier = Modifier.size(48.dp).clip(CircleShape).handCursor().clickable { haptics.tap(); onClick() },
         contentAlignment = Alignment.Center,
     ) { content() }
 }
