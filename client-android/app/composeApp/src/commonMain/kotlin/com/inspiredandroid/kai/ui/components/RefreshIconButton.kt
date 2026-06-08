@@ -19,8 +19,9 @@ fun RefreshIconButton(
     contentDescription: String,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = rememberHaptics()
     IconButton(
-        onClick = onClick,
+        onClick = { haptics.tap(); onClick() },
         enabled = !isRefreshing,
         modifier = modifier.handCursor(),
     ) {

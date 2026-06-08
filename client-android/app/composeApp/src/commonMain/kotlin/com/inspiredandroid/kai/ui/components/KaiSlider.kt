@@ -26,9 +26,15 @@ fun KaiSlider(
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
     steps: Int = 0,
 ) {
+    val haptics = rememberHaptics()
     Slider(
         value = value,
-        onValueChange = onValueChange,
+        onValueChange = {
+            // One tick per discrete notch crossed while dragging; continuous
+            // sliders (steps == 0) stay silent to avoid a buzz on every pixel.
+            if (steps > 0 && it != value) haptics.segmentTick()
+            onValueChange(it)
+        },
         onValueChangeFinished = onValueChangeFinished,
         modifier = modifier.handCursor(),
         valueRange = valueRange,
@@ -55,9 +61,13 @@ fun KaiRangeSlider(
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
     steps: Int = 0,
 ) {
+    val haptics = rememberHaptics()
     RangeSlider(
         value = value,
-        onValueChange = onValueChange,
+        onValueChange = {
+            if (steps > 0 && it != value) haptics.segmentTick()
+            onValueChange(it)
+        },
         onValueChangeFinished = onValueChangeFinished,
         modifier = modifier.handCursor(),
         valueRange = valueRange,
