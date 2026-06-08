@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pre-Android-12 fallback. On API 31+ this is overridden by values-v31 to
+         match the system app-widget corner so the widget aligns with the OEM
+         widget shape. -->
+    <dimen name="widget_corner_radius">20dp</dimen>
+</resources>
