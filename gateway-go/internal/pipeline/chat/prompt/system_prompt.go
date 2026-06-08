@@ -86,6 +86,10 @@ type SystemPromptParams struct {
 	// Dynamic (uncached) block — no prompt-cache impact.
 	HindsightEnabled bool
 
+	// PinnedFacts is the user's "/pin"-ed always-remember facts, pre-rendered
+	// as a numbered list. Empty = no section. Dynamic (uncached) block.
+	PinnedFacts string
+
 	// TopicKnowledge is per-forum-topic background knowledge merged into the
 	// Static (cached) block. Empty = no topic section. It is byte-stable for
 	// the session (frozen snapshot in LoadTopicKnowledge) so the Static cache
@@ -421,6 +425,13 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("- **\"위키에 정리해뒀어\" / \"저장했어\" 만으로 응답을 끝내지 마라.** 사용자가 비교·분석·코멘트를 요청했는데 응답이 저장 알림뿐이면, 사용자는 요청한 내용을 못 받은 것이다. 저장 사실 자체는 메타 정보이지 응답이 아니다.\n")
 		d.WriteString("- 카테고리는 프로젝트·인물·운영시스템 셋 중 하나. 판단이 어려우면 \"운영시스템\"에 넣어라.\n")
 		d.WriteString("- 장기 보존 가치가 애매하면 자동 일지에 맡기고, 위키 페이지는 반복해서 쓸 사실·선호·결정·프로젝트 맥락만 남겨라.\n\n")
+	}
+
+	if strings.TrimSpace(params.PinnedFacts) != "" {
+		d.WriteString("## 고정 사실\n")
+		d.WriteString("사용자가 명시적으로 고정한 사실이다. <recall-context>보다 우선 참고하되, 현재 요청과 충돌하면 사용자에게 확인하라.\n\n")
+		d.WriteString(params.PinnedFacts)
+		d.WriteString("\n\n")
 	}
 
 	// Hindsight cross-session memory (conditional).

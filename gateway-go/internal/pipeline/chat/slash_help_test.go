@@ -16,7 +16,7 @@ func TestParseSlashCommand_Help(t *testing.T) {
 
 func TestSlashHelpText_ListsCommands(t *testing.T) {
 	text := slashHelpText()
-	for _, want := range []string{"/help", "/status", "/reset", "/model", "/think", "/mode"} {
+	for _, want := range []string{"/help", "/status", "/reset", "/pin", "/pins", "/unpin", "/model", "/think", "/mode"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("slashHelpText() missing %q", want)
 		}

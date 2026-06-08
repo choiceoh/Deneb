@@ -33,6 +33,7 @@ func (h *Handler) handleSlashCommand(
 		}
 		prompt.ClearSessionSnapshot(sessionKey)
 		clearRecallMemory(sessionKey)
+		clearPinnedFacts(sessionKey)
 		if h.transcript != nil {
 			if err := h.transcript.Delete(sessionKey); err != nil {
 				h.logger.Warn("failed to delete transcript on reset", "error", err)
@@ -65,6 +66,29 @@ func (h *Handler) handleSlashCommand(
 	case "status":
 		status := h.buildSessionStatus(sessionKey)
 		h.deliverSlashResponse(delivery, status)
+
+	case "pin":
+		if ok, reason := pinFact(sessionKey, cmd.Args); !ok {
+			h.deliverSlashResponse(delivery, reason)
+		} else {
+			h.deliverSlashResponse(delivery, "📌 고정했습니다.\n\n"+renderPinnedFactsReply(listPinnedFacts(sessionKey)))
+		}
+
+	case "unpin":
+		idx, err := parsePinIndex(cmd.Args)
+		if err != nil {
+			h.deliverSlashResponse(delivery, "사용법: /unpin <번호> — 번호는 /pins로 확인하세요.")
+			break
+		}
+		removed, ok := unpinFact(sessionKey, idx)
+		if !ok {
+			h.deliverSlashResponse(delivery, "해당 번호의 고정 사실이 없습니다. /pins로 확인하세요.")
+			break
+		}
+		h.deliverSlashResponse(delivery, fmt.Sprintf("📌 제거: %s\n\n%s", removed, renderPinnedFactsReply(listPinnedFacts(sessionKey))))
+
+	case "pins":
+		h.deliverSlashResponse(delivery, renderPinnedFactsReply(listPinnedFacts(sessionKey)))
 
 	case "model":
 		if cmd.Args != "" {
