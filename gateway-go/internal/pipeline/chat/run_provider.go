@@ -237,3 +237,15 @@ func resolveAPIMode(deps runDeps, providerID string) string {
 	}
 	return apiModeFor(providerID, "")
 }
+
+// isCacheIncompatibleProvider reports whether a provider speaks the Anthropic
+// Messages wire but REJECTS cache_control markers with an HTTP 400 (not merely
+// ignores them). Kimi's coding endpoint is the known case: it is routed through
+// the Anthropic client (apiModeFor → anthropic) yet faults when any
+// cache_control field is present, so the markers Deneb attaches (2 system + 2
+// trailing) must be stripped for Kimi requests. Mirrors OpenClaw's per-provider
+// strip (extensions/kimi-coding). MiMo/z.ai are NOT included — they accept the
+// markers; only Kimi is known-incompatible.
+func isCacheIncompatibleProvider(providerID string) bool {
+	return strings.EqualFold(strings.TrimSpace(providerID), "kimi")
+}
