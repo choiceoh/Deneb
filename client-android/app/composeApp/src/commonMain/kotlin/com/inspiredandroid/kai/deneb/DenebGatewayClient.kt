@@ -1314,6 +1314,7 @@ class DenebGatewayClient(
             schedule = p.schedule,
             scheduleSpec = p.scheduleSpec,
             scheduleKind = p.scheduleKind,
+            timezone = p.timezone,
             payloadKind = p.payloadKind,
             prompt = p.prompt,
             model = p.model,
@@ -1333,6 +1334,38 @@ class DenebGatewayClient(
             "miniapp.crons.update",
             buildJsonObject { put("id", id); put("enabled", enabled) },
         ) != null
+
+    /**
+     * Patch an existing cron job (`miniapp.crons.update`). Only the arguments the
+     * caller passes non-null are sent; each maps to the gateway's optional-pointer
+     * patch, so omitted fields stay untouched (editing the schedule alone never
+     * blanks the prompt). The gateway parses the schedule spec and returns its
+     * reason on a bad expression — surfaced here so the edit form can show it.
+     * Returns null on success, an error message otherwise. Refreshes the cached
+     * task list on success so the list row reflects the edit.
+     */
+    suspend fun updateCron(
+        id: String,
+        name: String? = null,
+        schedule: String? = null,
+        tz: String? = null,
+        prompt: String? = null,
+        model: String? = null,
+    ): String? {
+        val err = rpcWrite(
+            "miniapp.crons.update",
+            buildJsonObject {
+                put("id", id)
+                if (name != null) put("name", name)
+                if (schedule != null) put("schedule", schedule)
+                if (tz != null) put("tz", tz)
+                if (prompt != null) put("prompt", prompt)
+                if (model != null) put("model", model)
+            },
+        )
+        if (err == null) refreshScheduledTasks()
+        return err
+    }
 
     /**
      * Check the gateway-served update manifest. The gateway exposes the APK +
