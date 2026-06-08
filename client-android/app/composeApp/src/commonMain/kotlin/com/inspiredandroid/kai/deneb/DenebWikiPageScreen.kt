@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 
 /**
@@ -56,6 +57,7 @@ fun DenebWikiPageScreen(
     var saving by remember(path) { mutableStateOf(false) }
     var status by remember(path) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
 
     suspend fun loadPage() {
         if (creating) return
@@ -120,6 +122,7 @@ fun DenebWikiPageScreen(
                         modifier = Modifier.weight(1f),
                     )
                     TextButton(onClick = {
+                        haptics.tap()
                         if (!editing) {
                             draftTitle = pg.title
                             draftSummary = pg.summary
@@ -171,6 +174,7 @@ fun DenebWikiPageScreen(
                 Button(
                     enabled = !saving && (!creating || draftTitle.isNotBlank()),
                     onClick = {
+                        haptics.confirm()
                         scope.launch {
                             saving = true
                             status = null

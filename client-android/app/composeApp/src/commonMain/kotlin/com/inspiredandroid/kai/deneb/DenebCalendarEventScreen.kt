@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.ui.DenebScreenScaffold
 import com.inspiredandroid.kai.ui.DenebSectionLabel
 import com.inspiredandroid.kai.ui.DenebType
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.denebHint
 import kotlinx.coroutines.launch
 
@@ -57,6 +58,7 @@ fun DenebCalendarEventScreen(
     var deleting by remember(eventId) { mutableStateOf(false) }
     var actionError by remember(eventId) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
 
     suspend fun load() {
         loadFailed = false
@@ -99,6 +101,7 @@ fun DenebCalendarEventScreen(
                 TextButton(
                     enabled = !deleting,
                     onClick = {
+                        haptics.confirm()
                         scope.launch {
                             deleting = true
                             actionError = null
@@ -130,6 +133,7 @@ internal fun CalendarEventContent(
     onEdit: () -> Unit = {},
     onDelete: () -> Unit = {},
 ) {
+    val haptics = rememberHaptics()
     Spacer(Modifier.height(8.dp))
     Text(
         ev.title.ifBlank { "(제목 없음)" },
@@ -167,8 +171,8 @@ internal fun CalendarEventContent(
     if (isLocal) {
         Spacer(Modifier.height(20.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onEdit) { Text("편집") }
-            OutlinedButton(onClick = onDelete) { Text("삭제") }
+            OutlinedButton(onClick = { haptics.tap(); onEdit() }) { Text("편집") }
+            OutlinedButton(onClick = { haptics.confirm(); onDelete() }) { Text("삭제") }
         }
         if (actionError != null) {
             Spacer(Modifier.height(8.dp))
