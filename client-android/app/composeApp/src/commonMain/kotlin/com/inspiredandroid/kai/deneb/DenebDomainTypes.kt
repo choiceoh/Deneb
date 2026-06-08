@@ -88,7 +88,8 @@ data class WidgetSummary(
     val ok: Boolean = true,
 )
 
-/** An upcoming calendar event shown in the native calendar screen. */
+/** An upcoming calendar event shown in the native calendar screen. `local` is
+ *  true for gateway-stored events the user can edit/delete (vs read-only Google). */
 data class CalendarEvent(
     val id: String,
     val title: String,
@@ -96,6 +97,7 @@ data class CalendarEvent(
     val start: String,
     val end: String,
     val allDay: Boolean,
+    val local: Boolean = false,
 )
 
 /** Full calendar event for the detail screen. */
@@ -110,6 +112,7 @@ data class CalendarEventDetail(
     val organizer: String,
     val attendees: List<String>,
     val status: String,
+    val local: Boolean = false,
 )
 
 /** Full cron job detail for the cron screen (`miniapp.crons.get`). */

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -32,6 +34,21 @@ func (f *fakeCalendarClient) Get(ctx context.Context, id string) (*calendar.Even
 
 func calDepsFor(client CalendarClient) CalendarDeps {
 	return CalendarDeps{Client: func() (CalendarClient, error) { return client, nil }}
+}
+
+// calDepsWithLocal builds deps backed by a real localcal.Store in a temp file,
+// optionally with a Google client too. Returns the store for direct assertions.
+func calDepsWithLocal(t *testing.T, client CalendarClient) (CalendarDeps, *localcal.Store) {
+	t.Helper()
+	store, err := localcal.New(filepath.Join(t.TempDir(), "calendar.json"))
+	if err != nil {
+		t.Fatalf("localcal.New: %v", err)
+	}
+	deps := CalendarDeps{Local: store}
+	if client != nil {
+		deps.Client = func() (CalendarClient, error) { return client, nil }
+	}
+	return deps, store
 }
 
 func TestCalendarListUpcoming_ShapeAndDefaults(t *testing.T) {
@@ -272,5 +289,266 @@ func TestCalendarListUpcoming_JSONSerializable(t *testing.T) {
 	resp := h(authedCtx(), reqWith(t, "miniapp.calendar.list_upcoming", nil))
 	if _, err := json.Marshal(resp); err != nil {
 		t.Errorf("response not JSON-serializable: %v", err)
+	}
+}
+
+// --- list_range ----------------------------------------------------------
+
+func TestCalendarListRange_HappyPath(t *testing.T) {
+	var seenFrom, seenTo time.Time
+	client := &fakeCalendarClient{
+		listFn: func(_ context.Context, from, to time.Time, _ int) ([]calendar.Event, error) {
+			seenFrom, seenTo = from, to
+			return []calendar.Event{{ID: "e1", Summary: "월간 회의"}}, nil
+		},
+	}
+	h := calendarListRange(calDepsFor(client))
+	resp := h(authedCtx(), reqWith(t, "miniapp.calendar.list_range", map[string]any{
+		"from": "2026-06-01T00:00:00Z",
+		"to":   "2026-06-30T23:59:59Z",
+	}))
+	var out struct {
+		Events []calendarEventOut `json:"events"`
+	}
+	decode(t, resp, &out)
+	if len(out.Events) != 1 || out.Events[0].ID != "e1" {
+		t.Fatalf("events = %+v", out.Events)
+	}
+	if !seenFrom.Equal(time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)) {
+		t.Errorf("from = %v", seenFrom)
+	}
+	if !seenTo.Equal(time.Date(2026, 6, 30, 23, 59, 59, 0, time.UTC)) {
+		t.Errorf("to = %v", seenTo)
+	}
+}
+
+func TestCalendarListRange_RejectsBadParams(t *testing.T) {
+	h := calendarListRange(calDepsFor(&fakeCalendarClient{}))
+	cases := []map[string]any{
+		{"from": "nope", "to": "2026-06-30T00:00:00Z"},                 // bad from
+		{"from": "2026-06-01T00:00:00Z", "to": "nope"},                 // bad to
+		{"from": "2026-06-30T00:00:00Z", "to": "2026-06-01T00:00:00Z"}, // to <= from
+	}
+	for i, c := range cases {
+		resp := h(authedCtx(), reqWith(t, "miniapp.calendar.list_range", c))
+		if resp.OK {
+			t.Errorf("case %d: expected validation error for %+v", i, c)
+		}
+	}
+}
+
+func TestCalendarListRange_ClampsWideWindow(t *testing.T) {
+	var seenWindow time.Duration
+	client := &fakeCalendarClient{
+		listFn: func(_ context.Context, from, to time.Time, _ int) ([]calendar.Event, error) {
+			seenWindow = to.Sub(from)
+			return nil, nil
+		},
+	}
+	h := calendarListRange(calDepsFor(client))
+	resp := h(authedCtx(), reqWith(t, "miniapp.calendar.list_range", map[string]any{
+		"from": "2026-01-01T00:00:00Z",
+		"to":   "2026-12-31T00:00:00Z", // ~364 days, must clamp to maxRangeDays
+	}))
+	if !resp.OK {
+		t.Fatalf("not ok: %+v", resp.Error)
+	}
+	if seenWindow > maxRangeDays*24*time.Hour {
+		t.Errorf("window not clamped: %v", seenWindow)
+	}
+}
+
+// --- list merge ----------------------------------------------------------
+
+// list_range and list_upcoming must union Google + local events, sorted by start.
+func TestCalendarListRange_MergesLocalEvents(t *testing.T) {
+	client := &fakeCalendarClient{
+		listFn: func(context.Context, time.Time, time.Time, int) ([]calendar.Event, error) {
+			return []calendar.Event{
+				{ID: "g1", Summary: "구글 일정", Start: time.Date(2026, 6, 15, 9, 0, 0, 0, time.UTC)},
+			}, nil
+		},
+	}
+	deps, store := calDepsWithLocal(t, client)
+	if _, err := store.Create(localcal.CreateInput{
+		Summary: "로컬 일정", Start: time.Date(2026, 6, 10, 5, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	h := calendarListRange(deps)
+	resp := h(authedCtx(), reqWith(t, "miniapp.calendar.list_range", map[string]any{
+		"from": "2026-06-01T00:00:00Z",
+		"to":   "2026-06-30T00:00:00Z",
+	}))
+	var out struct {
+		Events []calendarEventOut `json:"events"`
+	}
+	decode(t, resp, &out)
+	if len(out.Events) != 2 {
+		t.Fatalf("events = %d, want 2 (1 google + 1 local)", len(out.Events))
+	}
+	// Sorted by start: local (6/10) before google (6/15).
+	if !out.Events[0].Local || out.Events[0].Summary != "로컬 일정" {
+		t.Errorf("first should be the local event, got %+v", out.Events[0])
+	}
+	if out.Events[1].Local {
+		t.Errorf("second (google) must not be flagged local: %+v", out.Events[1])
+	}
+}
+
+// With no Google client configured, the calendar still works from the local store.
+func TestCalendarListRange_LocalOnlyWhenNoGoogle(t *testing.T) {
+	deps, store := calDepsWithLocal(t, nil)
+	if _, err := store.Create(localcal.CreateInput{
+		Summary: "로컬", Start: time.Date(2026, 6, 10, 5, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	h := calendarListRange(deps)
+	resp := h(authedCtx(), reqWith(t, "miniapp.calendar.list_range", map[string]any{
+		"from": "2026-06-01T00:00:00Z",
+		"to":   "2026-06-30T00:00:00Z",
+	}))
+	var out struct {
+		Events []calendarEventOut `json:"events"`
+	}
+	decode(t, resp, &out)
+	if len(out.Events) != 1 || !out.Events[0].Local {
+		t.Fatalf("events = %+v", out.Events)
+	}
+}
+
+// --- create / delete / update / get routing ------------------------------
+
+func TestCalendarCreate_WritesLocalEvent(t *testing.T) {
+	deps, store := calDepsWithLocal(t, nil)
+	h := calendarCreate(deps)
+	resp := h(authedCtx(), reqWith(t, "miniapp.calendar.create", map[string]any{
+		"summary":  "신규 미팅",
+		"location": "본사 3층",
+		"start":    "2026-06-10T14:00:00+09:00",
+		"end":      "2026-06-10T15:00:00+09:00",
+		"timeZone": "Asia/Seoul",
+	}))
+	var ev calendarEventOut
+	decode(t, resp, &ev)
+	if ev.Summary != "신규 미팅" || ev.Location != "본사 3층" {
+		t.Errorf("event = %+v", ev)
+	}
+	if !localcal.IsLocalID(ev.ID) || !ev.Local {
+		t.Errorf("created event must be a local event: %+v", ev)
+	}
+	// Persisted to the store and findable in range.
+	got := store.ListRange(time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC))
+	if len(got) != 1 {
+		t.Fatalf("store has %d events, want 1", len(got))
+	}
+}
+
+func TestCalendarCreate_RejectsMissingFields(t *testing.T) {
+	deps, _ := calDepsWithLocal(t, nil)
+	h := calendarCreate(deps)
+	cases := []map[string]any{
+		{"start": "2026-06-10T14:00:00Z"},        // missing summary
+		{"summary": "x"},                         // missing start
+		{"summary": "x", "start": "not-rfc3339"}, // bad start
+	}
+	for i, c := range cases {
+		resp := h(authedCtx(), reqWith(t, "miniapp.calendar.create", c))
+		if resp.OK {
+			t.Errorf("case %d: expected validation error for %+v", i, c)
+		}
+	}
+}
+
+func TestCalendarCreate_UnavailableWithoutLocalStore(t *testing.T) {
+	h := calendarCreate(calDepsFor(&fakeCalendarClient{})) // Google only, no local
+	resp := h(authedCtx(), reqWith(t, "miniapp.calendar.create", map[string]any{
+		"summary": "x", "start": "2026-06-10T14:00:00Z",
+	}))
+	if resp.OK {
+		t.Fatal("expected UNAVAILABLE without a local store")
+	}
+}
+
+func TestCalendarGet_RoutesLocalIDToStore(t *testing.T) {
+	deps, store := calDepsWithLocal(t, nil)
+	created, err := store.Create(localcal.CreateInput{
+		Summary: "로컬", Start: time.Date(2026, 6, 10, 5, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	h := calendarGet(deps)
+	resp := h(authedCtx(), reqWith(t, "miniapp.calendar.get", map[string]string{"id": created.ID}))
+	var ev calendarEventOut
+	decode(t, resp, &ev)
+	if ev.ID != created.ID || !ev.Local {
+		t.Errorf("event = %+v", ev)
+	}
+}
+
+func TestCalendarDelete_RemovesLocalEvent(t *testing.T) {
+	deps, store := calDepsWithLocal(t, nil)
+	created, err := store.Create(localcal.CreateInput{
+		Summary: "지울 일정", Start: time.Date(2026, 6, 10, 5, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	h := calendarDelete(deps)
+	resp := h(authedCtx(), reqWith(t, "miniapp.calendar.delete", map[string]string{"id": created.ID}))
+	if !resp.OK {
+		t.Fatalf("delete not ok: %+v", resp.Error)
+	}
+	if store.Get(created.ID) != nil {
+		t.Error("event still present after delete")
+	}
+}
+
+func TestCalendarDelete_RejectsGoogleID(t *testing.T) {
+	deps, _ := calDepsWithLocal(t, nil)
+	h := calendarDelete(deps)
+	resp := h(authedCtx(), reqWith(t, "miniapp.calendar.delete", map[string]string{"id": "google-event-123"}))
+	if resp.OK {
+		t.Fatal("expected error deleting a non-local event")
+	}
+	if resp.Error.Code != protocol.ErrForbidden {
+		t.Errorf("code = %s, want %s", resp.Error.Code, protocol.ErrForbidden)
+	}
+}
+
+func TestCalendarUpdate_EditsLocalEvent(t *testing.T) {
+	deps, store := calDepsWithLocal(t, nil)
+	created, err := store.Create(localcal.CreateInput{
+		Summary: "원래 제목", Start: time.Date(2026, 6, 10, 5, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	h := calendarUpdate(deps)
+	resp := h(authedCtx(), reqWith(t, "miniapp.calendar.update", map[string]any{
+		"id":      created.ID,
+		"summary": "수정된 제목",
+		"start":   "2026-06-10T14:00:00+09:00",
+	}))
+	var ev calendarEventOut
+	decode(t, resp, &ev)
+	if ev.ID != created.ID || ev.Summary != "수정된 제목" {
+		t.Errorf("event = %+v", ev)
+	}
+	if got := store.Get(created.ID); got == nil || got.Summary != "수정된 제목" {
+		t.Errorf("store not updated: %+v", got)
+	}
+}
+
+func TestCalendarUpdate_RejectsGoogleID(t *testing.T) {
+	deps, _ := calDepsWithLocal(t, nil)
+	h := calendarUpdate(deps)
+	resp := h(authedCtx(), reqWith(t, "miniapp.calendar.update", map[string]any{
+		"id": "google-event-123", "summary": "x", "start": "2026-06-10T14:00:00Z",
+	}))
+	if resp.OK || resp.Error.Code != protocol.ErrForbidden {
+		t.Errorf("expected FORBIDDEN, got ok=%v err=%+v", resp.OK, resp.Error)
 	}
 }

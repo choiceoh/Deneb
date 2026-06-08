@@ -1,5 +1,6 @@
 package com.inspiredandroid.kai.deneb
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,8 +10,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,23 +33,29 @@ import kotlinx.coroutines.launch
 
 /**
  * Calendar event detail (`miniapp.calendar.get`): when, location, organizer,
- * attendees and description.
+ * attendees and description. Locally-stored events (created in this app) also get
+ * 편집 / 삭제 actions; read-only Google events don't.
  *
  * Design split (see .claude/rules/native-design-system.md): the frame + type are
  * the Deneb typographic skin (DenebScreenScaffold + DenebType + DenebSectionLabel).
  * The loaded-event presentation lives in [CalendarEventContent] — a stateless body
  * the render harness previews with mock data; this composable is the stateful shell
- * (load + loading/error states).
+ * (load + loading/error states + delete confirm).
  */
 @Composable
 fun DenebCalendarEventScreen(
     client: DenebGatewayClient,
     eventId: String,
     onBack: () -> Unit,
+    onEdit: (String) -> Unit = {},
+    onDeleted: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var event by remember(eventId) { mutableStateOf<CalendarEventDetail?>(null) }
     var loadFailed by remember(eventId) { mutableStateOf(false) }
+    var showDelete by remember(eventId) { mutableStateOf(false) }
+    var deleting by remember(eventId) { mutableStateOf(false) }
+    var actionError by remember(eventId) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun load() {
@@ -69,18 +79,57 @@ fun DenebCalendarEventScreen(
                 ev == null && loadFailed ->
                     DenebError("일정을 불러오지 못했습니다.", onRetry = { scope.launch { load() } })
                 ev == null -> DenebLoading()
-                else -> CalendarEventContent(ev = ev)
+                else -> CalendarEventContent(
+                    ev = ev,
+                    isLocal = ev.local,
+                    actionError = actionError,
+                    onEdit = { onEdit(eventId) },
+                    onDelete = { showDelete = true },
+                )
             }
         }
+    }
+
+    if (showDelete) {
+        AlertDialog(
+            onDismissRequest = { if (!deleting) showDelete = false },
+            title = { Text("일정 삭제") },
+            text = { Text("이 일정을 삭제할까요? 되돌릴 수 없습니다.") },
+            confirmButton = {
+                TextButton(
+                    enabled = !deleting,
+                    onClick = {
+                        scope.launch {
+                            deleting = true
+                            actionError = null
+                            val err = client.deleteCalendarEvent(eventId)
+                            deleting = false
+                            showDelete = false
+                            if (err == null) onDeleted() else actionError = err
+                        }
+                    },
+                ) { Text("삭제") }
+            },
+            dismissButton = {
+                TextButton(enabled = !deleting, onClick = { showDelete = false }) { Text("취소") }
+            },
+        )
     }
 }
 
 /**
  * Stateless presentation of a loaded event — extracted so [RenderPreview] can render
- * it with mock data. Pure Deneb type skin.
+ * it with mock data. Pure Deneb type skin, with Material action buttons for local
+ * events (controls = Material per the design rules).
  */
 @Composable
-internal fun CalendarEventContent(ev: CalendarEventDetail) {
+internal fun CalendarEventContent(
+    ev: CalendarEventDetail,
+    isLocal: Boolean = false,
+    actionError: String? = null,
+    onEdit: () -> Unit = {},
+    onDelete: () -> Unit = {},
+) {
     Spacer(Modifier.height(8.dp))
     Text(
         ev.title.ifBlank { "(제목 없음)" },
@@ -113,6 +162,18 @@ internal fun CalendarEventContent(ev: CalendarEventDetail) {
     if (ev.description.isNotBlank()) {
         DenebSectionLabel("설명")
         Text(ev.description, style = DenebType.body, color = MaterialTheme.colorScheme.onBackground)
+    }
+
+    if (isLocal) {
+        Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onEdit) { Text("편집") }
+            OutlinedButton(onClick = onDelete) { Text("삭제") }
+        }
+        if (actionError != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(actionError, style = DenebType.meta, color = MaterialTheme.colorScheme.error)
+        }
     }
     Spacer(Modifier.height(24.dp))
 }

@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
@@ -261,15 +263,16 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			},
 		}),
 
-		// Mini App Calendar domain (miniapp.calendar.list_upcoming / get).
-		// Same lazy-factory pattern as Gmail — gateway boots without
-		// OAuth tokens configured; per-call UNAVAILABLE until the
-		// operator drops calendar_client.json + calendar_token.json
-		// into ~/.deneb/credentials/.
+		// Mini App Calendar domain. Hybrid: a read-only Google client (lazy
+		// factory, like Gmail — gateway boots without OAuth tokens; reads
+		// return UNAVAILABLE only when no local store either) plus a local
+		// store ({stateDir}/calendar.json) that holds hand-added events, so
+		// create/edit/delete work without a Google write scope.
 		handlerminiapp.CalendarMethods(handlerminiapp.CalendarDeps{
 			Client: func() (handlerminiapp.CalendarClient, error) {
 				return calendar.DefaultClient()
 			},
+			Local: resolveLocalCalendar(s.logger),
 		}),
 
 		// Mini App memory search (miniapp.memory.search). Lazy factory
@@ -602,4 +605,19 @@ func makeMailAnalysisWikiSink(hub *rpcutil.GatewayHub) func(handlerminiapp.WikiA
 		}
 		return store.WritePage(mailAnalysisWikiPath(in.MsgID), buildMailAnalysisPage(in))
 	}
+}
+
+// resolveLocalCalendar returns the process-wide local calendar store, or a nil
+// interface (so handlers degrade) when its file can't be read. Returning a nil
+// literal — not the (nil, err) store — avoids a non-nil interface wrapping a nil
+// pointer. The store lives at {stateDir}/calendar.json (dev uses its own dir).
+func resolveLocalCalendar(logger *slog.Logger) handlerminiapp.LocalCalendar {
+	store, err := localcal.Default()
+	if err != nil {
+		if logger != nil {
+			logger.Error("local calendar store unavailable — add/edit/delete disabled", "error", err)
+		}
+		return nil
+	}
+	return store
 }

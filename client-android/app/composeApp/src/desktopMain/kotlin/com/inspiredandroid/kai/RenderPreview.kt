@@ -18,9 +18,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.deneb.CalMonth
+import com.inspiredandroid.kai.deneb.CalendarAddContent
+import com.inspiredandroid.kai.deneb.CalendarDayList
+import com.inspiredandroid.kai.deneb.CalendarEvent
 import com.inspiredandroid.kai.deneb.CalendarEventContent
 import com.inspiredandroid.kai.deneb.CalendarEventDetail
+import com.inspiredandroid.kai.deneb.CalendarMonthGrid
 import com.inspiredandroid.kai.deneb.DenebMarkdown
+import com.inspiredandroid.kai.deneb.buildMonthGrid
+import com.inspiredandroid.kai.deneb.koreanDayOfWeek
 import com.inspiredandroid.kai.deneb.MailMessage
 import com.inspiredandroid.kai.deneb.MailRow
 import com.inspiredandroid.kai.ui.markdown.MarkdownContent
@@ -52,7 +59,11 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.HorizontalDivider
+import com.inspiredandroid.kai.ui.denebHairline
+import kotlinx.datetime.LocalDate
 
 // Off-screen render harness: renders Deneb composables to PNG via Skia so the
 // look (and bugs like invisible text) can be inspected without building +
@@ -89,6 +100,10 @@ fun main() {
     renderDesignSample("design_light.png", LightColorScheme)
     renderCalendarEvent("calendar_event_dark.png", DarkColorScheme)
     renderCalendarEvent("calendar_event_light.png", LightColorScheme)
+    renderCalendarMonth("calendar_month_dark.png", DarkColorScheme)
+    renderCalendarMonth("calendar_month_light.png", LightColorScheme)
+    renderCalendarAdd("calendar_add_dark.png", DarkColorScheme)
+    renderCalendarAdd("calendar_add_light.png", LightColorScheme)
     renderChart("chart_dark.png", DarkColorScheme)
     renderChart("chart_light.png", LightColorScheme)
     renderWorkFeed("workfeed_dark.png", DarkColorScheme)
@@ -160,7 +175,98 @@ private fun renderCalendarEvent(name: String, scheme: ColorScheme) {
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "일정", onBack = {}) {
                 Column(Modifier.padding(horizontal = 24.dp)) {
-                    CalendarEventContent(ev = sampleEvent)
+                    CalendarEventContent(ev = sampleEvent, isLocal = true)
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// Validates the new month-grid calendar body at phone width (412dp): the grid
+// (dots on days with events, today + selected highlighted) and the selected
+// day's event list. The weekday header is inlined here for column context.
+private fun renderCalendarMonth(name: String, scheme: ColorScheme) {
+    val month = CalMonth(2026, 6)
+    val grid = buildMonthGrid(month)
+    val today = LocalDate(2026, 6, 8)
+    val selected = LocalDate(2026, 6, 3)
+    val withEvents = setOf(
+        LocalDate(2026, 6, 3), LocalDate(2026, 6, 8), LocalDate(2026, 6, 12), LocalDate(2026, 6, 20),
+    )
+    val dayEvents = listOf(
+        CalendarEvent("e1", "기획조정실 주간 회의", "본사 3층 대회의실", "2026-06-03T05:00:00Z", "2026-06-03T06:00:00Z", false),
+        CalendarEvent("e2", "에코프로 구매팀 미팅", "남도에코에너지", "2026-06-03T07:30:00Z", "2026-06-03T08:30:00Z", false),
+    )
+    val scene = ImageComposeScene(width = 824, height = 1200, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "일정", onBack = {}) {
+                Column(Modifier.padding(horizontal = 16.dp)) {
+                    Text(
+                        "${month.year}년 ${month.month}월",
+                        style = DenebType.subject,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth()) {
+                        koreanDayOfWeek.forEach { d ->
+                            Text(
+                                d,
+                                style = DenebType.meta,
+                                color = denebHint(),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f).padding(vertical = 4.dp),
+                            )
+                        }
+                    }
+                    CalendarMonthGrid(grid, today, selected, withEvents, {})
+                    Spacer(Modifier.height(12.dp))
+                    HorizontalDivider(color = denebHairline())
+                    Spacer(Modifier.height(8.dp))
+                    Text("6월 3일 (수) · 2건", style = DenebType.sectionLabel, color = MaterialTheme.colorScheme.primary)
+                    CalendarDayList(dayEvents, {})
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// Validates the manual add-event form: Material inputs (text fields, all-day
+// switch, date/time picker buttons) under Deneb section labels.
+private fun renderCalendarAdd(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 824, height = 1300, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "일정 추가", onBack = {}) {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    CalendarAddContent(
+                        title = "남도에코 모듈 입고 점검",
+                        onTitle = {},
+                        allDay = false,
+                        onAllDay = {},
+                        dateLabel = "2026년 6월 10일 (수)",
+                        onPickDate = {},
+                        startLabel = "14:00",
+                        onPickStart = {},
+                        endLabel = "15:00",
+                        onPickEnd = {},
+                        location = "본사 3층",
+                        onLocation = {},
+                        description = "모듈 입고 수량 확인 및 검수 일정 조율",
+                        onDescription = {},
+                        error = null,
+                        saving = false,
+                        saveLabel = "추가",
+                        onSave = {},
+                    )
                 }
             }
         }
