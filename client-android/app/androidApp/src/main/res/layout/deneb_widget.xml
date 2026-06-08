@@ -12,7 +12,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Deneb"
-        android:textColor="#7AA2F7"
+        android:textColor="@color/widget_accent"
         android:textSize="12sp"
         android:textStyle="bold"
         android:letterSpacing="0.08" />
@@ -37,9 +37,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="…"
-            android:textColor="#E8EAF0"
+            android:textColor="@color/widget_title"
             android:textSize="15sp"
             android:textStyle="bold"
+            android:letterSpacing="-0.01"
             android:maxLines="2"
             android:ellipsize="end" />
     </LinearLayout>
@@ -71,7 +72,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text=""
-                android:textColor="#D5D8E5"
+                android:textColor="@color/widget_subtitle"
                 android:textSize="13sp"
                 android:maxLines="1"
                 android:ellipsize="end" />
@@ -82,8 +83,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="1dp"
                 android:text=""
-                android:textColor="#A9B1D6"
-                android:textSize="11sp"
+                android:textColor="@color/widget_meta"
+                android:textSize="12sp"
                 android:maxLines="1"
                 android:ellipsize="end" />
         </LinearLayout>

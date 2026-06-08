@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Home-widget palette, aligned to the app's Deneb design system (the dark
+  ColorScheme in composeApp ui/Theme.kt) instead of the standalone Tokyo Night
+  colors the widget shipped with in #1851. A RemoteViews widget can't read
+  MaterialTheme.colorScheme at runtime, so these mirror the dark-scheme token
+  VALUES as static colors — one named token per role, no scattered hex.
+-->
+<resources>
+    <!-- surface — a flat container that reads as a card on the home screen -->
+    <color name="widget_bg">#FF1E1E1E</color>
+    <!-- primary — the Deneb accent (brand wordmark, calendar glyph) -->
+    <color name="widget_accent">#FF7FA8D0</color>
+    <!-- onSurface, a step down from pure white to soften glare over bright wallpapers -->
+    <color name="widget_title">#FFECEFF4</color>
+    <!-- onSurfaceVariant — secondary line (latest mail, envelope glyph) -->
+    <color name="widget_subtitle">#FFC2C9D1</color>
+    <!-- meta (unread count): onBackground ~66% over surface — a step brighter than
+         the app's 55% hint, since the widget's small 12sp count needs more contrast
+         on the home screen (~7.4:1 on widget_bg, still dimmer than subtitle). -->
+    <color name="widget_meta">#FFA7AEB8</color>
+</resources>
