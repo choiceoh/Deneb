@@ -73,21 +73,32 @@ func latestPublishedApk(dir string) (appUpdateManifest, bool) {
 	if best.Code < 0 {
 		return appUpdateManifest{}, false
 	}
-	best.Notes = apkReleaseNotes(dir)
+	best.Notes = apkReleaseNotesForCode(dir, best.Code)
 	return best, true
 }
 
-// apkReleaseNotes pulls the optional "notes" string from version.json if it
-// exists; absence is fine (notes are cosmetic).
-func apkReleaseNotes(dir string) string {
+// apkReleaseNotesForCode pulls the optional "notes" string from version.json,
+// but ONLY when version.json describes the same build as the latest APK on disk
+// (its "code" matches). version.json is rewritten on every publish and holds just
+// one build's notes, so it can lag the newest APK — a concurrent publish that
+// finished later, or a notes-less hotfix, leaves version.json pointing at an
+// older build than the highest-coded APK the disk scan selects. Returning its
+// notes unconditionally then captions the new build with an OLDER build's
+// changelog (the "예전 패치노트가 다시 올라온다" bug). On a mismatch (or missing /
+// malformed file) we return empty: no notes is better than stale notes.
+func apkReleaseNotesForCode(dir string, code int) string {
 	raw, err := os.ReadFile(filepath.Join(dir, "version.json"))
 	if err != nil {
 		return ""
 	}
 	var vj struct {
+		Code  int    `json:"code"`
 		Notes string `json:"notes"`
 	}
 	if err := json.Unmarshal(raw, &vj); err != nil {
+		return ""
+	}
+	if vj.Code != code {
 		return ""
 	}
 	return strings.TrimSpace(vj.Notes)
