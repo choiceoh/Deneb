@@ -21,8 +21,10 @@ func TestLatestPublishedApk(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// version.json's code is intentionally stale (151 < 153) to prove the disk
-	// files win and version.json only contributes notes.
+	// version.json's code is intentionally stale (151 < 153). The disk files still
+	// win for code/name/file, AND the stale notes must be suppressed: captioning the
+	// newest build (153) with an older build's (151) notes is the "예전 패치노트가
+	// 다시 올라온다" bug. A mismatched version.json contributes nothing.
 	if err := os.WriteFile(filepath.Join(dir, "version.json"),
 		[]byte(`{"code":151,"notes":"release notes"}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -41,8 +43,28 @@ func TestLatestPublishedApk(t *testing.T) {
 	if m.Name != "2.9.30" {
 		t.Fatalf("want name 2.9.30, got %q", m.Name)
 	}
+	if m.Notes != "" {
+		t.Fatalf("stale version.json (code 151 != 153) must not supply notes, got %q", m.Notes)
+	}
+}
+
+// When version.json describes the same build as the newest APK, its notes ride
+// along — the normal published-build case.
+func TestLatestPublishedApkNotesMatchCode(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "deneb-2.9.30-153-fossDebug.apk"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "version.json"),
+		[]byte(`{"code":153,"notes":"release notes"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m, ok := latestPublishedApk(dir)
+	if !ok {
+		t.Fatal("expected a published apk")
+	}
 	if m.Notes != "release notes" {
-		t.Fatalf("want notes from version.json, got %q", m.Notes)
+		t.Fatalf("matching version.json (code 153) must supply notes, got %q", m.Notes)
 	}
 }
 
