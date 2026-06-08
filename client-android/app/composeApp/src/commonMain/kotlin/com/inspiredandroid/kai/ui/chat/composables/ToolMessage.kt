@@ -3,11 +3,6 @@ package com.inspiredandroid.kai.ui.chat.composables
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -33,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -41,6 +35,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.ui.denebBreathing
+import com.inspiredandroid.kai.ui.denebSpatialSpring
 import kai.composeapp.generated.resources.Res
 import kai.composeapp.generated.resources.tools_count
 import kai.composeapp.generated.resources.waiting_brewing
@@ -82,9 +78,7 @@ internal fun WaitingResponseRow(
                     MaterialTheme.colorScheme.surfaceVariant,
                     RoundedCornerShape(8.dp),
                 )
-                .animateContentSize(
-                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
-                )
+                .animateContentSize(animationSpec = denebSpatialSpring())
                 .padding(12.dp)
                 .semantics { contentDescription = waitingCd },
         ) {
@@ -110,23 +104,6 @@ internal fun PulsingStatusIndicator(
     modifier: Modifier = Modifier,
     isStatusOnly: Boolean = false,
 ) {
-    val infiniteTransition = rememberInfiniteTransition()
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 0.6f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-    )
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-    )
     val waitingTexts = remember {
         listOf(
             Res.string.waiting_thinking,
@@ -149,11 +126,7 @@ internal fun PulsingStatusIndicator(
         Box(
             modifier = Modifier
                 .size(dotSize)
-                .graphicsLayer {
-                    scaleX = pulseScale
-                    scaleY = pulseScale
-                    alpha = pulseAlpha
-                }
+                .denebBreathing()
                 .background(dotColor, CircleShape),
         )
         Spacer(Modifier.width(8.dp))

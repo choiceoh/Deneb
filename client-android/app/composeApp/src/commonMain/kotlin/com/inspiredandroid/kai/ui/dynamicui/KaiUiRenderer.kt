@@ -3,14 +3,6 @@
 package com.inspiredandroid.kai.ui.dynamicui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -206,7 +198,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -221,6 +212,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.inspiredandroid.kai.ui.KaiOutlinedTextField
 import com.inspiredandroid.kai.ui.components.KaiChip
+import com.inspiredandroid.kai.ui.denebBreathing
+import com.inspiredandroid.kai.ui.denebExpandIn
+import com.inspiredandroid.kai.ui.denebShrinkOut
 import com.inspiredandroid.kai.ui.handCursor
 import com.inspiredandroid.kai.ui.kaiAdaptiveCardBorder
 import com.inspiredandroid.kai.ui.kaiAdaptiveCardColors
@@ -637,26 +631,9 @@ private fun RenderButton(
 @Composable
 private fun pulseModifier(active: Boolean): Modifier {
     if (!active) return Modifier
-    val transition = rememberInfiniteTransition(label = "button-pulse")
-    val scale by transition.animateFloat(
-        initialValue = 0.96f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 700, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "scale",
-    )
-    val alpha by transition.animateFloat(
-        initialValue = 0.55f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 700, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "alpha",
-    )
-    return Modifier.graphicsLayer(scaleX = scale, scaleY = scale, alpha = alpha)
+    // Shares the app-wide breathing cadence (waiting dot, stop button) so a live
+    // dynamic-UI button pulses in sync with the rest of the chrome.
+    return Modifier.denebBreathing(minScale = 0.96f, minAlpha = 0.55f)
 }
 
 @Composable
@@ -1613,8 +1590,8 @@ private fun RenderAccordion(
             }
             AnimatedVisibility(
                 visible = expanded,
-                enter = expandVertically(),
-                exit = shrinkVertically(),
+                enter = denebExpandIn,
+                exit = denebShrinkOut,
             ) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp),

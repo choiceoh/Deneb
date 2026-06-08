@@ -1,11 +1,5 @@
 package com.inspiredandroid.kai.ui.chat.composables
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,7 +26,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,7 +33,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -61,6 +53,7 @@ import com.inspiredandroid.kai.data.imageExtensions
 import com.inspiredandroid.kai.ui.components.animatedGradientBorder
 import com.inspiredandroid.kai.ui.gradientBrush
 import com.inspiredandroid.kai.ui.components.rememberHaptics
+import com.inspiredandroid.kai.ui.denebBreathing
 import com.inspiredandroid.kai.ui.handCursor
 import com.inspiredandroid.kai.ui.outlineTextFieldColors
 import io.github.vinceglb.filekit.PlatformFile
@@ -285,29 +278,11 @@ internal fun TrailingIcon(
     isPulsing: Boolean = false,
     contentDescription: String? = null,
 ) {
+    // Stop button "breathes" while a turn streams — the shared cadence so it
+    // pulses in sync with the waiting-status dot. Slightly tighter range than the
+    // default so the icon stays legible mid-pulse.
     val pulseModifier = if (isPulsing) {
-        val infiniteTransition = rememberInfiniteTransition()
-        val pulseScale by infiniteTransition.animateFloat(
-            initialValue = 0.92f,
-            targetValue = 1.0f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 800, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-        )
-        val pulseAlpha by infiniteTransition.animateFloat(
-            initialValue = 0.7f,
-            targetValue = 1.0f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 800, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-        )
-        Modifier.graphicsLayer {
-            scaleX = pulseScale
-            scaleY = pulseScale
-            alpha = pulseAlpha
-        }
+        Modifier.denebBreathing(minScale = 0.9f, minAlpha = 0.65f)
     } else {
         Modifier
     }

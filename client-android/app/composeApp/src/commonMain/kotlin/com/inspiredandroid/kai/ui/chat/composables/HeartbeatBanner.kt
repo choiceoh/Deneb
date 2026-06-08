@@ -1,8 +1,6 @@
 package com.inspiredandroid.kai.ui.chat.composables
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.ui.components.rememberHaptics
+import com.inspiredandroid.kai.ui.denebBannerEnter
+import com.inspiredandroid.kai.ui.denebBannerExit
 import com.inspiredandroid.kai.ui.handCursor
 import com.inspiredandroid.kai.ui.kaiAdaptiveCardBorder
 import com.inspiredandroid.kai.ui.kaiAdaptiveCardColors
@@ -39,8 +39,8 @@ internal fun HeartbeatBanner(
     val haptics = rememberHaptics()
     AnimatedVisibility(
         visible = visible,
-        enter = slideInVertically { -it },
-        exit = slideOutVertically { -it },
+        enter = denebBannerEnter,
+        exit = denebBannerExit,
     ) {
         Card(
             modifier = Modifier

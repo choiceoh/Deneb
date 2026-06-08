@@ -6,8 +6,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -58,6 +56,9 @@ import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.getBackgroundDispatcher
 import com.inspiredandroid.kai.ui.dynamicui.FrozenSubmission
 import com.inspiredandroid.kai.ui.dynamicui.toSpeakableText
+import com.inspiredandroid.kai.ui.DenebMotion
+import com.inspiredandroid.kai.ui.denebExpandIn
+import com.inspiredandroid.kai.ui.denebShrinkOut
 import com.inspiredandroid.kai.ui.handCursor
 import com.inspiredandroid.kai.ui.markdown.MarkdownContent
 import com.inspiredandroid.kai.ui.markdown.parseMarkdown
@@ -276,7 +277,7 @@ private fun StreamingCaret() {
     val caretAlpha by transition.animateFloat(
         initialValue = 1f,
         targetValue = 0f,
-        animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(tween(720, easing = DenebMotion.emphasized), RepeatMode.Reverse),
         label = "caret-alpha",
     )
     // A thin rounded cursor bar reads cleaner than the "▍" glyph, which sits
@@ -340,8 +341,8 @@ private fun ReasoningBlockquote(
         }
         AnimatedVisibility(
             visible = expanded,
-            enter = expandVertically(),
-            exit = shrinkVertically(),
+            enter = denebExpandIn,
+            exit = denebShrinkOut,
         ) {
             Column(
                 modifier = Modifier.padding(top = 6.dp),

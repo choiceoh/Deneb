@@ -49,6 +49,7 @@ import com.inspiredandroid.kai.ui.chat.WorkFeedAction
 import com.inspiredandroid.kai.ui.chat.WorkFeedItem
 import com.inspiredandroid.kai.ui.chat.composables.DenebDrawerSheet
 import com.inspiredandroid.kai.ui.chat.composables.WorkFeedPanel
+import com.inspiredandroid.kai.ui.components.SkeletonList
 import com.inspiredandroid.kai.ui.dynamicui.ChartNode
 import com.inspiredandroid.kai.ui.dynamicui.KaiUiRenderer
 import kotlinx.collections.immutable.persistentListOf
@@ -126,6 +127,8 @@ fun main() {
     renderWorkFeed("workfeed_light.png", LightColorScheme)
     renderWidget("widget_loaded.png", "6/3 14:00 · 기획조정실 주간 회의 3분기 점검", "김민준 부장 · 회의 자료 검토 부탁드립니다", "미읽음 3")
     renderWidget("widget_loading.png", "불러오는 중…", "", "")
+    renderSkeleton("skeleton_dark.png", DarkColorScheme)
+    renderSkeleton("skeleton_light.png", LightColorScheme)
     println("rendered -> /tmp/deneb-render/")
 }
 
@@ -655,6 +658,25 @@ private fun renderWorkFeed(name: String, scheme: ColorScheme) {
                         onClose = {},
                     )
                 }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// Validates the loading skeleton (sweeping-shimmer placeholders). A static capture
+// shows the base tint at rest; the highlight band only appears mid-sweep, so this
+// mainly guards that the placeholder reads as visible (not a blank screen) and that
+// the draw-phase shimmer doesn't crash.
+private fun renderSkeleton(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 824, height = 700, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                SkeletonList(rows = 6)
             }
         }
     }
