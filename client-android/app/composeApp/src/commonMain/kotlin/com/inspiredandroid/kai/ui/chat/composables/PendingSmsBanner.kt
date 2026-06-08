@@ -1,8 +1,6 @@
 package com.inspiredandroid.kai.ui.chat.composables
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,6 +26,8 @@ import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.data.SmsDraft
 import com.inspiredandroid.kai.data.SmsDraftStatus
 import com.inspiredandroid.kai.ui.components.rememberHaptics
+import com.inspiredandroid.kai.ui.denebBannerEnter
+import com.inspiredandroid.kai.ui.denebBannerExit
 import com.inspiredandroid.kai.ui.handCursor
 import com.inspiredandroid.kai.ui.kaiAdaptiveCardBorder
 import com.inspiredandroid.kai.ui.kaiAdaptiveCardColors
@@ -57,8 +57,8 @@ internal fun PendingSmsBanners(
 ) {
     AnimatedVisibility(
         visible = drafts.isNotEmpty(),
-        enter = slideInVertically { -it },
-        exit = slideOutVertically { -it },
+        enter = denebBannerEnter,
+        exit = denebBannerExit,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),

@@ -8,8 +8,6 @@ package com.inspiredandroid.kai.ui.chat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -121,6 +119,8 @@ import com.inspiredandroid.kai.ui.dynamicui.KaiUiParser
 import com.inspiredandroid.kai.ui.dynamicui.KaiUiRenderer
 import com.inspiredandroid.kai.ui.dynamicui.toSpeakableText
 import com.inspiredandroid.kai.ui.components.rememberHaptics
+import com.inspiredandroid.kai.ui.denebPopEnter
+import com.inspiredandroid.kai.ui.denebPopExit
 import com.inspiredandroid.kai.ui.handCursor
 import com.inspiredandroid.kai.ui.markdown.KaiUiBlock
 import com.inspiredandroid.kai.ui.markdown.parseMarkdown
@@ -1086,8 +1086,8 @@ private fun ChatModeScreen(
                                 androidx.compose.animation.AnimatedVisibility(
                                     visible = showScrollToBottom,
                                     modifier = Modifier.align(BottomCenter).padding(bottom = 8.dp),
-                                    enter = fadeIn() + scaleIn(),
-                                    exit = fadeOut() + scaleOut(),
+                                    enter = denebPopEnter,
+                                    exit = denebPopExit,
                                 ) {
                                     SmallFloatingActionButton(
                                         modifier = Modifier

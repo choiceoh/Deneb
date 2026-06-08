@@ -95,7 +95,7 @@ fun DenebRow(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick).handCursor() else Modifier)
+            .then(if (onClick != null) Modifier.denebPressable(onClick = onClick).handCursor() else Modifier)
             .drawBehind {
                 val stroke = 1.dp.toPx()
                 val y = size.height - stroke / 2f
