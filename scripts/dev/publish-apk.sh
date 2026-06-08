@@ -21,7 +21,7 @@
 #   DENEB_APK_BASE_URL  base URL the app uses  (default: http://127.0.0.1:19010)
 #   ANDROID_HOME        Android SDK            (default: ~/android-sdk)
 #   DENEB_SKIP_SMOKE    set to skip the pre-publish smoke gate entirely
-#   DENEB_APK_VARIANT   fossDebug (default) | fossRelease (R8-optimized, much faster)
+#   DENEB_APK_VARIANT   fossRelease (default, R8 production build) | fossDebug (debuggable, faster to build)
 #
 # Usage:
 #   scripts/dev/publish-apk.sh "release notes shown in the in-app updater"
@@ -31,17 +31,18 @@ NOTES="${1:-}"
 APK_DIR="${DENEB_APK_DIR:-$HOME/.cache/deneb-apk}"
 BASE_URL="${DENEB_APK_BASE_URL:-http://127.0.0.1:19010}"
 SDK="${ANDROID_HOME:-$HOME/android-sdk}"
-# Build variant. fossDebug is the default (debuggable, no R8 — easy install but slow
-# Compose). fossRelease is R8-optimized + non-debuggable (much smoother scroll); its
-# signing falls back to the debug keystore when no release key is configured, so it
-# installs in place over a debug build (same signature). The serve dir is scanned across
-# both variants below so version codes stay monotonic when the two coexist.
+# Build variant. fossRelease is the default — the production build users actually run
+# (R8-optimized + non-debuggable, much smoother scroll); its signing falls back to the
+# debug keystore when no release key is configured, so it installs in place over a debug
+# build (same signature). Pass DENEB_APK_VARIANT=fossDebug for a faster, debuggable build
+# when iterating locally. The serve dir is scanned across both variants below so version
+# codes stay monotonic when the two coexist.
 #
 # NOTE: AGP 9.2.1's assembleFossRelease emits a manifest-less, unsigned APK that will not
 # install ("Missing AndroidManifest.xml"). The bundle's universal APK is the valid, signed,
 # R8-minified release artifact, so fossRelease builds packageFossReleaseUniversalApk instead
 # and copies that fixed-name output below.
-VARIANT="${DENEB_APK_VARIANT:-fossDebug}"
+VARIANT="${DENEB_APK_VARIANT:-fossRelease}"
 case "$VARIANT" in
   fossDebug)   GRADLE_TASK="assembleFossDebug" ;;
   fossRelease) GRADLE_TASK="packageFossReleaseUniversalApk" ;;
