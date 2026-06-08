@@ -28,6 +28,12 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.62",
+        highlights = listOf(
+            "달력 월 보기 고정 — 일정이 많은 날을 눌러도 위쪽 달력이 사라지지 않고, 아래 일정 목록만 따로 스크롤",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.61",
         highlights = listOf(
             "달력 월 보기 정리 — 짧은 일정은 점, 종일·여러 날 일정은 띠로 한눈에 구분",
