@@ -53,28 +53,18 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 APP_DIR="$REPO_ROOT/client-android/app"
 cd "$APP_DIR"
 
-VERSION_NAME="$(sed -n 's/^appVersion = "\(.*\)"/\1/p' gradle/libs.versions.toml)"
 LIBS_VERSION_CODE="$(sed -n 's/^android-versionCode = "\(.*\)"/\1/p' gradle/libs.versions.toml)"
 SHA="$(git -C "$REPO_ROOT" rev-parse --short=8 HEAD)"
 
-if [ -z "$VERSION_NAME" ] || [ -z "$LIBS_VERSION_CODE" ]; then
-  echo "could not read appVersion/android-versionCode from libs.versions.toml" >&2
+if [ -z "$LIBS_VERSION_CODE" ]; then
+  echo "could not read android-versionCode from libs.versions.toml" >&2
   exit 1
 fi
 
-# Guard against shipping a mislabeled build. VERSION_NAME is read from the working
-# tree's libs.versions.toml, but the filename's SHA is HEAD — so a hand-edited but
-# uncommitted appVersion publishes a "version" that lies about its contents. That
-# is exactly how a "2.9.59" APK built at commit a31ec001 actually shipped 2.9.56
-# (appVersion bumped in the working tree, never committed), which left the in-app
-# patch-notes stuck on old versions. Refuse unless the version line is committed.
-if ! git -C "$REPO_ROOT" diff --quiet HEAD -- client-android/app/gradle/libs.versions.toml 2>/dev/null; then
-  echo "REFUSING: client-android/app/gradle/libs.versions.toml has uncommitted changes." >&2
-  echo "  appVersion=$VERSION_NAME would be published against HEAD $SHA, mislabeling the build." >&2
-  echo "  Commit the version bump first (so the filename SHA matches the version), then republish." >&2
-  echo "  Override only if you understand the risk: DENEB_ALLOW_DIRTY_VERSION=1" >&2
-  [ -n "${DENEB_ALLOW_DIRTY_VERSION:-}" ] || exit 1
-fi
+# There is no semantic versionName anymore — the build is identified by versionCode
+# alone. That removes the whole class of mislabeled/duplicate publishes the old
+# dirty-appVersion guard defended against (a hand-edited uncommitted appVersion can
+# no longer lie about the build), so no guard is needed here.
 
 # Auto-assign a collision-free versionCode instead of trusting a hand-bumped libs
 # value. The 155/162/164 clobbers happened because each agent worktree bumped
@@ -87,8 +77,11 @@ fi
 mkdir -p "$APK_DIR"
 exec 200>"$APK_DIR/.publish.lock"
 flock 200
+# Accept both the new deneb-<code>-<sha> filenames and the legacy
+# deneb-<name>-<code>-<sha> ones still lingering in the serve dir: the optional
+# leading group only matches a dotted version, so <code> is the first dot-less int.
 SERVE_MAX="$(ls "$APK_DIR"/deneb-*.apk 2>/dev/null \
-  | grep -oE 'deneb-[0-9.]+-[0-9]+-' | grep -oE '[0-9]+-$' | tr -d '-' \
+  | grep -oE 'deneb-([0-9]+\.[0-9.]+-)?[0-9]+-' | grep -oE '[0-9]+-$' | tr -d '-' \
   | sort -n | tail -1)"
 VERSION_CODE=$(( ${SERVE_MAX:-0} + 1 ))
 if [ "$VERSION_CODE" -lt "$LIBS_VERSION_CODE" ]; then
@@ -123,10 +116,10 @@ else
   echo "pre-publish smoke: PASS"
 fi
 
-echo "building deneb $VERSION_NAME ($VERSION_CODE) @ $SHA [$VARIANT] ..."
+echo "building deneb $VERSION_CODE @ $SHA [$VARIANT] ..."
 DENEB_BUILD_SHA="$SHA" ANDROID_HOME="$SDK" ./gradlew ":androidApp:$GRADLE_TASK" -q -PdenebVersionCode="$VERSION_CODE"
 
-APK_NAME="deneb-$VERSION_NAME-$VERSION_CODE-$SHA-$VARIANT.apk"
+APK_NAME="deneb-$VERSION_CODE-$SHA-$VARIANT.apk"
 if [ "$VARIANT" = "fossRelease" ]; then
   # The bundle universal APK has a fixed name; copy + rename it to the serve name.
   APK_PATH="androidApp/build/outputs/apk_from_bundle/fossRelease/androidApp-foss-release-universal.apk"
@@ -148,7 +141,6 @@ NOTES_ESC="${NOTES_ESC//\"/\\\"}"
 cat > "$APK_DIR/version.json" <<EOF
 {
   "code": $VERSION_CODE,
-  "name": "$VERSION_NAME",
   "url": "$BASE_URL/$APK_NAME",
   "notes": "$NOTES_ESC"
 }
