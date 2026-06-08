@@ -153,6 +153,20 @@ func shouldForceExternalDeliveryFailureNotice(delivery *DeliveryContext, toolAct
 	return strings.TrimSpace(text) == ""
 }
 
+// isSubagentSession reports whether the run's session was spawned as a
+// sub-agent (child) of another session. Sub-agents have no user-facing
+// channel: their final output is read by the parent via session.LastOutput
+// (see ToolSessionsSpawn / the subagents tool), so a nil channel replyFunc at
+// completion is the normal, expected state rather than a delivery wiring bug.
+// Callers use this to avoid raising false delivery-failure alarms for children.
+func isSubagentSession(deps runDeps, sessionKey string) bool {
+	if deps.sessions == nil {
+		return false
+	}
+	sess := deps.sessions.Get(sessionKey)
+	return sess != nil && sess.SpawnedBy != ""
+}
+
 // handleRunSuccess processes a successful agent run completion.
 func handleRunSuccess(
 	ctx context.Context,
@@ -334,21 +348,46 @@ func handleRunSuccess(
 			if replyText != "" {
 				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer replyCancel()
+				// A nil replyFunc is only a wiring bug when there is a real user
+				// channel to deliver to. Two run shapes legitimately have none, so
+				// a missing replyFunc is the expected state, not an operator alarm:
+				//   - sub-agent (child) sessions — the parent reads their result via
+				//     session.LastOutput, not a channel push (SpawnedBy is set when
+				//     the spawn captured a non-empty parent key);
+				//   - channel-less runs — a sub-agent spawned with an empty parent
+				//     key gets a session key like ":label:ts" (observed live), which
+				//     deliveryFromSessionKey turns into an empty Delivery.Channel:
+				//     there is literally no channel a reply could reach. (The empty
+				//     parent key is a separate lineage bug — SendSync does not inject
+				//     the session key into the tool context the way runAgentAsync
+				//     does — but this guard must hold regardless of that fix.)
+				noUserChannel := isSubagentSession(deps, params.SessionKey) || params.Delivery.Channel == ""
 				if deps.callbacks.replyFunc == nil {
-					// Wiring bug: reply callback not registered. Escalate so
-					// operators notice — silent Warn was hiding broken deploys.
-					logger.Error("replyFunc is nil — response not delivered (wiring bug)",
-						"session", params.SessionKey,
-						"channel", params.Delivery.Channel,
-						"textLen", len(replyText))
-					if deps.broadcast != nil {
-						deps.broadcast("chat.delivery_failed", map[string]any{
-							"session": params.SessionKey,
-							"channel": params.Delivery.Channel,
-							"reason":  "reply_func_nil",
-						})
+					if noUserChannel {
+						// Expected: no channel to deliver to. Log quietly and skip the
+						// operator escalation (Error + chat.delivery_failed broadcast +
+						// transcript note) that would otherwise fire as a false alarm
+						// on every sub-agent / channel-less completion.
+						logger.Debug("run produced reply text but has no channel replyFunc (expected: sub-agent or channel-less session; output read via LastOutput)",
+							"session", params.SessionKey,
+							"channel", params.Delivery.Channel,
+							"textLen", len(replyText))
+					} else {
+						// Wiring bug: reply callback not registered. Escalate so
+						// operators notice — silent Warn was hiding broken deploys.
+						logger.Error("replyFunc is nil — response not delivered (wiring bug)",
+							"session", params.SessionKey,
+							"channel", params.Delivery.Channel,
+							"textLen", len(replyText))
+						if deps.broadcast != nil {
+							deps.broadcast("chat.delivery_failed", map[string]any{
+								"session": params.SessionKey,
+								"channel": params.Delivery.Channel,
+								"reason":  "reply_func_nil",
+							})
+						}
+						persistReplyDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, nil, logger)
 					}
-					persistReplyDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, nil, logger)
 				} else {
 					// Primary path: channel-specific reply function (handles dedup,
 					// formatting, chunking, etc.). Retry once on transient errors
