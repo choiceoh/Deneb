@@ -92,7 +92,20 @@ func NewStore(path string) *Store {
 	return &Store{path: path}
 }
 
+// Append adds item to the feed and returns the stored item. Thin wrapper over
+// AppendIfNew for callers that don't need the created flag.
 func (s *Store) Append(item Item) (Item, error) {
+	out, _, err := s.AppendIfNew(item)
+	return out, err
+}
+
+// AppendIfNew adds item unless it duplicates the most recent card (same source +
+// same body fingerprint). This guards against the same proactive analysis being
+// re-emitted — e.g. by a restart catch-up — and piling up as a duplicate card.
+// On a duplicate it writes nothing and returns the existing card with
+// created=false; callers (native sync) then skip the "created" event. Otherwise
+// it returns the stored item with created=true.
+func (s *Store) AppendIfNew(item Item) (Item, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -101,20 +114,47 @@ func (s *Store) Append(item Item) (Item, error) {
 	// infrequently (once per proactive report / capture), so the O(n) rewrite is
 	// cheap and keeps the file — and every List — from growing without bound as
 	// the feed ages. Fall back to a plain append if the file can't be read, so a
-	// transient read error never drops the new item.
+	// transient read error never drops the new item (dedup is skipped on that
+	// rare path — losing a card is worse than an occasional duplicate).
 	items, err := jsonlstore.Load[Item](s.path)
 	if err != nil {
 		if aerr := jsonlstore.Append(s.path, item); aerr != nil {
-			return Item{}, aerr
+			return Item{}, false, aerr
 		}
-		return item, nil
+		return item, true, nil
+	}
+	if n := len(items); n > 0 && isDuplicateCard(items[n-1], item) {
+		return items[n-1], false, nil
 	}
 	items = append(items, item)
 	items = pruneRetention(items)
 	if err := jsonlstore.Snapshot(s.path, items); err != nil {
-		return Item{}, err
+		return Item{}, false, err
 	}
-	return item, nil
+	return item, true, nil
+}
+
+// isDuplicateCard reports whether cur duplicates prev: same source and the same
+// non-empty body fingerprint. Only the body matters (title/priority ignored), so
+// a re-emitted analysis dedupes even if its priority was re-inferred. An empty
+// body never dedupes — distinct cards with no body (e.g. a capture whose OCR
+// came back empty) must not collapse into one.
+func isDuplicateCard(prev, cur Item) bool {
+	if prev.Source != cur.Source {
+		return false
+	}
+	fp := fingerprint(cur.Body)
+	if fp == "" {
+		return false
+	}
+	return fingerprint(prev.Body) == fp
+}
+
+// fingerprint normalizes a body for duplicate comparison: leading/trailing and
+// internal whitespace runs collapse to single spaces, so newline/trailing-space
+// differences don't defeat dedup while any real content difference is kept.
+func fingerprint(body string) string {
+	return strings.Join(strings.Fields(body), " ")
 }
 
 func (s *Store) List(limit int, includeAcked bool) ([]Item, int, error) {
