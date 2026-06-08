@@ -89,6 +89,37 @@ func TestListRangeStartInWindowSorted(t *testing.T) {
 	}
 }
 
+// A multi-day event must appear for any window it overlaps, even one that opens
+// after its start day — and must vanish once the window clears its end.
+func TestListRangeIncludesOverlappingMultiDay(t *testing.T) {
+	s := newTestStore(t)
+	// All-day workshop spanning June 8 → June 10, stored with an exclusive end at
+	// June 11 00:00 (the convention the native form and Google both use).
+	start := time.Date(2026, 6, 8, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 6, 11, 0, 0, 0, 0, time.UTC)
+	if _, err := s.Create(CreateInput{Summary: "워크숍", Start: start, End: end, AllDay: true}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Window opens after the start day but still overlaps the span → included.
+	got := s.ListRange(
+		time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 6, 20, 0, 0, 0, 0, time.UTC),
+	)
+	if len(got) != 1 || got[0].Summary != "워크숍" {
+		t.Fatalf("overlap window = %+v, want the multi-day workshop", got)
+	}
+
+	// Window starting at the exclusive end must NOT include it.
+	none := s.ListRange(
+		time.Date(2026, 6, 11, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 6, 20, 0, 0, 0, 0, time.UTC),
+	)
+	if len(none) != 0 {
+		t.Fatalf("post-event window = %+v, want empty", none)
+	}
+}
+
 func TestUpdatePreservesCreatedAndChangesFields(t *testing.T) {
 	s := newTestStore(t)
 	ev, err := s.Create(CreateInput{Summary: "원래", Start: time.Date(2026, 6, 10, 9, 0, 0, 0, time.UTC)})

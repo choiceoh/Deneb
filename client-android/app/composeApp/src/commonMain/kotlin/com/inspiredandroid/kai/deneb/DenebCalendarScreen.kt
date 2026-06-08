@@ -39,6 +39,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,6 +57,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.daysUntil
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
@@ -121,11 +124,14 @@ fun DenebCalendarScreen(
         }
     }
 
-    val daysWithEvents = remember(monthEvents, tz) {
-        monthEvents.mapNotNull { eventLocalDate(it.start, tz) }.toSet()
-    }
+    // Bars span every day a (possibly multi-day) event covers, packed into lanes
+    // so a span reads as one connected ribbon across the week. The day list shows
+    // every event that touches the selected day, all-day/multi-day events first.
+    val monthBars = remember(monthEvents, grid, tz) { layoutMonthBars(monthEvents, grid, tz) }
     val dayEvents = remember(monthEvents, selected, tz) {
-        monthEvents.filter { eventLocalDate(it.start, tz) == selected }.sortedBy { it.start }
+        monthEvents
+            .filter { selected in eventDays(it.start, it.end, it.allDay, tz) }
+            .sortedWith(compareBy({ !it.allDay }, { it.start }))
     }
 
     DenebScreenScaffold(title = "일정", onBack = onBack, tabBar = navigationTabBar) {
@@ -150,7 +156,7 @@ fun DenebCalendarScreen(
                     grid = grid,
                     today = today,
                     selected = selected,
-                    daysWithEvents = daysWithEvents,
+                    bars = monthBars,
                     onSelect = { date ->
                         // Tapping a leading/trailing cell jumps to that month too.
                         selected = date
@@ -175,7 +181,7 @@ fun DenebCalendarScreen(
                         onRetry = { scope.launch { loadOk = null; load() } },
                     )
                     dayEvents.isEmpty() -> DenebEmpty("이 날 일정이 없어요.")
-                    else -> CalendarDayList(dayEvents, onOpenEvent)
+                    else -> CalendarDayList(dayEvents, selected, tz, onOpenEvent)
                 }
                 Spacer(Modifier.height(24.dp))
             }
@@ -185,17 +191,22 @@ fun DenebCalendarScreen(
 
 // --- stateless bodies (previewable) --------------------------------------
 
-/** The month grid: 7-column weeks, a dot under days that have events, today and
- *  the selected day highlighted. Pure presentation — the shell owns selection. */
+/** The month grid: 7-column weeks with multi-day event ribbons under each day
+ *  number, today and the selected day highlighted. Pure presentation — the shell
+ *  owns selection. */
 @Composable
 internal fun CalendarMonthGrid(
     grid: MonthGrid,
     today: LocalDate,
     selected: LocalDate,
-    daysWithEvents: Set<LocalDate>,
+    bars: Map<LocalDate, List<DayBar>>,
     onSelect: (LocalDate) -> Unit,
 ) {
     val haptics = rememberHaptics()
+    val palette = barPalette()
+    // One lane count shared across the grid so every cell reserves equal height
+    // and bars on the same lane line up row-to-row.
+    val laneCount = bars.values.maxOfOrNull { day -> day.maxOfOrNull { it.lane + 1 } ?: 0 } ?: 0
     Column(Modifier.fillMaxWidth()) {
         grid.cells.chunked(7).forEach { week ->
             Row(Modifier.fillMaxWidth()) {
@@ -207,7 +218,9 @@ internal fun CalendarMonthGrid(
                         inMonth = inMonth,
                         isToday = date == today,
                         isSelected = date == selected,
-                        hasEvents = date in daysWithEvents,
+                        bars = bars[date].orEmpty(),
+                        laneCount = laneCount,
+                        palette = palette,
                         modifier = Modifier.weight(1f),
                         onClick = { haptics.tap(); onSelect(date) },
                     )
@@ -223,7 +236,9 @@ private fun DayCell(
     inMonth: Boolean,
     isToday: Boolean,
     isSelected: Boolean,
-    hasEvents: Boolean,
+    bars: List<DayBar>,
+    laneCount: Int,
+    palette: List<Color>,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -239,51 +254,66 @@ private fun DayCell(
     Column(
         modifier
             .heightIn(min = 46.dp)
-            .padding(2.dp)
-            .clip(RoundedCornerShape(10.dp))
-            // A ring marks today when it isn't the (filled) selection.
-            .then(
-                if (isToday && !isSelected) {
-                    Modifier.border(1.dp, scheme.primary, RoundedCornerShape(10.dp))
-                } else {
-                    Modifier
-                },
-            )
             .clickable(onClick = onClick)
-            .background(if (isSelected) scheme.primary else Color.Transparent)
             .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
     ) {
-        Text(
-            date.day.toString(),
-            style = DenebType.body,
-            fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
-            color = numberColor,
-        )
-        Spacer(Modifier.height(3.dp))
+        // Day number: a filled disc when selected, a hairline ring for today. The
+        // selection moved off the whole cell so bars below stay readable.
         Box(
             Modifier
-                .size(5.dp)
+                .size(26.dp)
                 .clip(CircleShape)
-                .background(
+                .then(
                     when {
-                        !hasEvents -> Color.Transparent
-                        isSelected -> scheme.onPrimary
-                        else -> scheme.primary
+                        isSelected -> Modifier.background(scheme.primary)
+                        isToday -> Modifier.border(1.dp, scheme.primary, CircleShape)
+                        else -> Modifier
                     },
                 ),
-        )
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                date.day.toString(),
+                style = DenebType.body,
+                fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
+                color = numberColor,
+            )
+        }
+        // Multi-day ribbons: one fixed-height lane per row. Bars run the full cell
+        // width (no horizontal inset) so a span connects across adjacent days; the
+        // first/last day get rounded outer corners, interior days stay square.
+        if (laneCount > 0) {
+            Spacer(Modifier.height(3.dp))
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                for (lane in 0 until laneCount) {
+                    val bar = bars.firstOrNull { it.lane == lane }
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(barSegmentShape(bar))
+                            .background(bar?.let { palette[it.colorIndex % palette.size] } ?: Color.Transparent),
+                    )
+                }
+            }
+        }
     }
 }
 
-/** The selected day's events, one tappable row each (time | title · location). */
+/** The selected day's events, one tappable row each (time | title · location).
+ *  The time column is day-aware: an all-day event shows 종일, a multi-day event
+ *  shows 계속 on the days after it starts, and a timed event shows its start HH:mm. */
 @Composable
-internal fun CalendarDayList(events: List<CalendarEvent>, onOpen: (String) -> Unit) {
+internal fun CalendarDayList(
+    events: List<CalendarEvent>,
+    selected: LocalDate,
+    tz: TimeZone,
+    onOpen: (String) -> Unit,
+) {
     val haptics = rememberHaptics()
     Column(Modifier.fillMaxWidth()) {
         events.forEachIndexed { index, event ->
-            val stamp = stampOf(event.start, event.allDay)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -292,7 +322,7 @@ internal fun CalendarDayList(events: List<CalendarEvent>, onOpen: (String) -> Un
                 verticalAlignment = Alignment.Top,
             ) {
                 Text(
-                    stamp?.time ?: "—",
+                    dayTimeLabel(event, selected, tz),
                     style = DenebType.body,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -452,4 +482,121 @@ internal fun stampOf(rfc3339: String, allDay: Boolean): CalStamp? {
             "${local.hour.toString().padStart(2, '0')}:${local.minute.toString().padStart(2, '0')}"
         },
     )
+}
+
+// --- multi-day event layout ----------------------------------------------
+
+/** Max event ribbon lanes drawn per week; extra concurrent spans are dropped. */
+private const val MaxBarLanes = 3
+
+private const val BarPaletteSize = 5
+
+/** A ribbon segment in one day cell: its lane (row), a stable per-event color
+ *  index, and whether this day is the span's first/last (for corner rounding). */
+internal data class DayBar(
+    val lane: Int,
+    val colorIndex: Int,
+    val isStart: Boolean,
+    val isEnd: Boolean,
+)
+
+/** The local days an event covers, inclusive. A single-day event yields one date;
+ *  a multi-day event yields every day it spans. All-day spans carry an exclusive
+ *  end (midnight after the last day — Google's and our local store's convention),
+ *  so an end at local midnight resolves to the previous day. A corrupt span is
+ *  clamped to a year so it can't generate an unbounded list. */
+internal fun eventDays(startRfc: String, endRfc: String, allDay: Boolean, tz: TimeZone): List<LocalDate> {
+    val startDate = eventLocalDate(startRfc, tz) ?: return emptyList()
+    val endLdt = runCatching { Instant.parse(endRfc).toLocalDateTime(tz) }.getOrNull()
+        ?: return listOf(startDate)
+    var last = endLdt.date
+    if (allDay && endLdt.time == LocalTime(0, 0) && last > startDate) {
+        last = last.minus(1, DateTimeUnit.DAY)
+    }
+    if (last <= startDate) return listOf(startDate)
+    val span = startDate.daysUntil(last).coerceAtMost(366)
+    return (0..span).map { startDate.plus(it, DateTimeUnit.DAY) }
+}
+
+/** Packs each event's covering days into per-week lanes so a multi-day span reads
+ *  as one connected ribbon. Within a week, spans are laid out left-to-right and
+ *  take the lowest free lane; a span keeps a stable color (from its id) across
+ *  weeks even if its lane shifts. Returns the bars to draw under each day. */
+internal fun layoutMonthBars(
+    events: List<CalendarEvent>,
+    grid: MonthGrid,
+    tz: TimeZone,
+): Map<LocalDate, List<DayBar>> {
+    data class Span(val first: LocalDate, val last: LocalDate, val colorIndex: Int)
+    val spans = events.mapNotNull { ev ->
+        val days = eventDays(ev.start, ev.end, ev.allDay, tz)
+        if (days.isEmpty()) null else Span(days.first(), days.last(), colorIndexFor(ev.id))
+    }
+    val out = HashMap<LocalDate, MutableList<DayBar>>()
+    grid.cells.chunked(7).forEach { week ->
+        val weekStart = week.first()
+        val weekEnd = week.last()
+        // Longer spans first (and earlier starts) so they claim low lanes and short
+        // events fill the gaps — a tidy, stable packing.
+        val inWeek = spans
+            .filter { it.first <= weekEnd && it.last >= weekStart }
+            .sortedWith(compareBy({ it.first }, { -it.first.daysUntil(it.last) }))
+        val laneLastDay = ArrayList<LocalDate?>() // lane → last day it occupies this week
+        for (span in inWeek) {
+            val segFirst = maxOf(span.first, weekStart)
+            val segLast = minOf(span.last, weekEnd)
+            var lane = laneLastDay.indexOfFirst { it == null || it < segFirst }
+            if (lane == -1) {
+                if (laneLastDay.size >= MaxBarLanes) continue // overflow — drop (rare)
+                lane = laneLastDay.size
+                laneLastDay.add(null)
+            }
+            laneLastDay[lane] = segLast
+            var d = segFirst
+            while (d <= segLast) {
+                out.getOrPut(d) { ArrayList() }.add(
+                    DayBar(
+                        lane = lane,
+                        colorIndex = span.colorIndex,
+                        isStart = d == span.first,
+                        isEnd = d == span.last,
+                    ),
+                )
+                d = d.plus(1, DateTimeUnit.DAY)
+            }
+        }
+    }
+    return out
+}
+
+/** Stable palette slot for an event id, so its ribbon keeps one color. */
+private fun colorIndexFor(id: String): Int = (id.hashCode() and Int.MAX_VALUE) % BarPaletteSize
+
+/** Ribbon colors, drawn from the active scheme (+ the calendar's Saturday blue). */
+@Composable
+internal fun barPalette(): List<Color> {
+    val s = MaterialTheme.colorScheme
+    return listOf(s.primary, s.tertiary, saturdayBlue, s.secondary, s.error)
+}
+
+/** Rounds only a ribbon segment's outer corners: the start day's left, the end
+ *  day's right; interior days stay square so the ribbon looks continuous. */
+private fun barSegmentShape(bar: DayBar?): Shape {
+    if (bar == null) return RectangleShape
+    val r = 2.dp
+    return RoundedCornerShape(
+        topStart = if (bar.isStart) r else 0.dp,
+        bottomStart = if (bar.isStart) r else 0.dp,
+        topEnd = if (bar.isEnd) r else 0.dp,
+        bottomEnd = if (bar.isEnd) r else 0.dp,
+    )
+}
+
+/** Day-aware time label for the day list: 종일 for all-day, 계속 for a multi-day
+ *  event on a day after it starts, else the start HH:mm. */
+private fun dayTimeLabel(event: CalendarEvent, day: LocalDate, tz: TimeZone): String {
+    if (event.allDay) return "종일"
+    val startDate = eventLocalDate(event.start, tz)
+    if (startDate != null && startDate != day) return "계속"
+    return stampOf(event.start, false)?.time ?: "—"
 }

@@ -118,18 +118,28 @@ func New(path string) (*Store, error) {
 	return s, nil
 }
 
-// ListRange returns events whose start falls in [from, to), sorted by start.
-// Start-in-window matches the native grid, which keys events to their start day.
+// ListRange returns events that overlap [from, to), sorted by start. An event
+// overlaps when it starts before the window ends and ends after the window
+// begins, so a multi-day event is returned for every month grid whose range it
+// touches — not only the one containing its start day. An event with no usable
+// end (zero, or not after start) is treated as an instant at Start.
 func (s *Store) ListRange(from, to time.Time) []calendar.Event {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]calendar.Event, 0, len(s.events))
 	for _, e := range s.events {
 		ev := e.toCalendar()
-		if ev.Start.IsZero() || ev.Start.Before(from) || !ev.Start.Before(to) {
+		if ev.Start.IsZero() {
 			continue
 		}
-		out = append(out, ev)
+		end := ev.End
+		if !end.After(ev.Start) {
+			end = ev.Start
+		}
+		// Half-open overlap: [Start, end) intersects [from, to).
+		if ev.Start.Before(to) && end.After(from) {
+			out = append(out, ev)
+		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Start.Before(out[j].Start) })
 	return out

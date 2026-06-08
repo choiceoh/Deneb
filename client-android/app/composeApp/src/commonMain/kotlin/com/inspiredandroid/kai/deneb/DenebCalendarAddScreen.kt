@@ -39,10 +39,13 @@ import com.inspiredandroid.kai.ui.DenebSectionLabel
 import com.inspiredandroid.kai.ui.DenebType
 import com.inspiredandroid.kai.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
@@ -77,11 +80,13 @@ fun DenebCalendarAddScreen(
     var location by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var allDay by remember { mutableStateOf(false) }
-    var date by remember { mutableStateOf(parseDateOr(initialDateIso, now.date)) }
+    var startDate by remember { mutableStateOf(parseDateOr(initialDateIso, now.date)) }
+    var endDate by remember { mutableStateOf(parseDateOr(initialDateIso, now.date)) }
     var startTime by remember { mutableStateOf(LocalTime(startHour, 0)) }
     var endTime by remember { mutableStateOf(LocalTime(startHour + 1, 0)) }
 
-    var showDatePicker by remember { mutableStateOf(false) }
+    var showStartDatePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
     var showStartPicker by remember { mutableStateOf(false) }
     var showEndPicker by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
@@ -100,10 +105,18 @@ fun DenebCalendarAddScreen(
             description = ev.description
             allDay = ev.allDay
             rfcToLocal(ev.start, tz)?.let { (d, t) ->
-                date = d
+                startDate = d
+                endDate = d
                 if (!ev.allDay) startTime = t
             }
-            rfcToLocal(ev.end, tz)?.let { (_, t) -> if (!ev.allDay) endTime = t }
+            rfcToLocal(ev.end, tz)?.let { (d, t) ->
+                if (ev.allDay) {
+                    endDate = allDayEndToInclusive(d, t, startDate)
+                } else {
+                    endDate = d
+                    endTime = t
+                }
+            }
         } else {
             error = "일정을 불러오지 못했습니다."
         }
@@ -115,18 +128,25 @@ fun DenebCalendarAddScreen(
             error = "제목을 입력해 주세요."
             return
         }
-        if (!allDay && !timeAfter(endTime, startTime)) {
-            error = "종료 시간은 시작 시간보다 뒤여야 합니다."
+        if (allDay) {
+            if (endDate < startDate) {
+                error = "종료 날짜는 시작 날짜와 같거나 뒤여야 합니다."
+                return
+            }
+        } else if (LocalDateTime(endDate, endTime).toInstant(tz) <= LocalDateTime(startDate, startTime).toInstant(tz)) {
+            error = "종료가 시작보다 뒤여야 합니다."
             return
         }
         scope.launch {
             saving = true
             error = null
             val (startIso, endIso) = if (allDay) {
-                LocalDateTime(date, LocalTime(0, 0)).toInstant(tz).toString() to ""
+                // All-day end is exclusive: midnight of the day after the last day.
+                LocalDateTime(startDate, LocalTime(0, 0)).toInstant(tz).toString() to
+                    LocalDateTime(endDate.plus(1, DateTimeUnit.DAY), LocalTime(0, 0)).toInstant(tz).toString()
             } else {
-                LocalDateTime(date, startTime).toInstant(tz).toString() to
-                    LocalDateTime(date, endTime).toInstant(tz).toString()
+                LocalDateTime(startDate, startTime).toInstant(tz).toString() to
+                    LocalDateTime(endDate, endTime).toInstant(tz).toString()
             }
             val err = if (editEventId != null) {
                 client.updateCalendarEvent(
@@ -167,8 +187,10 @@ fun DenebCalendarAddScreen(
                     onTitle = { title = it },
                     allDay = allDay,
                     onAllDay = { allDay = it },
-                    dateLabel = dateLabel(date),
-                    onPickDate = { showDatePicker = true },
+                    startDateLabel = dateLabel(startDate),
+                    onPickStartDate = { showStartDatePicker = true },
+                    endDateLabel = dateLabel(endDate),
+                    onPickEndDate = { showEndDatePicker = true },
                     startLabel = timeLabel(startTime),
                     onPickStart = { showStartPicker = true },
                     endLabel = timeLabel(endTime),
@@ -186,18 +208,40 @@ fun DenebCalendarAddScreen(
         }
     }
 
-    if (showDatePicker) {
-        val state = rememberDatePickerState(initialSelectedDateMillis = localDateToUtcMillis(date))
+    if (showStartDatePicker) {
+        val state = rememberDatePickerState(initialSelectedDateMillis = localDateToUtcMillis(startDate))
         DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
+            onDismissRequest = { showStartDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
                     haptics.tap()
-                    state.selectedDateMillis?.let { date = utcMillisToLocalDate(it) }
-                    showDatePicker = false
+                    state.selectedDateMillis?.let {
+                        val picked = utcMillisToLocalDate(it)
+                        startDate = picked
+                        if (endDate < picked) endDate = picked // keep end on/after start
+                    }
+                    showStartDatePicker = false
                 }) { Text("확인") }
             },
-            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("취소") } },
+            dismissButton = { TextButton(onClick = { showStartDatePicker = false }) { Text("취소") } },
+        ) { DatePicker(state = state) }
+    }
+    if (showEndDatePicker) {
+        val state = rememberDatePickerState(initialSelectedDateMillis = localDateToUtcMillis(endDate))
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    haptics.tap()
+                    state.selectedDateMillis?.let {
+                        val picked = utcMillisToLocalDate(it)
+                        endDate = picked
+                        if (startDate > picked) startDate = picked // keep start on/before end
+                    }
+                    showEndDatePicker = false
+                }) { Text("확인") }
+            },
+            dismissButton = { TextButton(onClick = { showEndDatePicker = false }) { Text("취소") } },
         ) { DatePicker(state = state) }
     }
     if (showStartPicker) {
@@ -205,8 +249,10 @@ fun DenebCalendarAddScreen(
             initial = startTime,
             onConfirm = {
                 startTime = it
-                // Keep end after start: nudge it to +1h if it now precedes start.
-                if (!timeAfter(endTime, startTime)) endTime = LocalTime((it.hour + 1) % 24, it.minute)
+                // Same-day event: nudge end to +1h if it now precedes start.
+                if (startDate == endDate && !timeAfter(endTime, startTime)) {
+                    endTime = LocalTime((it.hour + 1) % 24, it.minute)
+                }
                 showStartPicker = false
             },
             onDismiss = { showStartPicker = false },
@@ -231,8 +277,10 @@ internal fun CalendarAddContent(
     onTitle: (String) -> Unit,
     allDay: Boolean,
     onAllDay: (Boolean) -> Unit,
-    dateLabel: String,
-    onPickDate: () -> Unit,
+    startDateLabel: String,
+    onPickStartDate: () -> Unit,
+    endDateLabel: String,
+    onPickEndDate: () -> Unit,
     startLabel: String,
     onPickStart: () -> Unit,
     endLabel: String,
@@ -262,7 +310,9 @@ internal fun CalendarAddContent(
         Switch(checked = allDay, onCheckedChange = onAllDay)
     }
     Spacer(Modifier.height(8.dp))
-    OutlinedButton(onClick = { haptics.tap(); onPickDate() }, modifier = Modifier.fillMaxWidth()) { Text(dateLabel) }
+    OutlinedButton(onClick = { haptics.tap(); onPickStartDate() }, modifier = Modifier.fillMaxWidth()) { Text("시작 $startDateLabel") }
+    Spacer(Modifier.height(8.dp))
+    OutlinedButton(onClick = { haptics.tap(); onPickEndDate() }, modifier = Modifier.fillMaxWidth()) { Text("종료 $endDateLabel") }
     if (!allDay) {
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -320,6 +370,11 @@ private fun TimePickerDialog(
 }
 
 // --- helpers --------------------------------------------------------------
+
+// allDayEndToInclusive converts a stored all-day end (exclusive — midnight after
+// the last day) back to the last visible day, for pre-filling the edit form.
+private fun allDayEndToInclusive(d: LocalDate, t: LocalTime, start: LocalDate): LocalDate =
+    if (t == LocalTime(0, 0) && d > start) d.minus(1, DateTimeUnit.DAY) else d
 
 private fun parseDateOr(iso: String, fallback: LocalDate): LocalDate {
     if (iso.isBlank()) return fallback
