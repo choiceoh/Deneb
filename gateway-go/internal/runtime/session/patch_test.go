@@ -2,6 +2,7 @@ package session
 
 import (
 	"testing"
+	"time"
 )
 
 func TestSessionApplyPatch(t *testing.T) {
@@ -119,6 +120,25 @@ func TestManagerPatch(t *testing.T) {
 		}
 		if snap.Kind != KindUnknown {
 			t.Errorf("kind = %q, want %q", snap.Kind, KindUnknown)
+		}
+	})
+
+	t.Run("metadata patch emits no lifecycle event", func(t *testing.T) {
+		m := NewManager()
+		m.Create("s1", KindDirect)
+		events := make(chan Event, 1)
+		unsub := m.EventBusRef().Subscribe(func(e Event) {
+			events <- e
+		})
+		defer unsub()
+
+		label := "renamed"
+		m.Patch("s1", PatchFields{Label: &label})
+
+		select {
+		case evt := <-events:
+			t.Fatalf("unexpected lifecycle event: %+v", evt)
+		case <-time.After(150 * time.Millisecond):
 		}
 	})
 }

@@ -25,11 +25,11 @@ func (s *Server) buildMux() *http.ServeMux {
 	// production; these endpoints are never reachable from outside the host.
 	// Visit /debug/pprof/goroutine?debug=2 when the gateway appears hung —
 	// it returns a full stack dump without killing the process.
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	mux.HandleFunc("/debug/pprof/", loopbackOnly(pprof.Index))
+	mux.HandleFunc("/debug/pprof/cmdline", loopbackOnly(pprof.Cmdline))
+	mux.HandleFunc("/debug/pprof/profile", loopbackOnly(pprof.Profile))
+	mux.HandleFunc("/debug/pprof/symbol", loopbackOnly(pprof.Symbol))
+	mux.HandleFunc("/debug/pprof/trace", loopbackOnly(pprof.Trace))
 
 	// Explicit method-not-allowed for health/ready endpoints.
 	// Without these, non-GET requests fall through to the catch-all "/" handler
@@ -57,6 +57,16 @@ func (s *Server) buildMux() *http.ServeMux {
 	})
 
 	return mux
+}
+
+func loopbackOnly(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopbackRemote(r.RemoteAddr) {
+			http.Error(w, "localhost only", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {

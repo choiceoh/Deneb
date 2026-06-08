@@ -106,8 +106,11 @@ func (m *Manager) Patch(key string, patch PatchFields) *Session {
 		cp = *s
 		m.mu.Unlock()
 
+		// sessions.patch only mutates metadata/config fields, never lifecycle
+		// status. Emitting EventStatusChanged here causes downstream reset/terminal
+		// cleanup hooks to release active-session artifacts.
 		if changed {
-			return []Event{{Kind: EventStatusChanged, Key: key}}
+			return nil
 		}
 		return nil
 	})

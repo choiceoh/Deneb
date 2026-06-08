@@ -186,6 +186,49 @@ func TestCheckpointLifecycle_IgnoresRunningTransition(t *testing.T) {
 	}
 }
 
+// TestCheckpointLifecycle_IgnoresMetadataPatch ensures ordinary sessions.patch
+// updates do not trigger reset/terminal cleanup for an active session.
+func TestCheckpointLifecycle_IgnoresMetadataPatch(t *testing.T) {
+	root := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	s := &Server{
+		ServerTransport: &ServerTransport{},
+		ServerRPC:       &ServerRPC{},
+		ServerRuntime:   &ServerRuntime{},
+		SessionManager:  &SessionManager{sessions: session.NewManager()},
+		ChatManager:     &ChatManager{},
+		HookManager:     &HookManager{},
+		logger:          logger,
+	}
+	s.initCheckpointLifecycle(root)
+	t.Cleanup(func() {
+		if s.checkpointLifecycleUnsub != nil {
+			s.checkpointLifecycleUnsub()
+		}
+	})
+
+	const sessionKey = "sess-patch"
+	s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{Phase: session.PhaseStart, Ts: 1})
+
+	cpm := checkpoint.New(root, sessionKey)
+	target := filepath.Join(t.TempDir(), "file.txt")
+	if err := os.WriteFile(target, []byte("hi"), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	if _, err := cpm.Snapshot(context.Background(), target, "fs_write"); err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	sessionDir := cpm.SessionDir()
+
+	label := "renamed"
+	s.sessions.Patch(sessionKey, session.PatchFields{Label: &label})
+
+	time.Sleep(300 * time.Millisecond)
+	if _, err := os.Stat(sessionDir); err != nil {
+		t.Fatalf("dir should persist after metadata patch, stat err=%v", err)
+	}
+}
+
 // TestCheckpointLifecycle_EmptyRootIsNoop verifies that initCheckpointLifecycle
 // does not subscribe (and therefore does not leak a subscription) when no
 // storage root was configured.
