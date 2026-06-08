@@ -50,6 +50,7 @@ import com.inspiredandroid.kai.deneb.DenebCategoriesScreen
 import com.inspiredandroid.kai.deneb.DenebCategoryPagesScreen
 import com.inspiredandroid.kai.deneb.DenebDiaryScreen
 import com.inspiredandroid.kai.deneb.DenebSearchScreen
+import com.inspiredandroid.kai.deneb.DenebCronEditScreen
 import com.inspiredandroid.kai.deneb.DenebCronScreen
 import com.inspiredandroid.kai.deneb.DenebTopicDocScreen
 import com.inspiredandroid.kai.deneb.DenebWikiPageScreen
@@ -158,6 +159,10 @@ data class DenebCategoryPages(val category: String)
 @Serializable
 @SerialName("deneb_cron")
 data class DenebCron(val cronId: String)
+
+@Serializable
+@SerialName("deneb_cron_edit")
+data class DenebCronEdit(val cronId: String)
 
 @Composable
 fun App(
@@ -493,6 +498,18 @@ private fun AppContent(
                                 client = client,
                                 cronId = entry.toRoute<DenebCron>().cronId,
                                 onBack = { navController.navigateUp() },
+                                onEdit = { id -> navController.navigate(DenebCronEdit(id)) },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebCronEdit> { entry ->
+                        denebClient?.let { client ->
+                            DenebCronEditScreen(
+                                client = client,
+                                cronId = entry.toRoute<DenebCronEdit>().cronId,
+                                onBack = { navController.navigateUp() },
+                                onSaved = { navController.navigateUp() },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }

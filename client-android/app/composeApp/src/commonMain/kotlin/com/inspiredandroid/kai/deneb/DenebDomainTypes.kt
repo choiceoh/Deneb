@@ -123,6 +123,7 @@ data class CronDetail(
     val schedule: String,
     val scheduleSpec: String,
     val scheduleKind: String,
+    val timezone: String,
     val payloadKind: String,
     val prompt: String,
     val model: String,

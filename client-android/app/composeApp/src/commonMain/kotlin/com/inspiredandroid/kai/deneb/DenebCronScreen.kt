@@ -44,6 +44,7 @@ fun DenebCronScreen(
     client: DenebGatewayClient,
     cronId: String,
     onBack: () -> Unit,
+    onEdit: (String) -> Unit,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var cron by remember(cronId) { mutableStateOf<CronDetail?>(null) }
@@ -164,6 +165,10 @@ fun DenebCronScreen(
                         }
                     },
                 ) { Text("지금 실행") }
+                OutlinedButton(
+                    enabled = !busy,
+                    onClick = { haptics.tap(); onEdit(c.id) },
+                ) { Text("편집") }
                 OutlinedButton(
                     enabled = !busy,
                     onClick = { haptics.reject(); confirmDelete = true },

@@ -20,6 +20,10 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.deneb.CalMonth
 import com.inspiredandroid.kai.deneb.CalendarAddContent
+import com.inspiredandroid.kai.deneb.CronEditContent
+import com.inspiredandroid.kai.deneb.IntervalUnit
+import com.inspiredandroid.kai.deneb.SchedMode
+import com.inspiredandroid.kai.deneb.ScheduleDraft
 import com.inspiredandroid.kai.deneb.CalendarDayList
 import com.inspiredandroid.kai.deneb.CalendarEmptyDay
 import com.inspiredandroid.kai.deneb.CalendarEvent
@@ -112,6 +116,10 @@ fun main() {
     renderCalendarAdd("calendar_add_light.png", LightColorScheme)
     renderCalendarEmpty("calendar_empty_dark.png", DarkColorScheme)
     renderCalendarEmpty("calendar_empty_light.png", LightColorScheme)
+    renderCronEdit("cron_edit_dark.png", DarkColorScheme, cronWeeklyDraft, "Asia/Seoul")
+    renderCronEdit("cron_edit_light.png", LightColorScheme, cronWeeklyDraft, "Asia/Seoul")
+    renderCronEdit("cron_edit_interval.png", DarkColorScheme, cronIntervalDraft, "")
+    renderCronEdit("cron_edit_advanced.png", DarkColorScheme, cronAdvancedDraft, "Asia/Seoul")
     renderChart("chart_dark.png", DarkColorScheme)
     renderChart("chart_light.png", LightColorScheme)
     renderWorkFeed("workfeed_dark.png", DarkColorScheme)
@@ -316,6 +324,48 @@ private fun renderCalendarAdd(name: String, scheme: ColorScheme) {
                         error = null,
                         saving = false,
                         saveLabel = "추가",
+                        onSave = {},
+                    )
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// Sample drafts for the cron edit previews — one per schedule mode so the segmented
+// control, weekday chips, interval row, and raw-cron fallback all get exercised.
+private val cronWeeklyDraft = ScheduleDraft(SchedMode.WEEKLY, "08:00", setOf(1, 3, 5), "30", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "")
+private val cronIntervalDraft = ScheduleDraft(SchedMode.INTERVAL, "09:00", emptySet(), "15", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "")
+private val cronAdvancedDraft = ScheduleDraft(SchedMode.ADVANCED, "09:00", emptySet(), "30", IntervalUnit.MIN, LocalDate.parse("2026-06-13"), "*/5 8-22 * * 1-6")
+
+// Validates the cron edit form: soft filled fields, the frequency segmented control,
+// and the per-mode inputs (weekday chips / time / interval / raw-cron) under Deneb
+// section labels. Driven per schedule mode via [draft].
+private fun renderCronEdit(name: String, scheme: ColorScheme, draft: ScheduleDraft, tz: String) {
+    val scene = ImageComposeScene(width = 824, height = 1300, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "크론 편집", onBack = {}) {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    CronEditContent(
+                        name = "주간 업무 보고",
+                        onName = {},
+                        draft = draft,
+                        onDraft = {},
+                        onceDateLabel = "2026년 6월 13일",
+                        onPickOnceDate = {},
+                        tz = tz,
+                        onTz = {},
+                        prompt = "이번 주 진행 상황과 미결 항목을 정리해 보고해 줘.",
+                        onPrompt = {},
+                        model = "",
+                        onModel = {},
+                        error = null,
+                        saving = false,
                         onSave = {},
                     )
                 }
