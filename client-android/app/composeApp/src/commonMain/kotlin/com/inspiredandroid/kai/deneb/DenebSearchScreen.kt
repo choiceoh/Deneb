@@ -1,26 +1,19 @@
 package com.inspiredandroid.kai.deneb
 
-import androidx.compose.foundation.clickable
-import com.inspiredandroid.kai.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,17 +24,27 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.inspiredandroid.kai.ui.DenebMaxContentWidth
+import com.inspiredandroid.kai.ui.DenebRow
+import com.inspiredandroid.kai.ui.DenebScreenScaffold
+import com.inspiredandroid.kai.ui.DenebSectionLabel
+import com.inspiredandroid.kai.ui.DenebType
+import com.inspiredandroid.kai.ui.denebHairline
+import com.inspiredandroid.kai.ui.denebHint
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 
 /**
- * Unified discovery (`miniapp.search.all`): one box searches wiki, diary and
- * people. Wiki hits open the page view; people/diary show inline. Surface-
- * wrapped so all text is visible in dark mode.
+ * Unified discovery (`miniapp.search.all`): one box searches wiki, diary and people.
+ * Wiki hits open the page view; people open the person view; diary shows inline.
+ *
+ * Design (.claude/rules/native-design-system.md): the Deneb skin — [DenebScreenScaffold]
+ * frame, a flat hairline-underlined search input (no Material box), and [DenebRow] result
+ * rows in [DenebType]. Body rendering lives in [SearchContent] so the render harness can
+ * preview it; this is the stateful shell (query + search RPC).
  */
 @Composable
 fun DenebSearchScreen(
@@ -71,118 +74,127 @@ fun DenebSearchScreen(
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    DenebScreenScaffold(title = "검색", onBack = onBack, tabBar = navigationTabBar) {
         Column(
-            modifier = Modifier.widthIn(max = DenebMaxContentWidth).statusBarsPadding().padding(16.dp).verticalScroll(rememberScrollState()),
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
         ) {
-            if (navigationTabBar != null) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
-                Spacer(Modifier.height(16.dp))
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "검색",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = onOpenCategories) { Text("카테고리") }
-                TextButton(onClick = { onOpenWiki("") }) { Text("+ 새 위키") }
-                TextButton(onClick = onBack) { Text("닫기") }
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    placeholder = { Text("위키 · 일기 · 사람 검색") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { run() }),
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(8.dp))
-                TextButton(onClick = { run() }, enabled = !searching) { Text(if (searching) "…" else "검색") }
-            }
-            Spacer(Modifier.height(12.dp))
+            SearchContent(
+                query = query,
+                onQuery = { query = it },
+                onSearch = { run() },
+                searching = searching,
+                failed = failed,
+                results = results,
+                onOpenWiki = onOpenWiki,
+                onOpenPerson = onOpenPerson,
+                onOpenCategories = onOpenCategories,
+            )
+        }
+    }
+}
 
-            val r = results
-            when {
-                searching && r == null -> DenebLoading("검색 중…")
-                failed -> DenebError(
-                    "검색에 실패했어요.",
-                    onRetry = { run() },
-                )
-                r == null -> Text(
-                    "위키 · 일기 · 사람을 한 번에 검색합니다.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                r.wiki.isEmpty() && r.diary.isEmpty() && r.people.isEmpty() -> DenebEmpty("결과 없음")
-                else -> {
-                    if (r.wiki.isNotEmpty()) {
-                        GroupHeader("위키 ${r.wiki.size}")
-                        r.wiki.forEach { hit ->
-                            ResultRow(hit.title, hit.snippet) { onOpenWiki(hit.path) }
-                        }
-                    }
-                    if (r.people.isNotEmpty()) {
-                        GroupHeader("사람 ${r.people.size}")
-                        r.people.forEach { person ->
-                            ResultRow(
-                                "${person.name}  ·  ${person.messageCount}통",
-                                person.lastSubject,
-                                onClick = { onOpenPerson(person.email.ifBlank { person.name }) },
-                            )
-                        }
-                    }
-                    if (r.diary.isNotEmpty()) {
-                        GroupHeader("일기 ${r.diary.size}")
-                        r.diary.forEach { hit ->
-                            ResultRow(hit.title, hit.snippet, onClick = null)
-                        }
-                    }
-                    Spacer(Modifier.height(24.dp))
+/**
+ * Stateless search body — extracted so [RenderPreview] can render it with mock results.
+ * Pure presentation: a flat search field, quick actions, and hairline result rows.
+ */
+@Composable
+internal fun SearchContent(
+    query: String,
+    onQuery: (String) -> Unit,
+    onSearch: () -> Unit,
+    searching: Boolean,
+    failed: Boolean,
+    results: SearchResults?,
+    onOpenWiki: (String) -> Unit,
+    onOpenPerson: (String) -> Unit,
+    onOpenCategories: () -> Unit,
+) {
+    Spacer(Modifier.height(8.dp))
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        BasicTextField(
+            value = query,
+            onValueChange = onQuery,
+            textStyle = DenebType.body.copy(color = MaterialTheme.colorScheme.onBackground),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+            modifier = Modifier.weight(1f),
+            decorationBox = { inner ->
+                if (query.isEmpty()) {
+                    Text("위키 · 일기 · 사람 검색", style = DenebType.body, color = denebHint())
+                }
+                inner()
+            },
+        )
+        TextButton(onClick = onSearch, enabled = !searching) {
+            Text(if (searching) "…" else "검색")
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    HorizontalDivider(color = denebHairline())
+
+    Spacer(Modifier.height(4.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        TextButton(onClick = onOpenCategories) { Text("카테고리") }
+        TextButton(onClick = { onOpenWiki("") }) { Text("새 위키") }
+    }
+
+    Spacer(Modifier.height(8.dp))
+    val r = results
+    when {
+        searching && r == null -> DenebLoading("검색 중…")
+        failed -> DenebError("검색에 실패했어요.", onRetry = onSearch)
+        r == null -> Text(
+            "위키 · 일기 · 사람을 한 번에 검색합니다.",
+            style = DenebType.body,
+            color = denebHint(),
+        )
+        r.wiki.isEmpty() && r.diary.isEmpty() && r.people.isEmpty() -> DenebEmpty("결과 없음")
+        else -> {
+            if (r.wiki.isNotEmpty()) {
+                DenebSectionLabel("위키 ${r.wiki.size}")
+                r.wiki.forEach { hit ->
+                    SearchResultRow(hit.title, hit.snippet) { onOpenWiki(hit.path) }
                 }
             }
-        }
+            if (r.people.isNotEmpty()) {
+                DenebSectionLabel("사람 ${r.people.size}")
+                r.people.forEach { person ->
+                    SearchResultRow(
+                        "${person.name}  ·  ${person.messageCount}통",
+                        person.lastSubject,
+                    ) { onOpenPerson(person.email.ifBlank { person.name }) }
+                }
+            }
+            if (r.diary.isNotEmpty()) {
+                DenebSectionLabel("일기 ${r.diary.size}")
+                r.diary.forEach { hit ->
+                    SearchResultRow(hit.title, hit.snippet, null)
+                }
+            }
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
 
 @Composable
-private fun GroupHeader(label: String) {
-    Spacer(Modifier.height(12.dp))
-    Text(
-        label,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-    )
-    Spacer(Modifier.height(2.dp))
-}
-
-@Composable
-private fun ResultRow(title: String, snippet: String, onClick: (() -> Unit)?) {
+private fun SearchResultRow(title: String, snippet: String, onClick: (() -> Unit)?) {
     val haptics = rememberHaptics()
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable { haptics.tap(); onClick() } else Modifier)
-            .padding(vertical = 10.dp),
-    ) {
+    DenebRow(onClick = onClick?.let { cb -> { haptics.tap(); cb() } }) {
         Text(
             title.ifBlank { "(제목 없음)" },
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = DenebType.rowTitle,
+            color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         if (snippet.isNotBlank()) {
+            Spacer(Modifier.height(3.dp))
             Text(
                 snippet,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = DenebType.snippet,
+                color = denebHint(),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
