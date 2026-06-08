@@ -33,14 +33,17 @@ func denebApkDir() string {
 	return filepath.Join(home, ".cache", "deneb-apk")
 }
 
-// apkFilePattern matches a published flavor APK: deneb-<name>-<code>-<variant>.apk
-// (e.g. deneb-2.9.30-153-fossDebug.apk). The variant segment may itself contain
-// hyphens, so name is captured non-greedily up to the numeric code.
-var apkFilePattern = regexp.MustCompile(`^deneb-(.+?)-(\d+)-.+\.apk$`)
+// apkFilePattern matches a published flavor APK by its versionCode. The current
+// filename shape is deneb-<code>-<sha>-<variant>.apk (e.g.
+// deneb-187-a1b2c3d4-fossRelease.apk). It also accepts the legacy
+// deneb-<name>-<code>-... shape still lingering in the serve dir from before the
+// semantic versionName was dropped, so the scan keeps finding those during the
+// transition. The optional leading group only matches a dotted version (e.g.
+// 2.9.60-); the code is the first dot-less integer segment.
+var apkFilePattern = regexp.MustCompile(`^deneb-(?:\d+(?:\.\d+)+-)?(\d+)-.+\.apk$`)
 
 type appUpdateManifest struct {
 	Code  int    `json:"code"`
-	Name  string `json:"name"`
 	File  string `json:"file"`
 	Notes string `json:"notes"`
 }
@@ -62,12 +65,12 @@ func latestPublishedApk(dir string) (appUpdateManifest, bool) {
 		if groups == nil {
 			continue
 		}
-		code, err := strconv.Atoi(groups[2])
+		code, err := strconv.Atoi(groups[1])
 		if err != nil {
 			continue
 		}
 		if code > best.Code {
-			best = appUpdateManifest{Code: code, Name: groups[1], File: e.Name()}
+			best = appUpdateManifest{Code: code, File: e.Name()}
 		}
 	}
 	if best.Code < 0 {

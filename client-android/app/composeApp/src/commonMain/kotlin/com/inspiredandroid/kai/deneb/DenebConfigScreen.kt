@@ -266,7 +266,7 @@ private fun GatewayTab(
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "현재 v$DENEB_VERSION_NAME ($DENEB_VERSION_CODE)",
+                "현재 빌드 $DENEB_VERSION_CODE",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -281,7 +281,7 @@ private fun GatewayTab(
             if (info != null) {
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "새 버전 v${info.versionName} 사용 가능",
+                    "새 빌드 ${info.buildLabel} 사용 가능",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
@@ -492,25 +492,21 @@ private fun PatchNotesSheet(onDismiss: () -> Unit) {
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "현재 빌드 $DENEB_VERSION_CODE",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
+            // versionName was removed — the sheet is a flat reverse-chronological
+            // changelog. Each entry is one build's highlights, separated by spacing
+            // (no version label, no "현재 버전" badge).
             items(DENEB_PATCH_NOTES) { note ->
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "v${note.version}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        if (note.version == DENEB_VERSION_NAME) {
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "현재 버전",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(bottom = 8.dp),
+                ) {
                     note.highlights.forEach { line ->
                         Row {
                             Text(

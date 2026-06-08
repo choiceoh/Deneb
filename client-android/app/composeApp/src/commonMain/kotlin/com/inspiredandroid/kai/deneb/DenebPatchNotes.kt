@@ -1,6 +1,6 @@
 package com.inspiredandroid.kai.deneb
 
-// Compiled-in patch notes — the record of what each native-client build shipped.
+// Compiled-in changelog — the record of what the native client shipped over time.
 //
 // This is deliberately separate from [UpdateManifest.notes]: that field describes a
 // *newer* build fetched from the gateway's version.json and only appears when an
@@ -8,27 +8,18 @@ package com.inspiredandroid.kai.deneb
 // the one the user is running, so they work offline and survive the gateway being
 // down. The settings "버전" card surfaces them on demand (no auto-popup).
 //
-// Newest first. The head entry's [version] MUST equal [com.inspiredandroid.kai.Version.appVersion]
-// — the running build describes itself at the top of the sheet, and DenebPatchNotesTest
-// fails the build when it doesn't. That guard exists because this list silently went
-// stale once: it sat at 2.9.30 while shipping builds reached 2.9.53, so the
-// "패치노트 보기" sheet only ever showed old versions and the user's own build was
-// missing (looked like "최근 패치노트가 안 보이고 예전 것만 다시 올라온다"). When you bump
-// appVersion in libs.versions.toml for a release, prepend a matching entry here.
-//
-// Keyed by [version] (the user-facing versionName), NOT by versionCode: publish-apk.sh
-// auto-assigns the code at publish time, so it isn't known when these lines are written.
-// "현재 버전" is flagged by matching version against Version.appVersion, never the code.
+// Newest first. There is no per-entry version label: the app has no semantic
+// versionName anymore (it is identified by versionCode alone), so the sheet is a
+// flat reverse-chronological changelog headed by "현재 빌드 N". When you ship a
+// release with user-facing changes, prepend a new entry here with its highlights.
 
 /** One released build and the user-facing highlights it introduced. */
 data class DenebPatchNote(
-    val version: String,
     val highlights: List<String>,
 )
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
-        version = "2.9.60",
         highlights = listOf(
             "채팅 답변 속 맨 URL을 자동으로 링크 — 주소를 그냥 적어도 탭하면 바로 열림",
             "별표 곱셈 오인 수정 — \"3 * 4 * 5\" 같은 표현이 기울임꼴로 잘못 변하지 않음",
@@ -36,88 +27,74 @@ val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
         ),
     ),
     DenebPatchNote(
-        version = "2.9.59",
         highlights = listOf(
             "여러 날에 걸친 일정 추가 — 출장·전시·워크숍처럼 며칠짜리 일정의 시작·종료 날짜를 따로 지정",
             "월 보기에서 여러 날 일정을 걸친 모든 날에 이어진 막대로 표시 (주가 바뀌어도 연결), 어느 날을 눌러도 그 날에 걸친 일정이 목록에 표시",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.58",
         highlights = listOf(
             "채팅 답변 줄 간격을 메신저(텔레그램·카톡) 수준으로 더 촘촘하게 — 한 화면에 더 많이 담기되 읽기 흐름은 유지",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.57",
         highlights = listOf(
             "채팅 답변 가독성 개선 — 본문 줄 간격과 문단 사이를 넉넉하게, 글자 크기는 한 단계 정돈해 긴 한국어 답변이 한눈에 읽히도록",
             "내가 보낸 말풍선을 또렷한 색으로 구분 (특히 밝은 테마에서 잘 보이도록)",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.56",
         highlights = listOf(
             "긴 마크다운 메시지를 스크롤 진입 전에 미리 측정해 스크롤을 더 부드럽게 (R8 릴리스 최적화)",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.53",
         highlights = listOf(
             "긴 대화를 빠르게 스크롤할 때 이미지·서식이 매번 다시 그려지지 않도록 캐시 — 더 부드러운 스크롤",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.52",
         highlights = listOf(
             "유지보수 및 안정화 빌드 — 더 이상 쓰지 않는 텔레그램 잔재 정리",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.50",
         highlights = listOf(
             "우측 세션 드로어에서 크론·시스템뿐 아니라 모든 자동(기계) 세션을 한 그룹으로 접어 목록을 깔끔하게",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.49",
         highlights = listOf(
             "마크다운 본문 파싱 결과를 스크롤 중에도 캐시 — 순수 스크롤이 더 매끄럽게",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.48",
         highlights = listOf(
             "응답 스트리밍을 생동감보다 부드러움 쪽으로 미세 조정 — 화면 떨림 감소",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.47",
         highlights = listOf(
             "스트리밍 토큰 갱신을 초당 약 30회로 묶어 답변이 흐를 때 화면 부하를 낮춤",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.46",
         highlights = listOf(
             "답변이 흐르는 동안 변하지 않은 이전 메시지는 다시 그리지 않도록 최적화 — 더 가벼운 스트리밍",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.45",
         highlights = listOf(
             "화면이 지원하면 가장 빠른 표시 모드(120Hz)를 요청해 스크롤을 더 부드럽게",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.44",
         highlights = listOf(
             "업무 피드를 아이콘만 있는 간결한 빠른 동작으로 정돈",
             "스트리밍 중 마크다운 재파싱을 약 16fps로 제한해 답변이 흐를 때 더 가볍게",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.43",
         highlights = listOf(
             "채팅 마크다운 렌더링 대폭 개선 — 코드 구문 강조, 체크박스형 작업 목록, 코드 블록 복사 확인, 취소선·둥근 이미지",
             "메일 분석 상세를 표 포함 완전한 마크다운으로 표시",
@@ -125,13 +102,11 @@ val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
         ),
     ),
     DenebPatchNote(
-        version = "2.9.40",
         highlights = listOf(
             "유지보수 빌드 — 2.9.37 내용을 그대로 재배포(인앱 업데이트 정상화)",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.37",
         highlights = listOf(
             "인앱 업데이트가 앱 안에서 바로 내려받고 설치까지 — 브라우저로 빠져나가 직접 찾을 필요 없이",
             "최근 일기 타임라인 — '요즘 내 주변에 무슨 일이 있었나'를 최신순으로 한눈에",
@@ -141,27 +116,23 @@ val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
         ),
     ),
     DenebPatchNote(
-        version = "2.9.36",
         highlights = listOf(
             "유지보수 빌드 — 본문 글자 크기 조정 반영 및 인앱 업데이트 정상화",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.33",
         highlights = listOf(
             "업무 피드를 상단 알림 종 아이콘 뒤로 — 안 읽은 개수 배지를 누르면 시트로 열려 채팅 영역을 가리지 않음",
             "채팅 본문 글자 크기·줄 간격을 살짝 줄여 더 차분하고 조밀한 읽기 화면",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.32",
         highlights = listOf(
             "설정 탭을 좌우로 밀어서 전환",
             "은퇴한 토픽이 세션 드로어에 남던 문제 수정",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.31",
         highlights = listOf(
             "업무 피드(액션 인박스) — 처리할 일을 앱에서 모아 보고 바로 후속·완료",
             "설정에서 OpenAI 호환 모델(로컬 vLLM·LM Studio 등)을 직접 추가·삭제",
@@ -169,43 +140,36 @@ val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
         ),
     ),
     DenebPatchNote(
-        version = "2.9.30",
         highlights = listOf(
             "우측 세션 드로어 열기 스와이프를 화면 오른쪽 절반(가운데~오른쪽)에서 왼쪽으로 밀면 되도록 넓힘",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.29",
         highlights = listOf(
             "우측 세션 드로어 열기 제스처를 화면 오른쪽 끝 '살짝 안쪽'에서 왼쪽으로 미는 방식으로 — 안드로이드 뒤로가기 제스처가 맨 끝을 먹어서 안 되던 문제 우회",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.28",
         highlights = listOf(
             "모닝레터·개별 메일분석 등 능동형 리포트가 네이티브 앱에 제대로 도착 — 앱을 켜면 업무 홈으로 바로 들어가고, 켜둔 상태에서도 새 리포트가 실시간 반영(다른 대화를 보고 있으면 '새 업무 리포트' 배너로 안내)",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.27",
         highlights = listOf(
             "우측 세션 드로어를 화면 오른쪽 끝에서 왼쪽으로 밀어서 열기 — 중첩 드로어 제스처 충돌로 안 먹던 문제 수정",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.26",
         highlights = listOf(
             "안 쓰는 화상회의(Meet) 참가 버튼과 일정 목록의 Meet 배지 제거",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.25",
         highlights = listOf(
             "일정 상세 화면을 새 타이포그래픽 디자인으로 정돈 — 큰 제목·섹션 라벨·깔끔한 정보 행 (다른 화면도 순차 적용 예정)",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.24",
         highlights = listOf(
             "상세 화면(메일·크론·사람·일정·문서·카테고리)의 로딩 실패에 '다시 시도' 버튼 — 한 번 실패해도 빠져나갈 필요 없이 바로 재시도",
             "조용히 실패하던 동작 교정 — 크론 삭제 확인 + 실패 알림, 메일 보관·삭제·모델 전환 실패 표시",
@@ -213,112 +177,94 @@ val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
         ),
     ),
     DenebPatchNote(
-        version = "2.9.23",
         highlights = listOf(
             "메일·일정·사람·검색 화면의 로딩·오류·빈 상태 정리 — 스켈레톤 로딩, 실패 시 '다시 시도' 버튼, 내용이 없을 땐 안내 문구",
             "메일을 읽음·보관·삭제하면 목록에서 부드럽게 사라지고, 탭·길게누르기 햅틱을 통일",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.22",
         highlights = listOf(
             "메일 분석 리포트에서 모델의 추론 과정이 그대로 노출되던 문제 수정",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.19",
         highlights = listOf(
             "모델 아이콘 추가 — Gemma 전용 마크와 MiniMax 실제 로고를 모델 전환기에 표시",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.18",
         highlights = listOf(
             "모델 아이콘 추가 — Qwen·StepFun·Xiaomi MiMo 브랜드 마크가 모델 전환기에 표시",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.17",
         highlights = listOf(
             "설정 모델 탭에 응답 상태 색상 점 — 초록=응답 가능, 빨강=응답 없음, 노랑=미확인 (채움=현재 선택)",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.16",
         highlights = listOf(
             "모델 전환기에 모델별 실제 브랜드 아이콘(흑백) — Claude·GPT·Gemini·Kimi·DeepSeek 등을 한눈에 구분",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.15",
         highlights = listOf(
             "토픽 전환을 오른쪽 드로어로 — 상단바 해시태그(#)를 누르면 업무·잡담·코딩을 한눈에 보고 고를 수 있어요",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.14",
         highlights = listOf(
             "알림 주입 방식 선택 — 도착 즉시 자동 주입(기본)과 탭해서 보내는 수동 주입을 설정에서 전환",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.13",
         highlights = listOf(
             "캡처한 알림(카톡·메일 등)을 즉시 처리 — 60초 폴링 대기 없이 바로 트리아지",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.12",
         highlights = listOf(
             "능동 알림을 탭하면 보고가 있는 업무 토픽으로 바로 이동",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.11",
         highlights = listOf(
             "알림 캡처 — 설정에서 받을 앱을 직접 고를 수 있어요(비우면 전체)",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.10",
         highlights = listOf(
             "능동 알림 — 모닝레터·메일분석을 게이트웨이가 만든 즉시 푸시(주기 대기 없이)",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.9",
         highlights = listOf(
             "버그 수정 — 답변을 위키에 기록할 때 스트리밍된 본문이 사라지던 문제",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.8",
         highlights = listOf(
             "재생성(regen) 버튼 수정 — 마지막 답변을 다시 생성하도록 동작",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.7",
         highlights = listOf(
             "모닝레터·메일분석이 업무 토픽에도 표시 (텔레그램과 함께)",
             "좌측 드로어를 미니앱식 타이포 메뉴로 정리",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.6",
         highlights = listOf(
             "접근성 — 입력바 아이콘(보내기·중지·첨부)에 TalkBack 라벨",
             "설정 탭 목록(사람·크론·토픽문서)도 부드럽게 등장하는 모션",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.5",
         highlights = listOf(
             "유지보수 빌드 — 최신 변경 반영 및 안정화",
         ),
     ),
     DenebPatchNote(
-        version = "2.9.4",
         highlights = listOf(
             "답변이 생성될 때 깜빡이는 타이핑 커서 — 스트리밍이 한눈에",
             "드로어·목록·일정·검색 탭에 햅틱 — 손끝 피드백 통일",
@@ -326,7 +272,6 @@ val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
         ),
     ),
     DenebPatchNote(
-        version = "2.9.3",
         highlights = listOf(
             "UI 폴리싱 — 브랜드 블루 컬러 일관화, Pretendard 한글 자간 정리",
             "불러올 때 스켈레톤(시머) 표시 — 빈 화면 대신 부드럽게 채워짐",
@@ -335,45 +280,38 @@ val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
         ),
     ),
     DenebPatchNote(
-        version = "2.7.7",
         highlights = listOf(
             "음성 캡처 앱 단축키 — 홈 화면 단축키로 바로 말해서 Deneb에 받아쓰기",
             "토픽 전환 버튼(업무·잡담·코딩)과 좌측 내비게이션 드로어",
         ),
     ),
     DenebPatchNote(
-        version = "2.7.6",
         highlights = listOf(
             "이미지 캡처 — 사진·스크린샷을 Deneb에 공유하면 게이트웨이가 OCR로 텍스트를 읽어 처리",
         ),
     ),
     DenebPatchNote(
-        version = "2.7.5",
         highlights = listOf(
             "채팅 응답 토큰 단위 스트리밍 — 답변이 실시간으로 흘러나옴",
             "알림 캡처 탭 — 다른 앱 알림을 읽어와 탭으로 분류·처리",
         ),
     ),
     DenebPatchNote(
-        version = "2.7.4",
         highlights = listOf(
             "공유 시트 캡처 — 다른 앱에서 텍스트를 공유하면 바로 Deneb 채팅으로",
         ),
     ),
     DenebPatchNote(
-        version = "2.7.3",
         highlights = listOf(
             "역할별 모델 선택 — 메인·경량·폴백 모델을 각각 지정",
         ),
     ),
     DenebPatchNote(
-        version = "2.7.1",
         highlights = listOf(
             "크론 상세 화면 — 일정·지시·배달·상태 확인, 활성화·실행·삭제",
         ),
     ),
     DenebPatchNote(
-        version = "2.7.0",
         highlights = listOf(
             "캘린더 심화 + 위키 페이지 메타데이터 편집",
         ),

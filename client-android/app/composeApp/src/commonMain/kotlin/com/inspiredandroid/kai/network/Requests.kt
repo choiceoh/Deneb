@@ -71,7 +71,7 @@ class Requests {
             )
         }
         install(UserAgent) {
-            agent = "Kai/${Version.appVersion} (${currentPlatform.displayName})"
+            agent = "Deneb/${Version.appVersionCode} (${currentPlatform.displayName})"
         }
         install(HttpTimeout) {
             requestTimeoutMillis = 60.seconds.inWholeMilliseconds
