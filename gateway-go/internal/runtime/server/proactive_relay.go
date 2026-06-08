@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
@@ -76,6 +78,14 @@ func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
 	if content = chat.StripSilentToken(content); strings.TrimSpace(content) == "" {
 		return false, nil
 	}
+	// Drop the model's leading working-narration preamble — "전체 맥락 파악됐습니다.
+	// 분석 결과 정리합니다." (then "---" then the actual report) — before it reaches
+	// the work-feed card title/summary, the client:main transcript, or the push.
+	// A cron/morning-letter turn sometimes opens its terminal (no-tool) turn with
+	// this meta sentence about its own process; because it sits atop a single
+	// terminal turn, the per-turn isInterimNarration filter (tool-count based)
+	// never sees it. See stripProactiveMetaPreamble.
+	content = stripProactiveMetaPreamble(content)
 	// Floor: drop "nothing to report" pings before they reach the transcript,
 	// work feed, or push. A proactive agent turn that ignores its NO_REPLY
 	// contract and writes a chatty "읽지 않은 메일이 없습니다" (an email-check cron
@@ -178,6 +188,152 @@ func isContentlessProactive(content string) bool {
 		}
 	}
 	return false
+}
+
+// metaPreambleMaxRunes bounds how long a leading paragraph may be and still count
+// as throwaway working-narration. Observed leaks are all under ~50 runes; a real
+// report lede that opens on the subject runs longer. The signal match below is
+// the primary discriminator — this is a secondary guard so an unusually long
+// sentence that happens to contain a signal word is never mistaken for narration.
+const metaPreambleMaxRunes = 100
+
+// metaPreambleMinRemainderRunes is the minimum report content that must survive a
+// strip. Below this the original is kept untouched, so a body that is *only* a
+// short status line is never reduced to a near-empty card.
+const metaPreambleMinRemainderRunes = 30
+
+// metaPreambleSignals mark a leading paragraph as the model narrating its own
+// process — gathering context, finishing analysis, starting to write, detecting a
+// trigger, or framing the deliverable — rather than reporting. Matched only
+// against a short leading paragraph that real content follows (see
+// stripProactiveMetaPreamble), so a sentence containing one of these mid-report
+// is never touched.
+var metaPreambleSignals = []string{
+	// 맥락/정보 수집 단계 서술
+	"맥락을 확보", "맥락 확보", "맥락을 파악", "맥락 파악", "맥락이 파악",
+	"충분한 맥락", "충분한 정보", "전체 맥락",
+	"파악됐습니다", "파악했습니다", "파악 완료",
+	// 분석/정리/작성/수집/업데이트 완료·전환 서술
+	"분석 완료", "분석을 완료", "분석이 완료", "분석 결과 정리", "분석 결과를 정리",
+	"정리합니다", "정리하겠습니다", "정리해서 보고", "정리할게요", "정리했습니다",
+	"작성한다", "작성합니다", "작성하겠습니다", "작성할게요",
+	"수집 완료", "수집했습니다",
+	"업데이트까지 끝", "업데이트 완료",
+	// 보고 행위 자기언급
+	"보고드릴게요", "보고드리겠습니다", "보고하겠습니다", "보고할게요",
+	// 트리거 감지 서술 (실시간 메일 분석)
+	"도착 감지", "감지됐", "감지되어", "감지했",
+	// 산출물 자기언급
+	"발송 내용입니다", "보낼 내용입니다", "전달할 내용입니다", "작성한 내용입니다",
+}
+
+// metaPreambleFillerPrefixes mark an AI-filler opener some proactive turns
+// prepend before the real report. A proactive report has no user to acknowledge,
+// so any of these atop a card is throwaway. Matched as a prefix of a short
+// leading paragraph only.
+var metaPreambleFillerPrefixes = []string{
+	"좋아요", "좋습니다", "알겠습니다", "알겠어요", "물론입니다", "물론이죠",
+	"네, ", "네,", "넵 ", "넵,", "그럼 ", "자, ",
+}
+
+// stripProactiveMetaPreamble removes a leading working-narration paragraph (and
+// an immediately following horizontal-rule divider) from a proactive body.
+//
+// A model composing a cron/morning-letter report sometimes opens its final turn
+// with a meta sentence about its own process — "전체 맥락 파악됐습니다. 분석 결과
+// 정리합니다." then "---" then the actual report — which then leaks verbatim into
+// the 업무 리포트 card title, summary, and the client:main transcript. That preamble
+// sits atop a single terminal (no-tool) turn, so the per-turn isInterimNarration
+// filter cannot catch it; this post-process strip does.
+//
+// Conservative by design: it removes only the FIRST paragraph, and only when that
+// paragraph (1) opens with a letter/digit — not an emoji/markdown header marker,
+// so titles like "📬 메일 분석 보고" and "## 분석" are exempt — (2) is short, (3)
+// matches a meta/filler signal, and (4) leaves substantial report content behind.
+// A greeting ("...아침입니다 🐾") and direct subject analysis ("이 이메일은 ...")
+// match no signal and pass through unchanged.
+func stripProactiveMetaPreamble(content string) string {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return content
+	}
+	first, rest, found := splitFirstParagraph(trimmed)
+	if !found || !isMetaPreambleParagraph(first) {
+		return content
+	}
+	rest = strings.TrimSpace(rest)
+	// A divider ("---", "━━━…") often separates the preamble from the body — drop
+	// a leading divider paragraph so the card does not open on a bare rule.
+	if next, after, ok := splitFirstParagraph(rest); ok && isDividerLine(next) {
+		rest = strings.TrimSpace(after)
+	} else if isDividerLine(rest) {
+		// rest is only a divider: stripping leaves no body, so keep the original.
+		return content
+	}
+	if utf8.RuneCountInString(rest) < metaPreambleMinRemainderRunes {
+		return content
+	}
+	return rest
+}
+
+// isMetaPreambleParagraph reports whether a leading paragraph is throwaway
+// working narration rather than report content. See stripProactiveMetaPreamble
+// for the guarantees this upholds.
+func isMetaPreambleParagraph(para string) bool {
+	p := strings.TrimSpace(para)
+	if p == "" || utf8.RuneCountInString(p) > metaPreambleMaxRunes {
+		return false
+	}
+	// A line that opens with anything other than a letter or digit is structural —
+	// a markdown heading (#, >, -, *, |), a bold title (**…**), a divider, or an
+	// emoji-led header (📬/📋/📊/☀️). Real report ledes and headers live here;
+	// throwaway narration is always prose, opening on a Hangul/Latin word.
+	r, _ := utf8.DecodeRuneInString(p)
+	if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+		return false
+	}
+	for _, pre := range metaPreambleFillerPrefixes {
+		if strings.HasPrefix(p, pre) {
+			return true
+		}
+	}
+	for _, sig := range metaPreambleSignals {
+		if strings.Contains(p, sig) {
+			return true
+		}
+	}
+	return false
+}
+
+// splitFirstParagraph splits text at the first blank line into (first, rest).
+// found is false when there is no blank line (a single paragraph), in which case
+// first == text and rest == "". Callers trim the parts as needed.
+func splitFirstParagraph(text string) (first, rest string, found bool) {
+	lines := strings.Split(text, "\n")
+	for i, ln := range lines {
+		if strings.TrimSpace(ln) == "" {
+			return strings.Join(lines[:i], "\n"), strings.Join(lines[i+1:], "\n"), true
+		}
+	}
+	return text, "", false
+}
+
+// isDividerLine reports whether s is a horizontal-rule divider — markdown
+// ("---", "***", "___") or a unicode box-drawing rule ("━━━…", "─────", "═══").
+// Requires at least 3 rule runes so a short word is never mistaken for a divider.
+func isDividerLine(s string) bool {
+	t := strings.TrimSpace(s)
+	if utf8.RuneCountInString(t) < 3 {
+		return false
+	}
+	for _, r := range t {
+		switch r {
+		case '-', '*', '_', '=', '—', '–', '━', '─', '═', ' ':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // deliverNativeImage appends an image attachment (e.g. the rendered 주간업무보고
