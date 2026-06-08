@@ -127,8 +127,9 @@ actual suspend fun compressImageBytes(bytes: ByteArray, mimeType: String): ByteA
 }
 
 actual fun getAppFilesDirectory(): String {
-    val userHome = System.getProperty("user.home")
-    val kaiDir = File("$userHome/.kai")
+    // Two-arg File joins with the platform separator (\ on Windows, / on Unix) so the
+    // path stays clean cross-platform instead of mixing "C:\Users\x" with "/.kai".
+    val kaiDir = File(System.getProperty("user.home"), ".kai")
     if (!kaiDir.exists()) {
         kaiDir.mkdirs()
     }
