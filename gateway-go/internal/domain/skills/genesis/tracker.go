@@ -370,10 +370,9 @@ func (t *Tracker) recordEvolutionActivityLocked(kind string, ok bool, errMsg str
 		state.LastGenesisAt = now
 	}
 	if !ok && errMsg != "" {
-		if len(errMsg) > 200 {
-			errMsg = errMsg[:200] + "..."
-		}
-		state.LastError = errMsg
+		// Truncate by rune, not byte: this surfaces in /health JSON, and a
+		// byte slice can split a multi-byte UTF-8 sequence into replacement runes.
+		state.LastError = truncateRunes(errMsg, 200)
 		state.LastErrorAt = now
 	}
 	if writeErr := t.saveLivenessLocked(state); writeErr != nil && t.logger != nil {
