@@ -28,6 +28,13 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.61",
+        highlights = listOf(
+            "달력 월 보기 정리 — 짧은 일정은 점, 종일·여러 날 일정은 띠로 한눈에 구분",
+            "일정 추가가 더 간결하게 — 하루 일정은 날짜 하나만, '여러 날'을 켜면 종료 날짜 입력",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.60",
         highlights = listOf(
             "채팅 답변 속 맨 URL을 자동으로 링크 — 주소를 그냥 적어도 탭하면 바로 열림",

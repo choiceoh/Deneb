@@ -32,6 +32,7 @@ import com.inspiredandroid.kai.deneb.koreanDayOfWeek
 import com.inspiredandroid.kai.deneb.layoutMonthBars
 import com.inspiredandroid.kai.deneb.MailMessage
 import com.inspiredandroid.kai.deneb.MailRow
+import com.inspiredandroid.kai.deneb.timedSingleDayDots
 import com.inspiredandroid.kai.ui.markdown.MarkdownContent
 import com.inspiredandroid.kai.ui.DarkColorScheme
 import com.inspiredandroid.kai.ui.DenebRow
@@ -103,6 +104,7 @@ fun main() {
     renderDesignSample("design_light.png", LightColorScheme)
     renderCalendarEvent("calendar_event_dark.png", DarkColorScheme)
     renderCalendarEvent("calendar_event_light.png", LightColorScheme)
+    renderCalendarEvent("calendar_event_multiday_light.png", LightColorScheme, sampleSpanEvent)
     renderCalendarMonth("calendar_month_dark.png", DarkColorScheme)
     renderCalendarMonth("calendar_month_light.png", LightColorScheme)
     renderCalendarAdd("calendar_add_dark.png", DarkColorScheme)
@@ -171,14 +173,28 @@ private val sampleEvent = CalendarEventDetail(
     status = "confirmed",
 )
 
+// A multi-day timed event, so the detail's whenLabel shows the span end day too.
+private val sampleSpanEvent = CalendarEventDetail(
+    id = "e2",
+    title = "동계 워크숍 — 1박 2일 전략 세션",
+    description = "1일차 RE100 로드맵\n2일차 루프탑·주차장 사업 점검",
+    location = "양양 연수원",
+    start = "2026-06-03T05:00:00Z",
+    end = "2026-06-04T08:00:00Z",
+    allDay = false,
+    organizer = "오선택 전무",
+    attendees = listOf("기획조정실 전원"),
+    status = "confirmed",
+)
+
 // Validates the calendar-event detail in the hybrid idiom: Deneb type skin
 // (subject + section labels + body) with the Meet join as a Material button.
-private fun renderCalendarEvent(name: String, scheme: ColorScheme) {
+private fun renderCalendarEvent(name: String, scheme: ColorScheme, ev: CalendarEventDetail = sampleEvent) {
     val scene = ImageComposeScene(width = 760, height = 1100, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "일정", onBack = {}) {
                 Column(Modifier.padding(horizontal = 24.dp)) {
-                    CalendarEventContent(ev = sampleEvent, isLocal = true)
+                    CalendarEventContent(ev = ev, isLocal = true)
                 }
             }
         }
@@ -208,6 +224,7 @@ private fun renderCalendarMonth(name: String, scheme: ColorScheme) {
         CalendarEvent("e4", "RE100 전시 부스", "코엑스", "2026-06-19T00:00:00Z", "2026-06-24T00:00:00Z", true),
     )
     val bars = layoutMonthBars(events, grid, tz)
+    val dots = timedSingleDayDots(events, tz)
     val dayEvents = events.filter { selected in eventDays(it.start, it.end, it.allDay, tz) }
     val scene = ImageComposeScene(width = 824, height = 1280, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
@@ -230,7 +247,7 @@ private fun renderCalendarMonth(name: String, scheme: ColorScheme) {
                             )
                         }
                     }
-                    CalendarMonthGrid(grid, today, selected, bars, {})
+                    CalendarMonthGrid(grid, today, selected, bars, dots, {})
                     Spacer(Modifier.height(12.dp))
                     HorizontalDivider(color = denebHairline())
                     Spacer(Modifier.height(8.dp))
@@ -259,9 +276,11 @@ private fun renderCalendarAdd(name: String, scheme: ColorScheme) {
                         onTitle = {},
                         allDay = false,
                         onAllDay = {},
+                        multiDay = false,
+                        onMultiDay = {},
                         startDateLabel = "2026년 6월 10일 (수)",
                         onPickStartDate = {},
-                        endDateLabel = "2026년 6월 10일 (수)",
+                        endDateLabel = "2026년 6월 11일 (목)",
                         onPickEndDate = {},
                         startLabel = "14:00",
                         onPickStart = {},
