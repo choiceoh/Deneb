@@ -3,6 +3,7 @@ package com.inspiredandroid.kai.deneb
 import androidx.compose.foundation.clickable
 import com.inspiredandroid.kai.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -33,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.inspiredandroid.kai.ui.DenebMaxContentWidth
 import kotlinx.coroutines.launch
 
 /**
@@ -69,8 +72,9 @@ fun DenebSearchScreen(
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
-            modifier = Modifier.statusBarsPadding().padding(16.dp).verticalScroll(rememberScrollState()),
+            modifier = Modifier.widthIn(max = DenebMaxContentWidth).statusBarsPadding().padding(16.dp).verticalScroll(rememberScrollState()),
         ) {
             if (navigationTabBar != null) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
@@ -142,6 +146,7 @@ fun DenebSearchScreen(
                     Spacer(Modifier.height(24.dp))
                 }
             }
+        }
         }
     }
 }
