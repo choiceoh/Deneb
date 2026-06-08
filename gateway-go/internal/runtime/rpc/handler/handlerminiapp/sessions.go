@@ -12,6 +12,7 @@ package handlerminiapp
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"sort"
 	"strings"
 
@@ -304,11 +305,14 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 }
 
 // sessionsDelete removes a session the user dismissed (the × in the drawer's
-// session selector). It drops the in-memory session AND deletes its transcript
-// so the row can't resurrect on the next sessions.recent fetch — the Manager is
-// a pure in-memory map with no disk restore, so deleting from it is the source
-// of truth for "is this session still listed". The transcript removal is the
-// difference between "hidden until restart" and "gone for good".
+// session selector). It drops the in-memory session AND deletes its transcript.
+// Both are required: although session.Manager is itself a pure in-memory map,
+// the gateway's startup restore (Server.restoreAndWakeSessions) rebuilds
+// sessions by SCANNING the transcript dir — so a dismissed row whose .jsonl
+// survives resurrects on the next restart (and the gateway restarts every few
+// minutes on SIGUSR1). Deleting the transcript is the difference between
+// "hidden until restart" and "gone for good"; an earlier comment here wrongly
+// claimed "no disk restore", which was the exact blind spot that left zombies.
 //
 // A running session is left intact unless force=true: yanking it out from under
 // an in-flight turn would let that run re-Set the session on completion, so the
@@ -339,12 +343,17 @@ func sessionsDelete(deps SessionsDeps) rpcutil.HandlerFunc {
 
 		deleted := deps.Manager.Delete(key)
 
-		// Best-effort transcript removal. A missing store or a stray file isn't
-		// fatal — the session is already out of the manager, which is what the
-		// drawer reads from. We only need Delete to not error the whole call.
+		// Transcript removal is best-effort for the RPC result (the manager
+		// delete already cleared the live row the drawer reads from), but a
+		// failure is not silent: per the doc comment, a surviving .jsonl
+		// resurrects this row on the next restart, so surface it as a warning
+		// rather than swallowing it with `_ =`.
 		if deps.Transcripts != nil {
 			if store, err := deps.Transcripts(); err == nil && store != nil {
-				_ = store.Delete(key)
+				if delErr := store.Delete(key); delErr != nil {
+					slog.Warn("miniapp.sessions.delete: transcript removal failed; session may resurrect on restart",
+						"sessionKey", key, "error", delErr)
+				}
 			}
 		}
 

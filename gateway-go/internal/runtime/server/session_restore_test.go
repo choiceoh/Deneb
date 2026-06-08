@@ -48,13 +48,18 @@ func TestRestoreAndWakeSessions_RestoresNativeSessions(t *testing.T) {
 	}
 	t.Setenv("HOME", tmpHome)
 
-	// Create native transcripts plus transients (cron) and a retired Telegram
-	// transcript that must all stay out of the restored user session list.
+	// Live native sessions (client:main and client:main:<id>) restore. Retired
+	// shapes must NOT: the topic sessions removed in #1963 (client:coding,
+	// client:topic:*) and the pre-main client:<uuid> format linger as transcript
+	// files but would zombie-revive in the drawer on every SIGUSR1 restart.
+	// Transients (cron) and the retired Telegram channel stay out as before.
 	makeSessionTranscript(t, transcriptDir, "client:main")
-	makeSessionTranscript(t, transcriptDir, "client:coding")
 	makeSessionTranscript(t, transcriptDir, "client:main:fresh-chat")
-	makeSessionTranscript(t, transcriptDir, "cron:job1")    // should not be restored
-	makeSessionTranscript(t, transcriptDir, "telegram:111") // retired channel, should not be restored
+	makeSessionTranscript(t, transcriptDir, "client:coding")                               // retired topic session (#1963)
+	makeSessionTranscript(t, transcriptDir, "client:topic:업무")                             // retired topic session (#1963)
+	makeSessionTranscript(t, transcriptDir, "client:6ae56098-122c-40ff-a5bd-c9e6cad6faa8") // pre-main legacy format
+	makeSessionTranscript(t, transcriptDir, "cron:job1")                                   // transient, not a user session
+	makeSessionTranscript(t, transcriptDir, "telegram:111")                                // retired channel
 
 	mgr := session.NewManager()
 	srv := newTestServerForRestore(mgr)
@@ -64,20 +69,25 @@ func TestRestoreAndWakeSessions_RestoresNativeSessions(t *testing.T) {
 	// Allow any goroutines spawned in safeGo to exit.
 	time.Sleep(50 * time.Millisecond)
 
-	for _, key := range []string{"client:main", "client:coding", "client:main:fresh-chat"} {
+	for _, key := range []string{"client:main", "client:main:fresh-chat"} {
 		if got := mgr.Get(key); got == nil {
 			t.Errorf("expected %s to be restored", key)
 		}
 	}
-	if got := mgr.Get("cron:job1"); got != nil {
-		t.Error("cron:job1 should not have been restored")
-	}
-	if got := mgr.Get("telegram:111"); got != nil {
-		t.Error("retired telegram:111 should not have been restored")
+	for _, key := range []string{
+		"client:coding",   // retired topic session (#1963)
+		"client:topic:업무", // retired topic session (#1963)
+		"client:6ae56098-122c-40ff-a5bd-c9e6cad6faa8", // pre-main legacy format
+		"cron:job1",    // transient
+		"telegram:111", // retired channel
+	} {
+		if got := mgr.Get(key); got != nil {
+			t.Errorf("%s should not have been restored (would zombie-revive in the drawer)", key)
+		}
 	}
 
 	// Restored sessions must have DONE status and the correct channel.
-	for _, key := range []string{"client:main", "client:coding", "client:main:fresh-chat"} {
+	for _, key := range []string{"client:main", "client:main:fresh-chat"} {
 		s := mgr.Get(key)
 		if s == nil {
 			continue
