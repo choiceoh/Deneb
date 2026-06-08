@@ -1,0 +1,78 @@
+name: Publish APK (OTA)
+
+# Build the foss release APK on the gx10 self-hosted runner and publish it to the
+# gateway's local serve dir (~/.cache/deneb-apk) via scripts/dev/publish-apk.sh.
+# That script also runs the pre-publish render-crash smoke gate (native-app-smoke)
+# and assigns the versionCode under flock, so this workflow is a thin trigger that
+# reuses the exact same path the operator runs by hand.
+#
+# Auto-runs only when a release lands on main -- i.e. when the native versionName in
+# client-android/app/gradle/libs.versions.toml changes -- so routine native commits
+# that do not bump the version never push an OTA update prompt. Also runnable on
+# demand (workflow_dispatch) with custom release notes.
+#
+# Prerequisite: a self-hosted runner on gx10 labeled "gx10", running as the gateway
+# user so HOME/.cache/deneb-apk is the directory the gateway serves, with the
+# production gateway up (for the smoke gate) and the Android SDK + Xvfb harness deps
+# installed. One-time setup is documented in .claude/rules/release-and-deploy.md.
+# Only push-to-main and manual dispatch trigger this -- never fork pull requests --
+# so untrusted code can never run on the host runner.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - client-android/app/gradle/libs.versions.toml
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: Release notes shown in the in-app updater (defaults to the head commit subject)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+# One publish at a time; never cancel an in-flight build (it is writing the serve dir).
+concurrency:
+  group: publish-apk
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: [self-hosted, gx10]
+    timeout-minutes: 30
+    env:
+      # Isolate the smoke harness (display/state/ports) from any interactive
+      # native-app session on the same host.
+      DENEB_INSTANCE: ci-publish-apk
+      # Base URL baked into version.json's download link. Set this repo variable to
+      # the gateway's reachable base (tailnet/cloudflare); unset falls back to the
+      # script default, which is fine because the updater downloads via the gateway.
+      DENEB_APK_BASE_URL: ${{ vars.DENEB_APK_BASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Resolve release notes
+        id: notes
+        env:
+          INPUT_NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          notes="$INPUT_NOTES"
+          if [ -z "$notes" ]; then
+            notes="$(git log -1 --pretty=%s)"
+          fi
+          {
+            echo "notes<<__NOTES_EOF__"
+            echo "$notes"
+            echo "__NOTES_EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build, smoke, and publish APK
+        env:
+          NOTES: ${{ steps.notes.outputs.notes }}
+        run: |
+          set -euo pipefail
+          scripts/dev/publish-apk.sh "$NOTES"
