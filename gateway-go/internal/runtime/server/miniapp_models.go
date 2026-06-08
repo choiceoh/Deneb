@@ -218,13 +218,19 @@ func (s *Server) setMiniappModel(ctx context.Context, role, requested string) (s
 }
 
 // roleMiniappModels reports the model bound to each registry role for the
-// per-role picker (main/lightweight/fallback). Main reflects the live
-// chat-handler default when a /model switch changed it this session.
+// per-role picker (main/tiny/lightweight/analysis/fallback). Main reflects the
+// live chat-handler default when a /model switch changed it this session.
 func (s *Server) roleMiniappModels() []handlerminiapp.RoleModel {
 	if s.modelRegistry == nil {
 		return nil
 	}
-	roleList := []modelrole.Role{modelrole.RoleMain, modelrole.RoleLightweight, modelrole.RoleFallback}
+	roleList := []modelrole.Role{
+		modelrole.RoleMain,
+		modelrole.RoleTiny,
+		modelrole.RoleLightweight,
+		modelrole.RoleAnalysis,
+		modelrole.RoleFallback,
+	}
 	out := make([]handlerminiapp.RoleModel, 0, len(roleList))
 	for _, r := range roleList {
 		out = append(out, handlerminiapp.RoleModel{
