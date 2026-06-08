@@ -20,7 +20,6 @@ const val DENEB_VERSION_CODE = Version.appVersionCode
 @Serializable
 data class UpdateManifest(
     val code: Int = 0,
-    val name: String = "",
     val file: String = "",
     val notes: String = "",
 )

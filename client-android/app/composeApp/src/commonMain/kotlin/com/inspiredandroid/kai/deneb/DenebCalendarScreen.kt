@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -185,7 +185,9 @@ fun DenebCalendarScreen(
             ) {
                 // Own scroll state so the list scrolls under the pinned grid; a
                 // fillMaxSize column keeps pull-to-refresh working when empty.
-                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                // Keyed on `selected` so switching days starts the new day's list
+                // at the top instead of inheriting the previous day's scroll offset.
+                Column(Modifier.fillMaxSize().verticalScroll(remember(selected) { ScrollState(0) })) {
                     when {
                         loadOk == null && monthEvents.isEmpty() -> DenebLoading()
                         loadOk == false && monthEvents.isEmpty() -> DenebError(

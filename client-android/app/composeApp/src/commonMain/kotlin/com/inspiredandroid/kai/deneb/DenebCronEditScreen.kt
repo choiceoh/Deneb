@@ -355,7 +355,9 @@ private fun TimeField(draft: ScheduleDraft, onDraft: (ScheduleDraft) -> Unit) {
         onValueChange = { onDraft(draft.copy(timeText = it)) },
         label = "시간",
         placeholder = "09:00",
-        numeric = true,
+        // HH:MM needs a colon; a number keyboard hides ":" on most Android IMEs,
+        // so use the text keyboard for this field.
+        numeric = false,
         modifier = Modifier.fillMaxWidth(),
     )
 }

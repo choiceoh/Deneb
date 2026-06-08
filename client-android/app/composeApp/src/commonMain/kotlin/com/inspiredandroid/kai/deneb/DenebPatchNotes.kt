@@ -51,7 +51,7 @@ val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
             "여러 날에 걸친 일정 추가 — 출장·전시·워크숍처럼 며칠짜리 일정의 시작·종료 날짜를 따로 지정",
-            "월 보기에서 여러 날 일정을 걸친 모든 날에 이어진 막대로 표시 (주가 바뀌어도 연결), 어느 날을 눌러도 그 날에 걸친 일정이 목록에 표시",
+            "월 보기에서 여러 날에 걸친 일정을 그 기간의 모든 날에 이어진 막대로 표시 (주가 바뀌어도 연결), 어느 날을 눌러도 그날에 걸친 일정이 목록에 표시",
         ),
     ),
     DenebPatchNote(
