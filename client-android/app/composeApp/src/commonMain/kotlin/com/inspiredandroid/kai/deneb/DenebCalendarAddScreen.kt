@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.ui.DenebScreenScaffold
 import com.inspiredandroid.kai.ui.DenebSectionLabel
 import com.inspiredandroid.kai.ui.DenebType
+import com.inspiredandroid.kai.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -88,6 +89,7 @@ fun DenebCalendarAddScreen(
     // For edit mode, fields are populated from the fetched event before the form shows.
     var prefilling by remember { mutableStateOf(isEdit) }
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
 
     LaunchedEffect(editEventId) {
         if (editEventId == null) return@LaunchedEffect
@@ -190,6 +192,7 @@ fun DenebCalendarAddScreen(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
+                    haptics.tap()
                     state.selectedDateMillis?.let { date = utcMillisToLocalDate(it) }
                     showDatePicker = false
                 }) { Text("확인") }
@@ -243,6 +246,7 @@ internal fun CalendarAddContent(
     saveLabel: String,
     onSave: () -> Unit,
 ) {
+    val haptics = rememberHaptics()
     Spacer(Modifier.height(8.dp))
     OutlinedTextField(
         value = title,
@@ -258,12 +262,12 @@ internal fun CalendarAddContent(
         Switch(checked = allDay, onCheckedChange = onAllDay)
     }
     Spacer(Modifier.height(8.dp))
-    OutlinedButton(onClick = onPickDate, modifier = Modifier.fillMaxWidth()) { Text(dateLabel) }
+    OutlinedButton(onClick = { haptics.tap(); onPickDate() }, modifier = Modifier.fillMaxWidth()) { Text(dateLabel) }
     if (!allDay) {
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onPickStart, modifier = Modifier.weight(1f)) { Text("시작 $startLabel") }
-            OutlinedButton(onClick = onPickEnd, modifier = Modifier.weight(1f)) { Text("종료 $endLabel") }
+            OutlinedButton(onClick = { haptics.tap(); onPickStart() }, modifier = Modifier.weight(1f)) { Text("시작 $startLabel") }
+            OutlinedButton(onClick = { haptics.tap(); onPickEnd() }, modifier = Modifier.weight(1f)) { Text("종료 $endLabel") }
         }
     }
 
@@ -292,7 +296,7 @@ internal fun CalendarAddContent(
     }
 
     Spacer(Modifier.height(20.dp))
-    Button(onClick = onSave, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
+    Button(onClick = { haptics.confirm(); onSave() }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
         Text(if (saving) "$saveLabel 중…" else saveLabel)
     }
     Spacer(Modifier.height(24.dp))
@@ -306,9 +310,10 @@ private fun TimePickerDialog(
     onDismiss: () -> Unit,
 ) {
     val state = rememberTimePickerState(initialHour = initial.hour, initialMinute = initial.minute, is24Hour = true)
+    val haptics = rememberHaptics()
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = { onConfirm(LocalTime(state.hour, state.minute)) }) { Text("확인") } },
+        confirmButton = { TextButton(onClick = { haptics.tap(); onConfirm(LocalTime(state.hour, state.minute)) }) { Text("확인") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
         text = { TimePicker(state = state) },
     )
