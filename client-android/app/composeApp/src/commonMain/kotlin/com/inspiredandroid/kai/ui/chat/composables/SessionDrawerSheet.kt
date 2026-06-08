@@ -133,7 +133,14 @@ fun DenebSessionDrawerSheet(
                                     actions.loadConversation(conversation.id)
                                     onClose()
                                 },
-                                onDelete = { actions.deleteConversation(conversation.id) },
+                                // The 업무 home (client:main) is the permanent base
+                                // conversation where proactive reports are mirrored —
+                                // no × so it can't be deleted out from under them.
+                                onDelete = if (conversation.id == HOME_SESSION_ID) {
+                                    null
+                                } else {
+                                    { actions.deleteConversation(conversation.id) }
+                                },
                             )
                         }
                         // Machine-driven sessions (cron runs, system, boot) fold into
@@ -180,7 +187,7 @@ private fun SessionItem(
     conversation: ConversationSummary,
     isActive: Boolean,
     onClick: () -> Unit,
-    onDelete: () -> Unit,
+    onDelete: (() -> Unit)?,
 ) {
     val haptics = rememberHaptics()
     Row(
@@ -224,19 +231,22 @@ private fun SessionItem(
         }
         // Faint × to delete (undo via snackbar), keeping the row text-first. The 44dp
         // box gives a real touch target + a TalkBack label without a Material icon.
-        Box(
-            modifier = Modifier
-                .padding(start = 8.dp)
-                .size(44.dp)
-                .clickable(onClickLabel = "대화 삭제", role = Role.Button) { onDelete() }
-                .handCursor(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "×",
-                fontSize = 18.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-            )
+        // Omitted for the permanent home (onDelete == null) so it has no delete affordance.
+        if (onDelete != null) {
+            Box(
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .size(44.dp)
+                    .clickable(onClickLabel = "대화 삭제", role = Role.Button) { onDelete() }
+                    .handCursor(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "×",
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                )
+            }
         }
     }
 }
@@ -246,6 +256,11 @@ private fun formatDate(epochMillis: Long): String = try {
 } catch (_: Exception) {
     ""
 }
+
+// The permanent base conversation (업무 home), keyed under the native client and
+// always pinned to the top of the drawer. It has no delete affordance — proactive
+// reports are mirrored here, so it must not be removable.
+internal const val HOME_SESSION_ID = "client:main"
 
 // A session is a real user conversation only when it's keyed under the native
 // client (client:main, client:main:<uuid>). Everything else is machine-driven —

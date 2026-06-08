@@ -22,16 +22,24 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// SessionsLister is the subset of *session.Manager the handler needs.
-// Tests provide a fake; production wires the real Manager.
+// SessionsLister is the subset of *session.Manager the handler needs:
+// List backs the recent card, while Get+Delete let sessions.delete remove
+// a session the user dismissed from the drawer (without them the row
+// resurrects on the next sessions.recent fetch). Tests provide a fake;
+// production wires the real Manager.
 type SessionsLister interface {
 	List() []*session.Session
+	Get(key string) *session.Session
+	Delete(key string) bool
 }
 
-// TranscriptLoader is the subset of chat.TranscriptStore the transcript
-// handler needs. Lets tests provide a fake without standing up file I/O.
+// TranscriptLoader is the subset of chat.TranscriptStore the session
+// handlers need: Load for the transcript view, Delete so sessions.delete
+// can remove a dismissed conversation's history for good rather than just
+// hiding the live row. Lets tests provide a fake without standing up file I/O.
 type TranscriptLoader interface {
 	Load(sessionKey string, limit int) ([]toolctx.ChatMessage, int, error)
+	Delete(sessionKey string) error
 }
 
 // SessionsDeps holds the session list manager (required) and an optional
@@ -58,6 +66,7 @@ func SessionsMethods(deps SessionsDeps) map[string]rpcutil.HandlerFunc {
 	}
 	out := map[string]rpcutil.HandlerFunc{
 		"miniapp.sessions.recent": sessionsRecent(deps),
+		"miniapp.sessions.delete": sessionsDelete(deps),
 	}
 	// Transcript registration is conditional — without a transcript
 	// loader factory the gateway boots fine, the method just isn't
@@ -291,5 +300,54 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 			"sessions": out,
 			"count":    len(out),
 		})
+	}
+}
+
+// sessionsDelete removes a session the user dismissed (the × in the drawer's
+// session selector). It drops the in-memory session AND deletes its transcript
+// so the row can't resurrect on the next sessions.recent fetch — the Manager is
+// a pure in-memory map with no disk restore, so deleting from it is the source
+// of truth for "is this session still listed". The transcript removal is the
+// difference between "hidden until restart" and "gone for good".
+//
+// A running session is left intact unless force=true: yanking it out from under
+// an in-flight turn would let that run re-Set the session on completion, so the
+// row would just come back — a subtler resurrection than the one we're fixing.
+func sessionsDelete(deps SessionsDeps) rpcutil.HandlerFunc {
+	type params struct {
+		SessionKey string `json:"sessionKey"`
+		Force      bool   `json:"force,omitempty"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		key := strings.TrimSpace(p.SessionKey)
+		if key == "" {
+			return rpcerr.MissingParam("sessionKey").Response(req.ID)
+		}
+
+		if s := deps.Manager.Get(key); s != nil && s.Status == session.StatusRunning && !p.Force {
+			return rpcutil.RespondOK(req.ID, map[string]bool{"deleted": false})
+		}
+
+		deleted := deps.Manager.Delete(key)
+
+		// Best-effort transcript removal. A missing store or a stray file isn't
+		// fatal — the session is already out of the manager, which is what the
+		// drawer reads from. We only need Delete to not error the whole call.
+		if deps.Transcripts != nil {
+			if store, err := deps.Transcripts(); err == nil && store != nil {
+				_ = store.Delete(key)
+			}
+		}
+
+		return rpcutil.RespondOK(req.ID, map[string]bool{"deleted": deleted})
 	}
 }

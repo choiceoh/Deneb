@@ -547,7 +547,17 @@ class DenebGatewayClient(
     }
 
     override suspend fun deleteConversation(id: String) {
-        // Deneb sessions have no delete RPC; drop it from the local view only.
+        // Tell the gateway to drop the session — its in-memory entry AND its
+        // transcript — then remove it from the local drawer list. The session
+        // Manager is a pure in-memory map with no disk restore, so a local-only
+        // removal resurrects on the next sessions.recent fetch (reopen the
+        // drawer / restart the app). The server-side delete is what makes the
+        // dismissal stick. A running session is refused server-side; it'll
+        // reappear on the next fetch, which is correct (it's still live).
+        callRpc<JsonObject>(
+            "miniapp.sessions.delete",
+            buildJsonObject { put("sessionKey", id) },
+        )
         _savedConversations.update { list -> list.filterNot { it.id == id } }
     }
 
