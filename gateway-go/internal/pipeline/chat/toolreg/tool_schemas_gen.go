@@ -661,6 +661,63 @@ func gmailToolSchema() map[string]any {
 	}
 }
 
+func dropboxToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "Dropbox action to perform",
+				"enum":        []string{"list", "search", "download", "upload", "share", "analyze", "backup"},
+			},
+			"dest_path": map[string]any{
+				"type":        "string",
+				"description": "Dropbox destination path for upload (default: /<local filename>)",
+			},
+			"extract": map[string]any{
+				"type":        "boolean",
+				"description": "On download, also extract text (PDF/image OCR, Excel/Word/PowerPoint, text files)",
+				"default":     false,
+			},
+			"local_path": map[string]any{
+				"type":        "string",
+				"description": "Local file path to upload (for the upload action)",
+			},
+			"max": map[string]any{
+				"type":        "number",
+				"description": "Maximum results for list/search (default: 20, max: 100)",
+				"default":     20,
+				"minimum":     1,
+				"maximum":     100,
+			},
+			"overwrite": map[string]any{
+				"type":        "boolean",
+				"description": "Overwrite an existing file on upload; default false auto-renames",
+				"default":     false,
+			},
+			"path": map[string]any{
+				"type":        "string",
+				"description": "Dropbox path for list/download/share/analyze (e.g. /folder/file.pdf). Empty means the account root (list).",
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "Search query (for the search action)",
+			},
+			"recursive": map[string]any{
+				"type":        "boolean",
+				"description": "Recurse into subfolders on list",
+				"default":     false,
+			},
+			"target": map[string]any{
+				"type":        "string",
+				"description": "Backup target for the backup action: which Deneb artifacts to upload to /Deneb-Backup/<date>/",
+				"enum":        []string{"wiki", "weekly", "transcripts", "all"},
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 func skillsToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",

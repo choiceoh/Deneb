@@ -729,6 +729,75 @@
     ]
   },
   {
+    "name": "dropbox",
+    "properties": {
+      "action": {
+        "type": "string",
+        "description": "Dropbox action to perform",
+        "enum": [
+          "list",
+          "search",
+          "download",
+          "upload",
+          "share",
+          "analyze",
+          "backup"
+        ]
+      },
+      "path": {
+        "type": "string",
+        "description": "Dropbox path for list/download/share/analyze (e.g. /folder/file.pdf). Empty means the account root (list)."
+      },
+      "query": {
+        "type": "string",
+        "description": "Search query (for the search action)"
+      },
+      "local_path": {
+        "type": "string",
+        "description": "Local file path to upload (for the upload action)"
+      },
+      "dest_path": {
+        "type": "string",
+        "description": "Dropbox destination path for upload (default: /<local filename>)"
+      },
+      "overwrite": {
+        "type": "boolean",
+        "description": "Overwrite an existing file on upload; default false auto-renames",
+        "default": false
+      },
+      "extract": {
+        "type": "boolean",
+        "description": "On download, also extract text (PDF/image OCR, Excel/Word/PowerPoint, text files)",
+        "default": false
+      },
+      "recursive": {
+        "type": "boolean",
+        "description": "Recurse into subfolders on list",
+        "default": false
+      },
+      "max": {
+        "type": "number",
+        "description": "Maximum results for list/search (default: 20, max: 100)",
+        "default": 20,
+        "minimum": 1,
+        "maximum": 100
+      },
+      "target": {
+        "type": "string",
+        "description": "Backup target for the backup action: which Deneb artifacts to upload to /Deneb-Backup/<date>/",
+        "enum": [
+          "wiki",
+          "weekly",
+          "transcripts",
+          "all"
+        ]
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  {
     "name": "skills",
     "properties": {
       "action": {

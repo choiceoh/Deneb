@@ -16,6 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/appsettings"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -449,7 +450,11 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	s.registerGenesisAutonomousTasks(hub)
 
 	// Gmail polling service: periodic new-email analysis via LLM.
-	s.initGmailPoll()
+	// Load deneb.json once and share the snapshot across the poll initializers.
+	cfgSnap, _ := config.LoadConfigFromDefaultPath()
+	s.initGmailPoll(cfgSnap)
+	s.seedDropboxBackupJob()
+	s.initDropboxPoll(cfgSnap)
 
 	// Calendar briefing service: D-15min push for upcoming meetings.
 	// Delivers to the native client (업무 transcript + live push) via the
