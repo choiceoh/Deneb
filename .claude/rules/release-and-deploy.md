@@ -1,6 +1,6 @@
 ---
 description: "릴리스, 어드바이저리, 프로덕션 배포 워크플로우"
-globs: ["scripts/release*", "scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/androidApp/build.gradle.kts", "client-android/app/composeApp/build.gradle.kts", ".github/workflows/release*"]
+globs: ["scripts/release*", "scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/androidApp/build.gradle.kts", "client-android/app/composeApp/build.gradle.kts", ".github/workflows/release*", ".github/workflows/publish-apk.yml"]
 ---
 
 # Release & Advisory Workflows
@@ -34,3 +34,29 @@ globs: ["scripts/release*", "scripts/deploy*", "scripts/dev/publish-apk.sh", "cl
 DENEB_APK_BASE_URL=http://<gateway-host>:19010 \
   scripts/dev/publish-apk.sh "인앱 업데이트에 표시될 릴리스 노트"
 ```
+
+## Automated OTA publish (GitHub Action)
+
+> `.github/workflows/publish-apk.yml` 는 위 `publish-apk.sh` 를 **gx10 self-hosted 러너**에서 그대로 실행한다. 빌드·스모크 게이트·flock versionCode·serve dir 동작이 수동 배포와 100% 동일한, 재구현이 아닌 얇은 트리거다 (게이트웨이가 호스트 로컬 디스크에서 APK 를 서빙하고 스모크가 그 호스트의 Xvfb+게이트웨이를 요구하므로 GitHub-hosted 러너로는 불가능 → self-hosted 필연).
+
+- **트리거**: main 에 `client-android/app/gradle/libs.versions.toml` 변경이 머지될 때 자동(= `appVersion` bump = 의도된 릴리스만). 비릴리스 네이티브 커밋(테스트·리팩터)은 versionCode 만 올려 사용자에게 무의미한 업데이트 알림을 쏘므로 일부러 제외했다. 수동 `workflow_dispatch`(노트 입력)도 가능. **fork PR 로는 절대 안 돈다** (호스트 러너에서 미신뢰 코드 실행 차단).
+- **노트**: dispatch 입력 우선, 없으면 head 커밋 제목. 사용자에게 보이는 정돈된 한국어 패치노트는 어차피 컴파일된 `DenebPatchNotes` 가 오프라인으로 보여주므로 version.json 노트는 보조다.
+- **여전히 사람이 하는 것**: `appVersion`(versionName) bump + `DenebPatchNotes` head 항목은 PR 에서 손으로 (테스트가 head==appVersion 강제). 액션은 머지된 그 버전을 빌드·게시할 뿐 — *"release/publish 는 명시 승인"* 원칙은 "버전을 올린 PR 을 머지하는 행위" 가 그 승인이 되는 형태로 유지된다.
+
+### gx10 self-hosted 러너 1회 셋업 (운영자만)
+
+워크플로가 `runs-on: [self-hosted, gx10]` 이라 gx10 에 러너가 등록돼야 동작한다. **게이트웨이와 같은 사용자(choiceoh)로 실행**해야 `~/.cache/deneb-apk` 가 게이트웨이가 읽는 serve dir 와 일치한다 (HOME 이 다르면 게시해도 OTA 에 안 뜬다).
+
+```bash
+# gx10 에서 choiceoh 로. URL/토큰은 GitHub > Settings > Actions > Runners > New self-hosted runner 에서 복사.
+mkdir -p ~/actions-runner && cd ~/actions-runner
+curl -o runner.tar.gz -L <runner-linux-arm64-tarball-url>
+tar xzf runner.tar.gz
+./config.sh --url https://github.com/choiceoh/deneb \
+  --token <REG_TOKEN> --labels gx10 --name gx10-apk --unattended
+sudo ./svc.sh install choiceoh && sudo ./svc.sh start   # 재부팅 후 자동 상주
+```
+
+- 호스트 전제(이미 충족): `~/android-sdk`(ANDROID_HOME 기본), JDK 21, Xvfb/matchbox 등 스모크 하네스 의존(`native-live-app.md`), **프로덕션 게이트웨이 가동 중**(스모크가 붙는다).
+- 레포 변수 `DENEB_APK_BASE_URL` 를 게이트웨이 도달 base 로 설정(`Settings > Secrets and variables > Actions > Variables`). 미설정이어도 동작하나 version.json url 이 로컬 기본값이 된다(인앱 업데이터는 게이트웨이 다운로드 라우트로 받으므로 무해).
+- 커스텀 라벨 `gx10` 은 `.github/actionlint.yaml` 에 등록돼 있어 워크플로 린트(`workflow-sanity.yml`)를 통과한다.

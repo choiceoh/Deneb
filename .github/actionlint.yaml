@@ -6,6 +6,9 @@ self-hosted-runner:
     # Blacksmith CI runners (Linux only)
     - blacksmith-8vcpu-ubuntu-2404
     - blacksmith-16vcpu-ubuntu-2404
+    # gx10 DGX Spark host runner — builds + publishes the native APK OTA
+    # (publish-apk.yml). Pinned label so the job only lands on that host.
+    - gx10
 
 # Ignore patterns for known issues
 paths:
