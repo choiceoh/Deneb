@@ -218,9 +218,19 @@ func executeAgentRun(
 	//    to fit Anthropic's 4-breakpoint limit alongside our 2 system
 	//    markers). No-op for non-Anthropic providers.
 	apiMode := resolveAPIMode(deps, providerID)
+	// Kimi speaks the Anthropic wire but REJECTS cache_control with HTTP 400, so
+	// for cache-incompatible providers strip the system-block markers and skip
+	// the trailing-message hook entirely. Mirrors OpenClaw's per-provider strip
+	// (extensions/kimi-coding). The strip operates on the per-request cfg.System
+	// copy, so the prompt-cache doctrine (don't mutate cached blocks) holds.
+	trailingCache := buildTrailingCacheHook(apiMode)
+	if isCacheIncompatibleProvider(providerID) {
+		cfg.System = stripCacheControlMarkers(cfg.System)
+		trailingCache = nil
+	}
 	cfg.BeforeAPICall = agent.ComposeBeforeAPICall(
 		buildSteerHookIfEnabled(deps.steerQueue, params.SessionKey, logger),
-		buildTrailingCacheHook(apiMode),
+		trailingCache,
 	)
 
 	// Set up stream hooks via compositor: fan-out dispatch for each hook type.

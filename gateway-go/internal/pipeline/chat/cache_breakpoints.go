@@ -114,3 +114,35 @@ func decodeMessageBlocks(raw json.RawMessage) ([]llm.ContentBlock, bool) {
 	}
 	return nil, false
 }
+
+// stripCacheControlMarkers removes every cache_control field from a system
+// prompt payload (a JSON array of ContentBlocks). A plain-string system prompt
+// carries no markers and is returned unchanged. Used for cache-incompatible
+// providers (Kimi) whose Anthropic-wire endpoint returns HTTP 400 when any
+// cache_control is present — mirrors OpenClaw's per-provider strip. The
+// trailing-message markers are handled separately by skipping
+// buildTrailingCacheHook for those providers.
+func stripCacheControlMarkers(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return raw
+	}
+	var blocks []llm.ContentBlock
+	if err := json.Unmarshal(raw, &blocks); err != nil || len(blocks) == 0 {
+		return raw // string system prompt or undecodable — nothing to strip
+	}
+	changed := false
+	for i := range blocks {
+		if blocks[i].CacheControl != nil {
+			blocks[i].CacheControl = nil
+			changed = true
+		}
+	}
+	if !changed {
+		return raw
+	}
+	out, err := json.Marshal(blocks)
+	if err != nil {
+		return raw
+	}
+	return out
+}
