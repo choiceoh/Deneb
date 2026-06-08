@@ -28,6 +28,12 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.58",
+        highlights = listOf(
+            "채팅 답변 줄 간격을 메신저(텔레그램·카톡) 수준으로 더 촘촘하게 — 한 화면에 더 많이 담기되 읽기 흐름은 유지",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.57",
         highlights = listOf(
             "채팅 답변 가독성 개선 — 본문 줄 간격과 문단 사이를 넉넉하게, 글자 크기는 한 단계 정돈해 긴 한국어 답변이 한눈에 읽히도록",
