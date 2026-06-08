@@ -178,15 +178,18 @@ func metadataConcurrency(n int) int {
 	return n
 }
 
-// cleanSnippet decodes the HTML entities Gmail returns in snippets (&#39; &quot;
-// &amp; …) so the preview reads as plain text instead of leaking raw entities
-// into the mail list. Some signatures are double-encoded (&amp;nbsp;), so a
-// single decode leaves a literal "&nbsp;" — collapse those to spaces. A second
-// blanket UnescapeString is avoided because it would corrupt intentionally
-// escaped text like "&amp;lt;". Mirrors htmlToText() for message bodies.
-func cleanSnippet(s string) string {
+// decodeMailEntities undoes the HTML entities that leak into otherwise-plain mail
+// text — both Gmail snippets and text/plain bodies. Gmail double-encodes snippets
+// (&#39; &quot; &amp; …), and some senders (Korean mail clients especially) put
+// literal &nbsp; / &amp; in the text/plain *body* part instead of real characters,
+// so "주소 :&nbsp;경기" would otherwise show the raw entity. Some signatures are
+// double-encoded (&amp;nbsp;), so after the single UnescapeString a literal
+// "&nbsp;" remains — collapse those to spaces. A second blanket UnescapeString is
+// avoided because it would corrupt intentionally escaped text like "&amp;lt;".
+func decodeMailEntities(s string) string {
 	s = html.UnescapeString(s)
-	s = strings.ReplaceAll(s, "&nbsp;", " ")
+	s = strings.ReplaceAll(s, "&nbsp;", " ") // leftover from a double-encoded &amp;nbsp;
+	s = strings.ReplaceAll(s, "\u00A0", " ") // NBSP from a single &nbsp; → a regular space
 	return s
 }
 
@@ -202,7 +205,7 @@ func (c *Client) fetchMessageMetadata(ctx context.Context, id, _ string) (Messag
 	s := MessageSummary{
 		ID:       msg.ID,
 		ThreadID: msg.ThreadID,
-		Snippet:  cleanSnippet(msg.Snippet),
+		Snippet:  decodeMailEntities(msg.Snippet),
 		Labels:   msg.LabelIDs,
 	}
 	if msg.Payload != nil {
@@ -339,7 +342,9 @@ func extractBodyRaw(p *apiPayload) string {
 		if strings.EqualFold(p.MimeType, "text/html") {
 			return htmlToText(decoded)
 		}
-		return decoded
+		// text/plain (or other non-HTML): decode stray entities the sender left
+		// literal in the plain part, so "주소 :&nbsp;경기" doesn't reach the reader raw.
+		return decodeMailEntities(decoded)
 	}
 
 	// Multipart: search for text/plain first, then text/html.
@@ -347,7 +352,7 @@ func extractBodyRaw(p *apiPayload) string {
 	findBody(p, &plainText, &htmlText)
 
 	if plainText != "" {
-		return plainText
+		return decodeMailEntities(plainText)
 	}
 	if htmlText != "" {
 		return htmlToText(htmlText)
@@ -483,7 +488,7 @@ func htmlToText(s string) string {
 	s = html.UnescapeString(s)
 	// &nbsp; decodes to U+00A0 which renders as a space but trips up any
 	// downstream splitter that expects ASCII whitespace. Normalize.
-	s = strings.ReplaceAll(s, " ", " ")
+	s = strings.ReplaceAll(s, "\u00A0", " ")
 
 	// Trim trailing whitespace per line, then collapse runs of blank
 	// lines so newsletter templates don't render as a tall column of
