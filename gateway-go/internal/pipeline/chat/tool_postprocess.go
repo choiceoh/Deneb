@@ -161,9 +161,12 @@ func RegisterDefaultPostProcessors(registry *ToolRegistry) {
 	pp := NewPostProcessRegistry()
 
 	// Global processors (run on all tools after per-tool processors).
-	// 1. Generic trimmer: caps any remaining large output at 32K chars.
+	// 1. Compactor: strip ANSI + collapse adjacent duplicate lines (cheap,
+	//    lossless, deterministic) so the trimmer's cap sees already-clean text.
+	pp.AddGlobal(CompactToolOutput)
+	// 2. Generic trimmer: caps any remaining large output at 32K chars.
 	pp.AddGlobal(OutputTrimmer)
-	// 2. Error enrichment: adds actionable hints to error patterns.
+	// 3. Error enrichment: adds actionable hints to error patterns.
 	pp.AddGlobal(ErrorEnricher)
 
 	// Tool-specific processors (run before global processors).
