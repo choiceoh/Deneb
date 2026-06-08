@@ -42,6 +42,14 @@ type Config struct {
 	// through summarization. Passed as a soft hint to the summarizer's system
 	// prompt so the LLM emphasizes related facts as inevictable.
 	AnchorKeywords []string
+
+	// PreviousSummary, when non-empty, switches LLM compaction from
+	// summarize-from-scratch to incremental UPDATE: the prior summary is fed
+	// alongside the new turns and the model is asked to update it (move items
+	// In Progress → Done, prune obsolete) rather than re-summarize. Mirrors
+	// Hermes Agent's _previous_summary. The caller is responsible for storing
+	// Result.Summary and threading it back in as PreviousSummary next time.
+	PreviousSummary string
 }
 
 // NewConfig creates a compaction config for the given context budget.
@@ -60,6 +68,10 @@ type Result struct {
 	EmergencyEvicted      int  // messages evicted due to large input
 	TokensBefore          int
 	TokensAfter           int
+	// Summary is the LLM summary produced by this compaction (Tier 3a), if any.
+	// The caller persists it and feeds it back as Config.PreviousSummary next
+	// time so the following compaction updates it instead of re-summarizing.
+	Summary string
 }
 
 // Summarizer provides LLM-based summarization (typically local AI).
@@ -133,9 +145,10 @@ func Compact(
 
 			// Tier 3a: LLM summarization (best quality).
 			if !compacted && summarizer != nil {
-				if result, ok := LLMCompact(ctx, cfg, summarizeMessages, summarizer, logger); ok {
+				if result, summary, ok := LLMCompact(ctx, cfg, summarizeMessages, summarizer, logger); ok {
 					messages = result
 					r.LLMCompacted = true
+					r.Summary = summary
 					compacted = true
 				}
 			}

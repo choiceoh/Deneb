@@ -124,7 +124,7 @@ func TestLLMCompact_SummarizesOld(t *testing.T) {
 	cfg.ContextBudget = 1000 // low budget to trigger compaction
 
 	s := &mockSummarizer{}
-	result, ok := LLMCompact(context.Background(), cfg, msgs, s, nil)
+	result, _, ok := LLMCompact(context.Background(), cfg, msgs, s, nil)
 	if !ok {
 		t.Fatal("expected compaction to succeed")
 	}

@@ -714,7 +714,21 @@ func assembleMessages(
 		} else {
 			cfg := compact.NewConfig(contextBudget)
 			cfg.Embedder = deps.embeddingClient
+			// Incremental recompaction: feed the prior summary so the LLM tier
+			// UPDATES it (In Progress → Done) instead of re-summarizing from
+			// scratch, then store the new summary for next time. In-memory on
+			// the session; a /reset (new Session) or restart clears it.
+			var compSession *session.Session
+			if deps.sessions != nil {
+				compSession = deps.sessions.Get(params.SessionKey)
+			}
+			if compSession != nil {
+				cfg.PreviousSummary = compSession.PreviousCompactionSummary
+			}
 			messages, polarisResult = compact.Compact(polarisCtx, cfg, messages, summarizer, logger)
+			if compSession != nil && polarisResult.Summary != "" {
+				compSession.PreviousCompactionSummary = polarisResult.Summary
+			}
 		}
 		polarisCancel()
 
