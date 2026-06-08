@@ -164,4 +164,48 @@ class InlineParsingTest {
         val result = parseMarkdown(pathological)
         assertTrue(result.blocks.isNotEmpty())
     }
+
+    @Test
+    fun `bare url becomes an autolink`() {
+        val link = inlines("자세히는 https://github.com/deneb 참고").filterIsInstance<Link>().single()
+        assertEquals("https://github.com/deneb", link.href)
+        assertEquals(persistentListOf(Text("https://github.com/deneb")), link.children)
+    }
+
+    @Test
+    fun `bare url trailing punctuation stays out of the link`() {
+        val link = inlines("(see https://example.com).").filterIsInstance<Link>().single()
+        assertEquals("https://example.com", link.href)
+    }
+
+    @Test
+    fun `www url gains an https scheme`() {
+        val link = inlines("www.example.com 방문").filterIsInstance<Link>().single()
+        assertEquals("https://www.example.com", link.href)
+    }
+
+    @Test
+    fun `markdown link is not double-linked by autolink`() {
+        val link = inlines("[here](https://example.com)").single() as Link
+        assertEquals("https://example.com", link.href)
+        assertEquals(persistentListOf(Text("here")), link.children)
+    }
+
+    @Test
+    fun `space-flanked asterisks are not emphasis`() {
+        // "단가는 3 * 4 * 5" — multiplication must not turn "* 4 *" into italic.
+        assertEquals(listOf(Text("3 * 4 * 5")), inlines("3 * 4 * 5"))
+    }
+
+    @Test
+    fun `emphasis still works without flanking spaces`() {
+        assertEquals(listOf(Emphasis(persistentListOf(Text("italic")))), inlines("*italic*"))
+        assertTrue(inlines("a *b* c").any { it is Emphasis })
+    }
+
+    @Test
+    fun `html br becomes a line break`() {
+        assertTrue(inlines("line one<br>line two").any { it is LineBreak })
+        assertTrue(inlines("a<br/>b").any { it is LineBreak })
+    }
 }

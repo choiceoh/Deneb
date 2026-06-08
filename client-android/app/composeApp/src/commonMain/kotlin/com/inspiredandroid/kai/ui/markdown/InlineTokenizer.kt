@@ -27,7 +27,13 @@ internal object InlineTokenizer {
     // to match (one `\\.` iteration vs. two `[^…]` iterations), producing exponential
     // backtracking on Android's ICU regex engine when the surrounding `](url)` doesn't close.
     private val LINK_REGEX = Regex("(?<!\\\\)\\[((?:\\\\.|[^\\\\\\[\\]])*)\\]\\(([^)]*)\\)")
+    // GFM-style bare autolink: http(s):// or www. runs the LLM emits as plain text (not wrapped
+    // in []()). Stops at whitespace/<>; the opener can't sit right after a word char so it won't
+    // bite into "ahttps". Trailing sentence punctuation and unbalanced ) are trimmed at use site.
+    private val AUTOLINK_REGEX = Regex("(?<![\\w/@.])(?:https?://|www\\.)[^\\s<>]+")
     private val HARD_BREAK_REGEX = Regex(" {2,}\\n|\\\\\\n")
+    // LLM-emitted literal <br>/<br/> — common in table cells where a real newline would split the row.
+    private val HTML_BREAK_REGEX = Regex("<br\\s*/?>", RegexOption.IGNORE_CASE)
     private val EMOJI_SHORTCODE_REGEX = Regex(":([a-zA-Z0-9_+-]+):")
 
     // Math delimiters. `$$…$$` and `\[…\]` are display-flavored but still accepted inline
@@ -39,9 +45,14 @@ internal object InlineTokenizer {
     private val MATH_PAREN_REGEX = Regex("\\\\\\(([\\s\\S]+?)\\\\\\)")
     private val MATH_BRACKET_REGEX = Regex("\\\\\\[([\\s\\S]+?)\\\\\\]")
 
-    private val STRONG_STAR_REGEX = Regex("(?<!\\\\)\\*\\*([\\s\\S]+?)\\*\\*")
+    // `*`/`**` need the flanking guard the `_` patterns already get from their word-boundary
+    // lookarounds: a non-space right after the opener and right before the closer. Without it
+    // "단가는 3 * 4 * 5" makes "* 4 *" emphasis (the stars vanish, "4" goes italic). This is a
+    // trimmed CommonMark left/right-flanking rule — it kills space-flanked false positives while
+    // leaving "*italic*", "foo*bar*baz", and "**a `code` b**" intact.
+    private val STRONG_STAR_REGEX = Regex("(?<!\\\\)\\*\\*(?=\\S)([\\s\\S]+?)(?<=\\S)\\*\\*")
     private val STRONG_UNDER_REGEX = Regex("(?<![A-Za-z0-9_\\\\])__([\\s\\S]+?)__(?![A-Za-z0-9_])")
-    private val EMPH_STAR_REGEX = Regex("(?<!\\\\)\\*([\\s\\S]+?)\\*")
+    private val EMPH_STAR_REGEX = Regex("(?<!\\\\)\\*(?=\\S)([\\s\\S]+?)(?<=\\S)\\*")
     private val EMPH_UNDER_REGEX = Regex("(?<![A-Za-z0-9_\\\\])_([\\s\\S]+?)_(?![A-Za-z0-9_])")
     private val STRIKE_REGEX = Regex("(?<!\\\\)~~([\\s\\S]+?)~~")
 
@@ -119,11 +130,15 @@ internal object InlineTokenizer {
         val result = mutableListOf<InlineNode>()
         var cursor = start
         while (cursor < end) {
-            val segment = masked.substring(cursor, end)
+            // Earliest emphasis delimiter at/after cursor. Scanning `masked` from a start index
+            // (not substring(cursor, end)) avoids an O(n) copy per step — the old version was
+            // O(n²) in allocation on long answers. A match running past `end` is rejected: that
+            // opener had no in-range closer, exactly what substring(cursor, end) would yield.
             var bestMatch: MatchResult? = null
             var bestWrap: ((ImmutableList<InlineNode>) -> InlineNode)? = null
             for ((regex, wrapper) in EMPHASIS_PATTERNS) {
-                val m = regex.find(segment) ?: continue
+                val m = regex.find(masked, cursor) ?: continue
+                if (m.range.last + 1 > end) continue
                 if (bestMatch == null || m.range.first < bestMatch.range.first) {
                     bestMatch = m
                     bestWrap = wrapper
@@ -135,8 +150,8 @@ internal object InlineTokenizer {
                 break
             }
             val delimLen = (match.value.length - match.groupValues[1].length) / 2
-            val matchStart = cursor + match.range.first
-            val matchEnd = cursor + match.range.last + 1
+            val matchStart = match.range.first
+            val matchEnd = match.range.last + 1
             val innerStart = matchStart + delimLen
             val innerEnd = matchEnd - delimLen
             if (matchStart > cursor) {
@@ -191,8 +206,36 @@ internal object InlineTokenizer {
             val inner = parse(m.groupValues[1], depth + 1)
             all += m.range to Link(m.groupValues[2].trim(), inner)
         }
+        for (m in AUTOLINK_REGEX.findAll(text)) {
+            // Trim trailing prose punctuation, and a ) only when it has no matching ( inside the
+            // URL — so wiki links like ..._(disambiguation) keep their paren but "(see https://x.com)"
+            // drops the closer. (Atomics that fall inside a [..](..) link are dropped by the
+            // overlap pass below, so this never double-links a URL already in markdown form.)
+            var raw = m.value
+            var trimmed = 0
+            while (raw.length > "https://".length) {
+                val last = raw.last()
+                val isProse = last in ".,;:!?\"'»」』。、…"
+                val unbalancedParen = last == ')' && raw.count { it == '(' } < raw.count { it == ')' }
+                if (isProse || unbalancedParen) {
+                    raw = raw.dropLast(1)
+                    trimmed++
+                } else {
+                    break
+                }
+            }
+            if (raw == "www." || raw.endsWith("://")) continue
+            val range = m.range.first..(m.range.last - trimmed)
+            val href = if (raw.startsWith("www.")) "https://$raw" else raw
+            all += range to Link(href, persistentListOf(Text(raw)))
+        }
         for (m in HARD_BREAK_REGEX.findAll(text)) {
             all += m.range to LineBreak
+        }
+        if ('<' in text) {
+            for (m in HTML_BREAK_REGEX.findAll(text)) {
+                all += m.range to LineBreak
+            }
         }
         // Streaming hot path: skip the four math scans when the text has no math sentinels.
         val mayHaveMath = '$' in text || '\\' in text

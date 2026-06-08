@@ -11,7 +11,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
 import androidx.compose.material3.Icon
-import kotlinx.collections.immutable.toImmutableList
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.widthIn
@@ -262,10 +261,11 @@ private fun BulletListBlock(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         for (item in block.items) {
-            val task = remember(item) { detectTask(item) }
-            if (task != null) {
-                // A GFM task item ("- [ ] …" / "- [x] …") — render a real checkbox.
-                TaskItemRow(task.first, task.second, isInteractive, onUiCallback, frozen)
+            val checked = item.checked
+            if (checked != null) {
+                // A GFM task item ("- [ ] …" / "- [x] …"): the parser already stripped the
+                // marker and recorded the state, so render a real checkbox.
+                TaskItemRow(checked, item, isInteractive, onUiCallback, frozen)
             } else {
                 // The bullet is decoration, not content — mute it so the eye lands
                 // on the text, and "•" reads lighter than the body weight here.
@@ -273,28 +273,6 @@ private fun BulletListBlock(
             }
         }
     }
-}
-
-private val taskMarker = Regex("^\\[([ xX])]\\s+")
-
-// detectTask returns (checked, item-with-marker-stripped) when a bullet item is
-// a GFM task ("[ ] …" / "[x] …"), else null. Done at render time so the parser
-// stays a plain CommonMark subset.
-private fun detectTask(item: ListItem): Pair<Boolean, ListItem>? {
-    val firstPara = item.children.firstOrNull() as? Paragraph ?: return null
-    val firstText = firstPara.inlines.firstOrNull() as? com.inspiredandroid.kai.ui.markdown.Text ?: return null
-    val match = taskMarker.find(firstText.value) ?: return null
-    val checked = firstText.value[match.range.first + 1].lowercaseChar() == 'x'
-    val rest = firstText.value.substring(match.range.last + 1)
-    val newInlines = buildList {
-        if (rest.isNotEmpty()) add(com.inspiredandroid.kai.ui.markdown.Text(rest))
-        addAll(firstPara.inlines.drop(1))
-    }.toImmutableList()
-    val newChildren = buildList {
-        add(Paragraph(newInlines))
-        addAll(item.children.drop(1))
-    }.toImmutableList()
-    return checked to ListItem(newChildren)
 }
 
 @Composable

@@ -37,7 +37,12 @@ data class OrderedList(
 ) : BlockNode
 
 @Immutable
-data class ListItem(val children: ImmutableList<BlockNode>)
+data class ListItem(
+    val children: ImmutableList<BlockNode>,
+    // GFM task marker: null = ordinary item, true/false = checked/unchecked checkbox. The
+    // `[ ]`/`[x]` prefix is stripped from [children] by the parser, so renderers just read this.
+    val checked: Boolean? = null,
+)
 
 @Immutable
 data class Table(

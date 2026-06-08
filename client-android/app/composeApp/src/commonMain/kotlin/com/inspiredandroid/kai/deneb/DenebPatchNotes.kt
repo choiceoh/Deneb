@@ -28,6 +28,14 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.60",
+        highlights = listOf(
+            "채팅 답변 속 맨 URL을 자동으로 링크 — 주소를 그냥 적어도 탭하면 바로 열림",
+            "별표 곱셈 오인 수정 — \"3 * 4 * 5\" 같은 표현이 기울임꼴로 잘못 변하지 않음",
+            "체크리스트(✓)와 표 안 줄바꿈(<br>) 표시 개선",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.59",
         highlights = listOf(
             "여러 날에 걸친 일정 추가 — 출장·전시·워크숍처럼 며칠짜리 일정의 시작·종료 날짜를 따로 지정",
