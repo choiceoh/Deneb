@@ -8,13 +8,17 @@ import (
 )
 
 func TestIsCacheIncompatibleProvider(t *testing.T) {
-	for _, p := range []string{"kimi", "KIMI", " kimi "} {
+	// Bare id, casing/whitespace, catalog aliases (kimi-code/kimi-coding) and the
+	// "<provider>-subagent" remap (kimi-subagent) all route through the Anthropic
+	// client and reject cache_control, so all must match.
+	for _, p := range []string{"kimi", "KIMI", " kimi ", "kimi-code", "kimi-coding", "Kimi-Subagent", "kimi-anything"} {
 		if !isCacheIncompatibleProvider(p) {
 			t.Errorf("%q should be cache-incompatible", p)
 		}
 	}
 	// MiMo/z.ai are Anthropic-wire too but accept cache_control — must NOT match.
-	for _, p := range []string{"mimo", "mimo-plan", "zai", "anthropic", "openai", ""} {
+	// "kimimaru" has no hyphen boundary, so it must not match the kimi- prefix.
+	for _, p := range []string{"mimo", "mimo-plan", "zai", "anthropic", "openai", "kimimaru", ""} {
 		if isCacheIncompatibleProvider(p) {
 			t.Errorf("%q should NOT be cache-incompatible", p)
 		}

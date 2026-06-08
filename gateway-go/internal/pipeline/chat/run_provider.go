@@ -246,6 +246,12 @@ func resolveAPIMode(deps runDeps, providerID string) string {
 // trailing) must be stripped for Kimi requests. Mirrors OpenClaw's per-provider
 // strip (extensions/kimi-coding). MiMo/z.ai are NOT included — they accept the
 // markers; only Kimi is known-incompatible.
+//
+// Matches the bare "kimi" id and any Kimi alias/remap carrying it as a prefix:
+// catalog aliases like "kimi-code"/"kimi-coding" and the "<provider>-subagent"
+// remap applied to spawned sessions ("kimi-subagent"). Without the prefix match
+// those variants kept their cache_control markers and faulted with HTTP 400.
 func isCacheIncompatibleProvider(providerID string) bool {
-	return strings.EqualFold(strings.TrimSpace(providerID), "kimi")
+	id := strings.ToLower(strings.TrimSpace(providerID))
+	return id == "kimi" || strings.HasPrefix(id, "kimi-")
 }

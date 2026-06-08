@@ -323,7 +323,9 @@ func (s *Server) deleteMiniappCustomModel(_ context.Context, id string) (handler
 			if s.modelRegistry != nil {
 				s.modelRegistry.SetRoleModelID(modelrole.RoleMain, defaultModel)
 			}
-		case "lightweight", "fallback":
+		case "lightweight", "tiny", "analysis", "fallback":
+			// tiny/analysis are bindable from the picker too (see roleMiniappModels),
+			// so a deleted model could be left dangling on those roles if not reset.
 			if s.modelRegistry != nil {
 				s.modelRegistry.SetRoleModelID(modelrole.Role(role), defaultModel)
 			}
