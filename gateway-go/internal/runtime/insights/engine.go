@@ -94,10 +94,12 @@ type ModelStat struct {
 }
 
 // ToolStat aggregates tool-call counts. ErrorRate is 0..1; zero when unknown.
+// AvgMs is the mean execution time per call in milliseconds; zero when unknown.
 type ToolStat struct {
 	Name      string  `json:"name"`
 	Calls     int     `json:"calls"`
 	ErrorRate float64 `json:"errorRate"`
+	AvgMs     int64   `json:"avgMs,omitempty"`
 }
 
 // SessionStat summarizes a single session for "top sessions" ranking.

@@ -8,6 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
@@ -51,6 +52,12 @@ type proactiveRelayDeps struct {
 	transcriptStore toolctx.TranscriptStore
 	logger          interface{ Error(string, ...any) } // *slog.Logger subset
 
+	// behaviorLog records each relay decision (delivered/suppressed/dropped/
+	// error) under system:proactive so the autonomous-delivery funnel is
+	// observable: how often it fires and how much is suppressed and why. nil-safe;
+	// nil in older wiring/tests.
+	behaviorLog *agentlog.Writer
+
 	// pushHub fans a {title, body} frame out to connected native clients when a
 	// report arrives, so the app raises a notification live instead of waiting
 	// for its next heartbeat poll. nil in older wiring/tests; the push is then
@@ -92,7 +99,9 @@ func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
 	// suppressed — not delivered as a literal "NO_REPLY" work-feed card + push.
 	// isContentlessProactive below only catches the chatty prose variants
 	// ("메일이 없습니다" etc.); the bare token needs this explicit strip.
+	origLen := len(content) // raw body size, recorded on every relay decision
 	if content = chat.StripSilentToken(content); strings.TrimSpace(content) == "" {
+		d.logProactive("suppressed", "silent_token", origLen, "")
 		return false, nil
 	}
 	// Drop the model's leading working-narration preamble — "전체 맥락 파악됐습니다.
@@ -113,6 +122,7 @@ func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
 	// erroring), and the raw agent output is still kept in the cron run log for
 	// diagnosis.
 	if isContentlessProactive(content) {
+		d.logProactive("suppressed", "contentless", origLen, pushPreview(content))
 		return false, nil
 	}
 	if d.transcriptStore == nil {
@@ -124,6 +134,7 @@ func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
 			d.logger.Error("proactive native relay: no transcript store wired — report dropped",
 				"sessionKey", nativeWorkSessionKey)
 		}
+		d.logProactive("dropped", "no_transcript_store", origLen, "")
 		return false, nil
 	}
 	msg := toolctx.NewTextChatMessage("assistant", content, time.Now().UnixMilli())
@@ -132,6 +143,7 @@ func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
 			d.logger.Error("proactive native relay: transcript append failed",
 				"sessionKey", nativeWorkSessionKey, "error", err)
 		}
+		d.logProactive("error", "append_failed", origLen, "")
 		return false, err
 	}
 	if d.nativeSync != nil {
@@ -168,7 +180,20 @@ func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
 			Body:  pushPreview(content),
 		})
 	}
+	d.logProactive("delivered", "", origLen, pushPreview(content))
 	return true, nil
+}
+
+// logProactive records one relay decision to the behavioral event log so the
+// proactive funnel (fire → suppress / deliver) is queryable after the fact.
+// nil-safe via Writer.LogEvent.
+func (d proactiveRelayDeps) logProactive(decision, reason string, contentLen int, preview string) {
+	d.behaviorLog.LogEvent(agentlog.SessionProactive, agentlog.TypeProactiveRelay, agentlog.ProactiveRelayData{
+		Decision:   decision,
+		Reason:     reason,
+		ContentLen: contentLen,
+		Preview:    preview,
+	})
 }
 
 // contentlessProactiveFragments mark a proactive body as carrying nothing

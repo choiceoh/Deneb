@@ -178,13 +178,29 @@ func handleRunSuccess(
 	now int64,
 	runLog *agentlog.RunLogger,
 ) {
-	// Log run completion to agent detail log.
+	// Log run completion to agent detail log. CompactionFired is read from the
+	// session so the run shape records whether the context outgrew its budget
+	// this run; Proactive distinguishes autonomous/auto-delivered runs (heartbeat
+	// self-trigger, cron relay) from genuine user requests.
+	compacted := false
+	if deps.sessions != nil {
+		if sess := deps.sessions.Get(params.SessionKey); sess != nil {
+			compacted = sess.CompactionFired
+		}
+	}
 	runLog.LogEnd(agentlog.RunEndData{
-		StopReason:   result.StopReason,
-		Turns:        result.Turns,
-		InputTokens:  result.Usage.InputTokens,
-		OutputTokens: result.Usage.OutputTokens,
-		TextLen:      len(result.Text),
+		StopReason:          result.StopReason,
+		Turns:               result.Turns,
+		InputTokens:         result.Usage.InputTokens,
+		OutputTokens:        result.Usage.OutputTokens,
+		TextLen:             len(result.Text),
+		CacheReadTokens:     result.Usage.CacheReadInputTokens,
+		CacheCreationTokens: result.Usage.CacheCreationInputTokens,
+		ToolCalls:           result.TotalToolCalls,
+		ToolCounts:          result.ToolCounts,
+		MaxTokensRecoveries: result.MaxTokensRecoveries,
+		Compacted:           compacted,
+		Proactive:           params.AutoDeliveredOutput || params.EphemeralUser,
 	})
 	// Strip silent reply token (NO_REPLY) from the response text before
 	// persisting, broadcasting, or delivering. This ensures the internal
