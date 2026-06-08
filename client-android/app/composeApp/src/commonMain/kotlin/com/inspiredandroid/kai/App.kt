@@ -39,6 +39,7 @@ import com.inspiredandroid.kai.data.ThemeMode
 import com.inspiredandroid.kai.data.DataRepository
 import com.inspiredandroid.kai.deneb.DenebConfigScreen
 import com.inspiredandroid.kai.deneb.DenebGatewayClient
+import com.inspiredandroid.kai.deneb.DenebCalendarAddScreen
 import com.inspiredandroid.kai.deneb.DenebCalendarEventScreen
 import com.inspiredandroid.kai.deneb.DenebCalendarScreen
 import com.inspiredandroid.kai.deneb.DenebMailDetailScreen
@@ -113,6 +114,14 @@ data class DenebMailDetail(val id: String)
 @Serializable
 @SerialName("deneb_calendar_event")
 data class DenebCalendarEvent(val id: String)
+
+@Serializable
+@SerialName("deneb_calendar_add")
+data class DenebCalendarAdd(val dateIso: String)
+
+@Serializable
+@SerialName("deneb_calendar_edit")
+data class DenebCalendarEdit(val id: String)
 
 @Serializable
 @SerialName("deneb_search")
@@ -353,6 +362,7 @@ private fun AppContent(
                                 client = client,
                                 onBack = { navController.navigateUp() },
                                 onOpenEvent = { id -> navController.navigate(DenebCalendarEvent(id)) },
+                                onAddEvent = { date -> navController.navigate(DenebCalendarAdd(date.toString())) },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }
@@ -363,6 +373,31 @@ private fun AppContent(
                                 client = client,
                                 eventId = entry.toRoute<DenebCalendarEvent>().id,
                                 onBack = { navController.navigateUp() },
+                                onEdit = { id -> navController.navigate(DenebCalendarEdit(id)) },
+                                onDeleted = { navController.navigateUp() },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebCalendarAdd> { entry ->
+                        denebClient?.let { client ->
+                            DenebCalendarAddScreen(
+                                client = client,
+                                initialDateIso = entry.toRoute<DenebCalendarAdd>().dateIso,
+                                onBack = { navController.navigateUp() },
+                                onSaved = { navController.navigateUp() },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    }
+                    composable<DenebCalendarEdit> { entry ->
+                        denebClient?.let { client ->
+                            DenebCalendarAddScreen(
+                                client = client,
+                                initialDateIso = "",
+                                editEventId = entry.toRoute<DenebCalendarEdit>().id,
+                                onBack = { navController.navigateUp() },
+                                onSaved = { navController.navigateUp() },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }

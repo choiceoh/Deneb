@@ -32,6 +32,7 @@ data class CalendarEventOut(
     val allDay: Boolean = false,
     val status: String = "",
     val htmlLink: String = "",
+    val local: Boolean = false,
     val organizer: CalendarAttendeeOut? = null,
     val attendees: List<CalendarAttendeeOut> = emptyList(),
     val conference: CalendarConferenceOut? = null,

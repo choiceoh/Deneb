@@ -47,6 +47,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
@@ -76,15 +77,44 @@ type briefingCalendarClient interface {
 	ListUpcoming(ctx context.Context, from, to time.Time, maxResults int) ([]calendar.Event, error)
 }
 
-// resolveBriefingCalendarClient is the production factory: explicitly
-// converts (nil, err) into a typed nil so a nil-interface check
-// downstream never sees a non-nil interface wrapping a nil concrete.
-func resolveBriefingCalendarClient() (briefingCalendarClient, error) {
-	c, err := calendar.DefaultClient()
-	if err != nil {
-		return nil, err
+// mergedBriefingSource unions the read-only Google client with the local store
+// so hand-added events also trigger the D-15min reminder. Either field may be
+// nil; a Google list error propagates (so a configured-but-broken Google calendar
+// is noticed), while local events are always included.
+type mergedBriefingSource struct {
+	google briefingCalendarClient // nil when Google OAuth isn't configured
+	local  *localcal.Store        // nil when the local file can't be read
+}
+
+func (m mergedBriefingSource) ListUpcoming(ctx context.Context, from, to time.Time, maxResults int) ([]calendar.Event, error) {
+	var out []calendar.Event
+	if m.google != nil {
+		ev, err := m.google.ListUpcoming(ctx, from, to, maxResults)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ev...)
 	}
-	return c, nil
+	if m.local != nil {
+		out = append(out, m.local.ListRange(from, to)...)
+	}
+	return out, nil
+}
+
+// resolveBriefingCalendarClient is the production factory: it merges the Google
+// client (when configured) with the local store so briefings cover both. When
+// neither is available it returns the Google error so the operator is told.
+func resolveBriefingCalendarClient() (briefingCalendarClient, error) {
+	c, gerr := calendar.DefaultClient()
+	local, _ := localcal.Default()
+	var google briefingCalendarClient
+	if gerr == nil {
+		google = c
+	}
+	if google == nil && local == nil {
+		return nil, gerr
+	}
+	return mergedBriefingSource{google: google, local: local}, nil
 }
 
 type calendarBriefingService struct {

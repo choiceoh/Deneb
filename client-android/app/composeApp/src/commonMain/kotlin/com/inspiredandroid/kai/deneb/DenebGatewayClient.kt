@@ -1000,8 +1000,103 @@ class DenebGatewayClient(
         ) ?: return false
         _denebCalendar.value = payload.events
             .filter { it.id.isNotBlank() }
-            .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay) }
+            .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.local) }
         return true
+    }
+
+    /**
+     * Fetch events in an explicit [fromIso, toIso) window (`miniapp.calendar.list_range`).
+     * The month grid uses this because it needs a whole month — often reaching into the
+     * past — rather than [refreshCalendar]'s now-anchored look-ahead. Returns null on a
+     * fetch failure so the screen can tell a real "no events" from a network error.
+     */
+    suspend fun fetchCalendarRange(fromIso: String, toIso: String): List<CalendarEvent>? {
+        val payload = callRpc<CalListPayload>(
+            "miniapp.calendar.list_range",
+            buildJsonObject {
+                put("from", fromIso)
+                put("to", toIso)
+            },
+        ) ?: return null
+        return payload.events
+            .filter { it.id.isNotBlank() }
+            .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.local) }
+    }
+
+    /**
+     * Create a calendar event by hand (`miniapp.calendar.create`). The gateway
+     * stores it locally, so this always works without a Google write scope.
+     * Returns null on success, or a Korean error message on failure. start/end
+     * are RFC3339; pass end blank to let the gateway apply a default duration.
+     */
+    suspend fun createCalendarEvent(
+        summary: String,
+        description: String,
+        location: String,
+        allDay: Boolean,
+        startIso: String,
+        endIso: String,
+        timeZone: String,
+    ): String? = rpcWrite(
+        "miniapp.calendar.create",
+        calendarWriteParams(summary, description, location, allDay, startIso, endIso, timeZone),
+    )
+
+    /** Edit a locally-stored event (`miniapp.calendar.update`). Same return contract
+     *  as [createCalendarEvent]; the gateway rejects non-local (Google) IDs. */
+    suspend fun updateCalendarEvent(
+        id: String,
+        summary: String,
+        description: String,
+        location: String,
+        allDay: Boolean,
+        startIso: String,
+        endIso: String,
+        timeZone: String,
+    ): String? = rpcWrite(
+        "miniapp.calendar.update",
+        calendarWriteParams(summary, description, location, allDay, startIso, endIso, timeZone, id),
+    )
+
+    /** Delete a locally-stored event (`miniapp.calendar.delete`). Null on success,
+     *  a Korean error message otherwise (e.g. when the id is a read-only Google event). */
+    suspend fun deleteCalendarEvent(id: String): String? =
+        rpcWrite("miniapp.calendar.delete", buildJsonObject { put("id", id) })
+
+    // calendarWriteParams builds the shared create/update body; `id` is set only
+    // for updates. Blank optional fields are omitted so the gateway applies defaults.
+    private fun calendarWriteParams(
+        summary: String,
+        description: String,
+        location: String,
+        allDay: Boolean,
+        startIso: String,
+        endIso: String,
+        timeZone: String,
+        id: String? = null,
+    ): JsonObject = buildJsonObject {
+        if (id != null) put("id", id)
+        put("summary", summary)
+        if (description.isNotBlank()) put("description", description)
+        if (location.isNotBlank()) put("location", location)
+        put("allDay", allDay)
+        put("start", startIso)
+        if (endIso.isNotBlank()) put("end", endIso)
+        if (timeZone.isNotBlank()) put("timeZone", timeZone)
+    }
+
+    // rpcWrite posts a write RPC and surfaces the gateway's error message (so the
+    // UI can show the exact reason), returning null on success.
+    private suspend fun rpcWrite(method: String, params: JsonObject): String? {
+        if (clientToken.isEmpty()) return "게이트웨이에 연결되어 있지 않습니다."
+        return runCatching {
+            val result = http.post("$gatewayUrl/api/v1/miniapp/rpc") {
+                header(CLIENT_TOKEN_HEADER, clientToken)
+                contentType(ContentType.Application.Json)
+                setBody(RpcReq(id = Uuid.random().toString(), method = method, params = params))
+            }.body<RpcResult>()
+            if (result.ok) null else (result.error?.message?.ifBlank { null } ?: "요청을 처리하지 못했습니다.")
+        }.getOrElse { "요청을 처리하지 못했습니다." }
     }
 
     /**
@@ -1087,6 +1182,7 @@ class DenebGatewayClient(
             organizer = p.organizer?.let { it.displayName.ifBlank { it.email } }.orEmpty(),
             attendees = p.attendees.mapNotNull { (it.displayName.ifBlank { it.email }).ifBlank { null } },
             status = p.status,
+            local = p.local,
         )
     }
 
@@ -1716,6 +1812,14 @@ class DenebGatewayClient(
 
     @Serializable
     private data class RpcEnv<T>(val ok: Boolean = false, val payload: T? = null)
+
+    // Error-bearing envelope for writes (e.g. calendar.create) where the caller
+    // needs the gateway's error message, not just a null payload.
+    @Serializable
+    private data class RpcResult(val ok: Boolean = false, val error: RpcError? = null)
+
+    @Serializable
+    private data class RpcError(val code: String = "", val message: String = "")
 
     private companion object {
         const val CLIENT_TOKEN_HEADER = "X-Deneb-Client-Token"
