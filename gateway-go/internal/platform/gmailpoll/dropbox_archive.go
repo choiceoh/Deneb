@@ -23,7 +23,9 @@ const minArchiveSize = 1024
 // per-file failure is logged and skipped, never failing the poll cycle. Returns
 // the archived destination paths for inclusion in the consolidated report.
 func (s *Service) archiveAttachments(ctx context.Context, client *gmail.Client, details []*gmail.MessageDetail) []string {
-	if !s.cfg.ArchiveAttachments {
+	// Re-check per cycle (cheap file stat) so connecting Dropbox after startup
+	// activates archiving without a restart — no startup-latched bool.
+	if !dropbox.HasToken() {
 		return nil
 	}
 	dbx, err := s.ensureDropbox()

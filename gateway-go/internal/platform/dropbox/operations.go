@@ -17,6 +17,10 @@ const maxUploadBytes = 150 * 1024 * 1024
 // listPageCap bounds list_folder pagination so a huge tree can't run forever.
 const listPageCap = 50
 
+// ErrCursorReset signals a list_folder cursor has expired; the caller must
+// re-seed via LatestCursor (Dropbox returns 409 with a "reset" error tag).
+var ErrCursorReset = errors.New("dropbox cursor reset")
+
 // ListFolder lists entries under path ("" means the Dropbox root). When
 // recursive is true, descendant entries are included. Pagination is followed
 // via list_folder/continue up to listPageCap pages.
@@ -148,7 +152,7 @@ func (c *Client) Download(ctx context.Context, path string) ([]byte, *Entry, err
 // upload_session API — not implemented in v1).
 func (c *Client) Upload(ctx context.Context, destPath string, data []byte, overwrite bool) (*Entry, error) {
 	if len(data) > maxUploadBytes {
-		return nil, fmt.Errorf("파일이 너무 큼 (%s) — 단일 업로드 최대 150MB, 청크 업로드는 미지원", humanSize(int64(len(data)))) //nolint:staticcheck // ST1005 — Korean error message
+		return nil, fmt.Errorf("파일이 너무 큼 (%s) — 단일 업로드 최대 150MB, 청크 업로드는 미지원", HumanSize(int64(len(data)))) //nolint:staticcheck // ST1005 — Korean error message
 	}
 
 	mode := "add"
@@ -261,6 +265,11 @@ func (c *Client) ListChanges(ctx context.Context, cursor string) ([]Entry, strin
 	for pages := 0; hasMore && pages < listPageCap; pages++ {
 		body, err := c.doRPC(ctx, "/2/files/list_folder/continue", map[string]any{"cursor": cursor})
 		if err != nil {
+			var apiErr *APIError
+			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusConflict &&
+				strings.Contains(apiErr.Body, "reset") {
+				return entries, "", ErrCursorReset
+			}
 			return entries, cursor, err
 		}
 		var resp struct {

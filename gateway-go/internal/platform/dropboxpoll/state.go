@@ -10,11 +10,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
 const (
-	maxSeenIDs       = 500
+	// Generous cap: during a large burst the cursor stalls (held until the
+	// backlog drains under MaxPerCycle), so the watcher relies on the seen-set —
+	// not the cursor — to avoid re-processing. This must comfortably exceed any
+	// realistic backlog so already-handled IDs aren't evicted while still in the
+	// replayed change window.
+	maxSeenIDs       = 2000
 	defaultStateFile = "dropbox-poll-state.json"
 )
 
@@ -69,40 +75,9 @@ func (s *stateStore) Save(state *PollState) error {
 	if err != nil {
 		return fmt.Errorf("marshal poll state: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return fmt.Errorf("create state dir: %w", err)
-	}
-
-	// Atomic write via temp file + rename, one retry on transient errors.
-	tmp := s.path + ".tmp"
-	_ = os.Remove(tmp)
-	const maxAttempts = 2
-	var writeErr error
-	for attempt := range maxAttempts {
-		writeErr = os.WriteFile(tmp, data, 0o600)
-		if writeErr == nil {
-			break
-		}
-		if attempt+1 < maxAttempts {
-			time.Sleep(50 * time.Millisecond)
-		}
-	}
-	if writeErr != nil {
-		return fmt.Errorf("write temp state: %w", writeErr)
-	}
-
-	var renameErr error
-	for attempt := range maxAttempts {
-		renameErr = os.Rename(tmp, s.path)
-		if renameErr == nil {
-			return nil
-		}
-		if attempt+1 < maxAttempts {
-			time.Sleep(50 * time.Millisecond)
-		}
-	}
-	_ = os.Remove(tmp)
-	return renameErr
+	// atomicfile does mkdir + flock + temp + rename. The flock serializes saves
+	// across the concurrent agent worktrees that share ~/.deneb.
+	return atomicfile.WriteFile(s.path, data, &atomicfile.Options{Perm: 0o600, DirPerm: 0o700})
 }
 
 func (state *PollState) hasSeen(id string) bool {

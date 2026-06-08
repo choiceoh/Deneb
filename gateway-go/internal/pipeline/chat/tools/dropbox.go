@@ -45,6 +45,10 @@ func ToolDropbox() ToolFunc {
 			return fmt.Sprintf("Dropbox 인증 정보를 찾을 수 없습니다: %s\n게이트웨이 호스트에서 `go run ./cmd/deneb-dropbox-auth`로 연동을 1회 설정하세요.", err), nil
 		}
 
+		// Normalize the path once so every action sees a leading-slash path (or
+		// "" for the list root) — no per-action normalize drift.
+		p.Path = normalizeDropboxPath(p.Path)
+
 		switch p.Action {
 		case "list":
 			return dropboxList(ctx, client, p)
@@ -99,22 +103,21 @@ func dropboxSearch(ctx context.Context, client *dropbox.Client, p DropboxParams)
 // --- download (optionally extract text) ---
 
 func dropboxDownload(ctx context.Context, client *dropbox.Client, p DropboxParams) (string, error) {
-	path := normalizeDropboxPath(p.Path)
-	if path == "" {
+	if p.Path == "" {
 		return "", fmt.Errorf("path는 download 액션에 필수입니다")
 	}
-	data, meta, err := client.Download(ctx, path)
+	data, meta, err := client.Download(ctx, p.Path)
 	if err != nil {
 		return "", err
 	}
-	name := dropboxBaseName(path, meta)
+	name := dropboxBaseName(p.Path, meta)
 	localPath, err := saveDropboxFile(name, data)
 	if err != nil {
 		return "", err
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "✓ 다운로드 완료: **%s** (%.1fKB)\n저장 위치: `%s`\n", name, float64(len(data))/1024, localPath)
+	fmt.Fprintf(&sb, "✓ 다운로드 완료: **%s** (%s)\n저장 위치: `%s`\n", name, dropbox.HumanSize(int64(len(data))), localPath)
 	if p.Extract {
 		text := extractDropboxFileText(ctx, name, data)
 		if text != "" {
@@ -145,17 +148,16 @@ func dropboxUpload(ctx context.Context, client *dropbox.Client, p DropboxParams)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("✓ 업로드 완료: `%s` (%.1fKB)", meta.PathDisplay, float64(meta.Size)/1024), nil
+	return fmt.Sprintf("✓ 업로드 완료: `%s` (%s)", meta.PathDisplay, dropbox.HumanSize(meta.Size)), nil
 }
 
 // --- share ---
 
 func dropboxShare(ctx context.Context, client *dropbox.Client, p DropboxParams) (string, error) {
-	path := normalizeDropboxPath(p.Path)
-	if path == "" {
+	if p.Path == "" {
 		return "", fmt.Errorf("path는 share 액션에 필수입니다")
 	}
-	link, err := client.CreateSharedLink(ctx, path)
+	link, err := client.CreateSharedLink(ctx, p.Path)
 	if err != nil {
 		return "", err
 	}
@@ -165,15 +167,14 @@ func dropboxShare(ctx context.Context, client *dropbox.Client, p DropboxParams) 
 // --- analyze: download + extract text for the agent to reason over ---
 
 func dropboxAnalyze(ctx context.Context, client *dropbox.Client, p DropboxParams) (string, error) {
-	path := normalizeDropboxPath(p.Path)
-	if path == "" {
+	if p.Path == "" {
 		return "", fmt.Errorf("path는 analyze 액션에 필수입니다")
 	}
-	data, meta, err := client.Download(ctx, path)
+	data, meta, err := client.Download(ctx, p.Path)
 	if err != nil {
 		return "", err
 	}
-	name := dropboxBaseName(path, meta)
+	name := dropboxBaseName(p.Path, meta)
 	text := extractDropboxFileText(ctx, name, data)
 	if text == "" {
 		return fmt.Sprintf("**%s**에서 텍스트를 추출할 수 없습니다 (지원: PDF/이미지/Excel/Word/PowerPoint/텍스트).", name), nil

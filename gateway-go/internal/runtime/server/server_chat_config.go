@@ -20,9 +20,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
-func (s *Server) initGmailPoll() {
-	snap, err := config.LoadConfigFromDefaultPath()
-	if err != nil || snap == nil {
+func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
+	if snap == nil {
 		return
 	}
 	pollCfg := snap.Config.GmailPoll
@@ -72,9 +71,6 @@ func (s *Server) initGmailPoll() {
 	cfg.OnAnalyzed = s.makeMailAnalysisSink()
 	cfg.ProjectsFn = s.projectCandidatesFn()
 
-	// Auto-archive substantive email attachments to Dropbox when connected.
-	cfg.ArchiveAttachments = dropbox.HasToken()
-
 	s.gmailPollSvc = gmailpoll.NewService(cfg, s.logger)
 
 	// Wire proactive relay as the gmail-poll notifier so email summaries
@@ -108,14 +104,22 @@ func (s *Server) seedDropboxBackupJob() {
 	if s.cronService == nil {
 		return
 	}
+	// Seed only once a Dropbox token exists, so the job is created enabled in the
+	// same startup that first sees the token — no stale disabled job latched from
+	// a token-less first boot. JobByName keeps it idempotent and respects later
+	// user edits (schedule/enabled).
+	if !dropbox.HasToken() {
+		return
+	}
 	const jobName = "dropbox-backup-weekly"
 	if existing, _ := s.cronService.JobByName(jobName); existing != nil {
 		return
 	}
 	job := cron.StoreJob{
+		ID:      jobName,
 		Name:    jobName,
 		AgentID: "main",
-		Enabled: dropbox.HasToken(),
+		Enabled: true,
 		Schedule: cron.StoreSchedule{
 			Kind: "cron",
 			Expr: "0 3 * * 0", // weekly, Sunday 03:00
@@ -143,7 +147,15 @@ type dropboxAgentAdapter struct {
 }
 
 func (a *dropboxAgentAdapter) RunAgentTurn(ctx context.Context, prompt string) (string, error) {
-	result, err := a.chat.SendSync(ctx, "dropboxpoll", prompt, "", &chat.SyncOptions{AutoDeliveredOutput: true})
+	// system: prefix keeps this internal session out of Aurora recall and the
+	// native session drawer (isSystemSession). Ephemeral flags stop the
+	// fixed-key transcript from growing unbounded — the boot/heartbeat failure
+	// mode where compaction eventually misses its deadline and the turn stalls.
+	result, err := a.chat.SendSync(ctx, "system:dropboxpoll", prompt, "", &chat.SyncOptions{
+		AutoDeliveredOutput: true,
+		EphemeralUser:       true,
+		EphemeralAssistant:  true,
+	})
 	if err != nil {
 		return "", err
 	}
@@ -154,9 +166,8 @@ func (a *dropboxAgentAdapter) RunAgentTurn(ctx context.Context, prompt string) (
 // Mirrors initGmailPoll: detection runs here, analysis is delegated to an agent
 // turn, and the summary is delivered to the native 업무 chat via the proactive
 // relay (workfeed card + push).
-func (s *Server) initDropboxPoll() {
-	snap, err := config.LoadConfigFromDefaultPath()
-	if err != nil || snap == nil {
+func (s *Server) initDropboxPoll(snap *config.ConfigSnapshot) {
+	if snap == nil {
 		return
 	}
 	pollCfg := snap.Config.DropboxPoll

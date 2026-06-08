@@ -2,6 +2,7 @@ package dropboxpoll
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -13,6 +14,7 @@ type fakeClient struct {
 	latestCursor string
 	changes      []dropbox.Entry
 	newCursor    string
+	listErr      error
 	listCalls    int
 }
 
@@ -22,7 +24,7 @@ func (f *fakeClient) LatestCursor(_ context.Context, _ string, _ bool) (string, 
 
 func (f *fakeClient) ListChanges(_ context.Context, _ string) ([]dropbox.Entry, string, error) {
 	f.listCalls++
-	return f.changes, f.newCursor, nil
+	return f.changes, f.newCursor, f.listErr
 }
 
 type fakeAgent struct {
@@ -35,11 +37,14 @@ func (a *fakeAgent) RunAgentTurn(_ context.Context, prompt string) (string, erro
 	return a.reply, nil
 }
 
-type fakeNotifier struct{ msgs []string }
+type fakeNotifier struct {
+	msgs []string
+	err  error
+}
 
 func (n *fakeNotifier) Notify(_ context.Context, msg string) error {
 	n.msgs = append(n.msgs, msg)
-	return nil
+	return n.err
 }
 
 func newTestService(t *testing.T) *Service {
@@ -127,5 +132,56 @@ func TestPoll_SeenFilesSkipped(t *testing.T) {
 	st, _ := svc.state.Load()
 	if st.Cursor != "cur1" {
 		t.Errorf("cursor should still advance on no-fresh: %q", st.Cursor)
+	}
+}
+
+// Notify failure holds state (cursor/seen unchanged) so the report is retried
+// next cycle instead of being silently lost.
+func TestPoll_NotifyFailureHoldsState(t *testing.T) {
+	svc := newTestService(t)
+	if err := svc.state.Save(&PollState{Cursor: "cur0"}); err != nil {
+		t.Fatal(err)
+	}
+	agent := &fakeAgent{reply: "분석 요약"}
+	notifier := &fakeNotifier{err: errors.New("push down")}
+	svc.SetAgent(agent)
+	svc.SetNotifier(notifier)
+	fc := &fakeClient{
+		changes:   []dropbox.Entry{{ID: "id1", Tag: "file", Name: "a.pdf"}},
+		newCursor: "cur1",
+	}
+
+	if err := svc.poll(context.Background(), fc); err == nil {
+		t.Fatal("expected poll to return the notify error")
+	}
+	st, _ := svc.state.Load()
+	if st.Cursor == "cur1" {
+		t.Error("cursor advanced despite notify failure")
+	}
+	if st.hasSeen("id1") {
+		t.Error("file marked seen despite notify failure")
+	}
+}
+
+// An expired cursor (ErrCursorReset) re-seeds from LatestCursor instead of
+// wedging, and skips analysis that cycle.
+func TestPoll_CursorReset(t *testing.T) {
+	svc := newTestService(t)
+	if err := svc.state.Save(&PollState{Cursor: "stale"}); err != nil {
+		t.Fatal(err)
+	}
+	agent := &fakeAgent{}
+	svc.SetAgent(agent)
+	fc := &fakeClient{listErr: dropbox.ErrCursorReset, latestCursor: "fresh"}
+
+	if err := svc.poll(context.Background(), fc); err != nil {
+		t.Fatal(err)
+	}
+	if len(agent.prompts) != 0 {
+		t.Error("reset cycle must not analyze")
+	}
+	st, _ := svc.state.Load()
+	if st.Cursor != "fresh" {
+		t.Errorf("cursor not re-seeded: %q", st.Cursor)
 	}
 }

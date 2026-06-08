@@ -2,6 +2,7 @@ package dropboxpoll
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -127,6 +128,19 @@ func (s *Service) poll(ctx context.Context, client watchClient) error {
 	}
 
 	entries, newCursor, err := client.ListChanges(ctx, st.Cursor)
+	if errors.Is(err, dropbox.ErrCursorReset) {
+		// Cursor expired (long idle). Re-seed from the current folder state and
+		// skip this cycle; the next cycle diffs from the fresh cursor instead of
+		// wedging permanently on the dead cursor.
+		s.log.Warn("dropboxpoll cursor reset — re-seeding from latest")
+		cur, e := client.LatestCursor(ctx, s.cfg.FolderPath, false)
+		if e != nil {
+			return e
+		}
+		st.Cursor = cur
+		st.LastPollAt = time.Now().UnixMilli()
+		return s.state.Save(st)
+	}
 	if err != nil {
 		return err
 	}
@@ -149,6 +163,8 @@ func (s *Service) poll(ctx context.Context, client watchClient) error {
 	// is idempotent; seenIDs prevent re-processing what we did handle).
 	truncated := false
 	if len(fresh) > s.cfg.MaxPerCycle {
+		s.log.Warn("dropboxpoll: change burst exceeds MaxPerCycle, processing in batches",
+			"total", len(fresh), "perCycle", s.cfg.MaxPerCycle)
 		fresh = fresh[:s.cfg.MaxPerCycle]
 		truncated = true
 	}
@@ -165,7 +181,10 @@ func (s *Service) poll(ctx context.Context, client watchClient) error {
 	}
 	if s.notifier != nil && strings.TrimSpace(summary) != "" {
 		if err := s.notifier.Notify(ctx, summary); err != nil {
-			s.log.Error("dropboxpoll notify failed", "error", err)
+			// Don't mark seen / advance cursor — retry next cycle so the user
+			// isn't silently never told these files arrived.
+			s.log.Error("dropboxpoll notify failed — will retry next cycle", "error", err)
+			return err
 		}
 	}
 

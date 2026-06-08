@@ -61,12 +61,10 @@ type Config struct {
 	// Forwarded to PipelineDeps; nil = fall back to the graphify subprocess.
 	SenderFactsFn func(ctx context.Context, displayName string) string
 
-	// ArchiveAttachments enables auto-archiving of substantive email
-	// attachments to Dropbox. Wired true by the server when a Dropbox token
-	// exists; false leaves attachments untouched.
-	ArchiveAttachments bool
 	// ArchiveFolder is the Dropbox base folder for archived attachments
-	// (default "/Deneb-Archive/메일").
+	// (default "/Deneb-Archive/메일"). Archiving runs whenever a Dropbox token
+	// exists (re-checked per cycle), so connecting Dropbox after startup
+	// activates it without a gateway restart.
 	ArchiveFolder string
 }
 
@@ -109,7 +107,7 @@ func NewService(cfg Config, logger *slog.Logger) *Service {
 	if cfg.PromptFile == "" {
 		cfg.PromptFile = defaultPromptFile
 	}
-	if cfg.ArchiveAttachments && cfg.ArchiveFolder == "" {
+	if cfg.ArchiveFolder == "" {
 		cfg.ArchiveFolder = "/Deneb-Archive/메일"
 	}
 
@@ -266,17 +264,12 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 		report = "(분석 실패)"
 	}
 
-	// Auto-archive substantive attachments to Dropbox (best-effort) and note
-	// the archived paths in the consolidated report.
-	if archived := s.archiveAttachments(ctx, client, details); len(archived) > 0 {
-		var b strings.Builder
-		b.WriteString(report)
-		fmt.Fprintf(&b, "\n\n📎 첨부 %d개를 Dropbox에 보관했습니다:\n", len(archived))
-		for _, p := range archived {
-			fmt.Fprintf(&b, "- `%s`\n", p)
-		}
-		report = b.String()
-	}
+	// Auto-archive substantive attachments to Dropbox (best-effort). The note is
+	// added to the notification only (kept out of the diary so durable wiki
+	// knowledge stays clean) and only on a successful analysis — appending to the
+	// "(분석 실패)" stub would add a newline that defeats the proactive
+	// contentless-floor suppression and push a failed-analysis card.
+	archived := s.archiveAttachments(ctx, client, details)
 
 	// Persist each individual analysis (cache + per-message wiki page) so the
 	// Mini App shows it instantly without a manual re-run. Runs even if the
@@ -290,8 +283,18 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	// Log analysis result to diary for wiki knowledge synthesis.
 	s.logToDiary(len(details), report)
 
-	// Send single consolidated report.
-	s.sendNotification(ctx, report)
+	// Send single consolidated report (archive note appended on success only).
+	notifyMsg := report
+	if err == nil && len(archived) > 0 {
+		var b strings.Builder
+		b.WriteString(notifyMsg)
+		fmt.Fprintf(&b, "\n\n📎 첨부 %d개를 Dropbox에 보관했습니다:\n", len(archived))
+		for _, p := range archived {
+			fmt.Fprintf(&b, "- `%s`\n", p)
+		}
+		notifyMsg = b.String()
+	}
+	s.sendNotification(ctx, notifyMsg)
 
 	// Mark all as seen after successful notification.
 	for _, summary := range newMessages {

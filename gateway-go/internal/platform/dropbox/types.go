@@ -57,14 +57,14 @@ func FormatEntries(entries []Entry) string {
 		if e.IsFolder() {
 			fmt.Fprintf(&sb, "- 📁 **%s**  `%s`\n", e.Name, path)
 		} else {
-			fmt.Fprintf(&sb, "- 📄 %s  `%s`  (%s)\n", e.Name, path, humanSize(e.Size))
+			fmt.Fprintf(&sb, "- 📄 %s  `%s`  (%s)\n", e.Name, path, HumanSize(e.Size))
 		}
 	}
 	return sb.String()
 }
 
-// humanSize formats a byte count as a compact human-readable string.
-func humanSize(n int64) string {
+// HumanSize formats a byte count as a compact human-readable string.
+func HumanSize(n int64) string {
 	switch {
 	case n >= 1<<30:
 		return fmt.Sprintf("%.1fGB", float64(n)/(1<<30))

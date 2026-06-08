@@ -26,7 +26,9 @@ import (
 	"sync"
 	"time"
 	"unicode/utf16"
+	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
@@ -217,7 +219,13 @@ func (c *Client) refresh(ctx context.Context) (string, error) {
 	}
 
 	c.accessToken = tok.AccessToken
-	c.expiry = time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
+	c.expiry = time.Now().Add(tokenTTL(tok.ExpiresIn))
+	// Dropbox normally does not rotate refresh tokens, but capture a rotated one
+	// defensively so a policy change can't permanently lock us out (gmail pattern).
+	if tok.RefreshToken != "" && tok.RefreshToken != c.refreshToken {
+		slog.Info("Dropbox refresh token rotated", "tokenPath", c.tokenPath)
+		c.refreshToken = tok.RefreshToken
+	}
 	c.persistToken()
 
 	return c.accessToken, nil
@@ -237,16 +245,11 @@ func (c *Client) persistToken() {
 			"tokenPath", c.tokenPath, "error", err)
 		return
 	}
-	tmp := c.tokenPath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	// atomicfile does flock + temp + rename; the flock serializes writes across
+	// the worktrees that share ~/.deneb/credentials.
+	if err := atomicfile.WriteFile(c.tokenPath, data, &atomicfile.Options{Perm: 0o600}); err != nil {
 		slog.Error("Dropbox token write failed — token may be stale on restart",
-			"tmp", tmp, "tokenPath", c.tokenPath, "error", err)
-		return
-	}
-	if err := os.Rename(tmp, c.tokenPath); err != nil {
-		slog.Error("Dropbox token rename failed — token may be stale on restart",
-			"tmp", tmp, "tokenPath", c.tokenPath, "error", err)
-		_ = os.Remove(tmp)
+			"tokenPath", c.tokenPath, "error", err)
 	}
 }
 
@@ -415,7 +418,7 @@ func ExchangeCode(ctx context.Context, appKey, appSecret, code, verifier string)
 	return &TokenResult{
 		AccessToken:  tok.AccessToken,
 		RefreshToken: tok.RefreshToken,
-		Expiry:       time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second),
+		Expiry:       time.Now().Add(tokenTTL(tok.ExpiresIn)),
 	}, nil
 }
 
@@ -485,7 +488,10 @@ func asciiEscapeJSON(b []byte) string {
 	var sb strings.Builder
 	sb.Grow(len(b))
 	for _, r := range string(b) {
-		if r < 0x80 {
+		// Pass printable ASCII through; escape 0x7F (DEL) and all non-ASCII per
+		// Dropbox's Dropbox-API-Arg encoding spec. Control chars <0x20 never
+		// reach here — json.Marshal already escaped them.
+		if r < 0x7F {
 			sb.WriteRune(r)
 			continue
 		}
@@ -503,5 +509,20 @@ func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
+	// Back up to a UTF-8 rune boundary so Korean error text isn't split
+	// mid-codepoint (byte-vs-rune truncation class).
+	for maxLen > 0 && !utf8.RuneStart(s[maxLen]) {
+		maxLen--
+	}
 	return s[:maxLen] + "..."
+}
+
+// tokenTTL converts an OAuth expires_in (seconds) to a Duration, defaulting to
+// ~4h when the server omits or zeroes it — guarding against an expiry==now
+// refresh loop where every API call re-hits the token endpoint.
+func tokenTTL(expiresIn int64) time.Duration {
+	if expiresIn <= 0 {
+		expiresIn = 14400
+	}
+	return time.Duration(expiresIn) * time.Second
 }
