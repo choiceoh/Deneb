@@ -3,6 +3,7 @@ package com.inspiredandroid.kai.deneb
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -164,6 +166,8 @@ fun DenebCalendarScreen(
                         visible = CalMonth(date.year, date.month.ordinal + 1)
                     }
                 },
+                onSwipePrev = { showMonth(visible.prev()) },
+                onSwipeNext = { showMonth(visible.next()) },
             )
             Spacer(Modifier.height(12.dp))
             HorizontalDivider(color = denebHairline())
@@ -188,7 +192,7 @@ fun DenebCalendarScreen(
                             "일정을 불러오지 못했어요.",
                             onRetry = { scope.launch { loadOk = null; load() } },
                         )
-                        dayEvents.isEmpty() -> DenebEmpty("이 날 일정이 없어요.")
+                        dayEvents.isEmpty() -> CalendarEmptyDay(onAdd = { onAddEvent(selected) })
                         else -> CalendarDayList(dayEvents, selected, tz, onOpenEvent)
                     }
                     Spacer(Modifier.height(24.dp))
@@ -211,6 +215,8 @@ internal fun CalendarMonthGrid(
     bars: Map<LocalDate, List<DayBar>>,
     dots: Map<LocalDate, Int>,
     onSelect: (LocalDate) -> Unit,
+    onSwipePrev: () -> Unit = {},
+    onSwipeNext: () -> Unit = {},
 ) {
     val haptics = rememberHaptics()
     val palette = barPalette()
@@ -218,7 +224,23 @@ internal fun CalendarMonthGrid(
     // lane line up row-to-row, and the dot row is present-or-absent grid-wide.
     val laneCount = bars.values.maxOfOrNull { day -> day.maxOfOrNull { it.lane + 1 } ?: 0 } ?: 0
     val showDotRow = dots.isNotEmpty()
-    Column(Modifier.fillMaxWidth()) {
+    Column(
+        // Horizontal swipe flips months (swipe left → next, right → prev), the way
+        // a mobile calendar is expected to page. Keyed on `grid` so each month's
+        // gesture captures fresh callbacks. Vertical drags fall through to the day
+        // list below, which owns its own scroll.
+        Modifier.fillMaxWidth().pointerInput(grid) {
+            val threshold = size.width / 4f
+            var accum = 0f
+            detectHorizontalDragGestures(
+                onDragStart = { accum = 0f },
+                onDragCancel = { accum = 0f },
+                onDragEnd = {
+                    if (accum > threshold) onSwipePrev() else if (accum < -threshold) onSwipeNext()
+                },
+            ) { _, amount -> accum += amount }
+        },
+    ) {
         grid.cells.chunked(7).forEach { week ->
             Row(Modifier.fillMaxWidth()) {
                 week.forEach { date ->
@@ -378,6 +400,21 @@ internal fun CalendarDayList(
             }
             if (index < events.lastIndex) HorizontalDivider(color = denebHairline())
         }
+    }
+}
+
+/** Empty state for a day with no events — a quiet line plus an inline CTA that
+ *  opens the add screen pre-set to the selected day, so the obvious next action
+ *  (add something here) is one tap away. */
+@Composable
+internal fun CalendarEmptyDay(onAdd: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("이 날 일정이 없어요.", style = DenebType.body, color = denebHint())
+        Spacer(Modifier.height(8.dp))
+        TextButton(onClick = onAdd) { Text("이 날 일정 추가") }
     }
 }
 
