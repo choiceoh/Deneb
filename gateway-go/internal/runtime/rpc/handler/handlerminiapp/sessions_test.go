@@ -13,10 +13,31 @@ import (
 )
 
 type fakeSessionsLister struct {
-	out []*session.Session
+	out     []*session.Session
+	deleted []string // keys passed to Delete, in order
 }
 
 func (f *fakeSessionsLister) List() []*session.Session { return f.out }
+
+func (f *fakeSessionsLister) Get(key string) *session.Session {
+	for _, s := range f.out {
+		if s.Key == key {
+			return s
+		}
+	}
+	return nil
+}
+
+func (f *fakeSessionsLister) Delete(key string) bool {
+	f.deleted = append(f.deleted, key)
+	for i, s := range f.out {
+		if s.Key == key {
+			f.out = append(f.out[:i], f.out[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
 
 func sample(key string, updatedAt int64, channel string) *session.Session {
 	return &session.Session{
@@ -146,6 +167,126 @@ func TestSessionsRecent_EmptyManager(t *testing.T) {
 	}
 }
 
+// --- sessions.delete tests ------------------------------------------------
+
+func terminalSample(key string) *session.Session {
+	return &session.Session{
+		Key:       key,
+		Kind:      session.KindDirect,
+		Status:    session.StatusDone,
+		UpdatedAt: 1_000,
+	}
+}
+
+func TestSessionsDelete_RemovesSessionAndTranscript(t *testing.T) {
+	mgr := &fakeSessionsLister{out: []*session.Session{terminalSample("client:main:abc")}}
+	tr := &fakeTranscriptLoader{}
+	deps := SessionsDeps{
+		Manager:     mgr,
+		Transcripts: func() (TranscriptLoader, error) { return tr, nil },
+	}
+	resp := sessionsDelete(deps)(authedCtx(), reqWith(t, "miniapp.sessions.delete", map[string]any{
+		"sessionKey": "client:main:abc",
+	}))
+
+	var got struct {
+		Deleted bool `json:"deleted"`
+	}
+	decode(t, resp, &got)
+	if !got.Deleted {
+		t.Errorf("deleted = false, want true")
+	}
+	if len(mgr.deleted) != 1 || mgr.deleted[0] != "client:main:abc" {
+		t.Errorf("manager.Delete keys = %v, want [client:main:abc]", mgr.deleted)
+	}
+	if len(tr.deleted) != 1 || tr.deleted[0] != "client:main:abc" {
+		t.Errorf("transcript.Delete keys = %v, want [client:main:abc]", tr.deleted)
+	}
+}
+
+func TestSessionsDelete_RunningProtected(t *testing.T) {
+	// sample() builds a StatusRunning session; without force we must not delete
+	// it — the in-flight turn would re-Set it on completion and resurrect the row.
+	mgr := &fakeSessionsLister{out: []*session.Session{sample("client:main:live", 1_000, "")}}
+	tr := &fakeTranscriptLoader{}
+	deps := SessionsDeps{
+		Manager:     mgr,
+		Transcripts: func() (TranscriptLoader, error) { return tr, nil },
+	}
+	resp := sessionsDelete(deps)(authedCtx(), reqWith(t, "miniapp.sessions.delete", map[string]any{
+		"sessionKey": "client:main:live",
+	}))
+
+	var got struct {
+		Deleted bool `json:"deleted"`
+	}
+	decode(t, resp, &got)
+	if got.Deleted {
+		t.Errorf("deleted = true, want false (running session protected)")
+	}
+	if len(mgr.deleted) != 0 {
+		t.Errorf("manager.Delete called on running session: %v", mgr.deleted)
+	}
+	if len(tr.deleted) != 0 {
+		t.Errorf("transcript.Delete called on running session: %v", tr.deleted)
+	}
+}
+
+func TestSessionsDelete_ForceDeletesRunning(t *testing.T) {
+	mgr := &fakeSessionsLister{out: []*session.Session{sample("client:main:live", 1_000, "")}}
+	resp := sessionsDelete(SessionsDeps{Manager: mgr})(authedCtx(), reqWith(t, "miniapp.sessions.delete", map[string]any{
+		"sessionKey": "client:main:live", "force": true,
+	}))
+
+	var got struct {
+		Deleted bool `json:"deleted"`
+	}
+	decode(t, resp, &got)
+	if !got.Deleted {
+		t.Errorf("deleted = false, want true (force overrides running guard)")
+	}
+	if len(mgr.deleted) != 1 {
+		t.Errorf("manager.Delete keys = %v, want exactly one", mgr.deleted)
+	}
+}
+
+func TestSessionsDelete_NonexistentReturnsFalse(t *testing.T) {
+	mgr := &fakeSessionsLister{out: nil}
+	resp := sessionsDelete(SessionsDeps{Manager: mgr})(authedCtx(), reqWith(t, "miniapp.sessions.delete", map[string]any{
+		"sessionKey": "ghost",
+	}))
+
+	var got struct {
+		Deleted bool `json:"deleted"`
+	}
+	decode(t, resp, &got)
+	if got.Deleted {
+		t.Errorf("deleted = true, want false (no such session)")
+	}
+}
+
+func TestSessionsDelete_MissingKey(t *testing.T) {
+	resp := sessionsDelete(SessionsDeps{Manager: &fakeSessionsLister{}})(authedCtx(), reqWith(t, "miniapp.sessions.delete", map[string]any{}))
+	if resp.OK {
+		t.Fatalf("expected error")
+	}
+	if resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("code = %s, want MISSING_PARAM", resp.Error.Code)
+	}
+}
+
+func TestSessionsDelete_RequiresAuth(t *testing.T) {
+	resp := sessionsDelete(SessionsDeps{Manager: &fakeSessionsLister{}})(context.Background(), reqWith(t, "miniapp.sessions.delete", map[string]any{
+		"sessionKey": "k",
+	}))
+	if resp.OK {
+		t.Fatalf("expected unauthorized")
+	}
+	if resp.Error.Code != protocol.ErrUnauthorized {
+		t.Errorf("code = %s", resp.Error.Code)
+	}
+}
+
 func TestSessionsMethods_NilManagerReturnsNil(t *testing.T) {
 	if got := SessionsMethods(SessionsDeps{Manager: nil}); got != nil {
 		t.Errorf("SessionsMethods(nil) = %v, want nil", got)
@@ -153,10 +294,14 @@ func TestSessionsMethods_NilManagerReturnsNil(t *testing.T) {
 }
 
 func TestSessionsMethods_TranscriptOptional(t *testing.T) {
-	// Without Transcripts factory: only sessions.recent registers.
+	// Without Transcripts factory: sessions.recent + sessions.delete register
+	// (both need only the Manager); sessions.transcript does not.
 	got := SessionsMethods(SessionsDeps{Manager: &fakeSessionsLister{}})
 	if _, ok := got["miniapp.sessions.recent"]; !ok {
 		t.Errorf("sessions.recent missing")
+	}
+	if _, ok := got["miniapp.sessions.delete"]; !ok {
+		t.Errorf("sessions.delete missing")
 	}
 	if _, ok := got["miniapp.sessions.transcript"]; ok {
 		t.Errorf("transcript should not register when factory missing")
@@ -175,7 +320,9 @@ func TestSessionsMethods_TranscriptOptional(t *testing.T) {
 // --- transcript tests -----------------------------------------------------
 
 type fakeTranscriptLoader struct {
-	loadFn func(key string, limit int) ([]toolctx.ChatMessage, int, error)
+	loadFn    func(key string, limit int) ([]toolctx.ChatMessage, int, error)
+	deleted   []string // keys passed to Delete, in order
+	deleteErr error
 }
 
 func (f *fakeTranscriptLoader) Load(key string, limit int) ([]toolctx.ChatMessage, int, error) {
@@ -183,6 +330,11 @@ func (f *fakeTranscriptLoader) Load(key string, limit int) ([]toolctx.ChatMessag
 		return nil, 0, errors.New("Load not stubbed")
 	}
 	return f.loadFn(key, limit)
+}
+
+func (f *fakeTranscriptLoader) Delete(key string) error {
+	f.deleted = append(f.deleted, key)
+	return f.deleteErr
 }
 
 func transcriptDeps(loader TranscriptLoader) SessionsDeps {

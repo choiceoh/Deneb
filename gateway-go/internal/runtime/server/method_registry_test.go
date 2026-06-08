@@ -137,6 +137,7 @@ var requiredMethods = []string{
 	// (modelRegistry.Client(RoleMain) returning non-nil) — not in the
 	// required list because tests run without providers.
 	"miniapp.sessions.recent",
+	"miniapp.sessions.delete",
 	"miniapp.sessions.transcript",
 	// miniapp.memory.{search,get_page,categories,list_in_category,diary_recent}
 	// are conditional on wiki being enabled (DENEB_WIKI_ENABLED) — omitted
