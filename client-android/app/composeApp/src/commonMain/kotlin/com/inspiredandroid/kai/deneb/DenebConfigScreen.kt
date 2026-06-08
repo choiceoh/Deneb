@@ -502,7 +502,7 @@ private fun PatchNotesSheet(onDismiss: () -> Unit) {
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary,
                         )
-                        if (note.code == DENEB_VERSION_CODE) {
+                        if (note.version == DENEB_VERSION_NAME) {
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 "현재 버전",
