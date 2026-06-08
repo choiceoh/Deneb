@@ -188,6 +188,125 @@ func TestRelay_StripsTrailingSilentToken(t *testing.T) {
 	}
 }
 
+// TestStripProactiveMetaPreamble covers the real leak cases observed in
+// ~/.deneb/workfeed.jsonl (a model opening a cron/morning-letter report with
+// working narration) and the legit reports that must pass through untouched.
+func TestStripProactiveMetaPreamble(t *testing.T) {
+	// strip[i] = {body, wantPrefix}: the preamble (+ divider) must be removed and
+	// the remainder must begin with wantPrefix and no longer contain the preamble.
+	strip := []struct{ body, wantPrefix, gone string }{
+		{
+			"이제 충분한 맥락을 확보했다. 모닝레터를 작성한다.\n\n---\n\n**☀️ 모닝레터 — 2026.06.07 (일)**\n\n오늘의 시장 현황과 주요 일정을 아래에 정리합니다.",
+			"**☀️ 모닝레터", "충분한 맥락을 확보",
+		},
+		{
+			"메일 분석 완료. 위키 업데이트까지 끝났습니다.\n\n---\n\n## 📧 6/3(수) 메일 종합 분석 — 7건\n\n### 🔴 긴급 — 대한전선 당진 2차 착수보고회 D-2",
+			"## 📧", "위키 업데이트까지 끝났습니다",
+		},
+		{
+			"전체 맥락 파악됐습니다. 분석 결과 정리합니다.\n\n---\n\n## 📨 2026-06-08 (월) 수신 메일 종합 분석\n\n총 2건 수신 — 대한전선 당진 2차 관련.",
+			"## 📨", "분석 결과 정리합니다",
+		},
+		{
+			"메일 도착 감지 → Gmail inbox 최신 1건 분석 완료\n\n🟡 **[탑솔라(주)] 광명역 B환승주차장 가배치 요청**\n발신자: 김대희 과장. 가배치도 검토 요청 건입니다.",
+			"🟡 **[탑솔라", "메일 도착 감지",
+		},
+		{
+			"좋아요, 이번 주 첫날 모닝레터입니다.\n\n---\n\n**☀️ 네브 모닝레터 — 2026년 6월 8일 (월)**\n\n시장 현황과 오늘의 핵심 일정입니다.",
+			"**☀️ 네브 모닝레터", "좋아요",
+		},
+		{
+			"모닝레터, 6/4 월요일 발송 내용입니다.\n\n<pre>\n📋 모닝레터 (2026-06-04)\n\n1) [대한전선] 당진 3MW 2차 사업 — 내일 착수보고회",
+			"<pre>", "발송 내용입니다",
+		},
+		{
+			"메일 분석 완료. 최근 수신 메일 중 업무 관련 핵심만 정리해서 보고드릴게요.\n\n---\n\n📬 **메일 분석 보고 (6/3 16:30 기준)**\n대한전선 당진 2차 착수보고회 관련 메일입니다.",
+			"📬 **메일 분석 보고", "보고드릴게요",
+		},
+	}
+	for _, c := range strip {
+		got := stripProactiveMetaPreamble(c.body)
+		if !strings.HasPrefix(got, c.wantPrefix) {
+			t.Errorf("strip(%.30q…)\n  got:  %.60q…\n  want prefix: %q", c.body, got, c.wantPrefix)
+		}
+		if strings.Contains(got, c.gone) {
+			t.Errorf("strip(%.30q…) still contains preamble fragment %q:\n  %.80q", c.body, c.gone, got)
+		}
+	}
+
+	// keep[i]: real reports whose first line is a header, greeting, or direct
+	// subject analysis — never working narration. Must be returned byte-for-byte.
+	keep := []string{
+		// emoji-led titled headers (one contains "분석 완료" but is structural)
+		"📬 메일 분석 보고 (6/3 16:00 기준)\n\n━━━━━━━━━━━━━━━━━━━━\n\n🔴 **긴급 — 대한전선 당진 2차 착수보고회**\n6/5 착수보고회 자료 검토 요청.",
+		"📊 **당일 메일 종합 분석 완료** (2026-06-05)\n\n---\n\n## 🔴 긴급 / 임박 (즉시 확인 필요)\n대한전선 당진 건.",
+		// markdown / bold headers
+		"## 분석\n\n### 왜 지금 왔는지\n오늘 오전 10:49에 김대희 과장이 다원건축에 보낸 메일의 후속입니다.",
+		"## 핵심: 이틀 앞으로 다가온 착수보고회, 타이한에 최종 자료 검토 요청\n\n### 왜 지금 왔는지\n6/2 합의에 따른 후속입니다.",
+		"**발신 시점과 배경**\n고건이 6/4 18:00에 보낸 가배치도 요청 메일에 대한 답변으로, 6/8 15:22에 양도현이 회신했다.",
+		"### 분석 결과\n\n총 3건의 메일이 수신되었으며 핵심은 대한전선 건입니다.",
+		"# 통합 리포트 — 2026년 6월 8일 월요일 수신 메일 분석\n\n## 🔴 최우선: 네이버 계정 보안 변경 연쇄",
+		"🔴 / 🟡 / 🟢 분류 보고\n\n🟡 **확인 필요** — 현대자동차 울산공장 생기센터 재건축 태양광 설비공사 200kW 견적요청",
+		// direct subject analysis — describes the email, not the agent's process
+		"이 이메일은 Google의 정기적인 정책 변경 안내로, 특정 사전 합의나 사용자의 요청에 따른 응답이 아니라 서비스 업데이트 공지입니다.\n\n발신자는 Google입니다.",
+		"이 이메일은 서림철강의 공장 태양광발전사업 타당성 검토를 위해 탑솔라 기획조정실 김대희 과장이 1차 검토 결과를 회신한 것입니다.\n\n### 왜 지금",
+		// morning-letter greeting (a persona opener, not narration)
+		"2026-06-05(금) 아침입니다 🐾\n오늘은 대한전선 2차 태양광 착수보고회 당일이라 분주하실 거예요. 먼저 잠시 중요 이슈부터 짚고, 아래에 전체를 적을게요.\n\n시장 현황입니다.",
+		// a real short first line that is content, not narration
+		"긴급: 계약서 서명 필요\n\n대한전선 당진 2차 계약서에 오늘 중 서명이 필요합니다. 법무팀 검토는 완료되었습니다.",
+		// single-paragraph body (no blank line) — nothing to strip toward
+		"📬 업무 리포트 본문",
+	}
+	for _, body := range keep {
+		if got := stripProactiveMetaPreamble(body); got != body {
+			t.Errorf("strip must NOT alter a real report:\n  in:  %.60q\n  out: %.60q", body, got)
+		}
+	}
+
+	// Degenerate cases: a preamble with no real body left must keep the original
+	// rather than reduce the card to near-empty.
+	for _, body := range []string{
+		"메일 분석 완료. 위키 업데이트까지 끝났습니다.\n\n---", // divider only after preamble
+		"전체 맥락 파악됐습니다. 분석 결과 정리합니다.\n\n네.",  // remainder too short
+	} {
+		if got := stripProactiveMetaPreamble(body); got != body {
+			t.Errorf("strip must keep original when no substantial body remains:\n  in:  %q\n  out: %q", body, got)
+		}
+	}
+}
+
+// TestRelay_StripsMetaPreamble verifies the work-feed card body and transcript
+// delivered for a proactive report have the leading working-narration preamble
+// removed end-to-end (not just the standalone helper).
+func TestRelay_StripsMetaPreamble(t *testing.T) {
+	store := newRecordingTranscriptStore()
+	feed := &recordingWorkFeed{}
+	hub := newClientPushHub()
+
+	d := proactiveRelayDeps{transcriptStore: store, pushHub: hub, workFeed: feed}
+	body := "전체 맥락 파악됐습니다. 분석 결과 정리합니다.\n\n---\n\n## 📨 2026-06-08 수신 메일 종합 분석\n\n총 2건 수신 — 대한전선 당진 2차 관련 건입니다."
+	delivered, err := d.relay(context.Background(), "ignored", body)
+	if err != nil {
+		t.Fatalf("relay: %v", err)
+	}
+	if !delivered {
+		t.Fatal("relay delivered=false, want delivered")
+	}
+	if n := len(feed.items); n != 1 {
+		t.Fatalf("got %d work-feed item(s), want 1", n)
+	}
+	got := feed.items[0].Body
+	if !strings.HasPrefix(got, "## 📨") {
+		t.Errorf("work-feed body should start with the real header, got: %.50q", got)
+	}
+	if strings.Contains(got, "분석 결과 정리합니다") {
+		t.Errorf("work-feed body still carries the preamble: %.80q", got)
+	}
+	if msgs := store.appends[nativeWorkSessionKey]; len(msgs) != 1 || strings.Contains(string(msgs[0].Content), "맥락 파악됐습니다") {
+		t.Errorf("transcript append should carry the cleaned body, got: %+v", msgs)
+	}
+}
+
 func TestIsContentlessProactive(t *testing.T) {
 	contentless := []string{
 		"",
