@@ -28,6 +28,19 @@ data class DenebPatchNote(
 
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
+        version = "2.9.57",
+        highlights = listOf(
+            "채팅 답변 가독성 개선 — 본문 줄 간격과 문단 사이를 넉넉하게, 글자 크기는 한 단계 정돈해 긴 한국어 답변이 한눈에 읽히도록",
+            "내가 보낸 말풍선을 또렷한 색으로 구분 (특히 밝은 테마에서 잘 보이도록)",
+        ),
+    ),
+    DenebPatchNote(
+        version = "2.9.56",
+        highlights = listOf(
+            "긴 마크다운 메시지를 스크롤 진입 전에 미리 측정해 스크롤을 더 부드럽게 (R8 릴리스 최적화)",
+        ),
+    ),
+    DenebPatchNote(
         version = "2.9.53",
         highlights = listOf(
             "긴 대화를 빠르게 스크롤할 때 이미지·서식이 매번 다시 그려지지 않도록 캐시 — 더 부드러운 스크롤",

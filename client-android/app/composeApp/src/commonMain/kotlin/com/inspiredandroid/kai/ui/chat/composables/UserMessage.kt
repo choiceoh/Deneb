@@ -50,8 +50,12 @@ internal fun UserMessage(
             Spacer(Modifier.weight(1f))
             Column(
                 modifier = Modifier
+                    // A solid semantic container instead of a 15%-alpha onBackground
+                    // wash, which was nearly invisible on the light theme's white
+                    // background. secondaryContainer reads clearly in both themes so
+                    // "my message" is distinct from the assistant's flush text.
                     .background(
-                        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.15f),
+                        MaterialTheme.colorScheme.secondaryContainer,
                         RoundedCornerShape(8.dp),
                     )
                     .padding(16.dp),
@@ -94,7 +98,7 @@ internal fun UserMessage(
                                         modifier = Modifier.size(16.dp),
                                         painter = painterResource(Res.drawable.ic_file),
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onBackground,
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                     )
                                 },
                                 label = { Text(truncateFileName(att.fileName ?: att.mimeType)) },
@@ -106,9 +110,13 @@ internal fun UserMessage(
                     }
                 }
                 if (message.isNotEmpty()) {
+                    // Explicit body style (was unstyled => LocalTextStyle default,
+                    // a different size/face than the assistant's bodyLarge). 14sp
+                    // keeps it one step down, matching the chat answer body.
                     Text(
                         text = message,
-                        color = MaterialTheme.colorScheme.onBackground,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
                 }
             }

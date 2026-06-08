@@ -35,9 +35,11 @@ import androidx.compose.runtime.remember
 import kotlin.math.sqrt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.inspiredandroid.kai.ui.dynamicui.FrozenSubmission
 import com.inspiredandroid.kai.ui.dynamicui.KaiUiRenderer
@@ -83,6 +85,17 @@ fun MarkdownContent(
     }
     MarkdownContent(doc, modifier, isInteractive, onUiCallback, frozen)
 }
+
+// The base text style for AI-answer body content. One step smaller than
+// bodyLarge (14sp vs 15sp) with a looser line-height (~1.7) so dense Korean
+// prose breathes — Hangul has below-the-line jongseong that collide with the
+// next line at the 1.47 Latin default. Headings keep their own typography
+// roles; only paragraphs, list items, and table cells share this body style.
+private val markdownBodyStyle: TextStyle
+    @Composable get() = MaterialTheme.typography.bodyLarge.copy(
+        fontSize = 14.sp,
+        lineHeight = 24.sp,
+    )
 
 @Composable
 private fun BlockRenderer(
@@ -182,10 +195,14 @@ private fun ParagraphBlock(block: Paragraph) {
         )
         return
     }
+    // A paragraph carries more air above/below than the body line-height, so
+    // consecutive paragraphs read as distinct blocks rather than one wall of
+    // text (the old 2dp made the paragraph gap smaller than the line gap once
+    // the line-height loosened).
     InlineContent(
         inlines = block.inlines,
-        style = MaterialTheme.typography.bodyLarge,
-        modifier = Modifier.padding(vertical = 2.dp),
+        style = markdownBodyStyle,
+        modifier = Modifier.padding(vertical = 5.dp),
     )
 }
 
@@ -241,8 +258,8 @@ private fun BulletListBlock(
     frozen: FrozenSubmission?,
 ) {
     Column(
-        modifier = Modifier.padding(vertical = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp),
+        modifier = Modifier.padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         for (item in block.items) {
             val task = remember(item) { detectTask(item) }
@@ -316,8 +333,8 @@ private fun OrderedListBlock(
     frozen: FrozenSubmission?,
 ) {
     Column(
-        modifier = Modifier.padding(vertical = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp),
+        modifier = Modifier.padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         block.items.forEachIndexed { index, item ->
             ListItemRow("${block.start + index}.", 24.dp, Color.Unspecified, item, isInteractive, onUiCallback, frozen)
@@ -338,7 +355,7 @@ private fun ListItemRow(
     Row {
         Text(
             text = marker,
-            style = MaterialTheme.typography.bodyLarge,
+            style = markdownBodyStyle,
             color = markerColor,
             modifier = Modifier.width(markerWidth).padding(end = 4.dp),
         )
@@ -372,7 +389,7 @@ private fun TableBlock(block: Table) {
                 block.headers.forEachIndexed { i, cell ->
                     InlineContent(
                         inlines = cell,
-                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                        style = markdownBodyStyle.copy(fontWeight = FontWeight.Bold),
                         textAlign = alignTextFor(block.alignments.getOrNull(i)),
                         modifier = Modifier.weight(weights.getOrElse(i) { 1f })
                             .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -387,7 +404,7 @@ private fun TableBlock(block: Table) {
                 row.forEachIndexed { i, cell ->
                     InlineContent(
                         inlines = cell,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = markdownBodyStyle,
                         textAlign = alignTextFor(block.alignments.getOrNull(i)),
                         modifier = Modifier.weight(weights.getOrElse(i) { 1f })
                             .padding(horizontal = 8.dp, vertical = 6.dp),
