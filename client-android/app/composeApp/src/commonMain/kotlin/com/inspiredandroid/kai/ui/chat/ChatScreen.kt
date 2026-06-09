@@ -89,6 +89,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.inspiredandroid.kai.BackIcon
+import com.inspiredandroid.kai.Platform
+import com.inspiredandroid.kai.currentPlatform
 import com.inspiredandroid.kai.TerminalLine
 import com.inspiredandroid.kai.data.Service
 import com.inspiredandroid.kai.data.supportsAgenticFlows
@@ -597,16 +599,21 @@ private fun ChatModeScreen(
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
     ModalNavigationDrawer(
         drawerState = drawerState,
+        // Desktop uses the persistent DenebSidebar (App.kt) instead of this modal drawer;
+        // empty content + gestures off makes the left drawer inert there. Mobile unchanged.
+        gesturesEnabled = currentPlatform !is Platform.Desktop,
         drawerContent = {
-            DenebDrawerSheet(
-                onOpenSearch = onOpenSearch,
-                onOpenMail = onOpenMail,
-                onOpenCalendar = onOpenCalendar,
-                onOpenPeople = onOpenPeople,
-                onOpenCategories = onOpenCategories,
-                onNavigateToSettings = onNavigateToSettings,
-                onClose = { drawerScope.launch { drawerState.close() } },
-            )
+            if (currentPlatform !is Platform.Desktop) {
+                DenebDrawerSheet(
+                    onOpenSearch = onOpenSearch,
+                    onOpenMail = onOpenMail,
+                    onOpenCalendar = onOpenCalendar,
+                    onOpenPeople = onOpenPeople,
+                    onOpenCategories = onOpenCategories,
+                    onNavigateToSettings = onNavigateToSettings,
+                    onClose = { drawerScope.launch { drawerState.close() } },
+                )
+            }
         },
     ) {
     Box(
@@ -655,7 +662,12 @@ private fun ChatModeScreen(
                 isSpeaking = uiState.isSpeaking,
                 actions = uiState.actions,
                 isChatHistoryEmpty = uiState.history.isEmpty(),
-                onOpenDrawer = { drawerScope.launch { drawerState.open() } },
+                // Desktop has the persistent sidebar, so no hamburger (null → DrawerButton hides).
+                onOpenDrawer = if (currentPlatform is Platform.Desktop) {
+                    null
+                } else {
+                    { drawerScope.launch { drawerState.open() } }
+                },
                 isSandboxAvailable = isSandboxAvailable,
                 isSandboxOpen = isSandboxOpen,
                 isShellExecuting = isShellExecuting,
