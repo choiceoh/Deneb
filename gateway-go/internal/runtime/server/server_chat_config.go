@@ -20,6 +20,14 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
+// noopGmailNotifier is a gmailpoll.Notifier that drops messages. Used in
+// silent mode so the poller fills the Mini App cache + wiki (via OnAnalyzed)
+// without delivering a duplicate proactive chat message. A real no-op (rather
+// than a nil notifier) keeps sendNotification from logging a per-cycle warn.
+type noopGmailNotifier struct{}
+
+func (noopGmailNotifier) Notify(context.Context, string) error { return nil }
+
 func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 	if snap == nil {
 		return
@@ -81,7 +89,17 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 	// All proactive output goes to the native client's 업무 chat (client:main).
 	// The deliverTo config field was Telegram-target-specific and is no longer
 	// consulted after Telegram bot retirement.
-	s.gmailPollSvc.SetNotifier(s.proactiveRelay.notifierForSession(nativeWorkSessionKey))
+	//
+	// Silent mode: the kakao-watch email-single-analysis cron already delivers
+	// the prose analysis to chat, so a duplicate gmailpoll message is noise. A
+	// no-op notifier suppresses delivery while OnAnalyzed still pre-warms the
+	// Mini App analysis cache + per-message wiki page.
+	if pollCfg.Silent != nil && *pollCfg.Silent {
+		s.gmailPollSvc.SetNotifier(noopGmailNotifier{})
+		s.logger.Info("gmailpoll: silent mode — cache/wiki pre-warm only, chat delivery suppressed")
+	} else {
+		s.gmailPollSvc.SetNotifier(s.proactiveRelay.notifierForSession(nativeWorkSessionKey))
+	}
 
 	// Register as a periodic task within the autonomous service.
 	// The autonomous service handles lifecycle, panic recovery, and scheduling.

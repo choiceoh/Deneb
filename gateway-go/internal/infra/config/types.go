@@ -345,6 +345,13 @@ type GmailPollConfig struct {
 	MaxPerCycle *int   `json:"maxPerCycle,omitempty"` // max emails to process per cycle (default 5)
 	Model       string `json:"model,omitempty"`       // LLM model for analysis
 	PromptFile  string `json:"promptFile,omitempty"`  // path to custom analysis prompt (default ~/.deneb/gmail-analysis-prompt.md)
+	// Silent runs the poller as a cache/wiki pre-warmer only: it still
+	// analyzes each new mail and fills the Mini App analysis cache + per-message
+	// wiki page (so mail-detail opens as a cache hit instead of re-analyzing),
+	// but suppresses the proactive chat delivery. Use when another path (the
+	// kakao-watch email-single-analysis cron) already delivers the prose
+	// analysis to chat and gmailpoll would only duplicate it. Default false.
+	Silent *bool `json:"silent,omitempty"`
 }
 
 // DropboxPollConfig configures the periodic Dropbox folder watcher. When
