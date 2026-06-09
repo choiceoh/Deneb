@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
@@ -38,6 +39,7 @@ import (
 	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 	handlertask "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlertask"
 	handlerinsights "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/insights"
+	handlerobserve "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/observe"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
 	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/provider"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/session"
@@ -182,6 +184,15 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlersystem.UsageMethods(handlersystem.UsageDeps{Tracker: s.usageTracker}),
 		handlersystem.LogsMethods(handlersystem.LogsDeps{LogDir: filepath.Join(denebDir, "logs")}),
 
+		// --- Observation plane (unified: log ring + turn shape + behavior) ---
+		// AgentLog is a getter because s.agentLogWriter is constructed later in
+		// registerSessionRPCMethods; resolving it lazily avoids capturing a nil.
+		handlerobserve.Methods(handlerobserve.Deps{
+			Capture:  s.logCapture,
+			AgentLog: func() *agentlog.Writer { return s.agentLogWriter },
+			Logger:   hub.Logger(),
+		}),
+
 		// --- Insights (usage reports) ---
 		handlerinsights.Methods(handlerinsights.Deps{
 			Engine: hub.Insights(),
@@ -203,6 +214,16 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// server_http_miniapp.go before the dispatcher is reached. The
 		// methods read the authenticated operator from context via
 		// clientauth.FromContext.
+
+		// Observation plane under miniapp.observe.* — the same handlers as the
+		// in-process observe.* above, exposed here so remote adapters (native
+		// dashboard, token-holding external CLI) can reach logs/turns/behavior.
+		// The miniapp.* gate is exactly the client-token boundary we want.
+		handlerobserve.MiniappMethods(handlerobserve.Deps{
+			Capture:  s.logCapture,
+			AgentLog: func() *agentlog.Writer { return s.agentLogWriter },
+			Logger:   hub.Logger(),
+		}),
 		handlerminiapp.Methods(handlerminiapp.Deps{
 			Version: hub.Version(),
 			CurrentModel: func() string {

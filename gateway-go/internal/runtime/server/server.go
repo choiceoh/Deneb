@@ -28,6 +28,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
@@ -140,6 +141,12 @@ type Server struct {
 	// an ERROR-mirroring handler after creation. Set once in New(); never
 	// nil if logger is non-nil.
 	logSwap *swappableHandler
+
+	// logCapture heads the slog handler chain: it mirrors every record into an
+	// in-memory ring for the observe plane (observe.logs / observe.turn) before
+	// delegating onward. Set once in New() alongside logSwap; nil only when
+	// logger is nil.
+	logCapture *observe.LogCapture
 
 	// denebDir holds the resolved state directory for the lifetime of the
 	// server (set in Run before registerSessionRPCMethods). Downstream
@@ -262,7 +269,13 @@ func New(addr string, opts ...Option) (*Server, error) {
 	// capture (broadcaster, gatewaySubs, ...) so every subsystem that
 	// reads s.logger sees the swappable indirection.
 	if s.logger != nil {
-		s.logSwap = newSwappableHandler(s.logger.Handler())
+		// Head the chain with the observe capture handler so every record is
+		// mirrored into the ring, THEN make it swappable so the notify service
+		// can wrap on top later. Resulting order: notify(swap) → capture → base.
+		// notify forwards ERRORs but always runs its delegate first, so capture
+		// still sees every line after the swap.
+		s.logCapture = observe.NewCapture(s.logger.Handler(), observe.NewRing(observe.DefaultRingSize))
+		s.logSwap = newSwappableHandler(s.logCapture)
 		if s.logSwap != nil {
 			s.logger = slog.New(s.logSwap)
 		}
