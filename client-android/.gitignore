@@ -1,5 +1,5 @@
 # Build outputs, caches, and machine-specific config under the vendored app/.
-# The vendored Kai source is reproducible via vendor-kai.sh at the commit pinned
+# The vendored Kai source's origin commit is recorded
 # in VENDOR.txt. Standard (unanchored) patterns so they match at any depth.
 #
 # NOTE: scripts/committer uses `git add --force`, which bypasses these rules —

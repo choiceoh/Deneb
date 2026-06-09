@@ -109,7 +109,7 @@ fun DenebConfigScreen(
                 Text("설정", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 TextButton(onClick = onBack) { Text("닫기") }
             }
-            // Pill-style tabs (no underline) — mirrors the Kai "고급 설정" tab selector:
+            // Pill-style tabs (no underline) — mirrors the upstream "고급 설정" tab selector:
             // each tab is a rounded Surface, the selected one gets a soft primary tint.
             Row(
                 modifier = Modifier

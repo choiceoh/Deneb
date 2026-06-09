@@ -20,15 +20,15 @@ import kotlin.test.Test
  * Integration test that exercises real LLM providers with a battery of prompts and
  * validates that their responses contain well-formed deneb-ui blocks.
  *
- * By default this test is **skipped** — it only runs when `KAI_INTEGRATION=1` is set
+ * By default this test is **skipped** — it only runs when `DENEB_INTEGRATION=1` is set
  * in the environment, because it makes real (paid) API calls.
  *
  * ## How to run
  *
  * ```
- * KAI_INTEGRATION=1 \
- *   KAI_OPENAI_KEY=sk-... \
- *   KAI_ANTHROPIC_KEY=sk-ant-... \
+ * DENEB_INTEGRATION=1 \
+ *   DENEB_OPENAI_KEY=sk-... \
+ *   DENEB_ANTHROPIC_KEY=sk-ant-... \
  *   ./gradlew :composeApp:desktopTest --tests "*DenebUiValidationTest*" --info
  * ```
  *
@@ -37,23 +37,23 @@ import kotlin.test.Test
  *
  * | Provider     | Key env var           | Model env var (optional) | Default model                |
  * |--------------|-----------------------|--------------------------|------------------------------|
- * | OpenAI       | KAI_OPENAI_KEY        | KAI_OPENAI_MODEL         | gpt-4o-mini                  |
- * | Anthropic    | KAI_ANTHROPIC_KEY     | KAI_ANTHROPIC_MODEL      | claude-3-5-haiku-latest      |
- * | Gemini       | KAI_GEMINI_KEY        | KAI_GEMINI_MODEL         | gemini-2.0-flash             |
- * | Mistral      | KAI_MISTRAL_KEY       | KAI_MISTRAL_MODEL        | mistral-small-latest         |
- * | Groq         | KAI_GROQ_KEY          | KAI_GROQ_MODEL           | llama-3.3-70b-versatile      |
- * | OpenRouter   | KAI_OPENROUTER_KEY    | KAI_OPENROUTER_MODEL     | openai/gpt-4o-mini           |
- * | DeepSeek     | KAI_DEEPSEEK_KEY      | KAI_DEEPSEEK_MODEL       | deepseek-chat                |
- * | xAI          | KAI_XAI_KEY           | KAI_XAI_MODEL            | grok-2-latest                |
- * | Cerebras     | KAI_CEREBRAS_KEY      | KAI_CEREBRAS_MODEL       | llama-3.3-70b                |
- * | Moonshot     | KAI_MOONSHOT_KEY      | KAI_MOONSHOT_MODEL       | moonshot-v1-8k               |
- * | Together     | KAI_TOGETHER_KEY      | KAI_TOGETHER_MODEL       | meta-llama/Llama-3.3-70B-Instruct-Turbo |
- * | Mistral FT   | KAI_MISTRAL_FT_KEY    | KAI_MISTRAL_FT_MODEL     | ft:open-mistral-7b:latest  |
+ * | OpenAI       | DENEB_OPENAI_KEY        | DENEB_OPENAI_MODEL         | gpt-4o-mini                  |
+ * | Anthropic    | DENEB_ANTHROPIC_KEY     | DENEB_ANTHROPIC_MODEL      | claude-3-5-haiku-latest      |
+ * | Gemini       | DENEB_GEMINI_KEY        | DENEB_GEMINI_MODEL         | gemini-2.0-flash             |
+ * | Mistral      | DENEB_MISTRAL_KEY       | DENEB_MISTRAL_MODEL        | mistral-small-latest         |
+ * | Groq         | DENEB_GROQ_KEY          | DENEB_GROQ_MODEL           | llama-3.3-70b-versatile      |
+ * | OpenRouter   | DENEB_OPENROUTER_KEY    | DENEB_OPENROUTER_MODEL     | openai/gpt-4o-mini           |
+ * | DeepSeek     | DENEB_DEEPSEEK_KEY      | DENEB_DEEPSEEK_MODEL       | deepseek-chat                |
+ * | xAI          | DENEB_XAI_KEY           | DENEB_XAI_MODEL            | grok-2-latest                |
+ * | Cerebras     | DENEB_CEREBRAS_KEY      | DENEB_CEREBRAS_MODEL       | llama-3.3-70b                |
+ * | Moonshot     | DENEB_MOONSHOT_KEY      | DENEB_MOONSHOT_MODEL       | moonshot-v1-8k               |
+ * | Together     | DENEB_TOGETHER_KEY      | DENEB_TOGETHER_MODEL       | meta-llama/Llama-3.3-70B-Instruct-Turbo |
+ * | Mistral FT   | DENEB_MISTRAL_FT_KEY    | DENEB_MISTRAL_FT_MODEL     | ft:open-mistral-7b:latest  |
  *
  * Additional knobs:
  * - `DENEB_REPORT_DIR` — where to write the report (default: `build/reports/denebui-integration`)
- * - `KAI_MIN_SUCCESS_RATE` — 0.0-1.0, fail the test below this rate (default: 0.0, never fail)
- * - `KAI_REPLAY_STRICT` — set to `1` to make the replay test fail when any saved response
+ * - `DENEB_MIN_SUCCESS_RATE` — 0.0-1.0, fail the test below this rate (default: 0.0, never fail)
+ * - `DENEB_REPLAY_STRICT` — set to `1` to make the replay test fail when any saved response
  *   no longer parses cleanly. Default off (report-only).
  *
  * ## What it produces
@@ -79,15 +79,15 @@ class DenebUiValidationTest {
 
     @Test
     fun `validate deneb-ui output across providers`() {
-        if (System.getenv("KAI_INTEGRATION") != "1") {
-            println("[DenebUiValidationTest] Skipped — set KAI_INTEGRATION=1 to run.")
+        if (System.getenv("DENEB_INTEGRATION") != "1") {
+            println("[DenebUiValidationTest] Skipped — set DENEB_INTEGRATION=1 to run.")
             return
         }
 
         val providers = discoverProviders()
         if (providers.isEmpty()) {
             println("[DenebUiValidationTest] Skipped — no provider API keys found in env.")
-            println("    Set any of: KAI_OPENAI_KEY, KAI_ANTHROPIC_KEY, KAI_GEMINI_KEY, KAI_GROQ_KEY, KAI_OPENROUTER_KEY")
+            println("    Set any of: DENEB_OPENAI_KEY, DENEB_ANTHROPIC_KEY, DENEB_GEMINI_KEY, DENEB_GROQ_KEY, DENEB_OPENROUTER_KEY")
             return
         }
 
@@ -117,7 +117,7 @@ class DenebUiValidationTest {
         writeReport(reportDir, allResults, providers)
         printSummary(allResults, providers)
 
-        val minRate = System.getenv("KAI_MIN_SUCCESS_RATE")?.toDoubleOrNull() ?: 0.0
+        val minRate = System.getenv("DENEB_MIN_SUCCESS_RATE")?.toDoubleOrNull() ?: 0.0
         if (minRate > 0.0) {
             val rate = allResults.count { it.status == Status.SUCCESS }.toDouble() / allResults.size
             check(rate >= minRate) {
@@ -133,7 +133,7 @@ class DenebUiValidationTest {
      * `parseMarkdown()`, and reports which ones still fail. Free, fast, and needs no
      * API keys — use this while iterating on parser fixes or prompt tweaks.
      *
-     * Skips silently if no saved responses are found. Set `KAI_REPLAY_STRICT=1` to make
+     * Skips silently if no saved responses are found. Set `DENEB_REPLAY_STRICT=1` to make
      * the test fail when any previously-failing response still fails to parse cleanly.
      */
     @Test
@@ -149,7 +149,7 @@ class DenebUiValidationTest {
             .sortedBy { it.absolutePath }
         if (rawFiles.isEmpty()) {
             println("[DenebUiValidationTest] Replay skipped — no .raw.txt files under ${reportDir.absolutePath}")
-            println("    Run the online test first with KAI_INTEGRATION=1 and at least one provider key.")
+            println("    Run the online test first with DENEB_INTEGRATION=1 and at least one provider key.")
             return
         }
 
@@ -203,7 +203,7 @@ class DenebUiValidationTest {
 
         println("\n[DenebUiValidationTest] Replay summary: $success ok, $partial partial, $noUi no-ui, $parseError parse-error  (total ${rawFiles.size})")
 
-        val strict = System.getenv("KAI_REPLAY_STRICT") == "1"
+        val strict = System.getenv("DENEB_REPLAY_STRICT") == "1"
         if (strict && failures.isNotEmpty()) {
             error(
                 "Replay strict mode: ${failures.size} file(s) did not parse cleanly:\n" +
@@ -227,122 +227,122 @@ class DenebUiValidationTest {
 
     private fun discoverProviders(): List<ProviderSpec> {
         val out = mutableListOf<ProviderSpec>()
-        env("KAI_OPENAI_KEY")?.let {
+        env("DENEB_OPENAI_KEY")?.let {
             out += ProviderSpec(
                 "openai",
                 "OpenAI",
                 Service.OpenAI,
-                env("KAI_OPENAI_MODEL") ?: "gpt-4o-mini",
+                env("DENEB_OPENAI_MODEL") ?: "gpt-4o-mini",
                 it,
                 ProviderSpec.Kind.OPENAI_COMPAT,
             )
         }
-        env("KAI_ANTHROPIC_KEY")?.let {
+        env("DENEB_ANTHROPIC_KEY")?.let {
             out += ProviderSpec(
                 "anthropic",
                 "Anthropic",
                 Service.Anthropic,
-                env("KAI_ANTHROPIC_MODEL") ?: "claude-3-5-haiku-latest",
+                env("DENEB_ANTHROPIC_MODEL") ?: "claude-3-5-haiku-latest",
                 it,
                 ProviderSpec.Kind.ANTHROPIC,
             )
         }
-        env("KAI_GEMINI_KEY")?.let {
+        env("DENEB_GEMINI_KEY")?.let {
             out += ProviderSpec(
                 "gemini",
                 "Gemini",
                 Service.Gemini,
-                env("KAI_GEMINI_MODEL") ?: "gemini-2.0-flash",
+                env("DENEB_GEMINI_MODEL") ?: "gemini-2.0-flash",
                 it,
                 ProviderSpec.Kind.GEMINI,
             )
         }
-        env("KAI_MISTRAL_KEY")?.let {
+        env("DENEB_MISTRAL_KEY")?.let {
             out += ProviderSpec(
                 "mistral",
                 "Mistral",
                 Service.Mistral,
-                env("KAI_MISTRAL_MODEL") ?: "mistral-small-latest",
+                env("DENEB_MISTRAL_MODEL") ?: "mistral-small-latest",
                 it,
                 ProviderSpec.Kind.OPENAI_COMPAT,
             )
         }
-        env("KAI_GROQ_KEY")?.let {
+        env("DENEB_GROQ_KEY")?.let {
             out += ProviderSpec(
                 "groq",
                 "Groq",
                 Service.Groq,
-                env("KAI_GROQ_MODEL") ?: "llama-3.3-70b-versatile",
+                env("DENEB_GROQ_MODEL") ?: "llama-3.3-70b-versatile",
                 it,
                 ProviderSpec.Kind.OPENAI_COMPAT,
             )
         }
-        env("KAI_OPENROUTER_KEY")?.let {
+        env("DENEB_OPENROUTER_KEY")?.let {
             out += ProviderSpec(
                 "openrouter",
                 "OpenRouter",
                 Service.OpenRouter,
-                env("KAI_OPENROUTER_MODEL") ?: "openai/gpt-4o-mini",
+                env("DENEB_OPENROUTER_MODEL") ?: "openai/gpt-4o-mini",
                 it,
                 ProviderSpec.Kind.OPENAI_COMPAT,
             )
         }
-        env("KAI_DEEPSEEK_KEY")?.let {
+        env("DENEB_DEEPSEEK_KEY")?.let {
             out += ProviderSpec(
                 "deepseek",
                 "DeepSeek",
                 Service.DeepSeek,
-                env("KAI_DEEPSEEK_MODEL") ?: "deepseek-chat",
+                env("DENEB_DEEPSEEK_MODEL") ?: "deepseek-chat",
                 it,
                 ProviderSpec.Kind.OPENAI_COMPAT,
             )
         }
-        env("KAI_XAI_KEY")?.let {
+        env("DENEB_XAI_KEY")?.let {
             out += ProviderSpec(
                 "xai",
                 "xAI",
                 Service.XAI,
-                env("KAI_XAI_MODEL") ?: "grok-2-latest",
+                env("DENEB_XAI_MODEL") ?: "grok-2-latest",
                 it,
                 ProviderSpec.Kind.OPENAI_COMPAT,
             )
         }
-        env("KAI_CEREBRAS_KEY")?.let {
+        env("DENEB_CEREBRAS_KEY")?.let {
             out += ProviderSpec(
                 "cerebras",
                 "Cerebras",
                 Service.Cerebras,
-                env("KAI_CEREBRAS_MODEL") ?: "llama-3.3-70b",
+                env("DENEB_CEREBRAS_MODEL") ?: "llama-3.3-70b",
                 it,
                 ProviderSpec.Kind.OPENAI_COMPAT,
             )
         }
-        env("KAI_MOONSHOT_KEY")?.let {
+        env("DENEB_MOONSHOT_KEY")?.let {
             out += ProviderSpec(
                 "moonshot",
                 "Moonshot",
                 Service.Moonshot,
-                env("KAI_MOONSHOT_MODEL") ?: "moonshot-v1-8k",
+                env("DENEB_MOONSHOT_MODEL") ?: "moonshot-v1-8k",
                 it,
                 ProviderSpec.Kind.OPENAI_COMPAT,
             )
         }
-        env("KAI_TOGETHER_KEY")?.let {
+        env("DENEB_TOGETHER_KEY")?.let {
             out += ProviderSpec(
                 "together",
                 "Together",
                 Service.Together,
-                env("KAI_TOGETHER_MODEL") ?: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                env("DENEB_TOGETHER_MODEL") ?: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
                 it,
                 ProviderSpec.Kind.OPENAI_COMPAT,
             )
         }
-        env("KAI_MISTRAL_FT_KEY")?.let {
+        env("DENEB_MISTRAL_FT_KEY")?.let {
             out += ProviderSpec(
                 "mistral-ft",
                 "Mistral Fine-tuned",
                 Service.Mistral,
-                env("KAI_MISTRAL_FT_MODEL") ?: "ft:open-mistral-7b:latest",
+                env("DENEB_MISTRAL_FT_MODEL") ?: "ft:open-mistral-7b:latest",
                 it,
                 ProviderSpec.Kind.OPENAI_COMPAT,
             )

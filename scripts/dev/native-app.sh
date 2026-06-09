@@ -105,8 +105,8 @@ seed_settings() {
 import os, sys, json
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 url, token = sys.argv[1], sys.argv[2]
-kai = os.path.expanduser("~/.deneb-client"); os.makedirs(kai, exist_ok=True)
-keyp, aesp = os.path.join(kai, "settings.key"), os.path.join(kai, "settings.aes")
+storage = os.path.expanduser("~/.deneb-client"); os.makedirs(storage, exist_ok=True)
+keyp, aesp = os.path.join(storage, "settings.key"), os.path.join(storage, "settings.aes")
 # Reuse the app's key if present so the app can still read what it wrote.
 if os.path.exists(keyp) and os.path.getsize(keyp) == 32:
     key = open(keyp, "rb").read()
