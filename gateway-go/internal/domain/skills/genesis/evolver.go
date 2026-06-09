@@ -81,7 +81,12 @@ func (e *Evolver) SetTeacher(client *llm.Client, model string) {
 }
 
 // EvolveSkill attempts to improve a single skill based on usage feedback.
-func (e *Evolver) EvolveSkill(ctx context.Context, skillName string) (*EvolveResult, error) {
+// EvolveSkill improves one skill. reviewFinding is an optional improvement
+// directive from a background skill-review (the LLM that just observed a
+// session); when present it is the primary basis for the rewrite and lets the
+// evolver proceed even with no usage data — usage-stat-driven evolution
+// otherwise never fires because skill usage is sparsely recorded.
+func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding string) (*EvolveResult, error) {
 	if e.catalog == nil {
 		return nil, fmt.Errorf("evolver: catalog not configured")
 	}
@@ -105,7 +110,12 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName string) (*EvolveRes
 		stats = &UsageStats{SkillName: skillName}
 	}
 
-	// Build prompt.
+	// Build prompt. A review-provided finding (when present) is the primary
+	// basis for improvement and lets the evolver proceed without usage data.
+	findingSection := ""
+	if strings.TrimSpace(reviewFinding) != "" {
+		findingSection = "\n\n## Review Finding (개선 지시 — 우선 반영)\n" + strings.TrimSpace(reviewFinding)
+	}
 	userPrompt := fmt.Sprintf(`## 현재 SKILL.md
 %s
 
@@ -113,11 +123,12 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName string) (*EvolveRes
 - 총 사용: %d회
 - 성공: %d회 (%.0f%%)
 - 실패: %d회
-- 최근 에러: %s`,
+- 최근 에러: %s%s`,
 		string(currentContent),
 		stats.TotalUses, stats.SuccessCount, stats.SuccessRate*100,
 		stats.FailureCount,
-		formatRecentErrors(stats.RecentErrors))
+		formatRecentErrors(stats.RecentErrors),
+		findingSection)
 
 	events, err := e.llmClient.StreamChat(ctx, llm.ChatRequest{
 		Model:          e.resolveModel(),
@@ -174,7 +185,7 @@ func (e *Evolver) EvolveUnderperformers(ctx context.Context) ([]EvolveResult, er
 		if ctx.Err() != nil {
 			break
 		}
-		result, err := e.EvolveSkill(ctx, candidate.SkillName)
+		result, err := e.EvolveSkill(ctx, candidate.SkillName, "")
 		if err != nil {
 			e.logger.Warn("evolver: failed to evolve",
 				"skill", candidate.SkillName, "error", err)

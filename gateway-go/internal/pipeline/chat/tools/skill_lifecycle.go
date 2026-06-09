@@ -41,9 +41,12 @@ type SkillGenesisRequest struct {
 	DreamSummary string `json:"dreamSummary,omitempty"`
 }
 
-// SkillEvolutionRequest triggers improvement of one existing skill.
+// SkillEvolutionRequest triggers improvement of one existing skill. Finding is
+// an optional review-provided improvement directive; when set, the evolver uses
+// it as the basis for the rewrite even without usage data.
 type SkillEvolutionRequest struct {
 	SkillName string `json:"skillName"`
+	Finding   string `json:"finding,omitempty"`
 }
 
 // SkillLifecycleStatusRequest queries recent lifecycle decisions, usage stats,
