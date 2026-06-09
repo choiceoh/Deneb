@@ -37,12 +37,16 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.RichTooltip
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -554,11 +558,45 @@ private fun ModelTab(client: DenebGatewayClient) {
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(
-            "역할별 모델 — 메인=채팅, 경량=메일 분석·요약, 폴백=메인 실패 시",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        // Header + a "?" affordance: tapping the circled question mark opens a
+        // rich tooltip explaining what each of the five roles does. Descriptions
+        // live on ModelRole.desc so the segmented buttons and the tooltip stay in
+        // sync from one source.
+        val roleTooltip = rememberTooltipState(isPersistent = true)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                "역할별 모델",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberRichTooltipPositionProvider(),
+                tooltip = {
+                    RichTooltip(title = { Text("모델 역할") }) {
+                        Text(ModelRole.entries.joinToString("\n") { "${it.label} — ${it.desc}" })
+                    }
+                },
+                state = roleTooltip,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                        .clickable { scope.launch { roleTooltip.show() } }
+                        .handCursor(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "?",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
         // Legend for the per-model response-status dot.
         Row(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -1192,13 +1230,16 @@ private enum class ConfigTab(val label: String) {
 }
 
 /** Model-assignment roles. [wire] is the gateway's role key (sent on the RPC and
- *  used to look up the current model); [label] is the Korean segmented-button text. */
-private enum class ModelRole(val wire: String, val label: String) {
-    MAIN("main", "메인"),
-    TINY("tiny", "초경량"),
-    LIGHTWEIGHT("lightweight", "경량"),
-    ANALYSIS("analysis", "분석"),
-    FALLBACK("fallback", "폴백"),
+ *  used to look up the current model); [label] is the Korean segmented-button text;
+ *  [desc] is the one-line role explanation shown in the "?" tooltip. Descriptions
+ *  mirror the gateway's modelrole registry (main / tiny / lightweight / analysis /
+ *  fallback). */
+private enum class ModelRole(val wire: String, val label: String, val desc: String) {
+    MAIN("main", "메인", "채팅·분석·도구 호출 등 주 대화를 담당하는 기본 모델"),
+    TINY("tiny", "초경량", "간단한 분류·추출 같은 가벼운 작업"),
+    LIGHTWEIGHT("lightweight", "경량", "메일 요약 등 분량이 정해진 요약 작업"),
+    ANALYSIS("analysis", "분석", "추론이 필요한 고품질 작업"),
+    FALLBACK("fallback", "폴백", "메인 모델이 실패했을 때 대신 쓰는 모델"),
 }
 
 private const val KEY_URL = "deneb.gatewayUrl"
