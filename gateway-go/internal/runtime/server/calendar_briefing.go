@@ -46,7 +46,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
@@ -63,6 +65,28 @@ const (
 	// product contract, so a fixed offset is correct here rather than
 	// time.Local which silently equals UTC on stripped images.
 	kstFallbackOffset = 9 * 60 * 60
+)
+
+const (
+	// briefEnrichTimeout bounds the whole context-enrichment pass (all
+	// attendee + topic lookups for one event). The briefing fires once per
+	// meeting at D-15, so this is not user-facing latency — it only caps how
+	// long a slow Gmail/wiki backend can hold the briefing goroutine before
+	// we ship the base briefing anyway.
+	briefEnrichTimeout = 8 * time.Second
+
+	// briefAttendeeCap limits how many external attendees get a context line
+	// so a 30-person invite doesn't produce a 30-line push.
+	briefAttendeeCap = 3
+
+	// briefMailCountDays / briefMailCountCap: the per-attendee freshness
+	// signal counts messages from that sender within the window. We cap the
+	// page because only the count matters, not the messages themselves.
+	briefMailCountDays = 30
+	briefMailCountCap  = 25
+
+	// briefTopicMailCap limits topic-related recent mail subjects shown.
+	briefTopicMailCap = 3
 )
 
 // errBriefingUndelivered is returned by sendBriefing when the native relay
@@ -127,6 +151,12 @@ type calendarBriefingService struct {
 	logger    *slog.Logger
 	leadTime  time.Duration
 	pollEvery time.Duration
+
+	// enricher adds best-effort context (attendee mail freshness + wiki
+	// notes, related recent mail, past wiki record) to the base briefing.
+	// Optional and set after construction: nil → base briefing only, so the
+	// nil-receiver guards and existing tests stay unaffected.
+	enricher *briefingEnricher
 
 	// displayLoc is loaded once at service construction. Cached because
 	// LoadLocation is a non-trivial lookup on each formatBriefing call.
@@ -239,7 +269,7 @@ func (s *calendarBriefingService) tick(ctx context.Context) {
 
 	pushes := decidePushes(now, s.leadTime, events, s.alreadySent)
 	for _, ev := range pushes {
-		if err := s.sendBriefing(ev); err != nil {
+		if err := s.sendBriefing(ctx, ev); err != nil {
 			s.logger.Error("calendar briefing: push failed",
 				"eventId", ev.ID, "summary", ev.Summary, "error", err)
 			continue
@@ -291,8 +321,18 @@ func dedupKey(ev calendar.Event) string {
 // sendBriefing assembles and delivers the briefing to the native client.
 // Plain text (no HTML escaping) because the native client renders the
 // transcript body directly — unlike the retired Telegram HTML parse mode.
-func (s *calendarBriefingService) sendBriefing(ev calendar.Event) error {
-	delivered, err := s.deliver(s.formatBriefing(ev))
+//
+// The base briefing (formatBriefing) always ships; context enrichment is
+// strictly additive and best-effort, so a slow or absent Gmail/wiki backend
+// degrades to the bare reminder rather than blocking or dropping it.
+func (s *calendarBriefingService) sendBriefing(ctx context.Context, ev calendar.Event) error {
+	body := s.formatBriefing(ev)
+	if s.enricher != nil {
+		if extra := s.enricher.extra(ctx, ev); extra != "" {
+			body += "\n" + extra
+		}
+	}
+	delivered, err := s.deliver(body)
 	if err != nil {
 		return err
 	}
@@ -350,6 +390,232 @@ func attendeeNames(attendees []calendar.Attendee, limit int) string {
 		}
 	}
 	return strings.Join(picks, " · ")
+}
+
+// externalAttendees returns up to `limit` attendees who are neither the
+// authenticated user (Self) nor declined — the counterparts the operator is
+// actually meeting. limit <= 0 means no cap. This is the enrichment-side
+// filter: it decides who gets a *context line*, not whether the briefing
+// fires (decidePushes is unchanged, so solo events still get their D-15
+// reminder).
+func externalAttendees(attendees []calendar.Attendee, limit int) []calendar.Attendee {
+	var out []calendar.Attendee
+	for _, a := range attendees {
+		if a.Self || a.ResponseStatus == "declined" {
+			continue
+		}
+		out = append(out, a)
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+// briefingEnricher gathers optional context for a meeting briefing:
+//   - per external attendee: recent-mail frequency + a one-line wiki note
+//   - topic-related recent mail (search by meeting title keywords)
+//   - a past wiki record matching the meeting title
+//
+// Every lookup is best-effort. A nil func, an error, or a timeout simply
+// omits that line, so the base briefing always ships. Sequential by design
+// (project rule: prefer simple sequential over concurrency); the whole pass
+// is bounded by `timeout`. The function-typed deps keep this unit-testable
+// without constructing a real Gmail/wiki backend.
+type briefingEnricher struct {
+	// recentMailCount returns how many messages from `email` arrived within
+	// the last `days`. A negative count or an error omits the freshness line.
+	recentMailCount func(ctx context.Context, email string, days int) (int, error)
+	// topicMail returns up to `limit` recent mail subjects matching a free-text
+	// topic query (the meeting title).
+	topicMail func(ctx context.Context, query string, limit int) ([]string, error)
+	// wikiNote returns a one-line note ("Title — Summary") for a person or
+	// topic query, or "" when nothing is in memory.
+	wikiNote func(ctx context.Context, query string) string
+
+	timeout time.Duration
+	logger  *slog.Logger
+}
+
+// newBriefingEnricher wires the enricher to the production Gmail client and
+// the (late-bound) wiki store. wikiGetter is read at call time so the briefing
+// service, constructed before the wiki store exists, never captures a nil
+// store. All backends degrade gracefully: no Gmail OAuth → no mail lines, no
+// wiki store → no notes.
+func newBriefingEnricher(wikiGetter func() *wiki.Store, logger *slog.Logger) *briefingEnricher {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &briefingEnricher{
+		recentMailCount: func(ctx context.Context, email string, days int) (int, error) {
+			c, err := gmail.DefaultClient()
+			if err != nil {
+				return -1, err
+			}
+			// Quote the address so operator characters in the local part are
+			// treated as part of the address, not Gmail search syntax.
+			res, err := c.Search(ctx, fmt.Sprintf("from:%q newer_than:%dd", email, days), briefMailCountCap)
+			if err != nil {
+				return -1, err
+			}
+			return len(res), nil
+		},
+		topicMail: func(ctx context.Context, query string, limit int) ([]string, error) {
+			c, err := gmail.DefaultClient()
+			if err != nil {
+				return nil, err
+			}
+			res, err := c.Search(ctx, query, limit)
+			if err != nil {
+				return nil, err
+			}
+			subjects := make([]string, 0, len(res))
+			for _, r := range res {
+				if sub := strings.TrimSpace(r.Subject); sub != "" {
+					subjects = append(subjects, sub)
+				}
+			}
+			return subjects, nil
+		},
+		wikiNote: func(ctx context.Context, query string) string {
+			return wikiTopNote(ctx, wikiGetter, query)
+		},
+		timeout: briefEnrichTimeout,
+		logger:  logger,
+	}
+}
+
+// extra returns the additional briefing lines for an event (without a leading
+// newline). Wrapped in a bounded timeout and panic recovery so enrichment can
+// never block or crash the briefing goroutine — on any failure it returns "".
+func (e *briefingEnricher) extra(ctx context.Context, ev calendar.Event) (out string) {
+	if e == nil {
+		return ""
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			e.logger.Error("calendar briefing: enrich panic recovered", "panic", r)
+			out = ""
+		}
+	}()
+
+	timeout := e.timeout
+	if timeout <= 0 {
+		timeout = briefEnrichTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	var b strings.Builder
+
+	// 참석자 컨텍스트: 외부 참석자별 최근 메일 빈도 + 위키 메모.
+	for _, a := range externalAttendees(ev.Attendees, briefAttendeeCap) {
+		if line := e.attendeeLine(ctx, a); line != "" {
+			b.WriteString("\n")
+			b.WriteString(line)
+		}
+	}
+
+	// 관련 최근 메일: 회의 제목 키워드로 검색.
+	if e.topicMail != nil {
+		if q := briefTopicQuery(ev.Summary); q != "" {
+			if subs, err := e.topicMail(ctx, q, briefTopicMailCap); err == nil && len(subs) > 0 {
+				b.WriteString("\n📧 관련 메일: ")
+				b.WriteString(strings.Join(subs, " / "))
+			}
+		}
+	}
+
+	// 지난 기록: 회의 제목으로 위키 검색 (프로젝트/거래처 페이지).
+	if e.wikiNote != nil {
+		if note := e.wikiNote(ctx, strings.TrimSpace(ev.Summary)); note != "" {
+			b.WriteString("\n📌 지난 기록: ")
+			b.WriteString(note)
+		}
+	}
+
+	return strings.TrimSpace(b.String())
+}
+
+// attendeeLine builds one "· name — 최근 30일 N건, wiki note" line for an
+// attendee, or "" when no signal is available for them.
+func (e *briefingEnricher) attendeeLine(ctx context.Context, a calendar.Attendee) string {
+	name := strings.TrimSpace(a.DisplayName)
+	email := strings.TrimSpace(a.Email)
+	if name == "" {
+		name = email
+	}
+	if name == "" {
+		return ""
+	}
+
+	var parts []string
+	// Attendee.Email is normalized to lowercase by the calendar client; a
+	// plain "@" check is enough to avoid quoting a bare name into the query.
+	if e.recentMailCount != nil && strings.Contains(email, "@") {
+		if n, err := e.recentMailCount(ctx, email, briefMailCountDays); err == nil && n >= 0 {
+			parts = append(parts, fmt.Sprintf("최근 %d일 %d건", briefMailCountDays, n))
+		}
+	}
+	if e.wikiNote != nil {
+		if note := e.wikiNote(ctx, name); note != "" {
+			parts = append(parts, note)
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("· %s — %s", name, strings.Join(parts, ", "))
+}
+
+// briefTopicQuery turns a meeting title into a plain Gmail keyword query by
+// dropping characters Gmail treats as operators/grouping. Returns "" for
+// titles too short to search usefully.
+func briefTopicQuery(summary string) string {
+	s := strings.Map(func(r rune) rune {
+		switch r {
+		case '[', ']', '(', ')', '{', '}', '"', ':':
+			return ' '
+		}
+		return r
+	}, summary)
+	s = strings.Join(strings.Fields(s), " ")
+	if len([]rune(s)) < 2 {
+		return ""
+	}
+	return s
+}
+
+// wikiTopNote returns a one-line "Title — Summary" for the best wiki hit on
+// query, or "" when the store is unavailable / nothing matches. The store is
+// resolved lazily so a nil (not-yet-initialized) store is a clean skip.
+func wikiTopNote(ctx context.Context, getStore func() *wiki.Store, query string) string {
+	query = strings.TrimSpace(query)
+	if getStore == nil || query == "" {
+		return ""
+	}
+	st := getStore()
+	if st == nil {
+		return ""
+	}
+	hits, err := st.Search(ctx, query, 1)
+	if err != nil || len(hits) == 0 {
+		return ""
+	}
+	page, err := st.ReadPage(hits[0].Path)
+	if err != nil || page == nil {
+		return ""
+	}
+	title := strings.TrimSpace(page.Meta.Title)
+	summary := strings.TrimSpace(page.Meta.Summary)
+	switch {
+	case title != "" && summary != "":
+		return title + " — " + summary
+	case title != "":
+		return title
+	default:
+		return summary
+	}
 }
 
 // alreadySent / markSent / prune guard the dedup map.

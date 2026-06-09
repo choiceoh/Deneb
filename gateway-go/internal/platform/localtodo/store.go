@@ -43,6 +43,10 @@ type Todo struct {
 	DoneAt    time.Time
 	Created   time.Time
 	Updated   time.Time
+	// Source is an optional provenance key for automated creators (e.g.
+	// "mail:<id>|<title>"). It is the dedup key for CreateIfAbsent and is not
+	// exposed over the Mini App wire surface — purely internal bookkeeping.
+	Source string
 }
 
 // CreateInput is the user-settable subset of a to-do. Due is optional (zero =
@@ -53,6 +57,9 @@ type CreateInput struct {
 	Note      string
 	Due       time.Time
 	DueAllDay bool
+	// Source is an optional provenance/dedup key (see Todo.Source). Empty for
+	// user-created to-dos; set by automated creators that want idempotency.
+	Source string
 }
 
 // storedTodo is the on-disk shape. Times are RFC3339 strings so the file stays
@@ -67,6 +74,7 @@ type storedTodo struct {
 	DoneAt    string `json:"doneAt,omitempty"` // RFC3339
 	Created   string `json:"created,omitempty"`
 	Updated   string `json:"updated,omitempty"`
+	Source    string `json:"source,omitempty"`
 }
 
 func parseRFC3339(s string) time.Time {
@@ -85,6 +93,7 @@ func (t storedTodo) toTodo() Todo {
 		DoneAt:    parseRFC3339(t.DoneAt),
 		Created:   parseRFC3339(t.Created),
 		Updated:   parseRFC3339(t.Updated),
+		Source:    t.Source,
 	}
 }
 
@@ -194,6 +203,34 @@ func (s *Store) Create(in CreateInput) (Todo, error) {
 		return Todo{}, err
 	}
 	return rec.toTodo(), nil
+}
+
+// CreateIfAbsent creates the to-do only when no existing to-do shares the same
+// non-empty Source key, making automated creators (e.g. the mail→todo sink)
+// idempotent across re-analysis of the same source. On a match it returns the
+// existing to-do with created=false and writes nothing. An empty Source
+// disables the check and always creates, matching Create. The check + append
+// happen under one lock so concurrent callers can't race a duplicate in.
+func (s *Store) CreateIfAbsent(in CreateInput) (td Todo, created bool, err error) {
+	if verr := validate(in); verr != nil {
+		return Todo{}, false, verr
+	}
+	src := strings.TrimSpace(in.Source)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if src != "" {
+		for _, t := range s.todos {
+			if t.Source == src {
+				return t.toTodo(), false, nil
+			}
+		}
+	}
+	rec := s.newRecordLocked(in)
+	s.todos = append(s.todos, rec)
+	if perr := s.persistLocked(); perr != nil {
+		return Todo{}, false, perr
+	}
+	return rec.toTodo(), true, nil
 }
 
 // Update replaces the editable fields of the to-do with id (preserving its
@@ -312,6 +349,7 @@ func buildRecord(id string, in CreateInput) storedTodo {
 		DueAllDay: in.DueAllDay,
 		Created:   now,
 		Updated:   now,
+		Source:    strings.TrimSpace(in.Source),
 	}
 }
 

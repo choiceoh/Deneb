@@ -163,5 +163,35 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.Ana
 				s.logger.Warn("mail analysis 위키 저장 실패", "id", msg.ID, "error", err)
 			}
 		}
+		// Turn the analysis's high-priority follow-up actions into to-dos
+		// (best-effort, deduped per mail). See mail_todo.go.
+		s.autoCreateTodosFromMail(msg, res.ActionItems)
+		// File any extracted business document onto a 거래 wiki page (silent
+		// knowledge enrichment — no push).
+		s.fileDealFromMail(msg, res.Deal)
 	}
+}
+
+// fileDealFromMail files a structured business-document extraction onto its
+// counterparty's 거래 wiki page. Silent and best-effort: no push, deduped by
+// the mail id, failures logged only. nil deal (non-deal mail) is a no-op.
+func (s *Server) fileDealFromMail(msg *gmail.MessageDetail, deal *gmailpoll.DealInfo) {
+	if deal == nil || msg == nil || s.wikiStore == nil {
+		return
+	}
+	relPath, created, err := s.wikiStore.UpsertDealPage(wiki.DealPageInput{
+		Counterparty: deal.Counterparty,
+		DocType:      deal.DocType,
+		Amount:       deal.Amount,
+		Date:         deal.Date,
+		DueDate:      deal.DueDate,
+		Items:        deal.Items,
+		Summary:      deal.Summary,
+		SourceRef:    "mail:" + msg.ID,
+	}, time.Now())
+	if err != nil {
+		s.logger.Warn("mail→deal: 거래 페이지 저장 실패", "id", msg.ID, "counterparty", deal.Counterparty, "error", err)
+		return
+	}
+	s.logger.Info("mail→deal: 거래 페이지 갱신", "id", msg.ID, "path", relPath, "created", created)
 }

@@ -18,6 +18,7 @@ var Categories = []string{
 	"프로젝트",
 	"인물",
 	"운영시스템",
+	"거래",
 }
 
 // ValidateCategory returns true if cat is one of the allowed wiki categories.

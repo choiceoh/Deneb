@@ -145,6 +145,14 @@ type EmailFact struct {
 type AnalysisResult struct {
 	Text            string
 	RelatedProjects []string
+	// ActionItems are the operator's follow-up actions extracted from the
+	// analysis (best-effort; nil when local AI is unavailable or nothing
+	// qualifies). The server sink turns high-priority ones into to-dos.
+	ActionItems []ActionItem
+	// Deal is the structured business-document extraction (견적서/계약서/
+	// 세금계산서 등), or nil when the mail carries no recognizable deal
+	// document. The server sink files it onto a 거래 wiki page.
+	Deal *DealInfo
 }
 
 // ProjectCandidate is one registered project wiki page offered to the
@@ -659,6 +667,12 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	// it (the facts block would otherwise bury it).
 	clean, projects := parseRelatedProjects(analysis, candidates)
 
+	// Extract the operator's follow-up actions from the analysis prose — before
+	// the facts block is appended below, so the extractor sees only the analysis
+	// and not the "위키 갱신 제안" addendum. Best-effort; the server sink turns
+	// high-priority items into to-dos.
+	actions := extractActionItems(ctx, deps, clean)
+
 	// Local-AI fact extraction for wiki write-back. The system prompt's
 	// "분석 → 위키 갱신" section asks the agent to record new facts after
 	// analyzing; this attaches a structured proposal block so the agent has
@@ -668,7 +682,16 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	if factsBlock := extractFactsForWiki(ctx, deps, clean); factsBlock != "" {
 		clean = clean + "\n\n" + factsBlock
 	}
-	return AnalysisResult{Text: clean, RelatedProjects: projects}, nil
+
+	// Deal-document extraction is gated on attachments: business documents
+	// (견적서/계약서/세금계산서) arrive as files, so this avoids an extra local
+	// call on every plain mail and keeps extraction precise.
+	var deal *DealInfo
+	if len(msg.Attachments) > 0 {
+		deal = extractDealInfo(ctx, deps, clean)
+	}
+
+	return AnalysisResult{Text: clean, RelatedProjects: projects, ActionItems: actions, Deal: deal}, nil
 }
 
 // --- related-project selection ---
@@ -782,6 +805,55 @@ JSON 응답 형식:
 ## 분석 결과
 %s`
 
+const actionExtractorSystem = `당신은 이메일 분석에서 "받는 사람이 직접 해야 할 후속 행동"만 뽑는 추출기입니다.
+단순 정보·참고 사항·상대방이 할 일은 제외하고, 운영자 본인의 실행 항목만 추출합니다.
+반드시 JSON으로만 응답하세요.`
+
+const actionExtractorPrompt = `다음 이메일 분석에서 운영자가 직접 처리해야 할 후속 행동을 추출해주세요.
+
+JSON 응답 형식:
+{
+  "actions": [
+    {"title": "할 일 (명령형 한 문장)", "dueHint": "기한 단서 (예: 내일, 3일 후, 6월 15일 / 없으면 빈 문자열)", "priority": "high|medium|low"}
+  ]
+}
+
+추출 기준:
+- 운영자 본인이 실행할 구체적 행동만 (회신·검토·결재·송금·일정확정·자료준비 등)
+- 단순 안내·상대 담당 업무·이미 끝난 일은 제외
+- priority: 마감 임박·금액 큼·계약/결재 관련은 high
+- 최대 5개
+- 해당 없으면 actions 배열을 비워서 응답
+
+## 분석 결과
+%s`
+
+const dealExtractorSystem = `당신은 업무 문서(견적서·계약서·세금계산서·거래명세서·발주서 등)에서 거래 정보를 뽑는 추출기입니다.
+첨부 문서가 거래 문서일 때만 필드를 채우고, 일반 메일·뉴스레터·안내문이면 isDeal=false 로 응답합니다.
+반드시 JSON으로만 응답하세요.`
+
+const dealExtractorPrompt = `다음 이메일 분석(첨부 문서 내용 포함)에서 거래 정보를 추출해주세요.
+
+JSON 응답 형식:
+{
+  "isDeal": true,
+  "counterparty": "거래처/회사명",
+  "docType": "견적서|계약서|세금계산서|거래명세서|발주서|기타",
+  "amount": "총 금액 (예: 5,000,000원). 없으면 빈 문자열",
+  "date": "문서 일자 (YYYY-MM-DD 또는 원문 그대로). 없으면 빈 문자열",
+  "dueDate": "납기·결제 기한 (YYYY-MM-DD). 없으면 빈 문자열",
+  "items": ["주요 품목/항목"],
+  "summary": "거래 한 줄 요약"
+}
+
+추출 기준:
+- 거래 문서가 아니면 {"isDeal": false} 만 응답
+- counterparty(거래처명)를 못 찾으면 isDeal=false
+- 금액·일자·기한은 원문에 있는 값만, 추측 금지
+
+## 분석 결과
+%s`
+
 // WikiFactProposal is a single fact suggested for wiki write-back.
 type WikiFactProposal struct {
 	Entity string `json:"entity"`
@@ -793,6 +865,47 @@ type WikiFactProposal struct {
 // requires an object root; this carries the fact array.
 type wikiFactsBundle struct {
 	Facts []WikiFactProposal `json:"facts"`
+}
+
+// ActionItem is a single follow-up the operator should take, extracted from a
+// mail analysis. Priority is "high"|"medium"|"low"; DueHint is a free-text
+// Korean/relative due cue ("내일", "3일 후", "6월 15일") the server resolves to
+// a date (empty when the mail gives no deadline).
+type ActionItem struct {
+	Title    string `json:"title"`
+	DueHint  string `json:"dueHint"`
+	Priority string `json:"priority"`
+}
+
+// actionItemsBundle is the JSON-mode response wrapper (object root required).
+type actionItemsBundle struct {
+	Actions []ActionItem `json:"actions"`
+}
+
+// DealInfo is a structured business-document extraction (견적서/계약서/세금계산서
+// 등) from a mail attachment. All fields except Counterparty are optional.
+type DealInfo struct {
+	Counterparty string
+	DocType      string
+	Amount       string
+	Date         string
+	DueDate      string
+	Items        []string
+	Summary      string
+}
+
+// dealExtract is the local-LLM JSON-mode response. IsDeal lets the model say
+// "this attachment is not a business document" without us guessing from empty
+// fields.
+type dealExtract struct {
+	IsDeal       bool     `json:"isDeal"`
+	Counterparty string   `json:"counterparty"`
+	DocType      string   `json:"docType"`
+	Amount       string   `json:"amount"`
+	Date         string   `json:"date"`
+	DueDate      string   `json:"dueDate"`
+	Items        []string `json:"items"`
+	Summary      string   `json:"summary"`
 }
 
 // extractFactsForWiki runs a local-AI extractor over the final analysis text
@@ -846,6 +959,115 @@ func renderFactsBlock(facts []WikiFactProposal) string {
 		return ""
 	}
 	return strings.TrimSpace(sb.String())
+}
+
+// extractActionItems runs the local-AI extractor over the final analysis text
+// and returns the operator's follow-up actions. Best-effort: nil when local AI
+// is unavailable, extraction fails, or nothing qualifies. Mirrors
+// extractFactsForWiki — same local model, same stage-1 budget.
+func extractActionItems(ctx context.Context, deps PipelineDeps, analysisText string) []ActionItem {
+	if deps.LocalClient == nil || deps.LocalModel == "" {
+		return nil
+	}
+	if strings.TrimSpace(analysisText) == "" {
+		return nil
+	}
+
+	extractCtx, cancel := context.WithTimeout(ctx, stage1Timeout)
+	defer cancel()
+
+	prompt := fmt.Sprintf(actionExtractorPrompt, analysisText)
+	bundle, err := callLocalLLMJSON[actionItemsBundle](extractCtx, deps.LocalClient, deps.LocalModel, actionExtractorSystem, prompt, stage1MaxTokens)
+	if err != nil {
+		return nil
+	}
+	return sanitizeActionItems(bundle.Actions)
+}
+
+// sanitizeActionItems drops empty-title items, trims fields, normalizes
+// priority to high|medium|low, and caps the list so a runaway extraction can't
+// flood the to-do list.
+func sanitizeActionItems(in []ActionItem) []ActionItem {
+	const maxActions = 5
+	out := make([]ActionItem, 0, len(in))
+	for _, a := range in {
+		title := strings.TrimSpace(a.Title)
+		if title == "" {
+			continue
+		}
+		out = append(out, ActionItem{
+			Title:    title,
+			DueHint:  strings.TrimSpace(a.DueHint),
+			Priority: normalizeActionPriority(a.Priority),
+		})
+		if len(out) >= maxActions {
+			break
+		}
+	}
+	return out
+}
+
+// normalizeActionPriority maps assorted model outputs onto high|medium|low,
+// defaulting to medium so an unrecognized label never silently becomes a
+// high-priority auto-to-do.
+func normalizeActionPriority(p string) string {
+	switch strings.ToLower(strings.TrimSpace(p)) {
+	case "high", "urgent", "높음", "긴급":
+		return "high"
+	case "low", "낮음":
+		return "low"
+	default:
+		return "medium"
+	}
+}
+
+// extractDealInfo runs the local-AI extractor over the analysis text (which
+// includes attachment OCR) and returns structured deal data, or nil when the
+// mail carries no recognizable business document. Best-effort; mirrors
+// extractFactsForWiki — same local model, same stage-1 budget. Callers gate
+// this on attachment presence so it doesn't fire on every plain mail.
+func extractDealInfo(ctx context.Context, deps PipelineDeps, analysisText string) *DealInfo {
+	if deps.LocalClient == nil || deps.LocalModel == "" {
+		return nil
+	}
+	if strings.TrimSpace(analysisText) == "" {
+		return nil
+	}
+
+	extractCtx, cancel := context.WithTimeout(ctx, stage1Timeout)
+	defer cancel()
+
+	prompt := fmt.Sprintf(dealExtractorPrompt, analysisText)
+	ext, err := callLocalLLMJSON[dealExtract](extractCtx, deps.LocalClient, deps.LocalModel, dealExtractorSystem, prompt, stage1MaxTokens)
+	if err != nil {
+		return nil
+	}
+	return dealInfoFromExtract(ext)
+}
+
+// dealInfoFromExtract is the pure post-processing of a deal extraction: returns
+// nil when it isn't a deal or has no counterparty, otherwise trims fields and
+// drops empty items. Split out so it can be tested without a local LLM.
+func dealInfoFromExtract(ext dealExtract) *DealInfo {
+	counterparty := strings.TrimSpace(ext.Counterparty)
+	if !ext.IsDeal || counterparty == "" {
+		return nil
+	}
+	items := make([]string, 0, len(ext.Items))
+	for _, it := range ext.Items {
+		if t := strings.TrimSpace(it); t != "" {
+			items = append(items, t)
+		}
+	}
+	return &DealInfo{
+		Counterparty: counterparty,
+		DocType:      strings.TrimSpace(ext.DocType),
+		Amount:       strings.TrimSpace(ext.Amount),
+		Date:         strings.TrimSpace(ext.Date),
+		DueDate:      strings.TrimSpace(ext.DueDate),
+		Items:        items,
+		Summary:      strings.TrimSpace(ext.Summary),
+	}
 }
 
 // --- helpers ---
