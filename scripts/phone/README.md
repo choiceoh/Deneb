@@ -159,3 +159,31 @@ chmod +x ~/bin/deneb-flush
 termux-job-scheduler --script ~/bin/deneb-flush --period-ms 300000
 ```
 큐 위치는 `DENEB_QUEUE_DIR` 로 바꿀 수 있다(기본 `~/.deneb-queue`).
+
+## 통합 기동 — `deneb-supervisor` (권장)
+
+`deneb-tunnel`·`deneb-context-watch`·큐 배수(`deneb-emit --flush`)를 부팅 스크립트에
+따로 나열하는 대신, `deneb-supervisor` 하나가 **`~/bin` 에 설치된 것만 골라 기동하고
+죽으면 재시작**한다(빠른 재크래시는 백오프). 큐 배수도 주기적으로 대신 돌려준다 —
+그래서 위의 개별 boot 스크립트·`termux-job-scheduler` 래퍼가 모두 이 하나로 합쳐진다.
+
+```bash
+cp deneb-supervisor ~/bin/ && chmod +x ~/bin/deneb-supervisor
+deneb-supervisor status        # 무엇이 떠 있는지
+deneb-supervisor start | stop | restart
+```
+
+Termux:Boot 은 이 하나만 부르면 된다(앞의 개별 `~/.termux/boot/deneb-tunnel` 을 대체):
+```bash
+cat > ~/.termux/boot/deneb <<'EOF'
+#!/data/data/com.termux/files/usr/bin/bash
+termux-wake-lock
+exec ~/bin/deneb-supervisor start
+EOF
+chmod +x ~/.termux/boot/deneb
+```
+
+- 관리 대상은 설치된 것만 — `deneb-context-watch` 가 없으면 건너뛰고, `deneb-emit` 이
+  `--flush` 를 지원할 때만 큐를 배수한다(점진 도입 안전).
+- 튜닝: `DENEB_FLUSH_PERIOD`(기본 300s), `DENEB_SUP_INTERVAL`(감시 주기 30s),
+  `DENEB_BIN_DIR`(기본 `~/bin`).
