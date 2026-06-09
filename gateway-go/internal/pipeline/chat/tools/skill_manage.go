@@ -28,7 +28,7 @@ type SkillManageInvalidateFn func()
 // (list/create/patch/delete/read/list_files/write_file/remove_file).
 func ToolSkills(getSnapshot SkillsSnapshotProvider, workspaceDir string, invalidate SkillManageInvalidateFn) ToolFunc {
 	listFn := toolSkillsList(getSnapshot)
-	manageFn := toolSkillManage(workspaceDir, invalidate)
+	manageFn := toolSkillManage(getSnapshot, workspaceDir, invalidate)
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action string `json:"action"`
@@ -57,7 +57,7 @@ func ToolSkills(getSnapshot SkillsSnapshotProvider, workspaceDir string, invalid
 // but the system prompt is NOT rebuilt until the next session starts.
 // Pass `apply: true` to opt into immediate invalidation when the agent
 // truly needs the change visible in the current turn (rare).
-func toolSkillManage(workspaceDir string, invalidate SkillManageInvalidateFn) ToolFunc {
+func toolSkillManage(getSnapshot SkillsSnapshotProvider, workspaceDir string, invalidate SkillManageInvalidateFn) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action      string `json:"action"`
@@ -85,21 +85,32 @@ func toolSkillManage(workspaceDir string, invalidate SkillManageInvalidateFn) To
 			result string
 			err    error
 		)
+		// create writes a brand-new skill under workspaceDir. Every other action
+		// targets an existing skill, whose real path comes from the catalog
+		// snapshot (which indexes all source dirs / layouts) via resolveSkillPath
+		// — workspaceDir alone misses skills in the managed dir or genesis output.
 		switch p.Action {
 		case "create":
 			result, err = skillCreate(workspaceDir, p.Name, p.Category, p.Content, effectiveInvalidate)
-		case "patch":
-			result, err = skillPatch(workspaceDir, p.Name, p.OldText, p.NewText, effectiveInvalidate)
-		case "delete":
-			result, err = skillDelete(workspaceDir, p.Name, effectiveInvalidate)
-		case "read":
-			return skillRead(workspaceDir, p.Name, p.FilePath)
-		case "list_files":
-			return skillListFiles(workspaceDir, p.Name)
-		case "write_file":
-			result, err = skillWriteFile(workspaceDir, p.Name, p.FilePath, p.FileContent, effectiveInvalidate)
-		case "remove_file":
-			result, err = skillRemoveFile(workspaceDir, p.Name, p.FilePath, effectiveInvalidate)
+		case "patch", "delete", "read", "list_files", "write_file", "remove_file":
+			skillPath, rerr := resolveSkillPath(getSnapshot, workspaceDir, p.Name)
+			if rerr != nil {
+				return "", rerr
+			}
+			switch p.Action {
+			case "patch":
+				result, err = skillPatch(skillPath, p.Name, p.OldText, p.NewText, effectiveInvalidate)
+			case "delete":
+				result, err = skillDelete(skillPath, p.Name, effectiveInvalidate)
+			case "read":
+				return skillRead(skillPath, p.FilePath)
+			case "list_files":
+				return skillListFiles(skillPath)
+			case "write_file":
+				result, err = skillWriteFile(skillPath, p.Name, p.FilePath, p.FileContent, effectiveInvalidate)
+			case "remove_file":
+				result, err = skillRemoveFile(skillPath, p.Name, p.FilePath, effectiveInvalidate)
+			}
 		default:
 			return "", fmt.Errorf("unknown action %q: use create, patch, delete, read, list_files, write_file, or remove_file", p.Action)
 		}
@@ -175,17 +186,12 @@ func skillCreate(workspaceDir, name, category, content string, invalidate SkillM
 	), nil
 }
 
-func skillPatch(workspaceDir, name, oldText, newText string, invalidate SkillManageInvalidateFn) (string, error) {
+func skillPatch(skillPath, name, oldText, newText string, invalidate SkillManageInvalidateFn) (string, error) {
 	if oldText == "" {
 		return "", fmt.Errorf("old_text is required for patch")
 	}
 	if newText == "" {
 		return "", fmt.Errorf("new_text is required for patch")
-	}
-
-	skillPath, err := findSkillPath(workspaceDir, name)
-	if err != nil {
-		return "", err
 	}
 
 	data, err := os.ReadFile(skillPath)
@@ -228,11 +234,7 @@ func skillPatch(workspaceDir, name, oldText, newText string, invalidate SkillMan
 	return fmt.Sprintf("Patched skill %q", name), nil
 }
 
-func skillDelete(workspaceDir, name string, invalidate SkillManageInvalidateFn) (string, error) {
-	skillPath, err := findSkillPath(workspaceDir, name)
-	if err != nil {
-		return "", err
-	}
+func skillDelete(skillPath, name string, invalidate SkillManageInvalidateFn) (string, error) {
 	skillDir := filepath.Dir(skillPath)
 
 	if err := os.RemoveAll(skillDir); err != nil {
@@ -243,12 +245,7 @@ func skillDelete(workspaceDir, name string, invalidate SkillManageInvalidateFn) 
 	return fmt.Sprintf("Deleted skill %q", name), nil
 }
 
-func skillRead(workspaceDir, name, filePath string) (string, error) {
-	baseSkillPath, err := findSkillPath(workspaceDir, name)
-	if err != nil {
-		return "", err
-	}
-
+func skillRead(baseSkillPath, filePath string) (string, error) {
 	var targetPath string
 	if filePath != "" {
 		// Read auxiliary file within skill directory.
@@ -269,15 +266,11 @@ func skillRead(workspaceDir, name, filePath string) (string, error) {
 	return string(data), nil
 }
 
-func skillListFiles(workspaceDir, name string) (string, error) {
-	skillPath, err := findSkillPath(workspaceDir, name)
-	if err != nil {
-		return "", err
-	}
+func skillListFiles(skillPath string) (string, error) {
 	skillDir := filepath.Dir(skillPath)
 
 	var files []string
-	err = filepath.WalkDir(skillDir, func(path string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(skillDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil //nolint:nilerr // skip inaccessible entries in walk
 		}
@@ -301,13 +294,9 @@ func skillListFiles(workspaceDir, name string) (string, error) {
 	return strings.Join(files, "\n"), nil
 }
 
-func skillWriteFile(workspaceDir, name, filePath, fileContent string, invalidate SkillManageInvalidateFn) (string, error) {
+func skillWriteFile(baseSkillPath, name, filePath, fileContent string, invalidate SkillManageInvalidateFn) (string, error) {
 	if filePath == "" {
 		return "", fmt.Errorf("file_path is required for write_file")
-	}
-	baseSkillPath, err := findSkillPath(workspaceDir, name)
-	if err != nil {
-		return "", err
 	}
 	skillDir := filepath.Dir(baseSkillPath)
 	rel, err := cleanSupportFilePath(filePath)
@@ -335,13 +324,9 @@ func skillWriteFile(workspaceDir, name, filePath, fileContent string, invalidate
 	), nil
 }
 
-func skillRemoveFile(workspaceDir, name, filePath string, invalidate SkillManageInvalidateFn) (string, error) {
+func skillRemoveFile(baseSkillPath, name, filePath string, invalidate SkillManageInvalidateFn) (string, error) {
 	if filePath == "" {
 		return "", fmt.Errorf("file_path is required for remove_file")
-	}
-	baseSkillPath, err := findSkillPath(workspaceDir, name)
-	if err != nil {
-		return "", err
 	}
 	skillDir := filepath.Dir(baseSkillPath)
 	rel, err := cleanSupportFilePath(filePath)
@@ -396,6 +381,54 @@ func cleanSupportFilePath(filePath string) (string, error) {
 		return "", fmt.Errorf("support files must live under references/, templates/, scripts/, or assets/")
 	}
 	return clean, nil
+}
+
+// resolveSkillPath returns the SKILL.md path for an EXISTING skill. The catalog
+// snapshot is the source of truth: it indexes skills from every source dir
+// (managed ~/.deneb/skills, genesis output, the workspace dir, …) and records
+// each skill's real FilePath, so this reaches skills a <workspaceDir>/skills
+// walk alone misses — the root cause of catalog-visible-but-unreadable skills.
+// Falls back to findSkillPath for a skill just created this turn that isn't
+// re-indexed yet (and to keep tests hermetic when no snapshot is supplied).
+func resolveSkillPath(getSnapshot SkillsSnapshotProvider, workspaceDir, name string) (string, error) {
+	if getSnapshot != nil {
+		if snap := getSnapshot(); snap != nil {
+			if fp := skillFilePathFromSnapshot(snap, name); fp != "" {
+				if expanded := expandSkillHome(fp); skillFileExists(expanded) {
+					return expanded, nil
+				}
+			}
+		}
+	}
+	return findSkillPath(workspaceDir, name)
+}
+
+// skillFilePathFromSnapshot looks up a skill's real FilePath in the catalog
+// snapshot by (sanitized) name. Returns "" if the snapshot doesn't list it.
+func skillFilePathFromSnapshot(snap *skills.FullSkillSnapshot, name string) string {
+	if snap == nil {
+		return ""
+	}
+	want := sanitizeSkillName(name)
+	for _, list := range [][]skills.PromptSkill{snap.ResolvedSkills, snap.DiscoverableSkills} {
+		for _, s := range list {
+			if sanitizeSkillName(s.Name) == want {
+				return s.FilePath
+			}
+		}
+	}
+	return ""
+}
+
+// expandSkillHome restores a "~/"-compacted FilePath (CompactSkillPaths shortens
+// home-relative paths for the prompt) back to an absolute path.
+func expandSkillHome(p string) string {
+	if strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			return filepath.Join(home, p[2:])
+		}
+	}
+	return p
 }
 
 // skillFileExists reports whether path is an existing regular file. It rejects
