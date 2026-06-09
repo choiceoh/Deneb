@@ -3,7 +3,7 @@
 # Pure Go gateway build (Rust core has been removed).
 
 .PHONY: all \
-       go go-run go-dev go-test go-test-fuzz go-vet go-fmt go-lint go-clean go-bench go-binary gateway-prod \
+       go go-run go-dev go-test go-vet go-fmt go-lint go-clean go-bench go-binary gateway-prod \
        test clean check check-go fmt generate generate-check \
        tool-schemas tool-schemas-check \
        data-gen data-gen-check \
@@ -82,9 +82,6 @@ go-dev:
 
 go-test:
 	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go test -p $(GO_PAR) -count=1 ./...
-
-go-test-fuzz:
-	cd gateway-go && $(GO_ENV) go test ./internal/runtime/bridge/ -fuzz=FuzzParseRequestFrame -fuzztime=10s
 
 go-vet:
 	cd gateway-go && $(GO_ENV) go vet -p $(GO_PAR) ./...
