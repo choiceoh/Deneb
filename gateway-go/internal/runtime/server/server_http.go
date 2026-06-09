@@ -114,6 +114,10 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		health["self_evolution"] = se
 	}
 
+	if s.fleet != nil {
+		health["fleet"] = s.fleet.HealthReport()
+	}
+
 	s.writeJSON(w, http.StatusOK, health)
 }
 

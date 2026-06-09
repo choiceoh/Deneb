@@ -24,6 +24,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/middleware"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/sparkfleet"
 	arSession "github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
@@ -121,6 +122,11 @@ type Server struct {
 	version    string
 	logColor   bool // true when ANSI color output is enabled
 	logger     *slog.Logger
+
+	// fleet reads the SparkFleet control plane (GET /api/services) to surface
+	// which GPU backends (OCR/ASR/embeddings/vLLM) are actually up instead of
+	// degrading silently. nil unless DENEB_SPARKFLEET_URL is set.
+	fleet *sparkfleet.Client
 
 	// insights aggregates session/usage data for /insights reports.
 	// Created during registerEarlyMethods; nil until then.
@@ -384,6 +390,11 @@ func New(addr string, opts ...Option) (*Server, error) {
 	// auto-resume subsystem can recover runs that a gateway crash or
 	// restart interrupted. See auto_resume.go for the resume policy.
 	s.runMarkerUnsub = s.initRunMarkerLifecycle()
+
+	// SparkFleet control-plane discovery (opt-in via DENEB_SPARKFLEET_URL): surface
+	// which GPU backends are actually up instead of degrading silently. New returns
+	// nil when the env var is unset, so this stays a no-op unless configured.
+	s.fleet = sparkfleet.New(os.Getenv("DENEB_SPARKFLEET_URL"), s.logger)
 
 	return s, nil
 }
