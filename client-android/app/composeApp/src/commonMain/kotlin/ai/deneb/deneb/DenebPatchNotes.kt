@@ -21,6 +21,32 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "설정 '모델' 탭을 제공자별로 묶어 정리하고, 메인·경량·폴백 역할이 어느 모델에 배정됐는지 요약으로 표시",
+            "모델 역할이 헷갈릴 땐 '?'를 눌러 각 역할이 무슨 일을 하는지 설명 보기",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
+            "설정에 '관찰' 탭 추가 — 게이트웨이가 스스로 무엇을 했는지(실행 횟수, 도구별 사용량·오류율)와 최근 경고·오류 로그를 읽기 전용으로 한눈에",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
+            "데스크톱에서 메일 목록과 본문을 좌우로 나란히 보기 — 목록에서 고르면 오른쪽에 바로 펼쳐짐",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
+            "데스크톱에 고정 좌측 사이드바 — 넓은 화면에서 메뉴를 항상 띄워두고 더 빠르게 이동",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
+            "설정에 '스킬' 탭 추가 — 에이전트가 쓸 수 있는 스킬을 이름·설명·분류와 함께 확인(직접 부를 수 있는 스킬은 앞에 / 표시), 읽기 전용",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "할 일(To-do) 추가 — 마감일을 정하거나 날짜 없이도 등록, 체크로 완료 처리",
             "마감일이 있는 할 일은 달력 그 날짜에 함께 표시 (일정 아래 '할 일' 묶음)",
             "달력 상단 '할 일' 버튼으로 전체 목록 열기 — 진행 중·완료가 나뉘고 지난 마감은 빨갛게 강조",
