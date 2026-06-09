@@ -75,6 +75,33 @@ func (w *Writer) Read(opts ReadOpts) ReadResult {
 	}
 }
 
+// ReadRun finds every entry for runID across all session logs and returns them
+// in chronological order along with the sessionKey they belong to. Unlike Read
+// (which needs the sessionKey up front) this is the entry point for the observe
+// plane, where a caller often knows only the runId. It glob-scans every *.jsonl
+// like Aggregate — cheap on the single-user host where a run lands in exactly
+// one session file. nil-safe: a nil Writer or empty runID yields (nil, "").
+func (w *Writer) ReadRun(runID string) (entries []LogEntry, session string) {
+	if w == nil || runID == "" {
+		return nil, ""
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	paths, _ := filepath.Glob(filepath.Join(w.baseDir, "*.jsonl"))
+	for _, path := range paths {
+		for _, e := range readAllEntries(path) {
+			if e.RunID == runID {
+				entries = append(entries, e)
+				if session == "" {
+					session = e.Session
+				}
+			}
+		}
+	}
+	return entries, session
+}
+
 // ToolStat aggregates one tool's usage across every recorded run.
 type ToolStat struct {
 	Name    string `json:"name"`
