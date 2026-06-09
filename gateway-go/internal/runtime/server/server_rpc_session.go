@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/appsettings"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
@@ -497,5 +498,17 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		resolveBriefingCalendarClient,
 		s.logger,
 	)
+	if s.calendarBriefing != nil {
+		// Best-effort context enrichment: per-attendee mail freshness + wiki
+		// notes, topic-related recent mail, and a past wiki record. Backed by
+		// gmail.DefaultClient and the late-bound wiki store; both degrade to
+		// the base D-15 reminder when unavailable. wikiStore is read at call
+		// time (set during the session phase) so construction order can't
+		// capture a nil store.
+		s.calendarBriefing.enricher = newBriefingEnricher(
+			func() *wiki.Store { return s.wikiStore },
+			s.logger,
+		)
+	}
 	s.calendarBriefing.start(s.ShutdownCtx())
 }
