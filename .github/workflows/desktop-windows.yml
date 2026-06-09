@@ -36,6 +36,9 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: false
+          # Full history so the build can derive a monotonic versionCode from the commit
+          # count (git rev-list --count HEAD). A shallow clone would report 1.
+          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -65,7 +68,15 @@ jobs:
 
       - name: Build release MSI
         shell: pwsh
-        run: ./gradlew :composeApp:packageReleaseMsi --no-daemon --stacktrace
+        # The MSI ProductVersion must strictly increase or Windows Installer skips the
+        # upgrade (every build was 0.0.<floor> before, so new installers were no-ops). The
+        # APK's serve-dir auto-code is unreachable from this Windows runner, so derive a
+        # monotonic code from the git commit count and feed it to packageVersion + the
+        # in-app DENEB_VERSION_CODE.
+        run: |
+          $code = "$(git rev-list --count HEAD)".Trim()
+          Write-Host "denebVersionCode=$code (git commit count) -> MSI 0.0.$code"
+          ./gradlew :composeApp:packageReleaseMsi "-PdenebVersionCode=$code" --no-daemon --stacktrace
 
       - name: Locate MSI
         id: msi
