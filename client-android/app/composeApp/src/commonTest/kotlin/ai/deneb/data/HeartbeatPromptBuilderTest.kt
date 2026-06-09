@@ -35,7 +35,6 @@ class HeartbeatPromptBuilderTest {
         emailAccounts: List<EmailAccountSummary> = emptyList(),
         pendingEmails: List<HeartbeatPendingEmail> = emptyList(),
         pendingSms: List<HeartbeatPendingSms> = emptyList(),
-        pendingNotifications: List<HeartbeatPendingNotification> = emptyList(),
         promotionCandidates: List<HeartbeatPromotionCandidate> = emptyList(),
     ) = buildHeartbeatPrompt(
         customOrDefaultPrompt = customOrDefaultPrompt,
@@ -45,7 +44,6 @@ class HeartbeatPromptBuilderTest {
         emailAccounts = emailAccounts,
         pendingEmails = pendingEmails,
         pendingSms = pendingSms,
-        pendingNotifications = pendingNotifications,
         promotionCandidates = promotionCandidates,
     )
 

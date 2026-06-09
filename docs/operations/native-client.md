@@ -10,9 +10,9 @@ read_when:
 # Native Android Client
 
 Deneb's user surface is the native Android client. The app owns daily chat,
-share-sheet capture from any app, the home-screen widget, notification
-ingestion, and instant proactive push, while the agent, tools, memory, and
-always-on work stay on the gateway.
+share-sheet capture from any app, the home-screen widget, and instant
+proactive push, while the agent, tools, memory, and always-on work stay on the
+gateway.
 
 ## What It Is
 
@@ -128,10 +128,9 @@ Below the menu sits a small **capture** footer covered in
 The native client is where capture lives — share an image, a recording, or text
 into Deneb and the gateway triages it. The drawer's capture footer offers
 `image ocr`, `transcribe`, and `voice`; the Android share sheet routes shared
-content by type; a `deneb://voice` home-icon shortcut starts hands-free voice
-capture; and a notification-capture tab can ingest other apps' notifications.
-All of these — what each does, which sidecar runs, and the per-app allowlist —
-are documented in [Capture](/operations/capture).
+content by type; and a `deneb://voice` home-icon shortcut starts hands-free
+voice capture. What each does and which sidecar runs is documented in
+[Capture](/operations/capture).
 
 ## Home-Screen Widget
 
@@ -144,7 +143,7 @@ serves.
 
 ## Settings
 
-The 설정 hub has five tabs:
+The 설정 hub has these tabs:
 
 - **게이트웨이** — the gateway URL and client token, a live gateway status card
   (version, native API version, current model, capabilities), a link to
@@ -161,8 +160,6 @@ The 설정 hub has five tabs:
   (schedule, instruction, delivery target, state; enable, run now, delete).
 - **토픽문서** — the per-topic injected documents, viewable and editable, with a
   새 문서 (new document) action.
-- **알림** — the notification-capture tab and its per-app allowlist (see
-  [Capture](/operations/capture)).
 
 ## Instant Proactive Push
 

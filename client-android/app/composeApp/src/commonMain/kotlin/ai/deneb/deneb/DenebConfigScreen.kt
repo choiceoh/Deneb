@@ -70,12 +70,9 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupPositionProvider
 import ai.deneb.data.AppSettings
-import ai.deneb.data.NotificationRecord
-import ai.deneb.data.NotificationStore
 import ai.deneb.deneb.generated.SkillRow
 import ai.deneb.contacts.ContactsReader
 import ai.deneb.tools.ContactsPermissionController
-import ai.deneb.tools.NotificationListenerController
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.settings.SettingsCard
@@ -170,7 +167,6 @@ fun DenebConfigScreen(
                     ConfigTab.SKILLS -> denebClient?.let { SkillsTab(it) }
                     ConfigTab.CRON -> denebClient?.let { CronTab(it, onOpenCron) }
                     ConfigTab.TOPIC_DOCS -> denebClient?.let { TopicDocsTab(it, onOpenTopicDoc) }
-                    ConfigTab.NOTIFICATIONS -> denebClient?.let { NotificationsTab(it) }
                     ConfigTab.OBSERVE -> denebClient?.let { ObserveTab(it) }
                 }
             }
@@ -998,216 +994,6 @@ private fun skillMetaLine(skill: SkillRow): String = listOfNotNull(
     skillSourceLabel(skill.source).takeIf { it.isNotBlank() },
 ).joinToString(" · ")
 
-// Android-native: list other apps' notifications the listener captured and tap
-// one to send it into the Deneb chat for triage. Cross-platform-safe — non-FOSS
-// / non-Android builds report unsupported and show a hint.
-@Composable
-private fun NotificationsTab(client: DenebGatewayClient) {
-    val controller = koinInject<NotificationListenerController>()
-    val store = koinInject<NotificationStore>()
-    val appSettings = koinInject<AppSettings>()
-    val scope = rememberCoroutineScope()
-    val haptics = rememberHaptics()
-    var access by remember { mutableStateOf(controller.isAccessGranted()) }
-    var records by remember { mutableStateOf<List<NotificationRecord>>(emptyList()) }
-    var sentId by remember { mutableStateOf<String?>(null) }
-    // Capture allowlist: empty ⇒ all apps (default). Toggling a chip narrows it.
-    var allowlist by remember { mutableStateOf(appSettings.getNotificationCaptureAllowlist()) }
-    // Auto-inject: on ⇒ a captured notification triages itself immediately;
-    // off ⇒ it only queues until the user taps it below (manual injection).
-    var autoInject by remember { mutableStateOf(appSettings.isNotificationAutoInjectEnabled()) }
-    LaunchedEffect(access) {
-        if (access) records = store.getStore().sortedByDescending { it.postedAtEpochMs }
-    }
-    // Apps seen in capture history, for the picker (packageName → label).
-    val knownApps = remember(records) {
-        records.associate { it.packageName to it.appLabel.ifBlank { it.packageName } }
-            .toList().sortedBy { it.second.lowercase() }
-    }
-    when {
-        !controller.isSupported() -> EmptyTab("이 빌드는 알림 캡처를 지원하지 않습니다.")
-        !access -> Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                "타 앱 알림(카톡·메일·캘린더 등)을 Deneb가 읽으려면 '알림 접근' 권한이 필요합니다. 네이티브 앱에서만 가능한 기기 통합 기능입니다.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(onClick = { controller.openAccessSettings() }, modifier = Modifier.fillMaxWidth()) { Text("알림 접근 권한 열기") }
-            OutlinedButton(onClick = { access = controller.isAccessGranted() }, modifier = Modifier.fillMaxWidth()) { Text("권한 부여 후 새로고침") }
-        }
-        else -> Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // Auto-inject toggle: shown whenever access is granted, even before
-            // any notification is captured.
-            SettingsCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "도착 즉시 주입",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            if (autoInject) {
-                                "캡처된 알림을 도착 즉시 에이전트에게 보내 트리아지합니다."
-                            } else {
-                                "캡처만 하고, 아래 목록에서 직접 탭할 때만 채팅으로 보냅니다."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(
-                        checked = autoInject,
-                        onCheckedChange = {
-                            haptics.toggle(it)
-                            autoInject = it
-                            appSettings.setNotificationAutoInjectEnabled(it)
-                        },
-                    )
-                }
-            }
-            Spacer(Modifier.height(4.dp))
-            if (records.isEmpty()) {
-                Text(
-                    "캡처된 알림이 없습니다.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            // Capture-allowlist picker: choose which apps Deneb captures. Empty
-            // = all apps. Listed apps are those seen in capture history.
-            if (knownApps.isNotEmpty()) {
-                SettingsCard {
-                    Text(
-                        "캡처할 앱",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        if (allowlist.isEmpty()) {
-                            "모든 앱의 알림을 받습니다. 아래에서 특정 앱만 고르면 그 앱만 받습니다."
-                        } else {
-                            "선택한 ${allowlist.size}개 앱의 알림만 받습니다."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    knownApps.forEach { (pkg, label) ->
-                        val on = allowlist.isEmpty() || pkg in allowlist
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .toggleable(
-                                    value = on,
-                                    role = Role.Checkbox,
-                                    onValueChange = {
-                                        haptics.toggle(it)
-                                        // Toggle: from "all" (empty) the first tap selects
-                                        // just this app; thereafter add/remove from the set.
-                                        val base = if (allowlist.isEmpty()) knownApps.map { it.first }.toSet() else allowlist
-                                        val next = if (pkg in base) base - pkg else base + pkg
-                                        // Selecting every known app collapses back to "all".
-                                        allowlist = if (next.size == knownApps.size) emptySet() else next
-                                        appSettings.setNotificationCaptureAllowlist(allowlist)
-                                    },
-                                )
-                                .padding(vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Checkbox(
-                                checked = on,
-                                onCheckedChange = null,
-                                modifier = Modifier.padding(end = 10.dp),
-                            )
-                            Text(
-                                label,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                    }
-                    if (allowlist.isNotEmpty()) {
-                        Spacer(Modifier.height(4.dp))
-                        TextButton(onClick = {
-                            allowlist = emptySet()
-                            appSettings.setNotificationCaptureAllowlist(allowlist)
-                        }) { Text("모든 앱 받기로 초기화") }
-                    }
-                }
-                Spacer(Modifier.height(4.dp))
-            }
-            Text(
-                "탭하면 Deneb 채팅으로 보내 트리아지합니다.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            records.forEach { rec ->
-                SettingsCard(
-                    onClick = {
-                        haptics.tap()
-                        scope.launch {
-                            // A captured BigPicture image rides the OCR capture
-                            // path; text-only notifications send as text. The
-                            // bytes live in the in-memory cache, so a record that
-                            // outlived them (process restart) falls back to text.
-                            val image = if (rec.hasImage) store.getImage(rec.id) else null
-                            val context = "📲 ${rec.appLabel} 알림 — ${rec.title}\n${rec.text}".trim()
-                            val dispatched = if (image != null) {
-                                // Forward the picture AND the notification's text
-                                // context (sender/title/body) so the OCR turn sees both.
-                                client.captureImage(image, "image/jpeg", caption = context)
-                            } else {
-                                client.ask(context, emptyList(), null)
-                                true
-                            }
-                            // Only mark "보냄" when it actually dispatched (image path
-                            // returns false when the gateway token is unset).
-                            if (dispatched) sentId = rec.id
-                        }
-                    },
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                rec.appLabel + if (rec.title.isNotBlank()) "  ·  ${rec.title}" else "",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            if (rec.text.isNotBlank()) {
-                                Text(
-                                    rec.text,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                        if (sentId == rec.id) {
-                            Text("✓ 보냄", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 @Composable
 private fun TopicDocsTab(client: DenebGatewayClient, onOpenTopicDoc: (String) -> Unit) {
     val scope = rememberCoroutineScope()
@@ -1383,7 +1169,6 @@ private enum class ConfigTab(val label: String) {
     SKILLS("스킬"),
     CRON("크론"),
     TOPIC_DOCS("토픽문서"),
-    NOTIFICATIONS("알림"),
     OBSERVE("관찰"),
 }
 

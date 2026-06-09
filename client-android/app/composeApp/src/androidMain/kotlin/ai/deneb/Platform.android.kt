@@ -14,7 +14,6 @@ import androidx.core.net.toUri
 import ai.deneb.data.AppSettings
 import ai.deneb.data.EmailStore
 import ai.deneb.data.MemoryStore
-import ai.deneb.data.NotificationStore
 import ai.deneb.data.SmsDraftStore
 import ai.deneb.data.SmsStore
 import ai.deneb.data.TaskStore
@@ -23,8 +22,6 @@ import ai.deneb.network.tools.ParameterSchema
 import ai.deneb.network.tools.Tool
 import ai.deneb.network.tools.ToolInfo
 import ai.deneb.network.tools.ToolSchema
-import ai.deneb.notifications.NotificationReader
-import ai.deneb.notifications.declaresNotificationListener
 import ai.deneb.sandbox.LinuxSandboxManager
 import ai.deneb.sandbox.SandboxState
 import ai.deneb.sms.SmsReader
@@ -39,7 +36,6 @@ import ai.deneb.tools.HeartbeatTools
 import ai.deneb.tools.NotificationHelper
 import ai.deneb.tools.NotificationPermissionController
 import ai.deneb.tools.NotificationResult
-import ai.deneb.tools.NotificationTools
 import ai.deneb.tools.OpenFileTool
 import ai.deneb.tools.ProcessManagerTool
 import ai.deneb.tools.SchedulingTools
@@ -97,17 +93,6 @@ actual val isSmsSupported: Boolean by lazy {
     try {
         val context: Context by inject(Context::class.java)
         context.declaresReadSms()
-    } catch (_: Throwable) {
-        false
-    }
-}
-
-// Same lazy pattern as `isSmsSupported`: probe the merged manifest for the listener
-// service. Foss flavor declares it, playStore does not.
-actual val isNotificationsSupported: Boolean by lazy {
-    try {
-        val context: Context by inject(Context::class.java)
-        context.declaresNotificationListener()
     } catch (_: Throwable) {
         false
     }
@@ -477,17 +462,6 @@ actual fun getAvailableTools(): List<Tool> {
             if (smsSender.hasPermission()) {
                 val smsDraftStore: SmsDraftStore by inject(SmsDraftStore::class.java)
                 addAll(SmsTools.getSmsSendTools(smsDraftStore, smsReaderForTools, smsSender))
-            }
-        }
-
-        // Notification tools: triple-gated. `isNotificationsSupported` is FOSS-only
-        // (listener service declared in merged manifest). `isNotificationsEnabled()`
-        // is the user toggle. `hasAccess()` catches system-level revocation.
-        if (isNotificationsSupported && appSettings.isNotificationsEnabled()) {
-            val notificationReader: NotificationReader by inject(NotificationReader::class.java)
-            if (notificationReader.hasAccess()) {
-                val notificationStore: NotificationStore by inject(NotificationStore::class.java)
-                addAll(NotificationTools.getNotificationTools(notificationStore, notificationReader))
             }
         }
 
