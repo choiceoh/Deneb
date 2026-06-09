@@ -139,6 +139,13 @@ var requiredMethods = []string{
 	"miniapp.sessions.recent",
 	"miniapp.sessions.delete",
 	"miniapp.sessions.transcript",
+	// To-do domain — local store always resolves in tests (temp state dir),
+	// so these always register.
+	"miniapp.todo.list",
+	"miniapp.todo.create",
+	"miniapp.todo.update",
+	"miniapp.todo.set_done",
+	"miniapp.todo.delete",
 	// miniapp.memory.{search,get_page,categories,list_in_category,diary_recent}
 	// are conditional on wiki being enabled (DENEB_WIKI_ENABLED) — omitted
 	// here, matching the wiki.* exclusion above.

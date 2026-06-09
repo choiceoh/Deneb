@@ -269,4 +269,33 @@ class MiniappWireTypesTest {
         assertEquals(30, recent.windowDays)
         assertTrue(recent.truncated)
     }
+
+    @Test
+    fun `todo decodes with omitempty fields defaulting`() {
+        // Shape emitted by miniapp.todo.list: an undated, incomplete to-do drops
+        // every omitempty field, leaving only id + title.
+        val undated = json.decodeFromString<TodoOut>("""{ "id": "todo:1", "title": "장보기" }""")
+        assertEquals("todo:1", undated.id)
+        assertEquals("장보기", undated.title)
+        assertEquals("", undated.due)
+        assertTrue(!undated.dueAllDay)
+        assertTrue(!undated.done)
+        assertEquals("", undated.doneAt)
+
+        // A completed, dated to-do carries the full shape.
+        val done = json.decodeFromString<TodoOut>(
+            """
+            {
+              "id": "todo:2", "title": "보고서", "note": "Q2",
+              "due": "2026-06-10T00:00:00Z", "dueAllDay": true,
+              "done": true, "doneAt": "2026-06-09T01:00:00Z"
+            }
+            """.trimIndent(),
+        )
+        assertEquals("Q2", done.note)
+        assertEquals("2026-06-10T00:00:00Z", done.due)
+        assertTrue(done.dueAllDay)
+        assertTrue(done.done)
+        assertEquals("2026-06-09T01:00:00Z", done.doneAt)
+    }
 }

@@ -29,6 +29,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/localtodo"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
@@ -273,6 +274,14 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				return calendar.DefaultClient()
 			},
 			Local: resolveLocalCalendar(s.logger),
+		}),
+
+		// Mini App To-do domain (miniapp.todo.*). The task-list companion to
+		// the calendar, backed by a local store ({stateDir}/todos.json). No
+		// external provider — every method writes locally, so it works without
+		// any OAuth scope. Skipped if the store file can't be read.
+		handlerminiapp.TodoMethods(handlerminiapp.TodoDeps{
+			Store: resolveLocalTodos(s.logger),
 		}),
 
 		// Mini App memory search (miniapp.memory.search). Lazy factory
@@ -616,6 +625,20 @@ func resolveLocalCalendar(logger *slog.Logger) handlerminiapp.LocalCalendar {
 	if err != nil {
 		if logger != nil {
 			logger.Error("local calendar store unavailable — add/edit/delete disabled", "error", err)
+		}
+		return nil
+	}
+	return store
+}
+
+// resolveLocalTodos returns the process-wide to-do store, or a nil interface (so
+// handlers degrade to UNAVAILABLE) when its file can't be read. Mirrors
+// resolveLocalCalendar. The store lives at {stateDir}/todos.json.
+func resolveLocalTodos(logger *slog.Logger) handlerminiapp.LocalTodos {
+	store, err := localtodo.Default()
+	if err != nil {
+		if logger != nil {
+			logger.Error("local todo store unavailable — to-do list disabled", "error", err)
 		}
 		return nil
 	}

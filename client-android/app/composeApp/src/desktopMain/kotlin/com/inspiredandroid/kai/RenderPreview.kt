@@ -38,6 +38,9 @@ import com.inspiredandroid.kai.deneb.layoutMonthBars
 import com.inspiredandroid.kai.deneb.MailMessage
 import com.inspiredandroid.kai.deneb.MailRow
 import com.inspiredandroid.kai.deneb.timedSingleDayDots
+import com.inspiredandroid.kai.deneb.Todo
+import com.inspiredandroid.kai.deneb.TodoAddContent
+import com.inspiredandroid.kai.deneb.TodoListContent
 import com.inspiredandroid.kai.ui.markdown.MarkdownContent
 import com.inspiredandroid.kai.ui.DarkColorScheme
 import com.inspiredandroid.kai.ui.DenebRow
@@ -117,6 +120,10 @@ fun main() {
     renderCalendarAdd("calendar_add_light.png", LightColorScheme)
     renderCalendarEmpty("calendar_empty_dark.png", DarkColorScheme)
     renderCalendarEmpty("calendar_empty_light.png", LightColorScheme)
+    renderTodoList("todo_list_dark.png", DarkColorScheme)
+    renderTodoList("todo_list_light.png", LightColorScheme)
+    renderTodoAdd("todo_add_dark.png", DarkColorScheme)
+    renderTodoAdd("todo_add_light.png", LightColorScheme)
     renderCronEdit("cron_edit_dark.png", DarkColorScheme, cronWeeklyDraft, "Asia/Seoul")
     renderCronEdit("cron_edit_light.png", LightColorScheme, cronWeeklyDraft, "Asia/Seoul")
     renderCronEdit("cron_edit_interval.png", DarkColorScheme, cronIntervalDraft, "")
@@ -287,6 +294,68 @@ private fun renderCalendarEmpty(name: String, scheme: ColorScheme) {
                     Text("6월 9일 (화)", style = DenebType.sectionLabel, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(4.dp))
                     CalendarEmptyDay(onAdd = {})
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+private val sampleTodos = listOf(
+    Todo("todo:1", "남도에코 모듈 견적 회신", note = "6월말 납기 확인", due = "2026-06-09T00:00:00Z", dueAllDay = true),
+    Todo("todo:2", "RE100 계약서 검토", due = "2026-06-10T05:00:00Z"),
+    Todo("todo:3", "법인카드 정산", note = "5월분"),
+    Todo("todo:4", "주간 보고 작성", due = "2026-06-08T00:00:00Z", dueAllDay = true, done = true),
+)
+
+// Validates the to-do list: active items (Material checkbox + struck-through done)
+// under "할 일", completed under "완료", in the Deneb row idiom.
+private fun renderTodoList(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 824, height = 760, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "할 일", onBack = {}) {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    TodoListContent(sampleTodos, onToggle = { _, _ -> }, onOpen = {})
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// Validates the add/edit-to-do form: Material inputs (title, note, due switches +
+// date/time picker buttons) under Deneb section labels.
+private fun renderTodoAdd(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 824, height = 980, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "할 일 추가", onBack = {}) {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    TodoAddContent(
+                        title = "남도에코 모듈 견적 회신",
+                        onTitle = {},
+                        note = "6월말 납기 확인",
+                        onNote = {},
+                        hasDue = true,
+                        onHasDue = {},
+                        allDay = false,
+                        onAllDay = {},
+                        dueDateLabel = "2026년 6월 10일 (수)",
+                        onPickDate = {},
+                        dueTimeLabel = "14:00",
+                        onPickTime = {},
+                        error = null,
+                        saving = false,
+                        saveLabel = "추가",
+                        onSave = {},
+                    )
                 }
             }
         }

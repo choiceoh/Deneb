@@ -21,6 +21,13 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "할 일(To-do) 추가 — 마감일을 정하거나 날짜 없이도 등록, 체크로 완료 처리",
+            "마감일이 있는 할 일은 달력 그 날짜에 함께 표시 (일정 아래 '할 일' 묶음)",
+            "달력 상단 '할 일' 버튼으로 전체 목록 열기 — 진행 중·완료가 나뉘고 지난 마감은 빨갛게 강조",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "달력을 좌우로 쓸어 이전·다음 달로 바로 넘기기 (위쪽 화살표는 그대로)",
             "일정 없는 날에 '이 날 일정 추가' 버튼이 떠 바로 그 날짜로 등록",
         ),

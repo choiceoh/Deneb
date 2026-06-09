@@ -115,6 +115,19 @@ data class CalendarEventDetail(
     val local: Boolean = false,
 )
 
+/** A to-do item shown in the native to-do list and on the calendar day view.
+ *  `due` is an RFC3339 instant or "" when the to-do has no due date; `dueAllDay`
+ *  marks a whole-day due (time-of-day ignored). All to-dos are gateway-stored and
+ *  editable. */
+data class Todo(
+    val id: String,
+    val title: String,
+    val note: String = "",
+    val due: String = "",
+    val dueAllDay: Boolean = false,
+    val done: Boolean = false,
+)
+
 /** Full cron job detail for the cron screen (`miniapp.crons.get`). */
 data class CronDetail(
     val id: String,
