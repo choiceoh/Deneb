@@ -1187,6 +1187,42 @@ func observeToolSchema() map[string]any {
 	}
 }
 
+func phoneReadToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"what": map[string]any{
+				"type":        "string",
+				"description": "조회 대상: location(현재 GPS 좌표) | clipboard(방금 복사한 내용) | battery(배터리·충전 상태)",
+				"enum":        []string{"location", "clipboard", "battery"},
+			},
+		},
+		"required": []string{"what"},
+	}
+}
+
+func phoneWriteToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"text": map[string]any{
+				"type":        "string",
+				"description": "보낼/읽을/넣을 텍스트 내용",
+			},
+			"title": map[string]any{
+				"type":        "string",
+				"description": "notification 제목 (생략 시 Deneb)",
+			},
+			"to": map[string]any{
+				"type":        "string",
+				"description": "작용 대상: notification(알림 띄우기) | tts(음성으로 읽어주기) | clipboard(클립보드에 넣기)",
+				"enum":        []string{"notification", "tts", "clipboard"},
+			},
+		},
+		"required": []string{"to", "text"},
+	}
+}
+
 // ToolMaxOutputs returns per-tool output character budgets from tool_schemas.json.
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {

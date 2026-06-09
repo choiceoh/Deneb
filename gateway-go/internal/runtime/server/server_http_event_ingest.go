@@ -70,6 +70,7 @@ const phoneEventPromptTmpl = `[실시간 스마트폰 이벤트 — %s]
 보고할 때는 필요한 도구(캘린더·메일·위키·연락처)로 맥락을 직접 확인한 뒤 한 메시지로:
 • 왜 지금 중요한가 — 관련 일정·거래·인물 맥락
 • 무엇을·언제까지 — 구체적인 다음 행동
+필요하면 phone_read(위치·클립보드·배터리)로 사용자의 현재 상황을 보강하라(예: 위치로 출근/외근 판단, 클립보드로 직전 작업 맥락). 사용자가 화면을 못 볼 상황이 분명하면 phone_write(tts)로 폰에 음성으로 직접 읽어줘도 된다.
 인사·빈 서두·내부 토큰 금지. 능동 알림이므로 사용자 호명 없이 바로 본론으로.`
 
 // phoneEventKindLabel maps an event type to a short Korean descriptor used in the

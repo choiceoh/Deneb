@@ -30,6 +30,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 		diaryDir = deps.Wiki.Store.DiaryDir()
 	}
 	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, diaryDir)
+	RegisterPhoneTools(registry)
 
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
 	// because it depends on local AI hooks that live in the chat package.
@@ -39,6 +40,25 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 
 // FetchToolsSchema returns the fetch_tools schema for external registration.
 func FetchToolsSchema() map[string]any { return fetchToolsToolSchema() }
+
+// RegisterPhoneTools registers the phone bridge tools — phone_read (location/
+// clipboard/battery) and phone_write (notification/tts/clipboard) — which reach
+// the user's phone over reverse SSH. No deps: the ssh target resolves from the
+// "phone" ~/.ssh/config alias (or DENEB_PHONE_SSH).
+func RegisterPhoneTools(registry toolctx.ToolRegistrar) {
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "phone_read",
+		Description: "사용자 스마트폰을 조회한다(reverse SSH→Termux). what=location(현재 GPS 좌표) | clipboard(방금 복사한 내용) | battery(배터리·충전 상태). '지금 어디', '방금 복사한 거' 같은 질문이나, 능동 판단 시 맥락 보강에 사용.",
+		InputSchema: phoneReadToolSchema(),
+		Fn:          tools.ToolPhoneRead(),
+	})
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "phone_write",
+		Description: "사용자 스마트폰에 직접 작용한다(reverse SSH→Termux). to=notification(알림 띄우기) | tts(음성으로 읽어주기) | clipboard(클립보드에 넣기). text 필수, notification은 title 선택. 운전 중 음성 안내나, 작성한 답을 폰 클립보드에 바로 꽂을 때.",
+		InputSchema: phoneWriteToolSchema(),
+		Fn:          tools.ToolPhoneWrite(),
+	})
+}
 
 // RegisterPolarisTools registers the unified Polaris tool (search/describe/expand).
 // Called separately because the store and localAI are not part of CoreToolDeps.
