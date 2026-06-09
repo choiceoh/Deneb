@@ -1179,9 +1179,9 @@ private enum class ConfigTab(val label: String) {
  *  fallback). */
 private enum class ModelRole(val wire: String, val label: String, val desc: String) {
     MAIN("main", "메인", "채팅·분석·도구 호출 등 주 대화를 담당하는 기본 모델"),
-    TINY("tiny", "초경량", "간단한 분류·추출 같은 가벼운 작업"),
-    LIGHTWEIGHT("lightweight", "경량", "메일 요약 등 분량이 정해진 요약 작업"),
-    ANALYSIS("analysis", "분석", "추론이 필요한 고품질 작업"),
+    TINY("tiny", "초경량", "세션 제목·메일 1차 추출 같은 사소한 분류·추출"),
+    LIGHTWEIGHT("lightweight", "경량", "위키 병합·파일럿·스킬 리뷰 같은 범위가 정해진 요약"),
+    ANALYSIS("analysis", "분석", "메일 본문 분석·대화 압축·기록 요약 같은 추론 작업"),
     FALLBACK("fallback", "폴백", "메인 모델이 실패했을 때 대신 쓰는 모델"),
 }
 
