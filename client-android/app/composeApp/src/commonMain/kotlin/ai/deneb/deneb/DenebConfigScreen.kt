@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -99,7 +100,10 @@ fun DenebConfigScreen(
     val haptics = rememberHaptics()
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        // imePadding shrinks the column (and its weighted pager) above the soft
+        // keyboard, so a focused settings field low in a tab stays visible instead of
+        // hiding behind it (edge-to-edge: the app owns the IME inset).
+        Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
             if (navigationTabBar != null) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
             }

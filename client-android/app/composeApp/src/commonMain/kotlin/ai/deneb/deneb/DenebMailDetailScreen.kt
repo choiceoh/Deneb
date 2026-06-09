@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -114,6 +115,10 @@ fun DenebMailDetailScreen(
         Column(
             modifier = Modifier
                 .then(if (panelMode) Modifier else Modifier.statusBarsPadding())
+                // Keep the "ask about this mail" field above the soft keyboard instead
+                // of hiding it behind the keyboard (edge-to-edge: the app owns the IME
+                // inset). Before verticalScroll so it shrinks the scroll viewport.
+                .imePadding()
                 .padding(16.dp).verticalScroll(rememberScrollState()),
         ) {
             if (navigationTabBar != null) {

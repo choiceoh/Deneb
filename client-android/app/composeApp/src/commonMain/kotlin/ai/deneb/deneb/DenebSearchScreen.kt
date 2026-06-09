@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -74,7 +75,10 @@ fun DenebSearchScreen(
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             Column(
-                modifier = denebContentWidthModifier().statusBarsPadding().padding(16.dp).verticalScroll(rememberScrollState()),
+                // imePadding before verticalScroll shrinks the scroll viewport to end
+                // above the soft keyboard, so the bottom search results stay reachable
+                // instead of hiding behind it (edge-to-edge: the app owns the IME inset).
+                modifier = denebContentWidthModifier().statusBarsPadding().imePadding().padding(16.dp).verticalScroll(rememberScrollState()),
             ) {
             if (navigationTabBar != null) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }

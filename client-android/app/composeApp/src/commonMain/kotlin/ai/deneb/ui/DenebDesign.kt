@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -142,7 +143,11 @@ fun DenebScreenScaffold(
             Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .navigationBarsPadding(),
+                .navigationBarsPadding()
+                // Lift content above the soft keyboard so a focused field (and the
+                // bottom of a scrolling form) never hides behind it (edge-to-edge: the
+                // app owns the IME inset). No-op when the keyboard is down.
+                .imePadding(),
         ) {
             if (tabBar != null) {
                 Row(
