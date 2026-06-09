@@ -1,0 +1,38 @@
+name: Patch notes gate
+
+# Require a hand-curated 패치노트 entry for user-facing native features, so the
+# in-app "패치노트" changelog stops drifting (see .github/scripts/patch-notes-gate.sh).
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: patch-notes-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  patch-notes:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Ensure base commit is available
+        uses: ./.github/actions/ensure-base-commit
+        with:
+          base-sha: ${{ github.event.pull_request.base.sha }}
+          fetch-ref: ${{ github.event.pull_request.base.ref }}
+
+      - name: Require a patch note for user-facing native features
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash .github/scripts/patch-notes-gate.sh
