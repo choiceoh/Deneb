@@ -483,7 +483,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		}),
 		// Native-client chat bridge (miniapp.chat.send/history): lets the
 		// standalone app drive a turn over the miniapp.* RPC surface via
-		// SendSync, with kai-ui emission enabled (channel "client").
+		// SendSync, with deneb-ui emission enabled (channel "client").
 		handlerchat.MiniappMethods(handlerchat.Deps{
 			Chat:       hub.Chat(),
 			OcrImage:   tools.OcrImageBytes,

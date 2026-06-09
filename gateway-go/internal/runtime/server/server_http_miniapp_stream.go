@@ -39,7 +39,7 @@ import (
 // nativeClientChannel mirrors the constant of the same name in the blocking
 // miniapp chat bridge (internal/runtime/rpc/handler/chat/miniapp_bridge.go).
 // Both must name the same channel so the chat pipeline's richUIChannel enables
-// kai-ui emission for the native client; the streaming and blocking paths share
+// deneb-ui emission for the native client; the streaming and blocking paths share
 // one session and one channel. Kept in sync by hand — there is no shared export.
 const nativeClientChannel = "client"
 
@@ -100,7 +100,7 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 	ctx := clientauth.WithContext(r.Context(), identity)
 	runner := func(ctx context.Context, onDelta func(string)) (*chatStreamResult, error) {
 		res, err := s.chatHandler.SendSyncStream(ctx, sessionKey, reqBody.Message, strings.TrimSpace(reqBody.Model), &chat.SyncOptions{
-			// Channel "client" flips on kai-ui emission (richUIChannel).
+			// Channel "client" flips on deneb-ui emission (richUIChannel).
 			Delivery: &chat.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
 			// The reply text is streamed here, not pushed via the message tool.
 			AutoDeliveredOutput: true,

@@ -16,7 +16,7 @@ val denebVersionCode: Int =
         ?: libs.versions.android.versionCode.get().toInt()
 
 android {
-    namespace = "com.inspiredandroid.kai"
+    namespace = "ai.deneb"
     compileSdk =
         libs.versions.android.compileSdk
             .get()
@@ -24,7 +24,13 @@ android {
     ndkVersion = "29.0.14206865"
 
     defaultConfig {
-        applicationId = "com.inspiredandroid.kai"
+        // The code package is ai.deneb (see namespace above), but the
+        // applicationId — the app's install identity — is deliberately pinned to
+        // the original ai.deneb. Changing it would make Android
+        // treat a new build as a different app, breaking in-place OTA updates for
+        // already-installed clients. Identity stays stable; the code is fully
+        // de-Kai'd everywhere else.
+        applicationId = "ai.deneb"
         minSdk =
             libs.versions.android.minSdk
                 .get()

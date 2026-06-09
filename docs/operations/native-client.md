@@ -18,14 +18,14 @@ always-on work stay on the gateway.
 
 The client is built by vendoring the UI of [Kai](https://github.com/SimonSchubert/Kai)
 (Apache-2.0) and replacing its brain with calls to the Deneb gateway. The phone
-keeps Kai's rich chat UI and its interactive `kai-ui` renderer; every turn,
+keeps its rich chat UI and its interactive `deneb-ui` renderer; every turn,
 tool call, and memory write happens on the DGX Spark gateway over one
 authenticated endpoint.
 
 - **Chat is the home screen.** There is a single conversation view; replies
-  stream in token by token, and a reply carrying a `kai-ui` fence renders as an
+  stream in token by token, and a reply carrying a `deneb-ui` fence renders as an
   interactive screen rather than plain text.
-- **Text-first.** Kai's text-to-speech was removed — the client is for reading
+- **Text-first.** The upstream text-to-speech was removed — the client is for reading
   and capturing, not narration.
 - **Android only.** The vendored project drops the iOS, desktop, and web KMP
   targets. The build and the daily target is a Samsung Galaxy S26; the UI is
@@ -83,7 +83,7 @@ The chat path is built for long agent turns, not just quick replies.
   to a blocking send, so a partial answer is never discarded.
 - **Regenerate.** The last assistant message has a 재생성 (regenerate) control
   that pops the last exchange and re-asks.
-- **Interactive `kai-ui`.** A reply containing a `kai-ui` fence renders as a
+- **Interactive `deneb-ui`.** A reply containing a `deneb-ui` fence renders as a
   full interactive screen; pressing a button sends a structured callback as the
   next turn.
 - **Tool and fallback cues.** Running tools surface as activity chips, and a
@@ -148,7 +148,7 @@ The 설정 hub has five tabs:
 
 - **게이트웨이** — the gateway URL and client token, a live gateway status card
   (version, native API version, current model, capabilities), a link to
-  the surviving upstream Kai settings (providers, MCP, inference), and a version
+  the surviving upstream settings (providers, MCP), and a version
   card with a **패치노트 보기** (view patch notes) sheet and an **업데이트 확인**
   (check for update) button that offers an in-place APK download when a newer
   build exists.

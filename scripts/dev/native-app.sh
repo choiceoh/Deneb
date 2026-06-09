@@ -8,7 +8,7 @@
 # ---------------
 # The native client (`client-android/`) is a Kotlin Multiplatform app whose
 # commonMain is shared across Android / iOS / desktop. The desktop JVM target
-# (`com.inspiredandroid.kai.MainKt`, window titled "Deneb") is the SAME app the
+# (`ai.deneb.MainKt`, window titled "Deneb") is the SAME app the
 # phone runs, minus the Android shell. Running it under a virtual X display
 # (Xvfb) lets us exercise the live UI — connected to the real gateway, with real
 # mail / calendar / sessions — and capture it as PNG or drive it with synthetic
@@ -32,7 +32,7 @@
 # density 1, so screenshot px == dp == xdotool coords: click the pixel you see.
 #
 # Nothing here modifies the app source: the gateway URL + client token are
-# seeded into the desktop app's own encrypted settings (~/.kai/settings.aes),
+# seeded into the desktop app's own encrypted settings (~/.deneb-client/settings.aes),
 # byte-compatible with EncryptedFileSettings.kt.
 #
 set -euo pipefail
@@ -91,8 +91,8 @@ die()  { printf '\033[31m[native] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
 # ── Seed the desktop app's encrypted settings (gateway URL + client token) ───
-# Mirrors EncryptedFileSettings.kt: ~/.kai/settings.key = 32 raw AES bytes,
-# ~/.kai/settings.aes = IV(12) || AES-256-GCM(ct||tag) of a flat {String:String}
+# Mirrors EncryptedFileSettings.kt: ~/.deneb-client/settings.key = 32 raw AES bytes,
+# ~/.deneb-client/settings.aes = IV(12) || AES-256-GCM(ct||tag) of a flat {String:String}
 # JSON map. We MERGE so any existing keys the app wrote are preserved.
 seed_settings() {
   local url="${1:-$GW_URL}"
@@ -105,7 +105,7 @@ seed_settings() {
 import os, sys, json
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 url, token = sys.argv[1], sys.argv[2]
-kai = os.path.expanduser("~/.kai"); os.makedirs(kai, exist_ok=True)
+kai = os.path.expanduser("~/.deneb-client"); os.makedirs(kai, exist_ok=True)
 keyp, aesp = os.path.join(kai, "settings.key"), os.path.join(kai, "settings.aes")
 # Reuse the app's key if present so the app can still read what it wrote.
 if os.path.exists(keyp) and os.path.getsize(keyp) == 32:
@@ -125,7 +125,7 @@ data["deneb.clientToken"] = token
 iv = os.urandom(12)
 ct = AESGCM(key).encrypt(iv, json.dumps(data).encode(), None)
 open(aesp, "wb").write(iv + ct)
-print(f"seeded ~/.kai/settings.aes  url={url}  token={token[:8]}…  keys={len(data)}")
+print(f"seeded ~/.deneb-client/settings.aes  url={url}  token={token[:8]}…  keys={len(data)}")
 PY
 }
 
@@ -472,7 +472,7 @@ native-app.sh — run the real native client headlessly for agent verification
   taptext "text"          OCR-find the text and tap it (robust to layout shifts)
   wait-for "text" [secs]  poll OCR until the text renders (replaces fixed sleeps)
   view                    expose noVNC over Tailscale so a human can watch/drive
-  seed [url] [token]      (re)write ~/.kai gateway settings (defaults: prod)
+  seed [url] [token]      (re)write ~/.deneb-client gateway settings (defaults: prod)
   status | logs [n]       inspect
   restart [profile] | stop
 

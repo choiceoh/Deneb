@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PACKAGE="com.inspiredandroid.kai"
-ACTIVITY="com.inspiredandroid.kai.MainActivity"
+PACKAGE="ai.deneb"
+ACTIVITY="ai.deneb.MainActivity"
 EVENT_COUNT="${1:-10000}"
 THROTTLE="${2:-50}"
 
-echo "=== Kai Monkey Test ==="
+echo "=== Deneb Monkey Test ==="
 echo "Events: $EVENT_COUNT | Throttle: ${THROTTLE}ms"
 echo ""
 
@@ -59,7 +59,7 @@ adb shell monkey \
     --ignore-security-exceptions \
     --monitor-native-crashes \
     -v -v \
-    "$EVENT_COUNT" 2>&1 | tee /tmp/kai-monkey-results.txt
+    "$EVENT_COUNT" 2>&1 | tee /tmp/deneb-monkey-results.txt
 
 # Unpin
 echo ""
@@ -69,17 +69,17 @@ adb shell am task lock stop 2>/dev/null || true
 # Summary
 echo ""
 echo "=== Results ==="
-CRASHES=$(grep -c "CRASH" /tmp/kai-monkey-results.txt 2>/dev/null || echo "0")
-ANRS=$(grep -c "ANR" /tmp/kai-monkey-results.txt 2>/dev/null || echo "0")
+CRASHES=$(grep -c "CRASH" /tmp/deneb-monkey-results.txt 2>/dev/null || echo "0")
+ANRS=$(grep -c "ANR" /tmp/deneb-monkey-results.txt 2>/dev/null || echo "0")
 echo "Crashes: $CRASHES"
 echo "ANRs:    $ANRS"
 echo ""
-echo "Full log: /tmp/kai-monkey-results.txt"
+echo "Full log: /tmp/deneb-monkey-results.txt"
 
 if [ "$CRASHES" -gt 0 ] || [ "$ANRS" -gt 0 ]; then
     echo ""
     echo "=== Crash Details ==="
-    grep -A 10 "CRASH\|ANR" /tmp/kai-monkey-results.txt || true
+    grep -A 10 "CRASH\|ANR" /tmp/deneb-monkey-results.txt || true
     exit 1
 fi
 

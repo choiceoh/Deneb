@@ -17,7 +17,7 @@ composeCompiler {
 
 kotlin {
     androidLibrary {
-        namespace = "com.inspiredandroid.kai.shared"
+        namespace = "ai.deneb.shared"
         compileSdk =
             libs.versions.android.compileSdk
                 .get()
@@ -48,7 +48,7 @@ kotlin {
             // Must differ from the iosApp bundle identifier — iOS refuses to install a
             // .app whose embedded framework shares its parent's identifier (MIInstaller
             // error 57 / DuplicateIdentifier).
-            binaryOption("bundleId", "com.inspiredandroid.kai.composeapp")
+            binaryOption("bundleId", "ai.deneb.composeapp")
         }
     }
 
@@ -165,7 +165,7 @@ kotlin {
 
 compose.desktop {
     application {
-        mainClass = "com.inspiredandroid.kai.MainKt"
+        mainClass = "ai.deneb.MainKt"
 
         buildTypes.release.proguard {
             configurationFiles.from(
@@ -231,13 +231,13 @@ class VersionGeneratorPlugin : Plugin<Project> {
             // Generate Kotlin version file
             val versionFile =
                 layout.buildDirectory
-                    .file("generated/src/commonMain/kotlin/com/inspiredandroid/kai/Version.kt")
+                    .file("generated/src/commonMain/kotlin/ai/deneb/Version.kt")
                     .get()
                     .asFile
             versionFile.parentFile?.mkdirs()
             versionFile.writeText(
                 """
-                package com.inspiredandroid.kai
+                package ai.deneb
 
                 object Version {
                     const val appVersionCode = $appVersionCode
@@ -273,7 +273,7 @@ tasks.register<JavaExec>("renderPreviews") {
     val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
     dependsOn(desktopMain.compileTaskProvider)
     classpath = files(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles)
-    mainClass.set("com.inspiredandroid.kai.RenderPreviewKt")
+    mainClass.set("ai.deneb.RenderPreviewKt")
     systemProperty("java.awt.headless", "true")
 }
 
@@ -282,6 +282,6 @@ tasks.register<JavaExec>("benchScrollRender") {
     val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
     dependsOn(desktopMain.compileTaskProvider)
     classpath = files(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles)
-    mainClass.set("com.inspiredandroid.kai.ScrollRenderBenchKt")
+    mainClass.set("ai.deneb.ScrollRenderBenchKt")
     systemProperty("java.awt.headless", "true")
 }
