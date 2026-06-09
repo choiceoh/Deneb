@@ -21,6 +21,13 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "답변 속 이메일 주소가 바로 탭할 수 있는 링크로 — <주소> 꺾쇠 표기와 ***굵은 기울임***도 올바르게 표시",
+            "문장 바로 아래 붙은 표, '2026. 6. 9.' 같은 날짜 줄, HTML 문자(&amp; 등) 렌더링 교정",
+            "번호 목록이 10번을 넘어도 번호 칸이 밀리지 않게 정렬",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "설정 '모델' 탭을 제공자별로 묶어 정리하고, 메인·경량·폴백 역할이 어느 모델에 배정됐는지 요약으로 표시",
             "모델 역할이 헷갈릴 땐 '?'를 눌러 각 역할이 무슨 일을 하는지 설명 보기",
         ),

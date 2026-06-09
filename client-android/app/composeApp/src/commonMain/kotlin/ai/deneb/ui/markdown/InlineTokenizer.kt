@@ -31,6 +31,13 @@ internal object InlineTokenizer {
     // in []()). Stops at whitespace/<>; the opener can't sit right after a word char so it won't
     // bite into "ahttps". Trailing sentence punctuation and unbalanced ) are trimmed at use site.
     private val AUTOLINK_REGEX = Regex("(?<![\\w/@.])(?:https?://|www\\.)[^\\s<>]+")
+    // CommonMark angle autolinks: <https://…>, <mailto:…>, <user@host.tld>. The whole range
+    // including the brackets becomes the link node, so the <> never reaches the screen.
+    private val ANGLE_AUTOLINK_REGEX = Regex("<(https?://[^\\s<>]+|mailto:[^\\s<>]+|[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+)>")
+    // Bare email runs — this is a mail-first assistant, so addresses appear in prose constantly.
+    // The final label must be an alphabetic TLD (≥2 letters) so "node@18.0.0"-style package
+    // versions don't become mailto links, and trailing "a@b.com." prose dots stay out.
+    private val EMAIL_REGEX = Regex("(?<![\\w.+-])[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)*\\.[A-Za-z]{2,}")
     private val HARD_BREAK_REGEX = Regex(" {2,}\\n|\\\\\\n")
     // LLM-emitted literal <br>/<br/> — common in table cells where a real newline would split the row.
     private val HTML_BREAK_REGEX = Regex("<br\\s*/?>", RegexOption.IGNORE_CASE)
@@ -56,7 +63,13 @@ internal object InlineTokenizer {
     private val EMPH_UNDER_REGEX = Regex("(?<![A-Za-z0-9_\\\\])_([\\s\\S]+?)_(?![A-Za-z0-9_])")
     private val STRIKE_REGEX = Regex("(?<!\\\\)~~([\\s\\S]+?)~~")
 
+    // `***both***` must resolve as one bold-italic span. Without this, STRONG_STAR eats the
+    // first two stars and the inner/trailing `*` leak into the text as literals. Listed first:
+    // on a tie at the same start offset the earlier pattern wins.
+    private val TRIPLE_STAR_REGEX = Regex("(?<!\\\\)\\*\\*\\*(?=\\S)([\\s\\S]+?)(?<=\\S)\\*\\*\\*")
+
     private val EMPHASIS_PATTERNS: List<Pair<Regex, (ImmutableList<InlineNode>) -> InlineNode>> = listOf(
+        TRIPLE_STAR_REGEX to { children -> Emphasis(persistentListOf(Strong(children))) },
         STRONG_STAR_REGEX to { children -> Strong(children) },
         STRONG_UNDER_REGEX to { children -> Strong(children) },
         EMPH_STAR_REGEX to { children -> Emphasis(children) },
@@ -200,11 +213,11 @@ internal object InlineTokenizer {
             all += m.range to InlineCode(cleaned)
         }
         for (m in IMAGE_REGEX.findAll(text)) {
-            all += m.range to Image(m.groupValues[2].trim(), m.groupValues[1])
+            all += m.range to Image(cleanHref(m.groupValues[2]), m.groupValues[1])
         }
         for (m in LINK_REGEX.findAll(text)) {
             val inner = parse(m.groupValues[1], depth + 1)
-            all += m.range to Link(m.groupValues[2].trim(), inner)
+            all += m.range to Link(cleanHref(m.groupValues[2]), inner)
         }
         for (m in AUTOLINK_REGEX.findAll(text)) {
             // Trim trailing prose punctuation, and a ) only when it has no matching ( inside the
@@ -235,6 +248,18 @@ internal object InlineTokenizer {
         if ('<' in text) {
             for (m in HTML_BREAK_REGEX.findAll(text)) {
                 all += m.range to LineBreak
+            }
+            for (m in ANGLE_AUTOLINK_REGEX.findAll(text)) {
+                val inner = m.groupValues[1]
+                val href = if (inner.startsWith("http") || inner.startsWith("mailto:")) inner else "mailto:$inner"
+                all += m.range to Link(href, persistentListOf(Text(inner.removePrefix("mailto:"))))
+            }
+        }
+        if ('@' in text) {
+            // Bare addresses. Ones inside a longer atomic (a [..](..) link, an autolinked URL's
+            // userinfo/query) start later than that atomic and are dropped by the overlap pass.
+            for (m in EMAIL_REGEX.findAll(text)) {
+                all += m.range to Link("mailto:${m.value}", persistentListOf(Text(m.value)))
             }
         }
         // Streaming hot path: skip the four math scans when the text has no math sentinels.
@@ -267,6 +292,23 @@ internal object InlineTokenizer {
         return result
     }
 
+    // Normalize a raw link destination: drop a CommonMark <…> wrapper and a trailing
+    // "title" / 'title' so `[text](url "tooltip")` links to the url, not the whole blob.
+    private fun cleanHref(raw: String): String {
+        var href = raw.trim()
+        val space = href.indexOfFirst { it == ' ' || it == '\t' }
+        if (space > 0) {
+            val rest = href.substring(space).trim()
+            val quoted = rest.length >= 2 &&
+                ((rest.first() == '"' && rest.last() == '"') || (rest.first() == '\'' && rest.last() == '\''))
+            if (quoted) href = href.substring(0, space)
+        }
+        if (href.length >= 2 && href.first() == '<' && href.last() == '>') {
+            href = href.substring(1, href.length - 1)
+        }
+        return href
+    }
+
     private fun unescape(text: String): String {
         val withoutEscapes = if ('\\' !in text) {
             text
@@ -285,10 +327,52 @@ internal object InlineTokenizer {
             }
             out.toString()
         }
-        if (':' !in withoutEscapes) return withoutEscapes
-        return EMOJI_SHORTCODE_REGEX.replace(withoutEscapes) { m ->
+        val decoded = decodeEntities(withoutEscapes)
+        if (':' !in decoded) return decoded
+        return EMOJI_SHORTCODE_REGEX.replace(decoded) { m ->
             EMOJI_SHORTCODES[m.groupValues[1]] ?: m.value
         }
+    }
+
+    // HTML entities LLMs emit in prose (`AT&amp;T`, `&lt;tag&gt;`, `5&nbsp;kg`) plus numeric
+    // forms. Only Text segments pass through here — inline code and autolinked URLs are
+    // atomics and keep their raw `&`.
+    private val ENTITY_REGEX = Regex("&(#\\d{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]{1,31});")
+
+    private val NAMED_ENTITIES = mapOf(
+        "amp" to "&", "lt" to "<", "gt" to ">", "quot" to "\"", "apos" to "'",
+        "nbsp" to "\u00A0", "mdash" to "—", "ndash" to "–", "hellip" to "…",
+        "middot" to "·", "bull" to "•", "times" to "×", "deg" to "°", "plusmn" to "±",
+        "larr" to "←", "rarr" to "→", "le" to "≤", "ge" to "≥", "ne" to "≠",
+    )
+
+    private fun decodeEntities(text: String): String {
+        if ('&' !in text) return text
+        return ENTITY_REGEX.replace(text) { m ->
+            val body = m.groupValues[1]
+            if (body.startsWith("#")) {
+                val code = if (body.length > 1 && (body[1] == 'x' || body[1] == 'X')) {
+                    body.substring(2).toIntOrNull(16)
+                } else {
+                    body.substring(1).toIntOrNull()
+                }
+                if (code != null && code in 0x20..0x10FFFF && code !in 0xD800..0xDFFF) {
+                    codePointToString(code)
+                } else {
+                    m.value // out-of-range / control — keep the literal
+                }
+            } else {
+                NAMED_ENTITIES[body] ?: m.value // unknown name — keep the literal
+            }
+        }
+    }
+
+    // Kotlin common has no Character.toChars; build the surrogate pair by hand for astral planes.
+    private fun codePointToString(code: Int): String = if (code <= 0xFFFF) {
+        code.toChar().toString()
+    } else {
+        val c = code - 0x10000
+        charArrayOf((0xD800 + (c shr 10)).toChar(), (0xDC00 + (c and 0x3FF)).toChar()).concatToString()
     }
 
     private fun mergeAdjacentText(nodes: List<InlineNode>): List<InlineNode> {

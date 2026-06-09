@@ -46,7 +46,9 @@ internal object BlockScanner {
     // Arabic "1." / "1)" plus circled numbers ①. The marker is captured whole in group 2, and
     // the separator is optional for circled forms so "① foo" and "①. foo" both list. Groups now
     // match BULLET_REGEX (1=indent, 2=marker, 3=spacing, 4=content). Circled renders as "N.".
-    private val ORDERED_REGEX = Regex("""^(\s*)(\d{1,9}[.)]|[①-⑳][.)]?)(\s+)(.*)$""")
+    // Markers are capped at 3 digits: Korean date lines ("2026. 6. 9. 회의") must stay prose,
+    // not become item number 2026 of an ordered list.
+    private val ORDERED_REGEX = Regex("""^(\s*)(\d{1,3}[.)]|[①-⑳][.)]?)(\s+)(.*)$""")
     private val TABLE_SEPARATOR_REGEX = Regex("""^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$""")
 
     private const val MAX_BLOCK_DEPTH = 32
@@ -495,6 +497,16 @@ internal object BlockScanner {
         return Table(headers, alignments.toImmutableList(), rows.toImmutableList()) to i
     }
 
+    // GFM tables may interrupt a paragraph (GitHub behavior, and LLMs often put a table right
+    // under a "요약:" line with no blank line): a pipe row counts as a table start when the next
+    // line is its separator row and the cell counts agree (the same check parseTable enforces).
+    private fun looksLikeTableStart(line: String, next: String): Boolean {
+        if ('|' !in line) return false
+        if (line.length > MAX_LINE_REGEX_LEN || next.length > MAX_LINE_REGEX_LEN) return false
+        if (TABLE_SEPARATOR_REGEX.matchEntire(next) == null) return false
+        return splitRow(line).size == splitRow(next).size
+    }
+
     private fun splitRow(line: String): List<String> {
         var s = line.trim()
         if (s.startsWith("|")) s = s.substring(1)
@@ -543,6 +555,7 @@ internal object BlockScanner {
                 if (MATH_DISPLAY_BRACKET_OPEN_REGEX.matchEntire(line) != null) break
                 if (MATH_DISPLAY_INLINE_REGEX.matchEntire(line) != null) break
                 if (MATH_DISPLAY_BRACKET_INLINE_REGEX.matchEntire(line) != null) break
+                if (i + 1 < end && looksLikeTableStart(line, lines[i + 1])) break
             }
             if (accum.isNotEmpty()) accum.append('\n')
             accum.append(line)
