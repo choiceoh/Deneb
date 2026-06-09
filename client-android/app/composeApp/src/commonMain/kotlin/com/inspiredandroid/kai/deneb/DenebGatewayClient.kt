@@ -449,14 +449,35 @@ class DenebGatewayClient(
     }
 
     suspend fun openWorkFeedItem(id: String): String? {
-        val item = _denebWorkFeed.value.firstOrNull { it.id == id }
-        val target = item?.sessionKey?.takeIf { it.isNotBlank() } ?: "client:main"
+        // Opening a 업무 card runs its analysis in a dedicated side-conversation off
+        // the client:main home — NOT in client:main itself. The old path adopted the
+        // item's home session (client:main for proactive cards like the morning
+        // letter), so the verbose open-prompt and the summary landed as visible turns
+        // in the main 업무 chat. The open-prompt embeds the item's full context
+        // (title/source/summary/body), so the fresh session is self-sufficient. The
+        // key is stable per item id, so re-opening the same card resumes its thread
+        // instead of spawning duplicates.
+        val prompt = runWorkFeedAction(id, "open", adoptSession = false) ?: return null
+        val target = workItemSessionKey(id)
         switchSession(target)
         loadTranscriptGuarded(target)
-        return runWorkFeedAction(id, "open")
+        return prompt
     }
 
-    suspend fun runWorkFeedAction(itemId: String, actionId: String): String? {
+    // Dedicated side-conversation key for a 업무 card, in the same
+    // client:main:<suffix> explicit-conversation namespace as startNewChat(). The id
+    // is slugged to ascii so the key shape stays identical to client:main:<uuid>
+    // (single colon-suffix); a blank id falls back to a random conversation.
+    private fun workItemSessionKey(itemId: String): String {
+        val slug = itemId.trim().lowercase()
+            .map { if (it in 'a'..'z' || it in '0'..'9') it else '-' }
+            .joinToString("")
+            .trim('-')
+            .take(40)
+        return if (slug.isEmpty()) "client:main:${Uuid.random()}" else "client:main:wf-$slug"
+    }
+
+    suspend fun runWorkFeedAction(itemId: String, actionId: String, adoptSession: Boolean = true): String? {
         if (itemId.isBlank() || actionId.isBlank()) return null
         val payload = callRpc<WorkFeedActionRunPayload>(
             "miniapp.workfeed.action.run",
@@ -472,8 +493,11 @@ class DenebGatewayClient(
                 items.map { if (it.id == payload.item.id) payload.item else it }
             }
         }
+        // The "open" caller routes to its own dedicated conversation, so it opts out
+        // of adopting the item's home session here (client:main for proactive cards —
+        // see openWorkFeedItem). Other actions still follow the server-returned key.
         val target = payload.sessionKey.ifBlank { payload.item.sessionKey }
-        if (target.isNotBlank()) {
+        if (adoptSession && target.isNotBlank()) {
             switchSession(target)
             loadTranscriptGuarded(target)
         }
@@ -1718,6 +1742,18 @@ class DenebGatewayClient(
         // The single home session keeps the familiar 업무 label (matches the
         // empty-drawer fallback), not "내 대화 · main".
         if (s.key == "client:main") return "업무"
+        // 업무-card side-conversations (opened from a feed card) read with the item's
+        // title while it is still in the feed, falling back to a generic 업무 메모
+        // label once the card is acked and dropped from the feed.
+        if (s.key.substringAfterLast(':').startsWith("wf-")) {
+            val itemTitle = _denebWorkFeed.value
+                .firstOrNull { workItemSessionKey(it.id) == s.key }
+                ?.title
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?.take(40)
+            return itemTitle?.let { "업무 · $it" } ?: "업무 메모"
+        }
         val kind = s.key.substringBefore(':', "")
         // cron/system/boot carry meaning in the key itself — surface the job/kind
         // so the drawer reads "예약 · 메일 분석" / "시스템 부팅" instead of an opaque
