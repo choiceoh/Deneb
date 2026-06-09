@@ -351,6 +351,18 @@ func (h *Handler) ModelRegistry() *modelrole.Registry {
 	return h.registry
 }
 
+// ToolNames returns the sorted names of the agent's registered tools, for
+// callers that need the active toolset outside a turn (e.g. the Settings skills
+// list, to populate eligibility's AvailableTools so requires_tools skills are
+// filtered the same way the prompt and slash routing filter them). Returns nil
+// if the handler or its registry is unset.
+func (h *Handler) ToolNames() []string {
+	if h == nil || h.tools == nil {
+		return nil
+	}
+	return h.tools.SortedNames()
+}
+
 // Close stops background goroutines and cancels all active abort entries.
 func (h *Handler) Close() {
 	h.abort.Close()

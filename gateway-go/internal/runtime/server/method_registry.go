@@ -388,7 +388,15 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// tab advertises only skills the agent can actually use.
 		handlerminiapp.SkillsMethods(handlerminiapp.SkillsDeps{
 			List: func() []skills.SkillEntry {
-				return chat.EligibleWorkspaceSkills(resolveWorkspaceDir())
+				// chatHandler (and its tool registry) is ready by the time this
+				// runs — the RPC fires long after boot wires the chat pipeline.
+				// Pass the live toolset so requires_tools eligibility matches the
+				// prompt and slash routing.
+				var toolNames []string
+				if s.chatHandler != nil {
+					toolNames = s.chatHandler.ToolNames()
+				}
+				return chat.EligibleWorkspaceSkills(resolveWorkspaceDir(), toolNames)
 			},
 		}),
 

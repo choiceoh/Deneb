@@ -95,18 +95,25 @@ func CachedSkillsSnapshot() *skills.FullSkillSnapshot {
 // EligibleWorkspaceSkills discovers workspace skills and applies the same
 // archived + eligibility filtering loadCachedSkillsPrompt uses, so read-only
 // consumers (the Settings Skills tab via miniapp.skills.list) advertise only
-// skills the agent can actually use — not archived or env/bin-ineligible ones.
+// skills the agent can actually use — not archived or ineligible ones.
 //
-// AvailableTools is intentionally omitted: the tool registry isn't wired at the
-// RPC call site, and requires_tools skills are rare. They fall back to
-// ineligible (the safe side — don't advertise what may not run), which matches
-// the "no over-advertising" intent here.
-func EligibleWorkspaceSkills(workspaceDir string) []skills.SkillEntry {
+// availableToolNames must be the agent's registered tools (Handler.ToolNames).
+// FilterEligibleSkills only enforces requires_tools / fallback_for_tools when
+// the AvailableTools map is non-empty, so passing the real toolset is what keeps
+// a requires_tools skill out of the list when its tool isn't registered —
+// matching the prompt and slash-command routing. Passing nil would skip that
+// check and over-advertise.
+func EligibleWorkspaceSkills(workspaceDir string, availableToolNames []string) []skills.SkillEntry {
+	availableTools := make(map[string]struct{}, len(availableToolNames))
+	for _, name := range availableToolNames {
+		availableTools[name] = struct{}{}
+	}
 	entries := skills.DiscoverWorkspaceSkills(skills.DiscoverConfig{WorkspaceDir: workspaceDir})
 	entries = skills.FilterExcludedSkills(entries, loadArchivedCuratorSkillNames())
 	entries = skills.FilterEligibleSkills(entries, skills.EligibilityContext{
-		EnvVars:      skills.EnvSnapshotFromOS(),
-		SkillConfigs: make(map[string]skills.SkillConfig),
+		EnvVars:        skills.EnvSnapshotFromOS(),
+		SkillConfigs:   make(map[string]skills.SkillConfig),
+		AvailableTools: availableTools,
 	})
 	return entries
 }
