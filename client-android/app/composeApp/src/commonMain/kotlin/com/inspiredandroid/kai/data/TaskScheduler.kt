@@ -1,5 +1,6 @@
 package com.inspiredandroid.kai.data
 
+import com.inspiredandroid.kai.deneb.DenebGatewayClient
 import com.inspiredandroid.kai.email.EmailPoller
 import com.inspiredandroid.kai.getBackgroundDispatcher
 import com.inspiredandroid.kai.isEmailSupported
@@ -119,14 +120,50 @@ class TaskScheduler(
      * until the user manually reloaded.
      */
     private fun startPushSubscription() {
-        val gateway = dataRepository as? com.inspiredandroid.kai.deneb.DenebGatewayClient ?: return
+        val gateway = dataRepository as? DenebGatewayClient ?: return
         if (pushJob?.isActive == true) return
         pushJob = schedulerScope.launch {
-            gateway.subscribeEvents { title, body ->
+            gateway.subscribeEvents { _, _ ->
+                // The SSE frame is only a wake-signal: subscribeEvents already
+                // kicks a native-sync pull, and the sync path raises the
+                // notification for any genuinely-new work-feed item — durable and
+                // deduped by the persisted sync cursor (see
+                // startProactiveNotifications). Notifying off the live frame here
+                // would double-fire with that path and silently lose any frame
+                // dropped while asleep/reconnecting. Foreground is the only case
+                // left: suppress the tray notification and live-refresh the in-app
+                // feed instead.
                 if (appInForeground) {
                     dataRepository.onProactiveReportForeground()
-                } else {
-                    sendProactiveReportNotification(title = title, body = body)
+                }
+            }
+        }
+    }
+
+    private var proactiveJob: Job? = null
+
+    /**
+     * Durable proactive-notification path. The gateway's SSE push is best-effort
+     * (no persistence): a frame produced while the app is asleep, mid-reconnect,
+     * or across a gateway restart is dropped and never replayed. So rather than
+     * notify off the live frame, we notify off the native-sync stream —
+     * [DenebGatewayClient.proactiveNotifications] emits once per genuinely-new
+     * work-feed item the cursor-based pull surfaces, whether that pull was driven
+     * by a live SSE frame, a reconnect catch-up, or the poll-loop fallback in
+     * [start]. The persisted cursor guarantees exactly-once, and the first
+     * post-launch sync is treated as catch-up and suppressed so opening the app
+     * doesn't fire a notification barrage.
+     */
+    private fun startProactiveNotifications() {
+        val gateway = dataRepository as? DenebGatewayClient ?: return
+        if (proactiveJob?.isActive == true) return
+        proactiveJob = schedulerScope.launch {
+            gateway.proactiveNotifications.collect { report ->
+                // Raise a tray notification only when the user won't see the in-app
+                // feed update (backgrounded). Foreground reports refresh the feed
+                // live via onProactiveReportForeground.
+                if (!appInForeground) {
+                    sendProactiveReportNotification(title = report.title, body = report.body)
                 }
             }
         }
@@ -164,6 +201,7 @@ class TaskScheduler(
 
     fun start() {
         startPushSubscription()
+        startProactiveNotifications()
         startCaptureSubscription()
         if (!enabled || taskStore == null || appSettings == null) return
         if (activeJob?.isActive == true) return
@@ -207,6 +245,16 @@ class TaskScheduler(
                 if (!isLoadingCheck() && isSmsSupported && appSettings.isSmsEnabled() && smsStore != null && smsPoller != null) {
                     checkNewSms()
                 }
+
+                // Durable proactive-notification fallback. The gateway's live SSE
+                // push is best-effort, so a work-feed report produced while the
+                // push was missed (buffer drop, Doze, a reconnect/restart gap)
+                // would otherwise never raise a notification — it would only appear
+                // in the feed on next app open. Pulling the native-sync stream here
+                // makes any such item surface within one poll; new items flow to
+                // startProactiveNotifications, and the persisted cursor dedupes so
+                // this is a no-op when nothing new arrived.
+                (dataRepository as? DenebGatewayClient)?.syncNativeState()
             }
         }
     }

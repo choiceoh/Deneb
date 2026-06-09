@@ -67,8 +67,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -192,6 +195,30 @@ class DenebGatewayClient(
     // Native work feed: proactive reports and native shares as actionable rows.
     private val _denebWorkFeed = MutableStateFlow<List<WorkFeedItem>>(emptyList())
     val denebWorkFeed: StateFlow<List<WorkFeedItem>> = _denebWorkFeed
+
+    /** One proactive 업무-feed report worth a tray notification. */
+    data class ProactiveNotification(val title: String, val body: String)
+
+    // Durable proactive-notification stream. Emits once per genuinely-new
+    // workfeed.created item the native-sync pull surfaces (see applyNativeSyncEvent
+    // / maybeEmitProactiveNotification); TaskScheduler collects it to raise a tray
+    // notification when backgrounded. The gateway's live SSE push is best-effort
+    // with no persistence — a frame produced while the app is asleep, mid-reconnect,
+    // or across a gateway restart is dropped and never replayed — so notifications
+    // hang off the cursor-based sync instead, which replays every missed item
+    // exactly once on the next pull (live-push-triggered, reconnect catch-up, or
+    // the poll-loop fallback).
+    private val _proactiveNotifications =
+        MutableSharedFlow<ProactiveNotification>(extraBufferCapacity = 32)
+    val proactiveNotifications: SharedFlow<ProactiveNotification> =
+        _proactiveNotifications.asSharedFlow()
+
+    // The first post-launch sync is a catch-up over everything accumulated while
+    // the app was closed: surface those into the feed but suppress notifications so
+    // opening the app doesn't fire a barrage. Only items pulled after this is set
+    // raise a notification. Read/written only under nativeSyncGate, so the gate's
+    // happens-before covers visibility without @Volatile.
+    private var nativeSyncBaselined = false
 
     private var sessionKey: String = "client:main"
     private val _currentConversationId = MutableStateFlow<String?>(sessionKey)
@@ -424,6 +451,11 @@ class DenebGatewayClient(
                 cursor = nextCursor
                 pages++
             }
+            // First successful pull is the catch-up baseline: from here on a
+            // newly-created item raises a notification (the catch-up batch just
+            // applied did not). Set inside the gate so the flag and the
+            // maybeEmitProactiveNotification reads above stay serialized.
+            if (pulled) nativeSyncBaselined = true
         }
         reloadSessions
             .filter { it == sessionKey }
@@ -506,8 +538,14 @@ class DenebGatewayClient(
 
     private fun applyNativeSyncEvent(event: NativeSyncEvent, reloadSessions: MutableSet<String>) {
         when (event.type) {
-            "workfeed.created",
+            "workfeed.created" -> {
+                val item = decodeWorkFeedItem(event.payload) ?: return
+                upsertSyncedWorkFeedItem(item)
+                maybeEmitProactiveNotification(item)
+            }
             "workfeed.updated" -> {
+                // Updates (status flips, action results) refresh the feed but are
+                // not fresh arrivals, so they never raise a notification.
                 val item = decodeWorkFeedItem(event.payload) ?: return
                 upsertSyncedWorkFeedItem(item)
             }
@@ -547,6 +585,22 @@ class DenebGatewayClient(
             val next = items.filterNot { it.id == item.id } + item
             next.sortedByDescending { it.createdAtMs }
         }
+    }
+
+    // Raise a durable proactive notification for a freshly-created work-feed item.
+    // Called from applyNativeSyncEvent under nativeSyncGate, so the baseline read
+    // and the cursor advance are serialized — each item notifies at most once.
+    // Suppressed until the first sync has baselined (the catch-up over the closed
+    // period must not barrage) and only for live unread items (acked/snoozed are
+    // already dropped by upsertSyncedWorkFeedItem). tryEmit is non-blocking, so
+    // holding the gate here is safe.
+    private fun maybeEmitProactiveNotification(item: WorkFeedItem) {
+        if (!nativeSyncBaselined) return
+        if (item.id.isBlank() || item.status != "unread") return
+        val body = item.summary.ifBlank { item.body }.ifBlank { item.title }
+        _proactiveNotifications.tryEmit(
+            ProactiveNotification(title = item.title.ifBlank { "Deneb" }, body = body),
+        )
     }
 
     // --- Conversation drawer → Deneb sessions browser -----------------------
