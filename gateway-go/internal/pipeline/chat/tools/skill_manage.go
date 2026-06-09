@@ -433,12 +433,28 @@ func findSkillPath(workspaceDir, name string) (string, error) {
 		if !cat.IsDir() {
 			continue
 		}
-		candidate := filepath.Join(skillsRoot, cat.Name(), name, "SKILL.md")
-		if skillFileExists(candidate) {
+		// Nested category layout: skills/<category>/<name>/SKILL.md.
+		if candidate := filepath.Join(skillsRoot, cat.Name(), name, "SKILL.md"); skillFileExists(candidate) {
 			return candidate, nil
 		}
+		// Genesis output nests one level deeper:
+		// skills/genesis/<category>/<name>/SKILL.md. domain/skills/discovery.go
+		// indexes these into the catalog (the genesis dir is a source, its
+		// sub-dir the category), so read/patch must reach them too.
+		subEntries, subErr := os.ReadDir(filepath.Join(skillsRoot, cat.Name()))
+		if subErr != nil {
+			continue
+		}
+		for _, sub := range subEntries {
+			if !sub.IsDir() {
+				continue
+			}
+			if candidate := filepath.Join(skillsRoot, cat.Name(), sub.Name(), name, "SKILL.md"); skillFileExists(candidate) {
+				return candidate, nil
+			}
+		}
 	}
-	return "", fmt.Errorf("skill %q not found under skills/ (checked skills/%s/SKILL.md and skills/<category>/%s/SKILL.md)", name, name, name)
+	return "", fmt.Errorf("skill %q not found under skills/ (checked flat, category, and genesis layouts)", name)
 }
 
 func isValidCategory(cat string) bool {
