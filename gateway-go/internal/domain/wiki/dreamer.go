@@ -44,6 +44,11 @@ type diaryProcessState struct {
 	Files     map[string]diaryFileState `json:"files"`
 	Recent    []processedDiaryCapsule   `json:"recent,omitempty"`
 	UpdatedAt string                    `json:"updatedAt,omitempty"`
+	// LastDreamMs is the unix-millis time of the last dream cycle, persisted so
+	// the 8h time-trigger survives gateway restarts (which happen every few
+	// minutes). Without it, in-memory lastDream reset to zero on every boot and
+	// dreaming never fired.
+	LastDreamMs int64 `json:"lastDreamMs,omitempty"`
 }
 
 type diaryFileState struct {
@@ -114,13 +119,32 @@ type WikiDreamer struct {
 
 // NewWikiDreamer creates a new wiki dreamer.
 func NewWikiDreamer(store *Store, client *llm.Client, model string, cfg Config, logger *slog.Logger) *WikiDreamer {
-	return &WikiDreamer{
+	wd := &WikiDreamer{
 		store:  store,
 		config: cfg,
 		client: client,
 		model:  model,
 		logger: logger,
 	}
+	// Restore lastDream from persisted state so the 8h time-trigger survives
+	// gateway restarts. Without this, lastDream stayed zero on every boot,
+	// ShouldDream's IsZero guard blocked the time path, and turnCount (also reset
+	// on restart) rarely reached its threshold — dreaming was dead for ~26 days.
+	// On the first run (no persisted value), seed lastDream=now and persist so
+	// the interval starts counting from boot instead of staying zero forever.
+	if store != nil {
+		state := wd.loadDiaryProcessState()
+		if state.LastDreamMs > 0 {
+			wd.lastDream = time.UnixMilli(state.LastDreamMs)
+		} else {
+			wd.lastDream = time.Now()
+			state.LastDreamMs = wd.lastDream.UnixMilli()
+			if err := wd.saveDiaryProcessState(state); err != nil && logger != nil {
+				logger.Warn("wiki-dream: seed lastDream failed", "error", err)
+			}
+		}
+	}
+	return wd
 }
 
 // IncrementTurn records a conversation turn for threshold tracking.
@@ -963,6 +987,15 @@ func normalizeSlug(path string) string {
 func (wd *WikiDreamer) resetCounters() {
 	wd.turnCount = 0
 	wd.lastDream = time.Now()
+	// Persist lastDream so the time-trigger survives restarts (see NewWikiDreamer).
+	if wd.store == nil {
+		return
+	}
+	state := wd.loadDiaryProcessState()
+	state.LastDreamMs = wd.lastDream.UnixMilli()
+	if err := wd.saveDiaryProcessState(state); err != nil && wd.logger != nil {
+		wd.logger.Warn("wiki-dream: persist lastDream failed", "error", err)
+	}
 }
 
 // mergeTags merges two tag lists, deduplicating.
