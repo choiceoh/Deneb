@@ -364,6 +364,11 @@ func ToolWrite(defaultDir string) ToolFunc {
 		}
 
 		path := ResolvePath(p.FilePath, defaultDir)
+		// A directory target yields a confusing "rename: is a directory" error
+		// from atomicfile below; reject it up front with a clear message.
+		if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
+			return "", fmt.Errorf("%q is a directory, not a file — write needs a file path", p.FilePath)
+		}
 		if err := CheckProtectedPath(path, "write"); err != nil {
 			return "", err
 		}
@@ -424,6 +429,14 @@ func ToolEdit(defaultDir string) ToolFunc {
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
+			// A directory target yields a confusing "is a directory" read error.
+			// edit/write operate on a single file; point the model at read for
+			// directory exploration. (ResolvePath clamps out-of-workspace paths
+			// to the workspace root, which is itself a directory, so this also
+			// catches that case.)
+			if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
+				return "", fmt.Errorf("%q is a directory, not a file — edit targets a single file; use the read tool to list a directory", p.FilePath)
+			}
 			return "", fmt.Errorf("failed to read file: %w", err)
 		}
 
