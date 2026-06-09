@@ -30,6 +30,8 @@ import ai.deneb.data.AppSettings
 import ai.deneb.data.DataRepository
 import ai.deneb.data.ThemeMode
 import ai.deneb.deneb.DenebGatewayClient
+import ai.deneb.deneb.captureAudio
+import ai.deneb.deneb.captureImage
 import ai.deneb.ui.chat.composables.CaptureActions
 import ai.deneb.ui.DarkColorScheme
 import ai.deneb.ui.LightColorScheme
