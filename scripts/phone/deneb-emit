@@ -11,10 +11,18 @@
 # the endpoint is loopback-only, and a request forwarded over your SSH session
 # arrives on the host's loopback — holding the SSH key IS the auth.
 #
+# Offline queue: a phone is mobile, so the tunnel drops (subway, wifi↔cellular
+# handoff). When the POST fails the event is saved to ~/.deneb-queue instead of
+# being lost; every later deneb-emit flushes the backlog (oldest first) before
+# sending its own event, so a connectivity gap just delays delivery. To drain the
+# queue without sending a new event — e.g. on a timer when no events are flowing —
+# run `deneb-emit --flush` (see README: termux-job-scheduler).
+#
 # Usage:
 #   deneb-emit <type> <text> [source]
 #   deneb-emit notification "김부장: 내일 3시 미팅 가능?" 카카오톡
 #   termux-clipboard-get | deneb-emit clipboard - 클립보드
+#   deneb-emit --flush          # drain the offline backlog, send nothing new
 #
 #   type:   notification | context | clipboard | sms | <free label>
 #   text:   the event body; "-" reads from stdin
@@ -22,12 +30,54 @@
 #
 # Env:
 #   DENEB_INGEST_URL   gateway base URL (default http://127.0.0.1:18789)
+#   DENEB_QUEUE_DIR    offline queue directory (default ~/.deneb-queue)
 
 set -euo pipefail
 DENEB_INGEST_URL="${DENEB_INGEST_URL:-http://127.0.0.1:18789}"
+QUEUE_DIR="${DENEB_QUEUE_DIR:-$HOME/.deneb-queue}"
+
+# post_body POSTs a JSON body; returns 0 on success, non-zero on any failure
+# (tunnel down, timeout, or HTTP 4xx/5xx — -f turns those into a failure too).
+post_body() {
+  curl -fsS -m 10 -X POST "$DENEB_INGEST_URL/api/event/ingest" \
+    -H 'Content-Type: application/json' -d "$1" >/dev/null 2>&1
+}
+
+# flush_queue sends queued events oldest-first, deleting each on success, and
+# stops at the first failure (still offline) so ordering is preserved for the next
+# attempt. Returns 0 if the queue is empty afterward, 1 if events remain.
+flush_queue() {
+  [ -d "$QUEUE_DIR" ] || return 0
+  local f
+  for f in "$QUEUE_DIR"/*.json; do
+    [ -e "$f" ] || return 0      # glob did not match → queue is empty
+    if post_body "$(cat "$f")"; then
+      rm -f "$f"
+    else
+      return 1                   # still offline — keep this one and the rest
+    fi
+  done
+  return 0
+}
+
+# enqueue saves a body for later retry. The filename is a high-resolution
+# timestamp so the queue drains in arrival order; $$ disambiguates same-instant
+# writes from concurrent callers.
+enqueue() {
+  mkdir -p "$QUEUE_DIR"
+  local ts
+  ts="$(date +%s%N 2>/dev/null || date +%s)"
+  printf '%s' "$1" > "$QUEUE_DIR/${ts}-$$.json"
+}
+
+# --flush: drain the backlog and exit, without sending a new event.
+if [ "${1:-}" = "--flush" ]; then
+  if flush_queue; then echo "queue empty"; else echo "still offline — queue retained"; fi
+  exit 0
+fi
 
 if [ "$#" -lt 2 ]; then
-  echo "usage: deneb-emit <type> <text|-> [source]" >&2
+  echo "usage: deneb-emit <type> <text|-> [source]   |   deneb-emit --flush" >&2
   exit 2
 fi
 type="$1"
@@ -55,7 +105,13 @@ else
   body="{\"type\":\"$(esc "$type")\",\"text\":\"$(esc "$text")\",\"source\":\"$(esc "$source")\"}"
 fi
 
-# -f fails loudly on HTTP errors (403/400) so a misconfigured tunnel is visible.
-curl -fsS -m 10 -X POST "$DENEB_INGEST_URL/api/event/ingest" \
-  -H 'Content-Type: application/json' -d "$body"
-echo
+# Flush any backlog first (best-effort), then send the current event. If the send
+# fails — tunnel down — queue it so a later deneb-emit (or --flush) retries it in
+# order. Either way the phone-side call returns immediately.
+flush_queue || true
+if post_body "$body"; then
+  echo '{"status":"accepted"}'
+else
+  enqueue "$body"
+  echo '{"status":"queued (offline)"}'
+fi

@@ -140,3 +140,22 @@ termux-clipboard-get | deneb-emit clipboard - 클립보드
 - 알림 본문이 SSH 로 흐른다(금융·인증 포함). 비-actionable 은 서버가 억제하지만,
   민감 소스(은행 앱 등)는 Tasker 단에서 아예 제외하거나, `source` 라벨로 게이트웨이
   필터를 강화하는 편이 안전하다.
+
+## 오프라인 큐잉
+
+폰은 이동 중 터널이 끊긴다(지하철·WiFi↔셀룰러 전환). 이때 `deneb-emit` 은 이벤트를
+잃지 않고 `~/.deneb-queue` 에 저장하고, **다음 `deneb-emit` 호출이 백로그를 오래된
+것부터 먼저 보낸 뒤** 자기 이벤트를 전송한다 — 연결이 끊겨도 순서대로 따라잡는다.
+
+이벤트가 한동안 없으면 큐가 안 비워지니, 주기적으로 배수만 돌린다:
+```bash
+deneb-emit --flush     # 새 이벤트 없이 큐만 비운다
+```
+`termux-job-scheduler` 로 등록해 두면 자동 배수(예: 5분마다). 인자를 못 주므로 한 줄
+래퍼를 둔다:
+```bash
+printf '#!/data/data/com.termux/files/usr/bin/bash\nexec ~/bin/deneb-emit --flush\n' > ~/bin/deneb-flush
+chmod +x ~/bin/deneb-flush
+termux-job-scheduler --script ~/bin/deneb-flush --period-ms 300000
+```
+큐 위치는 `DENEB_QUEUE_DIR` 로 바꿀 수 있다(기본 `~/.deneb-queue`).
