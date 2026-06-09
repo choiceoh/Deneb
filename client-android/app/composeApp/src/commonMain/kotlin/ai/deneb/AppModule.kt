@@ -30,11 +30,6 @@ import ai.deneb.tools.NotificationPermissionController
 import ai.deneb.tools.SmsPermissionController
 import ai.deneb.tools.SmsSendPermissionController
 import ai.deneb.ui.chat.ChatViewModel
-import ai.deneb.ui.sandbox.SandboxFileBrowserViewModel
-import ai.deneb.ui.sandbox.SandboxPackagesViewModel
-import ai.deneb.ui.sandbox.SandboxSessionViewModel
-import ai.deneb.ui.settings.SandboxViewModel
-import ai.deneb.ui.settings.SettingsViewModel
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
@@ -129,10 +124,5 @@ val appModule = module {
     }
     single<DaemonController> { createDaemonController() }
     single<SandboxController> { createSandboxController() }
-    viewModel { SettingsViewModel(get<DataRepository>(), get<DaemonController>(), get<NotificationPermissionController>(), get<TaskScheduler>()) }
-    viewModel { SandboxViewModel(get<DataRepository>(), get<SandboxController>()) }
-    viewModel { SandboxFileBrowserViewModel(get<SandboxController>()) }
-    viewModel { SandboxPackagesViewModel(get<SandboxController>()) }
-    viewModel { SandboxSessionViewModel(get<SandboxController>(), get<DataRepository>()) }
     viewModel { ChatViewModel(get<DataRepository>(), get<TaskScheduler>()) }
 }

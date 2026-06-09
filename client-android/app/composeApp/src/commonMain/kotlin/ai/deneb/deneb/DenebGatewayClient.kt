@@ -157,9 +157,8 @@ class DenebGatewayClient(
     private val _savedConversations = MutableStateFlow<List<Conversation>>(emptyList())
     override val savedConversations: StateFlow<List<Conversation>> = _savedConversations
 
-    // Deneb wiki pages surfaced through the upstream memory screen. getMemories() returns
-    // this snapshot and also kicks a refresh; SettingsViewModel observes the flow
-    // to rebuild its state once the RPC lands (see SettingsViewModel.init).
+    // Deneb wiki pages. getMemories() returns this snapshot and also kicks a refresh;
+    // observers rebuild their state once the RPC lands.
     private val _denebMemories = MutableStateFlow<List<MemoryEntry>>(emptyList())
     val denebMemories: StateFlow<List<MemoryEntry>> = _denebMemories
 

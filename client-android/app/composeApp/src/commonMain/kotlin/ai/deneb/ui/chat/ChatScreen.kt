@@ -81,7 +81,6 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.TextFieldValue
@@ -91,7 +90,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ai.deneb.BackIcon
 import ai.deneb.Platform
 import ai.deneb.currentPlatform
-import ai.deneb.TerminalLine
 import ai.deneb.data.Service
 import ai.deneb.data.supportsAgenticFlows
 import ai.deneb.getBackgroundDispatcher
@@ -126,9 +124,6 @@ import ai.deneb.ui.denebPopExit
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.DenebUiBlock
 import ai.deneb.ui.markdown.parseMarkdown
-import ai.deneb.ui.sandbox.SandboxTabsContent
-import ai.deneb.ui.settings.SandboxUiState
-import ai.deneb.ui.settings.SandboxViewModel
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.fallback_answered_by
 import deneb.composeapp.generated.resources.fallback_service_failed
@@ -162,7 +157,6 @@ fun ChatScreen(
     onOpenSearch: () -> Unit = {},
     onOpenPeople: () -> Unit = {},
     onOpenCategories: () -> Unit = {},
-    isSandboxAvailable: Boolean = false,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
@@ -176,7 +170,6 @@ fun ChatScreen(
         onOpenSearch = onOpenSearch,
         onOpenPeople = onOpenPeople,
         onOpenCategories = onOpenCategories,
-        isSandboxAvailable = isSandboxAvailable,
         navigationTabBar = navigationTabBar,
     )
 }
@@ -191,11 +184,7 @@ fun ChatScreenContent(
     onOpenSearch: () -> Unit = {},
     onOpenPeople: () -> Unit = {},
     onOpenCategories: () -> Unit = {},
-    isSandboxAvailable: Boolean = false,
     navigationTabBar: (@Composable () -> Unit)? = null,
-    initialSandboxOpen: Boolean = false,
-    previewSandboxState: SandboxUiState? = null,
-    previewSandboxLines: ImmutableList<TerminalLine> = persistentListOf(),
 ) {
     if (uiState.isInteractiveMode && !uiState.isRestoring) {
         InteractiveModeScreen(uiState = uiState)
@@ -209,11 +198,7 @@ fun ChatScreenContent(
             onOpenSearch = onOpenSearch,
             onOpenPeople = onOpenPeople,
             onOpenCategories = onOpenCategories,
-            isSandboxAvailable = isSandboxAvailable,
             navigationTabBar = navigationTabBar,
-            initialSandboxOpen = initialSandboxOpen,
-            previewSandboxState = previewSandboxState,
-            previewSandboxLines = previewSandboxLines,
         )
     }
 }
@@ -500,16 +485,11 @@ private fun ChatModeScreen(
     onOpenSearch: () -> Unit = {},
     onOpenPeople: () -> Unit = {},
     onOpenCategories: () -> Unit = {},
-    isSandboxAvailable: Boolean,
     navigationTabBar: (@Composable () -> Unit)?,
-    initialSandboxOpen: Boolean = false,
-    previewSandboxState: SandboxUiState? = null,
-    previewSandboxLines: ImmutableList<TerminalLine> = persistentListOf(),
 ) {
-    var isSandboxOpen by rememberSaveable { mutableStateOf(initialSandboxOpen) }
     var showWorkFeed by rememberSaveable { mutableStateOf(false) }
-    // Hoisted here so the draft survives toggling the sandbox/terminal view, which
-    // removes QuestionInput from composition and would otherwise drop the text.
+    // Hoisted here so the draft survives recompositions that remove QuestionInput
+    // from composition and would otherwise drop the text.
     var questionInputText by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(""))
     }
@@ -550,19 +530,6 @@ private fun ChatModeScreen(
         }
     }
 
-    // When the active conversation changes (e.g. user starts a new chat from the
-    // top bar or taps the heartbeat banner), collapse the sandbox view so the
-    // user lands on the chat they just opened. Tracking the previous id avoids
-    // firing on the initial composition — important when returning from Settings,
-    // where rememberSaveable has just restored isSandboxOpen.
-    var lastConversationId by remember { mutableStateOf(uiState.currentConversationId) }
-    LaunchedEffect(uiState.currentConversationId) {
-        if (lastConversationId != uiState.currentConversationId) {
-            if (isSandboxOpen) isSandboxOpen = false
-            lastConversationId = uiState.currentConversationId
-        }
-    }
-
     LaunchedEffect(uiState.snackbarMessage) {
         val resource = uiState.snackbarMessage ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(getString(resource))
@@ -572,13 +539,6 @@ private fun ChatModeScreen(
     val filteredConversations = remember(uiState.savedConversations, uiState.pendingConversationDeletion) {
         val pendingId = uiState.pendingConversationDeletion
         if (pendingId != null) uiState.savedConversations.filter { it.id != pendingId }.toImmutableList() else uiState.savedConversations
-    }
-
-    val historyState = rememberUpdatedState(uiState.history)
-    val isShellExecuting by remember {
-        derivedStateOf {
-            historyState.value.any { it.role == History.Role.TOOL_EXECUTING && it.content == "execute_shell_command" }
-        }
     }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
@@ -668,10 +628,6 @@ private fun ChatModeScreen(
                 } else {
                     { drawerScope.launch { drawerState.open() } }
                 },
-                isSandboxAvailable = isSandboxAvailable,
-                isSandboxOpen = isSandboxOpen,
-                isShellExecuting = isShellExecuting,
-                onToggleSandbox = { isSandboxOpen = !isSandboxOpen },
                 navigationTabBar = navigationTabBar,
                 onOpenSessionDrawer = { drawerScope.launch { sessionDrawerState.open() } },
                 onOpenWorkFeed = { showWorkFeed = true },
@@ -697,7 +653,6 @@ private fun ChatModeScreen(
                 onTap = {
                     uiState.heartbeatConversationId?.let { uiState.actions.loadConversation(it) }
                     uiState.actions.clearUnreadHeartbeat()
-                    isSandboxOpen = false
                 },
                 onDismiss = {
                     uiState.actions.clearUnreadHeartbeat()
@@ -708,7 +663,6 @@ private fun ChatModeScreen(
                 visible = uiState.hasUnreadWorkReport,
                 onTap = {
                     uiState.actions.openWorkReport()
-                    isSandboxOpen = false
                 },
                 onDismiss = {
                     uiState.actions.clearUnreadWorkReport()
@@ -732,23 +686,7 @@ private fun ChatModeScreen(
                 )
             }
 
-            if (isSandboxOpen) {
-                val isPreview = LocalInspectionMode.current
-                val sandboxViewModel = if (!isPreview) koinViewModel<SandboxViewModel>() else null
-                val liveState = sandboxViewModel?.state?.collectAsStateWithLifecycle()?.value
-                val sandboxState = liveState ?: previewSandboxState ?: SandboxUiState()
-                SandboxTabsContent(
-                    sandboxState = sandboxState,
-                    onSetupSandbox = sandboxViewModel?.let { { it.onSetupSandbox() } } ?: {},
-                    onCancelSandbox = sandboxViewModel?.let { { it.onCancelSandbox() } } ?: {},
-                    previewLines = previewSandboxLines,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                )
-            } else {
-                Box(Modifier.weight(1f)) {
+            Box(Modifier.weight(1f)) {
                     var isDropping by remember {
                         mutableStateOf(false)
                     }
@@ -1113,23 +1051,20 @@ private fun ChatModeScreen(
                         }
                     }
                 }
-            }
 
-            if (!isSandboxOpen) {
-                QuestionInput(
-                    files = uiState.files,
-                    addFile = uiState.actions.addFile,
-                    removeFile = uiState.actions.removeFile,
-                    ask = uiState.actions.ask,
-                    supportedFileExtensions = uiState.supportedFileExtensions,
-                    textState = questionInputText,
-                    onTextStateChange = { questionInputText = it },
-                    isLoading = uiState.isLoading,
-                    cancel = uiState.actions.cancel,
-                    availableServices = uiState.availableServices,
-                    onSelectService = uiState.actions.selectService,
-                )
-            }
+            QuestionInput(
+                files = uiState.files,
+                addFile = uiState.actions.addFile,
+                removeFile = uiState.actions.removeFile,
+                ask = uiState.actions.ask,
+                supportedFileExtensions = uiState.supportedFileExtensions,
+                textState = questionInputText,
+                onTextStateChange = { questionInputText = it },
+                isLoading = uiState.isLoading,
+                cancel = uiState.actions.cancel,
+                availableServices = uiState.availableServices,
+                onSelectService = uiState.actions.selectService,
+            )
         }
         SnackbarHost(
             hostState = snackbarHostState,
