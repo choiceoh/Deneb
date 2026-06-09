@@ -35,10 +35,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.RichTooltip
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -607,21 +604,47 @@ private fun ModelTab(client: DenebGatewayClient) {
             HealthLegendItem(ModelHealth.OFFLINE, "응답 없음")
             HealthLegendItem(ModelHealth.UNKNOWN, "미확인")
         }
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        // Role summary: every role and its currently-assigned model at a glance,
+        // so you don't have to click through each segment to see what's wired.
+        // Tapping a row selects that role for the model list below.
+        SettingsCard(innerPadding = false) {
             ModelRole.entries.forEachIndexed { i, r ->
-                SegmentedButton(
-                    selected = role == r,
-                    onClick = { role = r },
-                    shape = SegmentedButtonDefaults.itemShape(i, ModelRole.entries.size),
-                ) { Text(r.label) }
+                val assignedId = roleModels[r.wire]
+                val assignedName = models.firstOrNull { it.id == assignedId }?.display
+                    ?: assignedId ?: "미설정"
+                val isSel = role == r
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { haptics.tap(); role = r }
+                        .handCursor()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        r.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (isSel) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.width(56.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        assignedName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (i < ModelRole.entries.lastIndex) {
+                    HorizontalDivider(
+                        Modifier.padding(start = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                    )
+                }
             }
-        }
-        if (currentForRole != null) {
-            Text(
-                "현재: $currentForRole",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
         }
         if (switchFailed) {
             Text(
@@ -630,58 +653,80 @@ private fun ModelTab(client: DenebGatewayClient) {
                 color = MaterialTheme.colorScheme.error,
             )
         }
+        Text(
+            "'${role.label}' 역할에 사용할 모델",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        // Model list grouped by provider (the id prefix before "/"), so local
+        // vLLM, custom endpoints, and cloud providers don't blur into one flat
+        // list. Tapping a row assigns that model to the role selected above.
         SettingsCard(innerPadding = false) {
-            models.forEachIndexed { i, model ->
-                val isCurrent = model.id == currentForRole
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = !isCurrent && !switching) {
-                            haptics.tap()
-                            scope.launch {
-                                switching = true
-                                switchFailed = !client.setRoleModel(model.id, role.wire)
-                                switching = false
+            val grouped = remember(models) { models.groupBy { modelProviderLabel(it.id) } }
+            grouped.entries.forEachIndexed { gi, (provider, groupModels) ->
+                Text(
+                    provider,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(
+                        start = 16.dp,
+                        top = if (gi == 0) 12.dp else 18.dp,
+                        bottom = 2.dp,
+                    ),
+                )
+                groupModels.forEachIndexed { mi, model ->
+                    val isCurrent = model.id == currentForRole
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !isCurrent && !switching) {
+                                haptics.tap()
+                                scope.launch {
+                                    switching = true
+                                    switchFailed = !client.setRoleModel(model.id, role.wire)
+                                    switching = false
+                                }
+                            }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // Color = response status (online/offline/unknown); filled = the
+                        // model currently selected for this role, ring = not selected.
+                        HealthDot(health = ModelHealth.parse(model.health), selected = isCurrent)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                model.display,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                model.id + ModelHealth.parse(model.health).suffix,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        // User-added models can be removed; built-in/role models can't.
+                        if (model.custom) {
+                            TextButton(
+                                onClick = {
+                                    haptics.reject()
+                                    pendingDelete = model
+                                },
+                                enabled = !switching,
+                            ) {
+                                Text("삭제", color = MaterialTheme.colorScheme.error)
                             }
                         }
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Color = response status (online/offline/unknown); filled = the
-                    // model currently selected for this role, ring = not selected.
-                    HealthDot(health = ModelHealth.parse(model.health), selected = isCurrent)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            model.display,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            model.id + ModelHealth.parse(model.health).suffix,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    }
+                    if (mi < groupModels.lastIndex) {
+                        HorizontalDivider(
+                            Modifier.padding(start = 16.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                         )
                     }
-                    // User-added models can be removed; built-in/role models can't.
-                    if (model.custom) {
-                        TextButton(
-                            onClick = {
-                                haptics.reject()
-                                pendingDelete = model
-                            },
-                            enabled = !switching,
-                        ) {
-                            Text("삭제", color = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                }
-                if (i < models.lastIndex) {
-                    HorizontalDivider(
-                        Modifier.padding(start = 16.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                    )
                 }
             }
         }
@@ -1334,6 +1379,24 @@ private enum class ModelRole(val wire: String, val label: String, val desc: Stri
     LIGHTWEIGHT("lightweight", "경량", "메일 요약 등 분량이 정해진 요약 작업"),
     ANALYSIS("analysis", "분석", "추론이 필요한 고품질 작업"),
     FALLBACK("fallback", "폴백", "메인 모델이 실패했을 때 대신 쓰는 모델"),
+}
+
+// modelProviderLabel maps a model id ("vllm/step3p7", "custom/gemma…") to a
+// human label for grouping the model list by provider. The prefix before the
+// first "/" is the provider key; unknown providers fall back to the raw prefix
+// so a newly-added provider still groups sensibly instead of vanishing.
+private fun modelProviderLabel(id: String): String {
+    val p = id.substringBefore('/', "")
+    return when {
+        p.isEmpty() -> "기타"
+        p == "vllm" -> "로컬 (vLLM)"
+        p.startsWith("custom") -> "커스텀"
+        p == "google" -> "Google"
+        p == "anthropic" -> "Anthropic"
+        p == "openai" -> "OpenAI"
+        p == "zai" -> "Z.ai"
+        else -> p
+    }
 }
 
 private const val KEY_URL = "deneb.gatewayUrl"
