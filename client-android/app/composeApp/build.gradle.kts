@@ -178,7 +178,11 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.AppImage)
             packageName = "Deneb"
             // versionName was removed; derive a semver-shaped package version from the build code.
-            packageVersion = "0.0.${libs.versions.android.versionCode.get()}"
+            // Honor the -PdenebVersionCode override (CI injects the git commit count) so each desktop
+            // build gets a unique, increasing MSI ProductVersion. Without this every installer shared
+            // 0.0.<floor> and Windows Installer silently skipped the upgrade (the build stayed pinned).
+            // Falls back to the libs floor for local/IDE builds that don't pass the property.
+            packageVersion = "0.0.${(project.findProperty("denebVersionCode") as? String) ?: libs.versions.android.versionCode.get()}"
 
             macOS {
                 iconFile.set(project.file("icon.icns"))
