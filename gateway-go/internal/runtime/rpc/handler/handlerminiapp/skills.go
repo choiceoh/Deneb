@@ -1,19 +1,15 @@
 // skills.go — miniapp.skills.* RPC handlers.
 //
-// Exposes the workspace skill catalog to the native client's Settings
-// screen as a read-only list ("which skills does this agent have?"). The
-// skills.* RPC surface (skill/ handler) already covers the full
-// snapshot/install/configure flow for richer consumers, but it requires
-// the caller to pass workspaceDir + bundled/managed dirs explicitly. The
-// native client doesn't know server-side paths, so this handler resolves
-// the workspace itself and returns a slim, presentation-ready row set.
+// Exposes the workspace skill catalog to the native client settings
+// (DenebConfigScreen Skills tab) as a read-only list ("which skills does
+// this agent have?"). The skills.* RPC surface (skill/ handler) already
+// covers the full snapshot/install/configure flow for richer consumers;
+// this slim projection is presentation-only.
 //
-// Discovery here intentionally uses WorkspaceDir only — the same config
-// the system-prompt builder uses (run_exec_skills.go:loadCachedSkillsPrompt).
-// That means this list matches the skills the agent actually sees:
-// managed (~/.deneb/skills), personal (~/.agents/skills), project, and
-// workspace skills. Bundled/plugin dirs are not injected (the prompt path
-// doesn't inject them either), so the two surfaces stay consistent.
+// The skills are pre-filtered by the caller (chat.EligibleWorkspaceSkills)
+// through the same archived + eligibility passes the system prompt applies,
+// so the tab advertises only skills the agent can actually use — not the raw
+// discovery result, which would include archived or env/bin-ineligible skills.
 
 package handlerminiapp
 
@@ -50,18 +46,18 @@ type SkillsListResponse struct {
 	Count  int        `json:"count"`
 }
 
-// SkillsDeps holds the workspace resolver. WorkspaceDir is the only
-// dependency — discovery fills the managed/personal/project paths from
-// $HOME internally. A nil resolver disables the domain (Methods returns
-// nil so method_registry can register conditionally).
+// SkillsDeps provides the already-filtered workspace skills. List returns the
+// skills after the archived + eligibility passes (see chat.EligibleWorkspaceSkills),
+// keeping this handler presentation-only. A nil List disables the domain so
+// method_registry can register conditionally.
 type SkillsDeps struct {
-	WorkspaceDir func() string
+	List func() []skills.SkillEntry
 }
 
 // SkillsMethods returns the miniapp.skills.* handler map, or nil when no
-// workspace resolver is wired.
+// skills provider is wired.
 func SkillsMethods(deps SkillsDeps) map[string]rpcutil.HandlerFunc {
-	if deps.WorkspaceDir == nil {
+	if deps.List == nil {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
@@ -75,13 +71,10 @@ func skillsList(deps SkillsDeps) rpcutil.HandlerFunc {
 			return errResp
 		}
 
-		entries := skills.DiscoverWorkspaceSkills(skills.DiscoverConfig{
-			WorkspaceDir: deps.WorkspaceDir(),
-		})
+		entries := deps.List()
 
-		// entries arrive sorted by name from DiscoverWorkspaceSkills; the
-		// front-end can re-group by category/source without losing a stable
-		// secondary order.
+		// entries arrive sorted by name from discovery; the front-end can
+		// re-group by category/source without losing a stable secondary order.
 		rows := make([]SkillRow, 0, len(entries))
 		for _, e := range entries {
 			row := SkillRow{

@@ -92,6 +92,25 @@ func CachedSkillsSnapshot() *skills.FullSkillSnapshot {
 	return skillsCache.snapshot
 }
 
+// EligibleWorkspaceSkills discovers workspace skills and applies the same
+// archived + eligibility filtering loadCachedSkillsPrompt uses, so read-only
+// consumers (the Settings Skills tab via miniapp.skills.list) advertise only
+// skills the agent can actually use — not archived or env/bin-ineligible ones.
+//
+// AvailableTools is intentionally omitted: the tool registry isn't wired at the
+// RPC call site, and requires_tools skills are rare. They fall back to
+// ineligible (the safe side — don't advertise what may not run), which matches
+// the "no over-advertising" intent here.
+func EligibleWorkspaceSkills(workspaceDir string) []skills.SkillEntry {
+	entries := skills.DiscoverWorkspaceSkills(skills.DiscoverConfig{WorkspaceDir: workspaceDir})
+	entries = skills.FilterExcludedSkills(entries, loadArchivedCuratorSkillNames())
+	entries = skills.FilterEligibleSkills(entries, skills.EligibilityContext{
+		EnvVars:      skills.EnvSnapshotFromOS(),
+		SkillConfigs: make(map[string]skills.SkillConfig),
+	})
+	return entries
+}
+
 // InvalidateSkillsCache forces the skills prompt to be rebuilt on next access.
 func InvalidateSkillsCache() {
 	skillsCache.mu.Lock()

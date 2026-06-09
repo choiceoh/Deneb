@@ -22,8 +22,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
@@ -380,12 +382,14 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			},
 		}),
 
-		// Mini App skills list (miniapp.skills.list). Read-only catalog
-		// for the Settings → Skills tab. WorkspaceDir-only discovery
-		// mirrors the system-prompt skill list, so the screen shows the
-		// same skills the agent sees.
+		// Mini App skills list (miniapp.skills.list). Read-only catalog for
+		// the Settings → Skills tab. Uses the same archived + eligibility
+		// filtering as the system prompt (chat.EligibleWorkspaceSkills), so the
+		// tab advertises only skills the agent can actually use.
 		handlerminiapp.SkillsMethods(handlerminiapp.SkillsDeps{
-			WorkspaceDir: resolveWorkspaceDir,
+			List: func() []skills.SkillEntry {
+				return chat.EligibleWorkspaceSkills(resolveWorkspaceDir())
+			},
 		}),
 
 		// Mini App unified search (miniapp.search.all). Single entry
