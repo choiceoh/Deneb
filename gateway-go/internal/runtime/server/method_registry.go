@@ -381,7 +381,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		}),
 
 		// Mini App skills list (miniapp.skills.list). Read-only catalog
-		// for the Settings → Tools screen. WorkspaceDir-only discovery
+		// for the Settings → Skills tab. WorkspaceDir-only discovery
 		// mirrors the system-prompt skill list, so the screen shows the
 		// same skills the agent sees.
 		handlerminiapp.SkillsMethods(handlerminiapp.SkillsDeps{

@@ -782,7 +782,7 @@ class DenebGatewayClient(
         return true
     }
 
-    // --- Skills (read-only) → Settings Tools tab ----------------------------
+    // --- Skills (read-only) → Settings Skills tab ---------------------------
     // The native client doesn't know server-side skill paths; miniapp.skills.list
     // resolves the workspace itself and returns the same skills the agent sees.
 
