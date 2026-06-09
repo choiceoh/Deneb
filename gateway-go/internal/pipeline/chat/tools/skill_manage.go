@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -93,6 +94,10 @@ func toolSkillManage(workspaceDir string, invalidate SkillManageInvalidateFn) To
 		case "delete":
 			result, err = skillDelete(workspaceDir, p.Name, effectiveInvalidate)
 		case "read":
+			// Record the consult so the run loop can attribute this turn's
+			// outcome to the skill — feeds the Evolver's success-rate gate
+			// (Add is nil-safe when no recorder is wired for this run).
+			toolctx.SkillConsultLogFromContext(ctx).Add(p.Name)
 			return skillRead(workspaceDir, p.Name, p.FilePath)
 		case "list_files":
 			return skillListFiles(workspaceDir, p.Name)

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
@@ -82,6 +83,13 @@ func (s *Server) initGenesisServices() {
 	// without importing the genesis package (dependency inversion).
 	if s.chatHandler != nil && s.genesisNudger.Enabled() {
 		s.chatHandler.SetSkillNudger(newChatNudgerAdapter(s.genesisNudger))
+	}
+	// Usage attribution is independent of the nudger: even with the nudger
+	// disabled, recording which skills are used (and whether their turns
+	// succeed) gives the Evolver the success-rate signal its
+	// SkillsNeedingEvolution gate reads — without it the loop runs blind.
+	if s.chatHandler != nil && s.genesisTracker != nil {
+		s.chatHandler.SetSkillUsageRecorder(newChatUsageRecorderAdapter(s.genesisTracker, s.logger))
 	}
 	s.registerSkillLifecycleTool()
 
@@ -171,6 +179,35 @@ func (a *chatNudgerAdapter) OnToolCalls(ctx context.Context, sessionKey string, 
 }
 
 func (a *chatNudgerAdapter) Reset(sessionKey string) { a.inner.Reset(sessionKey) }
+
+// chatUsageRecorderAdapter adapts *genesis.Tracker to chat.SkillUsageRecorder,
+// translating per-turn skill-consult outcomes from the chat run loop into
+// genesis usage records. Lives in the server package (the only place that knows
+// both types) so neither chat nor genesis imports the other.
+type chatUsageRecorderAdapter struct {
+	inner  *genesis.Tracker
+	logger *slog.Logger
+}
+
+func newChatUsageRecorderAdapter(t *genesis.Tracker, logger *slog.Logger) chat.SkillUsageRecorder {
+	return &chatUsageRecorderAdapter{inner: t, logger: logger}
+}
+
+func (a *chatUsageRecorderAdapter) RecordSkillUse(sessionKey, skillName string, success bool, errMsg string) {
+	if a == nil || a.inner == nil {
+		return
+	}
+	if err := a.inner.RecordUsage(genesis.UsageRecord{
+		SkillName:  skillName,
+		SessionKey: sessionKey,
+		Success:    success,
+		ErrorMsg:   errMsg,
+	}); err != nil && a.logger != nil {
+		// Usage telemetry is best-effort — a write failure must never affect the
+		// chat turn, but log it so a persistently failing tracker is visible.
+		a.logger.Warn("genesis: skill usage record failed", "skill", skillName, "error", err)
+	}
+}
 
 // registerGenesisAutonomousTasks registers periodic background tasks for genesis.
 // Called during registerWorkflowSideEffects (non-RPC phase).
