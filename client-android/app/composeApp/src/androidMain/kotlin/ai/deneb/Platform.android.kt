@@ -184,6 +184,19 @@ actual fun createLegacySettings(): Settings? {
     return SharedPreferencesSettings(prefs)
 }
 
+// A plain (unencrypted) prefs file used only as the durable mirror for the gateway
+// URL + client token (DurableMirrorSettings). It is deliberately a SEPARATE file
+// from "kai_secure_prefs" so the AEADBadTagException recovery in
+// createSecureSettings (which deletes kai_secure_prefs) does NOT touch it — that
+// is the whole point: url+token survive the wipe and re-seed the fresh encrypted
+// store on the next read. Single-user device; these two values trade a little
+// secrecy for surviving every update.
+actual fun createDurableSettings(): Settings? {
+    val context: Context by inject(Context::class.java)
+    val prefs = context.getSharedPreferences("deneb_durable_prefs", Context.MODE_PRIVATE)
+    return SharedPreferencesSettings(prefs)
+}
+
 // Tool definitions for Android platform
 actual fun getPlatformToolDefinitions(): List<ToolInfo> = buildList {
     addAll(CommonTools.commonToolDefinitions)

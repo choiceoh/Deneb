@@ -3,6 +3,7 @@ package ai.deneb
 import ai.deneb.data.AppSettings
 import ai.deneb.data.ConversationStorage
 import ai.deneb.data.DataRepository
+import ai.deneb.data.DurableMirrorSettings
 import ai.deneb.data.EmailStore
 import ai.deneb.data.HeartbeatManager
 import ai.deneb.data.MemoryStore
@@ -45,7 +46,18 @@ val appModule = module {
     single<NotificationListenerController> { NotificationListenerController() }
     single<NotificationReader> { NotificationReader() }
     single<AppSettings> {
-        AppSettings(createSecureSettings()).also {
+        // Wrap the encrypted store so the gateway URL + token are mirrored into a
+        // plain store that survives the Android encrypted-prefs wipe on app update
+        // (see DurableMirrorSettings). createDurableSettings() is null on platforms
+        // whose secure store already survives updates, so there we use it directly.
+        val secure = createSecureSettings()
+        val durable = createDurableSettings()
+        val settings = if (durable != null) {
+            DurableMirrorSettings(secure, durable, DurableMirrorSettings.GATEWAY_KEYS)
+        } else {
+            secure
+        }
+        AppSettings(settings).also {
             it.runMigrations(createLegacySettings())
         }
     }
