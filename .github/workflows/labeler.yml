@@ -36,6 +36,7 @@ jobs:
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
       - uses: actions/create-github-app-token@v2
         id: app-token-fallback
+        continue-on-error: true
         if: steps.app-token.outcome == 'failure'
         with:
           app-id: "2971289"
@@ -43,12 +44,12 @@ jobs:
       - uses: actions/labeler@v6
         with:
           configuration-path: .github/labeler.yml
-          repo-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          repo-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           sync-labels: true
       - name: Apply PR size label
         uses: actions/github-script@v8
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const pullRequest = context.payload.pull_request;
             if (!pullRequest) {
@@ -137,7 +138,7 @@ jobs:
       - name: Apply maintainer or trusted-contributor label
         uses: actions/github-script@v8
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const login = context.payload.pull_request?.user?.login;
             if (!login) {
@@ -208,7 +209,7 @@ jobs:
       - name: Apply too-many-prs label
         uses: actions/github-script@v8
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const pullRequest = context.payload.pull_request;
             if (!pullRequest) {
@@ -392,6 +393,7 @@ jobs:
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
       - uses: actions/create-github-app-token@v2
         id: app-token-fallback
+        continue-on-error: true
         if: steps.app-token.outcome == 'failure'
         with:
           app-id: "2971289"
@@ -399,7 +401,7 @@ jobs:
       - name: Backfill PR labels
         uses: actions/github-script@v8
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
@@ -640,6 +642,7 @@ jobs:
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
       - uses: actions/create-github-app-token@v2
         id: app-token-fallback
+        continue-on-error: true
         if: steps.app-token.outcome == 'failure'
         with:
           app-id: "2971289"
@@ -647,7 +650,7 @@ jobs:
       - name: Apply maintainer or trusted-contributor label
         uses: actions/github-script@v8
         with:
-          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || steps.app-token-fallback.outputs.token || github.token }}
           script: |
             const login = context.payload.issue?.user?.login;
             if (!login) {
