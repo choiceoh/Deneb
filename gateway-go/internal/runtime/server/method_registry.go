@@ -380,6 +380,14 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			},
 		}),
 
+		// Mini App skills list (miniapp.skills.list). Read-only catalog
+		// for the Settings → Tools screen. WorkspaceDir-only discovery
+		// mirrors the system-prompt skill list, so the screen shows the
+		// same skills the agent sees.
+		handlerminiapp.SkillsMethods(handlerminiapp.SkillsDeps{
+			WorkspaceDir: resolveWorkspaceDir,
+		}),
+
 		// Mini App unified search (miniapp.search.all). Single entry
 		// point that fans out to wiki + diary + people in parallel.
 		// Replaces the per-domain home menu entries — there's now one

@@ -270,6 +270,22 @@ data class SessionRowOut(
 )
 
 @Serializable
+data class SkillRow(
+    val name: String = "",
+    val description: String = "",
+    val category: String = "",
+    val source: String = "",
+    val version: String = "",
+    val userInvocable: Boolean = false,
+)
+
+@Serializable
+data class SkillsListResponse(
+    val skills: List<SkillRow> = emptyList(),
+    val count: Int = 0,
+)
+
+@Serializable
 data class TodoOut(
     val id: String = "",
     val title: String = "",

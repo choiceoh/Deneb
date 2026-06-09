@@ -20,6 +20,8 @@ import com.inspiredandroid.kai.deneb.generated.MiniappCronDetail
 import com.inspiredandroid.kai.deneb.generated.QATurn
 import com.inspiredandroid.kai.deneb.generated.SearchAllResult
 import com.inspiredandroid.kai.deneb.generated.SessionRowOut
+import com.inspiredandroid.kai.deneb.generated.SkillRow
+import com.inspiredandroid.kai.deneb.generated.SkillsListResponse
 import com.inspiredandroid.kai.ui.chat.History
 import kotlinx.collections.immutable.toImmutableList
 import com.inspiredandroid.kai.ui.chat.WorkFeedItem
@@ -174,6 +176,9 @@ class DenebGatewayClient(
     // Current model id per role (main / lightweight / fallback) for the model tab.
     private val _denebRoleModels = MutableStateFlow<Map<String, String>>(emptyMap())
     val denebRoleModels: StateFlow<Map<String, String>> = _denebRoleModels
+
+    private val _denebSkills = MutableStateFlow<List<SkillRow>>(emptyList())
+    val denebSkills: StateFlow<List<SkillRow>> = _denebSkills
 
     // Recent Gmail surfaced in the native mail screen.
     private val _denebMail = MutableStateFlow<List<MailMessage>>(emptyList())
@@ -774,6 +779,22 @@ class DenebGatewayClient(
                     consecutiveFailures = j.consecutiveErrors,
                 )
             }
+        return true
+    }
+
+    // --- Skills (read-only) → Settings Tools tab ----------------------------
+    // The native client doesn't know server-side skill paths; miniapp.skills.list
+    // resolves the workspace itself and returns the same skills the agent sees.
+
+    fun refreshSkillsAsync() {
+        scope.launch { refreshSkills() }
+    }
+
+    /** Returns false on a failed load so the Skills tab can surface a retry
+     *  instead of showing a misleading "no skills" empty state. */
+    suspend fun refreshSkills(): Boolean {
+        val payload = callRpc<SkillsListResponse>("miniapp.skills.list", buildJsonObject {}) ?: return false
+        _denebSkills.value = payload.skills
         return true
     }
 
