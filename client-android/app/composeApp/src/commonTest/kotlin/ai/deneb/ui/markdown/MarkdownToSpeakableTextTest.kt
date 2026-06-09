@@ -108,4 +108,16 @@ class MarkdownToSpeakableTextTest {
         val md = "| A | B |\n| - | - |\n| 1 | 2 |\n| 3 | 4 |"
         assertEquals("A, B. 1, 2. 3, 4", speak(md))
     }
+
+    @Test
+    fun `plain text keeps task checkbox state`() {
+        val doc = parseMarkdown("- [x] 끝남\n- [ ] 남음")
+        assertEquals("- [x] 끝남\n- [ ] 남음", doc.toPlainText())
+    }
+
+    @Test
+    fun `plain text ordinary bullets are unchanged`() {
+        val doc = parseMarkdown("- 하나\n- 둘")
+        assertEquals("- 하나\n- 둘", doc.toPlainText())
+    }
 }

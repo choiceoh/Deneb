@@ -21,7 +21,9 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "열이 많은 표는 가로 스크롤로 — 칸이 한 글자씩 찌그러지지 않고 전부 읽힘",
             "답변 속 이메일 주소가 바로 탭할 수 있는 링크로 — <주소> 꺾쇠 표기와 ***굵은 기울임***도 올바르게 표시",
+            "H₂O·m² 같은 위·아래 첨자와 <b> 등 HTML 표기, [텍스트][1] 참조형 링크 지원",
             "문장 바로 아래 붙은 표, '2026. 6. 9.' 같은 날짜 줄, HTML 문자(&amp; 등) 렌더링 교정",
             "번호 목록이 10번을 넘어도 번호 칸이 밀리지 않게 정렬",
         ),

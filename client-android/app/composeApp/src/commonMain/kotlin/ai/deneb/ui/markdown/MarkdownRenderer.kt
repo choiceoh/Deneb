@@ -357,6 +357,17 @@ private fun ListItemRow(
 private fun TableBlock(block: Table) {
     val numCols = maxOf(block.headers.size, block.rows.maxOfOrNull { it.size } ?: 0)
     if (numCols == 0) return
+    if (numCols <= 4) {
+        FittedTable(block, numCols)
+    } else {
+        // 5+ columns can't share a phone width — the weight layout crushes every
+        // cell to a character per line. Scroll instead.
+        WideTable(block, numCols)
+    }
+}
+
+@Composable
+private fun FittedTable(block: Table, numCols: Int) {
     // Weight each column by its widest cell so a short key column stops wasting
     // half the width on a key/value table (the common analysis shape). sqrt
     // compresses the extremes, so the long value column gets the room without
@@ -395,6 +406,64 @@ private fun TableBlock(block: Table) {
                         style = markdownBodyStyle,
                         textAlign = alignTextFor(block.alignments.getOrNull(i)),
                         modifier = Modifier.weight(weights.getOrElse(i) { 1f })
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+// Wide table: fixed content-derived column widths under one horizontal scroll, so the
+// header and every row stay aligned and each cell remains readable. Long cells wrap
+// within their clamped column width instead of stretching the table indefinitely.
+@Composable
+private fun WideTable(block: Table, numCols: Int) {
+    val colWidths = remember(block) {
+        IntArray(numCols) { i ->
+            var maxLen = inlineTextLength(block.headers.getOrNull(i) ?: emptyList())
+            for (row in block.rows) {
+                maxLen = maxOf(maxLen, inlineTextLength(row.getOrNull(i) ?: emptyList()))
+            }
+            // ~8dp/char at 14sp plus cell padding; clamped so one verbose cell
+            // doesn't explode its column.
+            (maxLen * 8 + 16).coerceIn(72, 220)
+        }
+    }
+    val totalWidth = colWidths.sum().dp
+    val rowDivider = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+    val scroll = rememberScrollState()
+    Column(
+        Modifier
+            .padding(vertical = 4.dp)
+            .horizontalScroll(scroll),
+    ) {
+        if (block.headers.any { it.isNotEmpty() }) {
+            Row {
+                block.headers.forEachIndexed { i, cell ->
+                    InlineContent(
+                        inlines = cell,
+                        style = markdownBodyStyle.copy(fontWeight = FontWeight.Bold),
+                        textAlign = alignTextFor(block.alignments.getOrNull(i)),
+                        modifier = Modifier.width(colWidths.getOrElse(i) { 100 }.dp)
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
+                }
+            }
+            // Dividers must span the content width, not the viewport, inside the scroller.
+            HorizontalDivider(Modifier.width(totalWidth))
+        }
+        block.rows.forEachIndexed { rowIdx, row ->
+            if (rowIdx > 0) {
+                HorizontalDivider(Modifier.width(totalWidth), thickness = 1.dp, color = rowDivider)
+            }
+            Row {
+                row.forEachIndexed { i, cell ->
+                    InlineContent(
+                        inlines = cell,
+                        style = markdownBodyStyle,
+                        textAlign = alignTextFor(block.alignments.getOrNull(i)),
+                        modifier = Modifier.width(colWidths.getOrElse(i) { 100 }.dp)
                             .padding(horizontal = 8.dp, vertical = 6.dp),
                     )
                 }

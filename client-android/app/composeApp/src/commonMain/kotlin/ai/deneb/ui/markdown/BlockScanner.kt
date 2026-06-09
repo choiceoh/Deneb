@@ -56,8 +56,55 @@ internal object BlockScanner {
 
     fun scan(text: String): ImmutableList<BlockNode> {
         val normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-        val lines = normalized.split("\n")
-        return scanLines(lines, 0, lines.size, 0)
+        val rawLines = normalized.split("\n")
+        val (lines, linkDefs) = extractLinkDefs(rawLines)
+        val blocks = scanLines(lines, 0, lines.size, 0)
+        return if (linkDefs.isEmpty()) blocks else resolveReferenceLinks(blocks, linkDefs)
+    }
+
+    // Reference-style link definition ("[1]: https://…", optionally <url> and a "title").
+    // The destination must look like a real link (scheme/www/mailto) so Korean bracket-label
+    // prose ("[중요]: 내일 회의 준비") is never swallowed as a definition.
+    private val LINK_DEF_REGEX =
+        Regex("""^\s{0,3}\[([^\]]+)\]:\s+(<[^<>\s]+>|https?://\S+|www\.\S+|mailto:\S+)(?:\s+(?:"[^"]*"|'[^']*'))?\s*$""")
+
+    // Collect definitions document-wide and blank their lines (removing them outright would
+    // merge the paragraphs around a definition). Fenced code is skipped — a definition-looking
+    // line inside ``` belongs to the code. "[^1]:" footnote definitions are not link defs.
+    private fun extractLinkDefs(lines: List<String>): Pair<List<String>, Map<String, String>> {
+        if (lines.none { it.length <= MAX_LINE_REGEX_LEN && "]:" in it }) return lines to emptyMap()
+        var defs: MutableMap<String, String>? = null
+        var out: MutableList<String>? = null
+        var inFence = false
+        var fenceChar = ' '
+        var fenceLen = 0
+        for (i in lines.indices) {
+            val line = lines[i]
+            if (line.length > MAX_LINE_REGEX_LEN) continue
+            val fm = FENCE_REGEX.matchEntire(line)
+            if (fm != null) {
+                val f = fm.groupValues[2]
+                if (!inFence) {
+                    inFence = true
+                    fenceChar = f[0]
+                    fenceLen = f.length
+                } else if (f[0] == fenceChar && f.length >= fenceLen && fm.groupValues[3].isBlank()) {
+                    inFence = false
+                }
+                continue
+            }
+            if (inFence || "]:" !in line) continue
+            val m = LINK_DEF_REGEX.matchEntire(line) ?: continue
+            val label = m.groupValues[1].trim().lowercase()
+            if (label.isEmpty() || label.startsWith("^")) continue
+            var url = m.groupValues[2]
+            if (url.first() == '<' && url.last() == '>') url = url.substring(1, url.length - 1)
+            val d = defs ?: linkedMapOf<String, String>().also { defs = it }
+            d[label] = url
+            val o = out ?: lines.toMutableList().also { out = it }
+            o[i] = ""
+        }
+        return (out ?: lines) to (defs ?: emptyMap())
     }
 
     private fun scanLines(lines: List<String>, start: Int, end: Int, depth: Int): ImmutableList<BlockNode> {
