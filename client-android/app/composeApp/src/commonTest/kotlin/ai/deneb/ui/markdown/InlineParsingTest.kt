@@ -293,4 +293,52 @@ class InlineParsingTest {
         val link = inlines("[참고](<https://example.com/a b>)").single() as Link
         assertEquals("https://example.com/a b", link.href)
     }
+
+    @Test
+    fun `html bold and italic tags map to style nodes`() {
+        assertEquals(listOf(Strong(persistentListOf(Text("굵게")))), inlines("<b>굵게</b>"))
+        assertEquals(listOf(Strong(persistentListOf(Text("강조")))), inlines("<strong>강조</strong>"))
+        assertEquals(listOf(Emphasis(persistentListOf(Text("기울임")))), inlines("<em>기울임</em>"))
+    }
+
+    @Test
+    fun `html del tag maps to strike`() {
+        assertEquals(listOf(Strike(persistentListOf(Text("지움")))), inlines("<del>지움</del>"))
+    }
+
+    @Test
+    fun `html sub and sup convert to unicode scripts`() {
+        assertEquals(listOf(Text("H₂O와 m²")), inlines("H<sub>2</sub>O와 m<sup>2</sup>"))
+    }
+
+    @Test
+    fun `html sup with unmappable chars keeps plain content`() {
+        assertEquals(listOf(Text("5th")), inlines("5<sup>th</sup>"))
+    }
+
+    @Test
+    fun `html mark and u are stripped to their content`() {
+        assertEquals(listOf(Text("표시 밑줄")), inlines("<mark>표시</mark> <u>밑줄</u>"))
+    }
+
+    @Test
+    fun `html code tag becomes inline code`() {
+        assertEquals(listOf(InlineCode("a < b")), inlines("<code>a < b</code>"))
+    }
+
+    @Test
+    fun `html bold tag parses nested markdown`() {
+        val strong = inlines("<b>a *i*</b>").single() as Strong
+        assertTrue(strong.children.any { it is Emphasis })
+    }
+
+    @Test
+    fun `unpaired html tag stays literal`() {
+        assertEquals(listOf(Text("List<b> 타입")), inlines("List<b> 타입"))
+    }
+
+    @Test
+    fun `html tag inside inline code stays raw`() {
+        assertEquals(listOf(InlineCode("<b>x</b>")), inlines("`<b>x</b>`"))
+    }
 }
