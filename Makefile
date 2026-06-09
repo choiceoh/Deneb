@@ -197,8 +197,8 @@ data-gen-check:
 # (compares against the committed file) and gates schema drift in CI.
 
 KOTLIN_MODELS_SRC = internal/runtime/rpc/handler/handlerminiapp
-KOTLIN_MODELS_OUT = ../client-android/app/composeApp/src/commonMain/kotlin/com/inspiredandroid/kai/deneb/generated/MiniappWireTypes.kt
-KOTLIN_MODELS_PKG = com.inspiredandroid.kai.deneb.generated
+KOTLIN_MODELS_OUT = ../client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/deneb/generated/MiniappWireTypes.kt
+KOTLIN_MODELS_PKG = ai.deneb.deneb.generated
 
 kotlin-models:
 	cd gateway-go && go run cmd/kotlin-models-gen/main.go \

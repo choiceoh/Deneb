@@ -1,9 +1,9 @@
 // Package clientauth manages the standalone native-client auth secret.
 //
 // The Telegram Mini App authenticates with signed initData (verified against the
-// bot token). A standalone native client — the vendored Kai app — runs outside
-// the Telegram webview and has no initData, so it authenticates with a static
-// bearer secret presented in the Header below.
+// bot token). The standalone Deneb native client runs outside the Telegram
+// webview and has no initData, so it authenticates with a static bearer secret
+// presented in the Header below.
 //
 // The secret lives in {stateDir}/client_token (0600), separate from the bot
 // token and other credentials (it never touches ~/.deneb/.env). Standalone auth

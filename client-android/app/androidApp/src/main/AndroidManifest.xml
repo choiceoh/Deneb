@@ -11,7 +11,7 @@
    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
     <application
-        android:name="com.inspiredandroid.kai.KaiApplication"
+        android:name="ai.deneb.DenebApplication"
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -24,7 +24,7 @@
         <activity
             android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
-            android:name="com.inspiredandroid.kai.MainActivity"
+            android:name="ai.deneb.MainActivity"
             android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -54,16 +54,12 @@
                 android:resource="@xml/file_paths" />
         </provider>
         <service
-            android:name="com.inspiredandroid.kai.DaemonService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-        <service
-            android:name="com.inspiredandroid.kai.inference.ModelDownloadService"
+            android:name="ai.deneb.DaemonService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
         <!-- Home-screen widget: next meeting + unread mail. -->
         <receiver
-            android:name="com.inspiredandroid.kai.DenebWidgetProvider"
+            android:name="ai.deneb.DenebWidgetProvider"
             android:exported="false"
             android:label="@string/widget_label">
             <intent-filter>
@@ -73,8 +69,6 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/deneb_widget_info" />
         </receiver>
-        <uses-native-library android:name="libvndksupport.so" android:required="false"/>
-        <uses-native-library android:name="libOpenCL.so" android:required="false"/>
     </application>
 
 </manifest>

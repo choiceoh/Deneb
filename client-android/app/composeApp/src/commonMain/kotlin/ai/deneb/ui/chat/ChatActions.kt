@@ -1,0 +1,38 @@
+package ai.deneb.ui.chat
+
+import androidx.compose.runtime.Immutable
+import io.github.vinceglb.filekit.PlatformFile
+
+@Immutable
+data class ChatActions(
+    val ask: (String) -> Unit,
+    val toggleSpeechOutput: () -> Unit,
+    val retry: () -> Unit,
+    val clearHistory: () -> Unit,
+    val setIsSpeaking: (Boolean, String) -> Unit,
+    val addFile: (PlatformFile) -> Unit,
+    val removeFile: (PlatformFile) -> Unit,
+    val startNewChat: () -> Unit,
+    val regenerate: () -> Unit,
+    val cancel: () -> Unit,
+    val selectService: (String) -> Unit,
+    val loadConversation: (String) -> Unit,
+    val deleteConversation: (String) -> Unit,
+    val clearUnreadHeartbeat: () -> Unit,
+    val clearUnreadWorkReport: () -> Unit,
+    val openWorkReport: () -> Unit,
+    val openWorkFeedItem: (String) -> Unit,
+    val runWorkFeedAction: (String, String) -> Unit,
+    val clearSnackbar: () -> Unit,
+    val undoDeleteConversation: () -> Unit,
+    val submitUiCallback: (event: String, data: Map<String, String>) -> Unit,
+    val resubmit: (messageId: String, event: String, data: Map<String, String>) -> Unit,
+    val enterInteractiveMode: () -> Unit,
+    val exitInteractiveMode: () -> Unit,
+    val goBackInteractiveMode: () -> Unit,
+    val sendSmsDraft: (String) -> Unit,
+    val discardSmsDraft: (String) -> Unit,
+    // Reload the session list from the gateway — fired when the drawer opens so it
+    // never shows a stale list (the list is otherwise only loaded once at startup).
+    val refreshConversations: () -> Unit,
+)

@@ -112,7 +112,7 @@
 # The Compose Gradle plugin ships default-compose-desktop-rules.pro with only
 # targeted keeps (Skia, Skiko, SliderDefaults, SnapshotStateKt__DerivedStateKt,
 # coroutine volatile fields, kotlinx.serialization infra). We add broader,
-# defensive keeps for the libraries Kai actually uses on desktop. Size cost is
+# defensive keeps for the libraries the app uses on desktop. Size cost is
 # small because the app already references most of these APIs.
 
 # kotlinx.io — Ktor 3.x public functions take kotlinx.io.Source/Sink/Buffer/
@@ -141,7 +141,7 @@
 # ProGuard flags "descriptor class missing" and the reflective KClass handle
 # Koin holds would point at a renamed class. Also makes user-submitted
 # stack traces readable without a mapping file.
--keep class com.inspiredandroid.kai.** { *; }
+-keep class ai.deneb.** { *; }
 
 # androidx.lifecycle / savedstate — required by compose-navigation and
 # Koin ViewModel support. Not covered by the Compose plugin defaults.

@@ -56,7 +56,7 @@ docs/.generated/config-baseline.jsonl
 .autoresearch-wt/
 cache/
 .claude/worktrees/
-# root CLI binary only — anchored so it does not also ignore the nested kai/deneb/ source package
+# root CLI binary only — anchored so it does not also ignore the nested ai/deneb/ source package
 /deneb
 # SQLite project databases (IDE/tool artifacts)
 projects.db

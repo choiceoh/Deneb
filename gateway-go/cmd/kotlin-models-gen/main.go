@@ -11,8 +11,8 @@
 //
 //	go run cmd/kotlin-models-gen/main.go \
 //	    -src internal/runtime/rpc/handler/handlerminiapp \
-//	    -out ../client-android/app/composeApp/src/commonMain/kotlin/com/inspiredandroid/kai/deneb/generated/MiniappWireTypes.kt \
-//	    -pkg com.inspiredandroid.kai.deneb.generated
+//	    -out ../client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/deneb/generated/MiniappWireTypes.kt \
+//	    -pkg ai.deneb.deneb.generated
 //
 // Add -check to compare against the committed file without writing (CI
 // drift gate; mirrors tool-schemas-check). Or via Makefile: make kotlin-models.

@@ -5,7 +5,7 @@ globs: ["client-android/**", "scripts/dev/native-app.sh"]
 
 # Native Live-App Harness (서버에서 실제 앱 검증)
 
-> **`renderPreviews`는 mock 데이터 정적 PNG일 뿐이다.** 실제 동작·실데이터·상호작용을 보려면 진짜 앱을 띄워라. `scripts/dev/native-app.sh`가 **client-android의 Compose Desktop 타깃**(`com.inspiredandroid.kai.MainKt`, commonMain을 Android/iOS와 공유하는 *바로 그 앱*)을 헤드리스 X 디스플레이에서 실행해, 에이전트가 스크린샷으로 보고 tap/type으로 조작하게 한다 — Deneb 네이티브 앱에 한정된 "computer use".
+> **`renderPreviews`는 mock 데이터 정적 PNG일 뿐이다.** 실제 동작·실데이터·상호작용을 보려면 진짜 앱을 띄워라. `scripts/dev/native-app.sh`가 **client-android의 Compose Desktop 타깃**(`ai.deneb.MainKt`, commonMain을 Android/iOS와 공유하는 *바로 그 앱*)을 헤드리스 X 디스플레이에서 실행해, 에이전트가 스크린샷으로 보고 tap/type으로 조작하게 한다 — Deneb 네이티브 앱에 한정된 "computer use".
 
 ## 언제 무엇을 쓰나
 
@@ -45,7 +45,7 @@ scripts/dev/native-app.sh stop
 | `assert "텍스트"` | 화면 OCR → 텍스트 있으면 exit 0, 없으면 1. **기대 화면이 실제로 떴는지** 검증(스모크가 wrong-screen/blank-render를 잡는 근거). |
 | `taptext "텍스트"` | OCR-find 후 그 텍스트를 탭. 레이아웃이 바뀌어도 안 깨지는 네비. ★앵커는 **OCR이 실제로 읽는** 문자열로(예: `← 뒤로`는 화살표 탓에 빗나감→`보관`, `역할별`보다 `경량`이 안정적). 화살표/아이콘 인접 텍스트는 피하고 `assert`로 먼저 검증. |
 | `wait-for "텍스트" [초]` | OCR을 폴링해 그 텍스트가 뜰 때까지 대기(기본 8초, 0.4초 간격). 고정 `sleep` 대신 **렌더 완료를 실제로 기다린다** — 화면 전환 후 정착 대기용. 뜨면 exit 0, 타임아웃 1. 콜드 첫 탭이 애니메이션 중 발사돼 빗나가는 flake를 줄인다. |
-| `seed [url] [token]` | `~/.kai` 게이트웨이 설정 재기록(기본: 프로덕션). |
+| `seed [url] [token]` | `~/.deneb-client` 게이트웨이 설정 재기록(기본: 프로덕션). |
 | `status` / `logs [n]` | 상태 / 앱 로그. |
 | `restart [profile]` / `stop` | 재시작 / 전체 종료. |
 
@@ -95,16 +95,16 @@ DENEB_GATEWAY_URL=http://127.0.0.1:<dev-port> scripts/dev/native-app.sh start
 scripts/dev/native-app.sh shot home    # 홈 데이터가 차 있으면 인증 통과
 ```
 
-- **client-token 인증은 이제 자동 시드된다.** dev 게이트웨이는 `DENEB_STATE_DIR=/tmp/deneb…-dev-state`(≠ `~/.deneb`)를 쓰므로, 예전엔 그 state dir 에 `client_token` 이 없어 `clientauth` 가 꺼진 채 모든 `miniapp.*` RPC 를 401("missing/invalid client token")로 막았다 → **홈 빈 화면 + 채팅 "게이트웨이 오류"**. `lib-server.sh:devlib_seed_client_token` 가 기동 시 **prod `~/.deneb/client_token` 을 dev state dir 로 미러링**(prod 회전 시 갱신)하므로, native-app.sh 가 앱(`~/.kai`)에 시드하는 토큰과 같은 값이라 그대로 통과한다. 예전 수동 우회(`cp ~/.deneb/client_token /tmp/…-dev-state/`)는 더 이상 필요 없다.
+- **client-token 인증은 이제 자동 시드된다.** dev 게이트웨이는 `DENEB_STATE_DIR=/tmp/deneb…-dev-state`(≠ `~/.deneb`)를 쓰므로, 예전엔 그 state dir 에 `client_token` 이 없어 `clientauth` 가 꺼진 채 모든 `miniapp.*` RPC 를 401("missing/invalid client token")로 막았다 → **홈 빈 화면 + 채팅 "게이트웨이 오류"**. `lib-server.sh:devlib_seed_client_token` 가 기동 시 **prod `~/.deneb/client_token` 을 dev state dir 로 미러링**(prod 회전 시 갱신)하므로, native-app.sh 가 앱(`~/.deneb-client`)에 시드하는 토큰과 같은 값이라 그대로 통과한다. 예전 수동 우회(`cp ~/.deneb/client_token /tmp/…-dev-state/`)는 더 이상 필요 없다.
 - **재시작 불필요**: 서버 `clientauth.Verify` 가 토큰 파일을 매 요청 새로 읽으므로 시드만 돼 있으면 되고, `live-test.sh` 는 기동 **전에** 시드하니 신경 쓸 것 없다.
 - **opt-in 전제**: 미러링은 prod 에 `~/.deneb/client_token` 이 있을 때만 동작한다(없으면 `go run ./cmd/deneb-client-token` 으로 1회 생성). 단일 사용자 host 라 dev state dir(`/tmp`)에 토큰이 떨어지는 건 이미 거기 있는 dev config(프로바이더 키 포함)와 동일한 보안 경계.
-- **앱 설정은 host 전역**: native-app.sh 의 `~/.kai` 시드는 인스턴스 격리(디스플레이/state/포트)와 달리 **host 단일**이라, 한 host 에서 prod·dev 두 게이트웨이로 동시에 두 앱을 띄울 수는 없다(마지막 `start`/`seed` 가 `~/.kai` 를 덮어씀). prod↔dev 전환은 순차로.
+- **앱 설정은 host 전역**: native-app.sh 의 `~/.deneb-client` 시드는 인스턴스 격리(디스플레이/state/포트)와 달리 **host 단일**이라, 한 host 에서 prod·dev 두 게이트웨이로 동시에 두 앱을 띄울 수는 없다(마지막 `start`/`seed` 가 `~/.deneb-client` 를 덮어씀). prod↔dev 전환은 순차로.
 - 검증 후엔 `scripts/dev/native-app.sh stop` + `scripts/dev/live-test.sh stop` 로 정리.
 
 ## 동작 원리 (앱 코드 무수정)
 
 - **Xvfb**(가상 디스플레이) + **matchbox-window-manager**(데코·툴바 없는 단일창 키오스크) + **Compose Desktop 앱** + **scrot** 캡처 + **xdotool** 입력. 선택적으로 x11vnc+noVNC.
-- **게이트웨이 자동연결**: 앱의 암호화 설정(`~/.kai/settings.aes`, `EncryptedFileSettings.kt`와 AES-256-GCM byte 호환)에 `deneb.gatewayUrl`/`deneb.clientToken`을 직접 시드. 토큰은 `~/.deneb/client_token`(프로덕션)에서 읽음. **앱 소스는 건드리지 않는다.**
+- **게이트웨이 자동연결**: 앱의 암호화 설정(`~/.deneb-client/settings.aes`, `EncryptedFileSettings.kt`와 AES-256-GCM byte 호환)에 `deneb.gatewayUrl`/`deneb.clientToken`을 직접 시드. 토큰은 `~/.deneb/client_token`(프로덕션)에서 읽음. **앱 소스는 건드리지 않는다.**
 
 ## 트러블슈팅 (증상 → 원인 → 해결, 전부 직접 디버깅으로 확립)
 
