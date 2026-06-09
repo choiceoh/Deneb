@@ -1,0 +1,333 @@
+package tools
+
+import (
+	"context"
+	"encoding/json"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
+)
+
+// fakeCalReader stands in for the read-only Google client.
+type fakeCalReader struct {
+	upcoming []calendar.Event
+	byID     map[string]*calendar.Event
+	listErr  error
+}
+
+func (f *fakeCalReader) ListUpcoming(_ context.Context, _, _ time.Time, _ int) ([]calendar.Event, error) {
+	return f.upcoming, f.listErr
+}
+
+func (f *fakeCalReader) Get(_ context.Context, id string) (*calendar.Event, error) {
+	return f.byID[id], nil
+}
+
+func newTestLocalCal(t *testing.T) *localcal.Store {
+	t.Helper()
+	store, err := localcal.New(filepath.Join(t.TempDir(), "calendar.json"))
+	if err != nil {
+		t.Fatalf("localcal.New: %v", err)
+	}
+	return store
+}
+
+func callCal(t *testing.T, d *toolctx.CalendarDeps, params map[string]any) string {
+	t.Helper()
+	raw, _ := json.Marshal(params)
+	out, err := ToolCalendar(d)(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("tool err: %v", err)
+	}
+	return out
+}
+
+// extractCalID pulls the "id=..." token out of a tool response (no spaces in IDs).
+func extractCalID(s string) string {
+	i := strings.Index(s, "id=")
+	if i < 0 {
+		return ""
+	}
+	rest := s[i+3:]
+	if j := strings.IndexAny(rest, " \n"); j >= 0 {
+		rest = rest[:j]
+	}
+	return strings.TrimSpace(rest)
+}
+
+// readerWith returns deps with a Google reader + local store.
+func depsWith(reader toolctx.CalendarReader, local toolctx.LocalCalendar) *toolctx.CalendarDeps {
+	return &toolctx.CalendarDeps{
+		Client: func() (toolctx.CalendarReader, error) { return reader, nil },
+		Local:  local,
+	}
+}
+
+func TestCalendar_ListMergesAndSorts(t *testing.T) {
+	now := time.Now()
+	google := &fakeCalReader{
+		upcoming: []calendar.Event{
+			{ID: "g-event-1", Summary: "구글 주간회의", Start: now.Add(2 * time.Hour), End: now.Add(3 * time.Hour)},
+		},
+	}
+	local := newTestLocalCal(t)
+	if _, err := local.Create(localcal.CreateInput{Summary: "로컬 통화", Start: now.Add(1 * time.Hour)}); err != nil {
+		t.Fatalf("seed local: %v", err)
+	}
+
+	out := callCal(t, depsWith(google, local), map[string]any{"action": "list"})
+
+	if !strings.Contains(out, "로컬 통화") || !strings.Contains(out, "구글 주간회의") {
+		t.Fatalf("expected both events in list, got:\n%s", out)
+	}
+	// local (T+1h) must sort before google (T+2h).
+	if strings.Index(out, "로컬 통화") > strings.Index(out, "구글 주간회의") {
+		t.Errorf("events not sorted by start time:\n%s", out)
+	}
+}
+
+func TestCalendar_CreateGetUpdateDelete(t *testing.T) {
+	local := newTestLocalCal(t)
+	d := &toolctx.CalendarDeps{Local: local}
+	start := time.Now().Add(24 * time.Hour).Truncate(time.Hour)
+
+	// Create.
+	createOut := callCal(t, d, map[string]any{
+		"action":   "create",
+		"summary":  "데네브 미팅",
+		"start":    start.Format(time.RFC3339),
+		"location": "회의실 A",
+	})
+	if !strings.Contains(createOut, "추가했습니다") || !strings.Contains(createOut, "데네브 미팅") {
+		t.Fatalf("create failed:\n%s", createOut)
+	}
+	id := extractCalID(createOut)
+	if !localcal.IsLocalID(id) {
+		t.Fatalf("expected local id, got %q from:\n%s", id, createOut)
+	}
+
+	// Get returns rich detail (location).
+	getOut := callCal(t, d, map[string]any{"action": "get", "id": id})
+	if !strings.Contains(getOut, "회의실 A") || !strings.Contains(getOut, "데네브 미팅") {
+		t.Errorf("get detail missing fields:\n%s", getOut)
+	}
+
+	// Update the summary.
+	updOut := callCal(t, d, map[string]any{
+		"action":  "update",
+		"id":      id,
+		"summary": "데네브 미팅 (수정)",
+		"start":   start.Format(time.RFC3339),
+	})
+	if !strings.Contains(updOut, "수정했습니다") || !strings.Contains(updOut, "데네브 미팅 (수정)") {
+		t.Errorf("update failed:\n%s", updOut)
+	}
+
+	// Delete.
+	delOut := callCal(t, d, map[string]any{"action": "delete", "id": id})
+	if !strings.Contains(delOut, "삭제했습니다") {
+		t.Errorf("delete failed:\n%s", delOut)
+	}
+	// Gone now.
+	if ev := local.Get(id); ev != nil {
+		t.Errorf("event still present after delete: %+v", ev)
+	}
+}
+
+func TestCalendar_RejectGoogleWrite(t *testing.T) {
+	local := newTestLocalCal(t)
+	d := &toolctx.CalendarDeps{Local: local}
+
+	updOut := callCal(t, d, map[string]any{
+		"action": "update", "id": "g-readonly-1",
+		"summary": "x", "start": time.Now().Format(time.RFC3339),
+	})
+	if !strings.Contains(updOut, "수정할 수 없") {
+		t.Errorf("expected Google update rejection, got:\n%s", updOut)
+	}
+
+	delOut := callCal(t, d, map[string]any{"action": "delete", "id": "g-readonly-1"})
+	if !strings.Contains(delOut, "삭제할 수 없") {
+		t.Errorf("expected Google delete rejection, got:\n%s", delOut)
+	}
+}
+
+func TestCalendar_GetGoogleEvent(t *testing.T) {
+	google := &fakeCalReader{
+		byID: map[string]*calendar.Event{
+			"g-1": {
+				ID: "g-1", Summary: "외부 미팅",
+				Start:      time.Now().Add(time.Hour),
+				Attendees:  []calendar.Attendee{{DisplayName: "김민준", ResponseStatus: "accepted"}},
+				Conference: &calendar.ConferenceInfo{Solution: "hangoutsMeet", URI: "https://meet.example/abc"},
+			},
+		},
+	}
+	d := depsWith(google, newTestLocalCal(t))
+	out := callCal(t, d, map[string]any{"action": "get", "id": "g-1"})
+	if !strings.Contains(out, "외부 미팅") || !strings.Contains(out, "김민준") || !strings.Contains(out, "수락") {
+		t.Errorf("google get detail missing attendee/rsvp:\n%s", out)
+	}
+	if !strings.Contains(out, "meet.example") {
+		t.Errorf("google get detail missing Meet link:\n%s", out)
+	}
+	if !strings.Contains(out, "읽기 전용") {
+		t.Errorf("google event should be marked read-only:\n%s", out)
+	}
+}
+
+func TestCalendar_UnknownAction(t *testing.T) {
+	d := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+	out := callCal(t, d, map[string]any{"action": "frobnicate"})
+	if !strings.Contains(out, "알 수 없는 액션") {
+		t.Errorf("expected unknown-action message, got:\n%s", out)
+	}
+}
+
+func TestCalendar_ListEmpty(t *testing.T) {
+	d := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+	out := callCal(t, d, map[string]any{"action": "list"})
+	if !strings.Contains(out, "일정이 없습니다") {
+		t.Errorf("expected empty message, got:\n%s", out)
+	}
+}
+
+func TestCalendarGlance(t *testing.T) {
+	loc, _ := time.LoadLocation("Asia/Seoul")
+	if loc == nil {
+		loc = time.FixedZone("KST", 9*60*60)
+	}
+	// Anchor "now" at a fixed wall clock so relative labels are deterministic.
+	now := time.Date(2026, 6, 9, 9, 0, 0, 0, loc)
+
+	google := &fakeCalReader{
+		upcoming: []calendar.Event{
+			{ID: "g-1", Summary: "주간회의", Start: now.Add(2 * time.Hour),
+				Conference: &calendar.ConferenceInfo{URI: "https://meet.example/x"}},
+		},
+	}
+	local := newTestLocalCal(t)
+	if _, err := local.Create(localcal.CreateInput{Summary: "고객 통화", Location: "본사", Start: now.Add(26 * time.Hour)}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	out := CalendarGlance(context.Background(), depsWith(google, local), now, 3)
+	if !strings.Contains(out, "주간회의") || !strings.Contains(out, "고객 통화") {
+		t.Fatalf("glance missing events:\n%s", out)
+	}
+	if !strings.Contains(out, "오늘") {
+		t.Errorf("expected 오늘 label for same-day event:\n%s", out)
+	}
+	if !strings.Contains(out, "내일") {
+		t.Errorf("expected 내일 label for next-day event:\n%s", out)
+	}
+	if !strings.Contains(out, "🎥Meet") || !strings.Contains(out, "📍본사") {
+		t.Errorf("glance missing badges:\n%s", out)
+	}
+}
+
+func TestCalendarGlance_EmptyWhenNoSource(t *testing.T) {
+	if out := CalendarGlance(context.Background(), &toolctx.CalendarDeps{}, time.Now(), 3); out != "" {
+		t.Errorf("expected empty glance with no source, got:\n%s", out)
+	}
+}
+
+func TestCalendar_FreeWithin(t *testing.T) {
+	loc := time.FixedZone("KST", 9*60*60)
+	at := func(h, m int) time.Time { return time.Date(2026, 6, 10, h, m, 0, 0, loc) }
+
+	busy := []interval{
+		{at(10, 0), at(11, 0)},
+		{at(14, 0), at(15, 30)},
+		{at(14, 30), at(15, 0)}, // overlaps previous → should merge
+	}
+	gaps := freeWithin(at(9, 0), at(18, 0), busy, 30*time.Minute)
+	if len(gaps) != 3 {
+		t.Fatalf("expected 3 gaps, got %d: %+v", len(gaps), gaps)
+	}
+	want := []interval{{at(9, 0), at(10, 0)}, {at(11, 0), at(14, 0)}, {at(15, 30), at(18, 0)}}
+	for i, w := range want {
+		if !gaps[i].start.Equal(w.start) || !gaps[i].end.Equal(w.end) {
+			t.Errorf("gap %d = %v–%v, want %v–%v", i, gaps[i].start, gaps[i].end, w.start, w.end)
+		}
+	}
+}
+
+func TestCalendar_FreeWithin_SkipsTooShort(t *testing.T) {
+	loc := time.FixedZone("KST", 9*60*60)
+	at := func(h, m int) time.Time { return time.Date(2026, 6, 10, h, m, 0, 0, loc) }
+	// Only a 20-min gap between the two events; minDur 30 → excluded.
+	busy := []interval{{at(9, 0), at(10, 0)}, {at(10, 20), at(18, 0)}}
+	gaps := freeWithin(at(9, 0), at(18, 0), busy, 30*time.Minute)
+	if len(gaps) != 0 {
+		t.Errorf("expected no qualifying gaps, got %+v", gaps)
+	}
+}
+
+func TestCalendar_DetectConflicts(t *testing.T) {
+	now := time.Now()
+	// Sorted by start, as calMerged returns.
+	events := []calendar.Event{
+		{Summary: "A", Start: now.Add(1 * time.Hour), End: now.Add(2 * time.Hour)},
+		{Summary: "B", Start: now.Add(90 * time.Minute), End: now.Add(150 * time.Minute)}, // overlaps A
+		{Summary: "C", Start: now.Add(3 * time.Hour), End: now.Add(4 * time.Hour)},        // no overlap
+	}
+	conflicts := detectConflicts(events)
+	if len(conflicts) != 1 || conflicts[0][0] != "A" || conflicts[0][1] != "B" {
+		t.Errorf("expected one A↔B conflict, got %+v", conflicts)
+	}
+}
+
+func TestCalendar_FreeSlotsAction(t *testing.T) {
+	loc := time.FixedZone("KST", 9*60*60)
+	// Tomorrow, so the "don't suggest past slots today" clamp never interferes.
+	tomorrow := time.Now().In(loc).AddDate(0, 0, 1)
+	dayStart := time.Date(tomorrow.Year(), tomorrow.Month(), tomorrow.Day(), 0, 0, 0, 0, loc)
+	dayEnd := dayStart.Add(24 * time.Hour)
+
+	local := newTestLocalCal(t)
+	busyStart := time.Date(tomorrow.Year(), tomorrow.Month(), tomorrow.Day(), 10, 0, 0, 0, loc)
+	if _, err := local.Create(localcal.CreateInput{Summary: "점유", Start: busyStart, End: busyStart.Add(time.Hour)}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	out := callCal(t, &toolctx.CalendarDeps{Local: local}, map[string]any{
+		"action": "free_slots",
+		"from":   dayStart.Format(time.RFC3339),
+		"to":     dayEnd.Format(time.RFC3339),
+	})
+	// Default working hours 09–18, busy 10–11 → expect 09:00–10:00 and 11:00–18:00.
+	if !strings.Contains(out, "09:00–10:00") || !strings.Contains(out, "11:00–18:00") {
+		t.Errorf("free slots not split around the busy block:\n%s", out)
+	}
+}
+
+func TestCalendar_ListFlagsConflicts(t *testing.T) {
+	local := newTestLocalCal(t)
+	base := time.Now().Add(2 * time.Hour)
+	if _, err := local.Create(localcal.CreateInput{Summary: "회의 A", Start: base, End: base.Add(time.Hour)}); err != nil {
+		t.Fatalf("seed A: %v", err)
+	}
+	if _, err := local.Create(localcal.CreateInput{Summary: "회의 B", Start: base.Add(30 * time.Minute), End: base.Add(90 * time.Minute)}); err != nil {
+		t.Fatalf("seed B: %v", err)
+	}
+	out := callCal(t, &toolctx.CalendarDeps{Local: local}, map[string]any{"action": "list"})
+	if !strings.Contains(out, "겹치는 일정") || !strings.Contains(out, "회의 A") || !strings.Contains(out, "회의 B") {
+		t.Errorf("expected conflict flag for overlapping events:\n%s", out)
+	}
+}
+
+func TestCalendar_CreateRequiresFields(t *testing.T) {
+	d := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+	if out := callCal(t, d, map[string]any{"action": "create", "start": time.Now().Format(time.RFC3339)}); !strings.Contains(out, "summary") {
+		t.Errorf("expected summary-required, got:\n%s", out)
+	}
+	if out := callCal(t, d, map[string]any{"action": "create", "summary": "x"}); !strings.Contains(out, "start") {
+		t.Errorf("expected start-required, got:\n%s", out)
+	}
+}

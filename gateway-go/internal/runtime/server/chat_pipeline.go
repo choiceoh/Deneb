@@ -21,6 +21,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 )
 
 // initMemorySubsystem initializes model registry, session memory, and wiki.
@@ -131,10 +132,25 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			// wired by the time chat init runs.
 			Store: s.contactsStore,
 		},
+		Calendar: chat.CalendarDeps{
+			// Same hybrid sources as the miniapp.calendar.* RPC surface: a
+			// lazy read-only Google client (nil-safe before OAuth) merged with
+			// the local store for create/edit/delete. Reusing the resolvers
+			// keeps the chat tool and the native UI on one calendar.
+			Client: func() (chat.CalendarReader, error) {
+				return calendar.DefaultClient()
+			},
+			Local: resolveLocalCalendar(s.logger),
+		},
 		LLMClient:    reg.Client(modelrole.RoleLightweight),
 		DefaultModel: reg.Model(modelrole.RoleLightweight),
 		AgentLog:     agentLogWriter,
 	}
+
+	// Ambient calendar awareness: a frozen-per-day upcoming-events glance in the
+	// dynamic system-prompt block, built over the same hybrid calendar source as
+	// the calendar tool. nil when no calendar source is wired (feature off).
+	chatCfg.CalendarGlanceFn = chat.NewCalendarGlanceFunc(&s.toolDeps.Calendar)
 
 	// Spillover store: saves large tool results to disk, replaces with preview.
 	// Session-end events release per-session spill files immediately instead of

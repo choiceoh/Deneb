@@ -1,12 +1,17 @@
 package toolctx
 
 import (
+	"context"
+	"time"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
@@ -20,6 +25,7 @@ type CoreToolDeps struct {
 	Chrono         ChronoDeps
 	Wiki           WikiDeps
 	Contacts       ContactsDeps
+	Calendar       CalendarDeps
 	LLMClient      *llm.Client
 	DefaultModel   string
 	AgentLog       *agentlog.Writer
@@ -67,4 +73,34 @@ type WikiDeps struct {
 // ContactsDeps holds dependencies for the contacts address-book tool.
 type ContactsDeps struct {
 	Store *contacts.Store // may be nil when the contacts store failed to init
+}
+
+// CalendarReader is the read-only slice of the Google calendar client the agent
+// calendar tool uses. Mirrors the miniapp handler's CalendarClient — Google
+// writes need an OAuth scope we don't require, so the tool only reads from Google.
+type CalendarReader interface {
+	ListUpcoming(ctx context.Context, from, to time.Time, maxResults int) ([]calendar.Event, error)
+	Get(ctx context.Context, eventID string) (*calendar.Event, error)
+}
+
+// LocalCalendar is the read/write local store slice — the writable half of the
+// hybrid calendar. Same interface the miniapp calendar handler depends on.
+type LocalCalendar interface {
+	ListRange(from, to time.Time) []calendar.Event
+	Get(id string) *calendar.Event
+	Create(in localcal.CreateInput) (calendar.Event, error)
+	Update(id string, in localcal.CreateInput) (*calendar.Event, error)
+	Delete(id string) error
+}
+
+// CalendarDeps holds dependencies for the calendar agent tool. Either field may
+// be nil: reads merge the read-only Google client (when OAuth is configured) with
+// the local store; writes always land in the local store (so create/edit/delete
+// work without a Google write scope). Both nil → the tool is not registered.
+type CalendarDeps struct {
+	// Client is a lazy factory for the read-only Google client (nil-safe: a
+	// gateway with no OAuth tokens returns an error here and the tool degrades
+	// to local-only). Matches the resolver shape in method_registry.go.
+	Client func() (CalendarReader, error)
+	Local  LocalCalendar
 }

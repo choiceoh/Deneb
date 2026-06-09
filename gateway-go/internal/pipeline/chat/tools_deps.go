@@ -21,3 +21,12 @@ type WikiDeps = toolctx.WikiDeps
 
 // ContactsDeps holds dependencies for the contacts address-book tool.
 type ContactsDeps = toolctx.ContactsDeps
+
+// CalendarDeps holds dependencies for the calendar tool.
+type CalendarDeps = toolctx.CalendarDeps
+
+// CalendarReader is the read-only Google calendar slice the calendar tool uses.
+type CalendarReader = toolctx.CalendarReader
+
+// LocalCalendar is the read/write local calendar store slice.
+type LocalCalendar = toolctx.LocalCalendar

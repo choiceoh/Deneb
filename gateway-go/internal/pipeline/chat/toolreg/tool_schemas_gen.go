@@ -870,6 +870,72 @@ func contactsToolSchema() map[string]any {
 	}
 }
 
+func calendarToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "list: 일정 조회 (기본 지금부터 48시간; from/to로 명시 범위, 또는 hours_ahead). 겹치는 일정은 ⚠️로 표시. get: id로 상세(참석자·장소·Meet·메모 — 미팅 준비용). create: 일정 추가(로컬). update: 로컬 일정 수정. delete: 로컬 일정 삭제. free_slots: 근무시간 내 빈 시간(미팅 넣을 자리) 찾기. 구글 일정은 읽기 전용이라 수정·삭제 불가.",
+				"enum":        []string{"list", "get", "create", "update", "delete", "free_slots"},
+			},
+			"all_day": map[string]any{
+				"type":        "boolean",
+				"description": "종일 일정 여부 (선택).",
+			},
+			"day_end": map[string]any{
+				"type":        "integer",
+				"description": "free_slots: 근무시간 끝 시(1-24, 기본 18 = 오후 6시).",
+			},
+			"day_start": map[string]any{
+				"type":        "integer",
+				"description": "free_slots: 근무시간 시작 시(0-23, 기본 9 = 오전 9시).",
+			},
+			"description": map[string]any{
+				"type":        "string",
+				"description": "설명·메모 (선택).",
+			},
+			"duration_min": map[string]any{
+				"type":        "integer",
+				"description": "free_slots: 찾을 빈 시간의 최소 길이(분, 기본 30).",
+			},
+			"end": map[string]any{
+				"type":        "string",
+				"description": "종료 시각 (RFC3339, 선택). 생략 시 1시간(종일은 1일) 자동.",
+			},
+			"from": map[string]any{
+				"type":        "string",
+				"description": "list 조회 시작 시각 (RFC3339, 예: 2026-06-10T00:00:00+09:00). to와 함께 명시 범위 조회.",
+			},
+			"hours_ahead": map[string]any{
+				"type":        "integer",
+				"description": "list에서 from/to 대신 '지금부터 N시간' (기본 48, 최대 336).",
+			},
+			"id": map[string]any{
+				"type":        "string",
+				"description": "이벤트 ID (get/update/delete). list 결과의 'id=...' 값을 그대로 사용. 'local:' 접두사면 로컬(수정·삭제 가능), 아니면 구글(읽기 전용).",
+			},
+			"location": map[string]any{
+				"type":        "string",
+				"description": "장소 (선택).",
+			},
+			"start": map[string]any{
+				"type":        "string",
+				"description": "시작 시각 (RFC3339, create/update 필수, 예: 2026-06-10T15:00:00+09:00). KST는 +09:00 오프셋.",
+			},
+			"summary": map[string]any{
+				"type":        "string",
+				"description": "일정 제목 (create/update 필수).",
+			},
+			"to": map[string]any{
+				"type":        "string",
+				"description": "list 조회 끝 시각 (RFC3339).",
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 func polarisToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -1087,6 +1153,7 @@ func watchToolSchema() map[string]any {
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {
 	return map[string]int{
+		"calendar": 8000,
 		"contacts": 8000,
 		"exec":     32000,
 		"wiki":     20000,

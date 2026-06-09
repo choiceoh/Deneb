@@ -89,6 +89,11 @@ type Handler struct {
 	// topicResolver maps a forum threadID to a per-topic knowledge key for
 	// system-prompt injection. Optional: nil disables per-topic knowledge.
 	topicResolver TopicResolver
+
+	// calendarGlanceFn builds the ambient upcoming-events glance injected into
+	// the dynamic system-prompt block. Optional: nil disables ambient calendar
+	// awareness (the live `calendar` tool is unaffected).
+	calendarGlanceFn CalendarGlanceFunc
 }
 
 // AppSettings is the minimal app-settings surface the chat handler needs to
@@ -190,6 +195,10 @@ type HandlerConfig struct {
 	// Optional: nil disables per-topic knowledge injection.
 	TopicResolver TopicResolver
 
+	// CalendarGlanceFn builds the ambient upcoming-events glance for the dynamic
+	// system-prompt block. Optional: nil disables ambient calendar awareness.
+	CalendarGlanceFn CalendarGlanceFunc
+
 	// RecordActivity is called for user-originating chat turns so the server
 	// can remember the latest active channel session for autonomous follow-ups.
 	// The server owns filtering; chat only reports the session key.
@@ -263,6 +272,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		jobTracker:           cfg.JobTracker,
 		appSettings:          cfg.AppSettings,
 		topicResolver:        cfg.TopicResolver,
+		calendarGlanceFn:     cfg.CalendarGlanceFn,
 		providerConfigs:      cloneProviderConfigs(cfg.ProviderConfigs),
 		embeddingClient:      cfg.EmbeddingClient,
 		wikiStore:            cfg.WikiStore,

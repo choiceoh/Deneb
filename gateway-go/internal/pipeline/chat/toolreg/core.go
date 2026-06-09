@@ -317,6 +317,24 @@ func RegisterContactsTool(registry toolctx.ToolRegistrar, contactsDeps *toolctx.
 	})
 }
 
+// RegisterCalendarTool registers the calendar tool: read merged Google (read-only)
+// + local events, and create/update/delete local events. Skipped when neither a
+// Google client factory nor a local store is wired, so the agent doesn't see a
+// dead surface. This is the chat-side twin of the miniapp.calendar.* RPC surface.
+func RegisterCalendarTool(registry toolctx.ToolRegistrar, calDeps *toolctx.CalendarDeps) {
+	if calDeps.Client == nil && calDeps.Local == nil {
+		return
+	}
+	registry.RegisterTool(toolctx.ToolDef{
+		Name: "calendar",
+		Description: "캘린더 일정 조회·관리. list(다가오는 일정), get(상세 — 참석자·장소·Meet·메모, 미팅 준비용), create(추가), update(수정), delete(삭제). " +
+			"구글 캘린더(읽기)와 로컬 일정(읽기·쓰기)을 합쳐 보여주며 추가·수정·삭제는 로컬 일정에만 적용된다. " +
+			"사용자가 '오늘/이번 주 일정', '내일 3시 미팅 잡아줘', 'OOO 일정 언제야', '미팅 준비' 같이 일정을 묻거나 시키면 짐작하지 말고 호출하라.",
+		InputSchema: calendarToolSchema(),
+		Fn:          tools.ToolCalendar(calDeps),
+	})
+}
+
 // RegisterWikiTools registers wiki knowledge base tools for long-term knowledge
 // access (search, read, write, log). Project-specific tools provide structured
 // access to the "프로젝트" wiki category.

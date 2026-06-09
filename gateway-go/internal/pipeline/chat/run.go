@@ -155,6 +155,10 @@ type runDeps struct {
 	// system-prompt injection. nil disables per-topic knowledge.
 	topicResolver TopicResolver
 
+	// calendarGlanceFn builds the ambient upcoming-events glance for the dynamic
+	// system-prompt block. nil disables ambient calendar awareness.
+	calendarGlanceFn CalendarGlanceFunc
+
 	// chatport holds injected adapters that decouple chat from autoreply.
 	chatport chatportAdapters
 }
