@@ -62,8 +62,12 @@ func (b *skillLifecycleBackend) ProposeSkillEvolution(ctx context.Context, req c
 				DreamSummary: req.DreamSummary,
 			})
 		case "evolve":
+			// Pass the review's reasoning + evidence as the improvement finding
+			// so the evolver can act on the LLM's verdict without usage stats.
+			finding := strings.TrimSpace(req.Reason + "\n" + req.Evidence)
 			execResult, execErr = b.RunSkillEvolution(ctx, chattools.SkillEvolutionRequest{
 				SkillName: req.SkillName,
+				Finding:   finding,
 			})
 		case "create":
 			result["nextAction"] = "load skill-factory, then use skills action=create"
@@ -79,6 +83,7 @@ func (b *skillLifecycleBackend) ProposeSkillEvolution(ctx context.Context, req c
 		}
 	}
 
+	b.recordReviewUsage(req, route)
 	b.logProposal(req, route, result)
 	return result, nil
 }
@@ -153,7 +158,7 @@ func (b *skillLifecycleBackend) RunSkillEvolution(ctx context.Context, req chatt
 	}
 	ctx, cancel := context.WithTimeout(ctx, skillLifecycleTimeout)
 	defer cancel()
-	result, err := b.evolver.EvolveSkill(ctx, req.SkillName)
+	result, err := b.evolver.EvolveSkill(ctx, req.SkillName, req.Finding)
 	if err != nil {
 		return nil, err
 	}
@@ -284,6 +289,28 @@ func (b *skillLifecycleBackend) logProposal(req chattools.SkillEvolutionProposal
 		Result:     resultText,
 	}); err != nil && b.logger != nil {
 		b.logger.Warn("skill lifecycle: proposal log failed", "error", err)
+	}
+}
+
+// recordReviewUsage captures skill usage from a review verdict: a no-op means
+// the skill worked as-is (success), an evolve means it needs improvement
+// (failure). This is the primary automatic source of per-skill usage data — the
+// chat path doesn't record per-skill use — so it feeds the evolver's usage
+// stats, EvolveUnderperformers candidate selection, and the curator's staleness
+// signal, all of which were starved (TotalUses always 0) before this.
+func (b *skillLifecycleBackend) recordReviewUsage(req chattools.SkillEvolutionProposalRequest, route string) {
+	if b.tracker == nil {
+		return
+	}
+	name := strings.TrimSpace(req.SkillName)
+	if name == "" {
+		return
+	}
+	switch route {
+	case "no-op":
+		_ = b.tracker.RecordUsage(genesis.UsageRecord{SkillName: name, SessionKey: req.SessionKey, Success: true})
+	case "evolve":
+		_ = b.tracker.RecordUsage(genesis.UsageRecord{SkillName: name, SessionKey: req.SessionKey, Success: false, ErrorMsg: strings.TrimSpace(req.Reason)})
 	}
 }
 

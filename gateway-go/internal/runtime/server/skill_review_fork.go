@@ -136,7 +136,7 @@ Tool summary: %s
 ## Required Action
 
 Record exactly one lifecycle decision with skill_lifecycle action=propose:
-- route=no-op when there is no durable reusable workflow.
+- route=no-op when there is no durable reusable workflow. If the session followed an existing skill, set skillName to that skill so it is recorded as used (a no-op verdict counts as a success for that skill).
 - route=evolve with skillName when an existing skill should be improved.
 - route=genesis with sessionKey=%s when the target transcript should generate a new skill.
 - route=create only when skill_lifecycle cannot execute the creation path but a class-level skill is clearly needed.
