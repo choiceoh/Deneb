@@ -54,7 +54,7 @@ func runPhone(ctx context.Context, stdinText, remoteCmd string) (string, error) 
 	out, err := cmd.CombinedOutput()
 	trimmed := strings.TrimSpace(string(out))
 	if err != nil {
-		return "", fmt.Errorf("phone ssh failed (%v): %s", err, trimmed)
+		return "", fmt.Errorf("phone ssh failed: %w (output: %q)", err, trimmed)
 	}
 	return trimmed, nil
 }
