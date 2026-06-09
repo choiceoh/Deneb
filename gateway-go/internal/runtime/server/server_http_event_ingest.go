@@ -46,26 +46,31 @@ const phoneEventTurnDeadline = 4 * time.Minute
 const phoneEventSessionPrefix = "phone-event"
 
 // phoneEventPromptTmpl frames a real-time phone event for the 비서실장 persona.
-// The four %s are, in order: kind label, source, body text, and the NO_REPLY
-// token.
+// The four %s are, in order: kind label, source, body text, and the type-specific
+// guidance line (built by phoneEventGuidance, which embeds the NO_REPLY token).
 //
-// Two-stage noise control: this prompt instructs the model to emit NO_REPLY for
-// non-actionable events (ads, OTP codes, receipts, routine system pings), and
-// relayNative strips/suppresses that downstream (StripSilentToken +
-// isContentlessProactive) — so a "nothing to report" judgment never reaches the
-// work feed or the push. The phone forwards everything; the gateway decides.
+// Per-type guidance matters: a notification is a "worth surfacing?" judgment, but
+// a context event (회사 WiFi 접속 → 출근) or a clipboard capture (회의록 → 추출/요약)
+// carries a different proactive intent. A single generic "알릴 가치 있나" prompt made
+// the model NO_REPLY every context/clipboard event, so those sources never fired.
+//
+// Two-stage noise control still holds: each guidance instructs NO_REPLY for its
+// own non-actionable case, and relayNative strips/suppresses that downstream
+// (StripSilentToken + isContentlessProactive). The phone forwards everything; the
+// gateway decides per type.
 const phoneEventPromptTmpl = `[실시간 스마트폰 이벤트 — %s]
 출처: %s
 내용:
 %s
 
-위는 사용자 스마트폰에서 방금 발생한 이벤트다. 비서실장으로서 판단하라:
+위는 사용자 스마트폰에서 방금 발생한 이벤트다. 비서실장으로서 판단하라.
 
-1. 지금 사용자에게 알릴 가치가 있는가? 광고·스팸·인증번호(OTP)·결제 영수증·일상적 시스템 알림처럼 별도 행동이 필요 없으면 다른 말 없이 %s 만 출력하라.
-2. 알릴 가치가 있으면, 필요한 도구(캘린더·메일·위키·연락처)로 맥락을 직접 확인한 뒤 한 메시지로 보고하라:
-   • 왜 지금 중요한가 — 관련 일정·거래·인물 맥락
-   • 무엇을·언제까지 — 구체적인 다음 행동
-3. 인사·빈 서두·내부 토큰 금지. 능동 알림이므로 사용자 호명 없이 바로 본론으로.`
+%s
+
+보고할 때는 필요한 도구(캘린더·메일·위키·연락처)로 맥락을 직접 확인한 뒤 한 메시지로:
+• 왜 지금 중요한가 — 관련 일정·거래·인물 맥락
+• 무엇을·언제까지 — 구체적인 다음 행동
+인사·빈 서두·내부 토큰 금지. 능동 알림이므로 사용자 호명 없이 바로 본론으로.`
 
 // phoneEventKindLabel maps an event type to a short Korean descriptor used in the
 // judgment prompt. Unknown types pass through verbatim — the type is a display
@@ -82,6 +87,22 @@ func phoneEventKindLabel(eventType string) string {
 		return "문자 메시지"
 	default:
 		return eventType
+	}
+}
+
+// phoneEventGuidance returns the type-specific proactive-judgment instruction
+// injected into phoneEventPromptTmpl. Each branch contains one %s for the NO_REPLY
+// token (filled by the caller). Per-type intent is the whole point: a context
+// transition or a clipboard capture is not a "worth surfacing?" alert, so a single
+// generic prompt suppressed them as NO_REPLY.
+func phoneEventGuidance(eventType string) string {
+	switch strings.TrimSpace(strings.ToLower(eventType)) {
+	case "context":
+		return `이것은 상황 변화 신호다(위치·네트워크 등). 이 맥락에서 사용자에게 선제적으로 도움될 일이 있으면 제공하라 — 예: 회사 도착(출근)이면 오늘 일정과 미처리 우선업무를, 귀가(퇴근)면 하루 마감 요약을. 현재 시간대에 비춰 단순 이동이거나 지금 도울 게 없으면 다른 말 없이 %s 만 출력하라.`
+	case "clipboard":
+		return `이것은 사용자가 복사(캡처)한 내용이다. 일정·할일·연락처·금액·주소가 들어 있으면 추출해 정리하고, 회의록·대화·문서면 핵심을 요약하라. 그냥 짧은 보관용 텍스트라 처리할 일이 없으면 다른 말 없이 %s 만 출력하라.`
+	default: // notification, sms, and any free label
+		return `지금 사용자에게 알릴 가치가 있는가? 광고·스팸·인증번호(OTP)·결제 영수증·일상적 시스템 알림처럼 별도 행동이 필요 없으면 다른 말 없이 %s 만 출력하라.`
 	}
 }
 
@@ -133,7 +154,8 @@ func (s *Server) handleEventIngest(w http.ResponseWriter, r *http.Request) {
 	eventType := req.Type
 
 	command := fmt.Sprintf(phoneEventPromptTmpl,
-		phoneEventKindLabel(eventType), source, text, chat.SilentReplyToken)
+		phoneEventKindLabel(eventType), source, text,
+		fmt.Sprintf(phoneEventGuidance(eventType), chat.SilentReplyToken))
 
 	// Fire-and-forget: the judgment turn (with tool calls) can take seconds, but
 	// the phone only needs to know the event was accepted. The proactive report
