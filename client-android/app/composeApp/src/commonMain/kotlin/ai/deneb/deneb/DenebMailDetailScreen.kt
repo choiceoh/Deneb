@@ -59,6 +59,10 @@ fun DenebMailDetailScreen(
     onBack: () -> Unit,
     onOpenWiki: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
+    // panelMode = rendered as the right detail pane of the desktop split-view: drop the
+    // status-bar inset and the "← 뒤로" header (the user switches mail by clicking list rows;
+    // onBack is still invoked by archive/trash success to clear the selection).
+    panelMode: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
@@ -108,14 +112,18 @@ fun DenebMailDetailScreen(
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
-            modifier = Modifier.statusBarsPadding().padding(16.dp).verticalScroll(rememberScrollState()),
+            modifier = Modifier
+                .then(if (panelMode) Modifier else Modifier.statusBarsPadding())
+                .padding(16.dp).verticalScroll(rememberScrollState()),
         ) {
             if (navigationTabBar != null) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
                 Spacer(Modifier.height(12.dp))
             }
-            TextButton(onClick = onBack) { Text("← 뒤로") }
-            Spacer(Modifier.height(4.dp))
+            if (!panelMode) {
+                TextButton(onClick = onBack) { Text("← 뒤로") }
+                Spacer(Modifier.height(4.dp))
+            }
 
             val mail = detail
             if (mail == null) {
