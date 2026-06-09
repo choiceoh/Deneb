@@ -202,12 +202,12 @@ func dropboxBackup(ctx context.Context, client *dropbox.Client, p DropboxParams)
 	case "wiki":
 		items = collectBackupFiles(wiki.ConfigFromEnv().Dir, "wiki", []string{".md"})
 	case "weekly":
-		items = collectBackupFiles(weeklyOutputDir(), "weekly", []string{".pdf", ".png", ".html"})
+		items = collectBackupFiles(weeklyOutputDir(), "weekly", []string{".pdf", ".png", ".html", ".json"})
 	case "transcripts":
 		items = collectBackupFiles(transcriptsDir(), "transcripts", []string{".jsonl"})
 	case "all":
 		items = append(items, collectBackupFiles(wiki.ConfigFromEnv().Dir, "wiki", []string{".md"})...)
-		items = append(items, collectBackupFiles(weeklyOutputDir(), "weekly", []string{".pdf", ".png", ".html"})...)
+		items = append(items, collectBackupFiles(weeklyOutputDir(), "weekly", []string{".pdf", ".png", ".html", ".json"})...)
 		items = append(items, collectBackupFiles(transcriptsDir(), "transcripts", []string{".jsonl"})...)
 	default:
 		return fmt.Sprintf("알 수 없는 backup 대상: %q. 지원: wiki, weekly, transcripts, all", target), nil

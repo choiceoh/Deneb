@@ -67,6 +67,19 @@ type RoleModel struct {
 	Model string `json:"model"`
 }
 
+// ModelsListResult is the miniapp.models.list response: the active model, the
+// per-role bindings, and the grouped selectable sections. Promoted from an
+// ad-hoc map[string]any wrapper so the response shape is a single source of
+// truth (its element types RoleModel/ModelSection are already wire types) and
+// the native client gets a generated Kotlin type. Wire JSON is unchanged.
+//
+//deneb:wire
+type ModelsListResult struct {
+	Current  string         `json:"current"`
+	Roles    []RoleModel    `json:"roles"`
+	Sections []ModelSection `json:"sections"`
+}
+
 // ModelDeps holds the lazy model operations exposed to the Mini App.
 type ModelDeps struct {
 	CurrentModel func() string
@@ -107,10 +120,10 @@ func modelsList(deps ModelDeps) rpcutil.HandlerFunc {
 		if deps.RoleModels != nil {
 			roles = deps.RoleModels()
 		}
-		return rpcutil.RespondOK(req.ID, map[string]any{
-			"current":  current,
-			"roles":    roles,
-			"sections": sections,
+		return rpcutil.RespondOK(req.ID, ModelsListResult{
+			Current:  current,
+			Roles:    roles,
+			Sections: sections,
 		})
 	}
 }

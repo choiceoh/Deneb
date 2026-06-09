@@ -112,11 +112,11 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 			// Surface the merge on the session event bus so dashboards
 			// can distinguish it from normal "message_sent" starts.
 			if h.broadcast != nil {
-				h.broadcast("sessions.changed", map[string]any{
-					"sessionKey": p.SessionKey,
-					"reason":     "merged",
-					"status":     "running",
-					"deltaMs":    deltaMs,
+				h.broadcast("sessions.changed", SessionsChangedEvent{
+					SessionKey: p.SessionKey,
+					Reason:     "merged",
+					Status:     "running",
+					DeltaMs:    deltaMs,
 				})
 			}
 			return h.startAsyncRun(req.ID, runParams, false)
@@ -413,10 +413,10 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 			Ts:    time.Now().UnixMilli(),
 		})
 		if h.broadcast != nil {
-			h.broadcast("sessions.changed", map[string]any{
-				"sessionKey": key,
-				"reason":     "aborted",
-				"status":     "killed",
+			h.broadcast("sessions.changed", SessionsChangedEvent{
+				SessionKey: key,
+				Reason:     "aborted",
+				Status:     "killed",
 			})
 		}
 	}

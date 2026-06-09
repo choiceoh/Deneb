@@ -27,12 +27,12 @@ func wireStreamHooks(
 		hc.OnToolResult(func(name, toolUseID, result string, isErr bool) {
 			broadcaster.EmitToolResult(name, toolUseID, result, isErr)
 			if deps.broadcast != nil {
-				deps.broadcast("session.tool", map[string]any{
-					"sessionKey": params.SessionKey,
-					"runId":      params.ClientRunID,
-					"tool":       name,
-					"toolUseId":  toolUseID,
-					"isError":    isErr,
+				deps.broadcast("session.tool", SessionToolEvent{
+					SessionKey: params.SessionKey,
+					RunID:      params.ClientRunID,
+					Tool:       name,
+					ToolUseID:  toolUseID,
+					IsError:    isErr,
 				})
 			}
 		})
@@ -78,13 +78,13 @@ func wireStreamHooks(
 				"tool", name, "session", params.SessionKey, "runId", params.ClientRunID)
 		}
 		if deps.broadcast != nil {
-			deps.broadcast("chat.tool_failed", map[string]any{
-				"session":    params.SessionKey,
-				"sessionKey": params.SessionKey,
-				"runId":      params.ClientRunID,
-				"tool":       name,
-				"reason":     "mutation_tool_in_band_failure",
-				"error":      mutationFailureError(result),
+			deps.broadcast("chat.tool_failed", ChatToolFailedEvent{
+				Session:    params.SessionKey,
+				SessionKey: params.SessionKey,
+				RunID:      params.ClientRunID,
+				Tool:       name,
+				Reason:     "mutation_tool_in_band_failure",
+				Error:      mutationFailureError(result),
 			})
 		}
 	})

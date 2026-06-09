@@ -793,11 +793,11 @@ func assembleMessages(
 				"tokensAfter", polarisResult.TokensAfter,
 				"budget", contextBudget)
 			if deps.broadcast != nil {
-				deps.broadcast("chat.compaction_degraded", map[string]any{
-					"session":      params.SessionKey,
-					"tokensBefore": polarisResult.TokensBefore,
-					"tokensAfter":  polarisResult.TokensAfter,
-					"budget":       contextBudget,
+				deps.broadcast("chat.compaction_degraded", ChatCompactionDegradedEvent{
+					Session:      params.SessionKey,
+					TokensBefore: polarisResult.TokensBefore,
+					TokensAfter:  polarisResult.TokensAfter,
+					Budget:       contextBudget,
 				})
 			}
 		}
@@ -1171,10 +1171,10 @@ func runAgentWithFallback(
 					"budget", contextBudget,
 					"attempt", compactAttempt+1)
 				if deps.broadcast != nil {
-					deps.broadcast("chat.compaction_stuck", map[string]any{
-						"reason":       "protected_zone_exceeds_budget",
-						"messageCount": len(messages),
-						"budget":       contextBudget,
+					deps.broadcast("chat.compaction_stuck", ChatCompactionStuckEvent{
+						Reason:       "protected_zone_exceeds_budget",
+						MessageCount: len(messages),
+						Budget:       contextBudget,
 					})
 				}
 				return &agent.AgentResult{
@@ -1195,10 +1195,10 @@ func runAgentWithFallback(
 					"inputHash", inputHash,
 					"attempt", compactAttempt+1)
 				if deps.broadcast != nil {
-					deps.broadcast("chat.compaction_stuck", map[string]any{
-						"reason":       "idempotent_compaction",
-						"messageCount": len(messages),
-						"inputHash":    inputHash,
+					deps.broadcast("chat.compaction_stuck", ChatCompactionStuckEvent{
+						Reason:       "idempotent_compaction",
+						MessageCount: len(messages),
+						InputHash:    inputHash,
 					})
 				}
 				return &agent.AgentResult{
@@ -1337,11 +1337,11 @@ func runAgentWithFallback(
 			// and the final error return — easy to miss when diagnosing
 			// "why did the bot suddenly stop on long sessions".
 			if isContextOverflow(runErr) && deps.broadcast != nil {
-				deps.broadcast("chat.context_overflow_unrecoverable", map[string]any{
-					"model":        cfg.Model,
-					"messageCount": len(messages),
-					"attempts":     maxCompactionRetries + 1,
-					"error":        runErr.Error(),
+				deps.broadcast("chat.context_overflow_unrecoverable", ChatContextOverflowEvent{
+					Model:        cfg.Model,
+					MessageCount: len(messages),
+					Attempts:     maxCompactionRetries + 1,
+					Error:        runErr.Error(),
 				})
 				logger.Error("context overflow: all compaction retries exhausted",
 					"model", cfg.Model,

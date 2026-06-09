@@ -69,10 +69,10 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 		if isSteer {
 			reason = "steered"
 		}
-		h.broadcast("sessions.changed", map[string]any{
-			"sessionKey": params.SessionKey,
-			"reason":     reason,
-			"status":     "running",
+		h.broadcast("sessions.changed", SessionsChangedEvent{
+			SessionKey: params.SessionKey,
+			Reason:     reason,
+			Status:     "running",
 		})
 	}
 
@@ -109,10 +109,10 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 					Ts:    time.Now().UnixMilli(),
 				})
 				if h.broadcast != nil {
-					h.broadcast("sessions.changed", map[string]any{
-						"sessionKey": params.SessionKey,
-						"reason":     "panic",
-						"status":     "failed",
+					h.broadcast("sessions.changed", SessionsChangedEvent{
+						SessionKey: params.SessionKey,
+						Reason:     "panic",
+						Status:     "failed",
 					})
 				}
 			}
