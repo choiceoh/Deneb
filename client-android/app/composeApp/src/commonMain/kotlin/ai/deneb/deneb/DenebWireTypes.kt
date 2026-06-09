@@ -180,3 +180,35 @@ internal data class CaptureAudioPayload(val text: String = "")
 
 @Serializable
 internal data class CaptureContactsPayload(val text: String = "")
+
+// --- Observation plane (miniapp.observe.*) ---
+
+@Serializable
+internal data class ObserveToolStat(
+    val name: String = "",
+    val calls: Int = 0,
+    val errors: Int = 0,
+    val avgMs: Long = 0,
+)
+
+@Serializable
+internal data class ObserveBehavior(
+    val runs: Int = 0,
+    val proactiveRuns: Int = 0,
+    val compactedRuns: Int = 0,
+    val tools: List<ObserveToolStat> = emptyList(),
+    val backgroundErrors: Map<String, Int> = emptyMap(),
+)
+
+@Serializable
+internal data class ObserveLogLine(
+    val level: String = "",
+    val msg: String = "",
+    val runId: String = "",
+)
+
+@Serializable
+internal data class ObserveLogsPayload(
+    val lines: List<ObserveLogLine> = emptyList(),
+    val count: Int = 0,
+)
