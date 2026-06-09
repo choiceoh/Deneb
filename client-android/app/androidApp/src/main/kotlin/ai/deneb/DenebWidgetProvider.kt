@@ -9,6 +9,7 @@ import android.widget.RemoteViews
 import ai.deneb.data.DataRepository
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.deneb.WidgetSummary
+import ai.deneb.deneb.widgetSummary
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
