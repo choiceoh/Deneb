@@ -81,6 +81,14 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		})
 	}
 
+	// SparkFleet readiness: probe the control plane for down GPU backends and
+	// surface them (startup warning + /healthz), refreshing on a ticker.
+	if s.fleet != nil {
+		s.safeGo("sparkfleet-readiness", func() {
+			s.fleet.Run(ctx)
+		})
+	}
+
 	// Cron session GC is handled by session.Manager's Kind-based retention
 	// (KindCron → 24h) via evictStale(); no separate reaper needed.
 
