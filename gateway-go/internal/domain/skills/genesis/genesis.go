@@ -149,13 +149,65 @@ func NewService(cfg Config, llmClient *llm.Client, catalog *skills.Catalog, logg
 	if cfg.CooldownPerSkill == 0 {
 		cfg.CooldownPerSkill = 24 * time.Hour
 	}
-	return &Service{
+	svc := &Service{
 		cfg:          cfg,
 		llmClient:    llmClient,
 		catalog:      catalog,
 		logger:       logger,
 		recentSkills: make(map[string]time.Time),
 	}
+	svc.loadDailyCap()
+	return svc
+}
+
+type dailyCapState struct {
+	Date  string `json:"date"`
+	Count int    `json:"count"`
+}
+
+func (s *Service) dailyCapPath() string {
+	if s.cfg.OutputDir == "" {
+		return ""
+	}
+	return filepath.Join(s.cfg.OutputDir, ".daily-cap.json")
+}
+
+// loadDailyCap restores the daily-cap counter from disk at startup so the
+// MaxSkillsPerDay limit survives the gateway's frequent SIGUSR1 restarts —
+// an in-memory counter otherwise resets every few minutes, defeating the cap.
+func (s *Service) loadDailyCap() {
+	path := s.dailyCapPath()
+	if path == "" {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var st dailyCapState
+	if json.Unmarshal(data, &st) != nil {
+		return
+	}
+	s.mu.Lock()
+	s.dailyCount = st.Count
+	s.dailyCountDate = st.Date
+	s.mu.Unlock()
+}
+
+// saveDailyCapLocked persists the daily-cap counter. Caller must hold s.mu.
+func (s *Service) saveDailyCapLocked() {
+	path := s.dailyCapPath()
+	if path == "" {
+		return
+	}
+	data, err := json.Marshal(dailyCapState{Date: s.dailyCountDate, Count: s.dailyCount})
+	if err != nil {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return
+	}
+	_ = os.WriteFile(path, data, 0o600)
 }
 
 // Stop is a no-op (genesis is RPC-triggered, not event-driven).
@@ -186,6 +238,7 @@ func (s *Service) Evaluate(sctx SessionContext) bool {
 	if s.dailyCountDate != today {
 		s.dailyCount = 0
 		s.dailyCountDate = today
+		s.saveDailyCapLocked()
 	}
 	if s.dailyCount >= s.cfg.MaxSkillsPerDay {
 		s.logger.Debug("genesis: daily cap reached", "count", s.dailyCount)
@@ -394,6 +447,7 @@ func (s *Service) Persist(skill *GeneratedSkill) error {
 	s.mu.Lock()
 	s.recentSkills[name] = time.Now()
 	s.dailyCount++
+	s.saveDailyCapLocked()
 	s.mu.Unlock()
 
 	return nil
