@@ -310,7 +310,6 @@
     <string name="sandbox_packages_upgrade_count">Upgraded %1$s packages</string>
     <string name="sandbox_packages_up_to_date">All packages up to date</string>
     <string name="sandbox_packages_upgrade_failed">Upgrade failed: %1$s</string>
-    <string name="sandbox_content_description">Open Linux sandbox</string>
     <string name="sandbox_files_save_success">Saved</string>
     <string name="sandbox_files_save_failed">Save failed</string>
     <string name="sandbox_files_open_failed">Could not open externally</string>

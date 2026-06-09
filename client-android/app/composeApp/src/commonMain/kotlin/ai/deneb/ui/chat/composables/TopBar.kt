@@ -1,28 +1,20 @@
 package ai.deneb.ui.chat.composables
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -35,7 +27,6 @@ import deneb.composeapp.generated.resources.ic_history
 import deneb.composeapp.generated.resources.ic_volume_off
 import deneb.composeapp.generated.resources.ic_volume_up
 import deneb.composeapp.generated.resources.new_chat_content_description
-import deneb.composeapp.generated.resources.sandbox_content_description
 import deneb.composeapp.generated.resources.toggle_speech_output_content_description
 import nl.marc_apps.tts.TextToSpeechInstance
 import org.jetbrains.compose.resources.stringResource
@@ -49,10 +40,6 @@ internal fun TopBar(
     actions: ChatActions,
     isChatHistoryEmpty: Boolean,
     onOpenDrawer: (() -> Unit)? = null,
-    isSandboxAvailable: Boolean,
-    isSandboxOpen: Boolean,
-    isShellExecuting: Boolean,
-    onToggleSandbox: () -> Unit,
     navigationTabBar: (@Composable () -> Unit)? = null,
     onOpenSessionDrawer: (() -> Unit)? = null,
     onOpenWorkFeed: (() -> Unit)? = null,
@@ -64,7 +51,7 @@ internal fun TopBar(
         ) {
             Row(modifier = Modifier.align(Alignment.CenterStart)) {
                 DrawerButton(onOpenDrawer)
-                LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty, isSandboxAvailable, isSandboxOpen, isShellExecuting, onToggleSandbox)
+                LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty)
             }
             Box(modifier = Modifier.align(Alignment.Center)) {
                 navigationTabBar()
@@ -83,7 +70,7 @@ internal fun TopBar(
     } else {
         Row {
             DrawerButton(onOpenDrawer)
-            LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty, isSandboxAvailable, isSandboxOpen, isShellExecuting, onToggleSandbox)
+            LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty)
             Spacer(Modifier.weight(1f))
             if (textToSpeech != null) {
                 SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
@@ -163,10 +150,6 @@ private fun LeadingButtons(
     isSpeaking: Boolean,
     actions: ChatActions,
     isChatHistoryEmpty: Boolean,
-    isSandboxAvailable: Boolean,
-    isSandboxOpen: Boolean,
-    isShellExecuting: Boolean,
-    onToggleSandbox: () -> Unit,
 ) {
     val haptics = rememberHaptics()
     if (!isChatHistoryEmpty) {
@@ -185,41 +168,6 @@ private fun LeadingButtons(
                 imageVector = vectorResource(Res.drawable.ic_add),
                 contentDescription = stringResource(Res.string.new_chat_content_description),
                 tint = MaterialTheme.colorScheme.onBackground,
-            )
-        }
-    }
-    if (isSandboxAvailable) {
-        val flashAlpha = remember { Animatable(0f) }
-        LaunchedEffect(isShellExecuting) {
-            if (isShellExecuting) {
-                flashAlpha.snapTo(0.4f)
-                flashAlpha.animateTo(
-                    targetValue = 0f,
-                    animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing),
-                )
-            }
-        }
-        val primary = MaterialTheme.colorScheme.primary
-        val checkedContainer = primary.copy(alpha = 0.2f)
-        val flashContainer = primary.copy(alpha = flashAlpha.value)
-        IconToggleButton(
-            checked = isSandboxOpen,
-            onCheckedChange = { haptics.toggle(it); onToggleSandbox() },
-            modifier = Modifier.handCursor(),
-            colors = IconButtonDefaults.iconToggleButtonColors(
-                containerColor = flashContainer,
-                checkedContainerColor = if (flashAlpha.value > 0f) flashContainer else checkedContainer,
-                checkedContentColor = MaterialTheme.colorScheme.primary,
-            ),
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Dns,
-                contentDescription = stringResource(Res.string.sandbox_content_description),
-                tint = if (isSandboxOpen) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onBackground
-                },
             )
         }
     }

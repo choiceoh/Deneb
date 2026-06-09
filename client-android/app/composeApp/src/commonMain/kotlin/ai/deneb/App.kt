@@ -13,7 +13,6 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -79,7 +78,6 @@ import ai.deneb.ui.chat.composables.CaptureActions
 import ai.deneb.ui.chat.composables.LocalCaptureActions
 import ai.deneb.ui.components.FullScreenImageHost
 import ai.deneb.ui.handCursor
-import ai.deneb.ui.settings.SettingsScreen
 import ai.deneb.ui.withBlackBackground
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.tab_chat
@@ -104,10 +102,6 @@ import ai.deneb.ui.chat.composables.DenebSidebar
 @Serializable
 @SerialName("home")
 object Home
-
-@Serializable
-@SerialName("settings")
-object Settings
 
 @Serializable
 @SerialName("deneb_config")
@@ -348,24 +342,6 @@ private fun AppContent(
                             onOpenSearch = { navController.navigate(DenebSearch) },
                             onOpenPeople = { navController.navigate(DenebPeople) },
                             onOpenCategories = { navController.navigate(DenebCategories) },
-                            // Deneb runs tools on the gateway; the local terminal/sandbox is irrelevant.
-                            isSandboxAvailable = false,
-                            navigationTabBar = if (showTabBar) navigationTabBar else null,
-                        )
-                    }
-                    composable<Settings> {
-                        if (showTabBar) {
-                            DisposableEffect(Unit) {
-                                onDispose {
-                                    chatViewModel.refreshSettings()
-                                }
-                            }
-                        }
-                        SettingsScreen(
-                            onNavigateBack = {
-                                chatViewModel.refreshSettings()
-                                navController.navigateUp()
-                            },
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
                         )
                     }
