@@ -35,8 +35,14 @@ func assembleSingleBlock(events <-chan StreamEvent) []ContentBlock {
 		case "content_block_delta":
 			var cbd ContentBlockDelta
 			if json.Unmarshal(ev.Payload, &cbd) == nil && cur != nil && cbd.Index == curIndex {
-				if cbd.Delta.Type == "input_json_delta" {
+				switch cbd.Delta.Type {
+				case "input_json_delta":
 					curJSON = append(curJSON, cbd.Delta.PartialJSON...)
+				case "text_delta":
+					cur.Text += cbd.Delta.Text
+				case "thinking_delta":
+					// thinking text is carried on Delta.Text (see emitDelta).
+					cur.Thinking += cbd.Delta.Text
 				}
 			}
 		case "content_block_stop":
