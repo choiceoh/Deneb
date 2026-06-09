@@ -33,9 +33,13 @@ type SkillRow struct {
 	// agents-skills-personal | agents-skills-project | bundled | plugin | extra.
 	Source  string `json:"source,omitempty"`
 	Version string `json:"version,omitempty"`
-	// UserInvocable reports whether the skill can be triggered as a slash
-	// command (frontmatter user-invocable, default true).
-	UserInvocable bool `json:"userInvocable"`
+	// Command is the runnable slash command (sanitized + uniqued by
+	// BuildSkillCommandSpecs), set only for user-invocable skills. Empty means
+	// the skill is not invocable as a slash command. The raw Name can contain
+	// characters invalid in a command (e.g. "email-analysis" → "/email_analysis"),
+	// so the UI must render Command — not "/"+Name — to show something users can
+	// actually type.
+	Command string `json:"command,omitempty"`
 }
 
 // SkillsListResponse is the miniapp.skills.list payload.
@@ -73,21 +77,29 @@ func skillsList(deps SkillsDeps) rpcutil.HandlerFunc {
 
 		entries := deps.List()
 
+		// Resolve the real slash command names (sanitized + uniqued) exactly the
+		// way the agent's command registry does, so the tab shows commands users
+		// can actually run rather than the raw skill name. Only user-invocable
+		// skills appear in the spec list, so non-invocable skills get an empty
+		// Command. reserved is nil — uniqueness is resolved among the skills
+		// themselves; collisions with built-in slashes are vanishingly rare.
+		cmdBySkill := make(map[string]string)
+		for _, sp := range skills.BuildSkillCommandSpecs(entries, nil) {
+			cmdBySkill[sp.SkillName] = sp.Name
+		}
+
 		// entries arrive sorted by name from discovery; the front-end can
 		// re-group by category/source without losing a stable secondary order.
 		rows := make([]SkillRow, 0, len(entries))
 		for _, e := range entries {
-			row := SkillRow{
+			rows = append(rows, SkillRow{
 				Name:        e.Skill.Name,
 				Description: e.Skill.Description,
 				Category:    e.Skill.Category,
 				Source:      string(e.Skill.Source),
 				Version:     e.Skill.Version,
-			}
-			if e.Invocation != nil {
-				row.UserInvocable = e.Invocation.UserInvocable
-			}
-			rows = append(rows, row)
+				Command:     cmdBySkill[e.Skill.Name],
+			})
 		}
 
 		return rpcutil.RespondOK(req.ID, SkillsListResponse{Skills: rows, Count: len(rows)})

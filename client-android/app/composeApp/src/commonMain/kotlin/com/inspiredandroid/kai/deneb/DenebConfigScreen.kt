@@ -838,9 +838,11 @@ private fun SkillsTab(client: DenebGatewayClient) {
                 Column(
                     Modifier.animateItem().fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
                 ) {
-                    // Leading slash marks a user-invocable skill (runnable as a command).
+                    // Show the real slash command for user-invocable skills — the raw
+                    // name may contain characters invalid in a command (e.g.
+                    // "email-analysis" → "/email_analysis"). Plain name otherwise.
                     Text(
-                        if (skill.userInvocable) "/${skill.name}" else skill.name,
+                        if (skill.command.isNotBlank()) "/${skill.command}" else skill.name,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface,
