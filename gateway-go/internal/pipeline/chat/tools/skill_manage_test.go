@@ -546,6 +546,47 @@ func TestSkillManage_Read_GenesisDepth4Layout(t *testing.T) {
 	}
 }
 
+// TestSkillManage_Read_ResolvesViaSnapshotFilePath verifies the root-cause fix:
+// a skill that lives OUTSIDE <workspaceDir>/skills (as in prod, where the catalog
+// indexes ~/.deneb/skills but skill_manage's workspaceDir is ~/.deneb/workspace)
+// is still readable because resolveSkillPath consults the catalog snapshot's
+// FilePath. findSkillPath alone would fail.
+func TestSkillManage_Read_ResolvesViaSnapshotFilePath(t *testing.T) {
+	// Skill on disk in a dir unrelated to workspaceDir.
+	managedDir := t.TempDir()
+	skillDir := filepath.Join(managedDir, "email-analysis")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("prep skill dir: %v", err)
+	}
+	skillPath := filepath.Join(skillDir, "SKILL.md")
+	if err := os.WriteFile(skillPath, []byte("# Email Analysis Skill\n"), 0o644); err != nil {
+		t.Fatalf("write skill: %v", err)
+	}
+	// workspaceDir is a separate dir that does NOT contain the skill.
+	workspaceDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workspaceDir, "skills"), 0o755); err != nil {
+		t.Fatalf("prep workspace: %v", err)
+	}
+	getSnapshot := func() *skills.FullSkillSnapshot {
+		return &skills.FullSkillSnapshot{
+			ResolvedSkills: []skills.PromptSkill{
+				{Name: "email-analysis", FilePath: skillPath},
+			},
+		}
+	}
+	fn := ToolSkills(getSnapshot, workspaceDir, func() {})
+	out, err := callSkillTool(t, fn, map[string]any{
+		"action": "read",
+		"name":   "email-analysis",
+	})
+	if err != nil {
+		t.Fatalf("read via snapshot FilePath (root-cause regression): %v", err)
+	}
+	if !strings.Contains(out, "Email Analysis Skill") {
+		t.Errorf("expected snapshot-resolved content, got: %s", out)
+	}
+}
+
 func TestCacheAwareInvalidate_ApplyFalseSkipsInner(t *testing.T) {
 	var count int32
 	inner := SkillManageInvalidateFn(func() { atomic.AddInt32(&count, 1) })
