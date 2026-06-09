@@ -7,13 +7,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -27,33 +28,44 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.inspiredandroid.kai.Platform
+import com.inspiredandroid.kai.currentPlatform
 
 // The Mini App's component idiom in native Compose: typography on a flat surface,
 // separated by hairline rules — no Material cards, fills, shadows, or icons. These
 // primitives are what Deneb screens build from so every surface reads the same.
 
 /**
- * Readable max content width. On a wide desktop window this keeps lines and rows from
- * stretching across the whole screen; on a phone (narrower than this) it is a no-op,
- * so the same screens stay full-bleed on mobile. Pair with [DenebContentWidth] or the
- * built-in centering in [DenebScreenScaffold].
+ * Readable max content width on desktop. On a wide window this keeps lines and rows from
+ * stretching across the whole screen; on a phone the content fills the width as before.
  */
-val DenebMaxContentWidth: Dp = 920.dp
+val DenebMaxContentWidth: Dp = 760.dp
 
 /**
- * Centers [content] in a column capped at [maxWidth] (desktop), or fills the width on a
- * phone. Drop this around the body of a self-built screen (one that doesn't use
- * [DenebScreenScaffold]) — e.g. mail, search, people — so its list/header read at a
- * comfortable width instead of spanning a 1280px window edge to edge.
+ * A width modifier for screen content: a fixed [cap] on desktop, full width on phone.
+ *
+ * NOTE: we deliberately do NOT use `widthIn(max).fillMaxSize()` (fillMaxSize fills the
+ * incoming max and drops the cap) nor `BoxWithConstraints { width(min(maxWidth, cap)) }`
+ * — under the headless native-app desktop harness `maxWidth` comes back as a bogus value
+ * so `min()` misfires. A platform-gated fixed width is the only reliable cap here.
+ */
+@Composable
+fun denebContentWidthModifier(cap: Dp = DenebMaxContentWidth): Modifier =
+    if (currentPlatform is Platform.Desktop) Modifier.width(cap) else Modifier.fillMaxWidth()
+
+/**
+ * Centers [content] in a column capped at [cap] (desktop) or filling the width (phone).
+ * Drop this around the body of a self-built screen (mail, search, people) so its list
+ * reads at a comfortable width instead of spanning a wide desktop window edge to edge.
  */
 @Composable
 fun DenebContentWidth(
     modifier: Modifier = Modifier,
-    maxWidth: Dp = DenebMaxContentWidth,
+    cap: Dp = DenebMaxContentWidth,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-        Column(Modifier.widthIn(max = maxWidth).fillMaxSize(), content = content)
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(denebContentWidthModifier(cap).fillMaxHeight(), content = content)
     }
 }
 
@@ -95,7 +107,7 @@ fun DenebRow(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.denebPressable(onClick = onClick).handCursor() else Modifier)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick).handCursor() else Modifier)
             .drawBehind {
                 val stroke = 1.dp.toPx()
                 val y = size.height - stroke / 2f
@@ -112,10 +124,9 @@ fun DenebRow(
  * scrolling content. Replaces the Material `Scaffold` + `TopAppBar` so inner
  * screens match the home menu rather than looking like stock Material.
  *
- * On a wide desktop window the title + content are centered in a column capped at
- * [maxContentWidth]; on a phone that cap is wider than the screen, so it stays
- * full-bleed. The content lambda keeps its [ColumnScope], so callers that use
- * `weight(1f)` on a scrolling child still work.
+ * On desktop the title + content are centered in a column capped at [maxContentWidth];
+ * on a phone the column fills the screen. The content lambda keeps its [ColumnScope],
+ * so callers that use `weight(1f)` on a scrolling child still work.
  */
 @Composable
 fun DenebScreenScaffold(
@@ -140,7 +151,7 @@ fun DenebScreenScaffold(
                 ) { tabBar() }
             }
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopCenter) {
-                Column(Modifier.widthIn(max = maxContentWidth).fillMaxSize()) {
+                Column(denebContentWidthModifier(maxContentWidth).fillMaxHeight()) {
                     Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 6.dp)) {
                         Text(
                             text = "←",
