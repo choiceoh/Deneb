@@ -1,0 +1,161 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# deneb-supervisor — single entry point that starts and keeps the Deneb
+# phone-side agents alive, for Termux:Boot.
+#
+# It manages whatever is installed in ~/bin (each optional except the tunnel):
+#   deneb-tunnel         SSH tunnel to the gateway — the critical one
+#   deneb-context-watch  WiFi context events (only if present)
+#   deneb-emit --flush   periodic drain of the offline queue (only if supported)
+#
+# Any managed child that dies is restarted on the next tick, with a short
+# crash-loop backoff so a misconfigured child doesn't spin the CPU. The flush is
+# not a child but a periodic call, so a stuck flush can't wedge the supervisor.
+#
+# Usage:
+#   deneb-supervisor start      # start + supervise (returns at once; loop daemonizes)
+#   deneb-supervisor stop       # stop children + supervisor
+#   deneb-supervisor status     # what's running
+#   deneb-supervisor restart
+#
+# Termux:Boot ( ~/.termux/boot/deneb ):
+#   #!/data/data/com.termux/files/usr/bin/bash
+#   termux-wake-lock
+#   exec ~/bin/deneb-supervisor start
+#
+# Env:
+#   DENEB_BIN_DIR       script location (default ~/bin)
+#   DENEB_SUP_DIR       pid/state dir (default ~/.deneb-sup)
+#   DENEB_FLUSH_PERIOD  queue-flush seconds (default 300)
+#   DENEB_SUP_INTERVAL  supervise tick seconds (default 30)
+
+# Note: no `-e` — a dead child (kill -0 failing) or a best-effort flush must not
+# abort the supervise loop.
+set -uo pipefail
+
+BIN="${DENEB_BIN_DIR:-$HOME/bin}"
+SUP_DIR="${DENEB_SUP_DIR:-$HOME/.deneb-sup}"
+FLUSH_PERIOD="${DENEB_FLUSH_PERIOD:-300}"
+INTERVAL="${DENEB_SUP_INTERVAL:-30}"
+MIN_UPTIME="${DENEB_SUP_MIN_UPTIME:-15}"   # restart < this after last start = crash loop → back off a tick
+
+# Resolve our own path so the daemonized re-exec ("$SELF __loop") works regardless
+# of how we were invoked (Termux:Boot uses an absolute path; be safe anyway).
+SELF="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+
+# Managed children other than the periodic flush. "name:script" — script is
+# resolved under $BIN and silently skipped when absent (context-watch is optional).
+CHILDREN="tunnel:deneb-tunnel context-watch:deneb-context-watch"
+
+pidfile() { printf '%s/%s.pid' "$SUP_DIR" "$1"; }
+
+alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
+
+child_pid() {
+  local f; f="$(pidfile "$1")"
+  [ -f "$f" ] && cat "$f" 2>/dev/null
+}
+
+# ensure_running (re)starts a named child when its recorded pid is not alive.
+# Crash-loop guard: if the last start was < MIN_UPTIME ago, skip this tick so a
+# child that dies instantly doesn't get hammered every loop.
+ensure_running() {
+  local name="$1" script="$2"
+  local path="$BIN/$script"
+  [ -x "$path" ] || return 0                    # optional child not installed
+  local pid; pid="$(child_pid "$name")"
+  if alive "$pid"; then return 0; fi
+  local stampf="$SUP_DIR/$name.started"
+  local last; last="$(cat "$stampf" 2>/dev/null || echo 0)"
+  local now; now="$(date +%s)"
+  if [ $((now - last)) -lt "$MIN_UPTIME" ]; then return 0; fi   # back off one tick
+  setsid "$path" >/dev/null 2>&1 &
+  echo $! > "$(pidfile "$name")"
+  echo "$now" > "$stampf"
+}
+
+# support_flush is true when deneb-emit understands --flush (i.e. the offline-queue
+# build is installed). Detected by scanning the script so we never call an old
+# deneb-emit with an arg it would reject.
+support_flush() {
+  [ -x "$BIN/deneb-emit" ] && grep -q -- '--flush' "$BIN/deneb-emit" 2>/dev/null
+}
+
+stop_children() {
+  local spec name pid
+  for spec in $CHILDREN; do
+    name="${spec%%:*}"
+    pid="$(child_pid "$name")"
+    if alive "$pid"; then kill "$pid" 2>/dev/null; fi
+    rm -f "$(pidfile "$name")"
+  done
+}
+
+supervise_loop() {
+  mkdir -p "$SUP_DIR"
+  rm -f "$SUP_DIR/stop"
+  local last_flush=0 spec now
+  while [ ! -f "$SUP_DIR/stop" ]; do
+    for spec in $CHILDREN; do
+      ensure_running "${spec%%:*}" "${spec#*:}"
+    done
+    if support_flush; then
+      now="$(date +%s)"
+      if [ $((now - last_flush)) -ge "$FLUSH_PERIOD" ]; then
+        "$BIN/deneb-emit" --flush >/dev/null 2>&1 || true
+        last_flush="$now"
+      fi
+    fi
+    sleep "$INTERVAL"
+  done
+  stop_children
+  rm -f "$SUP_DIR/stop" "$(pidfile supervisor)"
+}
+
+cmd_start() {
+  mkdir -p "$SUP_DIR"
+  local sp; sp="$(child_pid supervisor)"
+  if alive "$sp"; then echo "deneb-supervisor: already running (pid $sp)"; return 0; fi
+  setsid "$SELF" __loop >/dev/null 2>&1 &
+  echo $! > "$(pidfile supervisor)"
+  echo "deneb-supervisor: started (pid $!)"
+}
+
+cmd_stop() {
+  mkdir -p "$SUP_DIR"
+  local sp; sp="$(child_pid supervisor)"
+  if alive "$sp"; then
+    touch "$SUP_DIR/stop"               # ask the loop to exit and reap children
+    local i=0
+    while alive "$sp" && [ $i -lt 10 ]; do sleep 1; i=$((i + 1)); done
+    if alive "$sp"; then kill "$sp" 2>/dev/null; fi
+  fi
+  stop_children                          # reap directly too, in case loop was already gone
+  rm -f "$(pidfile supervisor)" "$SUP_DIR/stop"
+  echo "deneb-supervisor: stopped"
+}
+
+cmd_status() {
+  local sp; sp="$(child_pid supervisor)"
+  if alive "$sp"; then echo "supervisor   : running (pid $sp)"; else echo "supervisor   : stopped"; fi
+  local spec name script pid
+  for spec in $CHILDREN; do
+    name="${spec%%:*}"; script="${spec#*:}"
+    if [ ! -x "$BIN/$script" ]; then
+      printf '%-13s: not installed (%s)\n' "$name" "$script"; continue
+    fi
+    pid="$(child_pid "$name")"
+    if alive "$pid"; then printf '%-13s: running (pid %s)\n' "$name" "$pid"
+    else printf '%-13s: stopped\n' "$name"; fi
+  done
+  if support_flush; then echo "queue flush  : every ${FLUSH_PERIOD}s"
+  else echo "queue flush  : unsupported (deneb-emit lacks --flush)"; fi
+}
+
+case "${1:-}" in
+  __loop)  supervise_loop ;;
+  start)   cmd_start ;;
+  stop)    cmd_stop ;;
+  status)  cmd_status ;;
+  restart) cmd_stop; sleep 1; cmd_start ;;
+  *) echo "usage: deneb-supervisor {start|stop|status|restart}" >&2; exit 2 ;;
+esac
