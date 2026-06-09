@@ -186,6 +186,13 @@ data class ModelSection(
 )
 
 @Serializable
+data class ModelsListResult(
+    val current: String = "",
+    val roles: List<RoleModel> = emptyList(),
+    val sections: List<ModelSection> = emptyList(),
+)
+
+@Serializable
 data class PersonRow(
     val email: String = "",
     val name: String = "",
