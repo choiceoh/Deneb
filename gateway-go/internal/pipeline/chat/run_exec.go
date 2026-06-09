@@ -197,12 +197,13 @@ func executeAgentRun(
 
 	// Stage 4: Build tool list and agent config.
 	acd := agentConfigDeps{
-		Tools:            deps.tools,
-		MaxTokens:        deps.maxTokens,
-		SubagentNotifyCh: deps.subagentNotifyCh,
-		EmitAgentFn:      deps.callbacks.emitAgentFn,
-		Transcript:       deps.transcript,
-		SkillNudger:      deps.skillNudger,
+		Tools:              deps.tools,
+		MaxTokens:          deps.maxTokens,
+		SubagentNotifyCh:   deps.subagentNotifyCh,
+		EmitAgentFn:        deps.callbacks.emitAgentFn,
+		Transcript:         deps.transcript,
+		SkillNudger:        deps.skillNudger,
+		SkillUsageRecorder: deps.skillUsageRecorder,
 	}
 	cfg, spawnFlag := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, logger)
 	cfg.Model = model // set the resolved model
@@ -856,6 +857,9 @@ type agentConfigDeps struct {
 	// SkillNudger fires background skill reviews after every N tool
 	// invocations. Nil disables iteration-based nudging.
 	SkillNudger SkillNudger
+	// SkillUsageRecorder attributes each turn's outcome to the skills consulted
+	// that turn, feeding the genesis Evolver's success-rate gate. Nil disables.
+	SkillUsageRecorder SkillUsageRecorder
 }
 
 // buildAgentConfig constructs the agent.AgentConfig, building tool lists and
@@ -895,6 +899,11 @@ func buildAgentConfig(
 	// RunCache lives for the entire agent run (across all turns) and caches
 	// idempotent tool results (find, tree). Invalidated on mutation tools.
 	runCache := NewRunCache()
+
+	// skillConsults records which skills the agent reads during this run so the
+	// post-turn hook can attribute each turn's outcome to them (genesis usage
+	// signal). Run-scoped; shared with the skills tool via OnTurnInit.
+	skillConsults := NewSkillConsultLog()
 
 	// FileCache lives for the entire agent run and deduplicates repeated file reads.
 	fileCache := agent.NewFileCache(agent.DefaultFileCacheMaxItems)
@@ -985,9 +994,11 @@ func buildAgentConfig(
 				})
 			}
 		},
-		// Post-turn hook: feed the skill nudger. Kept intentionally cheap
-		// when the nudger is disabled — no allocation, no lock.
+		// Post-turn hook: (1) attribute this turn's outcome to the skills
+		// consulted during it (genesis usage signal), then (2) feed the skill
+		// nudger. Both are cheap no-ops when their dependency is nil.
 		OnToolTurn: func(turn int, activities []agent.ToolActivity) {
+			recordTurnSkillUsage(acd.SkillUsageRecorder, skillConsults, activities, params.SessionKey)
 			if !skillNudgerEnabled {
 				return
 			}
@@ -1017,6 +1028,7 @@ func buildAgentConfig(
 		OnTurnInit: func(ctx context.Context) context.Context {
 			ctx = WithTurnContext(ctx, NewTurnContext())
 			ctx = WithRunCache(ctx, runCache)
+			ctx = WithSkillConsultLog(ctx, skillConsults)
 			ctx = WithFileCache(ctx, fileCache)
 			ctx = WithToolPreset(ctx, sessionToolPreset)
 			ctx = WithDeferredActivation(ctx, deferredActivation)
@@ -1061,6 +1073,30 @@ func buildAgentConfig(
 	}
 
 	return cfg, spawnFlag
+}
+
+// recordTurnSkillUsage attributes one turn's outcome to the skills consulted
+// during it, feeding the genesis Evolver real success-rate signal instead of
+// empty stats. The turn counts as a failure for every consulted skill if any
+// tool in it errored. No-op when no recorder is wired or nothing was consulted.
+func recordTurnSkillUsage(rec SkillUsageRecorder, log *SkillConsultLog, activities []agent.ToolActivity, sessionKey string) {
+	if rec == nil || log == nil {
+		return
+	}
+	consulted := log.DrainNew()
+	if len(consulted) == 0 {
+		return
+	}
+	errMsg := ""
+	for _, a := range activities {
+		if a.IsError {
+			errMsg = "turn failed: tool " + a.Name + " errored"
+			break
+		}
+	}
+	for _, name := range consulted {
+		rec.RecordSkillUse(sessionKey, name, errMsg == "", errMsg)
+	}
 }
 
 func shouldEnableSkillNudger(nudger SkillNudger, params RunParams, sessionToolPreset string) bool {

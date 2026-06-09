@@ -163,10 +163,11 @@ func (h *Handler) buildRunDeps() runDeps {
 		startRunFn: func(params RunParams) {
 			h.startAsyncRun("pending-"+params.ClientRunID, params, false)
 		},
-		steerQueue:       h.steer,
-		skillNudger:      h.skillNudger,
-		topicResolver:    h.topicResolver,
-		calendarGlanceFn: h.calendarGlanceFn,
+		steerQueue:         h.steer,
+		skillNudger:        h.skillNudger,
+		skillUsageRecorder: h.skillUsageRecorder,
+		topicResolver:      h.topicResolver,
+		calendarGlanceFn:   h.calendarGlanceFn,
 
 		// Atomic snapshot of channel callbacks (reply, media, typing, etc.).
 		callbacks: h.Snapshot(),

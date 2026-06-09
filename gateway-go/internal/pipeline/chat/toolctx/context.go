@@ -24,6 +24,7 @@ const (
 	ctxKeySpawnFlag
 	ctxKeyCheckpointer
 	ctxKeyAutoDelivery
+	ctxKeySkillConsult
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.

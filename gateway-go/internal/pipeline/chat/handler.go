@@ -79,6 +79,13 @@ type Handler struct {
 	// on the domain/skills/genesis package directly.
 	skillNudger SkillNudger
 
+	// skillUsageRecorder records, per turn, which skills the agent consulted
+	// and whether the turn succeeded — feeding the genesis Evolver real
+	// success-rate data instead of empty stats. Optional; nil disables usage
+	// attribution. Injected by the server via SetSkillUsageRecorder so chat
+	// doesn't depend on the domain/skills/genesis package directly.
+	skillUsageRecorder SkillUsageRecorder
+
 	// appSettings persists user-mutable runtime state — currently only the
 	// "active home" chat set by /use-forum. Optional: if nil, /use-forum
 	// returns an error explaining migration is unavailable. The chat package
@@ -151,6 +158,19 @@ type SkillNudgeSnapshot struct {
 type SkillNudgeToolActivity struct {
 	Name    string
 	IsError bool
+}
+
+// SkillUsageRecorder is the chat-side interface the server's genesis.Tracker
+// satisfies (via adapter). The run loop calls it per turn to record that the
+// agent consulted a skill and whether that turn succeeded; this populates the
+// usage stats the Evolver's SkillsNeedingEvolution(minUses, maxSuccessRate)
+// gate reads, so the self-evolution loop converges on skills that actually
+// fail rather than evolving blind. Keeps chat free of any domain import.
+type SkillUsageRecorder interface {
+	// RecordSkillUse logs one skill-consult outcome. Must not block — the chat
+	// pipeline calls it synchronously on the run goroutine (the genesis
+	// implementation does a cheap JSONL append).
+	RecordSkillUse(sessionKey, skillName string, success bool, errMsg string)
 }
 
 // HandlerConfig configures the chat handler.
@@ -410,6 +430,12 @@ func (h *Handler) CheckpointRoot() string {
 // change at runtime.
 func (h *Handler) SetSkillNudger(n SkillNudger) {
 	h.skillNudger = n
+}
+
+// SetSkillUsageRecorder installs the per-turn skill usage recorder. Pass nil
+// to disable usage attribution. Safe to call before the first run starts.
+func (h *Handler) SetSkillUsageRecorder(r SkillUsageRecorder) {
+	h.skillUsageRecorder = r
 }
 
 // RegisterTool installs a runtime-bound tool after handler construction.

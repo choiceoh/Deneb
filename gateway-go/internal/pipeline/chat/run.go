@@ -147,6 +147,11 @@ type runDeps struct {
 	// nil disables iteration-based nudging (session-end genesis still runs).
 	skillNudger SkillNudger
 
+	// skillUsageRecorder records, per turn, which skills were consulted and
+	// whether the turn succeeded — feeds the genesis Evolver's success-rate
+	// gate. nil disables usage attribution.
+	skillUsageRecorder SkillUsageRecorder
+
 	// callbacks is an atomic snapshot of channel callbacks taken at run start.
 	// Contains reply, media, typing, reaction, draft, emit, shutdown, and model fields.
 	callbacks CallbackSnapshot
