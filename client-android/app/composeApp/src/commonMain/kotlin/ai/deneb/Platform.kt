@@ -17,6 +17,20 @@ expect fun createSecureSettings(): Settings
 
 expect fun createLegacySettings(): Settings?
 
+/**
+ * An optional second, *unencrypted* settings store used only to mirror a small
+ * whitelist of must-survive keys (the gateway URL + client token — see
+ * [ai.deneb.data.DurableMirrorSettings]). Returns null on platforms whose secure
+ * store already survives app updates (desktop file key, iOS Keychain).
+ *
+ * Android returns a real plain SharedPreferences file because its encrypted store
+ * (kai_secure_prefs) is deleted and recreated empty whenever it can't be decrypted
+ * after an app update / Auto Backup restore (the hardware Keystore key doesn't
+ * transfer) — which silently wiped the gateway token every update. The mirror file
+ * is not touched by that wipe, so url+token survive.
+ */
+expect fun createDurableSettings(): Settings?
+
 expect fun getBackgroundDispatcher(): CoroutineContext
 
 expect fun onDragAndDropEventDropped(event: DragAndDropEvent): PlatformFile?

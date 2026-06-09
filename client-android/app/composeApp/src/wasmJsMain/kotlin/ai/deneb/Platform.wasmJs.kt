@@ -62,6 +62,9 @@ actual fun createSecureSettings(): Settings {
 
 actual fun createLegacySettings(): Settings? = null // Same storage location, no migration needed
 
+// No durable mirror needed: web localStorage already persists across reloads.
+actual fun createDurableSettings(): Settings? = null
+
 actual fun getPlatformToolDefinitions(): List<ToolInfo> = CommonTools.commonToolDefinitions
 
 private object WebKoinHelper : KoinComponent {

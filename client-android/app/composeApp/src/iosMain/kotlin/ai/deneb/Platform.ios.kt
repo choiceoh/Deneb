@@ -125,6 +125,10 @@ actual fun createSecureSettings(): Settings = KeychainSettings(service = "ai.den
 
 actual fun createLegacySettings(): Settings? = NSUserDefaultsSettings(platform.Foundation.NSUserDefaults.standardUserDefaults)
 
+// No durable mirror needed: the iOS Keychain survives app updates by design, so the
+// gateway token never gets wiped the way Android's encrypted prefs do.
+actual fun createDurableSettings(): Settings? = null
+
 actual fun getPlatformToolDefinitions(): List<ToolInfo> = CommonTools.commonToolDefinitions
 
 private object IosKoinHelper : KoinComponent {

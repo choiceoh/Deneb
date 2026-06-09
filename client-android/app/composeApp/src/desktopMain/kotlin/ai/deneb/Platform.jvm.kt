@@ -142,6 +142,10 @@ actual fun createSecureSettings(): Settings = EncryptedFileSettings()
 
 actual fun createLegacySettings(): Settings? = null // Same storage location, no migration needed
 
+// No durable mirror needed: EncryptedFileSettings keeps its key on disk next to the
+// data, so it survives app updates (unlike Android's hardware-Keystore-bound store).
+actual fun createDurableSettings(): Settings? = null
+
 actual fun getPlatformToolDefinitions(): List<ToolInfo> = listOf(ShellCommandTool.toolInfo, ProcessManagerTool.toolInfo) + CommonTools.commonToolDefinitions
 
 actual fun getAvailableTools(): List<Tool> {
