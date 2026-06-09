@@ -1,0 +1,104 @@
+# Deneb 폰 연동 (phone ↔ gateway over SSH)
+
+스마트폰(Termux)에서 발생한 이벤트 — 알림·위치·클립보드 — 를 SSH 터널로 Deneb
+게이트웨이의 `POST /api/event/ingest` 로 보내, 비서실장 능동판정 턴을 돌린다.
+알릴 가치가 있으면 네이티브 업무 피드에 카드+푸시로 뜨고, 광고·OTP 같은 노이즈는
+서버에서 억제된다. **폰은 전달만, 판단은 게이트웨이가 한다.**
+
+> 서버 측 엔드포인트는 `gateway-go/internal/runtime/server/server_http_event_ingest.go`.
+> cron/gmail-poll 과 똑같이 `SendSync → relayNative` 능동 발화 경로를 재사용한다.
+
+## 구성 요소
+
+| 파일 | 역할 |
+|---|---|
+| `deneb-tunnel` | autossh 상시 SSH 터널. 폰 `localhost:18789` → 게이트웨이 호스트 loopback `18789` |
+| `deneb-emit`   | 이벤트 1건을 `/api/event/ingest` 로 POST (위 터널 경유) |
+
+**인증:** ingest 엔드포인트는 **loopback 전용**이다. SSH 세션으로 포워드된 요청은
+호스트 입장에서 loopback 으로 도착하므로 게이트웨이 토큰이 필요 없다 — **SSH 키를
+쥐고 있는 것 자체가 인증**이다.
+
+## 1회 설정 (폰 Termux)
+
+### 1) Termux + 패키지
+F-Droid 의 Termux 설치 후:
+```bash
+pkg update && pkg install -y openssh autossh jq termux-api
+```
+`termux-api` 는 클립보드·위치 등 Phase 2/3 용 (Termux:API 앱도 F-Droid 에서 함께 설치).
+
+### 2) SSH 키 생성 + 게이트웨이 등록
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ""
+cat ~/.ssh/id_ed25519.pub     # ← 이 공개키를 게이트웨이 호스트의
+                              #   ~/.ssh/authorized_keys 에 추가
+```
+
+### 3) `~/.ssh/config` 에 호스트 alias
+게이트웨이 호스트(예: Tailscale IP)를 `deneb-host` 로 별칭한다:
+```
+Host deneb-host
+    HostName <gateway-host>       # 예: 100.x.x.x (Tailscale) 또는 LAN IP
+    User <your-user>
+    IdentityFile ~/.ssh/id_ed25519
+    ServerAliveInterval 30
+```
+
+### 4) 스크립트 배치
+이 디렉토리의 `deneb-tunnel`, `deneb-emit` 을 폰의 `~/bin` (PATH 위)에 복사하고 실행권한 부여:
+```bash
+mkdir -p ~/bin && cp deneb-tunnel deneb-emit ~/bin/ && chmod +x ~/bin/deneb-*
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
+```
+
+## 터널 켜기 + 부팅 영속
+
+수동:
+```bash
+deneb-tunnel &        # 백그라운드 상시 터널
+```
+
+부팅 시 자동 (권장) — **Termux:Boot** 앱 설치 후:
+```bash
+mkdir -p ~/.termux/boot
+cat > ~/.termux/boot/deneb-tunnel <<'EOF'
+#!/data/data/com.termux/files/usr/bin/bash
+termux-wake-lock
+exec ~/bin/deneb-tunnel
+EOF
+chmod +x ~/.termux/boot/deneb-tunnel
+```
+
+## 동작 확인
+터널이 떠 있는 상태에서:
+```bash
+# actionable — 잠시 후 업무 피드에 카드/푸시가 떠야 한다
+deneb-emit notification "테스트: 내일 3시 미팅 가능?" 카카오톡
+# → {"status":"accepted"}
+
+# noise — accepted 지만 서버가 NO_REPLY 로 판정해 카드/푸시가 뜨지 않아야 정상
+deneb-emit notification "[Web발신] 인증번호 [123456]" 문자
+```
+
+## 다음: 이벤트 소스 연결
+
+`deneb-emit` 은 전송 도관일 뿐이다 — 폰의 실제 이벤트를 여기에 물려야 능동형이 산다.
+
+- **Phase 1 알림** (가치 최고, 브릿지 필요): Termux 단독으로는 타 앱 알림을 못
+  읽는다(NotificationListenerService 권한이 필요). **Tasker + AutoNotification**
+  (또는 MacroDroid)으로 카톡·SMS·은행 알림을 받아, 액션에서
+  `deneb-emit notification "%antext" "%anappname"` 을 호출한다.
+- **Phase 2 컨텍스트** (순수 Termux): `termux-wifi-connectioninfo` /
+  `termux-location` 을 `termux-job-scheduler` 로 주기 폴링 → SSID/위치 변화 시
+  `deneb-emit context "회사 WiFi 접속 — 출근" 위치`.
+- **Phase 3 클립보드** (순수 Termux): `termux-clipboard-get` 변화 감지 →
+  `termux-clipboard-get | deneb-emit clipboard - 클립보드`.
+
+각 소스 연결 스크립트는 별도 단계에서 추가한다.
+
+## 보안 메모
+- SSH 키 인증 + loopback 게이트웨이 = 게이트웨이에 새로운 노출이 0.
+- 알림 본문이 SSH 로 흐른다(금융·인증 포함). 비-actionable 은 서버가 억제하지만,
+  민감 소스(은행 앱 등)는 Tasker 단에서 아예 제외하거나, `source` 라벨로 게이트웨이
+  필터를 강화하는 편이 안전하다.

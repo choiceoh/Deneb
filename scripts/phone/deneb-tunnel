@@ -1,0 +1,32 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# deneb-tunnel — persistent SSH tunnel: phone localhost:18789 → gateway loopback.
+#
+# deneb-emit POSTs to localhost:18789; this tunnel forwards that to the Deneb
+# host's own 127.0.0.1:18789, where the gateway binds. From the host's view the
+# forwarded request arrives on loopback, which is exactly what /api/event/ingest
+# requires — so holding this SSH session IS the authentication. No gateway token.
+#
+# Run it under Termux:Boot (see README) so it survives reboots. autossh respawns
+# the link if it drops (subway dead zone, wifi↔cellular handoff).
+#
+# Env (override as needed):
+#   DENEB_SSH_HOST     ~/.ssh/config alias for the gateway host (default deneb-host)
+#   DENEB_LOCAL_PORT   phone-side port deneb-emit hits      (default 18789)
+#   DENEB_REMOTE_PORT  gateway loopback port on the host    (default 18789)
+
+set -euo pipefail
+DENEB_SSH_HOST="${DENEB_SSH_HOST:-deneb-host}"
+DENEB_LOCAL_PORT="${DENEB_LOCAL_PORT:-18789}"
+DENEB_REMOTE_PORT="${DENEB_REMOTE_PORT:-18789}"
+
+# -M 0 disables autossh's own monitoring port; SSH keepalives (ServerAlive*) are
+# more reliable on mobile networks. ExitOnForwardFailure makes a port clash loud
+# instead of a silently dead tunnel. accept-new trusts the host key on first
+# connect but still pins it afterward.
+exec autossh -M 0 -N \
+  -o ServerAliveInterval=30 \
+  -o ServerAliveCountMax=3 \
+  -o ExitOnForwardFailure=yes \
+  -o StrictHostKeyChecking=accept-new \
+  -L "${DENEB_LOCAL_PORT}:127.0.0.1:${DENEB_REMOTE_PORT}" \
+  "$DENEB_SSH_HOST"

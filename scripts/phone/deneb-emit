@@ -1,0 +1,61 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# deneb-emit — forward a phone event to Deneb's /api/event/ingest endpoint.
+#
+# The gateway runs a 비서실장 judgment turn on the event: if it is worth
+# surfacing, the report lands in the native 업무 chat (card + push); routine
+# noise (ads, OTP codes, receipts) is suppressed server-side. The phone just
+# forwards the raw event — the gateway decides what is worth your attention.
+#
+# Reaches the gateway through the persistent SSH tunnel (deneb-tunnel), which maps
+# localhost:18789 → the host's loopback gateway port. No gateway token is needed:
+# the endpoint is loopback-only, and a request forwarded over your SSH session
+# arrives on the host's loopback — holding the SSH key IS the auth.
+#
+# Usage:
+#   deneb-emit <type> <text> [source]
+#   deneb-emit notification "김부장: 내일 3시 미팅 가능?" 카카오톡
+#   termux-clipboard-get | deneb-emit clipboard - 클립보드
+#
+#   type:   notification | context | clipboard | sms | <free label>
+#   text:   the event body; "-" reads from stdin
+#   source: optional free label (app or sender name)
+#
+# Env:
+#   DENEB_INGEST_URL   gateway base URL (default http://127.0.0.1:18789)
+
+set -euo pipefail
+DENEB_INGEST_URL="${DENEB_INGEST_URL:-http://127.0.0.1:18789}"
+
+if [ "$#" -lt 2 ]; then
+  echo "usage: deneb-emit <type> <text|-> [source]" >&2
+  exit 2
+fi
+type="$1"
+text="$2"
+source="${3:-}"
+if [ "$text" = "-" ]; then text="$(cat)"; fi
+if [ -z "$text" ]; then
+  echo "deneb-emit: empty text — nothing to send" >&2
+  exit 2
+fi
+
+# Build the JSON body. jq handles arbitrary notification text (quotes, newlines,
+# emoji) safely; without it we fall back to minimal manual escaping. Install jq
+# for robustness: pkg install jq.
+if command -v jq >/dev/null 2>&1; then
+  body="$(jq -nc --arg t "$type" --arg x "$text" --arg s "$source" \
+    '{type:$t, text:$x, source:$s}')"
+else
+  esc() {
+    # Escape backslash and double-quote, then fold real newlines into \n so the
+    # body stays a single valid JSON string.
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' \
+      | awk 'BEGIN{ORS=""} {print (NR>1 ? "\\n" : "") $0}'
+  }
+  body="{\"type\":\"$(esc "$type")\",\"text\":\"$(esc "$text")\",\"source\":\"$(esc "$source")\"}"
+fi
+
+# -f fails loudly on HTTP errors (403/400) so a misconfigured tunnel is visible.
+curl -fsS -m 10 -X POST "$DENEB_INGEST_URL/api/event/ingest" \
+  -H 'Content-Type: application/json' -d "$body"
+echo
