@@ -140,9 +140,9 @@ jobs:
 
       - name: Gateway CLI flags smoke test
         run: |
-          dist/gateway --help 2>&1 | grep -q "plugin-host-cmd" || { echo "Missing --plugin-host-cmd flag"; exit 1; }
-          dist/gateway --help 2>&1 | grep -q "config-dir" || { echo "Missing --config-dir flag"; exit 1; }
-          dist/gateway --help 2>&1 | grep -q "auth-mode" || { echo "Missing --auth-mode flag"; exit 1; }
+          dist/gateway --help 2>&1 | grep -q -- "-port" || { echo "Missing -port flag"; exit 1; }
+          dist/gateway --help 2>&1 | grep -q -- "-bind" || { echo "Missing -bind flag"; exit 1; }
+          dist/gateway --help 2>&1 | grep -q -- "-config" || { echo "Missing -config flag"; exit 1; }
           echo "CLI flags present"
 
       - name: Gateway health + RPC endpoint test
