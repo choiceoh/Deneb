@@ -34,8 +34,12 @@ func (b *skillLifecycleBackend) ProposeSkillEvolution(ctx context.Context, req c
 	if route == "" {
 		return nil, fmt.Errorf("route must be one of no-op, genesis, create, evolve")
 	}
-	if strings.TrimSpace(req.Candidate) == "" {
-		return nil, fmt.Errorf("candidate is required for propose")
+	// A no-op proposal records "no skill-worthy pattern, nothing to do" — there
+	// is no reusable candidate by definition. Only executable routes (genesis/
+	// create/evolve) require one. Forcing candidate on no-op made the reviewer
+	// agent fail repeatedly with "candidate is required for propose".
+	if route != "no-op" && strings.TrimSpace(req.Candidate) == "" {
+		return nil, fmt.Errorf("candidate is required for propose with route=%q", route)
 	}
 
 	result := map[string]any{
