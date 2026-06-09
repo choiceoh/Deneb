@@ -483,6 +483,14 @@ class DenebGatewayClient(
         return true
     }
 
+    /** Observation plane (miniapp.observe.*): read the gateway's own behavior and
+     *  recent logs for the settings 관찰 tab. Returns null on transport/auth failure. */
+    internal suspend fun observeBehavior(days: Int): ObserveBehavior? =
+        callRpc("miniapp.observe.behavior", buildJsonObject { put("days", days) })
+
+    internal suspend fun observeLogs(level: String, limit: Int): ObserveLogsPayload? =
+        callRpc("miniapp.observe.logs", buildJsonObject { put("level", level); put("limit", limit) })
+
     suspend fun openWorkFeedItem(id: String): String? {
         // Opening a 업무 card runs its analysis in a dedicated side-conversation off
         // the client:main home — NOT in client:main itself. The old path adopted the
