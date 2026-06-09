@@ -5,11 +5,11 @@
 //
 // The block travels as a fenced JSON object in normal assistant text — there is
 // no separate wire event — so this package only needs to (a) extract the fence
-// and (b) structurally validate the JSON against Kai's DenebUiNode schema. The
+// and (b) structurally validate the JSON against Kai's KaiUiNode schema. The
 // client's own parser does the lenient repair + actual rendering, so validation
 // here is a server-side quality gate, not a full reimplementation.
 //
-// Schema source: SimonSchubert/Kai ui/dynamicui/DenebUiNode.kt + UiAction.kt.
+// Schema source: SimonSchubert/Kai ui/dynamicui/KaiUiNode.kt + UiAction.kt.
 // The polymorphic discriminator key is "type" (kotlinx default class
 // discriminator); each node carries a "type" string from nodeSpecs below.
 package denebui

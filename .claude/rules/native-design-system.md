@@ -37,7 +37,7 @@ globs: ["client-android/app/composeApp/src/**/*.kt"]
 idiom 문서엔 "no cards / no icons"라 써 있지만 **기능을 돕는 곳은 남긴다**:
 
 - **카드**: 리스트·행은 flat+하airline. 하지만 독립 *콜아웃 블록*(메일 상세의 AI 분석·발신자 컨텍스트)은 `ElevatedCard`가 그룹핑에 실익 → 유지(또는 하airline 박스, 화면 보고 판단). 모든 카드를 기계적으로 없애지 않는다.
-- **칩**: 첨부·관련항목 `AssistChip`은 상호작용·접근성 있는 Material 유지(외형만 정돈). `KaiChip`이 중간 지점.
+- **칩**: 첨부·관련항목 `AssistChip`은 상호작용·접근성 있는 Material 유지(외형만 정돈). `DenebChip`이 중간 지점.
 - **아이콘**: 기능 아이콘(보내기·중지·Meet·상태 점)은 유지, **장식** 아이콘만 배제.
 
 ## 행동 불변 (이미 들인 작업 보존)

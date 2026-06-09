@@ -97,17 +97,17 @@ import kotlin.uuid.Uuid
 /**
  * A [DataRepository] backed by the Deneb gateway.
  *
- * It delegates every non-chat member to [base] (Kai's RemoteDataRepository, kept
+ * It delegates every non-chat member to [base] (the upstream RemoteDataRepository, kept
  * so settings and the rest keep working) and overrides the chat path plus the
  * conversation drawer to drive the gateway's `miniapp.*` RPC surface. The reply
- * text may carry a ```deneb-ui fence, which Kai's chat renderer turns into an
+ * text may carry a ```deneb-ui fence, which the upstream chat renderer turns into an
  * interactive screen.
  *
  * Auth uses the X-Deneb-Client-Token header. Generate the token on the gateway
  * host with `go run ./gateway-go/cmd/deneb-client-token` and set it, together
  * with the gateway URL, under the [KEY_URL] / [KEY_TOKEN] settings keys.
  *
- * Revival pattern: to bring another dead Kai screen back to life, override the
+ * Revival pattern: to bring another dead upstream screen back to life, override the
  * DataRepository method(s) it calls and route them through [callRpc]. Flow-typed
  * members (chatHistory, savedConversations) map cleanly; synchronous getters need
  * a cached StateFlow refreshed off [scope].
@@ -157,13 +157,13 @@ class DenebGatewayClient(
     private val _savedConversations = MutableStateFlow<List<Conversation>>(emptyList())
     override val savedConversations: StateFlow<List<Conversation>> = _savedConversations
 
-    // Deneb wiki pages surfaced through Kai's memory screen. getMemories() returns
+    // Deneb wiki pages surfaced through the upstream memory screen. getMemories() returns
     // this snapshot and also kicks a refresh; SettingsViewModel observes the flow
     // to rebuild its state once the RPC lands (see SettingsViewModel.init).
     private val _denebMemories = MutableStateFlow<List<MemoryEntry>>(emptyList())
     val denebMemories: StateFlow<List<MemoryEntry>> = _denebMemories
 
-    // Deneb cron jobs surfaced through Kai's scheduler screen (same snapshot +
+    // Deneb cron jobs surfaced through the upstream scheduler screen (same snapshot +
     // observe pattern as memory).
     private val _denebScheduledTasks = MutableStateFlow<List<ScheduledTask>>(emptyList())
     val denebScheduledTasks: StateFlow<List<ScheduledTask>> = _denebScheduledTasks
@@ -320,7 +320,7 @@ class DenebGatewayClient(
         }
         replaceAssistant(
             finalText.ifBlank { "⚠️ 빈 응답" },
-            // Mirrors Kai's fallback badge: show which model answered when the
+            // Mirrors the upstream fallback badge: show which model answered when the
             // gateway fell back from its main model to a fallback role.
             if (reply.fellBack && reply.model.isNotBlank()) reply.model else null,
         )
@@ -877,10 +877,10 @@ class DenebGatewayClient(
     }
 
     // --- Chat-input model switcher → Deneb registry --------------------------
-    // Kai's chat input has a service/model switcher (ServiceSelector) driven by
+    // the upstream chat input has a service/model switcher (ServiceSelector) driven by
     // ChatUiState.availableServices. When this client is active, ChatViewModel
     // sources that list from here so the switcher changes the gateway main model
-    // instead of Kai's local providers.
+    // instead of the upstream local providers.
 
     /** Gateway models as switcher entries, current model first (it renders as selected). */
     fun denebServiceEntries(): List<ServiceEntry> {
