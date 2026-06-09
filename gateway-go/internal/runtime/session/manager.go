@@ -140,6 +140,15 @@ type Session struct {
 	// (see prompt.SystemPromptParams.CompactionFired).
 	CompactionFired bool `json:"compactionFired,omitempty"`
 
+	// PreviousCompactionSummary holds the last LLM compaction summary so the
+	// NEXT compaction updates it incrementally (Result.Summary → Config.
+	// PreviousSummary) instead of re-summarizing from scratch — the Hermes
+	// _previous_summary pattern. Sticky for the session lifetime; cleared on
+	// /reset (session deletion creates a fresh Session). In-memory only: a
+	// restart resets it, so the first post-restart compaction is a fresh
+	// summary (acceptable one-time degradation).
+	PreviousCompactionSummary string `json:"previousCompactionSummary,omitempty"`
+
 	// TimeoutAt is the absolute timestamp (UnixMilli) when a running session
 	// should be forcibly transitioned to StatusTimeout. Used for subagent
 	// sessions to prevent indefinitely hung agents. Zero means no timeout.
