@@ -81,21 +81,59 @@ deneb-emit notification "테스트: 내일 3시 미팅 가능?" 카카오톡
 deneb-emit notification "[Web발신] 인증번호 [123456]" 문자
 ```
 
-## 다음: 이벤트 소스 연결
+## 이벤트 소스 연결
 
 `deneb-emit` 은 전송 도관일 뿐이다 — 폰의 실제 이벤트를 여기에 물려야 능동형이 산다.
 
-- **Phase 1 알림** (가치 최고, 브릿지 필요): Termux 단독으로는 타 앱 알림을 못
-  읽는다(NotificationListenerService 권한이 필요). **Tasker + AutoNotification**
-  (또는 MacroDroid)으로 카톡·SMS·은행 알림을 받아, 액션에서
-  `deneb-emit notification "%antext" "%anappname"` 을 호출한다.
-- **Phase 2 컨텍스트** (순수 Termux): `termux-wifi-connectioninfo` /
-  `termux-location` 을 `termux-job-scheduler` 로 주기 폴링 → SSID/위치 변화 시
-  `deneb-emit context "회사 WiFi 접속 — 출근" 위치`.
-- **Phase 3 클립보드** (순수 Termux): `termux-clipboard-get` 변화 감지 →
-  `termux-clipboard-get | deneb-emit clipboard - 클립보드`.
+### WiFi 컨텍스트 — `deneb-context-watch` (제공됨, 순수 Termux)
 
-각 소스 연결 스크립트는 별도 단계에서 추가한다.
+WiFi SSID 변화를 감지해 `context` 이벤트로 보낸다. 게이트웨이가 출근/퇴근 타이밍을
+잡아 브리핑한다(회사 접속=출근 → 오늘 일정·우선순위, 집 접속=퇴근 → 하루 마감 요약).
+
+1. SSID→라벨 매핑:
+   ```bash
+   cat > ~/.deneb-context.conf <<'EOF'
+   TopSolar-5G=회사
+   home-wifi=집
+   EOF
+   ```
+2. 배치 + 부팅 영속(`deneb-tunnel` 과 함께 백그라운드 실행):
+   ```bash
+   cp deneb-context-watch ~/bin/ && chmod +x ~/bin/deneb-context-watch
+   # ~/.termux/boot/deneb-tunnel 끝에 다음 줄 추가:
+   #   ~/bin/deneb-context-watch &
+   ```
+3. `termux-wifi-connectioninfo` 는 **위치 권한**이 필요하다(없으면 SSID 가
+   `<unknown ssid>`). Termux:API 앱에 위치 권한을 허용한다.
+
+> 시작 시점 네트워크는 baseline 으로만 잡고 알리지 않으며, SSID *변화* 때만 보낸다.
+> 그 전환이 브리핑할 가치인지는 게이트웨이가 판단한다(noise floor).
+
+### 알림 — Tasker / AutoNotification (사용자 설정, 가치 최고)
+
+Termux 단독으로는 타 앱 알림을 못 읽는다(NotificationListenerService 권한). **Tasker +
+AutoNotification**(또는 MacroDroid)으로 잡아 액션에서 `deneb-emit` 을 호출한다:
+
+1. **Profile**: AutoNotification Intercept — 앱 필터에 카카오톡·메시지 등 **원하는 앱만**.
+2. **Task** → Run Shell:
+   ```
+   ~/bin/deneb-emit notification "%antitle: %antext" "%anappname"
+   ```
+   (PATH 를 못 잡으면 절대경로
+   `/data/data/com.termux/files/usr/bin/bash ~/bin/deneb-emit …` 사용.)
+3. 민감 앱(은행·인증)은 Profile 필터에서 **제외**한다. 서버 noise floor 가
+   비-actionable(OTP·광고)을 억제하지만, 전송 자체를 막는 게 더 안전하다.
+
+### 클립보드 — 공유(share) 기반 권장
+
+클립보드 **자동 폴링 watcher 는 제공하지 않는다** — 비밀번호·OTP·카드번호가 전부
+서버로 흐르기 때문. 필요한 것만 명시적으로 보낸다:
+```bash
+# 회의록·카톡 대화 등 캡처가 필요할 때만 수동으로
+termux-clipboard-get | deneb-emit clipboard - 클립보드
+```
+또는 안드로이드 공유 메뉴 → Termux:Tasker 로 "선택한 텍스트만" 보내는 share 액션을
+구성한다(전수 폴링보다 안전).
 
 ## 보안 메모
 - SSH 키 인증 + loopback 게이트웨이 = 게이트웨이에 새로운 노출이 0.

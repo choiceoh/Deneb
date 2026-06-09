@@ -1,0 +1,73 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# deneb-context-watch — detect WiFi SSID transitions and forward them to Deneb
+# as `context` events, so the gateway can time proactive briefings (회사 접속=
+# 출근 → 오늘 일정/우선순위, 집 접속=퇴근 → 하루 마감 요약).
+#
+# Pure Termux (termux-wifi-connectioninfo) — no Tasker needed. Reaches the gateway
+# through deneb-emit (→ the deneb-tunnel SSH forward). Run it under Termux:Boot
+# alongside deneb-tunnel.
+#
+# SSID → label map: ~/.deneb-context.conf, one "SSID=label" per line, e.g.
+#   TopSolar-5G=회사
+#   home-wifi=집
+# Unmapped SSIDs are reported by their raw name; a disconnect is "연결 끊김".
+#
+# Notes:
+#   - termux-wifi-connectioninfo needs Location permission on modern Android, and
+#     the SSID reads as "<unknown ssid>" without it — grant it to Termux:API.
+#   - The first poll only establishes a baseline (no event on startup), so a
+#     restart does not re-announce the current network.
+#   - Only SSID *changes* emit, so sitting on one network is silent. Whether a
+#     given transition is worth a briefing is the gateway's call (noise floor).
+#
+# Env:
+#   DENEB_CONTEXT_INTERVAL   poll seconds (default 60)
+#   DENEB_CONTEXT_CONF       SSID→label file (default ~/.deneb-context.conf)
+
+set -euo pipefail
+INTERVAL="${DENEB_CONTEXT_INTERVAL:-60}"
+CONF="${DENEB_CONTEXT_CONF:-$HOME/.deneb-context.conf}"
+
+# lookup_label maps an SSID to its friendly label via CONF, falling back to the
+# raw SSID when the file or entry is absent.
+lookup_label() {
+  local ssid="$1" line
+  [ -f "$CONF" ] || { printf '%s' "$ssid"; return; }
+  line="$(grep -F "${ssid}=" "$CONF" 2>/dev/null | head -1 || true)"
+  if [ -n "$line" ]; then printf '%s' "${line#*=}"; else printf '%s' "$ssid"; fi
+}
+
+# current_ssid returns the connected SSID, or "" when not connected / no location
+# permission (Termux reports "<unknown ssid>" in that case).
+current_ssid() {
+  local info ssid
+  info="$(termux-wifi-connectioninfo 2>/dev/null || true)"
+  if command -v jq >/dev/null 2>&1; then
+    ssid="$(printf '%s' "$info" | jq -r '.ssid // empty' 2>/dev/null || true)"
+  else
+    ssid="$(printf '%s' "$info" | sed -n 's/.*"ssid"[: ]*"\([^"]*\)".*/\1/p' | head -1)"
+  fi
+  case "$ssid" in
+    ""|"<unknown ssid>"|"null") printf '' ;;
+    *) printf '%s' "$ssid" ;;
+  esac
+}
+
+last=""
+first=1
+while true; do
+  cur="$(current_ssid)"
+  if [ "$cur" != "$last" ]; then
+    if [ "$first" = "1" ]; then
+      : # baseline only — do not announce the network we started on
+    elif [ -z "$cur" ]; then
+      deneb-emit context "WiFi 연결 끊김" 위치 >/dev/null 2>&1 || true
+    else
+      label="$(lookup_label "$cur")"
+      deneb-emit context "WiFi 접속: ${label}" 위치 >/dev/null 2>&1 || true
+    fi
+    last="$cur"
+    first=0
+  fi
+  sleep "$INTERVAL"
+done
