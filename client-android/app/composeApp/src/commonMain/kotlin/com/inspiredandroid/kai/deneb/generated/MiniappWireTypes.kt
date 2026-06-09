@@ -270,6 +270,17 @@ data class SessionRowOut(
 )
 
 @Serializable
+data class TodoOut(
+    val id: String = "",
+    val title: String = "",
+    val note: String = "",
+    val due: String = "",
+    val dueAllDay: Boolean = false,
+    val done: Boolean = false,
+    val doneAt: String = "",
+)
+
+@Serializable
 data class TranscriptAttachmentOut(
     val type: String = "",
     val mimeType: String = "",

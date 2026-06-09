@@ -11,6 +11,7 @@ import com.inspiredandroid.kai.deneb.generated.RoleModel
 import com.inspiredandroid.kai.deneb.generated.SenderRecentOut
 import com.inspiredandroid.kai.deneb.generated.SenderWikiHitOut
 import com.inspiredandroid.kai.deneb.generated.SessionRowOut
+import com.inspiredandroid.kai.deneb.generated.TodoOut
 import com.inspiredandroid.kai.deneb.generated.TranscriptMsgOut
 import com.inspiredandroid.kai.ui.chat.WorkFeedItem
 import kotlinx.serialization.Serializable
@@ -139,6 +140,11 @@ internal data class SenderContextPayload(
 // so the list and detail screens share one source of truth with the gateway.
 @Serializable
 internal data class CalListPayload(val events: List<CalendarEventOut> = emptyList())
+
+// To-do list envelope. The element shape (TodoOut) is generated from the Go
+// todoOut struct, so the to-do list and calendar share one source of truth.
+@Serializable
+internal data class TodoListPayload(val todos: List<TodoOut> = emptyList())
 
 @Serializable
 internal data class PeopleListPayload(val people: List<PersonRow> = emptyList())

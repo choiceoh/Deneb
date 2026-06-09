@@ -1151,6 +1151,67 @@ class DenebGatewayClient(
     suspend fun deleteCalendarEvent(id: String): String? =
         rpcWrite("miniapp.calendar.delete", buildJsonObject { put("id", id) })
 
+    // --- to-dos (miniapp.todo.*) -----------------------------------------
+
+    /**
+     * Fetch all to-dos (`miniapp.todo.list`). Returns null on a fetch failure so
+     * the screen can tell a real "no to-dos" from a network error. Completed items
+     * are included; the screen decides how to present them.
+     */
+    suspend fun fetchTodos(): List<Todo>? {
+        val payload = callRpc<TodoListPayload>("miniapp.todo.list", buildJsonObject {}) ?: return null
+        return payload.todos
+            .filter { it.id.isNotBlank() }
+            .map { Todo(it.id, it.title, it.note, it.due, it.dueAllDay, it.done) }
+    }
+
+    /**
+     * Create a to-do (`miniapp.todo.create`). Returns null on success or a Korean
+     * error message on failure. Pass dueIso blank for an undated to-do.
+     */
+    suspend fun createTodo(
+        title: String,
+        note: String,
+        dueIso: String,
+        dueAllDay: Boolean,
+    ): String? = rpcWrite("miniapp.todo.create", todoWriteParams(title, note, dueIso, dueAllDay))
+
+    /** Edit a to-do (`miniapp.todo.update`). Same return contract as [createTodo];
+     *  completion state is preserved server-side. */
+    suspend fun updateTodo(
+        id: String,
+        title: String,
+        note: String,
+        dueIso: String,
+        dueAllDay: Boolean,
+    ): String? = rpcWrite("miniapp.todo.update", todoWriteParams(title, note, dueIso, dueAllDay, id))
+
+    /** Flip a to-do's completion (`miniapp.todo.set_done`). Null on success. */
+    suspend fun setTodoDone(id: String, done: Boolean): String? =
+        rpcWrite("miniapp.todo.set_done", buildJsonObject { put("id", id); put("done", done) })
+
+    /** Delete a to-do (`miniapp.todo.delete`). Null on success. */
+    suspend fun deleteTodo(id: String): String? =
+        rpcWrite("miniapp.todo.delete", buildJsonObject { put("id", id) })
+
+    // todoWriteParams builds the shared create/update body; `id` is set only for
+    // updates. A blank due is omitted so the gateway stores an undated to-do.
+    private fun todoWriteParams(
+        title: String,
+        note: String,
+        dueIso: String,
+        dueAllDay: Boolean,
+        id: String? = null,
+    ): JsonObject = buildJsonObject {
+        if (id != null) put("id", id)
+        put("title", title)
+        if (note.isNotBlank()) put("note", note)
+        if (dueIso.isNotBlank()) {
+            put("due", dueIso)
+            put("dueAllDay", dueAllDay)
+        }
+    }
+
     // calendarWriteParams builds the shared create/update body; `id` is set only
     // for updates. Blank optional fields are omitted so the gateway applies defaults.
     private fun calendarWriteParams(

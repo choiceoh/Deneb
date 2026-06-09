@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inspiredandroid.kai.ui.DenebScreenScaffold
+import com.inspiredandroid.kai.ui.DenebSectionLabel
 import com.inspiredandroid.kai.ui.DenebType
 import com.inspiredandroid.kai.ui.components.rememberHaptics
 import com.inspiredandroid.kai.ui.denebHairline
@@ -87,6 +88,8 @@ fun DenebCalendarScreen(
     onBack: () -> Unit,
     onOpenEvent: (String) -> Unit = {},
     onAddEvent: (LocalDate) -> Unit = {},
+    onOpenTodos: () -> Unit = {},
+    onOpenTodo: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     val tz = remember { TimeZone.currentSystemDefault() }
@@ -111,6 +114,9 @@ fun DenebCalendarScreen(
     val failed = remember { mutableStateMapOf<CalMonth, Boolean>() }
     var selected by remember { mutableStateOf(today) }
     var refreshing by remember { mutableStateOf(false) }
+    // To-dos are independent of the visible month (a to-do has at most one due
+    // date), so they're fetched once and filtered to the selected day below.
+    var todos by remember { mutableStateOf<List<Todo>>(emptyList()) }
 
     suspend fun loadMonth(m: CalMonth, force: Boolean) {
         if (!force && cache[m] != null) return
@@ -122,6 +128,19 @@ fun DenebCalendarScreen(
             cache[m] = ev
             failed[m] = false
         }
+    }
+    suspend fun loadTodos() {
+        client.fetchTodos()?.let { todos = it }
+    }
+    // To-dos load once and refresh on pull-to-refresh / toggle, independent of the
+    // month so paging never drops them.
+    LaunchedEffect(Unit) { loadTodos() }
+
+    // Optimistic toggle: flip locally so the checkbox responds instantly, then
+    // persist and re-fetch to settle completion state.
+    fun toggleTodo(id: String, done: Boolean) {
+        todos = todos.map { if (it.id == id) it.copy(done = done) else it }
+        scope.launch { client.setTodoDone(id, done); loadTodos() }
     }
 
     // Prefetch the visible month and both neighbors whenever the pager moves, so a
@@ -164,6 +183,12 @@ fun DenebCalendarScreen(
         selEvents.orEmpty()
             .filter { selected in eventDays(it.start, it.end, it.allDay, tz) }
             .sortedWith(compareBy({ !it.allDay }, { it.start }))
+    }
+    // To-dos due on the selected day, incomplete first.
+    val dayTodos = remember(todos, selected, tz) {
+        todos
+            .filter { it.due.isNotBlank() && eventLocalDate(it.due, tz) == selected }
+            .sortedWith(compareBy({ it.done }, { it.due }))
     }
 
     DenebScreenScaffold(title = "일정", onBack = onBack, tabBar = navigationTabBar) {
@@ -216,15 +241,21 @@ fun DenebCalendarScreen(
             Spacer(Modifier.height(12.dp))
             HorizontalDivider(color = denebHairline())
             Spacer(Modifier.height(8.dp))
-            Text(
-                dayHeadLabel(selected, today, dayEvents.size),
-                style = DenebType.sectionLabel,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    dayHeadLabel(selected, today, dayEvents.size),
+                    style = DenebType.sectionLabel,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onOpenTodos, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                    Text("할 일")
+                }
+            }
             Spacer(Modifier.height(4.dp))
             PullToRefreshBox(
                 isRefreshing = refreshing,
-                onRefresh = { scope.launch { refreshing = true; loadMonth(selMonth, force = true); refreshing = false } },
+                onRefresh = { scope.launch { refreshing = true; loadMonth(selMonth, force = true); loadTodos(); refreshing = false } },
                 modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
                 // Own scroll state so the list scrolls under the pinned grid; a
@@ -236,8 +267,16 @@ fun DenebCalendarScreen(
                             "일정을 불러오지 못했어요.",
                             onRetry = { scope.launch { loadMonth(selMonth, force = true) } },
                         )
-                        dayEvents.isEmpty() -> CalendarEmptyDay(onAdd = { onAddEvent(selected) })
-                        else -> CalendarDayList(dayEvents, selected, tz, onOpenEvent)
+                        dayEvents.isEmpty() && dayTodos.isEmpty() -> CalendarEmptyDay(onAdd = { onAddEvent(selected) })
+                        else -> {
+                            if (dayEvents.isNotEmpty()) {
+                                CalendarDayList(dayEvents, selected, tz, onOpenEvent)
+                            }
+                            if (dayTodos.isNotEmpty()) {
+                                DenebSectionLabel("할 일")
+                                dayTodos.forEach { TodoCheckRow(it, tz, ::toggleTodo, onOpenTodo) }
+                            }
+                        }
                     }
                     Spacer(Modifier.height(24.dp))
                 }
