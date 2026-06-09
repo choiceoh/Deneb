@@ -33,6 +33,10 @@
 set -uo pipefail
 
 BIN="${DENEB_BIN_DIR:-$HOME/bin}"
+# ssh non-interactive shells skip ~/.bashrc, so $BIN is not on PATH — a child's
+# `deneb-emit` call (from the watchers) would then fail command-not-found. Export
+# it here so every setsid'd child inherits a working PATH.
+export PATH="$BIN:$PATH"
 SUP_DIR="${DENEB_SUP_DIR:-$HOME/.deneb-sup}"
 FLUSH_PERIOD="${DENEB_FLUSH_PERIOD:-300}"
 INTERVAL="${DENEB_SUP_INTERVAL:-30}"
@@ -44,7 +48,7 @@ SELF="$(readlink -f "$0" 2>/dev/null || echo "$0")"
 
 # Managed children other than the periodic flush. "name:script" — script is
 # resolved under $BIN and silently skipped when absent (context-watch is optional).
-CHILDREN="tunnel:deneb-tunnel context-watch:deneb-context-watch"
+CHILDREN="tunnel:deneb-tunnel context-watch:deneb-context-watch location:deneb-location-watch notification:deneb-notification-watch"
 
 pidfile() { printf '%s/%s.pid' "$SUP_DIR" "$1"; }
 

@@ -135,20 +135,35 @@ WiFi 가 없는 곳(현장·출장·외부 미팅)을 GPS 로 감지한다. `den
 > 장소 진입 시 `위치: <라벨> 도착`, 모든 장소를 벗어나면 `위치: <라벨> 벗어남` 이벤트.
 > 같은 장소를 WiFi watcher 와 양쪽에 등록하면 중복되니 한쪽에만 둔다.
 
-### 알림 — Tasker / AutoNotification (사용자 설정, 가치 최고)
+### 알림 — `deneb-notification-watch` (순수 Termux, 삼성 권장)
 
-Termux 단독으로는 타 앱 알림을 못 읽는다(NotificationListenerService 권한). **Tasker +
-AutoNotification**(또는 MacroDroid)으로 잡아 액션에서 `deneb-emit` 을 호출한다:
+> 네이티브 클라(#1840)도 `NotificationListenerService` 로 알림을 캡처하지만, 그
+> foreground `DaemonService` 가 삼성 One UI 의 백그라운드 킬에 죽는다(Android 12+ 는
+> 백그라운드 상태에서 foreground service 시작 자체를 막는다). Termux 는 wake-lock +
+> `deneb-supervisor` 로 살아있으므로, **삼성에선 이 watcher 가 견고한 알림 경로**다.
+> Tasker 도 불필요.
 
-1. **Profile**: AutoNotification Intercept — 앱 필터에 카카오톡·메시지 등 **원하는 앱만**.
-2. **Task** → Run Shell:
+F-Droid Termux:API 의 `termux-notification-list` 로 알림을 폴링해 `deneb-emit` 으로
+보낸다.
+
+1. **알림 접근 권한**: 안드 설정 → 알림 접근(특수 앱 접근) → **Termux:API** 켜기.
+2. 배치(`deneb-supervisor` 가 자동 관리):
+   ```bash
+   cp deneb-notification-watch ~/bin/ && chmod +x ~/bin/deneb-notification-watch
    ```
-   ~/bin/deneb-emit notification "%antitle: %antext" "%anappname"
+3. 받을 앱 좁히기 — `~/.deneb-notif-allow`, 패키지 substring 한 줄씩(파일 없으면 시스템·
+   Termux·Deneb 자신만 빼고 전체):
+   ```bash
+   printf 'kakao.talk\nmessaging\n' > ~/.deneb-notif-allow
    ```
-   (PATH 를 못 잡으면 절대경로
-   `/data/data/com.termux/files/usr/bin/bash ~/bin/deneb-emit …` 사용.)
-3. 민감 앱(은행·인증)은 Profile 필터에서 **제외**한다. 서버 noise floor 가
-   비-actionable(OTP·광고)을 억제하지만, 전송 자체를 막는 게 더 안전하다.
+   시스템 UI·Termux·Deneb 자신은 **항상 제외**(자기 푸시가 도로 캡처되는 루프 방지).
+
+> 시작 시점에 떠 있던 알림은 baseline 으로 무시하고 이후 도착분만 보낸다(키+내용 해시로
+> dedup, in-place 업데이트는 새 것으로 친다). 민감 앱(은행·인증)은 allowlist 에서 빼고,
+> 서버 noise floor 도 OTP·광고를 억제한다.
+
+(대안) GUI 를 선호하면 Tasker + AutoNotification 의 Run Shell 액션에서
+`~/bin/deneb-emit notification "%antitle: %antext" "%anappname"` 을 호출해도 된다.
 
 ### 클립보드 — 공유(share) 기반 권장
 

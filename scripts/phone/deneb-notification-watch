@@ -1,0 +1,88 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# deneb-notification-watch — poll termux-notification-list and forward NEW app
+# notifications to Deneb via deneb-emit.
+#
+# The native client (#1840) captures notifications too, but its foreground
+# DaemonService gets killed under Samsung One UI's aggressive background manager
+# (it can't even start a foreground service once backgrounded — Android 12+).
+# Termux, held up by wake-lock + deneb-supervisor, stays alive — so on Samsung
+# this is the durable path. Run it under deneb-supervisor.
+#
+# Needs Termux:API notification access: 안드 설정 → 알림 접근(특수 앱 접근) → Termux:API.
+#
+# App filtering:
+#   - Always skips system UI, Termux (our own test notifications), and Deneb
+#     itself (its proactive-report notification would otherwise loop back in).
+#   - ~/.deneb-notif-allow (optional): one package substring per line (e.g.
+#     `kakao`, `messaging`). If present, ONLY matching packages are forwarded —
+#     keeps ad/spam apps from spending a judgment turn each. If absent, every
+#     non-skipped app is forwarded (the gateway's noise floor still drops ads/OTP).
+#
+# Env: DENEB_NOTIF_INTERVAL (default 12s), DENEB_NOTIF_ALLOW, DENEB_NOTIF_SEEN.
+
+set -uo pipefail
+INTERVAL="${DENEB_NOTIF_INTERVAL:-12}"
+ALLOW="${DENEB_NOTIF_ALLOW:-$HOME/.deneb-notif-allow}"
+SEEN="${DENEB_NOTIF_SEEN:-$HOME/.deneb-notif-seen}"
+SEEN_MAX=800
+
+# skip_pkg: packages we never forward — system UI, Termux's own notifications,
+# and Deneb (avoid a self-loop from its proactive push).
+skip_pkg() {
+  case "$1" in
+    com.termux*|ai.deneb|android|com.android.systemui|com.samsung.android.systemui*|com.sec.android.systemui*)
+      return 0 ;;
+  esac
+  return 1
+}
+
+# allowed: with an allowlist file, true only when pkg contains a listed substring.
+# Without the file, everything (not skipped) is allowed.
+allowed() {
+  [ -f "$ALLOW" ] || return 0
+  local line
+  while IFS= read -r line; do
+    line="$(printf '%s' "$line" | tr -d '[:space:]')"
+    [ -z "$line" ] && continue
+    case "$1" in *"$line"*) return 0 ;; esac
+  done < "$ALLOW"
+  return 1
+}
+
+# notif_hash: stable id for a notification. Includes content so an in-place
+# update (same key, new text) counts as new.
+notif_hash() { printf '%s|%s' "$1" "$2" | md5sum | cut -d' ' -f1; }
+
+touch "$SEEN" 2>/dev/null || true
+
+# Baseline: mark everything currently showing as already-seen so a restart does
+# not replay the whole notification shade. Only notifications that arrive AFTER
+# startup are forwarded.
+termux-notification-list 2>/dev/null \
+  | jq -r '.[] | [.key, (.content//"")] | @tsv' 2>/dev/null \
+  | while IFS=$'\t' read -r key content; do
+      [ -n "$key" ] && notif_hash "$key" "$content" >> "$SEEN"
+    done
+
+while true; do
+  list="$(termux-notification-list 2>/dev/null)"
+  if [ -n "$list" ]; then
+    printf '%s' "$list" \
+      | jq -r '.[] | [.key, .packageName, (.title//""), (.content//"")] | @tsv' 2>/dev/null \
+      | while IFS=$'\t' read -r key pkg title content; do
+          [ -z "$pkg" ] && continue
+          skip_pkg "$pkg" && continue
+          allowed "$pkg" || continue
+          h="$(notif_hash "$key" "$content")"
+          grep -qxF "$h" "$SEEN" 2>/dev/null && continue
+          echo "$h" >> "$SEEN"
+          body="$title"
+          [ -n "$content" ] && body="$title: $content"
+          deneb-emit notification "$body" "$pkg" >/dev/null 2>&1 || true
+        done
+    if [ "$(wc -l < "$SEEN" 2>/dev/null || echo 0)" -gt "$SEEN_MAX" ]; then
+      tail -n "$SEEN_MAX" "$SEEN" > "$SEEN.tmp" 2>/dev/null && mv "$SEEN.tmp" "$SEEN"
+    fi
+  fi
+  sleep "$INTERVAL"
+done
