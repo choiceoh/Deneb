@@ -193,12 +193,12 @@ func TestIntegration_SimpleTextResponse(t *testing.T) {
 	hasCompleted := false
 	for _, ev := range events {
 		if ev.Event == "sessions.changed" {
-			p, ok := ev.Payload.(map[string]any)
+			p, ok := ev.Payload.(SessionsChangedEvent)
 			if ok {
-				if p["status"] == "running" {
+				if p.Status == "running" {
 					hasStarted = true
 				}
-				if p["status"] == "done" {
+				if p.Status == "done" {
 					hasCompleted = true
 				}
 			}
@@ -599,8 +599,8 @@ func TestIntegration_LLMError(t *testing.T) {
 	hasError := false
 	for _, ev := range events {
 		if ev.Event == "sessions.changed" {
-			p, ok := ev.Payload.(map[string]any)
-			if ok && p["status"] == "failed" {
+			p, ok := ev.Payload.(SessionsChangedEvent)
+			if ok && p.Status == "failed" {
 				hasError = true
 			}
 		}

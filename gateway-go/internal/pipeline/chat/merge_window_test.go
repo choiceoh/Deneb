@@ -280,12 +280,12 @@ func TestSend_SkipMergeBypassesMergeWindow(t *testing.T) {
 func TestSend_MergeBroadcastsSessionsChanged(t *testing.T) {
 	sm := session.NewManager()
 	var mu sync.Mutex
-	var events []map[string]any
+	var events []SessionsChangedEvent
 	bc := func(event string, payload any) (int, []error) {
 		if event != "sessions.changed" {
 			return 0, nil
 		}
-		if m, ok := payload.(map[string]any); ok {
+		if m, ok := payload.(SessionsChangedEvent); ok {
 			mu.Lock()
 			events = append(events, m)
 			mu.Unlock()
@@ -313,7 +313,7 @@ func TestSend_MergeBroadcastsSessionsChanged(t *testing.T) {
 	defer mu.Unlock()
 	var sawMerged bool
 	for _, e := range events {
-		if e["reason"] == "merged" && e["sessionKey"] == key {
+		if e.Reason == "merged" && e.SessionKey == key {
 			sawMerged = true
 			break
 		}

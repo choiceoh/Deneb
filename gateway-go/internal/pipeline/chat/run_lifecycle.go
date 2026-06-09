@@ -299,11 +299,11 @@ func handleRunSuccess(
 					"error", err, "stopReason", result.StopReason,
 					"session", params.SessionKey)
 				if deps.broadcast != nil {
-					deps.broadcast("chat.delivery_failed", map[string]any{
-						"session": params.SessionKey,
-						"channel": params.Delivery.Channel,
-						"reason":  "stop_fallback_error",
-						"error":   err.Error(),
+					deps.broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{
+						Session: params.SessionKey,
+						Channel: params.Delivery.Channel,
+						Reason:  "stop_fallback_error",
+						Error:   err.Error(),
 					})
 				}
 			}
@@ -312,11 +312,11 @@ func handleRunSuccess(
 			// No user-facing fallback (e.g. end_turn with empty text, which can
 			// be a legitimate tool-only turn). Still surface to monitoring so a
 			// silent no-reply is observable instead of being buried in a Warn.
-			deps.broadcast("chat.empty_response", map[string]any{
-				"session":    params.SessionKey,
-				"channel":    params.Delivery.Channel,
-				"stopReason": result.StopReason,
-				"turns":      result.Turns,
+			deps.broadcast("chat.empty_response", ChatEmptyResponseEvent{
+				Session:    params.SessionKey,
+				Channel:    params.Delivery.Channel,
+				StopReason: result.StopReason,
+				Turns:      result.Turns,
 			})
 		}
 	}
@@ -330,10 +330,10 @@ func handleRunSuccess(
 			"channel", params.Delivery.Channel,
 			"textLen", len(result.Text))
 		if deps.broadcast != nil {
-			deps.broadcast("chat.delivery_failed", map[string]any{
-				"session": params.SessionKey,
-				"channel": params.Delivery.Channel,
-				"reason":  "parse_directives_nil",
+			deps.broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{
+				Session: params.SessionKey,
+				Channel: params.Delivery.Channel,
+				Reason:  "parse_directives_nil",
 			})
 		}
 		persistReplyDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, nil, logger)
@@ -396,10 +396,10 @@ func handleRunSuccess(
 							"channel", params.Delivery.Channel,
 							"textLen", len(replyText))
 						if deps.broadcast != nil {
-							deps.broadcast("chat.delivery_failed", map[string]any{
-								"session": params.SessionKey,
-								"channel": params.Delivery.Channel,
-								"reason":  "reply_func_nil",
+							deps.broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{
+								Session: params.SessionKey,
+								Channel: params.Delivery.Channel,
+								Reason:  "reply_func_nil",
 							})
 						}
 						persistReplyDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, nil, logger)
@@ -420,11 +420,11 @@ func handleRunSuccess(
 							"error", err, "channel", params.Delivery.Channel,
 							"session", params.SessionKey)
 						if deps.broadcast != nil {
-							deps.broadcast("chat.delivery_failed", map[string]any{
-								"session": params.SessionKey,
-								"channel": params.Delivery.Channel,
-								"reason":  "reply_func_error",
-								"error":   err.Error(),
+							deps.broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{
+								Session: params.SessionKey,
+								Channel: params.Delivery.Channel,
+								Reason:  "reply_func_error",
+								Error:   err.Error(),
 							})
 						}
 						// Record the failure in the transcript so the next turn's
@@ -470,12 +470,12 @@ func handleRunSuccess(
 					"failed", len(failedURLs),
 					"total", len(directives.MediaURLs))
 				if deps.broadcast != nil {
-					deps.broadcast("chat.media_delivery_failed", map[string]any{
-						"session": params.SessionKey,
-						"channel": params.Delivery.Channel,
-						"count":   len(failedURLs),
-						"total":   len(directives.MediaURLs),
-						"urls":    failedURLs,
+					deps.broadcast("chat.media_delivery_failed", ChatMediaDeliveryFailedEvent{
+						Session: params.SessionKey,
+						Channel: params.Delivery.Channel,
+						Count:   len(failedURLs),
+						Total:   len(directives.MediaURLs),
+						URLs:    failedURLs,
 					})
 				}
 				persistMediaDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, failedURLs, logger)
@@ -603,10 +603,10 @@ func finishRun(deps runDeps, params RunParams, phase session.LifecyclePhase, rea
 		FailureReason: failureReason,
 	})
 	if deps.broadcast != nil {
-		deps.broadcast("sessions.changed", map[string]any{
-			"sessionKey": params.SessionKey,
-			"reason":     reason,
-			"status":     status,
+		deps.broadcast("sessions.changed", SessionsChangedEvent{
+			SessionKey: params.SessionKey,
+			Reason:     reason,
+			Status:     status,
 		})
 	}
 	// Clean up spillover files for completed/failed sessions.
