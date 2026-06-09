@@ -1,10 +1,9 @@
 ---
 title: "Capture"
-summary: "Share an image, recording, text, or notification; the gateway OCRs, transcribes, or triages it."
+summary: "Share an image, recording, or text; the gateway OCRs, transcribes, or triages it."
 read_when:
   - You want to share an image, recording, or text into Deneb for triage
   - You are operating or debugging the OCR and transcription sidecars
-  - You want to choose which apps Deneb captures notifications from
 ---
 
 # Capture
@@ -25,7 +24,6 @@ The same handful of capture flows reach Deneb through several doors:
 | Drawer **capture** footer | `image ocr` | `transcribe` | — |
 | Android **share sheet** (from any app) | `image/*` | `audio/*` | `text/plain` |
 | `deneb://voice` home-icon shortcut | — | voice (on-device) | — |
-| Notification tab | — | — | captured notifications |
 
 When two or more topics are configured, a cold share first asks
 어느 토픽으로 보낼까요? (which topic?) before routing.
@@ -98,23 +96,6 @@ phone's **on-device** speech recognizer (Korean, `ko-KR`, prompt
 is sent to chat prefixed with `🎤`. This is purely on-device — the gateway only
 ever sees the resulting text — which makes it the right tool for quick spoken
 commands, while a long recording belongs in [audio transcription](#audio-transcription).
-
-## Notification Capture
-
-With Android's notification-access permission granted, Deneb's listener reads
-other apps' notifications (KakaoTalk, mail, calendar) and the **알림** settings
-tab lists them; tapping one sends it into chat for triage, prefixed
-`📲 {app} 알림 — {title}`.
-
-A **캡처할 앱** (apps to capture) allowlist controls the scope:
-
-- **Empty set captures everything** — the default, unchanged behavior.
-- Selecting specific apps narrows capture to only those.
-- 모든 앱 받기로 초기화 (reset to capture all) clears the list.
-
-The listener runs entirely on the phone; captured notifications re-enter Deneb
-through the ordinary chat path, so there is no special gateway endpoint for
-them.
 
 ## Sidecars at a Glance
 

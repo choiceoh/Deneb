@@ -4,7 +4,6 @@ import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.email.EmailPoller
 import ai.deneb.getBackgroundDispatcher
 import ai.deneb.isEmailSupported
-import ai.deneb.isNotificationsSupported
 import ai.deneb.isSmsSupported
 import ai.deneb.sendHeartbeatNotification
 import ai.deneb.sendProactiveReportNotification
@@ -35,7 +34,6 @@ class TaskScheduler(
     private val emailPoller: EmailPoller? = null,
     private val smsStore: SmsStore? = null,
     private val smsPoller: SmsPoller? = null,
-    private val notificationStore: NotificationStore? = null,
     private val enabled: Boolean = true,
     private val backgroundDispatcher: CoroutineContext = getBackgroundDispatcher(),
 ) {
@@ -43,13 +41,6 @@ class TaskScheduler(
         const val POLL_INTERVAL_MS = 60_000L
         const val MAX_BACKOFF_MS = 3_600_000L // 1 hour
         const val HEARTBEAT_CONTEXT_COUNT = 3
-
-        /**
-         * How long to wait after a notification capture before running a
-         * heartbeat, so a burst of near-simultaneous notifications (a group
-         * chat, batched syncs) collapses into a single triage pass.
-         */
-        const val CAPTURE_DEBOUNCE_MS = 3_000L
 
         /** Per-task execution log size — surfaced in the task details sheet. */
         const val MAX_TASK_LOG_ENTRIES = 10
@@ -169,40 +160,9 @@ class TaskScheduler(
         }
     }
 
-    private var captureJob: Job? = null
-
-    /**
-     * Runs a heartbeat the moment a notification is captured, instead of waiting
-     * for the next [POLL_INTERVAL_MS] poll — so a KakaoTalk / mail notification
-     * is triaged in seconds. Debounced ([CAPTURE_DEBOUNCE_MS]) so a burst of
-     * notifications collapses into one heartbeat, and gated on the same
-     * isLoadingCheck/scheduling guards as the poll loop. The poll loop's own
-     * due-check stays as a backstop.
-     */
-    private fun startCaptureSubscription() {
-        val store = notificationStore ?: return
-        if (captureJob?.isActive == true) return
-        captureJob = schedulerScope.launch {
-            store.captured.collect {
-                // Manual-only mode: capture fills the queue but the user injects
-                // on demand by tapping a notification in the Notifications tab.
-                if (appSettings?.isNotificationAutoInjectEnabled() != true) return@collect
-                // Debounce: wait out a burst, then run once. Further signals that
-                // arrive during the heartbeat are picked up on the next emission.
-                delay(CAPTURE_DEBOUNCE_MS.milliseconds)
-                if (isLoadingCheck()) return@collect
-                if (appSettings?.isSchedulingEnabled() != true) return@collect
-                if (heartbeatManager?.getConfig()?.enabled != true) return@collect
-                if (store.getPending().isEmpty()) return@collect
-                runHeartbeat()
-            }
-        }
-    }
-
     fun start() {
         startPushSubscription()
         startProactiveNotifications()
-        startCaptureSubscription()
         if (!enabled || taskStore == null || appSettings == null) return
         if (activeJob?.isActive == true) return
         activeJob = schedulerScope.launch {
@@ -268,21 +228,13 @@ class TaskScheduler(
         val manager = heartbeatManager ?: return
         val pendingEmails = emailStore?.getPending().orEmpty()
         val pendingSms = smsStore?.getPending().orEmpty()
-        // In manual-only mode, captured notifications wait in the queue for the
-        // user to tap-inject — the regular heartbeat poll must not auto-drain
-        // them either (null/default => auto-inject on).
-        val pendingNotifications = if (appSettings?.isNotificationAutoInjectEnabled() != false) {
-            notificationStore?.getPending().orEmpty()
-        } else {
-            emptyList()
-        }
         try {
             val recentResponses = dataRepository.savedConversations.value
                 .find { it.type == Conversation.TYPE_HEARTBEAT }
                 ?.messages?.takeLast(HEARTBEAT_CONTEXT_COUNT)
                 ?.map { it.content }
                 ?: emptyList()
-            val heartbeatPrompt = manager.buildHeartbeatPrompt(recentResponses, pendingEmails, pendingSms, pendingNotifications)
+            val heartbeatPrompt = manager.buildHeartbeatPrompt(recentResponses, pendingEmails, pendingSms)
             // Resolve the heartbeat conversation id BEFORE the AI starts emitting
             // tool calls, so any execute_shell_command call binds to the heartbeat's
             // own persistent bash session rather than the chat the user happens to
@@ -337,11 +289,6 @@ class TaskScheduler(
             if (pendingSms.isNotEmpty()) {
                 smsStore?.removePending(pendingSms)
             }
-            if (pendingNotifications.isNotEmpty()) {
-                notificationStore?.removePending(pendingNotifications)
-            }
-            // Sweep retention bounds opportunistically after each heartbeat run.
-            notificationStore?.sweep()
         } catch (e: Exception) {
             manager.recordHeartbeat(success = false, error = e.message ?: e.toString())
         }

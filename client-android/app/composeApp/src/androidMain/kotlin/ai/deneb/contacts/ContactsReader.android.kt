@@ -14,7 +14,7 @@ import org.koin.java.KoinJavaComponent.inject
 
 // READ_CONTACTS is declared only in the foss flavor's manifest (privacy parity
 // with SMS); playStore omits it. Compile-time per flavor, safe to cache. Mirrors
-// NotificationReader's declaresNotificationListener gating.
+// the SMS reader's declaresReadSms gating.
 internal fun Context.declaresReadContacts(): Boolean = try {
     val info = packageManager.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS)
     info.requestedPermissions?.contains(Manifest.permission.READ_CONTACTS) == true

@@ -7,7 +7,6 @@ import ai.deneb.data.DurableMirrorSettings
 import ai.deneb.data.EmailStore
 import ai.deneb.data.HeartbeatManager
 import ai.deneb.data.MemoryStore
-import ai.deneb.data.NotificationStore
 import ai.deneb.data.RemoteDataRepository
 import ai.deneb.data.SmsDraftStore
 import ai.deneb.data.SmsStore
@@ -20,13 +19,11 @@ import ai.deneb.email.EmailPoller
 import ai.deneb.mcp.McpServerManager
 import ai.deneb.network.Requests
 import ai.deneb.contacts.ContactsReader
-import ai.deneb.notifications.NotificationReader
 import ai.deneb.sms.SmsPoller
 import ai.deneb.sms.SmsReader
 import ai.deneb.sms.SmsSender
 import ai.deneb.tools.CalendarPermissionController
 import ai.deneb.tools.ContactsPermissionController
-import ai.deneb.tools.NotificationListenerController
 import ai.deneb.tools.NotificationPermissionController
 import ai.deneb.tools.SmsPermissionController
 import ai.deneb.tools.SmsSendPermissionController
@@ -43,8 +40,6 @@ val appModule = module {
     single<SmsSendPermissionController> { SmsSendPermissionController() }
     single<SmsReader> { SmsReader() }
     single<SmsSender> { SmsSender() }
-    single<NotificationListenerController> { NotificationListenerController() }
-    single<NotificationReader> { NotificationReader() }
     single<AppSettings> {
         // Wrap the encrypted store so the gateway URL + token are mirrored into a
         // plain store that survives the Android encrypted-prefs wipe on app update
@@ -91,9 +86,6 @@ val appModule = module {
     single<SmsDraftStore> {
         SmsDraftStore(get())
     }
-    single<NotificationStore> {
-        NotificationStore(get())
-    }
     single<HeartbeatManager> {
         HeartbeatManager(get(), get(), get(), get())
     }
@@ -118,8 +110,6 @@ val appModule = module {
             smsSendPermissionController = get(),
             smsSender = get(),
             smsDraftStore = get(),
-            notificationStore = get(),
-            notificationListenerController = get(),
             mcpServerManager = get(),
             sandboxController = get(),
         )
@@ -131,7 +121,6 @@ val appModule = module {
         // gateway event subscription that backs Android push notifications.
         TaskScheduler(
             get<DataRepository>(),
-            notificationStore = get<NotificationStore>(),
         )
     }
     single<DaemonController> { createDaemonController() }

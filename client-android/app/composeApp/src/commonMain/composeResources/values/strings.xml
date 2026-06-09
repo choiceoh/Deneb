@@ -113,12 +113,6 @@
     <string name="tool_send_sms_description">Draft an SMS for the user to review and send</string>
     <string name="tool_reply_sms_name">Reply SMS</string>
     <string name="tool_reply_sms_description">Draft a reply to an SMS for the user to review and send</string>
-    <string name="tool_check_notifications_name">Check Notifications</string>
-    <string name="tool_check_notifications_description">List recent unread notifications</string>
-    <string name="tool_read_notification_name">Read Notification</string>
-    <string name="tool_read_notification_description">Read the full body of a notification</string>
-    <string name="tool_search_notifications_name">Search Notifications</string>
-    <string name="tool_search_notifications_description">Search notifications by app or text</string>
     <string name="settings_notifications_label">Read notifications</string>
     <string name="settings_notifications_description">Incoming notifications are picked up by the heartbeat. Pick which apps Deneb can read in system Notification access settings.</string>
     <string name="settings_notifications_access_required">Notification access has not been granted. Tap below to enable Deneb under system settings.</string>

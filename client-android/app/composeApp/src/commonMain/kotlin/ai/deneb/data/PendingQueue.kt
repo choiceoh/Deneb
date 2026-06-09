@@ -6,8 +6,8 @@ import kotlinx.serialization.KSerializer
 
 /**
  * Capped FIFO queue persisted as JSON via [readJson]/[writeJson]. Generic over the item type [T]
- * and a stable key type [K] used to identify items for removal. Shared by `EmailStore`,
- * `SmsStore`, and `NotificationStore` to enforce a uniform pending-buffer discipline.
+ * and a stable key type [K] used to identify items for removal. Shared by `EmailStore`
+ * and `SmsStore` to enforce a uniform pending-buffer discipline.
  */
 class PendingQueue<T, K>(
     private val readJson: () -> String,
