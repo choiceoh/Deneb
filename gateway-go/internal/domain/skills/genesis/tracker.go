@@ -374,6 +374,11 @@ func (t *Tracker) recordEvolutionActivityLocked(kind string, ok bool, errMsg str
 		// byte slice can split a multi-byte UTF-8 sequence into replacement runes.
 		state.LastError = truncateRunes(errMsg, 200)
 		state.LastErrorAt = now
+	} else if ok {
+		// A successful activity clears a stale error so /health doesn't keep
+		// surfacing a failure that has since recovered (false-red).
+		state.LastError = ""
+		state.LastErrorAt = 0
 	}
 	if writeErr := t.saveLivenessLocked(state); writeErr != nil && t.logger != nil {
 		t.logger.Warn("genesis-tracker: liveness write failed", "error", writeErr)

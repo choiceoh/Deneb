@@ -517,9 +517,14 @@ func (t *SkillCuratorTask) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if len(summary.Transitions) > 0 && t.Logger != nil {
+	// Log every cycle (not only when transitions occur) so a silent curator is
+	// distinguishable from one that ran and found nothing — the previous
+	// transition-gated log made "ran, no changes" indistinguishable from
+	// "never ran", hiding whether the weekly task fires at all.
+	if t.Logger != nil {
 		t.Logger.Info("skill-curator: cycle complete",
 			"checked", summary.Checked,
+			"transitions", len(summary.Transitions),
 			"stale", summary.MarkedStale,
 			"archived", summary.Archived,
 			"reactivated", summary.Reactivated,
