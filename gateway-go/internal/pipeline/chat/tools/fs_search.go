@@ -317,7 +317,7 @@ func ResolvePath(path, defaultDir string) string {
 // primaryArgs are the initial rg arguments. bareMinArgs are used as last resort.
 // fileType triggers an extra retry that strips --type when non-empty.
 func rgWithFallbacks(ctx context.Context, primaryArgs, bareMinArgs []string, fileType string) ([]byte, error) {
-	out, _, err := runRg(ctx, primaryArgs)
+	out, stderr0, err := runRg(ctx, primaryArgs)
 	if err == nil {
 		return out, nil
 	}
@@ -357,7 +357,14 @@ func rgWithFallbacks(ctx context.Context, primaryArgs, bareMinArgs []string, fil
 		return nil, nil
 	}
 
-	return nil, fmt.Errorf("grep failed (rg %s): %s", strings.Join(primaryArgs, " "), strings.TrimSpace(string(out)))
+	// Surface the FIRST call's stderr — that's where rg explains the real failure
+	// (bad regex, missing path, unreadable dir). The old code reported stdout,
+	// which is empty on failure, so every grep error read as a blank "(rg …): ".
+	detail := strings.TrimSpace(string(stderr0))
+	if detail == "" {
+		detail = strings.TrimSpace(string(out))
+	}
+	return nil, fmt.Errorf("grep failed (rg %s): %s", strings.Join(primaryArgs, " "), detail)
 }
 
 // runRg executes ripgrep with separate stdout/stderr capture.

@@ -111,8 +111,8 @@ func toolSessionsList(sessions *session.Manager) ToolFunc {
 func toolSessionsHistory(transcript toolctx.TranscriptStore) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			SessionKey string `json:"sessionKey"`
-			Limit      int    `json:"limit"`
+			SessionKey string  `json:"sessionKey"`
+			Limit      flexInt `json:"limit"`
 		}
 		if err := jsonutil.UnmarshalInto("sessions_history params", input, &p); err != nil {
 			return "", err
@@ -124,7 +124,7 @@ func toolSessionsHistory(transcript toolctx.TranscriptStore) ToolFunc {
 			return "Transcript store not available. Cannot fetch session history.", nil
 		}
 
-		limit := p.Limit
+		limit := p.Limit.Int()
 		if limit <= 0 {
 			limit = 20
 		}
@@ -158,8 +158,8 @@ func toolSessionsHistory(transcript toolctx.TranscriptStore) ToolFunc {
 func toolSessionsSearch(transcript toolctx.TranscriptStore) ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			Query      string `json:"query"`
-			MaxResults int    `json:"maxResults"`
+			Query      string  `json:"query"`
+			MaxResults flexInt `json:"maxResults"`
 		}
 		if err := jsonutil.UnmarshalInto("sessions_search params", input, &p); err != nil {
 			return "", err
@@ -175,7 +175,7 @@ func toolSessionsSearch(transcript toolctx.TranscriptStore) ToolFunc {
 			return "", fmt.Errorf("query is required")
 		}
 
-		maxResults := p.MaxResults
+		maxResults := p.MaxResults.Int()
 		if maxResults <= 0 {
 			maxResults = 20
 		}
