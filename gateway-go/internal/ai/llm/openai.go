@@ -391,6 +391,7 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 	textBlockOpen := false
 	textBlockIndex := -1
 	thinkingBlockOpen := false
+	thinkingBlockIndex := -1
 
 	type toolBuilder struct {
 		id       string
@@ -414,6 +415,27 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 		cbd.Delta.PartialJSON = partialJSON
 		p, _ := json.Marshal(cbd)
 		emit(ctx, out, StreamEvent{Type: "content_block_delta", Payload: p})
+	}
+
+	// emitText routes a string into the (lazily opened) text block, closing an
+	// open thinking block first so the single-active-block consumer doesn't
+	// discard it. Shared by streamed content and surfaced model refusals.
+	emitText := func(s string) {
+		if thinkingBlockOpen {
+			thinkingBlockOpen = false
+			closeBlock(thinkingBlockIndex)
+		}
+		if !textBlockOpen {
+			textBlockOpen = true
+			textBlockIndex = nextBlockIndex
+			nextBlockIndex++
+			start, _ := json.Marshal(ContentBlockStart{
+				Index:        textBlockIndex,
+				ContentBlock: ContentBlock{Type: "text"},
+			})
+			emit(ctx, out, StreamEvent{Type: "content_block_start", Payload: start})
+		}
+		emitDelta(textBlockIndex, "text_delta", s, "")
 	}
 
 	for raw := range rawEvents {
@@ -490,40 +512,42 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 
 		choice := chunk.Choices[0]
 
-		// Emit reasoning content as thinking block (OpenAI/vLLM reasoning models).
+		// Emit reasoning content as a thinking block (OpenAI/vLLM reasoning models).
 		if rtext := choice.Delta.reasoningText(); rtext != "" {
 			if !thinkingBlockOpen {
+				// Close an already-open text block first. Reasoning normally
+				// precedes text, but some providers emit content before reasoning;
+				// opening thinking over an un-stopped text block makes the
+				// single-active-block consumer discard the text, and a hardcoded
+				// index 0 would collide with the text block already at 0. Give the
+				// thinking block its own index instead.
+				if textBlockOpen {
+					textBlockOpen = false
+					closeBlock(textBlockIndex)
+				}
 				thinkingBlockOpen = true
+				thinkingBlockIndex = nextBlockIndex
+				nextBlockIndex++
 				p, _ := json.Marshal(ContentBlockStart{
-					Index:        0,
+					Index:        thinkingBlockIndex,
 					ContentBlock: ContentBlock{Type: "thinking"},
 				})
 				emit(ctx, out, StreamEvent{Type: "content_block_start", Payload: p})
-				if nextBlockIndex == 0 {
-					nextBlockIndex = 1 // reserve 0 for thinking
-				}
 			}
-			emitDelta(0, "thinking_delta", rtext, "")
+			emitDelta(thinkingBlockIndex, "thinking_delta", rtext, "")
 		}
 
-		// Emit text delta — open text block lazily on first text content.
+		// Emit text content. emitText opens the text block lazily and closes any
+		// open thinking block first.
 		if choice.Delta.Content != "" {
-			// Close thinking block if transitioning to text.
-			if thinkingBlockOpen && !textBlockOpen {
-				thinkingBlockOpen = false
-				closeBlock(0)
-			}
-			if !textBlockOpen {
-				textBlockOpen = true
-				textBlockIndex = nextBlockIndex
-				p, _ := json.Marshal(ContentBlockStart{
-					Index:        textBlockIndex,
-					ContentBlock: ContentBlock{Type: "text"},
-				})
-				emit(ctx, out, StreamEvent{Type: "content_block_start", Payload: p})
-				nextBlockIndex++
-			}
-			emitDelta(textBlockIndex, "text_delta", choice.Delta.Content, "")
+			emitText(choice.Delta.Content)
+		}
+
+		// Surface model refusals. OpenAI streams a refusal on delta.refusal with
+		// content null; without this the refusal text is dropped and the user
+		// gets an empty reply (a silent no-reply).
+		if choice.Delta.Refusal != "" {
+			emitText(choice.Delta.Refusal)
 		}
 
 		// Accumulate streamed tool calls; emit each as a CONTIGUOUS block at
@@ -541,7 +565,7 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 				// Close thinking/text block before the first tool call if open.
 				if thinkingBlockOpen {
 					thinkingBlockOpen = false
-					closeBlock(0)
+					closeBlock(thinkingBlockIndex)
 				}
 				if textBlockOpen {
 					textBlockOpen = false
@@ -568,7 +592,7 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 			// Close thinking block if still open.
 			if thinkingBlockOpen {
 				thinkingBlockOpen = false
-				closeBlock(0)
+				closeBlock(thinkingBlockIndex)
 			}
 
 			// Close text block if still open.
