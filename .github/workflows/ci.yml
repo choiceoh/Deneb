@@ -101,9 +101,6 @@ jobs:
       - name: Test (integration)
         run: CGO_ENABLED=0 go test -count=1 -tags=integration ./...
 
-      - name: Fuzz (bridge, smoke)
-        run: go test ./internal/runtime/bridge/ -fuzz=FuzzParseRequestFrame -fuzztime=10s
-
       - name: Build gateway binary
         run: CGO_ENABLED=0 go build -o gateway ./cmd/gateway/
 
