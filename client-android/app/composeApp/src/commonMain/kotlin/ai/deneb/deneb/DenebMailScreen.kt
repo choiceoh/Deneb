@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ai.deneb.ui.denebContentWidthModifier
+import ai.deneb.ui.denebHint
 import ai.deneb.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 
@@ -66,6 +67,11 @@ fun DenebMailScreen(
     onBack: () -> Unit,
     onOpenDetail: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
+    // panelMode = rendered as the left pane of the desktop split-view (fills the parent
+    // 380dp box instead of the 760dp centered column; "닫기" hidden since it's always shown).
+    // selectedId = the mail currently open in the right detail pane, for row highlight.
+    panelMode: Boolean = false,
+    selectedId: String? = null,
 ) {
     val mail by client.denebMail.collectAsState()
     val nextToken by client.denebMailNextToken.collectAsState()
@@ -101,7 +107,8 @@ fun DenebMailScreen(
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-            Column(denebContentWidthModifier().fillMaxHeight().statusBarsPadding()) {
+            val widthMod = if (panelMode) Modifier.fillMaxWidth() else denebContentWidthModifier()
+            Column(widthMod.fillMaxHeight().statusBarsPadding()) {
             if (navigationTabBar != null) {
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
@@ -129,7 +136,7 @@ fun DenebMailScreen(
                             )
                         }
                     }
-                    TextButton(onClick = onBack) { Text("닫기") }
+                    if (!panelMode) TextButton(onClick = onBack) { Text("닫기") }
                 }
             }
 
@@ -160,6 +167,7 @@ fun DenebMailScreen(
                                         message = m,
                                         selecting = selecting,
                                         isSelected = m.id in selected,
+                                        isCurrent = panelMode && m.id == selectedId,
                                         onTap = {
                                             haptics.tap()
                                             if (selecting) {
@@ -230,16 +238,18 @@ internal fun MailRow(
     isSelected: Boolean,
     onTap: () -> Unit,
     onLongPress: () -> Unit,
+    isCurrent: Boolean = false,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onTap, onLongClick = onLongPress)
             .background(
-                if (isSelected) {
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                } else {
-                    Color.Transparent
+                when {
+                    // Multi-select (checkbox) wins; else current-open-in-panel highlight; else none.
+                    isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    isCurrent -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                    else -> Color.Transparent
                 },
             )
             .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -310,3 +320,17 @@ internal fun shortDate(date: String): String = runCatching {
     fun p(n: Int) = n.toString().padStart(2, '0')
     "${p(t.monthNumber)}-${p(t.dayOfMonth)} ${p(t.hour)}:${p(t.minute)}"
 }.getOrElse { if (date.length >= 16) date.substring(5, 16).replace('T', ' ') else date }
+
+/** Desktop split-view right-pane placeholder, shown until a mail is selected. */
+@Composable
+internal fun EmptyMailPanel() {
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                "메일을 선택하세요",
+                style = MaterialTheme.typography.bodyMedium,
+                color = denebHint(),
+            )
+        }
+    }
+}
