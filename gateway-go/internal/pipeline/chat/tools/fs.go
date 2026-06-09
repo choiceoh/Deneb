@@ -53,6 +53,43 @@ func lineAnchorHash(line string) string {
 
 // --- Read tool ---
 
+// listDirForRead renders a directory's entries as a readable listing. A read on
+// a directory is a frequent, benign LLM move — exploring, or hitting a path that
+// turned out to be a dir (e.g. a wiki page that was momentarily a directory
+// during a structure change). Returning the listing rather than a hard error is
+// more useful to the model and keeps the mistake out of the tool error stats
+// (this case was the bulk of read's recorded failures). Entries are capped so a
+// huge directory can't blow up the output.
+func listDirForRead(absPath, displayPath string) (string, error) {
+	entries, err := os.ReadDir(absPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read directory %q: %w", displayPath, err)
+	}
+	const maxDirEntries = 200
+	var b strings.Builder
+	fmt.Fprintf(&b, "%q is a directory with %d entries:\n", displayPath, len(entries))
+	shown := entries
+	if len(shown) > maxDirEntries {
+		shown = shown[:maxDirEntries]
+	}
+	for _, e := range shown {
+		if e.IsDir() {
+			fmt.Fprintf(&b, "  %s/\n", e.Name())
+			continue
+		}
+		if info, statErr := e.Info(); statErr == nil {
+			fmt.Fprintf(&b, "  %s (%d bytes)\n", e.Name(), info.Size())
+		} else {
+			fmt.Fprintf(&b, "  %s\n", e.Name())
+		}
+	}
+	if len(entries) > maxDirEntries {
+		fmt.Fprintf(&b, "  … and %d more (showing first %d)\n", len(entries)-maxDirEntries, maxDirEntries)
+	}
+	b.WriteString("\nRead a file inside by passing its full path.")
+	return b.String(), nil
+}
+
 func ToolRead(defaultDir string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -90,10 +127,12 @@ func ToolRead(defaultDir string) ToolFunc {
 
 		data, err := os.ReadFile(path)
 		if err != nil {
-			// Reading a directory is a common LLM mistake — return a clear,
-			// actionable hint instead of the raw "is a directory" errno.
+			// A read on a directory is a common, benign LLM move (exploring, or a
+			// path that turned out to be a dir). Return the listing instead of a
+			// hard error — more useful, and it keeps the mistake out of the error
+			// stats (this hard error was the bulk of read's recorded failures).
 			if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
-				return "", fmt.Errorf("%q is a directory, not a file — list its contents with the exec tool (e.g. `ls %s`)", p.FilePath, p.FilePath)
+				return listDirForRead(path, p.FilePath)
 			}
 			return "", fmt.Errorf("failed to read file: %w", err)
 		}
