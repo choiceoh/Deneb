@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -67,7 +68,9 @@ fun DenebTopicDocScreen(
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
-            modifier = Modifier.statusBarsPadding().padding(16.dp).verticalScroll(rememberScrollState()),
+            // imePadding before verticalScroll keeps the editor field above the soft
+            // keyboard instead of hiding behind it (edge-to-edge: the app owns the IME inset).
+            modifier = Modifier.statusBarsPadding().imePadding().padding(16.dp).verticalScroll(rememberScrollState()),
         ) {
             if (navigationTabBar != null) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
