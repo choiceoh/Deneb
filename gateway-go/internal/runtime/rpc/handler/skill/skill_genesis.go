@@ -146,7 +146,7 @@ func skillsEvolve(deps GenesisDeps) rpcutil.HandlerFunc {
 		ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 		defer cancel()
 
-		result, err := deps.Evolver.EvolveSkill(ctx, p.SkillName)
+		result, err := deps.Evolver.EvolveSkill(ctx, p.SkillName, "")
 		if err != nil {
 			return rpcutil.RespondOK(req.ID, map[string]any{
 				"ok":    false,
