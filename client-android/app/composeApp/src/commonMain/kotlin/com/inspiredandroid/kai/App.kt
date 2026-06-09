@@ -89,6 +89,11 @@ import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.dsl.koinConfiguration
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import com.inspiredandroid.kai.ui.chat.composables.DenebSidebar
 
 @Serializable
 @SerialName("home")
@@ -279,7 +284,9 @@ private fun AppContent(
         Theme(colorScheme = effectiveColorScheme) {
             FullScreenImageHost {
                 val chatViewModel: ChatViewModel = koinViewModel()
-                val showTabBar = currentPlatform !is Platform.Mobile
+                // Desktop gets a persistent sidebar (below), so hide the chat/settings tab bar
+                // there; keep it on Web. Mobile never had it.
+                val showTabBar = currentPlatform is Platform.Web
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val isHome = currentBackStackEntry?.destination?.route == "home"
 
@@ -316,11 +323,12 @@ private fun AppContent(
                     }
                 }
 
-                NavHost(
-                    navController,
-                    startDestination = Home,
-                    modifier = Modifier.background(MaterialTheme.colorScheme.background),
-                ) {
+                val navHost: @Composable (Modifier) -> Unit = { navHostModifier ->
+                    NavHost(
+                        navController,
+                        startDestination = Home,
+                        modifier = navHostModifier.background(MaterialTheme.colorScheme.background),
+                    ) {
                     composable<Home> {
                         ChatScreen(
                             viewModel = chatViewModel,
@@ -573,6 +581,19 @@ private fun AppContent(
                             )
                         }
                     }
+                    }
+                }
+                // Desktop: persistent left sidebar + content; mobile/web: plain NavHost
+                // (ChatScreen keeps its modal drawer on mobile). Fixed sidebar width + a
+                // weight(1f) content column — neither uses maxWidth, so they sidestep the
+                // headless-harness over-measure trap.
+                if (currentPlatform is Platform.Desktop) {
+                    Row(Modifier.fillMaxSize()) {
+                        DenebSidebar(navController, currentBackStackEntry?.destination?.route)
+                        Box(Modifier.weight(1f).fillMaxHeight()) { navHost(Modifier.fillMaxSize()) }
+                    }
+                } else {
+                    navHost(Modifier)
                 }
             }
         }
