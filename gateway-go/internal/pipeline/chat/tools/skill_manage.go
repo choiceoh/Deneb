@@ -398,10 +398,28 @@ func cleanSupportFilePath(filePath string) (string, error) {
 	return clean, nil
 }
 
+// skillFileExists reports whether path is an existing regular file. It rejects
+// directories so a corrupted "SKILL.md" *directory* is never mistaken for a
+// skill file — that case surfaced downstream as a confusing "is a directory"
+// read error.
+func skillFileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
 func findSkillPath(workspaceDir, name string) (string, error) {
 	skillsRoot := filepath.Join(workspaceDir, "skills")
 
-	// Search all category directories for the skill.
+	// Flat layout: skills/<name>/SKILL.md. domain/skills/discovery.go indexes
+	// flat skills into the catalog, so read/patch must reach the same skills
+	// the catalog exposes — otherwise catalog-visible flat skills
+	// (email-analysis, playwright, topsolar-db) can't be read or patched and
+	// fail with "not found in any category".
+	if flat := filepath.Join(skillsRoot, name, "SKILL.md"); skillFileExists(flat) {
+		return flat, nil
+	}
+
+	// Nested category layout: skills/<category>/<name>/SKILL.md.
 	entries, err := os.ReadDir(skillsRoot)
 	if err != nil {
 		return "", fmt.Errorf("skills directory not found: %w", err)
@@ -411,11 +429,11 @@ func findSkillPath(workspaceDir, name string) (string, error) {
 			continue
 		}
 		candidate := filepath.Join(skillsRoot, cat.Name(), name, "SKILL.md")
-		if _, err := os.Stat(candidate); err == nil {
+		if skillFileExists(candidate) {
 			return candidate, nil
 		}
 	}
-	return "", fmt.Errorf("skill %q not found in any category under skills/", name)
+	return "", fmt.Errorf("skill %q not found under skills/ (checked skills/%s/SKILL.md and skills/<category>/%s/SKILL.md)", name, name, name)
 }
 
 func isValidCategory(cat string) bool {

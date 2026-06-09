@@ -145,7 +145,7 @@ func SkillLifecycleToolSchema() map[string]any {
 			},
 			"candidate": map[string]any{
 				"type":        "string",
-				"description": "Reusable workflow pattern being proposed (propose action)",
+				"description": "Reusable workflow pattern being proposed. Required for propose unless route=no-op (no-op records 'no reusable pattern', so candidate is optional there)",
 			},
 			"dreamSummary": map[string]any{
 				"type":        "string",

@@ -471,6 +471,55 @@ func TestCacheAwareInvalidate_ApplyTrueCallsInner(t *testing.T) {
 	}
 }
 
+// TestSkillManage_Read_FlatLayout verifies findSkillPath reaches flat-layout
+// skills (skills/<name>/SKILL.md, no category dir) — the layout
+// domain/skills/discovery.go indexes for skills like email-analysis,
+// playwright, and topsolar-db. Regression for the reviewer agent's repeated
+// "skill %q not found in any category" failures.
+func TestSkillManage_Read_FlatLayout(t *testing.T) {
+	fn, workspace, _ := newSkillManageHarness(t)
+	flatDir := filepath.Join(workspace, "skills", "email-analysis")
+	if err := os.MkdirAll(flatDir, 0o755); err != nil {
+		t.Fatalf("prep flat dir: %v", err)
+	}
+	content := "# Email Analysis Skill\n\n## When to Use\n- 테스트\n"
+	if err := os.WriteFile(filepath.Join(flatDir, "SKILL.md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write flat skill: %v", err)
+	}
+	out, err := callSkillTool(t, fn, map[string]any{
+		"action": "read",
+		"name":   "email-analysis",
+	})
+	if err != nil {
+		t.Fatalf("read flat skill: %v", err)
+	}
+	if !strings.Contains(out, "Email Analysis Skill") {
+		t.Errorf("read did not return flat skill content, got: %s", out)
+	}
+}
+
+// TestSkillManage_FindSkillPath_RejectsDirectorySkillMd ensures a corrupted
+// "SKILL.md" *directory* is not mistaken for a skill file — previously such a
+// directory was returned as a path and surfaced downstream as a confusing
+// "is a directory" read error.
+func TestSkillManage_FindSkillPath_RejectsDirectorySkillMd(t *testing.T) {
+	fn, workspace, _ := newSkillManageHarness(t)
+	badDir := filepath.Join(workspace, "skills", "broken", "SKILL.md")
+	if err := os.MkdirAll(badDir, 0o755); err != nil {
+		t.Fatalf("prep bad dir: %v", err)
+	}
+	_, err := callSkillTool(t, fn, map[string]any{
+		"action": "read",
+		"name":   "broken",
+	})
+	if err == nil {
+		t.Fatal("expected not-found error when SKILL.md is a directory, got nil")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected 'not found' error, got: %v", err)
+	}
+}
+
 func TestCacheAwareInvalidate_ApplyFalseSkipsInner(t *testing.T) {
 	var count int32
 	inner := SkillManageInvalidateFn(func() { atomic.AddInt32(&count, 1) })

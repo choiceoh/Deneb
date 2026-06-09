@@ -144,3 +144,42 @@ func TestSkillLifecycleCuratorActionsPinArchiveRestore(t *testing.T) {
 		t.Fatalf("expected restored active record, got %+v", rec)
 	}
 }
+
+// TestProposeSkillEvolution_NoOpWithoutCandidate verifies that a no-op proposal
+// succeeds without a candidate. A no-op records "no skill-worthy pattern,
+// nothing to do", so a reusable candidate is optional by definition.
+// Regression for the reviewer agent's repeated "candidate is required for
+// propose" failures, which forced every no-op review to error out.
+func TestProposeSkillEvolution_NoOpWithoutCandidate(t *testing.T) {
+	// nil tracker/genesis: logProposal no-ops and no route executes.
+	b := &skillLifecycleBackend{}
+	res, err := b.ProposeSkillEvolution(context.Background(), chattools.SkillEvolutionProposalRequest{
+		Route:      "no-op",
+		Reason:     "existing skill already covers this",
+		SessionKey: "test:session",
+	})
+	if err != nil {
+		t.Fatalf("no-op without candidate should succeed, got: %v", err)
+	}
+	m, ok := res.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map result, got %T", res)
+	}
+	if m["route"] != "no-op" {
+		t.Errorf("expected route=no-op, got %v", m["route"])
+	}
+}
+
+// TestProposeSkillEvolution_ExecutableRouteRequiresCandidate ensures executable
+// routes (genesis/create/evolve) still require a candidate — the no-op
+// exemption must not weaken validation for routes that actually do work.
+func TestProposeSkillEvolution_ExecutableRouteRequiresCandidate(t *testing.T) {
+	b := &skillLifecycleBackend{}
+	_, err := b.ProposeSkillEvolution(context.Background(), chattools.SkillEvolutionProposalRequest{
+		Route:      "evolve",
+		SessionKey: "test:session",
+	})
+	if err == nil {
+		t.Fatal("expected error: candidate required for executable route, got nil")
+	}
+}
