@@ -1,0 +1,95 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# deneb-location-watch — detect place transitions via GPS and forward them to
+# Deneb as `context` events. For places without a known WiFi (현장·출장·외부 미팅)
+# where deneb-context-watch (SSID-based) can't help. The two are complementary:
+# register WiFi spots in deneb-context-watch, GPS-only spots here.
+#
+# Pure Termux (termux-location) → deneb-emit (→ deneb-tunnel). Run under
+# deneb-supervisor or Termux:Boot.
+#
+# ~/.deneb-places.conf — one "label,lat,lon,radius_m" per line, e.g.
+#   회사,35.1234,129.5678,250
+#   남도에코,34.9876,127.6543,300
+# (lines starting with # are ignored). When the device enters a place's radius a
+# "위치: <label> 도착" event is sent; when it leaves into no known place, a
+# "위치: <label> 벗어남" event is sent.
+#
+# Notes:
+#   - termux-location needs Location permission (Termux:API app).
+#   - Default provider is "network" (fast, low battery, ~tens-of-m accuracy); set
+#     DENEB_LOC_PROVIDER=gps for precision at higher battery cost. Keep the radius
+#     comfortably larger than the provider's accuracy.
+#   - The first reading only sets a baseline (no event on startup).
+#   - A GPS fix is costly, so the default poll is 5 min, not seconds.
+#
+# Env:
+#   DENEB_LOC_INTERVAL   poll seconds (default 300)
+#   DENEB_LOC_PROVIDER   termux-location provider: network|gps|passive (default network)
+#   DENEB_PLACES_CONF    places file (default ~/.deneb-places.conf)
+
+set -uo pipefail
+INTERVAL="${DENEB_LOC_INTERVAL:-300}"
+PROVIDER="${DENEB_LOC_PROVIDER:-network}"
+CONF="${DENEB_PLACES_CONF:-$HOME/.deneb-places.conf}"
+
+# distance_m prints the great-circle distance in metres between two lat/lon pairs
+# (haversine). awk does the trig — bash has no floating point.
+distance_m() {  # lat1 lon1 lat2 lon2
+  awk -v a1="$1" -v o1="$2" -v a2="$3" -v o2="$4" 'BEGIN{
+    R=6371000; PI=atan2(0,-1); d=PI/180;
+    dla=(a2-a1)*d; dlo=(o2-o1)*d;
+    h=sin(dla/2)^2 + cos(a1*d)*cos(a2*d)*sin(dlo/2)^2;
+    printf "%d", R*2*atan2(sqrt(h), sqrt(1-h));
+  }'
+}
+
+# current_latlon prints "lat lon" for the current fix, or nothing on failure.
+current_latlon() {
+  local loc lat lon
+  loc="$(termux-location -p "$PROVIDER" 2>/dev/null || true)"
+  [ -n "$loc" ] || return 0
+  if command -v jq >/dev/null 2>&1; then
+    lat="$(printf '%s' "$loc" | jq -r '.latitude // empty' 2>/dev/null)"
+    lon="$(printf '%s' "$loc" | jq -r '.longitude // empty' 2>/dev/null)"
+  else
+    lat="$(printf '%s' "$loc" | sed -n 's/.*"latitude"[: ]*\(-\?[0-9.]*\).*/\1/p' | head -1)"
+    lon="$(printf '%s' "$loc" | sed -n 's/.*"longitude"[: ]*\(-\?[0-9.]*\).*/\1/p' | head -1)"
+  fi
+  [ -n "$lat" ] && [ -n "$lon" ] && printf '%s %s' "$lat" "$lon"
+}
+
+# find_place prints the label of the first configured place whose radius contains
+# (lat, lon), or nothing when outside all of them.
+find_place() {  # lat lon
+  local lat="$1" lon="$2" label plat plon prad d
+  [ -f "$CONF" ] || return 0
+  while IFS=, read -r label plat plon prad; do
+    label="$(printf '%s' "$label" | tr -d '[:space:]')"
+    [ -z "$label" ] && continue
+    case "$label" in '#'*) continue ;; esac
+    [ -n "$plat" ] && [ -n "$plon" ] && [ -n "$prad" ] || continue
+    d="$(distance_m "$lat" "$lon" "$plat" "$plon")"
+    if [ "$d" -le "$prad" ]; then printf '%s' "$label"; return 0; fi
+  done < "$CONF"
+}
+
+last=""
+first=1
+while true; do
+  latlon="$(current_latlon)"
+  if [ -n "$latlon" ]; then
+    cur="$(find_place ${latlon})"   # word-split lat lon into two args
+    if [ "$cur" != "$last" ]; then
+      if [ "$first" = 1 ]; then
+        :   # baseline — do not announce where we started
+      elif [ -n "$cur" ]; then
+        deneb-emit context "위치: ${cur} 도착" 위치 >/dev/null 2>&1 || true
+      else
+        deneb-emit context "위치: ${last} 벗어남 (이동 중)" 위치 >/dev/null 2>&1 || true
+      fi
+      last="$cur"
+      first=0
+    fi
+  fi
+  sleep "$INTERVAL"
+done
