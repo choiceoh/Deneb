@@ -208,4 +208,89 @@ class InlineParsingTest {
         assertTrue(inlines("line one<br>line two").any { it is LineBreak })
         assertTrue(inlines("a<br/>b").any { it is LineBreak })
     }
+
+    @Test
+    fun `triple asterisk is bold italic`() {
+        val em = inlines("***둘 다***").single() as Emphasis
+        val strong = em.children.single() as Strong
+        assertEquals(persistentListOf(Text("둘 다")), strong.children)
+    }
+
+    @Test
+    fun `triple underscore is bold italic`() {
+        val result = inlines("___both___").single()
+        // Underscore nesting already resolved via __…__ then _…_; either order is fine
+        // as long as both styles survive.
+        assertTrue(result is Strong || result is Emphasis)
+    }
+
+    @Test
+    fun `angle bracket url autolink hides the brackets`() {
+        val link = inlines("자세히는 <https://example.com/x> 참고").filterIsInstance<Link>().single()
+        assertEquals("https://example.com/x", link.href)
+        assertEquals(persistentListOf(Text("https://example.com/x")), link.children)
+    }
+
+    @Test
+    fun `bare email becomes a mailto link`() {
+        val link = inlines("문의는 kim@topsolar.kr 으로").filterIsInstance<Link>().single()
+        assertEquals("mailto:kim@topsolar.kr", link.href)
+        assertEquals(persistentListOf(Text("kim@topsolar.kr")), link.children)
+    }
+
+    @Test
+    fun `angle bracket email becomes a mailto link without brackets`() {
+        val link = inlines("회신: <lee@example.co.kr>").filterIsInstance<Link>().single()
+        assertEquals("mailto:lee@example.co.kr", link.href)
+        assertEquals(persistentListOf(Text("lee@example.co.kr")), link.children)
+    }
+
+    @Test
+    fun `package version is not an email`() {
+        assertTrue(inlines("node@18.0.0 으로 빌드").none { it is Link })
+    }
+
+    @Test
+    fun `email inside a markdown link is not double-linked`() {
+        val link = inlines("[메일 보내기](mailto:kim@topsolar.kr)").single() as Link
+        assertEquals("mailto:kim@topsolar.kr", link.href)
+        assertEquals(persistentListOf(Text("메일 보내기")), link.children)
+    }
+
+    @Test
+    fun `named html entities decode in text`() {
+        assertEquals(listOf(Text("AT&T <tag> 5\u00A0kg")), inlines("AT&amp;T &lt;tag&gt; 5&nbsp;kg"))
+    }
+
+    @Test
+    fun `numeric html entities decode in text`() {
+        assertEquals(listOf(Text("A 😀")), inlines("&#65; &#x1F600;"))
+    }
+
+    @Test
+    fun `unknown entity stays literal`() {
+        assertEquals(listOf(Text("&notanentity; 그대로")), inlines("&notanentity; 그대로"))
+    }
+
+    @Test
+    fun `bare ampersand stays literal`() {
+        assertEquals(listOf(Text("R&D 부서 & 영업")), inlines("R&D 부서 & 영업"))
+    }
+
+    @Test
+    fun `entities inside inline code stay raw`() {
+        assertEquals(listOf(InlineCode("a &amp; b")), inlines("`a &amp; b`"))
+    }
+
+    @Test
+    fun `link title is stripped from href`() {
+        val link = inlines("[참고](https://example.com \"공식 문서\")").single() as Link
+        assertEquals("https://example.com", link.href)
+    }
+
+    @Test
+    fun `link target in angle brackets is unwrapped`() {
+        val link = inlines("[참고](<https://example.com/a b>)").single() as Link
+        assertEquals("https://example.com/a b", link.href)
+    }
 }

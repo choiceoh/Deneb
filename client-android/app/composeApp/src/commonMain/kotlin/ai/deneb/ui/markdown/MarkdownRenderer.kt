@@ -258,7 +258,9 @@ private fun BulletListBlock(
 ) {
     Column(
         modifier = Modifier.padding(vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        // Loose lists (blank lines between items in the source) read as separate thoughts —
+        // give them more air than tight ones.
+        verticalArrangement = Arrangement.spacedBy(if (block.tight) 4.dp else 8.dp),
     ) {
         for (item in block.items) {
             val checked = item.checked
@@ -310,12 +312,20 @@ private fun OrderedListBlock(
     onUiCallback: (String, Map<String, String>) -> Unit,
     frozen: FrozenSubmission?,
 ) {
+    // Size the marker column to the widest number in this list so "10."/"100." doesn't
+    // wrap into the content column (the old fixed 24dp fit two digits at most).
+    val lastMarkerLen = "${block.start + block.items.size - 1}.".length
+    val markerWidth = when {
+        lastMarkerLen <= 2 -> 24.dp
+        lastMarkerLen == 3 -> 32.dp
+        else -> 40.dp
+    }
     Column(
         modifier = Modifier.padding(vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(if (block.tight) 4.dp else 8.dp),
     ) {
         block.items.forEachIndexed { index, item ->
-            ListItemRow("${block.start + index}.", 24.dp, Color.Unspecified, item, isInteractive, onUiCallback, frozen)
+            ListItemRow("${block.start + index}.", markerWidth, Color.Unspecified, item, isInteractive, onUiCallback, frozen)
         }
     }
 }

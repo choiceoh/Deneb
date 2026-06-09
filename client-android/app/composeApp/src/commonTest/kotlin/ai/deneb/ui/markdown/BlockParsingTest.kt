@@ -237,4 +237,35 @@ class BlockParsingTest {
         assertEquals(3, list.start)
         assertEquals(2, list.items.size)
     }
+
+    @Test
+    fun `table directly under a paragraph line is still a table`() {
+        // LLMs often skip the blank line between a lead-in sentence and the table.
+        val doc = parseMarkdown("요약:\n| 항목 | 값 |\n|---|---|\n| 매출 | 1억 |")
+        assertEquals(2, doc.blocks.size)
+        assertTrue(doc.blocks[0] is Paragraph)
+        val table = doc.blocks[1] as Table
+        assertEquals(2, table.headers.size)
+        assertEquals(1, table.rows.size)
+    }
+
+    @Test
+    fun `pipe line without separator stays in the paragraph`() {
+        val doc = parseMarkdown("코드는 a | b 형태로\n그냥 본문이다")
+        assertTrue(doc.blocks.single() is Paragraph)
+    }
+
+    @Test
+    fun `korean date line is not an ordered list`() {
+        // "2026. 6. 9." is the standard Korean date format — must stay prose, not item #2026.
+        val doc = parseMarkdown("2026. 6. 9. 전체 회의")
+        assertTrue(doc.blocks.single() is Paragraph)
+    }
+
+    @Test
+    fun `three digit ordered marker still lists`() {
+        val list = parseMarkdown("100. 백\n101. 백일").blocks.single() as OrderedList
+        assertEquals(100, list.start)
+        assertEquals(2, list.items.size)
+    }
 }
