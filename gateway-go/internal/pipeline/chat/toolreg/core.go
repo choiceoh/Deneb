@@ -117,6 +117,13 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		Fn:          tools.ToolGateway(workspaceDir),
 		Deferred:    true,
 	})
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "observe",
+		Description: "Observe your OWN runtime via the in-process observation plane: action=turn (runId → a past run's tokens/tools/cache + its captured logs), action=logs (recent log ring; filter by runId/session/level/contains), action=behavior (cross-session tool usage / proactive funnel / background-job health over N days). Use it to diagnose your own slow or failing turns.",
+		InputSchema: observeToolSchema(),
+		Fn:          tools.ToolObserve(deps.LogCapture, deps.AgentLog),
+		Deferred:    true,
+	})
 
 	// Spillover: read full content of a previously spilled large tool result.
 	// Registered eagerly so the trim marker's embedded spill ID can be used

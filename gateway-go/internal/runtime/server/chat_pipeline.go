@@ -145,6 +145,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		LLMClient:    reg.Client(modelrole.RoleLightweight),
 		DefaultModel: reg.Model(modelrole.RoleLightweight),
 		AgentLog:     agentLogWriter,
+		LogCapture:   s.logCapture,
 	}
 
 	// Ambient calendar awareness: a frozen-per-day upcoming-events glance in the

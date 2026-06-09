@@ -1277,5 +1277,46 @@
     "required": [
       "source"
     ]
+  },
+  {
+    "name": "observe",
+    "properties": {
+      "action": {
+        "type": "string",
+        "description": "What to observe about your own runtime: turn | logs | behavior",
+        "enum": [
+          "turn",
+          "logs",
+          "behavior"
+        ]
+      },
+      "runId": {
+        "type": "string",
+        "description": "Run id — required for action=turn; optional filter for action=logs"
+      },
+      "session": {
+        "type": "string",
+        "description": "Session key filter for action=logs"
+      },
+      "level": {
+        "type": "string",
+        "description": "Min log level for action=logs: debug | info | warn | error (default debug)"
+      },
+      "days": {
+        "type": "number",
+        "description": "Window in days for action=behavior (omit = all retained history)"
+      },
+      "limit": {
+        "type": "number",
+        "description": "Max log lines for action=logs"
+      },
+      "contains": {
+        "type": "string",
+        "description": "Substring filter on the log message for action=logs"
+      }
+    },
+    "required": [
+      "action"
+    ]
   }
 ]
