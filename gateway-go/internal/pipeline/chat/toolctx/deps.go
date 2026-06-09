@@ -12,6 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
@@ -29,6 +30,7 @@ type CoreToolDeps struct {
 	LLMClient      *llm.Client
 	DefaultModel   string
 	AgentLog       *agentlog.Writer
+	LogCapture     *observe.LogCapture   // optional; in-memory log ring for the observe tool
 	SpilloverStore *agent.SpilloverStore // optional; spills large tool results to disk
 
 	// SessionMemoryFn returns session memory content for a given session key.

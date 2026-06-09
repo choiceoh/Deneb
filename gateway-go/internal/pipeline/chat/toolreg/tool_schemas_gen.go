@@ -1149,6 +1149,44 @@ func watchToolSchema() map[string]any {
 	}
 }
 
+func observeToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "What to observe about your own runtime: turn | logs | behavior",
+				"enum":        []string{"turn", "logs", "behavior"},
+			},
+			"contains": map[string]any{
+				"type":        "string",
+				"description": "Substring filter on the log message for action=logs",
+			},
+			"days": map[string]any{
+				"type":        "number",
+				"description": "Window in days for action=behavior (omit = all retained history)",
+			},
+			"level": map[string]any{
+				"type":        "string",
+				"description": "Min log level for action=logs: debug | info | warn | error (default debug)",
+			},
+			"limit": map[string]any{
+				"type":        "number",
+				"description": "Max log lines for action=logs",
+			},
+			"runId": map[string]any{
+				"type":        "string",
+				"description": "Run id — required for action=turn; optional filter for action=logs",
+			},
+			"session": map[string]any{
+				"type":        "string",
+				"description": "Session key filter for action=logs",
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 // ToolMaxOutputs returns per-tool output character budgets from tool_schemas.json.
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {
