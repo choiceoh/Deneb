@@ -191,6 +191,7 @@ func BuildWeeklyReportPDF(ctx context.Context, opts WeeklyReportOpts, now time.T
 		return "", textFallback, false
 	}
 	dir := weeklyOutputDir()
+	weeklyWriteSidecar(env, dir) // structured snapshot beside the PDF (agent-readable, render-independent)
 	htmlPath := filepath.Join(dir, "deneb-weekly-report.html")
 	pdfPath = filepath.Join(dir, "deneb-weekly-report.pdf")
 	if err := os.WriteFile(htmlPath, []byte(html), 0o644); err != nil { //nolint:gosec // report html, not secret
@@ -224,6 +225,7 @@ func BuildWeeklyReportImage(ctx context.Context, opts WeeklyReportOpts, now time
 		return nil, false
 	}
 	dir := weeklyOutputDir()
+	weeklyWriteSidecar(env, dir) // structured snapshot beside the PNG (agent-readable, render-independent)
 	htmlPath := filepath.Join(dir, "deneb-weekly-form.html")
 	pngPath := filepath.Join(dir, "deneb-weekly-form.png")
 	if err := os.WriteFile(htmlPath, []byte(html), 0o644); err != nil { //nolint:gosec // report html, not secret
@@ -360,6 +362,24 @@ func weeklyOutputDir() string {
 		}
 	}
 	return os.TempDir()
+}
+
+// weeklySidecarName is the structured JSON snapshot written beside the rendered
+// PDF/PNG. The rendered artifacts are terminal — the agent can't re-read a PDF
+// or PNG — so this sidecar keeps the report's envelope (the same shape
+// CollectWeeklyReportData returns) on disk. A later turn can read it to answer
+// "what did last week's report cover?", and the snapshot survives even after the
+// source wiki pages move on (the report is a point-in-time projection of them).
+const weeklySidecarName = "deneb-weekly-report.json"
+
+// weeklyWriteSidecar persists the envelope as JSON next to the render output.
+// Best-effort: a write failure never blocks the render path.
+func weeklyWriteSidecar(env weeklyEnvelope, dir string) {
+	data, err := json.MarshalIndent(env, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(dir, weeklySidecarName), data, 0o644) //nolint:gosec,errcheck // report data, not secret; best-effort snapshot
 }
 
 // weeklyFreeDiskMB returns the available space on dir's filesystem in MB.
