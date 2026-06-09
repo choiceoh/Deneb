@@ -19,7 +19,10 @@ repos:
         args: [--maxkb=500]
       - id: check-merge-conflict
       - id: detect-private-key
-        exclude: '(^|/)(\.secrets\.baseline$|\.detect-secrets\.cfg$|\.pre-commit-config\.yaml$)'
+        # The redact/promptguard tests embed sample PEM key headers as fixtures
+        # (to verify redaction + exfil detection); they are not real keys, so
+        # exclude them from the private-key scan.
+        exclude: '(^|/)(\.secrets\.baseline$|\.detect-secrets\.cfg$|\.pre-commit-config\.yaml$)|^gateway-go/pkg/(redact|promptguard)/.*_test\.go$'
 
   # Secret detection (same as CI)
   - repo: https://github.com/Yelp/detect-secrets

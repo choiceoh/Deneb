@@ -51,6 +51,12 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: false
+          # golangci-lint runs in diff mode (--new-from-rev=HEAD~1 below); it
+          # needs HEAD~1 in the local history, which a shallow clone lacks —
+          # without it the action errors on "bad revision 'HEAD~1'" and falls
+          # back to linting the whole tree (flooding PRs with pre-existing
+          # issues). Full history keeps the diff scoped to the PR's changes.
+          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
