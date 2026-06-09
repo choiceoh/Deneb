@@ -23,6 +23,11 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// Active when the contacts store is wired (native-client contacts sync).
 	toolreg.RegisterContactsTool(registry, &deps.Contacts)
 
+	// Calendar (read merged Google + local; write local). Active when either a
+	// Google client factory or a local store is wired. Chat-side twin of the
+	// miniapp.calendar.* RPC surface — the agent's 일정 hand.
+	toolreg.RegisterCalendarTool(registry, &deps.Calendar)
+
 	// Deferred tool activation: fetch_tools lets the LLM load schemas on demand.
 	// Registered here (not in toolreg/) because it needs the chat-side
 	// ToolRegistry to satisfy FetchToolsRegistry (DeferredToolDef / DeferredSummaries).

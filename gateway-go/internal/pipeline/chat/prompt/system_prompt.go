@@ -90,6 +90,15 @@ type SystemPromptParams struct {
 	// as a numbered list. Empty = no section. Dynamic (uncached) block.
 	PinnedFacts string
 
+	// CalendarGlance is a compact, pre-formatted summary of upcoming calendar
+	// events for ambient awareness (the 업무비서 persona's 일정 sense). Empty =
+	// no section. Dynamic (uncached) block, but frozen per day by the provider
+	// (see chat/calendar_glance.go) so it stays byte-stable within a day like
+	// the day-only timestamp — preserving the trailing-message cache
+	// (.claude/rules/prompt-cache.md). The live `calendar` tool remains the
+	// authoritative source; this is background context only.
+	CalendarGlance string
+
 	// TopicKnowledge is per-forum-topic background knowledge merged into the
 	// Static (cached) block. Empty = no topic section. It is byte-stable for
 	// the session (frozen snapshot in LoadTopicKnowledge) so the Static cache
@@ -131,6 +140,7 @@ var toolCategories = []struct {
 	{"Memory", []string{"wiki", "polaris"}},
 	{"System", []string{"message", "clarify", "gateway"}},
 	{"Routine", []string{"cron", "gmail"}},
+	{"Schedule", []string{"calendar"}},
 	{"Sessions", []string{"sessions", "sessions_spawn", "subagents"}},
 	{"Media", []string{"send_file"}},
 }
@@ -434,6 +444,16 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("\n\n")
 	}
 
+	// Ambient calendar awareness: a frozen-per-day glance of upcoming events so
+	// the agent's answers carry "언제까지" without a tool round-trip. Background
+	// context only — use the `calendar` tool for authoritative/fresh detail.
+	if strings.TrimSpace(params.CalendarGlance) != "" {
+		d.WriteString("## 다가오는 일정\n")
+		d.WriteString("배경 참고용 일정 스냅샷이다(하루 단위로 갱신, 정확·최신 정보는 `calendar` 도구로 조회). 답변에 \"왜 지금 중요한가\"와 함께 \"언제까지/언제\"를 자연스럽게 녹여라.\n\n")
+		d.WriteString(params.CalendarGlance)
+		d.WriteString("\n\n")
+	}
+
 	// Hindsight cross-session memory (conditional).
 	if params.HindsightEnabled {
 		d.WriteString("## 장기 기억 (Hindsight)\n")
@@ -449,6 +469,15 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("- `web(query=..., fetch=N)`: search + auto-fetch top N pages in one call.\n")
 		d.WriteString("- `web(url=...)`: fetch a URL (Serper scrape for HTML; PDF/Office via liteparse; bot-block evasion fallback).\n")
 		d.WriteString("- On fetch failure (403/block): search for cached versions.\n\n")
+	}
+
+	// Calendar + meeting-prep guidance (conditional on the calendar tool).
+	if _, ok := toolSet["calendar"]; ok {
+		d.WriteString("## 일정·미팅 (calendar)\n")
+		d.WriteString("- 조회: `calendar(action=\"list\")` (기본 48시간; 범위는 from/to RFC3339 또는 hours_ahead). 상세는 `calendar(action=\"get\", id=\"...\")`.\n")
+		d.WriteString("- 추가·수정·삭제: `calendar(action=\"create\"|\"update\"|\"delete\", ...)`. start/end는 RFC3339 +09:00(KST), 현재 시각은 사용자 메시지의 타임스탬프 기준. 수정·삭제는 로컬 일정(id가 `local:`)만 — 구글 일정은 읽기 전용.\n")
+		d.WriteString("- 위 `다가오는 일정`은 배경 스냅샷이라 하루 단위로만 갱신된다 — 정확·최신 정보가 필요하면 도구로 조회하라.\n")
+		d.WriteString("- **미팅 준비** 요청 시 한 응답으로 브리핑을 조립한다: ①`calendar(get)`로 시간·장소·참석자·안건(메모)·Meet 확보 → ②참석자별 `contacts(search)`(소속·연락처)와 `knowledge(recall)`(과거 맥락·결정·이전 회의), 필요하면 `gmail`로 최근 메일 확인 → ③안건/목표·참석자별 핵심 컨텍스트와 오픈 이슈·내가 준비할 것·결정 필요사항·시간/장소/Meet를 종합해 제시한다.\n\n")
 	}
 
 	// Sub-agent delegation guidance (conditional).

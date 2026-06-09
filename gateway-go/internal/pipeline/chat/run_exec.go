@@ -537,6 +537,14 @@ func prepareContextAndPrompt(
 			}
 		}
 
+		// Ambient calendar glance for the dynamic block. The provider freezes
+		// it per day, so this is a cheap cache hit on all but the first turn of
+		// the day; "" when no calendar source or no upcoming events.
+		var calendarGlance string
+		if deps.calendarGlanceFn != nil {
+			calendarGlance = deps.calendarGlanceFn(ctx, params.SessionKey, tz)
+		}
+
 		spp := prompt.SystemPromptParams{
 			WorkspaceDir:        workspaceDir,
 			ToolDefs:            toolDefs,
@@ -551,6 +559,7 @@ func prepareContextAndPrompt(
 			AutoDeliveredOutput: params.AutoDeliveredOutput,
 			HindsightEnabled:    deps.hindsightClient != nil,
 			PinnedFacts:         formatPinnedFactsBlock(listPinnedFacts(params.SessionKey)),
+			CalendarGlance:      calendarGlance,
 			TopicKnowledge:      topicKnowledge,
 			TopicCacheKey:       topicCacheKey,
 			SupportsRichUI:      richUIChannel(ch),
