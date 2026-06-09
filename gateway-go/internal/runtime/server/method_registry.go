@@ -23,8 +23,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
@@ -398,6 +400,24 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlerminiapp.PeopleMethods(handlerminiapp.PeopleDeps{
 			Client: func() (handlerminiapp.PeopleClient, error) {
 				return gmail.DefaultClient()
+			},
+		}),
+
+		// Mini App skills list (miniapp.skills.list). Read-only catalog for
+		// the Settings → Skills tab. Uses the same archived + eligibility
+		// filtering as the system prompt (chat.EligibleWorkspaceSkills), so the
+		// tab advertises only skills the agent can actually use.
+		handlerminiapp.SkillsMethods(handlerminiapp.SkillsDeps{
+			List: func() []skills.SkillEntry {
+				// chatHandler (and its tool registry) is ready by the time this
+				// runs — the RPC fires long after boot wires the chat pipeline.
+				// Pass the live toolset so requires_tools eligibility matches the
+				// prompt and slash routing.
+				var toolNames []string
+				if s.chatHandler != nil {
+					toolNames = s.chatHandler.ToolNames()
+				}
+				return chat.EligibleWorkspaceSkills(resolveWorkspaceDir(), toolNames)
 			},
 		}),
 

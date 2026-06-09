@@ -92,6 +92,32 @@ func CachedSkillsSnapshot() *skills.FullSkillSnapshot {
 	return skillsCache.snapshot
 }
 
+// EligibleWorkspaceSkills discovers workspace skills and applies the same
+// archived + eligibility filtering loadCachedSkillsPrompt uses, so read-only
+// consumers (the Settings Skills tab via miniapp.skills.list) advertise only
+// skills the agent can actually use — not archived or ineligible ones.
+//
+// availableToolNames must be the agent's registered tools (Handler.ToolNames).
+// FilterEligibleSkills only enforces requires_tools / fallback_for_tools when
+// the AvailableTools map is non-empty, so passing the real toolset is what keeps
+// a requires_tools skill out of the list when its tool isn't registered —
+// matching the prompt and slash-command routing. Passing nil would skip that
+// check and over-advertise.
+func EligibleWorkspaceSkills(workspaceDir string, availableToolNames []string) []skills.SkillEntry {
+	availableTools := make(map[string]struct{}, len(availableToolNames))
+	for _, name := range availableToolNames {
+		availableTools[name] = struct{}{}
+	}
+	entries := skills.DiscoverWorkspaceSkills(skills.DiscoverConfig{WorkspaceDir: workspaceDir})
+	entries = skills.FilterExcludedSkills(entries, loadArchivedCuratorSkillNames())
+	entries = skills.FilterEligibleSkills(entries, skills.EligibilityContext{
+		EnvVars:        skills.EnvSnapshotFromOS(),
+		SkillConfigs:   make(map[string]skills.SkillConfig),
+		AvailableTools: availableTools,
+	})
+	return entries
+}
+
 // InvalidateSkillsCache forces the skills prompt to be rebuilt on next access.
 func InvalidateSkillsCache() {
 	skillsCache.mu.Lock()
