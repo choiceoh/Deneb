@@ -38,6 +38,14 @@ const DefaultNudgeInterval = 5
 // call cannot leak goroutines indefinitely.
 const nudgeGenerationTimeout = 90 * time.Second
 
+// maxNudgeBackoffShift caps the per-session review backoff. The fire
+// threshold for a session is interval << min(fires, maxNudgeBackoffShift),
+// so with interval=5 it grows 5 → 10 → 20 → 40 → 80 and then holds at 80.
+// This stops a long-running session (e.g. a cron job repeating the same class
+// of work) from re-reviewing a near-identical transcript every `interval`
+// tool calls and landing on the same no-op verdict each time.
+const maxNudgeBackoffShift = 4
+
 // Nudger tracks per-session tool activity and fires a background skill
 // review once a configurable tool-invocation threshold is crossed.
 //
@@ -53,6 +61,7 @@ type Nudger struct {
 	mu       sync.Mutex
 	counts   map[string]int       // sessionKey -> tool invocations since last fire
 	inflight map[string]time.Time // sessionKey -> fire started (guards against dupes)
+	fires    map[string]int       // sessionKey -> reviews already fired (drives backoff)
 }
 
 // NudgerConfig configures a Nudger.
@@ -95,6 +104,7 @@ func NewNudger(svc *Service, cfg NudgerConfig, logger *slog.Logger) *Nudger {
 		interval: interval,
 		counts:   make(map[string]int),
 		inflight: make(map[string]time.Time),
+		fires:    make(map[string]int),
 	}
 }
 
@@ -177,6 +187,7 @@ func (n *Nudger) Reset(sessionKey string) {
 	n.mu.Lock()
 	delete(n.counts, sessionKey)
 	delete(n.inflight, sessionKey)
+	delete(n.fires, sessionKey)
 	n.mu.Unlock()
 }
 
@@ -204,11 +215,19 @@ func (n *Nudger) increment(sessionKey string, delta int) bool {
 		return false
 	}
 	n.counts[sessionKey] += delta
-	if n.counts[sessionKey] < n.interval {
+	// Backoff: each successive review of the same session needs a larger
+	// threshold (interval, 2×, 4×, …) so we don't re-review a near-identical
+	// transcript every `interval` calls. Reset() clears the backoff.
+	shift := n.fires[sessionKey]
+	if shift > maxNudgeBackoffShift {
+		shift = maxNudgeBackoffShift
+	}
+	if n.counts[sessionKey] < n.interval<<shift {
 		return false
 	}
 	n.counts[sessionKey] = 0
 	n.inflight[sessionKey] = time.Now()
+	n.fires[sessionKey]++
 	return true
 }
 

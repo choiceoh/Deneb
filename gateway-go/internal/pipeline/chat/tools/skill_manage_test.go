@@ -520,6 +520,32 @@ func TestSkillManage_FindSkillPath_RejectsDirectorySkillMd(t *testing.T) {
 	}
 }
 
+// TestSkillManage_Read_GenesisDepth4Layout verifies findSkillPath reaches
+// genesis-generated skills, which nest one level deeper at
+// skills/genesis/<category>/<name>/SKILL.md (depth 4). domain/skills/discovery.go
+// indexes these into the catalog, so read/patch must reach them too.
+func TestSkillManage_Read_GenesisDepth4Layout(t *testing.T) {
+	fn, workspace, _ := newSkillManageHarness(t)
+	deepDir := filepath.Join(workspace, "skills", "genesis", "productivity", "morning-letter-workflow")
+	if err := os.MkdirAll(deepDir, 0o755); err != nil {
+		t.Fatalf("prep genesis dir: %v", err)
+	}
+	content := "---\nname: morning-letter-workflow\n---\n\n# Morning Letter Workflow\n"
+	if err := os.WriteFile(filepath.Join(deepDir, "SKILL.md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write genesis skill: %v", err)
+	}
+	out, err := callSkillTool(t, fn, map[string]any{
+		"action": "read",
+		"name":   "morning-letter-workflow",
+	})
+	if err != nil {
+		t.Fatalf("read genesis depth-4 skill: %v", err)
+	}
+	if !strings.Contains(out, "Morning Letter Workflow") {
+		t.Errorf("read did not return genesis skill content, got: %s", out)
+	}
+}
+
 func TestCacheAwareInvalidate_ApplyFalseSkipsInner(t *testing.T) {
 	var count int32
 	inner := SkillManageInvalidateFn(func() { atomic.AddInt32(&count, 1) })
