@@ -41,7 +41,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipBox
-import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
@@ -56,13 +55,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupPositionProvider
 import ai.deneb.data.AppSettings
 import ai.deneb.data.NotificationRecord
 import ai.deneb.data.NotificationStore
@@ -561,6 +566,16 @@ private fun ModelTab(client: DenebGatewayClient) {
         // live on ModelRole.desc so the segmented buttons and the tooltip stay in
         // sync from one source.
         val roleTooltip = rememberTooltipState(isPersistent = true)
+        // Material3's default rich-tooltip position provider computes a negative x
+        // when a wide tooltip is anchored near the left edge: as an off-screen
+        // fallback it centers the tooltip on the tiny "?" anchor, so the tooltip
+        // clips off the left of narrow phone screens. Use a provider that
+        // left-aligns to the anchor and clamps fully into the window — the same
+        // approach the chat ServiceSelector's AnchorAbovePositionProvider takes.
+        val tooltipSpacingPx = with(LocalDensity.current) { 4.dp.roundToPx() }
+        val clampedTooltipPosition = remember(tooltipSpacingPx) {
+            ClampedTooltipPositionProvider(tooltipSpacingPx)
+        }
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -571,7 +586,7 @@ private fun ModelTab(client: DenebGatewayClient) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             TooltipBox(
-                positionProvider = TooltipDefaults.rememberRichTooltipPositionProvider(),
+                positionProvider = clampedTooltipPosition,
                 tooltip = {
                     RichTooltip(title = { Text("모델 역할") }) {
                         Text(ModelRole.entries.joinToString("\n") { "${it.label} — ${it.desc}" })
@@ -1379,6 +1394,39 @@ private enum class ModelRole(val wire: String, val label: String, val desc: Stri
     LIGHTWEIGHT("lightweight", "경량", "메일 요약 등 분량이 정해진 요약 작업"),
     ANALYSIS("analysis", "분석", "추론이 필요한 고품질 작업"),
     FALLBACK("fallback", "폴백", "메인 모델이 실패했을 때 대신 쓰는 모델"),
+}
+
+/**
+ * Positions a rich tooltip above its anchor (falling back to below when there is
+ * no room above), left-aligned to the anchor but clamped fully inside the window
+ * so a wide tooltip never spills off a screen edge.
+ *
+ * Material3's default rich-tooltip position provider returns a negative x for a
+ * wide tooltip anchored near the left edge (its off-screen fallback centers the
+ * tooltip on the small anchor), which clipped the model-role "?" tooltip off the
+ * left of narrow phone screens. Mirrors [ServiceSelector]'s clamping approach.
+ * Marked internal so the clamping can be unit-tested without a live window.
+ */
+internal class ClampedTooltipPositionProvider(
+    private val verticalSpacing: Int,
+) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        val maxX = (windowSize.width - popupContentSize.width).coerceAtLeast(0)
+        val x = anchorBounds.left.coerceIn(0, maxX)
+        val above = anchorBounds.top - popupContentSize.height - verticalSpacing
+        val y = if (above >= 0) {
+            above
+        } else {
+            val maxY = (windowSize.height - popupContentSize.height).coerceAtLeast(0)
+            (anchorBounds.bottom + verticalSpacing).coerceAtMost(maxY)
+        }
+        return IntOffset(x, y)
+    }
 }
 
 // modelProviderLabel maps a model id ("vllm/step3p7", "custom/gemma…") to a
