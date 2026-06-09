@@ -276,7 +276,6 @@ data class SkillRow(
     val category: String = "",
     val source: String = "",
     val version: String = "",
-    val command: String = "",
 )
 
 @Serializable

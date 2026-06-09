@@ -838,11 +838,12 @@ private fun SkillsTab(client: DenebGatewayClient) {
                 Column(
                     Modifier.animateItem().fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
                 ) {
-                    // Show the real slash command for user-invocable skills — the raw
-                    // name may contain characters invalid in a command (e.g.
-                    // "email-analysis" → "/email_analysis"). Plain name otherwise.
+                    // Skill name only — no runnable slash command. The live slash
+                    // dispatcher matches a lowercased raw name (not a sanitized
+                    // command) and only for local/system skills, so showing a
+                    // command here would risk advertising one that doesn't route.
                     Text(
-                        if (skill.command.isNotBlank()) "/${skill.command}" else skill.name,
+                        skill.name,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface,
