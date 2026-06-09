@@ -3,7 +3,6 @@ package com.inspiredandroid.kai.deneb
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +16,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,6 +33,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,7 +44,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -90,85 +91,128 @@ fun DenebCalendarScreen(
 ) {
     val tz = remember { TimeZone.currentSystemDefault() }
     val today = remember { Clock.System.todayIn(tz) }
-    var visible by remember { mutableStateOf(CalMonth(today.year, today.month.ordinal + 1)) }
-    var selected by remember { mutableStateOf(today) }
-    var monthEvents by remember { mutableStateOf<List<CalendarEvent>>(emptyList()) }
-    // null = load in flight, true = ok, false = fetch failed.
-    var loadOk by remember { mutableStateOf<Boolean?>(null) }
-    var refreshing by remember { mutableStateOf(false) }
+    // The grid is a finite, lazy pager of months centered on the current month:
+    // page `startIndex` is today's month and each step is ±1 month. This makes
+    // paging a real swipe — the grid tracks the finger and springs to the next
+    // month — instead of the old instant state swap with no animation at all.
+    val anchor = remember { CalMonth(today.year, today.month.ordinal + 1) }
+    val startIndex = remember { MonthPageCount / 2 }
+    val pagerState = rememberPagerState(initialPage = startIndex) { MonthPageCount }
     val scope = rememberCoroutineScope()
 
-    val grid = remember(visible) { buildMonthGrid(visible) }
+    fun monthForPage(page: Int): CalMonth = anchor.plusMonths(page - startIndex)
+    fun pageForMonth(m: CalMonth): Int = startIndex + monthsBetween(anchor, m)
 
-    suspend fun load() {
-        val (from, to) = gridRangeIso(grid, tz)
+    // Per-month event cache so a neighbor is already populated when the user swipes
+    // to it (no blank grid flashing in). `failed` records a per-month fetch error so
+    // retry targets just that month. Both observable, so a late fetch recomposes the
+    // page that shows it.
+    val cache = remember { mutableStateMapOf<CalMonth, List<CalendarEvent>>() }
+    val failed = remember { mutableStateMapOf<CalMonth, Boolean>() }
+    var selected by remember { mutableStateOf(today) }
+    var refreshing by remember { mutableStateOf(false) }
+
+    suspend fun loadMonth(m: CalMonth, force: Boolean) {
+        if (!force && cache[m] != null) return
+        val (from, to) = gridRangeIso(buildMonthGrid(m), tz)
         val ev = client.fetchCalendarRange(from, to)
         if (ev == null) {
-            loadOk = false
+            failed[m] = true
         } else {
-            monthEvents = ev
-            loadOk = true
-        }
-    }
-    // Clear on month change so the old month's dots don't linger over the new
-    // grid while the fetch is in flight. Pull-to-refresh (same month) doesn't
-    // clear, so it never flickers to empty.
-    LaunchedEffect(visible) { loadOk = null; monthEvents = emptyList(); load() }
-
-    // Keep the selection visible after a month jump: today when it lands in the
-    // shown month, otherwise that month's first day.
-    fun showMonth(m: CalMonth) {
-        visible = m
-        selected = if (today.year == m.year && today.month.ordinal + 1 == m.month) {
-            today
-        } else {
-            LocalDate(m.year, m.month, 1)
+            cache[m] = ev
+            failed[m] = false
         }
     }
 
-    // Bars span every day a (possibly multi-day) event covers, packed into lanes
-    // so a span reads as one connected ribbon across the week. The day list shows
-    // every event that touches the selected day, all-day/multi-day events first.
-    val monthBars = remember(monthEvents, grid, tz) { layoutMonthBars(monthEvents, grid, tz) }
-    val monthDots = remember(monthEvents, tz) { timedSingleDayDots(monthEvents, tz) }
-    val dayEvents = remember(monthEvents, selected, tz) {
-        monthEvents
+    // Prefetch the visible month and both neighbors whenever the pager moves, so a
+    // swipe either way lands on a month that already has its dots/bars. currentPage
+    // updates mid-drag (past halfway), so the next month is usually fetched before
+    // the swipe settles. Launched on the screen scope (not this effect's) so a fast
+    // flick past a month doesn't cancel its in-flight fetch.
+    LaunchedEffect(pagerState.currentPage) {
+        for (off in intArrayOf(0, -1, 1)) {
+            val m = monthForPage(pagerState.currentPage + off)
+            if (cache[m] == null && failed[m] != true) {
+                scope.launch { loadMonth(m, force = false) }
+            }
+        }
+    }
+
+    // After a swipe settles on a new month, move the selection into it: today when
+    // it lands there, else the month's first day. Skipped when the selection is
+    // already in the settled month — that's a trailing/leading-cell tap from an
+    // adjacent month, whose exact pick we must keep.
+    LaunchedEffect(pagerState.settledPage) {
+        val m = monthForPage(pagerState.settledPage)
+        if (monthOf(selected) != m) {
+            selected = if (today.year == m.year && today.month.ordinal + 1 == m.month) {
+                today
+            } else {
+                LocalDate(m.year, m.month, 1)
+            }
+        }
+    }
+
+    val visible = monthForPage(pagerState.currentPage)
+    val selMonth = monthOf(selected)
+    val selEvents = cache[selMonth]
+
+    // The day list is driven by the selected day's month (it differs from the
+    // swiped-to month only for the moment a trailing-cell tap is animating the
+    // pager). All-day/multi-day events first, then by start time.
+    val dayEvents = remember(selEvents, selected, tz) {
+        selEvents.orEmpty()
             .filter { selected in eventDays(it.start, it.end, it.allDay, tz) }
             .sortedWith(compareBy({ !it.allDay }, { it.start }))
     }
 
     DenebScreenScaffold(title = "일정", onBack = onBack, tabBar = navigationTabBar) {
-        // The month grid (controls + weekday header + grid + day heading) stays
-        // pinned at the top; only the selected day's event list scrolls below it.
-        // These used to share one verticalScroll, so on a packed day the long list
-        // pushed the whole grid off the top and the calendar looked like a plain
-        // list once a day had more events than fit on screen.
+        // Controls + weekday header stay pinned; the month grid pages horizontally,
+        // and only the selected day's event list scrolls below it. The grid and the
+        // list used to share one verticalScroll, so on a packed day the long list
+        // pushed the whole grid off the top and the calendar looked like a plain list.
         Column(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp)) {
             MonthControls(
                 month = visible,
-                onPrev = { showMonth(visible.prev()) },
-                onNext = { showMonth(visible.next()) },
-                onToday = { showMonth(CalMonth(today.year, today.month.ordinal + 1)) },
+                onPrev = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } },
+                onNext = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } },
+                onToday = {
+                    selected = today
+                    scope.launch { pagerState.animateScrollToPage(startIndex) }
+                },
                 onAdd = { onAddEvent(selected) },
             )
             Spacer(Modifier.height(8.dp))
             WeekdayHeader()
-            CalendarMonthGrid(
-                grid = grid,
-                today = today,
-                selected = selected,
-                bars = monthBars,
-                dots = monthDots,
-                onSelect = { date ->
-                    // Tapping a leading/trailing cell jumps to that month too.
-                    selected = date
-                    if (date.year != visible.year || date.month.ordinal + 1 != visible.month) {
-                        visible = CalMonth(date.year, date.month.ordinal + 1)
-                    }
-                },
-                onSwipePrev = { showMonth(visible.prev()) },
-                onSwipeNext = { showMonth(visible.next()) },
-            )
+            // Each page builds its grid from the per-month cache, so the neighbor
+            // pages the pager pre-composes already show their events.
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxWidth(),
+                beyondViewportPageCount = 1,
+            ) { page ->
+                val pageMonth = monthForPage(page)
+                val pageGrid = remember(pageMonth) { buildMonthGrid(pageMonth) }
+                val events = cache[pageMonth]
+                val bars = remember(events, pageGrid, tz) { layoutMonthBars(events.orEmpty(), pageGrid, tz) }
+                val dots = remember(events, tz) { timedSingleDayDots(events.orEmpty(), tz) }
+                CalendarMonthGrid(
+                    grid = pageGrid,
+                    today = today,
+                    selected = selected,
+                    bars = bars,
+                    dots = dots,
+                    onSelect = { date ->
+                        // Tapping a leading/trailing cell selects that day and pages
+                        // to its month.
+                        selected = date
+                        val dm = monthOf(date)
+                        if (dm != monthForPage(pagerState.currentPage)) {
+                            scope.launch { pagerState.animateScrollToPage(pageForMonth(dm)) }
+                        }
+                    },
+                )
+            }
             Spacer(Modifier.height(12.dp))
             HorizontalDivider(color = denebHairline())
             Spacer(Modifier.height(8.dp))
@@ -180,17 +224,17 @@ fun DenebCalendarScreen(
             Spacer(Modifier.height(4.dp))
             PullToRefreshBox(
                 isRefreshing = refreshing,
-                onRefresh = { scope.launch { refreshing = true; load(); refreshing = false } },
+                onRefresh = { scope.launch { refreshing = true; loadMonth(selMonth, force = true); refreshing = false } },
                 modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
                 // Own scroll state so the list scrolls under the pinned grid; a
                 // fillMaxSize column keeps pull-to-refresh working when empty.
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                     when {
-                        loadOk == null && monthEvents.isEmpty() -> DenebLoading()
-                        loadOk == false && monthEvents.isEmpty() -> DenebError(
+                        selEvents == null && failed[selMonth] != true -> DenebLoading()
+                        selEvents == null -> DenebError(
                             "일정을 불러오지 못했어요.",
-                            onRetry = { scope.launch { loadOk = null; load() } },
+                            onRetry = { scope.launch { loadMonth(selMonth, force = true) } },
                         )
                         dayEvents.isEmpty() -> CalendarEmptyDay(onAdd = { onAddEvent(selected) })
                         else -> CalendarDayList(dayEvents, selected, tz, onOpenEvent)
@@ -215,8 +259,6 @@ internal fun CalendarMonthGrid(
     bars: Map<LocalDate, List<DayBar>>,
     dots: Map<LocalDate, Int>,
     onSelect: (LocalDate) -> Unit,
-    onSwipePrev: () -> Unit = {},
-    onSwipeNext: () -> Unit = {},
 ) {
     val haptics = rememberHaptics()
     val palette = barPalette()
@@ -224,23 +266,9 @@ internal fun CalendarMonthGrid(
     // lane line up row-to-row, and the dot row is present-or-absent grid-wide.
     val laneCount = bars.values.maxOfOrNull { day -> day.maxOfOrNull { it.lane + 1 } ?: 0 } ?: 0
     val showDotRow = dots.isNotEmpty()
-    Column(
-        // Horizontal swipe flips months (swipe left → next, right → prev), the way
-        // a mobile calendar is expected to page. Keyed on `grid` so each month's
-        // gesture captures fresh callbacks. Vertical drags fall through to the day
-        // list below, which owns its own scroll.
-        Modifier.fillMaxWidth().pointerInput(grid) {
-            val threshold = size.width / 4f
-            var accum = 0f
-            detectHorizontalDragGestures(
-                onDragStart = { accum = 0f },
-                onDragCancel = { accum = 0f },
-                onDragEnd = {
-                    if (accum > threshold) onSwipePrev() else if (accum < -threshold) onSwipeNext()
-                },
-            ) { _, amount -> accum += amount }
-        },
-    ) {
+    // Month paging is owned by the HorizontalPager in the screen shell; this grid is
+    // pure presentation. Each cell owns its tap; the pager claims horizontal drags.
+    Column(Modifier.fillMaxWidth()) {
         grid.cells.chunked(7).forEach { week ->
             Row(Modifier.fillMaxWidth()) {
                 week.forEach { date ->
@@ -480,11 +508,27 @@ internal val koreanDayOfWeek = listOf("월", "화", "수", "목", "금", "토", 
 // Korean calendar weekend tint: Saturday blue (Sunday reuses the theme's error red).
 private val saturdayBlue = Color(0xFF4F8FF7)
 
+/** How many month-pages the calendar pager spans, centered on the current month —
+ *  ~100 years each way. Big enough to feel unbounded; the pager is lazy so the
+ *  count itself costs nothing. */
+private const val MonthPageCount = 2400
+
 /** A visible month (month is 1-12). Small holder so grid math stays in Int. */
 internal data class CalMonth(val year: Int, val month: Int) {
-    fun prev(): CalMonth = if (month == 1) CalMonth(year - 1, 12) else CalMonth(year, month - 1)
-    fun next(): CalMonth = if (month == 12) CalMonth(year + 1, 1) else CalMonth(year, month + 1)
+    /** This month shifted by [n] months (negative = earlier). floorDiv/mod keep the
+     *  month in 1-12 and roll the year correctly in both directions. */
+    fun plusMonths(n: Int): CalMonth {
+        val zeroBased = year * 12 + (month - 1) + n
+        return CalMonth(zeroBased.floorDiv(12), zeroBased.mod(12) + 1)
+    }
 }
+
+/** Signed month distance from [a] to [b] (b − a), for mapping a month to a pager page. */
+internal fun monthsBetween(a: CalMonth, b: CalMonth): Int =
+    (b.year * 12 + b.month) - (a.year * 12 + a.month)
+
+/** The month a date falls in. */
+internal fun monthOf(date: LocalDate): CalMonth = CalMonth(date.year, date.month.ordinal + 1)
 
 /** The grid days for a month: full weeks (Mon-first) covering the month, plus
  *  the month's first day so cells can be tagged in/out of month. */
