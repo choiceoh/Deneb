@@ -29,7 +29,7 @@ globs: ["client-android/app/composeApp/src/**/*.kt"]
 
 ## 겹칠 때 타이브레이커
 
-- **헤더/제목**이 둘 다 있으면 → Deneb (`DenebScreenScaffold`). Material 향 `DenebViewHeader`/`DenebSurface`(`deneb/DenebUi.kt`, 닥스트링이 idiom과 모순)는 마이그레이션 끝나면 제거.
+- **헤더/제목**이 둘 다 있으면 → Deneb (`DenebScreenScaffold`). Material 향 `DenebViewHeader`/`DenebSurface` 는 제거 완료 — `deneb/DenebUi.kt` 에는 공용 상태 헬퍼(`DenebLoading`/`DenebError`/`DenebEmpty`)와 `humanBytes` 만 남아 있다.
 - **컨트롤**이 둘 다 가능하면 → Material. (예: 직접 그린 "☑" 글리프 대신 `Checkbox`)
 
 ## 도그마 금지 — "실용적 Material"을 지키는 경계 케이스

@@ -14,7 +14,7 @@ globs: ["gateway-go/**/*.go"]
 | `scripts/dev/iterate.sh` | 빌드→서버→smoke 2체크→결과 (~2초) |
 | `scripts/dev/iterate.sh --metric quality` | 내장 프리셋 (smoke\|quality\|combined) |
 | `scripts/dev/iterate.sh --metric CMD` | 커스텀 metric 커맨드 |
-| `scripts/dev/quality-metric.sh [MSG]` | 텔레그램 채팅 품질 점수 0-100 (15~60초) |
+| `scripts/dev/quality-metric.sh [MSG]` | 네이티브 클라 채팅 품질 점수 0-100 (15~60초) |
 
 ### metric 프리셋 선택 가이드
 

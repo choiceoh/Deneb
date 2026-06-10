@@ -1,89 +1,45 @@
 ---
-description: Perform a release for Kai. Args: bump type — patch (default), minor, or major.
+description: Publish a Deneb native-client build (versionCode-only — no semantic version bump). Args: optional Korean release note.
 ---
-Perform a release for Kai. Bump type argument: $ARGUMENTS (default: patch).
+Publish a Deneb native-client build. Optional release note argument: $ARGUMENTS.
+
+> The old Kai flow (semantic `appVersion` bump, fastlane Play Store changelog,
+> `v{X.Y.Z}` tags pushed to main) is retired. Deneb builds are identified by
+> **versionCode only** (#2089/#2099): there is no version file to bump, no tag,
+> and agents never push to main directly.
 
 Follow these steps exactly:
 
-## 1. Read current version
+## 1. Decide whether a patch note is needed
 
-Read `gradle/libs.versions.toml`. Extract `appVersion` (line 3) and `android-versionCode` (line 4).
+`DenebPatchNotes.kt` (composeApp/src/commonMain/.../deneb/DenebPatchNotes.kt) is
+the compiled-in, user-facing Korean changelog. Prepend a new entry at the head
+**only when this build carries user-visible changes**; internal refactors need
+no entry. The patch-notes CI gate enforces this for `feat(...)` PRs touching
+client-android.
 
-## 2. Calculate new version
+## 2. Publish
 
-Parse the bump type from the argument ($ARGUMENTS). If empty or not one of patch/minor/major, default to `patch`.
+Releases happen one of two ways — never by hand-copying APKs:
 
-- **patch**: 1.8.2 → 1.8.3
-- **minor**: 1.8.2 → 1.9.0
-- **major**: 1.8.2 → 2.0.0
+- **Automatic (normal path):** merging a PR that touches `client-android/**`
+  into main triggers `.github/workflows/publish-apk.yml` on the gx10
+  self-hosted runner. Merging the PR *is* the release approval.
+- **Manual (operator, on the deploy machine):**
 
-Increment `android-versionCode` by 1.
+  ```bash
+  DENEB_APK_BASE_URL=http://<gateway-host>:19010 \
+    scripts/dev/publish-apk.sh "인앱 업데이트에 표시될 릴리스 노트"
+  ```
 
-## 3. Generate changelog
-
-Run:
-```
-git log --pretty=format:"- %s (%h)" v{current}..HEAD --no-merges
-```
-
-Filter out lines matching any of:
-- `Auto-fix:`
-- `[skip ci]`
-- Lines that are exactly `- Release` or `- Release v...`
-- Documentation-only changes (e.g. "Update docs", "Fix README", "Add feature spec")
-- CI/workflow changes (e.g. "Update release.yml", "Fix CI", "Update AUR package", "Update Homebrew formula")
-
-Only include changes that affect the app itself — code, UI, dependencies, build config that impacts the output artifact.
-
-Additionally, collapse fix-up commits into the feature they belong to. If a feature was added and then fixed before this release (i.e. both commits are in the same range), the fix is not a standalone changelog entry — it's part of shipping the feature. Only list the feature itself. Similarly, don't list follow-up tweaks (e.g. "Add success feedback for import") separately if they refine a new feature in the same release.
-
-From the remaining commits, write a **human-readable summary** grouped by category:
-- **Features** — new capabilities
-- **Fixes** — bug fixes
-- **Improvements** — refactors, perf, UX polish, dependency updates
-
-Omit empty categories. Each entry should be a concise one-liner (rewrite commit messages for clarity if needed). Do NOT include commit hashes in the final summary.
-
-## 4. Write CHANGELOG.md
-
-If `CHANGELOG.md` exists, prepend the new section. If not, create it.
-
-Format:
-```
-## v{new} — {YYYY-MM-DD}
-
-### Features
-- ...
-
-### Fixes
-- ...
-
-(then a blank line before existing content)
-```
-
-## 5. Write Play Store changelog
-
-Write a condensed, user-facing summary to `fastlane/metadata/android/en-US/changelogs/{newVersionCode}.txt`.
-
-- Plain text only — no markdown headers, no bullet markers
-- One change per line — each entry on its own line, no blank lines between them
-- Must be under 500 characters (Play Store limit)
-- Each line should be a concise description, similar in style to existing entries like "Add identity configurations" or "Support additional languages"
-
-## 6. Update gradle/libs.versions.toml
-
-- Set `appVersion` to the new version
-- Set `android-versionCode` to the incremented value
-
-## 7. Commit, tag, and push
-
-- Stage `CHANGELOG.md`, `gradle/libs.versions.toml`, and `fastlane/metadata/android/en-US/changelogs/{newVersionCode}.txt`
-- Commit with message: `Release v{new}`
-- Create annotated tag: `git tag -a v{new} -m "v{new}"`
-- Push commit and tag to origin: `git push origin main --follow-tags`
+`publish-apk.sh` assigns the next versionCode itself (flock-serialized across
+worktrees), runs the native-app smoke gate, builds, and writes `version.json`.
+Details: `.claude/rules/release-and-deploy.md`.
 
 ## Important
 
-- Do NOT use `--no-verify` or skip any hooks
-- Show the user the changelog summary before committing so they can confirm
-- If anything fails, stop and report the error — do not retry destructively
+- Do NOT bump `android-versionCode` in `gradle/libs.versions.toml` — it is only
+  a floor/IDE default; the publish script assigns real codes.
+- Do NOT create tags or push to main for a client release.
+- If the smoke gate fails, fix the regression (see `smoke-*.png`) instead of
+  bypassing with `DENEB_SKIP_SMOKE=1`.

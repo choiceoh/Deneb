@@ -23,8 +23,7 @@ globs: ["gateway-go/**/*.go", "proto/**/*.proto"]
 > **동기 RPC 의 한계:** `miniapp.chat.send` 는 한 turn 의 최종 응답만 반환하므로(토큰
 > 스트림·per-tool 이벤트 없음), 콘텐츠 품질(한국어·충실도·누출·레이턴시)은 end-to-end
 > 로 검증되지만 per-tool 검증(`--expect-tool`, `tool-check`)은 관측 불가라 **skip(`~`)**
-> 처리된다. first-token latency 는 전체 turn latency 와 같다. 아래 목 텔레그램 관련
-> 레거시 설명(목 서버 주입/폴링)은 더 이상 적용되지 않는다 — 전송 계층만 바뀌었고
+> 처리된다. first-token latency 는 전체 turn latency 와 같다. 전송 계층만 바뀌었고
 > 품질 체크/스코어링/저장은 그대로다.
 >
 > **검증 스택:** `make check` (build + `-race`) + `live-test.sh restart && smoke`
@@ -60,23 +59,22 @@ dev 인스턴스는 항상 프로덕션 config를 기반으로 시작한다 (빈
 scripts/dev/live-test.sh parity    # dev vs prod 환경 비교 리포트
 ```
 
-**목 서버 동작 원리:**
-- `scripts/mock_telegram_server.py`가 로컬 HTTP 서버로 Telegram Bot API
-  서브셋(`getMe`/`getUpdates`/`sendMessage`/`editMessageText`/`deleteMessage`/
-  `setMessageReaction`/`sendChatAction`/`sendPhoto` 등)을 구현.
-- 게이트웨이는 `TELEGRAM_API_BASE=http://127.0.0.1:18792/bot`로 시작하므로
-  모든 Telegram 플러그인 호출이 목 서버로 향한다.
-- 테스트 클라이언트(`scripts/mock_telegram_client.py`)는 목 서버의
-  `/_test/inject`에 가짜 유저 업데이트를 주입하고 `/_test/wait`로 outbound
-  이벤트(sendMessage/editMessageText/...)가 settle될 때까지 기다린다.
-- 외부 네트워크 접근 0, 로그인/세션 파일 0, 409 Conflict 위험 0.
+**채팅 주입 동작 원리 (네이티브 클라 표면):**
+- 테스트 클라이언트(`scripts/mock_native_client.py`, `NativeTestClient`)가
+  실제 네이티브 클라 표면으로 주입한다: `POST /api/v1/miniapp/rpc` →
+  `miniapp.chat.send` (동기 RPC, `X-Deneb-Client-Token` 인증).
+- dev 게이트웨이는 시작 시 state dir 에 `client_token` 을 자동 생성하고,
+  live-test.sh 가 `DENEB_LIVETEST_GW_URL`/`DENEB_LIVETEST_STATE_DIR` 를 export
+  해 테스트가 같은 토큰으로 인증한다.
+- 외부 네트워크 접근 0, 로그인/세션 파일 0. (텔레그램 목 서버 주입은
+  PR #1922 로 플러그인과 함께 은퇴 — `scripts/mock_telegram_*.py` 는 레거시.)
 
 ### Functional Testing
 
 | Command | Description |
 |---|---|
 | `smoke` | Health + Ready smoke test |
-| `chat MESSAGE` | 목 텔레그램으로 채팅 메시지 전송 + 응답 수신 |
+| `chat MESSAGE` | 네이티브 클라 RPC(`miniapp.chat.send`)로 채팅 메시지 전송 + 응답 수신 |
 
 ### Quality Testing
 
