@@ -10,7 +10,7 @@ Primary runtime — HTTP/WS gateway server.
 ## Structure
 
 - `cmd/gateway/main.go` — Entry point with `--port`/`--bind` flags, graceful shutdown.
-- `internal/runtime/server/` — HTTP server: `/health`, `/api/v1/rpc`, OpenAI/Responses APIs, hooks, session endpoints. Connection tracking.
+- `internal/runtime/server/` — HTTP server: `/health`, `/api/v1/miniapp/rpc`, OpenAI/Responses APIs, hooks, session endpoints. Connection tracking.
 - `internal/runtime/rpc/` — Registry-based RPC method dispatcher (thread-safe). 150+ methods.
 - `internal/runtime/session/` — Session management with lifecycle state machine (`IDLE -> RUNNING -> DONE/FAILED/KILLED/TIMEOUT`), state transition validation, event pub/sub bus.
 - `internal/infra/auth/` — Token auth, allowlists, security paths, credentials, probe auth.

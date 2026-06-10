@@ -17,7 +17,7 @@ Go HTTP/WS gateway server — the primary Deneb runtime.
 | Directory | Purpose |
 |-----------|---------|
 | `cmd/gateway/` | Entry point (`main.go`), `--port`/`--bind` flags, graceful shutdown |
-| `internal/runtime/server/` | HTTP server: `/health`, `/api/v1/rpc`, OpenAI APIs, hooks |
+| `internal/runtime/server/` | HTTP server: `/health`, `/api/v1/miniapp/rpc`, OpenAI APIs, hooks |
 | `internal/runtime/rpc/` | Registry-based RPC dispatcher, 150+ methods |
 | `internal/runtime/session/` | Session lifecycle state machine (`IDLE → RUNNING → DONE/FAILED/KILLED/TIMEOUT`) |
 | `internal/pipeline/chat/` | System prompt, tool registration, context files, slash commands |
