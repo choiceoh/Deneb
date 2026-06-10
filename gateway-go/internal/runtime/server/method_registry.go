@@ -550,20 +550,23 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				if s.modelRegistry == nil {
 					return nil, handlerminiapp.ErrAnalyzeNoLLM
 				}
-				// step3.7 (the local vLLM behind the main + lightweight roles)
-				// does unstoppable extended thinking and streams no answer text
-				// for the free-text analysis prompt — disabling thinking (#1816)
-				// did not propagate to vLLM. Route analysis to the fallback role
-				// (a cloud chat model that reliably emits text) instead.
-				llmClient := s.modelRegistry.Client(modelrole.RoleFallback)
-				model := s.modelRegistry.Model(modelrole.RoleFallback)
-				// Stage-1 extractors (thread context + wiki fact extraction) run
-				// JSON-mode on the lightweight/local model — same role the
-				// autonomous poller uses (server_chat_config.go). This upgrades the
-				// Mini App analyze from the single-call fallback to the full 2-stage
-				// pipeline; stage-2 synthesis stays on the fallback role above.
-				localClient := s.modelRegistry.Client(modelrole.RoleLightweight)
-				localModel := s.modelRegistry.Model(modelrole.RoleLightweight)
+				// Stage-2 synthesis runs on the analysis role, same as the
+				// autonomous poller (server_chat_config.go). This used to be
+				// pinned to the fallback role as a #1816-era workaround
+				// ("step3.7 streams unstoppable thinking, no answer text"),
+				// but the poller has since proven the analysis role safe for
+				// this exact prompt — the pipeline disables thinking and
+				// scrubs reasoning leaks (gmailpoll/pipeline.go) — and the
+				// cloud fallback pin made the interactive button the only
+				// mail-analysis path that breaks when the fallback
+				// provider's key dies (401, 2026-06-10).
+				llmClient := s.modelRegistry.Client(modelrole.RoleAnalysis)
+				model := s.modelRegistry.Model(modelrole.RoleAnalysis)
+				// Stage-1 extractors (thread context + wiki fact extraction)
+				// run JSON-mode on the tiny role — same role the autonomous
+				// poller uses for its stage-1 (server_chat_config.go).
+				localClient := s.modelRegistry.Client(modelrole.RoleTiny)
+				localModel := s.modelRegistry.Model(modelrole.RoleTiny)
 				gmailClient, err := gmail.DefaultClient()
 				if err != nil {
 					return nil, err
