@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -40,14 +41,13 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 	home, _ := os.UserHomeDir()
 	stateDir := filepath.Join(home, ".deneb")
 
+	stage2, stage2Model, stage1, stage1Model := s.mailAnalysisModels()
 	cfg := gmailpoll.Config{
-		StateDir: stateDir,
-		// Stage-2 final analysis is reasoning-grade → analysis role.
-		LLMClient: s.modelRegistry.Client(modelrole.RoleAnalysis),
-		Model:     s.modelRegistry.Model(modelrole.RoleAnalysis),
-		// Stage-1 extractors are trivial classification → tiny role.
-		LocalClient:   s.modelRegistry.Client(modelrole.RoleTiny),
-		LocalModel:    s.modelRegistry.Model(modelrole.RoleTiny),
+		StateDir:      stateDir,
+		LLMClient:     stage2,
+		Model:         stage2Model,
+		LocalClient:   stage1,
+		LocalModel:    stage1Model,
 		SenderFactsFn: s.wikiSenderFacts,
 	}
 
@@ -293,6 +293,15 @@ func resolveDefaultModel(logger *slog.Logger) string {
 		return "" // empty: registry will provide the default
 	}
 	if root.Agents.DefaultModel != "" {
+		// agents.defaultModel wins over agents.defaults.model.primary. A stale
+		// primary that silently loses is a real operator trap — it reads like
+		// the main model to anyone inspecting the config — so make the
+		// shadowing visible once at startup.
+		if shadowed := extractModelFromDefaults(root.Agents.Defaults); shadowed != "" && shadowed != root.Agents.DefaultModel {
+			logger.Warn("agents.defaults.model.primary is shadowed by agents.defaultModel and ignored",
+				"defaultModel", root.Agents.DefaultModel,
+				"shadowedPrimary", shadowed)
+		}
 		return root.Agents.DefaultModel
 	}
 	if len(root.Agents.Defaults) > 0 {
@@ -330,6 +339,24 @@ func resolveLocalVllmModel(_ *slog.Logger) string {
 		return ""
 	}
 	return root.Models.Providers.Vllm.Models[0].ID
+}
+
+// mailAnalysisModels returns the role-resolved clients and model names shared
+// by BOTH mail-analysis paths — the autonomous gmail poller (initGmailPoll)
+// and the interactive miniapp gmail.analyze factory (method_registry.go).
+// Stage-2 synthesis is reasoning-grade → analysis role; stage-1 extractors
+// are trivial classification → tiny role. Keeping the choice in ONE place
+// prevents the two paths drifting apart: the #2045 tiny/analysis upgrade
+// reached only the poller, and the miniapp button stayed pinned to the
+// fallback role until that provider's key died (401, 2026-06-10).
+func (s *Server) mailAnalysisModels() (stage2 *llm.Client, stage2Model string, stage1 *llm.Client, stage1Model string) {
+	if s.modelRegistry == nil {
+		return nil, "", nil, ""
+	}
+	return s.modelRegistry.Client(modelrole.RoleAnalysis),
+		s.modelRegistry.Model(modelrole.RoleAnalysis),
+		s.modelRegistry.Client(modelrole.RoleTiny),
+		s.modelRegistry.Model(modelrole.RoleTiny)
 }
 
 // resolveLightweightModel / resolveFallbackModel read the optional per-role

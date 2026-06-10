@@ -39,6 +39,12 @@ const (
 	miniappModelHealthOnline  = "online"
 	miniappModelHealthOffline = "offline"
 	miniappModelHealthUnknown = "unknown"
+	// miniappModelHealthAuth marks a provider whose endpoint answers but
+	// whose credential is rejected (401/403-class). Reachability probes
+	// alone cannot see this — Z.AI returns 200 on GET /models even for an
+	// expired key — so the verdict comes from the role health watch's real
+	// 1-token probes (role_health_watch.go) and overrides reachability.
+	miniappModelHealthAuth    = "auth"
 	miniappModelHealthTimeout = 1500 * time.Millisecond
 	// customModelProbeTimeout bounds the /models probe used to auto-detect a
 	// newly-added custom model's context window. Best-effort: a miss just
@@ -404,7 +410,7 @@ func (s *Server) miniappModelSnapshot(ctx context.Context) miniappModelSnapshot 
 	sections := assembleMiniappModelSections(roles, providers)
 	return miniappModelSnapshot{
 		sections: sections,
-		health:   buildMiniappModelHealth(sections, probes),
+		health:   buildMiniappModelHealth(sections, probes, s.roleHealthVerdicts()),
 	}
 }
 
@@ -491,19 +497,26 @@ func (s *Server) miniappModelHealthProbes(
 func buildMiniappModelHealth(
 	sections []modelSection,
 	probes map[string]providerModelProbe,
+	roleVerdicts map[string]string,
 ) map[string]string {
 	health := make(map[string]string)
 	for _, section := range sections {
 		for _, entry := range section.entries {
-			health[entry.fullID] = miniappModelHealthForEntry(entry, probes)
+			health[entry.fullID] = miniappModelHealthForEntry(entry, probes, roleVerdicts)
 		}
 	}
 	return health
 }
 
-func miniappModelHealthForEntry(entry modelEntry, probes map[string]providerModelProbe) string {
+func miniappModelHealthForEntry(entry modelEntry, probes map[string]providerModelProbe, roleVerdicts map[string]string) string {
 	if entry.provider == "" {
 		return miniappModelHealthUnknown
+	}
+	// A rejected credential trumps reachability: the endpoint may answer
+	// every GET while refusing all real completions (the 2026-06 Z.AI key
+	// expiry). Only role-assigned cloud providers are probed this deeply.
+	if roleVerdicts[entry.provider] == roleHealthAuth {
+		return miniappModelHealthAuth
 	}
 	probe, ok := probes[entry.provider]
 	if !ok || !probe.checked {

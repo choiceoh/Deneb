@@ -528,4 +528,9 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		)
 	}
 	s.calendarBriefing.start(s.ShutdownCtx())
+
+	// Periodic auth/liveness probe for role-assigned cloud providers — the
+	// fallback role gets no organic traffic, so a dead credential there is
+	// invisible until the safety net is actually needed (role_health_watch.go).
+	s.startRoleHealthWatch()
 }
