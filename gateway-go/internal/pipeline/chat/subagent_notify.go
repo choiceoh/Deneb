@@ -136,6 +136,20 @@ func NewSubagentNotifier(deps SubagentNotifierDeps) *SubagentNotifier {
 		}
 
 		parentKey := child.SpawnedBy
+		// Parent session gone (deleted): nobody is waiting for this result, and
+		// triggerRun on the stale key would resurrect the deleted session.
+		if sm.Get(parentKey) == nil {
+			sn.logger.Info("subagent completion dropped: parent session deleted",
+				"child", abbreviateSession(event.Key),
+				"parent", abbreviateSession(parentKey))
+			return
+		}
+		// Cascade kills (parent killed/deleted → children killed by
+		// subagent_cleanup) are bookkeeping, not results — notifying the
+		// freshly-killed parent would just restart it with noise.
+		if child.FailureReason == subagentParentTerminatedReason {
+			return
+		}
 		item := buildNotifyItem(child)
 
 		q := sn.getOrCreateQueue(parentKey)
@@ -200,26 +214,48 @@ func (sn *SubagentNotifier) getOrCreateQueue(parentKey string) *notifyQueue {
 	return q
 }
 
-// getOrCreateCh returns the write end of the notification channel, creating lazily.
-func (sn *SubagentNotifier) getOrCreateCh(sessionKey string) chan<- string {
+// pushNotification sends a notification to the parent's channel (non-blocking).
+// A full channel never drops: everything parked is drained and merged with the
+// new notification into one combined entry — a dropped completion would be a
+// result the user silently never receives (logging.md rule 1).
+func (sn *SubagentNotifier) pushNotification(parentKey, notification string) {
 	sn.mu.Lock()
-	defer sn.mu.Unlock()
-	ch, ok := sn.channels[sessionKey]
+	ch, ok := sn.channels[parentKey]
 	if !ok {
 		ch = make(chan string, subagentNotifyChCap)
-		sn.channels[sessionKey] = ch
+		sn.channels[parentKey] = ch
 	}
-	return ch
-}
+	sn.mu.Unlock()
 
-// pushNotification sends a notification to the parent's channel (non-blocking).
-func (sn *SubagentNotifier) pushNotification(parentKey, notification string) {
-	ch := sn.getOrCreateCh(parentKey)
 	select {
 	case ch <- notification:
+		return
 	default:
-		sn.logger.Warn("subagent notification channel full, dropping",
-			"parent", abbreviateSession(parentKey))
+	}
+
+	var parts []string
+drain:
+	for {
+		select {
+		case n := <-ch:
+			parts = append(parts, n)
+		default:
+			break drain
+		}
+	}
+	merged := strings.Join(append(parts, notification), "\n\n")
+	select {
+	case ch <- merged:
+		sn.logger.Warn("subagent notification channel full, merged backlog",
+			"parent", abbreviateSession(parentKey),
+			"merged", len(parts)+1)
+	default:
+		// Only reachable if concurrent producers refill the channel between the
+		// drain and this push — the merged payload (and the completions in it)
+		// is lost. Escalate: this is a user-invisible result drop.
+		sn.logger.Error("subagent notification dropped despite merge",
+			"parent", abbreviateSession(parentKey),
+			"lost", len(parts)+1)
 	}
 }
 

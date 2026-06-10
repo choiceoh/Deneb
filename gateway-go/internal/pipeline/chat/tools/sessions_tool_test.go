@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
 type fakeSessionTranscript struct {
@@ -83,4 +84,124 @@ func TestToolSessionsSearchExpandsNaturalLanguageQuery(t *testing.T) {
 	if len(transcript.searches) < 2 || transcript.searches[0] != "GitHub PR 리뷰하고 체리픽했던 작업 찾아줘" {
 		t.Fatalf("expected exact search before expansion, got: %v", transcript.searches)
 	}
+}
+
+// --- sessions_spawn guardrails ---
+
+func spawnDeps(sm *session.Manager) *toolctx.SessionDeps {
+	return &toolctx.SessionDeps{
+		Manager: sm,
+		SendFn:  func(string, string) error { return nil },
+	}
+}
+
+func spawnInput(t *testing.T, task, label string) json.RawMessage {
+	t.Helper()
+	return sessionSearchJSON(t, map[string]string{"task": task, "label": label})
+}
+
+func TestSessionsSpawn_RecordsDepthAndLabel(t *testing.T) {
+	sm := session.NewManager()
+	ctx := toolctx.WithSessionKey(context.Background(), "client:main")
+
+	out, err := ToolSessionsSpawn(spawnDeps(sm))(ctx, spawnInput(t, "research X", "researcher"))
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if !strings.Contains(out, "Sub-agent spawned") {
+		t.Fatalf("unexpected spawn output: %s", out)
+	}
+
+	var child *session.Session
+	for _, s := range sm.List() {
+		if s.SpawnedBy == "client:main" {
+			child = s
+		}
+	}
+	if child == nil {
+		t.Fatal("child session not created")
+	}
+	if child.SpawnDepth == nil || *child.SpawnDepth != 1 {
+		t.Errorf("child SpawnDepth = %v, want 1", child.SpawnDepth)
+	}
+	if child.Label != "researcher" {
+		t.Errorf("child Label = %q, want researcher", child.Label)
+	}
+}
+
+func TestSessionsSpawn_RejectsBeyondMaxDepth(t *testing.T) {
+	sm := session.NewManager()
+	parent := sm.Create("client:main:deep", session.KindDirect)
+	depth := maxSubagentSpawnDepth
+	parent.SpawnDepth = &depth
+	if err := sm.Set(parent); err != nil {
+		t.Fatalf("set parent: %v", err)
+	}
+	ctx := toolctx.WithSessionKey(context.Background(), "client:main:deep")
+
+	out, err := ToolSessionsSpawn(spawnDeps(sm))(ctx, spawnInput(t, "go deeper", ""))
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if !strings.Contains(out, "Spawn rejected") || !strings.Contains(out, "depth") {
+		t.Fatalf("expected depth rejection, got: %s", out)
+	}
+	for _, s := range sm.List() {
+		if s.SpawnedBy == "client:main:deep" {
+			t.Fatalf("child %q was created despite depth rejection", s.Key)
+		}
+	}
+}
+
+func TestSessionsSpawn_RejectsBeyondConcurrencyCap(t *testing.T) {
+	sm := session.NewManager()
+	for i := range maxConcurrentSubagents {
+		key := spawnTestChildKey(i)
+		c := sm.Create(key, session.KindDirect)
+		c.SpawnedBy = "client:main"
+		c.Status = session.StatusRunning
+		if err := sm.Set(c); err != nil {
+			t.Fatalf("set child %d: %v", i, err)
+		}
+	}
+	ctx := toolctx.WithSessionKey(context.Background(), "client:main")
+
+	out, err := ToolSessionsSpawn(spawnDeps(sm))(ctx, spawnInput(t, "one more", ""))
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if !strings.Contains(out, "Spawn rejected") || !strings.Contains(out, "active") {
+		t.Fatalf("expected concurrency rejection, got: %s", out)
+	}
+}
+
+func TestSessionsSpawn_TerminalChildrenDoNotCountAgainstCap(t *testing.T) {
+	sm := session.NewManager()
+	for i := range maxConcurrentSubagents {
+		key := spawnTestChildKey(i)
+		c := sm.Create(key, session.KindDirect)
+		c.SpawnedBy = "client:main"
+		c.Status = session.StatusRunning
+		if err := sm.Set(c); err != nil {
+			t.Fatalf("set child %d running: %v", i, err)
+		}
+		c = sm.Get(key)
+		c.Status = session.StatusDone
+		if err := sm.Set(c); err != nil {
+			t.Fatalf("set child %d done: %v", i, err)
+		}
+	}
+	ctx := toolctx.WithSessionKey(context.Background(), "client:main")
+
+	out, err := ToolSessionsSpawn(spawnDeps(sm))(ctx, spawnInput(t, "fresh task", ""))
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if !strings.Contains(out, "Sub-agent spawned") {
+		t.Fatalf("expected spawn to succeed past terminal children, got: %s", out)
+	}
+}
+
+func spawnTestChildKey(i int) string {
+	return "client:main:worker:" + string(rune('a'+i))
 }

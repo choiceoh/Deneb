@@ -19,7 +19,7 @@ package server
 // Safety gates:
 //   - Max age (resumeMaxAge, default 2h): older markers are cleared without
 //     resuming, so a weeks-old crash does not suddenly revive a stale task.
-//   - Max attempts (resumeMaxAttempts, default 1): if the resume itself
+//   - Max attempts (resumeMaxAttempts, default 3): if the resume itself
 //     crashes the gateway, the counter stops us from looping forever.
 //   - Config opt-out (deneb.json → session.autoResume false): disables the
 //     whole subsystem.
@@ -54,8 +54,10 @@ const (
 
 	// resumeMaxAttempts bounds how many times the same marker may trigger
 	// a resume. Each attempt bumps marker.ResumeAttempts so a resume that
-	// itself crashes does not loop.
-	resumeMaxAttempts = 1
+	// itself crashes does not loop. 3 (was 1) so one transient failure during
+	// the first resume (OOM, provider outage at boot) does not permanently
+	// discard the interrupted work — resumeMaxAge still caps total lifetime.
+	resumeMaxAttempts = 3
 
 	// resumeDispatchDelay gives channel-facing startup hooks time to settle
 	// before we inject the resume message.

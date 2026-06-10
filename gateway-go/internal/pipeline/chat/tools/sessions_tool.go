@@ -415,6 +415,16 @@ func toolSessionsSend(d *toolctx.SessionDeps) ToolFunc {
 
 // --- sessions_spawn tool ---
 
+// Spawn guardrails. A misbehaving model (or an injected prompt) must not be
+// able to fork unbounded agent trees on a single-machine vLLM deployment.
+const (
+	// maxSubagentSpawnDepth caps nesting: a top-level session's children have
+	// depth 1; depth-3 children cannot spawn further.
+	maxSubagentSpawnDepth = 3
+	// maxConcurrentSubagents caps non-terminal children per parent session.
+	maxConcurrentSubagents = 5
+)
+
 // ToolSessionsSpawn returns a tool function that spawns a sub-agent session.
 func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
@@ -441,6 +451,29 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 		if label == "" {
 			label = "subagent"
 		}
+
+		// Depth guard: child depth = parent depth + 1, capped so spawn chains
+		// (A → B → C → …) cannot recurse unbounded.
+		depth := 1
+		if parent := d.Manager.Get(parentKey); parent != nil && parent.SpawnDepth != nil {
+			depth = *parent.SpawnDepth + 1
+		}
+		if depth > maxSubagentSpawnDepth {
+			return fmt.Sprintf("Spawn rejected: max sub-agent nesting depth (%d) reached. Do the task yourself instead of delegating further.", maxSubagentSpawnDepth), nil
+		}
+
+		// Concurrency guard: cap non-terminal children per parent so one turn
+		// cannot flood the local inference queue.
+		active := 0
+		for _, s := range d.Manager.List() {
+			if s.SpawnedBy == parentKey && !session.IsTerminal(s.Status) {
+				active++
+			}
+		}
+		if active >= maxConcurrentSubagents {
+			return fmt.Sprintf("Spawn rejected: %d sub-agents are already active (max %d). Wait for some to finish (use the subagents tool to check), or kill ones you no longer need.", active, maxConcurrentSubagents), nil
+		}
+
 		childKey := fmt.Sprintf("%s:%s:%d", parentKey, label, time.Now().UnixMilli())
 
 		// Create the child session.
@@ -451,6 +484,8 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 			childSession.Model = d.SubagentDefaultModel
 		}
 		childSession.SpawnedBy = parentKey
+		childSession.SpawnDepth = &depth
+		childSession.Label = label
 		childSession.ToolPreset = p.ToolPreset
 		d.Manager.Set(childSession)
 
