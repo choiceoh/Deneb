@@ -55,7 +55,7 @@ To modify a generated file: edit the source or generator, run the `make` target,
 - Assembly: `internal/pipeline/chat/prompt/system_prompt.go`
 - Context files: `internal/pipeline/chat/prompt/context_files.go` (loads CLAUDE.md, SOUL.md, etc.)
 - Silent replies: `internal/pipeline/chat/silent_reply.go` (NO_REPLY token)
-- Slash commands: `internal/pipeline/chat/slash_commands.go` (operational only: /reset, /status, /kill, /rollback, /update, /restart — user commands moved to the native UI)
+- Slash commands: `internal/pipeline/chat/slash_commands.go` (operational only: /help, /reset, /status, /kill, /rollback, /update, /restart — user commands moved to the native UI)
 
 ### Changing Wire Types
 - Hand-written types: `pkg/protocol/`
