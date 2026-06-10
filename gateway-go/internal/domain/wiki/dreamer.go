@@ -321,6 +321,10 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 		report.PhaseErrors = append(report.PhaseErrors, fmt.Sprintf("proposal-save-final: %v", err))
 	}
 
+	// Version the cycle's wiki mutations: one commit per dream cycle gives
+	// history/diff/rollback for autonomous memory edits. Best-effort.
+	wd.store.SnapshotGit(ctx, fmt.Sprintf("dream: +%d페이지 생성, %d페이지 수정", created, updated))
+
 	wd.logger.Info("wiki-dream: cycle complete",
 		"created", created, "updated", updated,
 		"duration", time.Since(start).Round(time.Millisecond))
