@@ -191,9 +191,12 @@ type AgentResult struct {
 	// DeliverableText is AllText minus the brief progress narration a model emits
 	// alongside tool calls ("이제 위키 검색부터 할게요"). A turn that calls tools and
 	// says only a short line is interim narration, not the answer; a terminal turn
-	// (no tools) or a long content turn is the deliverable. Used by proactive/cron
-	// delivery so multi-turn reports don't ship the agent's working narration. See
-	// the accumulation in executor.go and deliverableNarrationMaxRunes.
+	// (no tools) or a long content turn is the deliverable. Each kept turn also has
+	// a leading self-talk preamble stripped when the report body follows behind a
+	// rule/heading ("이제 분석 보고를 정리해.\n\n---\n\n## …" ships from "## …").
+	// Used by proactive/cron delivery so reports don't open with the agent's
+	// working narration. See the accumulation in executor.go,
+	// deliverableNarrationMaxRunes, and stripNarrationHead.
 	DeliverableText string
 	Thinking        string // accumulated thinking text from ALL turns (interleaved + final). Empty when extended thinking is disabled.
 	StopReason      string // "end_turn", "max_tokens", "timeout", "aborted", "max_turns", "max_turns_graceful"

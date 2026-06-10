@@ -40,6 +40,99 @@ func TestIsInterimNarration(t *testing.T) {
 	}
 }
 
+func TestStripNarrationHead(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want string
+	}{
+		{
+			// The 2026-06-10 prod leak: cron deliverable opened with the model's
+			// self-talk before the --- divider and the report heading.
+			name: "prod leak: narration + rule + report",
+			text: "이제 분석 보고를 정리해.\n\n---\n\n## 📧 메일 분석: [해밀고흥솔라팜] 견적 요청\n\n본문입니다.",
+			want: "## 📧 메일 분석: [해밀고흥솔라팜] 견적 요청\n\n본문입니다.",
+		},
+		{
+			name: "narration directly before heading (no rule)",
+			text: "이제 정리할게요.\n\n## 보고\n내용",
+			want: "## 보고\n내용",
+		},
+		{
+			name: "two narration paragraphs before rule",
+			text: "좋아, 메일 확인 완료.\n\n이제 분석 보고를 정리해.\n\n---\n\n## 본문 제목\n내용",
+			want: "## 본문 제목\n내용",
+		},
+		{
+			name: "clean report starting with heading is untouched",
+			text: "## LG전자 모듈 공급 협의\n\n- 항목 1\n- 항목 2",
+			want: "## LG전자 모듈 공급 협의\n\n- 항목 1\n- 항목 2",
+		},
+		{
+			name: "clean report starting with rule is untouched",
+			text: "---\n\n## 제목\n내용",
+			want: "---\n\n## 제목\n내용",
+		},
+		{
+			name: "head with digits is content (counts are facts)",
+			text: "신규 메일 1건을 분석했습니다.\n\n---\n\n## 상세",
+			want: "신규 메일 1건을 분석했습니다.\n\n---\n\n## 상세",
+		},
+		{
+			name: "head with colon label is content",
+			text: "임박: 미팅 준비가 필요합니다.\n\n## 상세",
+			want: "임박: 미팅 준비가 필요합니다.\n\n## 상세",
+		},
+		{
+			name: "emoji-led head is a content marker",
+			text: "📬 새 메일이 도착했습니다.\n\n---\n\n## 분석",
+			want: "📬 새 메일이 도착했습니다.\n\n---\n\n## 분석",
+		},
+		{
+			name: "head over the rune cap is content",
+			text: strings.Repeat("가", deliverableNarrationHeadMaxRunes+1) + ".\n\n---\n\n## 제목",
+			want: strings.Repeat("가", deliverableNarrationHeadMaxRunes+1) + ".\n\n---\n\n## 제목",
+		},
+		{
+			name: "head without sentence punctuation is kept",
+			text: "해밀고흥솔라팜 견적 분석\n\n---\n\n## 상세",
+			want: "해밀고흥솔라팜 견적 분석\n\n---\n\n## 상세",
+		},
+		{
+			name: "rule with empty body keeps everything",
+			text: "이제 정리해.\n\n---",
+			want: "이제 정리해.\n\n---",
+		},
+		{
+			name: "plain prose answer without boundary is untouched",
+			text: "오늘은 특이사항이 없습니다. 내일 일정은 그대로 유지됩니다.",
+			want: "오늘은 특이사항이 없습니다. 내일 일정은 그대로 유지됩니다.",
+		},
+		{
+			name: "narration then non-heading content paragraph is kept",
+			text: "이제 정리해.\n\n- 항목 하나\n- 항목 둘",
+			want: "이제 정리해.\n\n- 항목 하나\n- 항목 둘",
+		},
+		{
+			name: "asterisk rule divider",
+			text: "분석을 마쳤습니다.\n\n***\n\n## 결과\n내용",
+			want: "## 결과\n내용",
+		},
+		{
+			name: "empty text",
+			text: "",
+			want: "",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := stripNarrationHead(c.text); got != c.want {
+				t.Fatalf("stripNarrationHead(%q)\n got: %q\nwant: %q", c.text, got, c.want)
+			}
+		})
+	}
+}
+
 func TestExtractThinkingText_Basic(t *testing.T) {
 	blocks := []llm.ContentBlock{
 		{Type: "thinking", Thinking: "사용자가 설정 파일을 수정하고 싶어합니다.\n먼저 파일을 읽어봐야겠습니다."},
