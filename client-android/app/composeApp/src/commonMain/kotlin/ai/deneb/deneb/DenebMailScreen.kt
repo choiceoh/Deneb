@@ -1,11 +1,16 @@
 package ai.deneb.deneb
 
 import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.daysUntil
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.todayIn
+import kotlin.time.Clock
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,7 +24,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -46,19 +50,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import ai.deneb.ui.DenebSectionLabel
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.denebContentWidthModifier
+import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.handCursor
 import ai.deneb.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 
 /**
- * Native inbox triage backed by `miniapp.gmail.list_recent`. Pull to refresh;
+ * Native inbox triage backed by `miniapp.gmail.list_recent`, in the Deneb idiom:
+ * ultralight view title, full-width hairline rules between rows, DenebType roles,
+ * and time-bucketed section labels (오늘 / 어제 / 이번 주 / 이전). Pull to refresh;
  * long-press a row (with haptic) to multi-select; a tonal bottom bar runs bulk
  * read / archive / trash, and "더 보기" pages through nextPageToken. Tapping a
- * row opens the detail screen.
+ * row opens the detail screen. Controls (checkbox, buttons, pull refresh) stay
+ * Material; only the presentation is Deneb.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -68,8 +79,9 @@ fun DenebMailScreen(
     onOpenDetail: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
     // panelMode = rendered as the left pane of the desktop split-view (fills the parent
-    // 380dp box instead of the 760dp centered column; "닫기" hidden since it's always shown).
-    // selectedId = the mail currently open in the right detail pane, for row highlight.
+    // 380dp box instead of the 760dp centered column; back affordance hidden since the
+    // pane is always shown). selectedId = the mail currently open in the right detail
+    // pane, for row highlight.
     panelMode: Boolean = false,
     selectedId: String? = null,
 ) {
@@ -113,30 +125,43 @@ fun DenebMailScreen(
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (selecting) {
+            if (selecting) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 14.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
                         "${selected.size}개 선택",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
+                        style = DenebType.subject.copy(fontSize = 22.sp),
+                        color = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.weight(1f),
                     )
                     TextButton(onClick = { clearSelection() }) { Text("취소") }
-                } else {
-                    Column(Modifier.weight(1f)) {
-                        Text("받은 메일", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-                        if (mail.isNotEmpty()) {
-                            Text(
-                                "${mail.size}통 · 안 읽음 ${mail.count { it.unread }}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                }
+            } else {
+                Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 6.dp)) {
+                    if (!panelMode) {
+                        Text(
+                            text = "←",
+                            style = DenebType.subject.copy(fontSize = 22.sp),
+                            color = denebHint(),
+                            modifier = Modifier.clickable(onClick = onBack).handCursor(),
+                        )
+                        Spacer(Modifier.height(2.dp))
                     }
-                    if (!panelMode) TextButton(onClick = onBack) { Text("닫기") }
+                    Text(
+                        "받은 메일",
+                        style = DenebType.viewTitle,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    if (mail.isNotEmpty()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "${mail.size}통 · 안 읽음 ${mail.count { it.unread }}",
+                            style = DenebType.hint,
+                            color = denebHint(),
+                        )
+                    }
                 }
             }
 
@@ -151,42 +176,45 @@ fun DenebMailScreen(
                         )
                     }
                 } else if (mail.isEmpty()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("최근 7일 메일 없음", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    Box(Modifier.padding(horizontal = 24.dp)) { DenebEmpty("최근 7일 메일 없음") }
                 } else {
                     PullToRefreshBox(
                         isRefreshing = refreshing,
                         onRefresh = { scope.launch { refreshing = true; loadOk = client.refreshMail(); refreshing = false } },
                         modifier = Modifier.fillMaxSize(),
                     ) {
+                        val today = Clock.System.todayIn(TimeZone.currentSystemDefault())
+                        val sections = remember(mail, today) { mailSections(mail, today) }
                         LazyColumn(Modifier.fillMaxSize()) {
-                            items(mail, key = { it.id }) { m ->
-                                Column(Modifier.animateItem()) {
-                                    MailRow(
-                                        message = m,
-                                        selecting = selecting,
-                                        isSelected = m.id in selected,
-                                        isCurrent = panelMode && m.id == selectedId,
-                                        onTap = {
-                                            haptics.tap()
-                                            if (selecting) {
-                                                if (m.id in selected) selected.remove(m.id) else selected.add(m.id)
-                                                if (selected.isEmpty()) selecting = false
-                                            } else {
-                                                onOpenDetail(m.id)
-                                            }
-                                        },
-                                        onLongPress = {
-                                            haptics.longPress()
-                                            selecting = true
-                                            if (m.id !in selected) selected.add(m.id)
-                                        },
-                                    )
-                                    HorizontalDivider(
-                                        modifier = Modifier.padding(start = 68.dp),
-                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                                    )
+                            sections.forEach { section ->
+                                item(key = "section-${section.label}") {
+                                    DenebSectionLabel(section.label, Modifier.padding(horizontal = 24.dp))
+                                }
+                                items(section.items, key = { it.id }) { m ->
+                                    Column(Modifier.animateItem()) {
+                                        MailRow(
+                                            message = m,
+                                            selecting = selecting,
+                                            isSelected = m.id in selected,
+                                            isCurrent = panelMode && m.id == selectedId,
+                                            today = today,
+                                            onTap = {
+                                                haptics.tap()
+                                                if (selecting) {
+                                                    if (m.id in selected) selected.remove(m.id) else selected.add(m.id)
+                                                    if (selected.isEmpty()) selecting = false
+                                                } else {
+                                                    onOpenDetail(m.id)
+                                                }
+                                            },
+                                            onLongPress = {
+                                                haptics.longPress()
+                                                selecting = true
+                                                if (m.id !in selected) selected.add(m.id)
+                                            },
+                                        )
+                                        HorizontalDivider(color = denebHairline())
+                                    }
                                 }
                             }
                             if (nextToken != null) {
@@ -239,6 +267,7 @@ internal fun MailRow(
     onTap: () -> Unit,
     onLongPress: () -> Unit,
     isCurrent: Boolean = false,
+    today: LocalDate? = null,
 ) {
     Row(
         modifier = Modifier
@@ -252,7 +281,7 @@ internal fun MailRow(
                     else -> Color.Transparent
                 },
             )
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.Top,
     ) {
         if (selecting) {
@@ -262,30 +291,28 @@ internal fun MailRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (message.unread) {
                     Box(Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(8.dp))
                 }
                 Text(
                     senderName(message.from).ifBlank { "(발신자 없음)" },
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = if (message.unread) FontWeight.Bold else FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    style = if (message.unread) DenebType.rowTitleStrong else DenebType.rowTitle,
+                    color = MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    shortDate(message.date),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    mailTimeLabel(message.date, today),
+                    style = DenebType.meta,
+                    color = denebHint(),
                 )
             }
             Spacer(Modifier.height(3.dp))
             Text(
                 message.subject.ifBlank { "(제목 없음)" },
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (message.unread) FontWeight.Medium else FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurface,
+                style = DenebType.rowSubtitle,
+                color = if (message.unread) MaterialTheme.colorScheme.onBackground else denebHint(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -293,14 +320,58 @@ internal fun MailRow(
                 Spacer(Modifier.height(2.dp))
                 Text(
                     message.snippet,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
+                    style = DenebType.snippet,
+                    color = denebHint(),
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
         }
     }
+}
+
+/** One time bucket of the inbox, newest-first within the original list order. */
+internal data class MailSection(val label: String, val items: List<MailMessage>)
+
+/**
+ * Buckets the (newest-first) inbox into 오늘 / 어제 / 이번 주 / 이전 sections for
+ * the section labels. Unparseable dates land in 이전 so a bad timestamp can
+ * never crash or reorder the list. Section order is fixed regardless of the
+ * encounter order, so a stray out-of-order item cannot duplicate a header.
+ */
+internal fun mailSections(mail: List<MailMessage>, today: LocalDate): List<MailSection> {
+    val order = listOf("오늘", "어제", "이번 주", "이전")
+    val grouped = mail.groupBy { bucketLabel(it.date, today) }
+    return order.mapNotNull { label -> grouped[label]?.let { MailSection(label, it) } }
+}
+
+private fun bucketLabel(date: String, today: LocalDate): String = runCatching {
+    val d = Instant.parse(date).toLocalDateTime(TimeZone.currentSystemDefault()).date
+    when {
+        d.daysUntil(today) <= 0 -> "오늘" // future-dated (clock skew) counts as today
+        d.daysUntil(today) == 1 -> "어제"
+        d.daysUntil(today) < 7 -> "이번 주"
+        else -> "이전"
+    }
+}.getOrElse { "이전" }
+
+/**
+ * Bucket-adaptive timestamp: today shows the clock time, yesterday "어제", the
+ * rest of the week a Korean weekday, older mail "MM-dd". Falls back to
+ * [shortDate] when the date cannot be parsed or no [today] is supplied.
+ */
+internal fun mailTimeLabel(date: String, today: LocalDate?): String {
+    if (today == null) return shortDate(date)
+    return runCatching {
+        val t = Instant.parse(date).toLocalDateTime(TimeZone.currentSystemDefault())
+        fun p(n: Int) = n.toString().padStart(2, '0')
+        when {
+            t.date.daysUntil(today) <= 0 -> "${p(t.hour)}:${p(t.minute)}"
+            t.date.daysUntil(today) == 1 -> "어제"
+            t.date.daysUntil(today) < 7 -> koreanDayOfWeek.getOrElse(t.date.dayOfWeek.ordinal) { "" }
+            else -> "${p(t.monthNumber)}-${p(t.dayOfMonth)}"
+        }
+    }.getOrElse { shortDate(date) }
 }
 
 /** "Name <email>" -> "Name"; a bare address is returned as-is. */

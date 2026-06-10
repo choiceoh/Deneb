@@ -21,6 +21,13 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "받은 메일을 Deneb 디자인으로 새 단장 — 울트라라이트 제목, 전체 폭 구분선, 오늘·어제·이번 주 시간 구분, 가까운 메일은 시각·요일로 표시",
+            "내 메시지 말풍선에 오로라 색감 적용(다크), 도구 실행 표시가 OLED에서 투명한 외곽선 스타일로",
+            "입력창 안내 문구를 '무엇이든 물어보세요'로",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "설정에 '화면' 탭 추가 — 테마(시스템·라이트·다크·OLED 블랙)와 화면 배율을 직접 조절, 즉시 반영",
         ),
     ),

@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,6 +38,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ai.deneb.ui.denebBreathing
 import ai.deneb.ui.denebSpatialSpring
+import ai.deneb.ui.isOledFlavor
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.tools_count
 import deneb.composeapp.generated.resources.waiting_brewing
@@ -72,12 +74,17 @@ internal fun WaitingResponseRow(
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .clipToBounds(),
     ) {
+        // OLED: a filled surfaceVariant box floats as a gray slab on pure black, so
+        // the status chip goes transparent with a hairline ring instead (the same
+        // treatment as denebAdaptiveCardSurface). Non-OLED keeps the soft fill.
+        val chipShape = RoundedCornerShape(8.dp)
+        val chipSurface = if (MaterialTheme.colorScheme.isOledFlavor) {
+            Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, chipShape)
+        } else {
+            Modifier.background(MaterialTheme.colorScheme.surfaceVariant, chipShape)
+        }
         Box(
-            modifier = Modifier
-                .background(
-                    MaterialTheme.colorScheme.surfaceVariant,
-                    RoundedCornerShape(8.dp),
-                )
+            modifier = chipSurface
                 .animateContentSize(animationSpec = denebSpatialSpring())
                 .padding(12.dp)
                 .semantics { contentDescription = waitingCd },
