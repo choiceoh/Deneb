@@ -222,3 +222,30 @@ func TestBuildRecallPreflightSurvivesPanickingSource(t *testing.T) {
 		t.Fatalf("wiki evidence lost when a sibling source panicked: %q", out)
 	}
 }
+
+func TestDedupRecallEvidence_CrossSource(t *testing.T) {
+	rows := []recallEvidence{
+		{Source: "wiki", Note: "현대차 울산 모듈 납품, 결제기한 6월 말.", Score: 0.9},
+		{Source: "polaris", Note: "현대차 울산 모듈 납품 — 결제기한 6월 말", Score: 0.6}, // same fact, punctuation differs
+		{Source: "diary", Note: "남도에코와 실사 일정 통화", Score: 0.5},
+	}
+	out := dedupRecallEvidence(rows)
+	if len(out) != 2 {
+		t.Fatalf("want 2 rows after dedup, got %d: %+v", len(out), out)
+	}
+	if out[0].Source != "wiki" || out[0].Score != 0.9 {
+		t.Errorf("dedup must keep the best-scored row, got %+v", out[0])
+	}
+}
+
+func TestRecallEvidenceBudget_Adaptive(t *testing.T) {
+	if got := recallEvidenceBudget(true); got != recallMaxEvidence {
+		t.Errorf("cue budget = %d, want %d", got, recallMaxEvidence)
+	}
+	if got := recallEvidenceBudget(false); got != recallAutoMaxEvidence {
+		t.Errorf("auto budget = %d, want %d", got, recallAutoMaxEvidence)
+	}
+	if recallAutoMaxEvidence >= recallMaxEvidence {
+		t.Error("auto-recall budget must be tighter than the explicit-cue budget")
+	}
+}
