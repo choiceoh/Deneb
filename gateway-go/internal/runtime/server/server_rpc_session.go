@@ -274,6 +274,7 @@ func (s *Server) registerSessionRPCMethods() {
 		workFeed:        s.nativeWorkFeedStore(),
 		nativeSync:      s.nativeSyncStore,
 		behaviorLog:     agentLogWriter,
+		sessions:        s.sessions,
 	}
 
 	// Wire transcript cloner for subagent cron session support.

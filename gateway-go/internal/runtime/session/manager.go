@@ -485,6 +485,42 @@ func (m *Manager) TouchActivity(key string) {
 	m.mu.Unlock()
 }
 
+// EnsureVisible makes sure a session row exists for key and advances its
+// UpdatedAt to at (when newer), creating a terminal direct-kind row when the
+// key is unknown. Out-of-run transcript writers (the proactive relay) use it
+// so a transcript-only session shows up in List() — what the native drawer
+// reads — immediately, instead of waiting for the next startup transcript
+// rescan. Unlike Set it never replaces an existing row (a concurrent agent
+// run owns its status and stats); unlike Patch it creates the row in the
+// same shape the startup restore would (direct kind, done status, channel).
+func (m *Manager) EnsureVisible(key, channel string, at int64) {
+	if key == "" {
+		return
+	}
+	m.lazyInit()
+	m.mutateAndEmit(func() []Event {
+		m.mu.Lock()
+		s := m.sessions[key]
+		if s == nil {
+			m.sessions[key] = &Session{
+				Key:       key,
+				Kind:      KindDirect,
+				Status:    StatusDone,
+				Channel:   channel,
+				CreatedAt: time.Now(),
+				UpdatedAt: at,
+			}
+			m.mu.Unlock()
+			return []Event{{Kind: EventCreated, Key: key}}
+		}
+		if at > s.UpdatedAt {
+			s.UpdatedAt = at
+		}
+		m.mu.Unlock()
+		return nil
+	})
+}
+
 // List returns snapshot copies of all sessions.
 func (m *Manager) List() []*Session {
 	m.lazyInit()
