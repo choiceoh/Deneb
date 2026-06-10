@@ -61,13 +61,17 @@ type GmailDeps struct {
 // captures auto-archived-yet-unread mail from filter workflows), in
 // the last week, single screenful. Gmail uses {} as a logical OR group.
 const (
-	defaultGmailQuery    = "{in:inbox is:unread} newer_than:7d"
-	defaultGmailLimit    = 20
-	maxGmailLimit        = 100
-	maxGmailBodyChars    = 3000
-	labelUnread          = "UNREAD"
-	labelInbox           = "INBOX"
-	bodyTruncationSuffix = "\n\n...[truncated, total=%d chars]"
+	defaultGmailQuery = "{in:inbox is:unread} newer_than:7d"
+	defaultGmailLimit = 20
+	maxGmailLimit     = 100
+	maxGmailBodyChars = 3000
+	// maxGmailFullBodyChars caps the "full" body view requested by the
+	// detail screen's 전체 보기 — generous enough for any real mail, bounded
+	// so a pathological megabyte body can't be shipped to the phone whole.
+	maxGmailFullBodyChars = 200_000
+	labelUnread           = "UNREAD"
+	labelInbox            = "INBOX"
+	bodyTruncationSuffix  = "\n\n...[truncated, total=%d chars]"
 	// maxEmptyPageHops bounds the server-side absorption loop for the
 	// "Gmail returns 0 messages with a non-empty nextPageToken" case
 	// (legitimate response from filter-heavy queries) so the Mini App
@@ -249,6 +253,11 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 func gmailGet(deps GmailDeps) rpcutil.HandlerFunc {
 	type params struct {
 		ID string `json:"id"`
+		// Full requests the untruncated body (still bounded by
+		// maxGmailFullBodyChars). The default keeps the 3000-char cap so the
+		// list->detail flow stays light; the detail screen refetches with
+		// full=true when the user asks for the rest.
+		Full bool `json:"full,omitempty"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
@@ -274,7 +283,11 @@ func gmailGet(deps GmailDeps) rpcutil.HandlerFunc {
 			return rpcerr.NotFound("message " + rpcutil.TruncateForError(p.ID)).Response(req.ID)
 		}
 
-		body, total := truncateBody(msg.Body, maxGmailBodyChars)
+		bodyLimit := maxGmailBodyChars
+		if p.Full {
+			bodyLimit = maxGmailFullBodyChars
+		}
+		body, total := truncateBody(msg.Body, bodyLimit)
 		atts := make([]mailAttachmentOut, 0, len(msg.Attachments))
 		for _, a := range msg.Attachments {
 			atts = append(atts, mailAttachmentOut{
@@ -323,6 +336,11 @@ func gmailArchive(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 func gmailTrash(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 	type params struct {
 		ID string `json:"id"`
+		// Full requests the untruncated body (still bounded by
+		// maxGmailFullBodyChars). The default keeps the 3000-char cap so the
+		// list->detail flow stays light; the detail screen refetches with
+		// full=true when the user asks for the rest.
+		Full bool `json:"full,omitempty"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
@@ -356,6 +374,11 @@ func gmailTrash(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 func modifyLabelsHandler(deps GmailDeps, cache *listCache, removeLabels []string) rpcutil.HandlerFunc {
 	type params struct {
 		ID string `json:"id"`
+		// Full requests the untruncated body (still bounded by
+		// maxGmailFullBodyChars). The default keeps the 3000-char cap so the
+		// list->detail flow stays light; the detail screen refetches with
+		// full=true when the user asks for the rest.
+		Full bool `json:"full,omitempty"`
 	}
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {

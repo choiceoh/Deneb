@@ -376,6 +376,31 @@ func TestHTMLToText(t *testing.T) {
 			in:   `<a href='https://x.com/q'>q</a>`,
 			want: "q (https://x.com/q)",
 		},
+		{
+			name: "table cells get a gap, rows get a newline",
+			in:   `<table><tr><td>품명</td><td>단가</td></tr><tr><td>모듈</td><td>142,000</td></tr></table>`,
+			want: "품명  단가\n모듈  142,000",
+		},
+		{
+			name: "table header cells get a gap",
+			in:   `<tr><th>이름</th><th>값</th></tr>`,
+			want: "이름  값",
+		},
+		{
+			name: "list items get bullets",
+			in:   `<ul><li>첫째</li><li>둘째</li></ul>`,
+			want: "\u2022 첫째\n\u2022 둘째",
+		},
+		{
+			name: "ordered list items get bullets too",
+			in:   `<ol><li value="1">하나</li><li>둘</li></ol>`,
+			want: "\u2022 하나\n\u2022 둘",
+		},
+		{
+			name: "blockquote opener marks quoted text",
+			in:   `회신:<blockquote>원래 내용</blockquote>끝`,
+			want: "회신:\n> 원래 내용\n\n끝",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
