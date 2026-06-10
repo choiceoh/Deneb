@@ -140,6 +140,17 @@ func (c *Client) streamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 func (c *Client) convertMessagesToOpenAI(msgs []Message, preserveThinking bool) []openAIMessage {
 	var out []openAIMessage
 	for _, m := range msgs {
+		// Empty (0-byte) Content has nothing to convert — skip it without the
+		// unparseable-content warning below, which would otherwise fire on
+		// every API call for the rest of the run. Message factories guarantee
+		// valid JSON Content (see marshalBlocks), so this is defense in depth;
+		// a tool_use-bearing message can no longer arrive here empty, hence
+		// skipping cannot orphan a later tool_result.
+		if len(m.Content) == 0 {
+			c.logger.Debug("skipping message with empty content", "role", m.Role)
+			continue
+		}
+
 		// Try plain text string first.
 		var text string
 		if err := json.Unmarshal(m.Content, &text); err == nil {

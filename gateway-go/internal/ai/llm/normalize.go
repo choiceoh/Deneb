@@ -114,8 +114,10 @@ func mergeContent(a, b json.RawMessage) json.RawMessage {
 	merged := make([]ContentBlock, 0, len(blocksA)+len(blocksB))
 	merged = append(merged, blocksA...)
 	merged = append(merged, blocksB...)
-	raw, _ := json.Marshal(merged)
-	return raw
+	// marshalBlocks (not a bare json.Marshal) so a block with a non-JSON
+	// Input fragment can never collapse two real messages into one with
+	// empty (0-byte) Content.
+	return marshalBlocks(merged)
 }
 
 // contentToBlocks parses Content into blocks. A plain text string becomes
