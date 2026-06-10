@@ -78,6 +78,19 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 				// Prospective memory: extracted commitments land in the local
 				// to-do store (native list + heartbeat deadline signals).
 				s.wikiDreamer.SetOpenLoopSink(openLoopTodoSink(s.logger))
+				// Mention-driven 인물 seeding from the contacts mirror.
+				if cs := s.contactsStore; cs != nil {
+					s.wikiDreamer.SetPersonDirectory(func() []wiki.PersonSeed {
+						all := cs.All()
+						seeds := make([]wiki.PersonSeed, 0, len(all))
+						for _, c := range all {
+							seeds = append(seeds, wiki.PersonSeed{
+								Name: c.Name, Org: c.Org, Phones: c.Phones, Emails: c.Emails,
+							})
+						}
+						return seeds
+					})
+				}
 				s.logger.Info("wiki-dream: enabled")
 			}
 		}

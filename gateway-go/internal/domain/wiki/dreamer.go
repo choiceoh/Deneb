@@ -134,6 +134,10 @@ type WikiDreamer struct {
 	// openLoopSink receives unfulfilled commitments extracted each cycle
 	// (see open_loops.go). nil disables the extraction pass.
 	openLoopSink func(ctx context.Context, loops []OpenLoop) (int, error)
+
+	// personDirectory supplies the address-book snapshot for mention-driven
+	// 인물 page seeding (see person_seed.go). nil disables seeding.
+	personDirectory func() []PersonSeed
 }
 
 // NewWikiDreamer creates a new wiki dreamer.
@@ -288,6 +292,14 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 				wd.logger.Info("wiki-dream: open loops captured", "extracted", len(loops), "new", added)
 			}
 		}
+	}
+
+	// Phase 3c: mention-driven 인물 seeding — contacts repeatedly mentioned in
+	// this cycle's input get stub pages from the address book (see
+	// person_seed.go); later cycles enrich them like any page.
+	if n := wd.seedPersonPages(ctx, synthInput); n > 0 {
+		created += n
+		report.WikiPagesCreated = created
 	}
 
 	// Phase 4: Rebuild index.
