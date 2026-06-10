@@ -210,6 +210,7 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	if res, handled := h.trySlashSync(sessionKey, message, opts); handled {
 		return res, nil
 	}
+	message = h.maybeEnrichLinks(ctx, message, opts)
 	params, deps, err := h.prepareSyncRun(sessionKey, message, model, "sync", opts)
 	if err != nil {
 		return nil, err
@@ -282,6 +283,7 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 		}
 		return res, nil
 	}
+	message = h.maybeEnrichLinks(ctx, message, opts)
 	params, deps, err := h.prepareSyncRun(sessionKey, message, model, "stream", opts)
 	if err != nil {
 		return nil, err

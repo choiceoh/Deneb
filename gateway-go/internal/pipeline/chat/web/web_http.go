@@ -57,6 +57,18 @@ func fetchWithRetry(ctx context.Context, url string, maxBytes int64) (*media.Fet
 	return stealthFetch(ctx, url, maxBytes)
 }
 
+// FetchRaw exposes the stealth fetch pipeline (pooled SSRF-safe transport,
+// browser-like profiles, bot-block escalation) to callers outside the web
+// tool, returning the raw body and content type. Used by the chat pipeline's
+// inbound link enrichment.
+func FetchRaw(ctx context.Context, url string, maxBytes int64) ([]byte, string, error) {
+	result, err := fetchWithRetry(ctx, url, maxBytes)
+	if err != nil {
+		return nil, "", err
+	}
+	return result.Data, result.ContentType, nil
+}
+
 func isRetryableError(err error) bool {
 	var mfe *media.MediaFetchError
 	if errors.As(err, &mfe) {
