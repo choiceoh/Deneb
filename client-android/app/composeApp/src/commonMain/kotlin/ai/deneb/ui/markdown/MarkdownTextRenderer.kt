@@ -32,6 +32,8 @@ private fun blockToSpeakable(block: BlockNode): String = when (block) {
     is DisplayMath -> block.latex
     is DenebUiBlock -> block.node.collectSpeakableText()
     is DenebUiError -> ""
+
+    is DenebUiPending -> ""
 }
 
 private fun itemToSpeakable(item: ListItem): String {
@@ -108,6 +110,8 @@ private fun blockToPlain(block: BlockNode): String = when (block) {
     is DenebUiBlock -> block.node.collectSpeakableText()
 
     is DenebUiError -> ""
+
+    is DenebUiPending -> ""
 }
 
 private fun itemToPlain(item: ListItem): String = item.children.joinToString("\n") { blockToPlain(it) }.trim()

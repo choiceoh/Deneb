@@ -49,6 +49,11 @@ func TestValidate_Valid(t *testing.T) {
 			{"type":"checkbox","id":"agree","label":"동의"},
 			{"type":"button","label":"제출","action":{"type":"callback","event":"submit","collectFrom":["name","agree"]}}
 		]}`,
+		"datetime form": `{"type":"column","children":[
+			{"type":"date_input","id":"due","label":"마감일","required":true},
+			{"type":"time_input","id":"at","label":"시각","value":"14:30"},
+			{"type":"button","label":"저장","action":{"type":"callback","event":"save","collectFrom":["due","at"]}}
+		]}`,
 		"required form with keyboard and placeholder": `{"type":"column","children":[
 			{"type":"text_input","id":"qty","label":"수량","required":true,"keyboard":"number"},
 			{"type":"select","id":"cat","label":"분류","options":["업무","개인"],"placeholder":"선택…","required":true},
@@ -81,6 +86,7 @@ func TestValidate_Invalid(t *testing.T) {
 		"bad text style":      `{"type":"text","value":"x","style":"gigantic"}`,
 		"bad button variant":  `{"type":"button","label":"x","variant":"ghost"}`,
 		"bad keyboard type":   `{"type":"text_input","id":"x","keyboard":"qwerty"}`,
+		"date_input no id":    `{"type":"date_input","label":"마감일"}`,
 		"bad action type":     `{"type":"button","label":"x","action":{"type":"explode"}}`,
 		"children not array":  `{"type":"column","children":"nope"}`,
 		"missing type":        `{"value":"x"}`,

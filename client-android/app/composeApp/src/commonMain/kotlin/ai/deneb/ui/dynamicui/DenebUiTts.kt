@@ -25,6 +25,10 @@ private fun DenebUiNode.walk(parts: MutableList<String>) {
 
         is TextInputNode -> (value ?: label ?: placeholder)?.let { parts += it }
 
+        is DateInputNode -> (value ?: label)?.let { parts += it }
+
+        is TimeInputNode -> (value ?: label)?.let { parts += it }
+
         is CheckboxNode -> parts += label
 
         is SwitchNode -> parts += label

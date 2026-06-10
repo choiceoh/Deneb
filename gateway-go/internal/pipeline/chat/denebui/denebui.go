@@ -75,6 +75,8 @@ var nodeSpecs = map[string]nodeSpec{
 	// Interactive (id-bearing).
 	"button":      {actionFields: []string{"action"}, enums: map[string][]string{"variant": buttonVariants}},
 	"text_input":  {requireID: true, enums: map[string][]string{"keyboard": keyboardTypes}},
+	"date_input":  {requireID: true},
+	"time_input":  {requireID: true},
 	"checkbox":    {requireID: true},
 	"select":      {requireID: true},
 	"switch":      {requireID: true},

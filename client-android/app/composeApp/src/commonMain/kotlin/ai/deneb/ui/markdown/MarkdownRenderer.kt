@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import kotlin.math.sqrt
 import androidx.compose.ui.Alignment
@@ -42,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.dynamicui.FrozenSubmission
+import ai.deneb.ui.dynamicui.DenebUiParser
 import ai.deneb.ui.dynamicui.DenebUiRenderer
 import ai.deneb.ui.markdown.math.MathFormula
 import kotlinx.collections.immutable.persistentListOf
@@ -85,6 +88,13 @@ fun MarkdownContent(
     }
     MarkdownContent(doc, modifier, isInteractive, onUiCallback, frozen)
 }
+
+/**
+ * True while the surrounding message is still streaming. [DenebUiPending] blocks
+ * (deneb-ui fences whose closing ``` hasn't arrived) render as a quiet placeholder
+ * when set, and fall back to the salvage decode when the message is final.
+ */
+val LocalDenebUiStreaming = compositionLocalOf { false }
 
 // The base text style for AI-answer body content. One step down from bodyLarge
 // (14sp vs 15sp) with messenger-tight line-height (18sp ≈ 1.29, inside the
@@ -145,6 +155,52 @@ private fun BlockRenderer(
         is DenebUiError -> CodeFenceBlock(
             language = "json",
             code = block.rawJson,
+            modifier = Modifier.padding(vertical = 4.dp),
+        )
+
+        is DenebUiPending -> DenebUiPendingBlock(block, isInteractive, onUiCallback, frozen)
+    }
+}
+
+@Composable
+private fun DenebUiPendingBlock(
+    block: DenebUiPending,
+    isInteractive: Boolean,
+    onUiCallback: (String, Map<String, String>) -> Unit,
+    frozen: FrozenSubmission?,
+) {
+    if (LocalDenebUiStreaming.current) {
+        // Mid-stream: hold a stable placeholder instead of re-rendering a half-built
+        // form (or the truncation-salvage warning) on every token tick.
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(vertical = 8.dp),
+        ) {
+            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+            Text(
+                "화면 구성 중…",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        return
+    }
+    // Final message with an unclosed fence — a genuinely truncated reply. Decode with
+    // the usual salvage pipeline so whatever finished streaming is still shown.
+    val result = remember(block.rawBody) { DenebUiParser.parseUiBlockBody(block.rawBody) }
+    when (result) {
+        is DenebUiParser.UiBlockResult.Ui -> DenebUiRenderer(
+            node = result.node,
+            isInteractive = isInteractive,
+            onCallback = onUiCallback,
+            frozen = frozen,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+
+        else -> CodeFenceBlock(
+            language = "json",
+            code = block.rawBody,
             modifier = Modifier.padding(vertical = 4.dp),
         )
     }

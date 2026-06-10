@@ -21,6 +21,12 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "인터랙티브 폼에 날짜·시간 선택 — 마감일·미팅 시각을 타이핑 대신 네이티브 피커로",
+            "답변이 흐르는 동안 만들어지는 중인 인터랙티브 화면은 '화면 구성 중…'으로 차분하게 — 반쪽짜리 폼이 깜빡이던 것 해소",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "사람과 인물 위키를 한 화면으로 통합 — 최근 연락(메일 빈도)과 인물 문서가 한 목록에, 서로 아는 사람은 위키 요약이 함께 표시",
             "통합된 '사람'은 카테고리 화면 상단 진입점으로 이동 — 메뉴의 people 항목과 카테고리 목록의 '인물' 항목은 정리",
         ),

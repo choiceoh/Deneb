@@ -38,14 +38,25 @@ class StreamingToleranceTest {
     }
 
     @Test
-    fun `truncated deneb-ui json is repaired into a block`() {
+    fun `unclosed deneb-ui fence becomes a pending block carrying the body`() {
+        // While the fence is open the decode is deferred to render time: a quiet
+        // placeholder during streaming, the salvage pipeline on a final reply.
         val md = """
             ```deneb-ui
             {"type":"column","children":[{"type":"text","value":"a"
         """.trimIndent()
         val doc = parseMarkdown(md)
         assertEquals(1, doc.blocks.size)
-        assertTrue(doc.blocks[0] is DenebUiBlock || doc.blocks[0] is DenebUiError)
+        val pending = doc.blocks[0]
+        assertTrue(pending is DenebUiPending)
+        assertTrue("\"type\":\"column\"" in pending.rawBody)
+    }
+
+    @Test
+    fun `closed deneb-ui fence still decodes immediately`() {
+        val md = "```deneb-ui\n{\"type\":\"text\",\"value\":\"a\"}\n```"
+        val doc = parseMarkdown(md)
+        assertTrue(doc.blocks.single() is DenebUiBlock)
     }
 
     @Test
