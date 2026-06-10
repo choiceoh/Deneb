@@ -59,6 +59,12 @@ type ProviderResolved struct {
 	Reasoning     *bool // genuine reasoning-endpoint model
 	Vision        *bool // false → image blocks are stripped before sending
 	PromptCache   *bool // false → cache_control markers are stripped
+
+	// Sampling overrides layered over the builtin ProfileFor table by
+	// ProfileForModel. Nil means "no override".
+	Temperature *float64
+	TopP        *float64
+	TopK        *int
 }
 
 // RegistryOptions configures NewRegistryWithOptions.
@@ -97,6 +103,9 @@ type Registry struct {
 	vllmWindows map[string]int
 	// vllmProbedAt rate-limits RefreshVllmRole re-discovery (per role).
 	vllmProbedAt map[Role]time.Time
+	// tunedMaxTokens holds per-model output-token floors written by the
+	// background model tuner (tuning.go).
+	tunedMaxTokens map[string]int
 	// health tracks per-model failure streaks for the circuit breaker
 	// (health.go). Guarded by its own mutex, independent of mu.
 	health healthState
@@ -222,13 +231,14 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	}
 
 	r := &Registry{
-		models:       models,
-		clients:      make(map[Role]*clientEntry),
-		providers:    opts.Providers,
-		vllmWindows:  vllmWindows,
-		vllmProbedAt: make(map[Role]time.Time),
-		health:       healthState{models: make(map[string]*modelHealth)},
-		logger:       logger,
+		models:         models,
+		clients:        make(map[Role]*clientEntry),
+		providers:      opts.Providers,
+		vllmWindows:    vllmWindows,
+		vllmProbedAt:   make(map[Role]time.Time),
+		tunedMaxTokens: make(map[string]int),
+		health:         healthState{models: make(map[string]*modelHealth)},
+		logger:         logger,
 	}
 
 	// Pre-create client entries for lazy initialization.
