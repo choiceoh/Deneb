@@ -556,26 +556,19 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				return gmail.DefaultClient()
 			},
 			Pipeline: func() (handlerminiapp.AnalyzePipeline, error) {
-				if s.modelRegistry == nil {
+				// Role selection is shared with the autonomous poller via
+				// mailAnalysisModels (stage-2 = analysis role, stage-1 = tiny
+				// role) so the two mail-analysis paths cannot drift apart.
+				// This replaces a #1816-era pin to the fallback role
+				// ("step3.7 streams unstoppable thinking") that the poller
+				// has since disproven — the pipeline disables thinking and
+				// scrubs reasoning leaks — and that broke the interactive
+				// button alone when the fallback provider's key died (401,
+				// 2026-06-10).
+				llmClient, model, localClient, localModel := s.mailAnalysisModels()
+				if llmClient == nil {
 					return nil, handlerminiapp.ErrAnalyzeNoLLM
 				}
-				// Stage-2 synthesis runs on the analysis role, same as the
-				// autonomous poller (server_chat_config.go). This used to be
-				// pinned to the fallback role as a #1816-era workaround
-				// ("step3.7 streams unstoppable thinking, no answer text"),
-				// but the poller has since proven the analysis role safe for
-				// this exact prompt — the pipeline disables thinking and
-				// scrubs reasoning leaks (gmailpoll/pipeline.go) — and the
-				// cloud fallback pin made the interactive button the only
-				// mail-analysis path that breaks when the fallback
-				// provider's key dies (401, 2026-06-10).
-				llmClient := s.modelRegistry.Client(modelrole.RoleAnalysis)
-				model := s.modelRegistry.Model(modelrole.RoleAnalysis)
-				// Stage-1 extractors (thread context + wiki fact extraction)
-				// run JSON-mode on the tiny role — same role the autonomous
-				// poller uses for its stage-1 (server_chat_config.go).
-				localClient := s.modelRegistry.Client(modelrole.RoleTiny)
-				localModel := s.modelRegistry.Model(modelrole.RoleTiny)
 				gmailClient, err := gmail.DefaultClient()
 				if err != nil {
 					return nil, err
