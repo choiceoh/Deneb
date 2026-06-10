@@ -28,10 +28,12 @@ Go HTTP/WS gateway server — the primary Deneb runtime.
 ## Common Tasks
 
 ### Adding a New RPC Method
-1. Define the method in `internal/runtime/rpc/methods.go`
-2. Register in `internal/runtime/rpc/register.go`
-3. Add handler in `internal/runtime/rpc/handler/`
-4. Follow existing patterns for request/response types
+Follow the GatewayHub wiring rules (`.claude/rules/hub-wiring.md` — enforced by
+code review + snapshot test):
+1. Define `Deps` struct + `Methods(deps Deps)` in the handler package (`internal/runtime/rpc/handler/<domain>/`)
+2. Add the service field to `rpcutil.GatewayHub` (new domains only) + update `hub.Validate()`
+3. Wire the Deps inline in `internal/runtime/server/method_registry.go` (the ONLY wiring point)
+4. Update the `requiredMethods` snapshot list in `method_registry_test.go`
 
 ### Adding a New Agent Tool
 1. Add schema to `internal/pipeline/chat/toolreg/tool_schemas.json`, run `make tool-schemas`

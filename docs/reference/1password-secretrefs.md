@@ -1,3 +1,11 @@
+---
+title: "1Password Secret References"
+summary: "Read model provider API keys from 1Password CLI secret references instead of plaintext config."
+read_when:
+  - You want provider API keys out of deneb.json plaintext
+  - You are wiring 1Password service-account auth for the gateway
+---
+
 # 1Password Secret References
 
 Deneb can read model provider API keys from 1Password CLI secret references.

@@ -1,4 +1,4 @@
-# Background Task Control Plane (`internal/tasks/`)
+# Background Task Control Plane (`internal/domain/tasks/`)
 
 Unified execution ledger tracking all background work across runtimes.
 
