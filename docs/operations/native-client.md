@@ -1,15 +1,15 @@
 ---
-title: "Native Android Client"
-summary: "Connect the native Android client and use its capture, widget, and instant-push features."
+title: "Native Client"
+summary: "Connect the native client and use its capture, widget, and instant-push features."
 read_when:
-  - You are connecting the native Android app to your gateway
+  - You are connecting the native app to your gateway
   - You want native-only features like share capture, a home-screen widget, or instant push
   - You are setting the client token or the per-role model pickers
 ---
 
-# Native Android Client
+# Native Client
 
-Deneb's user surface is the native Android client. The app owns daily chat,
+Deneb's user surface is the native client. The app owns daily chat,
 share-sheet capture from any app, the home-screen widget, and instant
 proactive push, while the agent, tools, memory, and always-on work stay on the
 gateway.
@@ -27,9 +27,9 @@ authenticated endpoint.
   interactive screen rather than plain text.
 - **Text-first.** The upstream text-to-speech was removed — the client is for reading
   and capturing, not narration.
-- **Android only.** The vendored project drops the iOS, desktop, and web KMP
-  targets. The build and the daily target is a Samsung Galaxy S26; the UI is
-  Korean-first throughout.
+- **One codebase, three platforms.** The Kotlin Multiplatform project builds
+  for Android, iOS, and desktop (macOS / Windows MSI). The daily driver is a
+  Samsung Galaxy S26; the UI is Korean-first throughout.
 
 <Info>
   The native client is a standalone APK that authenticates with a client token.
@@ -148,18 +148,19 @@ serves.
 The 설정 hub has these tabs:
 
 - **게이트웨이** — the gateway URL and client token, a live gateway status card
-  (version, native API version, current model, capabilities), a link to
-  the surviving upstream settings (providers, MCP), and a version
+  (version, native API version, current model, capabilities), and a version
   card with a **패치노트 보기** (view patch notes) sheet and an **업데이트 확인**
   (check for update) button that offers an in-place APK download when a newer
   build exists.
 - **화면** — appearance: theme (system, light, dark, OLED black) and display
   scale, applied immediately.
-- **모델** — per-role model pickers. A **메인 / 경량 / 폴백** selector
-  (main / lightweight / fallback) with the gateway's models listed below it;
-  picking one binds that model to the selected role and takes effect without a
-  restart. The roles map to work: main is chat, lightweight runs mail analysis
-  and summaries, fallback is used when main fails.
+- **모델** — per-role model pickers. A role summary (**메인 / 초경량 / 경량 /
+  분석 / 폴백** — main / tiny / lightweight / analysis / fallback) with the
+  gateway's models grouped by provider below it; picking one binds that model
+  to the selected role and takes effect without a restart. The roles map to
+  work: main is chat, analysis runs mail analysis and compaction, lightweight
+  and tiny take scoped summaries and extraction, fallback is used when main
+  fails.
 - **스킬** — the skills the agent can use (read-only). Mirrors the gateway's
   skill list: name, description, category, and whether a skill is
   user-invocable.

@@ -11,14 +11,14 @@ read_when:
 
 The Deneb gateway runs on a single host you control — a DGX Spark, a homelab
 box, a developer workstation — and binds to loopback (or your Tailscale
-interface) by default. These pages cover the native Android client, the capture
+interface) by default. These pages cover the native client, the capture
 flows that feed it, and the day-to-day features built on top (mail analysis,
 proactive delivery).
 
 ## Guides
 
 <CardGroup cols={2}>
-  <Card title="Native Android Client" icon="smartphone" href="/operations/native-client">
+  <Card title="Native Client" icon="smartphone" href="/operations/native-client">
     The daily-driver app: connect with a client token, then capture, glance at a
     home-screen widget, and get instant proactive push.
   </Card>

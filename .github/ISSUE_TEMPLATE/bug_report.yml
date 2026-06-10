@@ -25,7 +25,7 @@ body:
     attributes:
       label: Summary
       description: One-sentence statement of what is broken, based only on observed evidence. If the evidence is insufficient, respond with exactly `NOT_ENOUGH_INFO`.
-      placeholder: After upgrading from 2026.2.10 to 2026.2.17, Telegram thread replies stopped posting; reproduced twice and confirmed by gateway logs.
+      placeholder: After upgrading the gateway, native-client chat replies stopped streaming; reproduced twice and confirmed by gateway logs.
     validations:
       required: true
   - type: textarea
@@ -35,7 +35,7 @@ body:
       description: Provide the shortest deterministic repro path supported by direct observation. If the repro path cannot be grounded from the evidence, respond with exactly `NOT_ENOUGH_INFO`.
       placeholder: |
         1. Start Deneb 2026.2.17 with the attached config.
-        2. Send a Telegram thread reply in the affected chat.
+        2. Send a chat message from the native client in the affected session.
         3. Observe no reply and confirm the attached `reply target not found` log line.
     validations:
       required: true
@@ -44,7 +44,7 @@ body:
     attributes:
       label: Expected behavior
       description: State the expected result using a concrete reference such as prior observed behavior, attached docs, or a known-good version. If no grounded reference exists, respond with exactly `NOT_ENOUGH_INFO`.
-      placeholder: In 2026.2.10, the agent posted replies in the same Telegram thread under the same workflow.
+      placeholder: On the previous build, the agent streamed replies into the same session under the same workflow.
     validations:
       required: true
   - type: textarea
@@ -121,7 +121,7 @@ body:
         - Frequency (always/intermittent/edge case)
         - Consequence (missed messages, failed onboarding, extra cost, etc.)
       placeholder: |
-        Affected: Telegram group users on 2026.2.17
+        Affected: native-client chat on the current build
         Severity: High (blocks thread replies)
         Frequency: 4/4 observed attempts
         Consequence: Agents do not respond in the affected threads
