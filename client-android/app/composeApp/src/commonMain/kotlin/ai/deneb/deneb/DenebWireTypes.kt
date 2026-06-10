@@ -101,6 +101,7 @@ internal data class ModelsPayload(
     val current: String = "",
     val roles: List<RoleModel> = emptyList(),
     val sections: List<ModelSection> = emptyList(),
+    val advisories: List<String> = emptyList(),
 )
 
 @Serializable

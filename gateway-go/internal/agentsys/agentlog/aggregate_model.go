@@ -35,6 +35,9 @@ type ModelStat struct {
 	// FallbackRuns counts runs where a different model produced the answer
 	// (run.end Model ≠ requested model) — how often this model needed rescue.
 	FallbackRuns int `json:"fallbackRuns"`
+	// ThinkingRuns counts runs whose run.start carried a non-off thinking
+	// level — separates thinking-budget latency from genuinely slow models.
+	ThinkingRuns int `json:"thinkingRuns"`
 
 	ToolCalls  int `json:"toolCalls"`
 	ToolErrors int `json:"toolErrors"`
@@ -58,8 +61,10 @@ func (w *Writer) AggregateByModel(sinceMs int64) []ModelStat {
 
 	paths, _ := filepath.Glob(filepath.Join(w.baseDir, "*.jsonl"))
 	for _, path := range paths {
-		// runId → stats key, scoped per file (a run lands in exactly one file).
+		// runId → stats key / thinking flag, scoped per file (a run lands in
+		// exactly one file).
 		runModel := map[string]string{}
+		runThinking := map[string]bool{}
 		for _, e := range readAllEntries(path) {
 			if sinceMs > 0 && e.Ts < sinceMs {
 				continue
@@ -72,6 +77,7 @@ func (w *Writer) AggregateByModel(sinceMs int64) []ModelStat {
 				}
 				key := d.Provider + "/" + d.Model
 				runModel[e.RunID] = key
+				runThinking[e.RunID] = d.ThinkingLevel != "" && d.ThinkingLevel != "off"
 				if stats[key] == nil {
 					stats[key] = &ModelStat{Model: d.Model, Provider: d.Provider}
 				}
@@ -97,6 +103,9 @@ func (w *Writer) AggregateByModel(sinceMs int64) []ModelStat {
 				}
 				if d.Model != "" && d.Model != st.Model {
 					st.FallbackRuns++
+				}
+				if runThinking[e.RunID] {
+					st.ThinkingRuns++
 				}
 				if d.Compacted {
 					st.CompactedRuns++

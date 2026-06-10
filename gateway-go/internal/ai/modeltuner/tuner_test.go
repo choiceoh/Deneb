@@ -33,9 +33,10 @@ func tunerRegistry() *modelrole.Registry {
 
 func TestAnalyze_Rules(t *testing.T) {
 	stats := []agentlog.ModelStat{
-		{ // fires max_tokens + stall + latency
+		{ // fires fallback + max_tokens + stall + latency (thinking-aware message)
 			Model: "m1", Provider: "p", Runs: 10,
 			MaxTokensRecoveries: 4, TimeoutRuns: 3, P95Ms: 200_000,
+			FallbackRuns: 4, ThinkingRuns: 6,
 		},
 		{ // fires cache_break (caching active, low read ratio) + tool_errors
 			Model: "m2", Provider: "p", Runs: 10,
@@ -56,7 +57,7 @@ func TestAnalyze_Rules(t *testing.T) {
 	for _, r := range recs {
 		got[r.Model] = append(got[r.Model], r.Rule)
 	}
-	if want := []string{"latency", "max_tokens", "stall"}; strings.Join(got["m1"], ",") != strings.Join(want, ",") {
+	if want := []string{"fallback", "latency", "max_tokens", "stall"}; strings.Join(got["m1"], ",") != strings.Join(want, ",") {
 		t.Errorf("m1 rules = %v, want %v (sorted)", got["m1"], want)
 	}
 	if want := []string{"cache_break", "tool_errors"}; strings.Join(got["m2"], ",") != strings.Join(want, ",") {
@@ -172,5 +173,37 @@ func TestNewTask_ReappliesPersistedFloors(t *testing.T) {
 	})
 	if got := reg.TunedMaxTokens("m1"); got != tunedMaxTokensFloor {
 		t.Fatalf("floor after restart = %d, want %d re-applied from scorecard", got, tunedMaxTokensFloor)
+	}
+}
+
+func TestScorecardNoteAndAdvisories(t *testing.T) {
+	sc := Scorecard{
+		WindowHours: 24,
+		Models: []agentlog.ModelStat{{
+			Model: "gemma4", Provider: "vllm", Runs: 12, P95Ms: 8000,
+			CacheReadTokens: 9000, CacheCreationTokens: 100, InputTokens: 1000,
+			FallbackRuns: 2, TimeoutRuns: 1,
+		}},
+		Calibrations: map[string]Calibration{
+			"gemma4": {Model: "gemma4", LatencyMs: 1200, KoreanOK: true},
+		},
+		Recommendations: []Recommendation{
+			{Model: "gemma4", Provider: "vllm", Rule: "stall", Message: "스톨 점검"},
+		},
+	}
+
+	note := sc.NoteFor("gemma4", 16384)
+	for _, want := range []string{"24h 12런", "p95 8초", "캐시 90%", "폴백 2", "스톨 1", "프로브 1.2초✓", "출력 floor 16384"} {
+		if !strings.Contains(note, want) {
+			t.Errorf("note %q missing %q", note, want)
+		}
+	}
+	if got := sc.NoteFor("unknown-model", 0); got != "" {
+		t.Errorf("unknown model note = %q, want empty", got)
+	}
+
+	lines := sc.AdvisoryLines()
+	if len(lines) != 1 || !strings.Contains(lines[0], "vllm/gemma4: 스톨 점검") {
+		t.Errorf("advisories = %v", lines)
 	}
 }

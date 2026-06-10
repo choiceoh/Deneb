@@ -177,6 +177,8 @@ data class ModelOption(
     val health: String = "",
     val current: Boolean = false,
     val custom: Boolean = false,
+    val unhealthy: Boolean = false,
+    val note: String = "",
 )
 
 @Serializable
@@ -190,6 +192,7 @@ data class ModelsListResult(
     val current: String = "",
     val roles: List<RoleModel> = emptyList(),
     val sections: List<ModelSection> = emptyList(),
+    val advisories: List<String> = emptyList(),
 )
 
 @Serializable

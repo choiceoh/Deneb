@@ -178,6 +178,7 @@ func RunAgent(
 			Thinking:         turnThinking,
 			Temperature:      cfg.Temperature,
 			TopP:             cfg.TopP,
+			TopK:             cfg.TopK,
 			FrequencyPenalty: cfg.FrequencyPenalty,
 			PresencePenalty:  cfg.PresencePenalty,
 			StopSequences:    cfg.StopSequences,

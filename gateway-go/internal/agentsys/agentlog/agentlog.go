@@ -47,6 +47,10 @@ type RunStartData struct {
 	Provider string `json:"provider"`
 	Message  string `json:"message"` // user input (truncated to maxMessageLen)
 	Channel  string `json:"channel,omitempty"`
+	// ThinkingLevel is the session's extended-thinking setting in effect for
+	// this run ("low".."xhigh"); empty = thinking off. Lets per-model latency
+	// analysis tell thinking-heavy runs apart from genuinely slow models.
+	ThinkingLevel string `json:"thinkingLevel,omitempty"`
 }
 
 // RunPrepData records context assembly metrics.
