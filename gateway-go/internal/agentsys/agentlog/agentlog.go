@@ -98,6 +98,12 @@ type RunEndData struct {
 	OutputTokens int    `json:"outputTokens"`
 	TotalMs      int64  `json:"totalMs"`
 	TextLen      int    `json:"textLen"`
+	// Model is the model that actually produced the answer — it differs from
+	// run.start's model only when the fallback chain fired. Aggregation keeps
+	// attributing the run to the requested model (failures belong there) but
+	// counts a FallbackRun when this differs, so per-model stats surface how
+	// often a model needed rescuing.
+	Model string `json:"model,omitempty"`
 	// CacheReadTokens/CacheCreationTokens are run totals (summed across turns).
 	// High read : low creation == healthy prompt-cache reuse.
 	CacheReadTokens     int `json:"cacheReadTokens,omitempty"`

@@ -167,7 +167,9 @@ func isSubagentSession(deps runDeps, sessionKey string) bool {
 	return sess != nil && sess.SpawnedBy != ""
 }
 
-// handleRunSuccess processes a successful agent run completion.
+// handleRunSuccess processes a successful agent run completion. actualModel is
+// the model that produced the answer (differs from run.start's model only when
+// the fallback chain fired); empty is tolerated for callers without it.
 func handleRunSuccess(
 	ctx context.Context,
 	params RunParams,
@@ -175,6 +177,7 @@ func handleRunSuccess(
 	broadcaster *streaming.Broadcaster,
 	logger *slog.Logger,
 	result *agent.AgentResult,
+	actualModel string,
 	now int64,
 	runLog *agentlog.RunLogger,
 ) {
@@ -189,6 +192,7 @@ func handleRunSuccess(
 		}
 	}
 	runLog.LogEnd(agentlog.RunEndData{
+		Model:               actualModel,
 		StopReason:          result.StopReason,
 		Turns:               result.Turns,
 		InputTokens:         result.Usage.InputTokens,

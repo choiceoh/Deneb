@@ -373,7 +373,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	if mergedCancel {
 		return
 	}
-	handleRunSuccess(ctx, params, deps, broadcaster, logger, chatResult.AgentResult, now, runLog)
+	handleRunSuccess(ctx, params, deps, broadcaster, logger, chatResult.AgentResult, chatResult.ActualModel, now, runLog)
 
 	// Process pending message: if the user sent a message while this run was
 	// active, it was queued. Now that the run is complete, drain and process it.

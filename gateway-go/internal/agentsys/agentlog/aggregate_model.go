@@ -32,6 +32,9 @@ type ModelStat struct {
 	TimeoutRuns         int `json:"timeoutRuns"`
 	MaxTokensRecoveries int `json:"maxTokensRecoveries"`
 	CompactedRuns       int `json:"compactedRuns"`
+	// FallbackRuns counts runs where a different model produced the answer
+	// (run.end Model ≠ requested model) — how often this model needed rescue.
+	FallbackRuns int `json:"fallbackRuns"`
 
 	ToolCalls  int `json:"toolCalls"`
 	ToolErrors int `json:"toolErrors"`
@@ -91,6 +94,9 @@ func (w *Writer) AggregateByModel(sinceMs int64) []ModelStat {
 				st.ToolCalls += d.ToolCalls
 				if d.StopReason == "timeout" {
 					st.TimeoutRuns++
+				}
+				if d.Model != "" && d.Model != st.Model {
+					st.FallbackRuns++
 				}
 				if d.Compacted {
 					st.CompactedRuns++

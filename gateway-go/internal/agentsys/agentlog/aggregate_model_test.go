@@ -27,9 +27,10 @@ func TestAggregateByModel(t *testing.T) {
 		TotalMs: 2000, ToolCalls: 4, MaxTokensRecoveries: 1, Compacted: true,
 	})
 
-	// Run 2: gemma4 again, in a different session file — stalled (timeout).
+	// Run 2: gemma4 again, in a different session file — stalled (timeout),
+	// rescued by a fallback model (run.end carries the answering model).
 	appendEntry(t, w, "s2", "r2", TypeRunStart, RunStartData{Model: "gemma4", Provider: "vllm"})
-	appendEntry(t, w, "s2", "r2", TypeRunEnd, RunEndData{StopReason: "timeout", Turns: 1, TotalMs: 6000})
+	appendEntry(t, w, "s2", "r2", TypeRunEnd, RunEndData{StopReason: "timeout", Turns: 1, TotalMs: 6000, Model: "glm-5-turbo"})
 
 	// Run 3: glm-5-turbo — errored out.
 	appendEntry(t, w, "s1", "r3", TypeRunStart, RunStartData{Model: "glm-5-turbo", Provider: "zai"})
@@ -46,6 +47,11 @@ func TestAggregateByModel(t *testing.T) {
 	}
 	if g.Runs != 2 || g.Turns != 4 || g.TimeoutRuns != 1 || g.CompactedRuns != 1 {
 		t.Errorf("gemma4 counters = %+v", g)
+	}
+	// Run 2 was answered by a different model → attributed to gemma4 (the
+	// requested model) but counted as a fallback rescue.
+	if g.FallbackRuns != 1 {
+		t.Errorf("gemma4 fallbackRuns = %d, want 1", g.FallbackRuns)
 	}
 	if g.InputTokens != 100 || g.OutputTokens != 50 || g.MaxTokensRecoveries != 1 {
 		t.Errorf("gemma4 tokens = %+v", g)
