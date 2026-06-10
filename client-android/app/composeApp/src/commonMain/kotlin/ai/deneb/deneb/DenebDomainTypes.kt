@@ -162,7 +162,17 @@ data class SearchResults(
 
 data class SearchHit(val path: String, val title: String, val snippet: String, val category: String)
 
-data class PersonHit(val name: String, val email: String, val messageCount: Int, val lastSubject: String)
+/** One row of the merged people directory: a recent Gmail counterparty, an 인물
+ *  wiki person, or both (matched server-side — see miniapp.people.list). A row
+ *  with a blank [email] and zero [messageCount] is wiki-only. */
+data class PersonHit(
+    val name: String,
+    val email: String,
+    val messageCount: Int,
+    val lastSubject: String,
+    val wikiPath: String = "",
+    val wikiSummary: String = "",
+)
 
 /** Full wiki/memory page for the page view. */
 data class WikiPage(

@@ -34,10 +34,18 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebPressable
 import kotlinx.coroutines.launch
 
+/** The wiki category absorbed by the merged people surface: its pages reach the
+ *  user through the pinned "사람" entry (with Gmail recency folded in), so the
+ *  raw 인물 bucket is hidden from the category list below to avoid two "people"
+ *  rows meaning different things on one screen. */
+private const val PEOPLE_WIKI_CATEGORY = "인물"
+
 /**
  * Wiki category browser (`miniapp.memory.categories`): every category with its
- * page count + corpus totals. Tap a category to list its pages. Surface-wrapped
- * so unstyled text inherits the right content color in dark mode.
+ * page count + corpus totals. Tap a category to list its pages. Also the browse
+ * hub's pinned entry points — "사람" (the merged people surface) and "최근 일기"
+ * — which are not wiki categories themselves. Surface-wrapped so unstyled text
+ * inherits the right content color in dark mode.
  */
 @Composable
 fun DenebCategoriesScreen(
@@ -45,6 +53,7 @@ fun DenebCategoriesScreen(
     onBack: () -> Unit,
     onOpenCategory: (String) -> Unit = {},
     onOpenDiary: () -> Unit = {},
+    onOpenPeople: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var data by remember { mutableStateOf<WikiCategories?>(null) }
@@ -83,27 +92,10 @@ fun DenebCategoriesScreen(
             }
             Spacer(Modifier.height(8.dp))
 
-            // Recent-diary timeline entry point ("what's been happening lately").
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .denebPressable(onClick = { haptics.tap(); onOpenDiary() })
-                    .padding(vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "최근 일기",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    "→",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            // Pinned entry points above the wiki buckets: the merged people surface
+            // (recent Gmail contacts + 인물 pages) and the recent-diary timeline.
+            PinnedEntryRow("사람") { haptics.tap(); onOpenPeople() }
+            PinnedEntryRow("최근 일기") { haptics.tap(); onOpenDiary() }
             Spacer(Modifier.height(8.dp))
 
             val d = data
@@ -121,7 +113,7 @@ fun DenebCategoriesScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(8.dp))
-                    d.categories.forEach { cat ->
+                    d.categories.filter { it.name != PEOPLE_WIKI_CATEGORY }.forEach { cat ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -150,4 +142,30 @@ fun DenebCategoriesScreen(
             }
         }
     }
+}
+
+/** A pinned non-category entry point row ("사람", "최근 일기"): label + a trailing
+ *  arrow, in the same flat row idiom as the category rows below it. */
+@Composable
+private fun PinnedEntryRow(label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .denebPressable(onClick = onClick)
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            "→",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 }

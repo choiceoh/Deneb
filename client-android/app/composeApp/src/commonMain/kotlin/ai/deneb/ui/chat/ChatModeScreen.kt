@@ -121,7 +121,6 @@ internal fun ChatModeScreen(
     onOpenMail: () -> Unit = {},
     onOpenCalendar: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
-    onOpenPeople: () -> Unit = {},
     onOpenCategories: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)?,
 ) {
@@ -206,7 +205,6 @@ internal fun ChatModeScreen(
                     onOpenSearch = onOpenSearch,
                     onOpenMail = onOpenMail,
                     onOpenCalendar = onOpenCalendar,
-                    onOpenPeople = onOpenPeople,
                     onOpenCategories = onOpenCategories,
                     onNavigateToSettings = onNavigateToSettings,
                     onClose = { drawerScope.launch { drawerState.close() } },

@@ -21,6 +21,12 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "사람과 인물 위키를 한 화면으로 통합 — 최근 연락(메일 빈도)과 인물 문서가 한 목록에, 서로 아는 사람은 위키 요약이 함께 표시",
+            "통합된 '사람'은 카테고리 화면 상단 진입점으로 이동 — 메뉴의 people 항목과 카테고리 목록의 '인물' 항목은 정리",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "메일 분석 접힘 카드의 미리보기가 제목 대신 본문 첫 줄을 표시 — 'AI 분석 · 이메일 분석' 같은 제목 반복 제거",
             "설정 모델 탭에서 키가 만료된 제공자를 '인증 만료'로 구분 표시 (응답 없음과 별개)",
         ),

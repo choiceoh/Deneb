@@ -22,7 +22,6 @@ fun ChatScreen(
     onOpenMail: () -> Unit = {},
     onOpenCalendar: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
-    onOpenPeople: () -> Unit = {},
     onOpenCategories: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
@@ -35,7 +34,6 @@ fun ChatScreen(
         onOpenMail = onOpenMail,
         onOpenCalendar = onOpenCalendar,
         onOpenSearch = onOpenSearch,
-        onOpenPeople = onOpenPeople,
         onOpenCategories = onOpenCategories,
         navigationTabBar = navigationTabBar,
     )
@@ -49,7 +47,6 @@ fun ChatScreenContent(
     onOpenMail: () -> Unit = {},
     onOpenCalendar: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
-    onOpenPeople: () -> Unit = {},
     onOpenCategories: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
@@ -63,7 +60,6 @@ fun ChatScreenContent(
             onOpenMail = onOpenMail,
             onOpenCalendar = onOpenCalendar,
             onOpenSearch = onOpenSearch,
-            onOpenPeople = onOpenPeople,
             onOpenCategories = onOpenCategories,
             navigationTabBar = navigationTabBar,
         )
