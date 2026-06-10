@@ -1,8 +1,8 @@
 // dispatch.go — Main subagent command dispatcher.
 // Mirrors src/auto-reply/reply/commands-subagents.ts (95 LOC).
 //
-// This file dispatches /subagents, /kill, /steer, /tell, /focus, /unfocus,
-// and /agents commands to their respective action handlers.
+// This file dispatches /subagents, /kill, /steer, /tell, and /agents
+// commands to their respective action handlers.
 package subagent
 
 import (
@@ -21,10 +21,6 @@ type SubagentCommandDeps struct {
 	Send *SubagentSendDeps
 	// Spawn deps.
 	Spawn *SubagentSpawnDeps
-	// Focus deps.
-	Focus *SubagentFocusDeps
-	// Unfocus deps.
-	Unfocus *SubagentUnfocusDeps
 	// Agents deps.
 	Agents *SubagentAgentsDeps
 }
@@ -88,10 +84,6 @@ func HandleSubagentsCommand(
 		return HandleSubagentsHelpAction()
 	case SubagentsActionAgents:
 		return HandleSubagentsAgentsAction(ctx, deps.Agents)
-	case SubagentsActionFocus:
-		return HandleSubagentsFocusAction(ctx, deps.Focus)
-	case SubagentsActionUnfocus:
-		return HandleSubagentsUnfocusAction(ctx, deps.Unfocus)
 	case SubagentsActionList:
 		return HandleSubagentsListAction(ctx)
 	case SubagentsActionKill:
