@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "메일 검색창은 평소 숨겨두고, 목록을 아래로 끌어내리면 나타나도록 — 받은 메일이 화면 맨 위부터 보임 (계속 당기면 새로고침은 그대로)",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "인터랙티브 폼에 날짜·시간 선택 — 마감일·미팅 시각을 타이핑 대신 네이티브 피커로",
             "답변이 흐르는 동안 만들어지는 중인 인터랙티브 화면은 '화면 구성 중…'으로 차분하게 — 반쪽짜리 폼이 깜빡이던 것 해소",
         ),

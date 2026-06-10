@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -70,9 +71,11 @@ import kotlinx.coroutines.launch
  * long-press a row (with haptic) to multi-select; a tonal bottom bar runs bulk
  * read / archive / trash, and "더 보기" pages through nextPageToken. Tapping a
  * row opens the detail screen. The search field runs a full-mailbox Gmail
- * query (IME search submits; clearing it returns to the inbox view). Controls
- * (checkbox, buttons, search field, pull refresh) stay Material; only the
- * presentation is Deneb.
+ * query (IME search submits; clearing it returns to the inbox view). It is the
+ * first list item, parked just above the viewport (iOS Mail style): the inbox
+ * opens without it, dragging the list down reveals it, and pulling past it
+ * still triggers the refresh. Controls (checkbox, buttons, search field, pull
+ * refresh) stay Material; only the presentation is Deneb.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -182,37 +185,17 @@ fun DenebMailScreen(
                 }
             }
 
-            if (!selecting) {
-                DenebSearchField(
-                    query = searchText,
-                    onQueryChange = {
-                        searchText = it
-                        // Clearing the field (✕ or backspace-to-empty) returns to the inbox.
-                        if (it.isBlank() && activeQuery != null) runSearch("")
-                    },
-                    placeholder = "전체 메일 검색 (키워드, from:…)",
-                    onSearch = { runSearch(searchText) },
-                    clearContentDescription = "검색 지우기",
-                    // Field carries its own 8dp inset; 16dp more aligns the pill with
-                    // the screen's 24dp content margins.
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-            }
+            // The search field lives inside the list as item 0, and the list starts
+            // at item 1 so the field sits just above the viewport: dragging the list
+            // down reveals it, pulling past it still reaches the refresh indicator.
+            // (When the content is shorter than the viewport the offset clamps to 0
+            // and the field simply shows — with no scroll range there is no way to
+            // pull it out, so that is the right fallback.)
+            val listState = rememberLazyListState(initialFirstVisibleItemIndex = 1)
 
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (mail.isEmpty() && loadOk == null) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { DenebLoading() }
-                } else if (mail.isEmpty() && loadOk == false) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        DenebError(
-                            "메일을 불러오지 못했어요.",
-                            onRetry = { scope.launch { loadOk = null; loadOk = client.refreshMail(activeQuery) } },
-                        )
-                    }
-                } else if (mail.isEmpty()) {
-                    Box(Modifier.padding(horizontal = 24.dp)) {
-                        DenebEmpty(if (activeQuery != null) "검색 결과 없음" else "최근 7일 메일 없음")
-                    }
                 } else {
                     PullToRefreshBox(
                         isRefreshing = refreshing,
@@ -221,7 +204,44 @@ fun DenebMailScreen(
                     ) {
                         val today = Clock.System.todayIn(TimeZone.currentSystemDefault())
                         val sections = remember(mail, today) { mailSections(mail, today) }
-                        LazyColumn(Modifier.fillMaxSize()) {
+                        LazyColumn(Modifier.fillMaxSize(), state = listState) {
+                            if (!selecting) {
+                                item(key = "search") {
+                                    DenebSearchField(
+                                        query = searchText,
+                                        onQueryChange = {
+                                            searchText = it
+                                            // Clearing the field (✕ or backspace-to-empty) returns to the inbox.
+                                            if (it.isBlank() && activeQuery != null) runSearch("")
+                                        },
+                                        placeholder = "전체 메일 검색 (키워드, from:…)",
+                                        onSearch = { runSearch(searchText) },
+                                        clearContentDescription = "검색 지우기",
+                                        // Field carries its own 8dp inset; 16dp more aligns the pill with
+                                        // the screen's 24dp content margins.
+                                        modifier = Modifier.padding(horizontal = 16.dp),
+                                    )
+                                }
+                            }
+                            // Error and empty render inside the list so the search field
+                            // stays reachable — a failed or empty *search* must keep the
+                            // field available to edit or clear the query.
+                            if (mail.isEmpty() && loadOk == false) {
+                                item(key = "load-error") {
+                                    Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
+                                        DenebError(
+                                            "메일을 불러오지 못했어요.",
+                                            onRetry = { scope.launch { loadOk = null; loadOk = client.refreshMail(activeQuery) } },
+                                        )
+                                    }
+                                }
+                            } else if (mail.isEmpty()) {
+                                item(key = "empty") {
+                                    Box(Modifier.padding(horizontal = 24.dp)) {
+                                        DenebEmpty(if (activeQuery != null) "검색 결과 없음" else "최근 7일 메일 없음")
+                                    }
+                                }
+                            }
                             sections.forEach { section ->
                                 item(key = "section-${section.label}") {
                                     DenebSectionLabel(section.label, Modifier.padding(horizontal = 24.dp))
