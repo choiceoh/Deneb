@@ -564,7 +564,6 @@ func prepareContextAndPrompt(
 			CompactionFired:     compactionFired,
 			AutoDeliveredOutput: params.AutoDeliveredOutput,
 			HindsightEnabled:    deps.hindsightClient != nil,
-			PinnedFacts:         formatPinnedFactsBlock(listPinnedFacts(params.SessionKey)),
 			CalendarGlance:      calendarGlance,
 			TopicKnowledge:      topicKnowledge,
 			TopicCacheKey:       topicCacheKey,

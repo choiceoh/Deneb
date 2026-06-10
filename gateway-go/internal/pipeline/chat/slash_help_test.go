@@ -16,9 +16,15 @@ func TestParseSlashCommand_Help(t *testing.T) {
 
 func TestSlashHelpText_ListsCommands(t *testing.T) {
 	text := slashHelpText()
-	for _, want := range []string{"/help", "/status", "/reset", "/pin", "/pins", "/unpin", "/model", "/think", "/mode"} {
+	for _, want := range []string{"/help", "/status", "/reset", "/kill", "/rollback", "/update", "/restart"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("slashHelpText() missing %q", want)
+		}
+	}
+	// Removed user commands must not be advertised.
+	for _, gone := range []string{"/pin", "/model", "/think", "/mode", "/mail", "/insights"} {
+		if strings.Contains(text, gone+" ") || strings.Contains(text, gone+"`") {
+			t.Errorf("slashHelpText() still lists removed command %q", gone)
 		}
 	}
 }

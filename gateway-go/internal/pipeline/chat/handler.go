@@ -86,13 +86,6 @@ type Handler struct {
 	// doesn't depend on the domain/skills/genesis package directly.
 	skillUsageRecorder SkillUsageRecorder
 
-	// appSettings persists user-mutable runtime state — currently only the
-	// "active home" chat set by /use-forum. Optional: if nil, /use-forum
-	// returns an error explaining migration is unavailable. The chat package
-	// stays free of any infra import by talking through the AppSettings
-	// interface (concrete *appsettings.Store satisfies it).
-	appSettings AppSettings
-
 	// topicResolver maps a forum threadID to a per-topic knowledge key for
 	// system-prompt injection. Optional: nil disables per-topic knowledge.
 	topicResolver TopicResolver
@@ -101,16 +94,6 @@ type Handler struct {
 	// the dynamic system-prompt block. Optional: nil disables ambient calendar
 	// awareness (the live `calendar` tool is unaffected).
 	calendarGlanceFn CalendarGlanceFunc
-}
-
-// AppSettings is the minimal app-settings surface the chat handler needs to
-// process /use-forum. The concrete implementation lives in
-// internal/infra/appsettings and is wired at server construction.
-type AppSettings interface {
-	// SetActiveHome records the chat that owns future bot conversation.
-	// Implementations must persist atomically — a crash mid-write must not
-	// produce a truncated settings file.
-	SetActiveHome(chatID int64, chatType string) error
 }
 
 // TopicResolver maps a Telegram forum threadID to a per-topic knowledge key
@@ -206,11 +189,6 @@ type HandlerConfig struct {
 	EmitAgentFn      func(kind, sessionKey, runID string, payload map[string]any)
 	EmitTranscriptFn func(sessionKey string, message any, messageID string)
 
-	// AppSettings persists /use-forum migration state. Optional: when nil,
-	// /use-forum politely refuses with "migration unavailable" so a degraded
-	// boot path (no settings dir) doesn't silently lose user intent.
-	AppSettings AppSettings
-
 	// TopicResolver maps a forum threadID to a per-topic knowledge key.
 	// Optional: nil disables per-topic knowledge injection.
 	TopicResolver TopicResolver
@@ -235,12 +213,6 @@ func DefaultHandlerConfig() HandlerConfig {
 		MaxTokens:       defaultMaxTokens,
 	}
 }
-
-// InsightsProviderFunc returns a Telegram-safe MarkdownV2 report string for the
-// /insights command. `days` is the lookback window (defaulted upstream).
-// Returns an error if generation fails — the dispatcher surfaces the failure
-// to the user without leaking internals.
-type InsightsProviderFunc func(ctx context.Context, days int) (markdown string, err error)
 
 // StatusDepsFunc returns server-level status data for the /status command.
 // Called lazily so values are always fresh.
@@ -290,7 +262,6 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		tools:                cfg.Tools,
 		authManager:          cfg.AuthManager,
 		jobTracker:           cfg.JobTracker,
-		appSettings:          cfg.AppSettings,
 		topicResolver:        cfg.TopicResolver,
 		calendarGlanceFn:     cfg.CalendarGlanceFn,
 		providerConfigs:      cloneProviderConfigs(cfg.ProviderConfigs),

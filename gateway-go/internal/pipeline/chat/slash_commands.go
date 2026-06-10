@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 
@@ -46,6 +45,13 @@ func ParseSlashCommand(text string) *SlashResult {
 	}
 
 	// Fall back to hardcoded builtins.
+	//
+	// Scope: operational commands only. The user-facing conversational
+	// commands (/model, /think, /pin, /mode, /mail, /insights, /use-forum,
+	// Telegram-era /models) were removed — the native client is the sole
+	// surface and covers those through its own UI (model picker via
+	// miniapp.models.*) or config defaults (agents.defaults.thinking);
+	// unrecognized slash text now flows to the LLM as a normal message.
 	switch cmd {
 	case "help", "도움말", "?":
 		// Discovery: list the builtin slash commands. Response is filled by the
@@ -66,80 +72,11 @@ func ParseSlashCommand(text string) *SlashResult {
 			Response: "", // Will be filled by the handler with actual status.
 			Command:  "status",
 		}
-	case "pin", "고정":
-		return &SlashResult{
-			Handled: true,
-			Command: "pin",
-			Args:    args,
-		}
-	case "unpin", "고정해제":
-		return &SlashResult{
-			Handled: true,
-			Command: "unpin",
-			Args:    args,
-		}
-	case "pins", "고정목록":
-		return &SlashResult{
-			Handled: true,
-			Command: "pins",
-		}
 	case "kill", "stop", "cancel":
 		return &SlashResult{
 			Handled:  true,
 			Response: "실행이 중단되었습니다.",
 			Command:  "kill",
-		}
-	case "model":
-		// Accepts model ID ("google/gemini-3.1-pro") or role name ("main", "lightweight", "fallback").
-		// No args: the dispatcher delivers the model line-up (renderModelInfo) —
-		// current model, roles, health, capability/tuning state.
-		if args == "" {
-			return &SlashResult{
-				Handled: true,
-				Command: "model",
-			}
-		}
-		return &SlashResult{
-			Handled:  true,
-			Response: fmt.Sprintf("모델이 %q(으)로 변경되었습니다.", args),
-			Command:  "model",
-			Args:     args,
-		}
-	case "models":
-		return &SlashResult{
-			Handled:  true,
-			Response: "모델 퀵체인지는 텔레그램에서만 지원됩니다.",
-			Command:  "models",
-		}
-	case "think":
-		// Args may carry a subcommand (e.g. "interleaved", "interleaved off").
-		// Response is filled by the dispatcher based on the resolved action so
-		// the user gets the actual new state, not a placeholder.
-		return &SlashResult{
-			Handled: true,
-			Command: "think",
-			Args:    args,
-		}
-	case "mode", "모드":
-		return &SlashResult{
-			Handled:  true,
-			Response: "",
-			Command:  "mode",
-			Args:     args,
-		}
-	case "mail", "메일":
-		return &SlashResult{
-			Handled:  true,
-			Response: "",
-			Command:  "mail",
-		}
-	case "insights", "사용량":
-		// Optional numeric arg (days). Default handled in dispatcher.
-		return &SlashResult{
-			Handled:  true,
-			Response: "",
-			Command:  "insights",
-			Args:     args,
 		}
 	case "rollback", "롤백":
 		// Subcommand parsing (list/목록 | diff/비교 | restore/복원) happens in
@@ -169,17 +106,6 @@ func ParseSlashCommand(text string) *SlashResult {
 			Response: "",
 			Command:  "restart",
 			Args:     args,
-		}
-	// /use-forum migrates the bot's home from the 1:1 chat into a Forum
-	// supergroup. Must be invoked from inside the target supergroup; the
-	// dispatcher refuses if the delivery target looks like a direct chat
-	// (positive Telegram chat IDs) so a stray /use-forum in the 1:1 doesn't
-	// silently re-bind to itself.
-	case "use-forum":
-		return &SlashResult{
-			Handled:  true,
-			Response: "",
-			Command:  "use-forum",
 		}
 	default:
 		// Not a recognized slash command; pass through to LLM.

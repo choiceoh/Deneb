@@ -14,22 +14,27 @@ func TestParseSlashCommand(t *testing.T) {
 		{"/stop", false, "kill", ""},
 		{"/cancel", false, "kill", ""},
 		{"/status", false, "status", ""},
-		{"/pin 거래처 X 담당자는 김부장", false, "pin", "거래처 X 담당자는 김부장"},
-		{"/고정 마감 6/15", false, "pin", "마감 6/15"},
-		{"/unpin 2", false, "unpin", "2"},
-		{"/고정해제 1", false, "unpin", "1"},
-		{"/pins", false, "pins", ""},
-		{"/고정목록", false, "pins", ""},
-		{"/model claude-opus-4-6", false, "model", "claude-opus-4-6"},
-		{"/model", false, "model", ""},
-		{"/think", false, "think", ""},
+		{"/help", false, "help", ""},
+		{"/rollback list", false, "rollback", "list"},
+		{"/update 확인", false, "update", "확인"},
+		{"/restart", false, "restart", ""},
 		{"/unknown", true, "", ""},
 		{"hello", true, "", ""},
 		{"", true, "", ""},
 		{" /reset ", false, "reset", ""},
 		{"/reset@MyBot", false, "reset", ""},
-		{"/model@MyBot claude-opus-4-6", false, "model", "claude-opus-4-6"},
 		{"/status@mybot", false, "status", ""},
+		// Removed user commands must fall through to the LLM as plain text.
+		{"/model claude-opus-4-6", true, "", ""},
+		{"/think", true, "", ""},
+		{"/pin 거래처 X", true, "", ""},
+		{"/pins", true, "", ""},
+		{"/unpin 1", true, "", ""},
+		{"/mode", true, "", ""},
+		{"/mail", true, "", ""},
+		{"/insights", true, "", ""},
+		{"/use-forum", true, "", ""},
+		{"/models", true, "", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
@@ -50,20 +55,5 @@ func TestParseSlashCommand(t *testing.T) {
 				t.Errorf("ParseSlashCommand(%q).Args = %q, want %q", tt.input, got.Args, tt.wantArg)
 			}
 		})
-	}
-}
-
-func TestParseSlashCommand_Mail(t *testing.T) {
-	for _, input := range []string{"/mail", "/메일", "/mail@MyBot"} {
-		got := ParseSlashCommand(input)
-		if got == nil {
-			t.Fatalf("ParseSlashCommand(%q) = nil, want command", input)
-		}
-		if got.Command != "mail" {
-			t.Errorf("ParseSlashCommand(%q).Command = %q, want %q", input, got.Command, "mail")
-		}
-		if !got.Handled {
-			t.Errorf("ParseSlashCommand(%q).Handled = false, want true", input)
-		}
 	}
 }

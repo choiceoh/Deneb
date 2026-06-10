@@ -232,8 +232,8 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 // dispatch layer's reply (delivered via ReplyFn, unwired on the native-only
 // deployment) was lost. The collector captures every immediate respond() call
 // so the slash reply returns in the RPC response the client renders.
-// Long-running commands (/mail, /update, …) reply from their own goroutines
-// later; their sync response is an acknowledgement only.
+// Long-running commands (/update, /rollback, …) reply from their own
+// goroutines later; their sync response is an acknowledgement only.
 func (h *Handler) trySlashSync(sessionKey, message string, opts *SyncOptions) (*SyncResult, bool) {
 	// PrebuiltMessages flows (OpenAI-compatible HTTP with full history) are
 	// API traffic, not interactive chat — leave them untouched.
