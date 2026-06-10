@@ -327,7 +327,8 @@ private fun AppContent(
                     composable<Home> {
                         ChatScreen(
                             viewModel = chatViewModel,
-                            // TTS removed for Deneb — text-first client.
+                            // Deneb chat is text-first — the TTS instance App
+                            // still configures above is not wired into chat.
                             textToSpeech = null,
                             onNavigateToSettings = {
                                 navController.navigate(DenebConfig)
