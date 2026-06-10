@@ -459,6 +459,8 @@ private fun parseTextInputNode(obj: JsonObject): TextInputNode = TextInputNode(
     placeholder = obj.readNullableString("placeholder"),
     value = obj.readNullableString("value"),
     multiline = obj.readNullableBoolean("multiline"),
+    keyboard = obj.readNullableString("keyboard"),
+    required = obj.readNullableBoolean("required"),
 )
 
 private fun parseCheckboxNode(obj: JsonObject): CheckboxNode = CheckboxNode(
@@ -472,6 +474,8 @@ private fun parseSelectNode(obj: JsonObject): SelectNode = SelectNode(
     label = obj.readNullableString("label"),
     options = obj.readStringList("options"),
     selected = obj.readNullableString("selected"),
+    placeholder = obj.readNullableString("placeholder"),
+    required = obj.readNullableBoolean("required"),
 )
 
 private fun parseSwitchNode(obj: JsonObject): SwitchNode = SwitchNode(
@@ -494,6 +498,7 @@ private fun parseRadioGroupNode(obj: JsonObject): RadioGroupNode = RadioGroupNod
     label = obj.readNullableString("label"),
     options = obj.readStringList("options"),
     selected = obj.readNullableString("selected"),
+    required = obj.readNullableBoolean("required"),
 )
 
 private fun parseChipGroupNode(obj: JsonObject): ChipGroupNode {
@@ -512,6 +517,7 @@ private fun parseChipGroupNode(obj: JsonObject): ChipGroupNode {
         id = obj.readRequiredId(),
         chips = obj.readChipList("chips"),
         selection = selection,
+        required = obj.readNullableBoolean("required"),
     )
 }
 

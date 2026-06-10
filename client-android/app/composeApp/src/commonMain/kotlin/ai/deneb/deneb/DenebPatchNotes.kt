@@ -21,6 +21,12 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "인터랙티브 폼에 필수 입력 검증 — 빈 필수 항목이 있으면 제출이 막히고 해당 칸이 빨갛게 표시",
+            "숫자·이메일·전화 입력 칸은 알맞은 키보드가 바로 열림, 선택 상자엔 안내 문구(placeholder) 지원",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "메일 본문 속 링크가 바로 탭 가능해지고, 본문 텍스트를 길게 눌러 복사 가능",
             "잘린 긴 메일은 '전체 보기'로 끝까지 읽기",
             "HTML 표 메일의 칸이 붙어 나오던 것 교정(품명·단가 구분), 목록은 • 글머리표, 인용은 > 표시로",

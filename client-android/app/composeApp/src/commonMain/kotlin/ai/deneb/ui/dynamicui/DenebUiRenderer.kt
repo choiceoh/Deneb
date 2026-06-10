@@ -54,6 +54,24 @@ data class FrozenSubmission(
 
 internal val LocalFrozenSubmission = compositionLocalOf<FrozenSubmission?> { null }
 
+/**
+ * Form-validation context for one rendered deneb-ui tree: which input ids are
+ * required, and which currently show a "필수" error. Buttons consult it before
+ * firing a callback (blank required inputs block the submit and get flagged);
+ * inputs clear their own flag on edit. CompositionLocal so the many Render*
+ * signatures stay untouched.
+ */
+internal class UiFormValidation(
+    val requiredIds: Set<String>,
+    val errors: SnapshotStateMap<String, Boolean>,
+) {
+    /** Required ids among [ids] whose current form value is blank. */
+    fun missingFrom(ids: List<String>, formState: Map<String, String>): List<String> =
+        ids.filter { it in requiredIds && formState[it].isNullOrBlank() }
+}
+
+internal val LocalUiFormValidation = compositionLocalOf<UiFormValidation?> { null }
+
 @Composable
 fun DenebUiRenderer(
     node: DenebUiNode,
@@ -65,6 +83,8 @@ fun DenebUiRenderer(
 ) {
     val formState = remember { mutableStateMapOf<String, String>() }
     val toggleState = remember { mutableStateMapOf<String, Boolean>() }
+    val validationErrors = remember { mutableStateMapOf<String, Boolean>() }
+    val validation = remember(node) { UiFormValidation(collectRequiredIds(node), validationErrors) }
     var hasError by remember { mutableStateOf(false) }
 
     LaunchedEffect(node, frozen?.values) {
@@ -86,7 +106,10 @@ fun DenebUiRenderer(
         return
     }
 
-    CompositionLocalProvider(LocalFrozenSubmission provides frozen) {
+    CompositionLocalProvider(
+        LocalFrozenSubmission provides frozen,
+        LocalUiFormValidation provides validation,
+    ) {
         if (wrapInCard) {
             Card(
                 modifier = modifier.fillMaxWidth().wrapContentHeight(),
@@ -226,6 +249,25 @@ private fun initializeFormState(node: DenebUiNode, formState: MutableMap<String,
 
         else -> {}
     }
+}
+
+/** Walk the tree and collect ids of inputs flagged `required:true`. */
+private fun collectRequiredIds(node: DenebUiNode, into: MutableSet<String> = mutableSetOf()): Set<String> {
+    when (node) {
+        is TextInputNode -> if (node.required == true) into.add(node.id)
+        is SelectNode -> if (node.required == true) into.add(node.id)
+        is RadioGroupNode -> if (node.required == true) into.add(node.id)
+        is ChipGroupNode -> if (node.required == true && node.selection != "none") into.add(node.id)
+        is ColumnNode -> node.children.forEach { collectRequiredIds(it, into) }
+        is RowNode -> node.children.forEach { collectRequiredIds(it, into) }
+        is CardNode -> node.children.forEach { collectRequiredIds(it, into) }
+        is ListNode -> node.items.forEach { collectRequiredIds(it, into) }
+        is BoxNode -> node.children.forEach { collectRequiredIds(it, into) }
+        is TabsNode -> node.tabs.forEach { tab -> tab.children.forEach { collectRequiredIds(it, into) } }
+        is AccordionNode -> node.children.forEach { collectRequiredIds(it, into) }
+        else -> {}
+    }
+    return into
 }
 
 internal fun collectFormData(action: CallbackAction, formState: Map<String, String>): Map<String, String> {

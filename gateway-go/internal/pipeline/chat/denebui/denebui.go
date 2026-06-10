@@ -42,6 +42,7 @@ type nodeSpec struct {
 
 var (
 	textStyles      = []string{"headline", "title", "body", "caption"}
+	keyboardTypes   = []string{"text", "number", "decimal", "email", "phone", "url"}
 	buttonVariants  = []string{"filled", "outlined", "text", "tonal"}
 	alertSeverities = []string{"info", "success", "warning", "error"}
 	actionTypes     = []string{"callback", "toggle", "open_url", "copy_to_clipboard"}
@@ -73,7 +74,7 @@ var nodeSpecs = map[string]nodeSpec{
 	"table":  {}, // headers/rows are strings, not nodes
 	// Interactive (id-bearing).
 	"button":      {actionFields: []string{"action"}, enums: map[string][]string{"variant": buttonVariants}},
-	"text_input":  {requireID: true},
+	"text_input":  {requireID: true, enums: map[string][]string{"keyboard": keyboardTypes}},
 	"checkbox":    {requireID: true},
 	"select":      {requireID: true},
 	"switch":      {requireID: true},

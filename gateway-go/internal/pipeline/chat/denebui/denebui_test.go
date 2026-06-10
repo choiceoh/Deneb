@@ -49,6 +49,12 @@ func TestValidate_Valid(t *testing.T) {
 			{"type":"checkbox","id":"agree","label":"동의"},
 			{"type":"button","label":"제출","action":{"type":"callback","event":"submit","collectFrom":["name","agree"]}}
 		]}`,
+		"required form with keyboard and placeholder": `{"type":"column","children":[
+			{"type":"text_input","id":"qty","label":"수량","required":true,"keyboard":"number"},
+			{"type":"select","id":"cat","label":"분류","options":["업무","개인"],"placeholder":"선택…","required":true},
+			{"type":"radio_group","id":"prio","options":["높음","낮음"],"required":true},
+			{"type":"button","label":"저장","action":{"type":"callback","event":"save","collectFrom":["qty","cat","prio"]}}
+		]}`,
 		"tabs": `{"type":"tabs","tabs":[
 			{"label":"A","children":[{"type":"text","value":"a"}]},
 			{"label":"B","children":[{"type":"alert","message":"hey","severity":"warning"}]}
@@ -74,6 +80,7 @@ func TestValidate_Invalid(t *testing.T) {
 		"missing required id": `{"type":"column","children":[{"type":"text_input","label":"x"}]}`,
 		"bad text style":      `{"type":"text","value":"x","style":"gigantic"}`,
 		"bad button variant":  `{"type":"button","label":"x","variant":"ghost"}`,
+		"bad keyboard type":   `{"type":"text_input","id":"x","keyboard":"qwerty"}`,
 		"bad action type":     `{"type":"button","label":"x","action":{"type":"explode"}}`,
 		"children not array":  `{"type":"column","children":"nope"}`,
 		"missing type":        `{"value":"x"}`,
