@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import ai.deneb.data.AppSettings
 import ai.deneb.contacts.ContactsReader
 import ai.deneb.tools.ContactsPermissionController
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.settings.SettingsCard
 import kotlinx.coroutines.launch
@@ -77,8 +78,7 @@ internal fun GatewayTab(
         SettingsCard {
             Text(
                 "게이트웨이 연결",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                style = DenebType.cardTitle,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Spacer(Modifier.height(12.dp))
@@ -145,8 +145,7 @@ internal fun GatewayTab(
         SettingsCard {
             Text(
                 "버전",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                style = DenebType.cardTitle,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Spacer(Modifier.height(8.dp))
@@ -234,8 +233,7 @@ private fun GatewayStatusCard(
     SettingsCard {
         Text(
             "게이트웨이 상태",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
+            style = DenebType.cardTitle,
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.height(8.dp))
@@ -302,8 +300,7 @@ private fun ContactsSyncCard(
     SettingsCard {
         Text(
             "주소록 동기화",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
+            style = DenebType.cardTitle,
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.height(8.dp))
@@ -373,8 +370,7 @@ private fun PatchNotesSheet(onDismiss: () -> Unit) {
             item {
                 Text(
                     "패치노트",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = DenebType.subject,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(4.dp))

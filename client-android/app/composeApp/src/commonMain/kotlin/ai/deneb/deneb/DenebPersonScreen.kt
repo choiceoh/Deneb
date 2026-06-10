@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 
@@ -84,8 +85,7 @@ fun DenebPersonScreen(
 
             Text(
                 c.displayName,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
+                style = DenebType.subject,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             if (c.email.isNotBlank()) {

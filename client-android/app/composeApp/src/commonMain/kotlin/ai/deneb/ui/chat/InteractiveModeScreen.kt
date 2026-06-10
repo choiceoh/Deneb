@@ -55,6 +55,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import ai.deneb.BackIcon
 import ai.deneb.data.supportsAgenticFlows
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.composables.CircleIconButton
 import ai.deneb.ui.chat.composables.ErrorMessage
 import ai.deneb.ui.chat.composables.QuestionInput
@@ -144,7 +145,7 @@ internal fun InteractiveModeScreen(uiState: ChatUiState) {
                         Spacer(Modifier.height(16.dp))
                         Text(
                             text = stringResource(Res.string.interactive_welcome_title),
-                            style = MaterialTheme.typography.titleLarge,
+                            style = DenebType.subject,
                             color = MaterialTheme.colorScheme.onBackground,
                         )
                         Text(
@@ -265,7 +266,7 @@ private fun InteractiveModeTopBar(
         Spacer(Modifier.weight(1f))
         Text(
             text = stringResource(Res.string.interactive_title),
-            style = MaterialTheme.typography.titleMedium,
+            style = DenebType.cardTitle,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.weight(1f))

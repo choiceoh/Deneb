@@ -26,9 +26,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 
@@ -70,8 +70,7 @@ fun DenebCategoriesScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "카테고리",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    style = DenebType.viewTitle,
                     modifier = Modifier.weight(1f),
                 )
                 TextButton(onClick = onBack) { Text("닫기") }

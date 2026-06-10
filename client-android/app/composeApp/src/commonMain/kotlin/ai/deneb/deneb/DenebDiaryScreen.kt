@@ -24,8 +24,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ai.deneb.ui.DenebType
 import kotlinx.coroutines.launch
 
 /**
@@ -65,8 +65,7 @@ fun DenebDiaryScreen(
             Spacer(Modifier.height(4.dp))
             Text(
                 "최근 일기",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
+                style = DenebType.viewTitle,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(12.dp))
@@ -84,8 +83,7 @@ fun DenebDiaryScreen(
                         if (entry.header.isNotBlank()) {
                             Text(
                                 entry.header,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
+                                style = DenebType.cardTitle,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                             Spacer(Modifier.height(4.dp))

@@ -9,11 +9,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import ai.deneb.ui.DenebType
 
 /**
  * Lightweight markdown renderer for wiki / topic-doc / analysis bodies — enough
@@ -37,9 +39,9 @@ fun DenebMarkdown(text: String, modifier: Modifier = Modifier) {
                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                     color = onSurface,
                 )
-                line.startsWith("### ") -> Heading(line.removePrefix("### "), MaterialTheme.typography.titleSmall.fontSize)
-                line.startsWith("## ") -> Heading(line.removePrefix("## "), MaterialTheme.typography.titleMedium.fontSize)
-                line.startsWith("# ") -> Heading(line.removePrefix("# "), MaterialTheme.typography.titleLarge.fontSize)
+                line.startsWith("### ") -> Heading(line.removePrefix("### "), DenebType.rowTitleStrong)
+                line.startsWith("## ") -> Heading(line.removePrefix("## "), DenebType.cardTitle)
+                line.startsWith("# ") -> Heading(line.removePrefix("# "), DenebType.subject)
                 line.startsWith("- ") || line.startsWith("* ") -> Row2("•  ", line.drop(2), onSurface)
                 ordered != null -> Row2("${ordered.groupValues[1]}.  ", ordered.groupValues[2], onSurface)
                 line.startsWith("> ") -> Row2("│  ", line.drop(2), onSurface)
@@ -50,12 +52,14 @@ fun DenebMarkdown(text: String, modifier: Modifier = Modifier) {
     }
 }
 
+// Heading ladder rides the DenebType scale: # = subject (22), ## = cardTitle (18),
+// ### = rowTitleStrong (15) — the 15 -> 18 -> 22 rungs of the type system.
 @Composable
-private fun Heading(text: String, size: androidx.compose.ui.unit.TextUnit) {
+private fun Heading(text: String, style: TextStyle) {
     Spacer(Modifier.height(8.dp))
     Text(
         text,
-        style = MaterialTheme.typography.titleMedium.copy(fontSize = size, fontWeight = FontWeight.SemiBold),
+        style = style,
         color = MaterialTheme.colorScheme.onSurface,
     )
     Spacer(Modifier.height(2.dp))

@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.LogoAnimation
 import ai.deneb.ui.components.animatedGradientBorder
 import ai.deneb.ui.components.rememberHaptics
@@ -52,7 +53,7 @@ internal fun EmptyState(
         Spacer(Modifier.height(16.dp))
         Text(
             text = greeting,
-            style = MaterialTheme.typography.titleLarge,
+            style = DenebType.subject,
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.height(8.dp))

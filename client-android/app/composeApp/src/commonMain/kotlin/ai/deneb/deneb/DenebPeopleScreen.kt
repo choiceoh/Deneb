@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.denebContentWidthModifier
 import kotlinx.coroutines.launch
 
@@ -74,8 +75,7 @@ fun DenebPeopleScreen(
             ) {
                 Text(
                     "사람",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    style = DenebType.viewTitle,
                     modifier = Modifier.weight(1f),
                 )
                 TextButton(onClick = onBack) { Text("닫기") }

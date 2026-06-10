@@ -21,6 +21,13 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "화면 전반의 글꼴 위계를 데네브 타입 시스템으로 통일 — 페이지 제목은 크고 가볍게, 카드·섹션 제목은 또렷하게",
+            "메뉴 서랍이 미니앱 시절의 큰 타이포 메뉴로 — 항목이 더 크고 시원하게",
+            "대화 목록·위키 본문 등 한글이 너무 가늘게 보이던 곳의 두께를 읽기 좋게 교정",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "받은 메일을 Deneb 디자인으로 새 단장 — 울트라라이트 제목, 전체 폭 구분선, 오늘·어제·이번 주 시간 구분, 가까운 메일은 시각·요일로 표시",
             "내 메시지 말풍선에 오로라 색감 적용(다크), 도구 실행 표시가 OLED에서 투명한 외곽선 스타일로",
             "입력창 안내 문구를 '무엇이든 물어보세요'로",

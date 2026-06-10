@@ -51,6 +51,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ai.deneb.ui.DenebType
 import kotlinx.coroutines.delay
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -66,8 +67,8 @@ private const val DEFAULT_IMAGE_ASPECT_RATIO = 1.91f
 @Composable
 internal fun RenderText(node: TextNode) {
     val style = when (node.style) {
-        TextNodeStyle.HEADLINE -> MaterialTheme.typography.headlineSmall
-        TextNodeStyle.TITLE -> MaterialTheme.typography.titleMedium
+        TextNodeStyle.HEADLINE -> DenebType.subject
+        TextNodeStyle.TITLE -> DenebType.cardTitle
         TextNodeStyle.BODY -> MaterialTheme.typography.bodyLarge
         TextNodeStyle.CAPTION -> MaterialTheme.typography.bodySmall
         null -> MaterialTheme.typography.bodyLarge
