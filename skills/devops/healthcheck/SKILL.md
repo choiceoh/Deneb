@@ -174,44 +174,38 @@ After Deneb install or first hardening pass, run at least one baseline audit and
 - the `~/.deneb` permission check
 - `scripts/build-status main` (release drift)
 
-Ongoing monitoring is recommended. Use the Deneb cron tool/CLI to schedule periodic audits (Gateway scheduler). Do not create scheduled tasks without explicit approval. Store outputs in a user-approved location and avoid secrets in logs.
+Ongoing monitoring is recommended. Use the `cron` agent tool to schedule periodic audits (Gateway scheduler). Do not create scheduled tasks without explicit approval. Store outputs in a user-approved location and avoid secrets in logs.
 When scheduling headless cron runs, include a note in the output that instructs the user to call `healthcheck` so issues can be fixed.
 
 ### Required prompt to schedule (always)
 
 After any audit or hardening pass, explicitly offer scheduling and require a direct response. Use a short prompt like (numbered):
 
-1. “Do you want me to schedule periodic audits (e.g., daily/weekly) via `deneb cron add`?”
+1. “Do you want me to schedule periodic audits (e.g., daily/weekly) via the `cron` tool?”
 
 If the user says yes, ask for:
 
 - cadence (daily/weekly), preferred time window, and output location
-- whether to also schedule `deneb update status`
+- whether to also schedule a periodic version-drift check (`scripts/build-status main`)
 
 Use a stable cron job name so updates are deterministic. Prefer exact names:
 
 - `healthcheck:security-audit`
 - `healthcheck:update-status`
 
-Before creating, `deneb cron list` and match on exact `name`. If found, `deneb cron edit <id> ...`.
-If not found, `deneb cron add --name <name> ...`.
-
-Also offer a periodic version check so the user can decide when to update (numbered):
-
-1. `deneb update status` (preferred for source checkouts and channels)
-2. `npm view deneb version` (published npm version)
+Before creating, list existing jobs with the `cron` tool and match on exact
+`name`. If found, update that job; if not, add a new one.
 
 ## Deneb command accuracy
 
-Use only supported commands and flags:
+There is no `deneb` CLI in this deployment. The Deneb surface is reached via:
 
-- `deneb security audit [--deep] [--fix] [--json]`
-- `deneb status` / `deneb status --deep`
-- `deneb health --json`
-- `deneb update status`
-- `deneb cron add|list|runs|run`
+- the gateway HTTP probes (`/health`, `/ready`)
+- the `cron` agent tool (list/add/update/run scheduled jobs)
+- `scripts/build-status main` on the host (release/version drift)
 
-Do not invent CLI flags or imply Deneb enforces host firewall/SSH policies.
+Everything else in this skill is plain OS commands. Do not invent CLI commands
+or imply Deneb enforces host firewall/SSH policies.
 
 ## Logging and audit trail
 
