@@ -16,6 +16,7 @@ type AutonomousSubsystem struct {
 	autonomousSvc *autonomous.Service
 	wikiDreamer   *wiki.WikiDreamer // set during initMemorySubsystem()
 	gmailPollSvc  *gmailpoll.Service
+	roleHealth    *roleHealthWatch // set during registerWorkflowSideEffects()
 
 	// agentLogWriter is the shared behavioral event log (the same instance the
 	// chat pipeline uses). Promoted to Server so registerWorkflowSideEffects can

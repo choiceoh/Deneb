@@ -40,7 +40,7 @@ func TestBuildMiniappModelHealth(t *testing.T) {
 		"kimi": {checked: true, reachable: false, listed: false},
 	}
 
-	got := buildMiniappModelHealth(sections, probes)
+	got := buildMiniappModelHealth(sections, probes, nil)
 	want := map[string]string{
 		"vllm/qwen3.6-35b-a3b":                   miniappModelHealthOnline,
 		"vllm/missing-model":                     miniappModelHealthOffline,
@@ -53,6 +53,17 @@ func TestBuildMiniappModelHealth(t *testing.T) {
 		if got[modelID] != status {
 			t.Errorf("health[%q] = %q, want %q", modelID, got[modelID], status)
 		}
+	}
+
+	// A role-watch auth verdict overrides reachability: zai answers GET
+	// /models with 200 even on an expired key, so the "online" above must
+	// flip to "auth" once the 1-token probe has seen the 401.
+	got = buildMiniappModelHealth(sections, probes, map[string]string{"zai": roleHealthAuth})
+	if got["zai/glm-5.1"] != miniappModelHealthAuth {
+		t.Errorf("auth overlay: health[zai/glm-5.1] = %q, want %q", got["zai/glm-5.1"], miniappModelHealthAuth)
+	}
+	if got["vllm/qwen3.6-35b-a3b"] != miniappModelHealthOnline {
+		t.Errorf("auth overlay must not leak to other providers: got %q", got["vllm/qwen3.6-35b-a3b"])
 	}
 }
 
