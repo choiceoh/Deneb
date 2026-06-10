@@ -19,9 +19,10 @@ Exception: `registerBuiltinMethods()` in `server_rpc.go` (server-state closures)
 
 ### Rule 2: Hub is built only in `buildHub()`
 
-`server/gateway_hub.go:buildHub()` is the sole constructor.
-No other file may assign Hub fields (except `hub.Chat` late-bind in `registerLateMethods`
-and `hub.Telegram` in `registerEarlyMethods` after plugin creation).
+`server/gateway_hub.go:buildHub()` is the sole constructor (a thin wrapper over
+`rpcutil.NewGatewayHub`). Hub fields are private with read-only accessors; the
+one post-construction mutation is the Chat late-bind via `hub.SetChat` in
+`registerLateMethods`.
 
 ### Rule 3: Handlers never import Hub
 

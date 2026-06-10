@@ -33,12 +33,12 @@
     "links": [
       {
         "label": "GitHub",
-        "href": "https://github.com/deneb/deneb",
+        "href": "https://github.com/choiceoh/Deneb",
         "icon": "github"
       },
       {
         "label": "Releases",
-        "href": "https://github.com/deneb/deneb/releases",
+        "href": "https://github.com/choiceoh/Deneb/releases",
         "icon": "package"
       }
     ]

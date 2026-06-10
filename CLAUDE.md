@@ -8,7 +8,7 @@
 
 # Repository Guidelines
 
-- Repo: https://github.com/deneb/deneb
+- Repo: https://github.com/choiceoh/Deneb
 - In chat replies, file references must be repo-root relative only (example: `gateway-go/internal/runtime/server/server.go:80`); never absolute paths or `~/...`.
 - Do not edit files covered by security-focused `CODEOWNERS` rules unless a listed owner explicitly asked for the change or is already reviewing it with you. Treat those paths as restricted surfaces, not drive-by cleanup.
 
@@ -81,7 +81,7 @@
 
 - **Single operator, single user.** No multi-tenant, multi-user, or team deployment. Ignore user isolation, permission separation, multi-user auth.
 - **Hardware:** NVIDIA DGX Spark (local server). All services run on this single machine.
-- **Primary I/O surface:** the native client (`client-android/`, a Kotlin Multiplatform app) — the sole user surface since the Telegram bot was retired (PR #1922). It runs on Android (Samsung Galaxy S26, the daily driver), iOS, and desktop (Mac) from one codebase, and talks to the gateway over the `miniapp.*` RPC surface with an `X-Deneb-Client-Token`. Optimize this path first.
+- **Primary I/O surface:** the native client (`client-android/`, a Kotlin Multiplatform app) — the sole user surface since the Telegram bot was retired (PR #1922). It runs on Android (Samsung Galaxy S26, the daily driver), iOS, and desktop (Mac/Windows) from one codebase, and talks to the gateway over the `miniapp.*` RPC surface with an `X-Deneb-Client-Token`. Optimize this path first.
 
 ### Design Principles
 

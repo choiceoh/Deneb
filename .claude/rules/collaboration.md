@@ -39,14 +39,11 @@ globs: ["**"]
 - **Focus reports on your edits**; avoid guard-rail disclaimers unless truly blocked; when multiple agents touch the same file, continue if safe; end with a brief "other files present" note only if relevant.
 - Bug investigations: read source code and all related local code before concluding; aim for high-confidence root cause.
 - Code style: add brief comments for tricky logic; keep files under ~500 LOC when feasible (split/refactor as needed).
-- Never send streaming/partial replies to external messaging surfaces (WhatsApp, Telegram); only final replies should be delivered there. Streaming/tool events may still go to internal UIs/control channel.
-- For manual `deneb message send` messages that include `!`, use the heredoc pattern to avoid the Bash tool's escaping.
+- Never send streaming/partial replies to external messaging surfaces; only final replies should be delivered there. Streaming/tool events may still go to internal UIs (native client SSE).
 - Release guardrails: do not change version numbers without operator's explicit consent.
 
 ## Security & Configuration
 
-- Web provider stores creds at `~/.deneb/credentials/`; rerun `deneb login` if logged out.
-- Pi sessions live under `~/.deneb/sessions/` by default; the base directory is not configurable.
 - Environment variables: see `~/.profile`.
 - Never commit or publish real phone numbers, videos, or live configuration values. Use obviously fake placeholders in docs, tests, and examples.
-- Release flow: use the private [maintainer release docs](https://github.com/deneb/maintainers/blob/main/release/README.md) for the actual runbook.
+- Release flow: see `.claude/rules/release-and-deploy.md` for the actual runbook.
