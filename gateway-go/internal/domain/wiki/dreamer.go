@@ -379,9 +379,13 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 		report.PhaseErrors = append(report.PhaseErrors, fmt.Sprintf("proposal-save-final: %v", err))
 	}
 
-	// Version the cycle's wiki mutations: one commit per dream cycle gives
-	// history/diff/rollback for autonomous memory edits. Best-effort.
-	wd.store.SnapshotGit(ctx, fmt.Sprintf("dream: +%d페이지 생성, %d페이지 수정", created, updated))
+	// Version the cycle's wiki mutations and surface exactly what changed —
+	// pages, snapshot hash, diffstat — plus a one-step rollback hint. A bad
+	// LLM cycle becomes a visible, revertible event instead of silent drift.
+	if hash := wd.store.SnapshotGit(ctx, fmt.Sprintf("dream: +%d페이지 생성, %d페이지 수정", created, updated)); hash != "" {
+		report.WikiChangeSummary = formatWikiChangeSummary(
+			hash, wd.store.GitSnapshotStat(ctx, hash), wd.store.Dir(), updatePaths(updates))
+	}
 
 	wd.logger.Info("wiki-dream: cycle complete",
 		"created", created, "updated", updated,

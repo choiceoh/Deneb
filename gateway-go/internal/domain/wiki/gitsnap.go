@@ -38,41 +38,59 @@ const wikiGitIgnore = `.semantic-cache.json
 
 var gitMissingOnce sync.Once
 
-// SnapshotGit commits the current wiki state with the given message. The
-// repository is created lazily on first use. No-op (with a Warn) when the git
-// binary is unavailable; no commit is created when nothing changed.
-func (s *Store) SnapshotGit(ctx context.Context, message string) {
+// SnapshotGit commits the current wiki state with the given message and
+// returns the short commit hash ("" when nothing changed or git is
+// unavailable). The repository is created lazily on first use.
+func (s *Store) SnapshotGit(ctx context.Context, message string) string {
 	if _, err := exec.LookPath("git"); err != nil {
 		gitMissingOnce.Do(func() {
 			slog.Warn("wiki: git not found; memory versioning disabled")
 		})
-		return
+		return ""
 	}
 	if err := s.ensureGitRepo(ctx); err != nil {
 		slog.Warn("wiki: git init failed; snapshot skipped", "error", err)
-		return
+		return ""
 	}
 
 	if out, err := s.git(ctx, "add", "-A"); err != nil {
 		slog.Warn("wiki: git add failed; snapshot skipped", "error", err, "output", out)
-		return
+		return ""
 	}
 	status, err := s.git(ctx, "status", "--porcelain")
 	if err != nil {
 		slog.Warn("wiki: git status failed; snapshot skipped", "error", err)
-		return
+		return ""
 	}
 	if strings.TrimSpace(status) == "" {
-		return // nothing changed since the last snapshot
+		return "" // nothing changed since the last snapshot
 	}
 	if message == "" {
 		message = "wiki snapshot"
 	}
 	if out, err := s.git(ctx, "commit", "-m", message); err != nil {
 		slog.Warn("wiki: git commit failed", "error", err, "output", out)
-		return
+		return ""
 	}
-	slog.Info("wiki: git snapshot committed", "message", message)
+	hash, err := s.git(ctx, "rev-parse", "--short", "HEAD")
+	if err != nil {
+		hash = ""
+	}
+	slog.Info("wiki: git snapshot committed", "message", message, "commit", hash)
+	return hash
+}
+
+// GitSnapshotStat returns the diffstat of a snapshot commit ("" on any
+// failure) — used for the dream-cycle change report.
+func (s *Store) GitSnapshotStat(ctx context.Context, hash string) string {
+	if hash == "" {
+		return ""
+	}
+	out, err := s.git(ctx, "show", "--stat", "--format=", hash)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
 }
 
 // ensureGitRepo initializes the wiki git repository on first use, with a
@@ -98,6 +116,33 @@ func (s *Store) ensureGitRepo(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// formatWikiChangeSummary renders the per-cycle change block appended to the
+// dream notification: which pages, which snapshot, and how to undo it. The
+// rollback hint is a concrete command so "되돌려줘" needs no archaeology.
+func formatWikiChangeSummary(hash, stat, wikiDir string, paths []string) string {
+	var sb strings.Builder
+	if len(paths) > 0 {
+		show := paths
+		if len(show) > 6 {
+			show = show[:6]
+		}
+		sb.WriteString("📄 " + strings.Join(show, ", "))
+		if extra := len(paths) - len(show); extra > 0 {
+			fmt.Fprintf(&sb, " 외 %d", extra)
+		}
+		sb.WriteString("\n")
+	}
+	sb.WriteString("🧾 스냅샷 " + hash)
+	if stat != "" {
+		lines := strings.Split(stat, "\n")
+		if last := strings.TrimSpace(lines[len(lines)-1]); last != "" {
+			sb.WriteString(" — " + last)
+		}
+	}
+	fmt.Fprintf(&sb, "\n↩️ 되돌리기: `git -C %s revert --no-edit %s`", wikiDir, hash)
+	return sb.String()
 }
 
 // git runs a git subcommand rooted at the wiki directory.

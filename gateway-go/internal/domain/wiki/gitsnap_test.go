@@ -72,3 +72,40 @@ func TestSnapshotGit_CommitsOnlyOnChange(t *testing.T) {
 		t.Errorf("page edit must commit; got %d commits", got)
 	}
 }
+
+func TestSnapshotGit_ReturnsHashAndStat(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mustWrite(t, store, "프로젝트/hash.md", &Page{
+		Meta: Frontmatter{ID: "hash", Title: "해시 테스트", Category: "프로젝트"},
+		Body: "본문",
+	})
+	ctx := context.Background()
+	hash := store.SnapshotGit(ctx, "with hash")
+	if hash == "" {
+		t.Fatal("commit must return a short hash")
+	}
+	if stat := store.GitSnapshotStat(ctx, hash); !strings.Contains(stat, "changed") {
+		t.Errorf("diffstat missing summary line: %q", stat)
+	}
+	// Noop snapshot returns "".
+	if got := store.SnapshotGit(ctx, "noop"); got != "" {
+		t.Errorf("noop snapshot returned hash %q", got)
+	}
+}
+
+func TestFormatWikiChangeSummary(t *testing.T) {
+	out := formatWikiChangeSummary("abc1234", " a.md | 2 +-\n 3 files changed, 10 insertions(+)", "/home/u/.deneb/wiki",
+		[]string{"프로젝트/a.md", "인물/b.md", "c.md", "d.md", "e.md", "f.md", "g.md"})
+	for _, want := range []string{"abc1234", "3 files changed", "revert --no-edit abc1234", "외 1", "프로젝트/a.md"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("summary missing %q in %q", want, out)
+		}
+	}
+}
