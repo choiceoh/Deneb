@@ -461,11 +461,15 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 			activity:    s.activity,
 			logger:      s.logger,
 			homeDir:     homeDir,
-			// Proactive signal augmentation: surface calendar conflicts /
-			// imminent meetings into the heartbeat turn (best-effort; no-op when
-			// Calendar OAuth is absent). See heartbeat_signals.go.
-			collectSignals: newCalendarSignalCollector(resolveBriefingCalendarClient),
-			signalConfig:   autonomous.DefaultSignalConfig(),
+			// Proactive signal augmentation: calendar conflicts / imminent
+			// meetings plus due to-dos (dream-captured open loops included)
+			// surface into the heartbeat turn. Best-effort; no-op when the
+			// sources are absent. See heartbeat_signals.go / open_loop_sink.go.
+			collectSignals: combineSignalCollectors(
+				newCalendarSignalCollector(resolveBriefingCalendarClient),
+				newTodoDeadlineCollector(),
+			),
+			signalConfig: autonomous.DefaultSignalConfig(),
 		})
 
 		// Daily offsite memory backup: tar.gz of the memory stores streamed

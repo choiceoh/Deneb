@@ -130,6 +130,10 @@ type WikiDreamer struct {
 	// workspaceDir is the agent workspace containing MEMORY.md. Empty disables
 	// memory curation (see memory_curation.go).
 	workspaceDir string
+
+	// openLoopSink receives unfulfilled commitments extracted each cycle
+	// (see open_loops.go). nil disables the extraction pass.
+	openLoopSink func(ctx context.Context, loops []OpenLoop) (int, error)
 }
 
 // NewWikiDreamer creates a new wiki dreamer.
@@ -267,6 +271,23 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	report.WikiPagesUpdated = updated
 	if len(oversized) > 0 {
 		phaseErrors = append(phaseErrors, fmt.Sprintf("oversized pages: %s", strings.Join(oversized, ", ")))
+	}
+
+	// Phase 3b: prospective memory — extract unfulfilled commitments from the
+	// same input and hand them to the wired sink (the to-do store). Best-effort:
+	// a failed extraction never costs the consolidation cycle.
+	if wd.openLoopSink != nil {
+		loops, lerr := wd.extractOpenLoops(ctx, synthInput)
+		switch {
+		case lerr != nil:
+			phaseErrors = append(phaseErrors, fmt.Sprintf("open-loops: %v", lerr))
+		case len(loops) > 0:
+			if added, serr := wd.openLoopSink(ctx, loops); serr != nil {
+				phaseErrors = append(phaseErrors, fmt.Sprintf("open-loops-sink: %v", serr))
+			} else if added > 0 {
+				wd.logger.Info("wiki-dream: open loops captured", "extracted", len(loops), "new", added)
+			}
+		}
 	}
 
 	// Phase 4: Rebuild index.

@@ -75,6 +75,9 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 				// Let dream cycles consume + curate the auto-recorded
 				// workspace MEMORY.md (distill to wiki, keep a bounded buffer).
 				s.wikiDreamer.SetWorkspaceDir(resolveWorkspaceDir())
+				// Prospective memory: extracted commitments land in the local
+				// to-do store (native list + heartbeat deadline signals).
+				s.wikiDreamer.SetOpenLoopSink(openLoopTodoSink(s.logger))
 				s.logger.Info("wiki-dream: enabled")
 			}
 		}
