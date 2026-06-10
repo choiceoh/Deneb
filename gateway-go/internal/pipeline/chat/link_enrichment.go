@@ -1,0 +1,238 @@
+// link_enrichment.go — Automatic link understanding for inbound messages.
+//
+// When a user message contains URLs, this module extracts them, fetches their
+// content, converts HTML to readable markdown, and appends a formatted summary
+// to the message before it reaches the LLM agent. This saves the agent a web
+// tool turn and provides immediate context.
+//
+// Wired into the synchronous send paths (SendSync / SendSyncStream — the
+// native client's miniapp.chat.send and the SSE stream) via maybeEnrichLinks.
+// The enriched text is persisted in the transcript as-is (prompt-cache rule:
+// what the LLM saw is what history reloads), and History() strips the block
+// for display so the user's chat bubble shows what they typed.
+package chat
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coreparsing/htmlmd"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coreparsing/urlextract"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/web"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
+)
+
+// Link enrichment limits.
+const (
+	maxLinksPerMessage     = 5
+	maxCharsPerLink        = 12000
+	maxTotalLinkChars      = 40000
+	linkFetchTimeout       = 10 * time.Second
+	totalEnrichmentTimeout = 30 * time.Second
+	// linkFetchMaxBytes caps the raw download per link. Raw HTML is much
+	// larger than the markdown it converts to, so this is intentionally far
+	// above maxCharsPerLink.
+	linkFetchMaxBytes = 2 * 1024 * 1024
+)
+
+// linkEnrichmentHeader marks the start of an appended enrichment block. The
+// formatter writes it and the History() display strip looks for it; the two
+// stay in sync through this constant.
+const linkEnrichmentHeader = "Link content from URLs in this message:"
+
+// fetchFunc abstracts URL fetching for testability.
+// Returns raw data, content-type header, and error.
+type fetchFunc func(ctx context.Context, url string) (data []byte, contentType string, err error)
+
+// webFetch is the production fetcher: the web tool's stealth fetch pipeline
+// (pooled SSRF-safe transport, browser-like profiles, bot-block escalation).
+func webFetch(ctx context.Context, url string) ([]byte, string, error) {
+	return web.FetchRaw(ctx, url, linkFetchMaxBytes)
+}
+
+// linkContent holds the fetched and converted content for a single URL.
+type linkContent struct {
+	URL     string
+	Title   string
+	Content string
+	Err     string // non-empty if fetch failed
+}
+
+// maybeEnrichLinks appends fetched link content to an interactive chat message.
+// No-op (returns message unchanged) when the turn carries prebuilt API history,
+// when the message has no fetchable URLs, or when every fetch fails.
+func (h *Handler) maybeEnrichLinks(ctx context.Context, message string, opts *SyncOptions) string {
+	if opts != nil && len(opts.Messages) > 0 {
+		// OpenAI-compatible API traffic with caller-owned history — leave it
+		// untouched, same boundary as trySlashSync.
+		return message
+	}
+	if strings.Contains(message, linkEnrichmentHeader) {
+		// Already enriched (e.g. a resent message) — never stack blocks.
+		return message
+	}
+	start := time.Now()
+	summary := enrichMessageWithLinks(ctx, message, webFetch, h.logger)
+	if summary == "" {
+		return message
+	}
+	h.logger.Info("link enrichment appended",
+		"chars", len(summary), "elapsed", time.Since(start).Round(time.Millisecond))
+	return message + "\n\n" + summary
+}
+
+// stripLinkEnrichmentForDisplay removes appended enrichment blocks from user
+// messages so history surfaces (native client bubbles) show what the user
+// typed, not the fetched page dump. Only plain-string content is touched and
+// only the RPC response is rewritten — the transcript itself never changes.
+func stripLinkEnrichmentForDisplay(msgs []ChatMessage) []ChatMessage {
+	marker := "\n\n---\n" + linkEnrichmentHeader
+	for i := range msgs {
+		if msgs[i].Role != "user" {
+			continue
+		}
+		var text string
+		if err := json.Unmarshal(msgs[i].Content, &text); err != nil {
+			continue // rich block content — enrichment only appends to plain text
+		}
+		idx := strings.Index(text, marker)
+		if idx < 0 || !strings.HasSuffix(text, "\n---") {
+			continue
+		}
+		msgs[i].Content = toolctx.MarshalJSONString(strings.TrimRight(text[:idx], " \n"))
+	}
+	return msgs
+}
+
+// enrichMessageWithLinks extracts URLs from the message, fetches each one,
+// converts HTML to markdown, and returns a formatted summary string.
+// Returns "" if no links found or all fetches fail.
+func enrichMessageWithLinks(ctx context.Context, text string, fetchFn fetchFunc, logger *slog.Logger) string {
+	urls := urlextract.ExtractLinks(text, maxLinksPerMessage)
+	if len(urls) == 0 {
+		return ""
+	}
+
+	enrichCtx, enrichCancel := context.WithTimeout(ctx, totalEnrichmentTimeout)
+	defer enrichCancel()
+
+	// Parallel fetch: fan-out to goroutines, collect in order.
+	results := make([]linkContent, len(urls))
+	var wg sync.WaitGroup
+	for i, u := range urls {
+		wg.Add(1)
+		go func(idx int, target string) {
+			defer wg.Done()
+			results[idx] = fetchAndConvert(enrichCtx, target, fetchFn, logger)
+		}(i, u)
+	}
+	wg.Wait()
+
+	// Apply total content budget in order.
+	totalChars := 0
+	var links []linkContent
+	for _, lc := range results {
+		contentLen := len(lc.Content)
+		if contentLen > 0 && totalChars+contentLen > maxTotalLinkChars {
+			remaining := maxTotalLinkChars - totalChars
+			if remaining <= 0 {
+				break
+			}
+			lc.Content = truncateContent(lc.Content, remaining)
+		}
+		totalChars += len(lc.Content)
+		links = append(links, lc)
+	}
+
+	return formatLinkSummary(links)
+}
+
+// fetchAndConvert fetches a single URL and converts the content.
+func fetchAndConvert(ctx context.Context, url string, fetchFn fetchFunc, logger *slog.Logger) linkContent {
+	// YouTube URLs are skipped: plain HTTP fetches return JavaScript-heavy
+	// pages with no useful transcript content, so the agent's web_fetch tool
+	// (which runs the yt-dlp transcript extractor) handles them instead.
+	if media.IsYouTubeURL(url) {
+		return linkContent{URL: url, Err: "skipped (YouTube handled by web_fetch)"}
+	}
+
+	fetchCtx, fetchCancel := context.WithTimeout(ctx, linkFetchTimeout)
+	defer fetchCancel()
+
+	data, contentType, err := fetchFn(fetchCtx, url)
+	if err != nil {
+		logger.Debug("link fetch failed", "url", url, "error", err)
+		return linkContent{URL: url, Err: err.Error()}
+	}
+
+	if len(data) == 0 {
+		return linkContent{URL: url, Err: "empty response"}
+	}
+
+	var title, content string
+
+	if isHTMLContent(contentType) {
+		cleaned := web.StripNoiseElements(string(data))
+		r := htmlmd.ConvertWithOpts(cleaned, htmlmd.Options{StripNoise: true})
+		content = r.Text
+		title = r.Title
+	} else {
+		content = string(data)
+	}
+
+	content = truncateContent(content, maxCharsPerLink)
+
+	return linkContent{
+		URL:     url,
+		Title:   title,
+		Content: content,
+	}
+}
+
+// formatLinkSummary builds the summary block from fetched link contents.
+// Skips links that failed to fetch entirely.
+func formatLinkSummary(links []linkContent) string {
+	var parts []string
+	for _, lc := range links {
+		if lc.Content == "" {
+			continue // failed or empty links carry nothing for the agent
+		}
+
+		label := lc.Title
+		if label == "" {
+			label = lc.URL
+		}
+		part := fmt.Sprintf("[%s](%s)\n%s", label, lc.URL, lc.Content)
+		parts = append(parts, part)
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("---\n" + linkEnrichmentHeader + "\n\n")
+	b.WriteString(strings.Join(parts, "\n\n"))
+	b.WriteString("\n---")
+	return b.String()
+}
+
+// isHTMLContent checks if the content-type indicates HTML.
+func isHTMLContent(contentType string) bool {
+	ct := strings.ToLower(contentType)
+	return strings.Contains(ct, "text/html") || strings.Contains(ct, "application/xhtml")
+}
+
+// truncateContent truncates text to maxLen characters with a marker.
+func truncateContent(text string, maxLen int) string {
+	if len(text) <= maxLen {
+		return text
+	}
+	return text[:maxLen] + "\n[...truncated]"
+}
