@@ -3,6 +3,7 @@ package session
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
@@ -69,6 +70,17 @@ func sessionsDelete(deps Deps) rpcutil.HandlerFunc {
 				Response(req.ID)
 		}
 		found := deps.Sessions.Delete(key)
+		// Remove the persisted transcript too — a surviving .jsonl resurrects
+		// the session at the next startup restore (mirrors
+		// miniapp.sessions.delete). Best-effort, but never silent.
+		if deps.Transcripts != nil {
+			if store, err := deps.Transcripts(); err == nil && store != nil {
+				if delErr := store.Delete(key); delErr != nil {
+					slog.Warn("sessions.delete: transcript removal failed; session may resurrect on restart",
+						"sessionKey", key, "error", delErr)
+				}
+			}
+		}
 		if found && deps.GatewaySubs != nil {
 			deps.GatewaySubs.EmitLifecycle(events.LifecycleChangeEvent{
 				SessionKey: key,
