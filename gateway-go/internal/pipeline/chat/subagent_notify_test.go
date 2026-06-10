@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -280,5 +281,38 @@ func TestReclaimOnIdle_EmptyChannelNoOp(t *testing.T) {
 
 	if len(started) != 0 {
 		t.Fatalf("expected no-op, got %d triggered runs", len(started))
+	}
+}
+
+// Overflow must merge, never drop: pushing past the channel cap collapses the
+// backlog into a combined notification that still carries every completion.
+// A dropped completion is a result the user silently never receives.
+func TestPushNotification_OverflowMergesInsteadOfDropping(t *testing.T) {
+	active := true
+	var started []RunParams
+	sn := newTestSubagentNotifier(&active, &started)
+
+	total := subagentNotifyChCap + 5
+	for i := range total {
+		sn.pushNotification("client:main", fmt.Sprintf("done-%d", i))
+	}
+
+	ch := sn.NotifyCh("client:main")
+	var all []string
+drain:
+	for {
+		select {
+		case n := <-ch:
+			all = append(all, n)
+		default:
+			break drain
+		}
+	}
+	joined := strings.Join(all, "\n")
+	for i := range total {
+		want := fmt.Sprintf("done-%d", i)
+		if !strings.Contains(joined, want) {
+			t.Fatalf("notification %q lost in overflow (got %d channel entries)", want, len(all))
+		}
 	}
 }

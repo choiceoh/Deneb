@@ -964,6 +964,11 @@ func buildAgentConfig(
 		case cachedSession.Mode == session.ModeChat:
 			maxTurns = 10
 			agentTimeout = 10 * time.Minute
+		case cachedSession.SpawnedBy != "":
+			// Sub-agents are scoped delegations, not open-ended sessions: a
+			// stuck child should fail fast and report back instead of holding
+			// a local vLLM slot for the full 60-minute default.
+			agentTimeout = 15 * time.Minute
 		case cachedSession.Kind == session.KindCron:
 			maxTurns = 50
 		}

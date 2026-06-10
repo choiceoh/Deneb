@@ -7,6 +7,7 @@ package session
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -296,7 +297,17 @@ func (m *Manager) StartGC(ctx context.Context) {
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					m.evictStale()
+					// Per-sweep recovery: a panic in one sweep must not kill the
+					// GC loop for the gateway's lifetime (terminal sessions would
+					// then accumulate unbounded until restart).
+					func() {
+						defer func() {
+							if r := recover(); r != nil {
+								slog.Default().Error("panic in session GC sweep", "panic", r)
+							}
+						}()
+						m.evictStale()
+					}()
 				}
 			}
 		}()
