@@ -23,6 +23,14 @@ type ModelOption struct {
 	// Custom marks a user-added model (provider custom/custom-N) that the
 	// picker may delete; built-in/role models leave this false.
 	Custom bool `json:"custom,omitempty"`
+	// Unhealthy is the model-health circuit breaker state (consecutive
+	// failures; initial attempts are being skipped in favor of fallback).
+	// Distinct from Health, which is endpoint reachability.
+	Unhealthy bool `json:"unhealthy,omitempty"`
+	// Note is a server-rendered Korean stat line from the model tuner's
+	// latest scorecard window (runs, p95, cache hit, fallback/stall counts,
+	// calibration probe, tuned output floor). Empty when no data yet.
+	Note string `json:"note,omitempty"`
 }
 
 // ModelSection groups selectable models by role/provider.
@@ -78,6 +86,9 @@ type ModelsListResult struct {
 	Current  string         `json:"current"`
 	Roles    []RoleModel    `json:"roles"`
 	Sections []ModelSection `json:"sections"`
+	// Advisories are the model tuner's open recommendations as Korean
+	// display lines ("provider/model: message"). Empty when all is well.
+	Advisories []string `json:"advisories,omitempty"`
 }
 
 // ModelDeps holds the lazy model operations exposed to the Mini App.
@@ -88,6 +99,9 @@ type ModelDeps struct {
 	SetModel     func(ctx context.Context, role, id string) (string, error)
 	AddModel     func(context.Context, string, string) (ModelAddResult, error)
 	DeleteModel  func(ctx context.Context, id string) (ModelDeleteResult, error)
+	// Advisories returns the model tuner's open recommendations as display
+	// lines. Optional: nil omits the field.
+	Advisories func() []string
 }
 
 // ModelMethods returns Mini App model quick-change RPC handlers.
@@ -120,10 +134,15 @@ func modelsList(deps ModelDeps) rpcutil.HandlerFunc {
 		if deps.RoleModels != nil {
 			roles = deps.RoleModels()
 		}
+		var advisories []string
+		if deps.Advisories != nil {
+			advisories = deps.Advisories()
+		}
 		return rpcutil.RespondOK(req.ID, ModelsListResult{
-			Current:  current,
-			Roles:    roles,
-			Sections: sections,
+			Current:    current,
+			Roles:      roles,
+			Sections:   sections,
+			Advisories: advisories,
 		})
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modeltuner"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
@@ -116,6 +117,9 @@ func (s *Server) miniappModelMethods() map[string]rpcutil.HandlerFunc {
 		SetModel:     s.setMiniappModel,
 		AddModel:     s.addMiniappCustomModel,
 		DeleteModel:  s.deleteMiniappCustomModel,
+		Advisories: func() []string {
+			return modeltuner.LoadScorecard(modeltuner.DefaultStatePath()).AdvisoryLines()
+		},
 	})
 }
 
@@ -134,19 +138,34 @@ func (s *Server) currentMiniappModel() string {
 func (s *Server) listMiniappModels(ctx context.Context) ([]handlerminiapp.ModelSection, error) {
 	current := s.currentMiniappModel()
 	snapshot := s.miniappModelSnapshot(ctx)
+	// Tuner enrichment: latest scorecard window (small JSON, read per list
+	// call — the picker is an on-demand screen) + circuit-breaker state.
+	scorecard := modeltuner.LoadScorecard(modeltuner.DefaultStatePath())
 
 	out := make([]handlerminiapp.ModelSection, 0, len(snapshot.sections))
 	for _, section := range snapshot.sections {
 		models := make([]handlerminiapp.ModelOption, 0, len(section.entries))
 		for _, entry := range section.entries {
+			modelName := entry.display
+			if modelName == "" {
+				_, modelName = modelrole.ParseModelID(entry.fullID)
+			}
+			unhealthy := false
+			tunedFloor := 0
+			if s.modelRegistry != nil {
+				unhealthy = s.modelRegistry.ModelUnhealthy(modelName)
+				tunedFloor = s.modelRegistry.TunedMaxTokens(modelName)
+			}
 			models = append(models, handlerminiapp.ModelOption{
-				ID:       entry.fullID,
-				Label:    entry.label,
-				Provider: entry.provider,
-				Display:  entry.display,
-				Health:   snapshot.health[entry.fullID],
-				Current:  entry.fullID == current,
-				Custom:   isMiniappCustomProvider(entry.provider),
+				ID:        entry.fullID,
+				Label:     entry.label,
+				Provider:  entry.provider,
+				Display:   entry.display,
+				Health:    snapshot.health[entry.fullID],
+				Current:   entry.fullID == current,
+				Custom:    isMiniappCustomProvider(entry.provider),
+				Unhealthy: unhealthy,
+				Note:      scorecard.NoteFor(modelName, tunedFloor),
 			})
 		}
 		if len(models) > 0 {
