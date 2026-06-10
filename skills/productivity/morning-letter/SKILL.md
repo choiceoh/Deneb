@@ -32,16 +32,15 @@ metadata:
 
 ### 1단계: 데이터 수집
 
-> `morning_letter` 게이트웨이 도구는 은퇴했다 (toolreg 미등록 — 호출하면 tool not found).
-> 섹션 데이터는 기존 도구로 직접 수집한다:
+`morning_letter` 도구를 호출한다. 파라미터 없이 호출하면 6개 섹션(날씨·환율·
+구리시세·일정·메일·마감)을 병렬 수집하여 JSON 데이터를 반환한다. **deferred
+도구**라 스키마가 안 보이면 `fetch_tools`로 `morning_letter`를 먼저 로드한다.
 
-- 날씨: `web` 으로 OpenWeather API 호출 (`OPENWEATHER_API_KEY`)
-- 환율: `web` 으로 USD/KRW·EUR/KRW 시세 조회
-- 구리시세: `web` 으로 MetalpriceAPI 호출 (`METALPRICEAPI_KEY`)
-- 일정: `calendar` 도구 (오늘 범위)
-- 메일: `gmail` 도구 (미읽음 요약)
+```json
+{"tool": "morning_letter"}
+```
 
-수집 목표 데이터 구조 (이전 도구가 반환하던 형태와 동일하게 맞춘다):
+반환 데이터 구조:
 - `date`: 오늘 날짜 (한국어, 요일 포함)
 - `sections.weather`: 기온, 체감온도, 날씨상태, 습도, 최저/최고, 강수확률
 - `sections.exchange`: USD/KRW, EUR/KRW 환율 (숫자)

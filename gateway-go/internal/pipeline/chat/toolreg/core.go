@@ -25,11 +25,12 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
 	RegisterMediaTools(registry, deps.WorkspaceDir)
-	var diaryDir string
+	var diaryDir, wikiDir string
 	if deps.Wiki.Store != nil {
 		diaryDir = deps.Wiki.Store.DiaryDir()
+		wikiDir = deps.Wiki.Store.Dir()
 	}
-	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, diaryDir)
+	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, diaryDir, wikiDir)
 	RegisterPhoneTools(registry)
 
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
@@ -257,8 +258,9 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 // RegisterRoutineTools registers tools for recurring/scheduled tasks —
 // things that sit between always-on core tools and on-demand skills.
 // Typical trigger: cron scheduler, daily routines, periodic checks.
-// diaryDir is the wiki diary directory for morning letter logging (empty = disabled).
-func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel, diaryDir string) {
+// diaryDir is the wiki diary directory for morning letter logging; wikiDir is
+// the wiki root for its deadline scan (either empty = that part disabled).
+func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel, diaryDir, wikiDir string) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "cron",
 		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, get, runs, wake",
@@ -286,9 +288,16 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 		Fn:          tools.ToolDropbox(),
 		Deferred:    true,
 	})
-	// NOTE: morning_letter is no longer registered as a tool. The data collection
-	// function (tools.CollectMorningLetterData) currently has no caller — it is
-	// kept for re-wiring; the morning-letter cron runs as a plain agent turn.
+	// Morning-letter data collection: six sections in parallel, raw JSON out;
+	// the agent composes the letter. Deferred like the other routine tools —
+	// the daily cron run loads it via fetch_tools, every other turn stays slim.
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "morning_letter",
+		Description: "모닝레터 데이터 수집: 날씨·환율·구리시세·오늘 일정·미읽음 메일·위키 마감(due) 6개 섹션을 병렬 수집해 raw JSON 반환. 편지 작성(어조·해석·우선순위)은 에이전트 몫. No parameters",
+		InputSchema: morningLetterToolSchema(),
+		Fn:          tools.ToolMorningLetter(nil, tools.MorningLetterOpts{DiaryDir: diaryDir, WikiDir: wikiDir}),
+		Deferred:    true,
+	})
 }
 
 // RegisterSkillsTools registers the unified skills tool
