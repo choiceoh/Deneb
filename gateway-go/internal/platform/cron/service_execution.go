@@ -2,6 +2,7 @@ package cron
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -30,7 +31,57 @@ func (s *Service) executeJobFull(ctx context.Context, job StoreJob) RunOutcome {
 	return s.executeJobFullWithTrigger(ctx, job, triggerScheduler)
 }
 
+// executeJobFullWithTrigger runs the job once, then consumes a PendingRerun
+// flag set while it was running (an overlapping trigger the per-job guard
+// dropped). Bounded so a trigger storm cannot loop the executor forever — a
+// leftover flag is picked up by the next trigger or the Service.Start boot
+// scan. Aborted and skipped outcomes never consume the flag here: aborted
+// means the gateway is shutting down (the rerun belongs to the next boot),
+// skipped means another executor owns the job (and its own post-run loop).
 func (s *Service) executeJobFullWithTrigger(ctx context.Context, job StoreJob, trigger triggerSource) RunOutcome {
+	outcome := s.runJobOnce(ctx, job, trigger)
+	const maxPendingRerunCycles = 3
+	for cycle := 1; cycle <= maxPendingRerunCycles; cycle++ {
+		if outcome.Status == "aborted" || outcome.Status == "skipped" || ctx.Err() != nil {
+			break
+		}
+		fresh := s.store.Job(job.ID)
+		if fresh == nil || !fresh.State.PendingRerun {
+			break
+		}
+		state := fresh.State
+		state.PendingRerun = false
+		if err := s.store.UpdateJobState(fresh.ID, state); err != nil {
+			s.logger.Warn("cron pending rerun: flag clear failed; leaving for next trigger",
+				"id", fresh.ID, "error", err)
+			break
+		}
+		fresh.State = state
+		s.logger.Info("cron pending rerun: executing", "id", fresh.ID, "cycle", cycle)
+		outcome = s.runJobOnce(ctx, *fresh, trigger)
+	}
+	return outcome
+}
+
+// markPendingRerun persists JobState.PendingRerun=true for the job, so a run
+// lost to the overlap guard or a shutdown abort is retried (post-run loop or
+// boot scan) instead of silently dropped.
+func (s *Service) markPendingRerun(jobID, why string) {
+	fresh := s.store.Job(jobID)
+	if fresh == nil || fresh.State.PendingRerun {
+		return
+	}
+	state := fresh.State
+	state.PendingRerun = true
+	if err := s.store.UpdateJobState(jobID, state); err != nil {
+		s.logger.Warn("cron pending rerun: persist failed — run may be lost",
+			"id", jobID, "reason", why, "error", err)
+		return
+	}
+	s.logger.Info("cron pending rerun: queued", "id", jobID, "reason", why)
+}
+
+func (s *Service) runJobOnce(ctx context.Context, job StoreJob, trigger triggerSource) RunOutcome {
 	// Per-job execution guard: skip if this job is already running.
 	if _, loaded := s.runningJobs.LoadOrStore(job.ID, true); loaded {
 		s.logger.Info("cron job already running, skipping", "id", job.ID)
@@ -41,6 +92,10 @@ func (s *Service) executeJobFullWithTrigger(ctx context.Context, job StoreJob, t
 			Status: "skipped",
 			Error:  "concurrent execution prevented",
 		})
+		// The dropped trigger is otherwise lost — for trigger-per-event jobs
+		// (mail watch) that means the event's analysis never happens. Queue a
+		// rerun for the owning executor's post-run consumption loop.
+		s.markPendingRerun(job.ID, "overlap trigger skipped")
 		return RunOutcome{
 			Status:    "skipped",
 			Error:     "job already running",
@@ -148,7 +203,12 @@ func (s *Service) executeJobFullWithTrigger(ctx context.Context, job StoreJob, t
 		if runErr != nil {
 			status := "error"
 			errMsg := runErr.Error()
-			if runCtx.Err() == context.DeadlineExceeded {
+			if errors.Is(runErr, ErrTurnAborted) {
+				// Infra churn (a restart killed the turn), not a job fault:
+				// applyJobResult queues a rerun and skips the error counter so
+				// a deploy storm cannot auto-disable a healthy job.
+				status = "aborted"
+			} else if runCtx.Err() == context.DeadlineExceeded {
 				status = "timeout"
 				elapsed := time.Duration(time.Now().UnixMilli()-startedAt) * time.Millisecond
 				timeoutDur := time.Duration(timeoutMs) * time.Millisecond
@@ -307,9 +367,22 @@ func (s *Service) applyJobResult(job StoreJob, outcome RunOutcome, sessionKey st
 	state := job.State
 	state.LastSessionKey = sessionKey
 
-	if outcome.Status == "ok" {
+	// Re-read the live PendingRerun flag: an overlapping trigger may have
+	// queued a rerun while this run executed, and `state` above is the
+	// pre-run snapshot — persisting it unmerged would clobber the flag.
+	if fresh := s.store.Job(job.ID); fresh != nil && fresh.State.PendingRerun {
+		state.PendingRerun = true
+	}
+
+	switch outcome.Status {
+	case "ok":
 		state.ConsecutiveErrors = 0
-	} else {
+	case "aborted":
+		// A shutdown killed the turn mid-run. Queue a rerun for the next boot
+		// (Service.Start scan) and leave the error counter alone — restart
+		// churn must not walk a healthy job toward auto-disable.
+		state.PendingRerun = true
+	default:
 		state.ConsecutiveErrors++
 		if state.ConsecutiveErrors >= 10 {
 			state.ScheduleErrorCount++

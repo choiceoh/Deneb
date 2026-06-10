@@ -66,6 +66,18 @@ func (s *Service) Start(ctx context.Context) error {
 	// NextRunAtMs while still under s.mu). Executors are spawned AFTER
 	// the lock is released, so they never race with code holding s.mu.
 	toRecover := s.collectMissedJobsLocked(storeData)
+	// Also re-run jobs whose previous run a restart aborted (PendingRerun).
+	// Dedupe against the missed list — when a job is in both, the missed-run
+	// executor below covers it and the helper has already cleared its flag.
+	recovering := make(map[string]bool, len(toRecover))
+	for _, j := range toRecover {
+		recovering[j.ID] = true
+	}
+	for _, j := range s.collectPendingRerunsLocked(storeData) {
+		if !recovering[j.ID] {
+			toRecover = append(toRecover, j)
+		}
+	}
 
 	// Reset stopCh so a second Start after Stop works. loopDone is fresh
 	// per-loop so Stop can wait on it. runCtx is derived from the caller

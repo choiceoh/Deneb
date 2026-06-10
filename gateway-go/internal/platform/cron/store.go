@@ -78,6 +78,11 @@ type JobState struct {
 	LastFailureAlertAtMs int64  `json:"lastFailureAlertAtMs,omitempty"`
 	ScheduleErrorCount   int    `json:"scheduleErrorCount,omitempty"`
 	AutoDisabledAtMs     int64  `json:"autoDisabledAtMs,omitempty"` // timestamp when auto-disabled due to consecutive errors
+	// PendingRerun marks a run lost to infra churn — a gateway restart that
+	// aborted the in-flight turn, or an overlapping trigger dropped by the
+	// per-job guard. The owning executor re-runs once after it finishes and
+	// Service.Start re-runs survivors once on boot; cleared before each rerun.
+	PendingRerun bool `json:"pendingRerun,omitempty"`
 }
 
 // Store manages cron job persistence with atomic writes and caching.
