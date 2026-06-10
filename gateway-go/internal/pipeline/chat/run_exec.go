@@ -963,6 +963,10 @@ func buildAgentConfig(
 	// SpawnFlag: tracks whether sessions_spawn was called during this run.
 	spawnFlag = NewSpawnFlag()
 
+	// Verification gate state: armed by successful write/edit, disarmed by a
+	// successful build/test exec; consulted when the model tries to finish.
+	verifyGate := &verifyGateState{}
+
 	// DeferredActivation: tracks which deferred tools have been activated via
 	// fetch_tools during this run.
 	deferredActivation := NewDeferredActivation()
@@ -1090,6 +1094,7 @@ func buildAgentConfig(
 			ctx = WithToolPreset(ctx, sessionToolPreset)
 			ctx = WithDeferredActivation(ctx, deferredActivation)
 			ctx = WithSpawnFlag(ctx, spawnFlag)
+			ctx = WithVerifyGate(ctx, verifyGate)
 			// Cron/scheduled runs deliver their final text via the run-completion
 			// layer, so an in-loop message-tool send is a benign no-op rather than
 			// an outage. Without this flag on the tool context, the message tool
@@ -1127,6 +1132,14 @@ func buildAgentConfig(
 	// Thinking is a request-level param, so per-turn variation is cache-safe.
 	if thinkingCfg != nil && reasoningSandwichEnabled() {
 		cfg.ThinkingModulator = planningSandwichThinking(thinkingCfg, cfg.MaxTokens)
+	}
+
+	// Verification gate (docs/research/ideal-agent-environment-harness.md §10):
+	// a run that wrote/edited files must run a verification command before its
+	// finish is accepted; the gate injects one demand prompt, then yields.
+	// Default ON (inert for non-mutating runs); DENEB_VERIFY_GATE=0 disables.
+	if verifyGateEnabled() {
+		cfg.FinalizeGate = func(int) string { return verifyGate.finalizePrompt() }
 	}
 
 	return cfg, spawnFlag

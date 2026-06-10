@@ -374,6 +374,19 @@ func RunAgent(
 			continue
 		}
 
+		// --- Verification gate: hold a finish that skipped verification ---
+		// Mirrors the max_tokens recovery shape: append what the model said,
+		// inject a user-role demand, keep looping. FinalizeGate self-limits,
+		// so the next finish attempt passes through.
+		if (turnRes.stopReason == "end_turn" || len(turnRes.toolCalls) == 0) && cfg.FinalizeGate != nil {
+			if gatePrompt := cfg.FinalizeGate(turn); gatePrompt != "" {
+				logger.Info("finalize gate: holding finish for verification", "turn", turn)
+				messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
+				messages = append(messages, llm.NewTextMessage("user", gatePrompt))
+				continue
+			}
+		}
+
 		// --- Check stop reason ---
 		if turnRes.stopReason == "end_turn" || len(turnRes.toolCalls) == 0 {
 			// Persist the terminal assistant message (not appended to messages

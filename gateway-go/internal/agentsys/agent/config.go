@@ -63,6 +63,16 @@ type AgentConfig struct {
 	// NOT affect prompt cache (see .claude/rules/prompt-cache.md).
 	ThinkingModulator func(turn int) *llm.ThinkingConfig
 
+	// FinalizeGate, when non-nil, is consulted as the model attempts to
+	// finish (end_turn / no tool calls). A non-empty return blocks that
+	// finish: the executor appends the assistant message, injects the
+	// returned text as a user-role message, and continues the loop — the
+	// same shape as the max_tokens recovery above it. The gate is expected
+	// to self-limit (return "" after its injection budget) so a run can
+	// always terminate. Used by the chat verification gate: runs that
+	// mutated files must verify (build/test) before finishing.
+	FinalizeGate func(turn int) string
+
 	// StripImagesAfterFirstTurn drops base64 image data from the message history
 	// after the first LLM turn. On turn 0 the image is sent normally; from turn 1
 	// onward each image block is replaced with a lightweight text placeholder so
