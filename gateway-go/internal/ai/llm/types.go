@@ -252,9 +252,49 @@ func NewTextMessage(role, text string) Message {
 }
 
 // NewBlockMessage creates a message with structured content blocks.
+// Content is guaranteed to be valid JSON — see marshalBlocks.
 func NewBlockMessage(role string, blocks []ContentBlock) Message {
-	raw, _ := json.Marshal(blocks)
-	return Message{Role: role, Content: raw}
+	return Message{Role: role, Content: marshalBlocks(blocks)}
+}
+
+// marshalBlocks serializes content blocks, guaranteeing a valid JSON result.
+//
+// A streamed tool_use block can carry a non-JSON Input fragment — e.g. a model
+// emitting whitespace-only or max_tokens-truncated tool arguments. RawMessage
+// marshaling fails on such bytes, and a silently ignored error here used to
+// leave the whole message with empty (0-byte) Content. Every wire converter
+// then dropped that message on every later API call: history loss, per-call
+// log spam, and the model repeating the failed call because it never saw it.
+// Instead, sanitize the offending Input and retry so the turn survives.
+func marshalBlocks(blocks []ContentBlock) json.RawMessage {
+	raw, err := json.Marshal(blocks)
+	if err == nil {
+		return raw
+	}
+	raw, err = json.Marshal(sanitizeBlockInputs(blocks))
+	if err == nil {
+		return raw
+	}
+	// Unreachable in practice (Input is the only RawMessage field on
+	// ContentBlock), but never return invalid Content.
+	return json.RawMessage(`[{"type":"text","text":"[unserializable content omitted]"}]`)
+}
+
+// sanitizeBlockInputs returns a copy of blocks where every non-empty Input
+// that is not valid JSON is wrapped into a valid JSON object preserving the
+// raw fragment, so the model can still see what it actually emitted.
+func sanitizeBlockInputs(blocks []ContentBlock) []ContentBlock {
+	out := make([]ContentBlock, len(blocks))
+	copy(out, blocks)
+	for i := range out {
+		if len(out[i].Input) > 0 && !json.Valid(out[i].Input) {
+			wrapped, _ := json.Marshal(map[string]string{
+				"_malformed_arguments": string(out[i].Input),
+			})
+			out[i].Input = wrapped
+		}
+	}
+	return out
 }
 
 // ContentBlock represents a single content block in a message.
