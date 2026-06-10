@@ -361,6 +361,12 @@ func cronToolSchema() map[string]any {
 	}
 }
 
+func morningLetterToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+	}
+}
+
 func messageToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
