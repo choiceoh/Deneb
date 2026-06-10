@@ -128,6 +128,9 @@ fun DenebRow(
  * On desktop the title + content are centered in a column capped at [maxContentWidth];
  * on a phone the column fills the screen. The content lambda keeps its [ColumnScope],
  * so callers that use `weight(1f)` on a scrolling child still work.
+ *
+ * [showBack] lets top-level sections drop the back arrow on desktop, where the
+ * persistent sidebar already is the navigation — sub-screens keep it everywhere.
  */
 @Composable
 fun DenebScreenScaffold(
@@ -136,6 +139,7 @@ fun DenebScreenScaffold(
     modifier: Modifier = Modifier,
     tabBar: (@Composable () -> Unit)? = null,
     maxContentWidth: Dp = DenebMaxContentWidth,
+    showBack: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.background, modifier = modifier.fillMaxSize()) {
@@ -158,13 +162,15 @@ fun DenebScreenScaffold(
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopCenter) {
                 Column(denebContentWidthModifier(maxContentWidth).fillMaxHeight()) {
                     Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 6.dp)) {
-                        Text(
-                            text = "←",
-                            style = DenebType.subject.copy(fontSize = 22.sp),
-                            color = denebHint(),
-                            modifier = Modifier.clickable(onClick = onBack).handCursor(),
-                        )
-                        Spacer(Modifier.height(2.dp))
+                        if (showBack) {
+                            Text(
+                                text = "←",
+                                style = DenebType.subject.copy(fontSize = 22.sp),
+                                color = denebHint(),
+                                modifier = Modifier.clickable(onClick = onBack).handCursor(),
+                            )
+                            Spacer(Modifier.height(2.dp))
+                        }
                         Text(
                             text = title,
                             style = DenebType.viewTitle,

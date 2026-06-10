@@ -1,8 +1,12 @@
 package ai.deneb.ui.chat.composables
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -11,6 +15,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -57,6 +63,26 @@ private val sidebarItems = listOf(
     SidebarItem("settings", "deneb_config", DenebConfig),
 )
 
+/**
+ * Ordered section destinations, top to bottom as the sidebar shows them. The desktop
+ * entry point maps Ctrl/Cmd+1..N onto this list so keyboard switching and the rail
+ * can never disagree about what "section 3" is.
+ */
+val denebSectionDestinations: List<Any> = sidebarItems.map { it.dest }
+
+/**
+ * Switch to a top-level section without stacking destinations: state of the current
+ * section is saved, the target's is restored, and repeated switches don't grow the
+ * back stack. Shared by the sidebar rows and the desktop keyboard shortcuts.
+ */
+fun navigateToDenebSection(navController: NavHostController, dest: Any) {
+    navController.navigate(dest) {
+        popUpTo(navController.graph.startDestinationId) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+}
+
 @Composable
 fun DenebSidebar(
     navController: NavHostController,
@@ -64,13 +90,7 @@ fun DenebSidebar(
     modifier: Modifier = Modifier,
 ) {
     SidebarContent(currentRoute = currentRoute, modifier = modifier) { dest ->
-        // popUpTo(start) + restoreState keeps section switches from stacking up and
-        // preserves each section's back stack (chat included, so no duplicate Home).
-        navController.navigate(dest) {
-            popUpTo(navController.graph.startDestinationId) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
-        }
+        navigateToDenebSection(navController, dest)
     }
 }
 
@@ -107,14 +127,28 @@ private fun SidebarContent(
 @Composable
 private fun SidebarRow(label: String, selected: Boolean, onClick: () -> Unit) {
     val haptics = rememberHaptics()
+    // Hover feedback by color only — `indication = null` because the default ripple
+    // also draws a focus overlay, and on desktop a mouse click focuses the row,
+    // leaving a gray box stuck on the label until focus moves elsewhere.
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val color by animateColorAsState(
+        when {
+            selected -> MaterialTheme.colorScheme.onBackground
+            hovered -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
+            else -> denebHint()
+        },
+    )
     Text(
         text = label,
         fontSize = 20.sp,
         lineHeight = 34.sp,
         fontWeight = FontWeight.ExtraLight,
-        color = if (selected) MaterialTheme.colorScheme.onBackground else denebHint(),
+        color = color,
         modifier = Modifier
-            .clickable { haptics.tap(); onClick() }
+            // Full row width: the whole 200dp band is the click target, not just the glyphs.
+            .fillMaxWidth()
+            .clickable(interactionSource = interaction, indication = null) { haptics.tap(); onClick() }
             .handCursor()
             .padding(vertical = 8.dp),
     )

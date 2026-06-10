@@ -28,6 +28,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ai.deneb.Platform
+import ai.deneb.currentPlatform
 import ai.deneb.data.AppSettings
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
@@ -74,7 +76,11 @@ fun DenebConfigScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("설정", style = DenebType.viewTitle, modifier = Modifier.weight(1f))
-                TextButton(onClick = onBack) { Text("닫기") }
+                // Desktop: the persistent sidebar is the navigation — a close
+                // affordance on a top-level section is redundant there.
+                if (currentPlatform !is Platform.Desktop) {
+                    TextButton(onClick = onBack) { Text("닫기") }
+                }
             }
             // Pill-style tabs (no underline) — mirrors the upstream "고급 설정" tab selector:
             // each tab is a rounded Surface, the selected one gets a soft primary tint.

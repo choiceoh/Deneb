@@ -1,6 +1,8 @@
 package ai.deneb.deneb
 
 import androidx.compose.foundation.clickable
+import ai.deneb.Platform
+import ai.deneb.currentPlatform
 import ai.deneb.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -92,7 +94,11 @@ fun DenebSearchScreen(
                 )
                 TextButton(onClick = onOpenCategories) { Text("카테고리") }
                 TextButton(onClick = { onOpenWiki("") }) { Text("+ 새 위키") }
-                TextButton(onClick = onBack) { Text("닫기") }
+                // Desktop: the persistent sidebar is the navigation — a close
+                // affordance on a top-level section is redundant there.
+                if (currentPlatform !is Platform.Desktop) {
+                    TextButton(onClick = onBack) { Text("닫기") }
+                }
             }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
