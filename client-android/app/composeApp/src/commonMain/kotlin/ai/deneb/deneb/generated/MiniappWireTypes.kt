@@ -202,6 +202,8 @@ data class PersonRow(
     val messageCount: Int = 0,
     val lastSeen: String = "",
     val lastSubject: String = "",
+    val wikiPath: String = "",
+    val wikiSummary: String = "",
 )
 
 @Serializable
