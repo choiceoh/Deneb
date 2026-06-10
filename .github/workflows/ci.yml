@@ -147,6 +147,13 @@ jobs:
 
       - name: Gateway health + RPC endpoint test
         run: |
+          # The gateway's only HTTP RPC surface is the native client's
+          # /api/v1/miniapp/rpc (client-token gated, miniapp.* namespace);
+          # the generic /api/v1/rpc route was retired with the plugin host.
+          # Seed a client token so the e2e exercises real auth + dispatch.
+          export DENEB_STATE_DIR="$RUNNER_TEMP/deneb-e2e-state"
+          mkdir -p "$DENEB_STATE_DIR"
+          printf 'ci-e2e-client-token\n' > "$DENEB_STATE_DIR/client_token"
           dist/gateway --port 19999 --bind loopback &
           GW_PID=$!
           sleep 2
@@ -157,11 +164,12 @@ jobs:
             exit 1
           fi
           echo "Health endpoint returned 200"
-          RESULT=$(curl -s -X POST http://127.0.0.1:19999/api/v1/rpc \
+          RESULT=$(curl -s -X POST http://127.0.0.1:19999/api/v1/miniapp/rpc \
             -H "Content-Type: application/json" \
-            -d '{"type":"req","id":"test-1","method":"health.check","params":{}}')
+            -H "X-Deneb-Client-Token: ci-e2e-client-token" \
+            -d '{"type":"req","id":"test-1","method":"miniapp.ping","params":{}}')
           echo "RPC response: $RESULT"
-          echo "$RESULT" | grep -q '"ok":true' || { echo "RPC health.check failed"; kill $GW_PID; exit 1; }
+          echo "$RESULT" | grep -q '"ok":true' || { echo "RPC miniapp.ping failed"; kill $GW_PID; exit 1; }
           kill $GW_PID
           wait $GW_PID 2>/dev/null || true
           echo "Integration test passed"
