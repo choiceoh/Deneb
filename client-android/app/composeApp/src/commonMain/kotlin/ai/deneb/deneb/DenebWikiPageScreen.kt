@@ -28,8 +28,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 
@@ -89,8 +89,7 @@ fun DenebWikiPageScreen(
             if (creating) {
                 Text(
                     "새 위키 페이지",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
+                    style = DenebType.subject,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(8.dp))
@@ -120,8 +119,7 @@ fun DenebWikiPageScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         pg.title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
+                        style = DenebType.subject,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f),
                     )

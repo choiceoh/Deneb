@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import ai.deneb.data.AppSettings
 import ai.deneb.data.ThemeMode
 import ai.deneb.defaultUiScale
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.settings.SettingsCard
@@ -60,8 +61,7 @@ internal fun AppearanceTab(appSettings: AppSettings) {
         SettingsCard {
             Text(
                 "테마",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                style = DenebType.cardTitle,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Spacer(Modifier.height(8.dp))
@@ -120,8 +120,7 @@ internal fun AppearanceTab(appSettings: AppSettings) {
         SettingsCard {
             Text(
                 "화면 배율",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                style = DenebType.cardTitle,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Spacer(Modifier.height(4.dp))

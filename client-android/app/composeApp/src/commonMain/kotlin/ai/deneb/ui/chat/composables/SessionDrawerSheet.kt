@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.ChatActions
 import ai.deneb.ui.chat.ConversationSummary
 import ai.deneb.ui.components.rememberHaptics
@@ -210,10 +211,11 @@ private fun SessionItem(
             if (conversation.title.isNotEmpty()) {
                 Text(
                     text = conversation.title,
-                    fontSize = 21.sp,
-                    lineHeight = 27.sp,
-                    fontWeight = if (isActive || conversation.isInteractive) FontWeight.Normal else FontWeight.ExtraLight,
-                    letterSpacing = (-0.02).em,
+                    // subject (22 / Light) carries the row; the active/interactive row
+                    // steps up to Normal — the old ExtraLight rest state read as a
+                    // hairline on Korean session titles.
+                    style = DenebType.subject,
+                    fontWeight = if (isActive || conversation.isInteractive) FontWeight.Normal else null,
                     color = when {
                         isActive -> MaterialTheme.colorScheme.onBackground
                         conversation.isInteractive -> MaterialTheme.colorScheme.primary

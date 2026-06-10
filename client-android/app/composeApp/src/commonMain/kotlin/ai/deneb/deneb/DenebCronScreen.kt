@@ -29,8 +29,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
@@ -88,8 +88,7 @@ fun DenebCronScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     c.name.ifBlank { c.id },
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
+                    style = DenebType.subject,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )

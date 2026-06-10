@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ai.deneb.data.AppSettings
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
 import kotlinx.coroutines.launch
@@ -72,7 +73,7 @@ fun DenebConfigScreen(
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("설정", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text("설정", style = DenebType.viewTitle, modifier = Modifier.weight(1f))
                 TextButton(onClick = onBack) { Text("닫기") }
             }
             // Pill-style tabs (no underline) — mirrors the upstream "고급 설정" tab selector:

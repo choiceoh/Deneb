@@ -19,10 +19,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
-import androidx.compose.ui.unit.sp
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
 
@@ -48,8 +46,9 @@ val LocalCaptureActions = compositionLocalOf<CaptureActions?> { null }
 /**
  * The left drawer, restyled as the Mini App's typographic menu (its home idiom,
  * frontend/src/views/home.ts): pure black-and-white words, no icons, no
- * dividers — the page is the list. Big ultralight lowercase rows navigate to
- * the domain surfaces; a small capture footer (Android only) hangs below. The
+ * dividers — the page is the list. Big [DenebType.menuItem] lowercase rows
+ * navigate to the domain surfaces; a small capture footer (Android only) hangs
+ * below. The
  * chat itself stays the home screen — this menu is revealed by a left swipe, so
  * the beauty lives in the navigation without costing the chat-first flow.
  */
@@ -94,10 +93,7 @@ private fun TypeMenuItem(label: String, onClick: () -> Unit) {
     val haptics = rememberHaptics()
     Text(
         text = label,
-        fontSize = 32.sp,
-        lineHeight = 42.sp,
-        fontWeight = FontWeight.ExtraLight,
-        letterSpacing = (-0.03).em,
+        style = DenebType.menuItem,
         color = MaterialTheme.colorScheme.onBackground,
         modifier = Modifier
             .fillMaxWidth()
@@ -114,9 +110,7 @@ private fun CaptureItem(label: String, onClick: () -> Unit) {
     val haptics = rememberHaptics()
     Text(
         text = label,
-        fontSize = 15.sp,
-        fontWeight = FontWeight.Normal,
-        letterSpacing = 0.01.em,
+        style = DenebType.rowTitle,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
             .fillMaxWidth()
