@@ -145,7 +145,11 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	for _, slot := range slots {
 		evidence = append(evidence, slot...)
 	}
-	if len(evidence) == 0 && deps.wikiStore != nil {
+	// Recent-diary fallback ONLY for topicless cues ("아까 뭐였지?" — no signal
+	// terms, so nothing was searchable). A topical question that found nothing
+	// must get the honest no-evidence notice, not two unrelated recent diary
+	// entries dressed up as recall (the bench caught exactly that).
+	if len(evidence) == 0 && deps.wikiStore != nil && len(queries) == 0 {
 		evidence = append(evidence, recallDiaryEvidence(ctx, deps.wikiStore, queries, true)...)
 	}
 
