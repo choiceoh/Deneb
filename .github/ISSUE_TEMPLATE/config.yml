@@ -1,8 +1,1 @@
 blank_issues_enabled: false
-contact_links:
-  - name: Onboarding
-    url: https://discord.gg/clawd
-    about: "New to Deneb? Join Discord for setup guidance in #help."
-  - name: Support
-    url: https://discord.gg/clawd
-    about: "Get help from the Deneb community on Discord in #help."
