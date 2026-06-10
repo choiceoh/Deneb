@@ -31,6 +31,10 @@ type DreamReport struct {
 	WikiGraphNodes      int      `json:"wikiGraphNodes,omitempty"`
 	WikiGraphEdges      int      `json:"wikiGraphEdges,omitempty"`
 	WikiGraphClustered  bool     `json:"wikiGraphClustered,omitempty"`
-	DurationMs          int64    `json:"durationMs"`
-	PhaseErrors         []string `json:"phaseErrors,omitempty"`
+	// WikiChangeSummary is a preformatted, human-readable block describing
+	// what this cycle changed (paths, git snapshot hash, diffstat, rollback
+	// hint). Appended verbatim to the dream notification.
+	WikiChangeSummary string   `json:"wikiChangeSummary,omitempty"`
+	DurationMs        int64    `json:"durationMs"`
+	PhaseErrors       []string `json:"phaseErrors,omitempty"`
 }

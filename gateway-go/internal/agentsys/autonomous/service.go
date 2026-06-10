@@ -410,6 +410,10 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 				msg += "\n  - " + truncateOutput(f, 80)
 			}
 		}
+		// What exactly changed + how to roll it back (wiki git snapshot).
+		if report.WikiChangeSummary != "" {
+			msg += "\n" + report.WikiChangeSummary
+		}
 		if len(report.PhaseErrors) > 0 {
 			msg += fmt.Sprintf("\n⚠️ 실패: %s", strings.Join(report.PhaseErrors, "; "))
 		}
