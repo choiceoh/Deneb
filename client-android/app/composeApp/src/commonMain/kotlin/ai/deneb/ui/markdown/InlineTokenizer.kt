@@ -41,6 +41,14 @@ internal object InlineTokenizer {
     private val HARD_BREAK_REGEX = Regex(" {2,}\\n|\\\\\\n")
     // LLM-emitted literal <br>/<br/> — common in table cells where a real newline would split the row.
     private val HTML_BREAK_REGEX = Regex("<br\\s*/?>", RegexOption.IGNORE_CASE)
+    // LLM-emitted semantic inline HTML. Paired tags only: b/strong/i/em map to real style
+    // nodes, code/kbd to inline code, sub/sup to Unicode scripts (H<sub>2</sub>O → H₂O),
+    // u/mark keep their content with the tags dropped. Unknown tags stay literal — they may
+    // be generics ("List<T>") or prose. Closing tag must match the opener (backreference).
+    private val HTML_INLINE_REGEX = Regex(
+        "<(b|strong|i|em|s|del|strike|u|mark|code|kbd|sub|sup)>([\\s\\S]+?)</\\1>",
+        RegexOption.IGNORE_CASE,
+    )
     private val EMOJI_SHORTCODE_REGEX = Regex(":([a-zA-Z0-9_+-]+):")
 
     // Math delimiters. `$$…$$` and `\[…\]` are display-flavored but still accepted inline
@@ -254,6 +262,23 @@ internal object InlineTokenizer {
                 val href = if (inner.startsWith("http") || inner.startsWith("mailto:")) inner else "mailto:$inner"
                 all += m.range to Link(href, persistentListOf(Text(inner.removePrefix("mailto:"))))
             }
+            // Cap the paired-tag scan: thousands of unclosed "<b>" would make the lazy
+            // closer search quadratic. Real prose has a handful of tags per paragraph.
+            if (text.count { it == '<' } <= 256) {
+                for (m in HTML_INLINE_REGEX.findAll(text)) {
+                    val inner = m.groupValues[2]
+                    val node: InlineNode = when (m.groupValues[1].lowercase()) {
+                        "b", "strong" -> Strong(parse(inner, depth + 1))
+                        "i", "em" -> Emphasis(parse(inner, depth + 1))
+                        "s", "del", "strike" -> Strike(parse(inner, depth + 1))
+                        "code", "kbd" -> InlineCode(inner)
+                        "sub" -> Text(convertScript(inner, SUBSCRIPT_CHARS))
+                        "sup" -> Text(convertScript(inner, SUPERSCRIPT_CHARS))
+                        else -> Text(inner) // u, mark: keep the content, drop the tags
+                    }
+                    all += m.range to node
+                }
+            }
         }
         if ('@' in text) {
             // Bare addresses. Ones inside a longer atomic (a [..](..) link, an autolinked URL's
@@ -290,6 +315,30 @@ internal object InlineTokenizer {
             }
         }
         return result
+    }
+
+    private val SUPERSCRIPT_CHARS = mapOf(
+        '0' to '⁰', '1' to '¹', '2' to '²', '3' to '³', '4' to '⁴',
+        '5' to '⁵', '6' to '⁶', '7' to '⁷', '8' to '⁸', '9' to '⁹',
+        '+' to '⁺', '-' to '⁻', '=' to '⁼', '(' to '⁽', ')' to '⁾', 'n' to 'ⁿ', 'i' to 'ⁱ',
+    )
+
+    private val SUBSCRIPT_CHARS = mapOf(
+        '0' to '₀', '1' to '₁', '2' to '₂', '3' to '₃', '4' to '₄',
+        '5' to '₅', '6' to '₆', '7' to '₇', '8' to '₈', '9' to '₉',
+        '+' to '₊', '-' to '₋', '=' to '₌', '(' to '₍', ')' to '₎',
+    )
+
+    // Convert only when every char has a Unicode script form ("m<sup>2</sup>" → "m²");
+    // otherwise keep the plain content ("5<sup>th</sup>" → "5th") rather than mixing
+    // baseline and script glyphs.
+    private fun convertScript(inner: String, map: Map<Char, Char>): String {
+        val sb = StringBuilder(inner.length)
+        for (c in inner) {
+            val mapped = map[c] ?: return inner
+            sb.append(mapped)
+        }
+        return sb.toString()
     }
 
     // Normalize a raw link destination: drop a CommonMark <…> wrapper and a trailing

@@ -85,7 +85,15 @@ private fun blockToPlain(block: BlockNode): String = when (block) {
 
     is Blockquote -> block.children.joinToString("\n") { blockToPlain(it) }
 
-    is BulletList -> block.items.joinToString("\n") { "- " + itemToPlain(it) }
+    is BulletList -> block.items.joinToString("\n") { item ->
+        // Keep GFM task state in copies — the parser stripped "[x]" into ListItem.checked.
+        val marker = when (item.checked) {
+            true -> "- [x] "
+            false -> "- [ ] "
+            null -> "- "
+        }
+        marker + itemToPlain(item)
+    }
 
     is OrderedList -> block.items.mapIndexed { index, item ->
         "${block.start + index}. " + itemToPlain(item)
