@@ -29,6 +29,7 @@ import (
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
+	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
 // registerSessionRPCMethods registers session state, repair, daemon status, and
@@ -65,6 +66,7 @@ func (s *Server) registerSessionRPCMethods() {
 		transcriptDir = home + "/.deneb/transcripts"
 	}
 	var transcriptStore chat.TranscriptStore
+	var polarisStoreForSweep *polaris.Store
 	if transcriptDir != "" {
 		cached := chat.NewCachedTranscriptStore(
 			chat.NewFileTranscriptStore(transcriptDir), 0)
@@ -79,6 +81,7 @@ func (s *Server) registerSessionRPCMethods() {
 				s.logger.Error("polaris: failed to open store", "error", polarisErr)
 			} else {
 				transcriptStore = polaris.NewBridge(cached, polarisStore, s.logger)
+				polarisStoreForSweep = polarisStore
 			}
 		}
 		// Fallback: if Polaris initialization failed, use cached store directly.
@@ -86,6 +89,20 @@ func (s *Server) registerSessionRPCMethods() {
 		if transcriptStore == nil {
 			transcriptStore = cached
 		}
+	}
+
+	// Startup retention GC: bound the Polaris raw-message store and
+	// automated-session transcripts, which otherwise grow forever (237MB /
+	// 1,400+ files observed). Runs once, off the startup path.
+	if maxAge := memorySweepRetention(); maxAge > 0 {
+		sweepPolaris := polarisStoreForSweep
+		sweepDir := transcriptDir
+		safego.GoWithSlog(s.logger, "memory-sweep", func() {
+			if sweepPolaris != nil {
+				sweepPolaris.SweepExpired(maxAge, s.logger)
+			}
+			sweepAutomatedTranscripts(sweepDir, maxAge, s.logger)
+		})
 	}
 
 	// Initialize agent detail log writer.
