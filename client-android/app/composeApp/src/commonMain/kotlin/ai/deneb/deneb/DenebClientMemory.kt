@@ -155,7 +155,9 @@ suspend fun DenebGatewayClient.searchAll(query: String): SearchResults? {
     )
 }
 
-/** People ranked by recent message volume (`miniapp.people.list`). Null on a
+/** Merged people directory (`miniapp.people.list`): recent Gmail counterparties
+ *  ranked by message volume, with their 인물 wiki page folded in when matched,
+ *  plus wiki-only people (no recent mail) appended by the gateway. Null on a
  *  fetch failure so the screen can offer retry instead of a misleading "empty". */
 suspend fun DenebGatewayClient.fetchPeople(): List<PersonHit>? {
     val p = callRpc<PeopleListPayload>(
@@ -164,6 +166,15 @@ suspend fun DenebGatewayClient.fetchPeople(): List<PersonHit>? {
     ) ?: return null
     return p.people
         .filter { it.email.isNotBlank() || it.name.isNotBlank() }
-        .map { PersonHit(it.name.ifBlank { it.email }, it.email, it.messageCount, it.lastSubject) }
+        .map {
+            PersonHit(
+                name = it.name.ifBlank { it.email },
+                email = it.email,
+                messageCount = it.messageCount,
+                lastSubject = it.lastSubject,
+                wikiPath = it.wikiPath,
+                wikiSummary = it.wikiSummary,
+            )
+        }
 }
 

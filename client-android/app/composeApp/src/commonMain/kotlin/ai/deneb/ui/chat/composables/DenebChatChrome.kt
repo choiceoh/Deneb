@@ -57,7 +57,6 @@ fun DenebDrawerSheet(
     onOpenSearch: () -> Unit,
     onOpenMail: () -> Unit,
     onOpenCalendar: () -> Unit,
-    onOpenPeople: () -> Unit,
     onOpenCategories: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onClose: () -> Unit,
@@ -70,10 +69,11 @@ fun DenebDrawerSheet(
                 .padding(horizontal = 28.dp, vertical = 40.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
+            // "people" is no longer a drawer destination: the merged people surface
+            // (recent contacts + 인물 wiki) lives inside categories as a pinned row.
             TypeMenuItem("mail") { onOpenMail(); onClose() }
             TypeMenuItem("calendar") { onOpenCalendar(); onClose() }
             TypeMenuItem("search") { onOpenSearch(); onClose() }
-            TypeMenuItem("people") { onOpenPeople(); onClose() }
             TypeMenuItem("categories") { onOpenCategories(); onClose() }
             TypeMenuItem("settings") { onNavigateToSettings(); onClose() }
 

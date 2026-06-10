@@ -462,7 +462,6 @@ private fun renderChrome(name: String, scheme: ColorScheme) {
                         onOpenSearch = {},
                         onOpenMail = {},
                         onOpenCalendar = {},
-                        onOpenPeople = {},
                         onOpenCategories = {},
                         onNavigateToSettings = {},
                         onClose = {},

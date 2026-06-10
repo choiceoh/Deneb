@@ -166,12 +166,31 @@ b="$(log_lines)"; check_screen "smoke-01-chat-workfeed" "$b"
 scroll_probe "smoke-01-chat-workfeed"
 
 # Left-drawer screens: tap the English drawer label, assert the screen's anchor.
-# List-heavy screens (mail/people/categories) also scroll-probe below the fold.
+# List-heavy screens (mail/categories) also scroll-probe below the fold.
 go_drawer "smoke-02-mail"       "mail"       "받은 메일"  scroll
 go_drawer "smoke-03-calendar"   "calendar"   "일정"
 go_drawer "smoke-04-search"     "search"     "검색"
-go_drawer "smoke-05-people"     "people"     "사람"      scroll
-go_drawer "smoke-06-categories" "categories" "카테고리"  scroll
+go_drawer "smoke-05-categories" "categories" "카테고리"  scroll
+
+# People — the merged 사람 surface is a pinned row INSIDE categories now (no
+# drawer item). Re-enter categories fresh (go_drawer escaped back to chat and
+# scroll-probed the list away from the top), then tap the pinned row. Anchor on
+# the screen's "최근 연락" section label — the bare word "사람" also appears on
+# the categories screen itself, so it can't distinguish the two.
+"$NA" tap 25 37 >/dev/null 2>&1 || true
+"$NA" wait-for "categories" 5 >/dev/null 2>&1 || true
+"$NA" taptext "categories" >/dev/null 2>&1 || true
+"$NA" wait-for "카테고리" 8 >/dev/null 2>&1 || sleep 2
+retry_nav "categories" "카테고리"
+b="$(log_lines)"
+"$NA" taptext "사람" >/dev/null 2>&1 || true
+settle "최근 연락"
+retry_nav "사람" "최근 연락"
+check_screen "smoke-06-people" "$b" "최근 연락"
+scroll_probe "smoke-06-people"
+"$NA" key Escape >/dev/null 2>&1 || true
+"$NA" key Escape >/dev/null 2>&1 || true
+sleep 1
 
 # Settings screen + tabs: taptext the toggle, then each tab label.
 "$NA" taptext "설정" >/dev/null 2>&1 || "$NA" tap 235 27 >/dev/null 2>&1 || true

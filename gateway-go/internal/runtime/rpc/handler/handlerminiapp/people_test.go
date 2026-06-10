@@ -3,9 +3,11 @@ package handlerminiapp
 import (
 	"context"
 	"errors"
+	"sort"
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -193,5 +195,149 @@ func TestAggregatePeople_TiebreakDeterministic(t *testing.T) {
 	rows := aggregatePeople(msgs)
 	if rows[0].Email != "a@x.com" {
 		t.Errorf("tiebreak order = %v, want a first", rows[0].Email)
+	}
+}
+
+// peopleWikiStore stubs the 인물 directory: ListPages("인물") returns the
+// page paths, ReadPage serves each page.
+func peopleWikiStore(pages map[string]*wiki.Page) *fakeMemoryStore {
+	paths := make([]string, 0, len(pages))
+	for p := range pages {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	return &fakeMemoryStore{
+		listPagesFn: func(category string) ([]string, error) {
+			if category != peopleWikiCategory {
+				return nil, nil
+			}
+			return paths, nil
+		},
+		readPageFn: func(rel string) (*wiki.Page, error) {
+			page, ok := pages[rel]
+			if !ok {
+				return nil, errors.New("no such page")
+			}
+			return page, nil
+		},
+	}
+}
+
+func TestPeopleList_MergesWikiPeople(t *testing.T) {
+	c := &fakePeopleClient{
+		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
+			return []gmail.MessageSummary{
+				// Matches 인물/kim by 연락처 email despite the unrelated display name.
+				{From: "MJ <mj.kim@topsolar.kr>", Subject: "견적", Date: "2026-06-08T10:00:00Z"},
+				// Matches 인물/lee by normalized name (honorific stripped).
+				{From: "이수민 차장 <soomin@partner.co>", Subject: "회의", Date: "2026-06-09T10:00:00Z"},
+				// No wiki page.
+				{From: "noreply@promo.example", Subject: "Sale", Date: "2026-06-07T10:00:00Z"},
+			}, nil
+		},
+	}
+	store := peopleWikiStore(map[string]*wiki.Page{
+		"인물/kim.md": {
+			Meta: wiki.Frontmatter{Title: "김민준", Summary: "탑솔라 대표", Category: "인물", Updated: "2026-06-01"},
+			Body: "# 김민준\n\n## 연락처\n\n- 이메일: MJ.Kim@topsolar.kr\n",
+		},
+		"인물/lee.md": {
+			Meta: wiki.Frontmatter{Title: "이수민", Summary: "파트너사 차장", Category: "인물", Updated: "2026-05-20"},
+			Body: "# 이수민\n",
+		},
+		// No recent mail → wiki-only tail row.
+		"인물/park.md": {
+			Meta: wiki.Frontmatter{Title: "박지훈", Summary: "법무 자문", Category: "인물", Updated: "2026-05-30"},
+			Body: "# 박지훈\n",
+		},
+		// Newer than park → must sort first in the tail.
+		"인물/choi.md": {
+			Meta: wiki.Frontmatter{Title: "최은서", Summary: "회계사", Category: "인물", Updated: "2026-06-05"},
+			Body: "# 최은서\n",
+		},
+		// Stray non-person page under 인물/ — must be skipped.
+		"인물/stray.md": {
+			Meta: wiki.Frontmatter{Title: "메모", Summary: "잘못 들어온 페이지", Category: "토픽"},
+			Body: "# 메모\n",
+		},
+	})
+	deps := peopleDepsFor(c)
+	deps.WikiStore = func() (MemorySearcher, error) { return store, nil }
+
+	h := peopleList(deps)
+	resp := h(authedCtx(), reqWith(t, "miniapp.people.list", map[string]any{}))
+	var got struct {
+		People []PersonRow `json:"people"`
+	}
+	decode(t, resp, &got)
+	if len(got.People) != 5 {
+		t.Fatalf("people len = %d, want 5 (3 gmail + 2 wiki-only): %+v", len(got.People), got.People)
+	}
+
+	kim := findPersonRow(got.People, "mj.kim@topsolar.kr")
+	if kim == nil || kim.WikiPath != "인물/kim.md" || kim.WikiSummary != "탑솔라 대표" {
+		t.Errorf("email match not applied: %+v", kim)
+	}
+	lee := findPersonRow(got.People, "soomin@partner.co")
+	if lee == nil || lee.WikiPath != "인물/lee.md" {
+		t.Errorf("normalized-name match not applied: %+v", lee)
+	}
+	promo := findPersonRow(got.People, "noreply@promo.example")
+	if promo == nil || promo.WikiPath != "" {
+		t.Errorf("unmatched sender gained wiki fields: %+v", promo)
+	}
+
+	// Wiki-only tail: updated desc → choi (06-05) before park (05-30);
+	// both after every Gmail row, with no email/count.
+	tail := got.People[3:]
+	if tail[0].Name != "최은서" || tail[1].Name != "박지훈" {
+		t.Errorf("wiki-only tail order = [%s, %s], want [최은서, 박지훈]", tail[0].Name, tail[1].Name)
+	}
+	for _, row := range tail {
+		if row.Email != "" || row.MessageCount != 0 || row.WikiPath == "" {
+			t.Errorf("wiki-only row malformed: %+v", row)
+		}
+	}
+}
+
+func findPersonRow(rows []PersonRow, email string) *PersonRow {
+	for i := range rows {
+		if rows[i].Email == email {
+			return &rows[i]
+		}
+	}
+	return nil
+}
+
+func TestPeopleList_WikiUnavailableDegradesToGmailOnly(t *testing.T) {
+	c := &fakePeopleClient{
+		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
+			return []gmail.MessageSummary{
+				{From: "a@x.com", Subject: "S", Date: "2026-06-09T10:00:00Z"},
+			}, nil
+		},
+	}
+	deps := peopleDepsFor(c)
+	deps.WikiStore = func() (MemorySearcher, error) { return nil, errors.New("wiki disabled") }
+
+	h := peopleList(deps)
+	resp := h(authedCtx(), reqWith(t, "miniapp.people.list", map[string]any{}))
+	var got struct {
+		People []PersonRow `json:"people"`
+	}
+	decode(t, resp, &got)
+	if len(got.People) != 1 || got.People[0].Email != "a@x.com" {
+		t.Errorf("wiki failure must not break gmail rows: %+v", got.People)
+	}
+}
+
+func TestContactSectionEmails_OnlyContactSection(t *testing.T) {
+	page := &wiki.Page{
+		Body: "# 김민준\n\n## 요약\n\n다른사람 other@x.com 언급.\n\n## 연락처\n\n- 전화: 010-0000-0000\n- 이메일: A@topsolar.kr, b@topsolar.kr\n\n_주소록에서 동기화됨_\n",
+	}
+	got := contactSectionEmails(page)
+	want := []string{"a@topsolar.kr", "b@topsolar.kr"}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("contactSectionEmails = %v, want %v", got, want)
 	}
 }

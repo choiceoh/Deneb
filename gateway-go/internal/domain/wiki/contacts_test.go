@@ -125,8 +125,8 @@ func TestNormalizePersonName(t *testing.T) {
 		{"민", "민"},
 	}
 	for _, c := range cases {
-		if got := normalizePersonName(c.in); got != c.want {
-			t.Errorf("normalizePersonName(%q) = %q, want %q", c.in, got, c.want)
+		if got := NormalizePersonName(c.in); got != c.want {
+			t.Errorf("NormalizePersonName(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }

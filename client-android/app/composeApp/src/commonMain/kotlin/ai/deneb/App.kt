@@ -336,7 +336,6 @@ private fun AppContent(
                             onOpenMail = { navController.navigate(DenebMail) },
                             onOpenCalendar = { navController.navigate(DenebCalendar) },
                             onOpenSearch = { navController.navigate(DenebSearch) },
-                            onOpenPeople = { navController.navigate(DenebPeople) },
                             onOpenCategories = { navController.navigate(DenebCategories) },
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
                         )
@@ -505,6 +504,7 @@ private fun AppContent(
                                 onBack = { navController.navigateUp() },
                                 onOpenCategory = { cat -> navController.navigate(DenebCategoryPages(cat)) },
                                 onOpenDiary = { navController.navigate(DenebDiary) },
+                                onOpenPeople = { navController.navigate(DenebPeople) },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }
@@ -535,6 +535,7 @@ private fun AppContent(
                                 client = client,
                                 onBack = { navController.navigateUp() },
                                 onOpenPerson = { sender -> navController.navigate(DenebPerson(sender)) },
+                                onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }

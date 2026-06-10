@@ -128,7 +128,7 @@ func (s *Store) EnrichPeople(names []string, book []Contact, createMissing bool)
 
 	seen := make(map[string]bool, len(names))
 	for _, name := range names {
-		key := normalizePersonName(name)
+		key := NormalizePersonName(name)
 		if len([]rune(key)) < 2 || seen[key] {
 			continue
 		}
@@ -174,7 +174,7 @@ func mergeContactsByName(book []Contact) map[string]*Contact {
 	merged := make(map[string]*Contact, len(book))
 	for i := range book {
 		c := book[i]
-		key := normalizePersonName(c.Name)
+		key := NormalizePersonName(c.Name)
 		if len([]rune(key)) < 2 {
 			continue
 		}
@@ -218,7 +218,7 @@ func (s *Store) listPeopleByName() (map[string]personPage, error) {
 		if title == "" {
 			continue
 		}
-		key := normalizePersonName(title)
+		key := NormalizePersonName(title)
 		if len([]rune(key)) < 2 {
 			continue
 		}
@@ -350,12 +350,14 @@ var personTitleSuffixes = []string{
 	"님", "씨", "군", "양",
 }
 
-// normalizePersonName reduces a display name to a stable match key: it drops any
+// NormalizePersonName reduces a display name to a stable match key: it drops any
 // parenthetical/affiliation suffix, removes whitespace, peels trailing honorific
 // tokens (while never shrinking below 2 runes, so "김부장" doesn't collapse to a
 // bare surname), and lowercases ASCII. Matching is exact on this key — no
-// substring matching, which would mis-pair "이수" with "이수민".
-func normalizePersonName(s string) string {
+// substring matching, which would mis-pair "이수" with "이수민". Exported so the
+// miniapp people directory matches Gmail senders to 인물 pages with the same
+// semantics the contacts sync uses.
+func NormalizePersonName(s string) string {
 	t := strings.TrimSpace(s)
 	if t == "" {
 		return ""

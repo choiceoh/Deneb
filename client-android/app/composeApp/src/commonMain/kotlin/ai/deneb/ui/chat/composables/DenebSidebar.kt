@@ -28,7 +28,6 @@ import ai.deneb.DenebCalendar
 import ai.deneb.DenebCategories
 import ai.deneb.DenebConfig
 import ai.deneb.DenebMail
-import ai.deneb.DenebPeople
 import ai.deneb.DenebSearch
 import ai.deneb.Home
 import ai.deneb.ui.components.rememberHaptics
@@ -53,12 +52,13 @@ private data class SidebarItem(val label: String, val route: String, val dest: A
 // [route] is the destination @SerialName (matches currentBackStackEntry.destination.route
 // for highlighting); [dest] is the typed route object passed to navController.navigate —
 // nav-compose 2.9 routes by the @Serializable object, not a bare route string.
+// "people" is not a rail item: the merged people surface (recent contacts +
+// 인물 wiki) is reached through categories' pinned "사람" row.
 private val sidebarItems = listOf(
     SidebarItem("chat", "home", Home),
     SidebarItem("mail", "deneb_mail", DenebMail),
     SidebarItem("calendar", "deneb_calendar", DenebCalendar),
     SidebarItem("search", "deneb_search", DenebSearch),
-    SidebarItem("people", "deneb_people", DenebPeople),
     SidebarItem("categories", "deneb_categories", DenebCategories),
     SidebarItem("settings", "deneb_config", DenebConfig),
 )
