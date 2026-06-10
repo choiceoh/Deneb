@@ -399,6 +399,17 @@ var (
 	htmlLineRE   = regexp.MustCompile(`(?i)<(?:br\s*/?|hr\s*/?|/li|/tr)\s*[^>]*>`)
 	htmlAnyTagRE = regexp.MustCompile(`(?s)<[^>]+>`)
 	htmlBlankRE  = regexp.MustCompile(`\n{3,}`)
+
+	// Structure markers that survive into the plain-text view:
+	//   htmlCellRE     — </td> / </th> become a two-space gap so table cells
+	//                    don't fuse ("품명단가수량") in invoice/order mails.
+	//   htmlListItemRE — <li> openers become a bullet so lists keep structure.
+	//   htmlQuoteRE    — <blockquote> openers mark the start of quoted text
+	//                    with "> " (first line only — a plain-text view can't
+	//                    carry the nesting, but the cue is enough to read it).
+	htmlCellRE     = regexp.MustCompile(`(?i)</t[dh]\s*>`)
+	htmlListItemRE = regexp.MustCompile(`(?i)<li\b[^>]*>`)
+	htmlQuoteRE    = regexp.MustCompile(`(?i)<blockquote\b[^>]*>`)
 )
 
 // extractAttr returns the first non-empty subgroup matched by attrRE in
@@ -482,6 +493,9 @@ func htmlToText(s string) string {
 	// tag pass and the anchor would lose its visible text.
 	s = replaceImages(s)
 	s = replaceAnchors(s)
+	s = htmlCellRE.ReplaceAllString(s, "  ")
+	s = htmlListItemRE.ReplaceAllString(s, "\u2022 ")
+	s = htmlQuoteRE.ReplaceAllString(s, "\n> ")
 	s = htmlParaRE.ReplaceAllString(s, "\n\n")
 	s = htmlLineRE.ReplaceAllString(s, "\n")
 	s = htmlAnyTagRE.ReplaceAllString(s, "")

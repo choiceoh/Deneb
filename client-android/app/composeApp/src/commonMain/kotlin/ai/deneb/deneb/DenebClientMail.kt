@@ -59,10 +59,15 @@ suspend fun DenebGatewayClient.loadMoreMail() {
     _denebMailNextToken.value = payload.nextPageToken.ifBlank { null }
 }
 
-suspend fun DenebGatewayClient.fetchMailDetail(id: String): MailDetail? {
+suspend fun DenebGatewayClient.fetchMailDetail(id: String, full: Boolean = false): MailDetail? {
     val row = callRpc<MailMessageOut>(
         "miniapp.gmail.get",
-        buildJsonObject { put("id", id) },
+        buildJsonObject {
+            put("id", id)
+            // full=true asks for the untruncated body (still server-bounded);
+            // the default keeps the light 3000-char cap for the list→detail flow.
+            if (full) put("full", true)
+        },
     ) ?: return null
     return MailDetail(
         id = row.id,

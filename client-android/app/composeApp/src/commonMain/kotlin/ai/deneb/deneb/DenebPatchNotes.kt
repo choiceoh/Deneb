@@ -21,6 +21,13 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "메일 본문 속 링크가 바로 탭 가능해지고, 본문 텍스트를 길게 눌러 복사 가능",
+            "잘린 긴 메일은 '전체 보기'로 끝까지 읽기",
+            "HTML 표 메일의 칸이 붙어 나오던 것 교정(품명·단가 구분), 목록은 • 글머리표, 인용은 > 표시로",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "메일 상세의 AI 분석이 기본 접힌 카드로 — 첫 줄 미리보기만 보이고 탭하면 펼쳐져, 긴 분석이 본문을 밀어내지 않음",
         ),
     ),

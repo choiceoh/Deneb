@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -57,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import ai.deneb.decodeToImageBitmap
 import ai.deneb.getBackgroundDispatcher
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.LinkifiedText
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
 import ai.deneb.ui.denebShrinkOut
@@ -106,6 +108,7 @@ fun DenebMailDetailScreen(
     val qa = remember(messageId) { mutableStateListOf<Pair<String, String>>() }
     var loadFailed by remember(messageId) { mutableStateOf(false) }
     var actionMsg by remember(messageId) { mutableStateOf<String?>(null) }
+    var loadingFullBody by remember(messageId) { mutableStateOf(false) }
 
     suspend fun load() {
         loadFailed = false
@@ -300,17 +303,35 @@ fun DenebMailDetailScreen(
             Spacer(Modifier.height(16.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(12.dp))
-            Text(
-                mail.body.ifBlank { "(본문 없음)" },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            if (mail.bodyTotal > mail.body.length) {
-                Text(
-                    "${mail.bodyTotal}자 중 일부만 표시",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            // The body is plain text (gateway already rendered HTML → text), not
+            // markdown — but its URLs must be tappable (auth/CTA mails are the
+            // link) and the text copyable. Email addresses stay plain on purpose.
+            SelectionContainer {
+                LinkifiedText(
+                    text = mail.body.ifBlank { "(본문 없음)" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
+            }
+            if (mail.bodyTotal > mail.body.length) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "${mail.bodyTotal}자 중 일부만 표시",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(
+                        onClick = {
+                            haptics.tap()
+                            scope.launch {
+                                loadingFullBody = true
+                                client.fetchMailDetail(messageId, full = true)?.let { detail = it }
+                                loadingFullBody = false
+                            }
+                        },
+                        enabled = !loadingFullBody,
+                    ) { Text(if (loadingFullBody) "불러오는 중…" else "전체 보기") }
+                }
             }
             if (mail.attachments.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
