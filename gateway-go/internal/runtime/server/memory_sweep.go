@@ -40,8 +40,8 @@ func memorySweepRetention() time.Duration {
 
 // automatedTranscriptPrefixes are session-key prefixes whose transcripts are
 // machine-generated and safe to age out: one-shot cron runs, ACP subagent
-// forks, and ad-hoc ':'-prefixed harness/agent sessions. User-facing channels
-// (client:*, telegram:*) and bounded system:* sessions are never swept —
+// forks, and ad-hoc ':'-prefixed harness/agent sessions. User-facing client:*
+// and bounded system:* sessions are never swept —
 // transcripts are primary records, so the sweep is allowlist-by-prefix, not
 // mtime-only like the Polaris one.
 var automatedTranscriptPrefixes = []string{"cron:", "acp:", ":"}

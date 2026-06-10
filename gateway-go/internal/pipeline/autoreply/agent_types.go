@@ -1,7 +1,7 @@
 // agent_types.go — Shared types for the agent execution interface.
 //
-// AgentExecutor is consumed by ReplyFromConfig (get_reply.go)
-// and implemented by chatSendExecutor (server/inbound_deps.go).
+// AgentExecutor is consumed by ReplyFromConfig (get_reply.go); the host
+// wiring ReplyDeps supplies the implementation.
 package autoreply
 
 import (
@@ -32,7 +32,7 @@ type AgentTurnConfig struct {
 }
 
 // AgentTurnResult holds the outcome of an agent turn.
-// The actual reply delivery happens asynchronously via chatSendExecutor →
+// The actual reply delivery happens asynchronously via the executor →
 // chat.Handler.Send(). Payloads here are only used for command replies.
 type AgentTurnResult struct {
 	Payloads []types.ReplyPayload

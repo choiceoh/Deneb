@@ -25,15 +25,16 @@ const (
 
 // ClarifyCallbackPrefix is the callback_data prefix for clarify button clicks.
 // Format: "clarify:<index>" (e.g. "clarify:0", "clarify:3").
-// Kept short so we stay well under Telegram's 64-byte callback_data limit.
+// Kept short — originally to stay under Telegram's 64-byte callback_data limit;
+// retained unchanged for any future button-capable surface.
 const ClarifyCallbackPrefix = "clarify:"
 
 // buildClarifyMessage formats the question + numbered options + button directive.
-// The directive is parsed by server/reply_buttons.go:parseReplyButtons and
-// converted into an InlineKeyboardMarkup when delivered to Telegram.
-//
-// Each button's callback_data encodes the option index so handleCallbackQuery
-// can forward the user's choice back to the agent on a later turn.
+// Legacy Telegram path: the directive used to be parsed into an
+// InlineKeyboardMarkup by the Telegram reply pipeline, and button taps came
+// back through its callback dispatcher. Both died with the plugin (PR #1922),
+// and no current channel reports as "telegram", so this builder is unreachable
+// today — kept for a future button-capable surface.
 func buildClarifyMessage(question string, options []string) (string, error) {
 	var body strings.Builder
 	body.WriteString(strings.TrimSpace(question))
@@ -46,8 +47,8 @@ func buildClarifyMessage(question string, options []string) (string, error) {
 	// on mobile (easier to tap than a wrapped horizontal row).
 	rows := make([][]string, len(options))
 	for i, opt := range options {
-		// Format "label|callback_data" — parseReplyButtons splits on the
-		// first "|". The label (visible button text) carries the full option.
+		// Format "label|callback_data" — the (retired) Telegram reply path
+		// split on the first "|". The label carried the full option text.
 		spec := fmt.Sprintf("%s|%s%d", opt, ClarifyCallbackPrefix, i)
 		rows[i] = []string{spec}
 	}
@@ -60,9 +61,9 @@ func buildClarifyMessage(question string, options []string) (string, error) {
 }
 
 // buildClarifyText formats just the question + numbered options, without the
-// Telegram button directive. Used as a fallback on channels that don't render
-// inline keyboards (e.g. the native client) so the agent can still ask — the
-// user replies in free text and the agent reads it on the next turn.
+// legacy button directive. This is the path every current channel takes (the
+// native client renders no inline keyboards): the user replies in free text
+// and the agent reads it on the next turn.
 func buildClarifyText(question string, options []string) string {
 	var body strings.Builder
 	body.WriteString(strings.TrimSpace(question))
@@ -75,11 +76,11 @@ func buildClarifyText(question string, options []string) string {
 }
 
 // ToolClarify implements the clarify tool: the agent asks the user to resolve
-// an ambiguity and receives the answer through a Telegram inline-keyboard
-// button click. The tool sends the question + buttons via the current
-// replyFunc and returns immediately — the agent's turn ends there. When the
-// user taps a button, the inbound callback dispatcher injects the choice as
-// a new user message on the next turn (see runtime/server/inbound.go).
+// an ambiguity with a numbered-option question sent via the current replyFunc,
+// then returns immediately — the agent's turn ends there. The user answers in
+// free text (number or wording) and the agent reads it as the next user turn.
+// The Telegram inline-keyboard round-trip this tool was built around is gone
+// (plugin + callback dispatcher retired in PR #1922).
 func ToolClarify() ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
@@ -131,10 +132,11 @@ func ToolClarify() ToolFunc {
 		if delivery == nil || delivery.Channel == "" || delivery.To == "" {
 			return "", fmt.Errorf("clarify: no active delivery target; cannot send button prompt")
 		}
-		// Inline keyboards are a Telegram-specific affordance. On other channels
-		// the button directive is stripped by parseReplyButtons (only the
-		// Telegram reply path parses it), so fall back to a plain-text numbered
-		// question — the user replies in free text and the agent reads it next turn.
+		// Inline keyboards were a Telegram-specific affordance and no current
+		// channel reports as "telegram", so every live caller takes this
+		// plain-text branch — the user replies in free text and the agent
+		// reads it next turn. The branch below survives for a future
+		// button-capable surface.
 		if delivery.Channel != "telegram" {
 			sendCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()

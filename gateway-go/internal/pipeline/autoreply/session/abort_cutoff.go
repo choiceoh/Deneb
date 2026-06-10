@@ -62,8 +62,7 @@ func ApplyAbortCutoffToSessionEntry(entry *SessionAbortCutoffEntry, cutoff *Abor
 }
 
 // ClearAbortCutoffInSession clears the abort cutoff fields on the entry struct.
-// This is a pure data mutation; callers must persist the entry themselves
-// (see ClearSessionAbortCutoff in commands_session_store.go for the full persist flow).
+// This is a pure data mutation; callers must persist the entry themselves.
 func ClearAbortCutoffInSession(entry *SessionAbortCutoffEntry) bool {
 	if entry == nil || !HasAbortCutoff(entry) {
 		return false

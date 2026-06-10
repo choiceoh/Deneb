@@ -1,4 +1,4 @@
-// commands_subagents_shared.go — Shared types and utilities for subagent commands.
+// commands_shared.go — Shared types and utilities for subagent commands.
 // Mirrors src/auto-reply/reply/commands-subagents/shared.ts (404 LOC).
 package subagent
 

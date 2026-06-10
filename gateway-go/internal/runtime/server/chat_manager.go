@@ -20,7 +20,7 @@ type ChatManager struct {
 	// gmail poll summaries, wiki dreaming notifications) to the user's
 	// channel without routing through the LLM. The body is sent verbatim
 	// and mirrored into the session transcript so follow-up user turns
-	// retain context. Set in registerSessionRPCMethods once both the
-	// telegram plugin and transcript store are available.
+	// retain context. Set in registerSessionRPCMethods once the
+	// transcript store is available.
 	proactiveRelay proactiveRelayDeps
 }

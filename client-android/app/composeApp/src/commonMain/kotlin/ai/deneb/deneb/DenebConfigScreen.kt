@@ -38,12 +38,13 @@ import kotlinx.coroutines.launch
 
 /**
  * Deneb hub + settings as a tabbed screen (the "더보기" surface): gateway config
- * plus the secondary surfaces — model, cron, observability — each as its
- * own tab so they live here instead of crowding the chat top bar.
+ * plus the secondary surfaces — appearance, model, cron, observability — each
+ * as its own tab so they live here instead of crowding the chat top bar.
  *
  * This file is only the frame (header + pill tab bar + pager); each tab's content
- * lives in its own Config*Tab.kt file ([GatewayTab], [ModelTab], [SkillsTab],
- * [CronTab], [ObserveTab]) so a tab can grow without re-bloating this screen.
+ * lives in its own Config*Tab.kt file ([GatewayTab], [AppearanceTab], [ModelTab],
+ * [SkillsTab], [CronTab], [ObserveTab]) so a tab can grow without re-bloating
+ * this screen.
  *
  * The per-topic knowledge doc (workspace/topics/&lt;key&gt;.md, injected into the
  * system prompt) has no tab on purpose: it is edited by asking the agent in chat
