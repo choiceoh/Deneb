@@ -101,8 +101,10 @@ proactive reports all land. The app does not split the conversation by topic.
 - **업무 is the home.** Proactive reports (the morning letter, a mail analysis)
   and existing home history live in `client:main`.
 - **Topic knowledge still applies.** The home injects its default topic's
-  knowledge document. Manage those under Settings -> 토픽문서; they are background
-  knowledge merged into the prompt, not separate conversations.
+  knowledge document (`workspace/topics/<key>.md` on the gateway host) into the
+  system prompt as background knowledge — not a separate conversation. There is
+  no editing UI: ask the agent in chat to update it (the injected prompt block
+  carries the file's path), and the change takes effect from the next session.
 
 ## Getting Around
 
@@ -151,15 +153,20 @@ The 설정 hub has these tabs:
   card with a **패치노트 보기** (view patch notes) sheet and an **업데이트 확인**
   (check for update) button that offers an in-place APK download when a newer
   build exists.
+- **화면** — appearance: theme (system, light, dark, OLED black) and display
+  scale, applied immediately.
 - **모델** — per-role model pickers. A **메인 / 경량 / 폴백** selector
   (main / lightweight / fallback) with the gateway's models listed below it;
   picking one binds that model to the selected role and takes effect without a
   restart. The roles map to work: main is chat, lightweight runs mail analysis
   and summaries, fallback is used when main fails.
+- **스킬** — the skills the agent can use (read-only). Mirrors the gateway's
+  skill list: name, description, category, and whether a skill is
+  user-invocable.
 - **크론** — the gateway's scheduled tasks, with a per-task detail screen
   (schedule, instruction, delivery target, state; enable, run now, delete).
-- **토픽문서** — the per-topic injected documents, viewable and editable, with a
-  새 문서 (new document) action.
+- **관찰** — a read-only operator dashboard: the gateway's recent behavior plus
+  warn/error log lines.
 
 ## Instant Proactive Push
 

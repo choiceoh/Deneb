@@ -10,9 +10,9 @@ import kotlinx.serialization.json.putJsonArray
 
 /**
  * Knowledge surface of [DenebGatewayClient]: wiki/memory pages and categories
- * (`miniapp.memory.*`), diary, unified search (`miniapp.search.all`), people
- * (`miniapp.people.list`), and topic docs (`miniapp.topicdocs.*`). Extensions so
- * the gateway client stays one facade while each RPC domain lives in its own file.
+ * (`miniapp.memory.*`), diary, unified search (`miniapp.search.all`), and people
+ * (`miniapp.people.list`). Extensions so the gateway client stays one facade
+ * while each RPC domain lives in its own file.
  */
 
 /** Refresh the wiki-page snapshot behind the memory screen (titles only — see
@@ -167,29 +167,3 @@ suspend fun DenebGatewayClient.fetchPeople(): List<PersonHit>? {
         .map { PersonHit(it.name.ifBlank { it.email }, it.email, it.messageCount, it.lastSubject) }
 }
 
-/** Topic doc files (`miniapp.topicdocs.list_files`). Null on a fetch failure so
- *  the tab can offer retry. */
-suspend fun DenebGatewayClient.fetchTopicDocs(): List<TopicDocFile>? {
-    val p = callRpc<TopicDocsListPayload>("miniapp.topicdocs.list_files", buildJsonObject {}) ?: return null
-    return p.files.filter { it.name.isNotBlank() }.map { TopicDocFile(it.name, it.modified) }
-}
-
-/** Read one topic doc (`miniapp.topicdocs.read_file`). */
-suspend fun DenebGatewayClient.readTopicDoc(name: String): TopicDocContent? {
-    val p = callRpc<TopicDocReadPayload>(
-        "miniapp.topicdocs.read_file",
-        buildJsonObject { put("name", name) },
-    ) ?: return null
-    return TopicDocContent(p.name.ifBlank { name }, p.content, p.modified)
-}
-
-/** Write (or create) a topic doc (`miniapp.topicdocs.write_file`). */
-suspend fun DenebGatewayClient.saveTopicDoc(name: String, content: String, create: Boolean): Boolean =
-    callRpc<JsonObject>(
-        "miniapp.topicdocs.write_file",
-        buildJsonObject {
-            put("name", name)
-            put("content", content)
-            put("create", create)
-        },
-    ) != null

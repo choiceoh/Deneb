@@ -150,15 +150,6 @@ internal data class TodoListPayload(val todos: List<TodoOut> = emptyList())
 internal data class PeopleListPayload(val people: List<PersonRow> = emptyList())
 
 @Serializable
-internal data class TopicDocsListPayload(val files: List<TopicDocRow> = emptyList())
-
-@Serializable
-internal data class TopicDocRow(val name: String = "", val size: Long = 0, val modified: String = "")
-
-@Serializable
-internal data class TopicDocReadPayload(val name: String = "", val content: String = "", val modified: String = "")
-
-@Serializable
 internal data class WikiPagePayload(
     val path: String = "",
     val title: String = "",

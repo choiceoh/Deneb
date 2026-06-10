@@ -532,13 +532,14 @@ func prepareContextAndPrompt(
 		// keys that cache per topic + content hash so topics never collide and
 		// edits invalidate. Unmapped/missing → empty (no injection, no cache
 		// key change → topic-less Static cache stays shared).
-		var topicKnowledge, topicCacheKey string
+		var topicKnowledge, topicCacheKey, topicKnowledgePath string
 		if deps.topicResolver != nil && params.Delivery != nil {
 			if key := deps.topicResolver.TopicKey(params.Delivery.ThreadID); key != "" {
 				tk := prompt.LoadTopicKnowledge(workspaceDir, deps.topicResolver.Dir(), key, params.SessionKey)
 				if tk.Content != "" {
 					topicKnowledge = tk.Content
 					topicCacheKey = tk.Key + ":" + tk.Hash
+					topicKnowledgePath = tk.Path
 				}
 			}
 		}
@@ -567,6 +568,7 @@ func prepareContextAndPrompt(
 			CalendarGlance:      calendarGlance,
 			TopicKnowledge:      topicKnowledge,
 			TopicCacheKey:       topicCacheKey,
+			TopicKnowledgePath:  topicKnowledgePath,
 			SupportsRichUI:      richUIChannel(ch),
 		}
 

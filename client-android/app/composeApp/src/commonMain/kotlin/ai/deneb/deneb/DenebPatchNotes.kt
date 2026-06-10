@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "설정에서 '토픽문서' 탭 제거 — 업무 배경지식 문서는 채팅에서 \"배경지식에 추가해줘\"라고 부탁하면 에이전트가 직접 관리",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "데스크톱 채팅이 넓은 창에서도 읽기 좋은 가운데 칼럼으로 — 메시지·입력창이 한 폭으로 정렬",
             "데스크톱 사이드바 다듬기 — 줄 전체가 클릭되고, 마우스를 올리면 밝아지며, 클릭 후 남던 회색 상자 제거",
             "데스크톱에서 Ctrl(맥은 Cmd)+1~7로 채팅·메일·일정·검색·사람·카테고리·설정 바로 전환",

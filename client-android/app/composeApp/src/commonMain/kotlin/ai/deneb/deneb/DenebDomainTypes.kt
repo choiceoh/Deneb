@@ -160,12 +160,6 @@ data class SearchHit(val path: String, val title: String, val snippet: String, v
 
 data class PersonHit(val name: String, val email: String, val messageCount: Int, val lastSubject: String)
 
-/** A topic doc file in the hub list. */
-data class TopicDocFile(val name: String, val modified: String)
-
-/** A topic doc's content for the read view. */
-data class TopicDocContent(val name: String, val content: String, val modified: String)
-
 /** Full wiki/memory page for the page view. */
 data class WikiPage(
     val path: String,
