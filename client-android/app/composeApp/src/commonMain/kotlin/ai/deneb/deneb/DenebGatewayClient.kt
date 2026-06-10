@@ -157,6 +157,11 @@ class DenebGatewayClient(
     internal val _denebMailNextToken = MutableStateFlow<String?>(null)
     val denebMailNextToken: StateFlow<String?> = _denebMailNextToken
 
+    // Gmail query behind the current mail list (null = default inbox view).
+    // Set by refreshMail on success; loadMoreMail must send the same query or
+    // the next page would come from a different result set than the cursor.
+    internal var denebMailActiveQuery: String? = null
+
     // Upcoming calendar events surfaced in the native calendar screen.
     internal val _denebCalendar = MutableStateFlow<List<CalendarEvent>>(emptyList())
     val denebCalendar: StateFlow<List<CalendarEvent>> = _denebCalendar

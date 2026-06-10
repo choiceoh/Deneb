@@ -3,6 +3,9 @@ package ai.deneb.deneb
 import ai.deneb.deneb.generated.MailAnalysisOut
 import ai.deneb.deneb.generated.MailMessageOut
 import ai.deneb.deneb.generated.QATurn
+import io.ktor.client.call.body
+import io.ktor.client.plugins.timeout
+import io.ktor.client.request.get
 import io.ktor.http.encodeURLParameter
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
@@ -17,13 +20,20 @@ import kotlinx.coroutines.flow.update
  * facade while each RPC domain lives in its own file.
  */
 
-/** Refresh the recent inbox. Returns false on a fetch failure so the screen can
- *  show a retry instead of a misleading "no mail" empty state. */
-suspend fun DenebGatewayClient.refreshMail(): Boolean {
+/** Refresh the mail list. With a [query] it runs a full-mailbox Gmail search
+ *  (any Gmail syntax: keywords, `from:`, `has:attachment`, …); null/blank falls
+ *  back to the server's default recent-inbox view. Returns false on a fetch
+ *  failure so the screen can show a retry instead of a misleading empty state. */
+suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
+    val q = query?.trim()?.ifBlank { null }
     val payload = callRpc<MailListPayload>(
         "miniapp.gmail.list_recent",
-        buildJsonObject { put("limit", 25) },
+        buildJsonObject {
+            put("limit", 25)
+            q?.let { put("query", it) }
+        },
     ) ?: return false
+    denebMailActiveQuery = q
     _denebMail.value = payload.messages
         .filter { it.id.isNotBlank() }
         .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread) }
@@ -31,7 +41,7 @@ suspend fun DenebGatewayClient.refreshMail(): Boolean {
     return true
 }
 
-/** Append the next inbox page (if any) to the current list. */
+/** Append the next page of the current view (inbox or active search) to the list. */
 suspend fun DenebGatewayClient.loadMoreMail() {
     val token = _denebMailNextToken.value ?: return
     val payload = callRpc<MailListPayload>(
@@ -39,6 +49,7 @@ suspend fun DenebGatewayClient.loadMoreMail() {
         buildJsonObject {
             put("limit", 25)
             put("pageToken", token)
+            denebMailActiveQuery?.let { put("query", it) }
         },
     ) ?: return
     val seen = _denebMail.value.mapTo(HashSet()) { it.id }
@@ -133,6 +144,21 @@ suspend fun DenebGatewayClient.askMail(id: String, question: String, history: Li
             }
         },
     )?.answer?.ifBlank { null }
+
+/**
+ * Download an attachment's raw bytes for in-app rendering (inline image
+ * previews). Reuses [attachmentUrl] so auth matches the browser download path
+ * exactly. Returns null on any failure — callers fall back to the plain chip.
+ */
+suspend fun DenebGatewayClient.fetchAttachmentBytes(messageId: String, att: MailAttachment): ByteArray? =
+    runCatching {
+        http.get(attachmentUrl(messageId, att)) {
+            timeout {
+                requestTimeoutMillis = 30_000
+                connectTimeoutMillis = 6_000
+            }
+        }.body<ByteArray>()
+    }.getOrNull()
 
 /**
  * Browser-openable attachment download URL. The download endpoint can't read

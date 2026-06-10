@@ -21,6 +21,13 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "메일 검색 추가 — 키워드·발신자(from:)로 전체 메일함을 바로 검색",
+            "이미지 첨부는 메일 안에서 바로 미리보기 (영수증·사진을 열지 않고 확인)",
+            "메일 상세 화면 정돈 — 휴지통과 AI 분석만 남기고 단순화",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "설정에서 '토픽문서' 탭 제거 — 업무 배경지식 문서는 채팅에서 \"배경지식에 추가해줘\"라고 부탁하면 에이전트가 직접 관리",
         ),
     ),
