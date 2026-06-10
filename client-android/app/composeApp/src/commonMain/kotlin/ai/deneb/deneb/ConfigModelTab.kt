@@ -79,6 +79,8 @@ internal fun ModelTab(client: DenebGatewayClient) {
     var adding by remember { mutableStateOf(false) }
     var addError by remember { mutableStateOf<String?>(null) }
     var pendingDelete by remember { mutableStateOf<ModelOption?>(null) }
+    // Model id whose tuner detail is expanded (ⓘ tap); null = all collapsed.
+    var expandedInfoId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { client.refreshModels() }
     if (models.isEmpty()) {
         DenebLoading()
@@ -150,21 +152,43 @@ internal fun ModelTab(client: DenebGatewayClient) {
         // Model tuner advisories: open recommendations from the background
         // per-model optimization loop (stalls, cache breaks, slow tails). Shown
         // only when something needs attention — silence is the normal state.
+        // Collapsed to a one-line count by default; tap to read the details.
         if (advisories.isNotEmpty()) {
-            SettingsCard {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            var advisoriesOpen by remember { mutableStateOf(false) }
+            SettingsCard(innerPadding = false) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { haptics.tap(); advisoriesOpen = !advisoriesOpen }
+                        .handCursor()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
-                        "튜너 권고",
+                        "튜너 권고 ${advisories.size}건",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
                     )
-                    advisories.forEach { line ->
-                        Text(
-                            line,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    Text(
+                        if (advisoriesOpen) "▾" else "▸",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (advisoriesOpen) {
+                    Column(
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        advisories.forEach { line ->
+                            Text(
+                                line,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
@@ -264,6 +288,8 @@ internal fun ModelTab(client: DenebGatewayClient) {
                             Text(
                                 // Circuit breaker open → consecutive failures; the
                                 // gateway is routing this model's turns to fallback.
+                                // The marker stays always-visible (rare + important);
+                                // the stat detail hides behind the ⓘ toggle.
                                 if (model.unhealthy) model.display + " ⚠️연속실패" else model.display,
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
@@ -275,15 +301,36 @@ internal fun ModelTab(client: DenebGatewayClient) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             // Tuner stat line (24h runs, p95, cache hit, fallback/stall,
-                            // calibration probe, tuned output floor) — empty until the
-                            // background tuner has data for this model.
-                            if (model.note.isNotBlank()) {
+                            // calibration probe, tuned output floor) — only when the row's
+                            // ⓘ toggle is expanded, so the list stays clean by default.
+                            if (expandedInfoId == model.id && model.note.isNotBlank()) {
                                 Text(
                                     model.note,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        // ⓘ toggle: same circled-glyph affordance as the role "?"
+                        // tooltip above. Shown only when the tuner has data for this
+                        // model, so rows without stats carry no extra chrome.
+                        if (model.note.isNotBlank()) {
+                            Spacer(Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                                    .clickable {
+                                        haptics.tap()
+                                        expandedInfoId = if (expandedInfoId == model.id) null else model.id
+                                    }
+                                    .handCursor(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    "i",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
