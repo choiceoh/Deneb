@@ -22,6 +22,7 @@ val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
             "채팅 답변 속 제목(#·##·###)이 위키·분석 화면과 같은 글꼴 사다리로 통일 — 화면 어디서나 제목 위계가 한 가지 언어로 읽힘",
+            "메일·사람·카테고리·세션 목록의 행을 누르는 동안 살짝 눌리는 촉감 피드백 — 할일·업무피드와 같은 감각으로 통일",
         ),
     ),
     DenebPatchNote(

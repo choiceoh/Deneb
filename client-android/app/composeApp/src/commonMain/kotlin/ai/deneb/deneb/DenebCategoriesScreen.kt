@@ -1,6 +1,5 @@
 package ai.deneb.deneb
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +31,7 @@ import ai.deneb.Platform
 import ai.deneb.currentPlatform
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebPressable
 import kotlinx.coroutines.launch
 
 /**
@@ -87,7 +87,7 @@ fun DenebCategoriesScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { haptics.tap(); onOpenDiary() }
+                    .denebPressable(onClick = { haptics.tap(); onOpenDiary() })
                     .padding(vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -125,7 +125,7 @@ fun DenebCategoriesScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { haptics.tap(); onOpenCategory(cat.name) }
+                                .denebPressable(onClick = { haptics.tap(); onOpenCategory(cat.name) })
                                 .padding(vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
