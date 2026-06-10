@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"log/slog"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
 )
 
@@ -30,7 +32,7 @@ func TestRoleHealthWatch_EdgeAlertsOnly(t *testing.T) {
 	targets := []roleHealthTarget{{providerID: "zai", model: "glm-5.1", roles: []string{"fallback"}}}
 
 	// First cycle: unknown → auth must alert (Error + broadcast).
-	w.applyVerdicts(targets, map[string]string{"zai": roleHealthAuth})
+	w.applyVerdicts(targets, map[string]string{"zai": roleHealthAuth}, map[string]string{"zai": "API error 401: token expired"})
 	if !strings.Contains(logBuf.String(), "model role provider unhealthy") {
 		t.Fatalf("expected unhealthy Error log, got: %s", logBuf.String())
 	}
@@ -40,14 +42,14 @@ func TestRoleHealthWatch_EdgeAlertsOnly(t *testing.T) {
 
 	// Second cycle, same verdict: NO new alert (edge-only, no spam).
 	logBuf.Reset()
-	w.applyVerdicts(targets, map[string]string{"zai": roleHealthAuth})
+	w.applyVerdicts(targets, map[string]string{"zai": roleHealthAuth}, map[string]string{"zai": "API error 401: token expired"})
 	if strings.Contains(logBuf.String(), "unhealthy") || len(*events) != 1 {
 		t.Fatalf("steady-state bad verdict must not re-alert (events=%d, log=%s)", len(*events), logBuf.String())
 	}
 
 	// Recovery: auth → ok alerts once at Info.
 	logBuf.Reset()
-	w.applyVerdicts(targets, map[string]string{"zai": roleHealthOK})
+	w.applyVerdicts(targets, map[string]string{"zai": roleHealthOK}, nil)
 	if !strings.Contains(logBuf.String(), "recovered") {
 		t.Fatalf("expected recovery log, got: %s", logBuf.String())
 	}
@@ -57,7 +59,7 @@ func TestRoleHealthWatch_EdgeAlertsOnly(t *testing.T) {
 
 	// Steady-state ok: silent.
 	logBuf.Reset()
-	w.applyVerdicts(targets, map[string]string{"zai": roleHealthOK})
+	w.applyVerdicts(targets, map[string]string{"zai": roleHealthOK}, nil)
 	if logBuf.Len() > 0 || len(*events) != 2 {
 		t.Fatalf("steady-state ok must be silent (events=%d, log=%s)", len(*events), logBuf.String())
 	}
@@ -66,7 +68,7 @@ func TestRoleHealthWatch_EdgeAlertsOnly(t *testing.T) {
 func TestRoleHealthWatch_StatePersistsAcrossRestart(t *testing.T) {
 	w, _, _ := newTestRoleHealthWatch(t)
 	targets := []roleHealthTarget{{providerID: "mimo-plan", model: "mimo-v2.5-pro", roles: []string{"fallback"}}}
-	w.applyVerdicts(targets, map[string]string{"mimo-plan": roleHealthOK})
+	w.applyVerdicts(targets, map[string]string{"mimo-plan": roleHealthOK}, nil)
 
 	// A "restarted" watch sharing the state file sees the prior verdicts and
 	// a fresh probe clock — so a 3-12 min SIGUSR1 restart cadence cannot
@@ -123,4 +125,24 @@ func TestClassifyProbeError(t *testing.T) {
 	if got := classifyProbeError(&httpretry.APIError{StatusCode: 502, Message: "bad gateway"}); got != roleHealthDown {
 		t.Fatalf("502 = %q, want down", got)
 	}
+}
+
+// TestRoleHealthProbe_Live reproduces a probe against a real endpoint so a
+// false verdict can be diagnosed with the actual error text. CI-skipped.
+//
+//	DENEB_ROLEHEALTH_LIVE=1 DENEB_ROLEHEALTH_URL=http://100.125.220.117:8000/v1 \
+//	DENEB_ROLEHEALTH_MODEL=step3p7 go test -run TestRoleHealthProbe_Live ./internal/runtime/server/
+func TestRoleHealthProbe_Live(t *testing.T) {
+	if os.Getenv("DENEB_ROLEHEALTH_LIVE") == "" {
+		t.Skip("live probe test; set DENEB_ROLEHEALTH_LIVE=1")
+	}
+	client := llm.NewClient(os.Getenv("DENEB_ROLEHEALTH_URL"), os.Getenv("DENEB_ROLEHEALTH_KEY"),
+		llm.WithAPIMode("openai-chat"))
+	w := &roleHealthWatch{logger: slog.Default()}
+	ctx, cancel := context.WithTimeout(context.Background(), roleHealthProbeTimeout)
+	defer cancel()
+	verdict, errText := w.probeProviderOnce(ctx, roleHealthTarget{
+		providerID: "live", model: os.Getenv("DENEB_ROLEHEALTH_MODEL"), client: client,
+	})
+	t.Logf("verdict=%s err=%q", verdict, errText)
 }

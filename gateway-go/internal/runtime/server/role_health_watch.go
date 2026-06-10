@@ -57,6 +57,10 @@ const (
 	roleHealthBootDelay = 2 * time.Minute
 	// roleHealthProbeTimeout bounds a single provider probe.
 	roleHealthProbeTimeout = 30 * time.Second
+	// roleHealthRetryDelay spaces the single retry that guards "down"
+	// verdicts against transient blips (a busy local vLLM, a restart). Auth
+	// verdicts are deterministic and never retried.
+	roleHealthRetryDelay = 10 * time.Second
 )
 
 // Role-provider verdicts. Stored as strings so the persisted file and the
@@ -97,8 +101,10 @@ type roleHealthWatch struct {
 	mu    sync.Mutex
 	state roleHealthState
 
-	// probeFn is swappable for tests; defaults to probeProviderOnce.
-	probeFn func(ctx context.Context, t roleHealthTarget) string
+	// probeFn is swappable for tests; defaults to probeProviderOnce. The
+	// second return is the raw error text ("" when healthy) — a bare "down"
+	// verdict is undiagnosable from the monitoring chat.
+	probeFn func(ctx context.Context, t roleHealthTarget) (verdict, errText string)
 }
 
 // startRoleHealthWatch launches the watch loop. Idempotent; no-ops when the
@@ -173,19 +179,39 @@ func (w *roleHealthWatch) untilNextProbe() time.Duration {
 	return roleHealthBootDelay
 }
 
-// probeCycle probes every target once and alerts on verdict edges.
+// probeCycle probes every target once and alerts on verdict edges. A "down"
+// verdict gets one retry after a short delay before it counts — a 6-hour
+// cadence means a single transient blip (busy vLLM, mid-restart) would
+// otherwise read as an outage for the next quarter day. Auth rejections are
+// deterministic, so they count immediately.
 func (w *roleHealthWatch) probeCycle(ctx context.Context) {
 	targets := w.collectTargets()
 	verdicts := make(map[string]string, len(targets))
+	errs := make(map[string]string, len(targets))
 	for _, t := range targets {
-		probeCtx, cancel := context.WithTimeout(ctx, roleHealthProbeTimeout)
-		verdicts[t.providerID] = w.probeFn(probeCtx, t)
-		cancel()
+		verdict, errText := w.probeOnceWithTimeout(ctx, t)
+		if verdict == roleHealthDown {
+			w.logger.Warn("model role provider probe failed, retrying once",
+				"provider", t.providerID, "error", errText)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(roleHealthRetryDelay):
+			}
+			verdict, errText = w.probeOnceWithTimeout(ctx, t)
+		}
+		verdicts[t.providerID], errs[t.providerID] = verdict, errText
 		if ctx.Err() != nil {
 			return // shutdown mid-cycle: keep prior state, no partial alerts
 		}
 	}
-	w.applyVerdicts(targets, verdicts)
+	w.applyVerdicts(targets, verdicts, errs)
+}
+
+func (w *roleHealthWatch) probeOnceWithTimeout(ctx context.Context, t roleHealthTarget) (string, string) {
+	probeCtx, cancel := context.WithTimeout(ctx, roleHealthProbeTimeout)
+	defer cancel()
+	return w.probeFn(probeCtx, t)
 }
 
 // collectTargets resolves the unique non-local providers behind the roles.
@@ -229,7 +255,7 @@ func (w *roleHealthWatch) collectTargets() []roleHealthTarget {
 // probeProviderOnce sends a minimal 1-token completion through the exact
 // client production traffic uses, so credential resolution (static key, Kimi
 // CLI token func, headers) is probed truthfully.
-func (w *roleHealthWatch) probeProviderOnce(ctx context.Context, t roleHealthTarget) string {
+func (w *roleHealthWatch) probeProviderOnce(ctx context.Context, t roleHealthTarget) (string, string) {
 	events, err := t.client.StreamChat(ctx, llm.ChatRequest{
 		Model:     t.model,
 		Messages:  []llm.Message{llm.NewTextMessage("user", "ping")},
@@ -238,12 +264,12 @@ func (w *roleHealthWatch) probeProviderOnce(ctx context.Context, t roleHealthTar
 		Thinking:  &llm.ThinkingConfig{Type: "disabled"},
 	})
 	if err != nil {
-		return classifyProbeError(err)
+		return classifyProbeError(err), err.Error()
 	}
 	// Drain to completion so the transport goroutine never leaks; a
 	// mid-stream "error" event still counts as a verdict (auth failures on
 	// some providers surface here rather than as a request-level error).
-	verdict := roleHealthOK
+	verdict, errText := roleHealthOK, ""
 	for ev := range events {
 		if ev.Type != "error" || verdict != roleHealthOK {
 			continue
@@ -255,9 +281,9 @@ func (w *roleHealthWatch) probeProviderOnce(ctx context.Context, t roleHealthTar
 		if json.Unmarshal(ev.Payload, &errBody) == nil && errBody.Message != "" {
 			msg = errBody.Message
 		}
-		verdict = classifyProbeError(errors.New(msg))
+		verdict, errText = classifyProbeError(errors.New(msg)), msg
 	}
-	return verdict
+	return verdict, errText
 }
 
 // classifyProbeError maps a probe failure to a verdict, lifting the HTTP
@@ -280,7 +306,7 @@ func classifyProbeError(err error) string {
 }
 
 // applyVerdicts persists the cycle result and alerts on edges only.
-func (w *roleHealthWatch) applyVerdicts(targets []roleHealthTarget, verdicts map[string]string) {
+func (w *roleHealthWatch) applyVerdicts(targets []roleHealthTarget, verdicts, errs map[string]string) {
 	w.mu.Lock()
 	prev := w.state.Verdicts
 	w.state.Verdicts = verdicts
@@ -299,17 +325,18 @@ func (w *roleHealthWatch) applyVerdicts(targets []roleHealthTarget, verdicts map
 			// why this must be loud now (Error mirrors to the monitoring
 			// chat via notify_slog).
 			w.logger.Error("model role provider unhealthy",
-				"provider", t.providerID, "model", t.model, "roles", roles, "verdict", now)
-			w.emit(t, now)
+				"provider", t.providerID, "model", t.model, "roles", roles,
+				"verdict", now, "error", errs[t.providerID])
+			w.emit(t, now, errs[t.providerID])
 		case now == roleHealthOK && known && before != roleHealthOK:
 			w.logger.Info("model role provider recovered",
 				"provider", t.providerID, "model", t.model, "roles", roles)
-			w.emit(t, now)
+			w.emit(t, now, "")
 		}
 	}
 }
 
-func (w *roleHealthWatch) emit(t roleHealthTarget, verdict string) {
+func (w *roleHealthWatch) emit(t roleHealthTarget, verdict, errText string) {
 	if w.broadcast == nil {
 		return
 	}
@@ -318,6 +345,7 @@ func (w *roleHealthWatch) emit(t roleHealthTarget, verdict string) {
 		"model":    t.model,
 		"roles":    t.roles,
 		"verdict":  verdict,
+		"error":    errText,
 	})
 }
 
