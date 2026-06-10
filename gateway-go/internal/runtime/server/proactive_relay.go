@@ -75,6 +75,31 @@ type proactiveRelayDeps struct {
 	nativeSync interface {
 		Append(nativesync.AppendInput) (nativesync.Event, error)
 	}
+
+	// sessions registers the delivery target in the session manager. The native
+	// drawer (miniapp.sessions.recent) lists Manager.List(), so a brand-new
+	// sub-session that exists only as a transcript file — client:main:dream's
+	// first delivery — would otherwise stay invisible until the next restart's
+	// transcript rescan. nil in older wiring/tests; registration is then skipped.
+	sessions interface {
+		EnsureVisible(key, channel string, at int64)
+	}
+}
+
+// markSessionVisible registers a successful delivery's target session in the
+// session manager (create-if-missing in the startup-restore shape, then bump
+// UpdatedAt so the drawer sorts it by its newest message). Only native session
+// shapes register — restorableTranscriptSession is the same predicate the
+// startup rescan uses, so the two paths cannot disagree.
+func (d proactiveRelayDeps) markSessionVisible(sessionKey string, ts int64) {
+	if d.sessions == nil {
+		return
+	}
+	channel, ok := restorableTranscriptSession(sessionKey)
+	if !ok {
+		return
+	}
+	d.sessions.EnsureVisible(sessionKey, channel, ts)
 }
 
 // relay delivers content to the native client (업무 transcript + live push).
@@ -157,6 +182,7 @@ func (d proactiveRelayDeps) relayNativeTo(sessionKey, content string) (bool, err
 		d.logProactive("error", "append_failed", origLen, "")
 		return false, err
 	}
+	d.markSessionVisible(target, msg.Timestamp)
 	if d.nativeSync != nil {
 		if _, err := d.nativeSync.Append(nativesync.TranscriptAppended(
 			target,
@@ -440,6 +466,7 @@ func (d proactiveRelayDeps) deliverNativeImage(caption string, pngBytes []byte) 
 		}
 		return false, err
 	}
+	d.markSessionVisible(nativeWorkSessionKey, msg.Timestamp)
 	if d.pushHub != nil {
 		d.pushHub.publish(clientPushEvent{Title: "Deneb", Body: caption})
 	}
