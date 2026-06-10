@@ -186,3 +186,37 @@ func TestRecallQuality(t *testing.T) {
 		t.Fatalf("recall quality %d%% below floor %d%% (%d/%d)", pct, recallBenchFloorPct, hits, total)
 	}
 }
+
+// TestRecallSourceAttribution reports which backend produced the evidence per
+// case — the data the backend-consolidation decision needs. Informational
+// (no floor): the corpus has no embedder/polaris/hindsight, so it attributes
+// the lexical sources; production attribution comes from the per-turn
+// "sources" field in the recall preflight Info logs.
+func TestRecallSourceAttribution(t *testing.T) {
+	store := buildRecallBenchStore(t)
+	agg := map[string]int{}
+	for _, c := range recallBenchCases() {
+		out := buildRecallPreflight(context.Background(),
+			RunParams{SessionKey: "client:main", Message: c.question},
+			runDeps{wikiStore: store},
+			nil,
+		)
+		for _, src := range []string{"wiki", "diary", "polaris", "transcript", "hindsight"} {
+			n := strings.Count(out, "source="+src+" ")
+			if n > 0 {
+				agg[src] += n
+				t.Logf("%-28s %-10s rows=%d", c.name, src, n)
+			}
+		}
+	}
+	parts := make([]string, 0, len(agg))
+	for _, src := range []string{"wiki", "diary", "polaris", "transcript", "hindsight"} {
+		if n := agg[src]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%s=%d", src, n))
+		}
+	}
+	fmt.Printf("RECALL_SOURCES %s\n", strings.Join(parts, " "))
+	if len(agg) == 0 {
+		t.Error("no source attribution found in any case output")
+	}
+}
