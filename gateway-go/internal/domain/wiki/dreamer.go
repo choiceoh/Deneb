@@ -633,21 +633,65 @@ func truncateDreamReportText(text string, maxRunes int) string {
 	return string(runes[:maxRunes]) + "..."
 }
 
+// flexStringList is a []string that tolerates an LLM emitting a single JSON
+// string (often comma-separated) where the schema calls for an array — a common
+// drift that otherwise fails the whole synthesis unmarshal and discards an
+// entire dream cycle. An array is taken as-is; a string is split on ',', ';',
+// and newlines (not spaces, since a tag or path may itself contain spaces).
+type flexStringList []string
+
+func (f *flexStringList) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		*f = nil
+		return nil
+	}
+	switch trimmed[0] {
+	case '[':
+		var arr []string
+		if err := json.Unmarshal(data, &arr); err != nil {
+			return err
+		}
+		*f = arr
+	case '"':
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		*f = splitFlexList(s)
+	default:
+		return fmt.Errorf("flexStringList: expected JSON array or string, got %.40s", trimmed)
+	}
+	return nil
+}
+
+// splitFlexList breaks a delimited string into trimmed, non-empty elements.
+func splitFlexList(s string) flexStringList {
+	parts := strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ';' || r == '\n' })
+	out := make(flexStringList, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // wikiUpdate represents a single page update instruction from the LLM.
 type wikiUpdate struct {
-	Action     string   `json:"action"` // "create" or "update"
-	Path       string   `json:"path"`   // e.g., "기술/dgx-spark.md"
-	Title      string   `json:"title"`
-	ID         string   `json:"id"`      // short kebab-case identifier (e.g., "dgx-spark")
-	Summary    string   `json:"summary"` // one-line description (~80 chars)
-	Category   string   `json:"category"`
-	Tags       []string `json:"tags"`
-	Related    []string `json:"related"` // existing page paths semantically related
-	Content    string   `json:"content"` // markdown body or section to append
-	Importance float64  `json:"importance"`
-	Type       string   `json:"type"`       // concept, entity, source, comparison, log
-	Confidence string   `json:"confidence"` // high, medium, low
-	Due        string   `json:"due"`        // YYYY-MM-DD upcoming deadline (거래 category)
+	Action     string         `json:"action"` // "create" or "update"
+	Path       string         `json:"path"`   // e.g., "기술/dgx-spark.md"
+	Title      string         `json:"title"`
+	ID         string         `json:"id"`      // short kebab-case identifier (e.g., "dgx-spark")
+	Summary    string         `json:"summary"` // one-line description (~80 chars)
+	Category   string         `json:"category"`
+	Tags       flexStringList `json:"tags"`
+	Related    flexStringList `json:"related"` // existing page paths semantically related
+	Content    string         `json:"content"` // markdown body or section to append
+	Importance float64        `json:"importance"`
+	Type       string         `json:"type"`       // concept, entity, source, comparison, log
+	Confidence string         `json:"confidence"` // high, medium, low
+	Due        string         `json:"due"`        // YYYY-MM-DD upcoming deadline (거래 category)
 }
 
 // synthesize calls the LLM to determine which wiki pages should be updated.
