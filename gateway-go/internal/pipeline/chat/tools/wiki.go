@@ -390,7 +390,141 @@ func wikiStatus(store *wiki.Store) string {
 		fmt.Fprintf(&sb, "- %s: %d 페이지\n", cat, count)
 	}
 
+	sb.WriteString(memorySystemStatus(store))
 	return sb.String()
+}
+
+// memorySystemStatus appends the wider memory-system panel to the wiki status:
+// dreaming liveness, diary/captures, MEMORY.md budget pressure, polaris and
+// transcript footprints, last backup. One glance answers "기억 상태 어때?" —
+// the question that previously took a manual filesystem dig (the very dig the
+// 2026-06-10 memory audit had to do to discover dead stores).
+func memorySystemStatus(store *wiki.Store) string {
+	var sb strings.Builder
+	sb.WriteString("\n## 기억 시스템\n\n")
+
+	// Dreaming liveness from the persisted state file.
+	if last := dreamLastRun(store.Dir()); !last.IsZero() {
+		fmt.Fprintf(&sb, "- 드리밍: 마지막 사이클 %s (%s 전)\n",
+			last.Format("01-02 15:04"), humanAge(time.Since(last)))
+	} else {
+		sb.WriteString("- 드리밍: 실행 기록 없음\n")
+	}
+
+	// Diary + captures live under the memory root.
+	memRoot := filepath.Dir(store.DiaryDir())
+	if n, size := dirFootprint(store.DiaryDir(), ".md"); n > 0 {
+		fmt.Fprintf(&sb, "- 다이어리: %d파일 %s\n", n, formatBytes(size))
+	}
+	if n, size := dirFootprint(filepath.Join(memRoot, "captures"), ".md"); n > 0 {
+		fmt.Fprintf(&sb, "- 캡처 원문: %d건 %s\n", n, formatBytes(size))
+	}
+
+	stateDir := memoryStateDir()
+	if stateDir == "" {
+		return sb.String()
+	}
+
+	// MEMORY.md budget pressure (32K loads into the prompt; the rest waits
+	// for dream curation).
+	if info, err := os.Stat(filepath.Join(stateDir, "workspace", "MEMORY.md")); err == nil {
+		line := fmt.Sprintf("- MEMORY.md: %s", formatBytes(info.Size()))
+		if over := info.Size() - 32_000; over > 0 {
+			line += fmt.Sprintf(" (프롬프트 예산 32KB 초과분 %s — 드림 큐레이션 대기)", formatBytes(over))
+		}
+		sb.WriteString(line + "\n")
+	}
+
+	if n, size := dirFootprint(filepath.Join(stateDir, "polaris", "messages"), ".jsonl"); n > 0 {
+		fmt.Fprintf(&sb, "- Polaris 세션 메모리: %d세션 %s\n", n, formatBytes(size))
+	}
+	if n, size := dirFootprint(filepath.Join(stateDir, "transcripts"), ".jsonl"); n > 0 {
+		fmt.Fprintf(&sb, "- 트랜스크립트: %d세션 %s\n", n, formatBytes(size))
+	}
+	if last := backupLastRun(stateDir); !last.IsZero() {
+		fmt.Fprintf(&sb, "- 오프사이트 백업: 마지막 %s (%s 전)\n",
+			last.Format("01-02 15:04"), humanAge(time.Since(last)))
+	}
+	return sb.String()
+}
+
+// memoryStateDir resolves the gateway state dir (env override, else ~/.deneb).
+func memoryStateDir() string {
+	if d := strings.TrimSpace(os.Getenv("DENEB_STATE_DIR")); d != "" {
+		return d
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".deneb")
+}
+
+// dreamLastRun reads LastDreamMs from the dreamer's persisted state.
+func dreamLastRun(wikiDir string) time.Time {
+	data, err := os.ReadFile(filepath.Join(wikiDir, ".diary-process-state.json"))
+	if err != nil {
+		return time.Time{}
+	}
+	var st struct {
+		LastDreamMs int64 `json:"lastDreamMs"`
+	}
+	if json.Unmarshal(data, &st) != nil || st.LastDreamMs <= 0 {
+		return time.Time{}
+	}
+	return time.UnixMilli(st.LastDreamMs)
+}
+
+// backupLastRun reads the memory-backup task's LastRunAt from the autonomous
+// service state file (a flat {"task-name": unixMillis} map).
+func backupLastRun(stateDir string) time.Time {
+	data, err := os.ReadFile(filepath.Join(stateDir, "autonomous_state.json"))
+	if err != nil {
+		return time.Time{}
+	}
+	var st map[string]int64
+	if json.Unmarshal(data, &st) != nil {
+		return time.Time{}
+	}
+	if ms := st["memory-backup"]; ms > 0 {
+		return time.UnixMilli(ms)
+	}
+	return time.Time{}
+}
+
+// dirFootprint counts files with the given extension directly under dir and
+// sums their sizes.
+func dirFootprint(dir, ext string) (int, int64) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0, 0
+	}
+	var n int
+	var size int64
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ext) {
+			continue
+		}
+		if info, err := e.Info(); err == nil {
+			n++
+			size += info.Size()
+		}
+	}
+	return n, size
+}
+
+// humanAge renders a duration as a compact Korean age ("3시간", "2일").
+func humanAge(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return "방금"
+	case d < time.Hour:
+		return fmt.Sprintf("%d분", int(d.Minutes()))
+	case d < 48*time.Hour:
+		return fmt.Sprintf("%d시간", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%d일", int(d.Hours()/24))
+	}
 }
 
 func truncate(s string, maxRunes int) string {

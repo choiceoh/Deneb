@@ -2,9 +2,12 @@ package tools
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
@@ -209,3 +212,43 @@ func TestWikiSearch_NoResults(t *testing.T) {
 // (intentionally no nil-store test: production wiring never passes nil —
 // the wiki tool is gated by deps.Store presence upstream. Exercising nil
 // here would only enforce an undocumented precondition.)
+
+// TestMemorySystemStatus_Panel: the wiki status action must answer
+// "기억 상태 어때?" in one glance — dreaming liveness, diary footprint,
+// MEMORY.md budget pressure, backup recency.
+func TestMemorySystemStatus_Panel(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("DENEB_STATE_DIR", home)
+
+	store, err := wiki.NewStore(filepath.Join(home, "wiki"), filepath.Join(home, "memory", "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	if err := store.AppendDiary("상태 패널 테스트 일지"); err != nil {
+		t.Fatal(err)
+	}
+	// Dream state, oversized MEMORY.md, backup stamp.
+	if err := os.WriteFile(filepath.Join(home, "wiki", ".diary-process-state.json"),
+		[]byte(`{"lastDreamMs":`+fmt.Sprint(time.Now().Add(-3*time.Hour).UnixMilli())+`}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(home, "workspace"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "workspace", "MEMORY.md"),
+		[]byte(strings.Repeat("기억 ", 20_000)), 0o644); err != nil { // ~140KB
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "autonomous_state.json"),
+		[]byte(`{"memory-backup":`+fmt.Sprint(time.Now().Add(-time.Hour).UnixMilli())+`}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := wikiStatus(store)
+	for _, want := range []string{"기억 시스템", "드리밍: 마지막 사이클", "다이어리: 1파일", "MEMORY.md:", "드림 큐레이션 대기", "오프사이트 백업"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("status panel missing %q\n%s", want, out)
+		}
+	}
+}
