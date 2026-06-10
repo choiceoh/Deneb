@@ -19,11 +19,67 @@ import (
 const (
 	recallPreflightTimeout = 1500 * time.Millisecond
 	recallMaxQueries       = 6
-	recallMaxEvidence      = 8
-	recallMaxChars         = 6500
-	recallContextOpenTag   = `<recall-context source="server-preflight" trust="untrusted">`
-	recallContextCloseTag  = `</recall-context>`
+	// recallMaxEvidence is the evidence budget for an explicit recall cue;
+	// silent every-turn auto-recall gets the tighter recallAutoMaxEvidence.
+	recallMaxEvidence     = 8
+	recallAutoMaxEvidence = 4
+	recallMaxChars        = 6500
+	recallContextOpenTag  = `<recall-context source="server-preflight" trust="untrusted">`
+	recallContextCloseTag = `</recall-context>`
 )
+
+// recallEvidenceBudget returns how many evidence rows a turn may carry.
+func recallEvidenceBudget(cue bool) int {
+	if cue {
+		return recallMaxEvidence
+	}
+	return recallAutoMaxEvidence
+}
+
+// dedupRecallEvidence collapses rows describing the same content surfaced via
+// different sources, keeping the best-scored row. Keyed on a normalized note
+// prefix: refs differ across sources for the same fact, the words don't.
+func dedupRecallEvidence(evidence []recallEvidence) []recallEvidence {
+	if len(evidence) <= 1 {
+		return evidence
+	}
+	bestIdx := make(map[string]int, len(evidence))
+	out := evidence[:0]
+	for _, ev := range evidence {
+		key := recallContentKey(ev.Note)
+		if key == "" {
+			out = append(out, ev)
+			continue
+		}
+		if i, ok := bestIdx[key]; ok {
+			if ev.Score > out[i].Score {
+				out[i] = ev
+			}
+			continue
+		}
+		bestIdx[key] = len(out)
+		out = append(out, ev)
+	}
+	return out
+}
+
+// recallContentKey normalizes a note for duplicate detection: lowercase,
+// letters/digits only, first 80 runes.
+func recallContentKey(note string) string {
+	var b strings.Builder
+	n := 0
+	for _, r := range strings.ToLower(note) {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			continue
+		}
+		b.WriteRune(r)
+		n++
+		if n >= 80 {
+			break
+		}
+	}
+	return b.String()
+}
 
 type recallEvidence struct {
 	Kind   string
@@ -165,14 +221,21 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 		return ""
 	}
 
+	// The same fact often surfaces from several sources at once (wiki page +
+	// polaris summary + diary echo); duplicate rows waste the evidence budget.
+	evidence = dedupRecallEvidence(evidence)
+
 	sort.SliceStable(evidence, func(i, j int) bool {
 		if evidence[i].Score == evidence[j].Score {
 			return evidence[i].At > evidence[j].At
 		}
 		return evidence[i].Score > evidence[j].Score
 	})
-	if len(evidence) > recallMaxEvidence {
-		evidence = evidence[:recallMaxEvidence]
+	// Adaptive budget: an explicit cue earns the full evidence window; silent
+	// every-turn auto-recall gets a tighter one — the user didn't ask, so
+	// marginal rows are more likely noise than memory.
+	if budget := recallEvidenceBudget(cue); len(evidence) > budget {
+		evidence = evidence[:budget]
 	}
 	if logger != nil {
 		logger.Info("recall preflight: evidence injected", "session", params.SessionKey, "count", len(evidence))
