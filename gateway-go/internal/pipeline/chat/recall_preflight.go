@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -85,21 +86,64 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	defer cancel()
 
 	queries := recallSearchQueries(message)
-	var evidence []recallEvidence
 
+	// All sources run concurrently under the shared preflight deadline. They
+	// used to run serially, so a slow wiki search ate the 1.5s budget and
+	// starved diary/polaris/hindsight — and every turn paid the SUM of source
+	// latencies instead of the slowest one. Results land in ordered slots to
+	// keep the historical evidence order (wiki, diary, session, hindsight).
+	type recallSource struct {
+		name string
+		run  func(context.Context) []recallEvidence
+	}
+	var sources []recallSource
 	if deps.wikiStore != nil {
-		evidence = append(evidence, recallWikiEvidence(ctx, deps.wikiStore, queries)...)
-		evidence = append(evidence, recallDiaryEvidence(ctx, deps.wikiStore, queries, false)...)
+		store := deps.wikiStore
+		sources = append(sources,
+			recallSource{"wiki", func(c context.Context) []recallEvidence {
+				return recallWikiEvidence(c, store, queries)
+			}},
+			recallSource{"diary", func(c context.Context) []recallEvidence {
+				return recallDiaryEvidence(c, store, queries, false)
+			}},
+		)
 	}
-	_, hasPolarisBridge := deps.transcript.(*polaris.Bridge)
 	if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
-		evidence = append(evidence, recallPolarisEvidence(ctx, bridge, params.SessionKey, queries)...)
-	}
-	if !hasPolarisBridge {
-		evidence = append(evidence, recallTranscriptEvidence(ctx, deps.transcript, params.SessionKey, message, queries)...)
+		sources = append(sources, recallSource{"polaris", func(c context.Context) []recallEvidence {
+			return recallPolarisEvidence(c, bridge, params.SessionKey, queries)
+		}})
+	} else {
+		sources = append(sources, recallSource{"transcript", func(c context.Context) []recallEvidence {
+			return recallTranscriptEvidence(c, deps.transcript, params.SessionKey, message, queries)
+		}})
 	}
 	if deps.hindsightClient != nil {
-		evidence = append(evidence, recallHindsightEvidence(ctx, deps.hindsightClient, message, logger)...)
+		sources = append(sources, recallSource{"hindsight", func(c context.Context) []recallEvidence {
+			return recallHindsightEvidence(c, deps.hindsightClient, message, logger)
+		}})
+	}
+
+	slots := make([][]recallEvidence, len(sources))
+	var wg sync.WaitGroup
+	for i, src := range sources {
+		wg.Add(1)
+		go func(i int, src recallSource) {
+			defer wg.Done()
+			// Per-goroutine recovery: the outer recover cannot see goroutine
+			// panics, and one broken source must cost its slot, not the turn.
+			defer func() {
+				if r := recover(); r != nil && logger != nil {
+					logger.Warn("recall preflight: source panicked", "source", src.name, "panic", r)
+				}
+			}()
+			slots[i] = src.run(ctx)
+		}(i, src)
+	}
+	wg.Wait()
+
+	var evidence []recallEvidence
+	for _, slot := range slots {
+		evidence = append(evidence, slot...)
 	}
 	if len(evidence) == 0 && deps.wikiStore != nil {
 		evidence = append(evidence, recallDiaryEvidence(ctx, deps.wikiStore, queries, true)...)
