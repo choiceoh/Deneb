@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
@@ -102,12 +103,25 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		if sessionKey == "" {
 			sessionKey = nativeClientChannel + ":main"
 		}
+		// Persist the raw extracted text before the turn: the agent only
+		// summarizes, and the original must outlive the chat transcript.
+		var savedPath string
+		if deps.SaveCapture != nil {
+			if rel, serr := deps.SaveCapture("image", p.Caption, text); serr != nil {
+				slog.Warn("capture image: raw persistence failed", "error", serr)
+			} else {
+				savedPath = rel
+			}
+		}
 		message := "📷 공유 이미지에서 추출한 텍스트 (OCR):\n\n" + strings.TrimSpace(text)
 		if c := strings.TrimSpace(p.Caption); c != "" {
 			// The caption carries context the image itself can't (which app/sender
 			// the picture came from, the notification body). Lead with it so the
 			// turn analyzes the photo in light of where it originated.
 			message = "📲 공유 맥락:\n" + c + "\n\n" + message
+		}
+		if savedPath != "" {
+			message += "\n\n(원문 보관: memory/" + savedPath + ")"
 		}
 		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
 			Delivery:            &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
@@ -182,6 +196,16 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 		if sessionKey == "" {
 			sessionKey = nativeClientChannel + ":main"
 		}
+		// Persist the full diarized transcript before the turn: minutes are a
+		// summary, and the one number the summary dropped lives only here.
+		var savedPath string
+		if deps.SaveCapture != nil {
+			if rel, serr := deps.SaveCapture("audio", "", transcript); serr != nil {
+				slog.Warn("capture audio: raw persistence failed", "error", serr)
+			} else {
+				savedPath = rel
+			}
+		}
 		// Drive a meeting-minutes turn, not a bare transcript dump. The agent
 		// judges meeting vs short memo (the meeting-minutes skill carries the
 		// stance); for a real discussion it writes minutes + analysis and saves
@@ -192,6 +216,9 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 			"다음에 이어보게 하라. 기한이 있는 항목은 due로 남겨 임박 알림이 챙기게 한다. " +
 			"짧은 음성 메모면 과하게 격식 차리지 말고 핵심만 정리하라. 한국어로.\n\n" +
 			"## 전사\n" + strings.TrimSpace(transcript)
+		if savedPath != "" {
+			message += "\n\n(전사 원문 보관: memory/" + savedPath + " — 회의록에 이 경로를 출처로 남겨라)"
+		}
 		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
 			Delivery:            &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,

@@ -492,6 +492,16 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			Chat:       hub.Chat(),
 			OcrImage:   tools.OcrImageBytes,
 			Transcribe: tools.TranscribeAudio,
+			// Raw capture persistence: full OCR text / diarized transcript →
+			// {memory}/captures/ + diary breadcrumb (recallable, dream-distilled,
+			// backed up). The agent turn only summarizes; this keeps the original.
+			SaveCapture: func(kind, context, text string) (string, error) {
+				ws := hub.WikiStore()
+				if ws == nil {
+					return "", fmt.Errorf("wiki store unavailable")
+				}
+				return ws.SaveCapture(kind, context, text)
+			},
 			// Proper-noun bias for audio transcription, merged from two sources:
 			// the wiki (people/companies/deals/domain terms) and the contacts
 			// address book (every saved name + org). Either may be empty.
