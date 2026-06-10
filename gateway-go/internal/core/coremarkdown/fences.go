@@ -1,6 +1,19 @@
+// Package coremarkdown provides fenced code block detection for raw
+// markdown text. The former markdown-to-IR parser (a port of
+// core-rs/core/src/markdown/) was removed with the Telegram channel;
+// the native client renders markdown itself.
 package coremarkdown
 
 import "strings"
+
+// FenceSpan describes a fenced code block's byte range in the source text.
+type FenceSpan struct {
+	Start    int    `json:"start"`
+	End      int    `json:"end"`
+	OpenLine string `json:"openLine"`
+	Marker   string `json:"marker"`
+	Indent   string `json:"indent"`
+}
 
 // DetectFences parses fenced code block spans from raw markdown text.
 // A fence opens with 3+ backticks or tildes (with up to 3 spaces indent)
