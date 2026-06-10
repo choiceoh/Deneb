@@ -47,7 +47,8 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 
 	mux := s.buildMux()
 
-	ln, err := net.Listen("tcp", s.addr)
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", s.addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen on %s: %w", s.addr, err)
 	}

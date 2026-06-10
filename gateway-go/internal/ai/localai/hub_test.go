@@ -3,6 +3,7 @@ package localai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -118,7 +119,7 @@ func TestQueueDropOldestBackground(t *testing.T) {
 	// bg1's resultCh should have an error.
 	select {
 	case res := <-bg1Ch:
-		if res.err != ErrQueueFull {
+		if !errors.Is(res.err, ErrQueueFull) {
 			t.Fatalf("got %v, want ErrQueueFull", res.err)
 		}
 	default:
@@ -237,7 +238,7 @@ func TestSubmit_UnhealthyRejectsBackground(t *testing.T) {
 
 	req := SimpleRequest("sys", "test", 100, PriorityBackground, "test")
 	_, err := h.Submit(context.Background(), req)
-	if err != ErrUnhealthy {
+	if !errors.Is(err, ErrUnhealthy) {
 		t.Fatalf("got %v, want ErrUnhealthy for background on unhealthy hub", err)
 	}
 

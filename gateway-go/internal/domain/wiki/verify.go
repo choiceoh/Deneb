@@ -323,9 +323,7 @@ func stripCodeFences(text string) string {
 	if idx := strings.Index(text[3:], "\n"); idx >= 0 {
 		text = text[3+idx+1:]
 	}
-	if strings.HasSuffix(text, "```") {
-		text = text[:len(text)-3]
-	}
+	text = strings.TrimSuffix(text, "```")
 	return strings.TrimSpace(text)
 }
 

@@ -14,9 +14,10 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/core/coremedia"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coremedia"
 )
 
 // MediaFetchErrorCode classifies media fetch errors.

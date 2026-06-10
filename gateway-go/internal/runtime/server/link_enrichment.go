@@ -27,7 +27,6 @@ const (
 	maxTotalLinkChars      = 40000
 	linkFetchTimeout       = 10 * time.Second
 	totalEnrichmentTimeout = 30 * time.Second
-	linkFetchMaxBytes      = int64(2 * 1024 * 1024) // 2 MB raw download
 )
 
 // FetchFunc abstracts URL fetching for testability.
@@ -40,26 +39,6 @@ type LinkContent struct {
 	Title   string
 	Content string
 	Err     string // non-empty if fetch failed
-}
-
-// defaultLinkFetcher wraps media.Fetch for production use. Uses the shared
-// pooled HTTP client from the web package for connection reuse.
-func defaultLinkFetcher(ctx context.Context, url string) (body []byte, contentType string, err error) {
-	result, err := media.Fetch(ctx, media.FetchOptions{
-		URL:      url,
-		MaxBytes: linkFetchMaxBytes,
-		Client:   web.SharedClient(linkFetchTimeout),
-		Headers: map[string]string{
-			"User-Agent":      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-			"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-			"Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-			"Accept-Encoding": "identity",
-		},
-	})
-	if err != nil {
-		return nil, "", err
-	}
-	return result.Data, result.ContentType, nil
 }
 
 // EnrichMessageWithLinks extracts URLs from the message, fetches each one,

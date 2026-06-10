@@ -29,6 +29,7 @@ func assembleContextFull(
 	// Check if store has data for this session.
 	maxIdx, err := store.MaxMsgIndex(sessionKey)
 	if err != nil || maxIdx < 0 {
+		//nolint:nilerr // no data (or unreadable store) means empty assembly; memory recall is best-effort
 		return &AssemblyResult{}, nil
 	}
 

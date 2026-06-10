@@ -4,7 +4,6 @@ import (
 	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 )
 
@@ -37,12 +36,6 @@ func DefaultContextConfig() ContextConfig {
 		SystemPromptBudget: defaultSystemPromptBudget,
 		FreshTailCount:     defaultFreshTailCount,
 	}
-}
-
-// estimateTokens returns a rough token count for a string.
-// Delegates to tokenest.Estimate (script-aware, Korean-weighted).
-func estimateTokens(s string) int {
-	return tokenest.Estimate(s)
 }
 
 // assembleContext builds the LLM context via the Polaris summary DAG.

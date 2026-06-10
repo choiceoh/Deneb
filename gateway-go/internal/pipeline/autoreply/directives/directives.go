@@ -1,10 +1,11 @@
 package directives
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/model"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"regexp"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/model"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
 
 var multiSpaceRe = regexp.MustCompile(`\s+`)

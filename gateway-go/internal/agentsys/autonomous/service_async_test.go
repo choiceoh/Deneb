@@ -189,10 +189,10 @@ func TestService_TaskPanicRecovery(t *testing.T) {
 		svc.executeTask(context.Background(), &panicingTask{})
 	}()
 
-	// Verify error was recorded.
+	// Verify error was recorded (executeTask's recover runs synchronously).
 	status := svc.TaskStatus("panicker")
-	if status != nil && status.ErrorCount > 0 {
-		// Good — panic was recorded.
+	if status == nil || status.ErrorCount == 0 {
+		t.Error("expected panic to be recorded in task status")
 	}
 }
 

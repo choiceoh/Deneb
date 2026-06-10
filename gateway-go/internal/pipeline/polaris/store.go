@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -297,9 +298,12 @@ func (s *Store) SearchMessages(sessionKey, query string, maxResults int) ([]Sear
 
 	var results []SearchHit
 	for _, h := range hits {
-		// Find the message by index.
-		var msgIdx int
-		fmt.Sscanf(h.ID, "%d", &msgIdx)
+		// Find the message by index; skip hits with malformed IDs so a
+		// parse failure cannot silently match message index 0.
+		msgIdx, err := strconv.Atoi(h.ID)
+		if err != nil {
+			continue
+		}
 		for _, m := range sd.messages {
 			if m.MsgIndex == msgIdx {
 				results = append(results, SearchHit{

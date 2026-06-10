@@ -72,12 +72,6 @@ func appendAttachmentsToHistory(messages []llm.Message, text string, attachments
 	// Find the last user message.
 	lastUserIdx := -1
 	for i := len(messages) - 1; i >= 0; i-- {
-		var role struct {
-			Role string `json:"role"`
-		}
-		if err := json.Unmarshal(messages[i].Content, &role); err == nil && role.Role == "" {
-			// Content is a string, not structured. Check role from the Message.
-		}
 		if messages[i].Role == "user" {
 			lastUserIdx = i
 			break

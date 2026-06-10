@@ -60,36 +60,6 @@ func preprocessSpoilers(text string) string {
 	return string(result)
 }
 
-// handleSpoilerText processes text containing sentinel markers, appending
-// plain text segments to the render state and toggling Spoiler style spans.
-func handleSpoilerText(rs *renderState, text string) {
-	remaining := text
-	for remaining != "" {
-		openIdx := indexOf(remaining, sentinelOpen)
-		closeIdx := indexOf(remaining, sentinelClose)
-
-		if openIdx < 0 && closeIdx < 0 {
-			rs.appendText(remaining)
-			break
-		}
-
-		// Pick whichever sentinel comes first.
-		if openIdx >= 0 && (closeIdx < 0 || openIdx <= closeIdx) {
-			if openIdx > 0 {
-				rs.appendText(remaining[:openIdx])
-			}
-			rs.openStyle(StyleSpoiler)
-			remaining = remaining[openIdx+len(sentinelOpen):]
-		} else {
-			if closeIdx > 0 {
-				rs.appendText(remaining[:closeIdx])
-			}
-			rs.closeStyle(StyleSpoiler)
-			remaining = remaining[closeIdx+len(sentinelClose):]
-		}
-	}
-}
-
 // indexOf returns the byte index of sub in s, or -1 if not found.
 func indexOf(s, sub string) int {
 	for i := 0; i <= len(s)-len(sub); i++ {

@@ -1,9 +1,10 @@
 package inbound
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"regexp"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
 
 // FinalizeInboundContextOptions controls which fields are force-overridden

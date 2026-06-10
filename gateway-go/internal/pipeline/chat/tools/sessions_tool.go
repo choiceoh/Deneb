@@ -487,7 +487,9 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 		childSession.SpawnDepth = &depth
 		childSession.Label = label
 		childSession.ToolPreset = p.ToolPreset
-		d.Manager.Set(childSession)
+		if err := d.Manager.Set(childSession); err != nil {
+			return fmt.Sprintf("Sub-agent session %q created but failed to store its settings: %s", childKey, err.Error()), nil
+		}
 
 		// Send the task message to the child session.
 		if err := d.SendFn(childKey, p.Task); err != nil {
