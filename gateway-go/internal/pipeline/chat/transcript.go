@@ -117,6 +117,11 @@ func (s *FileTranscriptStore) Append(sessionKey string, msg ChatMessage) error {
 	if _, err := f.Write(data); err != nil {
 		return fmt.Errorf("write transcript: %w", err)
 	}
+	// fsync: transcripts are the primary conversational record; without it a
+	// power loss or SIGKILL can drop the page-cache tail. ~1ms on local NVMe.
+	if err := f.Sync(); err != nil {
+		return fmt.Errorf("sync transcript: %w", err)
+	}
 	return nil
 }
 

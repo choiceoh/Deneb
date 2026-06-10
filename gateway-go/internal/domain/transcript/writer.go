@@ -186,6 +186,11 @@ func (w *Writer) AppendMessage(sessionKey string, msg json.RawMessage) error {
 	if _, err := f.Write(line); err != nil {
 		return fmt.Errorf("transcript: write: %w", err)
 	}
+	// fsync: transcripts are the primary conversational record; without it a
+	// power loss or SIGKILL can drop the page-cache tail. ~1ms on local NVMe.
+	if err := f.Sync(); err != nil {
+		return fmt.Errorf("transcript: sync: %w", err)
+	}
 
 	// Notify listeners with the already-redacted payload so downstream
 	// subscribers (wiki recorder, etc.) never see the raw secret either.
