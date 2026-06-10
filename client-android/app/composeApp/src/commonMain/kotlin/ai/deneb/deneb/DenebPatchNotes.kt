@@ -21,6 +21,12 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "설정에 '화면' 탭 추가 — 테마(시스템·라이트·다크·OLED 블랙)와 화면 배율을 직접 조절, 즉시 반영",
+            "설정에 '에이전트' 탭 추가 — 기억(학습)과 자동 스케줄링을 켜고 끄기",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "열이 많은 표는 가로 스크롤로 — 칸이 한 글자씩 찌그러지지 않고 전부 읽힘",
             "답변 속 이메일 주소가 바로 탭할 수 있는 링크로 — <주소> 꺾쇠 표기와 ***굵은 기울임***도 올바르게 표시",
             "H₂O·m² 같은 위·아래 첨자와 <b> 등 HTML 표기, [텍스트][1] 참조형 링크 지원",
