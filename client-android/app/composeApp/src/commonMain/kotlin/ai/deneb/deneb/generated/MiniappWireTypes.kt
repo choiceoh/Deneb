@@ -85,6 +85,8 @@ data class MailRowOut(
     val date: String = "",
     val isUnread: Boolean = false,
     val labels: List<String> = emptyList(),
+    val priority: String = "",
+    val priorityHint: String = "",
 )
 
 @Serializable

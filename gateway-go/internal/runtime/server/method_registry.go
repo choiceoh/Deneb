@@ -22,6 +22,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/mailpriority"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
@@ -292,6 +293,13 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlerminiapp.GmailMethods(handlerminiapp.GmailDeps{
 			Client: func() (handlerminiapp.GmailClient, error) {
 				return gmail.DefaultClient()
+			},
+			// Row priority: cheap local heuristics + address-book VIP
+			// lookup. contactsStore is created above in this same
+			// registration pass; a nil store just drops the VIP signal.
+			Priority: func(from, subject, snippet string) (string, string) {
+				tier, hint := mailPriorityScorer(s.contactsStore).Score(from, subject, snippet)
+				return string(tier), hint
 			},
 		}),
 
@@ -694,4 +702,15 @@ func resolveLocalTodos(logger *slog.Logger) handlerminiapp.LocalTodos {
 		return nil
 	}
 	return store
+}
+
+// mailPriorityScorer builds the inbox-row scorer for the gmail list handler.
+// The scorer is stateless and cheap to construct; the VIP signal binds the
+// (possibly nil) contacts store — nil simply drops that signal.
+func mailPriorityScorer(cs *contacts.Store) *mailpriority.Scorer {
+	var vip func(string) bool
+	if cs != nil {
+		vip = cs.HasEmail
+	}
+	return mailpriority.New(vip)
 }
