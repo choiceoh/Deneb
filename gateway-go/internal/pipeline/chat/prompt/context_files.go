@@ -2,6 +2,7 @@ package prompt
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,20 +28,35 @@ var contextFileNames = []string{
 }
 
 const (
-	// maxContextFileChars is the maximum characters per context file.
+	// maxContextFileChars is the maximum bytes per context file.
 	// Sized for single-user DGX Spark: typical AGENTS.md/SOUL.md files
 	// fit comfortably under 8K chars (~2K tokens). Oversized files are
 	// head+tail truncated so core rules are preserved.
 	maxContextFileChars = 8_000
-	// maxContextTotalChars is the maximum total characters for all context files.
-	// 5 file kinds x 8K = 40K chars (~10K tokens) worst case, leaving ample
+	// maxMemoryFileChars is the per-file budget for MEMORY.md. The agent's
+	// auto-recorded long-term memory routinely outgrows rule files (observed
+	// 176KB in production); the default 8K cap silently hid ~95% of it every
+	// turn. 32K keeps the curated head sections plus the recent tail entries.
+	// The dynamic system block is byte-stable per session, so the trailing
+	// message cache markers still amortize the extra tokens after turn one.
+	maxMemoryFileChars = 32_000
+	// maxContextTotalChars is the maximum total bytes for all context files.
+	// 5 rule files x 8K + MEMORY.md 32K = 72K bytes worst case, leaving ample
 	// budget for conversation history and tool schemas.
-	maxContextTotalChars = 40_000
+	maxContextTotalChars = 72_000
 	// ctxCacheRevalidateInterval forces a full re-scan after this duration
 	// to detect newly added or deleted context files.
 	// Extended for single-user DGX Spark: config files rarely change mid-session.
 	ctxCacheRevalidateInterval = 5 * time.Minute
 )
+
+// contextFileCharBudget returns the per-file byte budget for a context file.
+func contextFileCharBudget(name string) int {
+	if name == "MEMORY.md" {
+		return maxMemoryFileChars
+	}
+	return maxContextFileChars
+}
 
 // ResetContextFileCacheForTest clears all prompt caches.
 // Intended for tests to avoid cross-test state leakage.
@@ -158,18 +174,20 @@ func loadContextFilesFromDisk(workspaceDir string) ([]ContextFile, map[string]ti
 			// Record mtime for cache validation.
 			resolvedMtimes[resolved] = info.ModTime()
 
-			// Skip if this would exceed total budget.
-			if totalChars+len(content) > maxContextTotalChars {
-				remaining := maxContextTotalChars - totalChars
+			// Effective budget: per-file cap, clipped by the remaining total.
+			budget := contextFileCharBudget(name)
+			if remaining := maxContextTotalChars - totalChars; remaining < budget {
 				if remaining <= 0 {
 					break
 				}
-				content = truncateContent(content, remaining)
+				budget = remaining
 			}
-
-			// Truncate individual file if too large.
-			if len(content) > maxContextFileChars {
-				content = truncateContent(content, maxContextFileChars)
+			if len(content) > budget {
+				// Truncation drops real memory content — surface it so the
+				// operator learns the file needs trimming (not just the LLM).
+				slog.Warn("context file exceeds budget; head/tail truncated",
+					"file", name, "sizeBytes", len(content), "budgetBytes", budget)
+				content = truncateContent(content, budget)
 			}
 
 			// Content-based dedup (handles symlinks pointing to same file).
@@ -238,13 +256,16 @@ func collectSearchDirs(workspaceDir string) []string {
 // Cuts are aligned to UTF-8 rune boundaries so multi-byte characters (Korean,
 // emoji, CJK) are never split mid-rune — the caps are stated in bytes, but the
 // slicing must not emit invalid UTF-8 into the system prompt.
+// The marker states how much was dropped so the model (and anyone reading the
+// assembled prompt) knows the file is incomplete instead of silently partial.
 func truncateContent(content string, maxChars int) string {
 	if len(content) <= maxChars {
 		return content
 	}
 	headSize := maxChars * 70 / 100
 	tailSize := maxChars * 20 / 100
-	marker := "\n\n[...truncated...]\n\n"
+	omittedKB := (len(content) - headSize - tailSize + 1023) / 1024
+	marker := fmt.Sprintf("\n\n[...truncated: ~%dKB omitted — file exceeds its context budget; trim it or move durable notes into the wiki...]\n\n", omittedKB)
 
 	head := clipHeadUTF8(content, headSize)
 	tail := clipTailUTF8(content, tailSize)
