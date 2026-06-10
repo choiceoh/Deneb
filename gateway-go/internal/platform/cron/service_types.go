@@ -2,13 +2,14 @@ package cron
 
 import (
 	"context"
+	"errors"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
 // RunOutcome represents the result of a cron job execution.
 type RunOutcome struct {
-	Status     string          `json:"status"` // "ok", "error", "skipped", "timeout"
+	Status     string          `json:"status"` // "ok", "error", "skipped", "timeout", "aborted"
 	Output     string          `json:"output,omitempty"`
 	Error      string          `json:"error,omitempty"`
 	Delivery   *DeliveryResult `json:"delivery,omitempty"`
@@ -17,6 +18,15 @@ type RunOutcome struct {
 	EndedAt    int64           `json:"endedAt"`
 	DurationMs int64           `json:"durationMs"`
 }
+
+// ErrTurnAborted is returned by AgentRunner implementations when the agent
+// turn died before producing any deliverable output — typically a gateway
+// shutdown/restart killing the in-flight session. The executor records the
+// run as "aborted" (infra churn, not a job fault: no consecutive-error
+// count) and marks the job PendingRerun so the run is retried instead of
+// silently lost. The 2026-06-10 restart storm — 12 deploys in 31 minutes —
+// aborted three mail analyses that were then recorded status=ok.
+var ErrTurnAborted = errors.New("agent turn aborted before completion")
 
 // AgentRunner abstracts the agent execution so the cron package does not
 // depend on chat.Handler or protocol (which pull in CGo/FFI).

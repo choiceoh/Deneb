@@ -160,6 +160,15 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 		"allTextLen", len(allText),
 		"chosenLen", len(output),
 		"stopReason", result.StopReason)
+	if output == "" && result.StopReason == "aborted" {
+		// The turn died mid-run (gateway shutdown/restart) without producing a
+		// deliverable. Surface the abort instead of returning an empty success:
+		// an empty "ok" run is recorded ok and the triggering event's analysis
+		// is silently lost (the 2026-06-10 restart storm dropped three mail
+		// analyses this way). The cron executor maps this to status="aborted"
+		// and queues a PendingRerun for the next boot.
+		return "", cron.ErrTurnAborted
+	}
 	return output, nil
 }
 

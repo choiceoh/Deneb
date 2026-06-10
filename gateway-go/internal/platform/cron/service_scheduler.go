@@ -218,6 +218,38 @@ func (s *Service) collectMissedJobsLocked(storeData *CronStoreFile) []StoreJob {
 	return toRecover
 }
 
+// collectPendingRerunsLocked returns jobs whose previous run was lost to a
+// gateway restart (PendingRerun persisted by the aborted-outcome path in
+// applyJobResult) and clears the flag so the rerun fires exactly once.
+// Disabled jobs are included on purpose: trigger-only jobs (enabled=false,
+// fired via POST /api/cron/run — the mail watch) are exactly the ones that
+// lose runs to restarts, and the rerun resumes an already-authorized trigger
+// rather than scheduling anything new. Caller must hold s.mu; executors are
+// spawned only after the lock is released (same contract as
+// collectMissedJobsLocked).
+func (s *Service) collectPendingRerunsLocked(storeData *CronStoreFile) []StoreJob {
+	var out []StoreJob
+	for _, job := range storeData.Jobs {
+		if !job.State.PendingRerun {
+			continue
+		}
+		if _, running := s.runningJobs.Load(job.ID); running {
+			continue
+		}
+		state := job.State
+		state.PendingRerun = false
+		if err := s.store.UpdateJobState(job.ID, state); err != nil {
+			s.logger.Warn("cron pending rerun: boot flag clear failed; skipping rerun",
+				"id", job.ID, "error", err)
+			continue
+		}
+		job.State = state
+		s.logger.Info("cron pending rerun: recovering run lost to restart", "id", job.ID)
+		out = append(out, job)
+	}
+	return out
+}
+
 // spawnRecoverExecutors spawns one panic-recovered executor goroutine per
 // missed job and tracks each one on s.inFlight so Stop can wait for them.
 // Must be called WITHOUT s.mu held.
