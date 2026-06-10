@@ -19,8 +19,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,6 +44,9 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -63,7 +71,14 @@ import ai.deneb.ui.denebBreathing
 import ai.deneb.ui.handCursor
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.bot_message_copy_content_description
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.stringResource
+import kotlin.time.Instant
 
 /**
  * Interactive form components of the deneb-ui renderer: button / text input /
@@ -209,6 +224,146 @@ private fun keyboardOptionsFor(keyboard: String?): KeyboardOptions = when (keybo
     "url" -> KeyboardOptions(keyboardType = KeyboardType.Uri)
     else -> KeyboardOptions.Default
 }
+
+@Composable
+internal fun RenderDateInput(
+    node: DateInputNode,
+    isInteractive: Boolean,
+    formState: SnapshotStateMap<String, String>,
+) {
+    val validation = LocalUiFormValidation.current
+    val isError = validation?.errors?.get(node.id) == true
+    var showPicker by remember { mutableStateOf(false) }
+    val value = formState[node.id] ?: ""
+
+    PickerField(
+        value = value,
+        label = node.label,
+        placeholder = "날짜 선택",
+        icon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
+        isInteractive = isInteractive,
+        isError = isError,
+        onOpen = { showPicker = true },
+    )
+    if (showPicker) {
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = isoDateToUtcMillis(value),
+        )
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let {
+                        formState[node.id] = utcMillisToIsoDate(it)
+                        validation?.errors?.remove(node.id)
+                    }
+                    showPicker = false
+                }) { Text("확인") }
+            },
+            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("취소") } },
+        ) { DatePicker(state = state) }
+    }
+}
+
+@Composable
+internal fun RenderTimeInput(
+    node: TimeInputNode,
+    isInteractive: Boolean,
+    formState: SnapshotStateMap<String, String>,
+) {
+    val validation = LocalUiFormValidation.current
+    val isError = validation?.errors?.get(node.id) == true
+    var showPicker by remember { mutableStateOf(false) }
+    val value = formState[node.id] ?: ""
+
+    PickerField(
+        value = value,
+        label = node.label,
+        placeholder = "시간 선택",
+        icon = { Icon(Icons.Filled.AccessTime, contentDescription = null) },
+        isInteractive = isInteractive,
+        isError = isError,
+        onOpen = { showPicker = true },
+    )
+    if (showPicker) {
+        val initial = parseHm(value)
+        val state = rememberTimePickerState(
+            initialHour = initial.hour,
+            initialMinute = initial.minute,
+            is24Hour = true,
+        )
+        AlertDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    formState[node.id] =
+                        "${state.hour.toString().padStart(2, '0')}:${state.minute.toString().padStart(2, '0')}"
+                    validation?.errors?.remove(node.id)
+                    showPicker = false
+                }) { Text("확인") }
+            },
+            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("취소") } },
+            text = { TimePicker(state = state) },
+        )
+    }
+}
+
+/**
+ * Shared read-only field that opens a picker dialog. A transparent overlay
+ * captures the tap — a readOnly OutlinedTextField swallows clicks itself.
+ */
+@Composable
+private fun PickerField(
+    value: String,
+    label: String?,
+    placeholder: String,
+    icon: @Composable () -> Unit,
+    isInteractive: Boolean,
+    isError: Boolean,
+    onOpen: () -> Unit,
+) {
+    Box(Modifier.fillMaxWidth()) {
+        DenebOutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            label = label?.let { { Text(it) } },
+            placeholder = { Text(placeholder) },
+            trailingIcon = icon,
+            enabled = isInteractive,
+            isError = isError,
+            supportingText = if (isError) {
+                { Text("필수 입력입니다") }
+            } else {
+                null
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (isInteractive) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .handCursor()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onOpen,
+                    ),
+            )
+        }
+    }
+}
+
+/** Parse the picker seed: "yyyy-MM-dd" → UTC-midnight millis (DatePicker convention). */
+private fun isoDateToUtcMillis(value: String): Long? = runCatching {
+    LocalDateTime(LocalDate.parse(value), LocalTime(0, 0)).toInstant(TimeZone.UTC).toEpochMilliseconds()
+}.getOrNull()
+
+private fun utcMillisToIsoDate(millis: Long): String =
+    Instant.fromEpochMilliseconds(millis).toLocalDateTime(TimeZone.UTC).date.toString()
+
+/** Parse "HH:mm" leniently; blank/garbage falls back to 09:00 (a sane meeting-time seed). */
+private fun parseHm(value: String): LocalTime = runCatching { LocalTime.parse(value) }.getOrNull() ?: LocalTime(9, 0)
 
 @Composable
 internal fun RenderCheckbox(

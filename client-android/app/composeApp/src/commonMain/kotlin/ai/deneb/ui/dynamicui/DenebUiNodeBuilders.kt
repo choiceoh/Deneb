@@ -50,6 +50,8 @@ private fun parseObjectNode(obj: JsonObject): DenebUiNode? = when (obj.readNulla
     "quote" -> parseQuoteNode(obj)
     "button" -> parseButtonNode(obj)
     "text_input" -> parseTextInputNode(obj)
+    "date_input" -> parseDateInputNode(obj)
+    "time_input" -> parseTimeInputNode(obj)
     "checkbox" -> parseCheckboxNode(obj)
     "select" -> parseSelectNode(obj)
     "switch" -> parseSwitchNode(obj)
@@ -460,6 +462,20 @@ private fun parseTextInputNode(obj: JsonObject): TextInputNode = TextInputNode(
     value = obj.readNullableString("value"),
     multiline = obj.readNullableBoolean("multiline"),
     keyboard = obj.readNullableString("keyboard"),
+    required = obj.readNullableBoolean("required"),
+)
+
+private fun parseDateInputNode(obj: JsonObject): DateInputNode = DateInputNode(
+    id = obj.readRequiredId(),
+    label = obj.readNullableString("label"),
+    value = obj.readNullableString("value"),
+    required = obj.readNullableBoolean("required"),
+)
+
+private fun parseTimeInputNode(obj: JsonObject): TimeInputNode = TimeInputNode(
+    id = obj.readRequiredId(),
+    label = obj.readNullableString("label"),
+    value = obj.readNullableString("value"),
     required = obj.readNullableBoolean("required"),
 )
 

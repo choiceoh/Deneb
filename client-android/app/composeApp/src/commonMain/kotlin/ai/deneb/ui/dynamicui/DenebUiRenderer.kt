@@ -175,6 +175,8 @@ internal fun RenderNode(
         is TextNode -> RenderText(node)
         is ButtonNode -> RenderButton(node, isInteractive, formState, toggleState, onCallback)
         is TextInputNode -> RenderTextInput(node, isInteractive, formState)
+        is DateInputNode -> RenderDateInput(node, isInteractive, formState)
+        is TimeInputNode -> RenderTimeInput(node, isInteractive, formState)
         is CheckboxNode -> RenderCheckbox(node, isInteractive, formState)
         is SelectNode -> RenderSelect(node, isInteractive, formState)
         is ImageNode -> RenderImage(node)
@@ -219,6 +221,10 @@ private fun initializeFormState(node: DenebUiNode, formState: MutableMap<String,
     when (node) {
         is TextInputNode -> node.value?.let { if (node.id !in formState) formState[node.id] = it }
 
+        is DateInputNode -> node.value?.let { if (node.id !in formState) formState[node.id] = it }
+
+        is TimeInputNode -> node.value?.let { if (node.id !in formState) formState[node.id] = it }
+
         is CheckboxNode -> if (node.id !in formState) formState[node.id] = (node.checked ?: false).toString()
 
         is SelectNode -> node.selected?.let { if (node.id !in formState) formState[node.id] = it }
@@ -255,6 +261,8 @@ private fun initializeFormState(node: DenebUiNode, formState: MutableMap<String,
 private fun collectRequiredIds(node: DenebUiNode, into: MutableSet<String> = mutableSetOf()): Set<String> {
     when (node) {
         is TextInputNode -> if (node.required == true) into.add(node.id)
+        is DateInputNode -> if (node.required == true) into.add(node.id)
+        is TimeInputNode -> if (node.required == true) into.add(node.id)
         is SelectNode -> if (node.required == true) into.add(node.id)
         is RadioGroupNode -> if (node.required == true) into.add(node.id)
         is ChipGroupNode -> if (node.required == true && node.selection != "none") into.add(node.id)

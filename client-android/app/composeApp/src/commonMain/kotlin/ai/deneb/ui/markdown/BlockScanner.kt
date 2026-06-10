@@ -244,6 +244,9 @@ internal object BlockScanner {
         val (body, closed, next) = readFenceBody(lines, start + 1, end, fenceChar, fenceLen, indent)
 
         if (info.equals("deneb-ui", ignoreCase = true)) {
+            // An unclosed fence is almost always a stream still in flight — defer the
+            // decode to render time (placeholder while streaming, salvage when final).
+            if (!closed) return DenebUiPending(body) to next
             return decodeDenebUi(body) to next
         }
 

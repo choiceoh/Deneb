@@ -65,6 +65,14 @@ data class DenebUiBlock(val node: DenebUiNode, val rawJson: String) : BlockNode
 @Immutable
 data class DenebUiError(val rawJson: String) : BlockNode
 
+// A deneb-ui fence whose closing ``` hasn't arrived yet. While the message is
+// still streaming the renderer shows a quiet "구성 중" placeholder instead of a
+// half-built form (or the truncation-salvage warning) flickering as JSON grows;
+// once streaming ends (a genuinely truncated reply) it decodes the body with the
+// usual salvage pipeline.
+@Immutable
+data class DenebUiPending(val rawBody: String) : BlockNode
+
 @Immutable
 sealed interface InlineNode
 

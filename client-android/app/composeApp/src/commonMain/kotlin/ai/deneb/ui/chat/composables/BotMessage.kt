@@ -38,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +61,7 @@ import ai.deneb.ui.DenebMotion
 import ai.deneb.ui.denebExpandIn
 import ai.deneb.ui.denebShrinkOut
 import ai.deneb.ui.handCursor
+import ai.deneb.ui.markdown.LocalDenebUiStreaming
 import ai.deneb.ui.markdown.MarkdownContent
 import ai.deneb.ui.markdown.parseMarkdown
 import ai.deneb.ui.markdown.parseMarkdownCached
@@ -162,14 +164,18 @@ internal fun BotMessage(
                 // the visual gap to the answer — drop the duplicated top inset.
                 val answerTopPadding = if (nonBlankSegments.isNotEmpty()) 6.dp else 16.dp
                 SelectionContainer {
-                    MarkdownContent(
-                        document = document,
-                        isInteractive = effectiveInteractive,
-                        onUiCallback = denebUiCallback,
-                        frozen = effectiveFrozen,
-                        modifier = Modifier.fillMaxWidth()
-                            .padding(start = 16.dp, top = answerTopPadding, end = 16.dp, bottom = 8.dp),
-                    )
+                    // Streaming flag lets an unclosed deneb-ui fence render as a quiet
+                    // placeholder instead of a half-built form morphing per token.
+                    CompositionLocalProvider(LocalDenebUiStreaming provides isStreaming) {
+                        MarkdownContent(
+                            document = document,
+                            isInteractive = effectiveInteractive,
+                            onUiCallback = denebUiCallback,
+                            frozen = effectiveFrozen,
+                            modifier = Modifier.fillMaxWidth()
+                                .padding(start = 16.dp, top = answerTopPadding, end = 16.dp, bottom = 8.dp),
+                        )
+                    }
                 }
             }
             // Inbound image attachments (e.g. the proactive 주간업무보고 form). Tap to

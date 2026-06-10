@@ -14,6 +14,7 @@ import ai.deneb.getBackgroundDispatcher
 import ai.deneb.network.toUiError
 import ai.deneb.ui.dynamicui.DenebUiParser
 import ai.deneb.ui.markdown.DenebUiBlock
+import ai.deneb.ui.markdown.DenebUiPending
 import ai.deneb.ui.markdown.DenebUiError
 import ai.deneb.ui.markdown.parseMarkdown
 import io.github.vinceglb.filekit.PlatformFile
@@ -269,7 +270,13 @@ class ChatViewModel(
             val lastAssistant = dataRepository.chatHistory.value.lastRenderedAssistant() ?: return
 
             val blocks = parseMarkdown(DenebUiParser.wrapBareDenebUiContent(lastAssistant.content)).blocks
-            val hasValidUi = blocks.any { it is DenebUiBlock }
+            // An unclosed fence on a *final* reply (DenebUiPending) still counts as valid
+            // when its body salvages to a UI — the renderer shows that salvage, so a retry
+            // would needlessly re-do a screen the user can already see.
+            val hasValidUi = blocks.any {
+                it is DenebUiBlock ||
+                    (it is DenebUiPending && DenebUiParser.parseUiBlockBody(it.rawBody) is DenebUiParser.UiBlockResult.Ui)
+            }
             if (hasValidUi) return
 
             // Build error feedback for the AI

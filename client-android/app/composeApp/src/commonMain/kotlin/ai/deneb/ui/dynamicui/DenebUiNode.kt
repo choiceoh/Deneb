@@ -101,6 +101,30 @@ data class TextInputNode(
 
 @Immutable
 @Serializable
+@SerialName("date_input")
+data class DateInputNode(
+    override val id: String = "",
+    val label: String? = null,
+    /** ISO date, e.g. "2026-06-15". Opens a Material date picker. */
+    val value: String? = null,
+    /** Submit-blocking required flag — buttons refuse to fire while this input is blank. */
+    val required: Boolean? = null,
+) : DenebUiNode
+
+@Immutable
+@Serializable
+@SerialName("time_input")
+data class TimeInputNode(
+    override val id: String = "",
+    val label: String? = null,
+    /** 24h "HH:mm", e.g. "14:30". Opens a Material time picker. */
+    val value: String? = null,
+    /** Submit-blocking required flag — buttons refuse to fire while this input is blank. */
+    val required: Boolean? = null,
+) : DenebUiNode
+
+@Immutable
+@Serializable
 @SerialName("checkbox")
 data class CheckboxNode(
     override val id: String = "",

@@ -997,4 +997,18 @@ class DenebUiParserTest {
         )
         assertEquals(true, chips.required)
     }
+
+    @Test
+    fun `parses date_input and time_input`() {
+        val date = assertIs<DateInputNode>(
+            parseUi("""{"type":"date_input","id":"due","label":"마감일","value":"2026-06-15","required":true}"""),
+        )
+        assertEquals("2026-06-15", date.value)
+        assertEquals(true, date.required)
+        val time = assertIs<TimeInputNode>(
+            parseUi("""{"type":"time_input","id":"at","value":"14:30"}"""),
+        )
+        assertEquals("14:30", time.value)
+        assertNull(time.required)
+    }
 }
