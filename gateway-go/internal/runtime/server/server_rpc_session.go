@@ -468,6 +468,12 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 			signalConfig:   autonomous.DefaultSignalConfig(),
 		})
 
+		// Daily offsite memory backup: tar.gz of the memory stores streamed
+		// over ssh to the storage node (the NFS mount is read-only from this
+		// host). Only registered for the production state dir — dev live-test
+		// instances (DENEB_STATE_DIR=/tmp/...) must not ship archives.
+		s.registerMemoryBackupTask(homeDir)
+
 		// Model tuner: every 6h, aggregate the last 24h of agent logs by
 		// model, auto-apply the bounded output-token floor for models that
 		// keep hitting the ceiling, calibrate newly served vLLM models, and
