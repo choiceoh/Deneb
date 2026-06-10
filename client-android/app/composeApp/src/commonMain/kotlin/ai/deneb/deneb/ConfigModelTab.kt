@@ -389,12 +389,16 @@ private fun HealthLegendItem(health: ModelHealth, label: String) {
     }
 }
 
-/** Model response status. Color: online → green, offline → red, unknown/unprobed → amber
+/** Model response status. Color: online → green, offline/auth → red, unknown/unprobed → amber
  *  (the shared status accents from ui/Theme.kt, saturated on every flavor).
- *  [suffix] is appended to the model id line. Parsed once from the wire string. */
+ *  [suffix] is appended to the model id line. Parsed once from the wire string.
+ *  "auth" comes from the gateway's role health watch: the endpoint answers but
+ *  rejects the credential (expired key) — distinct from "no response" so the
+ *  operator knows to rotate the key, not check the network. */
 private enum class ModelHealth(val color: Color, val suffix: String) {
     ONLINE(statusSuccess, ""),
     OFFLINE(statusDanger, "  ·  응답 없음"),
+    AUTH(statusDanger, "  ·  인증 만료 — 키 갱신 필요"),
     UNKNOWN(statusWarning, "  ·  상태 미확인"),
     ;
 
@@ -402,6 +406,7 @@ private enum class ModelHealth(val color: Color, val suffix: String) {
         fun parse(health: String): ModelHealth = when (health.lowercase()) {
             "online" -> ONLINE
             "offline" -> OFFLINE
+            "auth" -> AUTH
             else -> UNKNOWN
         }
     }

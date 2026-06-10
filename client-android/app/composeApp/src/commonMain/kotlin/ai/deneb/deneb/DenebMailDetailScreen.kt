@@ -210,12 +210,16 @@ fun DenebMailDetailScreen(
             if (analyzing || analysis != null || analysisFailed) {
                 Spacer(Modifier.height(12.dp))
                 // First substantive line of the analysis doubles as the collapsed
-                // card's teaser (markdown decoration stripped for plain display).
+                // card's teaser. Heading lines are skipped — analyses almost always
+                // open with "## 이메일 분석", which would just echo the card's own
+                // label — so the teaser carries actual content ("유광열 부장이 6/8…");
+                // markdown decoration is stripped for plain display.
                 val analysisPreview = remember(analysis) {
-                    analysis?.text?.lineSequence()
-                        ?.map { it.trim().trimStart('#', '*', '-', '>', ' ').replace("*", "").replace("`", "").trim() }
-                        ?.firstOrNull { it.isNotEmpty() }
-                        .orEmpty()
+                    val lines = analysis?.text?.lines().orEmpty()
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                    val body = lines.firstOrNull { !it.startsWith("#") } ?: lines.firstOrNull().orEmpty()
+                    body.trimStart('#', '*', '-', '>', ' ').replace("*", "").replace("`", "").trim()
                 }
                 ElevatedCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
