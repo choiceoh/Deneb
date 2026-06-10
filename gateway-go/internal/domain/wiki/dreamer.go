@@ -12,7 +12,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -107,6 +109,10 @@ type WikiDreamer struct {
 	model  string
 	logger *slog.Logger
 
+	// cmu guards turnCount and lastDream: incremented from chat turns,
+	// read from the autonomous dream timer loop, reset from async dream
+	// runs — three goroutines on a plain int/time without it.
+	cmu       sync.Mutex
 	turnCount int
 	lastDream time.Time
 
@@ -149,7 +155,9 @@ func NewWikiDreamer(store *Store, client *llm.Client, model string, cfg Config, 
 
 // IncrementTurn records a conversation turn for threshold tracking.
 func (wd *WikiDreamer) IncrementTurn(_ context.Context) {
+	wd.cmu.Lock()
 	wd.turnCount++
+	wd.cmu.Unlock()
 }
 
 // SetPolarisContextFn wires a closure that returns formatted recent polaris
@@ -160,12 +168,17 @@ func (wd *WikiDreamer) SetPolarisContextFn(fn func() string) {
 
 // ShouldDream checks if dreaming conditions are met.
 func (wd *WikiDreamer) ShouldDream(_ context.Context) bool {
-	if wd.turnCount >= wikiDreamTurnThreshold {
-		wd.logger.Info("wiki-dream: turn threshold reached", "turns", wd.turnCount)
+	wd.cmu.Lock()
+	turns := wd.turnCount
+	last := wd.lastDream
+	wd.cmu.Unlock()
+
+	if turns >= wikiDreamTurnThreshold {
+		wd.logger.Info("wiki-dream: turn threshold reached", "turns", turns)
 		return true
 	}
-	if !wd.lastDream.IsZero() && time.Since(wd.lastDream).Hours() >= float64(wikiDreamTimeIntervalH) {
-		wd.logger.Info("wiki-dream: time threshold reached", "elapsed", time.Since(wd.lastDream).Round(time.Minute))
+	if !last.IsZero() && time.Since(last).Hours() >= float64(wikiDreamTimeIntervalH) {
+		wd.logger.Info("wiki-dream: time threshold reached", "elapsed", time.Since(last).Round(time.Minute))
 		return true
 	}
 	return false
@@ -393,7 +406,15 @@ func (wd *WikiDreamer) scanDiaries(_ context.Context) (*diaryScanResult, error) 
 		chunk := data[offset:]
 		nextOffset := info.Size()
 		if len(chunk) > remaining {
-			chunk = chunk[:remaining]
+			// Back the cut up to a rune boundary: diaries are Korean-heavy and
+			// a byte-indexed cut can split a 3-byte Hangul rune, feeding the
+			// synthesizer invalid UTF-8. The next scan resumes at nextOffset,
+			// so the trimmed bytes are not lost, just deferred.
+			cut := remaining
+			for cut > 0 && !utf8.RuneStart(chunk[cut]) {
+				cut--
+			}
+			chunk = chunk[:cut]
 			nextOffset = offset + int64(len(chunk))
 		}
 		if len(chunk) == 0 {
@@ -985,14 +1006,17 @@ func normalizeSlug(path string) string {
 }
 
 func (wd *WikiDreamer) resetCounters() {
+	wd.cmu.Lock()
 	wd.turnCount = 0
 	wd.lastDream = time.Now()
+	last := wd.lastDream
+	wd.cmu.Unlock()
 	// Persist lastDream so the time-trigger survives restarts (see NewWikiDreamer).
 	if wd.store == nil {
 		return
 	}
 	state := wd.loadDiaryProcessState()
-	state.LastDreamMs = wd.lastDream.UnixMilli()
+	state.LastDreamMs = last.UnixMilli()
 	if err := wd.saveDiaryProcessState(state); err != nil && wd.logger != nil {
 		wd.logger.Warn("wiki-dream: persist lastDream failed", "error", err)
 	}
