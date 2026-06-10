@@ -50,6 +50,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -365,13 +367,36 @@ internal fun MailRow(
                 )
             }
             Spacer(Modifier.height(3.dp))
-            Text(
-                message.subject.ifBlank { "(제목 없음)" },
-                style = DenebType.rowSubtitle,
-                color = if (message.unread) MaterialTheme.colorScheme.onBackground else denebHint(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Glanceable priority marker from the gateway's heuristic
+                // scorer (red = urgent, tertiary = attention); routine mail
+                // renders no marker. The signal hint feeds TalkBack.
+                val priorityColor = when (message.priority) {
+                    "urgent" -> MaterialTheme.colorScheme.error
+                    "attention" -> MaterialTheme.colorScheme.tertiary
+                    else -> null
+                }
+                if (priorityColor != null) {
+                    val label = if (message.priority == "urgent") "긴급" else "주의"
+                    val hint = message.priorityHint.ifBlank { label }
+                    Box(
+                        Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(priorityColor)
+                            .semantics { contentDescription = "$label: $hint" },
+                    )
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text(
+                    message.subject.ifBlank { "(제목 없음)" },
+                    style = DenebType.rowSubtitle,
+                    color = if (message.unread) MaterialTheme.colorScheme.onBackground else denebHint(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
             if (message.snippet.isNotBlank()) {
                 Spacer(Modifier.height(2.dp))
                 Text(

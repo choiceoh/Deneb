@@ -36,7 +36,7 @@ suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
     denebMailActiveQuery = q
     _denebMail.value = payload.messages
         .filter { it.id.isNotBlank() }
-        .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread) }
+        .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread, it.priority, it.priorityHint) }
     _denebMailNextToken.value = payload.nextPageToken.ifBlank { null }
     return true
 }
@@ -55,7 +55,7 @@ suspend fun DenebGatewayClient.loadMoreMail() {
     val seen = _denebMail.value.mapTo(HashSet()) { it.id }
     _denebMail.value = _denebMail.value + payload.messages
         .filter { it.id.isNotBlank() && it.id !in seen }
-        .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread) }
+        .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread, it.priority, it.priorityHint) }
     _denebMailNextToken.value = payload.nextPageToken.ifBlank { null }
 }
 
@@ -205,5 +205,5 @@ suspend fun DenebGatewayClient.fetchRecentFromSender(email: String, limit: Int =
     ) ?: return emptyList()
     return payload.messages
         .filter { it.id.isNotBlank() }
-        .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread) }
+        .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread, it.priority, it.priorityHint) }
 }
