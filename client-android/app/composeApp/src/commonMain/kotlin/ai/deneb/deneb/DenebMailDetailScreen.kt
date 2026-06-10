@@ -2,6 +2,7 @@
 
 package ai.deneb.deneb
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,11 +22,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -47,11 +52,15 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ai.deneb.decodeToImageBitmap
 import ai.deneb.getBackgroundDispatcher
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebExpandIn
+import ai.deneb.ui.denebShrinkOut
+import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.MarkdownContent
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -65,10 +74,12 @@ private const val MAIL_IMAGE_PREVIEW_MAX_BYTES = 8 * 1024 * 1024
  * Full Gmail message + reading surface. On open it marks read and fetches any
  * cached analysis instantly (no LLM). Actions are deliberately minimal: trash
  * and AI analysis (archive and the sender-context card were dropped — sender
- * context lives in the people screen). AI analysis renders markdown +
- * related-project chips (-> wiki) + a rerun; the ask box keeps multi-turn
- * history; attachments are tappable chips, and image attachments also render
- * an inline preview. Trash pops back.
+ * context lives in the people screen). The AI analysis card starts collapsed —
+ * header plus a one-line teaser — so a long analysis doesn't push the mail
+ * body below the fold; tapping the header (or explicitly running/rerunning)
+ * expands it to markdown + related-project chips (-> wiki). The ask box keeps
+ * multi-turn history; attachments are tappable chips, and image attachments
+ * also render an inline preview. Trash pops back.
  */
 @Composable
 fun DenebMailDetailScreen(
@@ -89,6 +100,7 @@ fun DenebMailDetailScreen(
     var analysis by remember(messageId) { mutableStateOf<MailAnalysis?>(null) }
     var analyzing by remember(messageId) { mutableStateOf(false) }
     var analysisFailed by remember(messageId) { mutableStateOf(false) }
+    var analysisExpanded by remember(messageId) { mutableStateOf(false) }
     var askText by remember(messageId) { mutableStateOf("") }
     var asking by remember(messageId) { mutableStateOf(false) }
     val qa = remember(messageId) { mutableStateListOf<Pair<String, String>>() }
@@ -120,6 +132,8 @@ fun DenebMailDetailScreen(
         scope.launch {
             analyzing = true
             analysisFailed = false
+            // An explicit run is a request to *see* the result — pop the card open.
+            analysisExpanded = true
             val a = client.analyzeMail(messageId, force)
             if (a != null) analysis = a else analysisFailed = true
             analyzing = false
@@ -192,53 +206,92 @@ fun DenebMailDetailScreen(
 
             if (analyzing || analysis != null || analysisFailed) {
                 Spacer(Modifier.height(12.dp))
+                // First substantive line of the analysis doubles as the collapsed
+                // card's teaser (markdown decoration stripped for plain display).
+                val analysisPreview = remember(analysis) {
+                    analysis?.text?.lineSequence()
+                        ?.map { it.trim().trimStart('#', '*', '-', '>', ' ').replace("*", "").replace("`", "").trim() }
+                        ?.firstOrNull { it.isNotEmpty() }
+                        .orEmpty()
+                }
                 ElevatedCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .clickable { haptics.toggle(!analysisExpanded); analysisExpanded = !analysisExpanded }
+                                .handCursor(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = if (analysisExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = if (analysisExpanded) "AI 분석 접기" else "AI 분석 펼치기",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
                             Text(
                                 "AI 분석",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.weight(1f),
                             )
+                            if (!analysisExpanded && analysisPreview.isNotEmpty()) {
+                                Text(
+                                    " · $analysisPreview",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f).padding(start = 4.dp),
+                                )
+                            } else {
+                                Spacer(Modifier.weight(1f))
+                            }
                             analysis?.let { a ->
                                 Text(
                                     if (a.cached) "저장됨 · ${a.createdAt.take(10)}" else "${a.durationMs / 1000}s",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                Spacer(Modifier.width(8.dp))
-                                TextButton(onClick = { haptics.tap(); runAnalysis(force = true) }, enabled = !analyzing) { Text("다시") }
-                            }
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        when {
-                            analyzing -> Row(verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                Spacer(Modifier.width(8.dp))
-                                Text("분석 중…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            analysis != null -> {
-                                MarkdownContent(analysis!!.text)
-                                if (analysis!!.related.isNotEmpty()) {
-                                    Spacer(Modifier.height(10.dp))
-                                    Text("관련 프로젝트", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Spacer(Modifier.height(4.dp))
-                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        analysis!!.related.forEach { rp ->
-                                            AssistChip(
-                                                onClick = { onOpenWiki(rp.path) },
-                                                label = { Text(rp.title.ifBlank { rp.path }) },
-                                            )
-                                        }
-                                    }
+                                // Rerun lives behind the fold: hiding it while collapsed keeps
+                                // the whole header a safe expand target (no accidental reruns).
+                                if (analysisExpanded) {
+                                    Spacer(Modifier.width(8.dp))
+                                    TextButton(onClick = { haptics.tap(); runAnalysis(force = true) }, enabled = !analyzing) { Text("다시") }
                                 }
                             }
-                            else -> Text(
-                                "분석을 가져오지 못했습니다.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                            )
+                        }
+                        AnimatedVisibility(visible = analysisExpanded, enter = denebExpandIn, exit = denebShrinkOut) {
+                            Column {
+                                Spacer(Modifier.height(6.dp))
+                                when {
+                                    analyzing -> Row(verticalAlignment = Alignment.CenterVertically) {
+                                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("분석 중…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    analysis != null -> Column {
+                                        MarkdownContent(analysis!!.text)
+                                        if (analysis!!.related.isNotEmpty()) {
+                                            Spacer(Modifier.height(10.dp))
+                                            Text("관련 프로젝트", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Spacer(Modifier.height(4.dp))
+                                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                analysis!!.related.forEach { rp ->
+                                                    AssistChip(
+                                                        onClick = { onOpenWiki(rp.path) },
+                                                        label = { Text(rp.title.ifBlank { rp.path }) },
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else -> Text(
+                                        "분석을 가져오지 못했습니다.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
                         }
                     }
                 }

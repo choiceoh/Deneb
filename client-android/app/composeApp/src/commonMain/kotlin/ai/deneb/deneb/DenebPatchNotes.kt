@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "메일 상세의 AI 분석이 기본 접힌 카드로 — 첫 줄 미리보기만 보이고 탭하면 펼쳐져, 긴 분석이 본문을 밀어내지 않음",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "메일 검색 추가 — 키워드·발신자(from:)로 전체 메일함을 바로 검색",
             "이미지 첨부는 메일 안에서 바로 미리보기 (영수증·사진을 열지 않고 확인)",
             "메일 상세 화면 정돈 — 휴지통과 AI 분석만 남기고 단순화",
