@@ -13,28 +13,24 @@ import (
 type SubagentsAction string
 
 const (
-	SubagentsActionList    SubagentsAction = "list"
-	SubagentsActionKill    SubagentsAction = "kill"
-	SubagentsActionLog     SubagentsAction = "log"
-	SubagentsActionSend    SubagentsAction = "send"
-	SubagentsActionSteer   SubagentsAction = "steer"
-	SubagentsActionInfo    SubagentsAction = "info"
-	SubagentsActionSpawn   SubagentsAction = "spawn"
-	SubagentsActionFocus   SubagentsAction = "focus"
-	SubagentsActionUnfocus SubagentsAction = "unfocus"
-	SubagentsActionAgents  SubagentsAction = "agents"
-	SubagentsActionHelp    SubagentsAction = "help"
+	SubagentsActionList   SubagentsAction = "list"
+	SubagentsActionKill   SubagentsAction = "kill"
+	SubagentsActionLog    SubagentsAction = "log"
+	SubagentsActionSend   SubagentsAction = "send"
+	SubagentsActionSteer  SubagentsAction = "steer"
+	SubagentsActionInfo   SubagentsAction = "info"
+	SubagentsActionSpawn  SubagentsAction = "spawn"
+	SubagentsActionAgents SubagentsAction = "agents"
+	SubagentsActionHelp   SubagentsAction = "help"
 )
 
 // Subagent command prefixes.
 const (
-	SubagentsCmdPrefix  = "/subagents"
-	SubagentsCmdKill    = "/kill"
-	SubagentsCmdSteer   = "/steer"
-	SubagentsCmdTell    = "/tell"
-	SubagentsCmdFocus   = "/focus"
-	SubagentsCmdUnfocus = "/unfocus"
-	SubagentsCmdAgents  = "/agents"
+	SubagentsCmdPrefix = "/subagents"
+	SubagentsCmdKill   = "/kill"
+	SubagentsCmdSteer  = "/steer"
+	SubagentsCmdTell   = "/tell"
+	SubagentsCmdAgents = "/agents"
 )
 
 // RecentWindowMinutes is the lookback for "recent" subagent display.
@@ -44,17 +40,15 @@ const RecentWindowMinutes = 30
 const SteerAbortSettleTimeoutMs = 5_000
 
 var validSubagentsActions = map[string]SubagentsAction{
-	"list":    SubagentsActionList,
-	"kill":    SubagentsActionKill,
-	"log":     SubagentsActionLog,
-	"send":    SubagentsActionSend,
-	"steer":   SubagentsActionSteer,
-	"info":    SubagentsActionInfo,
-	"spawn":   SubagentsActionSpawn,
-	"focus":   SubagentsActionFocus,
-	"unfocus": SubagentsActionUnfocus,
-	"agents":  SubagentsActionAgents,
-	"help":    SubagentsActionHelp,
+	"list":   SubagentsActionList,
+	"kill":   SubagentsActionKill,
+	"log":    SubagentsActionLog,
+	"send":   SubagentsActionSend,
+	"steer":  SubagentsActionSteer,
+	"info":   SubagentsActionInfo,
+	"spawn":  SubagentsActionSpawn,
+	"agents": SubagentsActionAgents,
+	"help":   SubagentsActionHelp,
 }
 
 // SubagentRunRecord mirrors the TS SubagentRunRecord.
@@ -150,8 +144,6 @@ func ResolveHandledPrefix(normalized string) string {
 		SubagentsCmdKill,
 		SubagentsCmdSteer,
 		SubagentsCmdTell,
-		SubagentsCmdFocus,
-		SubagentsCmdUnfocus,
 		SubagentsCmdAgents,
 	}
 	for _, p := range prefixes {
@@ -180,10 +172,6 @@ func ResolveSubagentsAction(handledPrefix string, restTokens []string) (resolved
 		return "", restTokens
 	case SubagentsCmdKill:
 		return SubagentsActionKill, restTokens
-	case SubagentsCmdFocus:
-		return SubagentsActionFocus, restTokens
-	case SubagentsCmdUnfocus:
-		return SubagentsActionUnfocus, restTokens
 	case SubagentsCmdAgents:
 		return SubagentsActionAgents, restTokens
 	case SubagentsCmdSteer, SubagentsCmdTell:
@@ -361,8 +349,6 @@ func BuildSubagentsHelp() string {
 		"- /subagents send <id|#> <message>",
 		"- /subagents steer <id|#> <message>",
 		"- /subagents spawn <agentId> <task> [--model <model>] [--thinking <level>]",
-		"- /focus <subagent-label|session-key|session-id|session-label>",
-		"- /unfocus",
 		"- /agents",
 		"- /session idle <duration|off>",
 		"- /session max-age <duration|off>",

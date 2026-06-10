@@ -16,8 +16,6 @@ func TestResolveHandledPrefix(t *testing.T) {
 		{"/kill 1", SubagentsCmdKill},
 		{"/steer 1 hello", SubagentsCmdSteer},
 		{"/tell 1 hello", SubagentsCmdTell},
-		{"/focus my-agent", SubagentsCmdFocus},
-		{"/unfocus", SubagentsCmdUnfocus},
 		{"/agents", SubagentsCmdAgents},
 		{"/unknown", ""},
 		{"hello", ""},
@@ -45,8 +43,6 @@ func TestResolveSubagentsAction(t *testing.T) {
 		{SubagentsCmdPrefix, []string{"unknown"}, ""},
 		{SubagentsCmdKill, []string{"1"}, SubagentsActionKill},
 		{SubagentsCmdSteer, []string{"1", "go"}, SubagentsActionSteer},
-		{SubagentsCmdFocus, []string{"agent"}, SubagentsActionFocus},
-		{SubagentsCmdUnfocus, nil, SubagentsActionUnfocus},
 		{SubagentsCmdAgents, nil, SubagentsActionAgents},
 	}
 

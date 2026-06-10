@@ -23,7 +23,7 @@ type ACPCommandDepsConfig struct {
 	SessionSendFn func(sessionKey, message string) error
 	// TranscriptLoader loads transcript history for a session.
 	TranscriptLoader func(sessionKey string, limit int) ([]ChatLogMessage, error)
-	// SessionBindings provides focus/unfocus/agents capabilities.
+	// SessionBindings provides the /agents binding-listing capability.
 	SessionBindings *acp.SessionBindingService
 }
 
@@ -118,25 +118,9 @@ func NewSubagentCommandDepsFromACP(registry *acp.ACPRegistry, cfg ...ACPCommandD
 		}
 	}
 
-	// Wire Focus/Unfocus/Agents if SessionBindings is available.
+	// Wire Agents if SessionBindings is available.
 	if config.SessionBindings != nil {
 		sbs := config.SessionBindings
-
-		deps.Focus = &SubagentFocusDeps{
-			BindSession: func(params acp.SessionBindParams) (*acp.SessionBindResult, error) {
-				result := sbs.Bind(params)
-				return result, nil
-			},
-		}
-
-		deps.Unfocus = &SubagentUnfocusDeps{
-			ResolveBinding: func(channel, accountID, conversationID string) *acp.SessionBindingEntry {
-				return sbs.Resolve(channel, accountID, conversationID)
-			},
-			Unbind: func(bindingID string) error {
-				return sbs.Unbind(bindingID)
-			},
-		}
 
 		deps.Agents = &SubagentAgentsDeps{
 			ListBindings: func(sessionKey string) []acp.AgentBindingEntry {
