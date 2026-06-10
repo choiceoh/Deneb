@@ -15,6 +15,7 @@ globs: ["gateway-go/**/*.go"]
 | `scripts/dev/iterate.sh --metric quality` | 내장 프리셋 (smoke\|quality\|combined) |
 | `scripts/dev/iterate.sh --metric CMD` | 커스텀 metric 커맨드 |
 | `scripts/dev/quality-metric.sh [MSG]` | 네이티브 클라 채팅 품질 점수 0-100 (15~60초) |
+| `scripts/dev/recall-metric.sh` | 회상 품질 점수 0-100 (합성 코퍼스 hit rate, ~1초, LLM 불필요) |
 
 ### metric 프리셋 선택 가이드
 
@@ -24,6 +25,7 @@ globs: ["gateway-go/**/*.go"]
 | 전반적 품질 | `combined` | smoke(20%) + quality(80%) |
 | 인프라/시작 성능 | `smoke` (0~2) | 빠른 빌드+시작 확인 |
 | 특정 메시지 응답 | `custom "메시지"` | 해당 메시지 품질 직접 측정 |
+| 회상(recall) 경로 | `scripts/dev/recall-metric.sh` | 근거 적중률 직접 측정 (recall_bench_test.go 코퍼스) |
 
 ---
 
