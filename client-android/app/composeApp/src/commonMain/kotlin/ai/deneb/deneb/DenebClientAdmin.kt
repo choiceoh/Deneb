@@ -48,8 +48,19 @@ suspend fun DenebGatewayClient.refreshModels() {
     _denebModels.value = payload.sections
         .flatMap { it.models }
         .distinctBy { it.id }
-        .map { ModelOption(it.id, it.display.ifBlank { it.label.ifBlank { it.id } }, it.id == payload.current, it.health, it.custom) }
+        .map {
+            ModelOption(
+                id = it.id,
+                display = it.display.ifBlank { it.label.ifBlank { it.id } },
+                current = it.id == payload.current,
+                health = it.health,
+                custom = it.custom,
+                unhealthy = it.unhealthy,
+                note = it.note,
+            )
+        }
     _denebRoleModels.value = payload.roles.associate { it.role to it.model }
+    _denebModelAdvisories.value = payload.advisories
 }
 
 suspend fun DenebGatewayClient.setMainModel(id: String): Boolean = setRoleModel(id, "main")

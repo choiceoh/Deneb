@@ -68,6 +68,7 @@ import kotlinx.coroutines.launch
 internal fun ModelTab(client: DenebGatewayClient) {
     val models by client.denebModels.collectAsState()
     val roleModels by client.denebRoleModels.collectAsState()
+    val advisories by client.denebModelAdvisories.collectAsState()
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
     var role by remember { mutableStateOf(ModelRole.MAIN) }
@@ -145,6 +146,28 @@ internal fun ModelTab(client: DenebGatewayClient) {
             HealthLegendItem(ModelHealth.ONLINE, "응답 가능")
             HealthLegendItem(ModelHealth.OFFLINE, "응답 없음")
             HealthLegendItem(ModelHealth.UNKNOWN, "미확인")
+        }
+        // Model tuner advisories: open recommendations from the background
+        // per-model optimization loop (stalls, cache breaks, slow tails). Shown
+        // only when something needs attention — silence is the normal state.
+        if (advisories.isNotEmpty()) {
+            SettingsCard {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "튜너 권고",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    advisories.forEach { line ->
+                        Text(
+                            line,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         }
         // Role summary: every role and its currently-assigned model at a glance,
         // so you don't have to click through each segment to see what's wired.
@@ -239,16 +262,30 @@ internal fun ModelTab(client: DenebGatewayClient) {
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
-                                model.display,
+                                // Circuit breaker open → consecutive failures; the
+                                // gateway is routing this model's turns to fallback.
+                                if (model.unhealthy) model.display + " ⚠️연속실패" else model.display,
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = if (model.unhealthy) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                             )
                             Text(
                                 model.id + ModelHealth.parse(model.health).suffix,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            // Tuner stat line (24h runs, p95, cache hit, fallback/stall,
+                            // calibration probe, tuned output floor) — empty until the
+                            // background tuner has data for this model.
+                            if (model.note.isNotBlank()) {
+                                Text(
+                                    model.note,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
                         // User-added models can be removed; built-in/role models can't.
                         if (model.custom) {

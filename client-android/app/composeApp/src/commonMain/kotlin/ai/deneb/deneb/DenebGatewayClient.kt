@@ -146,6 +146,10 @@ class DenebGatewayClient(
     internal val _denebRoleModels = MutableStateFlow<Map<String, String>>(emptyMap())
     val denebRoleModels: StateFlow<Map<String, String>> = _denebRoleModels
 
+    /** Model tuner advisories from miniapp.models.list ("provider/model: 권고"). */
+    internal val _denebModelAdvisories = MutableStateFlow<List<String>>(emptyList())
+    val denebModelAdvisories: StateFlow<List<String>> = _denebModelAdvisories
+
     internal val _denebSkills = MutableStateFlow<List<SkillRow>>(emptyList())
     val denebSkills: StateFlow<List<SkillRow>> = _denebSkills
 
