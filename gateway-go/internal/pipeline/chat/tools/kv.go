@@ -47,7 +47,9 @@ func (s *kvStore) load() {
 	}
 }
 
-// save persists the in-memory store to disk.
+// save persists the in-memory store to disk via tmp+rename. A direct
+// WriteFile interrupted by a restart left kv.json half-written; the next
+// load() then failed to parse and silently started the store empty.
 func (s *kvStore) save() error {
 	dir := filepath.Dir(s.path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -57,7 +59,15 @@ func (s *kvStore) save() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.path, data, 0o644) //nolint:gosec // G306 — world-readable is intentional
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil { //nolint:gosec // G306 — world-readable is intentional
+		return err
+	}
+	if err := os.Rename(tmp, s.path); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 func (s *kvStore) get(key string) (string, bool) {

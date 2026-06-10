@@ -195,6 +195,8 @@ func (s *Service) loadDailyCap() {
 }
 
 // saveDailyCapLocked persists the daily-cap counter. Caller must hold s.mu.
+// Atomic tmp+rename: this file exists precisely to survive restarts, and a
+// restart mid-write used to corrupt it, silently resetting the cap to zero.
 func (s *Service) saveDailyCapLocked() {
 	path := s.dailyCapPath()
 	if path == "" {
@@ -205,9 +207,18 @@ func (s *Service) saveDailyCapLocked() {
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		s.logger.Warn("genesis: daily-cap dir create failed", "error", err)
 		return
 	}
-	_ = os.WriteFile(path, data, 0o600)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		s.logger.Warn("genesis: daily-cap write failed; cap may reset on restart", "error", err)
+		return
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		s.logger.Warn("genesis: daily-cap rename failed; cap may reset on restart", "error", err)
+	}
 }
 
 // Stop is a no-op (genesis is RPC-triggered, not event-driven).
