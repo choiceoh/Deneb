@@ -646,12 +646,8 @@ func isTableSeparator(line string) bool {
 
 func splitTableCells(line string) []string {
 	trimmed := strings.TrimSpace(line)
-	if strings.HasPrefix(trimmed, "|") {
-		trimmed = trimmed[1:]
-	}
-	if strings.HasSuffix(trimmed, "|") {
-		trimmed = trimmed[:len(trimmed)-1]
-	}
+	trimmed = strings.TrimPrefix(trimmed, "|")
+	trimmed = strings.TrimSuffix(trimmed, "|")
 
 	// Split by | but respect backtick code spans (pipes inside `` are literal).
 	var cells []string

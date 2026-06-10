@@ -1,9 +1,10 @@
 package directives
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
 
 func TestParseInlineDirectives(t *testing.T) {

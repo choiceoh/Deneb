@@ -110,7 +110,7 @@ func toolPolarisDescribe(store *polaris.Store) toolctx.ToolFunc {
 		filtered := filterByTimeRange(nodes, p.TimeRange, now)
 
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("## 세션 대화 이력 구조\n\n"))
+		sb.WriteString("## 세션 대화 이력 구조\n\n")
 		sb.WriteString(fmt.Sprintf("- 총 메시지: %d\n", msgCount))
 		sb.WriteString(fmt.Sprintf("- 요약 커버: 메시지 0~%d\n", coverage))
 		sb.WriteString(fmt.Sprintf("- 요약 노드: %d개\n\n", len(filtered)))
@@ -162,7 +162,7 @@ func toolPolarisExpand(store *polaris.Store, localAI LocalAIFunc) toolctx.ToolFu
 		// Find the summary node by ID.
 		target, err := store.SummaryByID(int64(p.SummaryID))
 		if err != nil {
-			return fmt.Sprintf("ID %d인 요약 노드를 찾을 수 없습니다.", p.SummaryID), nil
+			return fmt.Sprintf("ID %d인 요약 노드를 찾을 수 없습니다: %v", p.SummaryID, err), nil
 		}
 		if target.SessionKey != sessionKey {
 			return "해당 요약 노드는 현재 세션에 속하지 않습니다.", nil

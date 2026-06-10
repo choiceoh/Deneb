@@ -1,8 +1,9 @@
 package typing
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
 
 func TestResolveRunTypingPolicy(t *testing.T) {

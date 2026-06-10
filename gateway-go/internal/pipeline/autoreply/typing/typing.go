@@ -1,10 +1,11 @@
 package typing
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/tokens"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/tokens"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
 
 // TypingController manages typing indicator lifecycle for a reply.

@@ -12,7 +12,6 @@ import (
 var (
 	callMethod    = rpctest.Call
 	mustOK        = rpctest.MustOK
-	mustErr       = rpctest.MustErr
 	extractResult = rpctest.Result
 )
 

@@ -84,7 +84,7 @@ func TestWrap(t *testing.T) {
 	if e.Message != "db connection lost" {
 		t.Errorf("message = %q", e.Message)
 	}
-	if e.Cause != cause {
+	if !errors.Is(e.Cause, cause) {
 		t.Error("Cause should be the original error")
 	}
 }
@@ -94,7 +94,7 @@ func TestUnwrap(t *testing.T) {
 	e := Wrap(protocol.ErrDependencyFailed, sentinel)
 
 	// errors.Unwrap should return the cause.
-	if errors.Unwrap(e) != sentinel {
+	if !errors.Is(errors.Unwrap(e), sentinel) {
 		t.Error("Unwrap should return the sentinel")
 	}
 
@@ -135,7 +135,7 @@ func TestWrapConvenienceConstructors(t *testing.T) {
 			if !errors.Is(tc.err, cause) {
 				t.Error("errors.Is should find the cause through the chain")
 			}
-			if tc.err.Cause != cause {
+			if !errors.Is(tc.err.Cause, cause) {
 				t.Error("Cause field should be set")
 			}
 		})

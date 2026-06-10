@@ -5,6 +5,7 @@ package rpc
 
 import (
 	"encoding/json"
+
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
 	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/gateway"

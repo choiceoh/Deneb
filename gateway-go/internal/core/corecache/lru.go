@@ -48,7 +48,9 @@ func (c *LRU[K, V]) Get(key K) (V, bool) {
 		return zero, false
 	}
 
-	e := elem.Value.(*lruEntry[K, V])
+	// The order list only ever stores *lruEntry values, so the assertions
+	// in this file cannot fail; blank ok keeps errcheck satisfied.
+	e, _ := elem.Value.(*lruEntry[K, V])
 	if c.ttl > 0 && time.Since(e.createdAt) > c.ttl {
 		c.order.Remove(elem)
 		delete(c.items, key)
@@ -67,7 +69,7 @@ func (c *LRU[K, V]) Put(key K, value V) {
 
 	now := time.Now()
 	if elem, exists := c.items[key]; exists {
-		e := elem.Value.(*lruEntry[K, V])
+		e, _ := elem.Value.(*lruEntry[K, V])
 		e.value = value
 		e.createdAt = now
 		c.order.MoveToBack(elem)
@@ -79,7 +81,7 @@ func (c *LRU[K, V]) Put(key K, value V) {
 		if front == nil {
 			break
 		}
-		oldest := front.Value.(*lruEntry[K, V])
+		oldest, _ := front.Value.(*lruEntry[K, V])
 		c.order.Remove(front)
 		delete(c.items, oldest.key)
 	}
@@ -122,7 +124,7 @@ func (c *LRU[K, V]) PruneFunc(fn func(key K, value V) bool) int {
 	removed := 0
 	for elem := c.order.Front(); elem != nil; {
 		next := elem.Next()
-		e := elem.Value.(*lruEntry[K, V])
+		e, _ := elem.Value.(*lruEntry[K, V])
 		if fn(e.key, e.value) {
 			c.order.Remove(elem)
 			delete(c.items, e.key)
@@ -145,7 +147,7 @@ func (c *LRU[K, V]) Cleanup() int {
 	cutoff := time.Now().Add(-c.ttl)
 	for elem := c.order.Front(); elem != nil; {
 		next := elem.Next()
-		e := elem.Value.(*lruEntry[K, V])
+		e, _ := elem.Value.(*lruEntry[K, V])
 		if e.createdAt.Before(cutoff) {
 			c.order.Remove(elem)
 			delete(c.items, e.key)

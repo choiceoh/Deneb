@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -277,8 +278,10 @@ func fetchWeather(ctx context.Context) any {
 		maxRain := 0
 		rainTime := ""
 		for _, h := range w.Hourly {
-			var pct int
-			fmt.Sscanf(h.ChanceOfRain, "%d", &pct)
+			pct, err := strconv.Atoi(strings.TrimSpace(h.ChanceOfRain))
+			if err != nil {
+				continue
+			}
 			if pct > maxRain {
 				maxRain = pct
 				rainTime = h.Time

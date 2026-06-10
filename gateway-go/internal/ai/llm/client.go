@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -339,13 +340,14 @@ func (c *cancelOnClose) Close() error {
 // Retry-After headers. 429 rate limits use a higher base delay floor.
 func (c *Client) backoffDelay(attempt int, err error) time.Duration {
 	// Respect Retry-After header from the API.
-	if apiErr, ok := err.(*httpretry.APIError); ok && apiErr.RetryAfter > 0 {
+	var apiErr *httpretry.APIError
+	if errors.As(err, &apiErr) && apiErr.RetryAfter > 0 {
 		return apiErr.RetryAfter
 	}
 
 	base := c.baseDelay
 	// Rate-limited responses need a higher floor than transient server errors.
-	if apiErr, ok := err.(*httpretry.APIError); ok &&
+	if apiErr != nil &&
 		httpretry.Classify(apiErr.StatusCode) == httpretry.CategoryRateLimit {
 		const rateLimitFloor = 2 * time.Second
 		if base < rateLimitFloor {
@@ -372,8 +374,8 @@ func parseRetryAfter(val string) time.Duration {
 // represent hard request-capacity limits where immediate retry is unlikely to
 // succeed (e.g. OpenRouter code 1302: "Rate limit reached for requests").
 func isProviderPermanentRateLimit(err error) bool {
-	apiErr, ok := err.(*httpretry.APIError)
-	if !ok || apiErr.StatusCode != http.StatusTooManyRequests || apiErr.Message == "" {
+	var apiErr *httpretry.APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusTooManyRequests || apiErr.Message == "" {
 		return false
 	}
 	var payload struct {

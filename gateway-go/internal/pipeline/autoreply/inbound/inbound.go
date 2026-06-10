@@ -1,10 +1,11 @@
 package inbound
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
 
 // InboundMeta holds parsed metadata from an inbound message.

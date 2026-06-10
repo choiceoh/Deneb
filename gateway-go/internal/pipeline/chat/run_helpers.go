@@ -10,7 +10,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
@@ -205,28 +204,4 @@ func toPromptToolDefs(defs []ToolDef) []prompt.ToolDef {
 		out = append(out, prompt.ToolDef{Name: d.Name})
 	}
 	return out
-}
-
-// extractTextContent pulls plain text from a message's content field.
-// Handles both plain string and content block array formats.
-func extractTextContent(raw json.RawMessage) string {
-	// Try plain string first.
-	var s string
-	if err := json.Unmarshal(raw, &s); err == nil {
-		return s
-	}
-
-	// Try content blocks.
-	var blocks []llm.ContentBlock
-	if err := json.Unmarshal(raw, &blocks); err == nil {
-		var parts []string
-		for _, b := range blocks {
-			if b.Type == "text" && b.Text != "" {
-				parts = append(parts, b.Text)
-			}
-		}
-		return strings.Join(parts, "\n")
-	}
-
-	return string(raw)
 }

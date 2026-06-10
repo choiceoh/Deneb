@@ -167,7 +167,9 @@ func generate(doc map[string]any, sourcePath string) string {
 
 	// Emit each variable definition.
 	for _, varName := range varNames {
-		varDef := doc[varName].(map[string]any)
+		// Safe: varNames only contains keys whose values passed this
+		// assertion during collection above.
+		varDef, _ := doc[varName].(map[string]any)
 
 		typeStr := "map[string]string"
 		if v, ok := varDef["_type"].(string); ok {

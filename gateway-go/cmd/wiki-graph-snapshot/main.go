@@ -22,10 +22,17 @@ import (
 )
 
 func main() {
+	// run wraps the work so deferred cleanup executes before os.Exit.
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "resolve home: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("resolve home: %w", err)
 	}
 	defaultIn := filepath.Join(home, ".deneb", "wiki")
 	defaultOut := filepath.Join(home, ".deneb", "wiki-graph")
@@ -39,16 +46,14 @@ func main() {
 
 	store, err := wiki.NewStore(*in, *diary)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "open wiki store at %s: %v\n", *in, err)
-		os.Exit(1)
+		return fmt.Errorf("open wiki store at %s: %w", *in, err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	res, err := wiki.BuildGraphSnapshot(ctx, store, *out, !*noCluster)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "snapshot failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("snapshot failed: %w", err)
 	}
 
 	fmt.Printf("graphPath: %s\n", res.GraphPath)
@@ -62,4 +67,5 @@ func main() {
 	if info, err := os.Stat(res.GraphPath); err == nil {
 		fmt.Printf("size:      %d bytes (%.1f KB)\n", info.Size(), float64(info.Size())/1024)
 	}
+	return nil
 }

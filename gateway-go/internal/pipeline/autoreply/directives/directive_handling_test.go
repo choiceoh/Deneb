@@ -1,9 +1,10 @@
 package directives
 
 import (
+	"testing"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/model"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
-	"testing"
 )
 
 func TestHandleDirectives_FastOnly(t *testing.T) {
