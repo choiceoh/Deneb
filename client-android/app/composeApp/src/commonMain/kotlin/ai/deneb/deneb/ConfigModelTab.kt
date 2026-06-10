@@ -53,6 +53,9 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.settings.SettingsCard
+import ai.deneb.ui.statusDanger
+import ai.deneb.ui.statusSuccess
+import ai.deneb.ui.statusWarning
 import kotlinx.coroutines.launch
 
 /**
@@ -382,12 +385,13 @@ private fun HealthLegendItem(health: ModelHealth, label: String) {
     }
 }
 
-/** Model response status. Color: online → green, offline → red, unknown/unprobed → amber.
+/** Model response status. Color: online → green, offline → red, unknown/unprobed → amber
+ *  (the shared status accents from ui/Theme.kt, saturated on every flavor).
  *  [suffix] is appended to the model id line. Parsed once from the wire string. */
 private enum class ModelHealth(val color: Color, val suffix: String) {
-    ONLINE(Color(0xFF4CAF50), ""),
-    OFFLINE(Color(0xFFE53935), "  ·  응답 없음"),
-    UNKNOWN(Color(0xFFFFB300), "  ·  상태 미확인"),
+    ONLINE(statusSuccess, ""),
+    OFFLINE(statusDanger, "  ·  응답 없음"),
+    UNKNOWN(statusWarning, "  ·  상태 미확인"),
     ;
 
     companion object {

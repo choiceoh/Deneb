@@ -30,16 +30,51 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
+// ---------------------------------------------------------------------------
+// Deneb color doctrine — the laws this file's values already follow, stated so
+// new colors are derived instead of picked (companion to the type laws in
+// DenebType.kt and the spacing/surface laws in DenebDesign.kt):
+//
+//  1. One hue, every role. A single Prussian navy seeds a COMPLETE blue-tinted
+//     M3 role set in both schemes, so stock Material purple never leaks into
+//     switches/chips/containers. MaterialTheme.colorScheme is the single source
+//     of chrome color — screens do not hardcode hex for UI chrome.
+//  2. Aurora is the only polychrome, and it is rationed. The iridescent loop
+//     (azure → cyan → periwinkle → violet) marks live/agentic and brand
+//     affordances only (animated input border, send). Scarcity is what makes
+//     it read as "the agent is alive" — spreading it would demote it to décor.
+//  3. Neutrals are derived, not picked: hairlines and hints are onBackground at
+//     fixed alphas (see DenebDesign.kt), so every neutral self-adapts across
+//     light / dark / OLED instead of maintaining grey ramps.
+//  4. OLED is a flavor, not a theme: background snaps to true black and FILLS
+//     BECOME OUTLINES (denebAdaptiveCard*) — surfaces are redefined, not merely
+//     darkened, so the AMOLED panel turns off where there is nothing.
+//  5. Status is semantic and two-tiered: tiny accents (dots/badges) stay
+//     saturated and theme-invariant so they read at 8dp on any flavor, while
+//     status CONTAINERS are theme-paired. Error uses the M3 role; success and
+//     warning below fill the roles M3 lacks.
+// ---------------------------------------------------------------------------
+
 // Deneb brand color — a deep Prussian navy (Deneb is a bright star against the
 // night sky). Used as the Material primary in the light theme. The name is
 // retained from the vendored upstream theme to keep the rebrand diff small.
 val darkPurple = Color(0xFF003153)
+
+// Status accents (law 5, accent tier) — promoted from the values screens were
+// hand-rolling (model-health dots in ConfigModelTab). Deliberately plain vals,
+// not @Composable: an 8dp dot must stay saturated on every flavor, so these do
+// not adapt. For text/containers use the *Container pairs below or the M3
+// error role instead.
+val statusSuccess = Color(0xFF4CAF50)
+val statusWarning = Color(0xFFFFB300)
+val statusDanger = Color(0xFFE53935)
 
 // Deneb aurora palette — an iridescent cool-spectrum loop (azure → cyan/teal →
 // periwinkle → soft violet). Drives the animated brand border (a slow rotating
@@ -169,6 +204,28 @@ val LightColorScheme = lightColorScheme(
     outline = Color(0xFF74808C),
     outlineVariant = Color(0xFFC4CDD6),
 )
+
+// Status containers (law 5, container tier) — the success/warning surface+text
+// pairs M3's scheme lacks, promoted from the values RenderAlert hand-rolled.
+// Theme-paired like errorContainer/onErrorContainer; dark detection mirrors
+// denebHairline()'s background-luminance probe so OLED counts as dark.
+private val ColorScheme.isDarkFlavor: Boolean get() = background.luminance() < 0.5f
+
+@Composable
+fun denebSuccessContainer(): Color =
+    if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFF1B3A1B) else Color(0xFFE8F5E9)
+
+@Composable
+fun denebOnSuccessContainer(): Color =
+    if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFFC8E6C9) else Color(0xFF1B5E20)
+
+@Composable
+fun denebWarningContainer(): Color =
+    if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFF3D2600) else Color(0xFFFFF3E0)
+
+@Composable
+fun denebOnWarningContainer(): Color =
+    if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFFFF9100) else Color(0xFFE65100)
 
 @Composable
 fun outlineTextFieldColors() = OutlinedTextFieldDefaults.colors()

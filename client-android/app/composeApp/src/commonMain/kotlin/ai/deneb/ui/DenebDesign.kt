@@ -35,6 +35,45 @@ import ai.deneb.currentPlatform
 // The Mini App's component idiom in native Compose: typography on a flat surface,
 // separated by hairline rules — no Material cards, fills, shadows, or icons. These
 // primitives are what Deneb screens build from so every surface reads the same.
+//
+// ---------------------------------------------------------------------------
+// Surface, spacing and component doctrine — extracted from how the shipped
+// screens actually use these primitives (companions: type laws in DenebType.kt,
+// color laws in Theme.kt, motion laws in DenebMotion.kt, touch vocabulary in
+// components/Haptics.kt):
+//
+//  SURFACE — hierarchy is drawn with type and hairlines, not boxes. Content
+//  sits directly on the background; a 1dp alpha-derived rule separates rows;
+//  elevation/shadow is absent by design. Cards exist only as CALLOUT blocks
+//  (an AI analysis, a sender context) and adapt per Theme.kt law 4: soft fill
+//  on light/dark, outline on OLED. Desktop never stretches: content is capped
+//  at [DenebMaxContentWidth] and centered.
+//
+//  SPACING — a 4dp grid with five working stops, each owning one job
+//  (usage counts across deneb screens: 4dp ×78, 8dp ×151, 12dp ×96,
+//  16dp ×103, 24dp ×36):
+//      4dp  micro     glyph-to-text, dot-to-label
+//      8dp  gap       between lines inside one row, label-to-control
+//     12dp  group     between related blocks inside a section
+//     16dp  module    the unit of "one thing" — row vertical padding, card
+//                     inner padding, chip horizontal padding
+//     24dp  gutter    the page margin (scaffold horizontal padding)
+//  Off-grid values (2/6/10/14) are optical half-step corrections only — they
+//  fine-tune a specific pairing and never structure a layout.
+//
+//  COMPONENT KIT — a screen is assembled from: [DenebScreenScaffold] (frame),
+//  [DenebRow] (list row), [DenebSectionLabel] (grouping), the state triple
+//  DenebLoading / DenebError / DenebEmpty (every remote-data surface renders
+//  all three: skeleton while loading, error WITH retry, empty WITH guidance),
+//  and DenebChip for compact choices. Controls (switches, buttons, fields,
+//  dialogs, sheets) stay stock Material — Deneb skins presentation, not
+//  interaction (see .claude/rules/native-design-system.md).
+//
+//  INTERACTION — every tappable row is tappable across its full width, shows
+//  a hand cursor on desktop, gives the denebPressable press-scale "give" from
+//  DenebMotion.kt, and fires an intent-named haptic (Haptics.kt) at the call
+//  site. Back/cancel/dismiss stay silent by convention.
+// ---------------------------------------------------------------------------
 
 /**
  * Readable max content width on desktop. On a wide window this keeps lines and rows from
@@ -97,6 +136,10 @@ fun DenebSectionLabel(text: String, modifier: Modifier = Modifier) {
  * A list row in the Mini App idiom: no card and no fill — a single hairline rule
  * under the row, roomy vertical padding, the whole row tappable. The caller lays
  * out the row's lines (title + snippet + meta) via [content].
+ *
+ * Tappable rows go through [denebPressable] (ripple + a subtle spring press-scale),
+ * fulfilling the DenebMotion.kt contract that wiring it here lifts every list in
+ * the app at once.
  */
 @Composable
 fun DenebRow(
@@ -108,7 +151,7 @@ fun DenebRow(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick).handCursor() else Modifier)
+            .then(if (onClick != null) Modifier.denebPressable(onClick = onClick).handCursor() else Modifier)
             .drawBehind {
                 val stroke = 1.dp.toPx()
                 val y = size.height - stroke / 2f
