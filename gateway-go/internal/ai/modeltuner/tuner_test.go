@@ -133,7 +133,7 @@ func TestTask_Run_AppliesAndClearsTunedFloor(t *testing.T) {
 	}
 
 	// Scorecard persisted and reloadable.
-	sc := loadScorecard(statePath)
+	sc := LoadScorecard(statePath)
 	if sc.GeneratedAtMs == 0 || len(sc.Models) != 1 {
 		t.Fatalf("scorecard not persisted: %+v", sc)
 	}
@@ -148,5 +148,29 @@ func TestKoreanRatio(t *testing.T) {
 	}
 	if r := koreanRatio("123 !!"); r != 0 {
 		t.Errorf("no-letter ratio = %f, want 0", r)
+	}
+}
+
+func TestNewTask_ReappliesPersistedFloors(t *testing.T) {
+	reg := tunerRegistry()
+	statePath := filepath.Join(t.TempDir(), "model-stats.json")
+
+	// Persist a scorecard carrying a floor recommendation, as a prior cycle
+	// would have, then simulate a restart by building a fresh task.
+	err := saveScorecard(statePath, Scorecard{
+		GeneratedAtMs: 1,
+		Recommendations: []Recommendation{
+			{Model: "m1", Provider: "p", Rule: "max_tokens", TunedMaxTokens: tunedMaxTokensFloor},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	NewTask(Deps{
+		Logs: &fakeStats{}, Registry: reg, StatePath: statePath,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if got := reg.TunedMaxTokens("m1"); got != tunedMaxTokensFloor {
+		t.Fatalf("floor after restart = %d, want %d re-applied from scorecard", got, tunedMaxTokensFloor)
 	}
 }

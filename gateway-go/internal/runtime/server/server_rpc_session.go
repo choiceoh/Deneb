@@ -490,9 +490,11 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 				tunerNotify = n.Notify
 			}
 			s.autonomousSvc.RegisterTask(modeltuner.NewTask(modeltuner.Deps{
-				Logs:      s.agentLogWriter,
-				Registry:  s.modelRegistry,
-				StatePath: filepath.Join(homeDir, ".deneb", "model-stats.json"),
+				Logs:     s.agentLogWriter,
+				Registry: s.modelRegistry,
+				// DENEB_STATE_DIR-aware so a dev gateway's tuner never writes
+				// into the production ~/.deneb scorecard.
+				StatePath: modeltuner.DefaultStatePath(),
 				Notify:    tunerNotify,
 				Logger:    s.logger,
 			}))
