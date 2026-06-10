@@ -77,6 +77,14 @@ type ProviderConfig struct {
 	// endpoint requires (some coding-subscription endpoints key access
 	// off the client identifier). Values override the client defaults.
 	Headers map[string]string `json:"headers,omitempty"`
+
+	// Capability overrides. Absent fields (zero/nil) keep the built-in
+	// defaults — see internal/ai/modelcaps and
+	// modelrole.Registry.CapabilityForModel for the layering.
+	ContextWindow int   `json:"contextWindow,omitempty"` // context length in tokens
+	Reasoning     *bool `json:"reasoning,omitempty"`     // genuine reasoning-endpoint model
+	Vision        *bool `json:"vision,omitempty"`        // false → strip image blocks before sending
+	PromptCache   *bool `json:"promptCache,omitempty"`   // false → strip cache_control markers
 }
 
 // DeliveryContext carries channel routing information for a chat message.

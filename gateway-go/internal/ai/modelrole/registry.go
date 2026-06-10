@@ -17,6 +17,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
@@ -49,6 +50,15 @@ type ProviderResolved struct {
 	BaseURL string
 	APIKey  string
 	APIMode string // "openai" (default) or "anthropic"
+
+	// Capability overrides from the provider's deneb.json entry. They are
+	// layered over the modelcaps builtin defaults (and vLLM discovery) by
+	// CapabilityForModel. Nil pointers / zero ContextWindow mean "no
+	// override" — the lower layer's value stands.
+	ContextWindow int   // context length in tokens; 0 = no override
+	Reasoning     *bool // genuine reasoning-endpoint model
+	Vision        *bool // false → image blocks are stripped before sending
+	PromptCache   *bool // false → cache_control markers are stripped
 }
 
 // RegistryOptions configures NewRegistryWithOptions.
@@ -72,13 +82,25 @@ type clientEntry struct {
 }
 
 // Registry holds the configured model roles and provides resolution,
-// client caching, and fallback chain logic.
+// client caching, fallback chain logic, capability lookup, and model health
+// tracking.
+//
+// Lock hierarchy: mu and health.mu are independent — never hold both at once.
 type Registry struct {
 	mu        sync.RWMutex
 	models    map[Role]ModelConfig
 	clients   map[Role]*clientEntry
 	providers map[string]ProviderResolved // deneb.json catalog, for runtime role re-resolution
-	logger    *slog.Logger
+	// vllmWindows caches context lengths (max_model_len) reported by the
+	// local vLLM /models discovery, keyed by served model id. Consulted by
+	// CapabilityForModel for provider "vllm" only.
+	vllmWindows map[string]int
+	// vllmProbedAt rate-limits RefreshVllmRole re-discovery (per role).
+	vllmProbedAt map[Role]time.Time
+	// health tracks per-model failure streaks for the circuit breaker
+	// (health.go). Guarded by its own mutex, independent of mu.
+	health healthState
+	logger *slog.Logger
 }
 
 // Default constants for known providers.
@@ -185,18 +207,28 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 
 	// Auto-discover the actual model name the local vLLM is serving and
 	// substitute it in when config drifts. reconcileVllmModel is a no-op for
-	// non-vllm roles, so running it across all roles is safe.
+	// non-vllm roles, so running it across all roles is safe. The discovery
+	// payload also carries each model's max_model_len; collect it so
+	// CapabilityForModel can clamp context budgets against the real window.
+	vllmWindows := make(map[string]int)
 	for _, role := range []Role{RoleMain, RoleTiny, RoleLightweight, RoleAnalysis, RoleFallback} {
 		cfg := models[role]
-		reconcileVllmModel(logger, &cfg)
+		for _, info := range reconcileVllmModel(logger, &cfg) {
+			if info.MaxModelLen > 0 {
+				vllmWindows[info.ID] = info.MaxModelLen
+			}
+		}
 		models[role] = cfg
 	}
 
 	r := &Registry{
-		models:    models,
-		clients:   make(map[Role]*clientEntry),
-		providers: opts.Providers,
-		logger:    logger,
+		models:       models,
+		clients:      make(map[Role]*clientEntry),
+		providers:    opts.Providers,
+		vllmWindows:  vllmWindows,
+		vllmProbedAt: make(map[Role]time.Time),
+		health:       healthState{models: make(map[string]*modelHealth)},
+		logger:       logger,
 	}
 
 	// Pre-create client entries for lazy initialization.
@@ -417,7 +449,11 @@ func (r *Registry) SetRoleModelID(role Role, modelID string) ModelConfig {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	cfg := resolveModelConfig(modelID, r.providers)
-	reconcileVllmModel(r.logger, &cfg)
+	for _, info := range reconcileVllmModel(r.logger, &cfg) {
+		if info.MaxModelLen > 0 {
+			r.vllmWindows[info.ID] = info.MaxModelLen
+		}
+	}
 	r.models[role] = cfg
 	r.clients[role] = &clientEntry{}
 	r.logger.Info("modelrole: role model updated",

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -326,19 +327,11 @@ func applySamplingParams(oaiReq *openAIRequest, req *ChatRequest) {
 }
 
 // isOpenAIReasoningModel reports whether model is a genuine OpenAI reasoning
-// model (o1/o3/o4 series, gpt-5) that requires max_completion_tokens instead
-// of max_tokens. OpenAI-compatible servers such as self-hosted vLLM keep
-// max_tokens and would reject max_tokens=0, so the reasoning remap must not
-// apply to them. A provider prefix ("openai/o3-mini") is ignored.
+// model that requires max_completion_tokens instead of max_tokens. The
+// heuristic lives in modelcaps so the capability registry and this wire-level
+// remap share one definition.
 func isOpenAIReasoningModel(model string) bool {
-	m := strings.ToLower(strings.TrimSpace(model))
-	if i := strings.LastIndex(m, "/"); i >= 0 {
-		m = m[i+1:]
-	}
-	return strings.HasPrefix(m, "o1") ||
-		strings.HasPrefix(m, "o3") ||
-		strings.HasPrefix(m, "o4") ||
-		strings.HasPrefix(m, "gpt-5")
+	return modelcaps.IsOpenAIReasoningModel(model)
 }
 
 // marshalMessageStart builds a serialized MessageStart payload with optional input token count.

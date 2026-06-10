@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/secretref"
@@ -240,18 +241,11 @@ func resolveAPIMode(deps runDeps, providerID string) string {
 
 // isCacheIncompatibleProvider reports whether a provider speaks the Anthropic
 // Messages wire but REJECTS cache_control markers with an HTTP 400 (not merely
-// ignores them). Kimi's coding endpoint is the known case: it is routed through
-// the Anthropic client (apiModeFor → anthropic) yet faults when any
-// cache_control field is present, so the markers Deneb attaches (2 system + 2
-// trailing) must be stripped for Kimi requests. Mirrors OpenClaw's per-provider
-// strip (extensions/kimi-coding). MiMo/z.ai are NOT included — they accept the
-// markers; only Kimi is known-incompatible.
-//
-// Matches the bare "kimi" id and any Kimi alias/remap carrying it as a prefix:
-// catalog aliases like "kimi-code"/"kimi-coding" and the "<provider>-subagent"
-// remap applied to spawned sessions ("kimi-subagent"). Without the prefix match
-// those variants kept their cache_control markers and faulted with HTTP 400.
+// ignores them); the markers Deneb attaches (2 system + 2 trailing) must be
+// stripped for such providers. The builtin list (Kimi and its aliases) lives in
+// modelcaps; a `promptCache` boolean on the provider's deneb.json entry
+// overrides it in either direction — see modelCapability in run_capability.go,
+// which is what the run path consults.
 func isCacheIncompatibleProvider(providerID string) bool {
-	id := strings.ToLower(strings.TrimSpace(providerID))
-	return id == "kimi" || strings.HasPrefix(id, "kimi-")
+	return modelcaps.RejectsCacheControl(providerID)
 }
