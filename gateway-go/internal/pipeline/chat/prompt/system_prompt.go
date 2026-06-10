@@ -105,6 +105,12 @@ type SystemPromptParams struct {
 	// buildStaticCacheKey so (a) different topics never share a Static cache
 	// entry and (b) editing a topic .md invalidates it.
 	TopicCacheKey string
+	// TopicKnowledgePath is TopicKnowledge's absolute source file, surfaced in
+	// the prompt so the agent can edit the doc when asked — the chat agent is
+	// the only edit surface (the settings topic-docs tab was removed). Derived
+	// from the topic key, so the Static cache key needs no extra input; frozen
+	// per session together with TopicKnowledge.
+	TopicKnowledgePath string
 
 	// SupportsRichUI gates the deneb-ui interactive-UI instructions in the
 	// dynamic block. True only for clients that can render deneb-ui fences
@@ -204,7 +210,11 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		// session via LoadTopicKnowledge's frozen snapshot.
 		if params.TopicKnowledge != "" {
 			s.WriteString("## 토픽 배경지식\n")
-			s.WriteString("현재 대화 토픽에 대한 배경지식이다. 이 토픽의 작업·질문에 이 지식을 우선 활용하라.\n\n")
+			s.WriteString("현재 대화 토픽에 대한 배경지식이다. 이 토픽의 작업·질문에 이 지식을 우선 활용하라.\n")
+			if params.TopicKnowledgePath != "" {
+				s.WriteString("원본 파일: `" + params.TopicKnowledgePath + "` — 사용자가 이 배경지식의 추가·수정을 요청하면 이 파일을 직접 편집하라 (반영은 다음 세션부터; 별도 편집 UI는 없다).\n")
+			}
+			s.WriteString("\n")
 			s.WriteString(strings.TrimSpace(params.TopicKnowledge))
 			s.WriteString("\n\n")
 		}

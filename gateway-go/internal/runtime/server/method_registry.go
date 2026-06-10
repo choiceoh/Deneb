@@ -256,7 +256,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 					"search":          wikiReady,
 					"people":          true,
 					"crons":           hub.CronService() != nil,
-					"topicDocs":       true,
 					"captureImage":    chatReady,
 					"captureAudio":    chatReady,
 					"captureContacts": hub.ContactsStore() != nil,
@@ -325,18 +324,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			// then notifies the home chat. Off the request path so the Mini
 			// App never blocks on a slow/down model.
 			StartMerge: s.makeWikiMergeStarter(hub),
-		}),
-
-		// Mini App topic-doc editing (miniapp.topicdocs.list_files /
-		// read_file / write_file): plain-text per-topic knowledge files under
-		// <workspace>/topics/*.md, edited from the Mini App. resolveWorkspaceDir
-		// is reused (config load + ~/.deneb/workspace fallback), resolved per
-		// call so a config change reflects without a restart; the dir is
-		// auto-created on first write (atomicfile MkdirAll).
-		handlerminiapp.TopicDocsMethods(handlerminiapp.TopicDocsDeps{
-			TopicsDir: func() (string, error) {
-				return filepath.Join(resolveWorkspaceDir(), "topics"), nil
-			},
 		}),
 
 		// Mini App cron job list (miniapp.crons.list). Same lazy-factory

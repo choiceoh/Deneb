@@ -179,7 +179,6 @@ go_drawer "smoke-06-categories" "categories" "카테고리"  scroll
 b="$(log_lines)"; check_screen "smoke-07-settings" "$b" "게이트웨이"
 settings_tab "smoke-08-models"    "모델"     "경량"
 settings_tab "smoke-09-crons"     "크론"     ""
-settings_tab "smoke-10-topicdocs" "토픽문서" ""
 # alerts has no reliable OCR anchor: its only distinctive text ("이 빌드는 알림
 # 캡처를 지원하지 않습니다", the desktop-unsupported notice) is OCR-hostile
 # (캡처를→"BMS", 빌드/않습니다 unread), and the lone readable word "알림" also

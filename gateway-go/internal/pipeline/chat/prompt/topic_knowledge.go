@@ -24,12 +24,13 @@ const maxTopicKnowledgeChars = 24_000
 const defaultTopicDir = "topics"
 
 // TopicKnowledge holds resolved per-forum-topic knowledge for the system
-// prompt. Key/Content/Hash are all empty when there is no injection (no topic
-// mapped, unsafe key, or missing/empty file).
+// prompt. Key/Content/Hash/Path are all empty when there is no injection (no
+// topic mapped, unsafe key, or missing/empty file).
 type TopicKnowledge struct {
 	Key     string // topic key (e.g. "coding"); "" = no injection
 	Content string // file body (trimmed, truncated); "" = no injection
 	Hash    string // sha256 hex (12 chars) of Content; "" when Content==""
+	Path    string // absolute source file path; lets the agent edit the doc on request (the only edit surface since the settings tab was removed)
 }
 
 // LoadTopicKnowledge reads <dir>/<topicKey>.md and freezes the result per
@@ -99,5 +100,6 @@ func loadTopicKnowledgeFromDisk(workspaceDir, dir, topicKey string) TopicKnowled
 		Key:     topicKey,
 		Content: content,
 		Hash:    hex.EncodeToString(sum[:])[:12],
+		Path:    path,
 	}
 }

@@ -57,7 +57,6 @@ import ai.deneb.deneb.DenebDiaryScreen
 import ai.deneb.deneb.DenebSearchScreen
 import ai.deneb.deneb.DenebCronEditScreen
 import ai.deneb.deneb.DenebCronScreen
-import ai.deneb.deneb.DenebTopicDocScreen
 import ai.deneb.deneb.DenebWikiPageScreen
 import ai.deneb.tools.CalendarPermissionController
 import ai.deneb.tools.ContactsPermissionController
@@ -158,10 +157,6 @@ object DenebPeople
 @Serializable
 @SerialName("deneb_person")
 data class DenebPerson(val sender: String)
-
-@Serializable
-@SerialName("deneb_topic_doc")
-data class DenebTopicDoc(val name: String)
 
 @Serializable
 @SerialName("deneb_categories")
@@ -350,7 +345,6 @@ private fun AppContent(
                             appSettings = appSettings,
                             denebClient = denebClient,
                             onBack = { navController.navigateUp() },
-                            onOpenTopicDoc = { name -> navController.navigate(DenebTopicDoc(name)) },
                             onOpenCron = { id -> navController.navigate(DenebCron(id)) },
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
                         )
@@ -552,16 +546,6 @@ private fun AppContent(
                                 onBack = { navController.navigateUp() },
                                 onOpenMail = { id -> navController.navigate(DenebMailDetail(id)) },
                                 onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
-                        }
-                    }
-                    composable<DenebTopicDoc> { entry ->
-                        denebClient?.let { client ->
-                            DenebTopicDocScreen(
-                                client = client,
-                                name = entry.toRoute<DenebTopicDoc>().name,
-                                onBack = { navController.navigateUp() },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }

@@ -171,17 +171,22 @@ func TestStaticCacheKeyTopicEmptyEqualsLegacy(t *testing.T) {
 func TestTopicKnowledgeOnlyInStaticBlock(t *testing.T) {
 	ResetContextFileCacheForTest()
 	marker := "DENEB_TOPIC_CACHE_SENTINEL_ZZZ"
+	pathMarker := "/tmp/topics/coding.md"
 	params := SystemPromptParams{
-		WorkspaceDir:   "/tmp",
-		ToolDefs:       []ToolDef{{Name: "read"}},
-		TopicKnowledge: "코딩 토픽 배경지식: " + marker,
-		TopicCacheKey:  "coding:hashA",
+		WorkspaceDir:       "/tmp",
+		ToolDefs:           []ToolDef{{Name: "read"}},
+		TopicKnowledge:     "코딩 토픽 배경지식: " + marker,
+		TopicCacheKey:      "coding:hashA",
+		TopicKnowledgePath: pathMarker,
 	}
 
 	staticText, semiStaticText, dynamicText := buildPromptSections(params)
 
 	if !strings.Contains(staticText, marker) {
 		t.Errorf("topic knowledge missing from STATIC block — not delivered to model")
+	}
+	if !strings.Contains(staticText, pathMarker) {
+		t.Errorf("topic knowledge source path missing from STATIC block — the agent cannot locate the doc to edit it (the chat agent is the only edit surface)")
 	}
 	if strings.Contains(semiStaticText, marker) {
 		t.Errorf("topic knowledge leaked into SEMI-STATIC block")
