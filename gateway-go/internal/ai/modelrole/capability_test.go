@@ -59,6 +59,56 @@ func TestCapabilityForModel_Layering(t *testing.T) {
 	})
 }
 
+func TestProfileForModel_Layering(t *testing.T) {
+	temp, topK := 0.3, 40
+	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
+		MainModel: "zai/glm-5-turbo",
+		Providers: map[string]ProviderResolved{
+			"acme": {BaseURL: "https://acme.example/v1", Temperature: &temp, TopK: &topK},
+		},
+	})
+
+	// Builtin profile passes through for providers without overrides.
+	p := reg.ProfileForModel("vllm", "qwen3.6-35b")
+	if p.Temperature == nil || *p.Temperature != 0.7 || !p.Reasoning {
+		t.Errorf("qwen builtin profile = %+v, want temp 0.7 + reasoning", p)
+	}
+
+	// Provider overrides win over builtin; unset fields keep the lower layer.
+	p = reg.ProfileForModel("acme", "qwen3.6-35b")
+	if p.Temperature == nil || *p.Temperature != 0.3 {
+		t.Errorf("temperature = %v, want 0.3 override", p.Temperature)
+	}
+	if p.TopK == nil || *p.TopK != 40 {
+		t.Errorf("topK = %v, want 40 override", p.TopK)
+	}
+	if p.TopP == nil || *p.TopP != 0.8 {
+		t.Errorf("topP = %v, want builtin 0.8 kept", p.TopP)
+	}
+	if !p.Reasoning {
+		t.Error("reasoning-channel flag must stay builtin")
+	}
+}
+
+func TestTunedMaxTokens(t *testing.T) {
+	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{MainModel: "zai/glm-5-turbo"})
+	if reg.TunedMaxTokens("m") != 0 {
+		t.Fatal("unset model must report 0")
+	}
+	reg.SetTunedMaxTokens("m", 16384)
+	if reg.TunedMaxTokens("m") != 16384 {
+		t.Fatal("floor not stored")
+	}
+	reg.SetTunedMaxTokens("m", 0)
+	if reg.TunedMaxTokens("m") != 0 {
+		t.Fatal("zero must clear the floor")
+	}
+	reg.SetTunedMaxTokens("", 100) // must not panic or store
+	if reg.TunedMaxTokens("") != 0 {
+		t.Fatal("empty model must be ignored")
+	}
+}
+
 func TestRefreshVllmRole(t *testing.T) {
 	srv := newDiscoverySrv(t, `{"data":[{"id":"model-a","max_model_len":8192}]}`, 200)
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{

@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modeltuner"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/appsettings"
@@ -477,6 +478,25 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 			collectSignals: newCalendarSignalCollector(resolveBriefingCalendarClient),
 			signalConfig:   autonomous.DefaultSignalConfig(),
 		})
+
+		// Model tuner: every 6h, aggregate the last 24h of agent logs by
+		// model, auto-apply the bounded output-token floor for models that
+		// keep hitting the ceiling, calibrate newly served vLLM models, and
+		// notify (only on change) about stalls / cache breaks / slow tails.
+		// Scorecard: ~/.deneb/model-stats.json.
+		if s.modelRegistry != nil && s.agentLogWriter != nil {
+			var tunerNotify func(ctx context.Context, msg string) error
+			if n := s.proactiveRelay.notifierForSession(nativeWorkSessionKey); n != nil {
+				tunerNotify = n.Notify
+			}
+			s.autonomousSvc.RegisterTask(modeltuner.NewTask(modeltuner.Deps{
+				Logs:      s.agentLogWriter,
+				Registry:  s.modelRegistry,
+				StatePath: filepath.Join(homeDir, ".deneb", "model-stats.json"),
+				Notify:    tunerNotify,
+				Logger:    s.logger,
+			}))
+		}
 	}
 
 	// Skill Genesis: register autonomous tasks (services created in initGenesisServices).

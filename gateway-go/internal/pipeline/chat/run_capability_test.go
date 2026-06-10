@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 )
 
@@ -77,6 +78,62 @@ func TestEffectiveContextBudget(t *testing.T) {
 		// 60000 - 30000 - 8192 (default reserve) = 21808
 		if got := effectiveContextBudget(deps, "acme", "custom-model", nil); got != 21_808 {
 			t.Errorf("budget = %d, want 21808", got)
+		}
+	})
+}
+
+func TestApplyModelTuning(t *testing.T) {
+	reg := capTestRegistry(t, map[string]modelrole.ProviderResolved{
+		"acme": {BaseURL: "https://acme.example/v1"},
+	})
+	deps := runDeps{registry: reg}
+
+	t.Run("profile defaults fill unset sampling only", func(t *testing.T) {
+		cfg := agent.AgentConfig{MaxTokens: 8192}
+		applyModelTuning(&cfg, deps, RunParams{}, "vllm", "qwen3.6-35b")
+		if cfg.Temperature == nil || *cfg.Temperature != 0.7 || cfg.TopP == nil || *cfg.TopP != 0.8 {
+			t.Errorf("qwen profile not applied: temp=%v topP=%v", cfg.Temperature, cfg.TopP)
+		}
+
+		// An explicit request value must never be overwritten.
+		explicit := 0.1
+		cfg = agent.AgentConfig{MaxTokens: 8192, Temperature: &explicit}
+		applyModelTuning(&cfg, deps, RunParams{}, "vllm", "qwen3.6-35b")
+		if *cfg.Temperature != 0.1 {
+			t.Errorf("explicit temperature overwritten: %v", *cfg.Temperature)
+		}
+	})
+
+	t.Run("tuned floor raises but never lowers maxTokens", func(t *testing.T) {
+		reg.SetTunedMaxTokens("custom-model", 16384)
+		defer reg.SetTunedMaxTokens("custom-model", 0)
+
+		cfg := agent.AgentConfig{MaxTokens: 8192}
+		applyModelTuning(&cfg, deps, RunParams{}, "acme", "custom-model")
+		if cfg.MaxTokens != 16384 {
+			t.Errorf("maxTokens = %d, want tuned floor 16384", cfg.MaxTokens)
+		}
+
+		cfg = agent.AgentConfig{MaxTokens: 32768}
+		applyModelTuning(&cfg, deps, RunParams{}, "acme", "custom-model")
+		if cfg.MaxTokens != 32768 {
+			t.Errorf("maxTokens = %d, floor must not lower a larger budget", cfg.MaxTokens)
+		}
+
+		// Explicit per-request max wins over the tuned floor.
+		reqMax := 4096
+		cfg = agent.AgentConfig{MaxTokens: 4096}
+		applyModelTuning(&cfg, deps, RunParams{MaxTokens: &reqMax}, "acme", "custom-model")
+		if cfg.MaxTokens != 4096 {
+			t.Errorf("maxTokens = %d, explicit request value must win", cfg.MaxTokens)
+		}
+	})
+
+	t.Run("nil registry falls back to builtin profile", func(t *testing.T) {
+		cfg := agent.AgentConfig{MaxTokens: 8192}
+		applyModelTuning(&cfg, runDeps{}, RunParams{}, "vllm", "qwen3.6-35b")
+		if cfg.Temperature == nil || *cfg.Temperature != 0.7 {
+			t.Errorf("builtin profile not applied without registry: %v", cfg.Temperature)
 		}
 	})
 }
