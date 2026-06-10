@@ -180,7 +180,7 @@ func executeAgentRun(
 			}
 		}
 	}
-	messages := assembleMessages(ctx, params, deps, prep, logger, cHooks)
+	messages := assembleMessages(ctx, params, deps, prep, mr, logger, cHooks)
 
 	// Stage 3: Finalize system prompt (budget optimization, coordinator suggestion, tier-1 injection).
 	systemPrompt := finalizePrompt(prep.SystemPrompt, prep.RecallMemory, prep.Tier1Wiki, deps.contextCfg, sessionToolPreset, params.Message)
@@ -220,13 +220,15 @@ func executeAgentRun(
 	//    to fit Anthropic's 4-breakpoint limit alongside our 2 system
 	//    markers). No-op for non-Anthropic providers.
 	apiMode := resolveAPIMode(deps, providerID)
-	// Kimi speaks the Anthropic wire but REJECTS cache_control with HTTP 400, so
-	// for cache-incompatible providers strip the system-block markers and skip
-	// the trailing-message hook entirely. Mirrors OpenClaw's per-provider strip
-	// (extensions/kimi-coding). The strip operates on the per-request cfg.System
+	// Some providers (Kimi) speak the Anthropic wire but REJECT cache_control
+	// with HTTP 400, so for cache-incompatible providers strip the system-block
+	// markers and skip the trailing-message hook entirely. Mirrors OpenClaw's
+	// per-provider strip (extensions/kimi-coding). The builtin list lives in
+	// modelcaps; a `promptCache` boolean on the provider's deneb.json entry
+	// overrides it either way. The strip operates on the per-request cfg.System
 	// copy, so the prompt-cache doctrine (don't mutate cached blocks) holds.
 	trailingCache := buildTrailingCacheHook(apiMode)
-	if isCacheIncompatibleProvider(providerID) {
+	if modelCapability(deps, providerID, model).RejectsCacheControl {
 		cfg.System = stripCacheControlMarkers(cfg.System)
 		trailingCache = nil
 	}
@@ -248,7 +250,7 @@ func executeAgentRun(
 
 	// Execute agent loop with model fallback chain.
 	agentStart := time.Now()
-	agentResult, actualModel, fellBack, err := runAgentWithFallback(ctx, cfg, messages, client, deps, initialRole, hooks, logger, runLog)
+	agentResult, actualModel, fellBack, err := runAgentWithFallback(ctx, cfg, messages, client, deps, providerID, initialRole, hooks, logger, runLog)
 	if err != nil {
 		return nil, err
 	}
@@ -585,12 +587,15 @@ type compactionHooks struct {
 }
 
 // assembleMessages builds the final message list from prebuilt messages, transcript
-// context, attachments, and Polaris compaction.
+// context, attachments, and Polaris compaction. mr identifies the resolved
+// provider/model so compaction budgets and content handling can respect the
+// model's capabilities (context window, vision).
 func assembleMessages(
 	ctx context.Context,
 	params RunParams,
 	deps runDeps,
 	prep prepResult,
+	mr modelResolution,
 	logger *slog.Logger,
 	hooks *compactionHooks,
 ) []llm.Message {
@@ -625,6 +630,14 @@ func assembleMessages(
 		messages = appendAttachmentsToHistory(messages, params.Message, params.Attachments)
 	}
 
+	// Model marked non-vision (provider config `vision: false`): replace image
+	// blocks with text stubs up front instead of letting the provider reject
+	// the request. Only fires on an explicit override — unknown models are
+	// assumed vision-capable.
+	if modelCapability(deps, mr.providerID, mr.model).NoVision {
+		messages = compact.StripImageBlocks(messages)
+	}
+
 	// Polaris compaction: tiered context compression.
 	// Applied after message assembly, before prompt finalization.
 	// STW (Stop-the-World): when LLM compaction fires, the user sees a
@@ -637,8 +650,9 @@ func assembleMessages(
 		if pilotHub := pilot.LocalAIHub(); pilotHub != nil {
 			summarizer = &localAISummarizer{}
 		}
-		// Derive compaction budget from context assembly budgets so they stay in sync.
-		contextBudget := int(deps.contextCfg.MemoryTokenBudget - deps.contextCfg.SystemPromptBudget) //nolint:gosec // G115
+		// Derive compaction budget from context assembly budgets so they stay
+		// in sync, clamped to the model's context window when it is known.
+		contextBudget := effectiveContextBudget(deps, mr.providerID, mr.model, logger)
 
 		// STW: pre-check if LLM compaction will likely fire.
 		// Signal the user before the (potentially slow) summarization starts.
@@ -1125,6 +1139,30 @@ var errModelStalled = errors.New("model produced no output before timeout (strea
 // late answer from a healthy model beats silence.
 const stallFallbackBudget = 90 * time.Second
 
+// errModelCircuitOpen marks a turn whose initial model was skipped because its
+// circuit breaker is open (repeated recent failures — see modelrole/health.go).
+// Synthesized instead of calling RunAgent so the fallback chain engages
+// immediately and the user is spared the dead model's stall timeout.
+var errModelCircuitOpen = errors.New("model circuit open: skipped after repeated recent failures")
+
+// healthyFallbackExists reports whether the fallback chain for role offers at
+// least one model that is distinct from failedModel and whose breaker is
+// closed. The initial-model skip only happens when this holds — when every
+// candidate is unhealthy, trying the requested model is still the best move.
+func healthyFallbackExists(reg *modelrole.Registry, role modelrole.Role, failedModel string) bool {
+	chain := reg.FallbackChain(role)
+	for i := 1; i < len(chain); i++ {
+		cfg := reg.Config(chain[i])
+		if cfg.Model == "" || cfg.Model == failedModel {
+			continue
+		}
+		if !reg.ModelUnhealthy(cfg.Model) {
+			return true
+		}
+	}
+	return false
+}
+
 // isStalledResult reports whether an agent run timed out without emitting any
 // text — the signature of a stalled LLM stream (the inner per-run timeout fired
 // before a single token arrived). A turn that timed out after producing text is
@@ -1145,6 +1183,7 @@ func runAgentWithFallback(
 	messages []llm.Message,
 	client *llm.Client,
 	deps runDeps,
+	providerID string,
 	initialRole modelrole.Role,
 	hooks agent.StreamHooks,
 	logger *slog.Logger,
@@ -1152,7 +1191,7 @@ func runAgentWithFallback(
 ) (*agent.AgentResult, string, bool, error) {
 	const maxCompactionRetries = 2
 
-	contextBudget := int(deps.contextCfg.MemoryTokenBudget - deps.contextCfg.SystemPromptBudget) //nolint:gosec // G115
+	contextBudget := effectiveContextBudget(deps, providerID, cfg.Model, logger)
 
 	// Anti-thrashing state (see compact_guard.go):
 	//   - lastCompactInputHash detects idempotent compaction — if the
@@ -1178,8 +1217,24 @@ func runAgentWithFallback(
 	// fallback's error — preserving the pre-fallback "stall = empty reply"
 	// behavior instead of surfacing a downstream error.
 	var stalledResult *agent.AgentResult
+	// Circuit breaker: when the requested model has failed repeatedly within
+	// the cooldown window AND the chain offers a healthy alternative, skip the
+	// initial attempt and go straight to the fallback chain. Saves the user
+	// the dead model's stall timeout on every turn while it is down; the
+	// cooldown re-admits the model automatically once it has aged out.
+	skipInitial := deps.registry != nil &&
+		deps.registry.ModelUnhealthy(cfg.Model) &&
+		healthyFallbackExists(deps.registry, initialRole, cfg.Model)
+	if skipInitial {
+		logger.Warn("model circuit open; skipping straight to fallback chain",
+			"model", cfg.Model, "role", string(initialRole))
+	}
 	for compactAttempt := 0; compactAttempt <= maxCompactionRetries; compactAttempt++ {
-		agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+		if skipInitial {
+			runErr = errModelCircuitOpen
+		} else {
+			agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+		}
 		// A stall (timed out with zero output) returns no error but an empty
 		// timeout result. Treat it as a failure so the fallback chain below gets
 		// a shot with a different model. Only the inner per-run timeout fired,
@@ -1316,6 +1371,13 @@ func runAgentWithFallback(
 				}
 			}
 			if runFallback {
+				// Feed the circuit breaker: a hard error or stall counts against
+				// the model's health. Context overflow does not (input-size
+				// problem, not a model fault) and neither does the synthetic
+				// circuit-open sentinel (the model was never tried).
+				if !isContextOverflow(runErr) && !errors.Is(runErr, errModelCircuitOpen) {
+					deps.registry.RecordModelFailure(cfg.Model)
+				}
 				chain := deps.registry.FallbackChain(initialRole)
 				// Skip models already attempted — the chain can list the same model
 				// for multiple roles (e.g. main == lightweight), and re-running a
@@ -1326,7 +1388,11 @@ func runAgentWithFallback(
 						break
 					}
 					fbRole := chain[i]
-					fbCfg := deps.registry.Config(fbRole)
+					// Re-discover what the local vLLM is serving before targeting
+					// the role (rate-limited; no-op for non-vllm roles). Without
+					// this, a model swapped on the server after gateway startup
+					// 404s every fallback until a restart.
+					fbCfg := deps.registry.RefreshVllmRole(fbRole)
 					fbClient := deps.registry.Client(fbRole)
 					if fbClient == nil || triedModels[fbCfg.Model] {
 						continue
@@ -1349,6 +1415,11 @@ func runAgentWithFallback(
 						actualModel = fbCfg.Model
 						fellBack = true
 						break
+					}
+					if fbCtx.Err() == nil {
+						// Only count failures the model itself produced — a spent
+						// fallback budget says nothing about the model's health.
+						deps.registry.RecordModelFailure(fbCfg.Model)
 					}
 					logger.Error("fallback also failed",
 						"role", string(fbRole), "model", fbCfg.Model, "error", runErr)
@@ -1390,6 +1461,12 @@ func runAgentWithFallback(
 		break // success via transient retry or fallback
 	}
 
+	// Close the answering model's breaker. Failures were already recorded at
+	// the fallback-engagement points above; the stalled-degrade and
+	// compression-stuck paths return earlier and never reach here.
+	if deps.registry != nil {
+		deps.registry.RecordModelSuccess(actualModel)
+	}
 	return agentResult, actualModel, fellBack, nil
 }
 

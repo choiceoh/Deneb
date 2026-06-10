@@ -90,12 +90,14 @@ func DiscoverServedVllmModelInfos(ctx context.Context, baseURL string) ([]Served
 }
 
 // reconcileVllmModel rewrites cfg.Model so it matches whatever the local
-// vLLM server is actually serving. Behaviour:
+// vLLM server is actually serving, and returns the discovery payload (nil
+// when the probe was skipped or failed) so callers can also harvest the
+// advertised context lengths. Behaviour:
 //
 //   - Provider != vllm: no-op (other providers have their own discovery
 //     conventions and we don't want to silently substitute against them).
-//   - Configured model is in the served list: no-op (operator's intent
-//     respected).
+//   - Configured model is in the served list: name untouched (operator's
+//     intent respected).
 //   - Configured model not in served list: replace with the first served
 //     id and log INFO so the substitution is visible.
 //   - Probe fails (server down, bad payload): no-op + WARN.
@@ -103,30 +105,35 @@ func DiscoverServedVllmModelInfos(ctx context.Context, baseURL string) ([]Served
 // The chat pipeline already retries through the fallback chain, so a
 // missing-model 404 isn't catastrophic; this just removes the most common
 // "I renamed the served model" footgun.
-func reconcileVllmModel(logger *slog.Logger, cfg *ModelConfig) {
+func reconcileVllmModel(logger *slog.Logger, cfg *ModelConfig) []ServedModelInfo {
 	if cfg == nil || cfg.ProviderID != "vllm" || cfg.BaseURL == "" {
-		return
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), vllmDiscoveryTimeout)
 	defer cancel()
-	served, err := DiscoverServedVllmModels(ctx, cfg.BaseURL)
+	served, err := DiscoverServedVllmModelInfos(ctx, cfg.BaseURL)
 	if err != nil {
 		logger.Warn("modelrole: vllm probe failed; using configured name as-is",
 			"configured", cfg.Model, "baseUrl", cfg.BaseURL, "error", err)
-		return
+		return nil
 	}
-	for _, id := range served {
-		if id == cfg.Model {
-			return // configured name matches what's served
+	for _, info := range served {
+		if info.ID == cfg.Model {
+			return served // configured name matches what's served
 		}
 	}
 	prev := cfg.Model
-	cfg.Model = served[0]
+	cfg.Model = served[0].ID
 	if prev == "" {
 		logger.Info("modelrole: vllm model auto-discovered",
 			"served", cfg.Model, "baseUrl", cfg.BaseURL)
 	} else {
+		ids := make([]string, 0, len(served))
+		for _, info := range served {
+			ids = append(ids, info.ID)
+		}
 		logger.Warn("modelrole: vllm configured model not served; using first served instead",
-			"configured", prev, "served", cfg.Model, "available", served, "baseUrl", cfg.BaseURL)
+			"configured", prev, "served", cfg.Model, "available", ids, "baseUrl", cfg.BaseURL)
 	}
+	return served
 }

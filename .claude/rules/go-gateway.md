@@ -24,6 +24,7 @@ Primary runtime — HTTP/WS gateway server.
 - `internal/pipeline/chat/silent_reply.go` — SILENT_REPLY_TOKEN (NO_REPLY) detection and stripping for delivery suppression.
 - `internal/pipeline/chat/slash_commands.go` — Slash command pre-processing (/reset, /status, /kill, /model, /think).
 - `internal/ai/llm/types.go` — Sampling parameters: top_p, top_k, stop_sequences, frequency_penalty, presence_penalty. ImageSource for multimodal content.
+- `internal/ai/modelcaps/` — Leaf package: builtin model capability defaults (reasoning model prefixes, cache_control compatibility). Layered with vLLM /models discovery and deneb.json `models.providers.<id>` overrides (contextWindow/reasoning/vision/promptCache) by `modelrole.Registry.CapabilityForModel`. The chat pipeline derives context-budget clamping, cache-marker stripping, and image-block stripping from it (`internal/pipeline/chat/run_capability.go`). Model health circuit breaker: `internal/ai/modelrole/health.go`.
 ## GatewayHub Wiring Rules
 
 - `GatewayHub` is a service container — no business logic, only `Broadcast()` and `Validate()`.

@@ -258,9 +258,13 @@ func providerCatalog(logger *slog.Logger) map[string]modelrole.ProviderResolved 
 	out := make(map[string]modelrole.ProviderResolved, len(raw))
 	for id, p := range raw {
 		out[id] = modelrole.ProviderResolved{
-			BaseURL: p.BaseURL,
-			APIKey:  p.APIKey,
-			APIMode: p.API,
+			BaseURL:       p.BaseURL,
+			APIKey:        p.APIKey,
+			APIMode:       p.API,
+			ContextWindow: p.ContextWindow,
+			Reasoning:     p.Reasoning,
+			Vision:        p.Vision,
+			PromptCache:   p.PromptCache,
 		}
 	}
 	return out
