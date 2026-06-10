@@ -1,31 +1,32 @@
 version: "2"
 
+# Philosophy: lint to block bugs, not to nag about style.
+# Keep linters that catch real defects (unchecked errors, leaked bodies,
+# missing contexts, dead code, unsafe patterns); drop pure style/refactor
+# nags so PRs aren't blocked by taste. CI runs in diff mode
+# (--new-from-rev), so only new code is gated.
+
 linters:
   enable:
-    - errcheck
+    # Bug catchers — these block because they find real defects.
+    - errcheck       # unchecked errors (incl. type assertions)
     - govet
-    - staticcheck
-    - revive
+    - staticcheck    # SA bug checks (style ST/QF checks excluded below)
     - ineffassign
-    - unused
-    - gocritic
-    - misspell
-    - unconvert
-    - unparam
-    - predeclared
-    - durationcheck
-    - nilerr
-    - bodyclose
-    - noctx
-    - errname
-    - errorlint
-    - exhaustive
+    - unused         # dead code
+    - durationcheck  # time.Duration multiplication bugs
+    - nilerr         # returning nil despite non-nil err
+    - bodyclose      # leaked HTTP response bodies
+    - noctx          # HTTP requests without context (turn-deadline rule)
+    - errorlint      # %w wrapping / errors.Is-As misuse
+    - exhaustive     # missed enum cases in switches
     - copyloopvar
-    - intrange
-    - gosec
-    - nakedret
-    - thelper
-    - usestdlibvars
+    - predeclared    # shadowing builtins like len/new/copy
+    - errname        # sentinel error naming (ErrFoo)
+    - gosec          # security (noisy FP rules excluded below)
+    - misspell       # real typos, near-zero FP (American English rule)
+    - gocritic       # diagnostic tag only — see settings
+    - revive         # trimmed rule set — see settings
   settings:
     errcheck:
       check-type-assertions: true
@@ -33,38 +34,47 @@ linters:
         - fmt.Fprintf
         - fmt.Fprintln
     revive:
+      # Bug-adjacent rules only. Pure style rules (error-strings, var-naming,
+      # redefines-builtin-id — fires on harmless min/max locals) dropped.
       rules:
         - name: blank-imports
         - name: context-as-argument
         - name: dot-imports
         - name: error-naming
         - name: error-return
-        - name: error-strings
-        - name: exported
-          disabled: true
         - name: increment-decrement
         - name: indent-error-flow
         - name: range
         - name: receiver-naming
-        - name: redefines-builtin-id
         - name: unexported-return
         - name: var-declaration
-        - name: var-naming
     gocritic:
-      enabled-tags:
-        - diagnostic
+      # Diagnostic checks only (likely bugs). The style tag (emptyStringTest,
+      # unlambda, paramTypeCombine, ifElseChain, ...) is opinion, not defect.
+      # Note: enabled-tags only ADDS to the default set, so style is removed
+      # via disabled-tags. experimental covers commentedOutCode.
+      disabled-tags:
         - style
-      disabled-checks:
-        - commentedOutCode
+        - experimental
+        - opinionated
+        - performance
     staticcheck:
       checks:
         - all
+        - "-ST*" # stylecheck: naming/comment conventions, not bugs
+        - "-QF*" # quickfix suggestions, not bugs
+    predeclared:
+      # min/max are Go 1.21+ builtins; shadowing them as locals/params is
+      # ubiquitous and harmless. Still flags len/copy/new/append etc.
+      ignore:
+        - min
+        - max
     gosec:
       excludes:
-        - G104  # Handled via errcheck linter instead.
-        - G304  # File path from variable — common in gateway serving files.
-    nakedret:
-      max-func-lines: 20
+        - G104 # Handled via errcheck linter instead.
+        - G304 # File path from variable — common in gateway serving files.
+        - G115 # int conversion overflow — overwhelmingly false positives.
+        - G306 # WriteFile permissions — single-user, single-machine box.
     exhaustive:
       default-signifies-exhaustive: true
   exclusions:
@@ -75,13 +85,16 @@ linters:
       - legacy
       - std-error-handling
     rules:
-      # Test files: relax errcheck, style, and security linters.
+      # Test files: relax error/style/security checks; tests may ignore
+      # errors, skip contexts, and leave bodies to t.Cleanup.
       - path: "_test\\.go$"
         linters:
           - errcheck
           - gocritic
-          - unparam
           - gosec
+          - noctx
+          - bodyclose
+          - predeclared
     paths:
       - third_party$
       - builtin$
