@@ -2,6 +2,7 @@ package compaction
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -213,5 +214,64 @@ func TestRecencyCompact_NoopUnderBudget(t *testing.T) {
 	_, ok := RecencyCompact(cfg, messages, nil)
 	if ok {
 		t.Error("expected no compaction under budget")
+	}
+}
+
+// TestMergeConsecutiveSameRole_PreservesToolBlocks guards against the
+// flattening bug: merging two same-role messages used to go through
+// ExtractSystemText, which silently dropped tool_use/tool_result/image
+// blocks — tool-call history vanished whenever MMR left adjacent
+// assistant turns. Blocks must survive the merge intact.
+func TestMergeConsecutiveSameRole_PreservesToolBlocks(t *testing.T) {
+	withTool := llm.NewBlockMessage("assistant", []llm.ContentBlock{
+		{Type: "text", Text: "checking the calendar"},
+		{Type: "tool_use", ID: "tu_1", Name: "calendar", Input: json.RawMessage(`{"day":"today"}`)},
+	})
+	textOnly := llm.NewTextMessage("assistant", "done — two events today")
+
+	out := mergeConsecutiveSameRole([]llm.Message{withTool, textOnly})
+	if len(out) != 1 {
+		t.Fatalf("expected 1 merged message, got %d", len(out))
+	}
+	var blocks []llm.ContentBlock
+	if err := json.Unmarshal(out[0].Content, &blocks); err != nil {
+		t.Fatalf("merged content not block-shaped: %v (content=%s)", err, out[0].Content)
+	}
+	var toolUse, texts int
+	for _, b := range blocks {
+		switch b.Type {
+		case "tool_use":
+			toolUse++
+			if b.ID != "tu_1" || b.Name != "calendar" {
+				t.Errorf("tool_use block mangled: %+v", b)
+			}
+		case "text":
+			texts++
+		}
+	}
+	if toolUse != 1 {
+		t.Errorf("tool_use block lost in merge: %+v", blocks)
+	}
+	if texts != 2 {
+		t.Errorf("expected both text blocks to survive, got %d", texts)
+	}
+}
+
+// TestMergeConsecutiveSameRole_PlainTextKeepsJoinedShape pins the legacy
+// behavior for the common all-text case: a single joined text message.
+func TestMergeConsecutiveSameRole_PlainTextKeepsJoinedShape(t *testing.T) {
+	out := mergeConsecutiveSameRole([]llm.Message{
+		llm.NewTextMessage("user", "첫 번째"),
+		llm.NewTextMessage("user", "두 번째"),
+	})
+	if len(out) != 1 {
+		t.Fatalf("expected 1 merged message, got %d", len(out))
+	}
+	var s string
+	if err := json.Unmarshal(out[0].Content, &s); err != nil {
+		t.Fatalf("merged plain-text content should stay a string: %v", err)
+	}
+	if s != "첫 번째\n\n두 번째" {
+		t.Errorf("unexpected merged text: %q", s)
 	}
 }
