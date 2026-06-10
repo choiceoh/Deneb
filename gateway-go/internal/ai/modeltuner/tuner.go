@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
@@ -23,6 +24,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 )
 
 const (
@@ -72,12 +74,27 @@ type Task struct {
 	deps Deps
 }
 
-// NewTask builds the periodic model-tuner task.
+// NewTask builds the periodic model-tuner task. Floors recommended by the
+// last persisted scorecard are re-applied immediately so a gateway restart
+// doesn't drop tuned output budgets until the first 6h cycle.
 func NewTask(deps Deps) *Task {
 	if deps.Logger == nil {
 		deps.Logger = slog.Default()
 	}
-	return &Task{deps: deps}
+	t := &Task{deps: deps}
+	if deps.Registry != nil {
+		prev := LoadScorecard(deps.StatePath)
+		for _, r := range prev.Recommendations {
+			if r.TunedMaxTokens > 0 {
+				deps.Registry.SetTunedMaxTokens(r.Model, r.TunedMaxTokens)
+			}
+		}
+		if len(prev.Recommendations) > 0 {
+			deps.Logger.Info("modeltuner: persisted tuning re-applied",
+				"recommendations", len(prev.Recommendations))
+		}
+	}
+	return t
 }
 
 func (t *Task) Name() string            { return "model-tuner" }
@@ -88,7 +105,7 @@ func (t *Task) Run(ctx context.Context) error {
 	since := time.Now().Add(-statsWindow).UnixMilli()
 	stats := t.deps.Logs.AggregateByModel(since)
 	recs := Analyze(stats)
-	prev := loadScorecard(t.deps.StatePath)
+	prev := LoadScorecard(t.deps.StatePath)
 
 	// Auto-apply: the max-tokens floor is the only adjustment safe enough to
 	// act on without a human (bounded, raise-only, request-level). Models
@@ -242,9 +259,17 @@ func formatNotification(recs []Recommendation) string {
 	return sb.String()
 }
 
-// loadScorecard reads the prior scorecard; a missing or corrupt file yields
-// the zero Scorecard (first run, or start over).
-func loadScorecard(path string) Scorecard {
+// DefaultStatePath returns the scorecard location under the resolved state
+// directory (DENEB_STATE_DIR-aware, so a dev gateway never writes into the
+// production ~/.deneb).
+func DefaultStatePath() string {
+	return filepath.Join(config.ResolveStateDir(), "model-stats.json")
+}
+
+// LoadScorecard reads the persisted scorecard; a missing or corrupt file
+// yields the zero Scorecard (first run, or start over). Exported for the
+// /model slash command's status rendering.
+func LoadScorecard(path string) Scorecard {
 	var sc Scorecard
 	if path == "" {
 		return sc

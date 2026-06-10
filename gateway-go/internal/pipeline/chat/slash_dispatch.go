@@ -9,19 +9,27 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // handleSlashCommand processes a recognized slash command and returns a response.
-// This runs synchronously (no agent loop) and delivers a reply to the channel.
+// This runs synchronously (no agent loop). Immediate replies go through respond;
+// a nil respond falls back to channel delivery (deliverSlashResponse), which the
+// async chat.send path uses. The sync native path (SendSync) passes a collector
+// so the reply text returns in the RPC response instead. Long-running commands
+// (/update, /restart, /rollback) still deliver their late output via the
+// channel reply path from their own goroutines.
 func (h *Handler) handleSlashCommand(
 	reqID string,
 	sessionKey string,
 	delivery *DeliveryContext,
 	cmd *SlashResult,
+	respond func(text string),
 ) *protocol.ResponseFrame {
+	if respond == nil {
+		respond = func(text string) { h.deliverSlashResponse(delivery, text) }
+	}
 	switch cmd.Command {
 	case "reset":
 		// Abort any active run, clear transcript, and discard frozen context snapshot.
@@ -33,7 +41,6 @@ func (h *Handler) handleSlashCommand(
 		}
 		prompt.ClearSessionSnapshot(sessionKey)
 		clearRecallMemory(sessionKey)
-		clearPinnedFacts(sessionKey)
 		if h.transcript != nil {
 			if err := h.transcript.Delete(sessionKey); err != nil {
 				h.logger.Warn("failed to delete transcript on reset", "error", err)
@@ -48,7 +55,7 @@ func (h *Handler) handleSlashCommand(
 			Phase: session.PhaseEnd,
 			Ts:    time.Now().UnixMilli(),
 		})
-		h.deliverSlashResponse(delivery, "세션이 초기화되었습니다.")
+		respond("세션이 초기화되었습니다.")
 
 	case "kill":
 		h.InterruptActiveRun(sessionKey)
@@ -58,115 +65,14 @@ func (h *Handler) handleSlashCommand(
 			Phase: session.PhaseEnd,
 			Ts:    time.Now().UnixMilli(),
 		})
-		h.deliverSlashResponse(delivery, "실행이 중단되었습니다.")
+		respond("실행이 중단되었습니다.")
 
 	case "help":
-		h.deliverSlashResponse(delivery, slashHelpText())
+		respond(slashHelpText())
 
 	case "status":
 		status := h.buildSessionStatus(sessionKey)
-		h.deliverSlashResponse(delivery, status)
-
-	case "pin":
-		if ok, reason := pinFact(sessionKey, cmd.Args); !ok {
-			h.deliverSlashResponse(delivery, reason)
-		} else {
-			h.deliverSlashResponse(delivery, "📌 고정했습니다.\n\n"+renderPinnedFactsReply(listPinnedFacts(sessionKey)))
-		}
-
-	case "unpin":
-		idx, err := parsePinIndex(cmd.Args)
-		if err != nil {
-			h.deliverSlashResponse(delivery, "사용법: /unpin <번호> — 번호는 /pins로 확인하세요.")
-			break
-		}
-		removed, ok := unpinFact(sessionKey, idx)
-		if !ok {
-			h.deliverSlashResponse(delivery, "해당 번호의 고정 사실이 없습니다. /pins로 확인하세요.")
-			break
-		}
-		h.deliverSlashResponse(delivery, fmt.Sprintf("📌 제거: %s\n\n%s", removed, renderPinnedFactsReply(listPinnedFacts(sessionKey))))
-
-	case "pins":
-		h.deliverSlashResponse(delivery, renderPinnedFactsReply(listPinnedFacts(sessionKey)))
-
-	case "model":
-		if cmd.Args != "" {
-			modelArg := cmd.Args
-			displayName := modelArg
-			// Accept role names ("main", "lightweight", etc.) as well as model IDs.
-			if h.registry != nil {
-				if resolved, role, ok := h.registry.ResolveModel(modelArg); ok {
-					modelArg = resolved
-					displayName = fmt.Sprintf("%s (%s)", modelArg, string(role))
-				}
-			}
-			h.SetDefaultModel(modelArg)
-			h.deliverSlashResponse(delivery, fmt.Sprintf("모델이 %s(으)로 변경되었습니다.", displayName))
-		}
-
-	case "think":
-		h.deliverSlashResponse(delivery, applyThinkSlashCommand(h.sessions, sessionKey, cmd.Args))
-
-	case "use-forum":
-		h.deliverSlashResponse(delivery, h.handleUseForum(delivery))
-
-	case "mode":
-		sess := h.sessions.Get(sessionKey)
-		if sess == nil {
-			h.deliverSlashResponse(delivery, "세션이 없습니다.")
-			break
-		}
-		arg := strings.ToLower(strings.TrimSpace(cmd.Args))
-		switch arg {
-		case "대화", "chat", "conversation":
-			sess.Mode = session.ModeChat
-			sess.ToolPreset = "conversation"
-			_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
-			h.deliverSlashResponse(delivery, "💬 대화 모드 — 도구 없이 대화만 합니다.")
-		case "일반", "normal":
-			sess.Mode = session.ModeNormal
-			sess.ToolPreset = ""
-			_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
-			h.deliverSlashResponse(delivery, "🔧 일반 모드 — 모든 도구를 사용합니다.")
-		case "":
-			// Toggle: normal ↔ chat
-			if sess.Mode == session.ModeChat {
-				sess.Mode = session.ModeNormal
-				sess.ToolPreset = ""
-				_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
-				h.deliverSlashResponse(delivery, "🔧 일반 모드 — 모든 도구를 사용합니다.")
-			} else {
-				sess.Mode = session.ModeChat
-				sess.ToolPreset = "conversation"
-				_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
-				h.deliverSlashResponse(delivery, "💬 대화 모드 — 도구 없이 대화만 합니다.")
-			}
-		default:
-			h.deliverSlashResponse(delivery, "사용법: /mode [일반|대화] — 인자 없이 토글")
-		}
-
-	case "mail":
-		mailLogger := h.logger
-		go func() {
-			defer func() {
-				if r := recover(); r != nil && mailLogger != nil {
-					mailLogger.Error("panic in /mail command handler", "panic", r)
-				}
-			}()
-			h.handleMailCommand(reqID, sessionKey, delivery)
-		}()
-
-	case "insights":
-		insightsLogger := h.logger
-		go func() {
-			defer func() {
-				if r := recover(); r != nil && insightsLogger != nil {
-					insightsLogger.Error("panic in /insights command handler", "panic", r)
-				}
-			}()
-			h.handleInsightsCommand(delivery, cmd.Args)
-		}()
+		respond(status)
 
 	case "rollback":
 		// /rollback [list|목록] [N] | [diff|비교] <id> | [restore|복원] <id>
@@ -230,90 +136,6 @@ func (h *Handler) deliverSlashResponse(delivery *DeliveryContext, text string) {
 		// as Error, not a Warn that hides the dropped reply.
 		h.logger.Error("slash command reply failed", "error", err)
 	}
-}
-
-// handleInsightsCommand renders a usage report and delivers it to the channel.
-// Takes an optional numeric argument for the lookback window in days (default 30).
-// Falls back to a friendly notice if the insights provider is not wired.
-func (h *Handler) handleInsightsCommand(delivery *DeliveryContext, args string) {
-	provider := h.InsightsProvider()
-	if provider == nil {
-		h.deliverSlashResponse(delivery, "사용량 리포트가 현재 비활성화되어 있습니다.")
-		return
-	}
-	days := 30
-	if trimmed := strings.TrimSpace(args); trimmed != "" {
-		if parsed, err := parseInsightsDays(trimmed); err == nil {
-			days = parsed
-		}
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	md, err := provider(ctx, days)
-	if err != nil {
-		h.logger.Error("insights report generation failed", "days", days, "error", err)
-		h.deliverSlashResponse(delivery, "사용량 리포트 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.")
-		return
-	}
-	h.deliverSlashResponse(delivery, md)
-}
-
-// parseInsightsDays parses and clamps the /insights day argument.
-// Accepts 1..365; otherwise returns an error so caller keeps default.
-func parseInsightsDays(s string) (int, error) {
-	// Strip a trailing "일" if present ("/insights 7일").
-	s = strings.TrimSuffix(s, "일")
-	s = strings.TrimSpace(s)
-	var n int
-	if _, err := fmt.Sscanf(s, "%d", &n); err != nil {
-		return 0, err
-	}
-	if n < 1 {
-		return 0, fmt.Errorf("days must be positive")
-	}
-	if n > 365 {
-		n = 365
-	}
-	return n, nil
-}
-
-// handleMailCommand fetches the Gmail inbox and either responds directly (no mail)
-// or starts an LLM run with the inbox data for analysis.
-func (h *Handler) handleMailCommand(reqID, sessionKey string, delivery *DeliveryContext) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	client, err := gmail.DefaultClient()
-	if err != nil {
-		h.deliverSlashResponse(delivery, "📬 Gmail 인증 정보를 찾을 수 없습니다.")
-		return
-	}
-
-	unread, err := client.Search(ctx, "is:unread", 10)
-	if err != nil {
-		h.deliverSlashResponse(delivery, fmt.Sprintf("📬 메일 조회 실패: %s", err))
-		return
-	}
-
-	var mailPrompt string
-	if len(unread) > 0 {
-		inbox := gmail.FormatSearchResults(unread)
-		mailPrompt = fmt.Sprintf("안 읽은 메일 %d건을 확인했어. 각 메일을 분석해서 요약해줘.\n\n%s", len(unread), inbox)
-	} else {
-		// No unread — fetch recent mail instead.
-		recent, err := client.Search(ctx, "newer_than:3d", 10)
-		if err != nil || len(recent) == 0 {
-			h.deliverSlashResponse(delivery, "📬 새로운 메일이 없습니다.")
-			return
-		}
-		inbox := gmail.FormatSearchResults(recent)
-		mailPrompt = fmt.Sprintf("안 읽은 메일은 없어. 최근 메일 %d건을 확인했어. 요약해줘.\n\n%s", len(recent), inbox)
-	}
-	h.startAsyncRun(reqID, RunParams{
-		SessionKey: sessionKey,
-		Message:    mailPrompt,
-		Delivery:   delivery,
-	}, false)
 }
 
 // buildSessionStatus constructs a human-readable session status string.

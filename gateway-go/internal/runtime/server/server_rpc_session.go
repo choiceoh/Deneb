@@ -17,7 +17,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modeltuner"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/appsettings"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
@@ -132,20 +131,6 @@ func (s *Server) registerSessionRPCMethods() {
 	chatCfg.JobTracker = s.jobTracker
 	chatCfg.AgentLog = agentLogWriter
 
-	// Wire app settings store so /use-forum can persist the active home.
-	// A failure here is logged but non-fatal — the gateway boots and the
-	// chat handler degrades to refusing /use-forum (and inbound stays in
-	// legacy "accept any chat" mode).
-	if s.denebDir != "" {
-		if appSettings, err := appsettings.NewStore(s.denebDir); err != nil {
-			s.logger.Error("appsettings: init failed; /use-forum unavailable",
-				"dir", s.denebDir, "error", err)
-		} else {
-			s.appSettings = appSettings
-			chatCfg.AppSettings = appSettings
-		}
-	}
-
 	// Wire the per-topic knowledge resolver (deneb.json topics.map). Returns
 	// nil when topics are unconfigured, so the chat handler simply skips
 	// per-topic injection.
@@ -242,20 +227,6 @@ func (s *Server) registerSessionRPCMethods() {
 		// Release per-session checkpoint dirs immediately on terminal
 		// lifecycle events instead of waiting for the 30-day startup GC.
 		s.initCheckpointLifecycle(cpRoot)
-	}
-
-	// Wire /insights command — builds a MarkdownV2 usage report using the
-	// insights engine (created during registerEarlyMethods via hub.SetInsights).
-	// Nil-safe: if the engine isn't available the dispatcher replies with a
-	// friendly disabled-notice.
-	if engine := s.insightsEngine(); engine != nil {
-		s.chatHandler.SetInsightsProviderFunc(func(ctx context.Context, days int) (string, error) {
-			rep, err := engine.Generate(ctx, days)
-			if err != nil {
-				return "", err
-			}
-			return insights.RenderMarkdownV2(rep), nil
-		})
 	}
 
 	// Wire SendFn after handler creation to avoid circular deps.
@@ -490,9 +461,11 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 				tunerNotify = n.Notify
 			}
 			s.autonomousSvc.RegisterTask(modeltuner.NewTask(modeltuner.Deps{
-				Logs:      s.agentLogWriter,
-				Registry:  s.modelRegistry,
-				StatePath: filepath.Join(homeDir, ".deneb", "model-stats.json"),
+				Logs:     s.agentLogWriter,
+				Registry: s.modelRegistry,
+				// DENEB_STATE_DIR-aware so a dev gateway's tuner never writes
+				// into the production ~/.deneb scorecard.
+				StatePath: modeltuner.DefaultStatePath(),
 				Notify:    tunerNotify,
 				Logger:    s.logger,
 			}))
