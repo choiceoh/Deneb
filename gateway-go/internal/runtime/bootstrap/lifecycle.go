@@ -62,8 +62,10 @@ func RunWithSignals(fn func(ctx context.Context) error, logger *slog.Logger) int
 
 	var restartRequested atomic.Bool
 	fnDone := make(chan struct{})
+	supervisorDone := make(chan struct{})
 
 	go func() {
+		defer close(supervisorDone)
 		select {
 		case <-fnDone:
 			// fn returned before any signal — nothing to supervise.
@@ -103,6 +105,11 @@ func RunWithSignals(fn func(ctx context.Context) error, logger *slog.Logger) int
 
 	err := fn(ctx)
 	close(fnDone)
+	// Join the supervisor before returning: its signal.Reset(INT, TERM) must
+	// not race a subsequent RunWithSignals call's signal.Notify in the same
+	// process (the signal tests hit exactly that window — a late Reset wiped
+	// the next test's handler and a self-sent SIGTERM killed the binary).
+	<-supervisorDone
 
 	if err != nil {
 		logger.Error("gateway error", "error", err)
