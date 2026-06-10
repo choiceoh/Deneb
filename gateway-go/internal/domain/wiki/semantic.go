@@ -16,7 +16,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"log/slog"
 	"math"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -47,15 +51,24 @@ type cachedVec struct {
 }
 
 // semanticIndex is an in-memory, lazily-maintained vector index over wiki pages.
+// Vectors are mirrored to an on-disk cache (semanticCacheFile) so the frequent
+// gateway restarts don't force a full re-embed of the wiki on the first
+// semantic query after every boot.
 type semanticIndex struct {
-	embedder Embedder
-	mu       sync.Mutex
-	vecs     map[string]cachedVec // relPath -> embedding
+	embedder  Embedder
+	cachePath string // "" → persistence disabled (tests)
+	mu        sync.Mutex
+	vecs      map[string]cachedVec // relPath -> embedding
 }
 
 func newSemanticIndex(e Embedder) *semanticIndex {
 	return &semanticIndex{embedder: e, vecs: make(map[string]cachedVec)}
 }
+
+// semanticCacheFile is the embedding cache inside the wiki dir. Hidden and
+// non-.md so the FTS walk and ListPages never pick it up. Entries are keyed by
+// content hash, so stale vectors for edited pages are re-embedded naturally.
+const semanticCacheFile = ".semantic-cache.json"
 
 // SetEmbedder attaches a semantic index backed by e. Passing nil disables it
 // (Search reverts to pure BM25). Safe to call once at wiring time.
@@ -64,7 +77,70 @@ func (s *Store) SetEmbedder(e Embedder) {
 		s.sem = nil
 		return
 	}
-	s.sem = newSemanticIndex(e)
+	si := newSemanticIndex(e)
+	si.cachePath = filepath.Join(s.dir, semanticCacheFile)
+	si.loadCache()
+	s.sem = si
+}
+
+// cachedVecWire is the JSON shape of one cached embedding.
+type cachedVecWire struct {
+	Hash string    `json:"hash"`
+	Vec  []float32 `json:"vec"`
+}
+
+// loadCache hydrates vecs from the on-disk cache. Missing file is the normal
+// first-boot case; a corrupt file is dropped (vectors rebuild lazily).
+func (si *semanticIndex) loadCache() {
+	if si.cachePath == "" {
+		return
+	}
+	data, err := os.ReadFile(si.cachePath)
+	if err != nil {
+		return
+	}
+	var wire map[string]cachedVecWire
+	if err := json.Unmarshal(data, &wire); err != nil {
+		slog.Warn("wiki: semantic cache unreadable; re-embedding from scratch",
+			"path", si.cachePath, "error", err)
+		return
+	}
+	si.mu.Lock()
+	defer si.mu.Unlock()
+	for rp, cv := range wire {
+		if cv.Hash == "" || len(cv.Vec) == 0 {
+			continue
+		}
+		si.vecs[rp] = cachedVec{hash: cv.Hash, vec: cv.Vec}
+	}
+}
+
+// saveCache mirrors vecs to disk (atomic tmp+rename). Failures only cost a
+// warm start, so they are logged and otherwise ignored.
+func (si *semanticIndex) saveCache() {
+	if si.cachePath == "" {
+		return
+	}
+	si.mu.Lock()
+	wire := make(map[string]cachedVecWire, len(si.vecs))
+	for rp, cv := range si.vecs {
+		wire[rp] = cachedVecWire{Hash: cv.hash, Vec: cv.vec}
+	}
+	si.mu.Unlock()
+
+	data, err := json.Marshal(wire)
+	if err != nil {
+		return
+	}
+	tmp := si.cachePath + ".tmp"
+	if err := writeFileSync(tmp, data, 0o644); err != nil {
+		slog.Warn("wiki: semantic cache write failed", "path", si.cachePath, "error", err)
+		return
+	}
+	if err := os.Rename(tmp, si.cachePath); err != nil {
+		os.Remove(tmp)
+		slog.Warn("wiki: semantic cache rename failed", "path", si.cachePath, "error", err)
+	}
 }
 
 // semanticText is the text embedded for a page: title + summary + body, which
@@ -136,11 +212,20 @@ func (s *Store) searchSemantic(ctx context.Context, query string, limit int) []S
 
 // refresh re-embeds pages whose content changed and drops deleted ones. Holds
 // the index mutex only around map mutations, not around the network call.
-func (si *semanticIndex) refresh(ctx context.Context, store *Store) error {
+// Any mutation (even partial progress before a batch error) is mirrored to the
+// on-disk cache so the work survives the next restart.
+func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) {
 	relPaths, err := store.ListPages("")
 	if err != nil {
 		return err
 	}
+
+	mutated := false
+	defer func() {
+		if mutated {
+			si.saveCache()
+		}
+	}()
 
 	// Compute desired hashes and collect pages needing (re)embedding.
 	want := make(map[string]string, len(relPaths))
@@ -168,6 +253,7 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) error {
 	for rp := range si.vecs {
 		if _, ok := want[rp]; !ok {
 			delete(si.vecs, rp)
+			mutated = true
 		}
 	}
 	si.mu.Unlock()
@@ -177,6 +263,11 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) error {
 		end := min(start+semanticEmbedBatch, len(toEmbed))
 		vecs, eerr := si.embedder.Embed(ctx, toEmbedText[start:end])
 		if eerr != nil {
+			// Prior batches already landed in vecs; keep them and surface the
+			// failure (a healthy-looking server refusing batches was invisible
+			// before and silently degraded search to BM25-only).
+			slog.Warn("wiki: semantic embed batch failed; keeping prior vectors",
+				"batchStart", start, "batchSize", end-start, "error", eerr)
 			return eerr
 		}
 		if len(vecs) != end-start {
@@ -187,6 +278,7 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) error {
 			si.vecs[rp] = cachedVec{hash: want[rp], vec: vecs[i]}
 		}
 		si.mu.Unlock()
+		mutated = true
 	}
 	return nil
 }

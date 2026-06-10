@@ -17,10 +17,20 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+// TranscriptDeleter removes a session's persisted transcript file.
+type TranscriptDeleter interface {
+	Delete(sessionKey string) error
+}
+
 // Deps holds dependencies for session RPC methods.
 type Deps struct {
 	Sessions    *session.Manager
 	GatewaySubs *events.GatewayEventSubscriptions
+	// Transcripts lazily resolves the transcript store (created after the
+	// early registration phase). Optional, but without it sessions.delete
+	// leaves the .jsonl behind and the startup restore resurrects the
+	// session — the zombie bug miniapp.sessions.delete already fixed.
+	Transcripts func() (TranscriptDeleter, error)
 }
 
 // ExecDeps holds dependencies for native session execution and agent RPC methods.

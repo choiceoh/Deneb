@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 )
 
 func TestShouldRunRecallPreflight(t *testing.T) {
@@ -178,5 +179,46 @@ func TestFormatRecallNoEvidenceIsFenced(t *testing.T) {
 	}
 	if !strings.Contains(out, "source=none") || !strings.Contains(out, "confidence=none") {
 		t.Fatalf("expected no-evidence tags, got %q", out)
+	}
+}
+
+// panickyTranscriptStore implements toolctx.TranscriptStore with a Search
+// that panics, to prove one broken recall source cannot take down the turn
+// (or the other sources) now that sources run in parallel goroutines.
+type panickyTranscriptStore struct{}
+
+func (panickyTranscriptStore) Load(string, int) ([]toolctx.ChatMessage, int, error) {
+	return nil, 0, nil
+}
+func (panickyTranscriptStore) Append(string, toolctx.ChatMessage) error { return nil }
+func (panickyTranscriptStore) Delete(string) error                      { return nil }
+func (panickyTranscriptStore) ListKeys() ([]string, error)              { return nil, nil }
+func (panickyTranscriptStore) Search(string, int) ([]toolctx.SearchResult, error) {
+	panic("transcript search exploded")
+}
+func (panickyTranscriptStore) CloneRecent(string, string, int) error { return nil }
+
+func TestBuildRecallPreflightSurvivesPanickingSource(t *testing.T) {
+	dir := t.TempDir()
+	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	page := &wiki.Page{
+		Meta: wiki.Frontmatter{Title: "Deneb 회상 개선 계획", Summary: "회상 preflight 개선", Category: "프로젝트"},
+		Body: "위키 근거가 살아남아야 한다.",
+	}
+	if err := store.WritePage("프로젝트/deneb-recall.md", page); err != nil {
+		t.Fatalf("WritePage: %v", err)
+	}
+
+	out := buildRecallPreflight(context.Background(),
+		RunParams{SessionKey: "client:main", Message: "전에 Deneb 회상 개선 얘기했던 거 계속해줘"},
+		runDeps{wikiStore: store, transcript: panickyTranscriptStore{}},
+		nil,
+	)
+	if !strings.Contains(out, "프로젝트/deneb-recall.md") {
+		t.Fatalf("wiki evidence lost when a sibling source panicked: %q", out)
 	}
 }

@@ -4,6 +4,7 @@ package wiki
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -83,6 +84,10 @@ func (s *searchDB) rebuildIndex(dir string) error {
 		rel, _ := filepath.Rel(dir, path)
 		page, err := ParsePageFile(path)
 		if err != nil {
+			// An unparseable page is functionally deleted: it stays on disk but
+			// never appears in search again. Surface it instead of hiding it.
+			slog.Warn("wiki: unparseable page skipped during search index rebuild",
+				"path", rel, "error", err)
 			return nil //nolint:nilerr // skip unparseable files
 		}
 		s.idx.Upsert(rel, searchablePageFields(page)...)

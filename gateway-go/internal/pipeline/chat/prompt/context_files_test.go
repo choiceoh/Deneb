@@ -61,12 +61,63 @@ func TestLoadContextFiles_IncludesMemoryMd(t *testing.T) {
 func TestTruncateContent(t *testing.T) {
 	content := strings.Repeat("a", 100)
 	result := truncateContent(content, 50)
-	if len(result) > 70 { // 50 + marker overhead (~20 chars for "[...truncated...]" + newlines)
+	if len(result) > 50+truncateMarkerOverhead {
 		t.Errorf("truncated content too long: %d chars", len(result))
 	}
-	if !strings.Contains(result, "[...truncated...]") {
+	if !strings.Contains(result, "[...truncated:") {
 		t.Error("expected truncation marker")
 	}
+}
+
+// truncateMarkerOverhead bounds the dynamic truncation marker size in tests.
+const truncateMarkerOverhead = 160
+
+// TestTruncateContent_MemoryBudget guards the MEMORY.md per-file budget: the
+// agent's auto-recorded memory grew to 176KB in production while the default
+// 8K cap silently hid ~95% of it. MEMORY.md must get the larger budget.
+func TestTruncateContent_MemoryBudget(t *testing.T) {
+	if got := contextFileCharBudget("MEMORY.md"); got != maxMemoryFileChars {
+		t.Errorf("MEMORY.md budget = %d, want %d", got, maxMemoryFileChars)
+	}
+	if got := contextFileCharBudget("AGENTS.md"); got != maxContextFileChars {
+		t.Errorf("AGENTS.md budget = %d, want %d", got, maxContextFileChars)
+	}
+	if maxMemoryFileChars <= maxContextFileChars {
+		t.Error("MEMORY.md budget must exceed the default per-file budget")
+	}
+	// The total budget must accommodate all rule files plus MEMORY.md maxed out.
+	want := (len(contextFileNames)-1)*maxContextFileChars + maxMemoryFileChars
+	if maxContextTotalChars < want {
+		t.Errorf("total budget %d cannot fit all files maxed out (%d)", maxContextTotalChars, want)
+	}
+}
+
+// TestLoadContextFiles_MemoryTruncationVisible verifies an oversized MEMORY.md
+// is loaded with the larger budget and carries a visible omission marker.
+func TestLoadContextFiles_MemoryTruncationVisible(t *testing.T) {
+	ResetContextFileCacheForTest()
+	dir := t.TempDir()
+	big := strings.Repeat("기억 항목입니다. ", 4_000) // ~88KB, over the 32K budget
+	if err := os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte(big), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files := LoadContextFiles(dir)
+	for _, f := range files {
+		if f.Path != "MEMORY.md" {
+			continue
+		}
+		if len(f.Content) <= maxContextFileChars {
+			t.Errorf("MEMORY.md clipped to default budget (%d bytes); want the larger memory budget", len(f.Content))
+		}
+		if len(f.Content) > maxMemoryFileChars+truncateMarkerOverhead {
+			t.Errorf("MEMORY.md exceeds memory budget: %d bytes", len(f.Content))
+		}
+		if !strings.Contains(f.Content, "[...truncated:") {
+			t.Error("expected omission marker in truncated MEMORY.md")
+		}
+		return
+	}
+	t.Fatalf("MEMORY.md not loaded: %+v", files)
 }
 
 // TestTruncateContent_UTF8Safe verifies that truncating Korean / multi-byte
@@ -82,12 +133,12 @@ func TestTruncateContent_UTF8Safe(t *testing.T) {
 	if !utf8.ValidString(result) {
 		t.Fatalf("truncated content is not valid UTF-8")
 	}
-	if !strings.Contains(result, "[...truncated...]") {
+	if !strings.Contains(result, "[...truncated:") {
 		t.Error("expected truncation marker")
 	}
 	// Neither head nor tail should exceed their nominal byte budget (defensive:
 	// the whole point is we never grow past the cap to preserve a rune).
-	if len(result) > 4000+len("\n\n[...truncated...]\n\n") {
+	if len(result) > 4000+truncateMarkerOverhead {
 		t.Errorf("truncated content too long: %d bytes", len(result))
 	}
 }

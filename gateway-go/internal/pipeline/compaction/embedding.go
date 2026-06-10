@@ -2,6 +2,7 @@ package compaction
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math"
@@ -254,10 +255,14 @@ func serializeSingleMessage(msg llm.Message) string {
 	return serializeMessages([]llm.Message{msg})
 }
 
-// mergeConsecutiveSameRole merges adjacent messages with the same role by
-// concatenating their text content. This repairs role-alternation violations
-// that can arise when extractive compaction (MMR) skips messages, leaving
-// two consecutive user or assistant turns in the result.
+// mergeConsecutiveSameRole merges adjacent messages with the same role. This
+// repairs role-alternation violations that can arise when extractive
+// compaction (MMR) skips messages, leaving two consecutive user or assistant
+// turns in the result.
+//
+// Block content is concatenated, not flattened: an earlier version merged via
+// ExtractSystemText, which silently dropped tool_use/tool_result/image blocks
+// from every merged pair — tool-call history vanished without an error.
 func mergeConsecutiveSameRole(messages []llm.Message) []llm.Message {
 	if len(messages) <= 1 {
 		return messages
@@ -270,9 +275,46 @@ func mergeConsecutiveSameRole(messages []llm.Message) []llm.Message {
 			result = append(result, msg)
 			continue
 		}
-		// Same role: concatenate text content and replace the last entry.
-		merged := llm.ExtractSystemText(last.Content) + "\n\n" + llm.ExtractSystemText(msg.Content)
-		result[len(result)-1] = llm.NewTextMessage(msg.Role, merged)
+		result[len(result)-1] = mergeMessagePair(last, msg)
 	}
 	return result
+}
+
+// mergeMessagePair combines two same-role messages into one. Plain-text pairs
+// keep the legacy joined-string shape; anything with structured blocks is
+// merged block-by-block so tool calls, images, and thinking survive.
+func mergeMessagePair(a, b llm.Message) llm.Message {
+	var as, bs string
+	if json.Unmarshal(a.Content, &as) == nil && json.Unmarshal(b.Content, &bs) == nil {
+		return llm.NewTextMessage(b.Role, as+"\n\n"+bs)
+	}
+	ab, aok := contentBlocksOf(a.Content)
+	bb, bok := contentBlocksOf(b.Content)
+	if !aok || !bok {
+		// Undecodable content: fall back to text extraction rather than drop
+		// the message entirely.
+		merged := llm.ExtractSystemText(a.Content) + "\n\n" + llm.ExtractSystemText(b.Content)
+		return llm.NewTextMessage(b.Role, merged)
+	}
+	return llm.NewBlockMessage(b.Role, append(ab, bb...))
+}
+
+// contentBlocksOf decodes message content into blocks; a plain string becomes
+// a single text block. ok=false when neither wire shape decodes.
+func contentBlocksOf(content json.RawMessage) ([]llm.ContentBlock, bool) {
+	if len(content) == 0 {
+		return nil, true
+	}
+	var s string
+	if json.Unmarshal(content, &s) == nil {
+		if s == "" {
+			return nil, true
+		}
+		return []llm.ContentBlock{{Type: "text", Text: s}}, true
+	}
+	var blocks []llm.ContentBlock
+	if err := json.Unmarshal(content, &blocks); err != nil {
+		return nil, false
+	}
+	return blocks, true
 }

@@ -20,7 +20,7 @@ Primary runtime — HTTP/WS gateway server.
 - `internal/pipeline/chat/tools/` — Pure tool implementations (fs, exec, git, health, vega, message, kv, gmail, etc.). Depends only on toolctx/ for types.
 - `internal/pipeline/chat/toolreg_core.go` — Thin wrapper: calls toolreg.RegisterCoreTools() + registers pilot tool (localai-coupled).
 - `internal/pipeline/chat/prompt/system_prompt.go` — System prompt assembly (identity, tooling, tool call style, safety, skills, memory recall, workspace, reply tags, messaging, timestamp, context files, silent replies, runtime).
-- `internal/pipeline/chat/prompt/context_files.go` — Workspace context file loader (AGENTS.md, CLAUDE.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md). Budget: 20K chars/file, 150K total.
+- `internal/pipeline/chat/prompt/context_files.go` — Workspace context file loader (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, MEMORY.md). Budget: 8K bytes/file (MEMORY.md 32K), 72K total; oversized files are head+tail truncated with a visible omission marker + Warn log.
 - `internal/pipeline/chat/silent_reply.go` — SILENT_REPLY_TOKEN (NO_REPLY) detection and stripping for delivery suppression.
 - `internal/pipeline/chat/slash_commands.go` — Slash command pre-processing (operational only: /reset, /status, /kill, /rollback, /update, /restart — user commands moved to the native UI).
 - `internal/ai/llm/types.go` — Sampling parameters: top_p, top_k, stop_sequences, frequency_penalty, presence_penalty. ImageSource for multimodal content.

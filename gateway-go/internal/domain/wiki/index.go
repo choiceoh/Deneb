@@ -146,7 +146,7 @@ func (idx *Index) Save(path string) error {
 	idx.GeneratedAt = dentime.Now().Format(time.RFC3339)
 	data := idx.Render()
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(data), 0o644); err != nil {
+	if err := writeFileSync(tmp, []byte(data), 0o644); err != nil {
 		return fmt.Errorf("wiki: write index tmp: %w", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {

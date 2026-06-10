@@ -263,15 +263,28 @@ func (s *Service) dreamTimerLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.mu.Lock()
-			dreamer := s.dreamer
-			dreamRunning := s.dreamRunning
-			s.mu.Unlock()
-
-			if dreamer != nil && !dreamRunning && dreamer.ShouldDream(ctx) {
-				s.runDreamingAsync()
-			}
+			s.dreamTimerTick(ctx)
 		}
+	}
+}
+
+// dreamTimerTick runs one dreaming-condition check. Recovery is per-tick so a
+// panic in ShouldDream or the async spawn kills one check, not the loop — an
+// unguarded panic here would silently end dreaming for the process lifetime.
+func (s *Service) dreamTimerTick(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.Error("panic in dream timer tick", "panic", r)
+		}
+	}()
+
+	s.mu.Lock()
+	dreamer := s.dreamer
+	dreamRunning := s.dreamRunning
+	s.mu.Unlock()
+
+	if dreamer != nil && !dreamRunning && dreamer.ShouldDream(ctx) {
+		s.runDreamingAsync()
 	}
 }
 

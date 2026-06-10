@@ -128,6 +128,15 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlersession.CRUDMethods(handlersession.Deps{
 			Sessions:    hub.Sessions(),
 			GatewaySubs: hub.GatewaySubs(),
+			// Lazy: the transcript store exists only after chat init (between
+			// early and late phase). sessions.delete must remove the .jsonl or
+			// the startup restore resurrects the session.
+			Transcripts: func() (handlersession.TranscriptDeleter, error) {
+				if s.toolDeps == nil || s.toolDeps.Sessions.Transcript == nil {
+					return nil, errTranscriptUnavailable
+				}
+				return s.toolDeps.Sessions.Transcript, nil
+			},
 		}),
 
 		// --- Health and system info ---
