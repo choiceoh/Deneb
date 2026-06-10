@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ai.deneb.data.AppSettings
 import ai.deneb.data.ThemeMode
+import ai.deneb.defaultUiScale
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.settings.SettingsCard
@@ -130,20 +131,30 @@ internal fun AppearanceTab(appSettings: AppSettings) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
+            // The scale is an absolute density multiplier (App.kt: density * uiScale).
+            // On desktop Linux the default can be a HiDPI value up to ~4.4
+            // (defaultUiScale = 1.1 * GDK env factor), so a fixed 0.8–1.3 range would
+            // pin a HiDPI user at the max and let any move only shrink the app. Span
+            // from 0.8 up to the platform default (plus headroom) and never below the
+            // current value, keeping ~0.05 increments.
+            val minScale = 0.8f
+            val maxScale = maxOf(1.3f, defaultUiScale + 0.3f, uiScale)
+            val sliderSteps = (((maxScale - minScale) / 0.05f).roundToInt() - 1).coerceAtLeast(0)
             Slider(
                 value = sliderValue,
                 onValueChange = { sliderValue = it },
                 onValueChangeFinished = { appSettings.setUiScale(sliderValue) },
-                valueRange = 0.8f..1.3f,
-                // 0.8–1.3 in 0.05 steps → 11 stops → 9 interior steps.
-                steps = 9,
+                valueRange = minScale..maxScale,
+                steps = sliderSteps,
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
+            // Reset to the platform default (1.0 on phone, the HiDPI-derived value on
+            // desktop Linux), not a hard-coded 100%.
             TextButton(
-                onClick = { haptics.tap(); appSettings.setUiScale(1.0f) },
-                enabled = uiScale != 1.0f,
-            ) { Text("기본값(100%)으로") }
+                onClick = { haptics.tap(); appSettings.setUiScale(defaultUiScale) },
+                enabled = uiScale != defaultUiScale,
+            ) { Text("기본값(${(defaultUiScale * 100).roundToInt()}%)으로") }
         }
     }
 }
