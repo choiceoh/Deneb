@@ -2,6 +2,7 @@ package process
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"testing"
@@ -39,6 +40,28 @@ func TestExecute_SimpleCommand(t *testing.T) {
 	}
 	if result.RuntimeMs < 0 {
 		t.Error("expected non-negative runtime")
+	}
+}
+
+// Regression: the old StdoutPipe + drain-goroutine arrangement called Wait
+// before the drains finished; Wait closes the pipe read ends on process exit,
+// so a not-yet-scheduled drain lost the buffered output of fast commands
+// (empty stdout roughly once per few hundred runs). Hammer a fast echo so the
+// race can't come back unnoticed.
+func TestExecute_FastCommandStdoutNotLost(t *testing.T) {
+	m := newTestManager(t)
+	for i := range 200 {
+		result := m.Execute(context.Background(), ExecRequest{
+			ID:      fmt.Sprintf("fast-%d", i),
+			Command: "echo",
+			Args:    []string{"hello"},
+		})
+		if result.Status != StatusDone || result.ExitCode != 0 {
+			t.Fatalf("run %d: got status=%s exit=%d err=%q", i, result.Status, result.ExitCode, result.Error)
+		}
+		if result.Stdout == "" {
+			t.Fatalf("run %d: stdout lost", i)
+		}
 	}
 }
 

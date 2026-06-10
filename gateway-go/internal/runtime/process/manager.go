@@ -273,27 +273,30 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
 
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		cancel()
-		return m.failProcess(tracked, req.ID, time.Now().UnixMilli(), "stdout pipe: "+err.Error())
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		cancel()
-		return m.failProcess(tracked, req.ID, time.Now().UnixMilli(), "stderr pipe: "+err.Error())
-	}
-
-	// Create stdin pipe so background processes can receive input via WriteStdin.
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
 		cancel()
 		return m.failProcess(tracked, req.ID, time.Now().UnixMilli(), "stdin pipe: "+err.Error())
 	}
 
+	// Capture output through exec.Cmd's own plumbing: assigning non-file writers
+	// makes Start create the pipes and copy goroutines internally, and Wait waits
+	// for those copies to finish before returning. The previous self-managed
+	// StdoutPipe + drain-goroutine arrangement called Wait before the drains were
+	// done — Wait closes the read ends right after process exit, so a drain that
+	// hadn't been scheduled yet lost the buffered output (flaky empty stdout on
+	// fast commands like `echo`; the os/exec docs forbid that order outright).
+	// StreamBuffer is mutex-guarded, so concurrent partial-output polls stay safe.
+	stdoutSB := NewStreamBuffer(m.maxStdout)
+	stderrSB := NewStreamBuffer(m.maxStdout)
+	cmd.Stdout = stdoutSB
+	cmd.Stderr = stderrSB
+
 	tracked.mu.Lock()
 	tracked.cmd = cmd
 	tracked.stdin = stdinPipe
+	tracked.stdoutBuf = stdoutSB
+	tracked.stderrBuf = stderrSB
 	tracked.Status = StatusRunning
 	tracked.mu.Unlock()
 	startedAt := time.Now().UnixMilli()
@@ -305,63 +308,22 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 		return m.failProcess(tracked, req.ID, startedAt, err.Error())
 	}
 
-	// Drain both pipes concurrently into StreamBuffers. This allows
-	// polling partial output while the process is still running.
-	stdoutSB := NewStreamBuffer(m.maxStdout)
-	stderrSB := NewStreamBuffer(m.maxStdout)
-	tracked.mu.Lock()
-	tracked.stdoutBuf = stdoutSB
-	tracked.stderrBuf = stderrSB
-	tracked.mu.Unlock()
-
-	var drainWg sync.WaitGroup
-	drainWg.Add(2)
-	logger := m.logger
-	go func() {
-		defer drainWg.Done()
-		defer func() {
-			if r := recover(); r != nil && logger != nil {
-				logger.Error("panic in stdout drain", "id", req.ID, "panic", r)
-			}
-		}()
-		drainToBuffer(stdout, stdoutSB)
-	}()
-	go func() {
-		defer drainWg.Done()
-		defer func() {
-			if r := recover(); r != nil && logger != nil {
-				logger.Error("panic in stderr drain", "id", req.ID, "panic", r)
-			}
-		}()
-		drainToBuffer(stderr, stderrSB)
-	}()
-
-	// Wait for process exit BEFORE waiting for pipe drain. cmd.Wait()
-	// triggers WaitDelay (SIGKILL after graceful timeout) and closes the
-	// write end of pipes, unblocking drain goroutines. If we waited for
-	// drain first, a grandchild process holding inherited pipe FDs would
-	// block Read() indefinitely — preventing cmd.Wait() from ever running
-	// and disabling the SIGKILL safety net.
+	// Wait reaps the process and waits for the internal pipe copies. If a
+	// grandchild inherited the pipe FDs and keeps them open after the child
+	// exits, WaitDelay force-closes them and Wait returns ErrWaitDelay — the
+	// same "proceed with partial output" safety net the old bounded drain
+	// wait provided, without the lost-output race. WaitDelay also still
+	// covers SIGKILL escalation after Cancel's SIGTERM.
 	err = cmd.Wait()
 	// Capture context error before cancel() overwrites it.
 	ctxErr := execCtx.Err()
 	cancel()
 
-	// Bounded wait for pipe drain. Usually instant since Wait() confirmed
-	// the process exited and closed the pipe write ends. But if grandchild
-	// processes inherited pipe FDs and escaped the process group kill,
-	// drain goroutines may still be blocked on Read(). Cap the wait to
-	// avoid hanging the entire agent loop.
-	drainDone := make(chan struct{})
-	go func() { drainWg.Wait(); close(drainDone) }()
-	select {
-	case <-drainDone:
-	case <-time.After(3 * time.Second):
+	if errors.Is(err, exec.ErrWaitDelay) {
+		// The process itself exited successfully (a failed exit takes
+		// precedence over ErrWaitDelay); only its pipes lingered.
 		m.logger.Warn("process pipe drain timeout, proceeding with partial output", "id", req.ID)
-		// Close the read ends to unblock stuck drain goroutines so they
-		// don't leak. Safe to call — cmd.Wait() already finished.
-		stdout.Close()
-		stderr.Close()
+		err = nil
 	}
 
 	endedAt := time.Now().UnixMilli()
