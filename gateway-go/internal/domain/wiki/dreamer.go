@@ -758,6 +758,7 @@ type wikiUpdate struct {
 	Type       string         `json:"type"`       // concept, entity, source, comparison, log
 	Confidence string         `json:"confidence"` // high, medium, low
 	Due        string         `json:"due"`        // YYYY-MM-DD upcoming deadline (거래 category)
+	Supersedes string         `json:"supersedes"` // relPath of an existing page this update REPLACES (contradicted facts)
 }
 
 // synthesize calls the LLM to determine which wiki pages should be updated.
@@ -797,6 +798,7 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 - type: 페이지 유형 — concept(개념), entity(인물/조직), source(출처), comparison(비교), log(이력)
 - confidence: 정보 신뢰도 — high(검증됨), medium(합리적 추론), low(불확실)
 - due: 거래의 임박한 결제기한·마감일 (YYYY-MM-DD). 거래 카테고리에서만 사용, 없으면 생략
+- supersedes: 새 일지 내용이 기존 페이지의 사실과 **모순되거나 그것을 대체**할 때, 대체되는 기존 페이지 경로 (인덱스에서 선택). 단순 추가 정보면 생략 — 사실이 바뀐 경우에만 (예: 단가 변경, 담당자 교체, 정책 폐기)
 - id: 짧은 kebab-case 식별자 (예: "dgx-spark", "gemma4-switch", "peter-kim")
 - summary: 한 줄 요약 (~80자, 한국어)
 - related: 의미적으로 관련된 기존 위키 페이지 경로 목록 (인덱스에서 선택)
@@ -999,6 +1001,18 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 				continue
 			}
 			updated++
+		}
+
+		// Contradiction handling: when the LLM flagged this update as
+		// REPLACING an existing page's facts, stamp the old page so search
+		// demotes it (the page itself stays readable — history is memory too).
+		if u.Supersedes != "" {
+			if err := wd.store.MarkSuperseded(u.Supersedes, u.Path); err != nil {
+				wd.logger.Warn("wiki-dream: supersede mark failed",
+					"old", u.Supersedes, "new", u.Path, "error", err)
+			} else {
+				wd.logger.Info("wiki-dream: page superseded", "old", u.Supersedes, "new", u.Path)
+			}
 		}
 
 		// Check page size and split if needed.

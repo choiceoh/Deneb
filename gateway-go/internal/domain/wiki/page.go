@@ -75,6 +75,11 @@ type Frontmatter struct {
 	Archived   bool
 	Type       string // concept, entity, source, comparison, log
 	Confidence string // high, medium, low
+	// SupersededBy points at the page that replaced this one's facts. Set by
+	// the dreamer when new information contradicts/replaces an old page;
+	// search demotes superseded pages so stale facts stop surfacing as
+	// current (see validityFactor).
+	SupersededBy string // relPath of the superseding page; "" = current
 }
 
 // ParsePage parses a wiki page from raw bytes.
@@ -139,6 +144,9 @@ func (p *Page) Render() []byte {
 	}
 	if p.Meta.Confidence != "" {
 		buf.WriteString("confidence: " + p.Meta.Confidence + "\n")
+	}
+	if p.Meta.SupersededBy != "" {
+		buf.WriteString("superseded_by: " + p.Meta.SupersededBy + "\n")
 	}
 	buf.WriteString("---\n\n")
 
@@ -435,6 +443,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Type = val
 		case "confidence":
 			fm.Confidence = val
+		case "superseded_by":
+			fm.SupersededBy = val
 		}
 	}
 	return fm
