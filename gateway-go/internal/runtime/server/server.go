@@ -210,10 +210,6 @@ func (p *sessionSnapshotProvider) SessionSnapshot(sessionKey string) *events.Ses
 // requests should derive from this so graceful shutdown does not leak them.
 // Returns a non-nil context.Background before Run() has initialized the
 // lifecycle context, so callers need not nil-check.
-// insightsEngine returns the server's active insights engine, or nil if one
-// has not been wired yet. Used by the /insights slash-command dispatcher.
-func (s *Server) insightsEngine() *insights.Engine { return s.insights }
-
 func (s *Server) ShutdownCtx() context.Context {
 	if s.lifecycleCtx == nil {
 		return context.Background()
