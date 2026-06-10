@@ -15,13 +15,22 @@ import (
 )
 
 // handleSlashCommand processes a recognized slash command and returns a response.
-// This runs synchronously (no agent loop) and delivers a reply to the channel.
+// This runs synchronously (no agent loop). Immediate replies go through respond;
+// a nil respond falls back to channel delivery (deliverSlashResponse), which the
+// async chat.send path uses. The sync native path (SendSync) passes a collector
+// so the reply text returns in the RPC response instead. Long-running commands
+// (/mail, /update, /insights, …) still deliver their late output via the
+// channel reply path from their own goroutines.
 func (h *Handler) handleSlashCommand(
 	reqID string,
 	sessionKey string,
 	delivery *DeliveryContext,
 	cmd *SlashResult,
+	respond func(text string),
 ) *protocol.ResponseFrame {
+	if respond == nil {
+		respond = func(text string) { h.deliverSlashResponse(delivery, text) }
+	}
 	switch cmd.Command {
 	case "reset":
 		// Abort any active run, clear transcript, and discard frozen context snapshot.
@@ -48,7 +57,7 @@ func (h *Handler) handleSlashCommand(
 			Phase: session.PhaseEnd,
 			Ts:    time.Now().UnixMilli(),
 		})
-		h.deliverSlashResponse(delivery, "세션이 초기화되었습니다.")
+		respond("세션이 초기화되었습니다.")
 
 	case "kill":
 		h.InterruptActiveRun(sessionKey)
@@ -58,37 +67,37 @@ func (h *Handler) handleSlashCommand(
 			Phase: session.PhaseEnd,
 			Ts:    time.Now().UnixMilli(),
 		})
-		h.deliverSlashResponse(delivery, "실행이 중단되었습니다.")
+		respond("실행이 중단되었습니다.")
 
 	case "help":
-		h.deliverSlashResponse(delivery, slashHelpText())
+		respond(slashHelpText())
 
 	case "status":
 		status := h.buildSessionStatus(sessionKey)
-		h.deliverSlashResponse(delivery, status)
+		respond(status)
 
 	case "pin":
 		if ok, reason := pinFact(sessionKey, cmd.Args); !ok {
-			h.deliverSlashResponse(delivery, reason)
+			respond(reason)
 		} else {
-			h.deliverSlashResponse(delivery, "📌 고정했습니다.\n\n"+renderPinnedFactsReply(listPinnedFacts(sessionKey)))
+			respond("📌 고정했습니다.\n\n" + renderPinnedFactsReply(listPinnedFacts(sessionKey)))
 		}
 
 	case "unpin":
 		idx, err := parsePinIndex(cmd.Args)
 		if err != nil {
-			h.deliverSlashResponse(delivery, "사용법: /unpin <번호> — 번호는 /pins로 확인하세요.")
+			respond("사용법: /unpin <번호> — 번호는 /pins로 확인하세요.")
 			break
 		}
 		removed, ok := unpinFact(sessionKey, idx)
 		if !ok {
-			h.deliverSlashResponse(delivery, "해당 번호의 고정 사실이 없습니다. /pins로 확인하세요.")
+			respond("해당 번호의 고정 사실이 없습니다. /pins로 확인하세요.")
 			break
 		}
-		h.deliverSlashResponse(delivery, fmt.Sprintf("📌 제거: %s\n\n%s", removed, renderPinnedFactsReply(listPinnedFacts(sessionKey))))
+		respond(fmt.Sprintf("📌 제거: %s\n\n%s", removed, renderPinnedFactsReply(listPinnedFacts(sessionKey))))
 
 	case "pins":
-		h.deliverSlashResponse(delivery, renderPinnedFactsReply(listPinnedFacts(sessionKey)))
+		respond(renderPinnedFactsReply(listPinnedFacts(sessionKey)))
 
 	case "model":
 		if cmd.Args != "" {
@@ -102,19 +111,23 @@ func (h *Handler) handleSlashCommand(
 				}
 			}
 			h.SetDefaultModel(modelArg)
-			h.deliverSlashResponse(delivery, fmt.Sprintf("모델이 %s(으)로 변경되었습니다.", displayName))
+			respond(fmt.Sprintf("모델이 %s(으)로 변경되었습니다.", displayName))
+		} else {
+			// No args: render the model line-up (current model, roles, health,
+			// capability/tuning state, latest scorecard window).
+			respond(h.renderModelInfo())
 		}
 
 	case "think":
-		h.deliverSlashResponse(delivery, applyThinkSlashCommand(h.sessions, sessionKey, cmd.Args))
+		respond(applyThinkSlashCommand(h.sessions, sessionKey, cmd.Args))
 
 	case "use-forum":
-		h.deliverSlashResponse(delivery, h.handleUseForum(delivery))
+		respond(h.handleUseForum(delivery))
 
 	case "mode":
 		sess := h.sessions.Get(sessionKey)
 		if sess == nil {
-			h.deliverSlashResponse(delivery, "세션이 없습니다.")
+			respond("세션이 없습니다.")
 			break
 		}
 		arg := strings.ToLower(strings.TrimSpace(cmd.Args))
@@ -123,27 +136,27 @@ func (h *Handler) handleSlashCommand(
 			sess.Mode = session.ModeChat
 			sess.ToolPreset = "conversation"
 			_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
-			h.deliverSlashResponse(delivery, "💬 대화 모드 — 도구 없이 대화만 합니다.")
+			respond("💬 대화 모드 — 도구 없이 대화만 합니다.")
 		case "일반", "normal":
 			sess.Mode = session.ModeNormal
 			sess.ToolPreset = ""
 			_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
-			h.deliverSlashResponse(delivery, "🔧 일반 모드 — 모든 도구를 사용합니다.")
+			respond("🔧 일반 모드 — 모든 도구를 사용합니다.")
 		case "":
 			// Toggle: normal ↔ chat
 			if sess.Mode == session.ModeChat {
 				sess.Mode = session.ModeNormal
 				sess.ToolPreset = ""
 				_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
-				h.deliverSlashResponse(delivery, "🔧 일반 모드 — 모든 도구를 사용합니다.")
+				respond("🔧 일반 모드 — 모든 도구를 사용합니다.")
 			} else {
 				sess.Mode = session.ModeChat
 				sess.ToolPreset = "conversation"
 				_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
-				h.deliverSlashResponse(delivery, "💬 대화 모드 — 도구 없이 대화만 합니다.")
+				respond("💬 대화 모드 — 도구 없이 대화만 합니다.")
 			}
 		default:
-			h.deliverSlashResponse(delivery, "사용법: /mode [일반|대화] — 인자 없이 토글")
+			respond("사용법: /mode [일반|대화] — 인자 없이 토글")
 		}
 
 	case "mail":

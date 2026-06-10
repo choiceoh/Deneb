@@ -205,8 +205,11 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 
 // SendSync runs the agent loop synchronously, blocking until the response is
 // complete or the context is canceled. Used by the OpenAI-compatible HTTP
-// endpoints that need the full response before replying.
+// endpoints and the native client's miniapp.chat.send.
 func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model string, opts *SyncOptions) (*SyncResult, error) {
+	if res, handled := h.trySlashSync(sessionKey, message, opts); handled {
+		return res, nil
+	}
 	params, deps, err := h.prepareSyncRun(sessionKey, message, model, "sync", opts)
 	if err != nil {
 		return nil, err
@@ -223,9 +226,62 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	return res, err
 }
 
+// trySlashSync short-circuits slash commands on the synchronous send paths.
+// The native client talks to the gateway via miniapp.chat.send (SendSync), so
+// without this, slash input fell through to the LLM as plain text and the
+// dispatch layer's reply (delivered via ReplyFn, unwired on the native-only
+// deployment) was lost. The collector captures every immediate respond() call
+// so the slash reply returns in the RPC response the client renders.
+// Long-running commands (/mail, /update, …) reply from their own goroutines
+// later; their sync response is an acknowledgement only.
+func (h *Handler) trySlashSync(sessionKey, message string, opts *SyncOptions) (*SyncResult, bool) {
+	// PrebuiltMessages flows (OpenAI-compatible HTTP with full history) are
+	// API traffic, not interactive chat — leave them untouched.
+	if opts != nil && len(opts.Messages) > 0 {
+		return nil, false
+	}
+	cmd := ParseSlashCommand(message)
+	if cmd == nil || !cmd.Handled {
+		return nil, false
+	}
+	var delivery *DeliveryContext
+	if opts != nil {
+		delivery = opts.Delivery
+	}
+	var reply strings.Builder
+	h.handleSlashCommand(shortid.New("slash"), sessionKey, delivery, cmd, func(text string) {
+		if text == "" {
+			return
+		}
+		if reply.Len() > 0 {
+			reply.WriteString("\n\n")
+		}
+		reply.WriteString(text)
+	})
+	text := reply.String()
+	if text == "" {
+		// Async commands ack immediately; their real output arrives later.
+		text = fmt.Sprintf("`/%s` 명령을 실행했습니다.", cmd.Command)
+	}
+	return &SyncResult{
+		Text:            text,
+		AllText:         text,
+		DeliverableText: text,
+		Model:           "slash:" + cmd.Command,
+		StopReason:      "slash_command",
+	}, true
+}
+
 // SendSyncStream runs the agent loop, calling onDelta for each text chunk,
-// then returning the final result. Used by streaming OpenAI-compatible endpoints.
+// then returning the final result. Used by streaming OpenAI-compatible
+// endpoints and the native client's miniapp.chat.stream.
 func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model string, opts *SyncOptions, onDelta func(string)) (*SyncResult, error) {
+	if res, handled := h.trySlashSync(sessionKey, message, opts); handled {
+		if onDelta != nil && res.Text != "" {
+			onDelta(res.Text)
+		}
+		return res, nil
+	}
 	params, deps, err := h.prepareSyncRun(sessionKey, message, model, "stream", opts)
 	if err != nil {
 		return nil, err
