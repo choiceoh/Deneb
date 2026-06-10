@@ -88,12 +88,23 @@ func (d proactiveRelayDeps) relay(_ context.Context, _, content string) (bool, e
 	return d.relayNative(content)
 }
 
-// relayNative delivers a proactive report to the native client only: it appends
-// the body to the 업무 (client:main) transcript so the app shows it, and live-
-// pushes a one-line preview so a connected app notifies immediately. Returns
-// (false, nil) when no transcript store is wired (older wiring or tests) so
-// the caller treats it as not-delivered.
+// relayNative delivers a proactive report to the primary native 업무 chat
+// (client:main). Thin wrapper over relayNativeTo for the callers that always
+// target the main session.
 func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
+	return d.relayNativeTo(nativeWorkSessionKey, content)
+}
+
+// relayNativeTo delivers a proactive report to a specific native session: it
+// appends the body to that session's transcript so the app shows it, live-pushes
+// a one-line preview, and — for the main 업무 feed (client:main) only — raises a
+// work-feed card. sessionKey defaults to client:main when empty. Returns
+// (false, nil) when no transcript store is wired (older wiring or tests).
+func (d proactiveRelayDeps) relayNativeTo(sessionKey, content string) (bool, error) {
+	target := sessionKey
+	if target == "" {
+		target = nativeWorkSessionKey
+	}
 	// Respect the NO_REPLY silent-reply contract: a proactive turn that correctly
 	// signals "nothing to report" with the token (alone or trailing) must be
 	// suppressed — not delivered as a literal "NO_REPLY" work-feed card + push.
@@ -132,32 +143,32 @@ func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
 		// is diagnosable instead of mysteriously quiet.
 		if d.logger != nil {
 			d.logger.Error("proactive native relay: no transcript store wired — report dropped",
-				"sessionKey", nativeWorkSessionKey)
+				"sessionKey", target)
 		}
 		d.logProactive("dropped", "no_transcript_store", origLen, "")
 		return false, nil
 	}
 	msg := toolctx.NewTextChatMessage("assistant", content, time.Now().UnixMilli())
-	if err := d.transcriptStore.Append(nativeWorkSessionKey, msg); err != nil {
+	if err := d.transcriptStore.Append(target, msg); err != nil {
 		if d.logger != nil {
 			d.logger.Error("proactive native relay: transcript append failed",
-				"sessionKey", nativeWorkSessionKey, "error", err)
+				"sessionKey", target, "error", err)
 		}
 		d.logProactive("error", "append_failed", origLen, "")
 		return false, err
 	}
 	if d.nativeSync != nil {
 		if _, err := d.nativeSync.Append(nativesync.TranscriptAppended(
-			nativeWorkSessionKey,
+			target,
 			"assistant",
 			pushPreview(content),
 			msg.Timestamp,
 		)); err != nil && d.logger != nil {
 			d.logger.Error("proactive native relay: native sync append failed",
-				"sessionKey", nativeWorkSessionKey, "error", err)
+				"sessionKey", target, "error", err)
 		}
 	}
-	if d.workFeed != nil {
+	if d.workFeed != nil && target == nativeWorkSessionKey {
 		// Derive a human title + summary from the body rather than the fixed
 		// "업무 리포트" + first-line slice that leaked markdown markers ("### …",
 		// "---") into every card. An empty title falls back to the store's
@@ -168,10 +179,10 @@ func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
 			Title:      title,
 			Summary:    extractCardSummary(content, titleLine),
 			Body:       content,
-			SessionKey: nativeWorkSessionKey,
+			SessionKey: target,
 		}); err != nil && d.logger != nil {
 			d.logger.Error("proactive native relay: work feed append failed",
-				"sessionKey", nativeWorkSessionKey, "error", err)
+				"sessionKey", target, "error", err)
 		}
 	}
 	if d.pushHub != nil {
@@ -454,6 +465,12 @@ func pushPreview(content string) string {
 // "client:main").
 const nativeWorkSessionKey = "client:main"
 
+// dreamWorkSessionKey is a dedicated client:main sub-session for Aurora Dream
+// lifecycle notifications, keeping memory-consolidation status (often "변경 없음"
+// or diagnostics) out of the primary 업무 feed while remaining a restorable native
+// session the user can open. See isRestorableNativeSessionKey (client:main:<id>).
+const dreamWorkSessionKey = nativeWorkSessionKey + ":dream"
+
 // nativeWorkSessionKeyTo is the "to" half of nativeWorkSessionKey. Used as the
 // cron DefaultTo so a job without an explicit delivery target resolves to a
 // valid recipient — the handoff rebuilds "client:" + "main" = client:main and
@@ -471,8 +488,8 @@ type relayNotifier struct {
 // Notify satisfies autonomous.Notifier and gmailpoll.Notifier. Returns the
 // underlying send error; delivery-not-wired (relay returns false with no error)
 // is treated as a silent no-op.
-func (n *relayNotifier) Notify(ctx context.Context, message string) error {
-	_, err := n.deps.relay(ctx, n.sessionKey, message)
+func (n *relayNotifier) Notify(_ context.Context, message string) error {
+	_, err := n.deps.relayNativeTo(n.sessionKey, message)
 	return err
 }
 

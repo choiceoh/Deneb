@@ -430,11 +430,12 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		hub.Broadcast("dreaming.cycle", event)
 	})
 
-	// Wire proactive relay as the dreaming notifier. Going through the native
-	// relay mirrors the body into the user's session transcript, so a follow-up
-	// message after a dream completion ("방금 뭔 얘기야?") is answered in a
-	// session that knows what was just delivered.
-	if n := s.proactiveRelay.notifierForSession(nativeWorkSessionKey); n != nil {
+	// Wire the proactive relay as the dreaming notifier, bound to a dedicated
+	// client:main:dream sub-session. Aurora Dream lifecycle messages (often "변경
+	// 없음" or diagnostics) land in their own native conversation instead of the
+	// primary 업무 feed (client:main); a follow-up like "방금 뭔 얘기야?" opened there is
+	// still answered with the dream delivery in view.
+	if n := s.proactiveRelay.notifierForSession(dreamWorkSessionKey); n != nil {
 		s.autonomousSvc.SetNotifier(n)
 	}
 
