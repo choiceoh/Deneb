@@ -15,59 +15,77 @@ import androidx.compose.ui.unit.sp
  * "snippet") rather than Material's size-addressed roles (`headlineSmall`), which are
  * tuned for a different (icon + card) idiom.
  *
- * The system, stated as four laws (reverse-extracted from the values, then completed
- * by filling the one register the values were missing — see [cardTitle]):
+ * Organizing principle — two registers, two jobs. Deneb is a Korean-first daily-driver
+ * tool, not an editorial surface, so where expression and legibility conflict the
+ * editorial character is confined to the sparse display "voice" and the working tiers
+ * stay functional:
  *
- *  1. Registers, named by content function. Display (menuItem 46 / viewTitle 32 /
- *     subject 26) -> heading (cardTitle 18) -> reading (rowTitle / rowTitleStrong /
- *     body 15, rowSubtitle 14) -> caption (hint 13, sectionLabel / snippet / meta 12).
- *     A role is chosen by meaning, not size, so the scale mirrors the screen's IA.
+ *   - Display (menuItem 46 / viewTitle 28 / subject 22): editorial — large, airy, tightly
+ *     tracked — but Hangul-adapted. The giants are Light, not ExtraLight (200 reads as thin
+ *     hairlines on Korean syllable blocks), and the tight Latin tracking is eased so the
+ *     blocks do not crowd. Seen rarely and read once, so the expressive cost is cheap.
+ *   - Heading + reading + caption (cardTitle 18 / rowTitle·rowTitleStrong·body 15,
+ *     rowSubtitle 14 / hint 13, sectionLabel·snippet·meta 12): functional — legible
+ *     weights, no hairlines, density-first leading. Scanned repeatedly, so friction is the
+ *     cost that matters.
  *
- *  2. Tracking optically compensates size. Strong negative at display (-0.035), easing
- *     through ~0 at reading, to positive at caption (+0.005..+0.08), with a surcharge
- *     for the uppercased sectionLabel. Big text tightens into a block; small text
- *     opens up to stay legible.
+ * Four laws hold across both:
  *
- *  3. Weight encodes function, not size. The giants are the lightest (ExtraLight 200);
- *     weight rises to SemiBold (600) only where an element acts or structures —
- *     emphasis (rowTitleStrong), headings (cardTitle), labels (sectionLabel), buttons.
+ *  1. Roles are named by content function, not size, so the scale mirrors the screen's IA.
+ *     Sizes follow a ~1.22 ladder in the working range (15 -> 18 -> 22 -> 28), with
+ *     menuItem the deliberate home-hero outlier.
+ *  2. Tracking optically compensates size: negative at display (-0.02), through ~0 at
+ *     reading, to positive at caption (+0.005..+0.08), with a surcharge for the uppercased
+ *     sectionLabel.
+ *  3. Weight encodes function, not size: it rises to SemiBold (600) only where an element
+ *     acts or structures (emphasis, headings, labels, buttons). The display tier sits at
+ *     Light — expressive yet legible — rather than the old hairline ExtraLight.
+ *  4. Leading is density-first: explicit lineHeight only on the display giants (tight, so a
+ *     title stacks as one block) and on body (a generous 1.67 for sustained reading); every
+ *     other role inherits the font's compact default on purpose.
  *
- *  4. Leading is density-first. Explicit lineHeight is set only on the display giants
- *     (tight, so a title stacks as one block) and on body (a generous 1.67 — the one
- *     place sustained reading earns air). Every other role inherits the font's compact
- *     default on purpose: list / caption density is the default, comfort the exception.
+ * Residual (needs an on-device / renderPreviews check before chasing further): body is
+ * still Light (300) — whether that reads heavy enough for sustained Korean paragraphs, and
+ * how the new display weights/sizes look in situ, is unverified in this pass.
  *
- * Known residuals (do NOT fix blind — these need an on-device / renderPreviews check):
- * screen headers elsewhere reach for a heavier 28px, hinting the ExtraLight [viewTitle]
- * may read thin in Hangul; and ~22px content-title fallbacks (wiki / mail / person)
- * belong on [subject], not a new role.
- *
- * Every style is Pretendard (the bundled UI face); only the size/weight/tracking
- * differ. Access is @Composable because the bundled font is a compose resource.
+ * Every style is Pretendard (the bundled UI face); only the size/weight/tracking differ.
+ * Access is @Composable because the bundled font is a compose resource.
  */
 object DenebType {
     private val family: FontFamily
         @Composable get() = PretendardFontFamily()
 
-    /** Home/landing menu rows — the `.type-item` giants (52px / 200 / -0.035em). */
+    /**
+     * Home / landing giants — `.type-item`. The product's loudest editorial voice, so it
+     * keeps the airy, tightly-tracked display character — but Hangul-adapted: Light, not
+     * the old ExtraLight, since 200 reads as thin hairlines on Korean. (46sp / 300 / -0.02em.)
+     */
     val menuItem: TextStyle
-        @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 46.sp, lineHeight = 50.sp, fontWeight = FontWeight.ExtraLight, letterSpacing = (-0.035).em)
+        @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 46.sp, lineHeight = 50.sp, fontWeight = FontWeight.Light, letterSpacing = (-0.02).em)
 
-    /** Hero page title — `.view-title` (40px / 200 / -0.035em). */
+    /**
+     * Hero page title — `.view-title`, the [ai.deneb.ui.DenebScreenScaffold] header. Light,
+     * not the old ExtraLight: screens were hand-rolling a heavier ~28px header to dodge the
+     * thin giant, so this folds that back into one legible token. (28sp / 300 / -0.018em.)
+     */
     val viewTitle: TextStyle
-        @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 32.sp, lineHeight = 36.sp, fontWeight = FontWeight.ExtraLight, letterSpacing = (-0.035).em)
+        @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 28.sp, lineHeight = 32.sp, fontWeight = FontWeight.Light, letterSpacing = (-0.018).em)
 
-    /** Big content subject — `.email-subject` / `.wiki-title` (28px / 300 / -0.025em). */
+    /**
+     * Content subject — `.email-subject` / `.wiki-title`: the title of the one thing on a
+     * screen (a mail, a wiki page, a person). 22sp matches the size screens already reach
+     * for via the titleLarge fallback, so those should migrate here. (22sp / 300 / -0.015em.)
+     */
     val subject: TextStyle
-        @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 26.sp, lineHeight = 32.sp, fontWeight = FontWeight.Light, letterSpacing = (-0.025).em)
+        @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.Light, letterSpacing = (-0.015).em)
 
     /**
      * Section / card heading — the rung that fills the gap between [subject] and the
      * reading tier (18sp / 600 / -0.015em). Titles a grouped block: a settings card, a
      * content section, a markdown `##`. Derived from the four laws rather than picked:
-     * its size is the geometric center of the 26->15 gap nudged toward real demand, its
-     * SemiBold weight follows law 3 (a heading structures, so it takes weight), and its
-     * tracking sits on the law-2 optical curve between subject (-0.025) and rowTitle
+     * its size is the geometric center of the subject->reading gap (sqrt(22*15) ~= 18),
+     * its SemiBold weight follows law 3 (a heading structures, so it takes weight), and
+     * its tracking sits on the law-2 optical curve between subject (-0.015) and rowTitle
      * (-0.01). No lineHeight — density stays tight (law 4).
      */
     val cardTitle: TextStyle
