@@ -205,12 +205,15 @@ sleep 1
 "$NA" wait-for "받은 메일" 8 >/dev/null 2>&1 || sleep 2
 retry_nav "mail" "받은 메일"                  # ensure the inbox list is up before the row tap
 b="$(log_lines)"
-"$NA" tap 200 185 >/dev/null 2>&1 || true   # first message row
+# First message row. The Deneb-idiom inbox header (← glyph + ultralight title +
+# count line + section label) is taller than the old Material header, so the
+# first row now spans roughly y 160-250; 210 aims at its center.
+"$NA" tap 200 210 >/dev/null 2>&1 || true
 "$NA" wait-for "보관" 8 >/dev/null 2>&1 || sleep 2
 # self-heal the data-dependent row tap: if the detail did not open (cold-tap
 # flake, or the list was still settling), re-tap the row once and re-settle.
 if ! "$NA" assert "보관" >/dev/null 2>&1; then
-  "$NA" tap 200 185 >/dev/null 2>&1 || true
+  "$NA" tap 200 210 >/dev/null 2>&1 || true
   "$NA" wait-for "보관" 8 >/dev/null 2>&1 || sleep 2
 fi
 check_screen "smoke-13-mail-detail" "$b" "보관"
