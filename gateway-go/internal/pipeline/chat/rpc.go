@@ -357,6 +357,8 @@ func (h *Handler) History(_ context.Context, req *protocol.RequestFrame) *protoc
 		if msgs == nil {
 			msgs = []ChatMessage{}
 		}
+		// Display-only: hide appended link-enrichment blocks from user bubbles.
+		msgs = stripLinkEnrichmentForDisplay(msgs)
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"messages": msgs,
 			"total":    total,
