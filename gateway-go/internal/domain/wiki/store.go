@@ -3,6 +3,7 @@ package wiki
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -246,7 +247,12 @@ func (s *Store) addBacklink(targetPath, sourcePath string) {
 	}
 	page.Meta.Related = append(page.Meta.Related, sourcePath)
 	page.Meta.Updated = time.Now().Format("2006-01-02")
-	_ = s.writePageInternal(targetPath, page, true) // best-effort: related page update is non-critical
+	// Best-effort: a failed reverse edge is non-fatal, but silent failures let
+	// the graph drift apart over months — surface them for the operator.
+	if err := s.writePageInternal(targetPath, page, true); err != nil {
+		slog.Warn("wiki: backlink add failed; graph edge now one-directional",
+			"target", targetPath, "source", sourcePath, "error", err)
+	}
 }
 
 func (s *Store) removeBacklink(targetPath, sourcePath string) {
@@ -265,7 +271,10 @@ func (s *Store) removeBacklink(targetPath, sourcePath string) {
 	}
 	page.Meta.Related = filtered
 	page.Meta.Updated = time.Now().Format("2006-01-02")
-	_ = s.writePageInternal(targetPath, page, true) // best-effort: related page update is non-critical
+	if err := s.writePageInternal(targetPath, page, true); err != nil {
+		slog.Warn("wiki: backlink removal failed; stale reverse edge remains",
+			"target", targetPath, "source", sourcePath, "error", err)
+	}
 }
 
 func toSet(ss []string) map[string]struct{} {

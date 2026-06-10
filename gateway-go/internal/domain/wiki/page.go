@@ -157,7 +157,7 @@ func WritePageFile(path string, page *Page) error {
 	redactPage(page)
 	data := page.Render()
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil { //nolint:gosec // G306 — world-readable is intentional
+	if err := writeFileSync(tmp, data, 0o644); err != nil { //nolint:gosec // G306 — world-readable is intentional
 		return fmt.Errorf("wiki: write tmp: %w", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
@@ -165,6 +165,26 @@ func WritePageFile(path string, page *Page) error {
 		return fmt.Errorf("wiki: rename: %w", err)
 	}
 	return nil
+}
+
+// writeFileSync writes data and fsyncs before close. Wiki pages and the master
+// index are the agent's long-term memory; tmp+rename alone leaves write/rename
+// ordering to the kernel, so a power loss right after the rename could surface
+// a truncated file. The fsync closes that window at the cost of ~1ms per write.
+func writeFileSync(path string, data []byte, perm os.FileMode) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // redactPage masks secret patterns in a Page's free-text fields before write.

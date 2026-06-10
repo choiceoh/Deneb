@@ -148,3 +148,56 @@ func TestSuggestRelatedAndEnrich(t *testing.T) {
 		t.Errorf("risk1 should have gained a related link, got none")
 	}
 }
+
+// countingEmbedder wraps fakeEmbedder and counts Embed calls so tests can
+// assert the persisted cache prevents re-embedding after a restart.
+type countingEmbedder struct {
+	fakeEmbedder
+	calls int
+}
+
+func (c *countingEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	c.calls++
+	return c.fakeEmbedder.Embed(ctx, texts)
+}
+
+// TestSemanticCache_PersistsAcrossRestart guards the embedding cache: the
+// gateway restarts every few minutes in production, and an in-memory-only
+// index re-embedded the entire wiki on the first semantic query of every
+// boot. A second Store over the same dir must hydrate vectors from disk and
+// only embed the query itself.
+func TestSemanticCache_PersistsAcrossRestart(t *testing.T) {
+	dir := t.TempDir()
+	wikiDir := filepath.Join(dir, "wiki")
+	store, err := NewStore(wikiDir, filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mustWrite(t, store, "프로젝트/supply.md", &Page{
+		Meta: Frontmatter{ID: "supply", Title: "공급 현황", Category: "프로젝트", Summary: "납품 일정"},
+		Body: "원자재 차질 우려 있음.",
+	})
+
+	emb1 := &countingEmbedder{fakeEmbedder: fakeEmbedder{healthy: true}}
+	store.SetEmbedder(emb1)
+	if got := store.searchSemantic(context.Background(), "납기 지연 위험 우려", 5); len(got) == 0 {
+		t.Fatalf("semantic search returned no hits on first run")
+	}
+	if emb1.calls < 2 { // at least one page batch + the query
+		t.Fatalf("expected page embedding on first run, got %d calls", emb1.calls)
+	}
+
+	// "Restart": fresh Store + fresh embedder over the same wiki dir.
+	store2, err := NewStore(wikiDir, filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore (restart): %v", err)
+	}
+	emb2 := &countingEmbedder{fakeEmbedder: fakeEmbedder{healthy: true}}
+	store2.SetEmbedder(emb2)
+	if got := store2.searchSemantic(context.Background(), "납기 지연 위험 우려", 5); len(got) == 0 {
+		t.Fatalf("semantic search returned no hits after restart")
+	}
+	if emb2.calls != 1 { // only the query — page vectors came from the cache
+		t.Errorf("expected cache hydration to skip page embedding, got %d Embed calls", emb2.calls)
+	}
+}
