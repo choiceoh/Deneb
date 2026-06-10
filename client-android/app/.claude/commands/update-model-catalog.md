@@ -11,7 +11,7 @@ The leaderboard shows models ranked by Elo rating (higher = better). Extract eve
 
 ## 2. Read the current catalog
 
-Read `composeApp/src/commonMain/kotlin/com/inspiredandroid/kai/data/ModelCatalog.kt`. This file has two key sections:
+Read `composeApp/src/commonMain/kotlin/ai/deneb/data/ModelCatalog.kt`. This file has two key sections:
 
 - `baseEntries` — the main catalog with `CuratedModelInfo(displayName, contextWindow, releaseDate, parameterCount)` for each model ID
 - `arenaScores` — a separate `mapOf(...)` mapping model IDs to Elo ints

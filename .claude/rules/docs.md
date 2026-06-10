@@ -40,12 +40,10 @@ globs: ["docs/**"]
 - Images: use root-relative paths (`/assets/...`). For light/dark mode, use paired `<img>` tags with `class="dark:hidden"` and `class="hidden dark:block"`.
 - Tables: standard Markdown tables for feature matrices, mode mappings, option lists.
 - File conventions: all doc files are `.md` (Mintlify processes MDX syntax transparently). File naming: lowercase, hyphenated (`getting-started.md`, `voice-wake.md`).
-- Validation scripts: `pnpm docs:dev` (local preview), `pnpm docs:spellcheck` (spell check; `pnpm docs:spellcheck:fix` to auto-fix).
+- Local preview: run `npx mintlify dev` from `docs/` (the repo has no pnpm docs scripts).
 
 ## Documentation Commands
 
 | Command | Description |
 |---|---|
-| `pnpm docs:dev` | Run Mintlify local preview |
-| `pnpm docs:spellcheck` | Spell check docs |
-| `pnpm docs:spellcheck:fix` | Auto-fix doc spelling |
+| `npx mintlify dev` (from `docs/`) | Run Mintlify local preview |

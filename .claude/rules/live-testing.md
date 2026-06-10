@@ -160,7 +160,7 @@ scripts/dev/live-test.sh quality tools
 scripts/dev/live-test.sh quality format
 
 # 여러 턴 흐름 테스트
-scripts/dev/live-test.sh session "health" "session.list {}"
+scripts/dev/live-test.sh multi-chat "프로젝트 상태 알려줘" "더 자세히"
 ```
 
 ### Step 5: 로그로 숨은 문제 확인

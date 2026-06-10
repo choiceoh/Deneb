@@ -51,8 +51,5 @@ Ask your agent to "refresh skills" or restart the gateway. Deneb will discover t
 
 - **Be Concise**: Instruct the model on _what_ to do, not how to be an AI.
 - **Safety First**: If your skill uses `bash`, ensure the prompts don't allow arbitrary command injection from untrusted user input.
-- **Test Locally**: Use `deneb agent --message "use my new skill"` to test.
+- **Test Locally**: Use `scripts/dev/live-test.sh chat "use my new skill"` against the dev gateway to test.
 
-## Shared Skills
-
-You can also browse and contribute skills to [ClawHub](https://clawhub.com).
