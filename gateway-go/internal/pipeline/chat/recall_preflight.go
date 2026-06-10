@@ -180,6 +180,7 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	}
 
 	slots := make([][]recallEvidence, len(sources))
+	elapsed := make([]time.Duration, len(sources))
 	var wg sync.WaitGroup
 	for i, src := range sources {
 		wg.Add(1)
@@ -192,10 +193,22 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 					logger.Warn("recall preflight: source panicked", "source", src.name, "panic", r)
 				}
 			}()
+			start := time.Now()
 			slots[i] = src.run(ctx)
+			elapsed[i] = time.Since(start)
 		}(i, src)
 	}
 	wg.Wait()
+
+	// Per-source contribution + latency. This accumulating record is the
+	// evidence base for backend consolidation: a source that never
+	// contributes rows but always burns the deadline argues for retirement.
+	sourceStats := make([]string, 0, len(sources))
+	for i, src := range sources {
+		sourceStats = append(sourceStats,
+			fmt.Sprintf("%s=%d(%dms)", src.name, len(slots[i]), elapsed[i].Milliseconds()))
+	}
+	sourceSummary := strings.Join(sourceStats, " ")
 
 	var evidence []recallEvidence
 	for _, slot := range slots {
@@ -211,7 +224,8 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 
 	if len(evidence) == 0 {
 		if logger != nil {
-			logger.Info("recall preflight: no evidence", "session", params.SessionKey)
+			logger.Info("recall preflight: no evidence",
+				"session", params.SessionKey, "sources", sourceSummary)
 		}
 		// Explicit recall tells the user nothing was found; silent auto-recall on a
 		// non-cue turn stays invisible so every-turn search adds no noise.
@@ -238,7 +252,8 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 		evidence = evidence[:budget]
 	}
 	if logger != nil {
-		logger.Info("recall preflight: evidence injected", "session", params.SessionKey, "count", len(evidence))
+		logger.Info("recall preflight: evidence injected",
+			"session", params.SessionKey, "count", len(evidence), "sources", sourceSummary)
 	}
 	return formatRecallEvidence(evidence)
 }
