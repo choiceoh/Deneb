@@ -960,4 +960,41 @@ class DenebUiParserTest {
         assertEquals("alice", data["user"]?.content)
         assertEquals("a, b", data["tags"]?.content)
     }
+
+    @Test
+    fun `parses text_input keyboard and required`() {
+        val input = assertIs<TextInputNode>(
+            parseUi("""{"type":"text_input","id":"qty","label":"수량","keyboard":"number","required":true}"""),
+        )
+        assertEquals("number", input.keyboard)
+        assertEquals(true, input.required)
+    }
+
+    @Test
+    fun `text_input without new fields defaults to null`() {
+        val input = assertIs<TextInputNode>(parseUi("""{"type":"text_input","id":"x"}"""))
+        assertNull(input.keyboard)
+        assertNull(input.required)
+    }
+
+    @Test
+    fun `parses select placeholder and required`() {
+        val select = assertIs<SelectNode>(
+            parseUi("""{"type":"select","id":"cat","options":["a","b"],"placeholder":"선택…","required":true}"""),
+        )
+        assertEquals("선택…", select.placeholder)
+        assertEquals(true, select.required)
+    }
+
+    @Test
+    fun `parses radio_group and chip_group required`() {
+        val radio = assertIs<RadioGroupNode>(
+            parseUi("""{"type":"radio_group","id":"p","options":["높음","낮음"],"required":true}"""),
+        )
+        assertEquals(true, radio.required)
+        val chips = assertIs<ChipGroupNode>(
+            parseUi("""{"type":"chip_group","id":"t","chips":["a","b"],"required":true}"""),
+        )
+        assertEquals(true, chips.required)
+    }
 }

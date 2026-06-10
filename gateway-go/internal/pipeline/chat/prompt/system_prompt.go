@@ -527,7 +527,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("- 언제: 비교/현황/지표 → 대시보드, 입력 받기 → 폼, 분기 선택 → 버튼/칩. 단순 한두 문장 답변은 그냥 텍스트로 (모든 답을 UI로 만들지 마라).\n")
 		d.WriteString("- **반드시 ```deneb-ui 코드펜스로 감싸라** — 펜스 없는 raw JSON은 화면으로 렌더되지 않는다. 펜스 안은 유효한 JSON 한 객체, 보통 root는 `{\"type\":\"column\",\"children\":[...]}`. 짧은 안내 문장 + 펜스 조합이 좋다.\n")
 		d.WriteString("- 노드 `type`: 레이아웃 column/row/card/box/list/accordion/tabs/divider · 콘텐츠 text(value,style:headline|title|body|caption)/image/icon/code/quote/badge/stat(value,label)/avatar/table(headers,rows) · 입력 text_input/checkbox/select/switch/slider/radio_group/chip_group · 피드백 progress/alert(message,severity:info|success|warning|error)/countdown · button(label,variant:filled|outlined|text|tonal,action).\n")
-		d.WriteString("- **입력 노드(text_input/checkbox/select/switch/slider/radio_group/chip_group)는 고유한 `id` 필수.**\n")
+		d.WriteString("- **입력 노드(text_input/checkbox/select/switch/slider/radio_group/chip_group)는 고유한 `id` 필수.** 비우면 안 되는 입력엔 `\"required\":true` — 빈 채로 제출하면 클라가 막고 해당 필드를 표시한다. text_input은 `\"keyboard\":\"number|decimal|email|phone|url\"`로 키보드 지정 가능, select는 `\"placeholder\"` 지원.\n")
 		d.WriteString("- 상호작용: button/countdown의 `action`은 `{\"type\":\"callback\",\"event\":\"이름\",\"collectFrom\":[\"입력id\",...]}`. `event`는 다음 턴에 받을 식별자, `collectFrom`은 함께 보낼 입력 노드 id들. 외부 링크는 `{\"type\":\"open_url\",\"url\":\"...\"}`.\n")
 		d.WriteString("- 예시(대시보드):\n")
 		d.WriteString("```deneb-ui\n")

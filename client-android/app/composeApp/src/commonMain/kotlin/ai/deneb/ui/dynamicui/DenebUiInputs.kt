@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Map
@@ -54,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.components.DenebChip
@@ -90,13 +92,21 @@ internal fun RenderButton(
     }
     val showPulse = (clicked && !isInteractive) || (isPressedSnapshot && frozen.isPending)
     val enabled = isInteractive && (node.enabled != false)
+    val validation = LocalUiFormValidation.current
     val onClick: () -> Unit = {
         try {
             when (val action = node.action) {
                 is CallbackAction -> {
-                    val data = collectFormData(action, formState)
-                    clicked = true
-                    onCallback(action.event, data)
+                    // Required gate: blank required inputs among collectFrom block the
+                    // submit and get flagged so the user sees what's missing.
+                    val missing = validation?.missingFrom(action.collectFrom.orEmpty(), formState).orEmpty()
+                    if (missing.isNotEmpty()) {
+                        missing.forEach { validation?.errors?.put(it, true) }
+                    } else {
+                        val data = collectFormData(action, formState)
+                        clicked = true
+                        onCallback(action.event, data)
+                    }
                 }
 
                 is ToggleAction -> {
@@ -167,15 +177,37 @@ internal fun RenderTextInput(
     isInteractive: Boolean,
     formState: SnapshotStateMap<String, String>,
 ) {
+    val validation = LocalUiFormValidation.current
+    val isError = validation?.errors?.get(node.id) == true
     DenebOutlinedTextField(
         value = formState[node.id] ?: "",
-        onValueChange = { formState[node.id] = it },
+        onValueChange = {
+            formState[node.id] = it
+            validation?.errors?.remove(node.id)
+        },
         label = node.label?.let { { Text(it) } },
         placeholder = node.placeholder?.let { { Text(it) } },
         enabled = isInteractive,
         singleLine = node.multiline != true,
+        isError = isError,
+        supportingText = if (isError) {
+            { Text("필수 입력입니다") }
+        } else {
+            null
+        },
+        keyboardOptions = keyboardOptionsFor(node.keyboard),
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/** Map the schema's keyboard hint to Compose keyboard options ("text"/unknown → default). */
+private fun keyboardOptionsFor(keyboard: String?): KeyboardOptions = when (keyboard?.lowercase()) {
+    "number" -> KeyboardOptions(keyboardType = KeyboardType.Number)
+    "decimal" -> KeyboardOptions(keyboardType = KeyboardType.Decimal)
+    "email" -> KeyboardOptions(keyboardType = KeyboardType.Email)
+    "phone" -> KeyboardOptions(keyboardType = KeyboardType.Phone)
+    "url" -> KeyboardOptions(keyboardType = KeyboardType.Uri)
+    else -> KeyboardOptions.Default
 }
 
 @Composable
@@ -227,6 +259,8 @@ internal fun RenderSelect(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selected = formState[node.id] ?: ""
+    val validation = LocalUiFormValidation.current
+    val isError = validation?.errors?.get(node.id) == true
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -237,8 +271,15 @@ internal fun RenderSelect(
             onValueChange = {},
             readOnly = true,
             label = node.label?.let { { Text(it) } },
+            placeholder = node.placeholder?.let { { Text(it) } },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             enabled = isInteractive,
+            isError = isError,
+            supportingText = if (isError) {
+                { Text("필수 선택입니다") }
+            } else {
+                null
+            },
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).handCursor(),
         )
@@ -249,6 +290,7 @@ internal fun RenderSelect(
                     modifier = Modifier.handCursor(),
                     onClick = {
                         formState[node.id] = option
+                        validation?.errors?.remove(node.id)
                         expanded = false
                     },
                 )
@@ -392,6 +434,8 @@ internal fun RenderRadioGroup(
     formState: SnapshotStateMap<String, String>,
 ) {
     val selected = formState[node.id] ?: ""
+    val validation = LocalUiFormValidation.current
+    val isError = validation?.errors?.get(node.id) == true
     Column(
         Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -400,7 +444,15 @@ internal fun RenderRadioGroup(
             Text(
                 text = node.label,
                 style = MaterialTheme.typography.titleSmall,
+                color = if (isError) MaterialTheme.colorScheme.error else Color.Unspecified,
                 modifier = Modifier.padding(bottom = 4.dp),
+            )
+        }
+        if (isError) {
+            Text(
+                text = "필수 선택입니다",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
             )
         }
         for (option in node.options) {
@@ -416,7 +468,10 @@ internal fun RenderRadioGroup(
                                 Modifier.clickable(
                                     interactionSource = interactionSource,
                                     indication = null,
-                                    onClick = { formState[node.id] = option },
+                                    onClick = {
+                                        formState[node.id] = option
+                                        validation?.errors?.remove(node.id)
+                                    },
                                 )
                             } else {
                                 Modifier
@@ -452,7 +507,17 @@ internal fun RenderChipGroup(
 ) {
     val isDisplayOnly = node.selection == "none"
     val isMulti = node.selection == "multi"
+    val validation = LocalUiFormValidation.current
+    val isError = validation?.errors?.get(node.id) == true
 
+    if (isError) {
+        Text(
+            text = "필수 선택입니다",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(bottom = 4.dp),
+        )
+    }
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -481,6 +546,7 @@ internal fun RenderChipGroup(
                                 if (isSelected) emptySet() else setOf(value)
                             }
                             formState[node.id] = newSelection.joinToString(",")
+                            validation?.errors?.remove(node.id)
                         },
                         enabled = isInteractive,
                     ) {

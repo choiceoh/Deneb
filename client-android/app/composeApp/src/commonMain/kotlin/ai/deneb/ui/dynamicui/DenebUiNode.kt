@@ -93,6 +93,10 @@ data class TextInputNode(
     val placeholder: String? = null,
     val value: String? = null,
     val multiline: Boolean? = null,
+    /** Soft keyboard hint: "text" (default), "number", "decimal", "email", "phone", "url". */
+    val keyboard: String? = null,
+    /** Submit-blocking required flag — buttons refuse to fire while this input is blank. */
+    val required: Boolean? = null,
 ) : DenebUiNode
 
 @Immutable
@@ -112,6 +116,10 @@ data class SelectNode(
     val label: String? = null,
     @Contextual val options: ImmutableList<String> = persistentListOf(),
     val selected: String? = null,
+    /** Hint shown while nothing is selected. */
+    val placeholder: String? = null,
+    /** Submit-blocking required flag — buttons refuse to fire while nothing is selected. */
+    val required: Boolean? = null,
 ) : DenebUiNode
 
 // --- Interactive nodes (additional) ---
@@ -145,6 +153,8 @@ data class RadioGroupNode(
     val label: String? = null,
     @Contextual val options: ImmutableList<String> = persistentListOf(),
     val selected: String? = null,
+    /** Submit-blocking required flag — buttons refuse to fire while nothing is selected. */
+    val required: Boolean? = null,
 ) : DenebUiNode
 
 // --- Feedback nodes ---
@@ -188,6 +198,8 @@ data class ChipGroupNode(
     @Contextual val chips: ImmutableList<ChipItem> = persistentListOf(),
     /** "single" (default), "multi", or "none" for display-only tags. */
     val selection: String = "single",
+    /** Submit-blocking required flag — buttons refuse to fire while nothing is selected. */
+    val required: Boolean? = null,
 ) : DenebUiNode
 
 @Immutable
