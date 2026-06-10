@@ -287,7 +287,8 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 		Deferred:    true,
 	})
 	// NOTE: morning_letter is no longer registered as a tool. The data collection
-	// function (CollectMorningLetterData) is called directly by the boot/routine handler.
+	// function (tools.CollectMorningLetterData) currently has no caller — it is
+	// kept for re-wiring; the morning-letter cron runs as a plain agent turn.
 }
 
 // RegisterSkillsTools registers the unified skills tool
