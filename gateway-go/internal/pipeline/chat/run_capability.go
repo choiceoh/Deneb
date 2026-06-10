@@ -3,7 +3,9 @@ package chat
 import (
 	"log/slog"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 )
 
 // Context-budget clamping constants.
@@ -26,6 +28,42 @@ func modelCapability(deps runDeps, providerID, model string) modelcaps.Capabilit
 		return deps.registry.CapabilityForModel(providerID, model)
 	}
 	return modelcaps.Builtin(providerID, model)
+}
+
+// applyModelTuning fills model-derived defaults into the agent config after
+// model resolution:
+//
+//   - Sampling: vendor-recommended (or deneb.json-overridden) temperature /
+//     top_p from the model profile, applied only when the request did not
+//     specify them — an explicit caller value always wins.
+//   - MaxTokens: the background model tuner's floor for models that keep
+//     hitting the output ceiling (raise-only, skipped when the caller set an
+//     explicit max). Request-level parameters only, so per-model variation
+//     never touches the prompt cache.
+func applyModelTuning(cfg *agent.AgentConfig, deps runDeps, params RunParams, providerID, model string) {
+	if deps.registry == nil {
+		profile := modelrole.ProfileFor(model)
+		fillSamplingDefaults(cfg, profile)
+		return
+	}
+	fillSamplingDefaults(cfg, deps.registry.ProfileForModel(providerID, model))
+	if params.MaxTokens == nil {
+		if floor := deps.registry.TunedMaxTokens(model); floor > cfg.MaxTokens {
+			cfg.MaxTokens = floor
+		}
+	}
+}
+
+// fillSamplingDefaults copies profile sampling values into unset config
+// fields. (TopK is not part of agent.AgentConfig; profile TopK currently
+// serves the localai hub path only.)
+func fillSamplingDefaults(cfg *agent.AgentConfig, profile modelrole.Profile) {
+	if cfg.Temperature == nil {
+		cfg.Temperature = profile.Temperature
+	}
+	if cfg.TopP == nil {
+		cfg.TopP = profile.TopP
+	}
 }
 
 // effectiveContextBudget returns the token budget for transcript history,

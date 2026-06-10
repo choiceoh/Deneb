@@ -207,6 +207,9 @@ func executeAgentRun(
 	}
 	cfg, spawnFlag := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, logger)
 	cfg.Model = model // set the resolved model
+	// Per-model defaults (profile sampling, tuned max-tokens floor) — only
+	// fills values the request left unset; request-level params, cache-safe.
+	applyModelTuning(&cfg, deps, params, providerID, model)
 
 	// BeforeAPICall hook chain: composed via agent.ComposeBeforeAPICall so
 	// features can register additional pre-LLM transforms without clobbering

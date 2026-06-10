@@ -50,6 +50,30 @@ func (r *Registry) CapabilityForModel(providerID, model string) modelcaps.Capabi
 	return caps
 }
 
+// ProfileForModel resolves the sampling/reasoning profile for a model by
+// layering deneb.json provider overrides (temperature/topP/topK on the
+// models.providers.<id> entry) over the builtin ProfileFor table. The
+// reasoning-channel flag stays builtin-only — it describes the chat template,
+// not an operator preference.
+func (r *Registry) ProfileForModel(providerID, model string) Profile {
+	p := ProfileFor(model)
+	r.mu.RLock()
+	pr, ok := r.providers[providerID]
+	r.mu.RUnlock()
+	if ok {
+		if pr.Temperature != nil {
+			p.Temperature = pr.Temperature
+		}
+		if pr.TopP != nil {
+			p.TopP = pr.TopP
+		}
+		if pr.TopK != nil {
+			p.TopK = pr.TopK
+		}
+	}
+	return p
+}
+
 // RefreshVllmRole re-runs served-model discovery for a vLLM-backed role and
 // returns the (possibly updated) config. Startup discovery is otherwise the
 // only reconciliation point, so a model swapped on the local server mid-run

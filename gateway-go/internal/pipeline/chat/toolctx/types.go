@@ -85,6 +85,13 @@ type ProviderConfig struct {
 	Reasoning     *bool `json:"reasoning,omitempty"`     // genuine reasoning-endpoint model
 	Vision        *bool `json:"vision,omitempty"`        // false → strip image blocks before sending
 	PromptCache   *bool `json:"promptCache,omitempty"`   // false → strip cache_control markers
+
+	// Sampling overrides layered over the builtin per-model profile
+	// (modelrole.ProfileFor) by modelrole.Registry.ProfileForModel. Applied
+	// only when the request itself does not specify the parameter.
+	Temperature *float64 `json:"temperature,omitempty"`
+	TopP        *float64 `json:"topP,omitempty"`
+	TopK        *int     `json:"topK,omitempty"`
 }
 
 // DeliveryContext carries channel routing information for a chat message.
