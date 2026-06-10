@@ -22,7 +22,6 @@ val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
             "설정에 '화면' 탭 추가 — 테마(시스템·라이트·다크·OLED 블랙)와 화면 배율을 직접 조절, 즉시 반영",
-            "설정에 '에이전트' 탭 추가 — 기억(학습)과 자동 스케줄링을 켜고 끄기",
         ),
     ),
     DenebPatchNote(
