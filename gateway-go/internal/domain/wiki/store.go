@@ -277,6 +277,27 @@ func (s *Store) removeBacklink(targetPath, sourcePath string) {
 	}
 }
 
+// MarkSuperseded stamps oldPath as replaced by newPath: the page stays
+// readable (history is memory too) but search demotes it so the stale fact
+// stops surfacing as current. Idempotent; refuses self-supersession.
+func (s *Store) MarkSuperseded(oldPath, newPath string) error {
+	oldPath = normalizePagePath(oldPath)
+	newPath = normalizePagePath(newPath)
+	if oldPath == "" || newPath == "" || oldPath == newPath {
+		return nil
+	}
+	page, err := s.ReadPage(oldPath)
+	if err != nil {
+		return fmt.Errorf("wiki: mark superseded: %w", err)
+	}
+	if page.Meta.SupersededBy == newPath {
+		return nil
+	}
+	page.Meta.SupersededBy = newPath
+	page.Meta.Updated = time.Now().Format("2006-01-02")
+	return s.writePageInternal(oldPath, page, true)
+}
+
 func toSet(ss []string) map[string]struct{} {
 	m := make(map[string]struct{}, len(ss))
 	for _, s := range ss {

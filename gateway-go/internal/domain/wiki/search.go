@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/textsearch"
 )
@@ -26,10 +27,14 @@ type SearchResult struct {
 type searchDB struct {
 	idx *textsearch.Index
 	mu  sync.RWMutex
+	// validity holds the per-page staleness factor (see validityFactor),
+	// computed when the page is (re)indexed. Search multiplies scores by it
+	// so archived/superseded/aging facts stop outranking current ones.
+	validity map[string]float64
 }
 
 func newSearchDB() *searchDB {
-	return &searchDB{idx: textsearch.New()}
+	return &searchDB{idx: textsearch.New(), validity: make(map[string]float64)}
 }
 
 // indexPage upserts a page into the search index.
@@ -37,6 +42,9 @@ func (s *searchDB) indexPage(relPath string, page *Page) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.idx.Upsert(relPath, searchablePageFields(page)...)
+	if page != nil {
+		s.validity[relPath] = validityFactor(page.Meta, time.Now())
+	}
 }
 
 // removePage removes a page from the search index.
@@ -44,6 +52,55 @@ func (s *searchDB) removePage(relPath string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.idx.Remove(relPath)
+	delete(s.validity, relPath)
+}
+
+// validityFactor scores how current a page's facts are (0–1]. Archived and
+// superseded pages keep working for direct reads but should not outrank
+// living pages in recall; old "updated" stamps decay gently — operational
+// facts (ports, prices, configs) rot, and recall presenting a year-old fact
+// as current is exactly the failure this guards against.
+func validityFactor(meta Frontmatter, now time.Time) float64 {
+	f := 1.0
+	if meta.Archived {
+		f *= 0.3
+	}
+	if meta.SupersededBy != "" {
+		f *= 0.5
+	}
+	if meta.Updated != "" {
+		if t, err := time.Parse("2006-01-02", meta.Updated); err == nil {
+			switch age := now.Sub(t); {
+			case age > 365*24*time.Hour:
+				f *= 0.7
+			case age > 180*24*time.Hour:
+				f *= 0.85
+			}
+		}
+	}
+	return f
+}
+
+// applyValidity multiplies result scores by each page's validity factor and
+// re-sorts. Pages never indexed (factor missing) pass through unchanged.
+func (s *searchDB) applyValidity(results []SearchResult) []SearchResult {
+	if len(results) == 0 {
+		return results
+	}
+	s.mu.RLock()
+	for i := range results {
+		if f, ok := s.validity[results[i].Path]; ok && f < 1.0 {
+			results[i].Score *= f
+		}
+	}
+	s.mu.RUnlock()
+	sort.SliceStable(results, func(a, b int) bool {
+		if results[a].Score != results[b].Score {
+			return results[a].Score > results[b].Score
+		}
+		return results[a].Path < results[b].Path
+	})
+	return results
 }
 
 // search runs a full-text query and returns scored results.
@@ -136,9 +193,9 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 	}
 	sem := s.searchSemantic(ctx, query, limit)
 	if len(sem) == 0 {
-		return bm25, nil
+		return s.fts.applyValidity(bm25), nil
 	}
-	return mergeSearchResults(bm25, sem, limit), nil
+	return s.fts.applyValidity(mergeSearchResults(bm25, sem, limit)), nil
 }
 
 // mergeSearchResults blends lexical (BM25) and semantic hits. Each list's score
