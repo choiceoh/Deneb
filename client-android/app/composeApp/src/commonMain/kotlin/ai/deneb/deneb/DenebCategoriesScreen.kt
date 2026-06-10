@@ -28,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ai.deneb.Platform
+import ai.deneb.currentPlatform
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
@@ -73,7 +75,11 @@ fun DenebCategoriesScreen(
                     style = DenebType.viewTitle,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = onBack) { Text("닫기") }
+                // Desktop: the persistent sidebar is the navigation — a close
+                // affordance on a top-level section is redundant there.
+                if (currentPlatform !is Platform.Desktop) {
+                    TextButton(onClick = onBack) { Text("닫기") }
+                }
             }
             Spacer(Modifier.height(8.dp))
 

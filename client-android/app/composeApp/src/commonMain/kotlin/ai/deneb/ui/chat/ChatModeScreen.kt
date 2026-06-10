@@ -55,6 +55,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment.Companion.BottomCenter
 import androidx.compose.ui.Alignment.Companion.CenterEnd
 import androidx.compose.ui.Alignment.Companion.CenterHorizontally
+import androidx.compose.ui.Alignment.Companion.TopCenter
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
@@ -88,6 +89,7 @@ import ai.deneb.ui.components.VerticalScrollbarForList
 import ai.deneb.ui.dynamicui.FrozenSubmission
 import ai.deneb.ui.dynamicui.toSpeakableText
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebContentWidthModifier
 import ai.deneb.ui.denebPopEnter
 import ai.deneb.ui.denebPopExit
 import ai.deneb.ui.handCursor
@@ -562,77 +564,84 @@ internal fun ChatModeScreen(
                                     contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp),
                                 ) {
                                     items(uiState.history, key = { it.id }, contentType = { it.role }) { history ->
-                                        when (history.role) {
-                                            History.Role.USER -> {
-                                                // Submissions are shown by the paired assistant's frozen deneb-ui card
-                                                // above; the "Responded with: …" text bubble would be redundant.
-                                                if (history.uiSubmission == null) {
-                                                    UserMessage(
-                                                        message = history.content,
-                                                        attachments = history.attachments,
-                                                    )
-                                                }
-                                            }
-
-                                            History.Role.ASSISTANT -> {
-                                                if ((history.content.isNotEmpty() || history.attachments.isNotEmpty()) && !history.isThinking) {
-                                                    val isLastAssistant = history.id == lastAssistantId
-                                                    val frozen = frozenByAssistantId[history.id]
-                                                    val pairedUserId = userIdByAssistantId[history.id]
-                                                    BotMessage(
-                                                        message = history.content,
-                                                        attachments = history.attachments,
-                                                        textToSpeech = textToSpeech,
-                                                        isSpeaking = uiState.isSpeaking && uiState.isSpeakingContentId == history.id,
-                                                        setIsSpeaking = {
-                                                            actions.setIsSpeaking(it, history.id)
-                                                        },
-                                                        onRegenerate = if (isLastAssistant) actions.regenerate else null,
-                                                        isInteractive = isLastAssistant && !uiState.isLoading && frozen == null,
-                                                        onUiCallback = { event, data ->
-                                                            actions.submitUiCallback(event, data)
-                                                        },
-                                                        frozen = frozen,
-                                                        onResubmit = if (pairedUserId != null && !uiState.isLoading) {
-                                                            { event, data -> actions.resubmit(pairedUserId, event, data) }
-                                                        } else {
-                                                            null
-                                                        },
-                                                        reasoningSegments = reasoningSegmentsByAssistantId[history.id] ?: persistentListOf(),
-                                                        isStreaming = isLastAssistant && isResponseStreaming,
-                                                    )
-                                                    if (history.fallbackServiceName != null) {
-                                                        androidx.compose.material3.Text(
-                                                            text = stringResource(Res.string.fallback_answered_by, history.fallbackServiceName),
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
+                                        // Readable measure on a wide desktop window: cap every row at the
+                                        // shared content width (no-op on phone, where this fills the width).
+                                        // The list itself stays full width so the mouse wheel works from the
+                                        // margins and the scrollbar hugs the pane edge; the LazyColumn's
+                                        // CenterHorizontally centers the capped rows.
+                                        Column(denebContentWidthModifier()) {
+                                            when (history.role) {
+                                                History.Role.USER -> {
+                                                    // Submissions are shown by the paired assistant's frozen deneb-ui card
+                                                    // above; the "Responded with: …" text bubble would be redundant.
+                                                    if (history.uiSubmission == null) {
+                                                        UserMessage(
+                                                            message = history.content,
+                                                            attachments = history.attachments,
                                                         )
                                                     }
-                                                } else if (history.isThinking &&
-                                                    history.content.isNotEmpty() &&
-                                                    history.id !in suppressedThinkingIds
-                                                ) {
-                                                    // Thinking-only turn still in flight — render as a standalone
-                                                    // reasoning bubble. The precomputation above has already gathered
-                                                    // every earlier thinking segment in this cycle under this id.
-                                                    BotMessage(
-                                                        message = "",
-                                                        textToSpeech = null,
-                                                        isSpeaking = false,
-                                                        setIsSpeaking = {},
-                                                        reasoningSegments = reasoningSegmentsByAssistantId[history.id]
-                                                            ?: persistentListOf(history.content),
-                                                    )
                                                 }
-                                            }
 
-                                            History.Role.TOOL_EXECUTING -> {
-                                                // Rendered in WaitingResponseRow below
-                                            }
+                                                History.Role.ASSISTANT -> {
+                                                    if ((history.content.isNotEmpty() || history.attachments.isNotEmpty()) && !history.isThinking) {
+                                                        val isLastAssistant = history.id == lastAssistantId
+                                                        val frozen = frozenByAssistantId[history.id]
+                                                        val pairedUserId = userIdByAssistantId[history.id]
+                                                        BotMessage(
+                                                            message = history.content,
+                                                            attachments = history.attachments,
+                                                            textToSpeech = textToSpeech,
+                                                            isSpeaking = uiState.isSpeaking && uiState.isSpeakingContentId == history.id,
+                                                            setIsSpeaking = {
+                                                                actions.setIsSpeaking(it, history.id)
+                                                            },
+                                                            onRegenerate = if (isLastAssistant) actions.regenerate else null,
+                                                            isInteractive = isLastAssistant && !uiState.isLoading && frozen == null,
+                                                            onUiCallback = { event, data ->
+                                                                actions.submitUiCallback(event, data)
+                                                            },
+                                                            frozen = frozen,
+                                                            onResubmit = if (pairedUserId != null && !uiState.isLoading) {
+                                                                { event, data -> actions.resubmit(pairedUserId, event, data) }
+                                                            } else {
+                                                                null
+                                                            },
+                                                            reasoningSegments = reasoningSegmentsByAssistantId[history.id] ?: persistentListOf(),
+                                                            isStreaming = isLastAssistant && isResponseStreaming,
+                                                        )
+                                                        if (history.fallbackServiceName != null) {
+                                                            androidx.compose.material3.Text(
+                                                                text = stringResource(Res.string.fallback_answered_by, history.fallbackServiceName),
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
+                                                            )
+                                                        }
+                                                    } else if (history.isThinking &&
+                                                        history.content.isNotEmpty() &&
+                                                        history.id !in suppressedThinkingIds
+                                                    ) {
+                                                        // Thinking-only turn still in flight — render as a standalone
+                                                        // reasoning bubble. The precomputation above has already gathered
+                                                        // every earlier thinking segment in this cycle under this id.
+                                                        BotMessage(
+                                                            message = "",
+                                                            textToSpeech = null,
+                                                            isSpeaking = false,
+                                                            setIsSpeaking = {},
+                                                            reasoningSegments = reasoningSegmentsByAssistantId[history.id]
+                                                                ?: persistentListOf(history.content),
+                                                        )
+                                                    }
+                                                }
 
-                                            History.Role.TOOL -> {
-                                                // Don't show completed tool results in UI
+                                                History.Role.TOOL_EXECUTING -> {
+                                                    // Rendered in WaitingResponseRow below
+                                                }
+
+                                                History.Role.TOOL -> {
+                                                    // Don't show completed tool results in UI
+                                                }
                                             }
                                         }
                                     }
@@ -643,16 +652,20 @@ internal fun ChatModeScreen(
                                         (frozenByAssistantId.values.none { it.isPending } || executingToolsState.tools.isNotEmpty())
                                     if (showWaitingRow) {
                                         item(key = "loading") {
-                                            WaitingResponseRow(
-                                                executingTools = executingToolsState.tools,
-                                                isStatusOnly = executingToolsState.isStatusOnly,
-                                                statusText = fallbackStatusText,
-                                            )
+                                            Column(denebContentWidthModifier()) {
+                                                WaitingResponseRow(
+                                                    executingTools = executingToolsState.tools,
+                                                    isStatusOnly = executingToolsState.isStatusOnly,
+                                                    statusText = fallbackStatusText,
+                                                )
+                                            }
                                         }
                                     }
                                     uiState.error?.let { error ->
                                         item(key = "error") {
-                                            ErrorMessage(error = error, retry = uiState.actions.retry)
+                                            Column(denebContentWidthModifier()) {
+                                                ErrorMessage(error = error, retry = uiState.actions.retry)
+                                            }
                                         }
                                     }
                                 }
@@ -688,19 +701,25 @@ internal fun ChatModeScreen(
                     }
                 }
 
-            QuestionInput(
-                files = uiState.files,
-                addFile = uiState.actions.addFile,
-                removeFile = uiState.actions.removeFile,
-                ask = uiState.actions.ask,
-                supportedFileExtensions = uiState.supportedFileExtensions,
-                textState = questionInputText,
-                onTextStateChange = { questionInputText = it },
-                isLoading = uiState.isLoading,
-                cancel = uiState.actions.cancel,
-                availableServices = uiState.availableServices,
-                onSelectService = uiState.actions.selectService,
-            )
+            // Same cap as the message rows so the input bar lines up with the
+            // conversation column on desktop instead of spanning the whole pane.
+            Box(Modifier.fillMaxWidth(), contentAlignment = TopCenter) {
+                Column(denebContentWidthModifier()) {
+                    QuestionInput(
+                        files = uiState.files,
+                        addFile = uiState.actions.addFile,
+                        removeFile = uiState.actions.removeFile,
+                        ask = uiState.actions.ask,
+                        supportedFileExtensions = uiState.supportedFileExtensions,
+                        textState = questionInputText,
+                        onTextStateChange = { questionInputText = it },
+                        isLoading = uiState.isLoading,
+                        cancel = uiState.actions.cancel,
+                        availableServices = uiState.availableServices,
+                        onSelectService = uiState.actions.selectService,
+                    )
+                }
+            }
         }
         SnackbarHost(
             hostState = snackbarHostState,

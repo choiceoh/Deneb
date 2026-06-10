@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import ai.deneb.Platform
+import ai.deneb.currentPlatform
 import ai.deneb.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -78,7 +80,11 @@ fun DenebPeopleScreen(
                     style = DenebType.viewTitle,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = onBack) { Text("닫기") }
+                // Desktop: the persistent sidebar is the navigation — a close
+                // affordance on a top-level section is redundant there.
+                if (currentPlatform !is Platform.Desktop) {
+                    TextButton(onClick = onBack) { Text("닫기") }
+                }
             }
 
             val list = people
