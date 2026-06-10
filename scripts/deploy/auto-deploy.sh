@@ -36,6 +36,10 @@ FAIL_FILE="$STATE_DIR/auto-deploy.failed-head"
 LOCK_FILE="/tmp/deneb-auto-deploy.lock"
 LOG_FILE="/tmp/deneb-auto-deploy.log"
 RETRY_SEC="${DENEB_AUTO_DEPLOY_RETRY_SEC:-600}"
+# Quiet period: defer deploying while origin/main is still "hot" (newest
+# commit younger than this). A landing PR stack then produces ONE deploy
+# after it settles instead of one restart per merge. 0 disables the guard.
+QUIET_SEC="${DENEB_AUTO_DEPLOY_QUIET_SEC:-300}"
 
 log() {
     printf '%s  %s\n' "$(date -Iseconds)" "$*" >> "$LOG_FILE"
@@ -166,6 +170,21 @@ fi
 
 if recent_failed_head "$remote_head"; then
     exit 0
+fi
+
+# PR-stack guard. 2026-06-10: 12 PRs merged in 31 minutes produced 12
+# build+restart cycles; each restart aborted in-flight cron agent turns
+# (three mail analyses lost). Deploying only once main has been quiet for
+# QUIET_SEC delivers the same code with a single restart. Trade-off: a lone
+# merge reaches production QUIET_SEC later — acceptable for this host.
+if (( QUIET_SEC > 0 )); then
+    remote_commit_ts=$(git log -1 --format=%ct "$remote_head" 2>>"$LOG_FILE" || echo 0)
+    now_ts=$(date +%s)
+    head_age=$(( now_ts - remote_commit_ts ))
+    if (( remote_commit_ts > 0 && head_age < QUIET_SEC )); then
+        log "deferring deploy: origin/main head ${remote_head:0:10} is ${head_age}s old (< ${QUIET_SEC}s quiet period)"
+        exit 0
+    fi
 fi
 
 log "new main candidate: current=$local_head deployed=${deployed_head:-none} remote=$remote_head; running deploy.sh"
