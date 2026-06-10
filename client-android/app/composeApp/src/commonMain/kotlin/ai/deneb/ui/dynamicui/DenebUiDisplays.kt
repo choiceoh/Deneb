@@ -245,7 +245,8 @@ internal fun RenderCountdown(
         }
         Text(
             text = formatted,
-            style = MaterialTheme.typography.headlineMedium,
+            // Big display number rides the subject rung (22) of the DenebType scale.
+            style = DenebType.subject,
             color = if (expired) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
         )
     }
@@ -382,7 +383,9 @@ internal fun RenderStat(node: StatNode) {
     ) {
         Text(
             text = node.value,
-            style = MaterialTheme.typography.headlineMedium,
+            // Stat value on the subject rung (22); Bold override keeps the metric
+            // reading as a number, not a content title (law 3: weight = function).
+            style = DenebType.subject,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
         )
