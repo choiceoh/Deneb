@@ -595,6 +595,22 @@ type compactionHooks struct {
 	typingFn func() // sends typing indicator every 5s during compaction
 }
 
+// minCompactionBudget is the floor below which an effective context budget is
+// treated as a history-suppression sentinel rather than a real budget. Real
+// budgets are tens of thousands of tokens (boot passes 30K, defaults are
+// 140K+); the only sub-floor caller is the skill-review fork's
+// MaxHistoryTokens=1. A single protected turn already exceeds such a budget,
+// so compaction cannot succeed by construction.
+const minCompactionBudget = 1024
+
+// skipCompactionBudget reports whether the effective context budget is a
+// deliberate history-suppression sentinel, in which case Polaris compaction
+// is skipped entirely instead of burning every tier and warning each run.
+// Zero means "no budget configured" and keeps the legacy behavior.
+func skipCompactionBudget(budget int) bool {
+	return budget > 0 && budget < minCompactionBudget
+}
+
 // assembleMessages builds the final message list from prebuilt messages, transcript
 // context, attachments, and Polaris compaction. mr identifies the resolved
 // provider/model so compaction budgets and content handling can respect the
@@ -654,14 +670,27 @@ func assembleMessages(
 	// No LLM call is made until context is compressed — incoming messages
 	// are already queued by PendingQueue during the active run.
 	if len(messages) > 0 {
+		// Derive compaction budget from context assembly budgets so they stay
+		// in sync, clamped to the model's context window when it is known.
+		contextBudget := effectiveContextBudget(deps, mr.providerID, mr.model, logger)
+
+		// History-suppressed runs (skill-review forks pass MaxHistoryTokens=1
+		// to exclude transcript history) yield a sub-floor budget no compaction
+		// can meet: the protected current turn alone exceeds it, so every tier
+		// runs for nothing and the "failed to reduce below budget" warning
+		// fires on each run. Budget 0 means "no budget configured" and keeps
+		// the legacy run-everything behavior.
+		if skipCompactionBudget(contextBudget) {
+			logger.Debug("polaris: budget below compaction floor; skipping compaction",
+				"session", params.SessionKey, "budget", contextBudget)
+			return messages
+		}
+
 		polarisCtx, polarisCancel := context.WithTimeout(ctx, 2*time.Minute)
 		var summarizer compact.Summarizer
 		if pilotHub := pilot.LocalAIHub(); pilotHub != nil {
 			summarizer = &localAISummarizer{}
 		}
-		// Derive compaction budget from context assembly budgets so they stay
-		// in sync, clamped to the model's context window when it is known.
-		contextBudget := effectiveContextBudget(deps, mr.providerID, mr.model, logger)
 
 		// STW: pre-check if LLM compaction will likely fire.
 		// Signal the user before the (potentially slow) summarization starts.
