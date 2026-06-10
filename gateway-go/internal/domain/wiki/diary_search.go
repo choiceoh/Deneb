@@ -60,22 +60,28 @@ func newDiarySearchDB() *diarySearchDB {
 	}
 }
 
-// diaryDocID encodes filename + header into a unique doc ID. Two entries
-// in the same minute would collide; AppendDiaryTo uses HH:MM precision so
-// collisions are possible in theory but rare in practice (single user,
-// sequential writes).
+// diaryDocID encodes filename + header into a doc ID. AppendDiaryTo uses
+// HH:MM precision, and a chat session routinely lands several entries in the
+// same minute — colliding IDs used to *replace* each other in the index, so
+// every same-minute entry but the last silently vanished from recall (the
+// on-disk file kept them all). upsertEntry merges on collision instead.
 func diaryDocID(file, header string) string {
 	return file + "#" + header
 }
 
-// upsertEntry indexes (or replaces) one diary entry. Safe for concurrent
-// use because both meta and idx have their own internal locking.
+// upsertEntry indexes one diary entry. A same-minute collision merges the
+// new content into the existing doc (both entries stay searchable; the
+// minute's doc reads as the minute's combined happenings). The meta lock
+// also serializes the read-merge-write.
 func (d *diarySearchDB) upsertEntry(file, header, content string, at int64) {
 	if content == "" {
 		return
 	}
 	id := diaryDocID(file, header)
 	d.mu.Lock()
+	if prev, ok := d.meta[id]; ok && prev.Content != "" && prev.Content != content {
+		content = prev.Content + "\n" + content
+	}
 	d.meta[id] = &diaryEntryMeta{File: file, Header: header, Content: content, At: at}
 	d.mu.Unlock()
 	d.idx.Upsert(id, content)

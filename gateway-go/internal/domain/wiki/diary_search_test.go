@@ -211,3 +211,23 @@ func TestStore_AppendDiaryTo_NoLiveIndex(t *testing.T) {
 		t.Errorf("standalone AppendDiaryTo is expected NOT to update the live index; got %d hits", len(hits))
 	}
 }
+
+// TestDiarySearch_SameMinuteEntriesBothSearchable guards the ID-collision
+// fix: several diary entries land in the same HH:MM minute after every chat
+// burst, and colliding doc IDs used to replace each other in the index —
+// every same-minute entry but the last vanished from recall.
+func TestDiarySearch_SameMinuteEntriesBothSearchable(t *testing.T) {
+	d := newDiarySearchDB()
+	d.upsertEntry("diary-2026-06-10.md", "15:01", "남도에코와 실사 일정 통화", 1)
+	d.upsertEntry("diary-2026-06-10.md", "15:01", "모닝레터 패턴 재사용 결정", 2)
+
+	for _, q := range []string{"남도에코", "모닝레터"} {
+		hits, err := d.search(context.Background(), q, 4)
+		if err != nil {
+			t.Fatalf("search %q: %v", q, err)
+		}
+		if len(hits) == 0 {
+			t.Errorf("same-minute entry lost from index: query %q found nothing", q)
+		}
+	}
+}
