@@ -59,6 +59,7 @@ import ai.deneb.ui.denebContentWidthModifier
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.handCursor
+import ai.deneb.ui.components.DenebSearchField
 import ai.deneb.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 
@@ -68,8 +69,10 @@ import kotlinx.coroutines.launch
  * and time-bucketed section labels (오늘 / 어제 / 이번 주 / 이전). Pull to refresh;
  * long-press a row (with haptic) to multi-select; a tonal bottom bar runs bulk
  * read / archive / trash, and "더 보기" pages through nextPageToken. Tapping a
- * row opens the detail screen. Controls (checkbox, buttons, pull refresh) stay
- * Material; only the presentation is Deneb.
+ * row opens the detail screen. The search field runs a full-mailbox Gmail
+ * query (IME search submits; clearing it returns to the inbox view). Controls
+ * (checkbox, buttons, search field, pull refresh) stay Material; only the
+ * presentation is Deneb.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -97,8 +100,22 @@ fun DenebMailScreen(
     val selected = remember { mutableStateListOf<String>() }
     var busy by remember { mutableStateOf(false) }
     var loadingMore by remember { mutableStateOf(false) }
+    // Full-mailbox Gmail search: the field holds what the user types; activeQuery
+    // is the query the current list actually came from (null = default inbox).
+    var searchText by remember { mutableStateOf("") }
+    var activeQuery by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) { loadOk = client.refreshMail() }
+
+    fun runSearch(raw: String) {
+        val q = raw.trim().ifBlank { null }
+        if (q == activeQuery) return
+        activeQuery = q
+        scope.launch {
+            loadOk = null
+            loadOk = client.refreshMail(q)
+        }
+    }
 
     fun clearSelection() {
         selecting = false
@@ -150,7 +167,7 @@ fun DenebMailScreen(
                         Spacer(Modifier.height(2.dp))
                     }
                     Text(
-                        "받은 메일",
+                        if (activeQuery != null) "메일 검색" else "받은 메일",
                         style = DenebType.viewTitle,
                         color = MaterialTheme.colorScheme.onBackground,
                     )
@@ -165,6 +182,23 @@ fun DenebMailScreen(
                 }
             }
 
+            if (!selecting) {
+                DenebSearchField(
+                    query = searchText,
+                    onQueryChange = {
+                        searchText = it
+                        // Clearing the field (✕ or backspace-to-empty) returns to the inbox.
+                        if (it.isBlank() && activeQuery != null) runSearch("")
+                    },
+                    placeholder = "전체 메일 검색 (키워드, from:…)",
+                    onSearch = { runSearch(searchText) },
+                    clearContentDescription = "검색 지우기",
+                    // Field carries its own 8dp inset; 16dp more aligns the pill with
+                    // the screen's 24dp content margins.
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (mail.isEmpty() && loadOk == null) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { DenebLoading() }
@@ -172,15 +206,17 @@ fun DenebMailScreen(
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         DenebError(
                             "메일을 불러오지 못했어요.",
-                            onRetry = { scope.launch { loadOk = null; loadOk = client.refreshMail() } },
+                            onRetry = { scope.launch { loadOk = null; loadOk = client.refreshMail(activeQuery) } },
                         )
                     }
                 } else if (mail.isEmpty()) {
-                    Box(Modifier.padding(horizontal = 24.dp)) { DenebEmpty("최근 7일 메일 없음") }
+                    Box(Modifier.padding(horizontal = 24.dp)) {
+                        DenebEmpty(if (activeQuery != null) "검색 결과 없음" else "최근 7일 메일 없음")
+                    }
                 } else {
                     PullToRefreshBox(
                         isRefreshing = refreshing,
-                        onRefresh = { scope.launch { refreshing = true; loadOk = client.refreshMail(); refreshing = false } },
+                        onRefresh = { scope.launch { refreshing = true; loadOk = client.refreshMail(activeQuery); refreshing = false } },
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         val today = Clock.System.todayIn(TimeZone.currentSystemDefault())

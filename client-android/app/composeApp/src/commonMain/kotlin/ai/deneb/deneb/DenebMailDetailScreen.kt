@@ -2,6 +2,8 @@
 
 package ai.deneb.deneb
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -10,12 +12,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
@@ -23,7 +27,6 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,27 +35,40 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ai.deneb.decodeToImageBitmap
+import ai.deneb.getBackgroundDispatcher
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.markdown.MarkdownContent
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/** Image attachments above this size stay download-only chips (no inline decode). */
+private const val MAIL_IMAGE_PREVIEW_MAX_BYTES = 8 * 1024 * 1024
 
 /**
- * Full Gmail message + triage. On open it marks read and fetches any cached
- * analysis instantly (no LLM). AI analysis renders markdown + related-project
- * chips (-> wiki) + a rerun; the ask box keeps multi-turn history; attachments
- * are tappable chips that download via the gateway. Archive/trash pop back.
+ * Full Gmail message + reading surface. On open it marks read and fetches any
+ * cached analysis instantly (no LLM). Actions are deliberately minimal: trash
+ * and AI analysis (archive and the sender-context card were dropped — sender
+ * context lives in the people screen). AI analysis renders markdown +
+ * related-project chips (-> wiki) + a rerun; the ask box keeps multi-turn
+ * history; attachments are tappable chips, and image attachments also render
+ * an inline preview. Trash pops back.
  */
 @Composable
 fun DenebMailDetailScreen(
@@ -73,8 +89,6 @@ fun DenebMailDetailScreen(
     var analysis by remember(messageId) { mutableStateOf<MailAnalysis?>(null) }
     var analyzing by remember(messageId) { mutableStateOf(false) }
     var analysisFailed by remember(messageId) { mutableStateOf(false) }
-    var senderCtx by remember(messageId) { mutableStateOf<SenderContext?>(null) }
-    var loadingSender by remember(messageId) { mutableStateOf(false) }
     var askText by remember(messageId) { mutableStateOf("") }
     var asking by remember(messageId) { mutableStateOf(false) }
     val qa = remember(messageId) { mutableStateListOf<Pair<String, String>>() }
@@ -160,42 +174,20 @@ fun DenebMailDetailScreen(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(
                     onClick = {
-                        haptics.confirm()
-                        scope.launch { if (client.archiveMail(mail.id)) onBack() else actionMsg = "보관 실패" }
-                    },
-                    modifier = Modifier.weight(1f),
-                ) { Text("보관") }
-                FilledTonalButton(
-                    onClick = {
                         haptics.reject()
                         scope.launch { if (client.trashMail(mail.id)) onBack() else actionMsg = "휴지통 이동 실패" }
                     },
                     modifier = Modifier.weight(1f),
                 ) { Text("휴지통") }
-            }
-            actionMsg?.let {
-                Spacer(Modifier.height(6.dp))
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
+                FilledTonalButton(
                     onClick = { haptics.tap(); runAnalysis(force = false) },
                     enabled = !analyzing,
                     modifier = Modifier.weight(1f),
                 ) { Text(if (analyzing) "분석 중…" else "AI 분석") }
-                OutlinedButton(
-                    onClick = {
-                        haptics.tap()
-                        scope.launch {
-                            loadingSender = true
-                            senderCtx = client.fetchSenderContext(mail.from)
-                            loadingSender = false
-                        }
-                    },
-                    enabled = !loadingSender,
-                    modifier = Modifier.weight(1f),
-                ) { Text(if (loadingSender) "불러오는 중…" else "발신자") }
+            }
+            actionMsg?.let {
+                Spacer(Modifier.height(6.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
 
             if (analyzing || analysis != null || analysisFailed) {
@@ -252,38 +244,6 @@ fun DenebMailDetailScreen(
                 }
             }
 
-            senderCtx?.let { ctx ->
-                Spacer(Modifier.height(12.dp))
-                ElevatedCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("발신자 컨텍스트", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(6.dp))
-                        Text(ctx.displayName, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
-                        if (ctx.recentCount > 0) {
-                            Text(
-                                "최근 ${ctx.windowDays}일 · ${ctx.recentCount}통 수신",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        if (ctx.wikiFacts.isNotBlank()) {
-                            Spacer(Modifier.height(8.dp))
-                            MarkdownContent(ctx.wikiFacts)
-                        }
-                        ctx.wikiHits.forEach { hit ->
-                            Spacer(Modifier.height(8.dp))
-                            Text(hit.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-                            if (hit.summary.isNotBlank()) {
-                                Text(hit.summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                        if (ctx.recentCount == 0 && ctx.wikiHits.isEmpty() && ctx.wikiFacts.isBlank()) {
-                            Text("알려진 컨텍스트 없음", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
-
             Spacer(Modifier.height(16.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(12.dp))
@@ -309,6 +269,53 @@ fun DenebMailDetailScreen(
                             onClick = { uriHandler.openUri(client.attachmentUrl(mail.id, att)) },
                             label = { Text(att.filename + "  " + humanBytes(att.size.toLong())) },
                         )
+                    }
+                }
+
+                // Inline previews for image attachments (receipts, photos, stamped
+                // documents) so they're readable without leaving the app. Bounded to
+                // 8MB per image; a fetch/decode failure just leaves the chip above as
+                // the only affordance. Tap opens the same download URL as the chip.
+                val imageAtts = mail.attachments.filter {
+                    it.mimeType.startsWith("image/") && it.size in 1..MAIL_IMAGE_PREVIEW_MAX_BYTES
+                }
+                if (imageAtts.isNotEmpty()) {
+                    val previews = remember(messageId) { mutableStateMapOf<String, ImageBitmap?>() }
+                    LaunchedEffect(mail.id) {
+                        // Sequential on purpose (project style): a mail rarely has more
+                        // than a few images, and this keeps peak memory at one decode.
+                        for (att in imageAtts) {
+                            if (previews.containsKey(att.id)) continue
+                            val bytes = client.fetchAttachmentBytes(mail.id, att)
+                            previews[att.id] = bytes?.let {
+                                withContext(getBackgroundDispatcher()) { decodeToImageBitmap(it) }
+                            }
+                        }
+                    }
+                    imageAtts.forEach { att ->
+                        when {
+                            !previews.containsKey(att.id) -> {
+                                Spacer(Modifier.height(8.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(att.filename, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            else -> previews[att.id]?.let { bmp ->
+                                Spacer(Modifier.height(8.dp))
+                                Image(
+                                    bitmap = bmp,
+                                    contentDescription = att.filename,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 360.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { uriHandler.openUri(client.attachmentUrl(mail.id, att)) },
+                                    contentScale = ContentScale.Fit,
+                                )
+                            }
+                        }
                     }
                 }
             }

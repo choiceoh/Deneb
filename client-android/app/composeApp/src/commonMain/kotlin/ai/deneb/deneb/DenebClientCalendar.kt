@@ -238,12 +238,17 @@ suspend fun DenebGatewayClient.widgetSummary(): WidgetSummary {
 
 // mailGlance renders "sender · subject" for the widget's recent-mail line.
 // Sender is the display name before any <email>; subject falls back to a
-// placeholder so the line is never just a bare name.
+// placeholder so the line is never just a bare name. The widget layout already
+// ellipsizes at one line; the code-side cap keeps a spammy 500-char subject off
+// the RemoteViews binder anyway (dropping a trailing high surrogate so an emoji
+// is never split in half).
 private fun mailGlance(from: String, subject: String): String {
     val lt = from.indexOf('<')
     val name = (if (lt > 0) from.take(lt) else from).trim().trim('"').ifBlank { from.trim() }
     val subj = subject.trim().ifBlank { "(제목 없음)" }
-    return "$name · $subj"
+    val line = "$name · $subj"
+    if (line.length <= 100) return line
+    return line.take(100).dropLastWhile { it.isHighSurrogate() } + "…"
 }
 
 // formatMeeting renders "M/D HH:mm · title" from an RFC3339 start using only
