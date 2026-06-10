@@ -46,12 +46,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.denebOnSuccessContainer
+import ai.deneb.ui.denebOnWarningContainer
+import ai.deneb.ui.denebSuccessContainer
+import ai.deneb.ui.denebWarningContainer
 import kotlinx.coroutines.delay
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -250,20 +253,17 @@ internal fun RenderCountdown(
 
 @Composable
 internal fun RenderAlert(node: AlertNode) {
-    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val successContainer = if (isDark) Color(0xFF1B3A1B) else Color(0xFFE8F5E9)
-    val onSuccessContainer = if (isDark) Color(0xFFC8E6C9) else Color(0xFF1B5E20)
-    val warningContainer = if (isDark) Color(0xFF3D2600) else Color(0xFFFFF3E0)
-    val onWarningContainer = if (isDark) Color(0xFFFF9100) else Color(0xFFE65100)
+    // Success/warning use the shared status-container pairs from ui/Theme.kt
+    // (the roles M3's scheme lacks); error/info stay on their M3 roles.
     val containerColor = when (node.severity) {
-        AlertSeverity.SUCCESS -> successContainer
-        AlertSeverity.WARNING -> warningContainer
+        AlertSeverity.SUCCESS -> denebSuccessContainer()
+        AlertSeverity.WARNING -> denebWarningContainer()
         AlertSeverity.ERROR -> MaterialTheme.colorScheme.errorContainer
         AlertSeverity.INFO, null -> MaterialTheme.colorScheme.primaryContainer
     }
     val contentColor = when (node.severity) {
-        AlertSeverity.SUCCESS -> onSuccessContainer
-        AlertSeverity.WARNING -> onWarningContainer
+        AlertSeverity.SUCCESS -> denebOnSuccessContainer()
+        AlertSeverity.WARNING -> denebOnWarningContainer()
         AlertSeverity.ERROR -> MaterialTheme.colorScheme.onErrorContainer
         AlertSeverity.INFO, null -> MaterialTheme.colorScheme.onPrimaryContainer
     }
