@@ -39,6 +39,11 @@ const (
 	// toolErrorRateThreshold flags models that mis-call tools.
 	toolErrorRateThreshold = 0.15
 	minToolCallsForRule    = 20
+
+	// fallbackRateThreshold: fraction of runs answered by a different model
+	// (fallback rescues) above which the requested model is flagged — it is
+	// effectively delegating its job.
+	fallbackRateThreshold = 0.3
 )
 
 // Recommendation is one rule firing for one model. TunedMaxTokens, when
@@ -93,10 +98,21 @@ func Analyze(stats []agentlog.ModelStat) []Recommendation {
 		}
 
 		if s.P95Ms > p95LatencyThresholdMs {
+			msg := fmt.Sprintf("p95 레이턴시 %.0f초 — 경량 역할 재배치를 검토하세요.", float64(s.P95Ms)/1000)
+			if s.ThinkingRuns > 0 {
+				msg = fmt.Sprintf("p95 레이턴시 %.0f초 (thinking 런 %d/%d) — thinking 레벨 하향 또는 경량 역할 재배치를 검토하세요.",
+					float64(s.P95Ms)/1000, s.ThinkingRuns, s.Runs)
+			}
 			recs = append(recs, Recommendation{
-				Model: s.Model, Provider: s.Provider, Rule: "latency",
-				Message: fmt.Sprintf("p95 레이턴시 %.0f초 — thinking 레벨 하향 또는 경량 역할 재배치를 검토하세요.",
-					float64(s.P95Ms)/1000),
+				Model: s.Model, Provider: s.Provider, Rule: "latency", Message: msg,
+			})
+		}
+
+		if float64(s.FallbackRuns)/runs >= fallbackRateThreshold {
+			recs = append(recs, Recommendation{
+				Model: s.Model, Provider: s.Provider, Rule: "fallback",
+				Message: fmt.Sprintf("폴백 구조가 %d/%d런 — 이 모델이 사실상 일을 위임하고 있습니다. 역할 교체 또는 서버 점검을 검토하세요.",
+					s.FallbackRuns, s.Runs),
 			})
 		}
 

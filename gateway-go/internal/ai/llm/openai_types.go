@@ -13,6 +13,7 @@ type openAIRequest struct {
 	MaxCompletionTokens *int              `json:"max_completion_tokens,omitempty"` // for reasoning models
 	Temperature         *float64          `json:"temperature,omitempty"`
 	TopP                *float64          `json:"top_p,omitempty"`
+	TopK                *int              `json:"top_k,omitempty"` // vLLM/OpenRouter extension; only sent when a profile/config sets it
 	FrequencyPenalty    *float64          `json:"frequency_penalty,omitempty"`
 	PresencePenalty     *float64          `json:"presence_penalty,omitempty"`
 	Stop                []string          `json:"stop,omitempty"`

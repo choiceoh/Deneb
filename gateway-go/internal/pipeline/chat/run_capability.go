@@ -55,14 +55,16 @@ func applyModelTuning(cfg *agent.AgentConfig, deps runDeps, params RunParams, pr
 }
 
 // fillSamplingDefaults copies profile sampling values into unset config
-// fields. (TopK is not part of agent.AgentConfig; profile TopK currently
-// serves the localai hub path only.)
+// fields.
 func fillSamplingDefaults(cfg *agent.AgentConfig, profile modelrole.Profile) {
 	if cfg.Temperature == nil {
 		cfg.Temperature = profile.Temperature
 	}
 	if cfg.TopP == nil {
 		cfg.TopP = profile.TopP
+	}
+	if cfg.TopK == nil {
+		cfg.TopK = profile.TopK
 	}
 }
 

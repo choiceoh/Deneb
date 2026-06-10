@@ -268,6 +268,9 @@ func applySamplingParams(oaiReq *openAIRequest, req *ChatRequest) {
 	if req.TopP != nil {
 		oaiReq.TopP = req.TopP
 	}
+	if req.TopK != nil {
+		oaiReq.TopK = req.TopK
+	}
 	if req.FrequencyPenalty != nil {
 		oaiReq.FrequencyPenalty = req.FrequencyPenalty
 	}

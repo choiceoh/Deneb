@@ -22,6 +22,7 @@ type AgentConfig struct {
 	// Sampling parameters (passed through to the LLM request).
 	Temperature      *float64
 	TopP             *float64
+	TopK             *int
 	FrequencyPenalty *float64
 	PresencePenalty  *float64
 	StopSequences    []string

@@ -33,9 +33,10 @@ func tunerRegistry() *modelrole.Registry {
 
 func TestAnalyze_Rules(t *testing.T) {
 	stats := []agentlog.ModelStat{
-		{ // fires max_tokens + stall + latency
+		{ // fires fallback + max_tokens + stall + latency (thinking-aware message)
 			Model: "m1", Provider: "p", Runs: 10,
 			MaxTokensRecoveries: 4, TimeoutRuns: 3, P95Ms: 200_000,
+			FallbackRuns: 4, ThinkingRuns: 6,
 		},
 		{ // fires cache_break (caching active, low read ratio) + tool_errors
 			Model: "m2", Provider: "p", Runs: 10,
@@ -56,7 +57,7 @@ func TestAnalyze_Rules(t *testing.T) {
 	for _, r := range recs {
 		got[r.Model] = append(got[r.Model], r.Rule)
 	}
-	if want := []string{"latency", "max_tokens", "stall"}; strings.Join(got["m1"], ",") != strings.Join(want, ",") {
+	if want := []string{"fallback", "latency", "max_tokens", "stall"}; strings.Join(got["m1"], ",") != strings.Join(want, ",") {
 		t.Errorf("m1 rules = %v, want %v (sorted)", got["m1"], want)
 	}
 	if want := []string{"cache_break", "tool_errors"}; strings.Join(got["m2"], ",") != strings.Join(want, ",") {

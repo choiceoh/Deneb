@@ -130,11 +130,16 @@ func executeAgentRun(
 	providerID := mr.providerID
 	initialRole := mr.initialRole
 
+	thinkingLevel := ""
+	if cachedSession != nil && cachedSession.ThinkingLevel != "" && cachedSession.ThinkingLevel != "off" {
+		thinkingLevel = cachedSession.ThinkingLevel
+	}
 	runLog.LogStart(agentlog.RunStartData{
-		Model:    model,
-		Provider: providerID,
-		Message:  params.Message,
-		Channel:  deliveryChannel(params.Delivery),
+		Model:         model,
+		Provider:      providerID,
+		Message:       params.Message,
+		Channel:       deliveryChannel(params.Delivery),
+		ThinkingLevel: thinkingLevel,
 	})
 
 	// 3. Resolve LLM client (no IO — reads in-memory config/auth store).
