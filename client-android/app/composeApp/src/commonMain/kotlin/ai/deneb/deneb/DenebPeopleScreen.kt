@@ -1,12 +1,12 @@
 package ai.deneb.deneb
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import ai.deneb.Platform
 import ai.deneb.currentPlatform
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebPressable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -101,7 +101,7 @@ fun DenebPeopleScreen(
                             Modifier
                                 .animateItem()
                                 .fillMaxWidth()
-                                .clickable { haptics.tap(); onOpenPerson(person.email.ifBlank { person.name }) }
+                                .denebPressable(onClick = { haptics.tap(); onOpenPerson(person.email.ifBlank { person.name }) })
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {

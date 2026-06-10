@@ -52,6 +52,7 @@ import androidx.compose.ui.window.PopupPositionProvider
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
+import ai.deneb.ui.denebPressable
 import ai.deneb.ui.settings.SettingsCard
 import ai.deneb.ui.statusDanger
 import ai.deneb.ui.statusSuccess
@@ -222,14 +223,17 @@ internal fun ModelTab(client: DenebGatewayClient) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(enabled = !isCurrent && !switching) {
-                                haptics.tap()
-                                scope.launch {
-                                    switching = true
-                                    switchFailed = !client.setRoleModel(model.id, role.wire)
-                                    switching = false
-                                }
-                            }
+                            .denebPressable(
+                                enabled = !isCurrent && !switching,
+                                onClick = {
+                                    haptics.tap()
+                                    scope.launch {
+                                        switching = true
+                                        switchFailed = !client.setRoleModel(model.id, role.wire)
+                                        switching = false
+                                    }
+                                },
+                            )
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

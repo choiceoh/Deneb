@@ -20,8 +20,10 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
@@ -130,18 +132,27 @@ val denebPopExit: ExitTransition =
  * Press feedback for flat, cardless rows and tiles: a subtle scale-down while
  * held that springs back on release, layered over the normal ripple. This is the
  * tactile "give" iOS rows have and stock Material rows lack — applied once in
- * [DenebRow] it lifts every list in the app at once.
+ * [DenebRow] it lifts every list in the app at once, and hand-rolled rows
+ * (mail, people, categories, session drawer) ride it directly.
  *
  * Spatial press uses [denebSnappySpring] going down (tracks the finger) and
  * [denebSpatialSpring] coming back (a soft settle). Ripple is kept via
  * [LocalIndication] so touch still reads as Material; the scale is additive.
+ *
+ * [onLongClick] switches the gesture handler to combinedClickable so rows with a
+ * long-press affordance (mail multi-select) keep it; [onClickLabel] carries the
+ * TalkBack action label for rows that set one. Both default off, so existing
+ * call sites are untouched.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun Modifier.denebPressable(
     onClick: () -> Unit,
     enabled: Boolean = true,
     pressedScale: Float = 0.98f,
     role: Role? = null,
+    onClickLabel: String? = null,
+    onLongClick: (() -> Unit)? = null,
 ): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -150,18 +161,30 @@ fun Modifier.denebPressable(
         animationSpec = if (pressed) denebSnappySpring() else denebSpatialSpring(),
         label = "deneb-pressable-scale",
     )
-    return this
-        .graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        }
-        .clickable(
+    val scaled = this.graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+    }
+    return if (onLongClick != null) {
+        scaled.combinedClickable(
             interactionSource = interactionSource,
             indication = LocalIndication.current,
             enabled = enabled,
+            onClickLabel = onClickLabel,
+            role = role,
+            onLongClick = onLongClick,
+            onClick = onClick,
+        )
+    } else {
+        scaled.clickable(
+            interactionSource = interactionSource,
+            indication = LocalIndication.current,
+            enabled = enabled,
+            onClickLabel = onClickLabel,
             role = role,
             onClick = onClick,
         )
+    }
 }
 
 /**

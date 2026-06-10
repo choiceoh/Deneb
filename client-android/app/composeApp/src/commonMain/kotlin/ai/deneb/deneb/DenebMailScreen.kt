@@ -11,7 +11,6 @@ import kotlin.time.Clock
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +57,7 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.denebContentWidthModifier
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebPressable
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.components.DenebSearchField
 import ai.deneb.ui.components.rememberHaptics
@@ -308,7 +308,7 @@ internal fun MailRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onTap, onLongClick = onLongPress)
+            .denebPressable(onClick = onTap, onLongClick = onLongPress)
             .background(
                 when {
                     // Multi-select (checkbox) wins; else current-open-in-panel highlight; else none.

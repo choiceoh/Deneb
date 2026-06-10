@@ -21,6 +21,12 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "채팅 답변 속 제목(#·##·###)이 위키·분석 화면과 같은 글꼴 사다리로 통일 — 화면 어디서나 제목 위계가 한 가지 언어로 읽힘",
+            "메일·사람·카테고리·세션 목록의 행을 누르는 동안 살짝 눌리는 촉감 피드백 — 할일·업무피드와 같은 감각으로 통일",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "인터랙티브 폼에 필수 입력 검증 — 빈 필수 항목이 있으면 제출이 막히고 해당 칸이 빨갛게 표시",
             "숫자·이메일·전화 입력 칸은 알맞은 키보드가 바로 열림, 선택 상자엔 안내 문구(placeholder) 지원",
         ),

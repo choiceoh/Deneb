@@ -40,6 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.dynamicui.FrozenSubmission
 import ai.deneb.ui.dynamicui.DenebUiRenderer
 import ai.deneb.ui.markdown.math.MathFormula
@@ -151,14 +152,14 @@ private fun BlockRenderer(
 
 @Composable
 private fun HeadingBlock(block: Heading) {
-    val typography = MaterialTheme.typography
+    // Heading ladder rides the DenebType scale, matching DenebMarkdown.kt:
+    // # = subject (22), ## = cardTitle (18), ###+ = rowTitleStrong (15). Deeper
+    // levels collapse onto the emphasis rung on purpose — hierarchy comes from
+    // register jumps, not a continuous ladder (see DenebType.kt law 1).
     val style = when (block.level) {
-        1 -> typography.headlineSmall
-        2 -> typography.titleLarge
-        3 -> typography.titleMedium
-        4 -> typography.titleSmall
-        5 -> typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
-        else -> typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+        1 -> DenebType.subject
+        2 -> DenebType.cardTitle
+        else -> DenebType.rowTitleStrong
     }
     // A heading opens a section: clear air above (more for higher levels) and a
     // tight gap below, so the title visibly groups with the content it leads.
