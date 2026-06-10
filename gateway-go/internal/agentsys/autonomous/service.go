@@ -16,7 +16,7 @@ import (
 )
 
 // Notifier delivers significant events to the user.
-// Implemented by the server layer to send messages via Telegram or other channels.
+// Implemented by the server layer to send messages to the user's channel.
 type Notifier interface {
 	Notify(ctx context.Context, message string) error
 }

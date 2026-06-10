@@ -237,7 +237,7 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "clarify",
-		Description: "Ask the user to resolve ambiguity with a Telegram button-tap choice. Sends the question + 2-5 labeled buttons; the agent's turn ends, and the user's choice arrives as a new user message on the next turn. Use only for genuine ambiguity the agent cannot resolve itself",
+		Description: "Ask the user to resolve ambiguity by presenting 2-5 numbered options. Sends the question + numbered choices; the agent's turn ends, and the user's choice arrives as a new user message on the next turn. Use only for genuine ambiguity the agent cannot resolve itself",
 		InputSchema: clarifyToolSchema(),
 		Fn:          tools.ToolClarify(),
 	})

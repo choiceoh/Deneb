@@ -110,7 +110,7 @@ func ReplyFromConfig(ctx context.Context, msg *types.MsgContext, opts types.GetR
 		return nil, err
 	}
 
-	// Reply delivery happens asynchronously via chatSendExecutor →
+	// Reply delivery happens asynchronously via the executor →
 	// chat.Handler.Send(). The returned Payloads are only used for
 	// command-level replies (not agent-generated content).
 	return result.Payloads, nil

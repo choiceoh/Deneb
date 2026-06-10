@@ -1,4 +1,6 @@
-// render.go — Telegram MarkdownV2 and plain-text rendering for Report.
+// render.go — MarkdownV2 (Telegram-flavored) and plain-text rendering for Report.
+// Consumed by the insights RPC handler; the format conventions below are
+// inherited from the retired Telegram surface and kept for renderer compat.
 //
 // MarkdownV2 reserved characters: _ * [ ] ( ) ~ ` > # + - = | { } . !
 // We always wrap tabular data in ```-fenced code blocks where escaping is not
