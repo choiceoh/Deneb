@@ -72,6 +72,9 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 			lwModel := (*regPtr).Model(modelrole.RoleLightweight)
 			if lwClient != nil && lwModel != "" {
 				s.wikiDreamer = wiki.NewWikiDreamer(wikiStore, lwClient, lwModel, wikiCfg, s.logger)
+				// Let dream cycles consume + curate the auto-recorded
+				// workspace MEMORY.md (distill to wiki, keep a bounded buffer).
+				s.wikiDreamer.SetWorkspaceDir(resolveWorkspaceDir())
 				s.logger.Info("wiki-dream: enabled")
 			}
 		}

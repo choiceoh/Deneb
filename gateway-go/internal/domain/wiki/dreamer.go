@@ -51,6 +51,11 @@ type diaryProcessState struct {
 	// minutes). Without it, in-memory lastDream reset to zero on every boot and
 	// dreaming never fired.
 	LastDreamMs int64 `json:"lastDreamMs,omitempty"`
+	// MemoryConsumedThrough is the high-water stamp ("YYYY-MM-DD HH:MM") of
+	// workspace MEMORY.md sections already distilled into the wiki. Sections
+	// at or before this stamp may be dropped from MEMORY.md once they age out
+	// of the keep window (see memory_curation.go).
+	MemoryConsumedThrough string `json:"memoryConsumedThrough,omitempty"`
 }
 
 type diaryFileState struct {
@@ -121,6 +126,10 @@ type WikiDreamer struct {
 	// source alongside raw diary entries. Wired by the chat pipeline; the wiki
 	// package does not import polaris directly.
 	polarisContextFn func() string
+
+	// workspaceDir is the agent workspace containing MEMORY.md. Empty disables
+	// memory curation (see memory_curation.go).
+	workspaceDir string
 }
 
 // NewWikiDreamer creates a new wiki dreamer.
@@ -166,6 +175,13 @@ func (wd *WikiDreamer) SetPolarisContextFn(fn func() string) {
 	wd.polarisContextFn = fn
 }
 
+// SetWorkspaceDir wires the workspace directory so dream cycles can consume
+// and curate the auto-recorded MEMORY.md (see memory_curation.go). Empty
+// disables memory curation.
+func (wd *WikiDreamer) SetWorkspaceDir(dir string) {
+	wd.workspaceDir = dir
+}
+
 // ShouldDream checks if dreaming conditions are met.
 func (wd *WikiDreamer) ShouldDream(_ context.Context) bool {
 	wd.cmu.Lock()
@@ -198,13 +214,25 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	if err != nil {
 		phaseErrors = append(phaseErrors, fmt.Sprintf("diary-scan: %v", err))
 	}
-	diaryContent := ""
-	if scan != nil {
-		diaryContent = scan.Content
+	if scan == nil {
+		// No new diary bytes. Keep a state-bearing scan so a MEMORY.md-only
+		// cycle flows through the same synthesis/persistence tail.
+		scan = &diaryScanResult{State: wd.loadDiaryProcessState()}
+	}
+	diaryContent := scan.Content
+
+	// Phase 1b: unconsumed workspace MEMORY.md sections join the synthesis
+	// input — same distillation as diaries; the file is curated in Phase 4b.
+	memScan := wd.scanWorkspaceMemory(scan.State.MemoryConsumedThrough)
+	synthInput := diaryContent
+	if memScan != nil {
+		synthInput += memScan.Content
+		wd.logger.Info("wiki-dream: memory sections queued for distillation",
+			"sections", memScan.Sections, "through", memScan.ConsumedThrough)
 	}
 
-	if diaryContent == "" {
-		wd.logger.Info("wiki-dream: no new diary entries to process")
+	if synthInput == "" {
+		wd.logger.Info("wiki-dream: no new diary or memory entries to process")
 		wd.resetCounters()
 		report.DurationMs = time.Since(start).Milliseconds()
 		return report, nil
@@ -218,7 +246,7 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 		return report, nil
 	}
 
-	updates, err := wd.synthesize(ctx, diaryContent, scan.State)
+	updates, err := wd.synthesize(ctx, synthInput, scan.State)
 	if err != nil {
 		phaseErrors = append(phaseErrors, fmt.Sprintf("synthesis: %v", err))
 		report.PhaseErrors = phaseErrors
@@ -282,6 +310,15 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 				"nodes", snap.Nodes, "edges", snap.Edges,
 				"clustered", snap.Clustered, "out", snap.GraphPath)
 		}
+	}
+
+	// Phase 4b: curate MEMORY.md now that its consumed sections are distilled
+	// into wiki pages, and advance the high-water mark for the state save below.
+	if memScan != nil {
+		if _, derr := wd.curateWorkspaceMemory(memScan); derr != nil {
+			phaseErrors = append(phaseErrors, fmt.Sprintf("memory-curation: %v", derr))
+		}
+		scan.State.MemoryConsumedThrough = memScan.ConsumedThrough
 	}
 
 	// Persist diary high-water state only after synthesis/apply/index work has
