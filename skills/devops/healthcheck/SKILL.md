@@ -78,26 +78,22 @@ If the user grants read-only permission, run the OS-appropriate checks by defaul
    - macOS: `/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate` and `pfctl -s info`.
 4. Backups (macOS): `tmutil status` (if Time Machine is used).
 
-### 2) Run Deneb security audits (read-only)
+### 2) Deneb-specific checks (read-only)
 
-As part of the default read-only checks, run `deneb security audit --deep`. Only offer alternatives if the user requests them:
+This deployment has no `deneb security audit` CLI (that was an upstream tool).
+Check the Deneb surface by hand instead:
 
-1. `deneb security audit` (faster, non-probing)
-2. `deneb security audit --json` (structured output)
+1. Gateway liveness: `curl -s http://127.0.0.1:18789/health` (200) and `/ready`.
+2. Secret file permissions: `~/.deneb/client_token` must be 0600 and owned by the gateway user; nothing under `~/.deneb/` should be world-readable.
+3. Recent errors: scan the gateway log (`/tmp/deneb-gateway.log`) for ERROR/WARN lines.
 
-Offer to apply Deneb safe defaults (numbered):
-
-1. `deneb security audit --fix`
-
-Be explicit that `--fix` only tightens Deneb defaults and file permissions. It does not change host firewall, SSH, or OS update policies.
-
-If browser control is enabled, recommend that 2FA be enabled on all important accounts, with hardware keys preferred and SMS not sufficient.
+Recommend that 2FA be enabled on all important accounts, with hardware keys preferred and SMS not sufficient.
 
 ### 3) Check Deneb version/update status (read-only)
 
-As part of the default read-only checks, run `deneb update status`.
-
-Report the current channel and whether an update is available.
+There is no `deneb update` CLI. Deployment is git-based: report the running
+gateway version (the `/health` payload / startup banner) and compare with
+`scripts/build-status main` on the host (commits since the last release tag).
 
 ### 4) Determine risk tolerance (after system context)
 
@@ -174,9 +170,9 @@ If unsure, ask.
 
 After Deneb install or first hardening pass, run at least one baseline audit and version check:
 
-- `deneb security audit`
-- `deneb security audit --deep`
-- `deneb update status`
+- the gateway `/health` + `/ready` probes
+- the `~/.deneb` permission check
+- `scripts/build-status main` (release drift)
 
 Ongoing monitoring is recommended. Use the Deneb cron tool/CLI to schedule periodic audits (Gateway scheduler). Do not create scheduled tasks without explicit approval. Store outputs in a user-approved location and avoid secrets in logs.
 When scheduling headless cron runs, include a note in the output that instructs the user to call `healthcheck` so issues can be fixed.

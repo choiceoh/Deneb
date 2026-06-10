@@ -79,44 +79,32 @@ cp docs/reference/AGENTS.default.md ~/.deneb/workspace/AGENTS.md
 
 ## Backup tip (recommended)
 
-If you treat this workspace as Clawd’s “memory”, make it a git repo (ideally private) so `AGENTS.md` and your memory files are backed up.
+If you treat this workspace as the agent's memory, make it a git repo (ideally private) so `AGENTS.md` and your memory files are backed up.
 
 ```bash
 cd ~/.deneb/workspace
 git init
 git add AGENTS.md
-git commit -m "Add Clawd workspace"
+git commit -m "Add Deneb workspace"
 # Optional: add a private remote + push
 ```
 
 ## What Deneb Does
 
-- Runs the Gateway + Pi coding agent so the assistant can read/write chats, fetch context, and run skills on the DGX Spark host.
-- Direct chats collapse into the agent's `main` session by default; groups stay isolated as `agent:<agentId>:<channel>:group:<id>` (rooms/channels: `agent:<agentId>:<channel>:channel:<id>`); heartbeats keep background tasks alive.
+- Runs the Go gateway on the DGX Spark host so the assistant can read/write chats, fetch context, and run skills.
+- The native client's home conversation is the `client:main` session; explicit conversations live at `client:main:<suffix>`, and background work runs under `cron:<job>:<ts>` / `system:<name>` sessions. Heartbeats keep background tasks alive.
 
-## Core Skills (enable in Settings → Skills)
+## Bundled Skills (`skills/`, filesystem-discovered)
 
-- **mcporter** — Tool server runtime/CLI for managing external skill backends.
-- **Peekaboo** — Fast screenshots with optional AI vision analysis.
-- **camsnap** — Capture frames, clips, or motion alerts from RTSP/ONVIF security cams.
-- **oracle** — OpenAI-ready agent CLI with session replay and browser control.
-- **eightctl** — Control your sleep, from the terminal.
-- **gog** — Google Suite CLI: Gmail, Calendar, Drive, Contacts.
-- **spotify-player** — Terminal Spotify client to search/queue/control playback.
-- **sag** — ElevenLabs speech with mac-style say UX; streams to speakers by default.
-- **Sonos CLI** — Control Sonos speakers (discover/status/playback/volume/grouping) from scripts.
-- **blucli** — Play, group, and automate BluOS players from scripts.
-- **OpenHue CLI** — Philips Hue lighting control for scenes and automations.
-- **OpenAI Whisper** — Local speech-to-text for quick dictation and voicemail transcripts.
-- **Gemini CLI** — Google Gemini models from the terminal for fast Q&A.
-- **agent-tools** — Utility toolkit for automations and helper scripts.
+Skill discovery is filesystem-driven — the gateway indexes `skills/` at startup
+and the native client's Settings → 스킬 tab lists them read-only (no toggles).
+
+- **productivity/** — email-analysis, hindsight, meeting-minutes, morning-letter, session-logs, summarize, weekly-report
+- **coding/** — github, skill-creator, skill-factory, skill-evolution, evolution-proposal
+- **devops/** — healthcheck, tmux
+- **security/** — 1password
 
 ## Usage Notes
 
-- Prefer the `deneb` CLI for scripting.
-- Run installs from the Skills tab; it hides the button if a binary is already present.
-- Keep heartbeats enabled so the assistant can schedule reminders, monitor inboxes, and trigger camera captures.
-- Canvas UI runs full-screen with native overlays. Avoid placing critical controls in the top-left/top-right/bottom edges; add explicit gutters in the layout and don’t rely on safe-area insets.
-- For browser-driven verification, use `deneb browser` (tabs/status/screenshot) with the Deneb-managed Chrome profile.
-- For DOM inspection, use `deneb browser eval|query|dom|snapshot` (and `--json`/`--out` when you need machine output).
-- For interactions, use `deneb browser click|type|hover|drag|select|upload|press|wait|navigate|back|evaluate|run` (click/type require snapshot refs; use `evaluate` for CSS selectors).
+- Keep heartbeats enabled so the assistant can schedule reminders and monitor inboxes.
+- Skills are read via each skill's `SKILL.md` on demand; there is no install step — adding a directory under `skills/` is the install.
