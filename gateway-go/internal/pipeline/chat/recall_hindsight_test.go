@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -105,5 +106,58 @@ func TestBuildRecallPreflightSurvivesHindsightFailure(t *testing.T) {
 	// no-evidence stub rather than crashing on the Hindsight error.
 	if !strings.Contains(out, "source=none") {
 		t.Fatalf("expected graceful no-evidence fallback, got %q", out)
+	}
+}
+
+func TestClipRunesAtBoundary(t *testing.T) {
+	// Word-boundary clip: never cut mid-word.
+	got := clipRunesAtBoundary("현대차 울산공장 모듈 납품 결제기한 확인 요청", 12)
+	if strings.HasSuffix(got, "납") || len([]rune(got)) > 12 {
+		t.Errorf("bad clip: %q", got)
+	}
+	// Short input untouched.
+	if got := clipRunesAtBoundary("짧은 질문", 400); got != "짧은 질문" {
+		t.Errorf("short input modified: %q", got)
+	}
+	// No whitespace in range → hard cut at the cap, still valid runes.
+	long := strings.Repeat("가", 50)
+	if got := clipRunesAtBoundary(long, 10); len([]rune(got)) != 10 {
+		t.Errorf("hard cut failed: %d runes", len([]rune(got)))
+	}
+}
+
+// TestRecallHindsightEvidence_QueryTooLongRetry: the bank enforces a
+// server-side TOKEN limit; on its "Query too long" 400 the source must halve
+// the query and retry instead of contributing nothing on long Korean turns
+// (the exact failure observed in production logs on 2026-06-10).
+func TestRecallHindsightEvidence_QueryTooLongRetry(t *testing.T) {
+	var queries []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Query string `json:"query"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		queries = append(queries, req.Query)
+		if len([]rune(req.Query)) > 250 {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"detail":"Query too long: 682 tokens exceeds maximum of 500."}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"results":[{"id":"m1","text":"현대차 울산 결제기한은 6월 말로 합의","type":"fact"}]}`))
+	}))
+	defer srv.Close()
+
+	client := hindsight.NewClient(hindsight.Config{BaseURL: srv.URL, BankID: "deneb"})
+	message := strings.Repeat("업무 맥락 설명 ", 60) // ~420 runes → first call rejected
+	ev := recallHindsightEvidence(context.Background(), client, message, nil)
+
+	if len(queries) != 2 {
+		t.Fatalf("want reject+retry (2 calls), got %d: %v", len(queries), queries)
+	}
+	if len([]rune(queries[1])) >= len([]rune(queries[0])) {
+		t.Errorf("retry query not shortened: %d vs %d runes", len([]rune(queries[1])), len([]rune(queries[0])))
+	}
+	if len(ev) != 1 || !strings.Contains(ev[0].Note, "결제기한") {
+		t.Errorf("retry evidence lost: %+v", ev)
 	}
 }

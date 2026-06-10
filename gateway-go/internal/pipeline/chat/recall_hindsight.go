@@ -16,9 +16,14 @@ import (
 )
 
 const (
-	// recallHindsightMaxQueryRunes caps the query length. Hindsight rejects
-	// overly long queries (its recall_max_input_chars default is 800).
-	recallHindsightMaxQueryRunes = 800
+	// recallHindsightMaxQueryRunes caps the query length. The bank enforces a
+	// server-side TOKEN limit (500 by default), not a rune limit — and Korean
+	// runs at roughly one token per rune, so the previous 800-rune cap blew
+	// straight past it: every long Korean turn got a 400 ("682 tokens exceeds
+	// maximum of 500") and hindsight contributed nothing on exactly the
+	// context-rich turns it exists for. 400 runes keeps Korean-heavy queries
+	// comfortably under the limit.
+	recallHindsightMaxQueryRunes = 400
 	// recallHindsightMaxResults caps how many bank hits enter the evidence
 	// pool, leaving room for wiki/diary/session sources under recallMaxEvidence.
 	recallHindsightMaxResults = 5
@@ -33,15 +38,19 @@ func recallHindsightEvidence(ctx context.Context, client *hindsight.Client, mess
 	if client == nil {
 		return nil
 	}
-	query := strings.TrimSpace(message)
+	query := clipRunesAtBoundary(strings.TrimSpace(message), recallHindsightMaxQueryRunes)
 	if query == "" {
 		return nil
 	}
-	if runes := []rune(query); len(runes) > recallHindsightMaxQueryRunes {
-		query = strings.TrimSpace(string(runes[:recallHindsightMaxQueryRunes]))
-	}
 
 	memories, err := client.Recall(ctx, query)
+	if err != nil && ctx.Err() == nil && isHindsightQueryTooLong(err) {
+		// The bank's token limit is server-configurable, so the rune cap can
+		// still overshoot on token-dense content. Halve once and retry rather
+		// than losing the turn's hindsight contribution entirely.
+		query = clipRunesAtBoundary(query, len([]rune(query))/2)
+		memories, err = client.Recall(ctx, query)
+	}
 	if err != nil {
 		// A cancelled context is the preflight budget expiring, not a fault,
 		// so only the real failures are worth a log line.
@@ -72,6 +81,28 @@ func recallHindsightEvidence(ctx context.Context, client *hindsight.Client, mess
 		logger.Info("recall preflight: hindsight evidence injected", "count", len(evidence))
 	}
 	return evidence
+}
+
+// isHindsightQueryTooLong matches the bank's over-limit rejection.
+func isHindsightQueryTooLong(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "Query too long")
+}
+
+// clipRunesAtBoundary truncates s to at most maxRunes, backing up to the last
+// whitespace so the hybrid search never sees a half-cut word.
+func clipRunesAtBoundary(s string, maxRunes int) string {
+	runes := []rune(s)
+	if maxRunes <= 0 || len(runes) <= maxRunes {
+		return strings.TrimSpace(s)
+	}
+	cut := maxRunes
+	for i := maxRunes - 1; i > maxRunes/2; i-- {
+		if runes[i] == ' ' || runes[i] == '\n' || runes[i] == '\t' {
+			cut = i
+			break
+		}
+	}
+	return strings.TrimSpace(string(runes[:cut]))
 }
 
 // recallHindsightScore assigns a rank-decayed score. Hindsight returns
