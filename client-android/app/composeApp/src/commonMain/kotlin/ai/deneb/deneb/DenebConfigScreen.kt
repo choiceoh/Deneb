@@ -122,6 +122,8 @@ fun DenebConfigScreen(
             ) { page ->
                 when (ConfigTab.entries[page]) {
                     ConfigTab.GATEWAY -> GatewayTab(appSettings, onBack, denebClient)
+                    ConfigTab.APPEARANCE -> AppearanceTab(appSettings)
+                    ConfigTab.AGENT -> AgentTab(appSettings)
                     ConfigTab.MODEL -> denebClient?.let { ModelTab(it) }
                     ConfigTab.SKILLS -> denebClient?.let { SkillsTab(it) }
                     ConfigTab.CRON -> denebClient?.let { CronTab(it, onOpenCron) }
@@ -145,6 +147,8 @@ internal fun EmptyTab(text: String) {
  *  pill row and switches content by enum, so a reorder/rename happens in one place. */
 private enum class ConfigTab(val label: String) {
     GATEWAY("게이트웨이"),
+    APPEARANCE("화면"),
+    AGENT("에이전트"),
     MODEL("모델"),
     SKILLS("스킬"),
     CRON("크론"),
