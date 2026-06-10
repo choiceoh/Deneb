@@ -514,6 +514,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	}
 	if params.AutoDeliveredOutput {
 		d.WriteString("- **이 실행은 예약된 자동 실행이다.** 최종 응답 텍스트는 시스템이 자동으로 사용자 채널에 전달한다. 결과를 전달하려고 `message` 도구를 호출하지 마라 — 그냥 최종 결과 텍스트를 작성하고 턴을 끝내라.\n")
+		d.WriteString("- 최종 텍스트는 그대로 사용자에게 보이는 배달문이다. 보고 본문(제목/헤딩)으로 바로 시작하라 — \"이제 분석 보고를 정리해\" 같은 사고·전환 문장을 본문 앞에 붙이지 마라.\n")
 		d.WriteString("- 내부 전송 도구가 실패하더라도 그것은 채널 장애가 아니다. \"채널이 끊겼다 / 연결되지 않았다 / 복구되면 보내겠다 / 여기 직접 전달한다\" 같은 안내를 절대 하지 마라 — 채널은 정상이고 너의 결과물은 그대로 전달된다.\n")
 	}
 	d.WriteString("\n")

@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
@@ -323,12 +324,15 @@ func RunAgent(
 			// model emits alongside tool calls ("위키 맥락 확보 완료. 이제 메일
 			// 읽을게요"). Proactive/cron delivery uses it so multi-turn reports
 			// don't ship the working narration. See isInterimNarration and
-			// AgentResult.DeliverableText.
+			// AgentResult.DeliverableText. An answer turn can still open with a
+			// self-talk sentence before the report body ("이제 분석 보고를
+			// 정리해.\n\n---\n\n## …"); stripNarrationHead peels that preamble
+			// off the deliverable copy only — Text/AllText keep the raw turn text.
 			if !isInterimNarration(turnRes.text, len(turnRes.toolCalls)) {
 				if result.DeliverableText != "" {
 					result.DeliverableText += "\n\n"
 				}
-				result.DeliverableText += turnRes.text
+				result.DeliverableText += stripNarrationHead(turnRes.text)
 			}
 		}
 
@@ -982,6 +986,107 @@ func fenceUntrustedToolOutput(toolName, output string, logger *slog.Logger) stri
 // to the wiki — are never narration. Used to build AgentResult.DeliverableText.
 func isInterimNarration(text string, toolCallCount int) bool {
 	return toolCallCount > 0 && utf8.RuneCountInString(text) < deliverableNarrationMaxRunes
+}
+
+// deliverableNarrationHeadMaxRunes bounds the leading self-narration preamble
+// stripNarrationHead may peel off a turn's deliverable contribution. The
+// observed leak ("이제 분석 보고를 정리해.") ran 16 runes; 80 leaves room for a
+// two-sentence preamble while staying below any summary that carries content.
+const deliverableNarrationHeadMaxRunes = 80
+
+// stripNarrationHead removes a short self-narration preamble from a turn's
+// deliverable contribution: leading plain-prose sentence(s) immediately
+// followed by a horizontal rule or markdown heading that opens the actual
+// report ("이제 분석 보고를 정리해.\n\n---\n\n## 📧 메일 분석…" → "## 📧 …").
+// isInterimNarration drops whole tool-call turns, but a model can bake the
+// same narration into the head of its *final* answer turn, which then opened
+// the user-visible cron report (step3p7, 2026-06-10).
+//
+// Deliberately conservative — the text is returned unchanged unless ALL hold:
+//   - every head line passes isNarrationSentenceLine (plain prose, no digits
+//     or colons, sentence-final punctuation)
+//   - the head totals ≤ deliverableNarrationHeadMaxRunes runes
+//   - the first structural line after it is a horizontal rule or a # heading
+//   - a non-empty body remains. The rule, being the model's narration/body
+//     divider, is consumed with the head; a heading stays (it IS the body).
+func stripNarrationHead(text string) string {
+	lines := strings.Split(text, "\n")
+	headRunes := 0
+	sawHead := false
+	for i, raw := range lines {
+		line := strings.TrimSpace(raw)
+		switch {
+		case line == "":
+			continue
+		case isHorizontalRule(line) || isMarkdownHeading(line):
+			if !sawHead {
+				return text // already opens with the body
+			}
+			bodyStart := i
+			if isHorizontalRule(line) {
+				bodyStart++
+			}
+			if body := strings.TrimSpace(strings.Join(lines[bodyStart:], "\n")); body != "" {
+				return body
+			}
+			return text
+		case isNarrationSentenceLine(line):
+			headRunes += utf8.RuneCountInString(line)
+			if headRunes > deliverableNarrationHeadMaxRunes {
+				return text
+			}
+			sawHead = true
+		default:
+			return text // head line looks like content — keep everything
+		}
+	}
+	return text // no body boundary found
+}
+
+// isNarrationSentenceLine reports whether a trimmed line could be model
+// self-narration rather than report content: a plain prose sentence that
+// starts with a letter and ends with sentence punctuation, carrying none of
+// the factual-summary tells (digits, colon labels). Markdown structure and
+// emoji-led content markers (📬/🔴) start with non-letters and fail the first
+// check, so they are always kept.
+func isNarrationSentenceLine(line string) bool {
+	first, _ := utf8.DecodeRuneInString(line)
+	if !unicode.IsLetter(first) {
+		return false
+	}
+	if strings.ContainsAny(line, ":：0123456789") {
+		return false
+	}
+	last, _ := utf8.DecodeLastRuneInString(line)
+	return strings.ContainsRune(".!?。！？", last)
+}
+
+// isHorizontalRule reports whether a trimmed line is a markdown thematic
+// break: three or more of the same rule character (-, *, _) and nothing else.
+func isHorizontalRule(line string) bool {
+	if len(line) < 3 {
+		return false
+	}
+	c := line[0]
+	if c != '-' && c != '*' && c != '_' {
+		return false
+	}
+	for i := 1; i < len(line); i++ {
+		if line[i] != c {
+			return false
+		}
+	}
+	return true
+}
+
+// isMarkdownHeading reports whether a trimmed line is an ATX heading: one to
+// six # followed by whitespace and at least one more character.
+func isMarkdownHeading(line string) bool {
+	n := 0
+	for n < len(line) && line[n] == '#' {
+		n++
+	}
+	return n >= 1 && n <= 6 && n < len(line) && (line[n] == ' ' || line[n] == '\t')
 }
 
 // joinAllThinkingTexts concatenates every thinking block in the turn in order.

@@ -121,6 +121,9 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 	// emits before tool calls. That working narration was leaking into cron
 	// reports — the final turn alone is often a short status ("위키 업데이트 완료")
 	// so the old heuristic fell back to the full AllText, narration and all.
+	// A self-talk preamble baked into the head of an answer turn ("이제 분석
+	// 보고를 정리해.\n\n---\n\n## …") is likewise stripped at accumulation —
+	// see agent.stripNarrationHead.
 	// Fall back to the final turn, then the raw accumulation, only when no
 	// deliverable survived (e.g. a run aborted after emitting only narration).
 	// NO_REPLY is stripped so the marker does not leak into Telegram.
