@@ -32,6 +32,11 @@ type Deps struct {
 	// Hotwords supplies proper-noun bias (wiki people/companies/domain terms)
 	// for audio-capture transcription. Optional; nil or "" means no bias.
 	Hotwords func() string
+	// SaveCapture durably stores raw captured content (full ASR transcript,
+	// OCR text) and returns the stored file's memory-relative path. The agent
+	// turn only summarizes; without this the original is unrecoverable once
+	// the chat transcript ages out. Optional; nil skips persistence.
+	SaveCapture func(kind, context, text string) (string, error)
 	// EnrichContacts merges a shared address book into EXISTING wiki 사람 pages —
 	// it creates no pages, only enriches people already in the wiki with their
 	// phone/email/org (native-client contacts sync). Optional; nil disables the
