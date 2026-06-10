@@ -1,11 +1,16 @@
 // people.go — miniapp.people.* RPC handlers.
 //
 // Aggregates Gmail senders over a recent window into a "who am I in
-// contact with" directory. This is the secretary-style counterparty
-// awareness surface — sorted by frequency, not chronology, so the user
-// can see "who's been writing me a lot this month" at a glance. The
-// existing sender_context handler covers the drill-in for a single
-// person; this handler is the index.
+// contact with" directory, then folds in the wiki's curated 인물 pages
+// so the native client has ONE people surface instead of two (the
+// drawer's "사람" Gmail view and the 인물 wiki category used to coexist).
+// A Gmail sender whose address or normalized name matches an 인물 page
+// carries that page's path/summary inline; 인물 pages with no recent
+// mail are appended as wiki-only rows. This is the secretary-style
+// counterparty awareness surface — sorted by frequency, not
+// chronology, so the user can see "who's been writing me a lot this
+// month" at a glance. The existing sender_context handler covers the
+// drill-in for a single person; this handler is the index.
 //
 // Implementation: one Gmail Search call into the existing client,
 // followed by an in-memory group-by-sender pass. We deliberately do
@@ -30,6 +35,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -47,8 +53,15 @@ type PeopleClient interface {
 // PeopleDeps holds the lazy Gmail client factory. Same UNAVAILABLE
 // fallback pattern as crons / memory: an unconfigured Gmail surfaces
 // the right error per call instead of crashing the gateway at boot.
+//
+// WikiStore is optional and best-effort: when wired, the handler folds
+// 인물 wiki pages into the directory (matched senders get wikiPath/
+// wikiSummary, unmatched pages become wiki-only tail rows). A nil
+// factory, a factory error, or a listing error all degrade to the
+// Gmail-only behavior — the wiki must never break the people list.
 type PeopleDeps struct {
-	Client func() (PeopleClient, error)
+	Client    func() (PeopleClient, error)
+	WikiStore func() (MemorySearcher, error)
 }
 
 const (
@@ -58,6 +71,13 @@ const (
 	maxPeopleWindowDays     = 365
 	maxPeopleScanMessages   = 100 // Gmail Search fan-out cap; see file header
 	maxPeopleSubjectPreview = 80  // runes
+
+	// peopleWikiCategory is the wiki directory that holds person pages —
+	// the same one contacts sync (wiki.EnrichContacts) maintains.
+	peopleWikiCategory = "인물"
+	// maxPeopleWikiRows bounds the wiki-only tail so a runaway 인물
+	// directory can't bloat the response (mirrors maxMemoryListLimit).
+	maxPeopleWikiRows = 200
 )
 
 // PeopleMethods returns the miniapp.people.* handler map. Returns nil
@@ -72,7 +92,10 @@ func PeopleMethods(deps PeopleDeps) map[string]rpcutil.HandlerFunc {
 	}
 }
 
-// PersonRow is one row in the people directory.
+// PersonRow is one row in the people directory. Three shapes share it:
+// a plain Gmail sender (wiki fields empty), a sender matched to an 인물
+// page (wiki fields set), and a wiki-only person with no recent mail
+// (email empty, messageCount 0, wiki fields set).
 //
 //deneb:wire
 type PersonRow struct {
@@ -81,6 +104,8 @@ type PersonRow struct {
 	MessageCount int    `json:"messageCount"`
 	LastSeen     string `json:"lastSeen,omitempty"`    // ISO 8601, from the most recent message
 	LastSubject  string `json:"lastSubject,omitempty"` // truncated
+	WikiPath     string `json:"wikiPath,omitempty"`    // 인물 page path when this person is in the wiki
+	WikiSummary  string `json:"wikiSummary,omitempty"` // that page's one-line summary
 }
 
 func peopleList(deps PeopleDeps) rpcutil.HandlerFunc {
@@ -140,6 +165,7 @@ func peopleList(deps PeopleDeps) rpcutil.HandlerFunc {
 		if len(people) > limit {
 			people = people[:limit]
 		}
+		people = mergeWikiPeople(people, loadWikiPeople(deps.WikiStore))
 		return rpcutil.RespondOK(req.ID, out{
 			People:       people,
 			WindowDays:   window,
@@ -214,6 +240,166 @@ func aggregatePeople(msgs []gmail.MessageSummary) []PersonRow {
 		}
 		return rows[i].Email < rows[j].Email
 	})
+	return rows
+}
+
+// wikiPerson is one 인물 page prepared for merging: identity (title →
+// normalized name key, 연락처 emails) plus the row fields the client
+// renders (path, summary) and the sort key (updated).
+type wikiPerson struct {
+	path    string
+	title   string
+	summary string
+	updated string   // YYYY-MM-DD from frontmatter; "" sorts last
+	emails  []string // lowercased, from the "## 연락처" section
+}
+
+// loadWikiPeople lists the 인물 wiki pages via the (optional) store
+// factory. Every failure path — nil factory, factory error, listing
+// error, unreadable page — degrades to "no wiki people" so the Gmail
+// directory keeps working when the wiki is disabled or broken.
+func loadWikiPeople(storeFn func() (MemorySearcher, error)) []wikiPerson {
+	if storeFn == nil {
+		return nil
+	}
+	store, err := storeFn()
+	if err != nil || store == nil {
+		return nil
+	}
+	relPaths, err := store.ListPages(peopleWikiCategory)
+	if err != nil {
+		return nil
+	}
+	people := make([]wikiPerson, 0, len(relPaths))
+	for _, rel := range relPaths {
+		if len(people) >= maxPeopleWikiRows {
+			break
+		}
+		page, perr := store.ReadPage(rel)
+		if perr != nil || page == nil {
+			continue
+		}
+		// Same defensive check as wiki's contacts sync: a stray
+		// non-person .md under 인물/ shouldn't surface as a person.
+		if page.Meta.Category != "" && page.Meta.Category != peopleWikiCategory {
+			continue
+		}
+		title := strings.TrimSpace(page.Meta.Title)
+		if title == "" {
+			continue
+		}
+		people = append(people, wikiPerson{
+			path:    rel,
+			title:   title,
+			summary: strings.TrimSpace(page.Meta.Summary),
+			updated: page.Meta.Updated,
+			emails:  contactSectionEmails(page),
+		})
+	}
+	return people
+}
+
+// contactSectionEmails extracts the person's own addresses from the
+// "## 연락처" section (the exact `- 이메일:` bullet contacts sync writes).
+// Scanning only that section — not the whole body — keeps a note that
+// merely *mentions* someone else's address from mis-pairing pages.
+func contactSectionEmails(page *wiki.Page) []string {
+	_, sections := page.SplitByH2()
+	for _, sec := range sections {
+		if !strings.EqualFold(strings.TrimSpace(sec.Heading), "연락처") {
+			continue
+		}
+		var emails []string
+		for _, line := range strings.Split(sec.Content, "\n") {
+			rest, ok := strings.CutPrefix(strings.TrimSpace(line), "- 이메일:")
+			if !ok {
+				continue
+			}
+			for _, e := range strings.Split(rest, ",") {
+				e = strings.ToLower(strings.TrimSpace(e))
+				if looksLikeEmail(e) {
+					emails = append(emails, e)
+				}
+			}
+		}
+		return emails
+	}
+	return nil
+}
+
+// mergeWikiPeople folds 인물 pages into the Gmail sender rows: a row
+// whose address appears in a page's 연락처 section (strong signal) or
+// whose normalized display name equals the page title (honorifics
+// stripped — "김민준 부장" matches page "김민준") carries that page's
+// path/summary. Pages left unmatched append as wiki-only rows after
+// the Gmail block, updated desc then title asc — the client renders
+// them as the "no recent mail, but curated" section.
+func mergeWikiPeople(rows []PersonRow, people []wikiPerson) []PersonRow {
+	if len(people) == 0 {
+		return rows
+	}
+	byEmail := make(map[string]int)
+	byName := make(map[string]int)
+	for i, wp := range people {
+		for _, e := range wp.emails {
+			if _, ok := byEmail[e]; !ok {
+				byEmail[e] = i
+			}
+		}
+		// First page wins a contested key, same as contacts sync's
+		// listPeopleByName; ≥2 runes so a degenerate title can't match.
+		key := wiki.NormalizePersonName(wp.title)
+		if len([]rune(key)) >= 2 {
+			if _, ok := byName[key]; !ok {
+				byName[key] = i
+			}
+		}
+	}
+
+	matched := make([]bool, len(people))
+	for ri := range rows {
+		idx, ok := byEmail[strings.ToLower(rows[ri].Email)]
+		if !ok {
+			key := wiki.NormalizePersonName(rows[ri].Name)
+			if len([]rune(key)) < 2 {
+				continue
+			}
+			idx, ok = byName[key]
+			if !ok {
+				continue
+			}
+		}
+		rows[ri].WikiPath = people[idx].path
+		rows[ri].WikiSummary = people[idx].summary
+		matched[idx] = true
+	}
+
+	rest := make([]wikiPerson, 0, len(people))
+	for i, wp := range people {
+		if !matched[i] {
+			rest = append(rest, wp)
+		}
+	}
+	sort.Slice(rest, func(i, j int) bool {
+		if rest[i].updated != rest[j].updated {
+			// Empty updated sinks last (same rule as list_in_category).
+			if rest[i].updated == "" {
+				return false
+			}
+			if rest[j].updated == "" {
+				return true
+			}
+			return rest[i].updated > rest[j].updated
+		}
+		return rest[i].title < rest[j].title
+	})
+	for _, wp := range rest {
+		rows = append(rows, PersonRow{
+			Name:        wp.title,
+			WikiPath:    wp.path,
+			WikiSummary: wp.summary,
+		})
+	}
 	return rows
 }
 

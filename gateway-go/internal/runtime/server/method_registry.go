@@ -392,10 +392,18 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 
 		// Mini App people directory (miniapp.people.list). Same Gmail
 		// lazy-client pattern; aggregates a single Search call into a
-		// frequency-sorted counterparty list.
+		// frequency-sorted counterparty list, then folds in 인물 wiki
+		// pages (best-effort — wiki disabled degrades to Gmail-only).
 		handlerminiapp.PeopleMethods(handlerminiapp.PeopleDeps{
 			Client: func() (handlerminiapp.PeopleClient, error) {
 				return gmail.DefaultClient()
+			},
+			WikiStore: func() (handlerminiapp.MemorySearcher, error) {
+				store := hub.WikiStore()
+				if store == nil {
+					return nil, errWikiDisabled
+				}
+				return store, nil
 			},
 		}),
 
