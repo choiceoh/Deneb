@@ -183,6 +183,69 @@ func TestGmailListRecent_PriorityFields(t *testing.T) {
 	}
 }
 
+// Layered priority: a cached LLM analysis verdict beats the heuristic —
+// urgent/attention render with the "분석 판정" hint, routine suppresses a
+// heuristic that would otherwise mark, and a cache miss falls back.
+func TestGmailListRecent_AnalysisVerdictLayering(t *testing.T) {
+	store := NewAnalysisStore(t.TempDir())
+	mustSave := func(id, importance string) {
+		t.Helper()
+		if err := store.SaveAnalysis(CachedAnalysis{MsgID: id, Analysis: "분석", Importance: importance}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustSave("m-urgent", "urgent")
+	mustSave("m-routine", "routine") // body-aware FYI verdict
+	mustSave("m-blank", "")          // v2 record without parseable tag
+
+	client := &fakeGmailClient{
+		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
+			return []gmail.MessageSummary{
+				{ID: "m-urgent", From: "a <a@b.kr>", Subject: "안부"},        // heuristic would say none
+				{ID: "m-routine", From: "b <b@c.kr>", Subject: "긴급 낙찰 공문"}, // heuristic would say urgent
+				{ID: "m-blank", From: "c <c@d.kr>", Subject: "견적 송부"},      // falls back to heuristic
+				{ID: "m-miss", From: "d <d@e.kr>", Subject: "회의 일정 조율"},    // no cache → heuristic
+			}, nil
+		},
+	}
+	deps := depsFor(client)
+	deps.AnalysisCache = store
+	deps.Priority = func(_, subject, _ string) (string, string) {
+		switch subject {
+		case "긴급 낙찰 공문":
+			return "urgent", "낙찰"
+		case "견적 송부":
+			return "attention", "견적"
+		case "회의 일정 조율":
+			return "attention", "회의"
+		}
+		return "", ""
+	}
+	h := gmailListRecent(deps, nil)
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	var got struct {
+		Messages []map[string]any `json:"messages"`
+	}
+	decode(t, resp, &got)
+	byID := map[string]map[string]any{}
+	for _, m := range got.Messages {
+		byID[m["id"].(string)] = m
+	}
+
+	if byID["m-urgent"]["priority"] != "urgent" || byID["m-urgent"]["priorityHint"] != "분석 판정" {
+		t.Errorf("analysis urgent must override heuristic-none: %+v", byID["m-urgent"])
+	}
+	if _, ok := byID["m-routine"]["priority"]; ok {
+		t.Errorf("analysis routine must suppress heuristic urgent: %+v", byID["m-routine"])
+	}
+	if byID["m-blank"]["priority"] != "attention" {
+		t.Errorf("blank verdict must fall back to heuristic: %+v", byID["m-blank"])
+	}
+	if byID["m-miss"]["priority"] != "attention" || byID["m-miss"]["priorityHint"] != "회의" {
+		t.Errorf("cache miss must fall back to heuristic: %+v", byID["m-miss"])
+	}
+}
+
 // Nil Priority dep (tests, wiring without scorer) leaves every row unmarked.
 func TestGmailListRecent_NilPriorityDep(t *testing.T) {
 	client := &fakeGmailClient{

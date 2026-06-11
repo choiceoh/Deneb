@@ -145,6 +145,7 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.Ana
 			From:            msg.From,
 			Date:            msg.Date,
 			Analysis:        res.Text,
+			Importance:      res.Importance,
 			RelatedProjects: res.RelatedProjects,
 			CreatedAt:       time.Now().UTC(),
 		}); err != nil {

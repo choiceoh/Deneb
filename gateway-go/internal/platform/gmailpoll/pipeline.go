@@ -145,6 +145,11 @@ type EmailFact struct {
 type AnalysisResult struct {
 	Text            string
 	RelatedProjects []string
+	// Importance is the model's own triage verdict for this mail, parsed
+	// from the IMPORTANCE tag line: "urgent" | "attention" | "routine",
+	// or "" when the tag was missing/unparseable. The inbox list marker
+	// prefers this over the cheap heuristic when present.
+	Importance string
 	// ActionItems are the operator's follow-up actions extracted from the
 	// analysis (best-effort; nil when local AI is unavailable or nothing
 	// qualifies). The server sink turns high-priority ones into to-dos.
@@ -232,13 +237,14 @@ func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 		// selection is still offered by appending the candidate block to the
 		// prompt, so the manual Mini App path — which never wires LocalClient
 		// — still cites related projects.
-		prompt := DefaultPrompt + projectSelectionSuffix(candidates)
+		prompt := DefaultPrompt + projectSelectionSuffix(candidates) + importanceSuffix
 		text, err := AnalyzeEmail(ctx, deps.LLMClient, deps.MainModel, prompt, msg)
 		if err != nil {
 			return AnalysisResult{}, err
 		}
 		clean, projects := parseRelatedProjects(text, candidates)
-		return AnalysisResult{Text: clean, RelatedProjects: projects}, nil
+		clean, importance := parseImportance(clean)
+		return AnalysisResult{Text: clean, RelatedProjects: projects, Importance: importance}, nil
 	}
 
 	// Stage 1: extract thread context + wiki-graph context in parallel.
@@ -623,6 +629,7 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 
 	userPrompt := fmt.Sprintf(finalAnalysisPrompt, emailText, threadSection, memorySection)
 	userPrompt += projectSelectionSuffix(candidates)
+	userPrompt += importanceSuffix
 
 	// Token budget: the interactive Mini App path raises this so a deliberate
 	// analysis can synthesize at depth; autonomous polling keeps the tighter
@@ -666,6 +673,7 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	// block, so the tag stays at the analysis tail where the parser expects
 	// it (the facts block would otherwise bury it).
 	clean, projects := parseRelatedProjects(analysis, candidates)
+	clean, importance := parseImportance(clean)
 
 	// Extract the operator's follow-up actions from the analysis prose — before
 	// the facts block is appended below, so the extractor sees only the analysis
@@ -691,7 +699,42 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 		deal = extractDealInfo(ctx, deps, clean)
 	}
 
-	return AnalysisResult{Text: clean, RelatedProjects: projects, ActionItems: actions, Deal: deal}, nil
+	return AnalysisResult{Text: clean, RelatedProjects: projects, ActionItems: actions, Deal: deal, Importance: importance}, nil
+}
+
+// --- importance verdict ---
+
+// importanceSuffix asks the model to end the analysis with one structured
+// triage line. Same tag-line pattern as RELATED_PROJECTS: the prose stays
+// free-form, only the last line is machine-readable.
+const importanceSuffix = "\n\n## 중요도 분류\n" +
+	"응답의 가장 마지막 줄에 정확히 다음 형식으로 이 메일의 중요도를 분류하라:\n" +
+	"IMPORTANCE: 긴급|확인|참고 중 정확히 하나\n" +
+	"긴급=마감·금전·계약·승인 등 즉시 행동이 필요한 메일, 확인=업무 관련이라 곧 봐야 하는 메일, 참고=알림·자동발신·FYI.\n"
+
+// parseImportance extracts and strips the IMPORTANCE tag line, returning the
+// cleaned text and the normalized tier ("urgent"/"attention"/"routine", ""
+// when absent or unrecognized — callers fall back to the heuristic scorer).
+func parseImportance(text string) (string, string) {
+	lines := strings.Split(text, "\n")
+	keep := make([]string, 0, len(lines))
+	tier := ""
+	for _, line := range lines {
+		rest, ok := cutTagPrefix(strings.TrimSpace(line), "IMPORTANCE:")
+		if !ok {
+			keep = append(keep, line)
+			continue
+		}
+		switch {
+		case strings.Contains(rest, "긴급"), strings.Contains(strings.ToLower(rest), "urgent"):
+			tier = "urgent"
+		case strings.Contains(rest, "확인"), strings.Contains(strings.ToLower(rest), "attention"):
+			tier = "attention"
+		case strings.Contains(rest, "참고"), strings.Contains(strings.ToLower(rest), "routine"):
+			tier = "routine"
+		}
+	}
+	return strings.TrimRight(strings.Join(keep, "\n"), "\n"), tier
 }
 
 // --- related-project selection ---
