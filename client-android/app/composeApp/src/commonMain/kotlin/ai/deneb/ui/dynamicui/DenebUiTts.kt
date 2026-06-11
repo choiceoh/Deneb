@@ -73,6 +73,10 @@ private fun DenebUiNode.walk(parts: MutableList<String>) {
 
         is ImageNode -> alt?.let { parts += it }
 
+        // Re-enter the markdown pipeline so formatting is stripped the same way
+        // a plain assistant message is (code blocks dropped, markers removed).
+        is MarkdownNode -> parts += parseMarkdown(value).toSpeakableText()
+
         is AccordionNode -> {
             parts += title
             children.forEach { it.walk(parts) }

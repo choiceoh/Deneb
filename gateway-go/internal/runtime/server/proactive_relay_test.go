@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 )
 
@@ -421,4 +422,111 @@ func TestRelay_EmptyTitleWhenUnextractable(t *testing.T) {
 	if feed.items[0].Title != "" {
 		t.Errorf("title = %q, want empty (store fallback supplies default)", feed.items[0].Title)
 	}
+}
+
+// TestRelayCollapsed verifies the collapsed mail-analysis delivery: the
+// client:main transcript carries a deneb-ui accordion (title-only card, body in
+// a markdown child) while the work-feed card and push preview keep reading the
+// raw prose. The suppression gates must also still apply to the raw body.
+func TestRelayCollapsed(t *testing.T) {
+	body := "## 📧 JOCA Cable 최신 메일 분석 보고\n\n**발신**: fred@jocacable.com\n\n- 회신 기한: 6/13"
+
+	t.Run("transcript holds accordion fence, feed and push keep prose", func(t *testing.T) {
+		store := newRecordingTranscriptStore()
+		feed := &recordingWorkFeed{}
+		hub := newClientPushHub()
+		events, unsub := hub.subscribe()
+		defer unsub()
+		d := proactiveRelayDeps{transcriptStore: store, workFeed: feed, pushHub: hub}
+
+		delivered, err := d.relayCollapsed(context.Background(), "ignored", body)
+		if err != nil || !delivered {
+			t.Fatalf("relayCollapsed: delivered=%v err=%v", delivered, err)
+		}
+
+		got := store.appends[nativeWorkSessionKey]
+		if len(got) != 1 {
+			t.Fatalf("want 1 transcript append, got %d", len(got))
+		}
+		text := got[0].TextContent()
+		fences := denebui.ExtractFences(text)
+		if len(fences) != 1 {
+			t.Fatalf("transcript should hold exactly 1 deneb-ui fence, got %d:\n%s", len(fences), text)
+		}
+		if issues, err := denebui.Validate(fences[0]); err != nil || len(issues) > 0 {
+			t.Fatalf("fence should validate, err=%v issues=%v", err, issues)
+		}
+		if !strings.Contains(fences[0], `"type":"accordion"`) || !strings.Contains(fences[0], "📧 JOCA Cable 최신 메일 분석 보고") {
+			t.Errorf("fence missing accordion/title: %s", fences[0])
+		}
+		// The body's leading heading became the card title — it must not be
+		// repeated as the expanded card's first line.
+		if strings.Contains(fences[0], `"value":"## 📧`) {
+			t.Errorf("expanded body repeats its own title heading: %s", fences[0])
+		}
+		if !strings.Contains(fences[0], "회신 기한: 6/13") {
+			t.Errorf("body content missing from fence: %s", fences[0])
+		}
+
+		if len(feed.items) != 1 {
+			t.Fatalf("want 1 work-feed item, got %d", len(feed.items))
+		}
+		if feed.items[0].Body != body {
+			t.Errorf("work-feed body must stay raw prose, got %q", feed.items[0].Body)
+		}
+		if feed.items[0].Title != "📧 JOCA Cable 최신 메일 분석 보고" {
+			t.Errorf("work-feed title = %q", feed.items[0].Title)
+		}
+
+		select {
+		case ev := <-events:
+			if strings.Contains(ev.Body, "deneb-ui") || strings.Contains(ev.Body, `"accordion"`) {
+				t.Errorf("push preview leaked fence JSON: %q", ev.Body)
+			}
+		default:
+			t.Error("expected a live push event, got none")
+		}
+	})
+
+	t.Run("unextractable title falls back to plain prose", func(t *testing.T) {
+		store := newRecordingTranscriptStore()
+		d := proactiveRelayDeps{transcriptStore: store}
+		if _, err := d.relayCollapsed(context.Background(), "ignored", "---\n***\n___"); err != nil {
+			t.Fatalf("relayCollapsed: %v", err)
+		}
+		got := store.appends[nativeWorkSessionKey]
+		if len(got) != 1 {
+			t.Fatalf("want 1 transcript append, got %d", len(got))
+		}
+		if denebui.HasFence(got[0].TextContent()) {
+			t.Errorf("titleless body must deliver plain, got fence: %s", got[0].TextContent())
+		}
+	})
+
+	t.Run("folded title keeps body intact", func(t *testing.T) {
+		// "## 분석" + "### 왜 지금 왔는가" folds into "분석 — 왜 지금 왔는가": no
+		// single body line equals the title, so nothing is stripped.
+		folded := "## 분석\n\n### 왜 지금 왔는가\n\n이 메일은 무림 울산공장 풍력 사업 검토안이다."
+		store := newRecordingTranscriptStore()
+		d := proactiveRelayDeps{transcriptStore: store}
+		if _, err := d.relayCollapsed(context.Background(), "ignored", folded); err != nil {
+			t.Fatalf("relayCollapsed: %v", err)
+		}
+		text := store.appends[nativeWorkSessionKey][0].TextContent()
+		if !strings.Contains(text, `## 분석`) || !strings.Contains(text, "왜 지금 왔는가") {
+			t.Errorf("folded-title body must stay intact, got: %s", text)
+		}
+	})
+
+	t.Run("suppression gates still apply", func(t *testing.T) {
+		store := newRecordingTranscriptStore()
+		d := proactiveRelayDeps{transcriptStore: store}
+		delivered, err := d.relayCollapsed(context.Background(), "ignored", "분석할 새 메일이 없습니다.")
+		if err != nil {
+			t.Fatalf("relayCollapsed: %v", err)
+		}
+		if delivered || len(store.appends) != 0 {
+			t.Errorf("contentless body must stay suppressed, delivered=%v appends=%v", delivered, store.appends)
+		}
+	})
 }

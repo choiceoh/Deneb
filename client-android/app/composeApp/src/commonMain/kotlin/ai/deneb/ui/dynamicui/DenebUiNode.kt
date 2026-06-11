@@ -60,6 +60,20 @@ data class TextNode(
     val color: String? = null,
 ) : DenebUiNode
 
+/**
+ * Rich-text content node: [value] is full markdown rendered through the chat
+ * markdown pipeline (headings, lists, tables, code). Exists so server-assembled
+ * blocks (e.g. a collapsed mail-analysis accordion) can carry a prose report
+ * without flattening it to plain [TextNode] lines.
+ */
+@Immutable
+@Serializable
+@SerialName("markdown")
+data class MarkdownNode(
+    override val id: String? = null,
+    val value: String = "",
+) : DenebUiNode
+
 @Immutable
 @Serializable
 @SerialName("image")

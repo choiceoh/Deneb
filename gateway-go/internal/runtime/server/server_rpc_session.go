@@ -308,7 +308,16 @@ func (s *Server) registerSessionRPCMethods() {
 				return false, nil
 			}
 			sessionKey := channel + ":" + to
-			delivered, err := s.proactiveRelay.relay(ctx, sessionKey, analysis)
+			// Mail analyses (email-single-analysis per kakao-watch trigger,
+			// email-analysis-full daily batch) arrive as collapsed title-only
+			// cards so each mail is one tap-to-expand row in the 업무 chat
+			// instead of a wall of prose. Other jobs (morning letter, weekly
+			// report) keep plain delivery.
+			relayFn := s.proactiveRelay.relay
+			if strings.HasPrefix(jobID, "email-") {
+				relayFn = s.proactiveRelay.relayCollapsed
+			}
+			delivered, err := relayFn(ctx, sessionKey, analysis)
 			if err != nil {
 				s.logger.Error("cron proactive relay failed",
 					"jobId", jobID, "sessionKey", sessionKey, "error", err)

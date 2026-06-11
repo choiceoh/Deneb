@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmailpoll"
 )
@@ -113,6 +114,18 @@ func (d proactiveRelayDeps) relay(_ context.Context, _, content string) (bool, e
 	return d.relayNative(content)
 }
 
+// relayCollapsed is relay() with the report delivered as a collapsed
+// title-only card (deneb-ui accordion) in the 업무 chat — the user taps it to
+// expand the full analysis in place instead of the long prose landing as a
+// visible wall of text. Used for per-mail analyses; the work-feed card, push
+// preview, and suppression gates all still see the raw prose body.
+func (d proactiveRelayDeps) relayCollapsed(_ context.Context, _, content string) (bool, error) {
+	if strings.TrimSpace(content) == "" {
+		return false, nil
+	}
+	return d.relayNativeToOpts(nativeWorkSessionKey, content, true)
+}
+
 // relayNative delivers a proactive report to the primary native 업무 chat
 // (client:main). Thin wrapper over relayNativeTo for the callers that always
 // target the main session.
@@ -126,6 +139,15 @@ func (d proactiveRelayDeps) relayNative(content string) (bool, error) {
 // work-feed card. sessionKey defaults to client:main when empty. Returns
 // (false, nil) when no transcript store is wired (older wiring or tests).
 func (d proactiveRelayDeps) relayNativeTo(sessionKey, content string) (bool, error) {
+	return d.relayNativeToOpts(sessionKey, content, false)
+}
+
+// relayNativeToOpts is relayNativeTo with the collapse switch: when collapse is
+// true the transcript message is wrapped as a collapsed deneb-ui accordion
+// (title-only card, tap to expand) while every other consumer of the body —
+// suppression gates, work-feed card extraction, push/sync previews — keeps
+// reading the raw prose.
+func (d proactiveRelayDeps) relayNativeToOpts(sessionKey, content string, collapse bool) (bool, error) {
 	target := sessionKey
 	if target == "" {
 		target = nativeWorkSessionKey
@@ -173,7 +195,17 @@ func (d proactiveRelayDeps) relayNativeTo(sessionKey, content string) (bool, err
 		d.logProactive("dropped", "no_transcript_store", origLen, "")
 		return false, nil
 	}
-	msg := toolctx.NewTextChatMessage("assistant", content, time.Now().UnixMilli())
+	// Collapsed delivery: the transcript carries a title-only accordion card
+	// that expands in place; the raw prose stays inside its markdown child, so
+	// follow-up turns in client:main still have the full analysis in context.
+	// A body whose title can't be derived falls back to plain prose delivery.
+	transcriptBody := content
+	if collapse {
+		if title, titleLine := extractCardTitle(content); strings.TrimSpace(title) != "" {
+			transcriptBody = denebui.CollapsedReportFence(title, collapsedReportBody(content, title, titleLine))
+		}
+	}
+	msg := toolctx.NewTextChatMessage("assistant", transcriptBody, time.Now().UnixMilli())
 	if err := d.transcriptStore.Append(target, msg); err != nil {
 		if d.logger != nil {
 			d.logger.Error("proactive native relay: transcript append failed",
@@ -219,6 +251,37 @@ func (d proactiveRelayDeps) relayNativeTo(sessionKey, content string) (bool, err
 	}
 	d.logProactive("delivered", "", origLen, pushPreview(content))
 	return true, nil
+}
+
+// collapsedReportBody returns content with its leading title line removed when
+// that exact line became the accordion title — otherwise the expanded card
+// would open by repeating its own header as the first heading. Folded titles
+// ("분석 — 왜 지금 왔는가", where titleLine is the sub-heading) and clipped titles
+// don't match the stripped line, so those bodies stay intact.
+func collapsedReportBody(content, title, titleLine string) string {
+	if stripMarkdownLine(titleLine) != title {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	want := strings.TrimSpace(titleLine)
+	for i, l := range lines {
+		if strings.TrimSpace(l) != want {
+			continue
+		}
+		rest := append(append([]string{}, lines[:i]...), lines[i+1:]...)
+		// Drop leading blanks and now-orphaned horizontal rules so the
+		// expanded card doesn't open with a stray divider.
+		start := 0
+		for start < len(rest) {
+			if t := strings.TrimSpace(rest[start]); t == "" || isHorizontalRule(t) {
+				start++
+				continue
+			}
+			break
+		}
+		return strings.Join(rest[start:], "\n")
+	}
+	return content
 }
 
 // logProactive records one relay decision to the behavioral event log so the

@@ -44,6 +44,7 @@ private fun parseObjectNode(obj: JsonObject): DenebUiNode? = when (obj.readNulla
     "box" -> parseBoxNode(obj)
     "divider" -> parseDividerNode(obj)
     "text" -> parseTextNode(obj)
+    "markdown" -> parseMarkdownNode(obj)
     "image" -> parseImageNode(obj)
     "icon" -> parseIconNode(obj)
     "code" -> parseCodeNode(obj)
@@ -412,6 +413,11 @@ private fun parseTextNode(obj: JsonObject): TextNode = TextNode(
     bold = obj.readNullableBoolean("bold"),
     italic = obj.readNullableBoolean("italic"),
     color = obj.readNullableString("color"),
+)
+
+private fun parseMarkdownNode(obj: JsonObject): MarkdownNode = MarkdownNode(
+    id = obj.readId(),
+    value = obj.readString("value"),
 )
 
 private fun parseImageNode(obj: JsonObject): ImageNode = ImageNode(

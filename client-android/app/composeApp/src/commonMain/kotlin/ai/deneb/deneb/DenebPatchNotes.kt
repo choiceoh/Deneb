@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "메일 분석이 업무 채팅에 접힌 카드로 도착 — 제목 한 줄만 보이고, 누르면 그 자리에서 전체 분석이 펼쳐짐 (다른 화면으로 이동하지 않음)",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "진행 표시가 대상까지 말해줌 — '메일 확인 중: 아르고에너지'처럼 무엇을 찾는지 표시, 실패한 단계는 '~ 실패'로 솔직하게",
             "답변 아래 작업 내역 한 줄 — 이번 답을 만들며 어떤 단계를 거쳤는지(메일 확인 ×2 · 웹 검색) 남음",
         ),
