@@ -29,12 +29,6 @@ func (s *Server) Publisher() *events.Publisher {
 	return s.publisher
 }
 
-// GatewaySubscriptions returns the gateway event subscription manager
-// for emitting agent, transcript, and lifecycle events.
-func (s *Server) GatewaySubscriptions() *events.GatewayEventSubscriptions {
-	return s.gatewaySubs
-}
-
 func (s *Server) StartMonitoring(ctx context.Context) {
 	// Note: Gateway self-watchdog removed — it caused frequent false-positive
 	// restarts in a single-user deployment. Channel health monitor below is

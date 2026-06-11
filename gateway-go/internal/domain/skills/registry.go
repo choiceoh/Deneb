@@ -133,17 +133,3 @@ func (r *Registry) Update(skillKey string, patch ConfigPatch) (*RegisteredSkill,
 	cp := *entry
 	return &cp, nil
 }
-
-// RegisterSkill adds a skill to the registry (used during initialization).
-func (r *Registry) RegisterSkill(entry RegisteredSkill) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.skills[entry.Key] = &entry
-}
-
-// SetBins sets the required binary dependencies list.
-func (r *Registry) SetBins(bins []string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.bins = bins
-}

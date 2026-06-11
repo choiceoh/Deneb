@@ -2,7 +2,6 @@
 package session
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
@@ -51,21 +50,6 @@ type SessionForkParams struct {
 	ResetPrompt bool
 }
 
-// ForkSession creates a new session based on a parent session.
-func ForkSession(parent *types.SessionState, params SessionForkParams) *types.SessionState {
-	forked := *parent
-	forked.SessionKey = params.NewKey
-	forked.IsNew = true
-	forked.CreatedAt = time.Now().UnixMilli()
-	forked.UpdatedAt = time.Now().UnixMilli()
-
-	if params.ResetModel {
-		forked.Model = ""
-		forked.Provider = ""
-	}
-	return &forked
-}
-
 // ResetSessionModel clears the model override on a session.
 func ResetSessionModel(sess *types.SessionState) {
 	sess.Model = ""
@@ -88,29 +72,12 @@ type TokenUsage struct {
 	CacheWriteTokens int64 `json:"cacheWriteTokens,omitempty"`
 }
 
-// AddUsage accumulates usage from another.
-func (u *TokenUsage) AddUsage(other TokenUsage) {
-	u.InputTokens += other.InputTokens
-	u.OutputTokens += other.OutputTokens
-	u.TotalTokens += other.TotalTokens
-	u.CacheReadTokens += other.CacheReadTokens
-	u.CacheWriteTokens += other.CacheWriteTokens
-}
-
 // SessionRunAccounting tracks run counts and totals.
 type SessionRunAccounting struct {
 	RunCount      int   `json:"runCount"`
 	TotalTokens   int64 `json:"totalTokens"`
 	TotalDuration int64 `json:"totalDurationMs"`
 	LastRunAt     int64 `json:"lastRunAt"`
-}
-
-// RecordRun updates accounting after a completed run.
-func (a *SessionRunAccounting) RecordRun(usage TokenUsage, durationMs int64) {
-	a.RunCount++
-	a.TotalTokens += usage.TotalTokens
-	a.TotalDuration += durationMs
-	a.LastRunAt = time.Now().UnixMilli()
 }
 
 // SessionUsage tracks detailed token usage for a session.
@@ -121,23 +88,4 @@ type SessionUsage struct {
 	CacheReadTokens  int64 `json:"cacheReadTokens"`
 	CacheWriteTokens int64 `json:"cacheWriteTokens"`
 	RunCount         int   `json:"runCount"`
-}
-
-// AddUsage accumulates token usage.
-func (u *SessionUsage) AddUsage(usage TokenUsage) {
-	u.InputTokens += usage.InputTokens
-	u.OutputTokens += usage.OutputTokens
-	u.TotalTokens += usage.TotalTokens
-	u.CacheReadTokens += usage.CacheReadTokens
-	u.CacheWriteTokens += usage.CacheWriteTokens
-	u.RunCount++
-}
-
-// FormatUsage formats usage as a compact display string.
-func (u *SessionUsage) FormatUsage() string {
-	if u.TotalTokens == 0 {
-		return "No usage recorded."
-	}
-	return fmt.Sprintf("%d tokens (%d in, %d out) across %d runs",
-		u.TotalTokens, u.InputTokens, u.OutputTokens, u.RunCount)
 }

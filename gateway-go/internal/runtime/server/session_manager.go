@@ -1,17 +1,15 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/transcript"
 	arSession "github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
-// SessionManager groups session-lifecycle dependencies: the session store,
-// transcript writer, and autoreply session subsystems.
+// SessionManager groups session-lifecycle dependencies: the session store
+// and autoreply session subsystems.
 // Embedded in Server so fields are promoted and existing access patterns are unchanged.
 type SessionManager struct {
-	sessions   *session.Manager
-	transcript *transcript.Writer
+	sessions *session.Manager
 
 	// Autoreply session subsystems.
 	abortMemory    *arSession.AbortMemory    // tracks recently aborted sessions for dedup

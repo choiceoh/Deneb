@@ -435,33 +435,6 @@ func signalGatewayRestart() error {
 	return proc.Signal(syscall.SIGUSR1)
 }
 
-// LatestAppliedRef identifies the deployed code for the /status dashboard. It
-// reads the running checkout's HEAD and returns the PR reference when the
-// commit is a GitHub squash-merge ("...(#1643)"), otherwise the short SHA.
-// Returns "" when git is unavailable so the caller can fall back to the build
-// version tag.
-func LatestAppliedRef() string {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	root, err := updateRepoRoot(ctx)
-	if err != nil {
-		return ""
-	}
-	out, err := runUpdateGit(ctx, root, "log", "-1", "--format=%h %s")
-	if err != nil {
-		return ""
-	}
-	shortSHA, subject, found := strings.Cut(out, " ")
-	if !found {
-		return strings.TrimSpace(out)
-	}
-	if pr := parsePRNumber(subject); pr != "" {
-		return fmt.Sprintf("PR #%s (%s)", pr, shortSHA)
-	}
-	return shortSHA
-}
-
 // parsePRNumber extracts the trailing "(#1234)" reference GitHub appends to
 // squash-merge commit subjects. Returns "" when the subject has none.
 func parsePRNumber(subject string) string {

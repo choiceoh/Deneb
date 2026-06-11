@@ -3,9 +3,9 @@
 // The gateway watches itself and surfaces two kinds of monitoring signal to
 // connected native clients (via clientPushHub) plus the operator log:
 //
-//  1. Status snapshots — on demand via SendStatusSnapshot. The caller asks
-//     "what is the gateway doing right now?" and we push a Korean summary of
-//     running sessions to connected native clients.
+//  1. Status snapshots — buildStatusReport formats "what is the gateway
+//     doing right now?" as a Korean summary of running sessions for
+//     connected native clients.
 //
 //  2. Error mirrors — automatic. The notifier registers a Broadcaster.Tap
 //     and forwards user-impacting events (chat.delivery_failed,
@@ -671,18 +671,6 @@ func (n *notifyService) deliver(_ context.Context, ev notifyEvent) {
 			Body:  truncate(body, 120),
 		})
 	}
-}
-
-// SendStatusSnapshot composes a Korean status report and pushes it to connected
-// native clients. Returns (delivered=true, nil) when push was attempted;
-// (false, nil) when no push hub is wired.
-func (n *notifyService) SendStatusSnapshot(_ context.Context) (bool, error) {
-	body := n.buildStatusReport(time.Now())
-	if n.pushHub == nil {
-		return false, nil
-	}
-	n.pushHub.publish(clientPushEvent{Title: "📡 게이트웨이 상태", Body: truncate(body, 140)})
-	return true, nil
 }
 
 // buildStatusReport formats the current session manager state as a Korean

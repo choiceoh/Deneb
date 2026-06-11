@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,7 +18,7 @@ import (
 
 // --- Package-level model role registry ---
 // Set once during handler initialization via SetModelRoleRegistry.
-// Used by role-based LLM helpers, CheckLocalAIHealth, and other lightweight-model code.
+// Used by role-based LLM helpers and other lightweight-model code.
 
 var (
 	pkgRegistry     *modelrole.Registry
@@ -35,8 +34,8 @@ func SetModelRoleRegistry(reg *modelrole.Registry) {
 	})
 }
 
-// SetLocalAIHub sets the centralized local AI hub. When set, CallLocalLLM and
-// CheckLocalAIHealth delegate to the hub instead of making direct calls.
+// SetLocalAIHub sets the centralized local AI hub. When set, CallLocalLLM
+// delegates to the hub instead of making direct calls.
 func SetLocalAIHub(h *localai.Hub) {
 	pkgLocalAIHub = h
 }
@@ -47,28 +46,15 @@ func LocalAIHub() *localai.Hub {
 	return pkgLocalAIHub
 }
 
-// LightweightBaseURL returns the base URL for the lightweight model.
-func LightweightBaseURL() string {
-	if pkgRegistry != nil {
-		return pkgRegistry.BaseURL(modelrole.RoleLightweight)
-	}
-	return modelrole.DefaultVllmBaseURL
-}
-
 // --- local AI health check (cached) ---
 
 const (
-	localAIHealthTTL  = 30 * time.Second
-	localAIWarmupTTL  = 5 * time.Second
-	localAIWarmupFor  = 2 * time.Minute
-	localAIHealthPing = 3 * time.Second
-	pilotTimeout      = 2 * time.Minute
+	pilotTimeout = 2 * time.Minute
 )
 
 var (
 	localAIHealthy   atomic.Bool
 	localAILastCheck atomic.Int64 // unix timestamp
-	localAIStartedAt = time.Now()
 )
 
 // LocalAIRecentlyDown returns true if local AI is known to be unhealthy.
@@ -79,55 +65,6 @@ func LocalAIRecentlyDown() bool {
 		return !pkgLocalAIHub.IsHealthy()
 	}
 	return !localAIHealthy.Load() && localAILastCheck.Load() > 0
-}
-
-// HasRegistry returns true if the model role registry has been set.
-func HasRegistry() bool {
-	return pkgRegistry != nil
-}
-
-// CheckLocalAIHealth returns true if the local AI server is reachable.
-// When the local AI hub is set, delegates to the hub's inference-based health check.
-// Otherwise falls back to the legacy /v1/models metadata probe.
-func CheckLocalAIHealth() bool {
-	if pkgLocalAIHub != nil {
-		return pkgLocalAIHub.IsHealthy()
-	}
-
-	// Legacy fallback: metadata-only probe.
-	now := time.Now().Unix()
-	last := localAILastCheck.Load()
-	ttl := localAIHealthTTL
-	if time.Since(localAIStartedAt) < localAIWarmupFor {
-		ttl = localAIWarmupTTL
-	}
-	if now-last < int64(ttl.Seconds()) {
-		return localAIHealthy.Load()
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), localAIHealthPing)
-	defer cancel()
-
-	baseURL := LightweightBaseURL()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/models", http.NoBody)
-	if err != nil {
-		localAIHealthy.Store(false)
-		localAILastCheck.Store(now)
-		return false
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		localAIHealthy.Store(false)
-		localAILastCheck.Store(now)
-		return false
-	}
-	defer resp.Body.Close()
-
-	healthy := resp.StatusCode == http.StatusOK
-	localAIHealthy.Store(healthy)
-	localAILastCheck.Store(now)
-	return healthy
 }
 
 // --- Helpers ---
@@ -144,11 +81,6 @@ func getRoleModel(role modelrole.Role, defaultModel string) string {
 		return pkgRegistry.Model(role)
 	}
 	return defaultModel
-}
-
-// LightweightClient returns the cached LLM client for the lightweight model role.
-func LightweightClient() *llm.Client {
-	return getRoleClient(modelrole.RoleLightweight, modelrole.DefaultVllmBaseURL, "local")
 }
 
 // LightweightModel returns the model name for the lightweight role.
@@ -340,11 +272,6 @@ func ExtractDeltaText(payload []byte) string {
 		}
 	}
 	return ""
-}
-
-// TruncateInput is a simple head-only truncation.
-func TruncateInput(s string, maxChars int) string {
-	return TruncateHead(s, maxChars)
 }
 
 // TruncateHead is a simple head-only truncation (used for chain prompts, fallback).

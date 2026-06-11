@@ -2,24 +2,8 @@
 package reply
 
 import (
-	"strings"
-
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
-
-// IsRenderablePayload returns true if the payload has content worth delivering.
-func IsRenderablePayload(p types.ReplyPayload) bool {
-	if strings.TrimSpace(p.Text) != "" {
-		return true
-	}
-	if p.MediaURL != "" || len(p.MediaURLs) > 0 {
-		return true
-	}
-	if len(p.ChannelData) > 0 {
-		return true
-	}
-	return false
-}
 
 // DeduplicateReplyPayloads removes duplicate text and media from payloads.
 func DeduplicateReplyPayloads(payloads []types.ReplyPayload) []types.ReplyPayload {

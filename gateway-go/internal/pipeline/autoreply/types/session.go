@@ -1,7 +1,6 @@
 package types
 
 import (
-	"strings"
 	"time"
 )
 
@@ -73,27 +72,6 @@ type SessionHintFlags struct {
 	PreviousRunFailed bool
 	IsResumed         bool
 	IsForked          bool
-}
-
-// BuildSessionHint produces a brief text hint about session state for the agent.
-func BuildSessionHint(flags SessionHintFlags) string {
-	var hints []string
-	if flags.WasAborted {
-		hints = append(hints, "Previous run was aborted by user.")
-	}
-	if flags.PreviousRunFailed {
-		hints = append(hints, "Previous run failed.")
-	}
-	if flags.IsResumed {
-		hints = append(hints, "Session resumed.")
-	}
-	if flags.IsForked {
-		hints = append(hints, "Session forked from parent.")
-	}
-	if len(hints) == 0 {
-		return ""
-	}
-	return strings.Join(hints, " ")
 }
 
 // SessionModification describes changes to apply to the session.
