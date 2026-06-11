@@ -173,6 +173,7 @@ internal fun RenderNode(
         is RowNode -> RenderRow(node, isInteractive, formState, toggleState, onCallback, depth)
         is CardNode -> RenderCard(node, isInteractive, formState, toggleState, onCallback, depth)
         is TextNode -> RenderText(node)
+        is MarkdownNode -> RenderMarkdown(node, isInteractive, onCallback)
         is ButtonNode -> RenderButton(node, isInteractive, formState, toggleState, onCallback)
         is TextInputNode -> RenderTextInput(node, isInteractive, formState)
         is DateInputNode -> RenderDateInput(node, isInteractive, formState)

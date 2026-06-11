@@ -63,15 +63,16 @@ var nodeSpecs = map[string]nodeSpec{
 	// "tabs" is handled specially (tabs[].children) in validateObject.
 	"tabs": {},
 	// Content.
-	"text":   {enums: map[string][]string{"style": textStyles}},
-	"image":  {},
-	"icon":   {},
-	"code":   {},
-	"quote":  {},
-	"badge":  {},
-	"stat":   {},
-	"avatar": {},
-	"table":  {}, // headers/rows are strings, not nodes
+	"text":     {enums: map[string][]string{"style": textStyles}},
+	"markdown": {}, // rich-text body (full markdown), e.g. a collapsed report
+	"image":    {},
+	"icon":     {},
+	"code":     {},
+	"quote":    {},
+	"badge":    {},
+	"stat":     {},
+	"avatar":   {},
+	"table":    {}, // headers/rows are strings, not nodes
 	// Interactive (id-bearing).
 	"button":      {actionFields: []string{"action"}, enums: map[string][]string{"variant": buttonVariants}},
 	"text_input":  {requireID: true, enums: map[string][]string{"keyboard": keyboardTypes}},

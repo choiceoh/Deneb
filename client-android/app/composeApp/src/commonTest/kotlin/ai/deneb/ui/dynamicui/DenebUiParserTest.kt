@@ -48,6 +48,26 @@ class DenebUiParserTest {
     }
 
     @Test
+    fun `parses collapsed markdown report accordion`() {
+        // Shape the gateway emits for a collapsed mail-analysis delivery:
+        // accordion(title) wrapping a markdown body (denebui.CollapsedReportFence).
+        val json = """
+            {
+              "type": "accordion",
+              "title": "📬 탑솔라 견적 요청",
+              "children": [
+                {"type": "markdown", "value": "## 분석\n- **중요도**: 높음\n- 회신 기한: 6/13"}
+              ]
+            }
+        """.trimIndent()
+        val node = assertIs<AccordionNode>(parseUi(json))
+        assertEquals("📬 탑솔라 견적 요청", node.title)
+        assertNull(node.expanded) // collapsed by default
+        val md = assertIs<MarkdownNode>(node.children[0])
+        assertTrue(md.value.startsWith("## 분석"))
+    }
+
+    @Test
     fun `parses column with children`() {
         val json = """
             {

@@ -109,6 +109,9 @@ fun main() {
     render("mail_light.png", LightColorScheme)
     renderMarkdown("markdown_dark.png", DarkColorScheme)
     renderAnalysis("analysis_clip.png", DarkColorScheme)
+    renderCollapsedReport("mail_collapsed_dark.png", DarkColorScheme, expanded = false)
+    renderCollapsedReport("mail_collapsed_light.png", LightColorScheme, expanded = false)
+    renderCollapsedReport("mail_expanded_dark.png", DarkColorScheme, expanded = true)
     renderChrome("chrome_dark.png", DarkColorScheme)
     renderChrome("chrome_light.png", LightColorScheme)
     renderDesignSample("design_dark.png", DarkColorScheme)
@@ -556,6 +559,36 @@ private fun renderAnalysis(name: String, scheme: ColorScheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Box(Modifier.width(412.dp)) {
                     MarkdownContent(analysisSample, modifier = Modifier.fillMaxWidth().padding(16.dp))
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// The exact transcript shape the gateway's denebui.CollapsedReportFence emits
+// for a per-mail analysis: an accordion (title-only collapsed card) wrapping a
+// markdown body. expanded=true previews the post-tap state so the markdown
+// child's rendering (headings/list/table) is visually checked too.
+private fun collapsedReportFence(expanded: Boolean): String {
+    // Body starts after the title line — the gateway strips the heading that
+    // became the accordion title (collapsedReportBody) so the expanded card
+    // doesn't open by repeating its own header.
+    val body = "**발신**: fred@jocacable.com — 견적 회신 요청\\n\\n### 왜 지금 왔는가\\n- 5/12 물량산출 메일의 후속, 단가 협상 단계 진입\\n- **회신 기한: 6/13(금)** 명시\\n\\n| 구분 | 내용 |\\n|:---|:---|\\n| 거래처 | JOCA Cable (케이블 협력사) |\\n| 요청 | 1,950매 모듈 물량 견적 회신 |\\n\\n### 권고\\n1. 김민준 부장에게 단가표 확인 요청\\n2. 금요일 오전까지 회신 초안 준비"
+    val exp = if (expanded) "\"expanded\":true," else ""
+    return "```deneb-ui\n{\"type\":\"accordion\",\"title\":\"📧 JOCA Cable 최신 메일 분석 보고\",$exp\"children\":[{\"type\":\"markdown\",\"value\":\"$body\"}]}\n```"
+}
+
+private fun renderCollapsedReport(name: String, scheme: ColorScheme, expanded: Boolean) {
+    val scene = ImageComposeScene(width = 824, height = if (expanded) 1560 else 320, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.width(412.dp)) {
+                    MarkdownContent(collapsedReportFence(expanded), modifier = Modifier.fillMaxWidth().padding(16.dp))
                 }
             }
         }

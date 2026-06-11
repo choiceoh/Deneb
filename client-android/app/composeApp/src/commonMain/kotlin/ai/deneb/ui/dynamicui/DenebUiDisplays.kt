@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.markdown.MarkdownContent
 import ai.deneb.ui.denebOnSuccessContainer
 import ai.deneb.ui.denebOnWarningContainer
 import ai.deneb.ui.denebSuccessContainer
@@ -88,6 +89,26 @@ internal fun RenderText(node: TextNode) {
         color = color,
         fontWeight = if (node.bold == true || node.value.startsWith("**")) FontWeight.Bold else null,
         fontStyle = if (node.italic == true) FontStyle.Italic else null,
+    )
+}
+
+/**
+ * Full markdown body inside a deneb-ui tree, rendered through the chat markdown
+ * pipeline (same renderer as a regular assistant message). Interactivity and UI
+ * callbacks pass through so a nested deneb-ui fence inside the markdown — rare,
+ * but possible — keeps working; recursion is naturally bounded by the content.
+ */
+@Composable
+internal fun RenderMarkdown(
+    node: MarkdownNode,
+    isInteractive: Boolean,
+    onCallback: (String, Map<String, String>) -> Unit,
+) {
+    MarkdownContent(
+        content = node.value,
+        modifier = Modifier.fillMaxWidth(),
+        isInteractive = isInteractive,
+        onUiCallback = onCallback,
     )
 }
 
