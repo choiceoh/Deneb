@@ -162,6 +162,11 @@ F-Droid Termux:API 의 `termux-notification-list` 로 알림을 폴링해 `deneb
 > dedup, in-place 업데이트는 새 것으로 친다). 민감 앱(은행·인증)은 allowlist 에서 빼고,
 > 서버 noise floor 도 OTP·광고를 억제한다.
 
+**버스트 배칭**: 한 폴 사이클(기본 12초)에 신규 알림이 `DENEB_NOTIF_BATCH`(기본 3)건
+이상이면 — 단톡방 폭주, 결재 일괄 도착 등 — 개별 전송 대신 **하나의 묶음 이벤트**로 보낸다.
+게이트웨이가 N번이 아니라 한 번의 triage turn 으로 처리하므로 step3p7 turn 폭주를 막는다.
+그 미만이면 각자 출처(앱)를 살려 개별 전송.
+
 (대안) GUI 를 선호하면 Tasker + AutoNotification 의 Run Shell 액션에서
 `~/bin/deneb-emit notification "%antitle: %antext" "%anappname"` 을 호출해도 된다.
 

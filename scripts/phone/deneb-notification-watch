@@ -25,6 +25,10 @@ INTERVAL="${DENEB_NOTIF_INTERVAL:-12}"
 ALLOW="${DENEB_NOTIF_ALLOW:-$HOME/.deneb-notif-allow}"
 SEEN="${DENEB_NOTIF_SEEN:-$HOME/.deneb-notif-seen}"
 SEEN_MAX=800
+# When a single poll cycle yields >= this many new notifications (group-chat
+# burst, batched approvals), collapse them into ONE event so the gateway runs a
+# single triage turn instead of one per notification. Fewer → forwarded individually.
+BATCH_THRESHOLD="${DENEB_NOTIF_BATCH:-3}"
 
 # skip_pkg: packages we never forward — system UI, Termux's own notifications,
 # and Deneb (avoid a self-loop from its proactive push).
@@ -67,6 +71,11 @@ termux-notification-list 2>/dev/null \
 while true; do
   list="$(termux-notification-list 2>/dev/null)"
   if [ -n "$list" ]; then
+    # Collect this cycle's NEW notifications into a temp file (the jq|while runs
+    # in a subshell, so we can't accumulate into a shell array). One line each:
+    # "pkg\ttitle: content".
+    new="$(mktemp "${TMPDIR:-$HOME}/.deneb-notif.XXXXXX")" 2>/dev/null || new="$HOME/.deneb-notif.batch"
+    : > "$new"
     printf '%s' "$list" \
       | jq -r '.[] | [.key, .packageName, (.title//""), (.content//"")] | @tsv' 2>/dev/null \
       | while IFS=$'\t' read -r key pkg title content; do
@@ -78,8 +87,23 @@ while true; do
           echo "$h" >> "$SEEN"
           body="$title"
           [ -n "$content" ] && body="$title: $content"
-          deneb-emit notification "$body" "$pkg" >/dev/null 2>&1 || true
+          printf '%s\t%s\n' "$pkg" "$body" >> "$new"
         done
+
+    cnt="$(wc -l < "$new" 2>/dev/null || echo 0)"
+    if [ "$cnt" -ge "$BATCH_THRESHOLD" ]; then
+      # Burst (group chat, batched approvals): collapse into ONE event so the
+      # gateway runs a single triage turn over all of them instead of N turns.
+      batch="$(cut -f2- "$new" | sed 's/^/• /')"
+      deneb-emit notification "$(printf '알림 %s건 도착:\n%s' "$cnt" "$batch")" "여러 앱" >/dev/null 2>&1 || true
+    elif [ "$cnt" -gt 0 ]; then
+      # A few: forward individually so each keeps its own source/context.
+      while IFS=$'\t' read -r pkg body; do
+        deneb-emit notification "$body" "$pkg" >/dev/null 2>&1 || true
+      done < "$new"
+    fi
+    rm -f "$new"
+
     if [ "$(wc -l < "$SEEN" 2>/dev/null || echo 0)" -gt "$SEEN_MAX" ]; then
       tail -n "$SEEN_MAX" "$SEEN" > "$SEEN.tmp" 2>/dev/null && mv "$SEEN.tmp" "$SEEN"
     fi
