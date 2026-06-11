@@ -103,6 +103,18 @@ func executeOneTool(
 				case <-ctx.Done():
 					return
 				case t := <-ticker.C:
+					// hbDone may close while a tick is already pending — Go's
+					// select picks randomly among ready cases, so the tick can
+					// win the race against the stop signal. Re-check before
+					// firing: a tool that returned before its first tick must
+					// never report progress (even if this goroutine is scheduled
+					// late), and skipping the stale fire keeps the post-return
+					// join on hbStopped fast.
+					select {
+					case <-hbDone:
+						return
+					default:
+					}
 					elapsedSec := int(t.Sub(start) / time.Second)
 					if elapsedSec <= 0 {
 						elapsedSec = 1
