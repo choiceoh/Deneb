@@ -18,7 +18,8 @@ import kotlinx.serialization.json.longOrNull
 // Philosophy: every reader here knows the expected type because the builder calls the
 // right one. Readers never throw — if a value can't be coerced, the field falls back to
 // its data-class default and the node still builds. Unknown node `type` discriminators
-// return null and are filtered out of `children`/`items` by readNodeList.
+// degrade to their children or text payload when one exists (unknownTypeFallback);
+// only opaque unknowns return null and are filtered out by readNodeList.
 //
 // This replaces the old field-name-keyed coercion pipeline in DenebUiParser with direct
 // construction, so each LLM-mistake handler lives next to the field it owns.
@@ -71,7 +72,7 @@ private fun parseObjectNode(obj: JsonObject): DenebUiNode? = when (obj.readNulla
     "tabs" -> parseTabsNode(obj)
     "accordion" -> parseAccordionNode(obj)
     null -> inferBareObject(obj)
-    else -> null // unknown type → silently dropped
+    else -> unknownTypeFallback(obj)
 }
 
 // =============================================================================================
@@ -373,6 +374,20 @@ private fun inferBareObject(obj: JsonObject): DenebUiNode? {
     }
 
     return null
+}
+
+// A `type` this build doesn't know — an older client meeting a newer server's
+// node (e.g. pre-"markdown" builds: the mail card's dropped child made the
+// accordion expand into nothing). Degrade like an unknown HTML tag: containers
+// render their children, leaves their first text-bearing field; only an opaque
+// object (neither) still drops.
+private fun unknownTypeFallback(obj: JsonObject): DenebUiNode? {
+    val children = obj.readNodeList("children")
+    if (children.isNotEmpty()) {
+        return ColumnNode(id = obj.readId(), children = children)
+    }
+    val textKey = LABEL_KEYS.firstOrNull { obj.readString(it).isNotBlank() } ?: return null
+    return TextNode(id = obj.readId(), value = obj.readString(textKey))
 }
 
 // =============================================================================================

@@ -68,6 +68,43 @@ class DenebUiParserTest {
     }
 
     @Test
+    fun `unknown leaf type degrades to its text payload`() {
+        // An older build meeting a newer server's node (the pre-"markdown" failure:
+        // the mail card's body child was dropped and the accordion expanded empty).
+        val json = """{"type":"hologram","value":"본문 내용"}"""
+        val node = assertIs<TextNode>(parseUi(json))
+        assertEquals("본문 내용", node.value)
+    }
+
+    @Test
+    fun `unknown container type degrades to its children`() {
+        val json = """
+            {
+              "type": "carousel",
+              "children": [{"type": "text", "value": "안쪽"}]
+            }
+        """.trimIndent()
+        val node = assertIs<ColumnNode>(parseUi(json))
+        assertEquals("안쪽", assertIs<TextNode>(node.children[0]).value)
+    }
+
+    @Test
+    fun `opaque unknown type is still dropped from children`() {
+        val json = """
+            {
+              "type": "column",
+              "children": [
+                {"type": "blackbox", "frequency": 42},
+                {"type": "text", "value": "남는다"}
+              ]
+            }
+        """.trimIndent()
+        val node = assertIs<ColumnNode>(parseUi(json))
+        assertEquals(1, node.children.size)
+        assertEquals("남는다", assertIs<TextNode>(node.children[0]).value)
+    }
+
+    @Test
     fun `parses column with children`() {
         val json = """
             {
