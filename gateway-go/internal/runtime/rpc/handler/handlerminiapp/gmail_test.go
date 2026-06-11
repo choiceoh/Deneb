@@ -147,6 +147,60 @@ func TestGmailListRecent_DefaultsAndShape(t *testing.T) {
 	}
 }
 
+func TestGmailListRecent_PriorityFields(t *testing.T) {
+	client := &fakeGmailClient{
+		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
+			return []gmail.MessageSummary{
+				{ID: "m1", From: "a <a@b.kr>", Subject: "낙찰 통보 공문", Snippet: "내일까지 회신 요망"},
+				{ID: "m2", From: "b <b@c.kr>", Subject: "안부", Snippet: "잘 지내시죠"},
+			}, nil
+		},
+	}
+	deps := depsFor(client)
+	deps.Priority = func(from, subject, snippet string) (string, string) {
+		if subject == "낙찰 통보 공문" {
+			return "urgent", "낙찰 · 마감 표현"
+		}
+		return "", ""
+	}
+	h := gmailListRecent(deps, nil)
+
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	var got struct {
+		Messages []map[string]any `json:"messages"`
+	}
+	decode(t, resp, &got)
+	if len(got.Messages) != 2 {
+		t.Fatalf("len(messages) = %d, want 2", len(got.Messages))
+	}
+	if got.Messages[0]["priority"] != "urgent" || got.Messages[0]["priorityHint"] != "낙찰 · 마감 표현" {
+		t.Errorf("urgent row missing priority fields: %+v", got.Messages[0])
+	}
+	// Routine rows omit the fields entirely (omitempty) — the wire stays
+	// byte-identical to the pre-priority shape for unmarked mail.
+	if _, ok := got.Messages[1]["priority"]; ok {
+		t.Errorf("routine row must omit priority: %+v", got.Messages[1])
+	}
+}
+
+// Nil Priority dep (tests, wiring without scorer) leaves every row unmarked.
+func TestGmailListRecent_NilPriorityDep(t *testing.T) {
+	client := &fakeGmailClient{
+		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
+			return []gmail.MessageSummary{{ID: "m1", From: "a <a@b.kr>", Subject: "긴급 낙찰"}}, nil
+		},
+	}
+	h := gmailListRecent(depsFor(client), nil)
+	resp := h(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+	var got struct {
+		Messages []map[string]any `json:"messages"`
+	}
+	decode(t, resp, &got)
+	if _, ok := got.Messages[0]["priority"]; ok {
+		t.Errorf("nil dep must not mark rows: %+v", got.Messages[0])
+	}
+}
+
 func TestGmailListRecent_RespectsCustomParams(t *testing.T) {
 	var seenQuery string
 	var seenLimit int

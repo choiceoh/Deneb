@@ -54,6 +54,10 @@ type GmailClient interface {
 // UNAVAILABLE responses instead.
 type GmailDeps struct {
 	Client func() (GmailClient, error)
+	// Priority scores one inbox row into a glanceable tier + short hint
+	// (domain/mailpriority). Nil disables row priority — rows ship with
+	// empty fields and the native inbox renders no marker.
+	Priority func(from, subject, snippet string) (tier, hint string)
 }
 
 // Default list query and limit applied when the Mini App omits them.
@@ -137,6 +141,11 @@ type mailRowOut struct {
 	Date     string   `json:"date"`
 	IsUnread bool     `json:"isUnread"`
 	Labels   []string `json:"labels"`
+	// Priority is the glanceable heuristic tier ("urgent"/"attention",
+	// empty for routine mail) computed at list time by domain/mailpriority;
+	// PriorityHint names the strongest signals (e.g. "낙찰 · 마감 표현").
+	Priority     string `json:"priority,omitempty"`
+	PriorityHint string `json:"priorityHint,omitempty"`
 }
 
 type mailAttachmentOut struct {
@@ -228,7 +237,7 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 
 		out := make([]mailRowOut, 0, len(results))
 		for _, m := range results {
-			out = append(out, mailRowOut{
+			row := mailRowOut{
 				ID:       m.ID,
 				ThreadID: m.ThreadID,
 				From:     m.From,
@@ -237,7 +246,11 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 				Date:     normalizeDate(m.Date),
 				IsUnread: hasUnreadLabel(m.Labels),
 				Labels:   m.Labels,
-			})
+			}
+			if deps.Priority != nil {
+				row.Priority, row.PriorityHint = deps.Priority(m.From, m.Subject, m.Snippet)
+			}
+			out = append(out, row)
 		}
 		payload := map[string]any{
 			"messages":      out,

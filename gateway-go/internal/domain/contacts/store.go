@@ -31,12 +31,13 @@ type Store struct {
 	mu      sync.RWMutex
 	path    string
 	all     []Contact
-	byPhone map[string][]int // normalized phone -> indices into all
+	byPhone map[string][]int    // normalized phone -> indices into all
+	byEmail map[string]struct{} // lowercased email -> present (VIP lookups)
 }
 
 // NewStore loads the snapshot from path (an empty store if the file is absent).
 func NewStore(path string) (*Store, error) {
-	s := &Store{path: path, byPhone: map[string][]int{}}
+	s := &Store{path: path, byPhone: map[string][]int{}, byEmail: map[string]struct{}{}}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -207,6 +208,28 @@ func (s *Store) reindexLocked() {
 		}
 	}
 	s.byPhone = idx
+	emails := make(map[string]struct{}, len(s.all))
+	for i := range s.all {
+		for _, e := range s.all[i].Emails {
+			if key := strings.ToLower(strings.TrimSpace(e)); key != "" {
+				emails[key] = struct{}{}
+			}
+		}
+	}
+	s.byEmail = emails
+}
+
+// HasEmail reports whether any contact carries the address (case-insensitive
+// exact match). Cheap enough to call per inbox row — one map lookup.
+func (s *Store) HasEmail(email string) bool {
+	key := strings.ToLower(strings.TrimSpace(email))
+	if key == "" {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.byEmail[key]
+	return ok
 }
 
 func (s *Store) persistLocked() error {

@@ -36,6 +36,10 @@ data class MailMessage(
     val snippet: String,
     val date: String,
     val unread: Boolean,
+    /** Gateway heuristic priority tier: "urgent" / "attention" / "" (routine). */
+    val priority: String = "",
+    /** Short Korean signal hint for the tier (e.g. "낙찰 · 마감 표현"). */
+    val priorityHint: String = "",
 )
 
 /** Full Gmail message for the native detail screen. */
