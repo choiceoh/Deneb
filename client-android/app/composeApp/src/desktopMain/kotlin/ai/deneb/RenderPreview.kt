@@ -51,6 +51,7 @@ import ai.deneb.ui.denebHint
 import ai.deneb.ui.chat.WorkFeedAction
 import ai.deneb.ui.chat.WorkFeedItem
 import ai.deneb.ui.chat.composables.DenebDrawerSheet
+import ai.deneb.ui.chat.composables.WaitingResponseRow
 import ai.deneb.ui.chat.composables.WorkFeedPanel
 import ai.deneb.ui.components.SkeletonList
 import ai.deneb.ui.dynamicui.ChartNode
@@ -137,6 +138,8 @@ fun main() {
     renderWidget("widget_loading.png", "불러오는 중…", "", "")
     renderSkeleton("skeleton_dark.png", DarkColorScheme)
     renderSkeleton("skeleton_light.png", LightColorScheme)
+    renderWaitingChip("waiting_chip_dark.png", DarkColorScheme)
+    renderWaitingChip("waiting_chip_light.png", LightColorScheme)
     println("rendered -> /tmp/deneb-render/")
 }
 
@@ -146,6 +149,37 @@ private val sampleMail = listOf(
     Triple("에코프로 구매팀", "모듈 견적 회신 요청 — 6월말 납기", false),
     Triple("이서연", "(제목 없음)", false),
 )
+
+// Validates the chat waiting chip in its live-progress states: generic rotating
+// text (no info yet), a gateway tool label fed by TurnProgress ("메일 확인 중",
+// status-only), and the thinking status. The multi-tool count (tools_count) and
+// the elapsed-time suffix don't render in a single-shot scene — the former's
+// format-args stringResource never resolves here, the latter needs 10s of wall
+// clock — so those are exercised by compile + live runs instead.
+private fun renderWaitingChip(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 760, height = 380, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = scheme.background) {
+                Column(Modifier.fillMaxSize().padding(8.dp)) {
+                    WaitingResponseRow(executingTools = persistentListOf())
+                    WaitingResponseRow(
+                        executingTools = persistentListOf("t1" to "메일 확인 중"),
+                        isStatusOnly = true,
+                    )
+                    WaitingResponseRow(
+                        executingTools = persistentListOf("t1" to "깊이 생각 중…"),
+                        isStatusOnly = true,
+                    )
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
 
 // Validates the Deneb design system (DenebScreenScaffold + DenebRow + DenebType)
 // on a mock mail list: English chrome, hairline rows, no Material cards.

@@ -17,26 +17,64 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/llmerr"
 )
 
-// executeAgentRunWithDelta is a variant of executeAgentRun that accepts a direct
-// onDelta callback for streaming text to HTTP clients.
+// streamEventSinks carries the per-event callbacks a streaming HTTP transport
+// (the miniapp SSE bridge) registers for one chat turn. All fields are
+// optional; nil callbacks drop their events.
+type streamEventSinks struct {
+	// OnDelta receives each assistant text chunk.
+	OnDelta func(delta string)
+	// OnTool receives tool lifecycle transitions (state "started"/"completed")
+	// so the client can show live tool progress in its waiting indicator.
+	OnTool func(state, tool, toolUseID string)
+	// OnThinking signals reasoning-in-progress (throttled by the broadcaster).
+	OnThinking func()
+}
+
+// executeAgentRunWithDelta is a variant of executeAgentRun that forwards the
+// run's broadcast stream (text deltas, tool lifecycle, thinking liveness) to
+// direct callbacks for streaming HTTP clients.
 func executeAgentRunWithDelta(
 	ctx context.Context,
 	params RunParams,
 	deps runDeps,
-	onDelta func(string),
+	sinks streamEventSinks,
 	logger *slog.Logger,
 ) (*chatRunResult, error) {
 	deltaRaw := streaming.BroadcastRawFunc(func(event string, data []byte) int {
-		if onDelta == nil || event != "chat.delta" {
+		switch event {
+		case streaming.EventDelta:
+			if sinks.OnDelta == nil {
+				return 0
+			}
+			var envelope struct {
+				Payload struct {
+					Delta string `json:"delta"`
+				} `json:"payload"`
+			}
+			if err := json.Unmarshal(data, &envelope); err == nil && envelope.Payload.Delta != "" {
+				sinks.OnDelta(envelope.Payload.Delta)
+			}
+		case streaming.EventTool:
+			if sinks.OnTool == nil {
+				return 0
+			}
+			var envelope struct {
+				Payload struct {
+					State     string `json:"state"`
+					Tool      string `json:"tool"`
+					ToolUseID string `json:"toolUseId"`
+				} `json:"payload"`
+			}
+			if err := json.Unmarshal(data, &envelope); err == nil && envelope.Payload.Tool != "" {
+				sinks.OnTool(envelope.Payload.State, envelope.Payload.Tool, envelope.Payload.ToolUseID)
+			}
+		case streaming.EventThinking:
+			if sinks.OnThinking == nil {
+				return 0
+			}
+			sinks.OnThinking()
+		default:
 			return 0
-		}
-		var envelope struct {
-			Payload struct {
-				Delta string `json:"delta"`
-			} `json:"payload"`
-		}
-		if err := json.Unmarshal(data, &envelope); err == nil && envelope.Payload.Delta != "" {
-			onDelta(envelope.Payload.Delta)
 		}
 		return 1
 	})

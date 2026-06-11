@@ -259,8 +259,17 @@ class DenebGatewayClient(
         val streamEmitInterval = 50.milliseconds
         var lastStreamEmit = TimeSource.Monotonic.markNow()
         var streamEmitted = false
+        // Live progress: the gateway's tool/thinking SSE frames become transient
+        // TOOL_EXECUTING rows so the waiting chip narrates what the agent is
+        // doing ("메일 확인 중") instead of cycling generic spinner text.
+        val progress = TurnProgress()
         val reply = try {
-            sendStreaming(sendText) { delta ->
+            sendStreaming(
+                sendText,
+                onTool = progress::onTool,
+                onThinking = progress::onThinking,
+            ) { delta ->
+                progress.onDelta()
                 accumulated.append(delta)
                 if (!streamEmitted || lastStreamEmit.elapsedNow() >= streamEmitInterval) {
                     replaceAssistant(accumulated.toString(), null)
@@ -280,6 +289,10 @@ class DenebGatewayClient(
             } else {
                 GatewayReply(text = accumulated.toString())
             }
+        } finally {
+            // Progress rows are turn-scoped — never leak a zombie chip past the
+            // turn, whatever way the stream ended (done, error, cancel).
+            progress.clear()
         }
 
         // Finalize: pick text + fallback badge.
@@ -312,6 +325,104 @@ class DenebGatewayClient(
             append(" values={")
             append(submission.values.entries.joinToString(", ") { "${it.key}=${it.value}" })
             append("}")
+        }
+    }
+
+    /**
+     * Turn-scoped live progress for [ask]: gateway `tool`/`thinking` SSE frames
+     * become transient [History.Role.TOOL_EXECUTING] rows (status-only, Korean
+     * labels via [ToolStatusLabels]) that the chat screen's waiting chip picks
+     * up through its existing executing-tools derivation — the same mechanism
+     * the local-provider pipeline uses.
+     *
+     * Threading: all map/flag state is touched only from the SSE read coroutine
+     * (callbacks run inline in [sendStreaming]); the delayed removals launched
+     * on [scope] only filter history by row id, so no synchronization is
+     * needed. [clear] runs in ask()'s finally, so a mid-stream error or cancel
+     * can never leak a zombie chip row.
+     */
+    private inner class TurnProgress {
+        private val thinkingId = "progress-thinking-${Uuid.random()}"
+        private var thinkingVisible = false
+
+        // toolUseId (or tool name when the gateway omits the id) → row id/start.
+        private val rowIds = mutableMapOf<String, String>()
+        private val startMarks = mutableMapOf<String, TimeSource.Monotonic.ValueTimeMark>()
+        private val allRowIds = mutableSetOf<String>()
+
+        /** Reasoning liveness pulse → show "깊이 생각 중…" until text or a tool arrives. */
+        fun onThinking() {
+            if (thinkingVisible) return
+            thinkingVisible = true
+            allRowIds += thinkingId
+            _chatHistory.update { list ->
+                list + History(
+                    id = thinkingId,
+                    role = History.Role.TOOL_EXECUTING,
+                    content = "thinking",
+                    toolName = ToolStatusLabels.THINKING,
+                    isStatusMessage = true,
+                )
+            }
+        }
+
+        /** Visible answer text is flowing — drop the thinking row (O(1) when hidden). */
+        fun onDelta() = hideThinking()
+
+        fun onTool(state: String, tool: String, toolUseId: String) {
+            val key = toolUseId.ifEmpty { tool }
+            when (state) {
+                "started" -> {
+                    hideThinking()
+                    val rowId = "progress-tool-${Uuid.random()}"
+                    rowIds[key] = rowId
+                    startMarks[key] = TimeSource.Monotonic.markNow()
+                    allRowIds += rowId
+                    _chatHistory.update { list ->
+                        list + History(
+                            id = rowId,
+                            role = History.Role.TOOL_EXECUTING,
+                            content = tool,
+                            toolName = ToolStatusLabels.label(tool),
+                            isStatusMessage = true,
+                        )
+                    }
+                }
+                "completed" -> {
+                    val rowId = rowIds.remove(key) ?: return
+                    val elapsed = startMarks.remove(key)?.elapsedNow() ?: 0.milliseconds
+                    val remaining = MIN_PROGRESS_DISPLAY_MS.milliseconds - elapsed
+                    if (remaining.isPositive()) {
+                        // Hold fast tools on screen long enough to read; the
+                        // removal is an idempotent id filter, so racing clear()
+                        // or a conversation switch is safe.
+                        scope.launch {
+                            delay(remaining)
+                            removeRow(rowId)
+                        }
+                    } else {
+                        removeRow(rowId)
+                    }
+                }
+            }
+        }
+
+        /** Remove every row this turn added (idempotent; runs in ask()'s finally). */
+        fun clear() {
+            if (allRowIds.isEmpty()) return
+            thinkingVisible = false
+            val ids = allRowIds.toSet()
+            _chatHistory.update { list -> list.filter { it.id !in ids } }
+        }
+
+        private fun hideThinking() {
+            if (!thinkingVisible) return
+            thinkingVisible = false
+            removeRow(thinkingId)
+        }
+
+        private fun removeRow(id: String) {
+            _chatHistory.update { list -> list.filter { it.id != id } }
         }
     }
 
@@ -737,16 +848,26 @@ class DenebGatewayClient(
     /**
      * Streaming counterpart of [send]: POSTs to the gateway's SSE chat endpoint
      * and invokes [onDelta] with each assistant text chunk as it arrives. The
+     * gateway also frames live progress — [onTool] fires on tool lifecycle
+     * transitions (state "started"/"completed") and [onThinking] on throttled
+     * reasoning liveness pulses — which [ask] surfaces in the waiting chip. The
      * terminal `done` frame carries the canonical text + which model answered,
      * returned as the [GatewayReply]. Throws on transport failure or a server
      * `error` frame so [ask] can fall back to the blocking RPC.
      *
      * SSE is parsed by hand off the response channel (no Ktor SSE plugin): lines
      * accumulate per frame and dispatch on the blank-line separator. Comment
-     * lines (": keepalive") are ignored. The request timeout is disabled because
-     * an agent turn (tool calls included) can outlast the default window.
+     * lines (": keepalive") and unknown events are ignored, so an older gateway
+     * without tool/thinking frames degrades gracefully. The request timeout is
+     * disabled because an agent turn (tool calls included) can outlast the
+     * default window.
      */
-    private suspend fun sendStreaming(message: String, onDelta: (String) -> Unit): GatewayReply {
+    private suspend fun sendStreaming(
+        message: String,
+        onTool: (state: String, tool: String, toolUseId: String) -> Unit = { _, _, _ -> },
+        onThinking: () -> Unit = {},
+        onDelta: (String) -> Unit,
+    ): GatewayReply {
         if (clientToken.isEmpty()) {
             return GatewayReply("⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요.")
         }
@@ -790,6 +911,14 @@ class DenebGatewayClient(
                                 }.getOrNull()
                                 if (!d.isNullOrEmpty()) onDelta(d)
                             }
+                            "tool" -> {
+                                runCatching {
+                                    jsonCodec.decodeFromString(ToolEvent.serializer(), data.toString())
+                                }.getOrNull()?.let {
+                                    if (it.tool.isNotEmpty()) onTool(it.state, it.tool, it.toolUseId)
+                                }
+                            }
+                            "thinking" -> onThinking()
                             "done" -> {
                                 runCatching {
                                     jsonCodec.decodeFromString(DoneEvent.serializer(), data.toString())
@@ -990,6 +1119,9 @@ class DenebGatewayClient(
     private data class DeltaEvent(val delta: String = "")
 
     @Serializable
+    private data class ToolEvent(val state: String = "", val tool: String = "", val toolUseId: String = "")
+
+    @Serializable
     private data class DoneEvent(val text: String = "", val model: String = "", val fellBack: Boolean = false)
 
     @Serializable
@@ -1030,6 +1162,10 @@ class DenebGatewayClient(
         // TCP connect budget. A reachable gateway on LAN/Tailscale connects well
         // under this; a dead one fails fast instead of waiting out REQUEST_TIMEOUT_MS.
         const val CONNECT_TIMEOUT_MS = 5_000L
+
+        // Minimum on-screen time for a tool progress row in the waiting chip,
+        // so fast tools register as a readable label instead of a flicker.
+        const val MIN_PROGRESS_DISPLAY_MS = 1_500L
 
         // Max idle between bytes on the chat SSE stream. The server emits a
         // keepalive comment every 15s, so this only trips on a real stall.

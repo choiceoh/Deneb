@@ -10,15 +10,19 @@
 //	  Body: {"sessionKey"?, "message", "model"?}
 //	    │
 //	    ▼  same auth as handleMiniappRPC
-//	  chat.Handler.SendSyncStream(... onDelta)
+//	  chat.Handler.SendSyncStream(... onDelta + tool/thinking callbacks)
 //	    │
-//	    ▼  each text chunk → one SSE "delta" frame
-//	  event: delta  data: {"delta":"..."}      (zero or more)
-//	  event: done   data: {"text":...,"model":...,"fellBack":...}   (on success)
-//	  event: error  data: {"error":"..."}      (on failure)
+//	    ▼  each stream event → one SSE frame
+//	  event: delta     data: {"delta":"..."}                        (zero or more)
+//	  event: tool      data: {"state":"started"|"completed","tool":"...","toolUseId":"..."}
+//	  event: thinking  data: {}                                     (throttled liveness)
+//	  event: done      data: {"text":...,"model":...,"fellBack":...}   (success terminal)
+//	  event: error     data: {"error":"..."}                        (failure terminal)
 //
-// The native client renders deltas live and replaces the message with the
-// canonical `done.text` on completion.
+// The native client renders deltas live, shows tool/thinking progress in its
+// waiting indicator, and replaces the message with the canonical `done.text`
+// on completion. Unknown event names are ignored by the client's SSE parser,
+// so older clients degrade gracefully.
 
 package server
 
@@ -55,10 +59,20 @@ type chatStreamResult struct {
 	FellBack bool
 }
 
-// chatStreamRunner runs a streaming chat turn, invoking onDelta for each text
-// chunk and returning the final result. It is the seam that lets
-// writeChatStreamSSE be unit-tested without a live chat handler.
-type chatStreamRunner func(ctx context.Context, onDelta func(string)) (*chatStreamResult, error)
+// chatStreamSinks carries the per-event callbacks writeChatStreamSSE hands to
+// the runner: text deltas, tool lifecycle transitions, and thinking liveness.
+// All callbacks are safe for the runner to invoke concurrently (writes are
+// serialized by the SSE writer's mutex).
+type chatStreamSinks struct {
+	Delta    func(delta string)
+	Tool     func(state, tool, toolUseID string)
+	Thinking func()
+}
+
+// chatStreamRunner runs a streaming chat turn, invoking the sink callbacks as
+// stream events arrive and returning the final result. It is the seam that
+// lets writeChatStreamSSE be unit-tested without a live chat handler.
+type chatStreamRunner func(ctx context.Context, sinks chatStreamSinks) (*chatStreamResult, error)
 
 // handleMiniappChatStream runs one chat turn for the native client and streams
 // the assistant text back as SSE. Auth and the session/channel wiring mirror
@@ -98,13 +112,17 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 
 	// From here on the response is SSE — no more writeJSON.
 	ctx := clientauth.WithContext(r.Context(), identity)
-	runner := func(ctx context.Context, onDelta func(string)) (*chatStreamResult, error) {
+	runner := func(ctx context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
 		res, err := s.chatHandler.SendSyncStream(ctx, sessionKey, reqBody.Message, strings.TrimSpace(reqBody.Model), &chat.SyncOptions{
 			// Channel "client" flips on deneb-ui emission (richUIChannel).
 			Delivery: &chat.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
 			// The reply text is streamed here, not pushed via the message tool.
 			AutoDeliveredOutput: true,
-		}, onDelta)
+			// Live progress for the client's waiting indicator: which tool is
+			// running, and a throttled "thinking" pulse before the first token.
+			OnToolEvent: sinks.Tool,
+			OnThinking:  sinks.Thinking,
+		}, sinks.Delta)
 		if err != nil {
 			return nil, err
 		}
@@ -184,11 +202,26 @@ func writeChatStreamSSE(ctx context.Context, w http.ResponseWriter, sessionKey s
 		}
 	}()
 
-	result, runErr := run(ctx, func(delta string) {
-		if delta == "" {
-			return
-		}
-		writeEvent("delta", map[string]string{"delta": delta})
+	result, runErr := run(ctx, chatStreamSinks{
+		Delta: func(delta string) {
+			if delta == "" {
+				return
+			}
+			writeEvent("delta", map[string]string{"delta": delta})
+		},
+		Tool: func(state, tool, toolUseID string) {
+			if tool == "" {
+				return
+			}
+			writeEvent("tool", map[string]string{
+				"state":     state,
+				"tool":      tool,
+				"toolUseId": toolUseID,
+			})
+		},
+		Thinking: func() {
+			writeEvent("thinking", map[string]string{})
+		},
 	})
 
 	// Stop and join the keepalive before the terminal frame so no comment can

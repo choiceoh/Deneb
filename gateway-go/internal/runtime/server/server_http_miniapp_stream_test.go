@@ -46,9 +46,9 @@ func parseSSEEvents(t *testing.T, body string) []struct{ Event, Data string } {
 
 func TestWriteChatStreamSSE_DeltasThenDone(t *testing.T) {
 	rec := httptest.NewRecorder()
-	run := func(_ context.Context, onDelta func(string)) (*chatStreamResult, error) {
-		onDelta("안녕")
-		onDelta("하세요")
+	run := func(_ context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
+		sinks.Delta("안녕")
+		sinks.Delta("하세요")
 		return &chatStreamResult{Text: "안녕하세요", Model: "step3p7", FellBack: true}, nil
 	}
 	writeChatStreamSSE(context.Background(), rec, "client:test", run, nil)
@@ -87,7 +87,7 @@ func TestWriteChatStreamSSE_DeltasThenDone(t *testing.T) {
 
 func TestWriteChatStreamSSE_ErrorFrame(t *testing.T) {
 	rec := httptest.NewRecorder()
-	run := func(_ context.Context, _ func(string)) (*chatStreamResult, error) {
+	run := func(_ context.Context, _ chatStreamSinks) (*chatStreamResult, error) {
 		return nil, errors.New("boom")
 	}
 	writeChatStreamSSE(context.Background(), rec, "client:test", run, nil)
@@ -101,6 +101,47 @@ func TestWriteChatStreamSSE_ErrorFrame(t *testing.T) {
 	}
 	if err := json.Unmarshal([]byte(events[0].Data), &e); err != nil || e.Error != "boom" {
 		t.Errorf("error payload = %q (err %v), want boom", e.Error, err)
+	}
+}
+
+// TestWriteChatStreamSSE_ToolAndThinkingFrames covers the live-progress frames:
+// a turn that thinks, runs a tool, then answers must interleave thinking/tool
+// frames with deltas in arrival order, ending with done.
+func TestWriteChatStreamSSE_ToolAndThinkingFrames(t *testing.T) {
+	rec := httptest.NewRecorder()
+	run := func(_ context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
+		sinks.Thinking()
+		sinks.Tool("started", "gmail", "tu_1")
+		sinks.Tool("completed", "gmail", "tu_1")
+		sinks.Delta("메일 3통이 도착했습니다")
+		sinks.Tool("", "", "") // empty tool name must be dropped, not framed
+		return &chatStreamResult{Text: "메일 3통이 도착했습니다", Model: "step3p7"}, nil
+	}
+	writeChatStreamSSE(context.Background(), rec, "client:test", run, nil)
+
+	events := parseSSEEvents(t, rec.Body.String())
+	wantOrder := []string{"thinking", "tool", "tool", "delta", "done"}
+	if len(events) != len(wantOrder) {
+		t.Fatalf("event count = %d, want %d: %q", len(events), len(wantOrder), rec.Body.String())
+	}
+	for i, want := range wantOrder {
+		if events[i].Event != want {
+			t.Errorf("event[%d] = %q, want %q", i, events[i].Event, want)
+		}
+	}
+	var tool struct {
+		State     string `json:"state"`
+		Tool      string `json:"tool"`
+		ToolUseID string `json:"toolUseId"`
+	}
+	if err := json.Unmarshal([]byte(events[1].Data), &tool); err != nil {
+		t.Fatalf("tool payload: %v", err)
+	}
+	if tool.State != "started" || tool.Tool != "gmail" || tool.ToolUseID != "tu_1" {
+		t.Errorf("tool[started] = %+v, want {started gmail tu_1}", tool)
+	}
+	if err := json.Unmarshal([]byte(events[2].Data), &tool); err != nil || tool.State != "completed" {
+		t.Errorf("tool[completed] = %+v (err %v), want state=completed", tool, err)
 	}
 }
 

@@ -103,6 +103,17 @@ type SyncOptions struct {
 	// than by the agent's in-loop `message` tool. Propagated to RunParams;
 	// see RunParams.AutoDeliveredOutput.
 	AutoDeliveredOutput bool
+
+	// OnToolEvent, when set on a streaming run (SendSyncStream only), receives
+	// tool lifecycle transitions (state "started"/"completed") so the transport
+	// can surface live tool progress — the native client renders these as the
+	// waiting indicator's tool label. Nil-safe.
+	OnToolEvent func(state, tool, toolUseID string)
+
+	// OnThinking, when set on a streaming run (SendSyncStream only), fires
+	// while the model emits reasoning deltas (throttled by the broadcaster) so
+	// the transport can show a "thinking" hint before the first visible token.
+	OnThinking func()
 }
 
 // prepareSyncRun builds RunParams and runDeps from the common sync arguments.
@@ -302,7 +313,12 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 		}
 	}
 
-	result, err := executeAgentRunWithDelta(ctx, params, deps, streamDelta, h.logger)
+	sinks := streamEventSinks{OnDelta: streamDelta}
+	if opts != nil {
+		sinks.OnTool = opts.OnToolEvent
+		sinks.OnThinking = opts.OnThinking
+	}
+	result, err := executeAgentRunWithDelta(ctx, params, deps, sinks, h.logger)
 	if err != nil {
 		return nil, err
 	}
