@@ -108,7 +108,7 @@ func Compact(
 	lastInputTokens := lastUserInputTokens(messages)
 	if lastInputTokens >= DefaultEmergencyInputThreshold && summarizer != nil {
 		var evicted int
-		summarizeMessages, evicted = EmergencyCompact(ctx, cfg, summarizeMessages, lastInputTokens, summarizer, logger)
+		summarizeMessages, evicted = EmergencyCompact(ctx, cfg, summarizeMessages, summarizer, logger)
 		r.EmergencyEvicted = evicted
 		emergencyFired = evicted > 0
 		if emergencyFired {

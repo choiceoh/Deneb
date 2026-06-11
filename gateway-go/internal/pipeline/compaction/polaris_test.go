@@ -149,15 +149,24 @@ func TestEmergencyCompact_EvictsOldestSummarizesNonEvicted(t *testing.T) {
 		msgs = append(msgs, textMsg("user", fmt.Sprintf("Message %d %s", i, strings.Repeat("x", 2000))))
 		msgs = append(msgs, textMsg("assistant", fmt.Sprintf("Reply %d %s", i, strings.Repeat("y", 2000))))
 	}
+	// The ~35K-token trigger input is part of messages, as in production.
+	hugeInput := strings.Repeat("z", 70000)
+	msgs = append(msgs, textMsg("user", hugeInput))
 
 	cfg := NewConfig(200_000)
-	// Budget: 40 msgs × ~1000 tok = ~40K + 35K input = 75K. Budget 60K forces partial eviction.
+	// 40 msgs × ~1000 tok + 35K input = ~75K. Budget 60K forces partial eviction.
 	cfg.ContextBudget = 60000
 
 	s := &mockSummarizer{}
-	result, evicted := EmergencyCompact(context.Background(), cfg, msgs, 35000, s, nil)
+	result, evicted := EmergencyCompact(context.Background(), cfg, msgs, s, nil)
 	if evicted == 0 {
 		t.Error("expected some messages to be evicted")
+	}
+	if evicted >= len(msgs)-4 {
+		t.Errorf("evicted = %d, want partial eviction (old zone is %d)", evicted, len(msgs)-4)
+	}
+	if last := string(result[len(result)-1].Content); !strings.Contains(last, hugeInput) {
+		t.Error("trigger input should be preserved intact in the recent tail")
 	}
 	if !s.called {
 		t.Error("expected summarizer to be called for non-evicted old messages")
@@ -173,6 +182,40 @@ func TestEmergencyCompact_EvictsOldestSummarizesNonEvicted(t *testing.T) {
 	// Last 4 messages should be the preserved recent tail.
 	if len(result) < 4 {
 		t.Fatalf("result too short: %d", len(result))
+	}
+}
+
+// Negative proof for the trigger-input double-count: production derives
+// inputTokens via lastUserInputTokens(messages), so the ≥30K trigger input is
+// itself one of the messages (usually inside the preserved recent tail).
+// Adding it to the budget check again demands phantom headroom and wipes the
+// whole old zone even when everything already fits.
+func TestEmergencyCompact_NoDoubleCountOfTriggerInput(t *testing.T) {
+	var msgs []llm.Message
+	for i := 0; i < 5; i++ {
+		msgs = append(msgs, textMsg("user", strings.Repeat("x", 2000)))
+		msgs = append(msgs, textMsg("assistant", strings.Repeat("y", 2000)))
+	}
+	// Recent tail ends with the huge trigger input (~35K tokens).
+	msgs = append(msgs,
+		textMsg("user", "q"),
+		textMsg("assistant", "a"),
+		textMsg("user", strings.Repeat("z", 70000)),
+	)
+
+	cfg := NewConfig(200_000)
+	// Total ≈ 10K (old) + 35K (input) ≈ 45K — comfortably within 60K.
+	// No eviction is needed; double-counting the input would require
+	// totalAfter ≤ 25K, which not even evicting all old messages satisfies.
+	cfg.ContextBudget = 60000
+
+	s := &mockSummarizer{}
+	result, evicted := EmergencyCompact(context.Background(), cfg, msgs, s, nil)
+	if evicted != 0 {
+		t.Fatalf("evicted = %d, want 0 (trigger input is already counted inside messages)", evicted)
+	}
+	if len(result) != len(msgs) {
+		t.Fatalf("messages changed: got %d, want %d", len(result), len(msgs))
 	}
 }
 
