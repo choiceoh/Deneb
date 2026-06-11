@@ -614,6 +614,12 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 			// instead of dropping interleaved or overwritten blocks.
 			for _, idx := range toolOrder {
 				tb := toolBuilders[idx]
+				if tb.id == "" {
+					// Some OpenAI-compatible servers stream tool calls without an
+					// id. Synthesize one — tool_use↔tool_result pairing and the
+					// echo-back to the provider both require a non-empty id.
+					tb.id = fmt.Sprintf("call_%d", tb.blockIdx)
+				}
 				startP, _ := json.Marshal(ContentBlockStart{
 					Index:        tb.blockIdx,
 					ContentBlock: ContentBlock{Type: "tool_use", ID: tb.id, Name: tb.name},
@@ -825,6 +831,7 @@ func (c *Client) completeOpenAI(ctx context.Context, req ChatRequest) (string, e
 		Choices []struct {
 			Message struct {
 				Content string `json:"content"`
+				Refusal string `json:"refusal"`
 			} `json:"message"`
 		} `json:"choices"`
 	}
@@ -834,9 +841,16 @@ func (c *Client) completeOpenAI(ctx context.Context, req ChatRequest) (string, e
 	if len(resp.Choices) == 0 {
 		return "", fmt.Errorf("no choices in response")
 	}
+	msg := resp.Choices[0].Message
+	if strings.TrimSpace(msg.Content) == "" && msg.Refusal != "" {
+		// A refusal arrives on `refusal` with content null. Returning "" with
+		// a nil error would let background callers (wiki dreamer/verify/merge)
+		// treat the refusal as a successful empty result.
+		return "", fmt.Errorf("model refused: %s", truncateForLog(msg.Refusal, 200))
+	}
 	// Strip reasoning model artifacts (<think> tags, "Thinking Process:" preamble)
 	// that leak into the content field of some local models (DeepSeek-R1, QwQ, etc.).
-	content := strings.TrimSpace(resp.Choices[0].Message.Content)
+	content := strings.TrimSpace(msg.Content)
 	content = jsonutil.StripThinkingTags(content)
 	content = jsonutil.StripThinkingPreamble(content)
 	return strings.TrimSpace(content), nil

@@ -56,6 +56,63 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 	var currentBlock *blockBuilder
 	var blockIndex = -1
 
+	// finalizePending appends the in-flight block to the result, applying the
+	// same field finalization content_block_stop performs (tool args, the
+	// thinking Text→Thinking move). No-op when no block is open.
+	finalizePending := func() {
+		if currentBlock == nil {
+			return
+		}
+		// Finalize the block's fields BEFORE appending — result.contentBlocks
+		// takes a value copy, so any mutation after the append lands on the
+		// soon-discarded currentBlock.block and is lost.
+		switch currentBlock.block.Type {
+		case "tool_use":
+			if len(currentBlock.jsonBuf) > 0 {
+				currentBlock.block.Input = json.RawMessage(currentBlock.jsonBuf)
+			}
+		case "thinking":
+			// Extended-thinking content streams in as thinking_delta and was
+			// accumulated into Text; move it to Thinking (where the round-trip
+			// and joinAllThinkingTexts read it) and clear Text so it stays out
+			// of user-visible output. Must happen before the append.
+			currentBlock.block.Thinking = currentBlock.block.Text
+			currentBlock.block.Text = ""
+		}
+		result.contentBlocks = append(result.contentBlocks, currentBlock.block)
+		switch currentBlock.block.Type {
+		case "tool_use":
+			result.toolCalls = append(result.toolCalls, currentBlock.block)
+		case "text":
+			result.text += currentBlock.block.Text
+		}
+		currentBlock = nil
+	}
+
+	// flushTruncated rescues an un-stopped in-flight block when the stream
+	// ends without its content_block_stop — a mid-stream EOF, a lost finish
+	// chunk, or [DONE] arriving with a block still open. Text/thinking the
+	// user already watched stream in (OnTextDelta fired live) must survive
+	// into the persisted result instead of silently vanishing into an empty
+	// reply. An incomplete tool_use is kept only when its accumulated
+	// arguments are complete valid JSON; executing truncated arguments would
+	// perform a half-specified action.
+	flushTruncated := func() {
+		if currentBlock == nil {
+			return
+		}
+		if currentBlock.block.Type == "tool_use" &&
+			len(currentBlock.jsonBuf) > 0 && !json.Valid(currentBlock.jsonBuf) {
+			logger.Warn("dropping incomplete tool_use at truncated stream end",
+				"tool", currentBlock.block.Name, "argsLen", len(currentBlock.jsonBuf))
+			currentBlock = nil
+			return
+		}
+		logger.Warn("finalizing un-stopped block at truncated stream end",
+			"type", currentBlock.block.Type)
+		finalizePending()
+	}
+
 	// Idle watchdog: detects LLM stream stalls where the TCP connection stays
 	// alive but no SSE events arrive. Without this, stalled streams hang
 	// indefinitely (HTTP-level timeouts are too coarse at 5+ minutes).
@@ -75,6 +132,8 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 			return ErrStreamIdle
 		case ev, ok := <-events:
 			if !ok {
+				// Channel closed without message_stop — truncated stream.
+				flushTruncated()
 				return nil
 			}
 			// Reset idle watchdog on every received event.
@@ -147,32 +206,7 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 				}
 
 			case "content_block_stop":
-				if currentBlock != nil {
-					// Finalize the block's fields BEFORE appending — result.contentBlocks
-					// takes a value copy, so any mutation after the append lands on the
-					// soon-discarded currentBlock.block and is lost.
-					switch currentBlock.block.Type {
-					case "tool_use":
-						if len(currentBlock.jsonBuf) > 0 {
-							currentBlock.block.Input = json.RawMessage(currentBlock.jsonBuf)
-						}
-					case "thinking":
-						// Extended-thinking content streams in as thinking_delta and was
-						// accumulated into Text; move it to Thinking (where the round-trip
-						// and joinAllThinkingTexts read it) and clear Text so it stays out
-						// of user-visible output. Must happen before the append.
-						currentBlock.block.Thinking = currentBlock.block.Text
-						currentBlock.block.Text = ""
-					}
-					result.contentBlocks = append(result.contentBlocks, currentBlock.block)
-					switch currentBlock.block.Type {
-					case "tool_use":
-						result.toolCalls = append(result.toolCalls, currentBlock.block)
-					case "text":
-						result.text += currentBlock.block.Text
-					}
-					currentBlock = nil
-				}
+				finalizePending()
 
 			case "message_delta":
 				var md llm.MessageDelta
@@ -199,7 +233,10 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 				}
 
 			case "message_stop":
-				// Stream complete for this turn.
+				// Stream complete for this turn. A block still open here means the
+				// stream was truncated (translators only reach message_stop with an
+				// open block on [DONE]/EOF without a finish chunk) — rescue it.
+				flushTruncated()
 				return nil
 
 			case "error":
