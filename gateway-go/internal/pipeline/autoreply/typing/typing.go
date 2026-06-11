@@ -250,11 +250,6 @@ func NewTypingSignaler(controller *TypingController) *TypingSignaler {
 	return &TypingSignaler{controller: controller, phase: "text"}
 }
 
-// SetPhase updates the current typing phase.
-func (s *TypingSignaler) SetPhase(phase string) {
-	s.phase = phase
-}
-
 // Signal sends a typing signal if appropriate for the current phase.
 func (s *TypingSignaler) Signal() {
 	if s.controller == nil {

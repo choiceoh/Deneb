@@ -7,23 +7,12 @@ import (
 	"math/big"
 	"strings"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
 
 // AbortCutoffContext holds the cutoff marker for abort deduplication.
 type AbortCutoffContext struct {
 	MessageSid string `json:"messageSid,omitempty"`
 	Timestamp  *int64 `json:"timestamp,omitempty"`
-}
-
-// ResolveAbortCutoffFromContext derives abort cutoff info from the message context.
-func ResolveAbortCutoffFromContext(msg *types.MsgContext) *AbortCutoffContext {
-	messageSid := strings.TrimSpace(msg.MessageSid)
-	if messageSid == "" {
-		return nil
-	}
-	return &AbortCutoffContext{MessageSid: messageSid}
 }
 
 // SessionAbortCutoffEntry holds abort cutoff fields on a session entry.

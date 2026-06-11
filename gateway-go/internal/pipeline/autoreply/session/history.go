@@ -100,24 +100,3 @@ func (h *HistoryTracker) Count() int {
 	defer h.mu.Unlock()
 	return len(h.entries)
 }
-
-// BuildHistoryContext formats recent history entries as context for the agent.
-func BuildHistoryContext(entries []HistoryEntry, maxEntries int) string {
-	if len(entries) == 0 {
-		return ""
-	}
-	start := 0
-	if maxEntries > 0 && len(entries) > maxEntries {
-		start = len(entries) - maxEntries
-	}
-
-	var result string
-	for _, e := range entries[start:] {
-		prefix := "User"
-		if e.Role == "assistant" {
-			prefix = "Assistant"
-		}
-		result += prefix + ": " + e.Text + "\n"
-	}
-	return result
-}

@@ -182,14 +182,6 @@ func (d *SubagentInfraDeps) ListSubagents(parentID string) string {
 	return FormatSubagentList(agents)
 }
 
-// ActiveSubagentCount returns the number of active sub-agents.
-func (d *SubagentInfraDeps) ActiveSubagentCount(parentID string) int {
-	if d.ACPRegistry == nil {
-		return 0
-	}
-	return d.ACPRegistry.ActiveCount(parentID)
-}
-
 // ResetSubagent performs an ACP reset-in-place for a bound conversation.
 func (d *SubagentInfraDeps) ResetSubagent(agentID, reason string) error {
 	if d.ACPRegistry == nil {
