@@ -21,6 +21,12 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "답변을 기다리는 동안 비서가 지금 뭘 하는지 보여줌 — '생각 중…' 대신 '메일 확인 중', '기억 검색 중', '깊이 생각 중…' 같은 실제 진행 상황 표시",
+            "10초 넘게 걸리는 작업은 경과 시간(· 32초)이 함께 표시 — 오래 걸려도 멈춘 게 아님을 알 수 있음",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "메일 검색창은 평소 숨겨두고, 목록을 아래로 끌어내리면 나타나도록 — 받은 메일이 화면 맨 위부터 보임 (계속 당기면 새로고침은 그대로)",
         ),
     ),
