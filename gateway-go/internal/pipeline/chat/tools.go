@@ -130,6 +130,9 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	}
 
 	output, err := def.Fn(ctx, input)
+	// Verification-gate bookkeeping (verify_gate.go): a successful write/edit
+	// arms the gate; a successful verification exec disarms it. Nil-safe.
+	verifyGateFromContext(ctx).recordTool(name, input, output, err)
 	if err != nil {
 		return output, err
 	}
