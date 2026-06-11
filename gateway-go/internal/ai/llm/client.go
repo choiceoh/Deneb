@@ -90,11 +90,6 @@ type Client struct {
 // ClientOption configures a Client.
 type ClientOption func(*Client)
 
-// WithHTTPClient sets a custom http.Client.
-func WithHTTPClient(c *http.Client) ClientOption {
-	return func(cl *Client) { cl.httpClient = c }
-}
-
 // WithLogger sets the logger.
 func WithLogger(l *slog.Logger) ClientOption {
 	return func(cl *Client) { cl.logger = l }

@@ -11,8 +11,6 @@
 package httputil
 
 import (
-	"context"
-	"fmt"
 	"net"
 	"net/http"
 	"time"
@@ -85,45 +83,4 @@ func NewClient(timeout time.Duration) *http.Client {
 // Call during graceful shutdown to release resources.
 func CloseIdle() {
 	sharedTransport.CloseIdleConnections()
-}
-
-// WaitForHealth polls a health endpoint until it returns a non-5xx status
-// or ctx is cancelled/expired. Callers control the deadline via context.
-func WaitForHealth(ctx context.Context, url string, interval time.Duration) error {
-	client := NewClient(3 * time.Second)
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	probe := func() (bool, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		if err != nil {
-			return false, fmt.Errorf("health check at %s: %w", url, err)
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			return false, nil // transient — retry
-		}
-		defer resp.Body.Close()
-		return resp.StatusCode < 500, nil
-	}
-
-	// Probe immediately before waiting for the first tick.
-	if ok, err := probe(); err != nil {
-		return err
-	} else if ok {
-		return nil
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("health check at %s: %w", url, ctx.Err())
-		case <-ticker.C:
-			if ok, err := probe(); err != nil {
-				return err
-			} else if ok {
-				return nil
-			}
-		}
-	}
 }

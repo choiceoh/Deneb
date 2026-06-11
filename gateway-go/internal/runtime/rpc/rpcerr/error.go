@@ -156,11 +156,6 @@ func InvalidRequest(msg string) *Error {
 	return New(protocol.ErrInvalidRequest, msg)
 }
 
-// DependencyFailed returns a DEPENDENCY_FAILED error.
-func DependencyFailed(msg string) *Error {
-	return New(protocol.ErrDependencyFailed, msg)
-}
-
 // ValidationFailed returns a VALIDATION_FAILED error.
 func ValidationFailed(msg string) *Error {
 	return New(protocol.ErrValidationFailed, msg)

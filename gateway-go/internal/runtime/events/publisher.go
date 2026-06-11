@@ -36,26 +36,6 @@ type SessionSnapshotProvider interface {
 	SessionSnapshot(sessionKey string) *SessionSnapshot
 }
 
-// PresenceSnapshot holds the system presence state.
-type PresenceSnapshot struct {
-	Channels []ChannelPresence `json:"channels,omitempty"`
-	Health   HealthPresence    `json:"health"`
-	Ts       int64             `json:"ts"` //nolint:staticcheck // ST1003 — JSON field name
-}
-
-// ChannelPresence represents a channel's presence state.
-type ChannelPresence struct {
-	ID     string `json:"id"`
-	Label  string `json:"label"`
-	Status string `json:"status"`
-}
-
-// HealthPresence represents overall system health.
-type HealthPresence struct {
-	Gateway string `json:"gateway"`
-	Uptime  int64  `json:"uptimeMs"`
-}
-
 // Publisher enriches the broadcaster with session-aware event delivery.
 type Publisher struct {
 	broadcaster *Broadcaster
@@ -117,24 +97,6 @@ func (p *Publisher) PublishSessionMessage(update TranscriptUpdate) {
 	p.publishSessionChanged(update.SessionKey, "message", nil)
 }
 
-// PublishSessionLifecycle publishes a session lifecycle change event.
-func (p *Publisher) PublishSessionLifecycle(evt LifecycleChangeEvent) {
-	overrides := map[string]any{}
-	if evt.Reason != "" {
-		overrides["reason"] = evt.Reason
-	}
-	if evt.Label != "" {
-		overrides["label"] = evt.Label
-	}
-	if evt.DisplayName != "" {
-		overrides["displayName"] = evt.DisplayName
-	}
-	if evt.ParentSessionKey != "" {
-		overrides["parentSessionKey"] = evt.ParentSessionKey
-	}
-	p.publishSessionChanged(evt.SessionKey, evt.Reason, overrides)
-}
-
 // PublishAgentEvent publishes an agent event with sequencing.
 func (p *Publisher) PublishAgentEvent(evt AgentEvent) {
 	payload := map[string]any{
@@ -169,12 +131,6 @@ func (p *Publisher) PublishAgentEvent(evt AgentEvent) {
 	}
 
 	p.broadcaster.BroadcastWithOpts("agent.event", payload, BroadcastOpts{DropIfSlow: true})
-}
-
-// PublishPresence broadcasts the system presence snapshot.
-func (p *Publisher) PublishPresence(snap PresenceSnapshot) {
-	snap.Ts = time.Now().UnixMilli()
-	p.broadcaster.BroadcastWithOpts("presence", snap, BroadcastOpts{DropIfSlow: true})
 }
 
 // PublishConfigChanged broadcasts a configuration change event.
