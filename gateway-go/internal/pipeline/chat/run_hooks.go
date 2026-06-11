@@ -26,7 +26,11 @@ func wireStreamHooks(
 		// Reasoning liveness for streaming transports (throttled inside the
 		// broadcaster — OnThinking fires once per reasoning delta).
 		hc.OnThinking(broadcaster.EmitThinking)
-		hc.OnToolEmit(broadcaster.EmitToolStart)
+		hc.OnToolEmit(func(name, toolUseID string, input []byte) {
+			// The detail hint (query/command/file name) turns the client's
+			// waiting chip from "메일 확인 중" into "메일 확인 중: 아르고".
+			broadcaster.EmitToolStart(name, toolUseID, toolStreamDetail(name, input))
+		})
 		hc.OnToolResult(func(name, toolUseID, result string, isErr bool) {
 			broadcaster.EmitToolResult(name, toolUseID, result, isErr)
 			if deps.broadcast != nil {

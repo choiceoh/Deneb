@@ -798,7 +798,7 @@ func executeOneTool(
 		hooks.OnToolStart(tc.Name, turnReason, tc.Input)
 	}
 	if hooks.OnToolEmit != nil {
-		hooks.OnToolEmit(tc.Name, tc.ID)
+		hooks.OnToolEmit(tc.Name, tc.ID, tc.Input)
 	}
 	logger.Info("exec", "name", tc.Name, "turn", turn)
 

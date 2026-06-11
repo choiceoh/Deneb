@@ -40,7 +40,6 @@
     <string name="settings_tools_none_available">이 플랫폼에서 사용 가능한 도구가 없습니다.</string>
     <string name="settings_tab_services">서비스</string>
     <string name="settings_tab_tools">도구</string>
-    <string name="tools_count">%1$d 도구</string>
     <string name="settings_tab_general">일반</string>
     <string name="settings_tab_agent">에이전트</string>
     <string name="tool_set_alarm_name">알람 설정</string>
@@ -140,6 +139,8 @@
     <string name="waiting_brewing">준비 중…</string>
     <string name="waiting_elapsed_sec">%1$d초</string>
     <string name="waiting_elapsed_min_sec">%1$d분 %2$d초</string>
+    <string name="tool_footprint">작업 내역: %1$s</string>
+    <string name="tools_count_more">%1$s 외 %2$d</string>
     <string name="settings_mcp_servers">MCP 서버</string>
     <string name="settings_mcp_servers_description">Model Context Protocol을 사용하여 외부 도구 서버에 연결합니다.</string>
     <string name="settings_mcp_add_server">MCP 서버 추가</string>

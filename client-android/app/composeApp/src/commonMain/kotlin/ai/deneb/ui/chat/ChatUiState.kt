@@ -133,6 +133,10 @@ data class History(
     val isThinking: Boolean = false,
     val isStatusMessage: Boolean = false,
     val fallbackServiceName: String? = null,
+    // Compact trail of the tools this answer's turn ran ("메일 확인 ×2 · 웹 검색"),
+    // shown as a meta line under the bubble. Live-turn only — transcript
+    // reloads do not carry it.
+    val toolFootprint: String? = null,
     val uiSubmission: UiSubmission? = null,
     // Preserved from a tool-call assistant turn so it can be round-tripped
     // back to providers (e.g. DeepSeek) that require it on the next request.

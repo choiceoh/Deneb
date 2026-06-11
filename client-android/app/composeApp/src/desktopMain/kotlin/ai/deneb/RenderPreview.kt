@@ -157,13 +157,23 @@ private val sampleMail = listOf(
 // format-args stringResource never resolves here, the latter needs 10s of wall
 // clock — so those are exercised by compile + live runs instead.
 private fun renderWaitingChip(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 760, height = 380, density = Density(2f)) {
+    val scene = ImageComposeScene(width = 760, height = 640, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = scheme.background) {
                 Column(Modifier.fillMaxSize().padding(8.dp)) {
                     WaitingResponseRow(executingTools = persistentListOf())
                     WaitingResponseRow(
                         executingTools = persistentListOf("t1" to "메일 확인 중"),
+                        isStatusOnly = true,
+                    )
+                    // Detail hint from the tool input ("tool" frame detail field).
+                    WaitingResponseRow(
+                        executingTools = persistentListOf("t1" to "메일 확인 중: 아르고에너지 NDA"),
+                        isStatusOnly = true,
+                    )
+                    // Failure form held briefly after an isError completion.
+                    WaitingResponseRow(
+                        executingTools = persistentListOf("t1" to "웹 검색 실패"),
                         isStatusOnly = true,
                     )
                     WaitingResponseRow(

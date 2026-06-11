@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 )
 
 // parseSSEEvents splits an SSE body into (event, dataJSON) pairs, skipping
@@ -105,16 +106,17 @@ func TestWriteChatStreamSSE_ErrorFrame(t *testing.T) {
 }
 
 // TestWriteChatStreamSSE_ToolAndThinkingFrames covers the live-progress frames:
-// a turn that thinks, runs a tool, then answers must interleave thinking/tool
-// frames with deltas in arrival order, ending with done.
+// a turn that thinks, runs a tool (with a detail hint), fails one, then answers
+// must interleave thinking/tool frames with deltas in arrival order, ending
+// with done. Also pins the wire shape: detail/isError omitted when zero.
 func TestWriteChatStreamSSE_ToolAndThinkingFrames(t *testing.T) {
 	rec := httptest.NewRecorder()
 	run := func(_ context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
 		sinks.Thinking()
-		sinks.Tool("started", "gmail", "tu_1")
-		sinks.Tool("completed", "gmail", "tu_1")
+		sinks.Tool(chat.ToolStreamEvent{State: "started", Tool: "gmail", ToolUseID: "tu_1", Detail: "아르고에너지"})
+		sinks.Tool(chat.ToolStreamEvent{State: "completed", Tool: "gmail", ToolUseID: "tu_1", IsError: true})
 		sinks.Delta("메일 3통이 도착했습니다")
-		sinks.Tool("", "", "") // empty tool name must be dropped, not framed
+		sinks.Tool(chat.ToolStreamEvent{}) // empty tool name must be dropped, not framed
 		return &chatStreamResult{Text: "메일 3통이 도착했습니다", Model: "step3p7"}, nil
 	}
 	writeChatStreamSSE(context.Background(), rec, "client:test", run, nil)
@@ -129,19 +131,21 @@ func TestWriteChatStreamSSE_ToolAndThinkingFrames(t *testing.T) {
 			t.Errorf("event[%d] = %q, want %q", i, events[i].Event, want)
 		}
 	}
-	var tool struct {
-		State     string `json:"state"`
-		Tool      string `json:"tool"`
-		ToolUseID string `json:"toolUseId"`
-	}
+	var tool toolStreamFrame
 	if err := json.Unmarshal([]byte(events[1].Data), &tool); err != nil {
 		t.Fatalf("tool payload: %v", err)
 	}
-	if tool.State != "started" || tool.Tool != "gmail" || tool.ToolUseID != "tu_1" {
-		t.Errorf("tool[started] = %+v, want {started gmail tu_1}", tool)
+	if tool.State != "started" || tool.Tool != "gmail" || tool.ToolUseID != "tu_1" || tool.Detail != "아르고에너지" || tool.IsError {
+		t.Errorf("tool[started] = %+v, want {started gmail tu_1 아르고에너지 false}", tool)
 	}
-	if err := json.Unmarshal([]byte(events[2].Data), &tool); err != nil || tool.State != "completed" {
-		t.Errorf("tool[completed] = %+v (err %v), want state=completed", tool, err)
+	if strings.Contains(events[1].Data, "isError") {
+		t.Errorf("started frame should omit isError: %q", events[1].Data)
+	}
+	if err := json.Unmarshal([]byte(events[2].Data), &tool); err != nil || tool.State != "completed" || !tool.IsError {
+		t.Errorf("tool[completed] = %+v (err %v), want state=completed isError=true", tool, err)
+	}
+	if strings.Contains(events[2].Data, "detail") {
+		t.Errorf("completed frame should omit empty detail: %q", events[2].Data)
 	}
 }
 

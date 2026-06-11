@@ -123,7 +123,7 @@ func TestStreamBroadcasterEvents(t *testing.T) {
 
 	sb.EmitStarted()
 	sb.EmitDelta("chunk1")
-	sb.EmitToolStart("read", "t1")
+	sb.EmitToolStart("read", "t1", "")
 	sb.EmitToolResult("read", "t1", "file content", false)
 	sb.EmitDelta("chunk2")
 	sb.EmitComplete("final", llm.TokenUsage{InputTokens: 100, OutputTokens: 50})

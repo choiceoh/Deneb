@@ -626,7 +626,7 @@ func TestRunAgent_StreamHooks_Called(t *testing.T) {
 		OnToolStart: func(name, _ string, _ []byte) {
 			atomic.AddInt32(&toolStarts, 1)
 		},
-		OnToolEmit: func(_, _ string) {
+		OnToolEmit: func(_, _ string, _ []byte) {
 			atomic.AddInt32(&toolEmits, 1)
 		},
 		OnToolResult: func(_, _, _ string, _ bool) {

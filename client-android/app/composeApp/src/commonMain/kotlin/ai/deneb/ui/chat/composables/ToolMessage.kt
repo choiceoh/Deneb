@@ -40,7 +40,7 @@ import ai.deneb.ui.denebBreathing
 import ai.deneb.ui.denebSpatialSpring
 import ai.deneb.ui.isOledFlavor
 import deneb.composeapp.generated.resources.Res
-import deneb.composeapp.generated.resources.tools_count
+import deneb.composeapp.generated.resources.tools_count_more
 import deneb.composeapp.generated.resources.waiting_brewing
 import deneb.composeapp.generated.resources.waiting_content_description
 import deneb.composeapp.generated.resources.waiting_elapsed_min_sec
@@ -51,6 +51,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 // Keep the chip quiet this long before showing the elapsed-time suffix: quick
 // turns stay minimal, while multi-minute tool calls read as alive, not hung.
@@ -62,7 +63,9 @@ internal fun toolSummaryText(
 ): String? = when {
     executingTools.isEmpty() -> null
     executingTools.size == 1 -> executingTools.first().second
-    else -> stringResource(Res.string.tools_count, executingTools.size)
+    // "메일 확인 중 외 1" — lead with the first concrete label instead of a
+    // bare count, so parallel tools still narrate something meaningful.
+    else -> stringResource(Res.string.tools_count_more, executingTools.first().second, executingTools.size - 1)
 }
 
 @Composable
@@ -70,18 +73,24 @@ internal fun WaitingResponseRow(
     executingTools: ImmutableList<Pair<String, String>>,
     isStatusOnly: Boolean = false,
     statusText: String? = null,
+    // When provided, the elapsed display anchors to the turn's actual start
+    // (survives this row briefly leaving composition, e.g. the deneb-ui
+    // pending stretch); otherwise it anchors to first composition.
+    turnStart: TimeSource.Monotonic.ValueTimeMark? = null,
 ) {
     val summary = statusText ?: toolSummaryText(executingTools)
     val effectiveStatusOnly = isStatusOnly || statusText != null
-    val waitingCd = stringResource(Res.string.waiting_content_description)
+    // Surface the live status to screen readers too — "응답 대기 중 — 메일 확인 중".
+    val waitingCdBase = stringResource(Res.string.waiting_content_description)
+    val waitingCd = if (summary != null) "$waitingCdBase — $summary" else waitingCdBase
 
-    // Elapsed time since this waiting row appeared (≈ since the turn started —
-    // the row stays composed for the whole loading stretch under a stable key).
+    // Elapsed time since the turn started (see turnStart above).
+    val anchor = remember(turnStart) { turnStart ?: TimeSource.Monotonic.markNow() }
     var elapsedSec by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(anchor) {
         while (true) {
+            elapsedSec = anchor.elapsedNow().inWholeSeconds.toInt()
             delay(1.seconds)
-            elapsedSec++
         }
     }
     val elapsedLabel = when {
