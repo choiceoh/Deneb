@@ -87,11 +87,13 @@ func executeOneTool(
 	// interval is snapshot at call time (not read inside the goroutine) so
 	// tests that rewrite the global via t.Cleanup() can't race with a
 	// straggling heartbeat goroutine from the previous subtest.
-	var hbDone chan struct{}
+	var hbDone, hbStopped chan struct{}
 	if hooks.OnToolProgress != nil {
 		hbDone = make(chan struct{})
+		hbStopped = make(chan struct{})
 		interval := toolHeartbeatInterval
 		safego.GoWithSlog(logger, "tool-heartbeat", func() {
+			defer close(hbStopped)
 			ticker := time.NewTicker(interval)
 			defer ticker.Stop()
 			for {
@@ -127,9 +129,16 @@ func executeOneTool(
 		}
 	}()
 
-	// Stop the heartbeat goroutine now that the tool returned.
+	// Stop the heartbeat goroutine now that the tool returned, and wait for
+	// it to exit. Without the join, an in-flight tick's OnToolProgress could
+	// land after this function returns — i.e. after the surface already saw
+	// the tool complete — resurrecting a stale "still running" label (and
+	// making the no-fire-after-return test assertion racy on slow runners).
+	// The join is bounded: the goroutine never blocks outside the select and
+	// exits on hbDone/ctx.Done immediately.
 	if hbDone != nil {
 		close(hbDone)
+		<-hbStopped
 	}
 
 	elapsed := time.Since(start)
