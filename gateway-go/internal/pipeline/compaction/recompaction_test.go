@@ -34,9 +34,12 @@ func TestSummarizeOldMessages_IncrementalUpdate(t *testing.T) {
 	cfg := NewConfig(100000)
 	cfg.PreviousSummary = "PREV_SUMMARY_MARKER_XYZ"
 
-	got := summarizeOldMessages(context.Background(), cfg, recompOldMessages(), capt, nil)
+	got, covered := summarizeOldMessages(context.Background(), cfg, recompOldMessages(), capt, nil)
 	if got != "UPDATED" {
 		t.Fatalf("summary = %q, want UPDATED", got)
+	}
+	if covered != len(recompOldMessages()) {
+		t.Fatalf("covered = %d, want %d (single-call path covers everything)", covered, len(recompOldMessages()))
 	}
 	// Incremental path uses the recompaction (update) system prompt.
 	if !strings.Contains(capt.system, "갱신") {
@@ -55,7 +58,7 @@ func TestSummarizeOldMessages_FreshNoPrevious(t *testing.T) {
 	capt := &recompCapture{out: "FRESH"}
 	cfg := NewConfig(100000) // no PreviousSummary
 
-	got := summarizeOldMessages(context.Background(), cfg, recompOldMessages(), capt, nil)
+	got, _ := summarizeOldMessages(context.Background(), cfg, recompOldMessages(), capt, nil)
 	if got != "FRESH" {
 		t.Fatalf("summary = %q, want FRESH", got)
 	}

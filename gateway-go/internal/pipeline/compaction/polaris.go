@@ -201,7 +201,7 @@ func Compact(
 	// boundary, so the compacted transcript never carries an orphan that Anthropic
 	// rejects with a 400 (and that re-sending would wedge into until /reset).
 	if r.LLMCompacted || r.EmbeddingCompacted || r.RecencyCompacted || r.EmergencyEvicted > 0 {
-		messages = balanceToolBlocks(messages)
+		messages = BalanceToolBlocks(messages)
 	}
 
 	r.TokensAfter = EstimateMessagesTokens(messages)
@@ -272,7 +272,7 @@ func isToolResultMessage(content json.RawMessage) bool {
 // it). Mirrors OpenClaw excluding tool_result from compaction cut points: the
 // result is pushed into the dropped/summarized side together with its
 // already-excluded tool_use, instead of surviving as an orphan that
-// balanceToolBlocks must replace with a lossy stub. balanceToolBlocks remains
+// BalanceToolBlocks must replace with a lossy stub. BalanceToolBlocks remains
 // the backstop for the tiers this does not cover (Embedding/MMR). Returns
 // len(messages) when every message from startIdx on is a tool_result — callers
 // guard against an empty window.

@@ -57,8 +57,9 @@ func (e *Engine) SetAnchorKeywords(keywords []string) {
 }
 
 // CompactAndPersist runs Polaris compaction and persists any LLM summary
-// into the DAG as a leaf node. Skips re-summarization when the context
-// already contains summary messages from AssembleContext.
+// into the DAG as a leaf node. Summary messages already injected by
+// AssembleContext (or bootstrap) are protected from re-summarization, but the
+// raw remainder still goes through the full tier chain.
 //
 // Bootstrap: when no summaries exist in the DAG, older messages that were
 // dropped by freshTailCount during assembly are recovered here. If the older
@@ -82,12 +83,27 @@ func (e *Engine) CompactAndPersist(
 	// output budget / chunking / parallelism as regular LLM compaction.
 	messages = e.bootstrapIfNeeded(ctx, sessionKey, messages, summarizer, polarisCfg)
 
-	// Summary reuse: if context already has injected summaries (from
-	// AssembleContext or bootstrap), Polaris would re-summarize them. Detect and skip.
-	if hasSummaryMessages(messages) {
-		// Polaris can still micro-compact and handle emergency, but the
-		// LLM tier should not re-summarize our injected summaries.
-		polarisCfg.SkipLLMCompaction = true
+	// Injected summary fences (from AssembleContext or bootstrap) must not be
+	// re-summarized — but they must not disable the LLM tier either. A
+	// previous blanket SkipLLMCompaction here meant that once a single DAG
+	// summary existed, the uncovered raw tail could never be summarized again
+	// and grew without bound (client:main reached 474 raw messages / 318K
+	// tokens while the blunt safety trim did all the cutting, every turn).
+	// Instead: split the fences out, run the tier chain on the raw remainder
+	// with a correspondingly reduced budget, and re-attach the fences after.
+	fences, rest := splitSummaryFences(messages)
+	innerCfg := polarisCfg
+	fenceTokens := 0
+	if len(fences) > 0 {
+		fenceTokens = compact.EstimateMessagesTokens(fences)
+		if innerBudget := contextBudget - fenceTokens; innerBudget > 0 {
+			innerCfg.ContextBudget = innerBudget
+		} else {
+			// Degenerate: the fences alone exceed the budget — no room for raw
+			// context, so another summary buys nothing. Cheap tiers still run;
+			// the safety trim below handles the rest.
+			innerCfg.SkipLLMCompaction = true
+		}
 	}
 
 	// Wrap summarizer to capture the summary text for DAG persistence.
@@ -100,27 +116,106 @@ func (e *Engine) CompactAndPersist(
 		}
 	}
 
-	// Run Polaris 3-tier compaction.
-	compacted, result := compact.Compact(ctx, polarisCfg, messages, wrappedSummarizer, e.logger)
+	// Run Polaris 3-tier compaction on the raw remainder.
+	compacted, result := compact.Compact(ctx, innerCfg, rest, wrappedSummarizer, e.logger)
 
-	// Persist summary to DAG if any summarization occurred.
-	if capturedSummary != "" && (result.LLMCompacted || result.EmergencyEvicted > 0) {
-		e.persistSummary(sessionKey, capturedSummary, len(compacted))
+	// Persist the summary to the DAG. Prefer Result.Summary — when the
+	// chunked path ran it is the joined text of all chunk summaries, while
+	// capturedSummary is whichever single Summarize() call finished last (one
+	// chunk's slice of the range; persisting it as covering the whole range
+	// would silently drop the other chunks' facts). The captured value remains
+	// the fallback for the emergency tier, which does not surface its summary
+	// in Result.Summary.
+	summaryToPersist := result.Summary
+	if summaryToPersist == "" {
+		summaryToPersist = capturedSummary
+	}
+	if summaryToPersist != "" && (result.LLMCompacted || result.EmergencyEvicted > 0) {
+		// Count only the inner compacted slice: persistSummary derives the
+		// covered range from how many real transcript messages were preserved,
+		// and the fences are not transcript messages.
+		e.persistSummary(sessionKey, summaryToPersist, len(compacted))
+	}
+
+	// Re-attach the protected fences and fold their tokens back into the
+	// result so callers (budget warnings, tier logs) see whole-context totals.
+	if len(fences) > 0 {
+		full := make([]llm.Message, 0, len(fences)+len(compacted))
+		full = append(full, fences...)
+		full = append(full, compacted...)
+		compacted = full
+		result.TokensBefore += fenceTokens
+		result.TokensAfter += fenceTokens
 	}
 
 	// Safety-net: if compaction could not bring the context within budget
-	// (e.g. recent messages themselves are extremely large and LLM compaction
-	// preserved them), drop oldest messages as a last resort. This should be
-	// rare; the warn log helps diagnose when it fires.
+	// (e.g. an uncovered raw backlog is being digested a few chunks per pass),
+	// drop oldest raw messages as a last resort — keeping summary fences, the
+	// densest context, and never leaving an orphaned tool pair. The result's
+	// TokensAfter is updated so the caller's "failed to reduce below budget"
+	// check fires only when even this trim could not get under budget.
 	if contextBudget > 0 && compact.EstimateMessagesTokens(compacted) > contextBudget {
 		before := compact.EstimateMessagesTokens(compacted)
-		compacted = trimLLMToTokenBudget(compacted, contextBudget)
+		compacted = trimWithFenceProtection(compacted, contextBudget)
 		after := compact.EstimateMessagesTokens(compacted)
+		result.TokensAfter = after
 		e.logger.Warn("polaris: post-compaction safety trim fired",
 			"tokensBefore", before, "tokensAfter", after, "budget", contextBudget)
 	}
 
 	return compacted, result
+}
+
+// splitSummaryFences partitions messages into injected summary-fence messages
+// (from AssembleContext, bootstrap, or legacy compaction) and the raw
+// remainder, preserving the relative order of both groups. In an assembled
+// context the fences are a strict prefix, so this is effectively a prefix
+// split that also tolerates strays.
+func splitSummaryFences(messages []llm.Message) (fences, rest []llm.Message) {
+	for _, m := range messages {
+		if isSummaryFenceMessage(m) {
+			fences = append(fences, m)
+		} else {
+			rest = append(rest, m)
+		}
+	}
+	return fences, rest
+}
+
+// isSummaryFenceMessage reports whether a message is injected summary context
+// rather than a real transcript message.
+func isSummaryFenceMessage(m llm.Message) bool {
+	if m.Role != "user" {
+		return false
+	}
+	var text string
+	if json.Unmarshal(m.Content, &text) != nil {
+		return false
+	}
+	return strings.HasPrefix(text, summaryPrefix) || compact.IsContextFenceText(text)
+}
+
+// trimWithFenceProtection drops oldest raw messages until the context fits the
+// budget while keeping summary fences (compressed context is the densest
+// information per token). Only when the fences alone exceed the budget does it
+// fall back to trimming across everything. Either way the result is re-balanced
+// so a tool_result whose tool_use was trimmed away cannot survive as an orphan
+// (Anthropic rejects those with a 400).
+func trimWithFenceProtection(msgs []llm.Message, budget int) []llm.Message {
+	fences, rest := splitSummaryFences(msgs)
+	rawBudget := budget - compact.EstimateMessagesTokens(fences)
+	if rawBudget > 0 && len(rest) > 0 {
+		rest = trimLLMToTokenBudget(rest, rawBudget)
+		out := make([]llm.Message, 0, len(fences)+len(rest))
+		out = append(out, fences...)
+		out = append(out, rest...)
+		if compact.EstimateMessagesTokens(out) <= budget {
+			return compact.BalanceToolBlocks(out)
+		}
+	}
+	// Degenerate: fences alone exceed the budget (or trimming raw was not
+	// enough) — trim across the full slice, oldest first.
+	return compact.BalanceToolBlocks(trimLLMToTokenBudget(msgs, budget))
 }
 
 // persistSummary stores a compaction summary as a leaf node in the DAG.
@@ -228,16 +323,26 @@ func (e *Engine) bootstrapIfNeeded(
 		return messages
 	}
 
-	summary := compact.BootstrapCompact(ctx, cfg, olderLLM, summarizer, e.logger)
-	if summary == "" {
+	summary, covered := compact.BootstrapCompact(ctx, cfg, olderLLM, summarizer, e.logger)
+	if summary == "" || covered <= 0 {
 		return messages
+	}
+	// A huge backlog is digested in bounded chunk batches, so the summary may
+	// cover only a prefix of the older messages. Persist exactly that range:
+	// olderLLM[i] holds store msg index i (LoadMessages from 0, append-only
+	// sequential indices), so the covered range is [0, covered-1]. Messages
+	// past coveredEnd stay uncovered; once coverage exists the next assembly
+	// loads them as raw recent and regular compaction digests them.
+	coveredEnd := covered - 1
+	if coveredEnd > olderEnd {
+		coveredEnd = olderEnd
 	}
 
 	// Inject summary message at the front of context.
 	summaryText := compact.FormatContextFence(
 		"polaris-bootstrap",
 		"conversation-summary",
-		fmt.Sprintf("이전 대화 요약 (메시지 0-%d)", olderEnd),
+		fmt.Sprintf("이전 대화 요약 (메시지 0-%d)", coveredEnd),
 		summary,
 	)
 	summaryMsg := llm.NewTextMessage("user", summaryText)
@@ -253,7 +358,7 @@ func (e *Engine) bootstrapIfNeeded(
 		TokenEst:   compact.EstimateTokens(summary),
 		CreatedAt:  time.Now().UnixMilli(),
 		MsgStart:   0,
-		MsgEnd:     olderEnd,
+		MsgEnd:     coveredEnd,
 	}
 	id, err := e.store.InsertSummary(node)
 	if err != nil {
@@ -261,8 +366,9 @@ func (e *Engine) bootstrapIfNeeded(
 	} else {
 		e.logger.Info("polaris: bootstrap summary created",
 			"id", id, "session", sessionKey,
-			"range", [2]int{0, olderEnd},
+			"range", [2]int{0, coveredEnd},
 			"olderMessages", len(olderChatMsgs),
+			"coveredMessages", covered,
 			"summaryTokens", node.TokenEst)
 	}
 
@@ -282,23 +388,6 @@ func (e *Engine) ShouldCompact(sessionKey string, currentTokens, budgetTokens in
 		return CompactSoft
 	}
 	return CompactNone
-}
-
-// hasSummaryMessages checks if any message starts with the summary prefix,
-// indicating AssembleContext already injected summaries.
-func hasSummaryMessages(messages []llm.Message) bool {
-	for _, m := range messages {
-		if m.Role != "user" {
-			continue
-		}
-		var text string
-		if json.Unmarshal(m.Content, &text) == nil {
-			if strings.HasPrefix(text, summaryPrefix) || compact.IsContextFenceText(text) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // Compile-time interface compliance.
