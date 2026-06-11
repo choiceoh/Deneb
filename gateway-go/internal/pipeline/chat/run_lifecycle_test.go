@@ -240,7 +240,7 @@ func TestHandleRunSuccess_SubagentReplyFuncNil(t *testing.T) {
 			StopReason: "end_turn",
 			Turns:      1,
 		}
-		handleRunSuccess(context.Background(), params, deps, nil, logger, result, "", time.Now().UnixMilli(), nil)
+		handleRunSuccess(context.Background(), params, deps, nil, logger, result, time.Now().UnixMilli())
 
 		mu.Lock()
 		defer mu.Unlock()

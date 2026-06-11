@@ -145,7 +145,9 @@ func executeAgentRun(
 	// 3. Resolve LLM client (no IO — reads in-memory config/auth store).
 	client := resolveClient(deps, providerID, logger)
 	if client == nil {
-		return nil, fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
+		err := fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
+		runLog.LogError(agentlog.RunErrorData{Error: err.Error()})
+		return nil, err
 	}
 
 	// Recall preflight runs during context preparation: when the current
@@ -260,6 +262,15 @@ func executeAgentRun(
 	agentStart := time.Now()
 	agentResult, actualModel, fellBack, err := runAgentWithFallback(ctx, cfg, messages, client, deps, providerID, initialRole, hooks, logger, runLog)
 	if err != nil {
+		// Log run.error here — not in the async-only completion handler — so
+		// every entry path (runAgentAsync, SendSync, SendSyncStream) closes the
+		// run.start it opened in the same per-session log file. The sync paths
+		// historically logged start/prep but never end/error, leaving orphaned
+		// runs that AggregateByModel could not count.
+		runLog.LogError(agentlog.RunErrorData{
+			Error:   err.Error(),
+			Aborted: ctx.Err() != nil,
+		})
 		return nil, err
 	}
 
@@ -328,6 +339,36 @@ func executeAgentRun(
 			"stopReason":   agentResult.StopReason,
 		})
 	}
+
+	// Log run.end to the agent detail log. This lives here — not in the
+	// async-only handleRunSuccess — so the sync paths (SendSync, SendSyncStream)
+	// pair every run.start with a run.end in the same session file. Orphaned
+	// starts are invisible to agentlog.AggregateByModel (runs are counted at
+	// run.end), which starved the modeltuner of all native-client interactive
+	// runs. CompactionFired is re-read from the session because compaction can
+	// fire during the run, after cachedSession was fetched; Proactive separates
+	// autonomous/auto-delivered runs (heartbeat, cron relay) from user requests.
+	compacted := false
+	if deps.sessions != nil {
+		if sess := deps.sessions.Get(params.SessionKey); sess != nil {
+			compacted = sess.CompactionFired
+		}
+	}
+	runLog.LogEnd(agentlog.RunEndData{
+		Model:               actualModel,
+		StopReason:          agentResult.StopReason,
+		Turns:               agentResult.Turns,
+		InputTokens:         agentResult.Usage.InputTokens,
+		OutputTokens:        agentResult.Usage.OutputTokens,
+		TextLen:             len(agentResult.Text),
+		CacheReadTokens:     agentResult.Usage.CacheReadInputTokens,
+		CacheCreationTokens: agentResult.Usage.CacheCreationInputTokens,
+		ToolCalls:           agentResult.TotalToolCalls,
+		ToolCounts:          agentResult.ToolCounts,
+		MaxTokensRecoveries: agentResult.MaxTokensRecoveries,
+		Compacted:           compacted,
+		Proactive:           params.AutoDeliveredOutput || params.EphemeralUser,
+	})
 
 	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag, ActualModel: actualModel, FellBack: fellBack}, nil
 }
