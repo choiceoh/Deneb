@@ -21,7 +21,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
@@ -60,7 +59,6 @@ type HubConfig struct {
 	CronPersistLog *cron.PersistentRunLog // optional
 
 	// Background task control plane.
-	Tasks *tasks.Registry
 
 	// Workflow subsystems.
 	Approvals *approval.Store
@@ -95,7 +93,6 @@ type GatewayHub struct {
 	cronPersistLog *cron.PersistentRunLog
 
 	// Background task control plane.
-	tasks *tasks.Registry
 
 	// Workflow subsystems.
 	approvals *approval.Store
@@ -133,7 +130,6 @@ func NewGatewayHub(cfg HubConfig) *GatewayHub {
 		jobTracker:     cfg.JobTracker,
 		cronService:    cfg.CronService,
 		cronPersistLog: cfg.CronPersistLog,
-		tasks:          cfg.Tasks,
 		approvals:      cfg.Approvals,
 		skills:         cfg.Skills,
 		logger:         cfg.Logger,
@@ -152,7 +148,6 @@ func (h *GatewayHub) Chat() *chat.Handler                            { return h.
 func (h *GatewayHub) JobTracker() *agent.JobTracker                  { return h.jobTracker }
 func (h *GatewayHub) CronService() *cron.Service                     { return h.cronService }
 func (h *GatewayHub) CronPersistLog() *cron.PersistentRunLog         { return h.cronPersistLog }
-func (h *GatewayHub) Tasks() *tasks.Registry                         { return h.tasks }
 func (h *GatewayHub) Approvals() *approval.Store                     { return h.approvals }
 func (h *GatewayHub) Skills() *skills.Registry                       { return h.skills }
 func (h *GatewayHub) WikiStore() *wiki.Store                         { return h.wikiStore }

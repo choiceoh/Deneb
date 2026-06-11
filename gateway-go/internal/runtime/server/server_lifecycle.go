@@ -10,7 +10,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/tasks"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/logging"
 )
 
@@ -108,14 +107,6 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	// Start autonomous service (dreaming lifecycle).
 	if s.autonomousSvc != nil {
 		s.autonomousSvc.Start()
-	}
-
-	// Start background task maintenance loop (orphan recovery, cleanup).
-	if s.taskRegistry != nil {
-		sessionChecker := func(key string) bool {
-			return s.sessions.Get(key) != nil
-		}
-		tasks.StartMaintenanceLoop(ctx, s.taskRegistry, sessionChecker, s.logger)
 	}
 
 	// Gmail polling is managed by the autonomous service (registered in initGmailPoll).
@@ -241,11 +232,6 @@ func (s *Server) doShutdown() error {
 	}
 	if s.embeddingClient != nil {
 		stopWithTimeout(10*time.Second, "embeddingClient.Shutdown", s.logger, s.embeddingClient.Shutdown)
-	}
-
-	// 7. Close task store.
-	if s.taskStore != nil {
-		stopWithTimeout(5*time.Second, "taskStore.Close", s.logger, func() { _ = s.taskStore.Close() })
 	}
 
 	// Gmail polling is stopped by autonomous service (registered as periodic task).

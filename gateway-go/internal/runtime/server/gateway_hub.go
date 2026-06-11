@@ -13,7 +13,6 @@ func (s *Server) buildHub() *rpcutil.GatewayHub {
 		JobTracker:     s.jobTracker,
 		CronService:    s.cronService,
 		CronPersistLog: s.cronRunLog,
-		Tasks:          s.taskRegistry,
 		Approvals:      s.approvals,
 		Skills:         s.skills,
 		Logger:         s.logger,
