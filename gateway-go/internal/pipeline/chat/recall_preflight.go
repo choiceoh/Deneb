@@ -109,7 +109,10 @@ var recallStopWords = map[string]struct{}{
 
 var recallFenceTagPattern = regexp.MustCompile(`(?i)</?\s*recall-context\b[^>]*>`)
 
-func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, logger *slog.Logger) (out string) {
+// The second return reports whether the shared preflight deadline cut at
+// least one source short: the snapshot is still usable for the current turn
+// but must not be frozen into the recall cache (see shouldFreezeRecallSnapshot).
+func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, logger *slog.Logger) (out string, truncated bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			if logger != nil {
@@ -120,12 +123,12 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	}()
 
 	if params.EphemeralUser {
-		return ""
+		return "", false
 	}
 
 	message := strings.TrimSpace(params.Message)
 	if message == "" {
-		return ""
+		return "", false
 	}
 	// Hermes-style auto_recall: search EVERY turn, not just cue turns. The ~1.5s
 	// preflight cost is accepted in exchange for automatic cross-session context
@@ -179,6 +182,7 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 
 	slots := make([][]recallEvidence, len(sources))
 	elapsed := make([]time.Duration, len(sources))
+	cut := make([]bool, len(sources))
 	var wg sync.WaitGroup
 	for i, src := range sources {
 		wg.Add(1)
@@ -194,9 +198,21 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 			start := time.Now()
 			slots[i] = src.run(ctx)
 			elapsed[i] = time.Since(start)
+			// Sampled at this source's own return: a source that finished
+			// before the deadline stays false even if the budget expires
+			// later, while one that early-returned on ctx.Err() (or came back
+			// from a blocking call to find the deadline gone) is flagged —
+			// its slot likely holds partial evidence.
+			cut[i] = ctx.Err() != nil
 		}(i, src)
 	}
 	wg.Wait()
+	for _, c := range cut {
+		if c {
+			truncated = true
+			break
+		}
+	}
 
 	// Per-source contribution + latency. This accumulating record is the
 	// evidence base for backend consolidation: a source that never
@@ -223,14 +239,14 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	if len(evidence) == 0 {
 		if logger != nil {
 			logger.Info("recall preflight: no evidence",
-				"session", params.SessionKey, "sources", sourceSummary)
+				"session", params.SessionKey, "sources", sourceSummary, "truncated", truncated)
 		}
 		// Explicit recall tells the user nothing was found; silent auto-recall on a
 		// non-cue turn stays invisible so every-turn search adds no noise.
 		if cue {
-			return formatRecallNoEvidence()
+			return formatRecallNoEvidence(), truncated
 		}
-		return ""
+		return "", truncated
 	}
 
 	// The same fact often surfaces from several sources at once (wiki page +
@@ -251,9 +267,9 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 	}
 	if logger != nil {
 		logger.Info("recall preflight: evidence injected",
-			"session", params.SessionKey, "count", len(evidence), "sources", sourceSummary)
+			"session", params.SessionKey, "count", len(evidence), "sources", sourceSummary, "truncated", truncated)
 	}
-	return formatRecallEvidence(evidence)
+	return formatRecallEvidence(evidence), truncated
 }
 
 func shouldRunRecallPreflight(message string) bool {

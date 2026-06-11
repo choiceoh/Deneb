@@ -144,7 +144,7 @@ func runRecallBench(t *testing.T, verbose bool) (int, int) {
 	cases := recallBenchCases()
 	hits := 0
 	for _, c := range cases {
-		out := buildRecallPreflight(context.Background(),
+		out, _ := buildRecallPreflight(context.Background(),
 			RunParams{SessionKey: "client:main", Message: c.question},
 			runDeps{wikiStore: store},
 			nil,
@@ -196,7 +196,7 @@ func TestRecallSourceAttribution(t *testing.T) {
 	store := buildRecallBenchStore(t)
 	agg := map[string]int{}
 	for _, c := range recallBenchCases() {
-		out := buildRecallPreflight(context.Background(),
+		out, _ := buildRecallPreflight(context.Background(),
 			RunParams{SessionKey: "client:main", Message: c.question},
 			runDeps{wikiStore: store},
 			nil,

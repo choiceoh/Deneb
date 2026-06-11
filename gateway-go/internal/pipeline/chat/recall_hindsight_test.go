@@ -49,7 +49,7 @@ func TestBuildRecallPreflightInjectsHindsightEvidence(t *testing.T) {
 	defer srv.Close()
 
 	client := hindsight.NewClient(hindsight.Config{BaseURL: srv.URL, BankID: "deneb"})
-	out := buildRecallPreflight(context.Background(),
+	out, _ := buildRecallPreflight(context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "전에 회상 개선 얘기했던 거 기억나?"},
 		runDeps{hindsightClient: client},
 		nil,
@@ -77,7 +77,7 @@ func TestBuildRecallPreflightSearchesHindsightEveryTurn(t *testing.T) {
 	client := hindsight.NewClient(hindsight.Config{BaseURL: srv.URL, BankID: "deneb"})
 	// Hermes-style auto_recall: every source (incl. hindsight) is searched on EVERY turn,
 	// not just cue turns. A no-cue turn with a matching hit injects evidence silently.
-	out := buildRecallPreflight(context.Background(),
+	out, _ := buildRecallPreflight(context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "오늘 저녁 뭐 먹지?"},
 		runDeps{hindsightClient: client},
 		nil,
@@ -97,7 +97,7 @@ func TestBuildRecallPreflightSurvivesHindsightFailure(t *testing.T) {
 	defer srv.Close()
 
 	client := hindsight.NewClient(hindsight.Config{BaseURL: srv.URL, BankID: "deneb"})
-	out := buildRecallPreflight(context.Background(),
+	out, _ := buildRecallPreflight(context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "전에 얘기했던 거 기억나?"},
 		runDeps{hindsightClient: client},
 		nil,

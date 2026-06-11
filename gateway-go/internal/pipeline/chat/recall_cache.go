@@ -92,6 +92,16 @@ func clearRecallMemory(sessionKey string) {
 	}
 }
 
+// shouldFreezeRecallSnapshot decides whether a preflight result may be stored
+// as the frozen snapshot for its (session, cue-fingerprint) slot. Snapshots
+// whose collection was cut by the preflight deadline stay turn-local: the
+// store is first-write-wins with no expiry, so freezing a degraded snapshot
+// would pin its gaps onto every later turn about the same topic instead of
+// letting the next turn retry the slow sources.
+func shouldFreezeRecallSnapshot(hasCue, truncated bool, snapshot string) bool {
+	return hasCue && !truncated && recallMemoryHasEvidence(snapshot)
+}
+
 // recallMemoryHasEvidence reports whether a buildRecallPreflight string carries
 // real wiki/diary/transcript/session evidence. The formatRecallNoEvidence stub
 // uses a single source line with `source=none`; real evidence rows use

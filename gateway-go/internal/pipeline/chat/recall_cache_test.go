@@ -204,3 +204,26 @@ source=none confidence=none age=unknown
 		})
 	}
 }
+
+func TestShouldFreezeRecallSnapshot(t *testing.T) {
+	evidence := "ref=프로젝트/x.md source=wiki confidence=high age=3d"
+	cases := []struct {
+		name      string
+		hasCue    bool
+		truncated bool
+		snapshot  string
+		want      bool
+	}{
+		{"cue with full evidence freezes", true, false, evidence, true},
+		{"deadline-truncated snapshot stays turn-local", true, true, evidence, false},
+		{"no cue never freezes", false, false, evidence, false},
+		{"no-evidence stub never freezes", true, false, "source=none confidence=none", false},
+		{"empty snapshot never freezes", true, false, "", false},
+	}
+	for _, tc := range cases {
+		if got := shouldFreezeRecallSnapshot(tc.hasCue, tc.truncated, tc.snapshot); got != tc.want {
+			t.Errorf("%s: shouldFreezeRecallSnapshot(%v, %v, %q) = %v, want %v",
+				tc.name, tc.hasCue, tc.truncated, tc.snapshot, got, tc.want)
+		}
+	}
+}

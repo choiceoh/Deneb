@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
@@ -63,11 +64,14 @@ func TestBuildRecallPreflightInjectsWikiEvidence(t *testing.T) {
 		t.Fatalf("WritePage: %v", err)
 	}
 
-	out := buildRecallPreflight(context.Background(),
+	out, truncated := buildRecallPreflight(context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "전에 Deneb 회상 개선 얘기했던 거 계속해줘"},
 		runDeps{wikiStore: store},
 		nil,
 	)
+	if truncated {
+		t.Fatal("fast sources within the deadline must not be flagged truncated")
+	}
 	if !strings.Contains(out, "회상 근거") {
 		t.Fatalf("expected recall section, got %q", out)
 	}
@@ -96,7 +100,7 @@ func TestBuildRecallPreflightUsesRecentDiaryForTopiclessRecall(t *testing.T) {
 		t.Fatalf("AppendDiary: %v", err)
 	}
 
-	out := buildRecallPreflight(context.Background(),
+	out, _ := buildRecallPreflight(context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "아까 뭐였지?"},
 		runDeps{wikiStore: store},
 		nil,
@@ -115,7 +119,7 @@ func TestBuildRecallPreflightSearchesTranscript(t *testing.T) {
 		t.Fatalf("Append current: %v", err)
 	}
 
-	out := buildRecallPreflight(context.Background(),
+	out, _ := buildRecallPreflight(context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "전에 alpha 결정 기억나?"},
 		runDeps{transcript: transcript},
 		nil,
@@ -126,7 +130,7 @@ func TestBuildRecallPreflightSearchesTranscript(t *testing.T) {
 }
 
 func TestBuildRecallPreflightNoTrigger(t *testing.T) {
-	out := buildRecallPreflight(context.Background(),
+	out, _ := buildRecallPreflight(context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "새 기능 설계해줘"},
 		runDeps{},
 		nil,
@@ -137,7 +141,7 @@ func TestBuildRecallPreflightNoTrigger(t *testing.T) {
 }
 
 func TestBuildRecallPreflightSkipsEphemeralUser(t *testing.T) {
-	out := buildRecallPreflight(context.Background(),
+	out, _ := buildRecallPreflight(context.Background(),
 		RunParams{SessionKey: "telegram:1", Message: "전에 alpha 결정 기억나?", EphemeralUser: true},
 		runDeps{},
 		nil,
@@ -198,6 +202,45 @@ func (panickyTranscriptStore) Search(string, int) ([]toolctx.SearchResult, error
 }
 func (panickyTranscriptStore) CloneRecent(string, string, int) error { return nil }
 
+// slowTranscriptStore implements toolctx.TranscriptStore with a Search that
+// blocks past the preflight deadline, simulating a source cut mid-collection.
+type slowTranscriptStore struct{ delay time.Duration }
+
+func (slowTranscriptStore) Load(string, int) ([]toolctx.ChatMessage, int, error) {
+	return nil, 0, nil
+}
+func (slowTranscriptStore) Append(string, toolctx.ChatMessage) error { return nil }
+func (slowTranscriptStore) Delete(string) error                      { return nil }
+func (slowTranscriptStore) ListKeys() ([]string, error)              { return nil, nil }
+func (s slowTranscriptStore) Search(string, int) ([]toolctx.SearchResult, error) {
+	time.Sleep(s.delay)
+	return nil, nil
+}
+func (slowTranscriptStore) CloneRecent(string, string, int) error { return nil }
+
+func TestBuildRecallPreflightFlagsDeadlineTruncation(t *testing.T) {
+	dir := t.TempDir()
+	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	// Parent deadline (80ms) undercuts the internal 1.5s preflight budget so
+	// the test stays fast; the transcript source outlives it and must flag
+	// the snapshot as truncated so it is never frozen into the recall cache.
+	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+	defer cancel()
+	out, truncated := buildRecallPreflight(ctx,
+		RunParams{SessionKey: "client:main", Message: "전에 Deneb 회상 개선 얘기했던 거 계속해줘"},
+		runDeps{wikiStore: store, transcript: slowTranscriptStore{delay: 300 * time.Millisecond}},
+		nil,
+	)
+	if !truncated {
+		t.Fatalf("expected truncated=true when a source outlives the deadline, out=%q", out)
+	}
+}
+
 func TestBuildRecallPreflightSurvivesPanickingSource(t *testing.T) {
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
@@ -213,7 +256,7 @@ func TestBuildRecallPreflightSurvivesPanickingSource(t *testing.T) {
 		t.Fatalf("WritePage: %v", err)
 	}
 
-	out := buildRecallPreflight(context.Background(),
+	out, _ := buildRecallPreflight(context.Background(),
 		RunParams{SessionKey: "client:main", Message: "전에 Deneb 회상 개선 얘기했던 거 계속해줘"},
 		runDeps{wikiStore: store, transcript: panickyTranscriptStore{}},
 		nil,
