@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
-// balanceToolBlocks rewrites any orphaned tool_use / tool_result block into a
+// BalanceToolBlocks rewrites any orphaned tool_use / tool_result block into a
 // text stub so the compacted transcript always has every tool_use paired with a
 // tool_result and vice versa.
 //
@@ -24,7 +24,7 @@ import (
 // Orphans are replaced with a short text stub rather than dropped, so no message
 // is emptied and role alternation is preserved. No-op when already balanced —
 // messages without an orphan keep their exact original Content (cache-stable).
-func balanceToolBlocks(messages []llm.Message) []llm.Message {
+func BalanceToolBlocks(messages []llm.Message) []llm.Message {
 	toolUseIDs := map[string]struct{}{}
 	resultIDs := map[string]struct{}{}
 	parsed := make([][]llm.ContentBlock, len(messages))

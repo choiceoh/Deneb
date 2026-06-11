@@ -55,7 +55,7 @@ func TestBalanceToolBlocks_OrphanedToolUseStubbed(t *testing.T) {
 		llm.NewTextMessage("user", "do it"),
 		llm.NewBlockMessage("assistant", []llm.ContentBlock{tbText("working on it"), tbToolUse("A", "read")}),
 	}
-	out := balanceToolBlocks(msgs)
+	out := BalanceToolBlocks(msgs)
 	assertBalanced(t, out)
 
 	blocks, ok := decodeBlocks(out[1].Content)
@@ -76,7 +76,7 @@ func TestBalanceToolBlocks_OrphanedToolResultStubbed(t *testing.T) {
 		llm.NewBlockMessage("user", []llm.ContentBlock{tbToolResult("B", "result text")}),
 		llm.NewTextMessage("assistant", "ok"),
 	}
-	out := balanceToolBlocks(msgs)
+	out := BalanceToolBlocks(msgs)
 	assertBalanced(t, out)
 
 	blocks, _ := decodeBlocks(out[0].Content)
@@ -91,7 +91,7 @@ func TestBalanceToolBlocks_BalancedPairUnchanged(t *testing.T) {
 		llm.NewBlockMessage("user", []llm.ContentBlock{tbToolResult("A", "ok")}),
 	}
 	before := []string{string(msgs[0].Content), string(msgs[1].Content)}
-	out := balanceToolBlocks(msgs)
+	out := BalanceToolBlocks(msgs)
 	assertBalanced(t, out)
 	// A balanced input must be a byte-for-byte no-op (prompt-cache stability).
 	for i := range out {
@@ -107,7 +107,7 @@ func TestBalanceToolBlocks_StringContentUntouched(t *testing.T) {
 		llm.NewTextMessage("assistant", "hi"),
 	}
 	before := []string{string(msgs[0].Content), string(msgs[1].Content)}
-	out := balanceToolBlocks(msgs)
+	out := BalanceToolBlocks(msgs)
 	for i := range out {
 		if string(out[i].Content) != before[i] {
 			t.Errorf("plain text message %d was modified", i)

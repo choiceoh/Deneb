@@ -19,12 +19,24 @@ const keepRecentTurns = 6
 // degradation when serialized input is very large.
 const chunkMaxTokens = 20_000
 
+// maxChunksPerPass bounds how many chunks a single compaction pass summarizes.
+// Compaction runs STW under a shared ~2-minute deadline; an unbounded fan-out
+// (30 chunks on a 600K-token backlog, 2026-06-05) meant the slowest chunks
+// always exceeded that shared deadline and the whole pass was discarded, so no
+// progress was ever made. Bounding the batch keeps each pass's wall time
+// predictable; the uncovered remainder stays raw and the next pass digests the
+// following batch (the summary DAG accumulates leaf nodes per pass).
+const maxChunksPerPass = 4
+
 // LLMCompact summarizes older messages using a local AI model when the context
 // exceeds the configured threshold. Recent turns are preserved intact.
 //
 // When old messages exceed chunkMaxTokens, they are split into ≤chunkMaxTokens
-// chunks and summarized in parallel, then joined. This prevents quality
-// degradation from feeding excessively long input to the local model.
+// chunks and at most maxChunksPerPass of the oldest chunks are summarized in
+// parallel per pass. Messages the summary does not cover (later chunks, or
+// chunks past a failed one) are kept raw between the summary and the recent
+// tail, so a later pass can digest them — partial progress instead of
+// all-or-nothing.
 func LLMCompact(
 	ctx context.Context,
 	cfg Config,
@@ -41,27 +53,31 @@ func LLMCompact(
 	old := messages[:splitIdx]
 	recent := messages[splitIdx:]
 
-	summary := summarizeOldMessages(ctx, cfg, old, summarizer, logger)
-	if summary == "" {
+	summary, covered := summarizeOldMessages(ctx, cfg, old, summarizer, logger)
+	if summary == "" || covered <= 0 {
 		return messages, "", false
 	}
+	leftover := old[covered:] // uncovered old stays raw for the next pass
 
-	// Rebuild: summary message + recent messages. The returned summary is
-	// surfaced via Result.Summary so the caller can feed it back as
-	// Config.PreviousSummary next time (incremental recompaction).
-	compacted := make([]llm.Message, 0, 1+len(recent))
+	// Rebuild: summary message + uncovered old + recent messages. The returned
+	// summary is surfaced via Result.Summary so the caller can persist it (DAG
+	// leaf node) or feed it back as Config.PreviousSummary next time.
+	compacted := make([]llm.Message, 0, 1+len(leftover)+len(recent))
 	compacted = append(compacted, llm.NewTextMessage("user",
 		FormatContextFence(
 			"polaris-compaction",
 			"conversation-summary",
-			fmt.Sprintf("Polaris compaction: %d messages summarized", len(old)),
+			fmt.Sprintf("Polaris compaction: %d messages summarized", covered),
 			summary,
 		)))
+	compacted = append(compacted, leftover...)
 	compacted = append(compacted, recent...)
 
 	if logger != nil {
 		logger.Info("polaris: LLM compaction applied",
 			"oldMessages", len(old),
+			"coveredMessages", covered,
+			"leftoverRaw", len(leftover),
 			"summaryTokens", EstimateTokens(summary),
 			"recentMessages", len(recent),
 			"incremental", strings.TrimSpace(cfg.PreviousSummary) != "")
@@ -69,18 +85,19 @@ func LLMCompact(
 	return compacted, summary, true
 }
 
-// summarizeOldMessages produces a single LLM summary of the given messages.
-// maxOutput is cfg.ContextBudget × DefaultLLMTargetPct (no arbitrary cap).
-// When input exceeds chunkMaxTokens, chunks are summarized in parallel and
-// joined. Returns empty string when summarization was skipped (too little
-// content) or the summarizer failed.
+// summarizeOldMessages produces an LLM summary of a prefix of the given
+// messages and reports how many leading messages it covers. maxOutput is
+// cfg.ContextBudget × DefaultLLMTargetPct (no arbitrary cap). When input
+// exceeds chunkMaxTokens it is summarized in bounded parallel chunk batches,
+// so covered may be smaller than len(old). Returns ("", 0) when summarization
+// was skipped (too little content) or failed.
 func summarizeOldMessages(
 	ctx context.Context,
 	cfg Config,
 	old []llm.Message,
 	summarizer Summarizer,
 	logger *slog.Logger,
-) string {
+) (string, int) {
 	maxOutput := int(float64(cfg.ContextBudget) * DefaultLLMTargetPct)
 	hasPrev := strings.TrimSpace(cfg.PreviousSummary) != ""
 
@@ -89,15 +106,21 @@ func summarizeOldMessages(
 		systemPrompt = augmentWithAnchors(recompactionSystemPrompt, cfg.AnchorKeywords)
 	}
 
-	// The chunked path is only for very large FRESH input. An incremental
-	// update folds the (small) prior summary + new turns in a single call, so
-	// it never chunks.
-	if !hasPrev && EstimateMessagesTokens(old) > chunkMaxTokens {
-		summary, ok := summarizeInChunks(ctx, old, summarizer, maxOutput, systemPrompt, logger)
-		if !ok {
-			return ""
+	if EstimateMessagesTokens(old) > chunkMaxTokens {
+		// An incremental update normally folds the (small) prior summary + new
+		// turns into one call, but when the new turns alone exceed a chunk that
+		// single call would blow the summarizer's input. Fall back to fresh
+		// chunked summarization: the prior summary stays wherever the caller
+		// keeps it, and the raw turns are still present, so facts are
+		// re-derived from raw rather than lost — just less incremental.
+		if hasPrev {
+			if logger != nil {
+				logger.Info("polaris: incremental update input too large, using fresh chunked path",
+					"oldTokens", EstimateMessagesTokens(old))
+			}
+			systemPrompt = augmentWithAnchors(compactionSystemPrompt, cfg.AnchorKeywords)
 		}
-		return summary
+		return summarizeInChunks(ctx, old, summarizer, maxOutput, systemPrompt, logger)
 	}
 
 	text := serializeMessages(old)
@@ -106,17 +129,30 @@ func summarizeOldMessages(
 		// it (In Progress → Done, refresh state) rather than re-summarizing.
 		text = "## 이전 요약 (이것을 갱신하라)\n" + cfg.PreviousSummary + "\n\n## 새 대화 (반영할 변경)\n" + text
 	} else if EstimateTokens(text) < 500 {
-		return "" // too little to bother (fresh path only)
+		return "", 0 // too little to bother (fresh path only)
 	}
 
 	summary, err := summarizer.Summarize(ctx, systemPrompt, text, maxOutput)
-	if err != nil {
+	if err = summarizeCallErr(ctx, err); err != nil {
 		if logger != nil {
 			logger.Warn("polaris: LLM compaction failed", "error", err)
 		}
-		return ""
+		return "", 0
 	}
-	return summary
+	return summary, len(old)
+}
+
+// summarizeCallErr normalizes a Summarize result: a nil error with the parent
+// context already expired means the underlying stream was likely cut
+// mid-output and the returned text truncated (pilot.CollectStream returns the
+// partial text with a nil error on ctx.Done). Persisting a truncated summary
+// as covering its message range would silently lose facts, so surface the
+// context error and let the caller retry that range on a later pass.
+func summarizeCallErr(ctx context.Context, err error) error {
+	if err != nil {
+		return err
+	}
+	return ctx.Err()
 }
 
 // augmentWithAnchors appends an anchor preservation instruction to the base
@@ -130,8 +166,15 @@ func augmentWithAnchors(base string, anchors []string) string {
 }
 
 // summarizeInChunks splits old messages into ≤chunkMaxTokens chunks,
-// summarizes them in parallel, and joins the results in order.
-// perChunkOutput = maxOutput / numChunks (floor 1024) to keep total bounded.
+// summarizes the oldest ≤maxChunksPerPass of them in parallel, and joins the
+// results in order. Returns the joined summary and the number of leading
+// messages it covers. perChunkOutput = maxOutput / numChunks (floor 1024).
+//
+// Failure tolerance: a failed chunk no longer discards the whole pass. The
+// longest contiguous prefix of successful chunks is kept — coverage must stay
+// gapless because the caller records a single covered range — and everything
+// from the first failure on stays raw for a later pass. Only a chunk-0
+// failure yields ("", 0).
 func summarizeInChunks(
 	ctx context.Context,
 	old []llm.Message,
@@ -139,11 +182,27 @@ func summarizeInChunks(
 	maxOutput int,
 	systemPrompt string,
 	logger *slog.Logger,
-) (string, bool) {
+) (string, int) {
 	chunks := splitIntoChunks(old, chunkMaxTokens)
+	if len(chunks) > maxChunksPerPass {
+		if logger != nil {
+			logger.Info("polaris: chunk batch limited",
+				"totalChunks", len(chunks), "digested", maxChunksPerPass)
+		}
+		chunks = chunks[:maxChunksPerPass]
+	}
+	// Cap per-chunk output: generation time, not prefill, dominates a chunk
+	// call (live: ~1.4K-token summaries ≈ 30-45s each on the analysis model),
+	// so an uncapped maxOutput/len share (~7K at a 140K budget) can single-
+	// handedly blow the shared STW deadline. 2048 ≈ 10:1 compression per
+	// chunk and double the floor — summaries stay substantive while a full
+	// batch reliably finishes within the deadline.
 	perChunkOutput := maxOutput / len(chunks)
 	if perChunkOutput < 1024 {
 		perChunkOutput = 1024
+	}
+	if perChunkOutput > 2048 {
+		perChunkOutput = 2048
 	}
 
 	type chunkResult struct {
@@ -161,33 +220,49 @@ func summarizeInChunks(
 				return
 			}
 			s, err := summarizer.Summarize(ctx, systemPrompt, text, perChunkOutput)
-			resultCh <- chunkResult{idx: idx, summary: s, err: err}
+			resultCh <- chunkResult{idx: idx, summary: s, err: summarizeCallErr(ctx, err)}
 		}(i, chunk)
 	}
 
 	results := make([]string, len(chunks))
+	failed := make([]bool, len(chunks))
 	for range chunks {
 		r := <-resultCh
 		if r.err != nil {
+			failed[r.idx] = true
 			if logger != nil {
 				logger.Warn("polaris: chunk summarization failed",
 					"chunk", r.idx, "total", len(chunks), "error", r.err)
 			}
-			return "", false
+			continue
 		}
 		results[r.idx] = r.summary
 	}
 
+	okChunks := 0
+	for okChunks < len(chunks) && !failed[okChunks] {
+		okChunks++
+	}
+	if okChunks == 0 {
+		return "", 0
+	}
+	if okChunks < len(chunks) && logger != nil {
+		logger.Info("polaris: partial chunk coverage",
+			"okChunks", okChunks, "totalChunks", len(chunks))
+	}
+
+	covered := 0
 	var parts []string
-	for _, s := range results {
-		if s != "" {
-			parts = append(parts, s)
+	for i := 0; i < okChunks; i++ {
+		covered += len(chunks[i])
+		if results[i] != "" {
+			parts = append(parts, results[i])
 		}
 	}
 	if len(parts) == 0 {
-		return "", false
+		return "", 0
 	}
-	return strings.Join(parts, "\n\n"), true
+	return strings.Join(parts, "\n\n"), covered
 }
 
 // splitIntoChunks groups messages into batches of ≤maxTokens tokens each.
