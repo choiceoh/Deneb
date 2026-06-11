@@ -29,7 +29,10 @@ import (
 
 // AnalysisPromptVersion bumps when the gmailpoll analysis prompt
 // changes in a way that should invalidate cached results.
-const AnalysisPromptVersion = "v1"
+// v2: the analysis prompt now demands a structured IMPORTANCE tag line,
+// parsed into the Importance field below — v1 records lack it, so they are
+// treated as misses and re-analyzed on next open.
+const AnalysisPromptVersion = "v2"
 
 // analysisRecord is the on-disk shape of one cached analysis.
 type analysisRecord struct {
@@ -38,6 +41,7 @@ type analysisRecord struct {
 	From            string    `json:"from,omitempty"`
 	Date            string    `json:"date,omitempty"`
 	Analysis        string    `json:"analysis"`
+	Importance      string    `json:"importance,omitempty"`      // model triage verdict: urgent/attention/routine
 	RelatedProjects []string  `json:"relatedProjects,omitempty"` // wiki paths of related project pages
 	DurationMs      int64     `json:"durationMs"`
 	PromptVersion   string    `json:"promptVersion"`
@@ -117,6 +121,7 @@ type CachedAnalysis struct {
 	From            string
 	Date            string
 	Analysis        string
+	Importance      string // model triage verdict: urgent/attention/routine ("" when absent)
 	RelatedProjects []string
 	DurationMs      int64
 	CreatedAt       time.Time
@@ -131,6 +136,7 @@ func (s *AnalysisStore) SaveAnalysis(in CachedAnalysis) error {
 		From:            in.From,
 		Date:            in.Date,
 		Analysis:        in.Analysis,
+		Importance:      in.Importance,
 		RelatedProjects: in.RelatedProjects,
 		DurationMs:      in.DurationMs,
 		PromptVersion:   AnalysisPromptVersion,

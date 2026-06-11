@@ -191,6 +191,7 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 			From:            msg.From,
 			Date:            date,
 			Analysis:        result.Text,
+			Importance:      result.Importance,
 			RelatedProjects: result.RelatedProjects,
 			DurationMs:      dur.Milliseconds(),
 			PromptVersion:   AnalysisPromptVersion,

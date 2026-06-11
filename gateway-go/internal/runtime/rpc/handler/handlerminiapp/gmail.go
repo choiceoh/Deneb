@@ -58,6 +58,12 @@ type GmailDeps struct {
 	// (domain/mailpriority). Nil disables row priority — rows ship with
 	// empty fields and the native inbox renders no marker.
 	Priority func(from, subject, snippet string) (tier, hint string)
+	// AnalysisCache, when set, lets list rows prefer the per-mail LLM
+	// analysis verdict (analysisRecord.Importance) over the heuristic:
+	// urgent/attention render the marker with a "분석 판정" hint, routine
+	// SUPPRESSES the heuristic (the analysis looked at the full body and
+	// judged it FYI), and absent/blank falls through to the heuristic.
+	AnalysisCache *AnalysisStore
 }
 
 // Default list query and limit applied when the Mini App omits them.
@@ -172,6 +178,27 @@ type mailMessageOut struct {
 
 // --- list_recent ---------------------------------------------------------
 
+// rowPriority resolves one row's glanceable marker, layered: the per-mail
+// LLM analysis verdict is authoritative when cached (it read the full body
+// and thread context), the cheap heuristic covers everything not yet — or
+// never — analyzed. An analyzed-routine verdict suppresses the heuristic so
+// a body-aware "FYI" beats a subject-level keyword match.
+func rowPriority(deps GmailDeps, msgID, from, subject, snippet string) (string, string) {
+	if rec, err := deps.AnalysisCache.load(msgID); err == nil && rec != nil {
+		switch rec.Importance {
+		case "urgent", "attention":
+			return rec.Importance, "분석 판정"
+		case "routine":
+			return "", ""
+		}
+		// "" (v2 record without a parseable tag): fall through to heuristic.
+	}
+	if deps.Priority == nil {
+		return "", ""
+	}
+	return deps.Priority(from, subject, snippet)
+}
+
 func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 	type params struct {
 		Query     string `json:"query,omitempty"`
@@ -247,9 +274,7 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 				IsUnread: hasUnreadLabel(m.Labels),
 				Labels:   m.Labels,
 			}
-			if deps.Priority != nil {
-				row.Priority, row.PriorityHint = deps.Priority(m.From, m.Subject, m.Snippet)
-			}
+			row.Priority, row.PriorityHint = rowPriority(deps, m.ID, m.From, m.Subject, m.Snippet)
 			out = append(out, row)
 		}
 		payload := map[string]any{
