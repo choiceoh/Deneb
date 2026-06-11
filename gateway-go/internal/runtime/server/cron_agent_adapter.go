@@ -108,7 +108,7 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 	// so the form lands first in the transcript.
 	if a.weeklyFormDeliver != nil && isWeeklyReportCommand(params.Command) {
 		if err := a.weeklyFormDeliver(ctx); err != nil && a.logger != nil {
-			a.logger.Warn("weekly form image delivery failed", "error", err)
+			a.logger.Error("weekly form image delivery failed", "error", err)
 		}
 	}
 	result, err := a.chat.SendSync(ctx, params.SessionKey, command, "", opts)

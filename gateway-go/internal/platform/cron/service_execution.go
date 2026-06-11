@@ -74,7 +74,7 @@ func (s *Service) markPendingRerun(jobID, why string) {
 	state := fresh.State
 	state.PendingRerun = true
 	if err := s.store.UpdateJobState(jobID, state); err != nil {
-		s.logger.Warn("cron pending rerun: persist failed — run may be lost",
+		s.logger.Error("cron pending rerun: persist failed — run may be lost",
 			"id", jobID, "reason", why, "error", err)
 		return
 	}
@@ -490,7 +490,7 @@ func (s *Service) sendFailureAlert(ctx context.Context, job StoreJob, outcome Ru
 	// legacy relay signature but ignored in native-only mode.
 	handled, err := s.cfg.MainSessionHandoff(ctx, ch, to, job.ID, text)
 	if err != nil || !handled {
-		s.logger.Warn("failure alert delivery failed",
+		s.logger.Error("failure alert delivery failed",
 			"jobID", job.ID, "handled", handled, "error", err)
 	}
 

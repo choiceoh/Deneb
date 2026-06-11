@@ -108,7 +108,7 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		var savedPath string
 		if deps.SaveCapture != nil {
 			if rel, serr := deps.SaveCapture("image", p.Caption, text); serr != nil {
-				slog.Warn("capture image: raw persistence failed", "error", serr)
+				slog.Error("capture image: raw persistence failed", "error", serr)
 			} else {
 				savedPath = rel
 			}
@@ -201,7 +201,7 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 		var savedPath string
 		if deps.SaveCapture != nil {
 			if rel, serr := deps.SaveCapture("audio", "", transcript); serr != nil {
-				slog.Warn("capture audio: raw persistence failed", "error", serr)
+				slog.Error("capture audio: raw persistence failed", "error", serr)
 			} else {
 				savedPath = rel
 			}

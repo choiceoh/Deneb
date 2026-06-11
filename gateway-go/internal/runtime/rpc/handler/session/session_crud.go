@@ -76,7 +76,7 @@ func sessionsDelete(deps Deps) rpcutil.HandlerFunc {
 		if deps.Transcripts != nil {
 			if store, err := deps.Transcripts(); err == nil && store != nil {
 				if delErr := store.Delete(key); delErr != nil {
-					slog.Warn("sessions.delete: transcript removal failed; session may resurrect on restart",
+					slog.Error("sessions.delete: transcript removal failed; session may resurrect on restart",
 						"sessionKey", key, "error", delErr)
 				}
 			}

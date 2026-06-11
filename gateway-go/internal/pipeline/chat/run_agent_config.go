@@ -438,7 +438,7 @@ func buildMessagePersister(
 			Timestamp: time.Now().UnixMilli(),
 		}
 		if err := deps.transcript.Append(params.SessionKey, chatMsg); err != nil {
-			logger.Warn("per-turn message persist failed", "role", msg.Role, "error", err)
+			logger.Error("per-turn message persist failed", "role", msg.Role, "error", err)
 		}
 	}
 }
