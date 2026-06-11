@@ -326,12 +326,6 @@ func todayDateString() string {
 	return nowFunc().Format("2006-01-02")
 }
 
-// MemoryCategoryRow is a single category entry exposed via
-// miniapp.memory.categories. Defined at package scope so the sort helper
-// can refer to it without a generic wrapper.
-//
-//deneb:wire
-
 func truncateRunes(s string, maxChars int) string {
 	runes := []rune(s)
 	if len(runes) <= maxChars {

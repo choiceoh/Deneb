@@ -15,6 +15,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+// MemoryCategoryRow is a single category entry exposed via
+// miniapp.memory.categories.
+//
+//deneb:wire
 type MemoryCategoryRow struct {
 	Name      string `json:"name"`
 	PageCount int    `json:"pageCount"`
