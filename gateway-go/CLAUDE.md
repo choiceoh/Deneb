@@ -11,6 +11,7 @@ Go HTTP/WS gateway server — the primary Deneb runtime.
 | `make go-test` | Run tests with `-race` |
 | `make go-vet` | Run `go vet` |
 | `make go-fmt` | Check formatting |
+| `scripts/audit/deadcode-audit.sh` | Advisory dead-code diff vs checked-in baseline (run from repo root; `--update` needs operator approval) |
 
 ## Directory Map
 
