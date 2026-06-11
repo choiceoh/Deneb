@@ -166,6 +166,15 @@ class DenebGatewayClient(
     // the next page would come from a different result set than the cursor.
     internal var denebMailActiveQuery: String? = null
 
+    // Ids read this session, kept so a list refetch can't resurrect the unread
+    // dot. markMailRead clears it in _denebMail optimistically, but on phone a
+    // back-nav recomposes the list and re-runs refreshMail inside the gateway's
+    // 30s list cache — which still reports the mail unread (mark_read deliberately
+    // doesn't invalidate that cache). applyReadOverlay re-applies this set on every
+    // fetch so the cleared dot stays cleared. Session-scoped, capped FIFO
+    // (LinkedHashSet; see recordReadId in DenebClientMail.kt).
+    internal val locallyReadMailIds = LinkedHashSet<String>()
+
     // Upcoming calendar events surfaced in the native calendar screen.
     internal val _denebCalendar = MutableStateFlow<List<CalendarEvent>>(emptyList())
     val denebCalendar: StateFlow<List<CalendarEvent>> = _denebCalendar
