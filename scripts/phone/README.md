@@ -233,3 +233,25 @@ chmod +x ~/.termux/boot/deneb
   `--flush` 를 지원할 때만 큐를 배수한다(점진 도입 안전).
 - 튜닝: `DENEB_FLUSH_PERIOD`(기본 300s), `DENEB_SUP_INTERVAL`(감시 주기 30s),
   `DENEB_BIN_DIR`(기본 `~/bin`).
+
+## 링크 헬스 감시 — 조용한 죽음 방지
+
+터널이 조용히 죽으면 알림이 그냥 안 와서 **죽은 줄도 모르는** 게 가장 큰 위험이다.
+양쪽이 맞물려 막는다:
+
+- **폰** `deneb-heartbeat`(supervisor child): `DENEB_HEARTBEAT_INTERVAL`(기본 300s)마다
+  `heartbeat` 이벤트를 ingest로 보낸다. 이 ping 은 터널을 통과해야만 도착하므로 **체인
+  전체(폰→터널→게이트웨이)가 살아있다는 직접 증거**다(tailscale-ping/sshd-open 은 폰 OS만
+  증명하지 터널은 증명 못 함). 서버는 이걸 능동판정 turn 없이 liveness 파일만 갱신한다.
+- **게이트웨이 호스트** `deneb-phone-link-check`(systemd timer, 5분): liveness 파일이
+  `DENEB_LINK_STALE_SECS`(기본 1200s=20분)보다 오래되면 — heartbeat 가 끊긴 것 — 게이트웨이
+  ingest 로 **경고를 한 번** 밀어넣어 업무 피드+푸시로 띄운다(sentinel 로 반복 억제,
+  heartbeat 복구 시 자동 클리어). `DENEB_PHONE_TS_IP` 를 주면 tailscale ping 으로 "폰
+  오프라인" vs "터널만 죽음"을 구분해 메시지에 담는다.
+
+호스트 설치(`scripts/phone/systemd/` 의 유닛 사용):
+```bash
+cp deneb-phone-link-check ~/bin/ && chmod +x ~/bin/deneb-phone-link-check
+cp systemd/deneb-phone-link-check.* ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now deneb-phone-link-check.timer
+```

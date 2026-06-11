@@ -1,0 +1,26 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# deneb-heartbeat — periodic "I'm alive" ping so the gateway can detect a silently
+# dead link. Run under deneb-supervisor (a deneb-*-watch-style child).
+#
+# Why a ping and not a server-side reachability probe: tailscale-ping or the
+# phone's sshd port being open only proves the phone OS / Termux is up — the
+# autossh TUNNEL itself can be dead while those still pass. A ping that travels
+# through deneb-emit (→ the tunnel → /api/event/ingest) proves the WHOLE chain
+# end to end: if it arrives, the link works; if it stops arriving, something on
+# the path is down. Offline-queued pings drain on reconnect, so a brief outage
+# self-heals without a false alarm (the server's stale window is generous).
+#
+# The gateway tags these `type=heartbeat`; server_http_event_ingest routes them
+# to a liveness file instead of a judgment turn (no LLM cost, no work-feed noise).
+#
+# Env: DENEB_HEARTBEAT_INTERVAL (default 300s).
+
+set -uo pipefail
+INTERVAL="${DENEB_HEARTBEAT_INTERVAL:-300}"
+
+while true; do
+  # source label carries the phone's own wall clock so the server can show "last
+  # seen" even if its own clock drifts; body is fixed.
+  deneb-emit heartbeat "phone alive $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null)" "deneb-phone" >/dev/null 2>&1 || true
+  sleep "$INTERVAL"
+done
