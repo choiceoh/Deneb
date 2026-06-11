@@ -21,14 +21,34 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
+
+// phoneHeartbeatPath is the liveness marker touched on each deneb-heartbeat ping.
+// A host-side timer (deneb-phone-link-check) reads its mtime to decide whether the
+// phone↔gateway tunnel has gone silently dead.
+func phoneHeartbeatPath() string {
+	return filepath.Join(config.ResolveStateDir(), "phone-heartbeat")
+}
+
+// recordPhoneHeartbeat updates the liveness marker's mtime to now. Best-effort:
+// a write failure is logged but never blocks the 202 (the phone only needs ack).
+func recordPhoneHeartbeat(logger *slog.Logger) {
+	p := phoneHeartbeatPath()
+	if err := os.WriteFile(p, []byte(time.Now().UTC().Format(time.RFC3339)+"\n"), 0o644); err != nil && logger != nil {
+		logger.Warn("phone heartbeat: write liveness marker failed", "path", p, "error", err)
+	}
+}
 
 // phoneEventMaxTokens caps the judgment turn's reply. A phone-event alert should
 // be a tight "왜 지금 중요한가 + 무엇을 언제까지" message, not an essay.
@@ -143,6 +163,17 @@ func (s *Server) handleEventIngest(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON body"})
 		return
 	}
+
+	// Heartbeat (deneb-heartbeat): a liveness ping that traveled the whole chain
+	// (phone → tunnel → here), proving the link is up. It must NOT spend a judgment
+	// turn — just record the arrival time so a host-side timer can detect a silently
+	// dead tunnel (no notifications + no heartbeats = link down). Returns at once.
+	if strings.EqualFold(strings.TrimSpace(req.Type), "heartbeat") {
+		recordPhoneHeartbeat(s.logger)
+		s.writeJSON(w, http.StatusAccepted, map[string]any{"status": "alive"})
+		return
+	}
+
 	text := strings.TrimSpace(req.Text)
 	if text == "" {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "text is required"})

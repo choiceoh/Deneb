@@ -1,0 +1,9 @@
+[Unit]
+Description=Deneb phone link watchdog (warn if phone↔gateway tunnel goes silently dead)
+After=network-online.target
+
+[Service]
+Type=oneshot
+# DENEB_PHONE_TS_IP enables the corroborating tailscale ping (phone offline vs tunnel-only down).
+Environment=DENEB_PHONE_TS_IP=100.93.163.49
+ExecStart=%h/bin/deneb-phone-link-check

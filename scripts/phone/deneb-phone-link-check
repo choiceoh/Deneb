@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# deneb-phone-link-check — host-side watchdog for the phone↔gateway link.
+#
+# Runs on the GATEWAY host (systemd timer, not on the phone). The phone's
+# deneb-heartbeat pings touch $STATE/phone-heartbeat on every arrival; if that
+# marker goes stale beyond DENEB_LINK_STALE_SECS, the tunnel/supervisor is
+# silently dead (no notifications would arrive and you'd never know). This then
+# pushes ONE warning into the gateway's own ingest so it surfaces in the work
+# feed + push, and writes a sentinel so it does not nag every tick.
+#
+# Self-healing: when heartbeats resume, the sentinel is cleared so a future
+# outage warns again.
+#
+# Env:
+#   DENEB_STATE_DIR        state dir (default ~/.deneb)
+#   DENEB_LINK_STALE_SECS  staleness threshold (default 1200 = 20 min)
+#   DENEB_INGEST_URL       gateway base URL (default http://127.0.0.1:18789)
+#   DENEB_PHONE_TS_IP      phone tailscale IP for the corroborating ping (optional)
+
+set -uo pipefail
+STATE="${DENEB_STATE_DIR:-$HOME/.deneb}"
+STALE="${DENEB_LINK_STALE_SECS:-1200}"
+URL="${DENEB_INGEST_URL:-http://127.0.0.1:18789}"
+MARK="$STATE/phone-heartbeat"
+SENT="$STATE/phone-link-warned"
+
+now=$(date +%s)
+
+# No marker yet: heartbeat never arrived. Don't warn on a fresh install — only
+# warn once a marker has existed and then gone stale. Bail quietly.
+[ -f "$MARK" ] || exit 0
+
+mtime=$(stat -c %Y "$MARK" 2>/dev/null || echo "$now")
+age=$((now - mtime))
+
+if [ "$age" -le "$STALE" ]; then
+  # Healthy — clear any prior warning sentinel so the next outage warns again.
+  rm -f "$SENT" 2>/dev/null || true
+  exit 0
+fi
+
+# Stale. Already warned for this outage? Stay quiet.
+[ -f "$SENT" ] && exit 0
+
+# Corroborate: is the phone OS even reachable? Shapes the message (tunnel-only
+# down vs phone fully offline) but we warn either way.
+phone_state="원인 미상"
+if [ -n "${DENEB_PHONE_TS_IP:-}" ] && command -v tailscale >/dev/null 2>&1; then
+  if timeout 8 tailscale ping --c 1 "$DENEB_PHONE_TS_IP" >/dev/null 2>&1; then
+    phone_state="폰은 온라인이나 터널/supervisor 가 죽은 것으로 보임 (재기동 필요)"
+  else
+    phone_state="폰 자체가 오프라인 (전원·네트워크 확인)"
+  fi
+fi
+
+mins=$((age / 60))
+body="[링크 경고] 스마트폰 알림 연동이 ${mins}분째 끊겼습니다. 마지막 heartbeat 이후 알림이 들어오지 않고 있습니다 — ${phone_state}."
+
+# Push through the gateway's own ingest (loopback). This rides the normal
+# proactive path → work-feed card + push. notification type so it's judged and
+# surfaced like any real alert. jq builds the JSON so the body needs no manual
+# escaping.
+payload="$(jq -nc --arg t notification --arg s deneb-link --arg x "$body" '{type:$t,source:$s,text:$x}')"
+if curl -fsS -m 10 -X POST "$URL/api/event/ingest" \
+     -H 'Content-Type: application/json' -d "$payload" >/dev/null 2>&1; then
+  : > "$SENT"   # mark warned for this outage
+fi
