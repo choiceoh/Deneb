@@ -26,6 +26,10 @@ const (
 	wikiDreamTurnThreshold = 50
 	wikiDreamTimeIntervalH = 8
 	wikiDreamTimeout       = 10 * time.Minute
+	// wikiDreamSynthesisTimeout bounds the synthesis LLM call alone: a wedged
+	// backend must fail the phase quickly instead of eating the whole cycle
+	// budget (a stuck vLLM engine held every cycle for the full 10 minutes).
+	wikiDreamSynthesisTimeout = 5 * time.Minute
 	wikiDreamMaxTokens     = 4096
 	diaryProcessStateFile  = ".diary-process-state.json"
 	dreamProposalFile      = ".dream-last-proposal.json"
@@ -247,8 +251,16 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	}
 
 	// Phase 2: LLM synthesis — determine which wiki pages to update.
+	//
+	// Both failure paths below back off a full interval (resetCounters).
+	// Without it, ShouldDream stays true and the 30-min timer hot-loops a
+	// doomed cycle — with a wedged LLM each attempt burned the entire 10-min
+	// cycle timeout, observed in production on 2026-06-11. Nothing is lost by
+	// backing off: diary offsets and the MEMORY.md high-water mark only
+	// persist on success, so the content is re-consumed next cycle.
 	if wd.client == nil {
 		phaseErrors = append(phaseErrors, "synthesis: LLM client not available")
+		wd.resetCounters()
 		report.PhaseErrors = phaseErrors
 		report.DurationMs = time.Since(start).Milliseconds()
 		return report, nil
@@ -256,6 +268,10 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 
 	updates, err := wd.synthesize(ctx, synthInput, scan.State)
 	if err != nil {
+		// Dreaming silently stalling is the audit's #1 ghost failure —
+		// surface it at Error so the operator sees consolidation is stuck.
+		wd.logger.Error("wiki-dream: synthesis failed; backing off one interval", "error", err)
+		wd.resetCounters()
 		phaseErrors = append(phaseErrors, fmt.Sprintf("synthesis: %v", err))
 		report.PhaseErrors = phaseErrors
 		report.DurationMs = time.Since(start).Milliseconds()
@@ -775,6 +791,9 @@ type wikiUpdate struct {
 
 // synthesize calls the LLM to determine which wiki pages should be updated.
 func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, state diaryProcessState) ([]wikiUpdate, error) {
+	ctx, cancel := context.WithTimeout(ctx, wikiDreamSynthesisTimeout)
+	defer cancel()
+
 	// Build existing wiki context.
 	idx := wd.store.Index()
 	indexContent := idx.Render()

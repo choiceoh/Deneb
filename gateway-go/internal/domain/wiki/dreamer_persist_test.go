@@ -55,3 +55,45 @@ func TestWikiDreamerPersistsLastDreamAcrossRestart(t *testing.T) {
 		t.Fatalf("expected resetCounters to persist a fresh lastDreamMs, got %d", reloaded.LastDreamMs)
 	}
 }
+
+// TestRunDream_FailureBacksOffOneInterval guards the hot-loop fix: a cycle
+// that cannot synthesize (nil/wedged LLM) must still advance lastDream, or
+// ShouldDream stays true and the 30-min timer retries a doomed 10-minute
+// cycle forever (observed in production 2026-06-11 with a wedged vLLM).
+func TestRunDream_FailureBacksOffOneInterval(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	if err := store.AppendDiary("백오프 테스트용 일지 항목"); err != nil {
+		t.Fatal(err)
+	}
+
+	wd := &WikiDreamer{store: store, logger: slog.Default()}
+	wd.lastDream = time.Now().Add(-24 * time.Hour) // stale → ShouldDream true
+	if !wd.ShouldDream(context.Background()) {
+		t.Fatal("precondition: ShouldDream must be true")
+	}
+
+	report, err := wd.RunDream(context.Background())
+	if err != nil {
+		t.Fatalf("RunDream: %v", err)
+	}
+	if len(report.PhaseErrors) == 0 {
+		t.Fatal("expected a synthesis phase error with no LLM client")
+	}
+	if wd.ShouldDream(context.Background()) {
+		t.Error("failed cycle must back off a full interval (lastDream advanced)")
+	}
+	// And the backoff must survive a restart.
+	st := wd.loadDiaryProcessState()
+	if st.LastDreamMs == 0 {
+		t.Error("backoff lastDream not persisted")
+	}
+	// Unconsumed content must remain unconsumed (re-tried next interval).
+	if st.MemoryConsumedThrough != "" {
+		t.Errorf("failed cycle must not advance the memory high-water mark: %q", st.MemoryConsumedThrough)
+	}
+}

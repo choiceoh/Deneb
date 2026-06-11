@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
@@ -38,6 +39,10 @@ const openLoopMaxPerCycle = 8
 // openLoopMaxTokens bounds the extraction response.
 const openLoopMaxTokens = 1024
 
+// openLoopTimeout bounds the extraction LLM call so a wedged backend costs
+// the loop pass, not the remaining dream-cycle budget.
+const openLoopTimeout = 2 * time.Minute
+
 // SetOpenLoopSink wires the destination for extracted commitments. The sink
 // returns how many were newly recorded (after its own dedup). nil disables
 // extraction entirely.
@@ -50,6 +55,8 @@ func (wd *WikiDreamer) extractOpenLoops(ctx context.Context, content string) ([]
 	if wd.client == nil || strings.TrimSpace(content) == "" {
 		return nil, nil
 	}
+	ctx, cancel := context.WithTimeout(ctx, openLoopTimeout)
+	defer cancel()
 
 	prompt := fmt.Sprintf(`아래 일지/메모에서 **아직 이행되지 않은 약속·후속조치(오픈루프)**만 추출하세요.
 
