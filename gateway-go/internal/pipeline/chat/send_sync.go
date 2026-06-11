@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
@@ -216,7 +217,11 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 		return nil, err
 	}
 
-	result, err := executeAgentRun(ctx, params, deps, nil, nil, nil, h.logger, nil)
+	// Agent detail logging: without a RunLogger every SendSync surface
+	// (miniapp.chat.send, cron single-run, heartbeat, boot, mail-qa, BTW) is
+	// invisible in ~/.deneb/agent-logs and to the modeltuner's AggregateByModel.
+	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
+	result, err := executeAgentRun(ctx, params, deps, nil, nil, nil, h.logger, runLog)
 	if err != nil {
 		return nil, err
 	}

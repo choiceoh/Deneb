@@ -341,7 +341,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			}
 			statusCtrl.CloseAfterDrain()
 		}
-		handleRunError(ctx, params, deps, broadcaster, logger, err, now, runLog)
+		handleRunError(ctx, params, deps, broadcaster, logger, err, now)
 
 		// Drain pending queue even on error: if the user sent a message while
 		// this run was active, it must be processed regardless of whether the
@@ -373,7 +373,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	if mergedCancel {
 		return
 	}
-	handleRunSuccess(ctx, params, deps, broadcaster, logger, chatResult.AgentResult, chatResult.ActualModel, now, runLog)
+	handleRunSuccess(ctx, params, deps, broadcaster, logger, chatResult.AgentResult, now)
 
 	// Process pending message: if the user sent a message while this run was
 	// active, it was queued. Now that the run is complete, drain and process it.

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
@@ -167,9 +166,9 @@ func isSubagentSession(deps runDeps, sessionKey string) bool {
 	return sess != nil && sess.SpawnedBy != ""
 }
 
-// handleRunSuccess processes a successful agent run completion. actualModel is
-// the model that produced the answer (differs from run.start's model only when
-// the fallback chain fired); empty is tolerated for callers without it.
+// handleRunSuccess processes a successful agent run completion.
+// Agent-detail logging (run.end) happens inside executeAgentRun — shared with
+// the sync entry paths — so this handler owns only delivery and persistence.
 func handleRunSuccess(
 	ctx context.Context,
 	params RunParams,
@@ -177,35 +176,8 @@ func handleRunSuccess(
 	broadcaster *streaming.Broadcaster,
 	logger *slog.Logger,
 	result *agent.AgentResult,
-	actualModel string,
 	now int64,
-	runLog *agentlog.RunLogger,
 ) {
-	// Log run completion to agent detail log. CompactionFired is read from the
-	// session so the run shape records whether the context outgrew its budget
-	// this run; Proactive distinguishes autonomous/auto-delivered runs (heartbeat
-	// self-trigger, cron relay) from genuine user requests.
-	compacted := false
-	if deps.sessions != nil {
-		if sess := deps.sessions.Get(params.SessionKey); sess != nil {
-			compacted = sess.CompactionFired
-		}
-	}
-	runLog.LogEnd(agentlog.RunEndData{
-		Model:               actualModel,
-		StopReason:          result.StopReason,
-		Turns:               result.Turns,
-		InputTokens:         result.Usage.InputTokens,
-		OutputTokens:        result.Usage.OutputTokens,
-		TextLen:             len(result.Text),
-		CacheReadTokens:     result.Usage.CacheReadInputTokens,
-		CacheCreationTokens: result.Usage.CacheCreationInputTokens,
-		ToolCalls:           result.TotalToolCalls,
-		ToolCounts:          result.ToolCounts,
-		MaxTokensRecoveries: result.MaxTokensRecoveries,
-		Compacted:           compacted,
-		Proactive:           params.AutoDeliveredOutput || params.EphemeralUser,
-	})
 	// Strip silent reply token (NO_REPLY) from the response text before
 	// persisting, broadcasting, or delivering. This ensures the internal
 	// token is never exposed to any client (RPC, WebSocket, Telegram) and
@@ -558,6 +530,8 @@ func handleRunSuccess(
 }
 
 // handleRunError processes a failed or aborted agent run.
+// Agent-detail logging (run.error) happens inside executeAgentRun — shared with
+// the sync entry paths — so this handler owns only lifecycle and broadcast.
 func handleRunError(
 	ctx context.Context,
 	params RunParams,
@@ -566,19 +540,12 @@ func handleRunError(
 	logger *slog.Logger,
 	err error,
 	now int64,
-	runLog *agentlog.RunLogger,
 ) {
 	// Do not delete the draft streaming message on error: any content already
 	// streamed to the user should remain visible instead of vanishing. The
 	// partial draft is preferable to a blank chat with no explanation.
 
 	aborted := ctx.Err() != nil
-
-	// Log run error to agent detail log.
-	runLog.LogError(agentlog.RunErrorData{
-		Error:   err.Error(),
-		Aborted: aborted,
-	})
 
 	if aborted {
 		logger.Info("agent run aborted", "error", err)
