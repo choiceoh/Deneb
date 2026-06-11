@@ -55,6 +55,8 @@
     <string name="waiting_working">Working…</string>
     <string name="waiting_brewing">Brewing…</string>
     <string name="waiting_content_description">Waiting for response</string>
+    <string name="waiting_elapsed_sec">%1$ds</string>
+    <string name="waiting_elapsed_min_sec">%1$dm %2$ds</string>
     <string name="tool_get_local_time_name">Get Local Time</string>
     <string name="tool_get_local_time_description">Get the current local date and time for interpreting relative dates</string>
     <string name="tool_get_location_name">Get Location</string>

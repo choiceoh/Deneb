@@ -23,6 +23,9 @@ func wireStreamHooks(
 	// Broadcaster: WebSocket streaming deltas.
 	if broadcaster != nil {
 		hc.OnTextDelta(broadcaster.EmitDelta)
+		// Reasoning liveness for streaming transports (throttled inside the
+		// broadcaster — OnThinking fires once per reasoning delta).
+		hc.OnThinking(broadcaster.EmitThinking)
 		hc.OnToolEmit(broadcaster.EmitToolStart)
 		hc.OnToolResult(func(name, toolUseID, result string, isErr bool) {
 			broadcaster.EmitToolResult(name, toolUseID, result, isErr)

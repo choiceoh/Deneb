@@ -35,6 +35,29 @@ func TestTruncateForBroadcast(t *testing.T) {
 	}
 }
 
+func TestStreamBroadcasterEmitThinkingThrottles(t *testing.T) {
+	var events []string
+	sb := NewBroadcaster(func(event string, _ []byte) int {
+		events = append(events, event)
+		return 1
+	}, "s1", "r1")
+
+	// A burst of reasoning deltas inside one throttle window → one frame.
+	for range 10 {
+		sb.EmitThinking()
+	}
+	if len(events) != 1 || events[0] != EventThinking {
+		t.Fatalf("events = %v, want exactly one %q", events, EventThinking)
+	}
+
+	// Aging the last-emit timestamp past the window re-arms the throttle.
+	sb.lastThinkingNs.Store(sb.lastThinkingNs.Load() - int64(thinkingThrottle) - 1)
+	sb.EmitThinking()
+	if len(events) != 2 {
+		t.Fatalf("after window: events = %v, want 2 frames", events)
+	}
+}
+
 func TestStreamBroadcasterEmitDelta(t *testing.T) {
 	t.Run("skips empty text", func(t *testing.T) {
 		called := false
@@ -60,8 +83,8 @@ func TestStreamBroadcasterEmitDelta(t *testing.T) {
 		}, "s1", "r1")
 		sb.EmitDelta("hello")
 
-		if captured.event != eventDelta {
-			t.Errorf("event = %q, want %q", captured.event, eventDelta)
+		if captured.event != EventDelta {
+			t.Errorf("event = %q, want %q", captured.event, EventDelta)
 		}
 
 		var msg map[string]any
@@ -110,7 +133,7 @@ func TestStreamBroadcasterEvents(t *testing.T) {
 	}
 
 	// Verify event types.
-	wantEvents := []string{eventChat, eventDelta, eventTool, eventTool, eventDelta, eventChat}
+	wantEvents := []string{EventChat, EventDelta, EventTool, EventTool, EventDelta, EventChat}
 	for i, want := range wantEvents {
 		if events[i].event != want {
 			t.Errorf("event[%d] = %q, want %q", i, events[i].event, want)

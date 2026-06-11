@@ -43,12 +43,18 @@ import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.tools_count
 import deneb.composeapp.generated.resources.waiting_brewing
 import deneb.composeapp.generated.resources.waiting_content_description
+import deneb.composeapp.generated.resources.waiting_elapsed_min_sec
+import deneb.composeapp.generated.resources.waiting_elapsed_sec
 import deneb.composeapp.generated.resources.waiting_thinking
 import deneb.composeapp.generated.resources.waiting_working
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Duration.Companion.seconds
+
+// Keep the chip quiet this long before showing the elapsed-time suffix: quick
+// turns stay minimal, while multi-minute tool calls read as alive, not hung.
+private const val ELAPSED_SHOW_AFTER_SEC = 10
 
 @Composable
 internal fun toolSummaryText(
@@ -68,6 +74,21 @@ internal fun WaitingResponseRow(
     val summary = statusText ?: toolSummaryText(executingTools)
     val effectiveStatusOnly = isStatusOnly || statusText != null
     val waitingCd = stringResource(Res.string.waiting_content_description)
+
+    // Elapsed time since this waiting row appeared (≈ since the turn started —
+    // the row stays composed for the whole loading stretch under a stable key).
+    var elapsedSec by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1.seconds)
+            elapsedSec++
+        }
+    }
+    val elapsedLabel = when {
+        elapsedSec < ELAPSED_SHOW_AFTER_SEC -> null
+        elapsedSec >= 60 -> stringResource(Res.string.waiting_elapsed_min_sec, elapsedSec / 60, elapsedSec % 60)
+        else -> stringResource(Res.string.waiting_elapsed_sec, elapsedSec)
+    }
 
     Row(
         modifier = Modifier
@@ -89,14 +110,24 @@ internal fun WaitingResponseRow(
                 .padding(12.dp)
                 .semantics { contentDescription = waitingCd },
         ) {
-            PulsingStatusIndicator(
-                toolSummary = summary,
-                isStatusOnly = effectiveStatusOnly,
-                dotSize = 16.dp,
-                dotColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                textColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                textStyle = MaterialTheme.typography.bodyMedium,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                PulsingStatusIndicator(
+                    toolSummary = summary,
+                    isStatusOnly = effectiveStatusOnly,
+                    dotSize = 16.dp,
+                    dotColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                )
+                if (elapsedLabel != null) {
+                    Text(
+                        text = " · $elapsedLabel",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                    )
+                }
+            }
         }
     }
 }

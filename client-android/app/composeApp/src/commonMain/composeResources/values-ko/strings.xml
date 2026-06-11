@@ -138,6 +138,8 @@
     <string name="waiting_thinking">생각 중…</string>
     <string name="waiting_working">작업 중…</string>
     <string name="waiting_brewing">준비 중…</string>
+    <string name="waiting_elapsed_sec">%1$d초</string>
+    <string name="waiting_elapsed_min_sec">%1$d분 %2$d초</string>
     <string name="settings_mcp_servers">MCP 서버</string>
     <string name="settings_mcp_servers_description">Model Context Protocol을 사용하여 외부 도구 서버에 연결합니다.</string>
     <string name="settings_mcp_add_server">MCP 서버 추가</string>

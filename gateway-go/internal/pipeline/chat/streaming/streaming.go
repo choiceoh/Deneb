@@ -3,6 +3,7 @@ package streaming
 import (
 	"encoding/json"
 	"sync/atomic"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
@@ -10,17 +11,26 @@ import (
 // BroadcastRawFunc sends pre-serialized event data to all matching subscribers.
 type BroadcastRawFunc func(event string, data []byte) int
 
-// Stream event names matching the TypeScript wire format.
+// Stream event names matching the TypeScript wire format. Exported so
+// transport adapters (e.g. the miniapp SSE bridge's BroadcastRawFunc filter)
+// can match events without duplicating the strings.
 const (
-	eventChat  = "chat"
-	eventDelta = "chat.delta"
-	eventTool  = "chat.tool"
+	EventChat     = "chat"
+	EventDelta    = "chat.delta"
+	EventTool     = "chat.tool"
+	EventThinking = "chat.thinking"
 )
 
 // Limits for broadcast payloads.
 const (
 	maxBroadcastResultLen = 4096
 )
+
+// thinkingThrottle bounds EmitThinking's broadcast rate. The agent loop fires
+// OnThinking once per reasoning delta — potentially hundreds per turn — while
+// subscribers only need a liveness signal, so anything beyond one frame every
+// couple of seconds is noise on the wire.
+const thinkingThrottle = 2 * time.Second
 
 // Broadcaster relays agent streaming events to WebSocket clients
 // via the gateway's raw broadcast function. All methods are safe to call
@@ -30,6 +40,9 @@ type Broadcaster struct {
 	sessionKey   string
 	clientRunID  string
 	seq          atomic.Int64
+	// lastThinkingNs is the monotonic-ish wall clock (UnixNano) of the last
+	// EmitThinking broadcast, used to throttle the per-reasoning-delta firehose.
+	lastThinkingNs atomic.Int64
 }
 
 // NewBroadcaster creates a new Broadcaster for a given session/run.
@@ -46,14 +59,31 @@ func (sb *Broadcaster) EmitDelta(text string) {
 	if text == "" {
 		return
 	}
-	sb.emit(eventDelta, map[string]any{
+	sb.emit(EventDelta, map[string]any{
 		"delta": text,
 	})
 }
 
+// EmitThinking broadcasts a reasoning-in-progress liveness signal, throttled
+// to at most one frame per thinkingThrottle. Subscribers (native client SSE)
+// use it to show a "thinking" indicator before the first visible token; the
+// payload carries no content.
+func (sb *Broadcaster) EmitThinking() {
+	now := time.Now().UnixNano()
+	last := sb.lastThinkingNs.Load()
+	if now-last < int64(thinkingThrottle) {
+		return
+	}
+	// CAS so concurrent reasoning deltas can't double-emit within one window.
+	if !sb.lastThinkingNs.CompareAndSwap(last, now) {
+		return
+	}
+	sb.emit(EventThinking, map[string]any{})
+}
+
 // EmitToolStart broadcasts a tool invocation start event.
 func (sb *Broadcaster) EmitToolStart(name, toolUseID string) {
-	sb.emit(eventTool, map[string]any{
+	sb.emit(EventTool, map[string]any{
 		"state":     "started",
 		"tool":      name,
 		"toolUseId": toolUseID,
@@ -62,7 +92,7 @@ func (sb *Broadcaster) EmitToolStart(name, toolUseID string) {
 
 // EmitToolResult broadcasts a tool execution result event.
 func (sb *Broadcaster) EmitToolResult(name, toolUseID, result string, isError bool) {
-	sb.emit(eventTool, map[string]any{
+	sb.emit(EventTool, map[string]any{
 		"state":     "completed",
 		"tool":      name,
 		"toolUseId": toolUseID,
@@ -73,7 +103,7 @@ func (sb *Broadcaster) EmitToolResult(name, toolUseID, result string, isError bo
 
 // EmitComplete broadcasts the final chat completion event.
 func (sb *Broadcaster) EmitComplete(text string, usage llm.TokenUsage) {
-	sb.emit(eventChat, map[string]any{
+	sb.emit(EventChat, map[string]any{
 		"state": "done",
 		"text":  text,
 		"usage": map[string]int{
@@ -85,7 +115,7 @@ func (sb *Broadcaster) EmitComplete(text string, usage llm.TokenUsage) {
 
 // EmitError broadcasts an error event for the run.
 func (sb *Broadcaster) EmitError(errMsg string) {
-	sb.emit(eventChat, map[string]any{
+	sb.emit(EventChat, map[string]any{
 		"state": "error",
 		"error": errMsg,
 	})
@@ -93,14 +123,14 @@ func (sb *Broadcaster) EmitError(errMsg string) {
 
 // EmitStarted broadcasts that the agent run has started.
 func (sb *Broadcaster) EmitStarted() {
-	sb.emit(eventChat, map[string]any{
+	sb.emit(EventChat, map[string]any{
 		"state": "started",
 	})
 }
 
 // EmitAborted broadcasts that the agent run was aborted.
 func (sb *Broadcaster) EmitAborted(partialText string) {
-	sb.emit(eventChat, map[string]any{
+	sb.emit(EventChat, map[string]any{
 		"state": "aborted",
 		"text":  partialText,
 	})
