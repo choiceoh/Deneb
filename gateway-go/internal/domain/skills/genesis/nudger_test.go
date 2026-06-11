@@ -206,3 +206,41 @@ func TestNudger_InflightBlocksSecondFire(t *testing.T) {
 		t.Errorf("expected count to stay 0 while inflight, got %d", got)
 	}
 }
+
+func TestNudger_BackoffRaisesThresholdPerFire(t *testing.T) {
+	n := newTestNudger(t, 5) // interval=5
+	// First fire lands at the base threshold (5).
+	if !n.increment("s", 5) {
+		t.Fatal("expected first fire at threshold 5")
+	}
+	n.clearInflight("s") // simulate the background review completing
+	// After 1 fire the threshold doubles to 10: 5 more calls must NOT fire.
+	if n.increment("s", 5) {
+		t.Fatal("expected no fire at 5 after backoff (threshold now 10)")
+	}
+	// Reaching cumulative 10 crosses the doubled threshold.
+	if !n.increment("s", 5) {
+		t.Fatal("expected fire at cumulative 10")
+	}
+	n.clearInflight("s")
+	// After 2 fires the threshold is 20.
+	if n.increment("s", 19) {
+		t.Fatal("expected no fire at 19 (threshold now 20)")
+	}
+	if !n.increment("s", 1) {
+		t.Fatal("expected fire at cumulative 20")
+	}
+}
+
+func TestNudger_ResetClearsBackoff(t *testing.T) {
+	n := newTestNudger(t, 5)
+	if !n.increment("s", 5) { // fire once, raising fires to 1
+		t.Fatal("expected first fire at 5")
+	}
+	n.clearInflight("s")
+	n.Reset("s")
+	// Reset clears the backoff, so the threshold returns to the base interval.
+	if !n.increment("s", 5) {
+		t.Fatal("expected fire at 5 after Reset cleared the backoff")
+	}
+}

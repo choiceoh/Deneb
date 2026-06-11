@@ -183,3 +183,32 @@ func TestProposeSkillEvolution_ExecutableRouteRequiresCandidate(t *testing.T) {
 		t.Fatal("expected error: candidate required for executable route, got nil")
 	}
 }
+
+// TestProposeSkillEvolution_RecordsUsageFromVerdict verifies the review verdict
+// drives automatic skill usage: a no-op records a success, an evolve records a
+// failure — the only automatic source of usage data, which the evolver and
+// curator were starved of (TotalUses always 0) before.
+func TestProposeSkillEvolution_RecordsUsageFromVerdict(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	b := &skillLifecycleBackend{tracker: tracker}
+
+	if _, err := b.ProposeSkillEvolution(context.Background(), chattools.SkillEvolutionProposalRequest{
+		Route: "no-op", SkillName: "email-analysis", Reason: "skill already covers it", SessionKey: "s1",
+	}); err != nil {
+		t.Fatalf("no-op: %v", err)
+	}
+	if _, err := b.ProposeSkillEvolution(context.Background(), chattools.SkillEvolutionProposalRequest{
+		Route: "evolve", SkillName: "email-analysis", Candidate: "add category param", Reason: "category missing", SessionKey: "s2",
+	}); err != nil {
+		t.Fatalf("evolve: %v", err)
+	}
+
+	stats, err := tracker.Stats("email-analysis")
+	if err != nil {
+		t.Fatalf("Stats: %v", err)
+	}
+	if stats.TotalUses != 2 || stats.SuccessCount != 1 || stats.FailureCount != 1 {
+		t.Fatalf("expected 2 uses (1 success, 1 failure), got total=%d success=%d failure=%d",
+			stats.TotalUses, stats.SuccessCount, stats.FailureCount)
+	}
+}

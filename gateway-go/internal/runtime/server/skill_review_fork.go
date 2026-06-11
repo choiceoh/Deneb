@@ -16,6 +16,16 @@ import (
 
 const skillReviewMaxTranscriptRunes = 8000
 
+// skillReviewHistoryBudget sizes the SendSync history budget for the review.
+// The review is single-shot (EphemeralUser/EphemeralAssistant), so no history
+// accumulates across turns — this value only needs to be large enough that the
+// self-review prompt (which embeds up to skillReviewMaxTranscriptRunes of
+// transcript, ~5-6K tokens in practice) does NOT trip compaction. A tiny value
+// like 1 made contextBudget=1 (correct per PR #2031, but) forcing a futile
+// compaction — and a wasted polaris LLM summary call — on every review, since
+// nothing can reduce below budget=1 (tokensBefore == tokensAfter every time).
+const skillReviewHistoryBudget = 32000
+
 type skillReviewFork struct {
 	chat        *chat.Handler
 	transcripts toolctx.TranscriptStore
@@ -55,7 +65,7 @@ func (r *skillReviewFork) RunSkillReview(ctx context.Context, sessionKey string,
 	_, err := r.chat.SendSync(ctx, skillReviewSessionKey(sessionKey), prompt, r.model, &chat.SyncOptions{
 		ToolPreset:         string(toolpreset.PresetSelfReview),
 		MaxTokens:          &maxTokens,
-		MaxHistoryTokens:   1,
+		MaxHistoryTokens:   skillReviewHistoryBudget,
 		EphemeralUser:      true,
 		EphemeralAssistant: true,
 	})
@@ -126,7 +136,7 @@ Tool summary: %s
 ## Required Action
 
 Record exactly one lifecycle decision with skill_lifecycle action=propose:
-- route=no-op when there is no durable reusable workflow.
+- route=no-op when there is no durable reusable workflow. If the session followed an existing skill, set skillName to that skill so it is recorded as used (a no-op verdict counts as a success for that skill).
 - route=evolve with skillName when an existing skill should be improved.
 - route=genesis with sessionKey=%s when the target transcript should generate a new skill.
 - route=create only when skill_lifecycle cannot execute the creation path but a class-level skill is clearly needed.
