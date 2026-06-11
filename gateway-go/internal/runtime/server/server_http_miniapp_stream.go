@@ -14,7 +14,8 @@
 //	    │
 //	    ▼  each stream event → one SSE frame
 //	  event: delta     data: {"delta":"..."}                        (zero or more)
-//	  event: tool      data: {"state":"started"|"completed","tool":"...","toolUseId":"..."}
+//	  event: tool      data: {"state":"started"|"completed","tool":"...","toolUseId":"...",
+//	                          "detail":"..."?, "isError":bool?}
 //	  event: thinking  data: {}                                     (throttled liveness)
 //	  event: done      data: {"text":...,"model":...,"fellBack":...}   (success terminal)
 //	  event: error     data: {"error":"..."}                        (failure terminal)
@@ -65,8 +66,18 @@ type chatStreamResult struct {
 // serialized by the SSE writer's mutex).
 type chatStreamSinks struct {
 	Delta    func(delta string)
-	Tool     func(state, tool, toolUseID string)
+	Tool     func(ev chat.ToolStreamEvent)
 	Thinking func()
+}
+
+// toolStreamFrame is the wire payload of one SSE "tool" frame. Detail and
+// isError are omitted when zero so the common frames stay minimal.
+type toolStreamFrame struct {
+	State     string `json:"state"`
+	Tool      string `json:"tool"`
+	ToolUseID string `json:"toolUseId"`
+	Detail    string `json:"detail,omitempty"`
+	IsError   bool   `json:"isError,omitempty"`
 }
 
 // chatStreamRunner runs a streaming chat turn, invoking the sink callbacks as
@@ -209,14 +220,16 @@ func writeChatStreamSSE(ctx context.Context, w http.ResponseWriter, sessionKey s
 			}
 			writeEvent("delta", map[string]string{"delta": delta})
 		},
-		Tool: func(state, tool, toolUseID string) {
-			if tool == "" {
+		Tool: func(ev chat.ToolStreamEvent) {
+			if ev.Tool == "" {
 				return
 			}
-			writeEvent("tool", map[string]string{
-				"state":     state,
-				"tool":      tool,
-				"toolUseId": toolUseID,
+			writeEvent("tool", toolStreamFrame{
+				State:     ev.State,
+				Tool:      ev.Tool,
+				ToolUseID: ev.ToolUseID,
+				Detail:    ev.Detail,
+				IsError:   ev.IsError,
 			})
 		},
 		Thinking: func() {

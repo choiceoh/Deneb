@@ -317,6 +317,13 @@ class DenebGatewayClient(
             // gateway fell back from its main model to a fallback role.
             if (reply.fellBack && reply.model.isNotBlank()) reply.model else null,
         )
+        // Post-turn transparency: leave a compact trail of what the agent did
+        // ("메일 확인 ×2 · 웹 검색") under the finished answer.
+        progress.footprint()?.let { fp ->
+            _chatHistory.update { list ->
+                list.map { if (it.id == assistantId) it.copy(toolFootprint = fp) else it }
+            }
+        }
     }
 
     private fun formatCallback(submission: UiSubmission): String = buildString {
@@ -350,6 +357,10 @@ class DenebGatewayClient(
         private val startMarks = mutableMapOf<String, TimeSource.Monotonic.ValueTimeMark>()
         private val allRowIds = mutableSetOf<String>()
 
+        // Completed tools in execution order (tool name + error flag) — the
+        // source of the post-turn footprint line under the answer.
+        private val trail = mutableListOf<Pair<String, Boolean>>()
+
         /** Reasoning liveness pulse → show "깊이 생각 중…" until text or a tool arrives. */
         fun onThinking() {
             if (thinkingVisible) return
@@ -369,27 +380,47 @@ class DenebGatewayClient(
         /** Visible answer text is flowing — drop the thinking row (O(1) when hidden). */
         fun onDelta() = hideThinking()
 
-        fun onTool(state: String, tool: String, toolUseId: String) {
-            val key = toolUseId.ifEmpty { tool }
-            when (state) {
+        fun onTool(ev: ToolEvent) {
+            val key = ev.toolUseId.ifEmpty { ev.tool }
+            when (ev.state) {
                 "started" -> {
                     hideThinking()
                     val rowId = "progress-tool-${Uuid.random()}"
                     rowIds[key] = rowId
                     startMarks[key] = TimeSource.Monotonic.markNow()
                     allRowIds += rowId
+                    // "메일 확인 중: 아르고에너지" — the server-extracted hint
+                    // names the target, not just the tool.
+                    val label = ToolStatusLabels.label(ev.tool) +
+                        if (ev.detail.isNotEmpty()) ": ${ev.detail}" else ""
                     _chatHistory.update { list ->
                         list + History(
                             id = rowId,
                             role = History.Role.TOOL_EXECUTING,
-                            content = tool,
-                            toolName = ToolStatusLabels.label(tool),
+                            content = ev.tool,
+                            toolName = label,
                             isStatusMessage = true,
                         )
                     }
                 }
                 "completed" -> {
+                    trail += ev.tool to ev.isError
                     val rowId = rowIds.remove(key) ?: return
+                    if (ev.isError) {
+                        // Swap the row to its failure form ("메일 확인 실패")
+                        // and hold it readable — the agent usually keeps going,
+                        // so this explains why the turn is taking longer.
+                        val failure = ToolStatusLabels.failureLabel(ev.tool)
+                        _chatHistory.update { list ->
+                            list.map { if (it.id == rowId) it.copy(toolName = failure) else it }
+                        }
+                        scope.launch {
+                            delay(FAILURE_DISPLAY_MS.milliseconds)
+                            removeRow(rowId)
+                        }
+                        startMarks.remove(key)
+                        return
+                    }
                     val elapsed = startMarks.remove(key)?.elapsedNow() ?: 0.milliseconds
                     val remaining = MIN_PROGRESS_DISPLAY_MS.milliseconds - elapsed
                     if (remaining.isPositive()) {
@@ -405,6 +436,31 @@ class DenebGatewayClient(
                     }
                 }
             }
+        }
+
+        /**
+         * One-line trail of what this turn did — "메일 확인 ×2 · 웹 검색 ⚠" —
+         * attached under the finished answer. Null when no tool completed.
+         * Live-turn only by design: the gateway transcript does not carry it,
+         * so reloading a conversation drops the line.
+         */
+        fun footprint(): String? {
+            if (trail.isEmpty()) return null
+            val counts = LinkedHashMap<String, IntArray>() // tool → [count, errored(0/1)]
+            for ((tool, isError) in trail) {
+                val agg = counts.getOrPut(tool) { intArrayOf(0, 0) }
+                agg[0]++
+                if (isError) agg[1] = 1
+            }
+            val parts = counts.entries.take(FOOTPRINT_MAX_TOOLS).map { (tool, agg) ->
+                buildString {
+                    append(ToolStatusLabels.trailLabel(tool))
+                    if (agg[0] > 1) append(" ×${agg[0]}")
+                    if (agg[1] == 1) append(" ⚠")
+                }
+            }
+            val more = counts.size - FOOTPRINT_MAX_TOOLS
+            return parts.joinToString(" · ") + if (more > 0) " 외 $more" else ""
         }
 
         /** Remove every row this turn added (idempotent; runs in ask()'s finally). */
@@ -864,7 +920,7 @@ class DenebGatewayClient(
      */
     private suspend fun sendStreaming(
         message: String,
-        onTool: (state: String, tool: String, toolUseId: String) -> Unit = { _, _, _ -> },
+        onTool: (ToolEvent) -> Unit = {},
         onThinking: () -> Unit = {},
         onDelta: (String) -> Unit,
     ): GatewayReply {
@@ -915,7 +971,7 @@ class DenebGatewayClient(
                                 runCatching {
                                     jsonCodec.decodeFromString(ToolEvent.serializer(), data.toString())
                                 }.getOrNull()?.let {
-                                    if (it.tool.isNotEmpty()) onTool(it.state, it.tool, it.toolUseId)
+                                    if (it.tool.isNotEmpty()) onTool(it)
                                 }
                             }
                             "thinking" -> onThinking()
@@ -1118,8 +1174,16 @@ class DenebGatewayClient(
     @Serializable
     private data class DeltaEvent(val delta: String = "")
 
+    // detail: short hint extracted from the tool input server-side (query,
+    // command, file name); isError marks a completed tool that returned an error.
     @Serializable
-    private data class ToolEvent(val state: String = "", val tool: String = "", val toolUseId: String = "")
+    private data class ToolEvent(
+        val state: String = "",
+        val tool: String = "",
+        val toolUseId: String = "",
+        val detail: String = "",
+        val isError: Boolean = false,
+    )
 
     @Serializable
     private data class DoneEvent(val text: String = "", val model: String = "", val fellBack: Boolean = false)
@@ -1166,6 +1230,13 @@ class DenebGatewayClient(
         // Minimum on-screen time for a tool progress row in the waiting chip,
         // so fast tools register as a readable label instead of a flicker.
         const val MIN_PROGRESS_DISPLAY_MS = 1_500L
+
+        // How long a failed tool's "~ 실패" label stays in the chip before the
+        // turn moves on — long enough to read, short enough not to alarm.
+        const val FAILURE_DISPLAY_MS = 1_800L
+
+        // Cap on distinct tools named in the post-turn footprint line.
+        const val FOOTPRINT_MAX_TOOLS = 5
 
         // Max idle between bytes on the chat SSE stream. The server emits a
         // keepalive comment every 15s, so this only trips on a real stall.

@@ -95,12 +95,14 @@ import ai.deneb.ui.denebPopExit
 import ai.deneb.ui.handCursor
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.fallback_answered_by
+import deneb.composeapp.generated.resources.tool_footprint
 import deneb.composeapp.generated.resources.fallback_service_failed
 import deneb.composeapp.generated.resources.fallback_trying_next
 import deneb.composeapp.generated.resources.scroll_to_bottom_content_description
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlin.time.TimeSource
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import nl.marc_apps.tts.TextToSpeechInstance
@@ -528,9 +530,14 @@ internal fun ChatModeScreen(
                             // long, so signal "done" even if the user has looked away.
                             val haptics = rememberHaptics()
                             val wasLoading = remember { mutableStateOf(false) }
+                            // Anchor for the waiting chip's elapsed display: marks the turn's
+                            // actual start, so the count survives the chip briefly leaving
+                            // composition (deneb-ui pending stretch).
+                            val turnStart = remember { mutableStateOf<TimeSource.Monotonic.ValueTimeMark?>(null) }
                             LaunchedEffect(uiState.isLoading) {
                                 if (wasLoading.value && !uiState.isLoading) haptics.tap()
                                 wasLoading.value = uiState.isLoading
+                                turnStart.value = if (uiState.isLoading) TimeSource.Monotonic.markNow() else null
                             }
 
                             // Follow the stream: while a reply streams in, keep the newest tokens
@@ -607,6 +614,14 @@ internal fun ChatModeScreen(
                                                             reasoningSegments = reasoningSegmentsByAssistantId[history.id] ?: persistentListOf(),
                                                             isStreaming = isLastAssistant && isResponseStreaming,
                                                         )
+                                                        if (history.toolFootprint != null) {
+                                                            androidx.compose.material3.Text(
+                                                                text = stringResource(Res.string.tool_footprint, history.toolFootprint),
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
+                                                            )
+                                                        }
                                                         if (history.fallbackServiceName != null) {
                                                             androidx.compose.material3.Text(
                                                                 text = stringResource(Res.string.fallback_answered_by, history.fallbackServiceName),
@@ -655,6 +670,7 @@ internal fun ChatModeScreen(
                                                     executingTools = executingToolsState.tools,
                                                     isStatusOnly = executingToolsState.isStatusOnly,
                                                     statusText = fallbackStatusText,
+                                                    turnStart = turnStart.value,
                                                 )
                                             }
                                         }

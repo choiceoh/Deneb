@@ -17,15 +17,27 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/llmerr"
 )
 
+// ToolStreamEvent is one tool lifecycle transition surfaced to a streaming
+// transport. State is "started" or "completed"; Detail (started only) is a
+// short human hint extracted from the tool input (query, command, file name);
+// IsError (completed only) marks a tool that returned an error result.
+type ToolStreamEvent struct {
+	State     string
+	Tool      string
+	ToolUseID string
+	Detail    string
+	IsError   bool
+}
+
 // streamEventSinks carries the per-event callbacks a streaming HTTP transport
 // (the miniapp SSE bridge) registers for one chat turn. All fields are
 // optional; nil callbacks drop their events.
 type streamEventSinks struct {
 	// OnDelta receives each assistant text chunk.
 	OnDelta func(delta string)
-	// OnTool receives tool lifecycle transitions (state "started"/"completed")
-	// so the client can show live tool progress in its waiting indicator.
-	OnTool func(state, tool, toolUseID string)
+	// OnTool receives tool lifecycle transitions so the client can show live
+	// tool progress in its waiting indicator.
+	OnTool func(ev ToolStreamEvent)
 	// OnThinking signals reasoning-in-progress (throttled by the broadcaster).
 	OnThinking func()
 }
@@ -63,10 +75,18 @@ func executeAgentRunWithDelta(
 					State     string `json:"state"`
 					Tool      string `json:"tool"`
 					ToolUseID string `json:"toolUseId"`
+					Detail    string `json:"detail"`
+					IsError   bool   `json:"isError"`
 				} `json:"payload"`
 			}
 			if err := json.Unmarshal(data, &envelope); err == nil && envelope.Payload.Tool != "" {
-				sinks.OnTool(envelope.Payload.State, envelope.Payload.Tool, envelope.Payload.ToolUseID)
+				sinks.OnTool(ToolStreamEvent{
+					State:     envelope.Payload.State,
+					Tool:      envelope.Payload.Tool,
+					ToolUseID: envelope.Payload.ToolUseID,
+					Detail:    envelope.Payload.Detail,
+					IsError:   envelope.Payload.IsError,
+				})
 			}
 		case streaming.EventThinking:
 			if sinks.OnThinking == nil {

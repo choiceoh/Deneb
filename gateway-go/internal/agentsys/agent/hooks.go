@@ -7,7 +7,7 @@ type StreamHooks struct {
 	OnTextDelta  func(text string)                                // text delta streamed from LLM
 	OnThinking   func()                                           // reasoning/thinking delta received
 	OnToolStart  func(name, reason string, input []byte)          // tool invocation about to execute; reason is thinking text, input is raw JSON args
-	OnToolEmit   func(name, toolUseID string)                     // tool start broadcast (name + ID for streaming)
+	OnToolEmit   func(name, toolUseID string, input []byte)       // tool start broadcast (name + ID + raw JSON args for streaming)
 	OnToolResult func(name, toolUseID, result string, isErr bool) // tool result broadcast
 	// OnToolProgress fires periodically while a single tool call is still
 	// executing (e.g., long-running `exec` or network fetch). Intended to
@@ -28,7 +28,7 @@ type HookCompositor struct {
 	textDelta    []func(string)
 	thinking     []func()
 	toolStart    []func(string, string, []byte)
-	toolEmit     []func(string, string)
+	toolEmit     []func(string, string, []byte)
 	toolResult   []func(string, string, string, bool)
 	toolProgress []func(string, string, int)
 
@@ -40,7 +40,9 @@ func (c *HookCompositor) OnThinking(fn func())        { c.thinking = append(c.th
 func (c *HookCompositor) OnToolStart(fn func(string, string, []byte)) {
 	c.toolStart = append(c.toolStart, fn)
 }
-func (c *HookCompositor) OnToolEmit(fn func(string, string)) { c.toolEmit = append(c.toolEmit, fn) }
+func (c *HookCompositor) OnToolEmit(fn func(string, string, []byte)) {
+	c.toolEmit = append(c.toolEmit, fn)
+}
 func (c *HookCompositor) OnToolResult(fn func(string, string, string, bool)) {
 	c.toolResult = append(c.toolResult, fn)
 }
@@ -78,9 +80,9 @@ func (c *HookCompositor) Build() StreamHooks {
 		}
 	}
 	if fns := c.toolEmit; len(fns) > 0 {
-		h.OnToolEmit = func(name, toolUseID string) {
+		h.OnToolEmit = func(name, toolUseID string, input []byte) {
 			for _, fn := range fns {
-				fn(name, toolUseID)
+				fn(name, toolUseID, input)
 			}
 		}
 	}

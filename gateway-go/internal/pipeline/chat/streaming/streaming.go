@@ -81,13 +81,19 @@ func (sb *Broadcaster) EmitThinking() {
 	sb.emit(EventThinking, map[string]any{})
 }
 
-// EmitToolStart broadcasts a tool invocation start event.
-func (sb *Broadcaster) EmitToolStart(name, toolUseID string) {
-	sb.emit(EventTool, map[string]any{
+// EmitToolStart broadcasts a tool invocation start event. detail is an
+// optional short human hint extracted from the tool input (query, command,
+// file name) — omitted from the payload when empty.
+func (sb *Broadcaster) EmitToolStart(name, toolUseID, detail string) {
+	payload := map[string]any{
 		"state":     "started",
 		"tool":      name,
 		"toolUseId": toolUseID,
-	})
+	}
+	if detail != "" {
+		payload["detail"] = detail
+	}
+	sb.emit(EventTool, payload)
 }
 
 // EmitToolResult broadcasts a tool execution result event.

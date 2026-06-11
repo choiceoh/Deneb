@@ -105,10 +105,10 @@ type SyncOptions struct {
 	AutoDeliveredOutput bool
 
 	// OnToolEvent, when set on a streaming run (SendSyncStream only), receives
-	// tool lifecycle transitions (state "started"/"completed") so the transport
-	// can surface live tool progress — the native client renders these as the
-	// waiting indicator's tool label. Nil-safe.
-	OnToolEvent func(state, tool, toolUseID string)
+	// tool lifecycle transitions (started/completed, with detail hint and
+	// error flag) so the transport can surface live tool progress — the native
+	// client renders these as the waiting indicator's tool label. Nil-safe.
+	OnToolEvent func(ev ToolStreamEvent)
 
 	// OnThinking, when set on a streaming run (SendSyncStream only), fires
 	// while the model emits reasoning deltas (throttled by the broadcaster) so
