@@ -5,6 +5,14 @@
 // authentication, and catalog discovery.
 package provider
 
+import "os"
+
+// ExpandEnvVars expands ${VAR} references in a string using os.Getenv.
+// Both ${VAR} and $VAR forms are expanded.
+func ExpandEnvVars(s string) string {
+	return os.Expand(s, os.Getenv)
+}
+
 // AuthMethod describes one authentication method for a provider.
 type AuthMethod struct {
 	ID    string `json:"id"`
