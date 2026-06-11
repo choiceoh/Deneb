@@ -43,7 +43,7 @@ func (h *Handler) handleSlashCommand(
 		clearRecallMemory(sessionKey)
 		if h.transcript != nil {
 			if err := h.transcript.Delete(sessionKey); err != nil {
-				h.logger.Warn("failed to delete transcript on reset", "error", err)
+				h.logger.Error("failed to delete transcript on reset", "error", err)
 			}
 		}
 		// Clear tool preset so session exits any preset mode (e.g. conversation).
