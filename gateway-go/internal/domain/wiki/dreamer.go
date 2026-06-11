@@ -30,10 +30,10 @@ const (
 	// backend must fail the phase quickly instead of eating the whole cycle
 	// budget (a stuck vLLM engine held every cycle for the full 10 minutes).
 	wikiDreamSynthesisTimeout = 5 * time.Minute
-	wikiDreamMaxTokens     = 4096
-	diaryProcessStateFile  = ".diary-process-state.json"
-	dreamProposalFile      = ".dream-last-proposal.json"
-	processedCapsuleLimit  = 12
+	wikiDreamMaxTokens        = 4096
+	diaryProcessStateFile     = ".diary-process-state.json"
+	dreamProposalFile         = ".dream-last-proposal.json"
+	processedCapsuleLimit     = 12
 )
 
 // Compile-time interface compliance.
