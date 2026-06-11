@@ -10,6 +10,10 @@ import (
 
 // EmergencyCompact handles the case where a single user input is ≥30K tokens.
 //
+// The trigger input is itself one of the messages (the caller measures it via
+// lastUserInputTokens(messages)), so its tokens are already accounted for in
+// the budget math below — never add it separately.
+//
 // The message list is split into three zones:
 //
 //	[evicted (dropped)] [non-evicted old → summarized] [recent (preserved)]
@@ -22,7 +26,6 @@ func EmergencyCompact(
 	ctx context.Context,
 	cfg Config,
 	messages []llm.Message,
-	inputTokens int,
 	summarizer Summarizer,
 	logger *slog.Logger,
 ) ([]llm.Message, int) {
@@ -49,7 +52,7 @@ func EmergencyCompact(
 	evicted := 0
 	for evicted < len(old) {
 		totalAfter := EstimateMessagesTokens(old[evicted:]) + EstimateMessagesTokens(recent)
-		if totalAfter+inputTokens <= cfg.ContextBudget {
+		if totalAfter <= cfg.ContextBudget {
 			break
 		}
 		evicted++
