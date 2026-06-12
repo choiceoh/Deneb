@@ -1,5 +1,5 @@
-// history_display.go — display-only sanitation of the transcript before it is
-// returned to the native client by History().
+// display.go — display-only sanitation of transcript messages before they are
+// returned to a client surface (chat.history and miniapp.sessions.transcript).
 //
 // The transcript on disk is the LLM's context: it stores tool_use, tool_result,
 // and thinking blocks verbatim because the prompt-cache rule requires that what
@@ -8,18 +8,31 @@
 // user-role messages carrying a tool_result block (the Anthropic API
 // convention). Left unfiltered, raw tool output (command stdout, ps dumps,
 // systemd errors) surfaces in the chat as an ordinary bubble the user can even
-// quote. These strippers rewrite only the RPC response; the JSONL is untouched.
-package chat
+// quote. These helpers rewrite only the RPC response; the JSONL is untouched.
+//
+// They live in toolctx (not chat) because both the chat pipeline's History RPC
+// and handlerminiapp's sessions.transcript RPC return transcripts to the
+// client, and handlerminiapp deliberately depends only on this leaf package.
+package toolctx
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
-// stripToolResultBlocksForDisplay removes tool_result content blocks from the
+// LinkEnrichmentHeader marks the start of a link-enrichment block appended to
+// an interactive user message. chat.maybeEnrichLinks writes it and the display
+// strips look for it; the generator and the strippers stay in sync through
+// this constant.
+const LinkEnrichmentHeader = "Link content from URLs in this message:"
+
+// StripToolResultBlocksForDisplay removes tool_result content blocks from the
 // messages handed to the client. A message whose blocks are *all* tool_result
 // (the usual case — a tool turn has no user-visible text) is dropped entirely so
 // no empty bubble remains; a mixed message keeps its other blocks. Plain-string
 // content never holds a tool_result, so it passes through untouched. The input
 // slice is not mutated — a fresh slice is returned.
-func stripToolResultBlocksForDisplay(msgs []ChatMessage) []ChatMessage {
+func StripToolResultBlocksForDisplay(msgs []ChatMessage) []ChatMessage {
 	out := make([]ChatMessage, 0, len(msgs))
 	for _, m := range msgs {
 		// Only rich block-array content can carry a tool_result; plain-string
@@ -55,4 +68,27 @@ func stripToolResultBlocksForDisplay(msgs []ChatMessage) []ChatMessage {
 		}
 	}
 	return out
+}
+
+// StripLinkEnrichmentForDisplay removes appended enrichment blocks from user
+// messages so history surfaces (native client bubbles) show what the user
+// typed, not the fetched page dump. Only plain-string content is touched and
+// only the RPC response is rewritten — the transcript itself never changes.
+func StripLinkEnrichmentForDisplay(msgs []ChatMessage) []ChatMessage {
+	marker := "\n\n---\n" + LinkEnrichmentHeader
+	for i := range msgs {
+		if msgs[i].Role != "user" {
+			continue
+		}
+		var text string
+		if err := json.Unmarshal(msgs[i].Content, &text); err != nil {
+			continue // rich block content — enrichment only appends to plain text
+		}
+		idx := strings.Index(text, marker)
+		if idx < 0 || !strings.HasSuffix(text, "\n---") {
+			continue
+		}
+		msgs[i].Content = MarshalJSONString(strings.TrimRight(text[:idx], " \n"))
+	}
+	return msgs
 }

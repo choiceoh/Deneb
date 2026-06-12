@@ -14,7 +14,6 @@ package chat
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -41,10 +40,9 @@ const (
 	linkFetchMaxBytes = 2 * 1024 * 1024
 )
 
-// linkEnrichmentHeader marks the start of an appended enrichment block. The
-// formatter writes it and the History() display strip looks for it; the two
-// stay in sync through this constant.
-const linkEnrichmentHeader = "Link content from URLs in this message:"
+// The enrichment block marker lives in toolctx (LinkEnrichmentHeader) so the
+// display strips shared by chat.history and miniapp.sessions.transcript stay
+// in sync with the formatter below.
 
 // fetchFunc abstracts URL fetching for testability.
 // Returns raw data, content-type header, and error.
@@ -73,7 +71,7 @@ func (h *Handler) maybeEnrichLinks(ctx context.Context, message string, opts *Sy
 		// untouched, same boundary as trySlashSync.
 		return message
 	}
-	if strings.Contains(message, linkEnrichmentHeader) {
+	if strings.Contains(message, toolctx.LinkEnrichmentHeader) {
 		// Already enriched (e.g. a resent message) — never stack blocks.
 		return message
 	}
@@ -85,29 +83,6 @@ func (h *Handler) maybeEnrichLinks(ctx context.Context, message string, opts *Sy
 	h.logger.Info("link enrichment appended",
 		"chars", len(summary), "elapsed", time.Since(start).Round(time.Millisecond))
 	return message + "\n\n" + summary
-}
-
-// stripLinkEnrichmentForDisplay removes appended enrichment blocks from user
-// messages so history surfaces (native client bubbles) show what the user
-// typed, not the fetched page dump. Only plain-string content is touched and
-// only the RPC response is rewritten — the transcript itself never changes.
-func stripLinkEnrichmentForDisplay(msgs []ChatMessage) []ChatMessage {
-	marker := "\n\n---\n" + linkEnrichmentHeader
-	for i := range msgs {
-		if msgs[i].Role != "user" {
-			continue
-		}
-		var text string
-		if err := json.Unmarshal(msgs[i].Content, &text); err != nil {
-			continue // rich block content — enrichment only appends to plain text
-		}
-		idx := strings.Index(text, marker)
-		if idx < 0 || !strings.HasSuffix(text, "\n---") {
-			continue
-		}
-		msgs[i].Content = toolctx.MarshalJSONString(strings.TrimRight(text[:idx], " \n"))
-	}
-	return msgs
 }
 
 // enrichMessageWithLinks extracts URLs from the message, fetches each one,
@@ -217,7 +192,7 @@ func formatLinkSummary(links []linkContent) string {
 	}
 
 	var b strings.Builder
-	b.WriteString("---\n" + linkEnrichmentHeader + "\n\n")
+	b.WriteString("---\n" + toolctx.LinkEnrichmentHeader + "\n\n")
 	b.WriteString(strings.Join(parts, "\n\n"))
 	b.WriteString("\n---")
 	return b.String()

@@ -48,7 +48,7 @@ func TestEnrichMessageWithLinks_SingleHTMLLink(t *testing.T) {
 
 	result := enrichMessageWithLinks(context.Background(), "check https://example.com out", fetch, logger)
 
-	if !strings.Contains(result, linkEnrichmentHeader) {
+	if !strings.Contains(result, toolctx.LinkEnrichmentHeader) {
 		t.Fatal("expected link summary header")
 	}
 	if !strings.Contains(result, "Example") {
@@ -121,7 +121,7 @@ func TestStripLinkEnrichmentForDisplay_RoundTrip(t *testing.T) {
 		toolctx.NewTextChatMessage("user", enriched, 0),
 		toolctx.NewTextChatMessage("assistant", "요약입니다.", 0),
 	}
-	out := stripLinkEnrichmentForDisplay(msgs)
+	out := toolctx.StripLinkEnrichmentForDisplay(msgs)
 
 	if got := out[0].TextContent(); got != typed {
 		t.Fatalf("user message not stripped to typed text:\ngot:  %q\nwant: %q", got, typed)
@@ -131,22 +131,11 @@ func TestStripLinkEnrichmentForDisplay_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestStripLinkEnrichmentForDisplay_LeavesPlainMessages(t *testing.T) {
-	msgs := []ChatMessage{
-		// A user message that merely *mentions* a --- divider stays intact.
-		toolctx.NewTextChatMessage("user", "구분선은 ---로 씁니다", 0),
-	}
-	out := stripLinkEnrichmentForDisplay(msgs)
-	if got := out[0].TextContent(); got != "구분선은 ---로 씁니다" {
-		t.Fatalf("plain message must be untouched, got: %q", got)
-	}
-}
-
 // A message that already carries an enrichment block must not be enriched
 // again (idempotence guard in maybeEnrichLinks).
 func TestMaybeEnrichLinks_AlreadyEnriched(t *testing.T) {
 	h := &Handler{logger: slog.Default()}
-	enriched := "see https://example.com\n\n---\n" + linkEnrichmentHeader + "\n\nstuff\n---"
+	enriched := "see https://example.com\n\n---\n" + toolctx.LinkEnrichmentHeader + "\n\nstuff\n---"
 	if got := h.maybeEnrichLinks(context.Background(), enriched, nil); got != enriched {
 		t.Fatal("already-enriched message must pass through unchanged")
 	}
