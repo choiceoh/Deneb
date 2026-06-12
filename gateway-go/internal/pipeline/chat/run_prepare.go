@@ -107,8 +107,8 @@ func prepareContextAndPrompt(
 				statusCtrl.SetRecalling()
 			}
 		}
-		recallMemory := buildRecallPreflight(ctx, params, deps, logger)
-		if hasCue && recallMemoryHasEvidence(recallMemory) {
+		recallMemory, recallTruncated := buildRecallPreflight(ctx, params, deps, logger)
+		if shouldFreezeRecallSnapshot(hasCue, recallTruncated, recallMemory) {
 			storeRecallMemory(params.SessionKey, fingerprint, recallMemory)
 		}
 		resultMu.Lock()
