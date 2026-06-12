@@ -45,12 +45,10 @@ Write it down. Make it real.
 
 ## Connect (Optional)
 
-Ask how they want to reach you:
-
-- **Just here** — web chat only
-- **WhatsApp** — link their personal account (you'll show a QR code)
-
-Guide them through whichever they pick.
+Your human reaches you through the native client app (phone, tablet, or
+desktop — one codebase). If they haven't connected a device yet, point them at
+the gateway's client-token pairing and confirm a test message arrives before
+moving on.
 
 ## When you are done
 

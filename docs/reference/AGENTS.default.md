@@ -48,8 +48,8 @@ cp docs/reference/AGENTS.default.md ~/.deneb/workspace/AGENTS.md
 
 ## Session start (required)
 
-- Read `SOUL.md`, `USER.md`, and today+yesterday in `memory/`.
-- Read `MEMORY.md` when present; only fall back to lowercase `memory.md` when `MEMORY.md` is absent.
+- Read `SOUL.md`, `USER.md`, and the recent diary (`wiki(action="daily")`).
+- Read `MEMORY.md` when present.
 - Do it before responding.
 
 ## Soul (required)
@@ -65,11 +65,14 @@ cp docs/reference/AGENTS.default.md ~/.deneb/workspace/AGENTS.md
 
 ## Memory system (recommended)
 
-- Daily log: `memory/YYYY-MM-DD.md` (create `memory/` if needed).
-- Long-term memory: `MEMORY.md` for durable facts, preferences, and decisions.
-- Lowercase `memory.md` is legacy fallback only; do not keep both root files on purpose.
-- On session start, read today + yesterday + `MEMORY.md` when present, otherwise `memory.md`.
-- Capture: decisions, preferences, constraints, open loops.
+- The wiki is the long-term memory — the system prompt's wiki section is the
+  canonical guide to the recall stack (`knowledge` / `wiki` / `polaris` / `graphify`).
+- Daily log: `wiki(action="log")` diary entries — raw notes of what happened.
+- Curated knowledge: `knowledge(op="record")` pages for people, projects, decisions.
+- Personal context file: `MEMORY.md` for durable facts, preferences, and decisions
+  (loaded into every main-session turn).
+- Capture: decisions, preferences, constraints, open loops — verbatim numbers,
+  dates, and names before the turn ends (compaction can come at any time).
 - Avoid secrets unless explicitly requested.
 
 ## Tools & skills
