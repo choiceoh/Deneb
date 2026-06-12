@@ -43,6 +43,26 @@ scripts/dev/live-test.sh logs-grep "cache_read_input_tokens\|cache_creation_inpu
 
 ---
 
+## 1.5. vLLM APC (메인 모델 경로) — 꼬리 주입 원칙
+
+> 메인 챗 모델이 로컬 vLLM(현재 DSV4-Flash)로 옮겨가면서 **마커 기반 Anthropic 캐시와 전혀 다른 제약**이 1순위가 됐다. vLLM 의 Automatic Prefix Caching 은 렌더된 프롬프트 전체에 대한 **엄격한 byte-prefix 매칭**이고, DSV4 인코더의 렌더 순서는 `[system 내용][tools 스키마][대화 히스토리]` 다. 즉 **system 끝의 per-turn 바이트 1줄이 tools + 전체 히스토리(수만 토큰)의 KV 를 통째로 무효화**한다.
+
+2026-06-13 측정: recall(`<recall-context>`, hindsight auto-recall 이 매 턴 변동) + tier-1 위키가 system 꼬리에 append 되던 시절 적중률 80.7%, 인터랙티브 턴 프리필 꼬리 20–40초 (프리필 스파이크는 dsv4 메모리 워치독 트립의 문서화된 원인이기도 하다).
+
+### 원칙 (Anthropic 4-마커 룰과 별개로 동시 적용)
+
+1. **per-turn 가변 바이트는 system 프롬프트에 절대 넣지 마라.** dynamic 블록이 "마커가 없어서 공짜"인 것은 Anthropic 이야기다 — vLLM 에선 system 의 모든 바이트가 히스토리보다 앞 prefix 다.
+2. **per-turn 주입은 마지막 user 메시지의 wire-only suffix 로.** `chat/run_tail_inject.go` (`buildTailAdditions` + `injectTailAdditions`) 가 단일 진입점이다: recall 증거, auto-delivery 지시문이 여기로 간다. transcript 에는 깨끗한 원문이 저장돼 다음 턴 히스토리는 이번 턴이 캐시한 prefix 와 byte-동일하다. 비용 = 추가분 자신의 토큰뿐.
+3. **세션 내 안정, 세션 간 공유.** system 에 남는 준가변 콘텐츠는 세션 동결로: tier-1 위키(`chat/tier1_cache.go`), 컨텍스트 파일(`prompt.WithSessionSnapshot`), 토픽 지식, calendar glance(일 단위). `/reset` 이 일괄 clear.
+4. **run 패밀리를 가르지 마라.** 같은 세션의 heartbeat/인터랙티브 턴이 다른 system 바이트를 받으면 prefix 패밀리가 2개로 갈라져 KV 풀을 이중 점유한다. AutoDelivered 지시문이 tail 로 간 이유이자, nil-Delivery 런이 세션 키에서 채널을 폴백(`sessionFallbackChannel`)하는 이유.
+
+### 측정
+
+- 엔진 전역: `curl -s http://<engine>/metrics | grep prefix_cache` (`vllm:prefix_cache_{hits,queries}_total`, 토큰 단위 누적).
+- per-run: agentlog `run.cache` 이벤트 (`chat/engine_cache_sample.go` 가 턴 종료 후 /metrics 델타를 비동기 기록; vLLM usage 에 cached_tokens 가 없는 빌드에서 유일한 per-turn 신호). 단일 사용자 직렬 트래픽 기준 근사치.
+
+---
+
 ## 2. 불가침 3원칙
 
 ### Rule A — **과거 메시지를 변경하지 마라**
@@ -113,9 +133,13 @@ func handleCmd(args []string) error {
 ### 현재 적용
 
 - **RecallMemory** — `gateway-go/internal/pipeline/chat/recall_cache.go`
-  - 첫 evidence-bearing recall 만 cache, 이후 turn 은 frozen 사용
+  - (session, cue-fingerprint) 별 cache; hindsight auto-recall 은 매 턴 fresh (no-cue 비캐시)
   - `/reset` 핸들러 (`slash_dispatch.go`) 에서 clear
-  - 가치: cache 가 아니라 **latency 절감** — wiki/diary/transcript/polaris 검색 (각 1.5s timeout) 을 첫 evidence turn 에만 수행
+  - 가치: cache 가 아니라 **latency 절감** — wiki/diary/transcript/polaris 검색 (각 1.5s timeout) 을 같은 cue 반복 시 재사용
+  - ★ **주입 위치는 system 이 아니라 마지막 user 메시지 wire-only suffix** (§1.5; `run_tail_inject.go`). per-turn 변동 콘텐츠를 system 에 두면 vLLM APC 에서 히스토리 전체가 죽는다.
+- **Tier-1 위키** — `gateway-go/internal/pipeline/chat/tier1_cache.go`
+  - 세션 첫 비어있지 않은 결과를 동결 (first-write-wins), `/reset` 에서 clear
+  - FormatTier1 이 라이브 위키를 읽으므로 동결 없이는 mid-session 위키 쓰기마다 system 꼬리가 흔들린다
 
 ### Lazy semantics 가 핵심
 

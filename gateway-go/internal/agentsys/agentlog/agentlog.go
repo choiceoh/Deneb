@@ -25,6 +25,11 @@ const (
 	TypeTurnTool = "turn.tool"
 	TypeRunEnd   = "run.end"
 	TypeRunError = "run.error"
+	// TypeRunCache is an engine-side prefix-cache sample paired to a run via
+	// runId, emitted asynchronously right after run.end (chat's
+	// engine_cache_sample.go). Separate from run.end because the sample is a
+	// best-effort HTTP scrape that must not delay the reply path.
+	TypeRunCache = "run.cache"
 
 	// Standalone behavioral events — not part of an agent run, emitted via
 	// Writer.LogEvent under a system:* session key. They make the background /
@@ -141,6 +146,20 @@ type RunEndData struct {
 type RunErrorData struct {
 	Error   string `json:"error"`
 	Aborted bool   `json:"aborted,omitempty"`
+}
+
+// RunCacheData carries a self-hosted vLLM engine's prefix-cache (APC) counter
+// delta sampled right after a run. The /metrics counters are engine-global
+// and cumulative, so the delta since this gateway's previous sample
+// approximates the run's own share under the single-user, mostly-serial
+// workload; overlapping runs smear into whichever samples next. Token counts:
+// EngineHitTokens/EngineQueryTokens ≈ the window's APC hit rate. This is the
+// only per-turn cache signal on the vLLM path — the engine does not report
+// cached_tokens in per-request usage (run.end's CacheReadTokens stays 0).
+type RunCacheData struct {
+	EngineHitTokens   int64  `json:"engineHitTokens"`
+	EngineQueryTokens int64  `json:"engineQueryTokens"`
+	MetricsURL        string `json:"metricsURL,omitempty"`
 }
 
 // ProactiveRelayData records one proactive delivery decision: what the

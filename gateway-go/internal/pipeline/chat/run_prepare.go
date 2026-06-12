@@ -53,14 +53,22 @@ func prepareContextAndPrompt(
 	var resultMu sync.Mutex
 	var prepWg sync.WaitGroup
 
-	// Tier-1 wiki auto-injection (parallel).
+	// Tier-1 wiki auto-injection (parallel). Frozen per session (tier1_cache.go):
+	// FormatTier1 reads the live store, and mid-session wiki writes would
+	// otherwise shift the system-prompt tail every few turns — invalidating
+	// the vLLM APC prefix for the tool schemas + entire history.
 	prepWg.Add(1)
 	safego.GoWithSlog(logger, "prep-tier1-wiki", func() {
 		defer prepWg.Done()
 		var tier1 string
 		if deps.wikiStore != nil {
-			cfg := wiki.ConfigFromEnv()
-			tier1 = knowledge.FormatTier1(deps.wikiStore, cfg.Tier1MinImportance)
+			if cached, ok := cachedTier1Wiki(params.SessionKey); ok {
+				tier1 = cached
+			} else {
+				cfg := wiki.ConfigFromEnv()
+				tier1 = knowledge.FormatTier1(deps.wikiStore, cfg.Tier1MinImportance)
+				storeTier1Wiki(params.SessionKey, tier1)
+			}
 		}
 		resultMu.Lock()
 		result.Tier1Wiki = tier1
@@ -173,7 +181,15 @@ func prepareContextAndPrompt(
 			return
 		}
 		tz, _ := prompt.LoadCachedTimezone()
+		// Channel feeds the prompt only (runtime line + SupportsRichUI gate).
+		// Runs without a DeliveryContext that piggyback on a client session
+		// (heartbeat, boot) fall back to the session's channel so their
+		// system prompt stays byte-identical to the interactive turns of the
+		// same session — one APC prefix family instead of two.
 		ch := deliveryChannel(params.Delivery)
+		if ch == "" {
+			ch = sessionFallbackChannel(params.SessionKey)
+		}
 		// Build tool defs — filtered if a preset is active.
 		allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
 		toolDefs := toPromptToolDefs(deps.tools.FilteredDefinitions(allowed))
@@ -231,23 +247,22 @@ func prepareContextAndPrompt(
 		}
 
 		spp := prompt.SystemPromptParams{
-			WorkspaceDir:        workspaceDir,
-			ToolDefs:            toolDefs,
-			DeferredTools:       deferredToolInfos,
-			UserTimezone:        tz,
-			ContextFiles:        prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey)),
-			RuntimeInfo:         prompt.BuildDefaultRuntimeInfo(params.Model, deps.callbacks.defaultModel),
-			Channel:             ch,
-			SkillsPrompt:        loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
-			ToolPreset:          sessionToolPreset,
-			CompactionFired:     compactionFired,
-			AutoDeliveredOutput: params.AutoDeliveredOutput,
-			HindsightEnabled:    deps.hindsightClient != nil,
-			CalendarGlance:      calendarGlance,
-			TopicKnowledge:      topicKnowledge,
-			TopicCacheKey:       topicCacheKey,
-			TopicKnowledgePath:  topicKnowledgePath,
-			SupportsRichUI:      richUIChannel(ch),
+			WorkspaceDir:       workspaceDir,
+			ToolDefs:           toolDefs,
+			DeferredTools:      deferredToolInfos,
+			UserTimezone:       tz,
+			ContextFiles:       prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey)),
+			RuntimeInfo:        prompt.BuildDefaultRuntimeInfo(params.Model, deps.callbacks.defaultModel),
+			Channel:            ch,
+			SkillsPrompt:       loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools)),
+			ToolPreset:         sessionToolPreset,
+			CompactionFired:    compactionFired,
+			HindsightEnabled:   deps.hindsightClient != nil,
+			CalendarGlance:     calendarGlance,
+			TopicKnowledge:     topicKnowledge,
+			TopicCacheKey:      topicCacheKey,
+			TopicKnowledgePath: topicKnowledgePath,
+			SupportsRichUI:     richUIChannel(ch),
 		}
 
 		systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
@@ -532,8 +547,11 @@ func assembleMessages(
 	return messages
 }
 
-// finalizePrompt applies budget optimization, tier-1 wiki injection, and
-// coordinator suggestion to the system prompt.
+// finalizePrompt applies budget optimization and tier-1 wiki injection to the
+// system prompt. recallAddition is normally "" — per-turn recall rides the
+// last user message now (run_tail_inject.go) so the system prompt stays a
+// stable vLLM APC prefix; it is only non-empty on the degenerate
+// no-user-message fallback path.
 func finalizePrompt(
 	systemPrompt json.RawMessage,
 	recallAddition string,

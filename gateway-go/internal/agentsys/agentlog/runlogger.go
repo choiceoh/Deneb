@@ -83,6 +83,16 @@ func (rl *RunLogger) LogError(data RunErrorData) {
 	rl.emit(TypeRunError, data)
 }
 
+// LogCache records an engine-side prefix-cache sample for this run. Emitted
+// asynchronously after LogEnd (best-effort scrape), so it may be absent or
+// arrive out of order relative to the next run's start.
+func (rl *RunLogger) LogCache(data RunCacheData) {
+	if rl == nil {
+		return
+	}
+	rl.emit(TypeRunCache, data)
+}
+
 func (rl *RunLogger) emit(entryType string, data any) {
 	raw, err := json.Marshal(data)
 	if err != nil {

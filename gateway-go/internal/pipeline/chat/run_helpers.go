@@ -190,6 +190,19 @@ func deliveryChannel(d *DeliveryContext) string {
 	return d.Channel
 }
 
+// sessionFallbackChannel infers the prompt-facing channel for runs that have
+// no DeliveryContext but piggyback on a client session (heartbeat, boot).
+// Keeping the channel equal to the session's interactive turns keeps the
+// system prompt byte-identical across both run families — one vLLM APC
+// prefix instead of two. Only client sessions map; automation sessions
+// (cron:, system:) keep "" so their prompts are unchanged.
+func sessionFallbackChannel(sessionKey string) string {
+	if strings.HasPrefix(sessionKey, "client:") {
+		return "client"
+	}
+	return ""
+}
+
 // Definitions returns all registered tool definitions (for system prompt assembly).
 func (r *ToolRegistry) Definitions() []ToolDef {
 	r.mu.RLock()
