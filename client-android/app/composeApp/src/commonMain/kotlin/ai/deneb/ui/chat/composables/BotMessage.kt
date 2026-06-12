@@ -61,17 +61,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import deneb.composeapp.generated.resources.Res
-import deneb.composeapp.generated.resources.bot_message_copy_content_description
 import deneb.composeapp.generated.resources.bot_message_regenerate_content_description
 import deneb.composeapp.generated.resources.bot_message_speech_content_description
 import deneb.composeapp.generated.resources.bot_message_thinking_expand_content_description
 import deneb.composeapp.generated.resources.bot_message_thinking_label
-import deneb.composeapp.generated.resources.ic_copy
 import deneb.composeapp.generated.resources.ic_refresh
 import deneb.composeapp.generated.resources.ic_stop
 import deneb.composeapp.generated.resources.ic_volume_up
@@ -236,7 +232,10 @@ internal fun BotMessage(
             }
         }
     }
-    if (message.isEmpty()) return
+    // Body text is selectable (SelectionContainer above), so there is no copy
+    // button — long-press covers it. Without TTS or regenerate the meta row
+    // has nothing to offer; skip it entirely.
+    if (message.isEmpty() || (textToSpeech == null && onRegenerate == null)) return
     Row(Modifier.padding(horizontal = 8.dp)) {
         if (textToSpeech != null) {
             val componentScope = rememberCoroutineScope()
@@ -263,14 +262,6 @@ internal fun BotMessage(
                 },
             )
         }
-        val clipboardManager = LocalClipboardManager.current
-        SmallIconButton(
-            iconResource = Res.drawable.ic_copy,
-            contentDescription = stringResource(Res.string.bot_message_copy_content_description),
-            onClick = {
-                clipboardManager.setText(buildAnnotatedString { append(message) })
-            },
-        )
         if (onRegenerate != null) {
             SmallIconButton(
                 iconResource = Res.drawable.ic_refresh,
