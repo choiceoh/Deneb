@@ -174,6 +174,10 @@ fun DenebRow(
  *
  * [showBack] lets top-level sections drop the back arrow on desktop, where the
  * persistent sidebar already is the navigation — sub-screens keep it everywhere.
+ *
+ * [fillWidth] is for screens embedded as a pane of a wider layout (the desktop
+ * mail split-view): the desktop fixed-width cap would overflow a narrow pane,
+ * so the column fills the parent instead.
  */
 @Composable
 fun DenebScreenScaffold(
@@ -183,6 +187,7 @@ fun DenebScreenScaffold(
     tabBar: (@Composable () -> Unit)? = null,
     maxContentWidth: Dp = DenebMaxContentWidth,
     showBack: Boolean = true,
+    fillWidth: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.background, modifier = modifier.fillMaxSize()) {
@@ -203,7 +208,8 @@ fun DenebScreenScaffold(
                 ) { tabBar() }
             }
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopCenter) {
-                Column(denebContentWidthModifier(maxContentWidth).fillMaxHeight()) {
+                val widthMod = if (fillWidth) Modifier.fillMaxWidth() else denebContentWidthModifier(maxContentWidth)
+                Column(widthMod.fillMaxHeight()) {
                     Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 6.dp)) {
                         if (showBack) {
                             Text(

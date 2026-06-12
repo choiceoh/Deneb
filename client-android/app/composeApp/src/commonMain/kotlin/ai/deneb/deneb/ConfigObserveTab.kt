@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ai.deneb.ui.denebHairline
 import kotlinx.coroutines.launch
 
 // Settings hub "관찰" (Observe) tab: the gateway's own behavior + recent
@@ -62,7 +63,7 @@ internal fun ObserveTab(client: DenebGatewayClient) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
                 }
                 if (b.tools.isNotEmpty()) {
                     item { ObserveSectionHeader("도구 사용") }
@@ -75,7 +76,7 @@ internal fun ObserveTab(client: DenebGatewayClient) {
                                 color = if (t.errors > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
                     }
                 }
             }
@@ -92,7 +93,7 @@ internal fun ObserveTab(client: DenebGatewayClient) {
                         )
                         Text(l.msg, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
-                    HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
                 }
             }
             if ((behavior?.runs ?: 0) == 0 && logs.isEmpty()) {

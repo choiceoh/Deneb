@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ai.deneb.deneb.generated.SkillRow
+import ai.deneb.ui.denebHairline
 import kotlinx.coroutines.launch
 
 // Settings hub "스킬" tab: skills the agent can use (read-only). Mirrors the
@@ -83,7 +84,7 @@ internal fun SkillsTab(client: DenebGatewayClient) {
                         )
                     }
                 }
-                HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
             }
         }
     }

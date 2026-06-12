@@ -1,21 +1,15 @@
 package ai.deneb.deneb
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -25,7 +19,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.denebHairline
 import kotlinx.coroutines.launch
 
 /**
@@ -53,21 +49,14 @@ fun DenebDiaryScreen(
     }
     LaunchedEffect(Unit) { load() }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    DenebScreenScaffold(title = "최근 일기", onBack = onBack, tabBar = navigationTabBar) {
         Column(
-            modifier = Modifier.statusBarsPadding().padding(16.dp).verticalScroll(rememberScrollState()),
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp),
         ) {
-            if (navigationTabBar != null) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
-                Spacer(Modifier.height(12.dp))
-            }
-            TextButton(onClick = onBack) { Text("← 뒤로") }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "최근 일기",
-                style = DenebType.viewTitle,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
             Spacer(Modifier.height(12.dp))
 
             val list = entries
@@ -90,7 +79,7 @@ fun DenebDiaryScreen(
                         }
                         DenebMarkdown(entry.content.ifBlank { "(빈 항목)" })
                         Spacer(Modifier.height(12.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(color = denebHairline())
                         Spacer(Modifier.height(12.dp))
                     }
                     Spacer(Modifier.height(12.dp))

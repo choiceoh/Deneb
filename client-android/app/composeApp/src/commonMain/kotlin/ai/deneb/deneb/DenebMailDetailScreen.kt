@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,10 +56,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ai.deneb.decodeToImageBitmap
 import ai.deneb.getBackgroundDispatcher
+import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.LinkifiedText
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
+import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebShrinkOut
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.MarkdownContent
@@ -143,25 +144,10 @@ fun DenebMailDetailScreen(
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier = Modifier
-                .then(if (panelMode) Modifier else Modifier.statusBarsPadding())
-                // Keep the "ask about this mail" field above the soft keyboard instead
-                // of hiding it behind the keyboard (edge-to-edge: the app owns the IME
-                // inset). Before verticalScroll so it shrinks the scroll viewport.
-                .imePadding()
-                .padding(16.dp).verticalScroll(rememberScrollState()),
-        ) {
-            if (navigationTabBar != null) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
-                Spacer(Modifier.height(12.dp))
-            }
-            if (!panelMode) {
-                TextButton(onClick = onBack) { Text("← 뒤로") }
-                Spacer(Modifier.height(4.dp))
-            }
-
+    // The same detail body renders inside two frames: full-screen it gets the
+    // standard DenebScreenScaffold; as the desktop split-view right pane it keeps
+    // a bare scrolling column (no title/back — the list pane is the navigation).
+    val body: @Composable () -> Unit = body@{
             val mail = detail
             if (mail == null) {
                 if (loadFailed) {
@@ -169,7 +155,7 @@ fun DenebMailDetailScreen(
                 } else {
                     DenebLoading()
                 }
-                return@Column
+                return@body
             }
 
             Text(
@@ -305,7 +291,7 @@ fun DenebMailDetailScreen(
             }
 
             Spacer(Modifier.height(16.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider(color = denebHairline())
             Spacer(Modifier.height(12.dp))
             // The body is plain text (gateway already rendered HTML → text), not
             // markdown — but its URLs must be tappable (auth/CTA mails are the
@@ -436,6 +422,32 @@ fun DenebMailDetailScreen(
                 ) { Text(if (asking) "…" else "질문") }
             }
             Spacer(Modifier.height(24.dp))
+    }
+
+    if (panelMode) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(
+                modifier = Modifier
+                    // Keep the "ask about this mail" field above the soft keyboard
+                    // (edge-to-edge: the app owns the IME inset). Before verticalScroll
+                    // so it shrinks the scroll viewport.
+                    .imePadding()
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) { body() }
+        }
+    } else {
+        DenebScreenScaffold(title = "메일", onBack = onBack, tabBar = navigationTabBar) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp),
+            ) {
+                Spacer(Modifier.height(8.dp))
+                body()
+            }
         }
     }
 }

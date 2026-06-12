@@ -51,6 +51,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupPositionProvider
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.denebPressable
 import ai.deneb.ui.settings.SettingsCard
@@ -231,7 +233,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                 if (i < ModelRole.entries.lastIndex) {
                     HorizontalDivider(
                         Modifier.padding(start = 16.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        color = denebHairline(),
                     )
                 }
             }
@@ -311,7 +313,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                                 Text(
                                     model.note,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    color = denebHint(),
                                 )
                             }
                         }
@@ -354,7 +356,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                     if (mi < groupModels.lastIndex) {
                         HorizontalDivider(
                             Modifier.padding(start = 16.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                            color = denebHairline(),
                         )
                     }
                 }

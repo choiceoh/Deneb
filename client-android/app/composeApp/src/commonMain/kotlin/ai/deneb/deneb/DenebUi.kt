@@ -17,7 +17,7 @@ import ai.deneb.ui.components.SkeletonList
  * Shared loading / error / empty states + helpers for Deneb surface screens.
  *
  * The old DenebSurface / DenebViewHeader / DenebChip(Row) chrome was removed once
- * screens migrated to DenebScreenScaffold + hand-rolled headers (see
+ * every screen migrated onto DenebScreenScaffold (see
  * .claude/rules/native-design-system.md). Only the cross-screen state helpers and
  * humanBytes remain here.
  */

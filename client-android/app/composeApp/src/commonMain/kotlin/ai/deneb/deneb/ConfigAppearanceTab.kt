@@ -33,6 +33,7 @@ import ai.deneb.data.ThemeMode
 import ai.deneb.defaultUiScale
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.settings.SettingsCard
 import kotlin.math.roundToInt
@@ -112,7 +113,7 @@ internal fun AppearanceTab(appSettings: AppSettings) {
                 if (i < options.lastIndex) {
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 16.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant,
+                        color = denebHairline(),
                     )
                 }
             }

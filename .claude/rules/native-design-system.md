@@ -58,9 +58,9 @@ cd client-android/app && ANDROID_HOME=~/android-sdk ./gradlew :composeApp:render
 
 ## 점진 이행 (한 번에 안 함 — 다중 PR)
 
-1. 기반: `DenebScreenScaffold` 확장(`tabBar` 슬롯 등) + 규칙 문서 + **파일럿 1화면**(일정 상세) → PNG 검증.
-2. 상세 화면 팬아웃 (사람·메일상세·크론·토픽문서·위키·카테고리페이지).
-3. 상위 화면 (메일·사람·검색·일정·카테고리, tabBar 모드 + `DenebRow` 리스트).
-4. 드로어 inline 값 → `DenebType` 참조 + 경쟁 헤더 제거 + divider/hint 스윕 + `DenebUi.kt` 닥스트링 수정.
+1. ✅ 기반: `DenebScreenScaffold` 확장(`tabBar` 슬롯 등) + 규칙 문서 + **파일럿 1화면**(일정 상세) → PNG 검증.
+2. ✅ 상세 화면 팬아웃 (사람·메일상세·크론·위키·카테고리페이지·일기).
+3. ✅ 상위 화면 (메일·사람·검색·일정·카테고리·설정·할일·크론). 메일 리스트의 데스크톱 분할 뷰 패널은 scaffold의 `fillWidth` 파라미터로 수용(380dp 패널에서 760dp 캡 대신 부모 채움); 메일상세 우측 패널만 타이틀 없는 bare 프레임 유지(리스트 패널이 곧 내비게이션).
+4. ✅ 드로어 inline 값 → `DenebType` 참조(세션 드로어=`subject`/`rowTitle`/`meta`/`body`, 데스크톱 레일=신설 `railItem` 20sp ExtraLight — Latin 전용이라 Hangul-hairline 예외) + divider 스윕(deneb 화면의 `outlineVariant` 구분선 25곳 → `denebHairline()`) + hint 스윕(수작업 `onSurfaceVariant.copy(alpha=…)` 6곳 → `denebHint()`; **일반 `onSurfaceVariant` 본문색 ~79곳은 의도적으로 유지** — 카드 내부 등 surface-상대 컨텍스트가 섞여 있어 일괄 치환은 라이브 시각 검증 없이는 위험) + `DenebUi.kt` 닥스트링 수정.
 
 착수 전 `grep -r DenebScreenScaffold`로 진행 상황 확인. 관련: [[project_native_design_system_dead]]

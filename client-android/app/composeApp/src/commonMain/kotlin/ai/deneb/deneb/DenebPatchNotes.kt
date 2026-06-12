@@ -21,6 +21,12 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "모든 화면의 머리글이 하나로 — 메일·검색·카테고리·사람·위키·일기·크론·설정도 일정 화면과 같은 뒤로(←) + 큰 제목 프레임을 사용",
+            "메일·카테고리의 다중 선택 하단 바가 그림자 떠 있는 패널 대신 본문과 같은 평면(헤어라인 구분선)으로",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "메일 분석이 업무 채팅에 접힌 카드로 도착 — 제목 한 줄만 보이고, 누르면 그 자리에서 전체 분석이 펼쳐짐 (다른 화면으로 이동하지 않음)",
         ),
     ),

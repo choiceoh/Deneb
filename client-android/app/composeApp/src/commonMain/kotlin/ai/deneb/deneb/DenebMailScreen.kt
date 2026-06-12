@@ -10,19 +10,15 @@ import kotlin.time.Clock
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -55,13 +51,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
-import ai.deneb.ui.denebContentWidthModifier
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebPressable
-import ai.deneb.ui.handCursor
 import ai.deneb.ui.components.DenebSearchField
 import ai.deneb.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
@@ -70,7 +65,7 @@ import kotlinx.coroutines.launch
  * Native inbox triage backed by `miniapp.gmail.list_recent`, in the Deneb idiom:
  * ultralight view title, full-width hairline rules between rows, DenebType roles,
  * and time-bucketed section labels (오늘 / 어제 / 이번 주 / 이전). Pull to refresh;
- * long-press a row (with haptic) to multi-select; a tonal bottom bar runs bulk
+ * long-press a row (with haptic) to multi-select; a flat bottom bar runs bulk
  * read / archive / trash, and "더 보기" pages through nextPageToken. Tapping a
  * row opens the detail screen. The search field runs a full-mailbox Gmail
  * query (IME search submits; clearing it returns to the inbox view). It is the
@@ -139,17 +134,18 @@ fun DenebMailScreen(
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-            val widthMod = if (panelMode) Modifier.fillMaxWidth() else denebContentWidthModifier()
-            Column(widthMod.fillMaxHeight().statusBarsPadding()) {
-            if (navigationTabBar != null) {
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
-            }
+    DenebScreenScaffold(
+        title = if (activeQuery != null) "메일 검색" else "받은 메일",
+        onBack = onBack,
+        tabBar = navigationTabBar,
+        // The desktop split-view always shows this pane, so a back affordance is noise;
+        // fillWidth keeps the column inside the 380dp pane instead of the desktop cap.
+        showBack = !panelMode,
+        fillWidth = panelMode,
+    ) {
             if (selecting) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 14.dp, bottom = 6.dp),
+                    modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -160,31 +156,13 @@ fun DenebMailScreen(
                     )
                     TextButton(onClick = { clearSelection() }) { Text("취소") }
                 }
-            } else {
-                Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 6.dp)) {
-                    if (!panelMode) {
-                        Text(
-                            text = "←",
-                            style = DenebType.subject.copy(fontSize = 22.sp),
-                            color = denebHint(),
-                            modifier = Modifier.clickable(onClick = onBack).handCursor(),
-                        )
-                        Spacer(Modifier.height(2.dp))
-                    }
-                    Text(
-                        if (activeQuery != null) "메일 검색" else "받은 메일",
-                        style = DenebType.viewTitle,
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
-                    if (mail.isNotEmpty()) {
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "${mail.size}통 · 안 읽음 ${mail.count { it.unread }}",
-                            style = DenebType.hint,
-                            color = denebHint(),
-                        )
-                    }
-                }
+            } else if (mail.isNotEmpty()) {
+                Text(
+                    "${mail.size}통 · 안 읽음 ${mail.count { it.unread }}",
+                    style = DenebType.hint,
+                    color = denebHint(),
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 6.dp),
+                )
             }
 
             // The search field lives inside the list as item 0, and the list starts
@@ -298,9 +276,11 @@ fun DenebMailScreen(
             }
 
             if (selecting && selected.isNotEmpty()) {
-                Surface(tonalElevation = 3.dp, shadowElevation = 6.dp) {
+                // Flat action bar in the Deneb idiom: a hairline above, no elevation.
+                Column(Modifier.fillMaxWidth()) {
+                    HorizontalDivider(color = denebHairline())
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text("${selected.size}개 선택", style = MaterialTheme.typography.titleSmall)
@@ -311,8 +291,6 @@ fun DenebMailScreen(
                     }
                 }
             }
-        }
-        }
     }
 }
 
