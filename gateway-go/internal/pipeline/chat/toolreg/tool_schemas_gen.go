@@ -530,7 +530,7 @@ func sessionsSpawnToolSchema() map[string]any {
 			},
 			"tool_preset": map[string]any{
 				"type":        "string",
-				"description": "Tool preset restricting which tools the sub-agent can use. researcher=read-only, implementer=read+write+build, verifier=read+test+exec",
+				"description": "Tool preset restricting which tools the sub-agent can use. researcher=context gathering (read/grep/web/gmail/wiki/knowledge/polaris/contacts/graphify; no shell, no file writes), implementer=researcher+write/edit/exec/process, verifier=read/grep/exec/process only (build/test validation). Omit for the full toolset",
 				"enum":        []string{"researcher", "implementer", "verifier"},
 			},
 		},
