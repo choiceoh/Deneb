@@ -405,6 +405,23 @@ internal fun ChatModeScreen(
                                 }
                             }
 
+                            // Jump-to-report: opening a proactive 업무 card lands on its
+                            // mirrored transcript message instead of the bottom. Declared
+                            // AFTER the bottom-scroll effect above: when one history install
+                            // relaunches both, this one launches last, so its scrollToItem
+                            // preempts the bottom snap and the card position wins. Keyed on
+                            // history too so it retries once the transcript actually
+                            // contains the target (install may land after the request).
+                            val pendingScrollId = uiState.pendingScrollToMessageId
+                            LaunchedEffect(pendingScrollId, uiState.history) {
+                                if (pendingScrollId == null) return@LaunchedEffect
+                                val idx = uiState.history.indexOfFirst { it.id == pendingScrollId }
+                                if (idx >= 0) {
+                                    listState.scrollToItem(idx)
+                                    actions.consumePendingScroll()
+                                }
+                            }
+
                             val lastAssistantId = remember(uiState.history) { uiState.history.lastRenderedAssistant()?.id }
                             // The streaming caret belongs only on the answer currently being written
                             // — not on a finished reply while the NEXT turn is still thinking, when

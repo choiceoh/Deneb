@@ -92,6 +92,15 @@ data class WorkFeedItem(
     val createdAtMs: Long = 0,
 )
 
+/**
+ * Proactive reports (mail analyses, morning letters) are mirrored into the
+ * client:main 업무 transcript by the gateway relay; opening their card jumps
+ * to that mirror. Capture cards have no mirror and keep the dedicated
+ * side-conversation open path.
+ */
+val WorkFeedItem.isProactiveReport: Boolean
+    get() = source == "proactive"
+
 @Immutable
 data class ChatUiState(
     val actions: ChatActions,
@@ -110,6 +119,9 @@ data class ChatUiState(
     val hasUnreadHeartbeat: Boolean = false,
     val hasUnreadWorkReport: Boolean = false,
     val workFeed: ImmutableList<WorkFeedItem> = persistentListOf(),
+    // One-shot scroll target: set when opening a proactive work-feed card jumps
+    // into client:main, consumed by the chat list once the message is visible.
+    val pendingScrollToMessageId: String? = null,
     val smsDrafts: ImmutableList<SmsDraft> = persistentListOf(),
     val snackbarMessage: StringResource? = null,
     val pendingConversationDeletion: String? = null,
@@ -141,6 +153,11 @@ data class History(
     // Preserved from a tool-call assistant turn so it can be round-tripped
     // back to providers (e.g. DeepSeek) that require it on the next request.
     val reasoningContent: String? = null,
+    // Wall-clock of the message as stored in the gateway transcript; 0 when
+    // unknown (live streaming rows, non-gateway repositories). Lets a proactive
+    // work-feed card locate its mirrored transcript message — both are stamped
+    // within the same relay call on the gateway.
+    val timestampMs: Long = 0,
 ) {
     enum class Role {
         USER,
