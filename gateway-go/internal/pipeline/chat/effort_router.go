@@ -91,7 +91,7 @@ const (
 // feed the structured run-complete record (label-pipeline raw data).
 type effortRoute struct {
 	origThinking  *llm.ThinkingConfig
-	origModulator func(turn int, messages []llm.Message) *llm.ThinkingConfig
+	origModulator func(turn int, acts []agent.ToolActivity) *llm.ThinkingConfig
 	reason        string
 	escalated     bool
 }
@@ -265,62 +265,43 @@ func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, messages []llm.
 // (applySamplingParams emits nothing for enabled with BudgetTokens 0 — the
 // dual-mode template then thinks again). Shared by the initial route and the
 // fallback chain (which rebuilds it for the fallback model's own kwarg).
-func effortStepModulator(disabled, origThinking *llm.ThinkingConfig) func(turn int, msgs []llm.Message) *llm.ThinkingConfig {
+func effortStepModulator(disabled, origThinking *llm.ThinkingConfig) func(turn int, acts []agent.ToolActivity) *llm.ThinkingConfig {
 	revert := origThinking
 	if revert == nil {
 		revert = &llm.ThinkingConfig{Type: "enabled"}
 	}
-	// Run-scoping: the executor's messages array is SEEDED with the session
-	// history (prior runs' tool_results included). o_t must reflect THIS
-	// run's observations only, so remember where the run starts and scan
-	// from there — the first modulator call (turn 0) sees the pre-run
-	// length before any new messages are appended.
-	baseLen := -1
-	return func(turn int, msgs []llm.Message) *llm.ThinkingConfig {
-		if baseLen < 0 {
-			baseLen = len(msgs)
-		}
-		return effortStepThinking(turn, msgs, baseLen, disabled, revert)
+	return func(turn int, acts []agent.ToolActivity) *llm.ThinkingConfig {
+		return effortStepThinking(turn, acts, disabled, revert)
 	}
 }
 
 // effortStepThinking is the per-step effort policy for a routed run: stay
 // non-thinking only while the step is early AND this run's observations are
 // light; revert to the session's thinking otherwise (Ares: later steps and
-// heavy observations need effort). Scans only messages appended SINCE the
-// run started (baseLen) — session history is h_t, not o_t. Batch-aware: a
-// parallel tool batch counts its LARGEST result and ANY error, so a
-// [6K-rune error, tiny ok] batch cannot hide behind block order.
-func effortStepThinking(turn int, msgs []llm.Message, baseLen int, disabled, revert *llm.ThinkingConfig) *llm.ThinkingConfig {
+// heavy observations need effort). o_t comes from the executor's ToolActivity
+// records — run-scoped by construction (session history is h_t, not o_t), no
+// message re-parsing. Batch-aware: calls sharing a Turn form one batch, and
+// the LATEST batch counts its LARGEST result while ANY error across the run
+// reverts — a [6K-rune error, tiny ok] batch cannot hide behind call order.
+func effortStepThinking(turn int, acts []agent.ToolActivity, disabled, revert *llm.ThinkingConfig) *llm.ThinkingConfig {
 	if turn == 0 {
 		return disabled
 	}
 	if turn >= effortStepCeilingTurn {
 		return revert
 	}
-	if baseLen < 0 || baseLen > len(msgs) {
-		baseLen = 0
-	}
-	var lastBatchMax, totalSize int
+	var lastTurn, lastBatchMax, totalSize int
 	var anyErr bool
-	for _, m := range msgs[baseLen:] {
-		batchMax, batchHasResult := 0, false
-		for _, b := range llm.ContentToBlocks(m.Content) {
-			if b.Type != "tool_result" {
-				continue
-			}
-			batchHasResult = true
-			n := len([]rune(b.Content))
-			totalSize += n
-			if n > batchMax {
-				batchMax = n
-			}
-			if b.IsError {
-				anyErr = true
-			}
+	for _, a := range acts {
+		totalSize += a.OutputRunes
+		if a.IsError {
+			anyErr = true
 		}
-		if batchHasResult {
-			lastBatchMax = batchMax
+		if a.Turn != lastTurn {
+			lastTurn, lastBatchMax = a.Turn, 0
+		}
+		if a.OutputRunes > lastBatchMax {
+			lastBatchMax = a.OutputRunes
 		}
 	}
 	if anyErr || lastBatchMax > effortObservationRunes || totalSize > effortCumulativeRunes {
