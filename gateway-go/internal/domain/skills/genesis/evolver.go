@@ -252,6 +252,14 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 	if e.selfTest {
 		body, ok, reason := e.selfTestAndMaybeEscalate(ctx, entry, originalContent, candidateBody, stats)
 		if !ok {
+			// Best-effort lifecycle record so rejected attempts are visible in
+			// the native observability feed, not just operator logs.
+			if e.tracker != nil {
+				if logErr := e.tracker.LogEvolveRejected(entry.Skill.Name, reason); logErr != nil {
+					e.logger.Warn("evolver: lifecycle log write failed",
+						"skill", entry.Skill.Name, "error", logErr)
+				}
+			}
 			return &EvolveResult{
 				SkillName: entry.Skill.Name,
 				Evolved:   false,
@@ -279,6 +287,16 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 		"version", newVersion,
 		"description", resp.Changes.Description,
 	)
+
+	// Durable lifecycle record for the evolution timeline. The curator's
+	// MarkSkillPatched only tracks agent-created skills, so without this a
+	// committed evolve of a user-authored skill leaves no queryable trace.
+	if e.tracker != nil {
+		if logErr := e.tracker.LogEvolve(entry.Skill.Name, newVersion, resp.Changes.Description); logErr != nil {
+			e.logger.Warn("evolver: lifecycle log write failed",
+				"skill", entry.Skill.Name, "error", logErr)
+		}
+	}
 
 	return &EvolveResult{
 		SkillName:   entry.Skill.Name,

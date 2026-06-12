@@ -234,6 +234,7 @@ type LifecycleLogEntry struct {
 	Reason      string `json:"reason,omitempty"`
 	Executed    bool   `json:"executed,omitempty"`
 	Result      string `json:"result,omitempty"`
+	NewVersion  string `json:"newVersion,omitempty"`
 }
 
 // genesisLogEntry is the JSONL format for genesis log events.
@@ -299,6 +300,45 @@ func (t *Tracker) LogEvolutionProposal(record EvolutionProposalRecord) error {
 		return err
 	}
 	return nil
+}
+
+// evolveLogEntry is the JSONL format for evolve outcome events. Unlike the
+// curator's MarkSkillPatched (which only tracks agent-created skills), this
+// records every committed or rejected evolve — including ones on user-authored
+// skills — so the native client can render a complete evolution timeline.
+type evolveLogEntry struct {
+	Type        string `json:"type"` // "evolved" | "evolve_rejected"
+	SkillName   string `json:"skillName"`
+	NewVersion  string `json:"newVersion,omitempty"`
+	Description string `json:"description,omitempty"`
+	Reason      string `json:"reason,omitempty"`
+	CreatedAt   int64  `json:"createdAt"`
+}
+
+// LogEvolve records a committed skill evolution (rewrite applied to disk).
+func (t *Tracker) LogEvolve(skillName, newVersion, description string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return jsonlstore.Append(t.logPath, evolveLogEntry{
+		Type:        "evolved",
+		SkillName:   skillName,
+		NewVersion:  newVersion,
+		Description: description,
+		CreatedAt:   time.Now().UnixMilli(),
+	})
+}
+
+// LogEvolveRejected records an evolve attempt whose rewrite the self-test
+// refused to commit (the original skill was kept).
+func (t *Tracker) LogEvolveRejected(skillName, reason string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return jsonlstore.Append(t.logPath, evolveLogEntry{
+		Type:      "evolve_rejected",
+		SkillName: skillName,
+		Reason:    reason,
+		CreatedAt: time.Now().UnixMilli(),
+	})
 }
 
 // RecentLifecycleLog returns recent genesis/proposal events, newest first.
