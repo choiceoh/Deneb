@@ -64,7 +64,7 @@ class AndroidSandboxController : SandboxController {
                 try {
                     _status.value = mapState(state)
                 } catch (e: Throwable) {
-                    android.util.Log.e("SandboxController", "mapState failed for $state", e)
+                    DenebLog.error("SandboxController", "mapState failed for $state", e)
                     _status.value = SandboxStatus(
                         error = true,
                         statusText = "Sandbox status error: ${e.message ?: e::class.simpleName}",
