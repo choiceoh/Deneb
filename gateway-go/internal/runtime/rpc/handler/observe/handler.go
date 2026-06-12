@@ -39,6 +39,13 @@ type Deps struct {
 	Capture  *observe.LogCapture
 	AgentLog func() *agentlog.Writer
 	Logger   *slog.Logger
+
+	// VllmBases lazily lists the deduped base URLs of OpenAI-mode vLLM roles
+	// (lazy for the same reason as AgentLog: the model registry is built
+	// after early registration). observe.health scrapes each endpoint's
+	// /metrics for the engine-level prefix-cache hit rate; nil or an empty
+	// list simply omits the field.
+	VllmBases func() []string
 }
 
 func (d Deps) ring() *observe.Ring {
@@ -165,12 +172,20 @@ func behaviorHandler(deps Deps) rpcutil.HandlerFunc {
 // healthHandler reports the observation plane's own liveness — is capture wired,
 // how full is the ring, how many recent errors, and a 24h behavior glance. This
 // answers "is the thing I observe Deneb through actually working" before an
-// agent trusts the other three methods.
+// agent trusts the other three methods. When an OpenAI-mode vLLM role is
+// configured it also scrapes the engine's /metrics for the prefix-cache hit
+// rate (cumulative since engine boot) — absent on non-vLLM deployments or
+// when the engine is down.
 func healthHandler(deps Deps) rpcutil.HandlerFunc {
-	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		out := map[string]any{
 			"captureEnabled":  deps.ring() != nil,
 			"agentLogEnabled": deps.alog() != nil,
+		}
+		if deps.VllmBases != nil {
+			if stats := observe.FetchVllmPrefixCaches(ctx, deps.VllmBases()); len(stats) > 0 {
+				out["vllmPrefixCache"] = stats
+			}
 		}
 		if ring := deps.ring(); ring != nil {
 			out["ringCapacity"] = ring.Cap()

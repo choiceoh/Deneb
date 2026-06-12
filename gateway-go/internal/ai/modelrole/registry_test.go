@@ -9,6 +9,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
 // TestMain forces the vLLM discovery probe to fail fast so registry tests
@@ -330,5 +332,46 @@ func TestLogModelAlias(t *testing.T) {
 				t.Errorf("logModelAlias(%+v) = %q, want %q", tt.cfg, got, tt.want)
 			}
 		})
+	}
+}
+
+// VllmBaseURLs feeds the observation plane's /metrics scrape: vllm-provider
+// roles only, deduped, main first, anthropic-mode endpoints excluded.
+func TestVllmBaseURLs(t *testing.T) {
+	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
+		MainModel:        "vllm/dsv4-flash",
+		LightweightModel: "vllm/qwen-lite",   // same catalog endpoint → deduped
+		FallbackModel:    "mimo-plan/mimo-x", // not the vllm provider → skipped
+		Providers: map[string]ProviderResolved{
+			"vllm": {BaseURL: "http://10.77.0.2:8000/v1"},
+		},
+	})
+	got := reg.VllmBaseURLs()
+	if len(got) != 1 || got[0] != "http://10.77.0.2:8000/v1" {
+		t.Errorf("VllmBaseURLs = %v, want exactly the deduped catalog URL", got)
+	}
+
+	// No vllm-provider role anywhere → nil (the scrape is silently disabled).
+	noVllm := NewRegistryWithOptions(slog.Default(), RegistryOptions{
+		MainModel:        "zai/a",
+		LightweightModel: "zai/b",
+		FallbackModel:    "zai/c",
+	})
+	if urls := noVllm.VllmBaseURLs(); len(urls) != 0 {
+		t.Errorf("VllmBaseURLs on a vllm-free registry = %v, want none", urls)
+	}
+
+	// A vllm provider entry forced to anthropic mode (some proxy) is not a
+	// scrape target — /metrics is the OpenAI-server surface.
+	proxied := NewRegistryWithOptions(slog.Default(), RegistryOptions{
+		MainModel:        "vllm/x",
+		LightweightModel: "zai/b",
+		FallbackModel:    "zai/c",
+		Providers: map[string]ProviderResolved{
+			"vllm": {BaseURL: "http://10.77.0.3:8000/v1", APIMode: llm.APIModeAnthropic},
+		},
+	})
+	if urls := proxied.VllmBaseURLs(); len(urls) != 0 {
+		t.Errorf("VllmBaseURLs with anthropic-mode vllm provider = %v, want none", urls)
 	}
 }

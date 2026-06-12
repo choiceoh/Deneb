@@ -140,9 +140,9 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "observe",
-		Description: "Observe your OWN runtime via the in-process observation plane: action=turn (runId → a past run's tokens/tools/cache + its captured logs), action=logs (recent log ring; filter by runId/session/level/contains), action=behavior (cross-session tool usage / proactive funnel / background-job health over N days). Use it to diagnose your own slow or failing turns.",
+		Description: "Observe your OWN runtime via the in-process observation plane: action=turn (runId → a past run's tokens/tools/cache + its captured logs), action=logs (recent log ring; filter by runId/session/level/contains), action=behavior (cross-session tool usage / proactive funnel / background-job health over N days, plus the local vLLM engine's prefix-cache hit rate). Use it to diagnose your own slow or failing turns.",
 		InputSchema: observeToolSchema(),
-		Fn:          tools.ToolObserve(deps.LogCapture, deps.AgentLog),
+		Fn:          tools.ToolObserve(deps.LogCapture, deps.AgentLog, deps.VllmBaseURLs),
 		Deferred:    true,
 	})
 

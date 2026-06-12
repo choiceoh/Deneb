@@ -33,6 +33,11 @@ type CoreToolDeps struct {
 	LogCapture     *observe.LogCapture   // optional; in-memory log ring for the observe tool
 	SpilloverStore *agent.SpilloverStore // optional; spills large tool results to disk
 
+	// VllmBaseURLs lazily lists the deduped base URLs of OpenAI-mode vLLM
+	// roles; the observe tool scrapes each endpoint's /metrics for the
+	// engine-level prefix-cache hit rate. Nil disables the scrape.
+	VllmBaseURLs func() []string
+
 	// SessionMemoryFn returns session memory content for a given session key.
 	// Nil means no session memory is available.
 	SessionMemoryFn func(sessionKey string) string
