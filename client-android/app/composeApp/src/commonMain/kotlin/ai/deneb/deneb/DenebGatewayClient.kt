@@ -542,6 +542,37 @@ class DenebGatewayClient(
     }
 
     /**
+     * Open the client:main 업무 home positioned at the transcript message that
+     * mirrors a proactive work-feed card, with its collapsed accordion rewritten
+     * to open expanded — so tapping the card reads the report in the 업무 chat
+     * instead of spawning a side-conversation (#2110 behavior, kept for capture
+     * cards whose results have no transcript mirror). Returns the History id the
+     * chat list should scroll to, or null when the mirror can't be located (the
+     * caller then simply lands at the bottom, plain [openWorkTopic] behavior).
+     * Epoch-guarded like [loadTranscriptGuarded] so a concurrent send isn't
+     * clobbered.
+     */
+    suspend fun openWorkTopicAtItem(item: WorkFeedItem): String? {
+        switchSession("client:main")
+        syncNativeStateAsync()
+        val startEpoch = historyGate.withLock { historyEpoch }
+        val transcript = fetchTranscript("client:main")
+        val idx = indexOfMirroredReport(transcript, item.createdAtMs)
+        val resolved = if (idx >= 0) {
+            transcript.mapIndexed { i, h ->
+                if (i == idx) h.copy(content = expandCollapsedReportFence(h.content)) else h
+            }
+        } else {
+            transcript
+        }
+        historyGate.withLock {
+            if (historyEpoch != startEpoch) return null
+            _chatHistory.value = resolved
+        }
+        return if (idx >= 0) resolved[idx].id else null
+    }
+
+    /**
      * Cold-start home = the client:main 업무 topic, where proactive reports
      * (morning-letter, mail-analysis) are mirrored. Open it so those reports are
      * visible by default instead of an empty chat. base.restoreCurrentConversation
@@ -1112,7 +1143,7 @@ class DenebGatewayClient(
             if (m.content.isBlank() && attachments.isEmpty()) {
                 null
             } else {
-                History(role = role, content = m.content, attachments = attachments)
+                History(role = role, content = m.content, attachments = attachments, timestampMs = m.timestampMs)
             }
         }
     }

@@ -67,6 +67,7 @@ class ChatViewModel(
         clearUnreadWorkReport = ::clearUnreadWorkReport,
         openWorkReport = ::openWorkReport,
         openWorkFeedItem = ::openWorkFeedItem,
+        consumePendingScroll = ::consumePendingScroll,
         runWorkFeedAction = ::runWorkFeedAction,
         clearSnackbar = ::clearSnackbar,
         undoDeleteConversation = ::undoDeleteConversation,
@@ -472,12 +473,32 @@ class ChatViewModel(
 
     private fun openWorkFeedItem(id: String) {
         viewModelScope.launch(backgroundDispatcher) {
-            val prompt = (dataRepository as? DenebGatewayClient)?.openWorkFeedItem(id)
+            val gateway = dataRepository as? DenebGatewayClient
+            val item = _state.value.workFeed.firstOrNull { it.id == id }
+            // A proactive report is already mirrored into client:main as a
+            // collapsed card — jump there (expanded) instead of spawning a
+            // side-conversation whose agent turn re-analyzes what's written.
+            // Captures keep the #2110 side-conversation path below.
+            if (gateway != null && item != null && item.isProactiveReport) {
+                val messageId = gateway.openWorkTopicAtItem(item)
+                dataRepository.clearUnreadWorkReport()
+                if (messageId != null) {
+                    _state.update { it.copy(pendingScrollToMessageId = messageId) }
+                }
+                return@launch
+            }
+            val prompt = gateway?.openWorkFeedItem(id)
             dataRepository.clearUnreadWorkReport()
             if (!prompt.isNullOrBlank()) {
                 askInternal(prompt, null)
             }
         }
+    }
+
+    // The chat list calls this once it has scrolled to the pending target, so a
+    // later transcript reload doesn't re-yank the viewport back to the card.
+    private fun consumePendingScroll() {
+        _state.update { it.copy(pendingScrollToMessageId = null) }
     }
 
     private fun runWorkFeedAction(itemId: String, actionId: String) {
