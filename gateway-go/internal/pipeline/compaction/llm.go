@@ -214,6 +214,18 @@ func summarizeInChunks(
 
 	for i, chunk := range chunks {
 		go func(idx int, msgs []llm.Message) {
+			// A panic here must still deliver a result: the collector below
+			// reads exactly len(chunks) results, so a dead goroutine would
+			// wedge the whole compaction pass forever (and kill the process
+			// without the recover).
+			defer func() {
+				if r := recover(); r != nil {
+					if logger != nil {
+						logger.Error("panic in chunk summarization", "chunk", idx, "panic", r)
+					}
+					resultCh <- chunkResult{idx: idx, err: fmt.Errorf("chunk summarizer panic: %v", r)}
+				}
+			}()
 			text := serializeMessages(msgs)
 			if EstimateTokens(text) < 100 {
 				resultCh <- chunkResult{idx: idx}

@@ -14,6 +14,18 @@ import (
 // ctxCache, sessionSnapshots, cachedTimezone, cachedHostname).
 //
 // Package-level var `Cache` is the singleton; all prompt functions use it.
+//
+// Lock hierarchy (acquire in this order; never reverse):
+//
+//	ctxMu  →  sessMu
+//	staticMu  (independent — never held together with ctxMu or sessMu)
+//
+// ctxMu → sessMu: LoadContextFiles (context_files.go) holds ctxMu via
+// LockCtx/UnlockCtx and calls SetSessionSnapshot (sessMu) to freeze the
+// loaded files for the session. sessMu sections are leaf-level map accesses
+// that never acquire ctxMu. Reset takes each lock strictly sequentially.
+// ContextFiles/SetContextFiles assume the caller already holds ctxMu (see
+// LockCtx/UnlockCtx); they must not be called with sessMu held.
 type PromptCache struct {
 	// --- Static prompt block (keyed on sorted tool name list) ---
 	staticMu     sync.RWMutex

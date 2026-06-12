@@ -1,11 +1,13 @@
 package typing
 
 import (
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
+	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
 // TypingController manages typing indicator lifecycle for a reply.
@@ -99,8 +101,9 @@ func (tc *TypingController) StartTypingLoop() {
 		tc.onStart()
 	}
 
-	// Keepalive loop with TTL expiry.
-	go func() {
+	// Keepalive loop with TTL expiry. safego: a panic in the onStart
+	// callback (channel-side typing sender) must not kill the process.
+	safego.GoWithSlog(slog.Default(), "typing-keepalive", func() {
 		ticker := time.NewTicker(time.Duration(tc.intervalMs) * time.Millisecond)
 		defer ticker.Stop()
 		for {
@@ -126,7 +129,7 @@ func (tc *TypingController) StartTypingLoop() {
 				}
 			}
 		}
-	}()
+	})
 }
 
 // StartTypingOnText starts typing only if the text is not a silent reply token.

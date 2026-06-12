@@ -55,6 +55,16 @@ const (
 )
 
 // JobTracker manages agent job tracking, caching, and deduplication.
+//
+// Lock hierarchy (acquire in this order; never reverse):
+//
+//	mu  →  subMu
+//
+// OnLifecycleEvent holds mu for the whole event (defer Unlock) and ends by
+// calling notifySubscribers, which takes subMu.RLock — the only nesting.
+// This is safe because the channel send under subMu is non-blocking
+// (select/default) and subMu sections never acquire mu: WaitForJob releases
+// subMu before calling CachedSnapshot (which locks mu).
 type JobTracker struct {
 	mu        sync.Mutex
 	cache     map[string]*RunSnapshot

@@ -63,6 +63,20 @@ const maxBufferedBytes int64 = 50 * 1024 * 1024 // 50 MB
 type Tap func(event string, payload any)
 
 // Broadcaster distributes events to subscribed WebSocket clients.
+//
+// Lock hierarchy (acquire in this order; never reverse):
+//
+//	mu               (independent — never held together with any other lock)
+//	tapMu            (independent — never held together with any other lock)
+//	sessionSubMu     (independent — never held together with any other lock)
+//	toolRecipientMu  (independent — never held together with any other lock)
+//
+// All four locks are fully independent: every method holds at most one of
+// them at a time. Methods that touch several (Unsubscribe, BroadcastWithOpts)
+// take and release them strictly sequentially. Subscriber sends and tap
+// callbacks always run with no lock held — snapshotSubscribers and
+// dispatchTaps copy under the lock, release, then invoke (concurrency.md
+// rule 3), so a tap or SendEvent may safely call back into the broadcaster.
 type Broadcaster struct {
 	mu          sync.RWMutex
 	subscribers map[string]subscriberEntry

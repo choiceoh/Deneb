@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
+	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
 // Spillover thresholds.
@@ -240,7 +241,9 @@ func (s *SpilloverStore) RemoveSession(sessionKey string) error {
 // StartCleanup runs a background goroutine that removes expired spill files
 // every cleanupInterval.  It stops when ctx is cancelled.
 func (s *SpilloverStore) StartCleanup(ctx context.Context) {
-	go func() {
+	// safego: a panic in cleanExpired (filesystem edge cases) must not kill
+	// the process; the loop exits via ctx on shutdown.
+	safego.GoWithSlog(slog.Default(), "spillover-cleanup", func() {
 		ticker := time.NewTicker(cleanupInterval)
 		defer ticker.Stop()
 		for {
@@ -251,7 +254,7 @@ func (s *SpilloverStore) StartCleanup(ctx context.Context) {
 				s.cleanExpired()
 			}
 		}
-	}()
+	})
 }
 
 // cleanExpired removes entries older than SpilloverTTL.

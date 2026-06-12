@@ -141,6 +141,18 @@ func resolveBriefingCalendarClient() (briefingCalendarClient, error) {
 	return mergedBriefingSource{google: google, local: local}, nil
 }
 
+// calendarBriefingService is the poll-and-push service described in the file
+// header comment above.
+//
+// Lock hierarchy (acquire in this order; never reverse):
+//
+//	sentMu            (independent — never held together with resolveFailureMu)
+//	resolveFailureMu  (independent — never held together with sentMu)
+//
+// Both locks guard disjoint leaf state (dedup map vs. log-throttle flag) and
+// are only taken in short leaf sections: sentMu in alreadySent/markSent/prune,
+// resolveFailureMu in logResolveFailure/clearResolveFailure. tick() calls
+// these helpers strictly sequentially, never nested.
 type calendarBriefingService struct {
 	// deliver sends a pre-formatted briefing body to the native client (업무
 	// transcript + live push). Returns (delivered, err); (false, nil) means
