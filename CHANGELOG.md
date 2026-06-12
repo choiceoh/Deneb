@@ -1,5 +1,23 @@
 # Changelog
 
+## [4.25.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.24.0...deneb-v4.25.0) (2026-06-12)
+
+
+### ✨ Features
+
+* **llm:** OpenAI-path hardening — cached-token usage, premature-end tool flush, Complete guard, mid-stream retry ([#2270](https://github.com/choiceoh/Deneb/issues/2270)) ([061b097](https://github.com/choiceoh/Deneb/commit/061b097bfa2a36672872d928ad2f781ff2b25086))
+* **native:** open proactive 업무 cards at their mirrored client:main message ([#2266](https://github.com/choiceoh/Deneb/issues/2266)) ([7723447](https://github.com/choiceoh/Deneb/commit/7723447692bd73489b0a9b0d71374d093f8965ac))
+
+
+### 🐛 Bug Fixes
+
+* **client-android:** route common-code failures through a real multiplatform logger ([#2265](https://github.com/choiceoh/Deneb/issues/2265)) ([9c95e51](https://github.com/choiceoh/Deneb/commit/9c95e516655fa778cf8a69c76ed9a59df4546b5d))
+
+
+### 🔧 Internal
+
+* **native:** complete the DenebScreenScaffold design-system rollout (phases 2–4) ([#2261](https://github.com/choiceoh/Deneb/issues/2261)) ([66c222f](https://github.com/choiceoh/Deneb/commit/66c222f254af21c28cd83cb9be77e96057137217))
+
 ## [4.24.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.23.0...deneb-v4.24.0) (2026-06-12)
 
 
