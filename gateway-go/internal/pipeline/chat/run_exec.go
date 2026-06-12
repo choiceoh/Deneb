@@ -208,7 +208,7 @@ func executeAgentRun(
 	// dual-mode models (capability-gated, provider-aware) skip the thinking
 	// phase (KV-prefix-safe). Routed runs may escalate back to thinking in
 	// runAgentWithFallback, which needs the route to restore the original.
-	effortRt := applyEffortRouter(&cfg, params, modelCapability(deps, providerID, model).ThinkingToggleKwarg, logger)
+	effortRt, effortDecision := applyEffortRouter(&cfg, params, modelCapability(deps, providerID, model).ThinkingToggleKwarg, logger)
 
 	// BeforeAPICall hook chain: composed via agent.ComposeBeforeAPICall so
 	// features can register additional pre-LLM transforms without clobbering
@@ -284,6 +284,19 @@ func executeAgentRun(
 		}
 	}
 	toolHist := formatToolHist(agentResult.ToolCounts)
+	// Structured effort-router record: one line per eligible run with the
+	// decision AND the outcome — the raw data for the RouterBench-style
+	// acceptance comparison and a future learned router (label pipeline).
+	if effortDecision != "" {
+		logger.Info("effort router: run complete",
+			"decision", effortDecision,
+			"escalated", effortRt != nil && effortRt.escalated,
+			"model", actualModel,
+			"turns", agentResult.Turns,
+			"outputTokens", agentResult.Usage.OutputTokens,
+			"agentMs", agentMs,
+			"stopReason", agentResult.StopReason)
+	}
 	logger.Info("pipeline: agent loop complete",
 		"agentMs", agentMs,
 		"totalMs", totalMs,

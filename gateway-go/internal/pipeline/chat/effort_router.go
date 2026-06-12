@@ -47,17 +47,47 @@ func envFlagEnabled(name string) bool {
 	}
 }
 
-// adaptiveEffortEnabled reports whether the effort router is opted in.
-func adaptiveEffortEnabled() bool {
-	return envFlagEnabled("DENEB_ADAPTIVE_EFFORT")
+// Effort-router operating modes (DENEB_ADAPTIVE_EFFORT).
+const (
+	effortModeOff      = ""         // default: router inert
+	effortModeAdaptive = "adaptive" // any truthy value: heuristic routing
+	effortModeForce    = "force"    // eval-only: route every eligible run (always-non baseline)
+)
+
+// effortMode resolves the router's operating mode from the env opt-in.
+// "force" exists for the acceptance harness (scripts/dev/effort-eval.sh): a
+// RouterBench-style comparison needs the always-non fixed policy as one of
+// the interpolation endpoints. Never use force in production.
+func effortMode() string {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("DENEB_ADAPTIVE_EFFORT")))
+	switch v {
+	case "force":
+		return effortModeForce
+	case "1", "true", "on", "yes", "adaptive":
+		return effortModeAdaptive
+	default:
+		return effortModeOff
+	}
 }
+
+// effortStepRevertTurn is the agent-loop turn index from which a routed run
+// gets its thinking restored per turn. Ares (arXiv:2603.07915) observes that
+// effort needs GROW with step index (accumulated context); a per-run
+// non-thinking decision would invert that for long tool chains. Turns 0..N-1
+// run non-thinking (the routed simple reply, typically terminal at turn 0,
+// plus one tool digest); turn N+ gets the session's thinking back via the
+// ThinkingModulator — request-level, so flipping per turn is KV-prefix-safe.
+const effortStepRevertTurn = 2
 
 // effortRoute records what the router replaced so escalation and the model
 // fallback chain can restore the session's original thinking configuration
-// with plain field assignment (no shared state to strip).
+// with plain field assignment (no shared state to strip). Reason/escalated
+// feed the structured run-complete record (label-pipeline raw data).
 type effortRoute struct {
 	origThinking  *llm.ThinkingConfig
 	origModulator func(turn int) *llm.ThinkingConfig
+	reason        string
+	escalated     bool
 }
 
 // effortHardSignals are substrings that mark a message as needing the
@@ -120,24 +150,48 @@ func decideThinkingOff(params RunParams) (bool, string) {
 // applyEffortRouter swaps the run's thinking config to "disabled" when the
 // resolved model supports a template thinking toggle and the user input is
 // obviously simple. Must run AFTER model resolution (buildAgentConfig leaves
-// cfg.Model empty). Returns the route to restore on escalation/fallback, or
-// nil when the run was not routed.
-func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, toggleKwarg string, logger *slog.Logger) *effortRoute {
-	if !adaptiveEffortEnabled() || toggleKwarg == "" {
-		return nil
+// cfg.Model empty). Returns the route to restore on escalation/fallback (nil
+// when not routed) plus the decision string ("routed:…"/"kept:…", "" when the
+// router gate is closed) for the structured run-complete record.
+func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, toggleKwarg string, logger *slog.Logger) (*effortRoute, string) {
+	mode := effortMode()
+	if mode == effortModeOff || toggleKwarg == "" {
+		return nil, ""
 	}
 	off, reason := decideThinkingOff(params)
-	if !off {
-		return nil
+	if mode == effortModeForce {
+		off, reason = true, "forced"
 	}
-	route := &effortRoute{origThinking: cfg.Thinking, origModulator: cfg.ThinkingModulator}
-	cfg.Thinking = &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: toggleKwarg}
-	cfg.ThinkingModulator = nil
+	if !off {
+		return nil, "kept:" + reason
+	}
+	route := &effortRoute{
+		origThinking:  cfg.Thinking,
+		origModulator: cfg.ThinkingModulator,
+		reason:        reason,
+	}
+	disabled := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: toggleKwarg}
+	cfg.Thinking = disabled
+	// Per-step revert (Ares): keep early turns non-thinking, restore the
+	// session's thinking from effortStepRevertTurn on. When the session had
+	// no explicit thinking config, an empty "enabled" sentinel restores the
+	// PROVIDER DEFAULT (applySamplingParams emits nothing for enabled with
+	// BudgetTokens 0 — the dual-mode template then thinks again).
+	revert := route.origThinking
+	if revert == nil {
+		revert = &llm.ThinkingConfig{Type: "enabled"}
+	}
+	cfg.ThinkingModulator = func(turn int) *llm.ThinkingConfig {
+		if turn < effortStepRevertTurn {
+			return disabled
+		}
+		return revert
+	}
 	if logger != nil {
 		logger.Info("effort router: thinking off for this run",
-			"reason", reason, "model", cfg.Model)
+			"reason", reason, "model", cfg.Model, "revertTurn", effortStepRevertTurn)
 	}
-	return route
+	return route, "routed:" + reason
 }
 
 // effortRouted reports whether the config currently carries the router's

@@ -51,9 +51,9 @@ func TestApplyEffortRouter_RouteAndRestore(t *testing.T) {
 	origMod := func(int) *llm.ThinkingConfig { return nil }
 	cfg := agent.AgentConfig{Model: "deepseek-v4-flash", Thinking: orig, ThinkingModulator: origMod}
 
-	route := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, "thinking", nil)
-	if route == nil {
-		t.Fatal("simple message on toggle model must route")
+	route, decision := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, "thinking", nil)
+	if route == nil || decision != "routed:short-conversational" {
+		t.Fatalf("simple message on toggle model must route (decision=%q)", decision)
 	}
 	if !effortRouted(&cfg) {
 		t.Fatal("routed config must report effortRouted")
@@ -61,8 +61,17 @@ func TestApplyEffortRouter_RouteAndRestore(t *testing.T) {
 	if cfg.Thinking.Type != "disabled" || cfg.Thinking.TemplateKwarg != "thinking" {
 		t.Fatalf("Thinking = %+v, want disabled+kwarg", cfg.Thinking)
 	}
-	if cfg.ThinkingModulator != nil {
-		t.Fatal("modulator must be cleared for routed runs")
+	// Per-step revert (Ares): early turns stay disabled, later turns get
+	// thinking back. With no session thinking, the revert sentinel is the
+	// provider-default "enabled".
+	if cfg.ThinkingModulator == nil {
+		t.Fatal("routed runs must install the step-revert modulator")
+	}
+	if got := cfg.ThinkingModulator(0); got == nil || got.Type != "disabled" {
+		t.Fatalf("turn 0 must stay disabled, got %+v", got)
+	}
+	if got := cfg.ThinkingModulator(effortStepRevertTurn); got == nil || got.Type != "enabled" || got.BudgetTokens != 4096 {
+		t.Fatalf("turn %d must revert to the session thinking, got %+v", effortStepRevertTurn, got)
 	}
 
 	restoreEffort(&cfg, route)
@@ -82,18 +91,23 @@ func TestApplyEffortRouter_RouteAndRestore(t *testing.T) {
 func TestApplyEffortRouter_Gates(t *testing.T) {
 	t.Setenv("DENEB_ADAPTIVE_EFFORT", "")
 	cfg := agent.AgentConfig{Model: "deepseek-v4-flash"}
-	if applyEffortRouter(&cfg, RunParams{Message: "안녕"}, "thinking", nil) != nil {
-		t.Error("flag off must not route")
+	if r, d := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, "thinking", nil); r != nil || d != "" {
+		t.Error("flag off must not route and reports no decision")
 	}
 	t.Setenv("DENEB_ADAPTIVE_EFFORT", "1")
-	if applyEffortRouter(&cfg, RunParams{Message: "안녕"}, "", nil) != nil {
+	if r, d := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, "", nil); r != nil || d != "" {
 		t.Error("empty capability kwarg must not route")
 	}
-	if applyEffortRouter(&cfg, RunParams{Message: "이 코드 분석해줘"}, "thinking", nil) != nil {
-		t.Error("hard message must not route")
+	if r, d := applyEffortRouter(&cfg, RunParams{Message: "이 코드 분석해줘"}, "thinking", nil); r != nil || d != "kept:hard-signal:분석" {
+		t.Errorf("hard message must report kept decision, got %q", d)
 	}
 	if cfg.Thinking != nil {
 		t.Error("no-route paths must leave Thinking untouched")
+	}
+	// force mode (eval baseline): routes even hard messages.
+	t.Setenv("DENEB_ADAPTIVE_EFFORT", "force")
+	if r, d := applyEffortRouter(&cfg, RunParams{Message: "이 코드 분석해줘"}, "thinking", nil); r == nil || d != "routed:forced" {
+		t.Errorf("force mode must route everything eligible, got %q", d)
 	}
 }
 
@@ -127,18 +141,16 @@ func TestEscalatableEffortFailure(t *testing.T) {
 	}
 }
 
-// TestEnvFlagEnabled checks the shared env opt-in parsing.
-func TestEnvFlagEnabled(t *testing.T) {
-	t.Setenv("DENEB_ADAPTIVE_EFFORT", "")
-	if adaptiveEffortEnabled() {
-		t.Error("default (unset) must be disabled")
-	}
-	t.Setenv("DENEB_ADAPTIVE_EFFORT", "1")
-	if !adaptiveEffortEnabled() {
-		t.Error("'1' must enable")
-	}
-	t.Setenv("DENEB_ADAPTIVE_EFFORT", "off")
-	if adaptiveEffortEnabled() {
-		t.Error("'off' must disable")
+// TestEffortMode checks the env mode parsing (off / adaptive / force).
+func TestEffortMode(t *testing.T) {
+	for v, want := range map[string]string{
+		"": effortModeOff, "off": effortModeOff, "0": effortModeOff,
+		"1": effortModeAdaptive, "true": effortModeAdaptive, "adaptive": effortModeAdaptive,
+		"force": effortModeForce,
+	} {
+		t.Setenv("DENEB_ADAPTIVE_EFFORT", v)
+		if got := effortMode(); got != want {
+			t.Errorf("effortMode(%q) = %q, want %q", v, got, want)
+		}
 	}
 }

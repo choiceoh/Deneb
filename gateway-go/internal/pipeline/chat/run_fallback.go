@@ -157,7 +157,8 @@ func runAgentWithFallback(
 			logger.Info("effort router: non-thinking run failed; retrying with thinking restored",
 				"model", cfg.Model, "error", runErr)
 			restoreEffort(&cfg, route)
-			route = nil // one shot; cfg keeps the restored thinking from here on
+			route.escalated = true // visible to the caller's run-complete record
+			route = nil            // one shot; cfg keeps the restored thinking from here on
 			escCtx, escCancel := context.WithTimeout(ctx, stallFallbackBudget)
 			if ctx.Err() != nil {
 				escCancel()
@@ -340,6 +341,10 @@ func runAgentWithFallback(
 					if route != nil && effortRouted(&cfg) {
 						if kw := modelCapability(deps, fbCfg.ProviderID, fbCfg.Model).ThinkingToggleKwarg; kw != "" {
 							agentCfg.Thinking = &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: kw}
+							// The step-revert modulator closes over the ORIGINAL
+							// model's kwarg — drop it rather than leak the wrong
+							// spelling to a different template.
+							agentCfg.ThinkingModulator = nil
 						} else {
 							restoreEffort(&agentCfg, route)
 						}
