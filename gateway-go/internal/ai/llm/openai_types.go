@@ -21,6 +21,11 @@ type openAIRequest struct {
 	ToolChoice          any               `json:"tool_choice,omitempty"`
 	ResponseFormat      *ResponseFormat   `json:"response_format,omitempty"`
 	ReasoningEffort     string            `json:"reasoning_effort,omitempty"` // "low", "medium", "high"
+	// ChatTemplateKwargs forwards per-request chat-template variables to a
+	// vLLM server (e.g. {"thinking": false} to disable a dual-mode model's
+	// thinking phase). Only set when ThinkingConfig.TemplateKwarg names the
+	// model's toggle; other OpenAI-compatible servers never see the field.
+	ChatTemplateKwargs map[string]any `json:"chat_template_kwargs,omitempty"`
 }
 
 // openAIStreamOpts controls streaming behavior.

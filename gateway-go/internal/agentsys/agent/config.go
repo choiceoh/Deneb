@@ -63,12 +63,6 @@ type AgentConfig struct {
 	// NOT affect prompt cache (see .claude/rules/prompt-cache.md).
 	ThinkingModulator func(turn int) *llm.ThinkingConfig
 
-	// ExtraBody holds additional top-level fields merged into every turn's
-	// OpenAI-format request body (e.g. vLLM chat_template_kwargs set by the
-	// adaptive effort router). Request-level like Thinking, so varying it per
-	// run does NOT affect the prompt/KV prefix cache.
-	ExtraBody map[string]any
-
 	// FinalizeGate, when non-nil, is consulted as the model attempts to
 	// finish (end_turn / no tool calls). A non-empty return blocks that
 	// finish: the executor appends the assistant message, injects the

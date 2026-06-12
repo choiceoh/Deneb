@@ -77,6 +77,7 @@ func runAgentWithFallback(
 	deps runDeps,
 	providerID string,
 	initialRole modelrole.Role,
+	route *effortRoute,
 	hooks agent.StreamHooks,
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,
@@ -137,14 +138,33 @@ func runAgentWithFallback(
 			runErr = errModelStalled
 			stalledResult = agentResult
 		}
-		// Effort-router escalation: a thinking-disabled run that stalled gets
-		// one retry with thinking restored before the model fallback chain
-		// fires. The prefix is KV-cached, so the retry re-enters cheaply.
-		if errors.Is(runErr, errModelStalled) && effortRouterApplied(&cfg) {
-			logger.Info("effort router: non-thinking run stalled; escalating to thinking",
-				"model", cfg.Model)
-			stripEffortOverride(&cfg)
-			agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+		// Effort-router escalation: a routed (thinking-disabled) run that
+		// failed in a router-attributable shape — stall, silently idle
+		// stream, or degenerate empty success — gets ONE thinking-restored
+		// retry on the same model before the fallback chain. The prefix is
+		// KV-cached so re-entry is cheap. Runs that already executed tools
+		// are excluded: re-running them would double tool side effects
+		// (message.send, exec); those flow to the fallback chain under its
+		// pre-existing re-run semantics. The retry budget mirrors the stall
+		// fallback: a stall surfaces with the parent ctx spent (fresh
+		// bounded budget via WithoutCancel), while a live parent stays
+		// cancelable but bounded so a wedged server cannot double the
+		// turn's wait.
+		if route != nil && effortRouted(&cfg) &&
+			escalatableEffortFailure(runErr, agentResult) &&
+			!resultRanTools(agentResult) &&
+			(ctx.Err() == nil || errors.Is(runErr, errModelStalled)) {
+			logger.Info("effort router: non-thinking run failed; retrying with thinking restored",
+				"model", cfg.Model, "error", runErr)
+			restoreEffort(&cfg, route)
+			route = nil // one shot; cfg keeps the restored thinking from here on
+			escCtx, escCancel := context.WithTimeout(ctx, stallFallbackBudget)
+			if ctx.Err() != nil {
+				escCancel()
+				escCtx, escCancel = context.WithTimeout(context.WithoutCancel(ctx), stallFallbackBudget)
+			}
+			agentResult, runErr = agent.RunAgent(escCtx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+			escCancel()
 			if runErr == nil && isStalledResult(agentResult) {
 				runErr = errModelStalled
 				stalledResult = agentResult
@@ -310,11 +330,19 @@ func runAgentWithFallback(
 						"error", runErr)
 					agentCfg := cfg
 					agentCfg.Model = fbCfg.Model
-					// The effort-router override is model-specific (vLLM
-					// chat_template_kwargs): never carry it to a fallback
-					// model whose server/template may reject or misread it.
-					if !supportsThinkingToggle(agentCfg.Model) {
-						stripEffortOverride(&agentCfg)
+					// Routed runs: carry "disabled" only to fallback models
+					// whose template supports the toggle (provider-aware
+					// capability lookup); every other fallback gets the
+					// session's ORIGINAL thinking back — never a bare nil
+					// that would erase the session's reasoning config
+					// (GLM leaks chain-of-thought without it; step3p7
+					// truncates, see applySamplingParams).
+					if route != nil && effortRouted(&cfg) {
+						if kw := modelCapability(deps, fbCfg.ProviderID, fbCfg.Model).ThinkingToggleKwarg; kw != "" {
+							agentCfg.Thinking = &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: kw}
+						} else {
+							restoreEffort(&agentCfg, route)
+						}
 					}
 					agentResult, runErr = agent.RunAgent(fbCtx, agentCfg, messages, fbClient, deps.tools, hooks, logger, runLog)
 					// A stalled fallback (empty timeout) is also a failure — advance

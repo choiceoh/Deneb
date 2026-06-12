@@ -9,7 +9,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -254,9 +253,6 @@ func buildAgentConfig(
 		cfg.ThinkingModulator = planningSandwichThinking(thinkingCfg, cfg.MaxTokens)
 	}
 
-	// NOTE: the adaptive effort router (effort_router.go) is applied by the
-	// caller AFTER model resolution — cfg.Model is still empty here.
-
 	// Verification gate (docs/research/ideal-agent-environment-harness.md §10):
 	// a run that wrote/edited files must run a verification command before its
 	// finish is accepted; the gate injects one demand prompt, then yields.
@@ -330,12 +326,7 @@ func resolveThinkingConfig(level string) *llm.ThinkingConfig {
 // the latency/quality trade-off should be validated live before defaulting on.
 // Enable with DENEB_REASONING_SANDWICH=1 (or true/on/yes).
 func reasoningSandwichEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("DENEB_REASONING_SANDWICH"))) {
-	case "1", "true", "on", "yes":
-		return true
-	default:
-		return false
-	}
+	return envFlagEnabled("DENEB_REASONING_SANDWICH")
 }
 
 // thinkingBudgetLadder lists the NAMED extended-thinking tiers in increasing

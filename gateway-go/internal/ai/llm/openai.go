@@ -319,6 +319,13 @@ func applySamplingParams(oaiReq *openAIRequest, req *ChatRequest) {
 			oaiReq.MaxTokens = 0
 		}
 	} else if req.Thinking != nil && req.Thinking.Type == "disabled" {
+		// Dual-mode vLLM models (DeepSeek V4 family) accept a real per-request
+		// off-switch through chat_template_kwargs; when the capability layer
+		// named the kwarg, use it and send no reasoning_effort at all.
+		if req.Thinking.TemplateKwarg != "" {
+			oaiReq.ChatTemplateKwargs = map[string]any{req.Thinking.TemplateKwarg: false}
+			return
+		}
 		// Minimize reasoning on openai-compatible reasoning models. step3p7 cannot
 		// actually disable thinking (its chat template force-opens every turn with
 		// <think>), so "disabled" maps to the effort level that empirically yields

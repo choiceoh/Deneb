@@ -205,10 +205,10 @@ func executeAgentRun(
 	// fills values the request left unset; request-level params, cache-safe.
 	applyModelTuning(&cfg, deps, params, providerID, model)
 	// Adaptive effort router: obviously-simple conversational messages on
-	// dual-mode models (DeepSeek V4) skip the thinking phase via a
-	// per-request chat-template override (KV-prefix-safe). Stalled
-	// non-thinking runs escalate back to thinking in runAgentWithFallback.
-	applyEffortRouter(&cfg, params.Message, logger)
+	// dual-mode models (capability-gated, provider-aware) skip the thinking
+	// phase (KV-prefix-safe). Routed runs may escalate back to thinking in
+	// runAgentWithFallback, which needs the route to restore the original.
+	effortRt := applyEffortRouter(&cfg, params, modelCapability(deps, providerID, model).ThinkingToggleKwarg, logger)
 
 	// BeforeAPICall hook chain: composed via agent.ComposeBeforeAPICall so
 	// features can register additional pre-LLM transforms without clobbering
@@ -252,7 +252,7 @@ func executeAgentRun(
 
 	// Execute agent loop with model fallback chain.
 	agentStart := time.Now()
-	agentResult, actualModel, fellBack, err := runAgentWithFallback(ctx, cfg, messages, client, deps, providerID, initialRole, hooks, logger, runLog)
+	agentResult, actualModel, fellBack, err := runAgentWithFallback(ctx, cfg, messages, client, deps, providerID, initialRole, effortRt, hooks, logger, runLog)
 	if err != nil {
 		// Log run.error here — not in the async-only completion handler — so
 		// every entry path (runAgentAsync, SendSync, SendSyncStream) closes the

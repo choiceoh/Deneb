@@ -44,3 +44,27 @@ func TestBuiltin(t *testing.T) {
 		t.Errorf("unknown builtin = %+v, want zero value", c)
 	}
 }
+
+// TestThinkingToggleKwarg verifies provider-aware gating: only vllm provider
+// ids get the template toggle, and only for the DeepSeek V4 family.
+func TestThinkingToggleKwarg(t *testing.T) {
+	if got := ThinkingToggleKwarg("vllm", "deepseek-v4-flash"); got != "thinking" {
+		t.Errorf("vllm/deepseek-v4-flash = %q, want \"thinking\"", got)
+	}
+	if got := ThinkingToggleKwarg("vllm", "DeepSeek-V4-Flash"); got != "thinking" {
+		t.Errorf("case-insensitive match failed: %q", got)
+	}
+	for _, c := range []struct{ p, m string }{
+		{"vllm", "step3p7"},               // non-dual-mode model
+		{"openrouter", "deepseek-v4"},     // non-vllm provider must NOT get the kwarg
+		{"deepseek", "deepseek-v4-flash"}, // official API is not vLLM serving
+		{"", "deepseek-v4-flash"},
+	} {
+		if got := ThinkingToggleKwarg(c.p, c.m); got != "" {
+			t.Errorf("ThinkingToggleKwarg(%q,%q) = %q, want \"\"", c.p, c.m, got)
+		}
+	}
+	if Builtin("vllm", "deepseek-v4-flash").ThinkingToggleKwarg != "thinking" {
+		t.Error("Builtin must surface the toggle kwarg")
+	}
+}

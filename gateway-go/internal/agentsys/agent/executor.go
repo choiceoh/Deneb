@@ -180,7 +180,6 @@ func RunAgent(
 			StopSequences:    cfg.StopSequences,
 			ResponseFormat:   cfg.ResponseFormat,
 			ToolChoice:       cfg.ToolChoice,
-			ExtraBody:        cfg.ExtraBody,
 		}
 
 		events, err := client.StreamChat(ctx, req)
