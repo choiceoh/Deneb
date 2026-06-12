@@ -160,6 +160,13 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 
 	// Graphify: knowledge-graph queries over the wiki concept graph (people,
 	// projects, deals, decisions, etc.) built by the wiki dreamer each cycle.
+	// Deferred: at ~1,200 tokens this was the single largest eager tool on the
+	// wire (prompt audit 2026-06-12) while most turns never touch the graph.
+	// The deferred listing shows the first sentence (80-char truncation); the
+	// full usage-pattern coaching below ships with the schema at fetch_tools
+	// time — exactly when the model is about to use it. No automation prompt
+	// directs graphify by name, so the fetch round-trip only ever lands on
+	// interactive turns (cf. heartbeat_update's eager rationale).
 	registry.RegisterTool(toolctx.ToolDef{
 		Name: "graphify",
 		Description: "위키 지식 그래프 질의 (사람·프로젝트·거래·결정·선호 등 개념/관계 그래프, dreamer가 매 사이클 갱신). " +
@@ -171,6 +178,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 			"(d) wiki search보다 graphify가 강한 상황: 관계·맥락·연쇄 추론이 필요할 때 (단순 키워드 룩업은 wiki/grep로 충분).",
 		InputSchema: graphifyToolSchema(),
 		Fn:          tools.ToolGraphify(workspaceDir),
+		Deferred:    true,
 	})
 }
 
