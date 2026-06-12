@@ -208,7 +208,7 @@ func executeAgentRun(
 	// dual-mode models (capability-gated, provider-aware) skip the thinking
 	// phase (KV-prefix-safe). Routed runs may escalate back to thinking in
 	// runAgentWithFallback, which needs the route to restore the original.
-	effortRt, effortDecision := applyEffortRouter(&cfg, params, modelCapability(deps, providerID, model).ThinkingToggleKwarg, logger)
+	effortRt, effortDecision := applyEffortRouter(&cfg, params, messages, modelCapability(deps, providerID, model).ThinkingToggleKwarg, logger)
 
 	// BeforeAPICall hook chain: composed via agent.ComposeBeforeAPICall so
 	// features can register additional pre-LLM transforms without clobbering

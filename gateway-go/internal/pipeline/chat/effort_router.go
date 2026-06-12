@@ -27,6 +27,7 @@
 package chat
 
 import (
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"os"
@@ -70,14 +71,20 @@ func effortMode() string {
 	}
 }
 
-// effortStepRevertTurn is the agent-loop turn index from which a routed run
-// gets its thinking restored per turn. Ares (arXiv:2603.07915) observes that
-// effort needs GROW with step index (accumulated context); a per-run
-// non-thinking decision would invert that for long tool chains. Turns 0..N-1
-// run non-thinking (the routed simple reply, typically terminal at turn 0,
-// plus one tool digest); turn N+ gets the session's thinking back via the
-// ThinkingModulator — request-level, so flipping per turn is KV-prefix-safe.
-const effortStepRevertTurn = 2
+// Per-step policy thresholds (Ares, arXiv:2603.07915: effort needs GROW with
+// step index and with the perceptual load of accumulated observations). A
+// routed run decides EVERY turn from (turn, h_t, o_t) — request-level, so
+// flipping per turn is KV-prefix-safe:
+//   - turn 0: non-thinking (the routed simple reply, typically terminal)
+//   - turns 1..ceiling-1: non-thinking only while the latest observation is
+//     small and clean; a big or error-bearing tool result reverts to thinking
+//   - turn >= effortStepCeilingTurn: always the session's thinking
+const (
+	effortStepCeilingTurn   = 3    // hard ceiling: later steps always think
+	effortObservationRunes  = 2000 // a tool_result bigger than this needs thinking to digest
+	effortCumulativeRunes   = 8000 // total tool_result volume that marks the run as heavy
+	effortHeavyHistoryRunes = 1500 // an assistant message this long marks recent context heavy
+)
 
 // effortRoute records what the router replaced so escalation and the model
 // fallback chain can restore the session's original thinking configuration
@@ -85,7 +92,7 @@ const effortStepRevertTurn = 2
 // feed the structured run-complete record (label-pipeline raw data).
 type effortRoute struct {
 	origThinking  *llm.ThinkingConfig
-	origModulator func(turn int) *llm.ThinkingConfig
+	origModulator func(turn int, messages []llm.Message) *llm.ThinkingConfig
 	reason        string
 	escalated     bool
 }
@@ -108,9 +115,64 @@ var effortHardSignals = []string{
 	"why", "how", "code", "fix", "refactor", "summar", "report",
 }
 
+// effortPureAcks are messages that stay routable even when the recent
+// context is heavy: pure pleasantries/acks do not steer the ongoing work.
+var effortPureAcks = []string{
+	"고마워", "감사", "잘자", "좋아", "좋네", "굿", "오케이", "ㅇㅋ", "응", "웅", "넵", "네", "ok", "thanks", "thx",
+}
+
+func isPureAck(msg string) bool {
+	if len([]rune(msg)) > 12 {
+		return false
+	}
+	lower := strings.ToLower(msg)
+	for _, a := range effortPureAcks {
+		if strings.Contains(lower, a) {
+			return true
+		}
+	}
+	return false
+}
+
+// recentContextHeavy reports whether the tail of the assembled history (h_t,
+// excluding the current user message) shows deep work in progress: tool
+// activity or a long assistant output. A short follow-up steering such a
+// thread ("그래서 어떻게 됐어", "계속해줘") needs the thinking the thread
+// already required — query-only routing would misjudge it (Ares decision
+// point #3: the router must see the agent's context, not the query alone).
+func recentContextHeavy(messages []llm.Message) bool {
+	if len(messages) < 2 {
+		return false
+	}
+	tail := messages[:len(messages)-1] // exclude the current user message
+	start := len(tail) - 6
+	if start < 0 {
+		start = 0
+	}
+	for _, m := range tail[start:] {
+		var blocks []llm.ContentBlock
+		if err := jsonUnmarshalBlocks(m.Content, &blocks); err != nil {
+			continue
+		}
+		for _, b := range blocks {
+			switch b.Type {
+			case "tool_use", "tool_result":
+				return true
+			case "text":
+				if m.Role == "assistant" && len([]rune(b.Text)) > effortHeavyHistoryRunes {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // decideThinkingOff returns true when the run's user input is obviously
 // simple enough to skip the thinking phase, plus a short reason for logs.
-func decideThinkingOff(params RunParams) (bool, string) {
+// messages is the assembled history INCLUDING the current user message —
+// the same context the agent itself sees (h_t).
+func decideThinkingOff(params RunParams, messages []llm.Message) (bool, string) {
 	// Automation runs always keep thinking: their Message is a job
 	// instruction, not conversational chatter, and NO_REPLY/delivery
 	// judgments must not run in degraded mode. Two markers cover the
@@ -144,6 +206,12 @@ func decideThinkingOff(params RunParams) (bool, string) {
 			return false, "hard-signal:" + sig
 		}
 	}
+	// h_t check (Ares #3): a short message steering a heavy thread (recent
+	// tool activity / long assistant output) inherits the thread's effort —
+	// unless it is a pure pleasantry/ack that steers nothing.
+	if recentContextHeavy(messages) && !isPureAck(msg) {
+		return false, "context-heavy"
+	}
 	return true, "short-conversational"
 }
 
@@ -153,12 +221,12 @@ func decideThinkingOff(params RunParams) (bool, string) {
 // cfg.Model empty). Returns the route to restore on escalation/fallback (nil
 // when not routed) plus the decision string ("routed:…"/"kept:…", "" when the
 // router gate is closed) for the structured run-complete record.
-func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, toggleKwarg string, logger *slog.Logger) (*effortRoute, string) {
+func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, messages []llm.Message, toggleKwarg string, logger *slog.Logger) (*effortRoute, string) {
 	mode := effortMode()
 	if mode == effortModeOff || toggleKwarg == "" {
 		return nil, ""
 	}
-	off, reason := decideThinkingOff(params)
+	off, reason := decideThinkingOff(params, messages)
 	if mode == effortModeForce {
 		off, reason = true, "forced"
 	}
@@ -172,26 +240,59 @@ func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, toggleKwarg str
 	}
 	disabled := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: toggleKwarg}
 	cfg.Thinking = disabled
-	// Per-step revert (Ares): keep early turns non-thinking, restore the
-	// session's thinking from effortStepRevertTurn on. When the session had
-	// no explicit thinking config, an empty "enabled" sentinel restores the
-	// PROVIDER DEFAULT (applySamplingParams emits nothing for enabled with
-	// BudgetTokens 0 — the dual-mode template then thinks again).
+	// Per-step decision e_t = f(turn, h_t, o_t) — see the threshold block
+	// above. When the session had no explicit thinking config, an empty
+	// "enabled" sentinel restores the PROVIDER DEFAULT (applySamplingParams
+	// emits nothing for enabled with BudgetTokens 0 — the dual-mode template
+	// then thinks again).
 	revert := route.origThinking
 	if revert == nil {
 		revert = &llm.ThinkingConfig{Type: "enabled"}
 	}
-	cfg.ThinkingModulator = func(turn int) *llm.ThinkingConfig {
-		if turn < effortStepRevertTurn {
-			return disabled
-		}
-		return revert
+	cfg.ThinkingModulator = func(turn int, msgs []llm.Message) *llm.ThinkingConfig {
+		return effortStepThinking(turn, msgs, disabled, revert)
 	}
 	if logger != nil {
 		logger.Info("effort router: thinking off for this run",
-			"reason", reason, "model", cfg.Model, "revertTurn", effortStepRevertTurn)
+			"reason", reason, "model", cfg.Model, "ceilingTurn", effortStepCeilingTurn)
 	}
 	return route, "routed:" + reason
+}
+
+// effortStepThinking is the per-step effort policy for a routed run: stay
+// non-thinking only while the step is early AND the latest observation is
+// light; revert to the session's thinking otherwise (Ares: later steps and
+// heavy observations need effort).
+func effortStepThinking(turn int, msgs []llm.Message, disabled, revert *llm.ThinkingConfig) *llm.ThinkingConfig {
+	if turn == 0 {
+		return disabled
+	}
+	if turn >= effortStepCeilingTurn {
+		return revert
+	}
+	// o_t: inspect the tool results accumulated so far — the latest one
+	// drives the digestion need; the cumulative volume marks a heavy run.
+	var lastSize, totalSize int
+	var lastErr bool
+	for _, m := range msgs {
+		var blocks []llm.ContentBlock
+		if err := jsonUnmarshalBlocks(m.Content, &blocks); err != nil {
+			continue
+		}
+		for _, b := range blocks {
+			if b.Type != "tool_result" {
+				continue
+			}
+			n := len([]rune(b.Content))
+			totalSize += n
+			lastSize = n
+			lastErr = b.IsError
+		}
+	}
+	if lastErr || lastSize > effortObservationRunes || totalSize > effortCumulativeRunes {
+		return revert
+	}
+	return disabled
 }
 
 // effortRouted reports whether the config currently carries the router's
@@ -225,4 +326,13 @@ func escalatableEffortFailure(runErr error, res *agent.AgentResult) bool {
 // such a turn would double tool side effects (message.send, exec).
 func resultRanTools(res *agent.AgentResult) bool {
 	return res != nil && res.TotalToolCalls > 0
+}
+
+// jsonUnmarshalBlocks decodes a message's content into blocks; plain-string
+// content (a bare text message) is not an error, just yields no blocks.
+func jsonUnmarshalBlocks(content json.RawMessage, blocks *[]llm.ContentBlock) error {
+	if len(content) == 0 || content[0] != '[' {
+		return errors.New("not a block array")
+	}
+	return json.Unmarshal(content, blocks)
 }

@@ -2,6 +2,7 @@ package chat
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
@@ -35,7 +36,7 @@ func TestDecideThinkingOff(t *testing.T) {
 		{RunParams{Message: "```\nprint(1)\n```"}, false, "code fence"},
 	}
 	for _, c := range cases {
-		off, reason := decideThinkingOff(c.params)
+		off, reason := decideThinkingOff(c.params, nil)
 		if off != c.wantOff {
 			t.Errorf("%s: decideThinkingOff(%q) = %v (reason=%s), want %v", c.name, c.params.Message, off, reason, c.wantOff)
 		}
@@ -48,10 +49,10 @@ func TestDecideThinkingOff(t *testing.T) {
 func TestApplyEffortRouter_RouteAndRestore(t *testing.T) {
 	t.Setenv("DENEB_ADAPTIVE_EFFORT", "1")
 	orig := &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 4096}
-	origMod := func(int) *llm.ThinkingConfig { return nil }
+	origMod := func(int, []llm.Message) *llm.ThinkingConfig { return nil }
 	cfg := agent.AgentConfig{Model: "deepseek-v4-flash", Thinking: orig, ThinkingModulator: origMod}
 
-	route, decision := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, "thinking", nil)
+	route, decision := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, nil, "thinking", nil)
 	if route == nil || decision != "routed:short-conversational" {
 		t.Fatalf("simple message on toggle model must route (decision=%q)", decision)
 	}
@@ -67,11 +68,11 @@ func TestApplyEffortRouter_RouteAndRestore(t *testing.T) {
 	if cfg.ThinkingModulator == nil {
 		t.Fatal("routed runs must install the step-revert modulator")
 	}
-	if got := cfg.ThinkingModulator(0); got == nil || got.Type != "disabled" {
+	if got := cfg.ThinkingModulator(0, nil); got == nil || got.Type != "disabled" {
 		t.Fatalf("turn 0 must stay disabled, got %+v", got)
 	}
-	if got := cfg.ThinkingModulator(effortStepRevertTurn); got == nil || got.Type != "enabled" || got.BudgetTokens != 4096 {
-		t.Fatalf("turn %d must revert to the session thinking, got %+v", effortStepRevertTurn, got)
+	if got := cfg.ThinkingModulator(effortStepCeilingTurn, nil); got == nil || got.Type != "enabled" || got.BudgetTokens != 4096 {
+		t.Fatalf("turn %d must revert to the session thinking, got %+v", effortStepCeilingTurn, got)
 	}
 
 	restoreEffort(&cfg, route)
@@ -91,14 +92,14 @@ func TestApplyEffortRouter_RouteAndRestore(t *testing.T) {
 func TestApplyEffortRouter_Gates(t *testing.T) {
 	t.Setenv("DENEB_ADAPTIVE_EFFORT", "")
 	cfg := agent.AgentConfig{Model: "deepseek-v4-flash"}
-	if r, d := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, "thinking", nil); r != nil || d != "" {
+	if r, d := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, nil, "thinking", nil); r != nil || d != "" {
 		t.Error("flag off must not route and reports no decision")
 	}
 	t.Setenv("DENEB_ADAPTIVE_EFFORT", "1")
-	if r, d := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, "", nil); r != nil || d != "" {
+	if r, d := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, nil, "", nil); r != nil || d != "" {
 		t.Error("empty capability kwarg must not route")
 	}
-	if r, d := applyEffortRouter(&cfg, RunParams{Message: "이 코드 분석해줘"}, "thinking", nil); r != nil || d != "kept:hard-signal:분석" {
+	if r, d := applyEffortRouter(&cfg, RunParams{Message: "이 코드 분석해줘"}, nil, "thinking", nil); r != nil || d != "kept:hard-signal:분석" {
 		t.Errorf("hard message must report kept decision, got %q", d)
 	}
 	if cfg.Thinking != nil {
@@ -106,7 +107,7 @@ func TestApplyEffortRouter_Gates(t *testing.T) {
 	}
 	// force mode (eval baseline): routes even hard messages.
 	t.Setenv("DENEB_ADAPTIVE_EFFORT", "force")
-	if r, d := applyEffortRouter(&cfg, RunParams{Message: "이 코드 분석해줘"}, "thinking", nil); r == nil || d != "routed:forced" {
+	if r, d := applyEffortRouter(&cfg, RunParams{Message: "이 코드 분석해줘"}, nil, "thinking", nil); r == nil || d != "routed:forced" {
 		t.Errorf("force mode must route everything eligible, got %q", d)
 	}
 }
@@ -152,5 +153,51 @@ func TestEffortMode(t *testing.T) {
 		if got := effortMode(); got != want {
 			t.Errorf("effortMode(%q) = %q, want %q", v, got, want)
 		}
+	}
+}
+
+// TestRecentContextHeavy + ack exception: a short follow-up in a heavy thread
+// keeps thinking (Ares #3 — router sees h_t), pure acks stay routable.
+func TestContextHeavyRouting(t *testing.T) {
+	heavy := []llm.Message{
+		llm.NewTextMessage("user", "이 코드 분석해줘"),
+		{Role: "assistant", Content: []byte(`[{"type":"tool_use","id":"t1","name":"read","input":{}}]`)},
+		{Role: "user", Content: []byte(`[{"type":"tool_result","tool_use_id":"t1","content":"file body"}]`)},
+		llm.NewTextMessage("assistant", "분석 결과입니다..."),
+		llm.NewTextMessage("user", "그거 마저 해줘"),
+	}
+	if off, reason := decideThinkingOff(RunParams{Message: "그거 마저 해줘"}, heavy); off || reason != "context-heavy" {
+		t.Errorf("short steer in heavy thread must keep thinking, got off=%v reason=%s", off, reason)
+	}
+	if off, _ := decideThinkingOff(RunParams{Message: "고마워!"}, heavy); !off {
+		t.Error("pure ack stays routable even in a heavy thread")
+	}
+	light := []llm.Message{llm.NewTextMessage("user", "안녕"), llm.NewTextMessage("assistant", "안녕하세요!"), llm.NewTextMessage("user", "잘 지냈어?")}
+	if off, _ := decideThinkingOff(RunParams{Message: "잘 지냈어?"}, light); !off {
+		t.Error("light history must not block routing")
+	}
+}
+
+// TestEffortStepThinking covers the per-step policy e_t = f(turn, o_t).
+func TestEffortStepThinking(t *testing.T) {
+	disabled := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: "thinking"}
+	revert := &llm.ThinkingConfig{Type: "enabled"}
+	small := []llm.Message{{Role: "user", Content: []byte(`[{"type":"tool_result","tool_use_id":"t","content":"ok"}]`)}}
+	if got := effortStepThinking(0, nil, disabled, revert); got != disabled {
+		t.Error("turn 0 must stay disabled")
+	}
+	if got := effortStepThinking(1, small, disabled, revert); got != disabled {
+		t.Error("turn 1 with a small clean observation stays disabled")
+	}
+	big := []llm.Message{{Role: "user", Content: []byte(`[{"type":"tool_result","tool_use_id":"t","content":"` + strings.Repeat("가", 2100) + `"}]`)}}
+	if got := effortStepThinking(1, big, disabled, revert); got != revert {
+		t.Error("a big observation must revert to thinking")
+	}
+	errRes := []llm.Message{{Role: "user", Content: []byte(`[{"type":"tool_result","tool_use_id":"t","content":"boom","is_error":true}]`)}}
+	if got := effortStepThinking(1, errRes, disabled, revert); got != revert {
+		t.Error("an error observation must revert to thinking")
+	}
+	if got := effortStepThinking(effortStepCeilingTurn, small, disabled, revert); got != revert {
+		t.Error("ceiling turn must always revert")
 	}
 }

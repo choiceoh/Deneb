@@ -159,7 +159,7 @@ func RunAgent(
 		// does not affect prompt cache. Falls back to cfg.Thinking.
 		turnThinking := cfg.Thinking
 		if cfg.ThinkingModulator != nil {
-			if m := cfg.ThinkingModulator(turn); m != nil {
+			if m := cfg.ThinkingModulator(turn, messages); m != nil {
 				turnThinking = m
 			}
 		}

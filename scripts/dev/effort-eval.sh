@@ -44,8 +44,20 @@ MSGS=(
 run_policy() {
   local name="$1" env="$2"
   echo "== policy: $name (DENEB_ADAPTIVE_EFFORT='$env') =="
-  DENEB_INSTANCE="$INSTANCE" DENEB_ADAPTIVE_EFFORT="$env" scripts/dev/live-test.sh restart >/dev/null 2>&1
-  sleep 3
+  local up=0 attempt
+  for attempt in 1 2 3; do
+    DENEB_INSTANCE="$INSTANCE" DENEB_ADAPTIVE_EFFORT="$env" scripts/dev/live-test.sh restart >/dev/null 2>&1
+    for _ in $(seq 1 20); do
+      if curl -sf --max-time 3 "http://127.0.0.1:19068/health" >/dev/null 2>&1; then up=1; break; fi
+      sleep 3
+    done
+    [ "$up" = 1 ] && break
+    echo "  restart attempt $attempt failed; stopping and retrying..."
+    DENEB_INSTANCE="$INSTANCE" scripts/dev/live-test.sh stop >/dev/null 2>&1
+    sleep 5
+  done
+  [ "$up" = 1 ] || { echo "  GATEWAY NEVER CAME UP for $name — aborting policy"; return 1; }
+  sleep 2
   local i=0
   for m in "${MSGS[@]}"; do
     i=$((i+1))
@@ -56,7 +68,7 @@ run_policy() {
     # per-run outputTokens from the run-complete log line appended since 'before_lines'
     toks=$(tail -n +"$before_lines" "$LOG" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -oE 'outputTokens=[0-9]+' | tail -1 | grep -oE '[0-9]+')
     local text
-    text=$(echo "$reply" | grep -vE '^==>|^$' | head -4 | tr '\n' ' ' | cut -c1-200)
+    text=$(echo "$reply" | grep -vE '^==>|^$|Connected to native|prerequisites' | head -4 | tr '\n' ' ')
     printf '%s\t%d\t%s\t%s\t%s\n' "$name" "$i" "${toks:-0}" "${ms:-0}" "$text" >> /tmp/effort-eval-rows.tsv
     echo "  [$i] toks=${toks:-?} ms=${ms:-?}"
   done
@@ -72,10 +84,10 @@ python3 - "$OUT" <<'PY'
 import sys, statistics, html, re, datetime
 out = sys.argv[1]
 rows = []
-for line in open('/tmp/effort-eval-rows.tsv'):
+for line in open('/tmp/effort-eval-rows.tsv', errors='replace'):
     p = line.rstrip('\n').split('\t')
     if len(p) >= 5:
-        rows.append({'policy': p[0], 'i': int(p[1]), 'toks': int(p[2]), 'ms': int(p[3]), 'text': p[4]})
+        rows.append({'policy': p[0], 'i': int(p[1]), 'toks': int(p[2]), 'ms': int(p[3]), 'text': p[4][:300]})
 
 def quality(text):
     """Automatic quality proxy (0-100): Korean ratio, substance, no leakage."""
@@ -108,7 +120,14 @@ if h['toks'] != n['toks']:
 else:
     frac = 1.0
 interp_q = n['q'] + (h['q'] - n['q']) * frac
-verdict = 'PASS (above interpolation line)' if r['q'] >= interp_q - 0.5 else 'FAIL (below interpolation line — router adds no value)'
+# Acceptance: (a) RouterBench — on/above the interpolation line; (b) Ares #8 —
+# quality within 2pt of always-high. The token-saving goal (40-50%) is
+# reported as a metric, not a hard gate (it depends on the traffic mix).
+quality_drop = h['q'] - r['q']
+above_line = r['q'] >= interp_q - 0.5
+within_2pt = quality_drop <= 2.0
+verdict = ('PASS' if (above_line and within_2pt) else 'FAIL') + \
+    f" (interp {'ok' if above_line else 'MISS'}, quality_drop {quality_drop:.1f}pt {'ok' if within_2pt else '>2pt'})"
 
 with open(out, 'w') as f:
     f.write(f"# Effort Router Acceptance — {datetime.datetime.now():%Y-%m-%d %H:%M}\n\n")
@@ -118,7 +137,9 @@ with open(out, 'w') as f:
         f.write(f"| {name} | {p['toks']} | {p['q']:.1f} | {p['ms']:.0f} |\n")
     f.write(f"\n**Interpolation quality @ router's spend: {interp_q:.1f} → router {r['q']:.1f} → {verdict}**\n")
     if h['toks']:
-        f.write(f"\nToken saving vs always-high: {100*(1-r['toks']/h['toks']):.1f}%\n")
+        saving = 100*(1-r['toks']/h['toks'])
+        goal = '달성' if 40 <= saving else ('초과달성' if saving > 50 else '미달')
+        f.write(f"\nAres #8 targets — token saving vs always-high: {saving:.1f}% (목표 40-50%: {goal}), quality drop: {h['q']-r['q']:.1f}pt (목표 ≤2pt)\n")
     f.write("\n## Replies (human judgment)\n\n| # | message-idx | always-high | always-non | router |\n|---|---|---|---|---|\n")
     for i in range(1, 13):
         cells = []

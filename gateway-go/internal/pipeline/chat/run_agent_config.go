@@ -368,7 +368,7 @@ const minThinkingResponseHeadroom = 4096
 // (Anthropic requires budget_tokens < max_tokens). maxTokens <= 0 means
 // "unknown" and keeps the boost. Returns nil when base is nil so the caller
 // leaves Thinking as-is.
-func planningSandwichThinking(base *llm.ThinkingConfig, maxTokens int) func(turn int) *llm.ThinkingConfig {
+func planningSandwichThinking(base *llm.ThinkingConfig, maxTokens int) func(turn int, messages []llm.Message) *llm.ThinkingConfig {
 	if base == nil {
 		return nil
 	}
@@ -381,7 +381,7 @@ func planningSandwichThinking(base *llm.ThinkingConfig, maxTokens int) func(turn
 			Interleaved:  base.Interleaved,
 		}
 	}
-	return func(turn int) *llm.ThinkingConfig {
+	return func(turn int, _ []llm.Message) *llm.ThinkingConfig {
 		if turn == 0 {
 			return boosted
 		}
