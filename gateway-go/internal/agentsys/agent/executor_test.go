@@ -271,3 +271,57 @@ func TestConsumeStreamInto_DeltaIndexMismatch(t *testing.T) {
 		t.Errorf("text = %q, want %q (mismatched delta should be dropped)", result.text, "hello")
 	}
 }
+
+func TestConsumeStreamInto_ErrorEventIsSentinel(t *testing.T) {
+	events := make(chan llm.StreamEvent, 1)
+	events <- llm.StreamEvent{Type: "error", Payload: json.RawMessage(`{"message":"upstream hiccup"}`)}
+	close(events)
+
+	err := consumeStreamInto(context.Background(), events, StreamHooks{}, &turnResult{}, -1, nil)
+	if !errors.Is(err, ErrStreamEvent) {
+		t.Fatalf("expected ErrStreamEvent, got: %v", err)
+	}
+}
+
+// TestRunAgent_MidStreamErrorRetriedOnSameModel verifies a mid-stream error
+// event retries the turn once on the same client instead of failing the run
+// (and thereby escalating to the model-fallback chain).
+func TestRunAgent_MidStreamErrorRetriedOnSameModel(t *testing.T) {
+	streamer := &fakeLLMStreamer{turns: [][]llm.StreamEvent{
+		{{Type: "error", Payload: json.RawMessage(`{"message":"transient backend fault"}`)}},
+		buildTextTurnEvents("recovered after retry", 10, 5),
+	}}
+
+	cfg := AgentConfig{MaxTurns: 3, Timeout: 5 * time.Second, MaxTokens: 1024}
+	messages := []llm.Message{llm.NewTextMessage("user", "hi")}
+
+	result := testutil.Must(RunAgent(context.Background(), cfg, messages, streamer, nil, StreamHooks{}, nil, nil))
+	if result.Text != "recovered after retry" {
+		t.Errorf("Text = %q, want the retried turn's text", result.Text)
+	}
+	if streamer.idx != 2 {
+		t.Errorf("StreamChat calls = %d, want 2 (original + one same-model retry)", streamer.idx)
+	}
+}
+
+// A second consecutive mid-stream error must NOT retry again — the single
+// retry budget is spent, the error propagates to the caller's fallback chain.
+func TestRunAgent_MidStreamErrorSecondFailurePropagates(t *testing.T) {
+	streamer := &fakeLLMStreamer{turns: [][]llm.StreamEvent{
+		{{Type: "error", Payload: json.RawMessage(`{"message":"fault A"}`)}},
+		{{Type: "error", Payload: json.RawMessage(`{"message":"fault B"}`)}},
+	}}
+
+	cfg := AgentConfig{MaxTurns: 3, Timeout: 5 * time.Second, MaxTokens: 1024}
+	_, err := RunAgent(context.Background(), cfg, []llm.Message{llm.NewTextMessage("user", "hi")},
+		streamer, nil, StreamHooks{}, nil, nil)
+	if err == nil {
+		t.Fatal("expected error after retry also failed")
+	}
+	if !errors.Is(err, ErrStreamEvent) {
+		t.Errorf("error = %v, want ErrStreamEvent in chain", err)
+	}
+	if streamer.idx != 2 {
+		t.Errorf("StreamChat calls = %d, want exactly 2 (no infinite retry)", streamer.idx)
+	}
+}
