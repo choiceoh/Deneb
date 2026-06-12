@@ -1,5 +1,41 @@
 # Changelog
 
+## [4.26.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.25.0...deneb-v4.26.0) (2026-06-12)
+
+
+### ✨ Features
+
+* **chat:** adaptive reasoning-effort router for dual-mode models (v1) ([#2259](https://github.com/choiceoh/Deneb/issues/2259)) ([20ca8cb](https://github.com/choiceoh/Deneb/commit/20ca8cbbbef16ef40cb993d1f2410e06a940f02a))
+* **chat:** effort-router telemetry — durable agentlog decisions + run-scoped o_t feed ([#2274](https://github.com/choiceoh/Deneb/issues/2274)) ([5295237](https://github.com/choiceoh/Deneb/commit/529523759f2b0084ef318bd19c18760357f53414))
+* **chat:** enforce sessions_spawn tool presets (researcher/implementer/verifier) ([#2285](https://github.com/choiceoh/Deneb/issues/2285)) ([d788c4f](https://github.com/choiceoh/Deneb/commit/d788c4fe4cfd6038b99f9c3dc0983a56df43be69))
+* **chat:** stream live reasoning preview + step-boundary continuity in the waiting chip ([#2286](https://github.com/choiceoh/Deneb/issues/2286)) ([e7e417b](https://github.com/choiceoh/Deneb/commit/e7e417b78320857ac8d0899a0ab9a9ad453dcc04))
+* **dev:** puppet seat — coding agent drives the gateway as its LLM (빙의 모드) ([#2268](https://github.com/choiceoh/Deneb/issues/2268)) ([d0f75ec](https://github.com/choiceoh/Deneb/commit/d0f75ec49cf63069f7063bc34c13515c120c8784))
+* **llm:** Anthropic-path hardening — Complete guards, fallback cache-marker reconcile, wire fixes ([#2282](https://github.com/choiceoh/Deneb/issues/2282)) ([4b0c7f2](https://github.com/choiceoh/Deneb/commit/4b0c7f200105ba0ae6ff5c8d7b9b197f7bbf4bf0))
+* **native:** skill detail screen — tap a skill for full meta, SKILL.md doc, and its evolution history ([#2279](https://github.com/choiceoh/Deneb/issues/2279)) ([1047547](https://github.com/choiceoh/Deneb/commit/104754794bd17d14c0077f4d56a1496f36cd0519))
+* **observe:** surface vLLM prefix-cache hit rate from engine /metrics ([#2273](https://github.com/choiceoh/Deneb/issues/2273)) ([86c0d3c](https://github.com/choiceoh/Deneb/commit/86c0d3cac5e8f3b0e966e458597948d0ba7ac88f))
+* **skill:** observe skill evolution from the native app — origin badges + lifecycle timeline ([#2271](https://github.com/choiceoh/Deneb/issues/2271)) ([14e1221](https://github.com/choiceoh/Deneb/commit/14e12210507940f5321cd2f065f4154fef143e3c))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** strip baked RFC3339 timestamp prefix from user bubbles on history reload ([#2278](https://github.com/choiceoh/Deneb/issues/2278)) ([c158234](https://github.com/choiceoh/Deneb/commit/c158234020a4e57dcba4cea48be42c8b2aa1ba87))
+* **llm:** surface mid-stream clean EOF as stream error instead of silent empty success ([#2275](https://github.com/choiceoh/Deneb/issues/2275)) ([4c9f5f6](https://github.com/choiceoh/Deneb/commit/4c9f5f6e3a27704b4584ac82479aa18669f4b399))
+* **skills:** make advertised SKILL.md locations actually readable + compact the index ([#2284](https://github.com/choiceoh/Deneb/issues/2284)) ([1653658](https://github.com/choiceoh/Deneb/commit/16536585fb68df272add1133c0d4b4ab54bab91a))
+
+
+### ⚡ Performance
+
+* **chat:** defer 7 cold eager tools off the wire (-~2.4K tok/turn) ([#2280](https://github.com/choiceoh/Deneb/issues/2280)) ([13ce5cb](https://github.com/choiceoh/Deneb/commit/13ce5cbedea4d0d16fa7f1fb9dd36c2069e4a18e))
+* **chat:** dsv4 gateway optimization pass — sampling, APC stability, thinking control ([#2287](https://github.com/choiceoh/Deneb/issues/2287)) ([eba22df](https://github.com/choiceoh/Deneb/commit/eba22df23d2f4f7979a8e716fbe587d7ab61f1e8))
+* **chat:** keep vLLM APC prefix stable across turns — tail-inject recall/auto-delivery, freeze tier-1, engine cache telemetry ([#2288](https://github.com/choiceoh/Deneb/issues/2288)) ([a324542](https://github.com/choiceoh/Deneb/commit/a324542314d20ba2dc838624f4293f6b05ea8d15))
+* **toolreg:** defer graphify off the eager wire (-1.2K tok/turn) + prompt-mass audit harness ([#2276](https://github.com/choiceoh/Deneb/issues/2276)) ([341a20b](https://github.com/choiceoh/Deneb/commit/341a20b05f7fe7012deca0308a4435ed71676a47))
+
+
+### 🔧 Internal
+
+* **client-android:** unify androidMain logging on DenebLog ([#2269](https://github.com/choiceoh/Deneb/issues/2269)) ([f70824a](https://github.com/choiceoh/Deneb/commit/f70824a2aea9cbbc5527a6013174174232df40a5))
+* **native:** flatten skills tab view switcher — ink/hint text over hairline instead of segmented pill ([#2281](https://github.com/choiceoh/Deneb/issues/2281)) ([97c6e22](https://github.com/choiceoh/Deneb/commit/97c6e224b29417a0fbb173a80a28344b0e3fccc0))
+
 ## [4.25.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.24.0...deneb-v4.25.0) (2026-06-12)
 
 
