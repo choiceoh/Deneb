@@ -284,12 +284,35 @@ data class SessionRowOut(
 )
 
 @Serializable
+data class SkillLifecycleEvent(
+    val type: String = "",
+    val skillName: String = "",
+    val at: Long = 0L,
+    val version: String = "",
+    val detail: String = "",
+    val route: String = "",
+)
+
+@Serializable
 data class SkillRow(
     val name: String = "",
     val description: String = "",
     val category: String = "",
     val source: String = "",
     val version: String = "",
+    val origin: String = "",
+    val createdAt: Long = 0L,
+    val evolveCount: Int = 0,
+    val lastEvolvedAt: Long = 0L,
+    val totalUses: Int = 0,
+    val lastUsedAt: Long = 0L,
+    val curatorState: String = "",
+)
+
+@Serializable
+data class SkillsLifecycleResponse(
+    val events: List<SkillLifecycleEvent> = emptyList(),
+    val count: Int = 0,
 )
 
 @Serializable
