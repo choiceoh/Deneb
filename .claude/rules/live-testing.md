@@ -285,6 +285,52 @@ scripts/dev/live-test.sh tool-check vega "최근 대화 검색해줘"
 3. 수정 후 같은 테스트 재실행하여 수정 확인
 4. `logs-errors`로 숨은 에러 확인
 
+## 빙의 모드 (puppet seat): 코딩 에이전트가 데네브의 모델이 된다
+
+> `chat`/`chat-check`가 **유저 역할**의 주입이라면, `scripts/dev/puppet.sh`는
+> **모델(LLM) 역할**의 주입이다. dev 게이트웨이의 모든 LLM role을 로컬 브로커
+> (`scripts/dev/puppet_broker.py`, OpenAI 호환 SSE)로 돌려, 코딩 에이전트가
+> 데네브의 LLM이 받는 것(조립된 시스템 프롬프트·메시지 히스토리·도구 스키마 22개+)을
+> **그대로 받아 보고**, 텍스트/도구호출을 직접 결정해 턴을 운전한다. 도구 호출은
+> 게이트웨이가 **실제로 실행**해 결과를 다음 요청에 담아온다. 게이트웨이 코드
+> 수정 0줄 — config-gen 결과에 `models.providers.puppet` + `agents.*Model`
+> 오버레이를 입혀 `DENEB_CONFIG_PATH`로 주입할 뿐이다.
+
+언제 쓰나: 시스템 프롬프트 조립(`prompt/`)·캐시 마커·압축(polaris)·도구 스키마/실행·
+멀티턴 transcript 형태를 **모델 시점에서** 눈으로 검증할 때. quality 테스트가
+"응답이 좋은가"를 본다면, 빙의 모드는 "모델에게 무엇이 주어지는가"를 본다.
+
+```bash
+export DENEB_INSTANCE="$(basename "$PWD")"   # worktree 격리 (live-test와 동일)
+scripts/dev/puppet.sh start                  # 빌드 + 브로커 + 게이트웨이 (전 role 빙의)
+scripts/dev/puppet.sh send "안녕"             # 유저 메시지 주입 (비동기, 세션 client:puppet-<인스턴스>)
+scripts/dev/puppet.sh pending --wait 60      # LLM 요청 도착 대기 → "r1 ..."
+scripts/dev/puppet.sh show r1                # 시스템 프롬프트/메시지/도구 확인 (--full | --raw)
+scripts/dev/puppet.sh reply r1 --tool exec '{"command":"hostname"}'   # 도구 호출 결정
+scripts/dev/puppet.sh pending --wait 60      # → r2: 실제 실행된 도구 결과가 tool 메시지로
+scripts/dev/puppet.sh reply r2 --text "호스트네임은 ..."               # 턴 마무리
+scripts/dev/puppet.sh result                 # 유저가 받은 최종 응답 + usage
+scripts/dev/puppet.sh stop                   # 게이트웨이 + 브로커 정리
+```
+
+- **타임아웃 안무**: 턴 전체는 `DefaultTurnDeadline` 5분 — pending 응답을 그 안에.
+  브로커가 SSE 주석 keepalive로 LLM HTTP 클라이언트의 10분 타임아웃은 회피하지만,
+  턴 데드라인이 끊으면 해당 요청은 `gone`으로 표시된다.
+- **전 role 빙의가 기본** (`--main-only`로 main만): main/lightweight/tiny/analysis/
+  fallback 전부 브로커行이라 실모델로 새는 응답이 없고, 백그라운드 LLM 호출(드리밍 등)도
+  `pending`에 그대로 드러난다. 낯선 요청이 보이면 그것 — `fail ID`로 정리.
+- `fail ID`는 `event: error` SSE로 provider 에러를 표면화한다 (에러 경로 테스트용;
+  주의: `data:` 라인만으로 보낸 `{"error":...}`는 게이트웨이 파서가 빈 청크로 삼킨다).
+- `reply --tool NAME ARGS`는 반복 가능(병렬 tool call 재현), ARGS가 JSON 파싱에
+  실패하면 **원문 그대로** 전달된다 — malformed arguments 처리 검증에 사용.
+- 게이트웨이는 live-test.sh와 같은 바이너리/pid/log/state 경로를 쓰므로
+  `live-test.sh logs-errors`·`status`가 그대로 동작한다. 종료는 `puppet.sh stop`
+  (브로커까지 정리). 교환 기록은 `history` 또는 `*-puppet-journal.jsonl`(5MB 회전).
+- ⚠️ **퍼펫 게이트웨이가 떠 있는 동안 `live-test.sh chat`/`quality`/`iterate.sh`를
+  돌리지 마라** — 그 LLM 호출들도 전부 브로커에 hold되어 오퍼레이터 응답 또는
+  5분 데드라인까지 멈춘다 ("게이트웨이가 죽었다"가 아니라 pending에 쌓여 있는 것).
+  품질 스위트가 필요하면 먼저 `puppet.sh stop` 후 `live-test.sh restart`.
+
 ## 주의사항
 
 - 반복 테스트는 포트 **18791** (dev=18790, prod=18789와 분리)

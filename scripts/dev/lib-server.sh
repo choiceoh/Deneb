@@ -51,6 +51,7 @@ if [[ "$DEVLIB_INSTANCE" == "default" ]]; then
   DEVLIB_LIVE_PORT=18790
   DEVLIB_ITERATE_PORT=18791
   DEVLIB_MOCK_DEFAULT_PORT=18792
+  DEVLIB_PUPPET_PORT=18793
 else
   DEVLIB_TMP_PREFIX="/tmp/deneb-${DEVLIB_INSTANCE}"
   _devlib_off=$(printf '%s' "$DEVLIB_INSTANCE" | cksum | cut -d' ' -f1)
@@ -58,6 +59,8 @@ else
   DEVLIB_LIVE_PORT=$_devlib_base
   DEVLIB_ITERATE_PORT=$((_devlib_base + 1))
   DEVLIB_MOCK_DEFAULT_PORT=$((_devlib_base + 2))
+  # 4th and last slot of the instance port block — puppet.sh's broker.
+  DEVLIB_PUPPET_PORT=$((_devlib_base + 3))
 fi
 
 # ---------------------------------------------------------------------------
