@@ -45,3 +45,7 @@ type MediaSendFunc = toolctx.MediaSendFunc
 
 // NewTextChatMessage creates a ChatMessage with text-only content.
 var NewTextChatMessage = toolctx.NewTextChatMessage
+
+// StripUserMessageTimestamp removes the baked "[<RFC3339>] " prefix from a
+// user message text (see the transcript persist site in run_exec.go).
+var StripUserMessageTimestamp = toolctx.StripUserMessageTimestamp

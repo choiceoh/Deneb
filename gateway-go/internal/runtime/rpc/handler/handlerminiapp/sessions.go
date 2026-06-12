@@ -160,13 +160,15 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 		}
 
 		// Display-only sanitation, same pipeline as chat.history: hide
-		// link-enrichment appendages from user bubbles and drop tool_result
+		// link-enrichment appendages from user bubbles, drop tool_result
 		// messages so raw tool output (ps dumps, command stdout) never renders
-		// as a quotable bubble. The stored transcript is untouched. This RPC is
-		// what the native client actually loads its timeline from, so the
-		// strip must live here, not only on chat.history.
+		// as a quotable bubble, and strip the baked "[<RFC3339>] " timestamp
+		// prefix so user bubbles show what was typed. The stored transcript is
+		// untouched. This RPC is what the native client actually loads its
+		// timeline from, so the strip must live here, not only on chat.history.
 		msgs = toolctx.StripLinkEnrichmentForDisplay(msgs)
 		msgs = toolctx.StripToolResultBlocksForDisplay(msgs)
+		msgs = toolctx.StripUserMessageTimestampsForDisplay(msgs)
 
 		rows := make([]transcriptMsgOut, 0, len(msgs))
 		for _, m := range msgs {
