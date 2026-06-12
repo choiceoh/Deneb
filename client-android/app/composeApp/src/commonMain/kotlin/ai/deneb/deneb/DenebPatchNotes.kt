@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "메일 분석 접기 카드의 이중 테두리 제거 — 카드 속 카드로 좁아졌던 본문이 좌우로 넓어져 표·목록이 덜 잘림",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "대기 칩이 생각 내용을 실시간 중계 — \"깊이 생각 중: …발신인 이력을 대조\"처럼 지금 무슨 생각을 하는지 보임",
             "도구 작업이 끝나고 다음 단계로 넘어가는 동안 칩이 일반 스피너로 되돌아가지 않고 \"결과 검토 중…\"으로 이어짐",
         ),
