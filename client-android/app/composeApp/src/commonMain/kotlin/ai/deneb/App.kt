@@ -13,7 +13,6 @@ import ai.deneb.deneb.DenebCategoryPagesScreen
 import ai.deneb.deneb.DenebConfigScreen
 import ai.deneb.deneb.DenebCronEditScreen
 import ai.deneb.deneb.DenebCronScreen
-import ai.deneb.deneb.DenebSkillScreen
 import ai.deneb.deneb.DenebDiaryScreen
 import ai.deneb.deneb.DenebFleetScreen
 import ai.deneb.deneb.DenebGatewayClient
@@ -22,6 +21,7 @@ import ai.deneb.deneb.DenebMailScreen
 import ai.deneb.deneb.DenebPeopleScreen
 import ai.deneb.deneb.DenebPersonScreen
 import ai.deneb.deneb.DenebSearchScreen
+import ai.deneb.deneb.DenebSkillScreen
 import ai.deneb.deneb.DenebTodoAddScreen
 import ai.deneb.deneb.DenebTodoScreen
 import ai.deneb.deneb.DenebWikiPageScreen

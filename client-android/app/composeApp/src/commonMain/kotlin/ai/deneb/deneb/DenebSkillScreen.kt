@@ -28,10 +28,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import kotlin.time.Instant
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Instant
 
 /**
  * Skill detail (`miniapp.skills.detail`): the full catalog meta the list row
@@ -189,8 +189,7 @@ private fun curatorStateLabel(state: String): String? = when (state) {
     else -> null
 }
 
-private fun epochDate(ms: Long): String =
-    Instant.fromEpochMilliseconds(ms).toLocalDateTime(TimeZone.currentSystemDefault()).date.toString()
+private fun epochDate(ms: Long): String = Instant.fromEpochMilliseconds(ms).toLocalDateTime(TimeZone.currentSystemDefault()).date.toString()
 
 /** Drops the leading YAML frontmatter fence from a SKILL.md body — the name /
  *  description / version it carries are already rendered as the header above,

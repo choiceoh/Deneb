@@ -301,11 +301,8 @@ private fun lifecycleTypeLabel(type: String): String = when (type) {
 private fun LifecycleTypeBadge(type: String) {
     val (bg, fg) = when (type) {
         "genesis" -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
-
         "evolved" -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
-
         "evolve_rejected" -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
-
         else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
     Text(
