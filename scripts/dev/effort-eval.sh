@@ -152,12 +152,19 @@ for name in ('always-high', 'always-non', 'router'):
     if len(p_['rows']) < expected or nonzero < expected - 2:
         print(f"VERDICT: INVALID — {name} arm has {len(p_['rows'])} rows / {nonzero} with tokens (need {expected})")
         sys.exit(2)
-# Random-interpolation line between the fixed policies at the router's token spend.
+# Random-interpolation line between the fixed policies at the router's token
+# spend. The line only spans [min,max] of the two fixed costs: a router point
+# CHEAPER than both baselines cannot be matched by any mixture — clamp, and
+# treat below-cheapest-cost with in-range quality as domination.
 if h['toks'] != n['toks']:
     frac = (r['toks'] - n['toks']) / (h['toks'] - n['toks'])
 else:
     frac = 1.0
+dominates = r['toks'] <= min(h['toks'], n['toks'])
+frac = max(0.0, min(1.0, frac))
 interp_q = n['q'] + (h['q'] - n['q']) * frac
+if dominates:
+    interp_q = min(h['q'], n['q'])  # cheapest achievable mixture is the cheaper policy itself
 # Acceptance: (a) RouterBench — on/above the interpolation line; (b) Ares #8 —
 # quality within 2pt of always-high. The token-saving goal (40-50%) is
 # reported as a metric, not a hard gate (it depends on the traffic mix).
