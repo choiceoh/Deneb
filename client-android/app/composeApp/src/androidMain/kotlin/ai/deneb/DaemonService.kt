@@ -1,5 +1,7 @@
 package ai.deneb
 
+import ai.deneb.data.TaskScheduler
+import ai.deneb.shared.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,8 +9,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.os.IBinder
-import ai.deneb.data.TaskScheduler
-import ai.deneb.shared.R
 import org.koin.android.ext.android.inject
 
 class DaemonService : Service() {

@@ -2,7 +2,6 @@
 
 package ai.deneb.ui.chat
 
-import androidx.compose.runtime.Immutable
 import ai.deneb.data.Attachment
 import ai.deneb.data.FallbackStatus
 import ai.deneb.data.ReasoningRequestMode
@@ -13,6 +12,7 @@ import ai.deneb.data.UiSubmission
 import ai.deneb.network.UiError
 import ai.deneb.network.dtos.gemini.GeminiChatRequestDto
 import ai.deneb.network.dtos.openaicompatible.OpenAICompatibleChatRequestDto
+import androidx.compose.runtime.Immutable
 import io.github.vinceglb.filekit.PlatformFile
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf

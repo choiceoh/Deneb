@@ -158,19 +158,15 @@ private suspend fun DenebGatewayClient.fleetPost(path: String, jsonBody: String)
 
 // --- reads ------------------------------------------------------------------
 
-internal suspend fun DenebGatewayClient.fleetState(): FleetState? =
-    fleetGetText("/api/state")?.let { runCatching { fleetJson.decodeFromString<FleetState>(it) }.getOrNull() }
+internal suspend fun DenebGatewayClient.fleetState(): FleetState? = fleetGetText("/api/state")?.let { runCatching { fleetJson.decodeFromString<FleetState>(it) }.getOrNull() }
 
-internal suspend fun DenebGatewayClient.fleetRecipes(): List<FleetRecipe>? =
-    fleetGetText("/api/recipes")?.let { runCatching { fleetJson.decodeFromString<List<FleetRecipe>>(it) }.getOrNull() }
+internal suspend fun DenebGatewayClient.fleetRecipes(): List<FleetRecipe>? = fleetGetText("/api/recipes")?.let { runCatching { fleetJson.decodeFromString<List<FleetRecipe>>(it) }.getOrNull() }
 
-internal suspend fun DenebGatewayClient.fleetJobs(): List<FleetJob>? =
-    fleetGetText("/api/jobs")?.let { runCatching { fleetJson.decodeFromString<List<FleetJob>>(it) }.getOrNull() }
+internal suspend fun DenebGatewayClient.fleetJobs(): List<FleetJob>? = fleetGetText("/api/jobs")?.let { runCatching { fleetJson.decodeFromString<List<FleetJob>>(it) }.getOrNull() }
 
-internal suspend fun DenebGatewayClient.fleetJob(id: String): FleetJob? =
-    fleetGetText("/api/jobs/${id.encodeURLParameter()}")?.let {
-        runCatching { fleetJson.decodeFromString<FleetJob>(it) }.getOrNull()
-    }
+internal suspend fun DenebGatewayClient.fleetJob(id: String): FleetJob? = fleetGetText("/api/jobs/${id.encodeURLParameter()}")?.let {
+    runCatching { fleetJson.decodeFromString<FleetJob>(it) }.getOrNull()
+}
 
 // --- writes -----------------------------------------------------------------
 
@@ -212,15 +208,13 @@ internal suspend fun DenebGatewayClient.fleetRecipeAction(
     return null
 }
 
-internal suspend fun DenebGatewayClient.fleetHFSearch(q: String): List<FleetHFModel>? =
-    fleetGetText("/api/hf/search?q=${q.encodeURLParameter()}")?.let {
-        runCatching { fleetJson.decodeFromString<FleetHFSearchResponse>(it).models }.getOrNull()
-    }
+internal suspend fun DenebGatewayClient.fleetHFSearch(q: String): List<FleetHFModel>? = fleetGetText("/api/hf/search?q=${q.encodeURLParameter()}")?.let {
+    runCatching { fleetJson.decodeFromString<FleetHFSearchResponse>(it).models }.getOrNull()
+}
 
-internal suspend fun DenebGatewayClient.fleetHFInfo(repo: String): FleetHFInfo? =
-    fleetGetText("/api/hf/info?repo=${repo.encodeURLParameter()}")?.let {
-        runCatching { fleetJson.decodeFromString<FleetHFInfo>(it) }.getOrNull()
-    }
+internal suspend fun DenebGatewayClient.fleetHFInfo(repo: String): FleetHFInfo? = fleetGetText("/api/hf/info?repo=${repo.encodeURLParameter()}")?.let {
+    runCatching { fleetJson.decodeFromString<FleetHFInfo>(it) }.getOrNull()
+}
 
 /** Start a HuggingFace download on a node. Error message, or null on success. */
 internal suspend fun DenebGatewayClient.fleetDownloadModel(node: String, repo: String, onJob: (String) -> Unit = {}): String? {
@@ -238,5 +232,4 @@ internal suspend fun DenebGatewayClient.fleetDownloadModel(node: String, repo: S
 }
 
 /** Cancel a running job. Error message, or null on success. */
-internal suspend fun DenebGatewayClient.fleetCancelJob(id: String): String? =
-    fleetPost("/api/jobs/${id.encodeURLParameter()}/cancel", "{}").second
+internal suspend fun DenebGatewayClient.fleetCancelJob(id: String): String? = fleetPost("/api/jobs/${id.encodeURLParameter()}/cancel", "{}").second

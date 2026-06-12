@@ -1,5 +1,8 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.denebHairline
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,9 +22,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.denebHairline
 import kotlinx.coroutines.launch
 
 /**
@@ -65,8 +65,11 @@ fun DenebDiaryScreen(
                     "일기를 불러오지 못했습니다.",
                     onRetry = { scope.launch { load() } },
                 )
+
                 list == null -> DenebLoading()
+
                 list.isEmpty() -> DenebEmpty("아직 기록된 일기가 없습니다.")
+
                 else -> {
                     list.forEach { entry ->
                         if (entry.header.isNotBlank()) {

@@ -1,5 +1,8 @@
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.network.UiError
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,9 +21,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import ai.deneb.network.UiError
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.handCursor
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.ic_refresh
 import org.jetbrains.compose.resources.stringResource
@@ -64,7 +64,10 @@ internal fun ErrorMessage(
             Spacer(Modifier.height(10.dp))
             TextButton(
                 modifier = Modifier.handCursor(),
-                onClick = { haptics.tap(); retry() },
+                onClick = {
+                    haptics.tap()
+                    retry()
+                },
             ) {
                 Icon(
                     imageVector = vectorResource(Res.drawable.ic_refresh),

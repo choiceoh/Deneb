@@ -1,5 +1,9 @@
 package ai.deneb.ui.components
 
+import ai.deneb.ui.auroraAzure
+import ai.deneb.ui.auroraCyan
+import ai.deneb.ui.auroraPeriwinkle
+import ai.deneb.ui.auroraViolet
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -17,10 +21,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.auroraAzure
-import ai.deneb.ui.auroraCyan
-import ai.deneb.ui.auroraPeriwinkle
-import ai.deneb.ui.auroraViolet
 
 // Closed aurora loop: four evenly spaced cool-spectrum colors that the border
 // sweep rotates through. Treating it as a continuous, periodic function (see

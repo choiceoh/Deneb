@@ -1,5 +1,6 @@
 package ai.deneb.ui.components
 
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.handCursor
 
 @Composable
 fun DenebSearchField(

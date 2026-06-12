@@ -1,5 +1,6 @@
 package ai.deneb
 
+import ai.deneb.contacts.ContactsReader
 import ai.deneb.data.AppSettings
 import ai.deneb.data.ConversationStorage
 import ai.deneb.data.DataRepository
@@ -18,7 +19,6 @@ import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.email.EmailPoller
 import ai.deneb.mcp.McpServerManager
 import ai.deneb.network.Requests
-import ai.deneb.contacts.ContactsReader
 import ai.deneb.sms.SmsPoller
 import ai.deneb.sms.SmsReader
 import ai.deneb.sms.SmsSender

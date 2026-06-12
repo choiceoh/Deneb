@@ -1,5 +1,8 @@
 package ai.deneb.ui.settings
 
+import ai.deneb.ui.denebAdaptiveCardBorder
+import ai.deneb.ui.denebAdaptiveCardColors
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,9 +11,6 @@ import androidx.compose.material3.Card
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.denebAdaptiveCardBorder
-import ai.deneb.ui.denebAdaptiveCardColors
-import ai.deneb.ui.handCursor
 
 /**
  * Deneb-styled card used to group settings rows. The Kai settings screen that

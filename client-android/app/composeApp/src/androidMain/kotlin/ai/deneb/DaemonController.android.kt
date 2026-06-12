@@ -1,9 +1,9 @@
 package ai.deneb
 
+import ai.deneb.data.AppSettings
 import android.app.ForegroundServiceStartNotAllowedException
 import android.content.Context
 import android.content.Intent
-import ai.deneb.data.AppSettings
 import org.koin.java.KoinJavaComponent.inject
 
 actual fun createDaemonController(): DaemonController = AndroidDaemonController()

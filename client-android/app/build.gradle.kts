@@ -45,6 +45,13 @@ configure<com.diffplug.gradle.spotless.SpotlessExtension> {
                     "ktlint_standard_discouraged-comment-location" to "disabled",
                     "ktlint_standard_value-argument-comment" to "disabled",
                     "ktlint_standard_value-parameter-comment" to "disabled",
+                    // Style-taste rules that fight the house conventions
+                    // (file-header KDocs, non-screaming compose constants,
+                    // topic-named files, exposed backing properties):
+                    "ktlint_standard_kdoc" to "disabled",
+                    "ktlint_standard_property-naming" to "disabled",
+                    "ktlint_standard_backing-property-naming" to "disabled",
+                    "ktlint_standard_filename" to "disabled",
                 ),
             )
     }

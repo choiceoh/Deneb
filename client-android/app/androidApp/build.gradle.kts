@@ -13,7 +13,9 @@ plugins {
 // fall back to the libs value.
 val denebVersionCode: Int =
     (findProperty("denebVersionCode") as? String)?.toIntOrNull()
-        ?: libs.versions.android.versionCode.get().toInt()
+        ?: libs.versions.android.versionCode
+            .get()
+            .toInt()
 
 android {
     namespace = "ai.deneb"
@@ -107,15 +109,18 @@ android {
 // the shared publish dir. The hash comes from DENEB_BUILD_SHA, else git, else "nogit".
 androidComponents {
     val versionCode = denebVersionCode
-    val gitSha = (
-        System.getenv("DENEB_BUILD_SHA")
-            ?: runCatching {
-                ProcessBuilder("git", "rev-parse", "--short=8", "HEAD")
-                    .directory(rootDir)
-                    .start()
-                    .inputStream.bufferedReader().use { it.readText() }
-                    .trim()
-            }.getOrNull()
+    val gitSha =
+        (
+            System.getenv("DENEB_BUILD_SHA")
+                ?: runCatching {
+                    ProcessBuilder("git", "rev-parse", "--short=8", "HEAD")
+                        .directory(rootDir)
+                        .start()
+                        .inputStream
+                        .bufferedReader()
+                        .use { it.readText() }
+                        .trim()
+                }.getOrNull()
         ).orEmpty().ifBlank { "nogit" }
     onVariants { variant ->
         variant.outputs.forEach { output ->

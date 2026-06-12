@@ -3,6 +3,8 @@
 
 package ai.deneb
 
+import ai.deneb.ui.chat.composables.denebSectionDestinations
+import ai.deneb.ui.chat.composables.navigateToDenebSection
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,8 +24,6 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import ai.deneb.ui.chat.composables.denebSectionDestinations
-import ai.deneb.ui.chat.composables.navigateToDenebSection
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.logo
 import nl.marc_apps.tts.TextToSpeechEngine

@@ -1,5 +1,9 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -31,10 +35,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHairline
 import kotlinx.coroutines.launch
 
 /**
@@ -105,140 +105,143 @@ fun DenebCategoryPagesScreen(
     }
 
     DenebScreenScaffold(title = "카테고리", onBack = onBack, tabBar = navigationTabBar) {
-            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-                if (selecting) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "${selected.size}개 선택",
-                            style = DenebType.cardTitle,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(onClick = { clearSelection() }) { Text("취소") }
-                    }
-                } else {
+        Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+            if (selecting) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        category.ifBlank { "(미분류)" },
-                        style = DenebType.subject,
+                        "${selected.size}개 선택",
+                        style = DenebType.cardTitle,
                         color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
                     )
+                    TextButton(onClick = { clearSelection() }) { Text("취소") }
                 }
-                Spacer(Modifier.height(12.dp))
-                HorizontalDivider(color = denebHairline())
+            } else {
+                Text(
+                    category.ifBlank { "(미분류)" },
+                    style = DenebType.subject,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
             }
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider(color = denebHairline())
+        }
 
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                Column(
-                    modifier = Modifier
-                        .padding(horizontal = 24.dp)
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    val p = pages
-                    when {
-                        loadFailed -> {
-                            Spacer(Modifier.height(12.dp))
-                            DenebError(
-                                "페이지를 불러오지 못했습니다.",
-                                onRetry = { scope.launch { load() } },
-                            )
-                        }
-                        p == null -> {
-                            Spacer(Modifier.height(12.dp))
-                            DenebLoading()
-                        }
-                        p.isEmpty() -> {
-                            Spacer(Modifier.height(12.dp))
-                            DenebEmpty("이 카테고리에 페이지가 없습니다.")
-                        }
-                        else -> p.forEach { page ->
-                            val isSelected = page.path in selected
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .combinedClickable(
-                                        onClick = {
-                                            haptics.tap()
-                                            if (selecting) {
-                                                if (isSelected) selected.remove(page.path) else selected.add(page.path)
-                                                if (selected.isEmpty()) selecting = false
-                                            } else {
-                                                onOpenWiki(page.path)
-                                            }
-                                        },
-                                        onLongClick = {
-                                            haptics.longPress()
-                                            selecting = true
-                                            if (page.path !in selected) selected.add(page.path)
-                                        },
-                                    )
-                                    .background(
-                                        if (isSelected) {
-                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 24.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                val p = pages
+                when {
+                    loadFailed -> {
+                        Spacer(Modifier.height(12.dp))
+                        DenebError(
+                            "페이지를 불러오지 못했습니다.",
+                            onRetry = { scope.launch { load() } },
+                        )
+                    }
+
+                    p == null -> {
+                        Spacer(Modifier.height(12.dp))
+                        DenebLoading()
+                    }
+
+                    p.isEmpty() -> {
+                        Spacer(Modifier.height(12.dp))
+                        DenebEmpty("이 카테고리에 페이지가 없습니다.")
+                    }
+
+                    else -> p.forEach { page ->
+                        val isSelected = page.path in selected
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .combinedClickable(
+                                    onClick = {
+                                        haptics.tap()
+                                        if (selecting) {
+                                            if (isSelected) selected.remove(page.path) else selected.add(page.path)
+                                            if (selected.isEmpty()) selecting = false
                                         } else {
-                                            Color.Transparent
-                                        },
-                                    )
-                                    .padding(vertical = 12.dp),
-                                verticalAlignment = Alignment.Top,
-                            ) {
-                                if (selecting) {
-                                    Checkbox(
-                                        checked = isSelected,
-                                        onCheckedChange = null,
-                                        modifier = Modifier.padding(end = 10.dp),
-                                    )
-                                }
-                                Column(Modifier.weight(1f)) {
+                                            onOpenWiki(page.path)
+                                        }
+                                    },
+                                    onLongClick = {
+                                        haptics.longPress()
+                                        selecting = true
+                                        if (page.path !in selected) selected.add(page.path)
+                                    },
+                                )
+                                .background(
+                                    if (isSelected) {
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                    } else {
+                                        Color.Transparent
+                                    },
+                                )
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.Top,
+                        ) {
+                            if (selecting) {
+                                Checkbox(
+                                    checked = isSelected,
+                                    onCheckedChange = null,
+                                    modifier = Modifier.padding(end = 10.dp),
+                                )
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    page.title,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (page.summary.isNotBlank()) {
                                     Text(
-                                        page.title,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
+                                        page.summary,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2,
                                         overflow = TextOverflow.Ellipsis,
                                     )
-                                    if (page.summary.isNotBlank()) {
-                                        Text(
-                                            page.summary,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                    }
-                                    if (page.updated.isNotBlank()) {
-                                        Text(
-                                            page.updated.take(10),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
+                                }
+                                if (page.updated.isNotBlank()) {
+                                    Text(
+                                        page.updated.take(10),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
                             }
-                            HorizontalDivider(color = denebHairline())
                         }
+                        HorizontalDivider(color = denebHairline())
                     }
-                    Spacer(Modifier.height(24.dp))
                 }
+                Spacer(Modifier.height(24.dp))
             }
+        }
 
-            if (selecting && selected.isNotEmpty()) {
-                // Flat action bar in the Deneb idiom: a hairline above, no elevation.
-                Column(Modifier.fillMaxWidth()) {
-                    HorizontalDivider(color = denebHairline())
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+        if (selecting && selected.isNotEmpty()) {
+            // Flat action bar in the Deneb idiom: a hairline above, no elevation.
+            Column(Modifier.fillMaxWidth()) {
+                HorizontalDivider(color = denebHairline())
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("${selected.size}개 선택", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.weight(1f))
+                    TextButton(
+                        onClick = { confirmDelete = true },
+                        enabled = !busy,
                     ) {
-                        Text("${selected.size}개 선택", style = MaterialTheme.typography.titleSmall)
-                        Spacer(Modifier.weight(1f))
-                        TextButton(
-                            onClick = { confirmDelete = true },
-                            enabled = !busy,
-                        ) {
-                            Text("삭제", color = MaterialTheme.colorScheme.error)
-                        }
+                        Text("삭제", color = MaterialTheme.colorScheme.error)
                     }
                 }
             }
+        }
     }
 }

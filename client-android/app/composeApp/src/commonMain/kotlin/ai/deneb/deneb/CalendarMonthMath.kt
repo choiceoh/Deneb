@@ -31,8 +31,7 @@ internal data class CalMonth(val year: Int, val month: Int) {
 }
 
 /** Signed month distance from [a] to [b] (b − a), for mapping a month to a pager page. */
-internal fun monthsBetween(a: CalMonth, b: CalMonth): Int =
-    (b.year * 12 + b.month) - (a.year * 12 + a.month)
+internal fun monthsBetween(a: CalMonth, b: CalMonth): Int = (b.year * 12 + b.month) - (a.year * 12 + a.month)
 
 /** The month a date falls in. */
 internal fun monthOf(date: LocalDate): CalMonth = CalMonth(date.year, date.month.ordinal + 1)

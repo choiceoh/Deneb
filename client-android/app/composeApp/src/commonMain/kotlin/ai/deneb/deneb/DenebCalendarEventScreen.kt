@@ -1,5 +1,10 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebSectionLabel
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHint
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,11 +30,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.DenebSectionLabel
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHint
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -82,7 +82,9 @@ fun DenebCalendarEventScreen(
             when {
                 ev == null && loadFailed ->
                     DenebError("일정을 불러오지 못했습니다.", onRetry = { scope.launch { load() } })
+
                 ev == null -> DenebLoading()
+
                 else -> CalendarEventContent(
                     ev = ev,
                     isLocal = ev.local,
@@ -173,8 +175,14 @@ internal fun CalendarEventContent(
     if (isLocal) {
         Spacer(Modifier.height(20.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { haptics.tap(); onEdit() }) { Text("편집") }
-            OutlinedButton(onClick = { haptics.reject(); onDelete() }) { Text("삭제") }
+            OutlinedButton(onClick = {
+                haptics.tap()
+                onEdit()
+            }) { Text("편집") }
+            OutlinedButton(onClick = {
+                haptics.reject()
+                onDelete()
+            }) { Text("삭제") }
         }
         if (actionError != null) {
             Spacer(Modifier.height(8.dp))

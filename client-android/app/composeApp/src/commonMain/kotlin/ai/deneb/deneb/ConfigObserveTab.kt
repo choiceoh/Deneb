@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.denebHairline
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,7 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.denebHairline
 import kotlinx.coroutines.launch
 
 // Settings hub "관찰" (Observe) tab: the gateway's own behavior + recent
@@ -49,9 +49,11 @@ internal fun ObserveTab(client: DenebGatewayClient) {
     LaunchedEffect(Unit) { load() }
     when {
         loading -> DenebLoading()
+
         failed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             DenebError("관찰 데이터를 불러오지 못했습니다.", onRetry = { scope.launch { load() } })
         }
+
         else -> LazyColumn(Modifier.fillMaxSize()) {
             behavior?.let { b ->
                 item {

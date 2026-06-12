@@ -1,7 +1,7 @@
 package ai.deneb.ui.markdown
 
-import androidx.compose.runtime.Immutable
 import ai.deneb.ui.dynamicui.DenebUiNode
+import androidx.compose.runtime.Immutable
 import kotlinx.collections.immutable.ImmutableList
 
 @Immutable

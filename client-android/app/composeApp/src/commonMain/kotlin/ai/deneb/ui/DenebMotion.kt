@@ -64,6 +64,7 @@ object DenebMotion {
     val emphasizedAccelerate: Easing = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
 
     // ---- Durations (ms), named by intent ----
+
     /** Near-instant acknowledgement (press states, tiny toggles). */
     const val DurationQuick = 120
 

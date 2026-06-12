@@ -1,5 +1,19 @@
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.data.Attachment
+import ai.deneb.getBackgroundDispatcher
+import ai.deneb.ui.DenebMotion
+import ai.deneb.ui.components.LocalShowFullScreenImage
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebExpandIn
+import ai.deneb.ui.denebShrinkOut
+import ai.deneb.ui.dynamicui.FrozenSubmission
+import ai.deneb.ui.dynamicui.toSpeakableText
+import ai.deneb.ui.handCursor
+import ai.deneb.ui.markdown.LocalDenebUiStreaming
+import ai.deneb.ui.markdown.MarkdownContent
+import ai.deneb.ui.markdown.parseMarkdown
+import ai.deneb.ui.markdown.parseMarkdownCached
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -9,12 +23,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.layout.ContentScale
-import ai.deneb.data.Attachment
-import ai.deneb.ui.components.LocalShowFullScreenImage
-import ai.deneb.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,7 +34,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -50,21 +60,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ai.deneb.getBackgroundDispatcher
-import ai.deneb.ui.dynamicui.FrozenSubmission
-import ai.deneb.ui.dynamicui.toSpeakableText
-import ai.deneb.ui.DenebMotion
-import ai.deneb.ui.denebExpandIn
-import ai.deneb.ui.denebShrinkOut
-import ai.deneb.ui.handCursor
-import ai.deneb.ui.markdown.LocalDenebUiStreaming
-import ai.deneb.ui.markdown.MarkdownContent
-import ai.deneb.ui.markdown.parseMarkdown
-import ai.deneb.ui.markdown.parseMarkdownCached
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.bot_message_copy_content_description
 import deneb.composeapp.generated.resources.bot_message_regenerate_content_description
@@ -199,7 +199,10 @@ internal fun BotMessage(
                                 .widthIn(max = 520.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .handCursor()
-                                .clickable(onClickLabel = "확대") { haptics.tap(); showFullScreen(imageBitmap) },
+                                .clickable(onClickLabel = "확대") {
+                                    haptics.tap()
+                                    showFullScreen(imageBitmap)
+                                },
                             contentScale = ContentScale.FillWidth,
                         )
                     }
@@ -218,7 +221,10 @@ internal fun BotMessage(
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceContainer)
                     .handCursor()
-                    .clickable { haptics.toggle(!isEditing); isEditing = !isEditing },
+                    .clickable {
+                        haptics.toggle(!isEditing)
+                        isEditing = !isEditing
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -318,7 +324,10 @@ private fun ReasoningBlockquote(
     Column(modifier = modifier) {
         Row(
             modifier = Modifier.fillMaxWidth()
-                .clickable { haptics.toggle(!expanded); expanded = !expanded }
+                .clickable {
+                    haptics.toggle(!expanded)
+                    expanded = !expanded
+                }
                 .handCursor(),
             verticalAlignment = Alignment.CenterVertically,
         ) {

@@ -56,7 +56,9 @@ private fun queryContacts(context: Context): List<ContactData> {
     cr.query(
         Phone.CONTENT_URI,
         arrayOf(Phone.CONTACT_ID, Phone.DISPLAY_NAME, Phone.NUMBER),
-        null, null, null,
+        null,
+        null,
+        null,
     )?.use { c ->
         val idCol = c.getColumnIndexOrThrow(Phone.CONTACT_ID)
         val nameCol = c.getColumnIndexOrThrow(Phone.DISPLAY_NAME)
@@ -71,7 +73,9 @@ private fun queryContacts(context: Context): List<ContactData> {
     cr.query(
         Email.CONTENT_URI,
         arrayOf(Email.CONTACT_ID, Email.DISPLAY_NAME, Email.ADDRESS),
-        null, null, null,
+        null,
+        null,
+        null,
     )?.use { c ->
         val idCol = c.getColumnIndexOrThrow(Email.CONTACT_ID)
         val nameCol = c.getColumnIndexOrThrow(Email.DISPLAY_NAME)

@@ -1,5 +1,10 @@
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.data.Attachment
+import ai.deneb.decodeToImageBitmap
+import ai.deneb.ui.components.LocalShowFullScreenImage
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,11 +34,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import ai.deneb.data.Attachment
-import ai.deneb.decodeToImageBitmap
-import ai.deneb.ui.components.LocalShowFullScreenImage
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.handCursor
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.ic_file
 import kotlinx.collections.immutable.ImmutableList
@@ -93,7 +93,10 @@ internal fun UserMessage(
                                 .widthIn(max = 200.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .handCursor()
-                                .clickable(onClickLabel = "확대") { haptics.tap(); showFullScreen(imageBitmap) },
+                                .clickable(onClickLabel = "확대") {
+                                    haptics.tap()
+                                    showFullScreen(imageBitmap)
+                                },
                             contentScale = ContentScale.FillWidth,
                         )
                         Spacer(Modifier.height(8.dp))

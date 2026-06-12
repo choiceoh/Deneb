@@ -1,7 +1,5 @@
 package ai.deneb.ui.chat
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import ai.deneb.data.Conversation
 import ai.deneb.data.DataRepository
 import ai.deneb.data.TaskScheduler
@@ -14,14 +12,16 @@ import ai.deneb.getBackgroundDispatcher
 import ai.deneb.network.toUiError
 import ai.deneb.ui.dynamicui.DenebUiParser
 import ai.deneb.ui.markdown.DenebUiBlock
-import ai.deneb.ui.markdown.DenebUiPending
 import ai.deneb.ui.markdown.DenebUiError
+import ai.deneb.ui.markdown.DenebUiPending
 import ai.deneb.ui.markdown.parseMarkdown
-import io.github.vinceglb.filekit.PlatformFile
-import io.github.vinceglb.filekit.extension
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.conversation_untitled
 import deneb.composeapp.generated.resources.error_unsupported_file_type
+import io.github.vinceglb.filekit.PlatformFile
+import io.github.vinceglb.filekit.extension
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList

@@ -1,5 +1,11 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebRow
+import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebSectionLabel
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHint
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -30,12 +36,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebRow
-import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.DenebSectionLabel
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHint
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.TimeZone
@@ -111,17 +111,31 @@ fun DenebTodoScreen(
             Spacer(Modifier.height(4.dp))
             PullToRefreshBox(
                 isRefreshing = refreshing,
-                onRefresh = { scope.launch { refreshing = true; load(); refreshing = false } },
+                onRefresh = {
+                    scope.launch {
+                        refreshing = true
+                        load()
+                        refreshing = false
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                     when {
                         loadOk == null && todos.isEmpty() -> DenebLoading()
+
                         loadOk == false && todos.isEmpty() -> DenebError(
                             "할 일을 불러오지 못했어요.",
-                            onRetry = { scope.launch { loadOk = null; load() } },
+                            onRetry = {
+                                scope.launch {
+                                    loadOk = null
+                                    load()
+                                }
+                            },
                         )
+
                         todos.isEmpty() -> DenebEmpty("할 일이 없어요.", actionLabel = "할 일 추가", onAction = onAddTodo)
+
                         else -> TodoListContent(todos, onToggle = ::toggle, onOpen = onOpenTodo)
                     }
                     Spacer(Modifier.height(24.dp))
@@ -168,11 +182,17 @@ internal fun TodoCheckRow(
 ) {
     val haptics = rememberHaptics()
     val due = todoDueLabel(todo.due, todo.dueAllDay, tz)
-    DenebRow(onClick = { haptics.tap(); onOpen(todo.id) }) {
+    DenebRow(onClick = {
+        haptics.tap()
+        onOpen(todo.id)
+    }) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Checkbox(
                 checked = todo.done,
-                onCheckedChange = { haptics.toggle(it); onToggle(todo.id, it) },
+                onCheckedChange = {
+                    haptics.toggle(it)
+                    onToggle(todo.id, it)
+                },
             )
             Spacer(Modifier.width(4.dp))
             Column(Modifier.weight(1f).padding(top = 12.dp)) {

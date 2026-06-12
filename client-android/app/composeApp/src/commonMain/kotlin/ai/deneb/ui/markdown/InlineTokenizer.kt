@@ -27,20 +27,25 @@ internal object InlineTokenizer {
     // to match (one `\\.` iteration vs. two `[^…]` iterations), producing exponential
     // backtracking on Android's ICU regex engine when the surrounding `](url)` doesn't close.
     private val LINK_REGEX = Regex("(?<!\\\\)\\[((?:\\\\.|[^\\\\\\[\\]])*)\\]\\(([^)]*)\\)")
+
     // GFM-style bare autolink: http(s):// or www. runs the LLM emits as plain text (not wrapped
     // in []()). Stops at whitespace/<>; the opener can't sit right after a word char so it won't
     // bite into "ahttps". Trailing sentence punctuation and unbalanced ) are trimmed at use site.
     private val AUTOLINK_REGEX = Regex("(?<![\\w/@.])(?:https?://|www\\.)[^\\s<>]+")
+
     // CommonMark angle autolinks: <https://…>, <mailto:…>, <user@host.tld>. The whole range
     // including the brackets becomes the link node, so the <> never reaches the screen.
     private val ANGLE_AUTOLINK_REGEX = Regex("<(https?://[^\\s<>]+|mailto:[^\\s<>]+|[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+)>")
+
     // Bare email runs — this is a mail-first assistant, so addresses appear in prose constantly.
     // The final label must be an alphabetic TLD (≥2 letters) so "node@18.0.0"-style package
     // versions don't become mailto links, and trailing "a@b.com." prose dots stay out.
     private val EMAIL_REGEX = Regex("(?<![\\w.+-])[\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)*\\.[A-Za-z]{2,}")
     private val HARD_BREAK_REGEX = Regex(" {2,}\\n|\\\\\\n")
+
     // LLM-emitted literal <br>/<br/> — common in table cells where a real newline would split the row.
     private val HTML_BREAK_REGEX = Regex("<br\\s*/?>", RegexOption.IGNORE_CASE)
+
     // LLM-emitted semantic inline HTML. Paired tags only: b/strong/i/em map to real style
     // nodes, code/kbd to inline code, sub/sup to Unicode scripts (H<sub>2</sub>O → H₂O),
     // u/mark keep their content with the tags dropped. Unknown tags stay literal — they may

@@ -1,10 +1,5 @@
 package ai.deneb
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.ui.draganddrop.DragAndDropEvent
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.ui.graphics.vector.ImageVector
 import ai.deneb.data.AppSettings
 import ai.deneb.data.EmailStore
 import ai.deneb.data.MemoryStore
@@ -17,6 +12,11 @@ import ai.deneb.tools.EmailTools
 import ai.deneb.tools.HeartbeatTools
 import ai.deneb.tools.SchedulingTools
 import ai.deneb.ui.icons.ArrowBackIos
+import androidx.compose.material.icons.Icons
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.russhwolf.settings.ExperimentalSettingsImplementation
 import com.russhwolf.settings.KeychainSettings
 import com.russhwolf.settings.NSUserDefaultsSettings

@@ -1,9 +1,9 @@
 package ai.deneb.sandbox
 
+import ai.deneb.TerminalLine
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.snapshots.SnapshotStateList
-import ai.deneb.TerminalLine
 
 private const val MAX_TRANSCRIPT_LINES = 500
 

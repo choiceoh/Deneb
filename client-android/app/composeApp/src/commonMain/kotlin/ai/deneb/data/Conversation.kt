@@ -1,7 +1,7 @@
 package ai.deneb.data
 
-import androidx.compose.runtime.Immutable
 import ai.deneb.TerminalLine
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable

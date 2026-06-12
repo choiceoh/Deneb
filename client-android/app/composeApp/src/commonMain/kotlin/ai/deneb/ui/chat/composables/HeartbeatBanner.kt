@@ -1,5 +1,11 @@
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebAdaptiveCardBorder
+import ai.deneb.ui.denebAdaptiveCardColors
+import ai.deneb.ui.denebBannerEnter
+import ai.deneb.ui.denebBannerExit
+import ai.deneb.ui.handCursor
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
@@ -16,12 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebBannerEnter
-import ai.deneb.ui.denebBannerExit
-import ai.deneb.ui.handCursor
-import ai.deneb.ui.denebAdaptiveCardBorder
-import ai.deneb.ui.denebAdaptiveCardColors
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.heartbeat_banner_dismiss
 import deneb.composeapp.generated.resources.heartbeat_banner_message
@@ -47,7 +47,10 @@ internal fun HeartbeatBanner(
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 4.dp)
                 .handCursor()
-                .clickable { haptics.tap(); onTap() },
+                .clickable {
+                    haptics.tap()
+                    onTap()
+                },
             colors = denebAdaptiveCardColors(),
             border = denebAdaptiveCardBorder(),
         ) {

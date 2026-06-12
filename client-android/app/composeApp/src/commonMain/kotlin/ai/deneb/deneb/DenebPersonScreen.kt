@@ -1,5 +1,9 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -21,10 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHairline
 import kotlinx.coroutines.launch
 
 /**
@@ -108,7 +108,16 @@ fun DenebPersonScreen(
                     Column(
                         Modifier
                             .fillMaxWidth()
-                            .then(if (hit.path.isNotBlank()) Modifier.clickable { haptics.tap(); onOpenWiki(hit.path) } else Modifier)
+                            .then(
+                                if (hit.path.isNotBlank()) {
+                                    Modifier.clickable {
+                                        haptics.tap()
+                                        onOpenWiki(hit.path)
+                                    }
+                                } else {
+                                    Modifier
+                                },
+                            )
                             .padding(vertical = 8.dp),
                     ) {
                         Text(hit.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
@@ -131,7 +140,10 @@ fun DenebPersonScreen(
                         message = m,
                         selecting = false,
                         isSelected = false,
-                        onTap = { haptics.tap(); onOpenMail(m.id) },
+                        onTap = {
+                            haptics.tap()
+                            onOpenMail(m.id)
+                        },
                         onLongPress = {},
                     )
                 }

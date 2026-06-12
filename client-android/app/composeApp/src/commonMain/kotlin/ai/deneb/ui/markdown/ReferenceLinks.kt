@@ -20,24 +20,29 @@ internal fun resolveReferenceLinks(
 
 private fun resolveBlock(block: BlockNode, defs: Map<String, String>): BlockNode = when (block) {
     is Heading -> Heading(block.level, resolveInlines(block.inlines, defs))
+
     is Paragraph -> Paragraph(resolveInlines(block.inlines, defs))
+
     is Blockquote -> Blockquote(block.children.map { resolveBlock(it, defs) }.toImmutableList())
+
     is BulletList -> BulletList(block.items.map { resolveItem(it, defs) }.toImmutableList(), block.tight)
+
     is OrderedList -> OrderedList(
         block.start,
         block.items.map { resolveItem(it, defs) }.toImmutableList(),
         block.tight,
     )
+
     is Table -> Table(
         block.headers.map { resolveInlines(it, defs) }.toImmutableList(),
         block.alignments,
         block.rows.map { row -> row.map { resolveInlines(it, defs) }.toImmutableList() }.toImmutableList(),
     )
+
     else -> block
 }
 
-private fun resolveItem(item: ListItem, defs: Map<String, String>): ListItem =
-    ListItem(item.children.map { resolveBlock(it, defs) }.toImmutableList(), item.checked)
+private fun resolveItem(item: ListItem, defs: Map<String, String>): ListItem = ListItem(item.children.map { resolveBlock(it, defs) }.toImmutableList(), item.checked)
 
 private fun resolveInlines(
     inlines: ImmutableList<InlineNode>,

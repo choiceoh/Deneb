@@ -7,8 +7,7 @@ import kotlin.test.assertTrue
 
 class WorkReportJumpTest {
 
-    private fun msg(role: History.Role, ts: Long, content: String = "x") =
-        History(role = role, content = content, timestampMs = ts)
+    private fun msg(role: History.Role, ts: Long, content: String = "x") = History(role = role, content = content, timestampMs = ts)
 
     // --- indexOfMirroredReport ------------------------------------------------
 

@@ -1,9 +1,10 @@
 package ai.deneb.deneb
 
-import androidx.compose.foundation.clickable
 import ai.deneb.Platform
 import ai.deneb.currentPlatform
+import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.components.rememberHaptics
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,7 +32,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebScreenScaffold
 import kotlinx.coroutines.launch
 
 /**
@@ -108,16 +108,20 @@ fun DenebSearchScreen(
             val r = results
             when {
                 searching && r == null -> DenebLoading("검색 중…")
+
                 failed -> DenebError(
                     "검색에 실패했어요.",
                     onRetry = { run() },
                 )
+
                 r == null -> Text(
                     "위키 · 일기 · 사람을 한 번에 검색합니다.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+
                 r.wiki.isEmpty() && r.diary.isEmpty() && r.people.isEmpty() -> DenebEmpty("결과 없음")
+
                 else -> {
                     if (r.wiki.isNotEmpty()) {
                         GroupHeader("위키 ${r.wiki.size}")
@@ -165,7 +169,16 @@ private fun ResultRow(title: String, snippet: String, onClick: (() -> Unit)?) {
     Column(
         Modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable { haptics.tap(); onClick() } else Modifier)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable {
+                        haptics.tap()
+                        onClick()
+                    }
+                } else {
+                    Modifier
+                },
+            )
             .padding(vertical = 10.dp),
     ) {
         Text(

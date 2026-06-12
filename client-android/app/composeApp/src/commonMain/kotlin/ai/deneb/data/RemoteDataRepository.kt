@@ -35,13 +35,13 @@ import ai.deneb.tools.SmsSendPermissionController
 import ai.deneb.ui.chat.History
 import ai.deneb.ui.chat.toGeminiMessageDto
 import ai.deneb.ui.settings.SettingsModel
+import deneb.composeapp.generated.resources.Res
+import deneb.composeapp.generated.resources.default_soul
 import io.github.vinceglb.filekit.PlatformFile
 import io.github.vinceglb.filekit.mimeType
 import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.readBytes
 import io.github.vinceglb.filekit.size
-import deneb.composeapp.generated.resources.Res
-import deneb.composeapp.generated.resources.default_soul
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,7 +64,6 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 private const val MAX_HEARTBEAT_MESSAGES = 50
-
 
 class RemoteDataRepository(
     internal val requests: Requests,
@@ -276,7 +275,6 @@ class RemoteDataRepository(
             ?: models.firstOrNull()
     }
 
-
     private fun hasValidInstanceApiKey(instanceId: String, service: Service): Boolean {
         if (!service.requiresApiKey && !service.supportsOptionalApiKey) return true
         if (service.requiresApiKey) return appSettings.getInstanceApiKey(instanceId).isNotBlank()
@@ -437,7 +435,6 @@ class RemoteDataRepository(
             _fallbackStatus.value = null
         }
     }
-
 
     private suspend fun saveCurrentConversation() {
         val history = trimToRecentExchanges(chatHistory.value, 20)
@@ -1122,5 +1119,4 @@ class RemoteDataRepository(
             if (lastSpace > 20) truncated.substring(0, lastSpace) + "..." else truncated + "..."
         }
     }
-
 }

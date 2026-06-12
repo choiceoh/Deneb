@@ -1,5 +1,8 @@
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.data.ServiceEntry
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -39,9 +42,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
-import ai.deneb.data.ServiceEntry
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.handCursor
 import kotlinx.collections.immutable.ImmutableList
 import org.jetbrains.compose.resources.vectorResource
 
@@ -62,7 +62,10 @@ internal fun ServiceSelector(
                 .size(48.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
-                .clickable(onClickLabel = "서비스 선택", role = Role.DropdownList) { haptics.tap(); expanded = true }
+                .clickable(onClickLabel = "서비스 선택", role = Role.DropdownList) {
+                    haptics.tap()
+                    expanded = true
+                }
                 .handCursor(),
             contentAlignment = Alignment.Center,
         ) {

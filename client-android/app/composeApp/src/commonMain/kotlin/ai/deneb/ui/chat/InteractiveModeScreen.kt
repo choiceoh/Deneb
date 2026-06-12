@@ -5,6 +5,22 @@
 
 package ai.deneb.ui.chat
 
+import ai.deneb.BackIcon
+import ai.deneb.data.supportsAgenticFlows
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.chat.composables.CircleIconButton
+import ai.deneb.ui.chat.composables.ErrorMessage
+import ai.deneb.ui.chat.composables.QuestionInput
+import ai.deneb.ui.chat.composables.ServiceSelector
+import ai.deneb.ui.chat.composables.TrailingIcon
+import ai.deneb.ui.chat.composables.WaitingResponseRow
+import ai.deneb.ui.components.LogoAnimation
+import ai.deneb.ui.components.animatedGradientBorder
+import ai.deneb.ui.dynamicui.DenebUiParser
+import ai.deneb.ui.dynamicui.DenebUiRenderer
+import ai.deneb.ui.handCursor
+import ai.deneb.ui.markdown.DenebUiBlock
+import ai.deneb.ui.markdown.parseMarkdown
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -53,22 +69,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import ai.deneb.BackIcon
-import ai.deneb.data.supportsAgenticFlows
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.chat.composables.CircleIconButton
-import ai.deneb.ui.chat.composables.ErrorMessage
-import ai.deneb.ui.chat.composables.QuestionInput
-import ai.deneb.ui.chat.composables.ServiceSelector
-import ai.deneb.ui.chat.composables.TrailingIcon
-import ai.deneb.ui.chat.composables.WaitingResponseRow
-import ai.deneb.ui.components.animatedGradientBorder
-import ai.deneb.ui.components.LogoAnimation
-import ai.deneb.ui.dynamicui.DenebUiParser
-import ai.deneb.ui.dynamicui.DenebUiRenderer
-import ai.deneb.ui.handCursor
-import ai.deneb.ui.markdown.DenebUiBlock
-import ai.deneb.ui.markdown.parseMarkdown
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.ic_stop
 import deneb.composeapp.generated.resources.interactive_back_content_description

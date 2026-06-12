@@ -2,6 +2,9 @@
 
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,9 +23,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.handCursor
 
 // Deneb-specific chat chrome: the left navigation drawer (a typographic menu in
 // the Mini App's idiom — pure words, no icons). Kept out of ChatScreen.kt to hold
@@ -71,18 +71,42 @@ fun DenebDrawerSheet(
         ) {
             // "people" is no longer a drawer destination: the merged people surface
             // (recent contacts + 인물 wiki) lives inside categories as a pinned row.
-            TypeMenuItem("mail") { onOpenMail(); onClose() }
-            TypeMenuItem("calendar") { onOpenCalendar(); onClose() }
-            TypeMenuItem("search") { onOpenSearch(); onClose() }
-            TypeMenuItem("categories") { onOpenCategories(); onClose() }
-            TypeMenuItem("settings") { onNavigateToSettings(); onClose() }
+            TypeMenuItem("mail") {
+                onOpenMail()
+                onClose()
+            }
+            TypeMenuItem("calendar") {
+                onOpenCalendar()
+                onClose()
+            }
+            TypeMenuItem("search") {
+                onOpenSearch()
+                onClose()
+            }
+            TypeMenuItem("categories") {
+                onOpenCategories()
+                onClose()
+            }
+            TypeMenuItem("settings") {
+                onNavigateToSettings()
+                onClose()
+            }
 
             val capture = LocalCaptureActions.current
             if (capture != null) {
                 Spacer(Modifier.height(24.dp))
-                CaptureItem("image ocr") { capture.onCaptureImage(); onClose() }
-                CaptureItem("transcribe") { capture.onCaptureAudio(); onClose() }
-                CaptureItem("voice") { capture.onVoiceInput(); onClose() }
+                CaptureItem("image ocr") {
+                    capture.onCaptureImage()
+                    onClose()
+                }
+                CaptureItem("transcribe") {
+                    capture.onCaptureAudio()
+                    onClose()
+                }
+                CaptureItem("voice") {
+                    capture.onVoiceInput()
+                    onClose()
+                }
             }
         }
     }
@@ -97,7 +121,10 @@ private fun TypeMenuItem(label: String, onClick: () -> Unit) {
         color = MaterialTheme.colorScheme.onBackground,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { haptics.tap(); onClick() }
+            .clickable {
+                haptics.tap()
+                onClick()
+            }
             .handCursor()
             .padding(vertical = 5.dp),
     )
@@ -114,7 +141,10 @@ private fun CaptureItem(label: String, onClick: () -> Unit) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { haptics.tap(); onClick() }
+            .clickable {
+                haptics.tap()
+                onClick()
+            }
             .handCursor()
             .padding(vertical = 6.dp),
     )

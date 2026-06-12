@@ -1,5 +1,13 @@
 package ai.deneb.deneb
 
+import ai.deneb.Platform
+import ai.deneb.currentPlatform
+import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebSectionLabel
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,14 +56,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ai.deneb.Platform
-import ai.deneb.currentPlatform
-import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.DenebSectionLabel
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHairline
-import ai.deneb.ui.denebHint
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
@@ -142,7 +142,10 @@ fun DenebCalendarScreen(
     // persist and re-fetch to settle completion state.
     fun toggleTodo(id: String, done: Boolean) {
         todos = todos.map { if (it.id == id) it.copy(done = done) else it }
-        scope.launch { client.setTodoDone(id, done); loadTodos() }
+        scope.launch {
+            client.setTodoDone(id, done)
+            loadTodos()
+        }
     }
 
     // Prefetch the visible month and both neighbors whenever the pager moves, so a
@@ -258,7 +261,14 @@ fun DenebCalendarScreen(
             Spacer(Modifier.height(4.dp))
             PullToRefreshBox(
                 isRefreshing = refreshing,
-                onRefresh = { scope.launch { refreshing = true; loadMonth(selMonth, force = true); loadTodos(); refreshing = false } },
+                onRefresh = {
+                    scope.launch {
+                        refreshing = true
+                        loadMonth(selMonth, force = true)
+                        loadTodos()
+                        refreshing = false
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
                 // Own scroll state so the list scrolls under the pinned grid; a
@@ -266,11 +276,14 @@ fun DenebCalendarScreen(
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                     when {
                         selEvents == null && failed[selMonth] != true -> DenebLoading()
+
                         selEvents == null -> DenebError(
                             "일정을 불러오지 못했어요.",
                             onRetry = { scope.launch { loadMonth(selMonth, force = true) } },
                         )
+
                         dayEvents.isEmpty() && dayTodos.isEmpty() -> CalendarEmptyDay(onAdd = { onAddEvent(selected) })
+
                         else -> {
                             if (dayEvents.isNotEmpty()) {
                                 CalendarDayList(dayEvents, selected, tz, onOpenEvent)
@@ -327,7 +340,10 @@ internal fun CalendarMonthGrid(
                         showDotRow = showDotRow,
                         palette = palette,
                         modifier = Modifier.weight(1f),
-                        onClick = { haptics.tap(); onSelect(date) },
+                        onClick = {
+                            haptics.tap()
+                            onSelect(date)
+                        },
                     )
                 }
             }
@@ -438,7 +454,10 @@ internal fun CalendarDayList(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { haptics.tap(); onOpen(event.id) }
+                    .clickable {
+                        haptics.tap()
+                        onOpen(event.id)
+                    }
                     .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.Top,
             ) {
@@ -528,8 +547,12 @@ private fun WeekdayHeader() {
     Row(Modifier.fillMaxWidth()) {
         koreanDayOfWeek.forEachIndexed { i, label ->
             val color = when (i) {
-                5 -> saturdayBlue // Saturday — blue
-                6 -> scheme.error // Sunday — red
+                5 -> saturdayBlue
+
+                // Saturday — blue
+                6 -> scheme.error
+
+                // Sunday — red
                 else -> denebHint()
             }
             Text(

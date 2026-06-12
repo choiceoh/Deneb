@@ -1,5 +1,7 @@
 package ai.deneb.deneb
 
+import ai.deneb.deneb.generated.SkillRow
+import ai.deneb.ui.denebHairline
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -25,8 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ai.deneb.deneb.generated.SkillRow
-import ai.deneb.ui.denebHairline
 import kotlinx.coroutines.launch
 
 // Settings hub "스킬" tab: skills the agent can use (read-only). Mirrors the
@@ -47,7 +47,9 @@ internal fun SkillsTab(client: DenebGatewayClient) {
                 onRetry = { scope.launch { loadFailed = !client.refreshSkills() } },
             )
         }
+
         skills.isEmpty() -> EmptyTab("사용할 수 있는 스킬이 없습니다.")
+
         else -> LazyColumn(Modifier.fillMaxSize()) {
             items(skills, key = { it.name }) { skill ->
                 Column(

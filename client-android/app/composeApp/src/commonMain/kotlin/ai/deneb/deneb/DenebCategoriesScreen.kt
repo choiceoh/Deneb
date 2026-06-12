@@ -1,5 +1,11 @@
 package ai.deneb.deneb
 
+import ai.deneb.Platform
+import ai.deneb.currentPlatform
+import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebPressable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,12 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ai.deneb.Platform
-import ai.deneb.currentPlatform
-import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHairline
-import ai.deneb.ui.denebPressable
 import kotlinx.coroutines.launch
 
 /** The wiki category absorbed by the merged people surface: its pages reach the
@@ -84,8 +84,14 @@ fun DenebCategoriesScreen(
 
             // Pinned entry points above the wiki buckets: the merged people surface
             // (recent Gmail contacts + 인물 pages) and the recent-diary timeline.
-            PinnedEntryRow("사람") { haptics.tap(); onOpenPeople() }
-            PinnedEntryRow("최근 일기") { haptics.tap(); onOpenDiary() }
+            PinnedEntryRow("사람") {
+                haptics.tap()
+                onOpenPeople()
+            }
+            PinnedEntryRow("최근 일기") {
+                haptics.tap()
+                onOpenDiary()
+            }
             Spacer(Modifier.height(8.dp))
 
             val d = data
@@ -94,8 +100,11 @@ fun DenebCategoriesScreen(
                     "카테고리를 불러오지 못했습니다.",
                     onRetry = { scope.launch { load() } },
                 )
+
                 d == null -> DenebLoading()
+
                 d.categories.isEmpty() -> DenebEmpty("위키 페이지가 없습니다.")
+
                 else -> {
                     Text(
                         "${d.totalPages}개 페이지 · ${humanBytes(d.totalBytes)}",
@@ -107,7 +116,10 @@ fun DenebCategoriesScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .denebPressable(onClick = { haptics.tap(); onOpenCategory(cat.name) })
+                                .denebPressable(onClick = {
+                                    haptics.tap()
+                                    onOpenCategory(cat.name)
+                                })
                                 .padding(vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

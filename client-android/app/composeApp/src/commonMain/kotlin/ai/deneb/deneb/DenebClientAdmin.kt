@@ -12,9 +12,9 @@ import deneb.composeapp.generated.resources.ic_service_deepseek
 import deneb.composeapp.generated.resources.ic_service_gemini
 import deneb.composeapp.generated.resources.ic_service_gemma
 import deneb.composeapp.generated.resources.ic_service_longcat
+import deneb.composeapp.generated.resources.ic_service_mimo
 import deneb.composeapp.generated.resources.ic_service_minimax
 import deneb.composeapp.generated.resources.ic_service_mistral
-import deneb.composeapp.generated.resources.ic_service_mimo
 import deneb.composeapp.generated.resources.ic_service_moonshot
 import deneb.composeapp.generated.resources.ic_service_nvidia
 import deneb.composeapp.generated.resources.ic_service_openai
@@ -140,22 +140,37 @@ fun DenebGatewayClient.denebServiceEntries(): List<ServiceEntry> {
 private fun denebModelIcon(model: ModelOption) = with("${model.id} ${model.display}".lowercase()) {
     when {
         contains("claude") || contains("anthropic") -> Res.drawable.ic_service_anthropic
+
         contains("gemma") -> Res.drawable.ic_service_gemma
+
         contains("gemini") -> Res.drawable.ic_service_gemini
+
         contains("gpt") || contains("openai") || contains("chatgpt") ||
             contains("o1-") || contains("o3") || contains("o4") -> Res.drawable.ic_service_openai
+
         contains("deepseek") -> Res.drawable.ic_service_deepseek
+
         contains("kimi") || contains("moonshot") -> Res.drawable.ic_service_moonshot
+
         contains("mistral") || contains("mixtral") || contains("magistral") ||
             contains("ministral") || contains("codestral") || contains("devstral") -> Res.drawable.ic_service_mistral
+
         contains("grok") || contains("x-ai") || contains("xai") -> Res.drawable.ic_service_xai
+
         contains("glm") || contains("zai") || contains("z-ai") || contains("chatglm") -> Res.drawable.ic_service_zai
+
         contains("minimax") -> Res.drawable.ic_service_minimax
+
         contains("longcat") -> Res.drawable.ic_service_longcat
+
         contains("llama") || contains("nemotron") || contains("nvidia") -> Res.drawable.ic_service_nvidia
+
         contains("qwen") || contains("qwq") || contains("tongyi") -> Res.drawable.ic_service_qwen
+
         contains("mimo") || contains("xiaomi") -> Res.drawable.ic_service_mimo
+
         contains("step") || contains("stepfun") -> Res.drawable.ic_service_step
+
         // Local/on-device runtimes (vLLM-served small models) keep the edge mark.
         else -> Res.drawable.ic_service_openai_compatible
     }
@@ -226,8 +241,7 @@ internal suspend fun DenebGatewayClient.refreshScheduledTasks(): Boolean {
 }
 
 /** Trigger a cron job immediately (`miniapp.crons.run`). */
-suspend fun DenebGatewayClient.runCron(id: String): Boolean =
-    callRpc<JsonObject>("miniapp.crons.run", buildJsonObject { put("id", id) }) != null
+suspend fun DenebGatewayClient.runCron(id: String): Boolean = callRpc<JsonObject>("miniapp.crons.run", buildJsonObject { put("id", id) }) != null
 
 /** Full cron job detail (`miniapp.crons.get`). */
 suspend fun DenebGatewayClient.fetchCron(id: String): CronDetail? {
@@ -254,11 +268,13 @@ suspend fun DenebGatewayClient.fetchCron(id: String): CronDetail? {
 }
 
 /** Enable or disable a cron job (`miniapp.crons.update`). */
-suspend fun DenebGatewayClient.setCronEnabled(id: String, enabled: Boolean): Boolean =
-    callRpc<JsonObject>(
-        "miniapp.crons.update",
-        buildJsonObject { put("id", id); put("enabled", enabled) },
-    ) != null
+suspend fun DenebGatewayClient.setCronEnabled(id: String, enabled: Boolean): Boolean = callRpc<JsonObject>(
+    "miniapp.crons.update",
+    buildJsonObject {
+        put("id", id)
+        put("enabled", enabled)
+    },
+) != null
 
 /**
  * Patch an existing cron job (`miniapp.crons.update`). Only the arguments the

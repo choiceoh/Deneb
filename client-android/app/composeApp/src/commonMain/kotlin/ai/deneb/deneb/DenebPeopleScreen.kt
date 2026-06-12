@@ -1,9 +1,11 @@
 package ai.deneb.deneb
 
-import androidx.compose.foundation.layout.Column
+import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebPressable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,8 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.DenebSectionLabel
 import kotlinx.coroutines.launch
 
 /**
@@ -50,6 +50,7 @@ fun DenebPeopleScreen(
     var failed by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
+
     // people: null = first load in flight, list = loaded. failed takes priority so a
     // fetch error offers retry instead of the misleading "no contacts" empty line.
     suspend fun load() {
@@ -69,8 +70,11 @@ fun DenebPeopleScreen(
                 "사람 목록을 불러오지 못했어요.",
                 onRetry = { scope.launch { load() } },
             )
+
             list == null -> DenebLoading()
+
             list.isEmpty() -> DenebEmpty("표시할 사람이 없습니다.")
+
             else -> {
                 // Recent Gmail counterparties vs. wiki-only people (no recent
                 // mail). The gateway appends the wiki-only block, but partition
@@ -84,7 +88,10 @@ fun DenebPeopleScreen(
                         items(contacts, key = { "p:" + it.email.ifBlank { it.name } }) { person ->
                             ContactPersonRow(
                                 person = person,
-                                onTap = { haptics.tap(); onOpenPerson(person.email.ifBlank { person.name }) },
+                                onTap = {
+                                    haptics.tap()
+                                    onOpenPerson(person.email.ifBlank { person.name })
+                                },
                                 modifier = Modifier.animateItem(),
                             )
                         }
@@ -98,8 +105,11 @@ fun DenebPeopleScreen(
                                 person = person,
                                 onTap = {
                                     haptics.tap()
-                                    if (person.wikiPath.isNotBlank()) onOpenWiki(person.wikiPath)
-                                    else onOpenPerson(person.name)
+                                    if (person.wikiPath.isNotBlank()) {
+                                        onOpenWiki(person.wikiPath)
+                                    } else {
+                                        onOpenPerson(person.name)
+                                    }
                                 },
                                 modifier = Modifier.animateItem(),
                             )

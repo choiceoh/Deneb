@@ -86,8 +86,7 @@ suspend fun DenebGatewayClient.updateCalendarEvent(
 
 /** Delete a locally-stored event (`miniapp.calendar.delete`). Null on success,
  *  a Korean error message otherwise (e.g. when the id is a read-only Google event). */
-suspend fun DenebGatewayClient.deleteCalendarEvent(id: String): String? =
-    rpcWrite("miniapp.calendar.delete", buildJsonObject { put("id", id) })
+suspend fun DenebGatewayClient.deleteCalendarEvent(id: String): String? = rpcWrite("miniapp.calendar.delete", buildJsonObject { put("id", id) })
 
 /** Full calendar event (attendees, Meet link, description) for the detail screen. */
 suspend fun DenebGatewayClient.fetchCalendarEvent(id: String): CalendarEventDetail? {
@@ -146,12 +145,16 @@ suspend fun DenebGatewayClient.updateTodo(
 ): String? = rpcWrite("miniapp.todo.update", todoWriteParams(title, note, dueIso, dueAllDay, id))
 
 /** Flip a to-do's completion (`miniapp.todo.set_done`). Null on success. */
-suspend fun DenebGatewayClient.setTodoDone(id: String, done: Boolean): String? =
-    rpcWrite("miniapp.todo.set_done", buildJsonObject { put("id", id); put("done", done) })
+suspend fun DenebGatewayClient.setTodoDone(id: String, done: Boolean): String? = rpcWrite(
+    "miniapp.todo.set_done",
+    buildJsonObject {
+        put("id", id)
+        put("done", done)
+    },
+)
 
 /** Delete a to-do (`miniapp.todo.delete`). Null on success. */
-suspend fun DenebGatewayClient.deleteTodo(id: String): String? =
-    rpcWrite("miniapp.todo.delete", buildJsonObject { put("id", id) })
+suspend fun DenebGatewayClient.deleteTodo(id: String): String? = rpcWrite("miniapp.todo.delete", buildJsonObject { put("id", id) })
 
 // todoWriteParams builds the shared create/update body; `id` is set only for
 // updates. A blank due is omitted so the gateway stores an undated to-do.

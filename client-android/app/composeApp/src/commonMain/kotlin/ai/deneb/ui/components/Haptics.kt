@@ -28,6 +28,7 @@ class Haptics(private val hf: HapticFeedback) {
     fun tap() = hf.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     fun toggleOn() = hf.performHapticFeedback(HapticFeedbackType.ToggleOn)
     fun toggleOff() = hf.performHapticFeedback(HapticFeedbackType.ToggleOff)
+
     /** Route to [toggleOn] / [toggleOff] from the new toggle state. */
     fun toggle(on: Boolean) = if (on) toggleOn() else toggleOff()
     fun confirm() = hf.performHapticFeedback(HapticFeedbackType.Confirm)

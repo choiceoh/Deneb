@@ -2,6 +2,7 @@
 
 package ai.deneb.ui.dynamicui
 
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -153,7 +154,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ai.deneb.ui.handCursor
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.deneb_ui_code_copy
 import org.jetbrains.compose.resources.stringResource

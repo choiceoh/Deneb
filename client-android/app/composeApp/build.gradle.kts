@@ -182,7 +182,8 @@ compose.desktop {
             // build gets a unique, increasing MSI ProductVersion. Without this every installer shared
             // 0.0.<floor> and Windows Installer silently skipped the upgrade (the build stayed pinned).
             // Falls back to the libs floor for local/IDE builds that don't pass the property.
-            packageVersion = "0.0.${(project.findProperty("denebVersionCode") as? String) ?: libs.versions.android.versionCode.get()}"
+            packageVersion = "0.0.${(project.findProperty("denebVersionCode") as? String) ?: libs.versions.android.versionCode
+                .get()}"
 
             macOS {
                 iconFile.set(project.file("icon.icns"))
@@ -229,8 +230,10 @@ class VersionGeneratorPlugin : Plugin<Project> {
             // publishes). Mirror androidApp's -PdenebVersionCode override so the
             // in-app updater's DENEB_VERSION_CODE matches the published APK; falls
             // back to libs for IDE/dev builds.
-            val appVersionCode = (project.findProperty("denebVersionCode") as? String)
-                ?: libs.versions.android.versionCode.get()
+            val appVersionCode =
+                (project.findProperty("denebVersionCode") as? String)
+                    ?: libs.versions.android.versionCode
+                        .get()
 
             // Generate Kotlin version file
             val versionFile =
@@ -274,7 +277,11 @@ apply<VersionGeneratorPlugin>()
 tasks.register<JavaExec>("renderPreviews") {
     group = "deneb"
     description = "Render Deneb composable previews to /tmp/deneb-render/*.png"
-    val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
+    val desktopMain =
+        kotlin.targets
+            .getByName("desktop")
+            .compilations
+            .getByName("main")
     dependsOn(desktopMain.compileTaskProvider)
     classpath = files(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles)
     mainClass.set("ai.deneb.RenderPreviewKt")
@@ -283,7 +290,11 @@ tasks.register<JavaExec>("renderPreviews") {
 
 tasks.register<JavaExec>("benchScrollRender") {
     group = "deneb"
-    val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
+    val desktopMain =
+        kotlin.targets
+            .getByName("desktop")
+            .compilations
+            .getByName("main")
     dependsOn(desktopMain.compileTaskProvider)
     classpath = files(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles)
     mainClass.set("ai.deneb.ScrollRenderBenchKt")

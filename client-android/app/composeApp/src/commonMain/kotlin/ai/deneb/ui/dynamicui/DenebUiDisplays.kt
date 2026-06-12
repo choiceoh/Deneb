@@ -2,6 +2,12 @@
 
 package ai.deneb.ui.dynamicui
 
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.denebOnSuccessContainer
+import ai.deneb.ui.denebOnWarningContainer
+import ai.deneb.ui.denebSuccessContainer
+import ai.deneb.ui.denebWarningContainer
+import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -50,12 +56,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.markdown.MarkdownContent
-import ai.deneb.ui.denebOnSuccessContainer
-import ai.deneb.ui.denebOnWarningContainer
-import ai.deneb.ui.denebSuccessContainer
-import ai.deneb.ui.denebWarningContainer
 import kotlinx.coroutines.delay
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -337,7 +337,6 @@ private fun AlertIcon(severity: AlertSeverity?, contentColor: Color, containerCo
 }
 
 @OptIn(ExperimentalLayoutApi::class)
-
 @Composable
 internal fun RenderQuote(node: QuoteNode) {
     Row(
