@@ -119,6 +119,10 @@ const (
 	DefaultVllmBaseURL = "http://127.0.0.1:8000/v1"
 	DefaultVllmModel   = "gemma4"
 
+	// First-party Anthropic API. The llm client appends /v1/messages in
+	// Anthropic mode, so the base URL carries no version segment.
+	DefaultAnthropicBaseURL = "https://api.anthropic.com"
+
 	DefaultZaiBaseURL = "https://api.z.ai/api/anthropic"
 	DefaultZaiModel   = "glm-5-turbo"
 
@@ -380,7 +384,7 @@ func buildClient(logger *slog.Logger, cfg ModelConfig) *llm.Client {
 // to a dedicated endpoint (as opposed to the zai fallback for unknown IDs).
 func isBuiltinProvider(providerID string) bool {
 	switch providerID {
-	case "zai", "localai", "vllm", "openrouter", "mimo", "mimo-plan", "kimi":
+	case "anthropic", "zai", "localai", "vllm", "openrouter", "mimo", "mimo-plan", "kimi":
 		return true
 	default:
 		return false
@@ -524,6 +528,8 @@ func logModelAlias(cfg ModelConfig) string {
 // resolveBaseURL returns the default base URL for a known provider.
 func resolveBaseURL(providerID string) string {
 	switch providerID {
+	case "anthropic":
+		return DefaultAnthropicBaseURL
 	case "zai":
 		return DefaultZaiBaseURL
 	case "localai":
@@ -568,6 +574,8 @@ func resolveVllmAPIKey() string {
 // resolveAPIKey attempts to resolve an API key for a provider from environment.
 func resolveAPIKey(providerID string) string {
 	switch providerID {
+	case "anthropic":
+		return os.Getenv("ANTHROPIC_API_KEY")
 	case "localai":
 		return resolveLocalAIAPIKey()
 	case "vllm":
@@ -616,12 +624,12 @@ func ResolveAuthScheme(providerID string) string {
 }
 
 // resolveAPIMode returns the LLM client API mode for built-in providers.
-// Z.ai, Xiaomi MiMo, and Kimi Code default to the Anthropic Messages API;
-// other built-in providers (vllm, localai) speak OpenAI-compatible
-// /chat/completions.
+// The first-party Anthropic API, Z.ai, Xiaomi MiMo, and Kimi Code default
+// to the Anthropic Messages API; other built-in providers (vllm, localai)
+// speak OpenAI-compatible /chat/completions.
 func resolveAPIMode(providerID string) string {
 	switch providerID {
-	case "zai", "zai-subagent", "mimo", "mimo-plan", "kimi":
+	case "anthropic", "zai", "zai-subagent", "mimo", "mimo-plan", "kimi":
 		return llm.APIModeAnthropic
 	default:
 		return ""

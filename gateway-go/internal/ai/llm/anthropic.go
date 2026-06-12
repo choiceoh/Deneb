@@ -67,18 +67,29 @@ func (c *Client) streamChatAnthropic(ctx context.Context, req ChatRequest) (<-ch
 	return out, nil
 }
 
+// defaultAnthropicMaxTokens is the output cap used when the caller did not set
+// MaxTokens. The Anthropic wire REQUIRES max_tokens > 0, while the OpenAI path
+// omits the field via omitempty and lets the server default apply — so a
+// Complete() caller that never sets MaxTokens works on an OpenAI-mode client
+// but would 400 here without this default.
+const defaultAnthropicMaxTokens = 4096
+
 // buildAnthropicRequestBody serializes a ChatRequest into Anthropic
 // Messages API JSON, merging ExtraBody fields at the top level.
 func buildAnthropicRequestBody(req ChatRequest) ([]byte, error) {
+	maxTokens := req.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = defaultAnthropicMaxTokens
+	}
 	areq := anthropicRequest{
 		Model:         req.Model,
-		MaxTokens:     req.MaxTokens,
+		MaxTokens:     maxTokens,
 		Stream:        true,
 		Temperature:   req.Temperature,
 		TopP:          req.TopP,
 		TopK:          req.TopK,
 		StopSequences: req.StopSequences,
-		ToolChoice:    req.ToolChoice,
+		ToolChoice:    translateAnthropicToolChoice(req.ToolChoice),
 	}
 
 	// System prompt: pass through raw (string or []ContentBlock, both valid).
@@ -125,12 +136,20 @@ func buildAnthropicRequestBody(req ChatRequest) ([]byte, error) {
 
 	// Thinking: native Anthropic shape. Interleaved is enabled via the beta
 	// header (set in setBetaHeaders), not the body.
-	if req.Thinking != nil && req.Thinking.Type == "enabled" && req.Thinking.BudgetTokens > 0 {
+	switch {
+	case req.Thinking == nil:
+		// omitted — provider default
+	case req.Thinking.Type == "enabled" && req.Thinking.BudgetTokens > 0:
 		areq.Thinking = &anthropicThinking{
 			Type:         "enabled",
 			BudgetTokens: req.Thinking.BudgetTokens,
 		}
-	} else if req.Thinking != nil && req.Thinking.Type == "disabled" {
+	case req.Thinking.Type == "adaptive":
+		// First-party Anthropic models from Opus 4.6 on: the model decides
+		// when and how much to think; budget_tokens is removed there (a 400
+		// on Opus 4.7+), so the type goes out alone.
+		areq.Thinking = &anthropicThinking{Type: "adaptive"}
+	case req.Thinking.Type == "disabled":
 		// Explicitly send {"type":"disabled"} instead of omitting the field.
 		// Providers that default reasoning ON — notably GLM-5.1 via the Z.ai
 		// anthropic endpoint — otherwise stream chain-of-thought into the answer
@@ -152,6 +171,46 @@ func buildAnthropicRequestBody(req ChatRequest) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+// translateAnthropicToolChoice maps the OpenAI-vocabulary tool_choice values
+// used across the pipeline ("auto" | "none" | "required" |
+// {"type":"function","function":{"name":...}}) onto the Anthropic Messages
+// shape ({"type":"auto"|"none"|"any"} or {"type":"tool","name":...}).
+// Anthropic rejects bare strings outright, so an untranslated value would 400
+// every request that sets ToolChoice on an Anthropic-mode client (e.g. a
+// SendSync option riding a fallback to mimo-plan). Values already in the
+// Anthropic shape pass through unchanged; nil stays nil.
+func translateAnthropicToolChoice(v any) any {
+	switch tc := v.(type) {
+	case nil:
+		return nil
+	case string:
+		switch strings.ToLower(strings.TrimSpace(tc)) {
+		case "":
+			return nil
+		case "auto":
+			return map[string]any{"type": "auto"}
+		case "none":
+			return map[string]any{"type": "none"}
+		case "required", "any":
+			return map[string]any{"type": "any"}
+		default:
+			// Unknown bare string — best effort: treat it as a tool name.
+			return map[string]any{"type": "tool", "name": tc}
+		}
+	case map[string]any:
+		// OpenAI function shape → Anthropic tool shape. Anything else (already
+		// Anthropic-shaped, or provider-specific) passes through.
+		if fn, ok := tc["function"].(map[string]any); ok {
+			if name, _ := fn["name"].(string); name != "" {
+				return map[string]any{"type": "tool", "name": name}
+			}
+		}
+		return tc
+	default:
+		return v
+	}
 }
 
 // emptyJSONObject is the canonical empty input for tool_use blocks when the
@@ -218,6 +277,7 @@ func marshalAnthropicBlocks(blocks []ContentBlock) (json.RawMessage, error) {
 		Source       *ImageSource    `json:"source,omitempty"`
 		Thinking     *string         `json:"thinking,omitempty"`
 		Signature    string          `json:"signature,omitempty"`
+		Data         string          `json:"data,omitempty"`
 		CacheControl *CacheControl   `json:"cache_control,omitempty"`
 	}
 	out := make([]wireBlock, len(blocks))
@@ -231,6 +291,7 @@ func marshalAnthropicBlocks(blocks []ContentBlock) (json.RawMessage, error) {
 			IsError:      b.IsError,
 			Source:       b.Source,
 			Signature:    b.Signature,
+			Data:         b.Data,
 			CacheControl: b.CacheControl,
 		}
 		switch b.Type {

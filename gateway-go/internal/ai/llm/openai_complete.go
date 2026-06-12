@@ -35,28 +35,61 @@ func (c *Client) Complete(ctx context.Context, req ChatRequest) (string, error) 
 // completeViaStream consumes the streaming chat as a one-shot Complete,
 // concatenating text deltas. Used for Anthropic-mode clients where
 // /v1/messages does not have a non-streaming sibling endpoint.
+//
+// Mirrors completeOpenAI's failure semantics: a mid-stream error event or an
+// empty answer whose budget was eaten by the reasoning channel must surface as
+// an error — "" (or partial text) with a nil error reads as a successful
+// result to background callers (wiki dreamer/verify/merge, gmail analysis
+// fallback), which then silently persist truncated or empty work.
 func (c *Client) completeViaStream(ctx context.Context, req ChatRequest) (string, error) {
 	events, err := c.StreamChat(ctx, req)
 	if err != nil {
 		return "", err
 	}
 	var sb strings.Builder
+	stopReason := ""
+	thinkingChars := 0
 	for ev := range events {
-		if ev.Type != "content_block_delta" {
-			continue
-		}
-		var cbd ContentBlockDelta
-		if json.Unmarshal(ev.Payload, &cbd) != nil {
-			continue
-		}
-		if cbd.Delta.Type == "text_delta" {
-			sb.WriteString(cbd.Delta.Text)
+		switch ev.Type {
+		case "content_block_delta":
+			var cbd ContentBlockDelta
+			if json.Unmarshal(ev.Payload, &cbd) != nil {
+				continue
+			}
+			switch cbd.Delta.Type {
+			case "text_delta":
+				sb.WriteString(cbd.Delta.Text)
+			case "thinking_delta":
+				// Anthropic-native puts the chunk in `thinking`; translated
+				// streams use `text`. Counted only for the empty-content
+				// diagnostic below, never emitted.
+				thinkingChars += len(cbd.Delta.Thinking) + len(cbd.Delta.Text)
+			}
+		case "message_delta":
+			var md MessageDelta
+			if json.Unmarshal(ev.Payload, &md) == nil && md.Delta.StopReason != "" {
+				stopReason = md.Delta.StopReason
+			}
+		case "error":
+			// Mid-stream error (overload, premature_end, provider fault):
+			// whatever text accumulated so far is partial — fail the call
+			// instead of returning it as a complete answer.
+			return "", fmt.Errorf("stream error event: %s", truncateForLog(string(ev.Payload), 300))
 		}
 	}
 	out := strings.TrimSpace(sb.String())
 	out = jsonutil.StripThinkingTags(out)
 	out = jsonutil.StripThinkingPreamble(out)
-	return strings.TrimSpace(out), nil
+	out = strings.TrimSpace(out)
+	if out == "" && (stopReason == "max_tokens" || thinkingChars > 0) {
+		// A reasoning model can burn the whole output budget in the thinking
+		// channel and finish with no text (observed live on deepseek-v4-flash
+		// via the OpenAI path; same trap here).
+		return "", fmt.Errorf(
+			"empty content (stop_reason=%s, thinking_chars=%d): reasoning consumed the output budget — raise MaxTokens or disable thinking",
+			stopReason, thinkingChars)
+	}
+	return out, nil
 }
 
 // completeOpenAI sends a non-streaming request to an OpenAI-compatible
