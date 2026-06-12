@@ -16,6 +16,8 @@ func TestProfileFor(t *testing.T) {
 		{"qwen3 instruct: non-reasoning + sampling", "qwen3-30b-instruct", false, true},
 		{"qwen36 alias", "qwen36", true, true},
 		{"qwq: reasoning, no sampling", "qwq-32b", true, false},
+		{"deepseek-v4: sampling, reasoning stays false", "deepseek-v4-flash", false, true},
+		{"deepseek-v4 provider-prefixed", "vllm/deepseek-v4-flash", false, true},
 		{"deepseek-r1: reasoning", "deepseek-r1", true, false},
 		{"gpt-oss: reasoning", "gpt-oss-120b", true, false},
 		{"gemma: non-reasoning, no sampling", "gemma4", false, false},
@@ -44,6 +46,22 @@ func TestIsReasoningModel_Step3p7(t *testing.T) {
 		if !IsReasoningModel(m) {
 			t.Errorf("IsReasoningModel(%q) = false, want true", m)
 		}
+	}
+}
+
+// TestProfileFor_DeepseekV4Sampling pins the recommended values for the
+// self-hosted main model: the shipped generation_config.json is 1.0/1.0,
+// so dropping this profile silently reverts dsv4 to no-op sampling.
+func TestProfileFor_DeepseekV4Sampling(t *testing.T) {
+	p := ProfileFor("deepseek-v4-flash")
+	if p.Temperature == nil || *p.Temperature != 0.6 {
+		t.Errorf("deepseek-v4 Temperature = %v, want 0.6", p.Temperature)
+	}
+	if p.TopP == nil || *p.TopP != 0.95 {
+		t.Errorf("deepseek-v4 TopP = %v, want 0.95", p.TopP)
+	}
+	if p.Reasoning {
+		t.Error("deepseek-v4 Reasoning = true, want false (thinking is toggled via chat_template_kwargs, not the reasoning channel flag)")
 	}
 }
 
