@@ -127,8 +127,42 @@ type openAIUsage struct {
 	CompletionTokens        int                      `json:"completion_tokens"`
 	TotalTokens             int                      `json:"total_tokens"`
 	CompletionTokensDetails *completionTokensDetails `json:"completion_tokens_details,omitempty"`
+	PromptTokensDetails     *promptTokensDetails     `json:"prompt_tokens_details,omitempty"`
+
+	// PromptCacheHitTokens is DeepSeek's official-API spelling of the cached
+	// prompt-token count (everyone else nests it under prompt_tokens_details).
+	PromptCacheHitTokens int `json:"prompt_cache_hit_tokens,omitempty"`
 }
 
 type completionTokensDetails struct {
 	ReasoningTokens int `json:"reasoning_tokens"`
+}
+
+// promptTokensDetails carries the prefix-cache breakdown of prompt_tokens.
+// vLLM (--enable-prefix-caching) and OpenAI both report cached_tokens here.
+type promptTokensDetails struct {
+	CachedTokens int `json:"cached_tokens"`
+}
+
+// splitPromptTokens normalizes the OpenAI prompt-token count to Anthropic
+// usage semantics: input excludes cache reads, so input + cacheRead equals the
+// wire's prompt_tokens. OpenAI-compatible servers report prompt_tokens as the
+// TOTAL prompt; mapping it to InputTokens unchanged while also surfacing
+// cached_tokens would double-count cache hits in every downstream sum
+// (usage tracker, modeltuner read-ratio denominators).
+func (u *openAIUsage) splitPromptTokens() (input, cacheRead int) {
+	cached := 0
+	if u.PromptTokensDetails != nil {
+		cached = u.PromptTokensDetails.CachedTokens
+	}
+	if u.PromptCacheHitTokens > cached {
+		cached = u.PromptCacheHitTokens
+	}
+	if cached <= 0 {
+		return u.PromptTokens, 0
+	}
+	if cached > u.PromptTokens {
+		cached = u.PromptTokens
+	}
+	return u.PromptTokens - cached, cached
 }

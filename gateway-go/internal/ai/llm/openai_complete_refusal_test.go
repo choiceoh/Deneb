@@ -2,7 +2,9 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -110,5 +112,107 @@ func TestStreamChat_MissingToolCallID_Synthesized(t *testing.T) {
 	}
 	if ids["read"] == ids["grep"] {
 		t.Errorf("ids must be distinct, both %q", ids["read"])
+	}
+}
+
+// A reasoning model can burn the whole output budget on the reasoning channel
+// and finish with content null + finish_reason "length" — observed live on
+// deepseek-v4-flash (server-default thinking) with a small max_tokens. The
+// old code returned "" with a nil error, which background callers treated as
+// a successful empty result, silently dropping their work.
+func TestCompleteOpenAI_ReasoningExhaustedBudget_Error(t *testing.T) {
+	server := completeJSONServer(`{"choices":[{"message":{"content":null,"refusal":null,` +
+		`"reasoning":"好的，用户只发了一个…"},"finish_reason":"length"}]}`)
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key")
+	out, err := client.Complete(context.Background(), ChatRequest{
+		Model:     "test-model",
+		Messages:  []Message{NewTextMessage("user", "hi")},
+		MaxTokens: 8,
+	})
+	if err == nil {
+		t.Fatalf("Complete = (%q, nil), want budget-exhaustion error", out)
+	}
+	if !strings.Contains(err.Error(), "reasoning consumed") {
+		t.Errorf("error = %q, want it to mention reasoning budget exhaustion", err)
+	}
+}
+
+// Truncation without any reasoning channel (plain model hit max_tokens with
+// nothing emitted) must also error rather than read as a successful empty.
+func TestCompleteOpenAI_LengthTruncatedEmpty_Error(t *testing.T) {
+	server := completeJSONServer(`{"choices":[{"message":{"content":""},"finish_reason":"length"}]}`)
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key")
+	_, err := client.Complete(context.Background(), ChatRequest{
+		Model:     "test-model",
+		Messages:  []Message{NewTextMessage("user", "hi")},
+		MaxTokens: 1,
+	})
+	if err == nil {
+		t.Fatal("Complete returned nil error for empty length-truncated response")
+	}
+}
+
+// A genuinely empty stop-finish completion (no reasoning, no truncation)
+// stays a non-error empty result — regression guard for the new strictness.
+func TestCompleteOpenAI_GenuineEmptyStop_NoError(t *testing.T) {
+	server := completeJSONServer(`{"choices":[{"message":{"content":""},"finish_reason":"stop"}]}`)
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key")
+	out, err := client.Complete(context.Background(), ChatRequest{
+		Model:     "test-model",
+		Messages:  []Message{NewTextMessage("user", "hi")},
+		MaxTokens: 50,
+	})
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if out != "" {
+		t.Errorf("Complete = %q, want empty", out)
+	}
+}
+
+// completeOpenAI must honor caller sampling parameters; they were previously
+// dropped on the non-streaming path (only the streaming path applied them).
+func TestCompleteOpenAI_SamplingParamsSent(t *testing.T) {
+	var captured []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}]}`)
+	}))
+	defer server.Close()
+
+	temp := 0.0
+	topP := 0.9
+	client := NewClient(server.URL, "test-key")
+	_, err := client.Complete(context.Background(), ChatRequest{
+		Model:         "test-model",
+		Messages:      []Message{NewTextMessage("user", "hi")},
+		MaxTokens:     50,
+		Temperature:   &temp,
+		TopP:          &topP,
+		StopSequences: []string{"END"},
+	})
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+
+	var req map[string]any
+	if err := json.Unmarshal(captured, &req); err != nil {
+		t.Fatalf("unmarshal captured request: %v", err)
+	}
+	if v, ok := req["temperature"].(float64); !ok || v != 0.0 {
+		t.Errorf("temperature = %v, want explicit 0.0", req["temperature"])
+	}
+	if v, ok := req["top_p"].(float64); !ok || v != 0.9 {
+		t.Errorf("top_p = %v, want 0.9", req["top_p"])
+	}
+	if _, ok := req["stop"]; !ok {
+		t.Error("stop sequences missing from request body")
 	}
 }
