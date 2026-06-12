@@ -130,10 +130,11 @@ var requiredMethods = []string{
 	"miniapp.sessions.recent",
 	"miniapp.sessions.delete",
 	"miniapp.sessions.transcript",
-	// Skills catalog + self-evolution feed — List is always wired, so both
-	// register unconditionally (tracker absence degrades the payload, not
-	// the registration).
+	// Skills catalog + detail + self-evolution feed — List is always wired,
+	// so all three register unconditionally (tracker absence degrades the
+	// payload, not the registration).
 	"miniapp.skills.list",
+	"miniapp.skills.detail",
 	"miniapp.skills.lifecycle",
 	// To-do domain — local store always resolves in tests (temp state dir),
 	// so these always register.

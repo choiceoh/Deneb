@@ -5,6 +5,7 @@ import ai.deneb.data.ServiceEntry
 import ai.deneb.data.TaskStatus
 import ai.deneb.data.TaskTrigger
 import ai.deneb.deneb.generated.MiniappCronDetail
+import ai.deneb.deneb.generated.SkillDetailResponse
 import ai.deneb.deneb.generated.SkillLifecycleEvent
 import ai.deneb.deneb.generated.SkillsLifecycleResponse
 import ai.deneb.deneb.generated.SkillsListResponse
@@ -207,11 +208,25 @@ suspend fun DenebGatewayClient.refreshSkills(): Boolean {
 
 /** Self-evolution timeline for the Skills tab (genesis/evolve/review events,
  *  newest first). Null on transport failure so the tab can show a retry —
- *  an empty feed is a valid, distinct state ("no activity yet"). */
-suspend fun DenebGatewayClient.fetchSkillLifecycle(limit: Int = 60): List<SkillLifecycleEvent>? = callRpc<SkillsLifecycleResponse>(
+ *  an empty feed is a valid, distinct state ("no activity yet"). Pass
+ *  [skillName] to narrow the feed to one skill (detail screen). */
+suspend fun DenebGatewayClient.fetchSkillLifecycle(
+    limit: Int = 60,
+    skillName: String? = null,
+): List<SkillLifecycleEvent>? = callRpc<SkillsLifecycleResponse>(
     "miniapp.skills.lifecycle",
-    buildJsonObject { put("limit", limit) },
+    buildJsonObject {
+        put("limit", limit)
+        if (!skillName.isNullOrBlank()) put("skillName", skillName)
+    },
 )?.events
+
+/** One skill's enriched row + SKILL.md body for the tap-through detail screen.
+ *  Null on transport failure or unknown skill name. */
+suspend fun DenebGatewayClient.fetchSkillDetail(name: String): SkillDetailResponse? = callRpc<SkillDetailResponse>(
+    "miniapp.skills.detail",
+    buildJsonObject { put("name", name) },
+)
 
 // --- Scheduler screen → Deneb cron --------------------------------------
 

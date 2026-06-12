@@ -2,11 +2,13 @@
 //
 // Exposes the workspace skill catalog to the native client settings
 // (DenebConfigScreen Skills tab) as a read-only list ("which skills does
-// this agent have?"), plus the self-evolution lifecycle feed
-// (miniapp.skills.lifecycle) so the operator can watch the genesis →
-// review → evolve loop work. The skills.* RPC surface (skill/ handler)
-// already covers the full snapshot/install/configure flow for richer
-// consumers; this slim projection is presentation-only.
+// this agent have?"), a per-skill detail (miniapp.skills.detail: the same
+// enriched row plus the SKILL.md body for the tap-through detail screen),
+// plus the self-evolution lifecycle feed (miniapp.skills.lifecycle) so the
+// operator can watch the genesis → review → evolve loop work. The skills.*
+// RPC surface (skill/ handler) already covers the full
+// snapshot/install/configure flow for richer consumers; this slim
+// projection is presentation-only.
 //
 // The skills are pre-filtered by the caller (chat.EligibleWorkspaceSkills)
 // through the same archived + eligibility passes the system prompt applies,
@@ -25,6 +27,7 @@ package handlerminiapp
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -45,6 +48,11 @@ const (
 // the per-skill evolve counters on list calls. The log is a small JSONL that
 // is fully loaded by the tracker anyway; this only caps the fold.
 const lifecycleScanLimit = 500
+
+// skillBodyMaxRunes caps the SKILL.md body returned by miniapp.skills.detail.
+// Typical skills are a few KB; this only guards against a pathological doc
+// flooding the detail screen.
+const skillBodyMaxRunes = 60_000
 
 // SkillRow is one entry in the Settings skills list. A slim projection of
 // skills.SkillEntry — only the fields the read-only list renders.
@@ -110,6 +118,22 @@ type SkillsLifecycleResponse struct {
 	Count  int                   `json:"count"`
 }
 
+// SkillDetailResponse is the miniapp.skills.detail payload: the same enriched
+// row the list renders plus the SKILL.md document itself, so the detail screen
+// can show what the skill actually instructs the agent to do.
+//
+//deneb:wire
+type SkillDetailResponse struct {
+	Skill SkillRow `json:"skill"`
+	// Body is the raw SKILL.md markdown (frontmatter included). Empty when the
+	// file is unreadable — the detail still renders from the row meta.
+	Body string `json:"body,omitempty"`
+	// BodyTruncated marks a Body capped at skillBodyMaxRunes.
+	BodyTruncated bool `json:"bodyTruncated,omitempty"`
+	// Path is the SKILL.md location on the gateway host (operator reference).
+	Path string `json:"path,omitempty"`
+}
+
 // SkillsDeps provides the already-filtered workspace skills plus optional
 // tracker projections. List returns the skills after the archived +
 // eligibility passes (see chat.EligibleWorkspaceSkills), keeping this handler
@@ -132,6 +156,7 @@ func SkillsMethods(deps SkillsDeps) map[string]rpcutil.HandlerFunc {
 	}
 	return map[string]rpcutil.HandlerFunc{
 		"miniapp.skills.list":      skillsList(deps),
+		"miniapp.skills.detail":    skillsDetail(deps),
 		"miniapp.skills.lifecycle": skillsLifecycle(deps),
 	}
 }
@@ -151,38 +176,93 @@ func skillsList(deps SkillsDeps) rpcutil.HandlerFunc {
 		// re-group by category/source without losing a stable secondary order.
 		rows := make([]SkillRow, 0, len(entries))
 		for _, e := range entries {
-			row := SkillRow{
-				Name:        e.Skill.Name,
-				Description: e.Skill.Description,
-				Category:    e.Skill.Category,
-				Source:      string(e.Skill.Source),
-				Version:     e.Skill.Version,
-				Origin:      skillOriginInitial,
-			}
-			rec, isManaged := curator[e.Skill.Name]
-			agentCreated := isManaged && rec.CreatedBy == genesis.SkillCuratorCreatedByAgent
-			// Two origin signals, belt and suspenders: the curator marker is
-			// written on LogGenesis, while the genesis output dir catches
-			// generated skills that predate the marker.
-			if agentCreated || underGenesisDir(e.Skill.FilePath) {
-				row.Origin = skillOriginGenesis
-			}
-			if agentCreated {
-				row.CreatedAt = rec.CreatedAt
-				row.CuratorState = rec.State
-			}
-			if st, ok := usage[e.Skill.Name]; ok {
-				row.TotalUses = st.TotalUses
-				row.LastUsedAt = st.LastUsed
-			}
-			if agg, ok := evolves[e.Skill.Name]; ok {
-				row.EvolveCount = agg.count
-				row.LastEvolvedAt = agg.lastAt
-			}
-			rows = append(rows, row)
+			rows = append(rows, buildSkillRow(e, curator, usage, evolves))
 		}
 
 		return rpcutil.RespondOK(req.ID, SkillsListResponse{Skills: rows, Count: len(rows)})
+	}
+}
+
+// buildSkillRow projects one catalog entry into the enriched wire row —
+// shared by the list and detail handlers so both render identical meta.
+func buildSkillRow(
+	e skills.SkillEntry,
+	curator map[string]genesis.SkillCuratorRecord,
+	usage map[string]genesis.UsageStats,
+	evolves map[string]evolveAgg,
+) SkillRow {
+	row := SkillRow{
+		Name:        e.Skill.Name,
+		Description: e.Skill.Description,
+		Category:    e.Skill.Category,
+		Source:      string(e.Skill.Source),
+		Version:     e.Skill.Version,
+		Origin:      skillOriginInitial,
+	}
+	rec, isManaged := curator[e.Skill.Name]
+	agentCreated := isManaged && rec.CreatedBy == genesis.SkillCuratorCreatedByAgent
+	// Two origin signals, belt and suspenders: the curator marker is
+	// written on LogGenesis, while the genesis output dir catches
+	// generated skills that predate the marker.
+	if agentCreated || underGenesisDir(e.Skill.FilePath) {
+		row.Origin = skillOriginGenesis
+	}
+	if agentCreated {
+		row.CreatedAt = rec.CreatedAt
+		row.CuratorState = rec.State
+	}
+	if st, ok := usage[e.Skill.Name]; ok {
+		row.TotalUses = st.TotalUses
+		row.LastUsedAt = st.LastUsed
+	}
+	if agg, ok := evolves[e.Skill.Name]; ok {
+		row.EvolveCount = agg.count
+		row.LastEvolvedAt = agg.lastAt
+	}
+	return row
+}
+
+func skillsDetail(deps SkillsDeps) rpcutil.HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+
+		var p struct {
+			Name string `json:"name"`
+		}
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		if strings.TrimSpace(p.Name) == "" {
+			return rpcerr.MissingParam("name").Response(req.ID)
+		}
+
+		var entry *skills.SkillEntry
+		for _, e := range deps.List() {
+			if e.Skill.Name == p.Name {
+				entry = &e
+				break
+			}
+		}
+		if entry == nil {
+			return rpcerr.NotFound("skill").Response(req.ID)
+		}
+
+		row := buildSkillRow(*entry, curatorBySkill(deps), usageBySkill(deps), evolveAggBySkill(deps))
+		resp := SkillDetailResponse{Skill: row, Path: entry.Skill.FilePath}
+		// Body read is best-effort: catalog entries always carry a FilePath from
+		// discovery, but the file may have been removed since the last scan.
+		if data, err := os.ReadFile(entry.Skill.FilePath); err == nil {
+			resp.Body = string(data)
+			if runes := []rune(resp.Body); len(runes) > skillBodyMaxRunes {
+				resp.Body = string(runes[:skillBodyMaxRunes])
+				resp.BodyTruncated = true
+			}
+		}
+		return rpcutil.RespondOK(req.ID, resp)
 	}
 }
 

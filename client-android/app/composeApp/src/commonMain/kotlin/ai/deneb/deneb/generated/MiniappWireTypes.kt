@@ -284,6 +284,14 @@ data class SessionRowOut(
 )
 
 @Serializable
+data class SkillDetailResponse(
+    val skill: SkillRow = SkillRow(),
+    val body: String = "",
+    val bodyTruncated: Boolean = false,
+    val path: String = "",
+)
+
+@Serializable
 data class SkillLifecycleEvent(
     val type: String = "",
     val skillName: String = "",

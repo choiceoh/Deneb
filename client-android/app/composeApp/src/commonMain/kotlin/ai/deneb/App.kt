@@ -13,6 +13,7 @@ import ai.deneb.deneb.DenebCategoryPagesScreen
 import ai.deneb.deneb.DenebConfigScreen
 import ai.deneb.deneb.DenebCronEditScreen
 import ai.deneb.deneb.DenebCronScreen
+import ai.deneb.deneb.DenebSkillScreen
 import ai.deneb.deneb.DenebDiaryScreen
 import ai.deneb.deneb.DenebFleetScreen
 import ai.deneb.deneb.DenebGatewayClient
@@ -174,6 +175,10 @@ object DenebDiary
 @Serializable
 @SerialName("deneb_category_pages")
 data class DenebCategoryPages(val category: String)
+
+@Serializable
+@SerialName("deneb_skill")
+data class DenebSkill(val name: String)
 
 @Serializable
 @SerialName("deneb_cron")
@@ -350,6 +355,7 @@ private fun AppContent(
                                 appSettings = appSettings,
                                 denebClient = denebClient,
                                 onBack = { navController.navigateUp() },
+                                onOpenSkill = { name -> navController.navigate(DenebSkill(name)) },
                                 onOpenCron = { id -> navController.navigate(DenebCron(id)) },
                                 onOpenFleet = { navController.navigate(DenebFleet) },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
@@ -563,6 +569,16 @@ private fun AppContent(
                                     onBack = { navController.navigateUp() },
                                     onOpenMail = { id -> navController.navigate(DenebMailDetail(id)) },
                                     onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
+                        }
+                        composable<DenebSkill> { entry ->
+                            denebClient?.let { client ->
+                                DenebSkillScreen(
+                                    client = client,
+                                    skillName = entry.toRoute<DenebSkill>().name,
+                                    onBack = { navController.navigateUp() },
                                     navigationTabBar = if (showTabBar) navigationTabBar else null,
                                 )
                             }

@@ -3,6 +3,8 @@ package handlerminiapp
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
@@ -112,6 +114,66 @@ func TestSkillsList_GenesisDirFallbackOrigin(t *testing.T) {
 		if r.Name == "morning-letter" && r.Origin != skillOriginGenesis {
 			t.Errorf("genesis-dir skill origin = %q, want genesis", r.Origin)
 		}
+	}
+}
+
+// Detail returns the same enriched row as the list plus the SKILL.md body
+// read from the entry's FilePath.
+func TestSkillsDetail_RowAndBody(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "SKILL.md")
+	body := "---\nname: email-analysis\n---\n\n# 메일 분석\n\n절차…"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	deps := testSkillsDeps()
+	base := deps.List
+	deps.List = func() []skills.SkillEntry {
+		entries := base()
+		entries[0].Skill.FilePath = path
+		return entries
+	}
+
+	h := skillsDetail(deps)
+	params, _ := json.Marshal(map[string]any{"name": "email-analysis"})
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Method: "miniapp.skills.detail", Params: params})
+	payload := decodeSkillsPayload[SkillDetailResponse](t, resp)
+
+	if payload.Skill.Name != "email-analysis" || payload.Skill.EvolveCount != 2 || payload.Skill.TotalUses != 7 {
+		t.Errorf("detail row not enriched like the list: %+v", payload.Skill)
+	}
+	if payload.Body != body || payload.BodyTruncated {
+		t.Errorf("body = %q (truncated=%v), want the file content", payload.Body, payload.BodyTruncated)
+	}
+	if payload.Path != path {
+		t.Errorf("path = %q, want %q", payload.Path, path)
+	}
+}
+
+// A missing SKILL.md is non-fatal: the row meta still renders.
+func TestSkillsDetail_MissingBodyDegrades(t *testing.T) {
+	h := skillsDetail(testSkillsDeps())
+	params, _ := json.Marshal(map[string]any{"name": "morning-letter"})
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Method: "miniapp.skills.detail", Params: params})
+	payload := decodeSkillsPayload[SkillDetailResponse](t, resp)
+	if payload.Skill.Origin != skillOriginGenesis {
+		t.Errorf("origin = %q, want genesis", payload.Skill.Origin)
+	}
+	if payload.Body != "" {
+		t.Errorf("expected empty body for unreadable file, got %q", payload.Body)
+	}
+}
+
+func TestSkillsDetail_UnknownAndMissingName(t *testing.T) {
+	h := skillsDetail(testSkillsDeps())
+
+	params, _ := json.Marshal(map[string]any{"name": "no-such-skill"})
+	if resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Method: "miniapp.skills.detail", Params: params}); resp.OK {
+		t.Error("expected not-found error for unknown skill")
+	}
+	if resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "2", Method: "miniapp.skills.detail"}); resp.OK {
+		t.Error("expected missing-param error without a name")
 	}
 }
 
