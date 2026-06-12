@@ -115,13 +115,13 @@ scroll_probe() {
   echo "  ✓ scroll-$name — scrolled ${step}× clean (below-the-fold items rendered)"
 }
 
-# go_drawer NAME DRAWER_LABEL ANCHOR [scroll] — open a left-drawer screen by its
-# label. Pass "scroll" as the 4th arg for list screens to also probe below the
-# fold for render crashes.
+# go_drawer NAME SIDEBAR_LABEL ANCHOR [scroll] — open a section by its sidebar
+# label (the desktop layout keeps the sidebar persistent — nothing to open
+# first). Pass "scroll" as the 4th arg for list screens to also probe below
+# the fold for render crashes.
 go_drawer() {
   local name="$1" label="$2" anchor="$3" do_scroll="${4:-}" b
-  "$NA" tap 25 37 >/dev/null 2>&1 || true            # hamburger (icon → pixel)
-  "$NA" wait-for "$label" 5 >/dev/null 2>&1 || true  # drawer rendered
+  "$NA" wait-for "$label" 5 >/dev/null 2>&1 || true  # sidebar rendered
   b="$(log_lines)"
   "$NA" taptext "$label" >/dev/null 2>&1 || true     # open the screen by its text
   settle "$anchor"
@@ -142,8 +142,17 @@ settings_tab() {
   check_screen "$name" "$b" "$anchor"
 }
 
-echo "==> booting live app (idempotent) ..."
-"$NA" start >/dev/null 2>&1 || { echo "native-app.sh start failed"; exit 1; }
+echo "==> booting live app (desktop profile, idempotent) ..."
+# The desktop build always shows the persistent sidebar; at the phone profile
+# (412dp) it squeezes content to ~170dp and clips every screen's title/anchor,
+# so the smoke walks the layout no real user sees. Desktop (1280x800) is the
+# layout this build actually ships to desks — restart only on profile mismatch.
+cur_profile="$("$NA" status 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | sed -n 's/^profile:[[:space:]]*\([a-z]*\).*/\1/p')"
+if [ "$cur_profile" = "desktop" ]; then
+  "$NA" start desktop >/dev/null 2>&1 || { echo "native-app.sh start failed"; exit 1; }
+else
+  "$NA" restart desktop >/dev/null 2>&1 || { echo "native-app.sh restart desktop failed"; exit 1; }
+fi
 sleep 3
 
 # Resolve instance-namespaced state paths from the harness (DENEB_INSTANCE-aware).
@@ -153,8 +162,8 @@ SHOTS="$(printf '%s\n' "$status_out" | sed -n 's/^shots:[[:space:]]*//p' | head 
 [ -n "$LOG" ] || { echo "could not resolve app log path from native-app.sh status"; exit 1; }
 PIDFILE="$(dirname "$LOG")/app_jvm.pid"
 
-# Known state: chat tab (taptext the toggle; pixel fallback if OCR misses).
-"$NA" taptext "채팅" >/dev/null 2>&1 || "$NA" tap 165 27 >/dev/null 2>&1 || true
+# Known state: chat (sidebar row — the desktop layout has no 채팅/설정 tab bar).
+"$NA" taptext "chat" >/dev/null 2>&1 || true
 "$NA" key Escape >/dev/null 2>&1 || true
 sleep 2
 
@@ -177,7 +186,6 @@ go_drawer "smoke-05-categories" "categories" "카테고리"  scroll
 # scroll-probed the list away from the top), then tap the pinned row. Anchor on
 # the screen's "최근 연락" section label — the bare word "사람" also appears on
 # the categories screen itself, so it can't distinguish the two.
-"$NA" tap 25 37 >/dev/null 2>&1 || true
 "$NA" wait-for "categories" 5 >/dev/null 2>&1 || true
 "$NA" taptext "categories" >/dev/null 2>&1 || true
 "$NA" wait-for "카테고리" 8 >/dev/null 2>&1 || sleep 2
@@ -192,8 +200,8 @@ scroll_probe "smoke-06-people"
 "$NA" key Escape >/dev/null 2>&1 || true
 sleep 1
 
-# Settings screen + tabs: taptext the toggle, then each tab label.
-"$NA" taptext "설정" >/dev/null 2>&1 || "$NA" tap 235 27 >/dev/null 2>&1 || true
+# Settings screen + tabs: sidebar row, then each pill-tab label.
+"$NA" taptext "settings" >/dev/null 2>&1 || true
 "$NA" wait-for "게이트웨이" 6 >/dev/null 2>&1 || sleep 2
 b="$(log_lines)"; check_screen "smoke-07-settings" "$b" "게이트웨이"
 settings_tab "smoke-08-models"    "모델"     "경량"
@@ -203,12 +211,12 @@ settings_tab "smoke-09-crons"     "크론"     ""
 # (캡처를→"BMS", 빌드/않습니다 unread), and the lone readable word "알림" also
 # appears on the gateway tab. Crash/alive check only.
 settings_tab "smoke-11-alerts"    "알림"     ""
-"$NA" taptext "채팅" >/dev/null 2>&1 || "$NA" tap 165 27 >/dev/null 2>&1 || true
+"$NA" taptext "chat" >/dev/null 2>&1 || true
 sleep 1
 
-# Right-side recent-sessions drawer (icon → pixel).
+# Right-side recent-sessions drawer (icon → pixel; top-right at 1280x800).
 b="$(log_lines)"
-"$NA" tap 388 37 >/dev/null 2>&1 || true
+"$NA" tap 1243 27 >/dev/null 2>&1 || true
 "$NA" wait-for "대화 기록" 5 >/dev/null 2>&1 || sleep 2
 check_screen "smoke-12-sessions" "$b" "대화 기록"
 "$NA" key Escape >/dev/null 2>&1 || true
@@ -217,24 +225,25 @@ sleep 1
 # Mail DETAIL — open the first inbox message: richest list-item screen (AI
 # analysis markdown, attachment chips, sender context). The row itself is data-
 # dependent so it stays a pixel tap; everything around it is text-driven.
-"$NA" tap 25 37 >/dev/null 2>&1 || true
 "$NA" wait-for "mail" 5 >/dev/null 2>&1 || true
 "$NA" taptext "mail" >/dev/null 2>&1 || true
 "$NA" wait-for "받은 메일" 8 >/dev/null 2>&1 || sleep 2
 retry_nav "mail" "받은 메일"                  # ensure the inbox list is up before the row tap
 b="$(log_lines)"
-# First message row. The Deneb-idiom inbox header (← glyph + ultralight title +
-# count line + section label) is taller than the old Material header, so the
-# first row now spans roughly y 160-250; 210 aims at its center.
-"$NA" tap 200 210 >/dev/null 2>&1 || true
-"$NA" wait-for "보관" 8 >/dev/null 2>&1 || sleep 2
+# First message row. Desktop mail is a split view: a 380dp list pane right of
+# the 240dp sidebar (content starts ~x263), detail rendering inline on the
+# right. The header stack puts the first row around y 160-250; aim its center.
+# Anchor on the 휴지통 action pill — present only on the detail pane (the
+# phone-era "보관" action does not exist in the desktop split view).
+"$NA" tap 420 210 >/dev/null 2>&1 || true
+"$NA" wait-for "휴지통" 8 >/dev/null 2>&1 || sleep 2
 # self-heal the data-dependent row tap: if the detail did not open (cold-tap
 # flake, or the list was still settling), re-tap the row once and re-settle.
-if ! "$NA" assert "보관" >/dev/null 2>&1; then
-  "$NA" tap 200 210 >/dev/null 2>&1 || true
-  "$NA" wait-for "보관" 8 >/dev/null 2>&1 || sleep 2
+if ! "$NA" assert "휴지통" >/dev/null 2>&1; then
+  "$NA" tap 420 210 >/dev/null 2>&1 || true
+  "$NA" wait-for "휴지통" 8 >/dev/null 2>&1 || sleep 2
 fi
-check_screen "smoke-13-mail-detail" "$b" "보관"
+check_screen "smoke-13-mail-detail" "$b" "휴지통"
 "$NA" key Escape >/dev/null 2>&1 || true
 "$NA" key Escape >/dev/null 2>&1 || true
 

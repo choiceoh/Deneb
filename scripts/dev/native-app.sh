@@ -340,12 +340,37 @@ cmd_scroll() {  # up|down [clicks]
 # ocr_tsv → capture the screen, OCR it, write the word-box TSV to a temp file,
 # and echo that path. (TSV goes to a file, not a pipe: the locator reads its
 # script from a heredoc on stdin, so it can't also read the TSV from stdin.)
+# OCR_SCALE: the screenshot is upscaled before tesseract (and every box
+# coordinate divided back down). At @1x the sidebar's small light-gray labels
+# OCR'd to *nothing* — every smoke navigation failed — while 3x + grayscale +
+# a hard threshold reads all of them at 94–97 confidence (measured on the
+# 2026-06-12 failure artifacts). Keep in sync with the divisor in _ocr_locate.
+OCR_SCALE=3
+
+# _ocr_preprocess SRC DST — upscale, grayscale, and binarize for tesseract.
+# Theme-aware: a dark screen is inverted first so text is always dark-on-light
+# (tesseract's preference); 215 keeps light-gray UI text while the background
+# stays white.
+_ocr_preprocess() {
+  python3 - "$1" "$2" <<'PY'
+import sys
+from PIL import Image, ImageOps, ImageStat
+src, dst = sys.argv[1], sys.argv[2]
+im = Image.open(src).convert("L")
+im = im.resize((im.width * 3, im.height * 3), Image.LANCZOS)
+if ImageStat.Stat(im).mean[0] < 128:   # dark theme → invert to dark-on-light
+    im = ImageOps.invert(im)
+im.point(lambda p: 0 if p < 215 else 255).save(dst)
+PY
+}
+
 ocr_tsv() {
   [[ -n "$(xvfb_pid)" ]] || die "nothing running — 'start' first"
   have tesseract || die "missing 'tesseract' — sudo apt-get install -y tesseract-ocr tesseract-ocr-kor"
-  local tmp="$STATE_DIR/_ocr.png" tsv="$STATE_DIR/_ocr.tsv"
+  local tmp="$STATE_DIR/_ocr.png" pre="$STATE_DIR/_ocr_pre.png" tsv="$STATE_DIR/_ocr.tsv"
   DISPLAY="$DISP" scrot --overwrite "$tmp" 2>/dev/null || DISPLAY="$DISP" scrot -o "$tmp"
-  tesseract "$tmp" stdout -l kor+eng --psm 11 tsv 2>/dev/null >"$tsv"
+  _ocr_preprocess "$tmp" "$pre" || die "ocr preprocess failed (python3-pil required)"
+  tesseract "$pre" stdout -l kor+eng --psm 11 tsv 2>/dev/null >"$tsv"
   echo "$tsv"
 }
 
@@ -377,7 +402,9 @@ for words in lines.values():
             sys.exit(0)
         xs = [w[0] for w in words]; ys = [w[1] for w in words]
         rs = [w[0] + w[2] for w in words]; bs = [w[1] + w[3] for w in words]
-        print((min(xs) + max(rs)) // 2, (min(ys) + max(bs)) // 2)
+        # Boxes are in the upscaled OCR image; report screen-pixel centers.
+        scale = 3  # keep in sync with OCR_SCALE in native-app.sh
+        print((min(xs) + max(rs)) // 2 // scale, (min(ys) + max(bs)) // 2 // scale)
         sys.exit(0)
 sys.exit(1)
 PY
