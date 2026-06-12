@@ -90,15 +90,21 @@ func buildAgentConfig(
 	// fetch_tools during this run.
 	deferredActivation := NewDeferredActivation()
 
-	// Resolve thinking config from the session's ThinkingLevel setting.
-	var thinkingCfg *llm.ThinkingConfig
-	if cachedSession != nil && cachedSession.ThinkingLevel != "" {
-		thinkingCfg = resolveThinkingConfig(cachedSession.ThinkingLevel)
+	// Resolve thinking config from the session's ThinkingLevel setting. A
+	// per-run override (params.Thinking — e.g. a cron payload's `thinking`
+	// field) takes precedence, including "off" to disable the phase.
+	thinkingLevel := ""
+	if cachedSession != nil {
+		thinkingLevel = cachedSession.ThinkingLevel
 	}
+	if params.Thinking != "" {
+		thinkingLevel = params.Thinking
+	}
+	thinkingCfg := resolveThinkingConfig(thinkingLevel)
 	// Interleaved thinking is an additive flag: it requires extended thinking
 	// to be enabled (otherwise there's nothing to interleave). When
-	// thinkingCfg is nil the interleaved bit has no effect.
-	if thinkingCfg != nil && cachedSession != nil && cachedSession.InterleavedThinking != nil && *cachedSession.InterleavedThinking {
+	// thinkingCfg is nil or disabled the interleaved bit has no effect.
+	if thinkingCfg != nil && thinkingCfg.Type == "enabled" && cachedSession != nil && cachedSession.InterleavedThinking != nil && *cachedSession.InterleavedThinking {
 		thinkingCfg.Interleaved = true
 	}
 
@@ -249,7 +255,7 @@ func buildAgentConfig(
 	// turns at baseline. Opt-in via DENEB_REASONING_SANDWICH and only when the
 	// session already has thinking enabled, so default behavior is unchanged.
 	// Thinking is a request-level param, so per-turn variation is cache-safe.
-	if thinkingCfg != nil && reasoningSandwichEnabled() {
+	if thinkingCfg != nil && thinkingCfg.Type == "enabled" && reasoningSandwichEnabled() {
 		cfg.ThinkingModulator = planningSandwichThinking(thinkingCfg, cfg.MaxTokens)
 	}
 
@@ -303,6 +309,13 @@ func shouldEnableSkillNudger(nudger SkillNudger, params RunParams, sessionToolPr
 
 func resolveThinkingConfig(level string) *llm.ThinkingConfig {
 	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "off", "none", "disabled":
+		// Explicitly disable the thinking phase. On dual-mode vLLM models the
+		// disabled config is translated to chat_template_kwargs (the only
+		// effective control on e.g. deepseek-v4); applyModelTuning fills the
+		// model's toggle kwarg. Providers without a toggle fall back to the
+		// openai.go reasoning_effort floor; Anthropic simply omits thinking.
+		return &llm.ThinkingConfig{Type: "disabled"}
 	case "minimal":
 		return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 1024}
 	case "low":

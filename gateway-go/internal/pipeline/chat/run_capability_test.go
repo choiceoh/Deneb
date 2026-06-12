@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 )
 
@@ -136,6 +137,54 @@ func TestApplyModelTuning(t *testing.T) {
 			t.Errorf("builtin profile not applied without registry: %v", cfg.Temperature)
 		}
 	})
+
+	t.Run("deepseek-v4 sampling profile applied", func(t *testing.T) {
+		// Pins the dsv4 fix: the shipped generation_config is 1.0/1.0, so the
+		// gateway must send the recommended 0.6/0.95 itself.
+		cfg := agent.AgentConfig{MaxTokens: 8192}
+		applyModelTuning(&cfg, deps, RunParams{}, "vllm", "deepseek-v4-flash")
+		if cfg.Temperature == nil || *cfg.Temperature != 0.6 || cfg.TopP == nil || *cfg.TopP != 0.95 {
+			t.Errorf("dsv4 profile not applied: temp=%v topP=%v", cfg.Temperature, cfg.TopP)
+		}
+	})
+
+	t.Run("disabled thinking gets the model toggle kwarg", func(t *testing.T) {
+		// Session-level "off" (or a cron payload override) produces a bare
+		// disabled config; the model's chat_template toggle must be attached
+		// here because on deepseek-v4 the reasoning_effort field is a no-op.
+		cfg := agent.AgentConfig{MaxTokens: 8192, Thinking: &llm.ThinkingConfig{Type: "disabled"}}
+		applyModelTuning(&cfg, deps, RunParams{}, "vllm", "deepseek-v4-flash")
+		if cfg.Thinking.TemplateKwarg != "thinking" {
+			t.Errorf("TemplateKwarg = %q, want \"thinking\"", cfg.Thinking.TemplateKwarg)
+		}
+
+		// Models without a toggle keep the kwarg empty (openai.go falls back
+		// to its reasoning_effort floor).
+		cfg = agent.AgentConfig{MaxTokens: 8192, Thinking: &llm.ThinkingConfig{Type: "disabled"}}
+		applyModelTuning(&cfg, deps, RunParams{}, "acme", "custom-model")
+		if cfg.Thinking.TemplateKwarg != "" {
+			t.Errorf("TemplateKwarg = %q, want empty for non-toggle model", cfg.Thinking.TemplateKwarg)
+		}
+
+		// An enabled config is never touched.
+		cfg = agent.AgentConfig{MaxTokens: 8192, Thinking: &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 4096}}
+		applyModelTuning(&cfg, deps, RunParams{}, "vllm", "deepseek-v4-flash")
+		if cfg.Thinking.TemplateKwarg != "" {
+			t.Errorf("enabled config must not get a toggle kwarg, got %q", cfg.Thinking.TemplateKwarg)
+		}
+	})
+}
+
+func TestResolveThinkingConfig_Off(t *testing.T) {
+	for _, level := range []string{"off", "none", "disabled", " OFF "} {
+		cfg := resolveThinkingConfig(level)
+		if cfg == nil || cfg.Type != "disabled" {
+			t.Errorf("resolveThinkingConfig(%q) = %+v, want Type=disabled", level, cfg)
+		}
+	}
+	if cfg := resolveThinkingConfig(""); cfg != nil {
+		t.Errorf("empty level must stay nil (provider default), got %+v", cfg)
+	}
 }
 
 func TestModelCapability_PromptCacheOverride(t *testing.T) {

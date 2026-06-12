@@ -46,6 +46,10 @@ type AgentTurnParams struct {
 	To          string
 	AccountID   string
 	ThreadID    string
+	// Thinking is the job payload's per-run thinking-level override
+	// ("off"/"none" disables the thinking phase; "minimal".."xhigh" set a
+	// budget). Empty = provider default.
+	Thinking string
 }
 
 // CronEvent describes a cron system event for listeners.
