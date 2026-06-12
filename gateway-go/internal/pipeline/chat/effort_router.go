@@ -27,7 +27,6 @@
 package chat
 
 import (
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"os"
@@ -117,21 +116,32 @@ var effortHardSignals = []string{
 
 // effortPureAcks are messages that stay routable even when the recent
 // context is heavy: pure pleasantries/acks do not steer the ongoing work.
-var effortPureAcks = []string{
-	"고마워", "감사", "잘자", "좋아", "좋네", "굿", "오케이", "ㅇㅋ", "응", "웅", "넵", "네", "ok", "thanks", "thx",
+// Matched by EXACT equality against the punctuation-stripped message —
+// substring matching misreads Korean sentence endings as acks ("안되네"
+// contains "네", "안 좋아" contains "좋아": both are steering/negative
+// reports, the costliest false-easy shape).
+var effortPureAcks = map[string]struct{}{
+	"고마워": {}, "고마워요": {}, "감사": {}, "감사합니다": {}, "감사해요": {},
+	"잘자": {}, "잘자요": {}, "좋아": {}, "좋아요": {}, "좋네": {}, "좋네요": {},
+	"굿": {}, "오케이": {}, "ㅇㅋ": {}, "ㅋㅋ": {}, "응": {}, "응응": {}, "웅": {},
+	"넵": {}, "네": {}, "네네": {}, "넹": {}, "예": {}, "알겠어": {}, "알겠습니다": {},
+	"ok": {}, "okay": {}, "thanks": {}, "thx": {}, "good": {},
 }
 
 func isPureAck(msg string) bool {
 	if len([]rune(msg)) > 12 {
 		return false
 	}
-	lower := strings.ToLower(msg)
-	for _, a := range effortPureAcks {
-		if strings.Contains(lower, a) {
-			return true
+	// Strip everything but letters/digits so "고마워!!" or "네~" match.
+	var b strings.Builder
+	for _, r := range strings.ToLower(msg) {
+		if ('가' <= r && r <= '힣') || ('a' <= r && r <= 'z') || ('0' <= r && r <= '9') ||
+			('ㄱ' <= r && r <= 'ㅣ') {
+			b.WriteRune(r)
 		}
 	}
-	return false
+	_, ok := effortPureAcks[b.String()]
+	return ok
 }
 
 // recentContextHeavy reports whether the tail of the assembled history (h_t,
@@ -150,11 +160,7 @@ func recentContextHeavy(messages []llm.Message) bool {
 		start = 0
 	}
 	for _, m := range tail[start:] {
-		var blocks []llm.ContentBlock
-		if err := jsonUnmarshalBlocks(m.Content, &blocks); err != nil {
-			continue
-		}
-		for _, b := range blocks {
+		for _, b := range llm.ContentToBlocks(m.Content) {
 			switch b.Type {
 			case "tool_use", "tool_result":
 				return true
@@ -182,7 +188,8 @@ func decideThinkingOff(params RunParams, messages []llm.Message) (bool, string) 
 	// sets only AutoDeliveredOutput). AutoDeliveredOutput itself is
 	// deliberately NOT checked: it is delivery semantics and is set on the
 	// interactive native client path (miniapp.chat.send) too.
-	if params.EphemeralUser || strings.HasPrefix(params.SessionKey, "cron:") {
+	if params.EphemeralUser || strings.HasPrefix(params.SessionKey, "cron:") ||
+		strings.HasPrefix(params.SessionKey, "acp:") {
 		return false, "automation"
 	}
 	// Attachment-bearing turns keep thinking: a short caption routinely
@@ -227,7 +234,11 @@ func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, messages []llm.
 		return nil, ""
 	}
 	off, reason := decideThinkingOff(params, messages)
-	if mode == effortModeForce {
+	// Force mode (eval baseline) overrides only the HEURISTIC tail: the
+	// automation/attachments/empty guards stand even under force — the dev
+	// gateway shares production cron jobs, and forcing those non-thinking
+	// would degrade real NO_REPLY/delivery judgments mid-eval.
+	if mode == effortModeForce && !off && !protectedEffortReason(reason) {
 		off, reason = true, "forced"
 	}
 	if !off {
@@ -240,18 +251,7 @@ func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, messages []llm.
 	}
 	disabled := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: toggleKwarg}
 	cfg.Thinking = disabled
-	// Per-step decision e_t = f(turn, h_t, o_t) — see the threshold block
-	// above. When the session had no explicit thinking config, an empty
-	// "enabled" sentinel restores the PROVIDER DEFAULT (applySamplingParams
-	// emits nothing for enabled with BudgetTokens 0 — the dual-mode template
-	// then thinks again).
-	revert := route.origThinking
-	if revert == nil {
-		revert = &llm.ThinkingConfig{Type: "enabled"}
-	}
-	cfg.ThinkingModulator = func(turn int, msgs []llm.Message) *llm.ThinkingConfig {
-		return effortStepThinking(turn, msgs, disabled, revert)
-	}
+	cfg.ThinkingModulator = effortStepModulator(disabled, route.origThinking)
 	if logger != nil {
 		logger.Info("effort router: thinking off for this run",
 			"reason", reason, "model", cfg.Model, "ceilingTurn", effortStepCeilingTurn)
@@ -259,37 +259,71 @@ func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, messages []llm.
 	return route, "routed:" + reason
 }
 
+// effortStepModulator builds the per-turn policy for a routed run on the
+// given model's disabled config. When the session had no explicit thinking
+// config, an empty "enabled" sentinel reverts to the PROVIDER DEFAULT
+// (applySamplingParams emits nothing for enabled with BudgetTokens 0 — the
+// dual-mode template then thinks again). Shared by the initial route and the
+// fallback chain (which rebuilds it for the fallback model's own kwarg).
+func effortStepModulator(disabled, origThinking *llm.ThinkingConfig) func(turn int, msgs []llm.Message) *llm.ThinkingConfig {
+	revert := origThinking
+	if revert == nil {
+		revert = &llm.ThinkingConfig{Type: "enabled"}
+	}
+	// Run-scoping: the executor's messages array is SEEDED with the session
+	// history (prior runs' tool_results included). o_t must reflect THIS
+	// run's observations only, so remember where the run starts and scan
+	// from there — the first modulator call (turn 0) sees the pre-run
+	// length before any new messages are appended.
+	baseLen := -1
+	return func(turn int, msgs []llm.Message) *llm.ThinkingConfig {
+		if baseLen < 0 {
+			baseLen = len(msgs)
+		}
+		return effortStepThinking(turn, msgs, baseLen, disabled, revert)
+	}
+}
+
 // effortStepThinking is the per-step effort policy for a routed run: stay
-// non-thinking only while the step is early AND the latest observation is
+// non-thinking only while the step is early AND this run's observations are
 // light; revert to the session's thinking otherwise (Ares: later steps and
-// heavy observations need effort).
-func effortStepThinking(turn int, msgs []llm.Message, disabled, revert *llm.ThinkingConfig) *llm.ThinkingConfig {
+// heavy observations need effort). Scans only messages appended SINCE the
+// run started (baseLen) — session history is h_t, not o_t. Batch-aware: a
+// parallel tool batch counts its LARGEST result and ANY error, so a
+// [6K-rune error, tiny ok] batch cannot hide behind block order.
+func effortStepThinking(turn int, msgs []llm.Message, baseLen int, disabled, revert *llm.ThinkingConfig) *llm.ThinkingConfig {
 	if turn == 0 {
 		return disabled
 	}
 	if turn >= effortStepCeilingTurn {
 		return revert
 	}
-	// o_t: inspect the tool results accumulated so far — the latest one
-	// drives the digestion need; the cumulative volume marks a heavy run.
-	var lastSize, totalSize int
-	var lastErr bool
-	for _, m := range msgs {
-		var blocks []llm.ContentBlock
-		if err := jsonUnmarshalBlocks(m.Content, &blocks); err != nil {
-			continue
-		}
-		for _, b := range blocks {
+	if baseLen < 0 || baseLen > len(msgs) {
+		baseLen = 0
+	}
+	var lastBatchMax, totalSize int
+	var anyErr bool
+	for _, m := range msgs[baseLen:] {
+		batchMax, batchHasResult := 0, false
+		for _, b := range llm.ContentToBlocks(m.Content) {
 			if b.Type != "tool_result" {
 				continue
 			}
+			batchHasResult = true
 			n := len([]rune(b.Content))
 			totalSize += n
-			lastSize = n
-			lastErr = b.IsError
+			if n > batchMax {
+				batchMax = n
+			}
+			if b.IsError {
+				anyErr = true
+			}
+		}
+		if batchHasResult {
+			lastBatchMax = batchMax
 		}
 	}
-	if lastErr || lastSize > effortObservationRunes || totalSize > effortCumulativeRunes {
+	if anyErr || lastBatchMax > effortObservationRunes || totalSize > effortCumulativeRunes {
 		return revert
 	}
 	return disabled
@@ -328,11 +362,12 @@ func resultRanTools(res *agent.AgentResult) bool {
 	return res != nil && res.TotalToolCalls > 0
 }
 
-// jsonUnmarshalBlocks decodes a message's content into blocks; plain-string
-// content (a bare text message) is not an error, just yields no blocks.
-func jsonUnmarshalBlocks(content json.RawMessage, blocks *[]llm.ContentBlock) error {
-	if len(content) == 0 || content[0] != '[' {
-		return errors.New("not a block array")
+// protectedEffortReason reports keep-reasons that even force mode must not
+// override (see applyEffortRouter).
+func protectedEffortReason(reason string) bool {
+	switch reason {
+	case "automation", "attachments", "empty":
+		return true
 	}
-	return json.Unmarshal(content, blocks)
+	return false
 }

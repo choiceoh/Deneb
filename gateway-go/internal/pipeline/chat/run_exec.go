@@ -253,6 +253,16 @@ func executeAgentRun(
 	// Execute agent loop with model fallback chain.
 	agentStart := time.Now()
 	agentResult, actualModel, fellBack, err := runAgentWithFallback(ctx, cfg, messages, client, deps, providerID, initialRole, effortRt, hooks, logger, runLog)
+	if err != nil && effortDecision != "" {
+		// The failed-run record matters MOST for the label pipeline: a
+		// routed run that escalated and still failed is the strongest
+		// misjudgment signal. The success-path record rides on the
+		// "agent loop complete" line below.
+		logger.Info("effort router: run failed",
+			"decision", effortDecision,
+			"escalated", effortRt != nil && effortRt.escalated,
+			"model", actualModel, "error", err)
+	}
 	if err != nil {
 		// Log run.error here — not in the async-only completion handler — so
 		// every entry path (runAgentAsync, SendSync, SendSyncStream) closes the
@@ -284,20 +294,12 @@ func executeAgentRun(
 		}
 	}
 	toolHist := formatToolHist(agentResult.ToolCounts)
-	// Structured effort-router record: one line per eligible run with the
-	// decision AND the outcome — the raw data for the RouterBench-style
-	// acceptance comparison and a future learned router (label pipeline).
-	if effortDecision != "" {
-		logger.Info("effort router: run complete",
-			"decision", effortDecision,
-			"escalated", effortRt != nil && effortRt.escalated,
-			"model", actualModel,
-			"turns", agentResult.Turns,
-			"outputTokens", agentResult.Usage.OutputTokens,
-			"agentMs", agentMs,
-			"stopReason", agentResult.StopReason)
-	}
+	// Effort-router fields ride on the existing run-complete line (one
+	// greppable record per run for the acceptance comparison and a future
+	// learned router) instead of a near-duplicate second Info line.
 	logger.Info("pipeline: agent loop complete",
+		"effortDecision", effortDecision,
+		"effortEscalated", effortRt != nil && effortRt.escalated,
 		"agentMs", agentMs,
 		"totalMs", totalMs,
 		"turns", agentResult.Turns,

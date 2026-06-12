@@ -88,7 +88,7 @@ func DropEmptyMessages(messages []Message) []Message {
 // Anthropic empty, so a message made only of those is empty for our purposes and
 // must be dropped — otherwise Anthropic rejects it ("... must not be empty").
 func isContentEmpty(content json.RawMessage) bool {
-	for _, b := range contentToBlocks(content) {
+	for _, b := range ContentToBlocks(content) {
 		switch b.Type {
 		case "", "text":
 			if strings.TrimSpace(b.Text) != "" {
@@ -109,8 +109,8 @@ func isContentEmpty(content json.RawMessage) bool {
 // array. Each value may be a JSON string (plain text) or a JSON array of
 // ContentBlock objects.
 func mergeContent(a, b json.RawMessage) json.RawMessage {
-	blocksA := contentToBlocks(a)
-	blocksB := contentToBlocks(b)
+	blocksA := ContentToBlocks(a)
+	blocksB := ContentToBlocks(b)
 	merged := make([]ContentBlock, 0, len(blocksA)+len(blocksB))
 	merged = append(merged, blocksA...)
 	merged = append(merged, blocksB...)
@@ -120,9 +120,11 @@ func mergeContent(a, b json.RawMessage) json.RawMessage {
 	return marshalBlocks(merged)
 }
 
-// contentToBlocks parses Content into blocks. A plain text string becomes
-// a single text block; an array of blocks is returned as-is.
-func contentToBlocks(content json.RawMessage) []ContentBlock {
+// ContentToBlocks parses message Content into blocks. A plain text string
+// becomes a single text block; an array of blocks is returned as-is. The
+// canonical content parser — reuse it instead of hand-rolling the
+// "is it a block array or a bare string" dance (effort router, compaction).
+func ContentToBlocks(content json.RawMessage) []ContentBlock {
 	if len(content) == 0 {
 		return nil
 	}

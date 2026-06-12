@@ -105,11 +105,16 @@ func TestApplyEffortRouter_Gates(t *testing.T) {
 	if cfg.Thinking != nil {
 		t.Error("no-route paths must leave Thinking untouched")
 	}
-	// force mode (eval baseline): routes even hard messages.
+	// force mode (eval baseline): routes even hard messages — but never
+	// automation/attachment-protected runs.
 	t.Setenv("DENEB_ADAPTIVE_EFFORT", "force")
 	if r, d := applyEffortRouter(&cfg, RunParams{Message: "이 코드 분석해줘"}, nil, "thinking", nil); r == nil || d != "routed:forced" {
 		t.Errorf("force mode must route everything eligible, got %q", d)
 	}
+	if r, d := applyEffortRouter(&cfg, RunParams{Message: "메일 분석", SessionKey: "cron:mail:1"}, nil, "thinking", nil); r != nil || d != "kept:automation" {
+		t.Errorf("force must NOT override the automation guard, got %q", d)
+	}
+	cfg.Thinking = nil
 }
 
 // TestEscalatableEffortFailure covers the three router-attributable failure
@@ -172,9 +177,23 @@ func TestContextHeavyRouting(t *testing.T) {
 	if off, _ := decideThinkingOff(RunParams{Message: "고마워!"}, heavy); !off {
 		t.Error("pure ack stays routable even in a heavy thread")
 	}
+	for _, neg := range []string{"안되네", "여전히 안되네요", "안 좋아", "반응이 없네"} {
+		if off, reason := decideThinkingOff(RunParams{Message: neg}, heavy); off {
+			t.Errorf("negative report %q must NOT be an ack (reason=%s)", neg, reason)
+		}
+	}
 	light := []llm.Message{llm.NewTextMessage("user", "안녕"), llm.NewTextMessage("assistant", "안녕하세요!"), llm.NewTextMessage("user", "잘 지냈어?")}
 	if off, _ := decideThinkingOff(RunParams{Message: "잘 지냈어?"}, light); !off {
 		t.Error("light history must not block routing")
+	}
+	// Plain-STRING assistant content (proactive cards, legacy persists) must
+	// also count as heavy — ContentToBlocks normalizes it to a text block.
+	card := []llm.Message{
+		llm.NewTextMessage("assistant", strings.Repeat("메일 분석 ", 400)),
+		llm.NewTextMessage("user", "그거 처리해줘"),
+	}
+	if off, reason := decideThinkingOff(RunParams{Message: "그거 처리해줘"}, card); off {
+		t.Errorf("string-persisted long assistant card must mark context heavy (reason=%s)", reason)
 	}
 }
 
@@ -183,21 +202,32 @@ func TestEffortStepThinking(t *testing.T) {
 	disabled := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: "thinking"}
 	revert := &llm.ThinkingConfig{Type: "enabled"}
 	small := []llm.Message{{Role: "user", Content: []byte(`[{"type":"tool_result","tool_use_id":"t","content":"ok"}]`)}}
-	if got := effortStepThinking(0, nil, disabled, revert); got != disabled {
+	if got := effortStepThinking(0, nil, 0, disabled, revert); got != disabled {
 		t.Error("turn 0 must stay disabled")
 	}
-	if got := effortStepThinking(1, small, disabled, revert); got != disabled {
+	if got := effortStepThinking(1, small, 0, disabled, revert); got != disabled {
 		t.Error("turn 1 with a small clean observation stays disabled")
 	}
 	big := []llm.Message{{Role: "user", Content: []byte(`[{"type":"tool_result","tool_use_id":"t","content":"` + strings.Repeat("가", 2100) + `"}]`)}}
-	if got := effortStepThinking(1, big, disabled, revert); got != revert {
+	if got := effortStepThinking(1, big, 0, disabled, revert); got != revert {
 		t.Error("a big observation must revert to thinking")
 	}
 	errRes := []llm.Message{{Role: "user", Content: []byte(`[{"type":"tool_result","tool_use_id":"t","content":"boom","is_error":true}]`)}}
-	if got := effortStepThinking(1, errRes, disabled, revert); got != revert {
+	if got := effortStepThinking(1, errRes, 0, disabled, revert); got != revert {
 		t.Error("an error observation must revert to thinking")
 	}
-	if got := effortStepThinking(effortStepCeilingTurn, small, disabled, revert); got != revert {
+	if got := effortStepThinking(effortStepCeilingTurn, small, 0, disabled, revert); got != revert {
 		t.Error("ceiling turn must always revert")
+	}
+	// Run-scoping: heavy HISTORY tool_results before baseLen must not count.
+	history := append([]llm.Message{}, big...)
+	withClean := append(append([]llm.Message{}, history...), small...)
+	if got := effortStepThinking(1, withClean, len(history), disabled, revert); got != disabled {
+		t.Error("prior-run tool_results (before baseLen) must not trip the policy")
+	}
+	// Batch-awareness: [error+big, tiny-ok] in ONE message must still revert.
+	batch := []llm.Message{{Role: "user", Content: []byte(`[{"type":"tool_result","tool_use_id":"a","content":"` + strings.Repeat("가", 2100) + `","is_error":true},{"type":"tool_result","tool_use_id":"b","content":"ok"}]`)}}
+	if got := effortStepThinking(1, batch, 0, disabled, revert); got != revert {
+		t.Error("an error/big result earlier in the batch must not be masked by a later tiny one")
 	}
 }

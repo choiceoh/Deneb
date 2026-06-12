@@ -22,6 +22,8 @@ cd "$(dirname "$0")/../.."
 
 INSTANCE="${DENEB_INSTANCE:-effortr}"
 LOG="/tmp/deneb-${INSTANCE}-gateway-live.log"
+# Port derivation must match scripts/dev/lib-server.sh (18800 + (cksum%100)*4).
+PORT=$(( 18800 + ($(printf '%s' "$INSTANCE" | cksum | cut -d' ' -f1) % 100) * 4 ))
 OUT="$HOME/.cache/deneb-visual/effort-eval-$(date +%Y%m%d-%H%M%S).md"
 mkdir -p "$(dirname "$OUT")"
 
@@ -48,7 +50,7 @@ run_policy() {
   for attempt in 1 2 3; do
     DENEB_INSTANCE="$INSTANCE" DENEB_ADAPTIVE_EFFORT="$env" scripts/dev/live-test.sh restart >/dev/null 2>&1
     for _ in $(seq 1 20); do
-      if curl -sf --max-time 3 "http://127.0.0.1:19068/health" >/dev/null 2>&1; then up=1; break; fi
+      if curl -sf --max-time 3 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then up=1; break; fi
       sleep 3
     done
     [ "$up" = 1 ] && break
@@ -66,7 +68,7 @@ run_policy() {
     reply=$(DENEB_INSTANCE="$INSTANCE" timeout 180 scripts/dev/live-test.sh chat "$m" 2>&1)
     ms=$(echo "$reply" | grep -oE 'Done \([0-9]+ms\)' | grep -oE '[0-9]+' | tail -1)
     # per-run outputTokens from the run-complete log line appended since 'before_lines'
-    toks=$(tail -n +"$before_lines" "$LOG" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -oE 'outputTokens=[0-9]+' | tail -1 | grep -oE '[0-9]+')
+    toks=$(tail -n +"$((before_lines + 1))" "$LOG" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep 'agent loop complete' | grep -oE ' outputTokens=[0-9]+' | tail -1 | grep -oE '[0-9]+')
     local text
     text=$(echo "$reply" | grep -vE '^==>|^$|Connected to native|prerequisites' | head -4 | tr '\n' ' ')
     printf '%s\t%d\t%s\t%s\t%s\n' "$name" "$i" "${toks:-0}" "${ms:-0}" "$text" >> /tmp/effort-eval-rows.tsv
@@ -75,9 +77,9 @@ run_policy() {
 }
 
 : > /tmp/effort-eval-rows.tsv
-run_policy "always-high" ""
-run_policy "always-non"  "force"
-run_policy "router"      "1"
+run_policy "always-high" "" || { echo "ABORT: always-high arm failed"; exit 2; }
+run_policy "always-non"  "force" || { echo "ABORT: always-non arm failed"; exit 2; }
+run_policy "router"      "1" || { echo "ABORT: router arm failed"; exit 2; }
 DENEB_INSTANCE="$INSTANCE" scripts/dev/live-test.sh stop >/dev/null 2>&1
 
 python3 - "$OUT" <<'PY'
@@ -114,6 +116,15 @@ for name in ('always-high', 'always-non', 'router'):
     }
 
 h, n, r = pol['always-high'], pol['always-non'], pol['router']
+# Empty/partial data must NEVER produce a PASS: every policy arm has to
+# contribute a full row set with real token counts.
+expected = 12
+for name in ('always-high', 'always-non', 'router'):
+    p_ = pol[name]
+    nonzero = sum(1 for x in p_['rows'] if x['toks'] > 0)
+    if len(p_['rows']) < expected or nonzero < expected - 2:
+        print(f"VERDICT: INVALID — {name} arm has {len(p_['rows'])} rows / {nonzero} with tokens (need {expected})")
+        sys.exit(2)
 # Random-interpolation line between the fixed policies at the router's token spend.
 if h['toks'] != n['toks']:
     frac = (r['toks'] - n['toks']) / (h['toks'] - n['toks'])

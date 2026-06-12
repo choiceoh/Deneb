@@ -340,11 +340,14 @@ func runAgentWithFallback(
 					// truncates, see applySamplingParams).
 					if route != nil && effortRouted(&cfg) {
 						if kw := modelCapability(deps, fbCfg.ProviderID, fbCfg.Model).ThinkingToggleKwarg; kw != "" {
-							agentCfg.Thinking = &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: kw}
-							// The step-revert modulator closes over the ORIGINAL
-							// model's kwarg — drop it rather than leak the wrong
-							// spelling to a different template.
-							agentCfg.ThinkingModulator = nil
+							// Rebuild (not drop) the per-step policy on the
+							// FALLBACK model's own kwarg — the original
+							// closure carries the old spelling, and nil-ing
+							// it would pin every fallback turn non-thinking
+							// with no per-step revert.
+							fbDisabled := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: kw}
+							agentCfg.Thinking = fbDisabled
+							agentCfg.ThinkingModulator = effortStepModulator(fbDisabled, route.origThinking)
 						} else {
 							restoreEffort(&agentCfg, route)
 						}
