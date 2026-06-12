@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -45,6 +46,43 @@ func TestSubagentCommandDeps_SpawnSubagent(t *testing.T) {
 	}
 	if agent.Depth != 0 {
 		t.Errorf("depth = %d, want 0 (parent not in registry)", agent.Depth)
+	}
+}
+
+// SpawnSubagent must put the tool preset on the RUNTIME session — that is
+// what the chat run reads for tool filtering (run_exec → toolpreset) — and
+// fail closed on unknown preset names.
+func TestSubagentCommandDeps_SpawnSubagent_ToolPreset(t *testing.T) {
+	acpRegistry := NewACPRegistry()
+	sessions := session.NewManager()
+	deps := &SubagentInfraDeps{
+		ACPRegistry: acpRegistry,
+		Sessions:    sessions,
+	}
+
+	result := deps.SpawnSubagent(context.Background(), SpawnSubagentParams{
+		ParentSessionKey: "parent-session",
+		Role:             "researcher",
+		ToolPreset:       "researcher",
+	})
+	if result.Error != nil {
+		t.Fatalf("SpawnSubagent() error = %v", result.Error)
+	}
+	sess := sessions.Get(result.SessionKey)
+	if sess == nil {
+		t.Fatal("expected runtime session to exist")
+	}
+	if sess.ToolPreset != "researcher" {
+		t.Errorf("runtime session ToolPreset = %q, want 'researcher'", sess.ToolPreset)
+	}
+
+	bad := deps.SpawnSubagent(context.Background(), SpawnSubagentParams{
+		ParentSessionKey: "parent-session",
+		Role:             "researcher",
+		ToolPreset:       "reseacher", // typo on purpose
+	})
+	if bad.Error == nil {
+		t.Error("expected error for unknown tool preset")
 	}
 }
 
