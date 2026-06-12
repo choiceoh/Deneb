@@ -2,6 +2,7 @@ package ai.deneb.deneb
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,9 +13,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -35,34 +40,49 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ai.deneb.Platform
+import ai.deneb.currentPlatform
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.handCursor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Settings hub "플릿" tab: manage the SparkFleet GPU control plane from the app
- * — node health (GPU/unified-memory/disk), recipe lifecycle (launch / stop /
- * restart, behind a confirm dialog), and background jobs with their streamed
- * logs. Data flows through the gateway's authenticated fleet passthrough; the
- * tab polls while visible so a launch's health-wait and job progress update
- * live. Hosted by [DenebConfigScreen]'s pager.
+ * Fleet management as its own full screen (NOT a settings tab — the settings
+ * hub stays configuration-only; running GPU nodes is an operational surface,
+ * like mail or people). The frame deliberately mirrors [DenebConfigScreen]:
+ * title row + pill tab bar + pager, with 노드 / 레시피 / 작업 as the tabs.
+ *
+ * Data flows through the gateway's authenticated SparkFleet passthrough
+ * (DenebClientFleet); one poll loop at screen level feeds all three tabs, so a
+ * launched recipe's health wait and a job's streamed log move live wherever
+ * the user is looking. Reached from the desktop sidebar ("fleet") and the
+ * 설정 게이트웨이 tab's 플릿 관리 entry (mobile).
  */
 @Composable
-internal fun FleetTab(client: DenebGatewayClient) {
+fun DenebFleetScreen(
+    client: DenebGatewayClient,
+    onBack: () -> Unit,
+    navigationTabBar: (@Composable () -> Unit)? = null,
+) {
+    val pagerState = rememberPagerState(pageCount = { FleetTab.entries.size })
+    val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
+
     var state by remember { mutableStateOf<FleetState?>(null) }
     var recipes by remember { mutableStateOf<List<FleetRecipe>?>(null) }
     var jobs by remember { mutableStateOf<List<FleetJob>?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     var confirm by remember { mutableStateOf<Pair<FleetRecipe, String>?>(null) }
-    var openLogJob by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-    val haptics = rememberHaptics()
 
     suspend fun refresh() {
         state = client.fleetState() ?: state
@@ -70,8 +90,8 @@ internal fun FleetTab(client: DenebGatewayClient) {
         jobs = client.fleetJobs() ?: jobs
         loaded = true
     }
-    // Poll while the tab is composed: a launched recipe's health-wait and job
-    // logs stream server-side, so a short cadence keeps them moving here.
+    // One poll loop for the whole screen: jobs stream their logs server-side,
+    // so a short cadence keeps launch health-waits and transfers moving here.
     LaunchedEffect(Unit) {
         while (isActive) {
             refresh()
@@ -79,57 +99,89 @@ internal fun FleetTab(client: DenebGatewayClient) {
         }
     }
 
-    val nodes = state?.nodes.orEmpty()
-    if (loaded && nodes.isEmpty() && recipes.isNullOrEmpty()) {
-        Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-            DenebError(
-                "플릿에 연결하지 못했습니다 — 게이트웨이의 DENEB_SPARKFLEET_URL 설정과 SparkFleet 동작 여부를 확인하세요.",
-                onRetry = { scope.launch { refresh() } },
-            )
-        }
-        return
-    }
-
-    LazyColumn(Modifier.fillMaxSize()) {
-        notice?.let { n ->
-            item(key = "notice") {
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            if (navigationTabBar != null) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("플릿", style = DenebType.viewTitle, modifier = Modifier.weight(1f))
+                if (currentPlatform !is Platform.Desktop) {
+                    TextButton(onClick = onBack) { Text("닫기") }
+                }
+            }
+            // Pill tab bar — same look as the settings hub so the two screens
+            // read as siblings.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                FleetTab.entries.forEachIndexed { idx, entry ->
+                    val isSelected = pagerState.currentPage == idx
+                    Surface(
+                        modifier = Modifier
+                            .handCursor()
+                            .clip(RoundedCornerShape(50))
+                            .selectable(
+                                selected = isSelected,
+                                role = Role.Tab,
+                                onClick = { haptics.tap(); scope.launch { pagerState.animateScrollToPage(idx) } },
+                            ),
+                        shape = RoundedCornerShape(50),
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                        } else {
+                            Color.Transparent
+                        },
+                    ) {
+                        Text(
+                            text = entry.label,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+            notice?.let { n ->
                 Text(
                     n,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 )
             }
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            ) { page ->
+                val unreachable = loaded && state?.nodes.isNullOrEmpty() && recipes.isNullOrEmpty()
+                if (unreachable) {
+                    Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+                        DenebError(
+                            "플릿에 연결하지 못했습니다 — 게이트웨이의 DENEB_SPARKFLEET_URL 설정과 SparkFleet 동작 여부를 확인하세요.",
+                            onRetry = { scope.launch { refresh() } },
+                        )
+                    }
+                } else {
+                    when (FleetTab.entries[page]) {
+                        FleetTab.NODES -> FleetNodesPage(state?.nodes.orEmpty(), loaded)
+                        FleetTab.RECIPES -> FleetRecipesPage(recipes.orEmpty(), loaded) { rc, action ->
+                            haptics.tap(); confirm = rc to action
+                        }
+                        FleetTab.JOBS -> FleetJobsPage(jobs.orEmpty(), loaded)
+                    }
+                }
+            }
         }
-
-        item(key = "h-nodes") { FleetSectionHeader("노드") }
-        items(nodes, key = { "n-" + it.name }) { node -> FleetNodeRow(node) }
-
-        item(key = "h-recipes") { FleetSectionHeader("레시피") }
-        val rcs = recipes.orEmpty()
-        if (rcs.isEmpty()) {
-            item(key = "rc-empty") { FleetMuted(if (loaded) "레시피가 없습니다." else "불러오는 중…") }
-        }
-        items(rcs, key = { "r-" + it.name }) { rc ->
-            FleetRecipeRow(
-                rc = rc,
-                onAction = { action -> haptics.tap(); confirm = rc to action },
-            )
-        }
-
-        item(key = "h-jobs") { FleetSectionHeader("작업") }
-        val js = jobs.orEmpty().take(10)
-        if (js.isEmpty()) {
-            item(key = "j-empty") { FleetMuted("진행 중인 작업이 없습니다.") }
-        }
-        items(js, key = { "j-" + it.id }) { job ->
-            FleetJobRow(
-                job = job,
-                expanded = openLogJob == job.id,
-                onToggle = { openLogJob = if (openLogJob == job.id) null else job.id },
-            )
-        }
-        item(key = "tail-pad") { Spacer(Modifier.height(24.dp)) }
     }
 
     confirm?.let { (rc, action) ->
@@ -148,7 +200,7 @@ internal fun FleetTab(client: DenebGatewayClient) {
                     confirm = null
                     scope.launch {
                         val err = client.fleetRecipeAction(rc.name, action) { jobId ->
-                            notice = "${rc.name} $label 시작됨 — 작업 $jobId 진행 상황은 아래 작업 목록에서"
+                            notice = "${rc.name} $label 시작됨 — 작업 $jobId 진행 상황은 작업 탭에서"
                         }
                         notice = err ?: notice ?: "${rc.name} $label 완료"
                         refresh()
@@ -160,26 +212,59 @@ internal fun FleetTab(client: DenebGatewayClient) {
     }
 }
 
+/** The fleet screen's tabs, in display order (same contract as ConfigTab). */
+private enum class FleetTab(val label: String) {
+    NODES("노드"),
+    RECIPES("레시피"),
+    JOBS("작업"),
+}
+
+// --- pages -------------------------------------------------------------------
+
 @Composable
-private fun FleetSectionHeader(title: String) {
-    Text(
-        title,
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 6.dp),
-    )
+private fun FleetNodesPage(nodes: List<FleetNode>, loaded: Boolean) {
+    if (nodes.isEmpty()) {
+        EmptyTab(if (loaded) "노드 정보가 없습니다." else "불러오는 중…")
+        return
+    }
+    LazyColumn(Modifier.fillMaxSize()) {
+        items(nodes, key = { it.name }) { node -> FleetNodeRow(node) }
+    }
 }
 
 @Composable
-private fun FleetMuted(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-    )
+private fun FleetRecipesPage(recipes: List<FleetRecipe>, loaded: Boolean, onAction: (FleetRecipe, String) -> Unit) {
+    if (recipes.isEmpty()) {
+        EmptyTab(if (loaded) "레시피가 없습니다." else "불러오는 중…")
+        return
+    }
+    LazyColumn(Modifier.fillMaxSize()) {
+        items(recipes, key = { it.name }) { rc ->
+            FleetRecipeRow(rc = rc, onAction = { action -> onAction(rc, action) })
+        }
+    }
 }
+
+@Composable
+private fun FleetJobsPage(jobs: List<FleetJob>, loaded: Boolean) {
+    var openLogJob by remember { mutableStateOf<String?>(null) }
+    val recent = jobs.take(20)
+    if (recent.isEmpty()) {
+        EmptyTab(if (loaded) "진행 중인 작업이 없습니다." else "불러오는 중…")
+        return
+    }
+    LazyColumn(Modifier.fillMaxSize()) {
+        items(recent, key = { it.id }) { job ->
+            FleetJobRow(
+                job = job,
+                expanded = openLogJob == job.id,
+                onToggle = { openLogJob = if (openLogJob == job.id) null else job.id },
+            )
+        }
+    }
+}
+
+// --- rows ---------------------------------------------------------------------
 
 @Composable
 private fun FleetDot(up: Boolean) {
@@ -197,7 +282,7 @@ private fun gib(kb: Long): String {
 
 @Composable
 private fun FleetNodeRow(node: FleetNode) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FleetDot(node.reachable)
             Text(node.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
@@ -225,6 +310,16 @@ private fun FleetNodeRow(node: FleetNode) {
                     (node.metrics.disks.firstOrNull()?.let { "  ·  디스크 ${it.usePct}%" } ?: ""),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        val downServices = node.metrics.services.filter { !it.ok }
+        if (downServices.isNotEmpty()) {
+            Text(
+                "다운: " + downServices.joinToString(", ") { it.name },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         node.error?.takeIf { it.isNotBlank() }?.let {
@@ -279,7 +374,6 @@ private fun FleetJobRow(job: FleetJob, expanded: Boolean, onToggle: () -> Unit) 
             Text(job.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         }
         if (expanded && job.log.isNotBlank()) {
-            Spacer(Modifier.width(8.dp))
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(8.dp),

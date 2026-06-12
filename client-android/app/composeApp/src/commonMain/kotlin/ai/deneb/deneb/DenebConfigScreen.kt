@@ -43,14 +43,15 @@ import kotlinx.coroutines.launch
  *
  * This file is only the frame (header + pill tab bar + pager); each tab's content
  * lives in its own Config*Tab.kt file ([GatewayTab], [AppearanceTab], [ModelTab],
- * [SkillsTab], [CronTab], [FleetTab], [ObserveTab]) so a tab can grow without re-bloating
+ * [SkillsTab], [CronTab], [ObserveTab]) so a tab can grow without re-bloating
  * this screen.
  *
  * The per-topic knowledge doc (workspace/topics/&lt;key&gt;.md, injected into the
  * system prompt) has no tab on purpose: it is edited by asking the agent in chat
  * — the injected prompt block carries its source path (gateway system_prompt.go).
  *
- * People browsing is NOT a tab here: it is a content destination with its own
+ * People browsing and fleet management are NOT tabs here: fleet is an operational
+ * surface with its own full screen (DenebFleetScreen, same frame as this one); it is a content destination with its own
  * drawer entry + full screen (DenebPeopleScreen), like mail and calendar. The
  * settings hub stays configuration-only.
  */
@@ -60,6 +61,7 @@ fun DenebConfigScreen(
     onBack: () -> Unit,
     denebClient: DenebGatewayClient? = null,
     onOpenCron: (String) -> Unit = {},
+    onOpenFleet: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     val pagerState = rememberPagerState(pageCount = { ConfigTab.entries.size })
@@ -131,12 +133,11 @@ fun DenebConfigScreen(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             ) { page ->
                 when (ConfigTab.entries[page]) {
-                    ConfigTab.GATEWAY -> GatewayTab(appSettings, onBack, denebClient)
+                    ConfigTab.GATEWAY -> GatewayTab(appSettings, onBack, denebClient, onOpenFleet)
                     ConfigTab.APPEARANCE -> AppearanceTab(appSettings)
                     ConfigTab.MODEL -> denebClient?.let { ModelTab(it) }
                     ConfigTab.SKILLS -> denebClient?.let { SkillsTab(it) }
                     ConfigTab.CRON -> denebClient?.let { CronTab(it, onOpenCron) }
-                    ConfigTab.FLEET -> denebClient?.let { FleetTab(it) }
                     ConfigTab.OBSERVE -> denebClient?.let { ObserveTab(it) }
                 }
             }
@@ -160,6 +161,5 @@ private enum class ConfigTab(val label: String) {
     MODEL("모델"),
     SKILLS("스킬"),
     CRON("크론"),
-    FLEET("플릿"),
     OBSERVE("관찰"),
 }

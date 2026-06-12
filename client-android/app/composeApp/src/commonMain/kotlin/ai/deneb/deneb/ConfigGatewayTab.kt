@@ -56,6 +56,7 @@ internal fun GatewayTab(
     appSettings: AppSettings,
     onBack: () -> Unit,
     denebClient: DenebGatewayClient?,
+    onOpenFleet: () -> Unit = {},
 ) {
     var url by remember { mutableStateOf(appSettings.settings.getString(KEY_URL, "")) }
     var token by remember { mutableStateOf(appSettings.settings.getString(KEY_TOKEN, "")) }
@@ -142,6 +143,26 @@ internal fun GatewayTab(
                 }
             },
         )
+        // Fleet management lives on its own full screen (DenebFleetScreen) — the
+        // hub stays configuration-only. This entry is the mobile path to it; the
+        // desktop sidebar has its own "fleet" row.
+        SettingsCard {
+            Text(
+                "플릿",
+                style = DenebType.cardTitle,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "GPU 노드 상태, 모델(레시피) 기동/중지, 작업 로그를 관리합니다.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = onOpenFleet, modifier = Modifier.fillMaxWidth()) {
+                Text("플릿 관리 열기")
+            }
+        }
         SettingsCard {
             Text(
                 "버전",
