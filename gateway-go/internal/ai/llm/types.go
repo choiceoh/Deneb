@@ -337,6 +337,11 @@ type ContentBlock struct {
 	// thinking blocks back to the API on subsequent turns.
 	Signature string `json:"signature,omitempty"`
 
+	// Data carries the encrypted payload of a redacted_thinking block.
+	// Round-tripped verbatim so a redacted block in an assistant turn can be
+	// echoed back on later turns (Anthropic rejects one without its data).
+	Data string `json:"data,omitempty"`
+
 	// Cache control for prompt caching.
 	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }

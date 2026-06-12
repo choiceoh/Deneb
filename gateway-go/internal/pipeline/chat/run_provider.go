@@ -185,6 +185,8 @@ const (
 // when no explicit base URL is configured.
 func resolveDefaultBaseURL(providerID string) string {
 	switch providerID {
+	case "anthropic":
+		return modelrole.DefaultAnthropicBaseURL
 	case "zai", "zai-subagent":
 		return defaultZaiBaseURL
 	case "google":
@@ -208,10 +210,10 @@ func resolveDefaultBaseURL(providerID string) string {
 
 // apiModeFor returns the LLM client API mode for a provider. Explicit
 // configValue (the `api` field on the provider config) wins; otherwise
-// providers known to default to Anthropic-compatible endpoints (z.ai,
-// Xiaomi MiMo, Kimi Code) are routed through the Anthropic Messages
-// client. Unknown values fall back to OpenAI-compatible (empty string
-// lets the caller skip the option).
+// providers known to default to Anthropic-compatible endpoints (the
+// first-party Anthropic API, z.ai, Xiaomi MiMo, Kimi Code) are routed
+// through the Anthropic Messages client. Unknown values fall back to
+// OpenAI-compatible (empty string lets the caller skip the option).
 func apiModeFor(providerID, configValue string) string {
 	switch strings.ToLower(strings.TrimSpace(configValue)) {
 	case "anthropic", "anthropic-messages":
@@ -220,7 +222,7 @@ func apiModeFor(providerID, configValue string) string {
 		return llm.APIModeOpenAI
 	}
 	switch providerID {
-	case "zai", "zai-subagent", "mimo", "mimo-plan", "kimi":
+	case "anthropic", "zai", "zai-subagent", "mimo", "mimo-plan", "kimi":
 		return llm.APIModeAnthropic
 	}
 	return ""

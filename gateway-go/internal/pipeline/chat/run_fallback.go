@@ -331,6 +331,14 @@ func runAgentWithFallback(
 						"error", runErr)
 					agentCfg := cfg
 					agentCfg.Model = fbCfg.Model
+					// cfg's cache_control policy (system markers + trailing-marker
+					// hook) was applied for the ORIGINAL provider in run_exec.go; a
+					// fallback can cross to a provider with the opposite policy —
+					// marker-rejecting (Kimi: every attempt 400s) or Anthropic-mode
+					// behind an OpenAI-mode main (runs uncached). Reconcile per
+					// attempt.
+					reconcileFallbackCacheMarkers(&agentCfg, deps, providerID, cfg.Model,
+						fbCfg.ProviderID, fbCfg.Model, fbClient, logger)
 					// Routed runs: carry "disabled" only to fallback models
 					// whose template supports the toggle (provider-aware
 					// capability lookup); every other fallback gets the

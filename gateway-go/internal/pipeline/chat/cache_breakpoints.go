@@ -15,8 +15,11 @@
 package chat
 
 import (
+	"bytes"
 	"encoding/json"
+	"log/slog"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
@@ -74,17 +77,30 @@ func pickTrailingCacheTargets(messages []llm.Message, n int) []int {
 }
 
 // withTrailingCacheControl returns a copy of msg with an ephemeral
-// cache_control marker on its last content block. String content is converted
-// into a single text block first. Returns msg unchanged when the content
-// cannot be decoded into blocks (preserves wire compatibility).
+// cache_control marker on its last cacheable content block. String content is
+// converted into a single text block first. Returns msg unchanged when the
+// content cannot be decoded into blocks (preserves wire compatibility).
+//
+// Anthropic rejects cache_control on thinking/redacted_thinking blocks with
+// HTTP 400, and an assistant message can legitimately END with one (a turn cut
+// by max_tokens mid-reasoning persists as [thinking] only) — so the marker
+// walks back to the last block that may carry it.
 func withTrailingCacheControl(msg llm.Message) llm.Message {
 	blocks, ok := decodeMessageBlocks(msg.Content)
 	if !ok || len(blocks) == 0 {
 		return msg
 	}
-	last := blocks[len(blocks)-1]
-	last.CacheControl = &llm.CacheControl{Type: "ephemeral"}
-	blocks[len(blocks)-1] = last
+	target := -1
+	for i := len(blocks) - 1; i >= 0; i-- {
+		if t := blocks[i].Type; t != "thinking" && t != "redacted_thinking" {
+			target = i
+			break
+		}
+	}
+	if target < 0 {
+		return msg // thinking-only message — nothing cacheable
+	}
+	blocks[target].CacheControl = &llm.CacheControl{Type: "ephemeral"}
 
 	raw, err := json.Marshal(blocks)
 	if err != nil {
@@ -113,6 +129,85 @@ func decodeMessageBlocks(raw json.RawMessage) ([]llm.ContentBlock, bool) {
 		return blocks, true
 	}
 	return nil, false
+}
+
+// stripMessageCacheMarkersHook is a BeforeAPICall hook that removes every
+// cache_control marker from the per-request message copy. Composed AFTER an
+// existing hook chain, it neutralizes markers attached earlier in that chain
+// (a trailing-cache hook built for the original provider) as well as any
+// marker already present in the message payloads. Messages without the
+// literal "cache_control" byte sequence pass through untouched — this both
+// skips the decode and avoids a lossy re-marshal of block shapes our
+// ContentBlock struct does not fully model.
+func stripMessageCacheMarkersHook(messages []llm.Message) []llm.Message {
+	out := messages
+	copied := false
+	for i := range messages {
+		if !bytes.Contains(messages[i].Content, []byte(`"cache_control"`)) {
+			continue
+		}
+		blocks, ok := decodeMessageBlocks(messages[i].Content)
+		if !ok {
+			continue
+		}
+		changed := false
+		for j := range blocks {
+			if blocks[j].CacheControl != nil {
+				blocks[j].CacheControl = nil
+				changed = true
+			}
+		}
+		if !changed {
+			continue
+		}
+		raw, err := json.Marshal(blocks)
+		if err != nil {
+			continue
+		}
+		if !copied {
+			out = make([]llm.Message, len(messages))
+			copy(out, messages)
+			copied = true
+		}
+		out[i].Content = raw
+	}
+	return out
+}
+
+// reconcileFallbackCacheMarkers adjusts a fallback attempt's agent config when
+// the fallback provider's cache_control policy differs from the provider the
+// run was prepared for. run_exec.go applies the cache policy (system-marker
+// strip + trailing-marker hook) for the ORIGINAL provider only; the fallback
+// chain can cross to a provider with the opposite policy:
+//
+//   - fallback REJECTS cache_control (Kimi): the inherited system markers and
+//     the trailing-marker hook would 400 every attempt — strip the system
+//     copy and append a message-marker strip after the existing hook chain.
+//   - fallback speaks Anthropic but the run was prepared for a non-Anthropic
+//     wire (or a rejecting provider): the trailing hook was never installed —
+//     append it so the fallback turn still gets prompt-cache reuse. (When the
+//     original provider rejected markers its system copy stays stripped;
+//     trailing markers alone still cache the conversation prefix.)
+//
+// OpenAI-mode fallbacks need nothing: their converters drop cache_control
+// during message translation.
+func reconcileFallbackCacheMarkers(agentCfg *agent.AgentConfig, deps runDeps, origProviderID, origModel, fbProviderID, fbModel string, fbClient *llm.Client, logger *slog.Logger) {
+	if fbClient == nil {
+		return
+	}
+	if modelCapability(deps, fbProviderID, fbModel).RejectsCacheControl {
+		agentCfg.System = stripCacheControlMarkers(agentCfg.System)
+		agentCfg.BeforeAPICall = agent.ComposeBeforeAPICall(agentCfg.BeforeAPICall, stripMessageCacheMarkersHook)
+		logger.Info("fallback provider rejects cache_control; stripping markers",
+			"fallbackProvider", fbProviderID, "fallbackModel", fbModel)
+		return
+	}
+	hookInstalled := resolveAPIMode(deps, origProviderID) == llm.APIModeAnthropic &&
+		!modelCapability(deps, origProviderID, origModel).RejectsCacheControl
+	if fbClient.APIMode() == llm.APIModeAnthropic && !hookInstalled {
+		agentCfg.BeforeAPICall = agent.ComposeBeforeAPICall(
+			agentCfg.BeforeAPICall, buildTrailingCacheHook(llm.APIModeAnthropic))
+	}
 }
 
 // stripCacheControlMarkers removes every cache_control field from a system
