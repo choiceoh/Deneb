@@ -1,5 +1,6 @@
 package ai.deneb.network
 
+import ai.deneb.DenebLog
 import ai.deneb.Version
 import ai.deneb.currentPlatform
 import ai.deneb.data.Service
@@ -89,7 +90,7 @@ class Requests {
 
     class DebugKtorLogger : Logger {
         override fun log(message: String) {
-            println("[KTOR] $message")
+            DenebLog.debug("Ktor", message)
         }
     }
 

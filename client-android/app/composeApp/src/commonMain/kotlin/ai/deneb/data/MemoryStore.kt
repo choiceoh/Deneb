@@ -1,5 +1,6 @@
 package ai.deneb.data
 
+import ai.deneb.DenebLog
 import androidx.compose.runtime.Immutable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -39,7 +40,7 @@ class MemoryStore(private val appSettings: AppSettings) {
         return try {
             json.decodeFromString<List<MemoryEntry>>(raw).toMutableList()
         } catch (e: Exception) {
-            println("MemoryStore: failed to load memories: ${e.message}")
+            DenebLog.error("MemoryStore", "failed to load memories: ${e.message}")
             mutableListOf()
         }
     }

@@ -1,5 +1,6 @@
 package ai.deneb.ui.dynamicui
 
+import ai.deneb.DenebLog
 import ai.deneb.data.SharedJson
 import kotlinx.collections.immutable.toImmutableList
 
@@ -76,7 +77,7 @@ object DenebUiParser {
                 ?: UiBlockResult.Error(json)
         } catch (e: Exception) {
             salvageToResult(json) ?: run {
-                println("deneb-ui parse error: ${e.message} | ${json.take(500)}")
+                DenebLog.warn("DenebUi", "parse error: ${e.message} | ${json.take(500)}")
                 UiBlockResult.Error(json)
             }
         }
@@ -90,7 +91,7 @@ object DenebUiParser {
     private fun tryParseLine(line: String): DenebUiNode? = runCatching { parseSingleNode(line) }.getOrNull()
         ?: runCatching { parseSingleNode(sanitizeJson(line)) }.getOrNull()
         ?: run {
-            println("deneb-ui parse error: failed to deserialize line | ${line.take(500)}")
+            DenebLog.warn("DenebUi", "parse error: failed to deserialize line | ${line.take(500)}")
             null
         }
 

@@ -1,5 +1,7 @@
 package ai.deneb.data
 
+import ai.deneb.DenebLog
+
 /**
  * Curated metadata for well-known models. Used as a fallback by
  * [ModelTransformations] when the provider API response doesn't expose a
@@ -1734,7 +1736,7 @@ internal object ModelCatalog {
         val key = modelId.substringAfterLast('/').lowercase()
         val hit = entries[key]
         if (hit == null && loggedMisses.add(key)) {
-            println("ModelCatalog miss: \"$key\" (raw: \"$modelId\")")
+            DenebLog.warn("ModelCatalog", "catalog miss: \"$key\" (raw: \"$modelId\")")
         }
         return hit
     }
