@@ -206,6 +206,13 @@ func buildAgentConfig(
 		// Inject a fresh TurnContext at the start of each turn so that tools
 		// executing in parallel within the same turn can share results via $ref.
 		OnTurnInit: func(ctx context.Context) context.Context {
+			// Session key must be set HERE, not only in runAgentAsync's ctx
+			// decoration: the SendSync path (miniapp.chat.send — the native
+			// client's sole entry) reaches RunAgent without that decoration,
+			// so tools reading SessionKeyFromContext (sessions_spawn parent
+			// attribution, polaris session-scoped recall, subagents, spillover)
+			// saw "" there. Same precedent as WithAutoDelivery below.
+			ctx = WithSessionKey(ctx, params.SessionKey)
 			ctx = WithTurnContext(ctx, NewTurnContext())
 			ctx = WithRunCache(ctx, runCache)
 			ctx = WithSkillConsultLog(ctx, skillConsults)
