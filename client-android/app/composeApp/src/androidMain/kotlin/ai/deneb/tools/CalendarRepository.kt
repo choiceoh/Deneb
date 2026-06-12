@@ -1,11 +1,11 @@
 package ai.deneb.tools
 
+import ai.deneb.DenebLog
 import android.Manifest
 import android.content.ContentValues
 import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.CalendarContract
-import android.util.Log
 import androidx.core.content.ContextCompat
 import java.time.Instant
 import java.time.LocalDateTime
@@ -75,18 +75,18 @@ class CalendarRepository(
         allDay: Boolean,
         reminderMinutes: Int,
     ): CalendarResult {
-        Log.d(TAG, "createEvent called: title=$title, startTime=$startTimeIso")
+        DenebLog.debug(TAG, "createEvent called: title=$title, startTime=$startTimeIso")
 
         // Request permission if not already granted
         if (!hasCalendarPermission()) {
-            Log.d(TAG, "Permission not granted, requesting...")
+            DenebLog.debug(TAG, "Permission not granted, requesting...")
             val granted = permissionController.requestPermission()
-            Log.d(TAG, "Permission request result: $granted")
+            DenebLog.debug(TAG, "Permission request result: $granted")
             if (!granted) {
                 return CalendarResult.Error("Calendar permission denied. Please enable calendar access in Settings to create events.")
             }
         } else {
-            Log.d(TAG, "Permission already granted")
+            DenebLog.debug(TAG, "Permission already granted")
         }
 
         val calendarId = getPrimaryCalendarId()

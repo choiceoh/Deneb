@@ -1,5 +1,6 @@
 package ai.deneb.sandbox
 
+import ai.deneb.DenebLog
 import ai.deneb.SandboxSessions
 import ai.deneb.TerminalLine
 import ai.deneb.data.ConversationStorage
@@ -58,7 +59,7 @@ class LinuxSandboxManager(
                     if (!dest.exists()) entry.copyRecursively(dest, overwrite = false)
                 }
             } catch (e: Exception) {
-                android.util.Log.w("LinuxSandbox", "Legacy home migration failed: ${e.message}")
+                DenebLog.warn("LinuxSandbox", "Legacy home migration failed: ${e.message}")
             }
         }
         target.absolutePath
@@ -305,7 +306,7 @@ class LinuxSandboxManager(
                         val error = result["error"] as? String ?: ""
                         val timedOut = result["timed_out"] as? Boolean ?: false
                         val exitCode = result["exit_code"] as? Int ?: -1
-                        android.util.Log.e("LinuxSandbox", "Failed to install $pkg: exit=$exitCode timedOut=$timedOut error=$error stdout=$stdout stderr=$stderr")
+                        DenebLog.error("LinuxSandbox", "Failed to install $pkg: exit=$exitCode timedOut=$timedOut error=$error stdout=$stdout stderr=$stderr")
                         _state.value = SandboxState.Error("Failed to install $pkg: ${stderr.ifEmpty { error }.ifEmpty { stdout }.take(200)}")
                         return@launch
                     }
@@ -316,12 +317,12 @@ class LinuxSandboxManager(
                 // here are non-fatal: openssh works without the defaults, just
                 // without the held-connection optimization.
                 runCatching { SshConfigManager(java.io.File(homePath)).ensureDefaults() }
-                    .onFailure { android.util.Log.w("LinuxSandbox", "ssh defaults seed failed: ${it.message}") }
+                    .onFailure { DenebLog.warn("LinuxSandbox", "ssh defaults seed failed: ${it.message}") }
                 _state.value = SandboxState.Ready
             } catch (_: kotlinx.coroutines.CancellationException) {
                 _state.value = SandboxState.Ready
             } catch (e: Exception) {
-                android.util.Log.e("LinuxSandbox", "Package install exception", e)
+                DenebLog.error("LinuxSandbox", "Package install exception", e)
                 _state.value = SandboxState.Error("Install failed: ${e.message}")
             }
         }
