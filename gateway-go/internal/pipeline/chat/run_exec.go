@@ -337,14 +337,19 @@ func executeAgentRun(
 
 	// Emit agent run.end event to gateway subscriptions.
 	if deps.callbacks.emitAgentFn != nil {
-		deps.callbacks.emitAgentFn("run.end", params.SessionKey, params.ClientRunID, map[string]any{
+		endData := map[string]any{
 			"model":        model,
 			"turns":        agentResult.Turns,
 			"durationMs":   totalMs,
 			"inputTokens":  agentResult.Usage.InputTokens,
 			"outputTokens": agentResult.Usage.OutputTokens,
 			"stopReason":   agentResult.StopReason,
-		})
+		}
+		if effortDecision != "" {
+			endData["effortDecision"] = effortDecision
+			endData["effortEscalated"] = effortRt != nil && effortRt.escalated
+		}
+		deps.callbacks.emitAgentFn("run.end", params.SessionKey, params.ClientRunID, endData)
 	}
 
 	// Log run.end to the agent detail log. This lives here — not in the
@@ -375,6 +380,8 @@ func executeAgentRun(
 		MaxTokensRecoveries: agentResult.MaxTokensRecoveries,
 		Compacted:           compacted,
 		Proactive:           params.AutoDeliveredOutput || params.EphemeralUser,
+		EffortDecision:      effortDecision,
+		EffortEscalated:     effortRt != nil && effortRt.escalated,
 	})
 
 	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag, ActualModel: actualModel, FellBack: fellBack}, nil

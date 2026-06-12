@@ -675,6 +675,7 @@ func TestRunAgent_ThinkingModulatorPerTurn(t *testing.T) {
 	tools := newFakeToolExecutor()
 
 	baseline := &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 5000}
+	var seenActs [][]ToolActivity
 	cfg := AgentConfig{
 		MaxTurns:  10,
 		Timeout:   10 * time.Second,
@@ -682,7 +683,8 @@ func TestRunAgent_ThinkingModulatorPerTurn(t *testing.T) {
 		Thinking:  baseline,
 		// Turn 0 is boosted; later turns return nil to exercise the fallback
 		// to cfg.Thinking.
-		ThinkingModulator: func(turn int, _ []llm.Message) *llm.ThinkingConfig {
+		ThinkingModulator: func(turn int, acts []ToolActivity) *llm.ThinkingConfig {
+			seenActs = append(seenActs, append([]ToolActivity(nil), acts...))
 			if turn == 0 {
 				return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 32768}
 			}
@@ -702,5 +704,14 @@ func TestRunAgent_ThinkingModulatorPerTurn(t *testing.T) {
 	// Turn 1 modulator returned nil → executor must fall back to cfg.Thinking.
 	if got := streamer.recordedThinking[1]; got == nil || got.BudgetTokens != 5000 {
 		t.Errorf("turn 1 Thinking = %+v, want budget 5000 (fallback to cfg.Thinking)", got)
+	}
+	// The modulator receives this run's accumulated tool activities: none
+	// before turn 0, the turn-0 read call (with its 1-based Turn and recorded
+	// output size) before turn 1.
+	if len(seenActs) < 2 || len(seenActs[0]) != 0 || len(seenActs[1]) != 1 {
+		t.Fatalf("modulator activities = %+v, want [] then [read]", seenActs)
+	}
+	if a := seenActs[1][0]; a.Name != "read" || a.Turn != 1 || a.IsError {
+		t.Errorf("turn-1 activity = %+v, want clean read at Turn 1", a)
 	}
 }

@@ -56,14 +56,15 @@ type AgentConfig struct {
 
 	// ThinkingModulator, when non-nil, overrides Thinking on a per-turn basis.
 	// The executor calls it before building each request with the zero-based
-	// turn index and the CURRENT message history (h_t, o_t — so policies can
-	// react to accumulated context and the latest tool observations, not just
-	// the step number); a non-nil return replaces Thinking for that turn, a
-	// nil return falls back to Thinking. Used by the reasoning-sandwich
-	// policy and the effort router's per-step revert. Like Thinking this is a
-	// request-level parameter, so varying it per turn does NOT affect prompt
-	// cache (see .claude/rules/prompt-cache.md).
-	ThinkingModulator func(turn int, messages []llm.Message) *llm.ThinkingConfig
+	// turn index and THIS RUN's accumulated tool activities (o_t — name,
+	// error flag, output size per call, run-scoped by construction, so
+	// policies read the latest observations without re-parsing the message
+	// array); a non-nil return replaces Thinking for that turn, a nil return
+	// falls back to Thinking. Used by the reasoning-sandwich policy and the
+	// effort router's per-step revert. Like Thinking this is a request-level
+	// parameter, so varying it per turn does NOT affect prompt cache (see
+	// .claude/rules/prompt-cache.md).
+	ThinkingModulator func(turn int, toolActivities []ToolActivity) *llm.ThinkingConfig
 
 	// FinalizeGate, when non-nil, is consulted as the model attempts to
 	// finish (end_turn / no tool calls). A non-empty return blocks that
@@ -194,6 +195,14 @@ type ToolTurnCallback func(turn int, activities []ToolActivity)
 type ToolActivity struct {
 	Name    string `json:"name"`
 	IsError bool   `json:"isError,omitempty"`
+	// Turn is the 1-based turn that executed this call (the ToolTurnCallback
+	// convention). Calls sharing a Turn form one batch — the unit the effort
+	// router's per-step policy sizes as "the latest observation".
+	Turn int `json:"turn,omitempty"`
+	// OutputRunes is the rune length of the tool result content, recorded at
+	// execution time so per-step consumers (ThinkingModulator) can read
+	// observation size without re-parsing the message array.
+	OutputRunes int `json:"outputRunes,omitempty"`
 }
 
 // AgentResult is the outcome of an agent run.

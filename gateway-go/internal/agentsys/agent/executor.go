@@ -155,11 +155,13 @@ func RunAgent(
 
 		// Per-turn thinking budget: the modulator (when set) lets the caller
 		// vary reasoning by turn — e.g. boost the planning turn, baseline the
-		// rest (the "reasoning sandwich"). Thinking is request-level, so this
+		// rest (the "reasoning sandwich"). It receives this run's accumulated
+		// tool activities (run-scoped o_t: size + error per call) so policies
+		// never re-parse the message array. Thinking is request-level, so this
 		// does not affect prompt cache. Falls back to cfg.Thinking.
 		turnThinking := cfg.Thinking
 		if cfg.ThinkingModulator != nil {
-			if m := cfg.ThinkingModulator(turn, messages); m != nil {
+			if m := cfg.ThinkingModulator(turn, result.ToolActivities); m != nil {
 				turnThinking = m
 			}
 		}
@@ -466,8 +468,11 @@ func RunAgent(
 			turnActivities = make([]ToolActivity, 0, len(turnRes.toolCalls))
 		}
 		for i, tc := range turnRes.toolCalls {
-			isErr := i < len(toolResults) && toolResults[i].IsError
-			ta := ToolActivity{Name: tc.Name, IsError: isErr}
+			ta := ToolActivity{Name: tc.Name, Turn: turn + 1}
+			if i < len(toolResults) {
+				ta.IsError = toolResults[i].IsError
+				ta.OutputRunes = len([]rune(toolResults[i].Content))
+			}
 			result.ToolActivities = append(result.ToolActivities, ta)
 			turnActivities = append(turnActivities, ta)
 		}
