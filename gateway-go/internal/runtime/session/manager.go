@@ -211,6 +211,17 @@ type SessionDefaults struct {
 
 // Manager tracks active sessions in memory.
 // The zero value is ready to use; NewManager is a convenience constructor.
+//
+// Lock hierarchy (acquire in this order; never reverse):
+//
+//	emitGate (channel gate)  →  mu  →  defaultsMu
+//
+// mu → defaultsMu: Create, Patch, and ApplyLifecycleEvent hold mu while
+// applySessionDefaults calls SessionDefaults(), which takes defaultsMu.RLock.
+// defaultsMu holders (SetSessionDefaults/SessionDefaults) never touch mu.
+// emitGate → mu: mutateAndEmit acquires the gate before fn locks mu; event
+// dispatch runs after the gate is released, with no locks held, so
+// subscribers can safely call mutating Manager methods.
 type Manager struct {
 	mu       sync.RWMutex
 	sessions map[string]*Session

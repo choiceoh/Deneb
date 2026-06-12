@@ -32,6 +32,16 @@ const mergeWindowDuration = 3 * time.Second
 // MergeWindowTracker remembers the wall-clock time of the most recent
 // chat.send per session key and hands out per-session decision mutexes so
 // the Touch→HasActiveRun→Cancel→Dispatch path is atomic. Thread-safe.
+//
+// Lock hierarchy (acquire in this order; never reverse):
+//
+//	locks[sessionKey] (per-session decision mutex)  →  mu
+//
+// The Send path (rpc.go) locks the per-session mutex returned by
+// SessionLock(), then calls Touch(), which takes mu — so the per-session
+// lock is the outer lock. mu is only ever held for this struct's own short
+// map operations; SessionLock releases mu before returning, so mu is never
+// held while a per-session mutex is being acquired.
 type MergeWindowTracker struct {
 	mu    sync.Mutex
 	ts    map[string]time.Time
