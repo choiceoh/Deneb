@@ -2,8 +2,10 @@ package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.SkillLifecycleEvent
 import ai.deneb.deneb.generated.SkillRow
+import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
@@ -48,9 +51,11 @@ import kotlin.time.Clock
 // streams miniapp.skills.lifecycle: genesis creations, committed evolves,
 // rejected evolve attempts, and review verdicts, newest first.
 // No toggles: discovery is filesystem-driven, so the list reflects what's
-// installed on the gateway host. Hosted by [DenebConfigScreen]'s pager.
+// installed on the gateway host. Tapping a row opens [DenebSkillScreen]
+// (full meta + SKILL.md body + per-skill timeline) via [onOpenSkill].
+// Hosted by [DenebConfigScreen]'s pager.
 @Composable
-internal fun SkillsTab(client: DenebGatewayClient) {
+internal fun SkillsTab(client: DenebGatewayClient, onOpenSkill: (String) -> Unit = {}) {
     val skills by client.denebSkills.collectAsState()
     val scope = rememberCoroutineScope()
     var loadFailed by remember { mutableStateOf(false) }
@@ -96,7 +101,7 @@ internal fun SkillsTab(client: DenebGatewayClient) {
 
                 skills.isEmpty() -> EmptyTab("사용할 수 있는 스킬이 없습니다.")
 
-                else -> SkillListContent(skills)
+                else -> SkillListContent(skills, onOpenSkill)
             }
         } else {
             val events = lifecycleEvents
@@ -118,13 +123,22 @@ internal fun SkillsTab(client: DenebGatewayClient) {
     }
 }
 
-// Stateless skill list — previewable without a gateway client.
+// Stateless skill list — previewable without a gateway client. Rows tap
+// through to the skill detail screen.
 @Composable
-internal fun SkillListContent(skills: List<SkillRow>) {
+internal fun SkillListContent(skills: List<SkillRow>, onOpenSkill: (String) -> Unit = {}) {
+    val haptics = rememberHaptics()
     LazyColumn(Modifier.fillMaxSize()) {
         items(skills, key = { it.name }) { skill ->
             Column(
-                Modifier.animateItem().fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                Modifier
+                    .animateItem()
+                    .fillMaxWidth()
+                    .clickable {
+                        haptics.tap()
+                        onOpenSkill(skill.name)
+                    }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
             ) {
                 // Skill name only — no runnable slash command. The live slash
                 // dispatcher matches a lowercased raw name (not a sanitized
@@ -172,41 +186,58 @@ internal fun SkillListContent(skills: List<SkillRow>) {
 internal fun SkillLifecycleContent(events: List<SkillLifecycleEvent>) {
     LazyColumn(Modifier.fillMaxSize()) {
         itemsIndexed(events) { _, event ->
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    LifecycleTypeBadge(event.type)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        event.skillName.ifBlank { "(스킬 미지정)" },
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        lifecycleTime(event.at),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                val detail = listOfNotNull(
-                    event.version.takeIf { it.isNotBlank() }?.let { "v$it" },
-                    event.detail.takeIf { it.isNotBlank() },
-                ).joinToString(" — ")
-                if (detail.isNotBlank()) {
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        detail,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
+            SkillLifecycleRow(event)
             HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
+        }
+    }
+}
+
+// One lifecycle event row — shared by the tab timeline (above) and the
+// per-skill section in [DenebSkillScreen]. [showSkillName] is off in the
+// detail screen, where every event belongs to the same skill (the type badge
+// alone carries the row) and the parent column already pads horizontally.
+@Composable
+internal fun SkillLifecycleRow(
+    event: SkillLifecycleEvent,
+    showSkillName: Boolean = true,
+    horizontalPadding: Dp = 16.dp,
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = horizontalPadding, vertical = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            LifecycleTypeBadge(event.type)
+            Spacer(Modifier.width(8.dp))
+            if (showSkillName) {
+                Text(
+                    event.skillName.ifBlank { "(스킬 미지정)" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                Spacer(Modifier.weight(1f))
+            }
+            Text(
+                lifecycleTime(event.at),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        val detail = listOfNotNull(
+            event.version.takeIf { it.isNotBlank() }?.let { "v$it" },
+            event.detail.takeIf { it.isNotBlank() },
+        ).joinToString(" — ")
+        if (detail.isNotBlank()) {
+            Spacer(Modifier.height(2.dp))
+            Text(
+                detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -214,7 +245,7 @@ internal fun SkillLifecycleContent(events: List<SkillLifecycleEvent>) {
 // Origin badge: 생성 (self-evolution authored) vs 최초 (installed/hand-written).
 // Both render so the distinction is explicit, not inferred from absence.
 @Composable
-private fun SkillOriginBadge(origin: String) {
+internal fun SkillOriginBadge(origin: String) {
     val generated = origin == "genesis"
     val bg = if (generated) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
     val fg = if (generated) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
@@ -229,35 +260,27 @@ private fun SkillOriginBadge(origin: String) {
     )
 }
 
+/** Korean label per lifecycle event type, rendered in [LifecycleTypeBadge]. */
+private fun lifecycleTypeLabel(type: String): String = when (type) {
+    "genesis" -> "생성"
+    "evolved" -> "진화"
+    "evolve_rejected" -> "기각"
+    else -> "리뷰"
+}
+
 @Composable
 private fun LifecycleTypeBadge(type: String) {
-    val (label, bg, fg) = when (type) {
-        "genesis" -> Triple(
-            "생성",
-            MaterialTheme.colorScheme.tertiaryContainer,
-            MaterialTheme.colorScheme.onTertiaryContainer,
-        )
+    val (bg, fg) = when (type) {
+        "genesis" -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
 
-        "evolved" -> Triple(
-            "진화",
-            MaterialTheme.colorScheme.primaryContainer,
-            MaterialTheme.colorScheme.onPrimaryContainer,
-        )
+        "evolved" -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
 
-        "evolve_rejected" -> Triple(
-            "기각",
-            MaterialTheme.colorScheme.errorContainer,
-            MaterialTheme.colorScheme.onErrorContainer,
-        )
+        "evolve_rejected" -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
 
-        else -> Triple(
-            "리뷰",
-            MaterialTheme.colorScheme.surfaceVariant,
-            MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
     Text(
-        label,
+        lifecycleTypeLabel(type),
         style = MaterialTheme.typography.labelSmall,
         color = fg,
         modifier = Modifier
@@ -270,7 +293,7 @@ private fun LifecycleTypeBadge(type: String) {
 // skillSourceLabel maps the gateway's discovery-origin string to a Korean label,
 // matching DenebConfigScreen's literal-string convention (this screen doesn't use
 // stringResource). Falls back to the raw value for origins we don't surface yet.
-private fun skillSourceLabel(source: String): String = when (source) {
+internal fun skillSourceLabel(source: String): String = when (source) {
     "managed" -> "관리형"
     "workspace" -> "워크스페이스"
     "agents-skills-personal" -> "개인"
@@ -292,8 +315,9 @@ private fun skillMetaLine(skill: SkillRow): String = listOfNotNull(
 ).joinToString(" · ")
 
 /** Short Korean relative time for timeline rows ("방금" / "N분 전" / "N시간 전" /
- *  "N일 전"). Blank for missing/future timestamps so the row omits the stamp. */
-private fun lifecycleTime(epochMs: Long): String {
+ *  "N일 전"). Blank for missing/future timestamps so the row omits the stamp.
+ *  Shared with [DenebSkillScreen]'s usage/evolve meta lines. */
+internal fun lifecycleTime(epochMs: Long): String {
     if (epochMs <= 0L) return ""
     val diff = Clock.System.now().toEpochMilliseconds() - epochMs
     return when {

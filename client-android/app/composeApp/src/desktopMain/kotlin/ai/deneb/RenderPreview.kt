@@ -17,6 +17,7 @@ import ai.deneb.deneb.MailMessage
 import ai.deneb.deneb.MailRow
 import ai.deneb.deneb.SchedMode
 import ai.deneb.deneb.ScheduleDraft
+import ai.deneb.deneb.SkillDetailContent
 import ai.deneb.deneb.SkillLifecycleContent
 import ai.deneb.deneb.SkillListContent
 import ai.deneb.deneb.Todo
@@ -24,6 +25,7 @@ import ai.deneb.deneb.TodoAddContent
 import ai.deneb.deneb.TodoListContent
 import ai.deneb.deneb.buildMonthGrid
 import ai.deneb.deneb.eventDays
+import ai.deneb.deneb.generated.SkillDetailResponse
 import ai.deneb.deneb.generated.SkillLifecycleEvent
 import ai.deneb.deneb.generated.SkillRow
 import ai.deneb.deneb.koreanDayOfWeek
@@ -151,6 +153,8 @@ fun main() {
     renderSkillsList("skills_list_light.png", LightColorScheme)
     renderSkillLifecycle("skills_lifecycle_dark.png", DarkColorScheme)
     renderSkillLifecycle("skills_lifecycle_light.png", LightColorScheme)
+    renderSkillDetail("skill_detail_dark.png", DarkColorScheme)
+    renderSkillDetail("skill_detail_light.png", LightColorScheme)
     println("rendered -> /tmp/deneb-render/")
 }
 
@@ -940,6 +944,48 @@ private fun renderSkillsList(name: String, scheme: ColorScheme) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 SkillListContent(sampleSkillRows)
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+private fun renderSkillDetail(name: String, scheme: ColorScheme) {
+    val now = System.currentTimeMillis()
+    val detail = SkillDetailResponse(
+        skill = sampleSkillRows[1].copy(
+            evolveCount = 1,
+            lastEvolvedAt = now - 2 * 3_600_000L,
+            totalUses = 2,
+            lastUsedAt = now - 9 * 3_600_000L,
+        ),
+        body = """
+            ---
+            name: morning-letter-composite
+            description: 아침 브리핑 편지를 일정·메일·할일 데이터로 합성하는 절차
+            version: 0.1.0
+            ---
+
+            # 아침 편지 합성
+
+            ## 절차
+            1. 오늘 일정(`miniapp.calendar`)과 미결 할일을 모은다.
+            2. 밤사이 도착한 메일 요약을 합친다.
+            3. **한 통의 편지**로 합성해 아침 브리핑으로 보낸다.
+        """.trimIndent(),
+        path = "/home/u/.deneb/skills/genesis/productivity/morning-letter-composite/SKILL.md",
+    )
+    val events = sampleLifecycleEvents(now).filter { it.skillName == "morning-letter-composite" }
+    val scene = ImageComposeScene(width = 824, height = 1400, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+                    SkillDetailContent(detail, events)
+                }
             }
         }
     }

@@ -56,6 +56,7 @@ fun DenebConfigScreen(
     appSettings: AppSettings,
     onBack: () -> Unit,
     denebClient: DenebGatewayClient? = null,
+    onOpenSkill: (String) -> Unit = {},
     onOpenCron: (String) -> Unit = {},
     onOpenFleet: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
@@ -124,7 +125,7 @@ fun DenebConfigScreen(
                 ConfigTab.GATEWAY -> GatewayTab(appSettings, onBack, denebClient, onOpenFleet)
                 ConfigTab.APPEARANCE -> AppearanceTab(appSettings)
                 ConfigTab.MODEL -> denebClient?.let { ModelTab(it) }
-                ConfigTab.SKILLS -> denebClient?.let { SkillsTab(it) }
+                ConfigTab.SKILLS -> denebClient?.let { SkillsTab(it, onOpenSkill) }
                 ConfigTab.CRON -> denebClient?.let { CronTab(it, onOpenCron) }
                 ConfigTab.OBSERVE -> denebClient?.let { ObserveTab(it) }
             }

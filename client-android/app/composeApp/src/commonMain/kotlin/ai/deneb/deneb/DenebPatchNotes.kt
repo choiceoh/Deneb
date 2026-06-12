@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "설정 > 스킬에서 스킬을 누르면 상세 화면이 열림 — 전체 설명·생성/사용/진화 이력과 SKILL.md 문서 본문, 그 스킬만의 진화 내역까지",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "업무 피드에서 메일 분석·리포트 카드를 열면 별도 대화 대신 업무 채팅의 해당 카드 위치로 이동 — 카드는 펼쳐진 채로 보여 바로 읽고 그 자리에서 이어서 질문 가능",
         ),
     ),
