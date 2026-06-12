@@ -9,7 +9,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -327,12 +326,7 @@ func resolveThinkingConfig(level string) *llm.ThinkingConfig {
 // the latency/quality trade-off should be validated live before defaulting on.
 // Enable with DENEB_REASONING_SANDWICH=1 (or true/on/yes).
 func reasoningSandwichEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("DENEB_REASONING_SANDWICH"))) {
-	case "1", "true", "on", "yes":
-		return true
-	default:
-		return false
-	}
+	return envFlagEnabled("DENEB_REASONING_SANDWICH")
 }
 
 // thinkingBudgetLadder lists the NAMED extended-thinking tiers in increasing
@@ -374,7 +368,7 @@ const minThinkingResponseHeadroom = 4096
 // (Anthropic requires budget_tokens < max_tokens). maxTokens <= 0 means
 // "unknown" and keeps the boost. Returns nil when base is nil so the caller
 // leaves Thinking as-is.
-func planningSandwichThinking(base *llm.ThinkingConfig, maxTokens int) func(turn int) *llm.ThinkingConfig {
+func planningSandwichThinking(base *llm.ThinkingConfig, maxTokens int) func(turn int, messages []llm.Message) *llm.ThinkingConfig {
 	if base == nil {
 		return nil
 	}
@@ -387,7 +381,7 @@ func planningSandwichThinking(base *llm.ThinkingConfig, maxTokens int) func(turn
 			Interleaved:  base.Interleaved,
 		}
 	}
-	return func(turn int) *llm.ThinkingConfig {
+	return func(turn int, _ []llm.Message) *llm.ThinkingConfig {
 		if turn == 0 {
 			return boosted
 		}

@@ -55,13 +55,15 @@ type AgentConfig struct {
 	Thinking *llm.ThinkingConfig
 
 	// ThinkingModulator, when non-nil, overrides Thinking on a per-turn basis.
-	// The executor calls it with the zero-based turn index before building each
-	// request; a non-nil return replaces Thinking for that turn, a nil return
-	// falls back to Thinking. Used by the reasoning-sandwich policy to give the
-	// planning turn a larger budget than later tool-execution turns. Like
-	// Thinking this is a request-level parameter, so varying it per turn does
-	// NOT affect prompt cache (see .claude/rules/prompt-cache.md).
-	ThinkingModulator func(turn int) *llm.ThinkingConfig
+	// The executor calls it before building each request with the zero-based
+	// turn index and the CURRENT message history (h_t, o_t — so policies can
+	// react to accumulated context and the latest tool observations, not just
+	// the step number); a non-nil return replaces Thinking for that turn, a
+	// nil return falls back to Thinking. Used by the reasoning-sandwich
+	// policy and the effort router's per-step revert. Like Thinking this is a
+	// request-level parameter, so varying it per turn does NOT affect prompt
+	// cache (see .claude/rules/prompt-cache.md).
+	ThinkingModulator func(turn int, messages []llm.Message) *llm.ThinkingConfig
 
 	// FinalizeGate, when non-nil, is consulted as the model attempts to
 	// finish (end_turn / no tool calls). A non-empty return blocks that

@@ -682,7 +682,7 @@ func TestRunAgent_ThinkingModulatorPerTurn(t *testing.T) {
 		Thinking:  baseline,
 		// Turn 0 is boosted; later turns return nil to exercise the fallback
 		// to cfg.Thinking.
-		ThinkingModulator: func(turn int) *llm.ThinkingConfig {
+		ThinkingModulator: func(turn int, _ []llm.Message) *llm.ThinkingConfig {
 			if turn == 0 {
 				return &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 32768}
 			}

@@ -236,6 +236,15 @@ type ThinkingConfig struct {
 	// preservation still allows OpenRouter-proxied reasoning to round-trip
 	// via the `reasoning_content` field on assistant messages.
 	Interleaved bool `json:"interleaved,omitempty"`
+
+	// TemplateKwarg, for Type "disabled" on dual-mode vLLM models, names the
+	// chat_template_kwargs boolean that truly disables the thinking phase
+	// (e.g. "thinking" for DeepSeek V4 — see modelcaps.ThinkingToggleKwarg).
+	// Set by the chat effort router from the model's capability. Empty means
+	// no template toggle: "disabled" then falls back to the per-model
+	// reasoning_effort floor in applySamplingParams. Steers request
+	// construction only; never serialized to the wire itself.
+	TemplateKwarg string `json:"-"`
 }
 
 // Message represents a single message in a conversation.

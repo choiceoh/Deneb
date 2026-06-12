@@ -204,6 +204,11 @@ func executeAgentRun(
 	// Per-model defaults (profile sampling, tuned max-tokens floor) — only
 	// fills values the request left unset; request-level params, cache-safe.
 	applyModelTuning(&cfg, deps, params, providerID, model)
+	// Adaptive effort router: obviously-simple conversational messages on
+	// dual-mode models (capability-gated, provider-aware) skip the thinking
+	// phase (KV-prefix-safe). Routed runs may escalate back to thinking in
+	// runAgentWithFallback, which needs the route to restore the original.
+	effortRt, effortDecision := applyEffortRouter(&cfg, params, messages, modelCapability(deps, providerID, model).ThinkingToggleKwarg, logger)
 
 	// BeforeAPICall hook chain: composed via agent.ComposeBeforeAPICall so
 	// features can register additional pre-LLM transforms without clobbering
@@ -247,7 +252,17 @@ func executeAgentRun(
 
 	// Execute agent loop with model fallback chain.
 	agentStart := time.Now()
-	agentResult, actualModel, fellBack, err := runAgentWithFallback(ctx, cfg, messages, client, deps, providerID, initialRole, hooks, logger, runLog)
+	agentResult, actualModel, fellBack, err := runAgentWithFallback(ctx, cfg, messages, client, deps, providerID, initialRole, effortRt, hooks, logger, runLog)
+	if err != nil && effortDecision != "" {
+		// The failed-run record matters MOST for the label pipeline: a
+		// routed run that escalated and still failed is the strongest
+		// misjudgment signal. The success-path record rides on the
+		// "agent loop complete" line below.
+		logger.Info("effort router: run failed",
+			"decision", effortDecision,
+			"escalated", effortRt != nil && effortRt.escalated,
+			"model", actualModel, "error", err)
+	}
 	if err != nil {
 		// Log run.error here — not in the async-only completion handler — so
 		// every entry path (runAgentAsync, SendSync, SendSyncStream) closes the
@@ -279,7 +294,12 @@ func executeAgentRun(
 		}
 	}
 	toolHist := formatToolHist(agentResult.ToolCounts)
+	// Effort-router fields ride on the existing run-complete line (one
+	// greppable record per run for the acceptance comparison and a future
+	// learned router) instead of a near-duplicate second Info line.
 	logger.Info("pipeline: agent loop complete",
+		"effortDecision", effortDecision,
+		"effortEscalated", effortRt != nil && effortRt.escalated,
 		"agentMs", agentMs,
 		"totalMs", totalMs,
 		"turns", agentResult.Turns,

@@ -42,6 +42,16 @@ type Capability struct {
 	// fault with HTTP 400 when cache_control markers are present (instead
 	// of merely ignoring them). Kimi Code is the known case.
 	RejectsCacheControl bool
+
+	// ThinkingToggleKwarg names the vLLM chat_template_kwargs boolean that
+	// disables the model's thinking phase per request ("" = no template
+	// toggle). DeepSeek V4 templates use "thinking"; Qwen3-family templates
+	// use "enable_thinking" (cf. localai.NoThinking — the kwarg SPELLING is
+	// per-family, and the wrong one fails at template render time). Only
+	// self-hosted vLLM serving honors chat_template_kwargs, so the builtin
+	// is gated to vllm provider ids; other providers silently drop or 400
+	// on unknown fields, which is why this must stay provider-aware.
+	ThinkingToggleKwarg string
 }
 
 // Builtin returns the built-in capability defaults for a provider/model pair.
@@ -51,7 +61,25 @@ func Builtin(providerID, model string) Capability {
 	return Capability{
 		Reasoning:           IsOpenAIReasoningModel(model),
 		RejectsCacheControl: RejectsCacheControl(providerID),
+		ThinkingToggleKwarg: ThinkingToggleKwarg(providerID, model),
 	}
+}
+
+// ThinkingToggleKwarg reports the chat_template_kwargs boolean that disables
+// the thinking phase for a provider/model pair, or "" when the pair has no
+// per-request template toggle. Gated to vllm provider ids because
+// chat_template_kwargs is a vLLM serving feature: the same model name via
+// OpenRouter or an Anthropic-wire relay must NOT receive the field.
+func ThinkingToggleKwarg(providerID, model string) string {
+	p := strings.ToLower(strings.TrimSpace(providerID))
+	if p != "vllm" && !strings.HasPrefix(p, "vllm-") && !strings.HasPrefix(p, "vllm_") {
+		return ""
+	}
+	m := strings.ToLower(model)
+	if strings.Contains(m, "deepseek-v4") || strings.Contains(m, "deepseek_v4") {
+		return "thinking"
+	}
+	return ""
 }
 
 // IsOpenAIReasoningModel reports whether model is a genuine OpenAI reasoning
