@@ -43,7 +43,7 @@ import kotlinx.coroutines.launch
  *
  * This file is only the frame (header + pill tab bar + pager); each tab's content
  * lives in its own Config*Tab.kt file ([GatewayTab], [AppearanceTab], [ModelTab],
- * [SkillsTab], [CronTab], [ObserveTab]) so a tab can grow without re-bloating
+ * [SkillsTab], [CronTab], [FleetTab], [ObserveTab]) so a tab can grow without re-bloating
  * this screen.
  *
  * The per-topic knowledge doc (workspace/topics/&lt;key&gt;.md, injected into the
@@ -136,6 +136,7 @@ fun DenebConfigScreen(
                     ConfigTab.MODEL -> denebClient?.let { ModelTab(it) }
                     ConfigTab.SKILLS -> denebClient?.let { SkillsTab(it) }
                     ConfigTab.CRON -> denebClient?.let { CronTab(it, onOpenCron) }
+                    ConfigTab.FLEET -> denebClient?.let { FleetTab(it) }
                     ConfigTab.OBSERVE -> denebClient?.let { ObserveTab(it) }
                 }
             }
@@ -159,5 +160,6 @@ private enum class ConfigTab(val label: String) {
     MODEL("모델"),
     SKILLS("스킬"),
     CRON("크론"),
+    FLEET("플릿"),
     OBSERVE("관찰"),
 }

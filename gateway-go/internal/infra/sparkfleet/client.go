@@ -93,6 +93,16 @@ func (c *Client) Run(ctx context.Context) {
 	}
 }
 
+// BaseURL returns the configured SparkFleet base URL, or "" when the
+// integration is disabled. Nil-safe like every Client method; used by the
+// gateway's fleet passthrough (/api/v1/fleet/*) to address the upstream.
+func (c *Client) BaseURL() string {
+	if c == nil {
+		return ""
+	}
+	return c.baseURL
+}
+
 // HealthReport returns the most recent poll result for inclusion in /healthz.
 func (c *Client) HealthReport() Report {
 	if c == nil {

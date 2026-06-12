@@ -20,6 +20,9 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/miniapp/gmail/attachment", s.handleMiniappGmailAttachment)
 	mux.HandleFunc("GET /api/v1/app/update/manifest", s.handleAppUpdateManifest)
 	mux.HandleFunc("GET /api/v1/app/update/download", s.handleAppUpdateDownload)
+	// Fleet passthrough — the native app manages SparkFleet through the gateway
+	// (subtree route; the handler enforces method+path allowlist + client token).
+	mux.HandleFunc("/api/v1/fleet/", s.handleFleetProxy)
 
 	// /debug/pprof/* — runtime profiling + goroutine dumps for live diagnosis.
 	// Safe to expose because the gateway binds loopback by default in
