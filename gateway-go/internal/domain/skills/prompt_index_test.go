@@ -1,6 +1,8 @@
 package skills
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -17,17 +19,17 @@ func TestBuildSkillsIndex_OmitsExtraMetadata(t *testing.T) {
 	result := BuildSkillsIndex(in, DefaultSkillsLimits())
 
 	for _, want := range []string{
-		"<name>release</name>",
-		"<description>Release a new version</description>",
-		"<location>/path/SKILL.md</location>",
+		"<available_skills>",
+		"- **release** (/path/SKILL.md): Release a new version",
+		"</available_skills>",
 	} {
 		if !strings.Contains(result.Prompt, want) {
 			t.Errorf("missing %q in index prompt: %s", want, result.Prompt)
 		}
 	}
-	for _, forbid := range []string{"<category>", "<tags>", "<related_skills>"} {
+	for _, forbid := range []string{"<skill>", "<name>", "<description>", "<location>", "devops", "git", "landpr"} {
 		if strings.Contains(result.Prompt, forbid) {
-			t.Errorf("%s leaked into index format (P5 strips it): %s", forbid, result.Prompt)
+			t.Errorf("%s leaked into index format (line format / P5 strips it): %s", forbid, result.Prompt)
 		}
 	}
 	if result.Compact {
@@ -92,8 +94,42 @@ func TestBuildSkillsIndex_FallsBackToCompactWhenIndexExceedsBudget(t *testing.T)
 	if !result.Compact {
 		t.Errorf("expected compact fallback, got Compact=false; len=%d", len(result.Prompt))
 	}
-	if strings.Contains(result.Prompt, "<description>") {
+	if strings.Contains(result.Prompt, long[:32]) {
 		t.Errorf("compact fallback should drop descriptions; got: %s", result.Prompt)
+	}
+	if !strings.Contains(result.Prompt, "- **alpha** (/p/a)") {
+		t.Errorf("compact fallback should keep name+location lines; got: %s", result.Prompt)
+	}
+}
+
+func TestBuildSkillsIndex_CompactsHomePaths(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		t.Skip("no home dir")
+	}
+	in := []PromptSkill{{
+		Name:        "managed",
+		Description: "lives in the catalog",
+		FilePath:    filepath.Join(home, ".deneb", "skills", "managed", "SKILL.md"),
+	}}
+	result := BuildSkillsIndex(in, DefaultSkillsLimits())
+	if !strings.Contains(result.Prompt, "(~/.deneb/skills/managed/SKILL.md)") {
+		t.Errorf("expected ~/-compacted location, got: %s", result.Prompt)
+	}
+	if strings.Contains(result.Prompt, home) {
+		t.Errorf("absolute home prefix leaked into index: %s", result.Prompt)
+	}
+}
+
+func TestBuildSkillsIndex_FlattensMultilineDescription(t *testing.T) {
+	in := []PromptSkill{{
+		Name:        "wrap",
+		Description: "first line\nsecond  line",
+		FilePath:    "/p/SKILL.md",
+	}}
+	result := BuildSkillsIndex(in, DefaultSkillsLimits())
+	if !strings.Contains(result.Prompt, "- **wrap** (/p/SKILL.md): first line second line") {
+		t.Errorf("multi-line description should flatten onto the entry line, got: %s", result.Prompt)
 	}
 }
 

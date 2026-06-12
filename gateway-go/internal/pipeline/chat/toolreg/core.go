@@ -119,7 +119,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		Name:        "read",
 		Description: "Read file contents with line numbers for code review (default: 2000 lines). Use offset/limit for large files; equivalent to a clean bat/cat -n view",
 		InputSchema: readToolSchema(),
-		Fn:          tools.ToolRead(workspaceDir),
+		Fn:          tools.ToolRead(workspaceDir, deps.SkillsCatalogDirs...),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "write",

@@ -90,7 +90,10 @@ func listDirForRead(absPath, displayPath string) (string, error) {
 	return b.String(), nil
 }
 
-func ToolRead(defaultDir string) ToolFunc {
+// ToolRead returns the file-read tool. extraReadRoots are directories outside
+// the workspace that reads may reach (read-only; currently the skills catalog —
+// the system prompt directs the model to read SKILL.md at those locations).
+func ToolRead(defaultDir string, extraReadRoots ...string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			FilePath string `json:"file_path"`
@@ -107,7 +110,7 @@ func ToolRead(defaultDir string) ToolFunc {
 			return "", fmt.Errorf("file_path is required")
 		}
 
-		path := ResolvePath(p.FilePath, defaultDir)
+		path := ResolvePathWithRoots(p.FilePath, defaultDir, extraReadRoots)
 		if err := CheckProtectedPath(path, "read"); err != nil {
 			return "", err
 		}

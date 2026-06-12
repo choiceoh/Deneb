@@ -85,6 +85,28 @@ type discoveredSkill struct {
 	Category string // parent category directory name (empty for flat layout)
 }
 
+// DefaultManagedSkillsDir returns the managed skills catalog root
+// (~/.deneb/skills), or "" when the home directory cannot be resolved.
+// Single source of truth for discovery and for the read tool's extra
+// allowed root (toolctx.CoreToolDeps.SkillsCatalogDir).
+func DefaultManagedSkillsDir() string {
+	home, _ := os.UserHomeDir()
+	if home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".deneb", "skills")
+}
+
+// DefaultPersonalSkillsDir returns the personal skills root (~/.agents/skills),
+// or "" when the home directory cannot be resolved.
+func DefaultPersonalSkillsDir() string {
+	home, _ := os.UserHomeDir()
+	if home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".agents", "skills")
+}
+
 // DiscoverWorkspaceSkills discovers skills from all configured sources and
 // returns merged entries with later sources overriding earlier ones by name.
 func DiscoverWorkspaceSkills(cfg DiscoverConfig) []SkillEntry {
@@ -94,8 +116,8 @@ func DiscoverWorkspaceSkills(cfg DiscoverConfig) []SkillEntry {
 
 	// Resolve source directories.
 	managedDir := cfg.ManagedSkillsDir
-	if managedDir == "" && home != "" {
-		managedDir = filepath.Join(home, ".deneb", "skills")
+	if managedDir == "" {
+		managedDir = DefaultManagedSkillsDir()
 	}
 	workspaceSkillsDir := filepath.Join(cfg.WorkspaceDir, "skills")
 

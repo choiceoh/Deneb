@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/hindsight"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
+	domskills "github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolreg"
@@ -127,6 +128,13 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 
 	s.toolDeps = &chat.CoreToolDeps{
 		WorkspaceDir: workspaceDir,
+		// Out-of-workspace skill catalog roots: lets the read tool reach the
+		// SKILL.md locations the skills index advertises (same roots the
+		// discovery walks; workspace-local roots need no allowance).
+		SkillsCatalogDirs: []string{
+			domskills.DefaultManagedSkillsDir(),
+			domskills.DefaultPersonalSkillsDir(),
+		},
 		Process: chat.ProcessDeps{
 			Mgr:          s.processes,
 			WorkspaceDir: workspaceDir,
