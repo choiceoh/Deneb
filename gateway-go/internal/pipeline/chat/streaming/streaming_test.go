@@ -2,6 +2,7 @@ package streaming
 
 import (
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 
@@ -37,24 +38,66 @@ func TestTruncateForBroadcast(t *testing.T) {
 
 func TestStreamBroadcasterEmitThinkingThrottles(t *testing.T) {
 	var events []string
-	sb := NewBroadcaster(func(event string, _ []byte) int {
+	var payloads []string
+	sb := NewBroadcaster(func(event string, data []byte) int {
 		events = append(events, event)
+		payloads = append(payloads, string(data))
 		return 1
 	}, "s1", "r1")
 
 	// A burst of reasoning deltas inside one throttle window → one frame.
 	for range 10 {
-		sb.EmitThinking()
+		sb.EmitThinking("스텝 ")
 	}
 	if len(events) != 1 || events[0] != EventThinking {
 		t.Fatalf("events = %v, want exactly one %q", events, EventThinking)
 	}
 
-	// Aging the last-emit timestamp past the window re-arms the throttle.
+	// Aging the last-emit timestamp past the window re-arms the throttle, and
+	// the next frame condenses every accumulated delta (throttled ones
+	// included) into a whitespace-collapsed preview.
 	sb.lastThinkingNs.Store(sb.lastThinkingNs.Load() - int64(thinkingThrottle) - 1)
-	sb.EmitThinking()
+	sb.EmitThinking("메일 발신인\n이력 대조")
 	if len(events) != 2 {
 		t.Fatalf("after window: events = %v, want 2 frames", events)
+	}
+	if !strings.Contains(payloads[1], `"preview":"스텝 스텝 스텝 스텝 스텝 스텝 스텝 스텝 스텝 스텝 메일 발신인 이력 대조"`) {
+		t.Fatalf("second frame should carry the collapsed preview, got %s", payloads[1])
+	}
+}
+
+func TestThinkingPreviewTailTruncation(t *testing.T) {
+	sb := NewBroadcaster(func(string, []byte) int { return 1 }, "s1", "r1")
+
+	// Empty/whitespace-only accumulation → no preview.
+	sb.appendThinking("  \n\t ")
+	if got := sb.thinkingPreview(); got != "" {
+		t.Fatalf("whitespace-only preview = %q, want empty", got)
+	}
+
+	// Below the minimum readable length (the first pulse fires on the very
+	// first delta) → still no preview, just the bare liveness signal.
+	sb.appendThinking("The")
+	if got := sb.thinkingPreview(); got != "" {
+		t.Fatalf("sub-minimum preview = %q, want empty", got)
+	}
+
+	// Long accumulation keeps the most recent runes with a leading ellipsis —
+	// the tail (newest thought) is the readable part, and Korean runes must
+	// not split mid-character.
+	for range 40 {
+		sb.appendThinking("과거 거래 조건을 다시 확인한다 ")
+	}
+	got := sb.thinkingPreview()
+	runes := []rune(got)
+	if len(runes) == 0 || runes[0] != '…' {
+		t.Fatalf("truncated preview should lead with ellipsis, got %q", got)
+	}
+	if len(runes) != thinkingPreviewRunes+1 {
+		t.Fatalf("preview length = %d runes, want %d", len(runes), thinkingPreviewRunes+1)
+	}
+	if !strings.HasSuffix(got, "확인한다") {
+		t.Fatalf("preview should end with the newest text, got %q", got)
 	}
 }
 

@@ -21,6 +21,12 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "대기 칩이 생각 내용을 실시간 중계 — \"깊이 생각 중: …발신인 이력을 대조\"처럼 지금 무슨 생각을 하는지 보임",
+            "도구 작업이 끝나고 다음 단계로 넘어가는 동안 칩이 일반 스피너로 되돌아가지 않고 \"결과 검토 중…\"으로 이어짐",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "설정 > 스킬에서 스킬을 누르면 상세 화면이 열림 — 전체 설명·생성/사용/진화 이력과 SKILL.md 문서 본문, 그 스킬만의 진화 내역까지",
         ),
     ),

@@ -114,7 +114,9 @@ type SyncOptions struct {
 	// OnThinking, when set on a streaming run (SendSyncStream only), fires
 	// while the model emits reasoning deltas (throttled by the broadcaster) so
 	// the transport can show a "thinking" hint before the first visible token.
-	OnThinking func()
+	// preview carries a chip-sized tail of the recent reasoning text ("" when
+	// nothing readable accumulated yet).
+	OnThinking func(preview string)
 }
 
 // prepareSyncRun builds RunParams and runDeps from the common sync arguments.

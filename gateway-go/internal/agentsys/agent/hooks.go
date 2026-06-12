@@ -5,7 +5,7 @@ package agent
 // All fields are optional — nil callbacks are silently skipped.
 type StreamHooks struct {
 	OnTextDelta  func(text string)                                // text delta streamed from LLM
-	OnThinking   func()                                           // reasoning/thinking delta received
+	OnThinking   func(delta string)                               // reasoning/thinking delta received (delta = the reasoning text chunk)
 	OnToolStart  func(name, reason string, input []byte)          // tool invocation about to execute; reason is thinking text, input is raw JSON args
 	OnToolEmit   func(name, toolUseID string, input []byte)       // tool start broadcast (name + ID + raw JSON args for streaming)
 	OnToolResult func(name, toolUseID, result string, isErr bool) // tool result broadcast
@@ -26,7 +26,7 @@ type StreamHooks struct {
 // Hooks that return a value (OnBeforeToolCall) are set directly via Set* methods.
 type HookCompositor struct {
 	textDelta    []func(string)
-	thinking     []func()
+	thinking     []func(string)
 	toolStart    []func(string, string, []byte)
 	toolEmit     []func(string, string, []byte)
 	toolResult   []func(string, string, string, bool)
@@ -36,7 +36,7 @@ type HookCompositor struct {
 }
 
 func (c *HookCompositor) OnTextDelta(fn func(string)) { c.textDelta = append(c.textDelta, fn) }
-func (c *HookCompositor) OnThinking(fn func())        { c.thinking = append(c.thinking, fn) }
+func (c *HookCompositor) OnThinking(fn func(string))  { c.thinking = append(c.thinking, fn) }
 func (c *HookCompositor) OnToolStart(fn func(string, string, []byte)) {
 	c.toolStart = append(c.toolStart, fn)
 }
@@ -66,9 +66,9 @@ func (c *HookCompositor) Build() StreamHooks {
 		}
 	}
 	if fns := c.thinking; len(fns) > 0 {
-		h.OnThinking = func() {
+		h.OnThinking = func(delta string) {
 			for _, fn := range fns {
-				fn()
+				fn(delta)
 			}
 		}
 	}

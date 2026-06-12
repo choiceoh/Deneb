@@ -16,7 +16,8 @@
 //	  event: delta     data: {"delta":"..."}                        (zero or more)
 //	  event: tool      data: {"state":"started"|"completed","tool":"...","toolUseId":"...",
 //	                          "detail":"..."?, "isError":bool?}
-//	  event: thinking  data: {}                                     (throttled liveness)
+//	  event: thinking  data: {"preview":"..."?}                     (throttled liveness +
+//	                          chip-sized tail of the live reasoning text)
 //	  event: done      data: {"text":...,"model":...,"fellBack":...}   (success terminal)
 //	  event: error     data: {"error":"..."}                        (failure terminal)
 //
@@ -67,7 +68,7 @@ type chatStreamResult struct {
 type chatStreamSinks struct {
 	Delta    func(delta string)
 	Tool     func(ev chat.ToolStreamEvent)
-	Thinking func()
+	Thinking func(preview string)
 }
 
 // toolStreamFrame is the wire payload of one SSE "tool" frame. Detail and
@@ -78,6 +79,13 @@ type toolStreamFrame struct {
 	ToolUseID string `json:"toolUseId"`
 	Detail    string `json:"detail,omitempty"`
 	IsError   bool   `json:"isError,omitempty"`
+}
+
+// thinkingStreamFrame is the wire payload of one SSE "thinking" frame. Preview
+// is a chip-sized tail of the live reasoning text; omitted while empty so the
+// bare liveness pulse stays minimal (and older clients ignore it either way).
+type thinkingStreamFrame struct {
+	Preview string `json:"preview,omitempty"`
 }
 
 // chatStreamRunner runs a streaming chat turn, invoking the sink callbacks as
@@ -232,8 +240,8 @@ func writeChatStreamSSE(ctx context.Context, w http.ResponseWriter, sessionKey s
 				IsError:   ev.IsError,
 			})
 		},
-		Thinking: func() {
-			writeEvent("thinking", map[string]string{})
+		Thinking: func(preview string) {
+			writeEvent("thinking", thinkingStreamFrame{Preview: preview})
 		},
 	})
 
