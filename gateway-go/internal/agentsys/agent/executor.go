@@ -194,12 +194,17 @@ func RunAgent(
 
 		turnRes := &turnResult{}
 
-		// Consume the stream for this turn. On idle stall, retry once —
-		// the LLM API sometimes stalls transiently but recovers on reconnect.
+		// Consume the stream for this turn. On idle stall or a mid-stream error
+		// event, retry once on the SAME model — both are transient far more
+		// often than not (the API stalls and recovers on reconnect; permanent
+		// faults reject at the HTTP layer before streaming). Without this, a
+		// single mid-stream hiccup escalated straight to the model-fallback
+		// chain, switching the turn to a different model.
 		err = consumeStreamInto(ctx, events, hooks, turnRes, cfg.StreamIdleTimeout, logger)
-		if errors.Is(err, ErrStreamIdle) && ctx.Err() == nil {
-			logger.Warn("stream idle stall detected, retrying turn",
+		if (errors.Is(err, ErrStreamIdle) || errors.Is(err, ErrStreamEvent)) && ctx.Err() == nil {
+			logger.Warn("stream interrupted, retrying turn on same model",
 				"turn", turn,
+				"error", err,
 				"idleTimeout", cfg.StreamIdleTimeout)
 			turnRes = &turnResult{}
 			events, err = client.StreamChat(ctx, req)

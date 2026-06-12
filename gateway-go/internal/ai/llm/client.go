@@ -30,7 +30,13 @@ var sharedTransport = &http.Transport{
 	MaxIdleConnsPerHost: 16,
 	IdleConnTimeout:     90 * time.Second,
 	TLSHandshakeTimeout: 5 * time.Second,
-	ForceAttemptHTTP2:   true,
+	// Healthy providers (including queued vLLM — FastAPI returns the
+	// StreamingResponse before scheduling) send headers near-instantly, so
+	// this only bounds a wedged server that accepts the connection but never
+	// responds. Matters because the overall client timeout below is generous
+	// to accommodate long streams.
+	ResponseHeaderTimeout: 2 * time.Minute,
+	ForceAttemptHTTP2:     true,
 }
 
 // API mode constants for Client. Controls request/response wire format.
@@ -195,9 +201,17 @@ func (c *Client) applyHeaders(req *http.Request) {
 }
 
 // NewClient creates a new LLM API client.
+//
+// The 30-minute client timeout caps the WHOLE exchange including the streamed
+// body read, so it must exceed the longest legitimate stream: a local model at
+// ~40 tok/s producing a max_tokens-recovery-scaled output (1.5×16384 tokens)
+// plus long-context prefill already passes 10 minutes. Genuine hangs are
+// caught much earlier by ResponseHeaderTimeout (wedged server) and the
+// caller-level stream idle watchdog (no event for 180s — see
+// agent.consumeStreamInto); this is only the last-resort backstop.
 func NewClient(baseURL, apiKey string, opts ...ClientOption) *Client {
 	c := &Client{
-		httpClient:        &http.Client{Timeout: 10 * time.Minute, Transport: sharedTransport},
+		httpClient:        &http.Client{Timeout: 30 * time.Minute, Transport: sharedTransport},
 		baseURL:           baseURL,
 		apiKey:            apiKey,
 		logger:            slog.Default(),

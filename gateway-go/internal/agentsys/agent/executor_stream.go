@@ -6,6 +6,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -33,6 +34,14 @@ const defaultStreamIdleTimeout = 180 * time.Second
 // ErrStreamIdle is returned when the LLM stream stalls (no event within the
 // idle timeout). The error is considered retryable by callers.
 var ErrStreamIdle = fmt.Errorf("stream stalled: no event within idle timeout")
+
+// ErrStreamEvent is returned when the provider emits an explicit error event
+// mid-stream (upstream disconnect, transient backend fault, overload). Like
+// ErrStreamIdle it is considered retryable: mid-stream errors are almost
+// always transient (permanent faults reject the request at the HTTP layer,
+// before streaming starts), so callers retry the turn once on the same model
+// before escalating to the model-fallback chain.
+var ErrStreamEvent = errors.New("stream reported error event")
 
 // consumeStreamInto reads all events from a streaming LLM response and
 // populates the provided turnResult.
@@ -240,7 +249,7 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 				return nil
 
 			case "error":
-				return fmt.Errorf("stream error: %s", string(ev.Payload))
+				return fmt.Errorf("%w: %s", ErrStreamEvent, string(ev.Payload))
 			}
 		}
 	}

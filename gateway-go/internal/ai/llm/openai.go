@@ -219,6 +219,16 @@ func (c *Client) convertMessagesToOpenAI(msgs []Message, preserveThinking bool) 
 
 		// Assistant message with tool calls.
 		if m.Role == "assistant" {
+			// A turn whose only content was thinking blocks (dropped above when
+			// preserveThinking is off) would serialize as
+			// {"role":"assistant","content":null} — a contentless assistant
+			// message that some chat templates reject and models misread as
+			// "I replied with nothing". Skip it entirely; no tool_use means no
+			// later tool_result can orphan.
+			if textParts == "" && len(toolCalls) == 0 && thinkingParts == "" {
+				c.logger.Debug("skipping assistant message with no convertible content")
+				continue
+			}
 			msg := openAIMessage{Role: "assistant"}
 			if textParts != "" {
 				msg.Content = textParts

@@ -87,6 +87,11 @@ func (c *Client) completeOpenAI(ctx context.Context, req ChatRequest) (string, e
 		}
 	}
 
+	// Honor caller sampling/thinking parameters (temperature, top_p, stop,
+	// reasoning_effort mapping). Previously dropped on this path, so e.g. a
+	// deterministic temperature=0 classifier silently ran at server default.
+	applySamplingParams(&oaiReq, &req)
+
 	body, err := json.Marshal(oaiReq)
 	if err != nil {
 		return "", fmt.Errorf("marshal openai request: %w", err)
@@ -123,9 +128,12 @@ func (c *Client) completeOpenAI(ctx context.Context, req ChatRequest) (string, e
 	var resp struct {
 		Choices []struct {
 			Message struct {
-				Content string `json:"content"`
-				Refusal string `json:"refusal"`
+				Content          string `json:"content"`
+				Refusal          string `json:"refusal"`
+				Reasoning        string `json:"reasoning"`         // vLLM reasoning-parser output
+				ReasoningContent string `json:"reasoning_content"` // DeepSeek/OpenRouter spelling
 			} `json:"message"`
+			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(data, &resp); err != nil {
@@ -134,12 +142,25 @@ func (c *Client) completeOpenAI(ctx context.Context, req ChatRequest) (string, e
 	if len(resp.Choices) == 0 {
 		return "", fmt.Errorf("no choices in response")
 	}
-	msg := resp.Choices[0].Message
-	if strings.TrimSpace(msg.Content) == "" && msg.Refusal != "" {
-		// A refusal arrives on `refusal` with content null. Returning "" with
-		// a nil error would let background callers (wiki dreamer/verify/merge)
-		// treat the refusal as a successful empty result.
-		return "", fmt.Errorf("model refused: %s", truncateForLog(msg.Refusal, 200))
+	choice := resp.Choices[0]
+	msg := choice.Message
+	if strings.TrimSpace(msg.Content) == "" {
+		if msg.Refusal != "" {
+			// A refusal arrives on `refusal` with content null. Returning "" with
+			// a nil error would let background callers (wiki dreamer/verify/merge)
+			// treat the refusal as a successful empty result.
+			return "", fmt.Errorf("model refused: %s", truncateForLog(msg.Refusal, 200))
+		}
+		// Reasoning models can burn the whole output budget on the reasoning
+		// channel and finish with content null — observed live on
+		// deepseek-v4-flash (server default thinking) with small max_tokens.
+		// Treat as an error: "" with nil error reads as a successful empty
+		// result to background callers, which silently drops their work.
+		if reasoning := strings.TrimSpace(msg.Reasoning + msg.ReasoningContent); reasoning != "" || choice.FinishReason == "length" {
+			return "", fmt.Errorf(
+				"empty content (finish_reason=%s, reasoning_chars=%d): reasoning consumed the output budget — raise MaxTokens or disable thinking",
+				choice.FinishReason, len(reasoning))
+		}
 	}
 	// Strip reasoning model artifacts (<think> tags, "Thinking Process:" preamble)
 	// that leak into the content field of some local models (DeepSeek-R1, QwQ, etc.).
