@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -359,8 +360,9 @@ func (h *Handler) History(_ context.Context, req *protocol.RequestFrame) *protoc
 		}
 		// Display-only: hide appended link-enrichment blocks from user bubbles,
 		// and drop tool_result blocks so raw tool output isn't shown as a bubble.
-		msgs = stripLinkEnrichmentForDisplay(msgs)
-		msgs = stripToolResultBlocksForDisplay(msgs)
+		// Shared with miniapp.sessions.transcript — see toolctx/display.go.
+		msgs = toolctx.StripLinkEnrichmentForDisplay(msgs)
+		msgs = toolctx.StripToolResultBlocksForDisplay(msgs)
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"messages": msgs,
 			"total":    total,

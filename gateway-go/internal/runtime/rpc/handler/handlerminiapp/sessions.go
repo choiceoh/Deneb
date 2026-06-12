@@ -159,6 +159,15 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 			return rpcerr.WrapUnavailable("transcript load failed", err).Response(req.ID)
 		}
 
+		// Display-only sanitation, same pipeline as chat.history: hide
+		// link-enrichment appendages from user bubbles and drop tool_result
+		// messages so raw tool output (ps dumps, command stdout) never renders
+		// as a quotable bubble. The stored transcript is untouched. This RPC is
+		// what the native client actually loads its timeline from, so the
+		// strip must live here, not only on chat.history.
+		msgs = toolctx.StripLinkEnrichmentForDisplay(msgs)
+		msgs = toolctx.StripToolResultBlocksForDisplay(msgs)
+
 		rows := make([]transcriptMsgOut, 0, len(msgs))
 		for _, m := range msgs {
 			var atts []transcriptAttachmentOut
@@ -172,10 +181,15 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 					Size:     a.Size,
 				})
 			}
+			content := decodeChatContent(m.Content)
+			if content == "" && len(atts) == 0 {
+				// Tool/thinking-only message — nothing a bubble can show.
+				continue
+			}
 			rows = append(rows, transcriptMsgOut{
 				ID:          m.ID,
 				Role:        m.Role,
-				Content:     decodeChatContent(m.Content),
+				Content:     content,
 				Attachments: atts,
 				TimestampMs: m.Timestamp,
 			})
@@ -190,8 +204,11 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 
 // decodeChatContent collapses ChatMessage.Content (which can be a plain
 // JSON string or an array of ContentBlock-like objects) into a single
-// display string. The Mini App's transcript view doesn't need the full
-// structured form; we just want readable text per message.
+// display string. Only text blocks render: tool_use/tool_result/thinking
+// blocks are turn machinery, not conversation — the live UI already showed
+// tool activity as transient status rows, and raw tool output must never
+// come back as a quotable bubble on reload (tool_result is additionally
+// stripped upstream; skipping it here keeps the decode safe on its own).
 func decodeChatContent(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
@@ -201,39 +218,27 @@ func decodeChatContent(raw json.RawMessage) string {
 	if err := json.Unmarshal(raw, &s); err == nil {
 		return s
 	}
-	// Array of blocks. We pull "text" fields and concatenate; tool
-	// calls etc. are surfaced as a short tag so the user can see them
-	// without rendering raw JSON.
 	var blocks []map[string]any
 	if err := json.Unmarshal(raw, &blocks); err != nil {
 		return string(raw)
 	}
-	var sb strings.Builder
-	for i, b := range blocks {
-		if i > 0 {
-			sb.WriteString("\n\n")
-		}
+	var parts []string
+	for _, b := range blocks {
 		t, _ := b["type"].(string)
 		switch t {
 		case "text":
-			if txt, ok := b["text"].(string); ok {
-				sb.WriteString(txt)
+			if txt, ok := b["text"].(string); ok && txt != "" {
+				parts = append(parts, txt)
 			}
-		case "tool_use":
-			name, _ := b["name"].(string)
-			sb.WriteString("⚙️ ")
-			sb.WriteString(name)
-		case "tool_result":
-			content, _ := b["content"].(string)
-			sb.WriteString("↩️ ")
-			sb.WriteString(content)
+		case "tool_use", "tool_result", "thinking", "redacted_thinking":
+			// Internal turn machinery — never bubble content.
 		default:
-			sb.WriteString("[")
-			sb.WriteString(t)
-			sb.WriteString("]")
+			// Unknown block type: a content-free tag so the bubble shows
+			// *something* was here without rendering raw JSON.
+			parts = append(parts, "["+t+"]")
 		}
 	}
-	return sb.String()
+	return strings.Join(parts, "\n\n")
 }
 
 func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {

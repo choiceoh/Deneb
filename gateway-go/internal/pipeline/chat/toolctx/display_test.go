@@ -1,11 +1,9 @@
-package chat
+package toolctx
 
 import (
 	"encoding/json"
 	"strings"
 	"testing"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 )
 
 func richMsg(role, blocks string) ChatMessage {
@@ -17,12 +15,12 @@ func richMsg(role, blocks string) ChatMessage {
 // the surrounding turn (including the assistant's text) is preserved in order.
 func TestStripToolResultBlocks_DropsToolResultOnlyMessage(t *testing.T) {
 	msgs := []ChatMessage{
-		toolctx.NewTextChatMessage("user", "리눅스 프로세스 보여줘", 0),
+		NewTextChatMessage("user", "리눅스 프로세스 보여줘", 0),
 		richMsg("assistant", `[{"type":"text","text":"확인해볼게요"},{"type":"tool_use","id":"t1","name":"exec","input":{"command":"ps aux"}}]`),
 		richMsg("user", `[{"type":"tool_result","tool_use_id":"t1","content":"root 1 ... ps aux output ..."}]`),
-		toolctx.NewTextChatMessage("assistant", "정상 프로세스입니다.", 0),
+		NewTextChatMessage("assistant", "정상 프로세스입니다.", 0),
 	}
-	out := stripToolResultBlocksForDisplay(msgs)
+	out := StripToolResultBlocksForDisplay(msgs)
 
 	if len(out) != 3 {
 		t.Fatalf("tool_result-only message should be dropped, got %d messages", len(out))
@@ -49,7 +47,7 @@ func TestStripToolResultBlocks_KeepsOtherBlocksInMixedMessage(t *testing.T) {
 	msgs := []ChatMessage{
 		richMsg("user", `[{"type":"text","text":"여기 결과"},{"type":"tool_result","tool_use_id":"t9","content":"secret stdout"}]`),
 	}
-	out := stripToolResultBlocksForDisplay(msgs)
+	out := StripToolResultBlocksForDisplay(msgs)
 
 	if len(out) != 1 {
 		t.Fatalf("mixed message must be kept, got %d", len(out))
@@ -67,10 +65,10 @@ func TestStripToolResultBlocks_KeepsOtherBlocksInMixedMessage(t *testing.T) {
 func TestStripToolResultBlocks_LeavesPlainAndNonToolResultBlocks(t *testing.T) {
 	thinking := richMsg("assistant", `[{"type":"thinking","thinking":"고민중"},{"type":"tool_use","id":"t1","name":"exec","input":{}}]`)
 	msgs := []ChatMessage{
-		toolctx.NewTextChatMessage("user", "안녕", 0),
+		NewTextChatMessage("user", "안녕", 0),
 		thinking,
 	}
-	out := stripToolResultBlocksForDisplay(msgs)
+	out := StripToolResultBlocksForDisplay(msgs)
 
 	if len(out) != 2 {
 		t.Fatalf("no message should be dropped, got %d", len(out))
@@ -80,5 +78,28 @@ func TestStripToolResultBlocks_LeavesPlainAndNonToolResultBlocks(t *testing.T) {
 	}
 	if string(out[1].Content) != string(thinking.Content) {
 		t.Fatalf("non-tool_result blocks must be untouched:\ngot:  %s\nwant: %s", out[1].Content, thinking.Content)
+	}
+}
+
+// A user message carrying an appended link-enrichment block is trimmed back to
+// the typed text; a message that merely mentions a --- divider stays intact.
+func TestStripLinkEnrichmentForDisplay_StripsAppendedBlock(t *testing.T) {
+	typed := "이 링크 요약해줘 https://example.com"
+	enriched := typed + "\n\n---\n" + LinkEnrichmentHeader + "\n\npage dump here\n---"
+	msgs := []ChatMessage{
+		NewTextChatMessage("user", enriched, 0),
+		NewTextChatMessage("user", "구분선은 ---로 씁니다", 0),
+		NewTextChatMessage("assistant", enriched, 0), // non-user roles untouched
+	}
+	out := StripLinkEnrichmentForDisplay(msgs)
+
+	if got := out[0].TextContent(); got != typed {
+		t.Fatalf("enriched user message not stripped to typed text, got %q", got)
+	}
+	if got := out[1].TextContent(); got != "구분선은 ---로 씁니다" {
+		t.Fatalf("plain message must be untouched, got %q", got)
+	}
+	if got := out[2].TextContent(); got != enriched {
+		t.Fatalf("assistant message must be untouched, got %q", got)
 	}
 }

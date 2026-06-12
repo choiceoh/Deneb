@@ -413,11 +413,63 @@ func TestSessionsTranscript_DecodesBlocks(t *testing.T) {
 	if !strings.Contains(got.Messages[0].Content, "Hello") {
 		t.Errorf("text block missing: %q", got.Messages[0].Content)
 	}
-	if !strings.Contains(got.Messages[0].Content, "⚙️ gmail") {
-		t.Errorf("tool_use marker missing: %q", got.Messages[0].Content)
+	if strings.Contains(got.Messages[0].Content, "gmail") {
+		t.Errorf("tool_use must not render in a bubble: %q", got.Messages[0].Content)
 	}
 	if !strings.Contains(got.Messages[0].Content, "After tool") {
 		t.Errorf("second text block missing: %q", got.Messages[0].Content)
+	}
+}
+
+// Regression for the ps-dump leak: tool results are persisted as user-role
+// messages, and the old decode rendered them as "↩️ <raw stdout>" bubbles the
+// user could quote. The transcript RPC must drop tool_result messages, hide
+// thinking/tool_use machinery, and trim link-enrichment appendages — the same
+// display sanitation chat.history applies.
+func TestSessionsTranscript_HidesToolMachineryAndEnrichment(t *testing.T) {
+	enriched := "이 링크 봐줘 https://example.com\n\n---\n" +
+		toolctx.LinkEnrichmentHeader + "\n\npage dump\n---"
+	loader := &fakeTranscriptLoader{
+		loadFn: func(_ string, _ int) ([]toolctx.ChatMessage, int, error) {
+			return []toolctx.ChatMessage{
+				toolctx.NewTextChatMessage("user", enriched, 0),
+				{Role: "assistant", Content: jsonRaw(`[
+					{"type": "thinking", "thinking": "고민"},
+					{"type": "text", "text": "재시작해볼게요"},
+					{"type": "tool_use", "id": "t1", "name": "exec", "input": {"command": "ps aux"}}
+				]`)},
+				{Role: "user", Content: jsonRaw(`[
+					{"type": "tool_result", "tool_use_id": "t1", "content": "choiceoh 2495893 ... /home/choiceoh/.claude/remote/srv/... ps dump"}
+				]`)},
+				toolctx.NewTextChatMessage("assistant", "완료했습니다.", 0),
+			}, 4, nil
+		},
+	}
+	h := sessionsTranscript(transcriptDeps(loader))
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
+		"sessionKey": "k",
+	}))
+	var got struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
+	}
+	decode(t, resp, &got)
+
+	if len(got.Messages) != 3 {
+		t.Fatalf("tool_result-only message must be dropped, got %d rows: %+v", len(got.Messages), got.Messages)
+	}
+	if got.Messages[0].Content != "이 링크 봐줘 https://example.com" {
+		t.Errorf("enrichment not trimmed from user bubble: %q", got.Messages[0].Content)
+	}
+	if got.Messages[1].Content != "재시작해볼게요" {
+		t.Errorf("assistant bubble must be text-only: %q", got.Messages[1].Content)
+	}
+	for _, m := range got.Messages {
+		if strings.Contains(m.Content, "ps dump") || strings.Contains(m.Content, "↩️") {
+			t.Errorf("raw tool output leaked into transcript view: %q", m.Content)
+		}
 	}
 }
 
@@ -488,6 +540,14 @@ func TestDecodeChatContent(t *testing.T) {
 		{"string", jsonRaw(`"hello"`), "hello"},
 		{"text block", jsonRaw(`[{"type":"text","text":"hi"}]`), "hi"},
 		{"unknown block", jsonRaw(`[{"type":"weird"}]`), "[weird]"},
+		{"tool_use hidden", jsonRaw(`[{"type":"tool_use","name":"exec"}]`), ""},
+		{"tool_result hidden", jsonRaw(`[{"type":"tool_result","content":"raw stdout"}]`), ""},
+		{"thinking hidden", jsonRaw(`[{"type":"thinking","thinking":"hmm"}]`), ""},
+		{
+			"text joined across hidden blocks",
+			jsonRaw(`[{"type":"thinking","thinking":"x"},{"type":"text","text":"a"},{"type":"tool_use","name":"exec"},{"type":"text","text":"b"}]`),
+			"a\n\nb",
+		},
 	}
 	for _, c := range cases {
 		got := decodeChatContent(c.in)
