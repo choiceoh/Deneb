@@ -112,7 +112,8 @@ func TestWriteChatStreamSSE_ErrorFrame(t *testing.T) {
 func TestWriteChatStreamSSE_ToolAndThinkingFrames(t *testing.T) {
 	rec := httptest.NewRecorder()
 	run := func(_ context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
-		sinks.Thinking()
+		sinks.Thinking("발신인 이력을 대조")
+		sinks.Thinking("")
 		sinks.Tool(chat.ToolStreamEvent{State: "started", Tool: "gmail", ToolUseID: "tu_1", Detail: "아르고에너지"})
 		sinks.Tool(chat.ToolStreamEvent{State: "completed", Tool: "gmail", ToolUseID: "tu_1", IsError: true})
 		sinks.Delta("메일 3통이 도착했습니다")
@@ -122,7 +123,7 @@ func TestWriteChatStreamSSE_ToolAndThinkingFrames(t *testing.T) {
 	writeChatStreamSSE(context.Background(), rec, "client:test", run, nil)
 
 	events := parseSSEEvents(t, rec.Body.String())
-	wantOrder := []string{"thinking", "tool", "tool", "delta", "done"}
+	wantOrder := []string{"thinking", "thinking", "tool", "tool", "delta", "done"}
 	if len(events) != len(wantOrder) {
 		t.Fatalf("event count = %d, want %d: %q", len(events), len(wantOrder), rec.Body.String())
 	}
@@ -131,21 +132,28 @@ func TestWriteChatStreamSSE_ToolAndThinkingFrames(t *testing.T) {
 			t.Errorf("event[%d] = %q, want %q", i, events[i].Event, want)
 		}
 	}
+	var thinking thinkingStreamFrame
+	if err := json.Unmarshal([]byte(events[0].Data), &thinking); err != nil || thinking.Preview != "발신인 이력을 대조" {
+		t.Errorf("thinking payload = %+v (err %v), want preview passthrough", thinking, err)
+	}
+	if strings.Contains(events[1].Data, "preview") {
+		t.Errorf("empty preview should be omitted from the frame: %q", events[1].Data)
+	}
 	var tool toolStreamFrame
-	if err := json.Unmarshal([]byte(events[1].Data), &tool); err != nil {
+	if err := json.Unmarshal([]byte(events[2].Data), &tool); err != nil {
 		t.Fatalf("tool payload: %v", err)
 	}
 	if tool.State != "started" || tool.Tool != "gmail" || tool.ToolUseID != "tu_1" || tool.Detail != "아르고에너지" || tool.IsError {
 		t.Errorf("tool[started] = %+v, want {started gmail tu_1 아르고에너지 false}", tool)
 	}
-	if strings.Contains(events[1].Data, "isError") {
-		t.Errorf("started frame should omit isError: %q", events[1].Data)
+	if strings.Contains(events[2].Data, "isError") {
+		t.Errorf("started frame should omit isError: %q", events[2].Data)
 	}
-	if err := json.Unmarshal([]byte(events[2].Data), &tool); err != nil || tool.State != "completed" || !tool.IsError {
+	if err := json.Unmarshal([]byte(events[3].Data), &tool); err != nil || tool.State != "completed" || !tool.IsError {
 		t.Errorf("tool[completed] = %+v (err %v), want state=completed isError=true", tool, err)
 	}
-	if strings.Contains(events[2].Data, "detail") {
-		t.Errorf("completed frame should omit empty detail: %q", events[2].Data)
+	if strings.Contains(events[3].Data, "detail") {
+		t.Errorf("completed frame should omit empty detail: %q", events[3].Data)
 	}
 }
 

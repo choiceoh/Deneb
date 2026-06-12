@@ -48,7 +48,7 @@ func wireStreamHooks(
 	// Typing signaler: UI typing indicators.
 	if typingSignaler != nil {
 		hc.OnTextDelta(typingSignaler.SignalTextDelta)
-		hc.OnThinking(typingSignaler.SignalReasoningDelta)
+		hc.OnThinking(func(string) { typingSignaler.SignalReasoningDelta() })
 		hc.OnToolStart(func(_ string, _ string, _ []byte) {
 			typingSignaler.SignalToolStart()
 		})
@@ -64,7 +64,7 @@ func wireStreamHooks(
 
 	// Status controller: Telegram emoji reactions.
 	if statusCtrl != nil {
-		hc.OnThinking(statusCtrl.SetThinking)
+		hc.OnThinking(func(string) { statusCtrl.SetThinking() })
 		hc.OnToolStart(func(name, _ string, _ []byte) { statusCtrl.SetTool(name) })
 		// First text delta means we moved past thinking — set thinking
 		// emoji if not already in a tool phase.

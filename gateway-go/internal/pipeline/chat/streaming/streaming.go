@@ -2,6 +2,8 @@ package streaming
 
 import (
 	"encoding/json"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -28,9 +30,21 @@ const (
 
 // thinkingThrottle bounds EmitThinking's broadcast rate. The agent loop fires
 // OnThinking once per reasoning delta — potentially hundreds per turn — while
-// subscribers only need a liveness signal, so anything beyond one frame every
-// couple of seconds is noise on the wire.
+// subscribers only need a liveness signal plus a slowly-updating preview, so
+// anything beyond one frame every couple of seconds is noise on the wire.
 const thinkingThrottle = 2 * time.Second
+
+// Thinking preview sizing: the tail buffer keeps enough recent reasoning text
+// to survive whitespace collapsing; the preview itself is chip-sized (the
+// native client renders it as "깊이 생각 중: …<preview>" in the waiting chip).
+const (
+	thinkingTailRunes    = 512
+	thinkingPreviewRunes = 64
+	// thinkingPreviewMinRunes suppresses the preview until enough reasoning
+	// accumulated to read as a phrase — the first pulse fires on the very
+	// first delta, and "깊이 생각 중: The" is worse than the bare indicator.
+	thinkingPreviewMinRunes = 12
+)
 
 // Broadcaster relays agent streaming events to WebSocket clients
 // via the gateway's raw broadcast function. All methods are safe to call
@@ -43,6 +57,10 @@ type Broadcaster struct {
 	// lastThinkingNs is the monotonic-ish wall clock (UnixNano) of the last
 	// EmitThinking broadcast, used to throttle the per-reasoning-delta firehose.
 	lastThinkingNs atomic.Int64
+	// thinkingMu guards thinkingTail, the rolling tail of recent reasoning text
+	// that throttled EmitThinking frames condense into a chip-sized preview.
+	thinkingMu   sync.Mutex
+	thinkingTail []rune
 }
 
 // NewBroadcaster creates a new Broadcaster for a given session/run.
@@ -65,10 +83,13 @@ func (sb *Broadcaster) EmitDelta(text string) {
 }
 
 // EmitThinking broadcasts a reasoning-in-progress liveness signal, throttled
-// to at most one frame per thinkingThrottle. Subscribers (native client SSE)
-// use it to show a "thinking" indicator before the first visible token; the
-// payload carries no content.
-func (sb *Broadcaster) EmitThinking() {
+// to at most one frame per thinkingThrottle. delta is the reasoning text chunk
+// that triggered the pulse: every chunk is accumulated into a rolling tail, and
+// each throttled frame carries a chip-sized `preview` of the most recent
+// reasoning so the client's "깊이 생각 중" indicator can narrate the live
+// thought instead of sitting static for the whole reasoning stretch.
+func (sb *Broadcaster) EmitThinking(delta string) {
+	sb.appendThinking(delta)
 	now := time.Now().UnixNano()
 	last := sb.lastThinkingNs.Load()
 	if now-last < int64(thinkingThrottle) {
@@ -78,7 +99,43 @@ func (sb *Broadcaster) EmitThinking() {
 	if !sb.lastThinkingNs.CompareAndSwap(last, now) {
 		return
 	}
-	sb.emit(EventThinking, map[string]any{})
+	payload := map[string]any{}
+	if preview := sb.thinkingPreview(); preview != "" {
+		payload["preview"] = preview
+	}
+	sb.emit(EventThinking, payload)
+}
+
+// appendThinking adds a reasoning chunk to the rolling tail, trimming the
+// front so the buffer never exceeds thinkingTailRunes.
+func (sb *Broadcaster) appendThinking(delta string) {
+	if delta == "" {
+		return
+	}
+	sb.thinkingMu.Lock()
+	defer sb.thinkingMu.Unlock()
+	sb.thinkingTail = append(sb.thinkingTail, []rune(delta)...)
+	if over := len(sb.thinkingTail) - thinkingTailRunes; over > 0 {
+		sb.thinkingTail = sb.thinkingTail[over:]
+	}
+}
+
+// thinkingPreview condenses the rolling tail into a single chip-sized line:
+// whitespace collapsed, truncated from the front (the most recent thought is
+// the interesting part) with a leading ellipsis when cut.
+func (sb *Broadcaster) thinkingPreview() string {
+	sb.thinkingMu.Lock()
+	tail := string(sb.thinkingTail)
+	sb.thinkingMu.Unlock()
+	collapsed := strings.Join(strings.Fields(tail), " ")
+	runes := []rune(collapsed)
+	if len(runes) < thinkingPreviewMinRunes {
+		return ""
+	}
+	if len(runes) <= thinkingPreviewRunes {
+		return collapsed
+	}
+	return "…" + string(runes[len(runes)-thinkingPreviewRunes:])
 }
 
 // EmitToolStart broadcasts a tool invocation start event. detail is an

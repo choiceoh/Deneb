@@ -39,7 +39,9 @@ type streamEventSinks struct {
 	// tool progress in its waiting indicator.
 	OnTool func(ev ToolStreamEvent)
 	// OnThinking signals reasoning-in-progress (throttled by the broadcaster).
-	OnThinking func()
+	// preview is a chip-sized tail of the recent reasoning text ("" when the
+	// broadcaster has nothing readable yet).
+	OnThinking func(preview string)
 }
 
 // executeAgentRunWithDelta is a variant of executeAgentRun that forwards the
@@ -92,7 +94,15 @@ func executeAgentRunWithDelta(
 			if sinks.OnThinking == nil {
 				return 0
 			}
-			sinks.OnThinking()
+			var envelope struct {
+				Payload struct {
+					Preview string `json:"preview"`
+				} `json:"payload"`
+			}
+			// Best-effort: a parse failure still delivers the liveness pulse,
+			// just without the preview text.
+			_ = json.Unmarshal(data, &envelope)
+			sinks.OnThinking(envelope.Payload.Preview)
 		default:
 			return 0
 		}

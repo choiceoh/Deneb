@@ -14,6 +14,13 @@ internal object ToolStatusLabels {
     /** Waiting-chip label while the model streams reasoning (no tool yet). */
     const val THINKING = "깊이 생각 중…"
 
+    /**
+     * Waiting-chip label for the stretch between agent steps: the last running
+     * tool finished and the model is back in an LLM step reading its results
+     * (a cache-missed prefill can hold this silent for tens of seconds).
+     */
+    const val REVIEWING = "결과 검토 중…"
+
     // Noun + "~ 중" forms only: failureLabel swaps the " 중" suffix for
     // " 실패", so verb forms ("보내는 중") would conjugate badly there.
     private val labels = mapOf(

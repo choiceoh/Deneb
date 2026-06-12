@@ -620,7 +620,7 @@ func TestRunAgent_StreamHooks_Called(t *testing.T) {
 		OnTextDelta: func(text string) {
 			textDeltas = append(textDeltas, text)
 		},
-		OnThinking: func() {
+		OnThinking: func(string) {
 			atomic.AddInt32(&thinkingHits, 1)
 		},
 		OnToolStart: func(name, _ string, _ []byte) {

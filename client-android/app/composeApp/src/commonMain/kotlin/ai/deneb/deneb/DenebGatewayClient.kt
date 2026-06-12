@@ -351,11 +351,17 @@ class DenebGatewayClient(
      * up through its existing executing-tools derivation — the same mechanism
      * the local-provider pipeline uses.
      *
+     * Coverage goal: never regress the chip to the generic spinner mid-turn.
+     * Thinking frames narrate the live reasoning tail ("깊이 생각 중: …"), and
+     * when the last running tool completes the row is repurposed as a
+     * continuity status ("결과 검토 중…") that bridges the event-silent prefill
+     * stretch until the next thinking/tool/delta event.
+     *
      * Threading: all map/flag state is touched only from the SSE read coroutine
-     * (callbacks run inline in [sendStreaming]); the delayed removals launched
-     * on [scope] only filter history by row id, so no synchronization is
-     * needed. [clear] runs in ask()'s finally, so a mid-stream error or cancel
-     * can never leak a zombie chip row.
+     * (callbacks run inline in [sendStreaming]); the delayed removals/swaps
+     * launched on [scope] only perform id-keyed history edits, so no
+     * synchronization is needed. [clear] runs in ask()'s finally, so a
+     * mid-stream error or cancel can never leak a zombie chip row.
      */
     private inner class TurnProgress {
         private val thinkingId = "progress-thinking-${Uuid.random()}"
@@ -366,34 +372,56 @@ class DenebGatewayClient(
         private val startMarks = mutableMapOf<String, TimeSource.Monotonic.ValueTimeMark>()
         private val allRowIds = mutableSetOf<String>()
 
+        // Row currently repurposed as the between-steps continuity status
+        // ("결과 검토 중…"); null when no continuity chip is showing.
+        private var continuityRowId: String? = null
+
         // Completed tools in execution order (tool name + error flag) — the
         // source of the post-turn footprint line under the answer.
         private val trail = mutableListOf<Pair<String, Boolean>>()
 
-        /** Reasoning liveness pulse → show "깊이 생각 중…" until text or a tool arrives. */
-        fun onThinking() {
-            if (thinkingVisible) return
-            thinkingVisible = true
-            allRowIds += thinkingId
-            _chatHistory.update { list ->
-                list + History(
-                    id = thinkingId,
-                    role = History.Role.TOOL_EXECUTING,
-                    content = "thinking",
-                    toolName = ToolStatusLabels.THINKING,
-                    isStatusMessage = true,
-                )
+        /**
+         * Reasoning liveness pulse → show "깊이 생각 중…" until text or a tool
+         * arrives. [preview] is a chip-sized tail of the live reasoning text
+         * (server-throttled to ~1 frame / 2s); when present the row narrates
+         * the actual thought — "깊이 생각 중: …발신인 이력을 대조" — and each
+         * pulse refreshes it.
+         */
+        fun onThinking(preview: String) {
+            hideContinuity()
+            val label = ToolStatusLabels.THINKING +
+                if (preview.isNotEmpty()) ": $preview" else ""
+            if (!thinkingVisible) {
+                thinkingVisible = true
+                allRowIds += thinkingId
+                _chatHistory.update { list ->
+                    list + History(
+                        id = thinkingId,
+                        role = History.Role.TOOL_EXECUTING,
+                        content = "thinking",
+                        toolName = label,
+                        isStatusMessage = true,
+                    )
+                }
+            } else if (preview.isNotEmpty()) {
+                _chatHistory.update { list ->
+                    list.map { if (it.id == thinkingId) it.copy(toolName = label) else it }
+                }
             }
         }
 
-        /** Visible answer text is flowing — drop the thinking row (O(1) when hidden). */
-        fun onDelta() = hideThinking()
+        /** Visible answer text is flowing — drop the status rows (O(1) when hidden). */
+        fun onDelta() {
+            hideThinking()
+            hideContinuity()
+        }
 
         fun onTool(ev: ToolEvent) {
             val key = ev.toolUseId.ifEmpty { ev.tool }
             when (ev.state) {
                 "started" -> {
                     hideThinking()
+                    hideContinuity()
                     val rowId = "progress-tool-${Uuid.random()}"
                     rowIds[key] = rowId
                     startMarks[key] = TimeSource.Monotonic.markNow()
@@ -433,6 +461,39 @@ class DenebGatewayClient(
                     }
                     val elapsed = startMarks.remove(key)?.elapsedNow() ?: 0.milliseconds
                     val remaining = MIN_PROGRESS_DISPLAY_MS.milliseconds - elapsed
+                    if (rowIds.isEmpty()) {
+                        // Last running tool finished — the model is back in an
+                        // LLM step reading the results, which on a cache-missed
+                        // prefill can stay event-silent for tens of seconds.
+                        // Repurpose the row as a continuity status instead of
+                        // dropping the chip back to the generic spinner; the
+                        // next thinking/tool/delta event (or clear) removes it.
+                        continuityRowId = rowId
+                        val swap = {
+                            _chatHistory.update { list ->
+                                list.map {
+                                    if (it.id == rowId) {
+                                        it.copy(content = "continuity", toolName = ToolStatusLabels.REVIEWING)
+                                    } else {
+                                        it
+                                    }
+                                }
+                            }
+                        }
+                        if (remaining.isPositive()) {
+                            // Keep the finished tool's label readable first. The
+                            // delayed swap is an idempotent id-keyed map, so
+                            // racing hideContinuity()/clear() (row already gone)
+                            // is harmless.
+                            scope.launch {
+                                delay(remaining)
+                                swap()
+                            }
+                        } else {
+                            swap()
+                        }
+                        return
+                    }
                     if (remaining.isPositive()) {
                         // Hold fast tools on screen long enough to read; the
                         // removal is an idempotent id filter, so racing clear()
@@ -477,6 +538,7 @@ class DenebGatewayClient(
         fun clear() {
             if (allRowIds.isEmpty()) return
             thinkingVisible = false
+            continuityRowId = null
             val ids = allRowIds.toSet()
             _chatHistory.update { list -> list.filter { it.id !in ids } }
         }
@@ -485,6 +547,12 @@ class DenebGatewayClient(
             if (!thinkingVisible) return
             thinkingVisible = false
             removeRow(thinkingId)
+        }
+
+        private fun hideContinuity() {
+            val id = continuityRowId ?: return
+            continuityRowId = null
+            removeRow(id)
         }
 
         private fun removeRow(id: String) {
@@ -953,7 +1021,9 @@ class DenebGatewayClient(
      * and invokes [onDelta] with each assistant text chunk as it arrives. The
      * gateway also frames live progress — [onTool] fires on tool lifecycle
      * transitions (state "started"/"completed") and [onThinking] on throttled
-     * reasoning liveness pulses — which [ask] surfaces in the waiting chip. The
+     * reasoning liveness pulses (carrying a chip-sized preview of the live
+     * reasoning text, "" on older gateways) — which [ask] surfaces in the
+     * waiting chip. The
      * terminal `done` frame carries the canonical text + which model answered,
      * returned as the [GatewayReply]. Throws on transport failure or a server
      * `error` frame so [ask] can fall back to the blocking RPC.
@@ -968,7 +1038,7 @@ class DenebGatewayClient(
     private suspend fun sendStreaming(
         message: String,
         onTool: (ToolEvent) -> Unit = {},
-        onThinking: () -> Unit = {},
+        onThinking: (String) -> Unit = {},
         onDelta: (String) -> Unit,
     ): GatewayReply {
         if (clientToken.isEmpty()) {
@@ -1027,7 +1097,15 @@ class DenebGatewayClient(
                                 }
                             }
 
-                            "thinking" -> onThinking()
+                            "thinking" -> {
+                                // preview: chip-sized tail of the live reasoning
+                                // text; absent on bare liveness pulses (and on
+                                // older gateways, which send an empty object).
+                                val preview = runCatching {
+                                    jsonCodec.decodeFromString(ThinkingEvent.serializer(), data.toString()).preview
+                                }.getOrNull() ?: ""
+                                onThinking(preview)
+                            }
 
                             "done" -> {
                                 runCatching {
@@ -1243,6 +1321,11 @@ class DenebGatewayClient(
         val detail: String = "",
         val isError: Boolean = false,
     )
+
+    // preview: chip-sized tail of the live reasoning text the gateway condenses
+    // from the model's thinking stream; empty on bare liveness pulses.
+    @Serializable
+    private data class ThinkingEvent(val preview: String = "")
 
     @Serializable
     private data class DoneEvent(val text: String = "", val model: String = "", val fellBack: Boolean = false)

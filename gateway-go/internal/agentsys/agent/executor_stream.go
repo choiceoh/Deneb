@@ -203,7 +203,7 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 						}
 						currentBlock.block.Text += chunk
 						if hooks.OnThinking != nil {
-							hooks.OnThinking()
+							hooks.OnThinking(chunk)
 						}
 					case "signature_delta":
 						// Anthropic attaches a cryptographic signature at the end of a
