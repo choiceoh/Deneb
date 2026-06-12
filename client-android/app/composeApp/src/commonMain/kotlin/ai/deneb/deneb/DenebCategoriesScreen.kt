@@ -1,21 +1,16 @@
 package ai.deneb.deneb
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,7 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ai.deneb.Platform
 import ai.deneb.currentPlatform
-import ai.deneb.ui.DenebType
+import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebPressable
 import kotlinx.coroutines.launch
@@ -44,8 +39,7 @@ private const val PEOPLE_WIKI_CATEGORY = "인물"
  * Wiki category browser (`miniapp.memory.categories`): every category with its
  * page count + corpus totals. Tap a category to list its pages. Also the browse
  * hub's pinned entry points — "사람" (the merged people surface) and "최근 일기"
- * — which are not wiki categories themselves. Surface-wrapped so unstyled text
- * inherits the right content color in dark mode.
+ * — which are not wiki categories themselves. Framed by [DenebScreenScaffold].
  */
 @Composable
 fun DenebCategoriesScreen(
@@ -70,26 +64,21 @@ fun DenebCategoriesScreen(
     }
     LaunchedEffect(Unit) { load() }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    // Desktop: the persistent sidebar is the navigation — a back affordance on a
+    // top-level section is redundant there (showBack drops it).
+    DenebScreenScaffold(
+        title = "카테고리",
+        onBack = onBack,
+        tabBar = navigationTabBar,
+        showBack = currentPlatform !is Platform.Desktop,
+    ) {
         Column(
-            modifier = Modifier.statusBarsPadding().padding(16.dp).verticalScroll(rememberScrollState()),
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp),
         ) {
-            if (navigationTabBar != null) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
-                Spacer(Modifier.height(16.dp))
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "카테고리",
-                    style = DenebType.viewTitle,
-                    modifier = Modifier.weight(1f),
-                )
-                // Desktop: the persistent sidebar is the navigation — a close
-                // affordance on a top-level section is redundant there.
-                if (currentPlatform !is Platform.Desktop) {
-                    TextButton(onClick = onBack) { Text("닫기") }
-                }
-            }
             Spacer(Modifier.height(8.dp))
 
             // Pinned entry points above the wiki buckets: the merged people surface

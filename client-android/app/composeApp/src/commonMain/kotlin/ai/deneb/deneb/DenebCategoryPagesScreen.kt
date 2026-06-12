@@ -3,23 +3,19 @@ package ai.deneb.deneb
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,15 +31,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import kotlinx.coroutines.launch
 
 /**
  * Pages within one wiki category (`miniapp.memory.list_in_category`). Tap a page
- * to open it; long-press (with haptic) to enter multi-select mode, then a tonal
+ * to open it; long-press (with haptic) to enter multi-select mode, then a flat
  * bottom bar deletes the selected pages via `miniapp.memory.delete_pages` after a
- * confirmation. Surface-wrapped for dark mode.
+ * confirmation. Framed by [DenebScreenScaffold].
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -106,13 +104,8 @@ fun DenebCategoryPagesScreen(
         )
     }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp).padding(top = 16.dp)) {
-                if (navigationTabBar != null) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
-                    Spacer(Modifier.height(12.dp))
-                }
+    DenebScreenScaffold(title = "카테고리", onBack = onBack, tabBar = navigationTabBar) {
+            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
                 if (selecting) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -124,8 +117,6 @@ fun DenebCategoryPagesScreen(
                         TextButton(onClick = { clearSelection() }) { Text("취소") }
                     }
                 } else {
-                    TextButton(onClick = onBack) { Text("← 뒤로") }
-                    Spacer(Modifier.height(4.dp))
                     Text(
                         category.ifBlank { "(미분류)" },
                         style = DenebType.subject,
@@ -139,7 +130,7 @@ fun DenebCategoryPagesScreen(
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 Column(
                     modifier = Modifier
-                        .padding(horizontal = 16.dp)
+                        .padding(horizontal = 24.dp)
                         .verticalScroll(rememberScrollState()),
                 ) {
                     val p = pages
@@ -231,9 +222,11 @@ fun DenebCategoryPagesScreen(
             }
 
             if (selecting && selected.isNotEmpty()) {
-                Surface(tonalElevation = 3.dp, shadowElevation = 6.dp) {
+                // Flat action bar in the Deneb idiom: a hairline above, no elevation.
+                Column(Modifier.fillMaxWidth()) {
+                    HorizontalDivider(color = denebHairline())
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text("${selected.size}개 선택", style = MaterialTheme.typography.titleSmall)
@@ -247,6 +240,5 @@ fun DenebCategoryPagesScreen(
                     }
                 }
             }
-        }
     }
 }

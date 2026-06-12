@@ -5,17 +5,12 @@ import ai.deneb.Platform
 import ai.deneb.currentPlatform
 import ai.deneb.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -23,7 +18,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,14 +31,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.denebContentWidthModifier
+import ai.deneb.ui.DenebScreenScaffold
 import kotlinx.coroutines.launch
 
 /**
  * Unified discovery (`miniapp.search.all`): one box searches wiki, diary and
- * people. Wiki hits open the page view; people/diary show inline. Surface-
- * wrapped so all text is visible in dark mode.
+ * people. Wiki hits open the page view; people/diary show inline. Framed by
+ * [DenebScreenScaffold].
  */
 @Composable
 fun DenebSearchScreen(
@@ -74,33 +67,29 @@ fun DenebSearchScreen(
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-            Column(
-                // imePadding before verticalScroll shrinks the scroll viewport to end
-                // above the soft keyboard, so the bottom search results stay reachable
-                // instead of hiding behind it (edge-to-edge: the app owns the IME inset).
-                modifier = denebContentWidthModifier().statusBarsPadding().imePadding().padding(16.dp).verticalScroll(rememberScrollState()),
-            ) {
-            if (navigationTabBar != null) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { navigationTabBar() }
-                Spacer(Modifier.height(16.dp))
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "검색",
-                    style = DenebType.viewTitle,
-                    modifier = Modifier.weight(1f),
-                )
+    // Desktop: the persistent sidebar is the navigation — a back affordance on a
+    // top-level section is redundant there (showBack drops it).
+    DenebScreenScaffold(
+        title = "검색",
+        onBack = onBack,
+        tabBar = navigationTabBar,
+        showBack = currentPlatform !is Platform.Desktop,
+    ) {
+        Column(
+            // The scaffold's imePadding shrinks this weighted column above the soft
+            // keyboard, so the bottom search results stay reachable instead of
+            // hiding behind it (edge-to-edge: the app owns the IME inset).
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp),
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onOpenCategories) { Text("카테고리") }
                 TextButton(onClick = { onOpenWiki("") }) { Text("+ 새 위키") }
-                // Desktop: the persistent sidebar is the navigation — a close
-                // affordance on a top-level section is redundant there.
-                if (currentPlatform !is Platform.Desktop) {
-                    TextButton(onClick = onBack) { Text("닫기") }
-                }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = query,
@@ -155,7 +144,6 @@ fun DenebSearchScreen(
                     Spacer(Modifier.height(24.dp))
                 }
             }
-        }
         }
     }
 }
