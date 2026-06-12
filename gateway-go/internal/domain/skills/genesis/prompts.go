@@ -105,7 +105,12 @@ const evolveSystemPrompt = `당신은 AI 에이전트의 스킬 개선 시스템
 {
   "skip": true,
   "reason": "이유"
-}`
+}
+
+## body 작성 규칙
+
+- body에는 frontmatter("---" 블록, name/version/description 메타데이터)를 절대 포함하지 마세요. frontmatter는 시스템이 별도로 관리합니다. body는 "# 제목"부터 시작하는 본문만 담으세요.
+- new_version은 현재 버전에서 patch를 1 올린 값으로 지정하세요 (예: 1.1.0 → 1.1.1).`
 
 // skillJudgeSystemPrompt drives the self-test: an LLM validates an evolved
 // skill body against the original BEFORE it is committed. Conservative by
