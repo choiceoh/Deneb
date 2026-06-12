@@ -4,8 +4,11 @@ import ai.deneb.deneb.generated.SkillLifecycleEvent
 import ai.deneb.deneb.generated.SkillRow
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,12 +21,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -76,20 +78,7 @@ internal fun SkillsTab(client: DenebGatewayClient, onOpenSkill: (String) -> Unit
     }
 
     Column(Modifier.fillMaxSize()) {
-        SingleChoiceSegmentedButtonRow(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        ) {
-            SegmentedButton(
-                selected = !showLifecycle,
-                onClick = { showLifecycle = false },
-                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-            ) { Text("스킬 목록") }
-            SegmentedButton(
-                selected = showLifecycle,
-                onClick = { showLifecycle = true },
-                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-            ) { Text("진화 내역") }
-        }
+        SkillsViewSwitcher(showLifecycle) { showLifecycle = it }
         if (!showLifecycle) {
             when {
                 skills.isEmpty() && loadFailed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -120,6 +109,46 @@ internal fun SkillsTab(client: DenebGatewayClient, onOpenSkill: (String) -> Unit
                 else -> SkillLifecycleContent(events)
             }
         }
+    }
+}
+
+// Flat view switcher in the Deneb idiom — ink-vs-hint text over a shared
+// hairline, no capsule or fill. The Material SegmentedButton it replaces read
+// as a third chrome layer stacked under the settings hub's pill tab bar; this
+// is view navigation (not a form input), so presentation belongs to Deneb
+// while each label keeps Material selectable + Role.Tab semantics.
+@Composable
+internal fun SkillsViewSwitcher(showLifecycle: Boolean, onSelect: (Boolean) -> Unit) {
+    val haptics = rememberHaptics()
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            listOf("스킬 목록" to false, "진화 내역" to true).forEach { (label, lifecycle) ->
+                val selected = showLifecycle == lifecycle
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (selected) MaterialTheme.colorScheme.onSurface else denebHint(),
+                    modifier = Modifier
+                        .handCursor()
+                        .selectable(
+                            selected = selected,
+                            role = Role.Tab,
+                            onClick = {
+                                if (!selected) {
+                                    haptics.tap()
+                                    onSelect(lifecycle)
+                                }
+                            },
+                        )
+                        .padding(horizontal = 8.dp, vertical = 10.dp),
+                )
+            }
+        }
+        HorizontalDivider(color = denebHairline())
     }
 }
 
