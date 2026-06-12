@@ -1,0 +1,16 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>TooGenericExceptionThrown:EmailConnection.android.kt$JvmEmailConnection$throw Exception("Connection closed")</ID>
+    <ID>TooGenericExceptionThrown:EmailConnection.ios.kt$KtorEmailConnection$throw Exception("Connection closed")</ID>
+    <ID>TooGenericExceptionThrown:EmailConnection.jvm.kt$JvmEmailConnection$throw Exception("Connection closed")</ID>
+    <ID>TooGenericExceptionThrown:SmtpClient.kt$SmtpClient$throw Exception("AUTH LOGIN not supported: $authResponse")</ID>
+    <ID>TooGenericExceptionThrown:SmtpClient.kt$SmtpClient$throw Exception("Auth username rejected: $userResponse")</ID>
+    <ID>TooGenericExceptionThrown:SmtpClient.kt$SmtpClient$throw Exception("Authentication failed: $passResponse")</ID>
+    <ID>TooGenericExceptionThrown:SmtpClient.kt$SmtpClient$throw Exception("DATA failed: $response")</ID>
+    <ID>TooGenericExceptionThrown:SmtpClient.kt$SmtpClient$throw Exception("MAIL FROM failed: $response")</ID>
+    <ID>TooGenericExceptionThrown:SmtpClient.kt$SmtpClient$throw Exception("RCPT TO failed: $response")</ID>
+    <ID>TooGenericExceptionThrown:SmtpClient.kt$SmtpClient$throw Exception("STARTTLS failed: $response")</ID>
+  </CurrentIssues>
+</SmellBaseline>

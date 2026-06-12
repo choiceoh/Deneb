@@ -1,5 +1,6 @@
 package ai.deneb.ui.markdown
 
+import ai.deneb.ui.markdown.math.MathFormula
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -12,7 +13,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
-import ai.deneb.ui.markdown.math.MathFormula
 import kotlinx.collections.immutable.ImmutableList
 
 /**

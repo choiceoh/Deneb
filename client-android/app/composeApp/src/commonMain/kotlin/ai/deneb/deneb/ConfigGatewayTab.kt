@@ -1,5 +1,11 @@
 package ai.deneb.deneb
 
+import ai.deneb.contacts.ContactsReader
+import ai.deneb.data.AppSettings
+import ai.deneb.tools.ContactsPermissionController
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.handCursor
+import ai.deneb.ui.settings.SettingsCard
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -37,12 +43,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ai.deneb.data.AppSettings
-import ai.deneb.contacts.ContactsReader
-import ai.deneb.tools.ContactsPermissionController
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.handCursor
-import ai.deneb.ui.settings.SettingsCard
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 

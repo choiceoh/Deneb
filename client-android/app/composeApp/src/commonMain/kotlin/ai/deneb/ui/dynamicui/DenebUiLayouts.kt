@@ -2,6 +2,11 @@
 
 package ai.deneb.ui.dynamicui
 
+import ai.deneb.ui.denebAdaptiveCardBorder
+import ai.deneb.ui.denebAdaptiveCardColors
+import ai.deneb.ui.denebExpandIn
+import ai.deneb.ui.denebShrinkOut
+import ai.deneb.ui.handCursor
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -44,11 +49,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.denebExpandIn
-import ai.deneb.ui.denebShrinkOut
-import ai.deneb.ui.handCursor
-import ai.deneb.ui.denebAdaptiveCardBorder
-import ai.deneb.ui.denebAdaptiveCardColors
 
 /**
  * Layout containers of the deneb-ui renderer: column / row / card / list /

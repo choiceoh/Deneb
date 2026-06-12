@@ -2,6 +2,13 @@
 
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.chat.ChatActions
+import ai.deneb.ui.chat.ConversationSummary
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebPressable
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,13 +45,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.chat.ChatActions
-import ai.deneb.ui.chat.ConversationSummary
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHint
-import ai.deneb.ui.denebPressable
-import ai.deneb.ui.handCursor
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.chat_history_empty
 import deneb.composeapp.generated.resources.chat_history_heartbeat_label
@@ -193,7 +193,10 @@ private fun SessionItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .denebPressable(onClick = { haptics.tap(); onClick() })
+            .denebPressable(onClick = {
+                haptics.tap()
+                onClick()
+            })
             .handCursor()
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -283,7 +286,10 @@ private fun SessionFolderHeader(count: Int, expanded: Boolean, onToggle: () -> U
         modifier = Modifier
             .fillMaxWidth()
             .denebPressable(
-                onClick = { haptics.toggle(!expanded); onToggle() },
+                onClick = {
+                    haptics.toggle(!expanded)
+                    onToggle()
+                },
                 onClickLabel = if (expanded) "예약·시스템 세션 접기" else "예약·시스템 세션 펼치기",
                 role = Role.Button,
             )

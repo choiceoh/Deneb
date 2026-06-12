@@ -5,13 +5,13 @@ import ai.deneb.network.tools.ParameterSchema
 import ai.deneb.network.tools.Tool
 import ai.deneb.network.tools.ToolInfo
 import ai.deneb.network.tools.ToolSchema
+import deneb.composeapp.generated.resources.Res
+import deneb.composeapp.generated.resources.tool_web_search_description
+import deneb.composeapp.generated.resources.tool_web_search_name
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
-import deneb.composeapp.generated.resources.Res
-import deneb.composeapp.generated.resources.tool_web_search_description
-import deneb.composeapp.generated.resources.tool_web_search_name
 
 private const val MAX_RESULTS = 5
 

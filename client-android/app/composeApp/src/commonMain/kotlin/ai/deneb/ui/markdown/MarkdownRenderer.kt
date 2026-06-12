@@ -1,30 +1,32 @@
 package ai.deneb.ui.markdown
 
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.dynamicui.DenebUiParser
+import ai.deneb.ui.dynamicui.DenebUiRenderer
+import ai.deneb.ui.dynamicui.FrozenSubmission
+import ai.deneb.ui.markdown.math.MathFormula
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckBox
-import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
-import androidx.compose.material3.Icon
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -33,21 +35,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
-import kotlin.math.sqrt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.dynamicui.FrozenSubmission
-import ai.deneb.ui.dynamicui.DenebUiParser
-import ai.deneb.ui.dynamicui.DenebUiRenderer
-import ai.deneb.ui.markdown.math.MathFormula
 import kotlinx.collections.immutable.persistentListOf
+import kotlin.math.sqrt
 
 /**
  * Render a parsed [MarkdownDocument] as a Compose layout. Each block becomes one child of the
@@ -531,20 +531,19 @@ private fun WideTable(block: Table, numCols: Int) {
 
 // inlineTextLength is the plain-text character count of a cell's inline nodes,
 // used to size table columns by content.
-private fun inlineTextLength(inlines: List<InlineNode>): Int =
-    inlines.sumOf { node ->
-        when (node) {
-            is Text -> node.value.length
-            is InlineCode -> node.code.length
-            is InlineMath -> node.latex.length
-            is Emphasis -> inlineTextLength(node.children)
-            is Strong -> inlineTextLength(node.children)
-            is Strike -> inlineTextLength(node.children)
-            is Link -> inlineTextLength(node.children)
-            is Image -> node.alt.length
-            else -> 0
-        }
+private fun inlineTextLength(inlines: List<InlineNode>): Int = inlines.sumOf { node ->
+    when (node) {
+        is Text -> node.value.length
+        is InlineCode -> node.code.length
+        is InlineMath -> node.latex.length
+        is Emphasis -> inlineTextLength(node.children)
+        is Strong -> inlineTextLength(node.children)
+        is Strike -> inlineTextLength(node.children)
+        is Link -> inlineTextLength(node.children)
+        is Image -> node.alt.length
+        else -> 0
     }
+}
 
 private fun alignTextFor(align: ColumnAlign?): TextAlign = when (align) {
     ColumnAlign.LEFT -> TextAlign.Start

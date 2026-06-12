@@ -1,5 +1,8 @@
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.ui.chat.ChatActions
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,9 +21,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.chat.ChatActions
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.handCursor
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.ic_add
 import deneb.composeapp.generated.resources.ic_history
@@ -89,7 +89,10 @@ private fun WorkFeedButton(onOpenWorkFeed: (() -> Unit)?, count: Int) {
     if (onOpenWorkFeed == null) return
     IconButton(
         modifier = Modifier.handCursor(),
-        onClick = { haptics.tap(); onOpenWorkFeed() },
+        onClick = {
+            haptics.tap()
+            onOpenWorkFeed()
+        },
     ) {
         BadgedBox(
             badge = {
@@ -115,7 +118,10 @@ private fun SessionButton(onOpenSessionDrawer: (() -> Unit)?) {
     if (onOpenSessionDrawer == null) return
     IconButton(
         modifier = Modifier.handCursor(),
-        onClick = { haptics.tap(); onOpenSessionDrawer() },
+        onClick = {
+            haptics.tap()
+            onOpenSessionDrawer()
+        },
     ) {
         Icon(
             imageVector = vectorResource(Res.drawable.ic_history),
@@ -133,7 +139,10 @@ private fun DrawerButton(onOpenDrawer: (() -> Unit)?) {
     if (onOpenDrawer == null) return
     IconButton(
         modifier = Modifier.handCursor(),
-        onClick = { haptics.tap(); onOpenDrawer() },
+        onClick = {
+            haptics.tap()
+            onOpenDrawer()
+        },
     ) {
         Icon(
             imageVector = Icons.Filled.Menu,

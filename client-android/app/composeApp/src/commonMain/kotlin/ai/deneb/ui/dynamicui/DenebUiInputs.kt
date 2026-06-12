@@ -2,6 +2,10 @@
 
 package ai.deneb.ui.dynamicui
 
+import ai.deneb.ui.DenebOutlinedTextField
+import ai.deneb.ui.components.DenebChip
+import ai.deneb.ui.denebBreathing
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.indication
@@ -17,16 +21,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -65,10 +69,6 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebOutlinedTextField
-import ai.deneb.ui.components.DenebChip
-import ai.deneb.ui.denebBreathing
-import ai.deneb.ui.handCursor
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.bot_message_copy_content_description
 import kotlinx.datetime.LocalDate
@@ -359,8 +359,7 @@ private fun isoDateToUtcMillis(value: String): Long? = runCatching {
     LocalDateTime(LocalDate.parse(value), LocalTime(0, 0)).toInstant(TimeZone.UTC).toEpochMilliseconds()
 }.getOrNull()
 
-private fun utcMillisToIsoDate(millis: Long): String =
-    Instant.fromEpochMilliseconds(millis).toLocalDateTime(TimeZone.UTC).date.toString()
+private fun utcMillisToIsoDate(millis: Long): String = Instant.fromEpochMilliseconds(millis).toLocalDateTime(TimeZone.UTC).date.toString()
 
 /** Parse "HH:mm" leniently; blank/garbage falls back to 09:00 (a sane meeting-time seed). */
 private fun parseHm(value: String): LocalTime = runCatching { LocalTime.parse(value) }.getOrNull() ?: LocalTime(9, 0)
@@ -405,7 +404,6 @@ internal fun RenderCheckbox(
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-
 @Composable
 internal fun RenderSelect(
     node: SelectNode,

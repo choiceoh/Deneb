@@ -5,6 +5,9 @@ import ai.deneb.network.tools.ParameterSchema
 import ai.deneb.network.tools.Tool
 import ai.deneb.network.tools.ToolInfo
 import ai.deneb.network.tools.ToolSchema
+import deneb.composeapp.generated.resources.Res
+import deneb.composeapp.generated.resources.tool_fetch_url_description
+import deneb.composeapp.generated.resources.tool_fetch_url_name
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.header
 import io.ktor.client.request.request
@@ -15,9 +18,6 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.Url
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
-import deneb.composeapp.generated.resources.Res
-import deneb.composeapp.generated.resources.tool_fetch_url_description
-import deneb.composeapp.generated.resources.tool_fetch_url_name
 
 private val ALLOWED_METHODS = setOf("GET", "POST", "HEAD")
 private val HTML_TAG_REGEX = Regex("<[^>]*>")

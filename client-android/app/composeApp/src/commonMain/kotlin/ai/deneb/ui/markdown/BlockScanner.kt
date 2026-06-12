@@ -33,16 +33,19 @@ internal object BlockScanner {
     private val ATX_HEADING_REGEX = Regex("""^\s{0,3}(#{1,6})(?:\s+(.*?))?\s*#*\s*$""")
     private val SETEXT_H1_REGEX = Regex("""^\s{0,3}=+\s*$""")
     private val SETEXT_H2_REGEX = Regex("""^\s{0,3}-+\s*$""")
+
     // ASCII rules plus the box-drawing runs LLMs emit as separators (━━━ / ─── / ═══ —
     // 1400+ in real logs). Same-char runs only, so mixed tree art like ┌─┐ never matches.
     private val HR_REGEX = Regex(
         """^\s{0,3}(?:-(?:[ \t]*-){2,}|\*(?:[ \t]*\*){2,}|_(?:[ \t]*_){2,}|─{3,}|━{3,}|═{3,})\s*$""",
     )
     private val BLOCKQUOTE_REGEX = Regex("""^\s{0,3}>\s?(.*)$""")
+
     // ASCII bullets plus the Unicode bullets LLMs emit directly (• ▸ ◦ ‣ — • alone is 1400+
     // in real logs); the renderer always draws "•", so they look the same but now get real
     // list structure (indent, spacing, nesting).
     private val BULLET_REGEX = Regex("""^(\s*)([-*+•▸◦‣])(\s+)(.*)$""")
+
     // Arabic "1." / "1)" plus circled numbers ①. The marker is captured whole in group 2, and
     // the separator is optional for circled forms so "① foo" and "①. foo" both list. Groups now
     // match BULLET_REGEX (1=indent, 2=marker, 3=spacing, 4=content). Circled renders as "N.".

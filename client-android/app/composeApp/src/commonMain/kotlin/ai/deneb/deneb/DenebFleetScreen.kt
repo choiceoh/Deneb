@@ -1,5 +1,11 @@
 package ai.deneb.deneb
 
+import ai.deneb.Platform
+import ai.deneb.currentPlatform
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -47,12 +53,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ai.deneb.Platform
-import ai.deneb.currentPlatform
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHairline
-import ai.deneb.ui.handCursor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -142,7 +142,10 @@ fun DenebFleetScreen(
                             .selectable(
                                 selected = isSelected,
                                 role = Role.Tab,
-                                onClick = { haptics.tap(); scope.launch { pagerState.animateScrollToPage(idx) } },
+                                onClick = {
+                                    haptics.tap()
+                                    scope.launch { pagerState.animateScrollToPage(idx) }
+                                },
                             ),
                         shape = RoundedCornerShape(50),
                         color = if (isSelected) {
@@ -193,10 +196,14 @@ fun DenebFleetScreen(
                 } else {
                     when (FleetTab.entries[page]) {
                         FleetTab.NODES -> FleetNodesPage(state?.nodes.orEmpty(), loaded)
+
                         FleetTab.RECIPES -> FleetRecipesPage(recipes.orEmpty(), loaded) { rc, action ->
-                            haptics.tap(); confirm = rc to action
+                            haptics.tap()
+                            confirm = rc to action
                         }
+
                         FleetTab.MODELS -> FleetModelsPage(client, state?.nodes.orEmpty()) { notice = it }
+
                         FleetTab.JOBS -> FleetJobsPage(client, jobs.orEmpty(), loaded) { notice = it }
                     }
                 }
@@ -229,18 +236,24 @@ fun DenebFleetScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         OutlinedTextField(
-                            value = gmu, onValueChange = { gmu = it },
-                            label = { Text("GPU 메모리 사용률 (0–1)") }, singleLine = true,
+                            value = gmu,
+                            onValueChange = { gmu = it },
+                            label = { Text("GPU 메모리 사용률 (0–1)") },
+                            singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         OutlinedTextField(
-                            value = maxLen, onValueChange = { maxLen = it },
-                            label = { Text("최대 컨텍스트 (tokens)") }, singleLine = true,
+                            value = maxLen,
+                            onValueChange = { maxLen = it },
+                            label = { Text("최대 컨텍스트 (tokens)") },
+                            singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         OutlinedTextField(
-                            value = seqs, onValueChange = { seqs = it },
-                            label = { Text("동시 시퀀스") }, singleLine = true,
+                            value = seqs,
+                            onValueChange = { seqs = it },
+                            label = { Text("동시 시퀀스") },
+                            singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }

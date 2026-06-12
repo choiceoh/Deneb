@@ -1,5 +1,7 @@
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -12,8 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.handCursor
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
@@ -53,7 +53,10 @@ internal fun SmallIconButton(
 private fun SmallIconButtonBox(onClick: () -> Unit, content: @Composable () -> Unit) {
     val haptics = rememberHaptics()
     Box(
-        modifier = Modifier.size(48.dp).clip(CircleShape).handCursor().clickable { haptics.tap(); onClick() },
+        modifier = Modifier.size(48.dp).clip(CircleShape).handCursor().clickable {
+            haptics.tap()
+            onClick()
+        },
         contentAlignment = Alignment.Center,
     ) { content() }
 }

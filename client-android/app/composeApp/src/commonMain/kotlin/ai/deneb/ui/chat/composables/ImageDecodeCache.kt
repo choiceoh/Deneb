@@ -1,7 +1,7 @@
 package ai.deneb.ui.chat.composables
 
-import androidx.compose.ui.graphics.ImageBitmap
 import ai.deneb.decodeToImageBitmap
+import androidx.compose.ui.graphics.ImageBitmap
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 

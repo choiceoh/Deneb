@@ -1,5 +1,11 @@
 package ai.deneb.deneb
 
+import ai.deneb.Platform
+import ai.deneb.currentPlatform
+import ai.deneb.data.AppSettings
+import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,12 +30,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import ai.deneb.Platform
-import ai.deneb.currentPlatform
-import ai.deneb.data.AppSettings
-import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.handCursor
 import kotlinx.coroutines.launch
 
 /**
@@ -90,7 +90,10 @@ fun DenebConfigScreen(
                         .selectable(
                             selected = isSelected,
                             role = Role.Tab,
-                            onClick = { haptics.tap(); scope.launch { pagerState.animateScrollToPage(idx) } },
+                            onClick = {
+                                haptics.tap()
+                                scope.launch { pagerState.animateScrollToPage(idx) }
+                            },
                         ),
                     shape = RoundedCornerShape(50),
                     color = if (isSelected) {

@@ -16,8 +16,12 @@ import kotlin.test.assertTrue
 class DenebClientMailReadOverlayTest {
 
     private fun row(id: String, unread: Boolean) = MailMessage(
-        id = id, from = "a@b.com", subject = "s", snippet = "x",
-        date = "2026-06-11T00:00:00Z", unread = unread,
+        id = id,
+        from = "a@b.com",
+        subject = "s",
+        snippet = "x",
+        date = "2026-06-11T00:00:00Z",
+        unread = unread,
     )
 
     @Test
@@ -39,8 +43,10 @@ class DenebClientMailReadOverlayTest {
         // Reproduces the bug input: the gateway's 30s list cache replays
         // isUnread=true for a message mark_read already cleared.
         val cachedStale = listOf(row("m1", true))
-        assertFalse(applyReadOverlay(cachedStale, setOf("m1")).single().unread,
-            "a refetch within the cache window must not resurrect the dot")
+        assertFalse(
+            applyReadOverlay(cachedStale, setOf("m1")).single().unread,
+            "a refetch within the cache window must not resurrect the dot",
+        )
     }
 
     @Test

@@ -1,5 +1,17 @@
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.DenebCalendar
+import ai.deneb.DenebCategories
+import ai.deneb.DenebConfig
+import ai.deneb.DenebFleet
+import ai.deneb.DenebMail
+import ai.deneb.DenebSearch
+import ai.deneb.Home
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
+import ai.deneb.ui.handCursor
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -22,18 +34,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import ai.deneb.DenebCalendar
-import ai.deneb.DenebCategories
-import ai.deneb.DenebConfig
-import ai.deneb.DenebFleet
-import ai.deneb.DenebMail
-import ai.deneb.DenebSearch
-import ai.deneb.Home
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHairline
-import ai.deneb.ui.denebHint
-import ai.deneb.ui.handCursor
 
 /**
  * Desktop's always-visible left navigation rail — the persistent counterpart to the
@@ -147,7 +147,10 @@ private fun SidebarRow(label: String, selected: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             // Full row width: the whole 200dp band is the click target, not just the glyphs.
             .fillMaxWidth()
-            .clickable(interactionSource = interaction, indication = null) { haptics.tap(); onClick() }
+            .clickable(interactionSource = interaction, indication = null) {
+                haptics.tap()
+                onClick()
+            }
             .handCursor()
             .padding(vertical = 8.dp),
     )

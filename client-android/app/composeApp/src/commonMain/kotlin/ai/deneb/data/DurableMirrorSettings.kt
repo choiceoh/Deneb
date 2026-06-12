@@ -75,11 +75,13 @@ class DurableMirrorSettings(
                 if (!inMirror) mirror.putString(key, value) // backfill: cover a future wipe
                 value
             }
+
             inMirror -> {
                 val value = mirror.getString(key, "")
                 delegate.putString(key, value) // heal the wiped encrypted store
                 value
             }
+
             else -> null
         }
     }

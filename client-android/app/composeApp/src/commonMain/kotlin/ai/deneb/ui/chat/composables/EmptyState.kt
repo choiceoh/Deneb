@@ -1,5 +1,10 @@
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.LogoAnimation
+import ai.deneb.ui.components.animatedGradientBorder
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,17 +23,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.LogoAnimation
-import ai.deneb.ui.components.animatedGradientBorder
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.handCursor
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.start_interactive_ui
-import kotlin.time.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.stringResource
+import kotlin.time.Clock
 
 @Composable
 internal fun EmptyState(
@@ -85,7 +85,10 @@ private fun AnimatedBorderButton(
         modifier = Modifier
             .handCursor()
             .clip(RoundedCornerShape(50))
-            .clickable { haptics.tap(); onClick() }
+            .clickable {
+                haptics.tap()
+                onClick()
+            }
             .animatedGradientBorder(
                 cornerRadius = 50.dp,
                 borderWidth = 3.dp,

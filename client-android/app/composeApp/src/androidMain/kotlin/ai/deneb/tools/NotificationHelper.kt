@@ -1,12 +1,12 @@
 package ai.deneb.tools
 
+import ai.deneb.shared.R
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
-import ai.deneb.shared.R
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.notification_channel_description
 import deneb.composeapp.generated.resources.notification_channel_name

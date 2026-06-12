@@ -1,11 +1,11 @@
 package ai.deneb.sms
 
+import ai.deneb.data.SmsMessage
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.Telephony
 import androidx.core.content.ContextCompat
-import ai.deneb.data.SmsMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.java.KoinJavaComponent.inject

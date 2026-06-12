@@ -1,5 +1,9 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,10 +28,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHairline
 import kotlinx.coroutines.launch
 
 /**
@@ -194,7 +194,17 @@ fun DenebWikiPageScreen(
                             }
                         }
                     },
-                ) { Text(if (saving) "저장 중…" else if (creating) "생성" else "저장") }
+                ) {
+                    Text(
+                        if (saving) {
+                            "저장 중…"
+                        } else if (creating) {
+                            "생성"
+                        } else {
+                            "저장"
+                        },
+                    )
+                }
                 status?.let {
                     Spacer(Modifier.height(8.dp))
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

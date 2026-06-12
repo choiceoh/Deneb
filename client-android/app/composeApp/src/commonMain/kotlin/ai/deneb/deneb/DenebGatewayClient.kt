@@ -1,17 +1,16 @@
 package ai.deneb.deneb
 
 import ai.deneb.data.AppSettings
+import ai.deneb.data.Attachment
 import ai.deneb.data.Conversation
 import ai.deneb.data.DataRepository
 import ai.deneb.data.MemoryEntry
 import ai.deneb.data.RemoteDataRepository
 import ai.deneb.data.ScheduledTask
 import ai.deneb.data.UiSubmission
-import ai.deneb.httpClient
-import ai.deneb.data.Attachment
 import ai.deneb.deneb.generated.SkillRow
+import ai.deneb.httpClient
 import ai.deneb.ui.chat.History
-import kotlinx.collections.immutable.toImmutableList
 import ai.deneb.ui.chat.WorkFeedItem
 import io.github.vinceglb.filekit.PlatformFile
 import io.ktor.client.call.body
@@ -19,9 +18,9 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
-import io.ktor.client.request.prepareGet
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.prepareGet
 import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
@@ -31,6 +30,7 @@ import io.ktor.http.encodeURLParameter
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.utils.io.readUTF8Line
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,9 +49,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
@@ -412,6 +412,7 @@ class DenebGatewayClient(
                         )
                     }
                 }
+
                 "completed" -> {
                     trail += ev.tool to ev.isError
                     val rowId = rowIds.remove(key) ?: return
@@ -673,11 +674,15 @@ class DenebGatewayClient(
 
     /** Observation plane (miniapp.observe.*): read the gateway's own behavior and
      *  recent logs for the settings 관찰 tab. Returns null on transport/auth failure. */
-    internal suspend fun observeBehavior(days: Int): ObserveBehavior? =
-        callRpc("miniapp.observe.behavior", buildJsonObject { put("days", days) })
+    internal suspend fun observeBehavior(days: Int): ObserveBehavior? = callRpc("miniapp.observe.behavior", buildJsonObject { put("days", days) })
 
-    internal suspend fun observeLogs(level: String, limit: Int): ObserveLogsPayload? =
-        callRpc("miniapp.observe.logs", buildJsonObject { put("level", level); put("limit", limit) })
+    internal suspend fun observeLogs(level: String, limit: Int): ObserveLogsPayload? = callRpc(
+        "miniapp.observe.logs",
+        buildJsonObject {
+            put("level", level)
+            put("limit", limit)
+        },
+    )
 
     suspend fun openWorkFeedItem(id: String): String? {
         // Opening a 업무 card runs its analysis in a dedicated side-conversation off
@@ -742,12 +747,14 @@ class DenebGatewayClient(
                 upsertSyncedWorkFeedItem(item)
                 maybeEmitProactiveNotification(item)
             }
+
             "workfeed.updated" -> {
                 // Updates (status flips, action results) refresh the feed but are
                 // not fresh arrivals, so they never raise a notification.
                 val item = decodeWorkFeedItem(event.payload) ?: return
                 upsertSyncedWorkFeedItem(item)
             }
+
             "workfeed.action.run" -> {
                 val action = decodeWorkFeedActionRun(event.payload) ?: return
                 if (action.removeFromFeed) {
@@ -756,6 +763,7 @@ class DenebGatewayClient(
                     upsertSyncedWorkFeedItem(action.item)
                 }
             }
+
             "transcript.appended" -> {
                 if (event.sessionKey.isNotBlank()) {
                     reloadSessions += event.sessionKey
@@ -769,10 +777,9 @@ class DenebGatewayClient(
         return runCatching { jsonCodec.decodeFromJsonElement(WorkFeedItem.serializer(), item) }.getOrNull()
     }
 
-    private fun decodeWorkFeedActionRun(payload: JsonObject?): NativeSyncActionPayload? =
-        runCatching {
-            payload?.let { jsonCodec.decodeFromJsonElement(NativeSyncActionPayload.serializer(), it) }
-        }.getOrNull()
+    private fun decodeWorkFeedActionRun(payload: JsonObject?): NativeSyncActionPayload? = runCatching {
+        payload?.let { jsonCodec.decodeFromJsonElement(NativeSyncActionPayload.serializer(), it) }
+    }.getOrNull()
 
     private fun upsertSyncedWorkFeedItem(item: WorkFeedItem) {
         if (item.id.isBlank()) return
@@ -993,12 +1000,16 @@ class DenebGatewayClient(
             while (!channel.isClosedForRead) {
                 val line = channel.readUTF8Line() ?: break
                 when {
-                    line.startsWith(":") -> Unit // comment / keepalive
+                    line.startsWith(":") -> Unit
+
+                    // comment / keepalive
                     line.startsWith("event:") -> event = line.removePrefix("event:").trim()
+
                     line.startsWith("data:") -> {
                         if (data.isNotEmpty()) data.append('\n')
                         data.append(line.removePrefix("data:").trimStart())
                     }
+
                     line.isEmpty() -> {
                         when (event) {
                             "delta" -> {
@@ -1007,6 +1018,7 @@ class DenebGatewayClient(
                                 }.getOrNull()
                                 if (!d.isNullOrEmpty()) onDelta(d)
                             }
+
                             "tool" -> {
                                 runCatching {
                                     jsonCodec.decodeFromString(ToolEvent.serializer(), data.toString())
@@ -1014,7 +1026,9 @@ class DenebGatewayClient(
                                     if (it.tool.isNotEmpty()) onTool(it)
                                 }
                             }
+
                             "thinking" -> onThinking()
+
                             "done" -> {
                                 runCatching {
                                     jsonCodec.decodeFromString(DoneEvent.serializer(), data.toString())
@@ -1024,6 +1038,7 @@ class DenebGatewayClient(
                                     fellBack = it.fellBack
                                 }
                             }
+
                             "error" -> {
                                 val msg = runCatching {
                                     jsonCodec.decodeFromString(ErrorEvent.serializer(), data.toString()).error
@@ -1081,12 +1096,16 @@ class DenebGatewayClient(
                     while (!channel.isClosedForRead) {
                         val line = channel.readUTF8Line() ?: break
                         when {
-                            line.startsWith(":") -> Unit // keepalive comment
+                            line.startsWith(":") -> Unit
+
+                            // keepalive comment
                             line.startsWith("event:") -> event = line.removePrefix("event:").trim()
+
                             line.startsWith("data:") -> {
                                 if (data.isNotEmpty()) data.append('\n')
                                 data.append(line.removePrefix("data:").trimStart())
                             }
+
                             line.isEmpty() -> {
                                 if (event == "push") {
                                     runCatching {

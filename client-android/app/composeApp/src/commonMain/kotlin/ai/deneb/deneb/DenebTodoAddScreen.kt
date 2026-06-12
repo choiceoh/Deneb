@@ -1,5 +1,9 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebSectionLabel
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,10 +38,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.DenebSectionLabel
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -236,20 +236,35 @@ internal fun TodoAddContent(
     DenebSectionLabel("마감일")
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text("마감일 설정", style = DenebType.body, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.weight(1f))
-        Switch(checked = hasDue, onCheckedChange = { haptics.toggle(it); onHasDue(it) })
+        Switch(checked = hasDue, onCheckedChange = {
+            haptics.toggle(it)
+            onHasDue(it)
+        })
     }
     if (hasDue) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("종일", style = DenebType.body, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.weight(1f))
-            Switch(checked = allDay, onCheckedChange = { haptics.toggle(it); onAllDay(it) })
+            Switch(checked = allDay, onCheckedChange = {
+                haptics.toggle(it)
+                onAllDay(it)
+            })
         }
         Spacer(Modifier.height(8.dp))
         if (allDay) {
-            OutlinedButton(onClick = { haptics.tap(); onPickDate() }, modifier = Modifier.fillMaxWidth()) { Text(dueDateLabel) }
+            OutlinedButton(onClick = {
+                haptics.tap()
+                onPickDate()
+            }, modifier = Modifier.fillMaxWidth()) { Text(dueDateLabel) }
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { haptics.tap(); onPickDate() }, modifier = Modifier.weight(1f)) { Text(dueDateLabel) }
-                OutlinedButton(onClick = { haptics.tap(); onPickTime() }, modifier = Modifier.weight(1f)) { Text(dueTimeLabel) }
+                OutlinedButton(onClick = {
+                    haptics.tap()
+                    onPickDate()
+                }, modifier = Modifier.weight(1f)) { Text(dueDateLabel) }
+                OutlinedButton(onClick = {
+                    haptics.tap()
+                    onPickTime()
+                }, modifier = Modifier.weight(1f)) { Text(dueTimeLabel) }
             }
         }
     }
@@ -260,7 +275,10 @@ internal fun TodoAddContent(
     }
 
     Spacer(Modifier.height(20.dp))
-    Button(onClick = { haptics.confirm(); onSave() }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
+    Button(onClick = {
+        haptics.confirm()
+        onSave()
+    }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
         Text(if (saving) "$saveLabel 중…" else saveLabel)
     }
     Spacer(Modifier.height(24.dp))
@@ -273,11 +291,8 @@ private fun todoDateLabel(d: LocalDate): String {
     return "${d.year}년 ${d.month.ordinal + 1}월 ${d.day}일 ($dow)"
 }
 
-private fun todoTimeLabel(t: LocalTime): String =
-    "${t.hour.toString().padStart(2, '0')}:${t.minute.toString().padStart(2, '0')}"
+private fun todoTimeLabel(t: LocalTime): String = "${t.hour.toString().padStart(2, '0')}:${t.minute.toString().padStart(2, '0')}"
 
-private fun todoDateToUtcMillis(d: LocalDate): Long =
-    LocalDateTime(d, LocalTime(0, 0)).toInstant(TimeZone.UTC).toEpochMilliseconds()
+private fun todoDateToUtcMillis(d: LocalDate): Long = LocalDateTime(d, LocalTime(0, 0)).toInstant(TimeZone.UTC).toEpochMilliseconds()
 
-private fun todoUtcMillisToDate(ms: Long): LocalDate =
-    Instant.fromEpochMilliseconds(ms).toLocalDateTime(TimeZone.UTC).date
+private fun todoUtcMillisToDate(ms: Long): LocalDate = Instant.fromEpochMilliseconds(ms).toLocalDateTime(TimeZone.UTC).date

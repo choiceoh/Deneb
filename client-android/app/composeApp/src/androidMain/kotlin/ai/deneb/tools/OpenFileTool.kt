@@ -1,12 +1,12 @@
 package ai.deneb.tools
 
-import android.content.Context
 import ai.deneb.network.tools.ParameterSchema
 import ai.deneb.network.tools.Tool
 import ai.deneb.network.tools.ToolSchema
 import ai.deneb.sandbox.LinuxSandboxManager
 import ai.deneb.sandbox.openFileWithIntent
 import ai.deneb.sandbox.resolveSandboxFile
+import android.content.Context
 import org.koin.java.KoinJavaComponent.inject
 
 private const val OPEN_FILE_DESCRIPTION = """Open a file from the sandbox /root directory in the user's default Android app — browser for HTML, image viewer for PNG/JPG, PDF viewer for PDF, markdown viewer for .md, etc. This is how you show finished work to the user.

@@ -1,5 +1,7 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,8 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHairline
 import kotlinx.coroutines.launch
 
 /**
@@ -46,11 +46,16 @@ internal fun CronTab(client: DenebGatewayClient, onOpenCron: (String) -> Unit) {
                 onRetry = { scope.launch { loadFailed = !client.loadScheduledTasks() } },
             )
         }
+
         crons.isEmpty() -> EmptyTab("예약된 작업이 없습니다.")
+
         else -> LazyColumn(Modifier.fillMaxSize()) {
             items(crons, key = { it.id }) { cron ->
                 Column(
-                    Modifier.animateItem().fillMaxWidth().clickable { haptics.tap(); onOpenCron(cron.id) }.padding(horizontal = 16.dp, vertical = 14.dp),
+                    Modifier.animateItem().fillMaxWidth().clickable {
+                        haptics.tap()
+                        onOpenCron(cron.id)
+                    }.padding(horizontal = 16.dp, vertical = 14.dp),
                 ) {
                     Text(
                         cron.description.ifBlank { cron.id },

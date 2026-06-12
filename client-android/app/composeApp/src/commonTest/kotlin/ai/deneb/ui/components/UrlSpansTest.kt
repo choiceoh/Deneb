@@ -8,8 +8,7 @@ class UrlSpansTest {
 
     private fun urls(text: String): List<String> = findUrlSpans(text).map { it.url }
 
-    private fun spanText(text: String): List<String> =
-        findUrlSpans(text).map { text.substring(it.start, it.end) }
+    private fun spanText(text: String): List<String> = findUrlSpans(text).map { text.substring(it.start, it.end) }
 
     @Test
     fun `bare url is detected`() {

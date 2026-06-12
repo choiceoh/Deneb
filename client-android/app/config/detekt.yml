@@ -1,0 +1,43 @@
+# Bug-focused detekt profile. buildUponDefaultConfig=true, so this file only
+# turns OFF the taste rulesets and tunes the bug catchers. Formatting is
+# spotless's job; complexity/naming/style opinions are deliberately not gated
+# (same philosophy as gateway-go/.golangci.yml).
+
+complexity:
+  active: false
+
+naming:
+  active: false
+
+style:
+  active: false
+
+comments:
+  active: false
+
+# Bug catchers stay on (potential-bugs, coroutines, exceptions are active in
+# the default config). Tune the few that misfire on idiomatic KMP/Compose:
+exceptions:
+  TooGenericExceptionCaught:
+    # catch (e: Exception) at IO/parse boundaries is the house pattern for
+    # graceful degradation (stores, parsers); generic catches are reviewed
+    # case-by-case, not gated.
+    active: false
+  SwallowedException:
+    active: false
+  InstanceOfCheckForException:
+    # Misfires on the canonical coroutine-safe pattern
+    # `catch (e: Exception) { if (e is CancellationException) throw e }` —
+    # Kotlin has no multi-catch, so the suggested rewrite doesn't exist.
+    active: false
+
+potential-bugs:
+  LateinitUsage:
+    active: false
+
+empty-blocks:
+  EmptyFunctionBlock:
+    # No-op `actual` stubs are the standard KMP pattern for platforms where a
+    # feature doesn't exist (DesktopScrollbar on touch targets, sandbox
+    # controllers off-Android). Not a bug signal here.
+    active: false

@@ -213,20 +213,16 @@ val LightColorScheme = lightColorScheme(
 private val ColorScheme.isDarkFlavor: Boolean get() = background.luminance() < 0.5f
 
 @Composable
-fun denebSuccessContainer(): Color =
-    if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFF1B3A1B) else Color(0xFFE8F5E9)
+fun denebSuccessContainer(): Color = if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFF1B3A1B) else Color(0xFFE8F5E9)
 
 @Composable
-fun denebOnSuccessContainer(): Color =
-    if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFFC8E6C9) else Color(0xFF1B5E20)
+fun denebOnSuccessContainer(): Color = if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFFC8E6C9) else Color(0xFF1B5E20)
 
 @Composable
-fun denebWarningContainer(): Color =
-    if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFF3D2600) else Color(0xFFFFF3E0)
+fun denebWarningContainer(): Color = if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFF3D2600) else Color(0xFFFFF3E0)
 
 @Composable
-fun denebOnWarningContainer(): Color =
-    if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFFFF9100) else Color(0xFFE65100)
+fun denebOnWarningContainer(): Color = if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFFFF9100) else Color(0xFFE65100)
 
 @Composable
 fun outlineTextFieldColors() = OutlinedTextFieldDefaults.colors()

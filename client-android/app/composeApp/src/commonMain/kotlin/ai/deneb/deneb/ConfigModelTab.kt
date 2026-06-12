@@ -1,5 +1,15 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebPressable
+import ai.deneb.ui.handCursor
+import ai.deneb.ui.settings.SettingsCard
+import ai.deneb.ui.statusDanger
+import ai.deneb.ui.statusSuccess
+import ai.deneb.ui.statusWarning
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -49,16 +59,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupPositionProvider
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHairline
-import ai.deneb.ui.denebHint
-import ai.deneb.ui.handCursor
-import ai.deneb.ui.denebPressable
-import ai.deneb.ui.settings.SettingsCard
-import ai.deneb.ui.statusDanger
-import ai.deneb.ui.statusSuccess
-import ai.deneb.ui.statusWarning
 import kotlinx.coroutines.launch
 
 /**
@@ -162,7 +162,10 @@ internal fun ModelTab(client: DenebGatewayClient) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { haptics.tap(); advisoriesOpen = !advisoriesOpen }
+                        .clickable {
+                            haptics.tap()
+                            advisoriesOpen = !advisoriesOpen
+                        }
                         .handCursor()
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -208,7 +211,10 @@ internal fun ModelTab(client: DenebGatewayClient) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { haptics.tap(); role = r }
+                        .clickable {
+                            haptics.tap()
+                            role = r
+                        }
                         .handCursor()
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -381,7 +387,10 @@ internal fun ModelTab(client: DenebGatewayClient) {
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = addBaseUrl,
-                onValueChange = { addBaseUrl = it; addError = null },
+                onValueChange = {
+                    addBaseUrl = it
+                    addError = null
+                },
                 label = { Text("Base URL") },
                 placeholder = { Text("http://127.0.0.1:8000/v1") },
                 singleLine = true,
@@ -392,7 +401,10 @@ internal fun ModelTab(client: DenebGatewayClient) {
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = addModel,
-                onValueChange = { addModel = it; addError = null },
+                onValueChange = {
+                    addModel = it
+                    addError = null
+                },
                 label = { Text("모델 이름") },
                 placeholder = { Text("예: qwen2.5-coder-7b") },
                 singleLine = true,

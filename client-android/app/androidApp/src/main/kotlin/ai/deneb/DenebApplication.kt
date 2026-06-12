@@ -1,11 +1,11 @@
 package ai.deneb
 
+import ai.deneb.data.TaskScheduler
+import ai.deneb.sandbox.sandboxModule
 import android.app.Application
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
-import ai.deneb.data.TaskScheduler
-import ai.deneb.sandbox.sandboxModule
 import org.koin.android.ext.android.inject
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.startKoin

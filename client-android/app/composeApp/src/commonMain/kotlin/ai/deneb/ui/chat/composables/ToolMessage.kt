@@ -1,5 +1,8 @@
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.ui.denebBreathing
+import ai.deneb.ui.denebSpatialSpring
+import ai.deneb.ui.isOledFlavor
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
@@ -36,9 +39,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.denebBreathing
-import ai.deneb.ui.denebSpatialSpring
-import ai.deneb.ui.isOledFlavor
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.tools_count_more
 import deneb.composeapp.generated.resources.waiting_brewing
@@ -62,7 +62,9 @@ internal fun toolSummaryText(
     executingTools: ImmutableList<Pair<String, String>>,
 ): String? = when {
     executingTools.isEmpty() -> null
+
     executingTools.size == 1 -> executingTools.first().second
+
     // "메일 확인 중 외 1" — lead with the first concrete label instead of a
     // bare count, so parallel tools still narrate something meaningful.
     else -> stringResource(Res.string.tools_count_more, executingTools.first().second, executingTools.size - 1)

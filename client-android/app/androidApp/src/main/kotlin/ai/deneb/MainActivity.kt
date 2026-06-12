@@ -1,5 +1,14 @@
 package ai.deneb
 
+import ai.deneb.data.AppSettings
+import ai.deneb.data.DataRepository
+import ai.deneb.data.ThemeMode
+import ai.deneb.deneb.DenebGatewayClient
+import ai.deneb.deneb.captureAudio
+import ai.deneb.deneb.captureImage
+import ai.deneb.ui.DarkColorScheme
+import ai.deneb.ui.LightColorScheme
+import ai.deneb.ui.chat.composables.CaptureActions
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -8,9 +17,9 @@ import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -26,20 +35,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
-import ai.deneb.data.AppSettings
-import ai.deneb.data.DataRepository
-import ai.deneb.data.ThemeMode
-import ai.deneb.deneb.DenebGatewayClient
-import ai.deneb.deneb.captureAudio
-import ai.deneb.deneb.captureImage
-import ai.deneb.ui.chat.composables.CaptureActions
-import ai.deneb.ui.DarkColorScheme
-import ai.deneb.ui.LightColorScheme
 import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.dialogs.init
+import kotlinx.coroutines.launch
 import nl.marc_apps.tts.TextToSpeechEngine
 import nl.marc_apps.tts.rememberTextToSpeechOrNull
-import kotlinx.coroutines.launch
 import org.koin.android.ext.android.get
 
 class MainActivity : ComponentActivity() {

@@ -25,12 +25,10 @@ actual class ContactsPermissionController actual constructor() {
 
     private val permissionResultFlow = MutableStateFlow<Boolean?>(null)
 
-    actual fun hasPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.READ_CONTACTS,
-        ) == PackageManager.PERMISSION_GRANTED
-    }
+    actual fun hasPermission(): Boolean = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.READ_CONTACTS,
+    ) == PackageManager.PERMISSION_GRANTED
 
     actual suspend fun requestPermission(): Boolean {
         if (hasPermission()) return true

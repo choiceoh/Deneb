@@ -1,5 +1,9 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebSectionLabel
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,10 +38,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.DenebSectionLabel
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -225,8 +225,11 @@ fun DenebCalendarAddScreen(
                     state.selectedDateMillis?.let {
                         val picked = utcMillisToLocalDate(it)
                         startDate = picked
-                        if (!multiDay) endDate = picked // single-day: end follows start
-                        else if (endDate < picked) endDate = picked
+                        if (!multiDay) {
+                            endDate = picked // single-day: end follows start
+                        } else if (endDate < picked) {
+                            endDate = picked
+                        }
                     }
                     showStartDatePicker = false
                 }) { Text("확인") }
@@ -269,7 +272,10 @@ fun DenebCalendarAddScreen(
     if (showEndPicker) {
         TimePickerDialog(
             initial = endTime,
-            onConfirm = { endTime = it; showEndPicker = false },
+            onConfirm = {
+                endTime = it
+                showEndPicker = false
+            },
             onDismiss = { showEndPicker = false },
         )
     }
@@ -317,7 +323,10 @@ internal fun CalendarAddContent(
     DenebSectionLabel("일시")
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text("종일", style = DenebType.body, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.weight(1f))
-        Switch(checked = allDay, onCheckedChange = { haptics.toggle(it); onAllDay(it) })
+        Switch(checked = allDay, onCheckedChange = {
+            haptics.toggle(it)
+            onAllDay(it)
+        })
     }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text("여러 날", style = DenebType.body, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.weight(1f))
@@ -325,17 +334,32 @@ internal fun CalendarAddContent(
     }
     Spacer(Modifier.height(8.dp))
     if (multiDay) {
-        OutlinedButton(onClick = { haptics.tap(); onPickStartDate() }, modifier = Modifier.fillMaxWidth()) { Text("시작 $startDateLabel") }
+        OutlinedButton(onClick = {
+            haptics.tap()
+            onPickStartDate()
+        }, modifier = Modifier.fillMaxWidth()) { Text("시작 $startDateLabel") }
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = { haptics.tap(); onPickEndDate() }, modifier = Modifier.fillMaxWidth()) { Text("종료 $endDateLabel") }
+        OutlinedButton(onClick = {
+            haptics.tap()
+            onPickEndDate()
+        }, modifier = Modifier.fillMaxWidth()) { Text("종료 $endDateLabel") }
     } else {
-        OutlinedButton(onClick = { haptics.tap(); onPickStartDate() }, modifier = Modifier.fillMaxWidth()) { Text(startDateLabel) }
+        OutlinedButton(onClick = {
+            haptics.tap()
+            onPickStartDate()
+        }, modifier = Modifier.fillMaxWidth()) { Text(startDateLabel) }
     }
     if (!allDay) {
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { haptics.tap(); onPickStart() }, modifier = Modifier.weight(1f)) { Text("시작 $startLabel") }
-            OutlinedButton(onClick = { haptics.tap(); onPickEnd() }, modifier = Modifier.weight(1f)) { Text("종료 $endLabel") }
+            OutlinedButton(onClick = {
+                haptics.tap()
+                onPickStart()
+            }, modifier = Modifier.weight(1f)) { Text("시작 $startLabel") }
+            OutlinedButton(onClick = {
+                haptics.tap()
+                onPickEnd()
+            }, modifier = Modifier.weight(1f)) { Text("종료 $endLabel") }
         }
     }
 
@@ -364,7 +388,10 @@ internal fun CalendarAddContent(
     }
 
     Spacer(Modifier.height(20.dp))
-    Button(onClick = { haptics.confirm(); onSave() }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
+    Button(onClick = {
+        haptics.confirm()
+        onSave()
+    }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
         Text(if (saving) "$saveLabel 중…" else saveLabel)
     }
     Spacer(Modifier.height(24.dp))
@@ -381,7 +408,12 @@ private fun TimePickerDialog(
     val haptics = rememberHaptics()
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = { haptics.tap(); onConfirm(LocalTime(state.hour, state.minute)) }) { Text("확인") } },
+        confirmButton = {
+            TextButton(onClick = {
+                haptics.tap()
+                onConfirm(LocalTime(state.hour, state.minute))
+            }) { Text("확인") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
         text = { TimePicker(state = state) },
     )
@@ -391,8 +423,7 @@ private fun TimePickerDialog(
 
 // allDayEndToInclusive converts a stored all-day end (exclusive — midnight after
 // the last day) back to the last visible day, for pre-filling the edit form.
-private fun allDayEndToInclusive(d: LocalDate, t: LocalTime, start: LocalDate): LocalDate =
-    if (t == LocalTime(0, 0) && d > start) d.minus(1, DateTimeUnit.DAY) else d
+private fun allDayEndToInclusive(d: LocalDate, t: LocalTime, start: LocalDate): LocalDate = if (t == LocalTime(0, 0) && d > start) d.minus(1, DateTimeUnit.DAY) else d
 
 private fun parseDateOr(iso: String, fallback: LocalDate): LocalDate {
     if (iso.isBlank()) return fallback
@@ -414,14 +445,10 @@ private fun dateLabel(d: LocalDate): String {
     return "${d.year}년 ${d.month.ordinal + 1}월 ${d.day}일 ($dow)"
 }
 
-private fun timeLabel(t: LocalTime): String =
-    "${t.hour.toString().padStart(2, '0')}:${t.minute.toString().padStart(2, '0')}"
+private fun timeLabel(t: LocalTime): String = "${t.hour.toString().padStart(2, '0')}:${t.minute.toString().padStart(2, '0')}"
 
-private fun timeAfter(a: LocalTime, b: LocalTime): Boolean =
-    a.hour * 60 + a.minute > b.hour * 60 + b.minute
+private fun timeAfter(a: LocalTime, b: LocalTime): Boolean = a.hour * 60 + a.minute > b.hour * 60 + b.minute
 
-private fun localDateToUtcMillis(d: LocalDate): Long =
-    LocalDateTime(d, LocalTime(0, 0)).toInstant(TimeZone.UTC).toEpochMilliseconds()
+private fun localDateToUtcMillis(d: LocalDate): Long = LocalDateTime(d, LocalTime(0, 0)).toInstant(TimeZone.UTC).toEpochMilliseconds()
 
-private fun utcMillisToLocalDate(ms: Long): LocalDate =
-    Instant.fromEpochMilliseconds(ms).toLocalDateTime(TimeZone.UTC).date
+private fun utcMillisToLocalDate(ms: Long): LocalDate = Instant.fromEpochMilliseconds(ms).toLocalDateTime(TimeZone.UTC).date

@@ -32,7 +32,6 @@ private fun blockToSpeakable(block: BlockNode): String = when (block) {
     is DisplayMath -> block.latex
     is DenebUiBlock -> block.node.collectSpeakableText()
     is DenebUiError -> ""
-
     is DenebUiPending -> ""
 }
 

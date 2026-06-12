@@ -1,5 +1,7 @@
 package ai.deneb.ui
 
+import ai.deneb.Platform
+import ai.deneb.currentPlatform
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,8 +31,6 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ai.deneb.Platform
-import ai.deneb.currentPlatform
 
 // The Mini App's component idiom in native Compose: typography on a flat surface,
 // separated by hairline rules — no Material cards, fills, shadows, or icons. These
@@ -90,8 +90,7 @@ val DenebMaxContentWidth: Dp = 760.dp
  * so `min()` misfires. A platform-gated fixed width is the only reliable cap here.
  */
 @Composable
-fun denebContentWidthModifier(cap: Dp = DenebMaxContentWidth): Modifier =
-    if (currentPlatform is Platform.Desktop) Modifier.width(cap) else Modifier.fillMaxWidth()
+fun denebContentWidthModifier(cap: Dp = DenebMaxContentWidth): Modifier = if (currentPlatform is Platform.Desktop) Modifier.width(cap) else Modifier.fillMaxWidth()
 
 /**
  * Centers [content] in a column capped at [cap] (desktop) or filling the width (phone).

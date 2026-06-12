@@ -1,5 +1,12 @@
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.deneb.DenebEmpty
+import ai.deneb.ui.DenebRow
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.chat.WorkFeedItem
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHint
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,21 +37,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ai.deneb.deneb.DenebEmpty
-import ai.deneb.ui.DenebRow
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.chat.WorkFeedItem
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHint
-import ai.deneb.ui.handCursor
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.ic_file
 import deneb.composeapp.generated.resources.ic_image
 import deneb.composeapp.generated.resources.work_feed_title
-import kotlin.time.Clock
 import kotlinx.collections.immutable.ImmutableList
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import kotlin.time.Clock
 
 /**
  * Bottom-sheet content for the work feed (action inbox), in the Deneb idiom:
@@ -128,7 +128,10 @@ private fun WorkFeedRow(
         .filter { it.kind != "open" && it.id.isNotBlank() }
         .take(3)
     DenebRow(
-        onClick = { haptics.tap(); onOpen(item.id) },
+        onClick = {
+            haptics.tap()
+            onOpen(item.id)
+        },
         modifier = Modifier.padding(horizontal = 20.dp),
     ) {
         Row(verticalAlignment = Alignment.Top) {
@@ -184,7 +187,10 @@ private fun WorkFeedRow(
                         actions.forEach { action ->
                             IconButton(
                                 modifier = Modifier.handCursor().size(32.dp),
-                                onClick = { haptics.confirm(); onRunAction(item.id, action.id) },
+                                onClick = {
+                                    haptics.confirm()
+                                    onRunAction(item.id, action.id)
+                                },
                             ) {
                                 Icon(
                                     imageVector = actionIcon(action.kind),

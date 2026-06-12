@@ -2,8 +2,57 @@
 
 package ai.deneb
 
+import ai.deneb.data.AppSettings
+import ai.deneb.data.DataRepository
+import ai.deneb.data.ThemeMode
+import ai.deneb.deneb.DenebCalendarAddScreen
+import ai.deneb.deneb.DenebCalendarEventScreen
+import ai.deneb.deneb.DenebCalendarScreen
+import ai.deneb.deneb.DenebCategoriesScreen
+import ai.deneb.deneb.DenebCategoryPagesScreen
+import ai.deneb.deneb.DenebConfigScreen
+import ai.deneb.deneb.DenebCronEditScreen
+import ai.deneb.deneb.DenebCronScreen
+import ai.deneb.deneb.DenebDiaryScreen
+import ai.deneb.deneb.DenebFleetScreen
+import ai.deneb.deneb.DenebGatewayClient
+import ai.deneb.deneb.DenebMailDetailScreen
+import ai.deneb.deneb.DenebMailScreen
+import ai.deneb.deneb.DenebPeopleScreen
+import ai.deneb.deneb.DenebPersonScreen
+import ai.deneb.deneb.DenebSearchScreen
+import ai.deneb.deneb.DenebTodoAddScreen
+import ai.deneb.deneb.DenebTodoScreen
+import ai.deneb.deneb.DenebWikiPageScreen
+import ai.deneb.deneb.EmptyMailPanel
+import ai.deneb.tools.CalendarPermissionController
+import ai.deneb.tools.ContactsPermissionController
+import ai.deneb.tools.NotificationPermissionController
+import ai.deneb.tools.SetupCalendarPermissionHandler
+import ai.deneb.tools.SetupContactsPermissionHandler
+import ai.deneb.tools.SetupNotificationPermissionHandler
+import ai.deneb.tools.SetupSmsPermissionHandler
+import ai.deneb.tools.SetupSmsSendPermissionHandler
+import ai.deneb.tools.SmsPermissionController
+import ai.deneb.tools.SmsSendPermissionController
+import ai.deneb.ui.DarkColorScheme
+import ai.deneb.ui.LightColorScheme
+import ai.deneb.ui.Theme
+import ai.deneb.ui.chat.ChatScreen
+import ai.deneb.ui.chat.ChatViewModel
+import ai.deneb.ui.chat.composables.CaptureActions
+import ai.deneb.ui.chat.composables.DenebSidebar
+import ai.deneb.ui.chat.composables.LocalCaptureActions
+import ai.deneb.ui.components.FullScreenImageHost
+import ai.deneb.ui.handCursor
+import ai.deneb.ui.withBlackBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +74,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -36,49 +86,6 @@ import coil3.PlatformContext
 import coil3.compose.setSingletonImageLoaderFactory
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.svg.SvgDecoder
-import ai.deneb.data.AppSettings
-import ai.deneb.data.ThemeMode
-import ai.deneb.data.DataRepository
-import ai.deneb.deneb.DenebConfigScreen
-import ai.deneb.deneb.DenebGatewayClient
-import ai.deneb.deneb.DenebCalendarAddScreen
-import ai.deneb.deneb.DenebCalendarEventScreen
-import ai.deneb.deneb.DenebCalendarScreen
-import ai.deneb.deneb.DenebTodoAddScreen
-import ai.deneb.deneb.DenebTodoScreen
-import ai.deneb.deneb.DenebMailDetailScreen
-import ai.deneb.deneb.DenebMailScreen
-import ai.deneb.deneb.EmptyMailPanel
-import ai.deneb.deneb.DenebFleetScreen
-import ai.deneb.deneb.DenebPeopleScreen
-import ai.deneb.deneb.DenebPersonScreen
-import ai.deneb.deneb.DenebCategoriesScreen
-import ai.deneb.deneb.DenebCategoryPagesScreen
-import ai.deneb.deneb.DenebDiaryScreen
-import ai.deneb.deneb.DenebSearchScreen
-import ai.deneb.deneb.DenebCronEditScreen
-import ai.deneb.deneb.DenebCronScreen
-import ai.deneb.deneb.DenebWikiPageScreen
-import ai.deneb.tools.CalendarPermissionController
-import ai.deneb.tools.ContactsPermissionController
-import ai.deneb.tools.NotificationPermissionController
-import ai.deneb.tools.SetupCalendarPermissionHandler
-import ai.deneb.tools.SetupContactsPermissionHandler
-import ai.deneb.tools.SetupNotificationPermissionHandler
-import ai.deneb.tools.SetupSmsPermissionHandler
-import ai.deneb.tools.SetupSmsSendPermissionHandler
-import ai.deneb.tools.SmsPermissionController
-import ai.deneb.tools.SmsSendPermissionController
-import ai.deneb.ui.DarkColorScheme
-import ai.deneb.ui.LightColorScheme
-import ai.deneb.ui.Theme
-import ai.deneb.ui.chat.ChatScreen
-import ai.deneb.ui.chat.ChatViewModel
-import ai.deneb.ui.chat.composables.CaptureActions
-import ai.deneb.ui.chat.composables.LocalCaptureActions
-import ai.deneb.ui.components.FullScreenImageHost
-import ai.deneb.ui.handCursor
-import ai.deneb.ui.withBlackBackground
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.tab_chat
 import deneb.composeapp.generated.resources.tab_settings
@@ -91,13 +98,6 @@ import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.dsl.koinConfiguration
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.width
-import androidx.compose.ui.unit.dp
-import ai.deneb.ui.chat.composables.DenebSidebar
 
 @Serializable
 @SerialName("home")
@@ -329,277 +329,277 @@ private fun AppContent(
                         startDestination = Home,
                         modifier = navHostModifier.background(MaterialTheme.colorScheme.background),
                     ) {
-                    composable<Home> {
-                        ChatScreen(
-                            viewModel = chatViewModel,
-                            // Deneb chat is text-first — the TTS instance App
-                            // still configures above is not wired into chat.
-                            textToSpeech = null,
-                            onNavigateToSettings = {
-                                navController.navigate(DenebConfig)
-                            },
-                            onOpenMail = { navController.navigate(DenebMail) },
-                            onOpenCalendar = { navController.navigate(DenebCalendar) },
-                            onOpenSearch = { navController.navigate(DenebSearch) },
-                            onOpenCategories = { navController.navigate(DenebCategories) },
-                            navigationTabBar = if (showTabBar) navigationTabBar else null,
-                        )
-                    }
-                    composable<DenebConfig> {
-                        DenebConfigScreen(
-                            appSettings = appSettings,
-                            denebClient = denebClient,
-                            onBack = { navController.navigateUp() },
-                            onOpenCron = { id -> navController.navigate(DenebCron(id)) },
-                            onOpenFleet = { navController.navigate(DenebFleet) },
-                            navigationTabBar = if (showTabBar) navigationTabBar else null,
-                        )
-                    }
-                    composable<DenebFleet> {
-                        denebClient?.let { client ->
-                            DenebFleetScreen(
-                                client = client,
-                                onBack = { navController.navigateUp() },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
-                        }
-                    }
-                    composable<DenebMail> {
-                        denebClient?.let { client ->
-                            if (currentPlatform is Platform.Desktop) {
-                                // Desktop split-view: fixed 380dp list + weighted detail pane, side
-                                // by side. A row click sets selectedMailId (no navigate) so the list
-                                // stays put and only the right pane reloads. Fixed width + weight only
-                                // — neither reads maxWidth (headless-harness over-measure trap).
-                                var selectedMailId by rememberSaveable { mutableStateOf<String?>(null) }
-                                Row(Modifier.fillMaxSize()) {
-                                    Box(Modifier.width(380.dp).fillMaxHeight()) {
-                                        DenebMailScreen(
-                                            client = client,
-                                            onBack = { navController.navigateUp() },
-                                            onOpenDetail = { id -> selectedMailId = id },
-                                            navigationTabBar = null,
-                                            panelMode = true,
-                                            selectedId = selectedMailId,
-                                        )
-                                    }
-                                    Box(Modifier.weight(1f).fillMaxHeight()) {
-                                        val openId = selectedMailId
-                                        if (openId != null) {
-                                            DenebMailDetailScreen(
-                                                client = client,
-                                                messageId = openId,
-                                                // Archive/trash success calls onBack -> clears the pane.
-                                                onBack = { selectedMailId = null },
-                                                onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
-                                                navigationTabBar = null,
-                                                panelMode = true,
-                                            )
-                                        } else {
-                                            EmptyMailPanel()
-                                        }
-                                    }
-                                }
-                            } else {
-                                DenebMailScreen(
-                                    client = client,
-                                    onBack = { navController.navigateUp() },
-                                    onOpenDetail = { id -> navController.navigate(DenebMailDetail(id)) },
-                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
-                                )
-                            }
-                        }
-                    }
-                    composable<DenebCalendar> {
-                        denebClient?.let { client ->
-                            DenebCalendarScreen(
-                                client = client,
-                                onBack = { navController.navigateUp() },
-                                onOpenEvent = { id -> navController.navigate(DenebCalendarEvent(id)) },
-                                onAddEvent = { date -> navController.navigate(DenebCalendarAdd(date.toString())) },
-                                onOpenTodos = { navController.navigate(DenebTodo) },
-                                onOpenTodo = { id -> navController.navigate(DenebTodoEdit(id)) },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
-                        }
-                    }
-                    composable<DenebTodo> {
-                        denebClient?.let { client ->
-                            DenebTodoScreen(
-                                client = client,
-                                onBack = { navController.navigateUp() },
-                                onAddTodo = { navController.navigate(DenebTodoAdd) },
-                                onOpenTodo = { id -> navController.navigate(DenebTodoEdit(id)) },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
-                        }
-                    }
-                    composable<DenebTodoAdd> {
-                        denebClient?.let { client ->
-                            DenebTodoAddScreen(
-                                client = client,
-                                onBack = { navController.navigateUp() },
-                                onSaved = { navController.navigateUp() },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
-                        }
-                    }
-                    composable<DenebTodoEdit> { entry ->
-                        denebClient?.let { client ->
-                            DenebTodoAddScreen(
-                                client = client,
-                                editTodoId = entry.toRoute<DenebTodoEdit>().id,
-                                onBack = { navController.navigateUp() },
-                                onSaved = { navController.navigateUp() },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
-                        }
-                    }
-                    composable<DenebCalendarEvent> { entry ->
-                        denebClient?.let { client ->
-                            DenebCalendarEventScreen(
-                                client = client,
-                                eventId = entry.toRoute<DenebCalendarEvent>().id,
-                                onBack = { navController.navigateUp() },
-                                onEdit = { id -> navController.navigate(DenebCalendarEdit(id)) },
-                                onDeleted = { navController.navigateUp() },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
-                        }
-                    }
-                    composable<DenebCalendarAdd> { entry ->
-                        denebClient?.let { client ->
-                            DenebCalendarAddScreen(
-                                client = client,
-                                initialDateIso = entry.toRoute<DenebCalendarAdd>().dateIso,
-                                onBack = { navController.navigateUp() },
-                                onSaved = { navController.navigateUp() },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
-                        }
-                    }
-                    composable<DenebCalendarEdit> { entry ->
-                        denebClient?.let { client ->
-                            DenebCalendarAddScreen(
-                                client = client,
-                                initialDateIso = "",
-                                editEventId = entry.toRoute<DenebCalendarEdit>().id,
-                                onBack = { navController.navigateUp() },
-                                onSaved = { navController.navigateUp() },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
-                        }
-                    }
-                    composable<DenebSearch> {
-                        denebClient?.let { client ->
-                            DenebSearchScreen(
-                                client = client,
-                                onBack = { navController.navigateUp() },
-                                onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
-                                onOpenPerson = { sender -> navController.navigate(DenebPerson(sender)) },
+                        composable<Home> {
+                            ChatScreen(
+                                viewModel = chatViewModel,
+                                // Deneb chat is text-first — the TTS instance App
+                                // still configures above is not wired into chat.
+                                textToSpeech = null,
+                                onNavigateToSettings = {
+                                    navController.navigate(DenebConfig)
+                                },
+                                onOpenMail = { navController.navigate(DenebMail) },
+                                onOpenCalendar = { navController.navigate(DenebCalendar) },
+                                onOpenSearch = { navController.navigate(DenebSearch) },
                                 onOpenCategories = { navController.navigate(DenebCategories) },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }
-                    }
-                    composable<DenebWiki> { entry ->
-                        denebClient?.let { client ->
-                            DenebWikiPageScreen(
-                                client = client,
-                                path = entry.toRoute<DenebWiki>().path,
+                        composable<DenebConfig> {
+                            DenebConfigScreen(
+                                appSettings = appSettings,
+                                denebClient = denebClient,
                                 onBack = { navController.navigateUp() },
+                                onOpenCron = { id -> navController.navigate(DenebCron(id)) },
+                                onOpenFleet = { navController.navigate(DenebFleet) },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }
-                    }
-                    composable<DenebCategories> {
-                        denebClient?.let { client ->
-                            DenebCategoriesScreen(
-                                client = client,
-                                onBack = { navController.navigateUp() },
-                                onOpenCategory = { cat -> navController.navigate(DenebCategoryPages(cat)) },
-                                onOpenDiary = { navController.navigate(DenebDiary) },
-                                onOpenPeople = { navController.navigate(DenebPeople) },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
+                        composable<DenebFleet> {
+                            denebClient?.let { client ->
+                                DenebFleetScreen(
+                                    client = client,
+                                    onBack = { navController.navigateUp() },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
                         }
-                    }
-                    composable<DenebDiary> {
-                        denebClient?.let { client ->
-                            DenebDiaryScreen(
-                                client = client,
-                                onBack = { navController.navigateUp() },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
+                        composable<DenebMail> {
+                            denebClient?.let { client ->
+                                if (currentPlatform is Platform.Desktop) {
+                                    // Desktop split-view: fixed 380dp list + weighted detail pane, side
+                                    // by side. A row click sets selectedMailId (no navigate) so the list
+                                    // stays put and only the right pane reloads. Fixed width + weight only
+                                    // — neither reads maxWidth (headless-harness over-measure trap).
+                                    var selectedMailId by rememberSaveable { mutableStateOf<String?>(null) }
+                                    Row(Modifier.fillMaxSize()) {
+                                        Box(Modifier.width(380.dp).fillMaxHeight()) {
+                                            DenebMailScreen(
+                                                client = client,
+                                                onBack = { navController.navigateUp() },
+                                                onOpenDetail = { id -> selectedMailId = id },
+                                                navigationTabBar = null,
+                                                panelMode = true,
+                                                selectedId = selectedMailId,
+                                            )
+                                        }
+                                        Box(Modifier.weight(1f).fillMaxHeight()) {
+                                            val openId = selectedMailId
+                                            if (openId != null) {
+                                                DenebMailDetailScreen(
+                                                    client = client,
+                                                    messageId = openId,
+                                                    // Archive/trash success calls onBack -> clears the pane.
+                                                    onBack = { selectedMailId = null },
+                                                    onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
+                                                    navigationTabBar = null,
+                                                    panelMode = true,
+                                                )
+                                            } else {
+                                                EmptyMailPanel()
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    DenebMailScreen(
+                                        client = client,
+                                        onBack = { navController.navigateUp() },
+                                        onOpenDetail = { id -> navController.navigate(DenebMailDetail(id)) },
+                                        navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                    )
+                                }
+                            }
                         }
-                    }
-                    composable<DenebCategoryPages> { entry ->
-                        denebClient?.let { client ->
-                            DenebCategoryPagesScreen(
-                                client = client,
-                                category = entry.toRoute<DenebCategoryPages>().category,
-                                onBack = { navController.navigateUp() },
-                                onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
+                        composable<DenebCalendar> {
+                            denebClient?.let { client ->
+                                DenebCalendarScreen(
+                                    client = client,
+                                    onBack = { navController.navigateUp() },
+                                    onOpenEvent = { id -> navController.navigate(DenebCalendarEvent(id)) },
+                                    onAddEvent = { date -> navController.navigate(DenebCalendarAdd(date.toString())) },
+                                    onOpenTodos = { navController.navigate(DenebTodo) },
+                                    onOpenTodo = { id -> navController.navigate(DenebTodoEdit(id)) },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
                         }
-                    }
-                    composable<DenebPeople> {
-                        denebClient?.let { client ->
-                            DenebPeopleScreen(
-                                client = client,
-                                onBack = { navController.navigateUp() },
-                                onOpenPerson = { sender -> navController.navigate(DenebPerson(sender)) },
-                                onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
+                        composable<DenebTodo> {
+                            denebClient?.let { client ->
+                                DenebTodoScreen(
+                                    client = client,
+                                    onBack = { navController.navigateUp() },
+                                    onAddTodo = { navController.navigate(DenebTodoAdd) },
+                                    onOpenTodo = { id -> navController.navigate(DenebTodoEdit(id)) },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
                         }
-                    }
-                    composable<DenebPerson> { entry ->
-                        denebClient?.let { client ->
-                            DenebPersonScreen(
-                                client = client,
-                                sender = entry.toRoute<DenebPerson>().sender,
-                                onBack = { navController.navigateUp() },
-                                onOpenMail = { id -> navController.navigate(DenebMailDetail(id)) },
-                                onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
+                        composable<DenebTodoAdd> {
+                            denebClient?.let { client ->
+                                DenebTodoAddScreen(
+                                    client = client,
+                                    onBack = { navController.navigateUp() },
+                                    onSaved = { navController.navigateUp() },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
                         }
-                    }
-                    composable<DenebCron> { entry ->
-                        denebClient?.let { client ->
-                            DenebCronScreen(
-                                client = client,
-                                cronId = entry.toRoute<DenebCron>().cronId,
-                                onBack = { navController.navigateUp() },
-                                onEdit = { id -> navController.navigate(DenebCronEdit(id)) },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
+                        composable<DenebTodoEdit> { entry ->
+                            denebClient?.let { client ->
+                                DenebTodoAddScreen(
+                                    client = client,
+                                    editTodoId = entry.toRoute<DenebTodoEdit>().id,
+                                    onBack = { navController.navigateUp() },
+                                    onSaved = { navController.navigateUp() },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
                         }
-                    }
-                    composable<DenebCronEdit> { entry ->
-                        denebClient?.let { client ->
-                            DenebCronEditScreen(
-                                client = client,
-                                cronId = entry.toRoute<DenebCronEdit>().cronId,
-                                onBack = { navController.navigateUp() },
-                                onSaved = { navController.navigateUp() },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
+                        composable<DenebCalendarEvent> { entry ->
+                            denebClient?.let { client ->
+                                DenebCalendarEventScreen(
+                                    client = client,
+                                    eventId = entry.toRoute<DenebCalendarEvent>().id,
+                                    onBack = { navController.navigateUp() },
+                                    onEdit = { id -> navController.navigate(DenebCalendarEdit(id)) },
+                                    onDeleted = { navController.navigateUp() },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
                         }
-                    }
-                    composable<DenebMailDetail> { entry ->
-                        denebClient?.let { client ->
-                            DenebMailDetailScreen(
-                                client = client,
-                                messageId = entry.toRoute<DenebMailDetail>().id,
-                                onBack = { navController.navigateUp() },
-                                onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
-                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                            )
+                        composable<DenebCalendarAdd> { entry ->
+                            denebClient?.let { client ->
+                                DenebCalendarAddScreen(
+                                    client = client,
+                                    initialDateIso = entry.toRoute<DenebCalendarAdd>().dateIso,
+                                    onBack = { navController.navigateUp() },
+                                    onSaved = { navController.navigateUp() },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
                         }
-                    }
+                        composable<DenebCalendarEdit> { entry ->
+                            denebClient?.let { client ->
+                                DenebCalendarAddScreen(
+                                    client = client,
+                                    initialDateIso = "",
+                                    editEventId = entry.toRoute<DenebCalendarEdit>().id,
+                                    onBack = { navController.navigateUp() },
+                                    onSaved = { navController.navigateUp() },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
+                        }
+                        composable<DenebSearch> {
+                            denebClient?.let { client ->
+                                DenebSearchScreen(
+                                    client = client,
+                                    onBack = { navController.navigateUp() },
+                                    onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
+                                    onOpenPerson = { sender -> navController.navigate(DenebPerson(sender)) },
+                                    onOpenCategories = { navController.navigate(DenebCategories) },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
+                        }
+                        composable<DenebWiki> { entry ->
+                            denebClient?.let { client ->
+                                DenebWikiPageScreen(
+                                    client = client,
+                                    path = entry.toRoute<DenebWiki>().path,
+                                    onBack = { navController.navigateUp() },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
+                        }
+                        composable<DenebCategories> {
+                            denebClient?.let { client ->
+                                DenebCategoriesScreen(
+                                    client = client,
+                                    onBack = { navController.navigateUp() },
+                                    onOpenCategory = { cat -> navController.navigate(DenebCategoryPages(cat)) },
+                                    onOpenDiary = { navController.navigate(DenebDiary) },
+                                    onOpenPeople = { navController.navigate(DenebPeople) },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
+                        }
+                        composable<DenebDiary> {
+                            denebClient?.let { client ->
+                                DenebDiaryScreen(
+                                    client = client,
+                                    onBack = { navController.navigateUp() },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
+                        }
+                        composable<DenebCategoryPages> { entry ->
+                            denebClient?.let { client ->
+                                DenebCategoryPagesScreen(
+                                    client = client,
+                                    category = entry.toRoute<DenebCategoryPages>().category,
+                                    onBack = { navController.navigateUp() },
+                                    onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
+                        }
+                        composable<DenebPeople> {
+                            denebClient?.let { client ->
+                                DenebPeopleScreen(
+                                    client = client,
+                                    onBack = { navController.navigateUp() },
+                                    onOpenPerson = { sender -> navController.navigate(DenebPerson(sender)) },
+                                    onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
+                        }
+                        composable<DenebPerson> { entry ->
+                            denebClient?.let { client ->
+                                DenebPersonScreen(
+                                    client = client,
+                                    sender = entry.toRoute<DenebPerson>().sender,
+                                    onBack = { navController.navigateUp() },
+                                    onOpenMail = { id -> navController.navigate(DenebMailDetail(id)) },
+                                    onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
+                        }
+                        composable<DenebCron> { entry ->
+                            denebClient?.let { client ->
+                                DenebCronScreen(
+                                    client = client,
+                                    cronId = entry.toRoute<DenebCron>().cronId,
+                                    onBack = { navController.navigateUp() },
+                                    onEdit = { id -> navController.navigate(DenebCronEdit(id)) },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
+                        }
+                        composable<DenebCronEdit> { entry ->
+                            denebClient?.let { client ->
+                                DenebCronEditScreen(
+                                    client = client,
+                                    cronId = entry.toRoute<DenebCronEdit>().cronId,
+                                    onBack = { navController.navigateUp() },
+                                    onSaved = { navController.navigateUp() },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
+                        }
+                        composable<DenebMailDetail> { entry ->
+                            denebClient?.let { client ->
+                                DenebMailDetailScreen(
+                                    client = client,
+                                    messageId = entry.toRoute<DenebMailDetail>().id,
+                                    onBack = { navController.navigateUp() },
+                                    onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
+                                    navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                )
+                            }
+                        }
                     }
                 }
                 // Desktop: persistent left sidebar + content; mobile/web: plain NavHost

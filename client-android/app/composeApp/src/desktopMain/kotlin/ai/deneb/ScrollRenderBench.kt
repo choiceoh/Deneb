@@ -1,5 +1,7 @@
 package ai.deneb
 
+import ai.deneb.ui.DarkColorScheme
+import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -10,8 +12,6 @@ import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DarkColorScheme
-import ai.deneb.ui.markdown.MarkdownContent
 import java.util.Locale
 
 // One-off bench: break a chat message's render into compose / measure / draw so we can see
@@ -19,11 +19,13 @@ import java.util.Locale
 // (fast on a real GPU). SOFTWARE Skia, so absolutes are inflated — the SHAPE (which phase, and
 // markdown vs plain text) is the signal. Run: ./gradlew :composeApp:benchScrollRender
 private val LONG_PLAIN =
-    ("탑솔라 1팀은 이번 주 루프탑 안건을 검토했습니다. 핵심 지표는 RE100 달성률과 모듈 공급 일정이며 장기적으로는 거래처 다변화가 " +
-        "필요합니다. 사업개발은 남도에코와 계약 초안 검토를 마쳤고 2팀은 주차장 태양광 EPC 견적 3건을 수령했습니다. 3팀은 모듈 수입 " +
-        "통관이 약 이틀 지연되었습니다. 김민준 부장과 협의해 다음 주 회의를 잡았고 그 전에 BOM 정리가 선행돼야 합니다. 자금 측면에서 " +
-        "단기 유동성은 충분하나 분기 말 세금 납부 일정과 겹쳐 주의가 필요합니다. 리스크는 환율 변동으로 인한 모듈 원가 상승, 인허가 " +
-        "일정 불확실성, 시공 인력 수급의 계절적 변동입니다. 결론적으로 이번 주는 계약 단계 진입이 가장 중요한 마일스톤이었습니다.").repeat(2)
+    (
+        "탑솔라 1팀은 이번 주 루프탑 안건을 검토했습니다. 핵심 지표는 RE100 달성률과 모듈 공급 일정이며 장기적으로는 거래처 다변화가 " +
+            "필요합니다. 사업개발은 남도에코와 계약 초안 검토를 마쳤고 2팀은 주차장 태양광 EPC 견적 3건을 수령했습니다. 3팀은 모듈 수입 " +
+            "통관이 약 이틀 지연되었습니다. 김민준 부장과 협의해 다음 주 회의를 잡았고 그 전에 BOM 정리가 선행돼야 합니다. 자금 측면에서 " +
+            "단기 유동성은 충분하나 분기 말 세금 납부 일정과 겹쳐 주의가 필요합니다. 리스크는 환율 변동으로 인한 모듈 원가 상승, 인허가 " +
+            "일정 불확실성, 시공 인력 수급의 계절적 변동입니다. 결론적으로 이번 주는 계약 단계 진입이 가장 중요한 마일스톤이었습니다."
+        ).repeat(2)
 
 private val LONG_MD = """
 # 주간 업무 분석
@@ -71,13 +73,19 @@ private fun bench(label: String, n: Int, content: @Composable () -> Unit) {
     var d = 0L
     repeat(n) {
         val (cc, mm, dd) = renderPhases(content)
-        c += cc; m += mm; d += dd
+        c += cc
+        m += mm
+        d += dd
     }
     println(
         String.format(
             Locale.US,
             "PHASE %-22s compose=%5.1f  measure=%5.1f  draw=%5.1f  cpu(compose+measure)=%5.1f ms",
-            label, c / n / 1e6, m / n / 1e6, d / n / 1e6, (c + m) / n / 1e6,
+            label,
+            c / n / 1e6,
+            m / n / 1e6,
+            d / n / 1e6,
+            (c + m) / n / 1e6,
         ),
     )
 }

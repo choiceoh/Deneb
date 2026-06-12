@@ -1,5 +1,9 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,10 +31,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHairline
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
@@ -164,11 +164,17 @@ fun DenebCronScreen(
                 ) { Text("지금 실행") }
                 OutlinedButton(
                     enabled = !busy,
-                    onClick = { haptics.tap(); onEdit(c.id) },
+                    onClick = {
+                        haptics.tap()
+                        onEdit(c.id)
+                    },
                 ) { Text("편집") }
                 OutlinedButton(
                     enabled = !busy,
-                    onClick = { haptics.reject(); confirmDelete = true },
+                    onClick = {
+                        haptics.reject()
+                        confirmDelete = true
+                    },
                 ) { Text("삭제") }
             }
             status?.let {

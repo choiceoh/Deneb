@@ -114,28 +114,26 @@ suspend fun DenebGatewayClient.saveWikiPage(
     title: String? = null,
     summary: String? = null,
     tags: List<String>? = null,
-): Boolean =
-    callRpc<JsonObject>(
-        "miniapp.memory.write_page",
-        buildJsonObject {
-            put("path", path)
-            put("body", body)
-            if (title != null) put("title", title)
-            if (summary != null) put("summary", summary)
-            if (tags != null) putJsonArray("tags") { tags.forEach { add(it) } }
-        },
-    ) != null
+): Boolean = callRpc<JsonObject>(
+    "miniapp.memory.write_page",
+    buildJsonObject {
+        put("path", path)
+        put("body", body)
+        if (title != null) put("title", title)
+        if (summary != null) put("summary", summary)
+        if (tags != null) putJsonArray("tags") { tags.forEach { add(it) } }
+    },
+) != null
 
 /** Create a new wiki page (`miniapp.memory.create_page`); returns its path. */
-suspend fun DenebGatewayClient.createWikiPage(title: String, category: String, body: String): String? =
-    callRpc<WikiPagePayload>(
-        "miniapp.memory.create_page",
-        buildJsonObject {
-            put("title", title)
-            put("category", category)
-            put("body", body)
-        },
-    )?.path
+suspend fun DenebGatewayClient.createWikiPage(title: String, category: String, body: String): String? = callRpc<WikiPagePayload>(
+    "miniapp.memory.create_page",
+    buildJsonObject {
+        put("title", title)
+        put("category", category)
+        put("body", body)
+    },
+)?.path
 
 /** Unified search across wiki, diary and people (`miniapp.search.all`). */
 suspend fun DenebGatewayClient.searchAll(query: String): SearchResults? {
@@ -177,4 +175,3 @@ suspend fun DenebGatewayClient.fetchPeople(): List<PersonHit>? {
             )
         }
 }
-

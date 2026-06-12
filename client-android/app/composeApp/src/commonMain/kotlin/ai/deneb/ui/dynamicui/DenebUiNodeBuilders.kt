@@ -635,8 +635,7 @@ internal fun JsonObject.readFloatList(key: String): ImmutableList<Float> {
     return array.mapNotNull { (it as? JsonPrimitive)?.floatLike() }.toImmutableList()
 }
 
-private fun JsonPrimitive.floatLike(): Float? =
-    doubleOrNull?.toFloat() ?: longOrNull?.toFloat() ?: content.toFloatOrNull()
+private fun JsonPrimitive.floatLike(): Float? = doubleOrNull?.toFloat() ?: longOrNull?.toFloat() ?: content.toFloatOrNull()
 
 private fun parseTabsNode(obj: JsonObject): TabsNode = TabsNode(
     id = obj.readId(),

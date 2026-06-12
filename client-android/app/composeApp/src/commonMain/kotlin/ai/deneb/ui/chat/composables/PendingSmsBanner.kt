@@ -1,5 +1,13 @@
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.data.SmsDraft
+import ai.deneb.data.SmsDraftStatus
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebAdaptiveCardBorder
+import ai.deneb.ui.denebAdaptiveCardColors
+import ai.deneb.ui.denebBannerEnter
+import ai.deneb.ui.denebBannerExit
+import ai.deneb.ui.handCursor
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,14 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import ai.deneb.data.SmsDraft
-import ai.deneb.data.SmsDraftStatus
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebBannerEnter
-import ai.deneb.ui.denebBannerExit
-import ai.deneb.ui.handCursor
-import ai.deneb.ui.denebAdaptiveCardBorder
-import ai.deneb.ui.denebAdaptiveCardColors
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.ic_close
 import deneb.composeapp.generated.resources.sms_draft_banner_discard
@@ -143,7 +143,10 @@ private fun PendingSmsBanner(
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        TextButton(onClick = { haptics.confirm(); onSend() }) {
+                        TextButton(onClick = {
+                            haptics.confirm()
+                            onSend()
+                        }) {
                             Text(stringResource(Res.string.sms_draft_banner_send))
                         }
                     }

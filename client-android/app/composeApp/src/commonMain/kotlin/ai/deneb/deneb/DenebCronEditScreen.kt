@@ -2,6 +2,12 @@
 
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebSectionLabel
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -41,12 +47,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.DenebSectionLabel
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.denebHairline
-import ai.deneb.ui.denebHint
-import ai.deneb.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -137,7 +137,10 @@ fun DenebCronEditScreen(
         // Build (and validate) the schedule first so a bad time/empty-weekday is caught
         // before the network call; the gateway re-validates the spec as a backstop.
         val spec = buildScheduleSpec(draft, TimeZone.currentSystemDefault())
-            .getOrElse { error = it.message ?: "일정을 확인해 주세요."; return }
+            .getOrElse {
+                error = it.message ?: "일정을 확인해 주세요."
+                return
+            }
         if (prompt.isBlank()) {
             error = "작업 내용을 입력해 주세요."
             return
@@ -168,7 +171,9 @@ fun DenebCronEditScreen(
         ) {
             when {
                 prefilling -> DenebLoading()
+
                 original == null -> DenebError("크론을 불러오지 못했습니다.", onRetry = { scope.launch { load() } })
+
                 else -> CronEditContent(
                     name = name,
                     onName = { name = it },
@@ -266,7 +271,10 @@ internal fun CronEditContent(
     }
 
     Spacer(Modifier.height(28.dp))
-    Button(onClick = { haptics.confirm(); onSave() }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
+    Button(onClick = {
+        haptics.confirm()
+        onSave()
+    }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
         Text(if (saving) "저장 중…" else "저장")
     }
     Spacer(Modifier.height(28.dp))
@@ -295,7 +303,10 @@ private fun ScheduleEditor(
         segments.forEachIndexed { i, (m, label) ->
             SegmentedButton(
                 selected = draft.mode == m,
-                onClick = { haptics.tap(); onDraft(draft.copy(mode = m)) },
+                onClick = {
+                    haptics.tap()
+                    onDraft(draft.copy(mode = m))
+                },
                 shape = SegmentedButtonDefaults.itemShape(i, segments.size),
             ) { Text(label) }
         }
@@ -304,17 +315,21 @@ private fun ScheduleEditor(
     Spacer(Modifier.height(20.dp))
     when (draft.mode) {
         SchedMode.DAILY -> TimeField(draft, onDraft)
+
         SchedMode.WEEKLY -> {
             WeekdayChips(draft, onDraft)
             Spacer(Modifier.height(20.dp))
             TimeField(draft, onDraft)
         }
+
         SchedMode.INTERVAL -> IntervalField(draft, onDraft)
+
         SchedMode.ONCE -> {
             DenebPickerRow(label = "날짜", value = onceDateLabel, onClick = onPickOnceDate)
             Spacer(Modifier.height(20.dp))
             TimeField(draft, onDraft)
         }
+
         SchedMode.ADVANCED -> {
             DenebField(
                 value = draft.rawSpec,
@@ -475,8 +490,7 @@ private fun DenebPickerRow(label: String, value: String, onClick: () -> Unit) {
 
 // --- schedule spec <-> draft ----------------------------------------------------
 
-private fun emptyDraft(today: LocalDate): ScheduleDraft =
-    ScheduleDraft(SchedMode.DAILY, "09:00", emptySet(), "30", IntervalUnit.MIN, today, "")
+private fun emptyDraft(today: LocalDate): ScheduleDraft = ScheduleDraft(SchedMode.DAILY, "09:00", emptySet(), "30", IntervalUnit.MIN, today, "")
 
 // parseScheduleDraft seeds the editor from a job's stored schedule. Daily/weekly cron
 // expressions and simple intervals map to the friendly pickers; anything richer (ranges,
@@ -497,6 +511,7 @@ internal fun parseScheduleDraft(kind: String, spec: String, today: LocalDate): S
                 base
             }
         }
+
         "at" -> {
             val instant = runCatching { Instant.parse(s) }.getOrNull()
             if (instant != null) {
@@ -506,6 +521,7 @@ internal fun parseScheduleDraft(kind: String, spec: String, today: LocalDate): S
                 base
             }
         }
+
         "cron" -> {
             val f = s.split(Regex("\\s+"))
             val minute = f.getOrNull(0)?.toIntOrNull()
@@ -525,6 +541,7 @@ internal fun parseScheduleDraft(kind: String, spec: String, today: LocalDate): S
                 base
             }
         }
+
         else -> base
     }
 }
@@ -535,18 +552,23 @@ internal fun buildScheduleSpec(draft: ScheduleDraft, tz: TimeZone): Result<Strin
     SchedMode.DAILY -> parseHhmm(draft.timeText)
         ?.let { Result.success("${it.second} ${it.first} * * *") }
         ?: Result.failure(IllegalArgumentException("시간 형식을 확인해 주세요 (예: 09:00)."))
+
     SchedMode.WEEKLY -> when {
         draft.weekdays.isEmpty() -> Result.failure(IllegalArgumentException("요일을 하나 이상 선택해 주세요."))
+
         else -> parseHhmm(draft.timeText)
             ?.let { Result.success("${it.second} ${it.first} * * ${draft.weekdays.sorted().joinToString(",")}") }
             ?: Result.failure(IllegalArgumentException("시간 형식을 확인해 주세요 (예: 09:00)."))
     }
+
     SchedMode.INTERVAL -> draft.intervalText.trim().toIntOrNull()?.takeIf { it > 0 }
         ?.let { Result.success("$it${if (draft.intervalUnit == IntervalUnit.HOUR) "h" else "m"}") }
         ?: Result.failure(IllegalArgumentException("주기를 숫자로 입력해 주세요."))
+
     SchedMode.ONCE -> parseHhmm(draft.timeText)
         ?.let { Result.success(LocalDateTime(draft.onceDate, LocalTime(it.first, it.second)).toInstant(tz).toString()) }
         ?: Result.failure(IllegalArgumentException("시간 형식을 확인해 주세요 (예: 09:00)."))
+
     SchedMode.ADVANCED -> draft.rawSpec.trim().ifEmpty { null }
         ?.let { Result.success(it) }
         ?: Result.failure(IllegalArgumentException("일정을 입력해 주세요."))
@@ -572,13 +594,10 @@ private fun parseHhmm(s: String): Pair<Int, Int>? {
     return if (h in 0..23 && m in 0..59) h to m else null
 }
 
-private fun fmtHhmm(h: Int, m: Int): String =
-    "${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}"
+private fun fmtHhmm(h: Int, m: Int): String = "${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}"
 
 private fun dateLabelKo(d: LocalDate): String = "${d.year}년 ${d.month.ordinal + 1}월 ${d.day}일"
 
-private fun localDateToUtcMillis(d: LocalDate): Long =
-    LocalDateTime(d, LocalTime(0, 0)).toInstant(TimeZone.UTC).toEpochMilliseconds()
+private fun localDateToUtcMillis(d: LocalDate): Long = LocalDateTime(d, LocalTime(0, 0)).toInstant(TimeZone.UTC).toEpochMilliseconds()
 
-private fun utcMillisToLocalDate(ms: Long): LocalDate =
-    Instant.fromEpochMilliseconds(ms).toLocalDateTime(TimeZone.UTC).date
+private fun utcMillisToLocalDate(ms: Long): LocalDate = Instant.fromEpochMilliseconds(ms).toLocalDateTime(TimeZone.UTC).date

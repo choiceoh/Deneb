@@ -2,70 +2,66 @@
 
 package ai.deneb
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.ui.ImageComposeScene
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.dp
 import ai.deneb.deneb.CalMonth
 import ai.deneb.deneb.CalendarAddContent
-import ai.deneb.deneb.CronEditContent
-import ai.deneb.deneb.IntervalUnit
-import ai.deneb.deneb.SchedMode
-import ai.deneb.deneb.ScheduleDraft
 import ai.deneb.deneb.CalendarDayList
 import ai.deneb.deneb.CalendarEmptyDay
 import ai.deneb.deneb.CalendarEvent
 import ai.deneb.deneb.CalendarEventContent
 import ai.deneb.deneb.CalendarEventDetail
 import ai.deneb.deneb.CalendarMonthGrid
+import ai.deneb.deneb.CronEditContent
 import ai.deneb.deneb.DenebMarkdown
+import ai.deneb.deneb.IntervalUnit
+import ai.deneb.deneb.MailMessage
+import ai.deneb.deneb.MailRow
+import ai.deneb.deneb.SchedMode
+import ai.deneb.deneb.ScheduleDraft
+import ai.deneb.deneb.Todo
+import ai.deneb.deneb.TodoAddContent
+import ai.deneb.deneb.TodoListContent
 import ai.deneb.deneb.buildMonthGrid
 import ai.deneb.deneb.eventDays
 import ai.deneb.deneb.koreanDayOfWeek
 import ai.deneb.deneb.layoutMonthBars
-import ai.deneb.deneb.MailMessage
-import ai.deneb.deneb.MailRow
 import ai.deneb.deneb.timedSingleDayDots
-import ai.deneb.deneb.Todo
-import ai.deneb.deneb.TodoAddContent
-import ai.deneb.deneb.TodoListContent
-import ai.deneb.ui.markdown.MarkdownContent
 import ai.deneb.ui.DarkColorScheme
 import ai.deneb.ui.DenebRow
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.LightColorScheme
-import ai.deneb.ui.denebHint
 import ai.deneb.ui.chat.WorkFeedAction
 import ai.deneb.ui.chat.WorkFeedItem
 import ai.deneb.ui.chat.composables.DenebDrawerSheet
 import ai.deneb.ui.chat.composables.WaitingResponseRow
 import ai.deneb.ui.chat.composables.WorkFeedPanel
 import ai.deneb.ui.components.SkeletonList
+import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
 import ai.deneb.ui.dynamicui.ChartNode
 import ai.deneb.ui.dynamicui.DenebUiRenderer
-import kotlinx.collections.immutable.persistentListOf
-import org.jetbrains.skia.EncodedImageFormat
-import java.io.File
+import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ImageComposeScene
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -73,11 +69,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material3.HorizontalDivider
-import ai.deneb.ui.denebHairline
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import org.jetbrains.skia.EncodedImageFormat
+import java.io.File
 
 // Off-screen render harness: renders Deneb composables to PNG via Skia so the
 // look (and bugs like invisible text) can be inspected without building +
@@ -650,15 +650,14 @@ private const val WIDGET_CAL_PATH =
 private const val WIDGET_MAIL_PATH =
     "M20,4H4c-1.1,0 -1.99,0.9 -1.99,2L2,18c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V6c0,-1.1 -0.9,-2 -2,-2zM20,8l-8,5 -8,-5V6l8,5 8,-5v2z"
 
-private fun widgetGlyph(pathData: String): ImageVector =
-    ImageVector.Builder(
-        defaultWidth = 24.dp,
-        defaultHeight = 24.dp,
-        viewportWidth = 24f,
-        viewportHeight = 24f,
-    ).apply {
-        addPath(PathParser().parsePathString(pathData).toNodes(), fill = SolidColor(Color.White))
-    }.build()
+private fun widgetGlyph(pathData: String): ImageVector = ImageVector.Builder(
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f,
+).apply {
+    addPath(PathParser().parsePathString(pathData).toNodes(), fill = SolidColor(Color.White))
+}.build()
 
 private fun renderWidget(name: String, meeting: String, latestMail: String, unread: String) {
     val homeBg = Color(0xFF0B0B12)

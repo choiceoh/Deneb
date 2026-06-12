@@ -7,11 +7,11 @@ import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
 import io.ktor.http.encodeURLParameter
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
-import kotlinx.coroutines.flow.update
 
 /**
  * Mail surface of [DenebGatewayClient] (`miniapp.gmail.*`): inbox list +
@@ -34,12 +34,11 @@ private const val MAX_LOCAL_READ_IDS = 1000
  * unread would resurrect a dot the user already cleared. Identity (no allocation)
  * when the overlay is empty, the common case.
  */
-internal fun applyReadOverlay(rows: List<MailMessage>, locallyRead: Set<String>): List<MailMessage> =
-    if (locallyRead.isEmpty()) {
-        rows
-    } else {
-        rows.map { if (it.unread && it.id in locallyRead) it.copy(unread = false) else it }
-    }
+internal fun applyReadOverlay(rows: List<MailMessage>, locallyRead: Set<String>): List<MailMessage> = if (locallyRead.isEmpty()) {
+    rows
+} else {
+    rows.map { if (it.unread && it.id in locallyRead) it.copy(unread = false) else it }
+}
 
 /** Record [id] as read in [into] (most-recent-last), evicting the oldest beyond [max]. */
 internal fun recordReadId(into: LinkedHashSet<String>, id: String, max: Int = MAX_LOCAL_READ_IDS) {
@@ -150,62 +149,57 @@ suspend fun DenebGatewayClient.trashMail(id: String): Boolean {
 }
 
 /** Instant cached analysis (no LLM call) if one was already produced on poll or earlier. */
-suspend fun DenebGatewayClient.fetchCachedAnalysis(id: String): MailAnalysis? =
-    callRpc<MailAnalysisOut>("miniapp.gmail.analysis_cached", buildJsonObject { put("id", id) })?.toAnalysis()
+suspend fun DenebGatewayClient.fetchCachedAnalysis(id: String): MailAnalysis? = callRpc<MailAnalysisOut>("miniapp.gmail.analysis_cached", buildJsonObject { put("id", id) })?.toAnalysis()
 
 /** Run AI analysis; force=true reruns the LLM instead of returning the cached result. */
-suspend fun DenebGatewayClient.analyzeMail(id: String, force: Boolean = false): MailAnalysis? =
-    callRpc<MailAnalysisOut>(
-        "miniapp.gmail.analyze",
-        buildJsonObject {
-            put("id", id)
-            if (force) put("force", true)
-        },
-    )?.toAnalysis()
+suspend fun DenebGatewayClient.analyzeMail(id: String, force: Boolean = false): MailAnalysis? = callRpc<MailAnalysisOut>(
+    "miniapp.gmail.analyze",
+    buildJsonObject {
+        put("id", id)
+        if (force) put("force", true)
+    },
+)?.toAnalysis()
 
-private fun MailAnalysisOut.toAnalysis(): MailAnalysis? =
-    if (analysis.isBlank()) {
-        null
-    } else {
-        MailAnalysis(
-            text = analysis,
-            related = relatedProjects.map { RelatedProject(it.path, it.title, it.summary) },
-            cached = cached,
-            createdAt = createdAt,
-            durationMs = durationMs,
-        )
-    }
+private fun MailAnalysisOut.toAnalysis(): MailAnalysis? = if (analysis.isBlank()) {
+    null
+} else {
+    MailAnalysis(
+        text = analysis,
+        related = relatedProjects.map { RelatedProject(it.path, it.title, it.summary) },
+        cached = cached,
+        createdAt = createdAt,
+        durationMs = durationMs,
+    )
+}
 
 /** Ask a follow-up about a message; prior Q&A is sent as history for multi-turn context. */
-suspend fun DenebGatewayClient.askMail(id: String, question: String, history: List<Pair<String, String>> = emptyList()): String? =
-    callRpc<AskPayload>(
-        "miniapp.gmail.ask",
-        buildJsonObject {
-            put("id", id)
-            put("question", question)
-            // History items use the generated QATurn wire shape (json q/a) so the
-            // gateway's []QATurn binding actually receives them — the old hand-rolled
-            // {question, answer} keys silently dropped all prior-turn context.
-            putJsonArray("history") {
-                history.forEach { (q, a) -> add(jsonCodec.encodeToJsonElement(QATurn.serializer(), QATurn(q = q, a = a))) }
-            }
-        },
-    )?.answer?.ifBlank { null }
+suspend fun DenebGatewayClient.askMail(id: String, question: String, history: List<Pair<String, String>> = emptyList()): String? = callRpc<AskPayload>(
+    "miniapp.gmail.ask",
+    buildJsonObject {
+        put("id", id)
+        put("question", question)
+        // History items use the generated QATurn wire shape (json q/a) so the
+        // gateway's []QATurn binding actually receives them — the old hand-rolled
+        // {question, answer} keys silently dropped all prior-turn context.
+        putJsonArray("history") {
+            history.forEach { (q, a) -> add(jsonCodec.encodeToJsonElement(QATurn.serializer(), QATurn(q = q, a = a))) }
+        }
+    },
+)?.answer?.ifBlank { null }
 
 /**
  * Download an attachment's raw bytes for in-app rendering (inline image
  * previews). Reuses [attachmentUrl] so auth matches the browser download path
  * exactly. Returns null on any failure — callers fall back to the plain chip.
  */
-suspend fun DenebGatewayClient.fetchAttachmentBytes(messageId: String, att: MailAttachment): ByteArray? =
-    runCatching {
-        http.get(attachmentUrl(messageId, att)) {
-            timeout {
-                requestTimeoutMillis = 30_000
-                connectTimeoutMillis = 6_000
-            }
-        }.body<ByteArray>()
-    }.getOrNull()
+suspend fun DenebGatewayClient.fetchAttachmentBytes(messageId: String, att: MailAttachment): ByteArray? = runCatching {
+    http.get(attachmentUrl(messageId, att)) {
+        timeout {
+            requestTimeoutMillis = 30_000
+            connectTimeoutMillis = 6_000
+        }
+    }.body<ByteArray>()
+}.getOrNull()
 
 /**
  * Browser-openable attachment download URL. The download endpoint can't read

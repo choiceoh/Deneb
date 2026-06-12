@@ -16,8 +16,7 @@ import androidx.compose.ui.text.withStyle
 // Not @Composable: takes the resolved ColorScheme so callers can cache the result
 // with remember(inlines, colors). Building the AnnotatedString on every streaming
 // token (it was rebuilt per recomposition) was a measurable hot-path cost.
-internal fun List<InlineNode>.toAnnotatedString(colors: ColorScheme): AnnotatedString =
-    buildAnnotatedString { appendInlines(this@toAnnotatedString, colors) }
+internal fun List<InlineNode>.toAnnotatedString(colors: ColorScheme): AnnotatedString = buildAnnotatedString { appendInlines(this@toAnnotatedString, colors) }
 
 private fun AnnotatedString.Builder.appendInlines(nodes: List<InlineNode>, colors: ColorScheme) {
     for (n in nodes) appendInline(n, colors)

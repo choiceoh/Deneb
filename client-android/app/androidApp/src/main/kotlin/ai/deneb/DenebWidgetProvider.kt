@@ -1,15 +1,15 @@
 package ai.deneb
 
+import ai.deneb.data.DataRepository
+import ai.deneb.deneb.DenebGatewayClient
+import ai.deneb.deneb.WidgetSummary
+import ai.deneb.deneb.widgetSummary
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
-import ai.deneb.data.DataRepository
-import ai.deneb.deneb.DenebGatewayClient
-import ai.deneb.deneb.WidgetSummary
-import ai.deneb.deneb.widgetSummary
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -21,7 +21,9 @@ import org.koin.core.component.inject
 // (deneb_widget_info.xml) and whenever a widget is added or resized. A
 // native-only surface — the Telegram bot can't put a glanceable card on the home
 // screen.
-class DenebWidgetProvider : AppWidgetProvider(), KoinComponent {
+class DenebWidgetProvider :
+    AppWidgetProvider(),
+    KoinComponent {
 
     private val repo: DataRepository by inject()
 

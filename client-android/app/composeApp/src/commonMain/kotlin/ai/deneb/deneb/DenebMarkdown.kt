@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebType
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -15,7 +16,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.DenebType
 
 /**
  * Lightweight markdown renderer for wiki / topic-doc / analysis bodies — enough
@@ -34,18 +34,27 @@ fun DenebMarkdown(text: String, modifier: Modifier = Modifier) {
             val ordered = ORDERED_ITEM.find(line)
             when {
                 line.startsWith("```") -> inFence = !inFence
+
                 inFence -> Text(
                     raw.trimEnd(), // keep code indentation
                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                     color = onSurface,
                 )
+
                 line.startsWith("### ") -> Heading(line.removePrefix("### "), DenebType.rowTitleStrong)
+
                 line.startsWith("## ") -> Heading(line.removePrefix("## "), DenebType.cardTitle)
+
                 line.startsWith("# ") -> Heading(line.removePrefix("# "), DenebType.subject)
+
                 line.startsWith("- ") || line.startsWith("* ") -> Row2("•  ", line.drop(2), onSurface)
+
                 ordered != null -> Row2("${ordered.groupValues[1]}.  ", ordered.groupValues[2], onSurface)
+
                 line.startsWith("> ") -> Row2("│  ", line.drop(2), onSurface)
+
                 line.isBlank() -> Spacer(Modifier.height(8.dp))
+
                 else -> Text(inline(line), style = MaterialTheme.typography.bodyMedium, color = onSurface)
             }
         }
@@ -91,19 +100,26 @@ private fun inline(text: String): AnnotatedString = buildAnnotatedString {
                     withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(text.substring(i + 2, end)) }
                     i = end + 2
                 } else {
-                    append(text.substring(i)); i = text.length
+                    append(text.substring(i))
+                    i = text.length
                 }
             }
+
             text[i] == '`' -> {
                 val end = text.indexOf('`', i + 1)
                 if (end > 0) {
                     withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(text.substring(i + 1, end)) }
                     i = end + 1
                 } else {
-                    append(text.substring(i)); i = text.length
+                    append(text.substring(i))
+                    i = text.length
                 }
             }
-            else -> { append(text[i]); i++ }
+
+            else -> {
+                append(text[i])
+                i++
+            }
         }
     }
 }

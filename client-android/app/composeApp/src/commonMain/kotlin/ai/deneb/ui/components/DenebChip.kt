@@ -1,5 +1,6 @@
 package ai.deneb.ui.components
 
+import ai.deneb.ui.handCursor
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.defaultMinSize
@@ -16,7 +17,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.handCursor
 
 /**
  * Chip with full control over appearance — fixed 48.dp height, no hidden

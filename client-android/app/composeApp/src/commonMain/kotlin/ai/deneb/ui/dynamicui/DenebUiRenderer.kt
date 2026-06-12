@@ -2,6 +2,8 @@
 
 package ai.deneb.ui.dynamicui
 
+import ai.deneb.ui.denebAdaptiveCardBorder
+import ai.deneb.ui.denebAdaptiveCardColors
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -28,8 +30,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.unit.dp
-import ai.deneb.ui.denebAdaptiveCardBorder
-import ai.deneb.ui.denebAdaptiveCardColors
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.deneb_ui_render_failed
 import kotlinx.collections.immutable.ImmutableList
@@ -66,8 +66,7 @@ internal class UiFormValidation(
     val errors: SnapshotStateMap<String, Boolean>,
 ) {
     /** Required ids among [ids] whose current form value is blank. */
-    fun missingFrom(ids: List<String>, formState: Map<String, String>): List<String> =
-        ids.filter { it in requiredIds && formState[it].isNullOrBlank() }
+    fun missingFrom(ids: List<String>, formState: Map<String, String>): List<String> = ids.filter { it in requiredIds && formState[it].isNullOrBlank() }
 }
 
 internal val LocalUiFormValidation = compositionLocalOf<UiFormValidation?> { null }

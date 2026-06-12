@@ -1,5 +1,13 @@
 package ai.deneb.deneb
 
+import ai.deneb.data.AppSettings
+import ai.deneb.data.ThemeMode
+import ai.deneb.defaultUiScale
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
+import ai.deneb.ui.handCursor
+import ai.deneb.ui.settings.SettingsCard
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,14 +36,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import ai.deneb.data.AppSettings
-import ai.deneb.data.ThemeMode
-import ai.deneb.defaultUiScale
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHairline
-import ai.deneb.ui.handCursor
-import ai.deneb.ui.settings.SettingsCard
 import kotlin.math.roundToInt
 
 /**
@@ -87,7 +87,10 @@ internal fun AppearanceTab(appSettings: AppSettings) {
                         .selectable(
                             selected = isSel,
                             role = Role.RadioButton,
-                            onClick = { haptics.tap(); appSettings.setThemeMode(mode) },
+                            onClick = {
+                                haptics.tap()
+                                appSettings.setThemeMode(mode)
+                            },
                         )
                         .handCursor()
                         .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -152,7 +155,10 @@ internal fun AppearanceTab(appSettings: AppSettings) {
             // Reset to the platform default (1.0 on phone, the HiDPI-derived value on
             // desktop Linux), not a hard-coded 100%.
             TextButton(
-                onClick = { haptics.tap(); appSettings.setUiScale(defaultUiScale) },
+                onClick = {
+                    haptics.tap()
+                    appSettings.setUiScale(defaultUiScale)
+                },
                 enabled = uiScale != defaultUiScale,
             ) { Text("기본값(${(defaultUiScale * 100).roundToInt()}%)으로") }
         }

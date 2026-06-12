@@ -1,6 +1,5 @@
 package ai.deneb.ui.chat
 
-import app.cash.turbine.test
 import ai.deneb.data.TaskScheduler
 import ai.deneb.network.AnthropicInsufficientCreditsException
 import ai.deneb.network.AnthropicInvalidApiKeyException
@@ -12,6 +11,7 @@ import ai.deneb.network.GenericNetworkException
 import ai.deneb.network.OpenAICompatibleInvalidApiKeyException
 import ai.deneb.network.OpenAICompatibleRateLimitExceededException
 import ai.deneb.testutil.FakeDataRepository
+import app.cash.turbine.test
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher

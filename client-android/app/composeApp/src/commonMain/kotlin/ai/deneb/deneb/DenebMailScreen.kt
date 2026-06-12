@@ -1,13 +1,13 @@
 package ai.deneb.deneb
 
-import kotlinx.datetime.Instant
-import kotlinx.datetime.LocalDate
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.daysUntil
-import kotlinx.datetime.toLocalDateTime
-import kotlinx.datetime.todayIn
-import kotlin.time.Clock
-
+import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebSectionLabel
+import ai.deneb.ui.DenebType
+import ai.deneb.ui.components.DenebSearchField
+import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebPressable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -51,15 +51,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.DenebSectionLabel
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.denebHairline
-import ai.deneb.ui.denebHint
-import ai.deneb.ui.denebPressable
-import ai.deneb.ui.components.DenebSearchField
-import ai.deneb.ui.components.rememberHaptics
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.daysUntil
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.todayIn
+import kotlin.time.Clock
 
 /**
  * Native inbox triage backed by `miniapp.gmail.list_recent`, in the Deneb idiom:
@@ -143,130 +142,140 @@ fun DenebMailScreen(
         showBack = !panelMode,
         fillWidth = panelMode,
     ) {
-            if (selecting) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "${selected.size}개 선택",
-                        style = DenebType.subject.copy(fontSize = 22.sp),
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = { clearSelection() }) { Text("취소") }
-                }
-            } else if (mail.isNotEmpty()) {
+        if (selecting) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
-                    "${mail.size}통 · 안 읽음 ${mail.count { it.unread }}",
-                    style = DenebType.hint,
-                    color = denebHint(),
-                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 6.dp),
+                    "${selected.size}개 선택",
+                    style = DenebType.subject.copy(fontSize = 22.sp),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.weight(1f),
                 )
+                TextButton(onClick = { clearSelection() }) { Text("취소") }
             }
+        } else if (mail.isNotEmpty()) {
+            Text(
+                "${mail.size}통 · 안 읽음 ${mail.count { it.unread }}",
+                style = DenebType.hint,
+                color = denebHint(),
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 6.dp),
+            )
+        }
 
-            // The search field lives inside the list as item 0, and the list starts
-            // at item 1 so the field sits just above the viewport: dragging the list
-            // down reveals it, pulling past it still reaches the refresh indicator.
-            // (When the content is shorter than the viewport the offset clamps to 0
-            // and the field simply shows — with no scroll range there is no way to
-            // pull it out, so that is the right fallback.)
-            val listState = rememberLazyListState(initialFirstVisibleItemIndex = 1)
+        // The search field lives inside the list as item 0, and the list starts
+        // at item 1 so the field sits just above the viewport: dragging the list
+        // down reveals it, pulling past it still reaches the refresh indicator.
+        // (When the content is shorter than the viewport the offset clamps to 0
+        // and the field simply shows — with no scroll range there is no way to
+        // pull it out, so that is the right fallback.)
+        val listState = rememberLazyListState(initialFirstVisibleItemIndex = 1)
 
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                if (mail.isEmpty() && loadOk == null) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { DenebLoading() }
-                } else {
-                    PullToRefreshBox(
-                        isRefreshing = refreshing,
-                        onRefresh = { scope.launch { refreshing = true; loadOk = client.refreshMail(activeQuery); refreshing = false } },
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        val today = Clock.System.todayIn(TimeZone.currentSystemDefault())
-                        val sections = remember(mail, today) { mailSections(mail, today) }
-                        LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                            if (!selecting) {
-                                item(key = "search") {
-                                    DenebSearchField(
-                                        query = searchText,
-                                        onQueryChange = {
-                                            searchText = it
-                                            // Clearing the field (✕ or backspace-to-empty) returns to the inbox.
-                                            if (it.isBlank() && activeQuery != null) runSearch("")
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            if (mail.isEmpty() && loadOk == null) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { DenebLoading() }
+            } else {
+                PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = {
+                        scope.launch {
+                            refreshing = true
+                            loadOk = client.refreshMail(activeQuery)
+                            refreshing = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    val today = Clock.System.todayIn(TimeZone.currentSystemDefault())
+                    val sections = remember(mail, today) { mailSections(mail, today) }
+                    LazyColumn(Modifier.fillMaxSize(), state = listState) {
+                        if (!selecting) {
+                            item(key = "search") {
+                                DenebSearchField(
+                                    query = searchText,
+                                    onQueryChange = {
+                                        searchText = it
+                                        // Clearing the field (✕ or backspace-to-empty) returns to the inbox.
+                                        if (it.isBlank() && activeQuery != null) runSearch("")
+                                    },
+                                    placeholder = "전체 메일 검색 (키워드, from:…)",
+                                    onSearch = { runSearch(searchText) },
+                                    clearContentDescription = "검색 지우기",
+                                    // Field carries its own 8dp inset; 16dp more aligns the pill with
+                                    // the screen's 24dp content margins.
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                )
+                            }
+                        }
+                        // Error and empty render inside the list so the search field
+                        // stays reachable — a failed or empty *search* must keep the
+                        // field available to edit or clear the query.
+                        if (mail.isEmpty() && loadOk == false) {
+                            item(key = "load-error") {
+                                Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
+                                    DenebError(
+                                        "메일을 불러오지 못했어요.",
+                                        onRetry = {
+                                            scope.launch {
+                                                loadOk = null
+                                                loadOk = client.refreshMail(activeQuery)
+                                            }
                                         },
-                                        placeholder = "전체 메일 검색 (키워드, from:…)",
-                                        onSearch = { runSearch(searchText) },
-                                        clearContentDescription = "검색 지우기",
-                                        // Field carries its own 8dp inset; 16dp more aligns the pill with
-                                        // the screen's 24dp content margins.
-                                        modifier = Modifier.padding(horizontal = 16.dp),
                                     )
                                 }
                             }
-                            // Error and empty render inside the list so the search field
-                            // stays reachable — a failed or empty *search* must keep the
-                            // field available to edit or clear the query.
-                            if (mail.isEmpty() && loadOk == false) {
-                                item(key = "load-error") {
-                                    Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                                        DenebError(
-                                            "메일을 불러오지 못했어요.",
-                                            onRetry = { scope.launch { loadOk = null; loadOk = client.refreshMail(activeQuery) } },
-                                        )
-                                    }
-                                }
-                            } else if (mail.isEmpty()) {
-                                item(key = "empty") {
-                                    Box(Modifier.padding(horizontal = 24.dp)) {
-                                        DenebEmpty(if (activeQuery != null) "검색 결과 없음" else "최근 7일 메일 없음")
-                                    }
+                        } else if (mail.isEmpty()) {
+                            item(key = "empty") {
+                                Box(Modifier.padding(horizontal = 24.dp)) {
+                                    DenebEmpty(if (activeQuery != null) "검색 결과 없음" else "최근 7일 메일 없음")
                                 }
                             }
-                            sections.forEach { section ->
-                                item(key = "section-${section.label}") {
-                                    DenebSectionLabel(section.label, Modifier.padding(horizontal = 24.dp))
-                                }
-                                items(section.items, key = { it.id }) { m ->
-                                    Column(Modifier.animateItem()) {
-                                        MailRow(
-                                            message = m,
-                                            selecting = selecting,
-                                            isSelected = m.id in selected,
-                                            isCurrent = panelMode && m.id == selectedId,
-                                            today = today,
-                                            onTap = {
-                                                haptics.tap()
-                                                if (selecting) {
-                                                    if (m.id in selected) selected.remove(m.id) else selected.add(m.id)
-                                                    if (selected.isEmpty()) selecting = false
-                                                } else {
-                                                    onOpenDetail(m.id)
-                                                }
-                                            },
-                                            onLongPress = {
-                                                haptics.longPress()
-                                                selecting = true
-                                                if (m.id !in selected) selected.add(m.id)
-                                            },
-                                        )
-                                        HorizontalDivider(color = denebHairline())
-                                    }
+                        }
+                        sections.forEach { section ->
+                            item(key = "section-${section.label}") {
+                                DenebSectionLabel(section.label, Modifier.padding(horizontal = 24.dp))
+                            }
+                            items(section.items, key = { it.id }) { m ->
+                                Column(Modifier.animateItem()) {
+                                    MailRow(
+                                        message = m,
+                                        selecting = selecting,
+                                        isSelected = m.id in selected,
+                                        isCurrent = panelMode && m.id == selectedId,
+                                        today = today,
+                                        onTap = {
+                                            haptics.tap()
+                                            if (selecting) {
+                                                if (m.id in selected) selected.remove(m.id) else selected.add(m.id)
+                                                if (selected.isEmpty()) selecting = false
+                                            } else {
+                                                onOpenDetail(m.id)
+                                            }
+                                        },
+                                        onLongPress = {
+                                            haptics.longPress()
+                                            selecting = true
+                                            if (m.id !in selected) selected.add(m.id)
+                                        },
+                                    )
+                                    HorizontalDivider(color = denebHairline())
                                 }
                             }
-                            if (nextToken != null) {
-                                item {
-                                    Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
-                                        if (loadingMore) {
-                                            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                                        } else {
-                                            TextButton(onClick = {
-                                                scope.launch {
-                                                    loadingMore = true
-                                                    client.loadMoreMail()
-                                                    loadingMore = false
-                                                }
-                                            }) { Text("더 보기") }
-                                        }
+                        }
+                        if (nextToken != null) {
+                            item {
+                                Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
+                                    if (loadingMore) {
+                                        CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                                    } else {
+                                        TextButton(onClick = {
+                                            scope.launch {
+                                                loadingMore = true
+                                                client.loadMoreMail()
+                                                loadingMore = false
+                                            }
+                                        }) { Text("더 보기") }
                                     }
                                 }
                             }
@@ -274,23 +283,24 @@ fun DenebMailScreen(
                     }
                 }
             }
+        }
 
-            if (selecting && selected.isNotEmpty()) {
-                // Flat action bar in the Deneb idiom: a hairline above, no elevation.
-                Column(Modifier.fillMaxWidth()) {
-                    HorizontalDivider(color = denebHairline())
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("${selected.size}개 선택", style = MaterialTheme.typography.titleSmall)
-                        Spacer(Modifier.weight(1f))
-                        TextButton(onClick = { bulk { client.markMailRead(it) } }, enabled = !busy) { Text("읽음") }
-                        TextButton(onClick = { bulk { client.archiveMail(it) } }, enabled = !busy) { Text("보관") }
-                        TextButton(onClick = { bulk { client.trashMail(it) } }, enabled = !busy) { Text("휴지통") }
-                    }
+        if (selecting && selected.isNotEmpty()) {
+            // Flat action bar in the Deneb idiom: a hairline above, no elevation.
+            Column(Modifier.fillMaxWidth()) {
+                HorizontalDivider(color = denebHairline())
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("${selected.size}개 선택", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = { bulk { client.markMailRead(it) } }, enabled = !busy) { Text("읽음") }
+                    TextButton(onClick = { bulk { client.archiveMail(it) } }, enabled = !busy) { Text("보관") }
+                    TextButton(onClick = { bulk { client.trashMail(it) } }, enabled = !busy) { Text("휴지통") }
                 }
             }
+        }
     }
 }
 
@@ -313,7 +323,9 @@ internal fun MailRow(
                 when {
                     // Multi-select (checkbox) wins; else current-open-in-panel highlight; else none.
                     isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+
                     isCurrent -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+
                     else -> Color.Transparent
                 },
             )
@@ -407,9 +419,13 @@ internal fun mailSections(mail: List<MailMessage>, today: LocalDate): List<MailS
 private fun bucketLabel(date: String, today: LocalDate): String = runCatching {
     val d = Instant.parse(date).toLocalDateTime(TimeZone.currentSystemDefault()).date
     when {
-        d.daysUntil(today) <= 0 -> "오늘" // future-dated (clock skew) counts as today
+        d.daysUntil(today) <= 0 -> "오늘"
+
+        // future-dated (clock skew) counts as today
         d.daysUntil(today) == 1 -> "어제"
+
         d.daysUntil(today) < 7 -> "이번 주"
+
         else -> "이전"
     }
 }.getOrElse { "이전" }
