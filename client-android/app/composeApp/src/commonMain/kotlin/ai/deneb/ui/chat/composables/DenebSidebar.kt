@@ -27,6 +27,7 @@ import androidx.navigation.NavHostController
 import ai.deneb.DenebCalendar
 import ai.deneb.DenebCategories
 import ai.deneb.DenebConfig
+import ai.deneb.DenebFleet
 import ai.deneb.DenebMail
 import ai.deneb.DenebSearch
 import ai.deneb.Home
@@ -60,6 +61,7 @@ private val sidebarItems = listOf(
     SidebarItem("calendar", "deneb_calendar", DenebCalendar),
     SidebarItem("search", "deneb_search", DenebSearch),
     SidebarItem("categories", "deneb_categories", DenebCategories),
+    SidebarItem("fleet", "deneb_fleet", DenebFleet),
     SidebarItem("settings", "deneb_config", DenebConfig),
 )
 

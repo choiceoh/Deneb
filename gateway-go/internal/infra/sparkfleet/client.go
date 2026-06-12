@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -49,6 +50,7 @@ type Report struct {
 // means "integration disabled" (every method is a safe no-op).
 type Client struct {
 	baseURL string
+	token   string // optional X-Fleet-Token (DENEB_SPARKFLEET_TOKEN)
 	http    *http.Client
 	logger  *slog.Logger
 
@@ -68,6 +70,7 @@ func New(url string, logger *slog.Logger) *Client {
 	}
 	return &Client{
 		baseURL: url,
+		token:   strings.TrimSpace(os.Getenv("DENEB_SPARKFLEET_TOKEN")),
 		http:    httputil.NewClient(requestTimeout),
 		logger:  logger,
 		last:    Report{Status: "unavailable", URL: url},
@@ -91,6 +94,26 @@ func (c *Client) Run(ctx context.Context) {
 			c.check(ctx)
 		}
 	}
+}
+
+// BaseURL returns the configured SparkFleet base URL, or "" when the
+// integration is disabled. Nil-safe like every Client method; used by the
+// gateway's fleet passthrough (/api/v1/fleet/*) to address the upstream.
+func (c *Client) BaseURL() string {
+	if c == nil {
+		return ""
+	}
+	return c.baseURL
+}
+
+// Token returns the optional SparkFleet API token (DENEB_SPARKFLEET_TOKEN),
+// shared by the health poll and the fleet passthrough so a token-protected
+// SparkFleet works for both or neither. Nil-safe.
+func (c *Client) Token() string {
+	if c == nil {
+		return ""
+	}
+	return c.token
 }
 
 // HealthReport returns the most recent poll result for inclusion in /healthz.
@@ -137,6 +160,9 @@ func (c *Client) fetch(ctx context.Context) ([]Service, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/services", http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
+	}
+	if c.token != "" {
+		req.Header.Set("X-Fleet-Token", c.token)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {

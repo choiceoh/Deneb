@@ -49,6 +49,7 @@ import ai.deneb.deneb.DenebTodoScreen
 import ai.deneb.deneb.DenebMailDetailScreen
 import ai.deneb.deneb.DenebMailScreen
 import ai.deneb.deneb.EmptyMailPanel
+import ai.deneb.deneb.DenebFleetScreen
 import ai.deneb.deneb.DenebPeopleScreen
 import ai.deneb.deneb.DenebPersonScreen
 import ai.deneb.deneb.DenebCategoriesScreen
@@ -105,6 +106,10 @@ object Home
 @Serializable
 @SerialName("deneb_config")
 object DenebConfig
+
+@Serializable
+@SerialName("deneb_fleet")
+object DenebFleet
 
 @Serializable
 @SerialName("deneb_mail")
@@ -346,8 +351,18 @@ private fun AppContent(
                             denebClient = denebClient,
                             onBack = { navController.navigateUp() },
                             onOpenCron = { id -> navController.navigate(DenebCron(id)) },
+                            onOpenFleet = { navController.navigate(DenebFleet) },
                             navigationTabBar = if (showTabBar) navigationTabBar else null,
                         )
+                    }
+                    composable<DenebFleet> {
+                        denebClient?.let { client ->
+                            DenebFleetScreen(
+                                client = client,
+                                onBack = { navController.navigateUp() },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
                     }
                     composable<DenebMail> {
                         denebClient?.let { client ->

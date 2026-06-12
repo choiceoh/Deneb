@@ -50,7 +50,8 @@ import kotlinx.coroutines.launch
  * system prompt) has no tab on purpose: it is edited by asking the agent in chat
  * — the injected prompt block carries its source path (gateway system_prompt.go).
  *
- * People browsing is NOT a tab here: it is a content destination with its own
+ * People browsing and fleet management are NOT tabs here: fleet is an operational
+ * surface with its own full screen (DenebFleetScreen, same frame as this one); it is a content destination with its own
  * drawer entry + full screen (DenebPeopleScreen), like mail and calendar. The
  * settings hub stays configuration-only.
  */
@@ -60,6 +61,7 @@ fun DenebConfigScreen(
     onBack: () -> Unit,
     denebClient: DenebGatewayClient? = null,
     onOpenCron: (String) -> Unit = {},
+    onOpenFleet: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     val pagerState = rememberPagerState(pageCount = { ConfigTab.entries.size })
@@ -131,7 +133,7 @@ fun DenebConfigScreen(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             ) { page ->
                 when (ConfigTab.entries[page]) {
-                    ConfigTab.GATEWAY -> GatewayTab(appSettings, onBack, denebClient)
+                    ConfigTab.GATEWAY -> GatewayTab(appSettings, onBack, denebClient, onOpenFleet)
                     ConfigTab.APPEARANCE -> AppearanceTab(appSettings)
                     ConfigTab.MODEL -> denebClient?.let { ModelTab(it) }
                     ConfigTab.SKILLS -> denebClient?.let { SkillsTab(it) }
