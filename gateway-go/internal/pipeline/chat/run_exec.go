@@ -176,8 +176,25 @@ func executeAgentRun(
 	}
 	messages := assembleMessages(ctx, params, deps, prep, mr, logger, cHooks)
 
+	// Per-turn additions (recall evidence + auto-delivery directive) ride the
+	// LAST user message as a wire-only suffix, NOT the system prompt. On the
+	// vLLM path the rendered prompt is [system][tool schemas][history] and APC
+	// is strict prefix matching — per-turn system-tail bytes invalidated the
+	// KV cache for the tools + entire history on every evidence-bearing turn
+	// (2026-06-13: 80.7% hit rate, 20-40s prefill tail on interactive turns).
+	// The transcript already persisted the clean user message, so next turn's
+	// history reload stays byte-identical to this turn's cached prefix. The
+	// degenerate no-user-message case falls back to the legacy system
+	// placement so evidence is never dropped. See run_tail_inject.go.
+	tailAdds := buildTailAdditions(params, prep.RecallMemory)
+	messages, tailInjected := injectTailAdditions(messages, tailAdds)
+	tailForSystem := ""
+	if !tailInjected {
+		tailForSystem = strings.Join(tailAdds, "\n\n")
+	}
+
 	// Stage 3: Finalize system prompt (budget optimization, coordinator suggestion, tier-1 injection).
-	systemPrompt := finalizePrompt(prep.SystemPrompt, prep.RecallMemory, prep.Tier1Wiki, deps.contextCfg, sessionToolPreset, params.Message)
+	systemPrompt := finalizePrompt(prep.SystemPrompt, tailForSystem, prep.Tier1Wiki, deps.contextCfg, sessionToolPreset, params.Message)
 
 	logger.Info("pipeline: system prompt finalized",
 		"chars", len(systemPrompt))
@@ -390,6 +407,11 @@ func executeAgentRun(
 		EffortDecision:      effortDecision,
 		EffortEscalated:     effortRt != nil && effortRt.escalated,
 	})
+
+	// Engine-side APC sample → run.cache event (async, best-effort). The vLLM
+	// usage payload carries no cached_tokens, so the engine's global counters
+	// are the only per-turn cache-hit signal on this path.
+	logEngineCacheAsync(deps, runLog, client, apiMode, fellBack, logger)
 
 	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag, ActualModel: actualModel, FellBack: fellBack}, nil
 }

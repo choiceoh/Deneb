@@ -73,16 +73,6 @@ type SystemPromptParams struct {
 	// the system prompt stays byte-stable from that point onward (P4).
 	CompactionFired bool
 
-	// AutoDeliveredOutput marks a scheduled/cron run whose final reply text
-	// is delivered to the user's channel by the run-completion layer (cron
-	// relay / main-session handoff), not by the agent's own `message` tool.
-	// When set, the Messaging section tells the model not to deliver its
-	// result via the `message` tool and not to editorialize about channel
-	// connectivity — an in-loop send failure in such a run is an internal
-	// wiring detail, not a user-facing outage. Lives in the dynamic
-	// (uncached) block, so it has no prompt-cache impact.
-	AutoDeliveredOutput bool
-
 	// HindsightEnabled adds a short dynamic-block note telling the model it
 	// has a cross-session Hindsight memory bank: past turns are retained
 	// automatically and relevant memories arrive via <recall-context>.

@@ -41,6 +41,7 @@ func (h *Handler) handleSlashCommand(
 		}
 		prompt.ClearSessionSnapshot(sessionKey)
 		clearRecallMemory(sessionKey)
+		clearTier1Wiki(sessionKey)
 		if h.transcript != nil {
 			if err := h.transcript.Delete(sessionKey); err != nil {
 				h.logger.Error("failed to delete transcript on reset", "error", err)

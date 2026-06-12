@@ -139,6 +139,11 @@ func WithAPIMode(mode string) ClientOption {
 // into the answer body).
 func (c *Client) APIMode() string { return c.apiMode }
 
+// BaseURL returns the client's resolved base URL. The chat pipeline uses it
+// to locate a self-hosted vLLM engine's /metrics endpoint for prefix-cache
+// telemetry; it carries no credentials.
+func (c *Client) BaseURL() string { return c.baseURL }
+
 // WithHeaders sets extra HTTP headers applied to every request this
 // client makes. Provider configs use this for endpoint-required headers
 // (e.g. a custom User-Agent). Values overwrite client defaults, so a

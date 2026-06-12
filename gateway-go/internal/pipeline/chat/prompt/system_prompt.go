@@ -388,11 +388,12 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	if _, ok := eagerSet["clarify"]; ok {
 		d.WriteString("- `clarify(question, options)` 로 진짜 모호성을 버튼 선택으로 해결하라: 파일·경로·이름이 여러 개 매치되어 사용자만이 선택할 수 있을 때. 평서문으로 되물어 답변 타이핑을 요구하지 말고 이 도구를 써라. 예/아니오 수준의 사소한 확인, 스스로 추론 가능한 질문에는 쓰지 마라. 호출 후에는 턴을 즉시 종료한다 — 선택 결과는 다음 턴에 `[유저 응답 (버튼): ...]` 형태로 도착한다.\n")
 	}
-	if params.AutoDeliveredOutput {
-		d.WriteString("- **이 실행은 예약된 자동 실행이다.** 최종 응답 텍스트는 시스템이 자동으로 사용자 채널에 전달한다. 결과를 전달하려고 `message` 도구를 호출하지 마라 — 그냥 최종 결과 텍스트를 작성하고 턴을 끝내라.\n")
-		d.WriteString("- 최종 텍스트는 그대로 사용자에게 보이는 배달문이다. 보고 본문(제목/헤딩)으로 바로 시작하라 — \"이제 분석 보고를 정리해\" 같은 사고·전환 문장을 본문 앞에 붙이지 마라.\n")
-		d.WriteString("- 내부 전송 도구가 실패하더라도 그것은 채널 장애가 아니다. \"채널이 끊겼다 / 연결되지 않았다 / 복구되면 보내겠다 / 여기 직접 전달한다\" 같은 안내를 절대 하지 마라 — 채널은 정상이고 너의 결과물은 그대로 전달된다.\n")
-	}
+	// Auto-delivered runs (cron relay, miniapp sync) used to get a 3-line
+	// delivery directive here, gated per run — which split heartbeat and
+	// interactive turns of one session into two divergent system prompts
+	// (two vLLM APC prefix families). The directive now rides the last user
+	// message as a wire-only tail addition (chat/run_tail_inject.go), so the
+	// system prompt stays byte-identical across both run families.
 	d.WriteString("\n")
 
 	// Rich interactive UI (deneb-ui) — gated to clients that can render it (the
