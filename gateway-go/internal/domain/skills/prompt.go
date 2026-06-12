@@ -190,11 +190,13 @@ func formatSkillsCompact(skills []PromptSkill) string {
 // format the chat pipeline injects into the semi-static block of the
 // system prompt: the agent only needs identity + one-line purpose to
 // decide which skill matches; full SKILL.md body is loaded on demand via
-// the skills tool's read action or the read tool against <location>.
+// the skills tool's read action or the read tool against the listed path.
 //
-// Roughly half the size of formatSkillsFull for a typical catalog and
-// keeps semi-static cache turnover lower (fewer fields → fewer reasons
-// for the byte sequence to drift).
+// One markdown list line per skill instead of the per-field XML the other
+// formats use: the prompt audit (2026-06-13) measured the XML tags at ~22
+// wire tokens per skill of pure markup, paid on every turn and growing with
+// every skill the self-evolution loop creates. The <available_skills>
+// envelope stays so the system-prompt instructions keep a stable anchor.
 func formatSkillsIndex(skills []PromptSkill) string {
 	if len(skills) == 0 {
 		return ""
@@ -204,23 +206,50 @@ func formatSkillsIndex(skills []PromptSkill) string {
 	b.WriteString("\n\n<available_skills>")
 
 	for _, s := range skills {
-		b.WriteString("\n  <skill>")
-		b.WriteString("\n    <name>")
-		b.WriteString(escapeXML(s.Name))
-		b.WriteString("</name>")
+		b.WriteString("\n- **")
+		b.WriteString(indexLineText(s.Name))
+		b.WriteString("** (")
+		b.WriteString(indexLineText(s.FilePath))
+		b.WriteString(")")
 		if s.Description != "" {
-			b.WriteString("\n    <description>")
-			b.WriteString(escapeXML(s.Description))
-			b.WriteString("</description>")
+			b.WriteString(": ")
+			b.WriteString(indexLineText(s.Description))
 		}
-		b.WriteString("\n    <location>")
-		b.WriteString(escapeXML(s.FilePath))
-		b.WriteString("</location>")
-		b.WriteString("\n  </skill>")
 	}
 
 	b.WriteString("\n</available_skills>")
 	return b.String()
+}
+
+// formatSkillsIndexCompact is the budget-overflow fallback for the index:
+// name + location only, same line shape as formatSkillsIndex.
+func formatSkillsIndexCompact(skills []PromptSkill) string {
+	if len(skills) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("\n\n<available_skills>")
+
+	for _, s := range skills {
+		b.WriteString("\n- **")
+		b.WriteString(indexLineText(s.Name))
+		b.WriteString("** (")
+		b.WriteString(indexLineText(s.FilePath))
+		b.WriteString(")")
+	}
+
+	b.WriteString("\n</available_skills>")
+	return b.String()
+}
+
+// indexLineText flattens a frontmatter-sourced value onto one line so a
+// multi-line name/description cannot break the one-line-per-skill index shape.
+func indexLineText(s string) string {
+	if !strings.ContainsAny(s, "\r\n") {
+		return s
+	}
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // BuildSkillsIndex is the P5 builder: full index (name+description+location)
@@ -242,6 +271,11 @@ func BuildSkillsIndex(skills []PromptSkill, limits SkillsLimits) PromptResult {
 	if len(visible) == 0 {
 		return PromptResult{}
 	}
+
+	// ~/-compact the listed locations (the read tool expands ~ and allows the
+	// skills catalog root — tools/fs_search.go ResolvePathWithRoots), saving
+	// the home-dir prefix on every entry.
+	visible = CompactSkillPaths(visible)
 
 	maxCount := limits.MaxSkillsInPrompt
 	if maxCount <= 0 {
@@ -267,9 +301,9 @@ func BuildSkillsIndex(skills []PromptSkill, limits SkillsLimits) PromptResult {
 	}
 
 	compactBudget := maxChars - compactWarningOverhead
-	if len(formatSkillsCompact(visible)) <= compactBudget {
+	if len(formatSkillsIndexCompact(visible)) <= compactBudget {
 		return PromptResult{
-			Prompt:    formatSkillsCompact(visible),
+			Prompt:    formatSkillsIndexCompact(visible),
 			Truncated: truncated,
 			Compact:   true,
 			Count:     len(visible),
@@ -279,7 +313,7 @@ func BuildSkillsIndex(skills []PromptSkill, limits SkillsLimits) PromptResult {
 	lo, hi := 0, len(visible)
 	for lo < hi {
 		mid := (lo + hi + 1) / 2
-		if len(formatSkillsCompact(visible[:mid])) <= compactBudget {
+		if len(formatSkillsIndexCompact(visible[:mid])) <= compactBudget {
 			lo = mid
 		} else {
 			hi = mid - 1
@@ -289,7 +323,7 @@ func BuildSkillsIndex(skills []PromptSkill, limits SkillsLimits) PromptResult {
 	truncated = true
 
 	return PromptResult{
-		Prompt:    formatSkillsCompact(visible),
+		Prompt:    formatSkillsIndexCompact(visible),
 		Truncated: truncated,
 		Compact:   true,
 		Count:     len(visible),

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -284,9 +285,32 @@ func splitGlobs(include string) []string {
 	return globs
 }
 
-// resolvePath resolves a potentially relative path against the default directory.
+// ResolvePath resolves a potentially relative path against the default directory.
 // It validates that the resolved path does not escape the workspace boundary.
 func ResolvePath(path, defaultDir string) string {
+	return ResolvePathWithRoots(path, defaultDir, nil)
+}
+
+// ResolvePathWithRoots is ResolvePath with additional allowed roots: a resolved
+// path under any of extraRoots is returned as-is instead of being clamped to
+// the workspace root. Read-only tools use it to reach curated catalogs outside
+// the workspace — concretely the skills catalog (~/.deneb/skills), whose
+// SKILL.md locations the system prompt itself directs the model to read.
+// Before this, those reads were silently clamped to the workspace root and
+// returned a directory listing instead of the skill body.
+//
+// A leading "~/" (or bare "~") expands to the user home before resolution, so
+// the prompt-style paths the model naturally emits (~/.deneb/...) resolve
+// instead of joining into a nonexistent "<workspace>/~/..." path. Expansion
+// does not widen the boundary: the expanded path still passes the same
+// workspace/extra-root containment check.
+func ResolvePathWithRoots(path, defaultDir string, extraRoots []string) string {
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			path = filepath.Join(home, strings.TrimPrefix(path, "~"))
+		}
+	}
+
 	var resolved string
 	if filepath.IsAbs(path) {
 		resolved = filepath.Clean(path)
@@ -294,8 +318,9 @@ func ResolvePath(path, defaultDir string) string {
 		resolved = filepath.Clean(filepath.Join(defaultDir, path))
 	}
 
-	// Security: verify the resolved path is under the workspace root
-	// to prevent path traversal attacks (e.g., "../../etc/passwd").
+	// Security: verify the resolved path is under the workspace root (or an
+	// explicitly allowed extra root) to prevent path traversal attacks
+	// (e.g., "../../etc/passwd").
 	absDefault, err := filepath.Abs(defaultDir)
 	if err != nil {
 		return resolved
@@ -304,12 +329,29 @@ func ResolvePath(path, defaultDir string) string {
 	if err != nil {
 		return resolved
 	}
-	if !strings.HasPrefix(absResolved, absDefault+string(filepath.Separator)) && absResolved != absDefault {
-		// Path escapes workspace — clamp to workspace root.
-		return absDefault
+	if pathUnderRoot(absResolved, absDefault) {
+		return resolved
 	}
+	for _, root := range extraRoots {
+		root = strings.TrimSpace(root)
+		if root == "" {
+			continue
+		}
+		absRoot, err := filepath.Abs(root)
+		if err != nil {
+			continue
+		}
+		if pathUnderRoot(absResolved, absRoot) {
+			return resolved
+		}
+	}
+	// Path escapes all allowed roots — clamp to workspace root.
+	return absDefault
+}
 
-	return resolved
+// pathUnderRoot reports whether abs path p is root itself or contained in it.
+func pathUnderRoot(p, root string) bool {
+	return p == root || strings.HasPrefix(p, root+string(filepath.Separator))
 }
 
 // rgWithFallbacks runs ripgrep with automatic retry on failure.

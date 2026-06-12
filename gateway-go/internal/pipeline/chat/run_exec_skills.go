@@ -72,7 +72,8 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 		// so the semi-static block is roughly half the size and keeps
 		// drifting less when peripheral metadata changes (tags edits,
 		// category renames). Full body is loaded on demand via the
-		// skills tool's read action or the read tool against <location>.
+		// skills tool's read action or the read tool against the listed
+		// location path.
 		indexResult := skills.BuildSkillsIndex(snapshot.ResolvedSkills, skills.DefaultSkillsLimits())
 		skillsCache.prompt = indexResult.Prompt
 		skillsCache.snapshot = snapshot

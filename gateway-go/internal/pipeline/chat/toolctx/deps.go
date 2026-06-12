@@ -20,18 +20,24 @@ import (
 // CoreToolDeps holds all dependencies for core agent tools.
 // It composes focused dep structs for each tool group.
 type CoreToolDeps struct {
-	WorkspaceDir   string
-	Process        ProcessDeps
-	Sessions       SessionDeps
-	Chrono         ChronoDeps
-	Wiki           WikiDeps
-	Contacts       ContactsDeps
-	Calendar       CalendarDeps
-	LLMClient      *llm.Client
-	DefaultModel   string
-	AgentLog       *agentlog.Writer
-	LogCapture     *observe.LogCapture   // optional; in-memory log ring for the observe tool
-	SpilloverStore *agent.SpilloverStore // optional; spills large tool results to disk
+	WorkspaceDir string
+	// SkillsCatalogDirs are the skill catalog roots that live outside the
+	// workspace (managed ~/.deneb/skills, personal ~/.agents/skills). The
+	// read tool accepts them as extra allowed roots so the SKILL.md
+	// locations listed in the system prompt are actually readable —
+	// without this they were clamped to the workspace root. Empty disables.
+	SkillsCatalogDirs []string
+	Process           ProcessDeps
+	Sessions          SessionDeps
+	Chrono            ChronoDeps
+	Wiki              WikiDeps
+	Contacts          ContactsDeps
+	Calendar          CalendarDeps
+	LLMClient         *llm.Client
+	DefaultModel      string
+	AgentLog          *agentlog.Writer
+	LogCapture        *observe.LogCapture   // optional; in-memory log ring for the observe tool
+	SpilloverStore    *agent.SpilloverStore // optional; spills large tool results to disk
 
 	// VllmBaseURLs lazily lists the deduped base URLs of OpenAI-mode vLLM
 	// roles; the observe tool scrapes each endpoint's /metrics for the
