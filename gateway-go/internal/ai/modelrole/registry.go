@@ -308,6 +308,33 @@ func (r *Registry) BaseURL(role Role) string {
 	return r.Config(role).BaseURL
 }
 
+// VllmBaseURLs returns the deduped base URLs (".../v1") of every role that
+// targets the OpenAI-mode vLLM provider, main role first. The observation
+// plane scrapes each endpoint's /metrics for engine-level prefix-cache
+// counters — some vLLM builds never fill the per-request usage field
+// (prompt_tokens_details.cached_tokens), so the engine counters are the only
+// reliable cache-hit signal. Non-vLLM deployments return nil.
+func (r *Registry) VllmBaseURLs() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var out []string
+	seen := make(map[string]bool)
+	for _, role := range []Role{RoleMain, RoleAnalysis, RoleLightweight, RoleTiny, RoleFallback} {
+		cfg, ok := r.models[role]
+		if !ok || cfg.ProviderID != "vllm" || cfg.BaseURL == "" || seen[cfg.BaseURL] {
+			continue
+		}
+		// /metrics lives on vLLM's OpenAI server; an anthropic-mode endpoint
+		// under the vllm provider id would be some other proxy — skip it.
+		if cfg.APIMode == llm.APIModeAnthropic {
+			continue
+		}
+		seen[cfg.BaseURL] = true
+		out = append(out, cfg.BaseURL)
+	}
+	return out
+}
+
 // Client returns a cached LLM client for the given role.
 // The client is lazily created on first access and reused thereafter.
 func (r *Registry) Client(role Role) *llm.Client {

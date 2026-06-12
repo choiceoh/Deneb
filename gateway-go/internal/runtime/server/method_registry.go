@@ -121,6 +121,22 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		s.notify.start(s.ShutdownCtx())
 	}
 
+	// Observation-plane deps, shared verbatim by the in-process observe.* and
+	// the remote miniapp.observe.* registrations below. AgentLog and VllmBases
+	// are getters because the agentlog writer and the model registry are both
+	// constructed later (session phase); resolving lazily avoids capturing nil.
+	observeDeps := handlerobserve.Deps{
+		Capture:  s.logCapture,
+		AgentLog: func() *agentlog.Writer { return s.agentLogWriter },
+		VllmBases: func() []string {
+			if s.modelRegistry == nil {
+				return nil
+			}
+			return s.modelRegistry.VllmBaseURLs()
+		},
+		Logger: hub.Logger(),
+	}
+
 	// Table-driven domain registration: one slice, one loop.
 	// Deps assembled inline from hub accessors — no adapter layer.
 	domains := []map[string]rpcutil.HandlerFunc{
@@ -195,13 +211,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlersystem.LogsMethods(handlersystem.LogsDeps{LogDir: filepath.Join(denebDir, "logs")}),
 
 		// --- Observation plane (unified: log ring + turn shape + behavior) ---
-		// AgentLog is a getter because s.agentLogWriter is constructed later in
-		// registerSessionRPCMethods; resolving it lazily avoids capturing a nil.
-		handlerobserve.Methods(handlerobserve.Deps{
-			Capture:  s.logCapture,
-			AgentLog: func() *agentlog.Writer { return s.agentLogWriter },
-			Logger:   hub.Logger(),
-		}),
+		handlerobserve.Methods(observeDeps),
 
 		// --- Insights (usage reports) ---
 		handlerinsights.Methods(handlerinsights.Deps{
@@ -229,11 +239,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// in-process observe.* above, exposed here so remote adapters (native
 		// dashboard, token-holding external CLI) can reach logs/turns/behavior.
 		// The miniapp.* gate is exactly the client-token boundary we want.
-		handlerobserve.MiniappMethods(handlerobserve.Deps{
-			Capture:  s.logCapture,
-			AgentLog: func() *agentlog.Writer { return s.agentLogWriter },
-			Logger:   hub.Logger(),
-		}),
+		handlerobserve.MiniappMethods(observeDeps),
 		handlerminiapp.Methods(handlerminiapp.Deps{
 			Version: hub.Version(),
 			CurrentModel: func() string {

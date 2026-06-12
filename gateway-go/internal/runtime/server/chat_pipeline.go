@@ -165,6 +165,8 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		DefaultModel: reg.Model(modelrole.RoleLightweight),
 		AgentLog:     agentLogWriter,
 		LogCapture:   s.logCapture,
+		// Engine-level prefix-cache scrape targets for the observe tool.
+		VllmBaseURLs: reg.VllmBaseURLs,
 	}
 
 	// Ambient calendar awareness: a frozen-per-day upcoming-events glance in the
