@@ -20,6 +20,7 @@ import ai.deneb.deneb.ScheduleDraft
 import ai.deneb.deneb.SkillDetailContent
 import ai.deneb.deneb.SkillLifecycleContent
 import ai.deneb.deneb.SkillListContent
+import ai.deneb.deneb.SkillsViewSwitcher
 import ai.deneb.deneb.Todo
 import ai.deneb.deneb.TodoAddContent
 import ai.deneb.deneb.TodoListContent
@@ -943,7 +944,10 @@ private fun renderSkillsList(name: String, scheme: ColorScheme) {
     val scene = ImageComposeScene(width = 824, height = 700, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
-                SkillListContent(sampleSkillRows)
+                Column {
+                    SkillsViewSwitcher(showLifecycle = false, onSelect = {})
+                    SkillListContent(sampleSkillRows)
+                }
             }
         }
     }
@@ -1000,7 +1004,10 @@ private fun renderSkillLifecycle(name: String, scheme: ColorScheme) {
     val scene = ImageComposeScene(width = 824, height = 700, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
-                SkillLifecycleContent(sampleLifecycleEvents(System.currentTimeMillis()))
+                Column {
+                    SkillsViewSwitcher(showLifecycle = true, onSelect = {})
+                    SkillLifecycleContent(sampleLifecycleEvents(System.currentTimeMillis()))
+                }
             }
         }
     }
