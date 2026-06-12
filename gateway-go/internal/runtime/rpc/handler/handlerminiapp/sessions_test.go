@@ -354,7 +354,9 @@ func TestSessionsTranscript_HappyPath(t *testing.T) {
 				t.Errorf("limit = %d, want %d", limit, defaultTranscriptLimit)
 			}
 			return []toolctx.ChatMessage{
-				{ID: "m1", Role: "user", Content: jsonRaw(`"안녕"`), Timestamp: 1_700_000_000_000},
+				// User messages are persisted with a baked "[<RFC3339>] "
+				// wall-clock prefix (run_exec.go) — bubbles must not show it.
+				{ID: "m1", Role: "user", Content: jsonRaw(`"[2026-06-12T15:30:00+09:00] 안녕"`), Timestamp: 1_700_000_000_000},
 				{ID: "m2", Role: "assistant", Content: jsonRaw(`"안녕하세요"`), Timestamp: 1_700_000_001_000},
 			}, 42, nil
 		},

@@ -18,6 +18,7 @@ package toolctx
 import (
 	"encoding/json"
 	"strings"
+	"time"
 )
 
 // LinkEnrichmentHeader marks the start of a link-enrichment block appended to
@@ -89,6 +90,51 @@ func StripLinkEnrichmentForDisplay(msgs []ChatMessage) []ChatMessage {
 			continue
 		}
 		msgs[i].Content = MarshalJSONString(strings.TrimRight(text[:idx], " \n"))
+	}
+	return msgs
+}
+
+// StripUserMessageTimestamp removes the leading "[<RFC3339>] " wall-clock
+// prefix from a user message text. executeAgentRun bakes that prefix in at
+// transcript-persist time: the model needs per-turn wall-clock while the
+// system prompt's date field stays day-only precision for cache stability
+// (see prompt-cache.md § 1). The bracketed segment must parse as RFC3339 —
+// user-typed brackets ("[중요] 회의 메모") and messages persisted before the
+// timestamp policy pass through unchanged.
+func StripUserMessageTimestamp(text string) string {
+	if !strings.HasPrefix(text, "[") {
+		return text
+	}
+	end := strings.Index(text, "] ")
+	if end < 0 {
+		return text
+	}
+	if _, err := time.Parse(time.RFC3339, text[1:end]); err != nil {
+		return text
+	}
+	return text[end+len("] "):]
+}
+
+// StripUserMessageTimestampsForDisplay removes the baked timestamp prefix
+// from user bubbles handed to a client surface, so the timeline shows what
+// the user actually typed. Only plain-string content is touched — the prepend
+// site only writes plain text — and only the RPC response is rewritten; the
+// stored transcript keeps the prefix so history reloads stay byte-identical
+// for the LLM (prompt-cache invariant).
+func StripUserMessageTimestampsForDisplay(msgs []ChatMessage) []ChatMessage {
+	for i := range msgs {
+		if msgs[i].Role != "user" {
+			continue
+		}
+		var text string
+		if err := json.Unmarshal(msgs[i].Content, &text); err != nil {
+			continue // rich block content never carries the prefix
+		}
+		stripped := StripUserMessageTimestamp(text)
+		if stripped == text {
+			continue
+		}
+		msgs[i].Content = MarshalJSONString(stripped)
 	}
 	return msgs
 }

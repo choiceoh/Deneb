@@ -103,3 +103,45 @@ func TestStripLinkEnrichmentForDisplay_StripsAppendedBlock(t *testing.T) {
 		t.Fatalf("assistant message must be untouched, got %q", got)
 	}
 }
+
+// The baked "[<RFC3339>] " wall-clock prefix (run_exec.go persist site) must
+// come off user bubbles, while user-typed brackets and non-user roles survive.
+func TestStripUserMessageTimestamp(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+	}{
+		{"baked timestamp", "[2026-06-12T15:30:00+09:00] 안녕", "안녕"},
+		{"utc timestamp", "[2026-06-12T06:30:00Z] hello", "hello"},
+		{"user-typed bracket", "[중요] 회의 메모", "[중요] 회의 메모"},
+		{"pre-policy plain", "타임스탬프 없는 메시지", "타임스탬프 없는 메시지"},
+		{"bracket without close", "[2026-06-12T15:30:00+09:00 잘림", "[2026-06-12T15:30:00+09:00 잘림"},
+		{"date only is not rfc3339", "[2026-06-12] 메모", "[2026-06-12] 메모"},
+		{"timestamp then typed bracket", "[2026-06-12T15:30:00+09:00] [중요] 공지", "[중요] 공지"},
+	}
+	for _, c := range cases {
+		if got := StripUserMessageTimestamp(c.in); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func TestStripUserMessageTimestampsForDisplay(t *testing.T) {
+	stamped := "[2026-06-12T15:30:00+09:00] 오늘 일정 알려줘"
+	blocks := `[{"type":"text","text":"[2026-06-12T15:30:00+09:00] block"}]`
+	msgs := []ChatMessage{
+		NewTextChatMessage("user", stamped, 0),
+		NewTextChatMessage("assistant", stamped, 0), // non-user roles untouched
+		richMsg("user", blocks),                     // block content untouched
+	}
+	out := StripUserMessageTimestampsForDisplay(msgs)
+
+	if got := out[0].TextContent(); got != "오늘 일정 알려줘" {
+		t.Fatalf("user bubble not stripped, got %q", got)
+	}
+	if got := out[1].TextContent(); got != stamped {
+		t.Fatalf("assistant message must be untouched, got %q", got)
+	}
+	if string(out[2].Content) != blocks {
+		t.Fatalf("block content must be untouched, got %s", out[2].Content)
+	}
+}
