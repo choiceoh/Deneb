@@ -20,6 +20,38 @@ import kotlinx.coroutines.flow.update
  * facade while each RPC domain lives in its own file.
  */
 
+/** Cap on the session read-overlay so a very long session can't grow it without
+ *  bound (EmailStore caps its pending queue for the same reason). */
+private const val MAX_LOCAL_READ_IDS = 1000
+
+/**
+ * Re-apply the session read-overlay to a freshly fetched page: a mail the user
+ * has read this session shows no unread dot even when the server's row still
+ * says unread. The gateway caches list_recent for 30s and mark_read deliberately
+ * does NOT invalidate it (inbox membership is unchanged), leaning on this
+ * optimistic clear to mask the stale dot. Phone back-nav recomposes the list and
+ * re-runs refreshMail within that window, so without re-applying here the cached
+ * unread would resurrect a dot the user already cleared. Identity (no allocation)
+ * when the overlay is empty, the common case.
+ */
+internal fun applyReadOverlay(rows: List<MailMessage>, locallyRead: Set<String>): List<MailMessage> =
+    if (locallyRead.isEmpty()) {
+        rows
+    } else {
+        rows.map { if (it.unread && it.id in locallyRead) it.copy(unread = false) else it }
+    }
+
+/** Record [id] as read in [into] (most-recent-last), evicting the oldest beyond [max]. */
+internal fun recordReadId(into: LinkedHashSet<String>, id: String, max: Int = MAX_LOCAL_READ_IDS) {
+    into.remove(id) // re-insert to refresh recency so eviction drops the longest-untouched
+    into.add(id)
+    if (into.size > max) {
+        val it = into.iterator()
+        it.next()
+        it.remove()
+    }
+}
+
 /** Refresh the mail list. With a [query] it runs a full-mailbox Gmail search
  *  (any Gmail syntax: keywords, `from:`, `has:attachment`, …); null/blank falls
  *  back to the server's default recent-inbox view. Returns false on a fetch
@@ -34,9 +66,12 @@ suspend fun DenebGatewayClient.refreshMail(query: String? = null): Boolean {
         },
     ) ?: return false
     denebMailActiveQuery = q
-    _denebMail.value = payload.messages
-        .filter { it.id.isNotBlank() }
-        .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread, it.priority, it.priorityHint) }
+    _denebMail.value = applyReadOverlay(
+        payload.messages
+            .filter { it.id.isNotBlank() }
+            .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread, it.priority, it.priorityHint) },
+        locallyReadMailIds,
+    )
     _denebMailNextToken.value = payload.nextPageToken.ifBlank { null }
     return true
 }
@@ -53,9 +88,12 @@ suspend fun DenebGatewayClient.loadMoreMail() {
         },
     ) ?: return
     val seen = _denebMail.value.mapTo(HashSet()) { it.id }
-    _denebMail.value = _denebMail.value + payload.messages
-        .filter { it.id.isNotBlank() && it.id !in seen }
-        .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread, it.priority, it.priorityHint) }
+    _denebMail.value = _denebMail.value + applyReadOverlay(
+        payload.messages
+            .filter { it.id.isNotBlank() && it.id !in seen }
+            .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread, it.priority, it.priorityHint) },
+        locallyReadMailIds,
+    )
     _denebMailNextToken.value = payload.nextPageToken.ifBlank { null }
 }
 
@@ -88,6 +126,10 @@ suspend fun DenebGatewayClient.fetchMailDetail(id: String, full: Boolean = false
 suspend fun DenebGatewayClient.markMailRead(id: String): Boolean {
     val ok = callRpc<OkPayload>("miniapp.gmail.mark_read", buildJsonObject { put("id", id) })?.ok == true
     if (ok) {
+        // Remember the read so a later list refetch can't resurrect the dot: on phone,
+        // popping back from the mail recomposes the list and re-runs refreshMail inside
+        // the gateway's 30s list cache, which still reports the mail unread.
+        recordReadId(locallyReadMailIds, id)
         _denebMail.update { list -> list.map { if (it.id == id) it.copy(unread = false) else it } }
     }
     return ok
@@ -203,7 +245,10 @@ suspend fun DenebGatewayClient.fetchRecentFromSender(email: String, limit: Int =
             put("limit", limit)
         },
     ) ?: return emptyList()
-    return payload.messages
-        .filter { it.id.isNotBlank() }
-        .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread, it.priority, it.priorityHint) }
+    return applyReadOverlay(
+        payload.messages
+            .filter { it.id.isNotBlank() }
+            .map { MailMessage(it.id, it.from, it.subject, it.snippet, it.date, it.isUnread, it.priority, it.priorityHint) },
+        locallyReadMailIds,
+    )
 }
