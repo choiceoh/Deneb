@@ -191,6 +191,21 @@ start_wm() {
   sleep 1
 }
 
+# Record the app JVM pid for by-PID liveness checks and teardown. Prefer the
+# window's pid (xdotool getwindowpid, via _NET_WM_PID); that can come back empty
+# under WM/timing contention (the queried window is a reparented frame, or
+# _NET_WM_PID is not set yet) — fall back to the gradle launcher pid (app.pid),
+# which the `run` task keeps alive for the app's whole lifetime and which dies
+# when the app does. An empty app_jvm.pid otherwise reads as a hard crash to
+# every `kill -0` liveness check (the publish smoke gate falsely flagged every
+# screen DEAD while the app rendered fine).
+record_app_jvm_pid() {
+  local wid="$1" pid
+  pid="$(DISPLAY="$DISP" xdotool getwindowpid "$wid" 2>/dev/null || true)"
+  [[ -n "$pid" ]] || pid="$(cat "$STATE_DIR/app.pid" 2>/dev/null || true)"
+  printf '%s\n' "$pid" >"$STATE_DIR/app_jvm.pid"
+}
+
 cmd_start() {
   local profile="${1:-phone}"
   local geo; geo="$(profile_geometry "$profile")"
@@ -212,7 +227,7 @@ cmd_start() {
   if [[ -n "$existing" ]]; then
     log "app already running — re-asserting ${pxw}x${pxh} geometry"
     force_geometry "$existing" "$pxw" "$pxh"
-    DISPLAY="$DISP" xdotool getwindowpid "$existing" 2>/dev/null >"$STATE_DIR/app_jvm.pid" || true
+    record_app_jvm_pid "$existing"
     cmd_status; return
   fi
 
@@ -252,9 +267,9 @@ cmd_start() {
   # sticks at the screen size.
   force_geometry "$wid" "$pxw" "$pxh"
   DISPLAY="$DISP" xdotool windowfocus "$wid" 2>/dev/null || true
-  # Record the app JVM pid straight from the window, so teardown is by-PID and
-  # never needs `pkill -f` (which self-kills any shell whose argv holds the pattern).
-  DISPLAY="$DISP" xdotool getwindowpid "$wid" 2>/dev/null >"$STATE_DIR/app_jvm.pid" || true
+  # Record the app JVM pid (for by-PID teardown — never `pkill -f`, which would
+  # self-kill any shell whose argv holds the pattern — and for liveness checks).
+  record_app_jvm_pid "$wid"
   sleep 1  # let it settle / connect to gateway
   log "app window ready (wid=$wid)"
   cmd_status
