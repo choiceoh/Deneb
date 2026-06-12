@@ -236,13 +236,15 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 		return nil, fmt.Errorf("evolver: skill %q has no valid frontmatter", entry.Skill.Name)
 	}
 
-	// Update version in frontmatter.
-	newVersion := resp.Changes.NewVersion
-	if newVersion == "" {
+	// Update version in frontmatter. An empty or unchanged version from the
+	// LLM still gets a forced patch bump so every committed evolve is
+	// distinguishable (production evolves were landing as the same version).
+	newVersion := strings.TrimSpace(resp.Changes.NewVersion)
+	if newVersion == "" || newVersion == entry.Skill.Version {
 		newVersion = bumpPatchVersion(entry.Skill.Version)
 	}
 
-	candidateBody := resp.Changes.Body
+	candidateBody := stripEchoedFrontmatter(resp.Changes.Body)
 
 	// Self-test the rewrite before committing it. A failed or uncertain judge
 	// keeps the original — a bad "improvement" is worse than no change. When a
@@ -259,7 +261,12 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 		candidateBody = body
 	}
 
-	newHeader := strings.Replace(header, entry.Skill.Version, newVersion, 1)
+	// Guard the empty-version case: strings.Replace with an empty "old"
+	// would prepend newVersion to the header instead of replacing anything.
+	newHeader := header
+	if entry.Skill.Version != "" {
+		newHeader = strings.Replace(header, entry.Skill.Version, newVersion, 1)
+	}
 	newContent := newHeader + "\n" + candidateBody + "\n"
 
 	// Write back atomically so a crash mid-write can't corrupt the skill.
@@ -286,6 +293,28 @@ func (e *Evolver) resolveModel() string {
 		return e.model
 	}
 	return "gemini-2.5-flash"
+}
+
+// stripEchoedFrontmatter removes any leading YAML frontmatter block(s) an LLM
+// echoed into a rewritten skill body. The evolve prompt asks for the body
+// only, but lightweight models often return the whole SKILL.md; blindly
+// prepending the canonical header then stacks one duplicate frontmatter per
+// evolve cycle (production email-analysis reached a triple frontmatter this
+// way). Only blocks that parse as skill frontmatter (a name: key) are
+// stripped, so a body that legitimately opens with a "---" rule is kept. The
+// bodyOffset >= len guard also keeps the no-closing-delimiter case (where the
+// whole text is treated as frontmatter) from stripping the body to nothing.
+func stripEchoedFrontmatter(body string) string {
+	for {
+		header, bodyOffset := skills.ExtractFrontmatterBlock(body)
+		if header == "" || bodyOffset <= 0 || bodyOffset >= len(body) {
+			return body
+		}
+		if skills.ParseFrontmatter(body)["name"] == "" {
+			return body
+		}
+		body = strings.TrimLeft(body[bodyOffset:], "\n")
+	}
 }
 
 // bumpPatchVersion increments the patch segment of a semver string.
@@ -470,7 +499,7 @@ func (e *Evolver) teacherRewrite(ctx context.Context, originalContent, failedCan
 	if resp.Skip || resp.Changes == nil {
 		return "", nil
 	}
-	return resp.Changes.Body, nil
+	return stripEchoedFrontmatter(resp.Changes.Body), nil
 }
 
 // EvolutionTask implements autonomous.PeriodicTask for background skill evolution.
