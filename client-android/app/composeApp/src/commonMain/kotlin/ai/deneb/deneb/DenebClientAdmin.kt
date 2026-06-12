@@ -5,6 +5,8 @@ import ai.deneb.data.ServiceEntry
 import ai.deneb.data.TaskStatus
 import ai.deneb.data.TaskTrigger
 import ai.deneb.deneb.generated.MiniappCronDetail
+import ai.deneb.deneb.generated.SkillLifecycleEvent
+import ai.deneb.deneb.generated.SkillsLifecycleResponse
 import ai.deneb.deneb.generated.SkillsListResponse
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.ic_service_anthropic
@@ -202,6 +204,14 @@ suspend fun DenebGatewayClient.refreshSkills(): Boolean {
     _denebSkills.value = payload.skills
     return true
 }
+
+/** Self-evolution timeline for the Skills tab (genesis/evolve/review events,
+ *  newest first). Null on transport failure so the tab can show a retry —
+ *  an empty feed is a valid, distinct state ("no activity yet"). */
+suspend fun DenebGatewayClient.fetchSkillLifecycle(limit: Int = 60): List<SkillLifecycleEvent>? = callRpc<SkillsLifecycleResponse>(
+    "miniapp.skills.lifecycle",
+    buildJsonObject { put("limit", limit) },
+)?.events
 
 // --- Scheduler screen → Deneb cron --------------------------------------
 

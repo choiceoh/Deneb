@@ -119,6 +119,19 @@ func DiscoverWorkspaceSkills(cfg DiscoverConfig) []SkillEntry {
 
 	managedSkills := loadSkillsFromSource(managedDir, SourceManaged, limits, log)
 
+	// The genesis output dir nests one level deeper than this walker reaches
+	// (managed/genesis/<category>/<name>/SKILL.md — the managed walk treats
+	// "genesis" as a category and finds no SKILL.md one level down), so load
+	// it as its own source root, inside which the layout is the standard
+	// category nesting. Without this, loop-generated skills exist on disk but
+	// vanish from the catalog, the system prompt, and the skills tab at every
+	// restart (they were only ever visible via the in-memory Register at
+	// creation time).
+	var genesisSkills []discoveredSkill
+	if managedDir != "" {
+		genesisSkills = loadSkillsFromSource(filepath.Join(managedDir, "genesis"), SourceManaged, limits, log)
+	}
+
 	var personalSkills []discoveredSkill
 	if home != "" {
 		personalDir := filepath.Join(home, ".agents", "skills")
@@ -130,7 +143,8 @@ func DiscoverWorkspaceSkills(cfg DiscoverConfig) []SkillEntry {
 
 	workspaceSkills := loadSkillsFromSource(workspaceSkillsDir, SourceWorkspace, limits, log)
 
-	// Merge by name: extra < bundled < managed < personal < project < workspace
+	// Merge by name: extra < bundled < managed (incl. genesis) < personal <
+	// project < workspace
 	merged := make(map[string]discoveredSkill)
 	for _, s := range extraSkills {
 		merged[s.Name] = s
@@ -139,6 +153,9 @@ func DiscoverWorkspaceSkills(cfg DiscoverConfig) []SkillEntry {
 		merged[s.Name] = s
 	}
 	for _, s := range managedSkills {
+		merged[s.Name] = s
+	}
+	for _, s := range genesisSkills {
 		merged[s.Name] = s
 	}
 	for _, s := range personalSkills {

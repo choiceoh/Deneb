@@ -25,6 +25,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/mailpriority"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -423,10 +424,15 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			},
 		}),
 
-		// Mini App skills list (miniapp.skills.list). Read-only catalog for
-		// the Settings → Skills tab. Uses the same archived + eligibility
-		// filtering as the system prompt (chat.EligibleWorkspaceSkills), so the
-		// tab advertises only skills the agent can actually use.
+		// Mini App skills list + self-evolution feed (miniapp.skills.list,
+		// miniapp.skills.lifecycle). Read-only catalog for the Settings →
+		// Skills tab plus the genesis → review → evolve timeline. Uses the
+		// same archived + eligibility filtering as the system prompt
+		// (chat.EligibleWorkspaceSkills), so the tab advertises only skills
+		// the agent can actually use. The tracker projections read
+		// s.genesisTracker lazily (it is wired after early registration) and
+		// are nil-tolerant so the tab degrades to an un-enriched list when
+		// the tracker is unavailable.
 		handlerminiapp.SkillsMethods(handlerminiapp.SkillsDeps{
 			List: func() []skills.SkillEntry {
 				// chatHandler (and its tool registry) is ready by the time this
@@ -438,6 +444,24 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 					toolNames = s.chatHandler.ToolNames()
 				}
 				return chat.EligibleWorkspaceSkills(resolveWorkspaceDir(), toolNames)
+			},
+			CuratorRecords: func() ([]genesis.SkillCuratorRecord, error) {
+				if s.genesisTracker == nil {
+					return nil, nil
+				}
+				return s.genesisTracker.SkillCuratorReport("")
+			},
+			UsageStats: func() ([]genesis.UsageStats, error) {
+				if s.genesisTracker == nil {
+					return nil, nil
+				}
+				return s.genesisTracker.ListAllStats()
+			},
+			RecentLifecycle: func(limit int) ([]genesis.LifecycleLogEntry, error) {
+				if s.genesisTracker == nil {
+					return nil, nil
+				}
+				return s.genesisTracker.RecentLifecycleLog(limit)
 			},
 		}),
 

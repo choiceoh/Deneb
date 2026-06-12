@@ -17,11 +17,15 @@ import ai.deneb.deneb.MailMessage
 import ai.deneb.deneb.MailRow
 import ai.deneb.deneb.SchedMode
 import ai.deneb.deneb.ScheduleDraft
+import ai.deneb.deneb.SkillLifecycleContent
+import ai.deneb.deneb.SkillListContent
 import ai.deneb.deneb.Todo
 import ai.deneb.deneb.TodoAddContent
 import ai.deneb.deneb.TodoListContent
 import ai.deneb.deneb.buildMonthGrid
 import ai.deneb.deneb.eventDays
+import ai.deneb.deneb.generated.SkillLifecycleEvent
+import ai.deneb.deneb.generated.SkillRow
 import ai.deneb.deneb.koreanDayOfWeek
 import ai.deneb.deneb.layoutMonthBars
 import ai.deneb.deneb.timedSingleDayDots
@@ -143,6 +147,10 @@ fun main() {
     renderSkeleton("skeleton_light.png", LightColorScheme)
     renderWaitingChip("waiting_chip_dark.png", DarkColorScheme)
     renderWaitingChip("waiting_chip_light.png", LightColorScheme)
+    renderSkillsList("skills_list_dark.png", DarkColorScheme)
+    renderSkillsList("skills_list_light.png", LightColorScheme)
+    renderSkillLifecycle("skills_lifecycle_dark.png", DarkColorScheme)
+    renderSkillLifecycle("skills_lifecycle_light.png", LightColorScheme)
     println("rendered -> /tmp/deneb-render/")
 }
 
@@ -857,6 +865,96 @@ private fun render(name: String, scheme: ColorScheme) {
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                 }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// --- Skills tab (settings) -------------------------------------------------
+// Validates the origin badges (생성 vs 최초) on the skill list and the
+// self-evolution timeline rows (genesis/evolved/rejected/review badges).
+
+private val sampleSkillRows = listOf(
+    SkillRow(
+        name = "email-analysis",
+        description = "새 메일 도착(cron 트리거) 또는 직접 요청 시 Gmail 단일 메일을 심층 분석하는 워크플로우 — 스레드 수집, 위키 컨텍스트 결합, 중요도 분류.",
+        category = "productivity",
+        source = "managed",
+        version = "1.1.1",
+        origin = "initial",
+        evolveCount = 2,
+        totalUses = 7,
+    ),
+    SkillRow(
+        name = "morning-letter-composite",
+        description = "아침 브리핑 편지를 일정·메일·할일 데이터로 합성하는 절차",
+        category = "productivity", source = "managed", version = "0.1.0",
+        origin = "genesis", createdAt = 1L, curatorState = "active", totalUses = 2,
+    ),
+    SkillRow(
+        name = "playwright",
+        description = "브라우저 자동화 작업 절차",
+        category = "integration",
+        source = "managed",
+        version = "1.0.0",
+        origin = "initial",
+    ),
+)
+
+private fun sampleLifecycleEvents(now: Long) = listOf(
+    SkillLifecycleEvent(
+        type = "evolved",
+        skillName = "email-analysis",
+        at = now - 2 * 3_600_000L,
+        version = "1.1.1",
+        detail = "gmail 도구 오류 시 가용 정보로 보고를 완료하도록 절차 보강",
+    ),
+    SkillLifecycleEvent(
+        type = "review",
+        skillName = "email-analysis",
+        at = now - 3 * 3_600_000L,
+        route = "no-op",
+        detail = "기존 email-analysis 스킬이 해당 워크플로우를 이미 커버",
+    ),
+    SkillLifecycleEvent(
+        type = "evolve_rejected",
+        skillName = "email-analysis",
+        at = now - 26 * 3_600_000L,
+        detail = "self-test rejected: 절차 퇴보 (위키 업데이트 단계 누락)",
+    ),
+    SkillLifecycleEvent(
+        type = "genesis",
+        skillName = "morning-letter-composite",
+        at = now - 50 * 3_600_000L,
+        detail = "아침 편지 합성 절차를 재사용 스킬로 추출",
+    ),
+)
+
+private fun renderSkillsList(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 824, height = 700, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                SkillListContent(sampleSkillRows)
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+private fun renderSkillLifecycle(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 824, height = 700, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                SkillLifecycleContent(sampleLifecycleEvents(System.currentTimeMillis()))
             }
         }
     }
