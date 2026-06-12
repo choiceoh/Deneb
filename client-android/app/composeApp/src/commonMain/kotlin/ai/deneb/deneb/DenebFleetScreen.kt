@@ -27,6 +27,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -194,7 +195,8 @@ fun DenebFleetScreen(
                         FleetTab.RECIPES -> FleetRecipesPage(recipes.orEmpty(), loaded) { rc, action ->
                             haptics.tap(); confirm = rc to action
                         }
-                        FleetTab.JOBS -> FleetJobsPage(jobs.orEmpty(), loaded)
+                        FleetTab.MODELS -> FleetModelsPage(client, state?.nodes.orEmpty()) { notice = it }
+                        FleetTab.JOBS -> FleetJobsPage(client, jobs.orEmpty(), loaded) { notice = it }
                     }
                 }
             }
@@ -208,15 +210,55 @@ fun DenebFleetScreen(
             "restart" -> "재시작"
             else -> action
         }
+        // Per-launch memory overrides, prefilled from the recipe's vLLM block —
+        // SparkFleet applies them to a clone, the recipe file never changes.
+        var gmu by remember(rc.name) { mutableStateOf(rc.vllm?.gpuMemoryUtilization?.toString().orEmpty()) }
+        var maxLen by remember(rc.name) { mutableStateOf(rc.vllm?.maxModelLen?.toString().orEmpty()) }
+        var seqs by remember(rc.name) { mutableStateOf(rc.vllm?.maxNumSeqs?.toString().orEmpty()) }
         AlertDialog(
             onDismissRequest = { confirm = null },
             title = { Text("${rc.name} $label") },
-            text = { Text("${rc.status.node.ifBlank { rc.node }} 노드에서 ${rc.name} 레시피를 $label 할까요?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("${rc.status.node.ifBlank { rc.node }} 노드에서 ${rc.name} 레시피를 $label 할까요?")
+                    if (action == "launch" && rc.vllm != null) {
+                        Text(
+                            "이번 기동에만 적용되는 메모리 설정 (비우면 레시피 값)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        OutlinedTextField(
+                            value = gmu, onValueChange = { gmu = it },
+                            label = { Text("GPU 메모리 사용률 (0–1)") }, singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = maxLen, onValueChange = { maxLen = it },
+                            label = { Text("최대 컨텍스트 (tokens)") }, singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = seqs, onValueChange = { seqs = it },
+                            label = { Text("동시 시퀀스") }, singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
                     confirm = null
+                    val overrides = if (action == "launch") {
+                        FleetVllm(
+                            gpuMemoryUtilization = gmu.trim().toDoubleOrNull(),
+                            maxModelLen = maxLen.trim().toIntOrNull(),
+                            maxNumSeqs = seqs.trim().toIntOrNull(),
+                        )
+                    } else {
+                        null
+                    }
                     scope.launch {
-                        val err = client.fleetRecipeAction(rc.name, action) { jobId ->
+                        val err = client.fleetRecipeAction(rc.name, action, overrides) { jobId ->
                             notice = "${rc.name} $label 시작됨 — 작업 $jobId 진행 상황은 작업 탭에서"
                         }
                         notice = err ?: notice ?: "${rc.name} $label 완료"
@@ -233,6 +275,7 @@ fun DenebFleetScreen(
 private enum class FleetTab(val label: String) {
     NODES("노드"),
     RECIPES("레시피"),
+    MODELS("모델"),
     JOBS("작업"),
 }
 
@@ -263,8 +306,10 @@ private fun FleetRecipesPage(recipes: List<FleetRecipe>, loaded: Boolean, onActi
 }
 
 @Composable
-private fun FleetJobsPage(jobs: List<FleetJob>, loaded: Boolean) {
+private fun FleetJobsPage(client: DenebGatewayClient, jobs: List<FleetJob>, loaded: Boolean, onNotice: (String) -> Unit) {
     var openLogJob by remember { mutableStateOf<String?>(null) }
+    var cancelTarget by remember { mutableStateOf<FleetJob?>(null) }
+    val scope = rememberCoroutineScope()
     val recent = jobs.take(20)
     if (recent.isEmpty()) {
         EmptyTab(if (loaded) "진행 중인 작업이 없습니다." else "불러오는 중…")
@@ -276,8 +321,26 @@ private fun FleetJobsPage(jobs: List<FleetJob>, loaded: Boolean) {
                 job = job,
                 expanded = openLogJob == job.id,
                 onToggle = { openLogJob = if (openLogJob == job.id) null else job.id },
+                onCancel = { cancelTarget = job },
             )
         }
+    }
+    cancelTarget?.let { job ->
+        AlertDialog(
+            onDismissRequest = { cancelTarget = null },
+            title = { Text("작업 취소") },
+            text = { Text("\"${job.title}\" 작업을 취소할까요?\n전송류 작업은 재시도하면 끊긴 지점부터 이어받습니다.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    cancelTarget = null
+                    scope.launch {
+                        val err = client.fleetCancelJob(job.id)
+                        onNotice(err ?: "작업 취소됨: ${job.id}")
+                    }
+                }) { Text("취소 실행", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { cancelTarget = null }) { Text("닫기") } },
+        )
     }
 }
 
@@ -375,7 +438,7 @@ private fun FleetRecipeRow(rc: FleetRecipe, onAction: (String) -> Unit) {
 }
 
 @Composable
-private fun FleetJobRow(job: FleetJob, expanded: Boolean, onToggle: () -> Unit) {
+private fun FleetJobRow(job: FleetJob, expanded: Boolean, onToggle: () -> Unit, onCancel: () -> Unit = {}) {
     Column(
         Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
@@ -389,6 +452,9 @@ private fun FleetJobRow(job: FleetJob, expanded: Boolean, onToggle: () -> Unit) 
                 Text(label, style = MaterialTheme.typography.labelSmall, color = color, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
             }
             Text(job.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            if (job.state == "running") {
+                TextButton(onClick = onCancel) { Text("취소", color = MaterialTheme.colorScheme.error) }
+            }
         }
         if (expanded && job.log.isNotBlank()) {
             Surface(
@@ -405,4 +471,213 @@ private fun FleetJobRow(job: FleetJob, expanded: Boolean, onToggle: () -> Unit) 
         }
     }
     HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+}
+
+@Composable
+private fun FleetSectionHeader(title: String) {
+    Text(
+        title,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 6.dp),
+    )
+}
+
+@Composable
+private fun FleetMuted(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+}
+
+// --- 모델 tab -------------------------------------------------------------------
+
+private fun fmtParamsK(p: Long): String = when {
+    p <= 0 -> "?"
+    p >= 1_000_000_000_000 -> "${(p / 100_000_000_000) / 10.0}T"
+    p >= 10_000_000_000 -> "${p / 1_000_000_000}B"
+    p >= 1_000_000_000 -> "${(p / 100_000_000) / 10.0}B"
+    else -> "${p / 1_000_000}M"
+}
+
+private fun fmtBytes(b: Long): String {
+    if (b <= 0) return "0 B"
+    val units = listOf("B", "KiB", "MiB", "GiB", "TiB")
+    var v = b.toDouble()
+    var i = 0
+    while (v >= 1024 && i < units.lastIndex) {
+        v /= 1024
+        i++
+    }
+    return if (v >= 100 || i <= 1) "${v.toInt()} ${units[i]}" else "${(v * 10).toInt() / 10.0} ${units[i]}"
+}
+
+/**
+ * 모델 tab: HuggingFace search → size preview → download to a node (all through
+ * the fleet passthrough; the gateway's stored HF token covers gated repos), plus
+ * each node's on-disk model inventory so "where are the weights" has an answer
+ * in the app.
+ */
+@Composable
+private fun FleetModelsPage(client: DenebGatewayClient, nodes: List<FleetNode>, onNotice: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var query by remember { mutableStateOf("") }
+    var searching by remember { mutableStateOf(false) }
+    var results by remember { mutableStateOf<List<FleetHFModel>?>(null) }
+    var dlTarget by remember { mutableStateOf<FleetHFModel?>(null) }
+
+    LazyColumn(Modifier.fillMaxSize()) {
+        item(key = "hf-search") {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        label = { Text("HuggingFace 모델 검색") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        enabled = !searching && query.isNotBlank(),
+                        onClick = {
+                            scope.launch {
+                                searching = true
+                                results = client.fleetHFSearch(query.trim()) ?: emptyList()
+                                searching = false
+                            }
+                        },
+                    ) { Text(if (searching) "검색 중…" else "검색") }
+                }
+            }
+        }
+        results?.let { rs ->
+            if (rs.isEmpty()) {
+                item(key = "hf-none") { FleetMuted("결과 없음") }
+            }
+            items(rs, key = { "hf-" + it.id }) { m ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { dlTarget = m }.padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            m.id + if (m.gated) " 🔒" else "",
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            "↓ ${m.downloads} · ♥ ${m.likes}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) {
+                        Text(
+                            fmtParamsK(m.params),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+                HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            }
+        }
+        nodes.filter { it.models.isNotEmpty() }.forEach { node ->
+            item(key = "mh-" + node.name) { FleetSectionHeader("${node.name} 보유 모델 · ${node.models.size}") }
+            items(node.models, key = { "m-" + node.name + "-" + it.name }) { m ->
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(m.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(fmtBytes(m.sizeBytes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        item(key = "models-pad") { Spacer(Modifier.height(24.dp)) }
+    }
+
+    dlTarget?.let { m ->
+        FleetDownloadDialog(client, m, nodes, onDismiss = { dlTarget = null }, onNotice = onNotice)
+    }
+}
+
+@Composable
+private fun FleetDownloadDialog(
+    client: DenebGatewayClient,
+    model: FleetHFModel,
+    nodes: List<FleetNode>,
+    onDismiss: () -> Unit,
+    onNotice: (String) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var info by remember(model.id) { mutableStateOf<FleetHFInfo?>(null) }
+    // 운영 규칙: 새 가중치는 우선 저장 노드(마스터 저장소)로.
+    var target by remember(model.id) {
+        mutableStateOf(nodes.firstOrNull { it.role == "storage" }?.name ?: nodes.firstOrNull()?.name.orEmpty())
+    }
+    LaunchedEffect(model.id) { info = client.fleetHFInfo(model.id) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("모델 다운로드") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(model.id, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    info?.let { "총 ${fmtBytes(it.sizeBytes)} · ${it.files} files" + (if (it.gated) " · 🔒 gated" else "") }
+                        ?: "크기 조회 중…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text("다운로드할 노드", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    nodes.forEach { n ->
+                        val sel = target == n.name
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = if (sel) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.clip(RoundedCornerShape(50)).clickable { target = n.name },
+                        ) {
+                            Text(
+                                n.name,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            )
+                        }
+                    }
+                }
+                Text(
+                    "진행 상황은 작업 탭에서 실시간으로 보입니다 · 재시작하면 이어받습니다",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = target.isNotBlank(),
+                onClick = {
+                    onDismiss()
+                    scope.launch {
+                        val err = client.fleetDownloadModel(target, model.id) { jobId ->
+                            onNotice("다운로드 시작: ${model.id} → $target (작업 $jobId)")
+                        }
+                        if (err != null) onNotice(err)
+                    }
+                },
+            ) { Text("⬇ 다운로드") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+    )
 }

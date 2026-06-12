@@ -122,3 +122,48 @@ func TestFleetProxyRequiresToken(t *testing.T) {
 		t.Errorf("missing token: got %d want 401", w.Code)
 	}
 }
+
+func TestFleetPathAllowedJobCancel(t *testing.T) {
+	if !fleetPathAllowed(http.MethodPost, "/api/jobs/job-12/cancel") {
+		t.Error("job cancel must be allowed")
+	}
+	for _, bad := range []string{"/api/jobs//cancel", "/api/jobs/a/b/cancel", "/api/jobs/cancel"} {
+		if fleetPathAllowed(http.MethodPost, bad) {
+			t.Errorf("%s must be denied", bad)
+		}
+	}
+}
+
+// The fleet webhook relays SparkFleet's generic alerts to connected clients,
+// loopback-only.
+func TestFleetHook(t *testing.T) {
+	s := &Server{logger: slog.Default(), pushHub: newClientPushHub()}
+	ch, unsub := s.pushHub.subscribe()
+	defer unsub()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/hooks/fleet",
+		strings.NewReader(`{"source":"sparkfleet","level":"bad","title":"node down: srv3","message":"ssh unreachable"}`))
+	req.RemoteAddr = "127.0.0.1:5555"
+	w := httptest.NewRecorder()
+	s.handleFleetHook(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("hook: %d %s", w.Code, w.Body.String())
+	}
+	select {
+	case ev := <-ch:
+		if !strings.Contains(ev.Title, "플릿") || !strings.Contains(ev.Title, "node down: srv3") || ev.Body != "ssh unreachable" {
+			t.Errorf("unexpected push frame: %+v", ev)
+		}
+	default:
+		t.Fatal("no push frame published")
+	}
+
+	// Non-loopback callers are refused (SparkFleet posts from this host).
+	req = httptest.NewRequest(http.MethodPost, "/api/hooks/fleet", strings.NewReader(`{"title":"x"}`))
+	req.RemoteAddr = "100.105.145.6:5555"
+	w = httptest.NewRecorder()
+	s.handleFleetHook(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Errorf("non-loopback: got %d want 403", w.Code)
+	}
+}
