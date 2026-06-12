@@ -126,8 +126,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("## 실행 우선\n")
 		s.WriteString("사용자가 작업을 요청하면 같은 턴에서 바로 시작하라. 계획만 세우거나 '하겠습니다'로 끝내지 마라.\n")
 		s.WriteString("도구가 있고 다음 행동이 명확하면, 도구를 먼저 호출하라. 코멘트만 하는 턴은 미완성이다.\n")
-		s.WriteString("여러 단계가 필요하면, 짧은 진행 알림과 함께 바로 작업하라.\n")
-		s.WriteString("복잡한 다단계 작업에서는 짧은 진행 알림과 함께 바로 작업하라.\n\n")
+		s.WriteString("여러 단계가 필요하면, 짧은 진행 알림과 함께 바로 작업하라.\n\n")
 
 		// Tool Call Style / Progress narration.
 		s.WriteString("## 작업 과정 설명\n")
@@ -197,10 +196,11 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		s.WriteString("- find/tree results are cached within a run. Avoid re-calling with the same pattern unless you've modified files.\n")
 		s.WriteString("- For future follow-ups or reminders, use cron. Do not use exec sleep, polling loops, or repeated status checks for scheduling.\n")
 		s.WriteString("- Deneb CLI: `deneb gateway {status|start|stop|restart}`. Do not invent subcommands.\n")
-		s.WriteString("- 유저가 '상태', '시스템 상태', '지금 뭐하고 있어' 등 **게이트웨이 자체 상태**를 물으면 먼저 `gateway(action=status)` 를 시도하라 (버전/PID/포트/업타임/세션 수를 한 번에 반환). `top`/`free`/`nvidia-smi` 같은 OS 레벨 세부는 유저가 명시적으로 요청하거나 gateway 응답이 부족할 때만 추가 호출.\n")
-		s.WriteString("- 유저가 '재시작', '업데이트', '설정 바꿔줘'라고 하면 `gateway` 툴을 사용하라 (action=status|config_get|config_set|update|restart). 파괴적 작업(restart/update/config_set)은 첫 호출이 `needs_approval` envelope을 돌려준다 — envelope의 한국어 summary를 유저에게 그대로 전달하고, 유저가 승인하면 같은 `action_token`으로 `.confirmed` variant를 호출해 실제 실행한다. 토큰/비밀번호/API 키는 절대 `config_set`으로 건드리지 말 것.\n")
-		s.WriteString("- 첨부 파일을 사용자에게 전달하라는 요청(\"그 PDF 보내줘\", \"계약서 파일 줘\")이면 두 단계로 chain하라: ① `gmail(action=\"attachment\", message_id=..., attachment=\"파일명 또는 번호\", download=true)`로 디스크에 저장 → 반환된 경로 확보, ② 그 경로를 `send_file(file_path=...)`에 넘긴다. 한 턴에서 끝내고 사용자에게 \"전송했습니다\"만 답하라.\n")
-		s.WriteString("- 메일 분석/요약 요청(\"이 메일 분석해줘\", \"안 읽은 메일 정리해줘\")이면 `gmail(action=\"analyze\", query=\"is:unread newer_than:1h\", max=5)` (특정 메일은 message_id=...)을 써라. 2단계 분석으로 핵심 요약·이해관계자·중요도·리스크/기한·다음 단계를 돌려준다. 결과로 알게 된 금액·기한·역할 변경 등은 위 '분석 → 위키 갱신' 원칙대로 기록하라.\n")
+		// Trigger lines only — the HOW (status payload, approval envelope, gmail
+		// attachment/analyze flows) ships in the deferred tools' descriptions at
+		// fetch_tools time (graphify pattern; prompt audit 2026-06-12).
+		s.WriteString("- 유저가 게이트웨이 자체의 '상태'·'재시작'·'업데이트'·'설정 변경'을 말하면 `gateway` 도구가 1순위다 (`top`/`nvidia-smi` 같은 OS 레벨 세부는 명시 요청 시에만 추가).\n")
+		s.WriteString("- 메일 관련 요청(분석·요약·첨부 전달·검색·발송)은 `gmail` 도구로 처리하라.\n")
 		s.WriteString("- **Never output tool call syntax or shell commands as text to the user.** Always use structured tool calls. Report results, not the commands you ran.\n\n")
 
 		built := s.String()
@@ -292,18 +292,10 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("- **이번 세션의 사라진 대화 → polaris**: 컨텍스트에서 압축돼 사라진 '아까 그거'·합의·숫자·결정. 현재 세션 한정.\n")
 		d.WriteString("- **관계·맥락·연쇄 추론 → graphify**: 단순 키워드 룩업이 아닌 \"누가 어떤 결정에 엮였나\", \"이 함수가 어떤 개념을 구현하나\" 같은 그래프 탐색.\n\n")
 
-		d.WriteString("### 그래프 추론 (graphify)\n")
-		d.WriteString("위키와 코드는 graphify 도구를 통해 **그래프**로도 질의 가능하다. 매 dream cycle마다 위키 페이지가 자동으로 graph.json으로 갱신되고, 코드는 `graphify update .`로 빌드된 호출/import 그래프를 사용한다.\n")
-		d.WriteString("- `graph=\"wiki\"` (기본): 사람·프로젝트·거래·기술·결정·선호 등 개념/관계 그래프 (~/.deneb/wiki-graph)\n")
-		d.WriteString("- `graph=\"code\"`: 코드 호출/import/contains 그래프 (workspace/graphify-out)\n")
-		d.WriteString("- 액션: query (자연어→관련 노드), explain (한 노드+이웃 요약), path (두 노드 간 최단 경로)\n\n")
-
-		d.WriteString("**융합/연결적 사용 패턴 (이게 핵심):**\n")
-		d.WriteString("- 단순 검색 대신 **그래프 탐색**으로 사고하라 — query로 후보 노드를 찾고 explain으로 이웃을 펼친 뒤 path로 다른 영역과 연결.\n")
-		d.WriteString("- wiki + code 두 그래프를 **묶어서** 답하라 — \"이 함수가 어떤 개념을 구현하나\"면 code에서 함수 노드 → explain → 관련 docs/주석 노드 식별 후 wiki에서 같은 개념 query.\n")
-		d.WriteString("- explain 결과의 community 번호를 활용하라 — 같은 community 안의 노드는 의미적으로 한 묶음.\n")
-		d.WriteString("- 단발 질의로 끝내지 마라 — 한 질문에 query/explain/path를 2~3회 chaining해 답을 입체화.\n")
-		d.WriteString("- wiki search보다 graphify가 강한 상황: 관계·맥락·연쇄 추론. 단순 키워드 룩업은 wiki/grep로 충분.\n\n")
+		// NOTE: graphify deep-coaching (graph=wiki|code, 탐색/chaining/community
+		// 패턴) lives in the graphify tool description and arrives at fetch_tools
+		// time — it was duplicated here verbatim before the prompt audit
+		// (2026-06-12). The 검색 도구 선택 bullet above keeps the trigger.
 
 		d.WriteString("### 쓰기 (Ingest) — 단순화된 2층 구조\n")
 		d.WriteString("서버가 성공한 대화 턴을 자동으로 일지에 기록한다. 매 응답마다 `wiki log`를 따로 호출하지 마라.\n")
@@ -384,11 +376,16 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	d.WriteString("- Current session replies auto-route to source channel. Cross-session: sessions(action=send, sessionKey=..., message=...).\n")
 	d.WriteString("- 외부 채널 전송이 실패하면 전달 상태는 실패/미확인이다. 성공을 추정하거나 현재 채팅에 보인다고 추정하지 마라.\n")
 	d.WriteString("- 특히 '여기에 떠 있다', '이미 보인다', '채널 복구 후 다시 보낼 수 있다' 같은 추정성 안내 금지. 도구가 확인한 사실만 말하라.\n")
-	if _, ok := toolSet["message"]; ok {
+	// message/clarify protocol coaching gates on eagerSet, not toolSet: both
+	// are deferred by default (toolreg/core.go), and their full usage protocol
+	// ships in the tool description at fetch_tools time. These lines render
+	// only if a deployment re-eagerizes them — avoiding per-turn dynamic cost
+	// for tools not on the wire.
+	if _, ok := eagerSet["message"]; ok {
 		fmt.Fprintf(&d, "- `message` for proactive sends + channel actions. If used for user-visible reply, respond with ONLY: %s.\n", SilentReplyToken)
 		fmt.Fprintf(&d, "- %s 규칙: 메시지 전체가 %s만이어야 한다. 다른 텍스트와 섞지 마라. **사용자가 방금 보낸 메시지에 대응할 때는 절대 사용 금지** — 오직 proactive/maintenance 전송(`message` 도구 사용) 후에만 허용.\n", SilentReplyToken, SilentReplyToken)
 	}
-	if _, ok := toolSet["clarify"]; ok {
+	if _, ok := eagerSet["clarify"]; ok {
 		d.WriteString("- `clarify(question, options)` 로 진짜 모호성을 버튼 선택으로 해결하라: 파일·경로·이름이 여러 개 매치되어 사용자만이 선택할 수 있을 때. 평서문으로 되물어 답변 타이핑을 요구하지 말고 이 도구를 써라. 예/아니오 수준의 사소한 확인, 스스로 추론 가능한 질문에는 쓰지 마라. 호출 후에는 턴을 즉시 종료한다 — 선택 결과는 다음 턴에 `[유저 응답 (버튼): ...]` 형태로 도착한다.\n")
 	}
 	if params.AutoDeliveredOutput {

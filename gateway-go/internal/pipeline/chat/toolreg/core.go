@@ -46,18 +46,26 @@ func FetchToolsSchema() map[string]any { return fetchToolsToolSchema() }
 // clipboard/battery) and phone_write (notification/tts/clipboard) — which reach
 // the user's phone over reverse SSH. No deps: the ssh target resolves from the
 // "phone" ~/.ssh/config alias (or DENEB_PHONE_SSH).
+//
+// Deferred (prompt audit 2026-06-12): together ~1,050 wire tokens for 17 uses
+// in 14 days, nearly all on phone-event turns. The one name-directing prompt
+// (server_http_event_ingest.go) now teaches the fetch_tools step, and those
+// turns are background — a fetch round-trip there is cheap, while every
+// interactive turn stops paying for the schemas.
 func RegisterPhoneTools(registry toolctx.ToolRegistrar) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "phone_read",
 		Description: "사용자 스마트폰을 조회한다(reverse SSH→Termux). what=location(현재 GPS 좌표) | clipboard(방금 복사한 내용) | battery(배터리·충전 상태). '지금 어디', '방금 복사한 거' 같은 질문이나, 능동 판단 시 맥락 보강에 사용.",
 		InputSchema: phoneReadToolSchema(),
 		Fn:          tools.ToolPhoneRead(),
+		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "phone_write",
 		Description: "사용자 스마트폰에 직접 작용한다(reverse SSH→Termux). to=notification(알림 띄우기) | tts(음성으로 읽어주기) | clipboard(클립보드에 넣기). text 필수, notification은 title 선택. 운전 중 음성 안내나, 작성한 답을 폰 클립보드에 바로 꽂을 때.",
 		InputSchema: phoneWriteToolSchema(),
 		Fn:          tools.ToolPhoneWrite(),
+		Deferred:    true,
 	})
 }
 
@@ -119,11 +127,15 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		InputSchema: writeToolSchema(),
 		Fn:          tools.ToolWrite(workspaceDir),
 	})
+	// Deferred (prompt audit 2026-06-12): ~370 wire tokens for 2 uses in 14
+	// days — Deneb is a chief-of-staff, not a coding agent, so partial file
+	// edits are rare. read/write/grep stay eager; an editing turn fetches this.
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "edit",
 		Description: "Search-and-replace in a file. old_string must be unique unless replace_all=true. Read first to find the exact string",
 		InputSchema: editToolSchema(),
 		Fn:          tools.ToolEdit(workspaceDir),
+		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "grep",
@@ -132,8 +144,10 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		Fn:          tools.ToolGrep(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "gateway",
-		Description: "Gateway self-management: status, config_get/config_set (dotted paths), update (git pull + rebuild + restart), restart. Destructive actions require approval — the first call returns a needs_approval envelope; relay the Korean summary to the user and call the .confirmed variant after approval.",
+		Name: "gateway",
+		Description: "Gateway self-management: status (버전/PID/포트/업타임/세션 수를 한 번에 반환), config_get/config_set (dotted paths), update (git pull + rebuild + restart), restart. " +
+			"Destructive actions (restart/update/config_set) require approval — the first call returns a needs_approval envelope; relay the Korean summary to the user verbatim, and after approval call the .confirmed variant with the same action_token. " +
+			"토큰/비밀번호/API 키는 절대 config_set으로 건드리지 마라.",
 		InputSchema: gatewayToolSchema(),
 		Fn:          tools.ToolGateway(workspaceDir),
 		Deferred:    true,
@@ -170,12 +184,14 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 	registry.RegisterTool(toolctx.ToolDef{
 		Name: "graphify",
 		Description: "위키 지식 그래프 질의 (사람·프로젝트·거래·결정·선호 등 개념/관계 그래프, dreamer가 매 사이클 갱신). " +
+			"graph=\"wiki\"(기본, ~/.deneb/wiki-graph) | graph=\"code\"(코드 호출/import/contains 그래프, `graphify update .`로 빌드, workspace/graphify-out). " +
 			"액션: query (자연어 질문 → 관련 노드 탐색), explain (한 노드와 이웃 요약), path (두 노드 간 최단 경로). " +
 			"**사용 패턴:** " +
 			"(a) 단순 검색이 아니라 **그래프 탐색**으로 사고하라 — query로 후보 노드를 찾고 explain으로 이웃을 펼친 뒤 path로 다른 영역과 연결. " +
 			"(b) explain 결과의 community 번호를 활용하라 — 같은 community 안의 노드는 의미적으로 한 묶음. " +
 			"(c) 단발 질의로 끝내지 마라 — 한 질문에 query/explain/path를 2~3회 chaining해 답을 입체화. " +
-			"(d) wiki search보다 graphify가 강한 상황: 관계·맥락·연쇄 추론이 필요할 때 (단순 키워드 룩업은 wiki/grep로 충분).",
+			"(d) wiki search보다 graphify가 강한 상황: 관계·맥락·연쇄 추론이 필요할 때 (단순 키워드 룩업은 wiki/grep로 충분). " +
+			"(e) wiki + code 두 그래프를 묶어서 답하라 — \"이 함수가 어떤 개념을 구현하나\"면 code에서 함수 노드 explain 후 wiki에서 같은 개념을 query.",
 		InputSchema: graphifyToolSchema(),
 		Fn:          tools.ToolGraphify(workspaceDir),
 		Deferred:    true,
@@ -237,18 +253,34 @@ func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps
 }
 
 // RegisterChronoTools registers messaging tools (non-periodic).
+//
+// message and clarify are deferred (prompt audit 2026-06-12): 1 and 4 uses in
+// 14 days respectively for ~510 wire tokens. Normal replies auto-route as the
+// turn's final text, so message only matters for rare mid-turn/proactive sends;
+// clarify only for genuine option-pick ambiguity. Their usage protocol moved
+// from the dynamic Messaging block into the descriptions below — it ships at
+// fetch_tools time, exactly when the model has the tool in hand (graphify
+// pattern). The boot prompt is the one automation that names message, and it
+// already runs with fetch_tools in its preset.
 func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "message",
-		Description: "Send messages to the user's channel. Actions: send, reply, react, thread-reply. Use for proactive sends",
+		Name: "message",
+		Description: "Send messages to the user's channel. Actions: send, reply, react, thread-reply. Use for proactive sends. " +
+			"**사용자가 방금 보낸 메시지에 대한 응답에는 절대 쓰지 마라** — 일반 응답은 턴의 최종 텍스트가 자동 전달된다. " +
+			"이 도구로 사용자에게 보일 내용을 이미 전송했다면, 중복 전달을 막기 위해 턴의 최종 텍스트는 정확히 NO_REPLY 한 단어만 출력하라(다른 텍스트와 섞지 말 것).",
 		InputSchema: messageToolSchema(),
 		Fn:          tools.ToolMessage(),
+		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "clarify",
-		Description: "Ask the user to resolve ambiguity by presenting 2-5 numbered options. Sends the question + numbered choices; the agent's turn ends, and the user's choice arrives as a new user message on the next turn. Use only for genuine ambiguity the agent cannot resolve itself",
+		Name: "clarify",
+		Description: "Ask the user to resolve ambiguity by presenting 2-5 numbered options. Sends the question + numbered choices; the agent's turn ends, and the user's choice arrives as a new user message on the next turn. Use only for genuine ambiguity the agent cannot resolve itself. " +
+			"파일·경로·이름이 여러 개 매치되어 사용자만이 고를 수 있을 때 평서문으로 되묻는 대신 이 도구를 써라. " +
+			"예/아니오 수준의 사소한 확인이나 스스로 추론 가능한 질문에는 쓰지 마라. " +
+			"호출 후에는 턴을 즉시 종료한다 — 선택 결과는 다음 턴에 `[유저 응답 (버튼): ...]` 형태로 도착한다.",
 		InputSchema: clarifyToolSchema(),
 		Fn:          tools.ToolClarify(),
+		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name: "heartbeat_update",
@@ -269,11 +301,18 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 // diaryDir is the wiki diary directory for morning letter logging; wikiDir is
 // the wiki root for its deadline scan (either empty = that part disabled).
 func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, llmClient *llm.Client, defaultModel, diaryDir, wikiDir string) {
+	// Deferred (prompt audit 2026-06-12): ~590 wire tokens — the second-largest
+	// eager tool — for 11 interactive uses in 14 days. The scheduler itself runs
+	// server-side; this tool only manages jobs, so a "매일 아침에 …" turn pays one
+	// fetch round-trip instead of every turn paying the schema. No cron job
+	// prompt directs the cron tool by name (the static Tool Usage trigger line
+	// "for follow-ups use cron" stays, pointing at the deferred listing).
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "cron",
 		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, get, runs, wake",
 		InputSchema: cronToolSchema(),
 		Fn:          tools.ToolCron(chrono),
+		Deferred:    true,
 	})
 
 	// Build gmail pipeline deps from available subsystems.
@@ -282,8 +321,11 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 		DefaultModel: defaultModel,
 	}
 	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "gmail",
-		Description: "Gmail (native OAuth2): inbox, search, read, thread (대화 전체를 시간순으로), attachment (첨부파일 추출 — PDF/Excel/Word/PowerPoint/이미지 OCR, 또는 download로 파일 저장), send, reply, labels, analyze (LLM 이메일 분석, 첨부 내용 자동 포함). Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
+		Name: "gmail",
+		Description: "Gmail (native OAuth2): inbox, search, read, thread (대화 전체를 시간순으로), attachment (첨부파일 추출 — PDF/Excel/Word/PowerPoint/이미지 OCR, 또는 download로 파일 저장), send, reply, labels, analyze (LLM 이메일 분석, 첨부 내용 자동 포함). " +
+			"메일 분석/요약 요청(\"이 메일 분석해줘\", \"안 읽은 메일 정리해줘\")이면 analyze를 써라 (query=\"is:unread newer_than:1h\", max=5 식; 특정 메일은 message_id=...) — 핵심 요약·이해관계자·중요도·리스크/기한·다음 단계를 돌려준다. 결과로 알게 된 금액·기한·역할 변경은 '분석 → 위키 갱신' 원칙대로 기록하라. " +
+			"첨부 파일을 사용자에게 전달하라는 요청(\"그 PDF 보내줘\")이면 한 턴에서 chain하라: ① attachment(message_id=..., attachment=\"파일명 또는 번호\", download=true)로 디스크 저장 → ② 반환된 경로를 send_file(file_path=...)에 넘기고 \"전송했습니다\"만 답하라. " +
+			"Auth: ~/.deneb/credentials/gmail_client.json + gmail_token.json",
 		InputSchema: gmailToolSchema(),
 		Fn:          tools.ToolGmail(gmailPipelineDeps),
 		Deferred:    true,
@@ -352,6 +394,10 @@ func RegisterContactsTool(registry toolctx.ToolRegistrar, contactsDeps *toolctx.
 	if contactsDeps.Store == nil {
 		return
 	}
+	// Deferred (prompt audit 2026-06-12): ~220 wire tokens for 6 uses in 14
+	// days. ASR hotword injection and wiki person enrichment read the contacts
+	// store server-side and are unaffected; only the rare "이 번호 누구야" turn
+	// pays a fetch round-trip.
 	registry.RegisterTool(toolctx.ToolDef{
 		Name: "contacts",
 		Description: "주소록(연락처 DB)에서 전화번호로 인물을 찾거나(lookup) 이름·회사로 검색(search). " +
@@ -359,6 +405,7 @@ func RegisterContactsTool(registry toolctx.ToolRegistrar, contactsDeps *toolctx.
 			"사용자가 '이 번호 누구?', '010-xxxx 누구야', 'OOO 연락처/번호' 같이 물으면 짐작하지 말고 호출하라.",
 		InputSchema: contactsToolSchema(),
 		Fn:          tools.ToolContacts(contactsDeps),
+		Deferred:    true,
 	})
 }
 
