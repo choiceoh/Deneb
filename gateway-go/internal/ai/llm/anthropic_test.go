@@ -151,6 +151,64 @@ func TestStreamChat_AnthropicMode_ForwardsSSEEventsAsIs(t *testing.T) {
 	}
 }
 
+// TestStreamChat_AnthropicMode_MidStreamEOF_SurfacesError: an Anthropic
+// stream always ends with message_stop (or an error event), so a clean EOF
+// before either means the connection died mid-response. The forwarder must
+// emit a terminal error event — previously it just let the channel close,
+// and the executor committed the partial text as a successful turn (the same
+// silent-truncation trap as the OpenAI path, PR #2268 review).
+func TestStreamChat_AnthropicMode_MidStreamEOF_SurfacesError(t *testing.T) {
+	body := strings.Join([]string{
+		"event: message_start",
+		`data: {"type":"message_start","message":{"id":"m1","model":"glm-5.1","usage":{"input_tokens":7,"output_tokens":0}}}`,
+		"",
+		"event: content_block_start",
+		`data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+		"",
+		"event: content_block_delta",
+		`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial"}}`,
+		"",
+		// Body ends here: no message_delta, no message_stop.
+	}, "\n")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	client := NewClient(srv.URL, "k", WithAPIMode(APIModeAnthropic))
+
+	events, err := client.StreamChat(context.Background(), ChatRequest{
+		Model:     "glm-5.1",
+		MaxTokens: 256,
+		Messages:  []Message{NewTextMessage("user", "hi")},
+	})
+	if err != nil {
+		t.Fatalf("StreamChat: %v", err)
+	}
+
+	var got []StreamEvent
+	for ev := range events {
+		got = append(got, ev)
+	}
+	if len(got) == 0 {
+		t.Fatal("no events received")
+	}
+	last := got[len(got)-1]
+	if last.Type != "error" {
+		t.Fatalf("terminal event = %q, want error (mid-stream EOF must not look like success)", last.Type)
+	}
+	if !strings.Contains(string(last.Payload), "message_stop") {
+		t.Errorf("error payload = %s, want mention of the missing message_stop", last.Payload)
+	}
+	for _, ev := range got {
+		if ev.Type == "message_stop" {
+			t.Error("message_stop must not appear on a truncated anthropic stream")
+		}
+	}
+}
+
 // TestSanitizeAnthropicContent ensures the request builder backfills the
 // fields z.ai's Anthropic-compat validator requires. Without this, an
 // empty `text` block or a `tool_use` block with no `input` triggers a

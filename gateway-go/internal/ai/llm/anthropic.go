@@ -295,4 +295,19 @@ func forwardAnthropicStream(ctx context.Context, rawEvents <-chan StreamEvent, o
 			return
 		}
 	}
+
+	// rawEvents closed without a terminal event. An Anthropic stream always
+	// ends with message_stop (or error), so a clean EOF here means the
+	// connection died mid-response on a close-delimited body — the same
+	// silent-truncation trap as the OpenAI path: the executor treats a closed
+	// channel as a truncated-but-successful turn and delivers the partial
+	// text. Surface a retryable error instead.
+	payload, _ := json.Marshal(struct {
+		Type    string `json:"type"`
+		Message string `json:"message"`
+	}{
+		Type:    "premature_end",
+		Message: "provider stream ended without message_stop — connection cut mid-response",
+	})
+	emit(ctx, out, StreamEvent{Type: "error", Payload: payload})
 }
