@@ -3,7 +3,6 @@ package server
 import (
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -122,8 +121,8 @@ func (s *Server) fleetProxy(w http.ResponseWriter, r *http.Request) {
 		req.Header.Set("Content-Type", ct)
 	}
 	// SparkFleet normally relies on its Tailscale-bound listener; pass its API
-	// token when the operator has set one.
-	if tok := strings.TrimSpace(os.Getenv("DENEB_SPARKFLEET_TOKEN")); tok != "" {
+	// token when the operator has set one (same token the health poll uses).
+	if tok := s.fleet.Token(); tok != "" {
 		req.Header.Set("X-Fleet-Token", tok)
 	}
 

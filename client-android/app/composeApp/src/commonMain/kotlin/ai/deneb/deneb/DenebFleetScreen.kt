@@ -81,13 +81,22 @@ fun DenebFleetScreen(
     var recipes by remember { mutableStateOf<List<FleetRecipe>?>(null) }
     var jobs by remember { mutableStateOf<List<FleetJob>?>(null) }
     var loaded by remember { mutableStateOf(false) }
+    var stale by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     var confirm by remember { mutableStateOf<Pair<FleetRecipe, String>?>(null) }
 
     suspend fun refresh() {
-        state = client.fleetState() ?: state
-        recipes = client.fleetRecipes() ?: recipes
-        jobs = client.fleetJobs() ?: jobs
+        val st = client.fleetState()
+        val rc = client.fleetRecipes()
+        val jb = client.fleetJobs()
+        st?.let { state = it }
+        rc?.let { recipes = it }
+        jb?.let { jobs = it }
+        // Every fetch failing after a successful load means the fleet went away:
+        // keep the last data on screen but flag it, instead of letting stale
+        // green health pass for live (the retained values would otherwise look
+        // current forever).
+        stale = loaded && st == null && rc == null && jb == null
         loaded = true
     }
     // One poll loop for the whole screen: jobs stream their logs server-side,
@@ -150,6 +159,14 @@ fun DenebFleetScreen(
                         )
                     }
                 }
+            }
+            if (stale) {
+                Text(
+                    "⚠ 플릿 연결 끊김 — 마지막으로 받은 데이터를 표시 중입니다",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                )
             }
             notice?.let { n ->
                 Text(
