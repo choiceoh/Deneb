@@ -1,7 +1,14 @@
 // openai_stream_premature_test.go — premature stream-end behavior of the
-// OpenAI SSE translator: tool calls buffered for contiguous emission must not
-// be silently discarded when the stream ends without a finish_reason chunk
-// ([DONE] arriving early, or the connection cutting mid-stream).
+// OpenAI SSE translator. Two regimes, split by who ended the stream:
+//
+//   - [DONE] without a finish_reason chunk: the SERVER ended the stream —
+//     treat as a clean stop and rescue buffered tool calls (valid-JSON args
+//     only) so a dropped finish chunk doesn't discard the turn's work.
+//   - bare EOF with neither finish_reason nor [DONE]: the TRANSPORT died
+//     (close-delimited connection cut, empty 200 body) — surface a terminal
+//     error event. Synthesizing message_stop here delivered empty/truncated
+//     turns as successes (PR #2268 review, reproduced live by killing an
+//     HTTP/1.0 broker mid-response).
 package llm
 
 import (
@@ -132,9 +139,42 @@ func TestStreamChat_PrematureDone_DropsTruncatedToolArgs(t *testing.T) {
 	}
 }
 
-// TestStreamChat_EOFWithoutDone_FlushesToolCalls verifies the flush also fires
-// when the connection closes without even a [DONE] sentinel (mid-stream EOF).
-func TestStreamChat_EOFWithoutDone_FlushesToolCalls(t *testing.T) {
+// requireTerminalError asserts the stream's last event is an error event whose
+// payload mentions wantSubstr, and that no message_stop was synthesized — the
+// invariant that keeps a cut stream from masquerading as a successful turn.
+func requireTerminalError(t *testing.T, got []StreamEvent, wantSubstr string) {
+	t.Helper()
+	if len(got) == 0 {
+		t.Fatal("no events received")
+	}
+	last := got[len(got)-1]
+	if last.Type != "error" {
+		t.Fatalf("terminal event = %q, want error (events: %v)", last.Type, eventTypes(got))
+	}
+	if !strings.Contains(string(last.Payload), wantSubstr) {
+		t.Errorf("error payload = %s, want mention of %q", last.Payload, wantSubstr)
+	}
+	for _, ev := range got {
+		if ev.Type == "message_stop" {
+			t.Error("message_stop must not be synthesized on a cut stream")
+		}
+	}
+}
+
+func eventTypes(events []StreamEvent) []string {
+	types := make([]string, len(events))
+	for i, ev := range events {
+		types[i] = ev.Type
+	}
+	return types
+}
+
+// TestStreamChat_EOFWithoutDone_SurfacesErrorNotSuccess pins the EOF regime:
+// a clean connection EOF with neither finish_reason nor [DONE] is a transport
+// failure, not a stop. The buffered tool call must be DROPPED (the flush
+// rescue is reserved for an explicit [DONE]) and the terminal event must be
+// an error so the executor retries instead of committing the turn.
+func TestStreamChat_EOFWithoutDone_SurfacesErrorNotSuccess(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		flusher := w.(http.Flusher)
@@ -146,20 +186,120 @@ func TestStreamChat_EOFWithoutDone_FlushesToolCalls(t *testing.T) {
 
 	got := collectStreamEvents(t, NewClient(server.URL, "test-key"))
 
-	var sawTool bool
+	requireTerminalError(t, got, "finish_reason")
 	for _, ev := range got {
 		if ev.Type != "content_block_start" {
 			continue
 		}
 		var cbs ContentBlockStart
 		testutil.NoError(t, json.Unmarshal(ev.Payload, &cbs))
-		if cbs.ContentBlock.Type == "tool_use" && cbs.ContentBlock.Name == "health" {
-			sawTool = true
+		if cbs.ContentBlock.Type == "tool_use" {
+			t.Error("buffered tool call must be dropped on mid-stream EOF, not flushed")
 		}
 	}
-	if !sawTool {
-		t.Fatal("buffered tool call was not flushed on mid-stream EOF")
+}
+
+// TestStreamChat_MidStreamEOF_AfterTextDeltas_SurfacesError covers the
+// user-facing shape of the bug: text was streaming, the connection died, and
+// the truncated reply must NOT be committed as a successful turn.
+func TestStreamChat_MidStreamEOF_AfterTextDeltas_SurfacesError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		fmt.Fprintf(w, "data: %s\n\n", mustJSON(map[string]any{
+			"id": "chatcmpl-cut", "model": "test-model",
+			"choices": []map[string]any{
+				{"index": 0, "delta": map[string]any{"content": "truncated rep"}},
+			},
+		}))
+		flusher.Flush()
+		// Connection cut before any finish_reason chunk.
+	}))
+	defer server.Close()
+
+	got := collectStreamEvents(t, NewClient(server.URL, "test-key"))
+
+	var sawTextDelta bool
+	for _, ev := range got {
+		if ev.Type == "content_block_delta" {
+			sawTextDelta = true
+		}
 	}
+	if !sawTextDelta {
+		t.Fatal("text delta missing — fixture should cut mid-stream, not pre-stream")
+	}
+	requireTerminalError(t, got, "finish_reason")
+}
+
+// TestStreamChat_EmptyStreamEOF_SurfacesError: an HTTP 200 with an empty SSE
+// body (the killed-broker live repro) must be an error, not an empty success.
+func TestStreamChat_EmptyStreamEOF_SurfacesError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		// No body at all.
+	}))
+	defer server.Close()
+
+	got := collectStreamEvents(t, NewClient(server.URL, "test-key"))
+
+	requireTerminalError(t, got, "0 chunks")
+}
+
+// TestStreamChat_FinishReasonWithoutDone_NormalStop guards the other
+// direction: some OpenAI-compatible servers omit the [DONE] sentinel and just
+// close after the finish_reason chunk. That is a server-declared clean end —
+// it must keep producing a normal message_stop, never an error.
+func TestStreamChat_FinishReasonWithoutDone_NormalStop(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		fmt.Fprintf(w, "data: %s\n\n", mustJSON(map[string]any{
+			"id": "chatcmpl-nodone", "model": "test-model",
+			"choices": []map[string]any{
+				{"index": 0, "delta": map[string]any{"content": "complete reply"}},
+			},
+		}))
+		fmt.Fprintf(w, "data: %s\n\n", mustJSON(map[string]any{
+			"id": "chatcmpl-nodone", "model": "test-model",
+			"choices": []map[string]any{
+				{"index": 0, "delta": map[string]any{}, "finish_reason": "stop"},
+			},
+		}))
+		flusher.Flush()
+		// EOF without [DONE].
+	}))
+	defer server.Close()
+
+	got := collectStreamEvents(t, NewClient(server.URL, "test-key"))
+
+	if len(got) == 0 {
+		t.Fatal("no events received")
+	}
+	if last := got[len(got)-1]; last.Type != "message_stop" {
+		t.Errorf("terminal event = %q, want message_stop (finish_reason counts as a clean end)", last.Type)
+	}
+	for _, ev := range got {
+		if ev.Type == "error" {
+			t.Errorf("unexpected error event on a finish_reason-terminated stream: %s", ev.Payload)
+		}
+	}
+}
+
+// TestStreamChat_ErrorJSONBody_SurfacedNotSwallowed: a bare {"error":{...}}
+// data line unmarshals into a zero-valued openAIChunk, so it used to be
+// swallowed as an empty usage chunk — the provider's own error message
+// vanished and the turn ended as an empty success. It must surface as a
+// terminal error event carrying that message.
+func TestStreamChat_ErrorJSONBody_SurfacedNotSwallowed(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"error\":{\"message\":\"backend exploded\",\"type\":\"server_error\"}}\n\n")
+	}))
+	defer server.Close()
+
+	got := collectStreamEvents(t, NewClient(server.URL, "test-key"))
+
+	requireTerminalError(t, got, "backend exploded")
 }
 
 // TestConvertMessages_ThinkingOnlyAssistantSkipped verifies that an assistant

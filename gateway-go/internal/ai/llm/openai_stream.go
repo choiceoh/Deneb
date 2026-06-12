@@ -55,10 +55,35 @@ func mapFinishReason(reason string) string {
 	}
 }
 
+// probeOpenAIError detects a bare OpenAI error body ({"error":{...}}) and
+// repacks it as a flat {"type","message"} error payload. Needed in two spots:
+// the unparseable-chunk path, and the choice-less-chunk path — an error body
+// unmarshals into openAIChunk with all-zero fields, so without the second
+// probe it was swallowed as an empty usage chunk and the turn ended as an
+// empty success.
+func probeOpenAIError(payload json.RawMessage) (json.RawMessage, bool) {
+	var errResp struct {
+		Error struct {
+			Message string `json:"message"`
+			Type    string `json:"type"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(payload, &errResp) != nil || errResp.Error.Message == "" {
+		return nil, false
+	}
+	p, _ := json.Marshal(map[string]string{
+		"type":    errResp.Error.Type,
+		"message": errResp.Error.Message,
+	})
+	return p, true
+}
+
 // translateOpenAIStream reads OpenAI SSE chunks from rawEvents and emits
 // Anthropic-style StreamEvents to out.
 func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan StreamEvent, out chan<- StreamEvent) {
 	firstChunk := true
+	sawFinishReason := false // any non-nil choice finish_reason — a clean-end signal
+	chunkCount := 0          // parsed data chunks, for the premature-EOF diagnostic
 	nextBlockIndex := 0
 	textBlockOpen := false
 	textBlockIndex := -1
@@ -156,14 +181,16 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 		toolOrder = nil
 	}
 
-	// flushPremature rescues buffered state when the stream ends without a
-	// finish_reason chunk ([DONE] arriving early, or EOF mid-stream). Open
-	// text/thinking blocks are closed and complete buffered tool calls are
-	// emitted — without this, a connection cut right before the finish chunk
-	// silently discarded every tool call of the turn. No stop_reason is
-	// synthesized: the consumer executes tools based on block presence, and a
-	// fake "tool_use" would misrepresent a cut stream as a clean stop. After a
-	// normal finish chunk the buffers are already empty, so this is a no-op.
+	// flushPremature rescues buffered state when the server explicitly ended
+	// the stream ([DONE]) without a finish_reason chunk. Open text/thinking
+	// blocks are closed and complete buffered tool calls are emitted — without
+	// this, a dropped finish chunk silently discarded every tool call of the
+	// turn. No stop_reason is synthesized: the consumer executes tools based
+	// on block presence, and a fake "tool_use" would misrepresent the cut as a
+	// clean stop. After a normal finish chunk the buffers are already empty,
+	// so this is a no-op. A bare EOF (no [DONE], no finish_reason) does NOT
+	// take this path — that is a connection cut and surfaces as an error
+	// event below instead.
 	flushPremature := func() {
 		closeOpenBlocks()
 		if len(toolOrder) == 0 {
@@ -191,17 +218,7 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 		var chunk openAIChunk
 		if err := json.Unmarshal(raw.Payload, &chunk); err != nil {
 			// Try parsing as an OpenAI error response ({"error": {...}}).
-			var errResp struct {
-				Error struct {
-					Message string `json:"message"`
-					Type    string `json:"type"`
-				} `json:"error"`
-			}
-			if json.Unmarshal(raw.Payload, &errResp) == nil && errResp.Error.Message != "" {
-				errPayload, _ := json.Marshal(map[string]string{
-					"type":    errResp.Error.Type,
-					"message": errResp.Error.Message,
-				})
+			if errPayload, ok := probeOpenAIError(raw.Payload); ok {
 				emit(ctx, out, StreamEvent{Type: "error", Payload: errPayload})
 				return
 			}
@@ -209,6 +226,7 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 				"error", err, "payload", string(raw.Payload))
 			continue
 		}
+		chunkCount++
 
 		// Emit synthetic message_start on first chunk.
 		if firstChunk {
@@ -220,6 +238,17 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 		}
 
 		if len(chunk.Choices) == 0 {
+			// A bare {"error":{...}} body parses cleanly into a zero-valued
+			// openAIChunk, so the unmarshal-error probe above never sees it.
+			// Probe again here or the provider's error is swallowed as an
+			// empty usage chunk and vanishes from the turn entirely.
+			if chunk.Usage == nil {
+				if errPayload, ok := probeOpenAIError(raw.Payload); ok {
+					emit(ctx, out, StreamEvent{Type: "error", Payload: errPayload})
+					return
+				}
+			}
+
 			// Usage-only chunk (OpenAI sends this at the end with stream_options).
 			// Re-emit message_start with accurate input tokens, plus message_delta
 			// with output tokens, so consumeStream picks up correct usage.
@@ -320,6 +349,7 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 
 		// Check finish reason (nil = not yet finished, non-nil = terminal).
 		if choice.FinishReason != nil {
+			sawFinishReason = true
 			closeOpenBlocks()
 
 			// Emit each accumulated tool_use block contiguously
@@ -358,9 +388,39 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 		}
 	}
 
-	// Stream ended without [DONE] — flush buffered state and emit stop events.
-	flushPremature()
-	emit(ctx, out, StreamEvent{Type: "message_stop"})
+	// Stream ended without [DONE]. If a finish_reason chunk arrived, the model
+	// completed its answer and the server merely omitted the [DONE] sentinel
+	// (either signal counts as a clean end) — emit the normal stop.
+	if sawFinishReason {
+		flushPremature()
+		emit(ctx, out, StreamEvent{Type: "message_stop"})
+		return
+	}
+
+	// Clean EOF with neither finish_reason nor [DONE]: a close-delimited
+	// (non-chunked) response whose connection died mid-answer, or an empty 200
+	// body. ParseSSE cannot tell this from a normal end (scanner.Err() == nil),
+	// and synthesizing message_stop here delivered the empty-or-truncated turn
+	// to the user as a SUCCESS (reproduced live by killing an HTTP/1.0 broker
+	// mid-response — PR #2268 review). Surface a retryable error instead: the
+	// executor retries once on the same model, then escalates to the fallback
+	// chain. Buffered tool calls are deliberately dropped, not flushed — the
+	// flush rescue is reserved for an explicit [DONE], where the server (not
+	// the transport) ended the stream.
+	if len(toolOrder) > 0 {
+		c.logger.Warn("dropping buffered tool calls at mid-stream EOF",
+			"count", len(toolOrder))
+	}
+	errPayload, _ := json.Marshal(struct {
+		Type    string `json:"type"`
+		Message string `json:"message"`
+	}{
+		Type: "premature_end",
+		Message: fmt.Sprintf(
+			"provider stream ended without finish_reason or [DONE] after %d chunks — connection cut mid-response",
+			chunkCount),
+	})
+	emit(ctx, out, StreamEvent{Type: "error", Payload: errPayload})
 }
 
 func emit(ctx context.Context, ch chan<- StreamEvent, ev StreamEvent) {

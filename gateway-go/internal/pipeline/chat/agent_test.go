@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -85,6 +86,47 @@ func TestRunAgent_SimpleTextResponse(t *testing.T) {
 	}
 	if len(deltas) != 1 || deltas[0] != "Hello world" {
 		t.Errorf("deltas = %v", deltas)
+	}
+}
+
+// TestRunAgent_MidStreamCleanEOF_FailsTurnInsteadOfEmptySuccess reproduces
+// the PR #2268-review bug chain end to end: a close-delimited provider dies
+// mid-response — the SSE body ends cleanly (scanner.Err() == nil) after a
+// content delta, with no finish_reason chunk and no [DONE]. The translator
+// used to synthesize message_stop, so RunAgent delivered the truncated text
+// as a successful turn. It must now surface a stream error: the executor
+// retries once on the same model and, when the retry is cut the same way,
+// fails the run instead of faking success.
+func TestRunAgent_MidStreamCleanEOF_FailsTurnInsteadOfEmptySuccess(t *testing.T) {
+	callCount := 0
+	client := newTestLLMClient(t, func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		// One content delta, then the handler returns. Go finalizes the
+		// chunked body cleanly, so the client sees a clean EOF — the
+		// close-delimited "silent death" shape, not a read error.
+		fmt.Fprint(w, "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"truncated rep\"},\"finish_reason\":null}]}\n\n")
+	})
+	cfg := agent.AgentConfig{
+		MaxTurns: 5,
+		Timeout:  10 * time.Second,
+		Model:    "test-model",
+	}
+
+	result, err := agent.RunAgent(
+		context.Background(), cfg,
+		[]llm.Message{llm.NewTextMessage("user", "hi")},
+		client, nil, agent.StreamHooks{}, nil, nil,
+	)
+	if err == nil {
+		t.Fatalf("RunAgent = success (Text=%q), want error — a truncated stream must not be delivered as a reply", result.Text)
+	}
+	if !errors.Is(err, agent.ErrStreamEvent) {
+		t.Errorf("error = %v, want agent.ErrStreamEvent in chain", err)
+	}
+	if callCount != 2 {
+		t.Errorf("LLM calls = %d, want 2 (original + one same-model retry)", callCount)
 	}
 }
 
