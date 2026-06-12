@@ -235,8 +235,10 @@ func TestCompact_PipelineOrder(t *testing.T) {
 		msgs = append(msgs, textMsg("assistant", "a"))
 	}
 
-	cfg := NewConfig(200_000)
-	cfg.ContextBudget = 999999 // high budget, no LLM compaction
+	// Budget such that tokens are above the cheap-prune gate (50%) but below
+	// the LLM threshold (90%): gate fires, Tier 3 does not.
+	tokens := EstimateMessagesTokens(msgs)
+	cfg := NewConfig(tokens + tokens/2)
 
 	result, r := Compact(context.Background(), cfg, msgs, nil, nil)
 	// Should have micro-compacted the old tool result.
@@ -244,12 +246,51 @@ func TestCompact_PipelineOrder(t *testing.T) {
 		t.Errorf("MicroPruned = %d, want 1", r.MicroPruned)
 	}
 	if r.LLMCompacted {
-		t.Error("LLM compaction should not trigger with high budget")
+		t.Error("LLM compaction should not trigger below threshold")
 	}
 	if r.EmergencyEvicted != 0 {
 		t.Error("no emergency eviction expected")
 	}
 	if len(result) != len(msgs) {
 		t.Errorf("message count should not change for micro-only: got %d, want %d", len(result), len(msgs))
+	}
+}
+
+// TestCompact_CheapPruneGate locks the APC-stability gate: far below the
+// budget (under CheapPruneMinUsagePct) the Tier 2/2b cheap pruning must not
+// run at all — every pruned byte rewrites history mid-prompt and invalidates
+// the vLLM prefix cache from that point on every turn.
+func TestCompact_CheapPruneGate(t *testing.T) {
+	bulky := strings.Repeat("결과 데이터 라인입니다. ", 40) // > DefaultStubMinChars runes
+	msgs := []llm.Message{
+		textMsg("user", "old question"),
+		textMsg("assistant", "old answer"),
+		toolResultMsg("```python\nprint('hello')\n```\n" + bulky),
+		textMsg("assistant", "done"),
+	}
+	for i := 0; i < 5; i++ {
+		msgs = append(msgs, textMsg("user", "q"))
+		msgs = append(msgs, textMsg("assistant", "a"))
+	}
+
+	tokens := EstimateMessagesTokens(msgs)
+	cfg := NewConfig(tokens * 10) // usage 10% — far below the 50% gate
+
+	result, r := Compact(context.Background(), cfg, msgs, nil, nil)
+	if r.MicroPruned != 0 || r.OldToolResultsStubbed != 0 {
+		t.Errorf("cheap pruning ran below the gate: pruned=%d stubbed=%d", r.MicroPruned, r.OldToolResultsStubbed)
+	}
+	if string(result[2].Content) != string(msgs[2].Content) {
+		t.Error("old tool_result bytes must be untouched below the gate")
+	}
+
+	// Same messages under pressure (budget barely above tokens): both tiers fire.
+	cfgTight := NewConfig(tokens + tokens/2)
+	_, rTight := Compact(context.Background(), cfgTight, msgs, nil, nil)
+	if rTight.MicroPruned == 0 {
+		t.Error("MicroCompact should fire above the gate")
+	}
+	if rTight.OldToolResultsStubbed == 0 {
+		t.Error("TruncateOldToolResults should fire above the gate")
 	}
 }
