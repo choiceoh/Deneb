@@ -105,11 +105,16 @@ fun DenebUiRenderer(
         return
     }
 
+    // A root that already paints its own card chrome (card / accordion) renders
+    // bare: wrapping it in another Card stacks surface-on-surface and eats 12dp
+    // of content width per side — the #2238 mail-analysis accordion was down to
+    // ~330dp of body width on a phone.
+    val selfChromed = node is CardNode || node is AccordionNode
     CompositionLocalProvider(
         LocalFrozenSubmission provides frozen,
         LocalUiFormValidation provides validation,
     ) {
-        if (wrapInCard) {
+        if (wrapInCard && !selfChromed) {
             Card(
                 modifier = modifier.fillMaxWidth().wrapContentHeight(),
                 colors = denebAdaptiveCardColors(),
