@@ -129,6 +129,60 @@ func TestSessionsSpawn_RecordsDepthAndLabel(t *testing.T) {
 	}
 }
 
+func TestSessionsSpawn_StoresToolPreset(t *testing.T) {
+	sm := session.NewManager()
+	ctx := toolctx.WithSessionKey(context.Background(), "client:main")
+
+	input := sessionSearchJSON(t, map[string]string{
+		"task": "research X", "label": "r1", "tool_preset": "researcher",
+	})
+	out, err := ToolSessionsSpawn(spawnDeps(sm))(ctx, input)
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if !strings.Contains(out, "Tool preset: researcher") {
+		t.Fatalf("expected preset echo in output, got: %s", out)
+	}
+
+	var child *session.Session
+	for _, s := range sm.List() {
+		if s.SpawnedBy == "client:main" {
+			child = s
+		}
+	}
+	if child == nil {
+		t.Fatal("child session not created")
+	}
+	if child.ToolPreset != "researcher" {
+		t.Errorf("child ToolPreset = %q, want researcher", child.ToolPreset)
+	}
+}
+
+// TestSessionsSpawn_RejectsUnknownToolPreset pins the fail-closed contract:
+// toolpreset.AllowedTools returns nil (= unrestricted) for unknown names, so
+// a typo'd preset must reject the spawn instead of silently granting the
+// child the full toolset.
+func TestSessionsSpawn_RejectsUnknownToolPreset(t *testing.T) {
+	sm := session.NewManager()
+	ctx := toolctx.WithSessionKey(context.Background(), "client:main")
+
+	input := sessionSearchJSON(t, map[string]string{
+		"task": "research X", "tool_preset": "reseacher", // typo on purpose
+	})
+	out, err := ToolSessionsSpawn(spawnDeps(sm))(ctx, input)
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if !strings.Contains(out, "Spawn rejected: unknown tool_preset") {
+		t.Fatalf("expected rejection message, got: %s", out)
+	}
+	for _, s := range sm.List() {
+		if s.SpawnedBy == "client:main" {
+			t.Fatalf("no child session should be created on invalid preset, found %s", s.Key)
+		}
+	}
+}
+
 func TestSessionsSpawn_RejectsBeyondMaxDepth(t *testing.T) {
 	sm := session.NewManager()
 	parent := sm.Create("client:main:deep", session.KindDirect)

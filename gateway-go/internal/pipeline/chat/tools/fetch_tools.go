@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -39,6 +40,21 @@ func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 			return "", fmt.Errorf("names or query is required")
 		}
 
+		// Preset-restricted runs only see and activate allowed tools. The
+		// system prompt already hides disallowed deferred tools, but the
+		// query path below searches the full registry — without this filter
+		// a restricted sub-agent could surface and "activate" a tool that
+		// Execute then rejects, wasting a turn on a false "you can now call
+		// them directly". nil allowed = no restriction.
+		allowed := toolpreset.AllowedTools(toolpreset.Preset(toolctx.ToolPresetFromContext(ctx)))
+		isAllowed := func(name string) bool {
+			if allowed == nil {
+				return true
+			}
+			_, ok := allowed[name]
+			return ok
+		}
+
 		// If query is provided, search deferred tools by keyword. Rank with
 		// BM25 over name + description + parameter names so the most relevant
 		// tools come first, then union in any literal substring matches so the
@@ -48,6 +64,9 @@ func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 			summaries := registry.DeferredSummaries()
 			docs := make([]searchDoc, 0, len(summaries))
 			for _, s := range summaries {
+				if !isAllowed(s.Name) {
+					continue
+				}
 				tokens := append(tokenize(s.Name), tokenize(s.Description)...)
 				if def, ok := registry.DeferredToolDef(s.Name); ok {
 					for _, pn := range extractParamNames(def.InputSchema) {
@@ -86,6 +105,10 @@ func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 		var sb strings.Builder
 		var activated []string
 		for _, name := range p.Names {
+			if !isAllowed(name) {
+				fmt.Fprintf(&sb, "- %s: not available under the current tool preset\n", name)
+				continue
+			}
 			def, ok := registry.DeferredToolDef(name)
 			if !ok {
 				fmt.Fprintf(&sb, "- %s: not found or not a deferred tool\n", name)

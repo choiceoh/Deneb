@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
@@ -439,6 +440,20 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) ToolFunc {
 		}
 		if p.Task == "" {
 			return "", fmt.Errorf("task is required")
+		}
+
+		// Fail closed on unknown presets: AllowedTools returns nil (= no
+		// restriction) for unrecognized names, so a typo'd preset would
+		// silently spawn a FULLY unrestricted child — the opposite of what
+		// the caller asked for.
+		p.ToolPreset = strings.TrimSpace(p.ToolPreset)
+		if p.ToolPreset != "" && !toolpreset.IsValid(toolpreset.Preset(p.ToolPreset)) {
+			valid := make([]string, 0, 3)
+			for _, sp := range toolpreset.SpawnPresets() {
+				valid = append(valid, string(sp))
+			}
+			return fmt.Sprintf("Spawn rejected: unknown tool_preset %q. Valid presets: %s. Omit tool_preset for the full toolset.",
+				p.ToolPreset, strings.Join(valid, ", ")), nil
 		}
 
 		if d == nil || d.Manager == nil || d.SendFn == nil {

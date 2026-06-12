@@ -9,6 +9,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
@@ -50,6 +51,14 @@ type SpawnSubagentResult struct {
 func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubagentParams) SpawnSubagentResult {
 	if d.ACPRegistry == nil {
 		return SpawnSubagentResult{Error: fmt.Errorf("ACP registry not available")}
+	}
+
+	// Fail closed on unknown presets — toolpreset.AllowedTools returns nil
+	// (= unrestricted) for names it does not know, so passing a typo through
+	// would silently drop the requested restriction.
+	params.ToolPreset = strings.TrimSpace(params.ToolPreset)
+	if params.ToolPreset != "" && !toolpreset.IsValid(toolpreset.Preset(params.ToolPreset)) {
+		return SpawnSubagentResult{Error: fmt.Errorf("unknown tool preset %q (valid: researcher, implementer, verifier)", params.ToolPreset)}
 	}
 
 	// Determine depth.
@@ -106,6 +115,11 @@ func (d *SubagentInfraDeps) SpawnSubagent(ctx context.Context, params SpawnSubag
 			sess.IdleTimeoutMs = 10 * 60 * 1000 // 10 minutes idle → stall
 			now := time.Now().UnixMilli()
 			sess.LastActivityAt = &now
+			// The runtime session is what the chat run reads for tool
+			// filtering (run_exec → toolpreset.AllowedTools); storing the
+			// preset only on the autoreply SessionState below leaves the
+			// restriction unenforced.
+			sess.ToolPreset = params.ToolPreset
 			if err := d.Sessions.Set(sess); err != nil {
 				d.logger().Warn("failed to persist subagent session timeout",
 					"agentId", agentID, "sessionKey", sessionKey, "error", err)
