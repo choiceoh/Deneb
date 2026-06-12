@@ -126,6 +126,15 @@ type RunEndData struct {
 	// so analysis can separate the two populations.
 	Compacted bool `json:"compacted,omitempty"`
 	Proactive bool `json:"proactive,omitempty"`
+	// EffortDecision is the adaptive effort router's verdict for this run
+	// ("routed:short-conversational", "kept:hard-signal:왜", …; empty when the
+	// router gate is closed — non-dual-mode model or DENEB_ADAPTIVE_EFFORT
+	// off). EffortEscalated marks a routed run that failed non-thinking and
+	// was retried once with thinking restored. The journald copy of these
+	// fields rotates away; this is the durable feed for the v2 learned-router
+	// label pipeline and modeltuner-style aggregation.
+	EffortDecision  string `json:"effortDecision,omitempty"`
+	EffortEscalated bool   `json:"effortEscalated,omitempty"`
 }
 
 // RunErrorData records agent run failure.
