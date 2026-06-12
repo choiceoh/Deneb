@@ -47,7 +47,7 @@ jobs:
           java-version: "21" # bundles jpackage
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.1.1
 
       # jpackage shells out to WiX's candle.exe/light.exe to assemble the MSI. WiX v3 ships
       # preinstalled on windows-latest but is often missing from PATH; WiX v4 is incompatible
