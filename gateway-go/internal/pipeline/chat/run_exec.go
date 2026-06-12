@@ -204,6 +204,11 @@ func executeAgentRun(
 	// Per-model defaults (profile sampling, tuned max-tokens floor) — only
 	// fills values the request left unset; request-level params, cache-safe.
 	applyModelTuning(&cfg, deps, params, providerID, model)
+	// Adaptive effort router: obviously-simple conversational messages on
+	// dual-mode models (DeepSeek V4) skip the thinking phase via a
+	// per-request chat-template override (KV-prefix-safe). Stalled
+	// non-thinking runs escalate back to thinking in runAgentWithFallback.
+	applyEffortRouter(&cfg, params.Message, logger)
 
 	// BeforeAPICall hook chain: composed via agent.ComposeBeforeAPICall so
 	// features can register additional pre-LLM transforms without clobbering

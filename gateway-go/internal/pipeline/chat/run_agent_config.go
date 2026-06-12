@@ -254,6 +254,9 @@ func buildAgentConfig(
 		cfg.ThinkingModulator = planningSandwichThinking(thinkingCfg, cfg.MaxTokens)
 	}
 
+	// NOTE: the adaptive effort router (effort_router.go) is applied by the
+	// caller AFTER model resolution — cfg.Model is still empty here.
+
 	// Verification gate (docs/research/ideal-agent-environment-harness.md §10):
 	// a run that wrote/edited files must run a verification command before its
 	// finish is accepted; the gate injects one demand prompt, then yields.

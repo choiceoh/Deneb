@@ -137,6 +137,19 @@ func runAgentWithFallback(
 			runErr = errModelStalled
 			stalledResult = agentResult
 		}
+		// Effort-router escalation: a thinking-disabled run that stalled gets
+		// one retry with thinking restored before the model fallback chain
+		// fires. The prefix is KV-cached, so the retry re-enters cheaply.
+		if errors.Is(runErr, errModelStalled) && effortRouterApplied(&cfg) {
+			logger.Info("effort router: non-thinking run stalled; escalating to thinking",
+				"model", cfg.Model)
+			stripEffortOverride(&cfg)
+			agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+			if runErr == nil && isStalledResult(agentResult) {
+				runErr = errModelStalled
+				stalledResult = agentResult
+			}
+		}
 		if runErr == nil {
 			break
 		}
@@ -297,6 +310,12 @@ func runAgentWithFallback(
 						"error", runErr)
 					agentCfg := cfg
 					agentCfg.Model = fbCfg.Model
+					// The effort-router override is model-specific (vLLM
+					// chat_template_kwargs): never carry it to a fallback
+					// model whose server/template may reject or misread it.
+					if !supportsThinkingToggle(agentCfg.Model) {
+						stripEffortOverride(&agentCfg)
+					}
 					agentResult, runErr = agent.RunAgent(fbCtx, agentCfg, messages, fbClient, deps.tools, hooks, logger, runLog)
 					// A stalled fallback (empty timeout) is also a failure — advance
 					// to the next role instead of returning its empty result.
