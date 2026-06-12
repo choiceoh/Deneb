@@ -47,12 +47,16 @@ internal data class FleetNodeMetrics(
 )
 
 @Serializable
+internal data class FleetModel(val name: String = "", val sizeBytes: Long = 0)
+
+@Serializable
 internal data class FleetNode(
     val name: String,
     val role: String = "",
     val reachable: Boolean = false,
     val error: String? = null,
     val metrics: FleetNodeMetrics = FleetNodeMetrics(),
+    val models: List<FleetModel> = emptyList(),
 )
 
 @Serializable
@@ -66,11 +70,19 @@ internal data class FleetRecipeStatus(
 )
 
 @Serializable
+internal data class FleetVllm(
+    val gpuMemoryUtilization: Double? = null,
+    val maxModelLen: Int? = null,
+    val maxNumSeqs: Int? = null,
+)
+
+@Serializable
 internal data class FleetRecipe(
     val name: String,
     val description: String = "",
     val node: String = "",
     val port: Int = 0,
+    val vllm: FleetVllm? = null,
     val status: FleetRecipeStatus = FleetRecipeStatus(),
 )
 
@@ -86,6 +98,26 @@ internal data class FleetJob(
 
 @Serializable
 private data class FleetJobIdResponse(val jobId: String = "")
+
+@Serializable
+internal data class FleetHFModel(
+    val id: String,
+    val downloads: Long = 0,
+    val likes: Long = 0,
+    val params: Long = 0, // safetensors parameter count; 0 = unknown (GGUF)
+    val gated: Boolean = false,
+)
+
+@Serializable
+private data class FleetHFSearchResponse(val models: List<FleetHFModel> = emptyList())
+
+@Serializable
+internal data class FleetHFInfo(
+    val repo: String = "",
+    val sizeBytes: Long = 0,
+    val files: Int = 0,
+    val gated: Boolean = false,
+)
 
 // fleetJson decodes SparkFleet (a Go server) responses: Go marshals nil
 // slices/maps as JSON null, so an unreachable node arrives as
@@ -150,11 +182,26 @@ internal suspend fun DenebGatewayClient.fleetJob(id: String): FleetJob? =
 internal suspend fun DenebGatewayClient.fleetRecipeAction(
     recipe: String,
     action: String,
+    overrides: FleetVllm? = null,
     onJob: (String) -> Unit = {},
 ): String? {
     val body = buildJsonObject {
         put("recipe", recipe)
         put("action", action)
+        // Per-launch memory-budget tweaks — SparkFleet applies them to a clone,
+        // so the recipe file itself never changes.
+        if (action == "launch" && overrides != null &&
+            (overrides.gpuMemoryUtilization != null || overrides.maxModelLen != null || overrides.maxNumSeqs != null)
+        ) {
+            put(
+                "overrides",
+                buildJsonObject {
+                    overrides.gpuMemoryUtilization?.let { put("gpuMemoryUtilization", it) }
+                    overrides.maxModelLen?.let { put("maxModelLen", it) }
+                    overrides.maxNumSeqs?.let { put("maxNumSeqs", it) }
+                },
+            )
+        }
     }.toString()
     val (ok, err) = fleetPost("/api/recipes/action", body)
     if (err != null) return err
@@ -164,3 +211,32 @@ internal suspend fun DenebGatewayClient.fleetRecipeAction(
     }
     return null
 }
+
+internal suspend fun DenebGatewayClient.fleetHFSearch(q: String): List<FleetHFModel>? =
+    fleetGetText("/api/hf/search?q=${q.encodeURLParameter()}")?.let {
+        runCatching { fleetJson.decodeFromString<FleetHFSearchResponse>(it).models }.getOrNull()
+    }
+
+internal suspend fun DenebGatewayClient.fleetHFInfo(repo: String): FleetHFInfo? =
+    fleetGetText("/api/hf/info?repo=${repo.encodeURLParameter()}")?.let {
+        runCatching { fleetJson.decodeFromString<FleetHFInfo>(it) }.getOrNull()
+    }
+
+/** Start a HuggingFace download on a node. Error message, or null on success. */
+internal suspend fun DenebGatewayClient.fleetDownloadModel(node: String, repo: String, onJob: (String) -> Unit = {}): String? {
+    val body = buildJsonObject {
+        put("node", node)
+        put("repo", repo)
+    }.toString()
+    val (ok, err) = fleetPost("/api/models/download", body)
+    if (err != null) return err
+    ok?.let { text ->
+        runCatching { fleetJson.decodeFromString<FleetJobIdResponse>(text) }.getOrNull()
+            ?.jobId?.takeIf { it.isNotBlank() }?.let(onJob)
+    }
+    return null
+}
+
+/** Cancel a running job. Error message, or null on success. */
+internal suspend fun DenebGatewayClient.fleetCancelJob(id: String): String? =
+    fleetPost("/api/jobs/${id.encodeURLParameter()}/cancel", "{}").second

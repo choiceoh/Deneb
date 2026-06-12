@@ -65,7 +65,15 @@ func fleetPathAllowed(method, path string) bool {
 			return id != "" && !strings.Contains(id, "/")
 		}
 	case http.MethodPost:
-		return fleetAllowPost[path]
+		if fleetAllowPost[path] {
+			return true
+		}
+		// POST /api/jobs/{id}/cancel — the one parameterized write (id is a
+		// single segment, same shape as the GET).
+		if rest, ok := strings.CutPrefix(path, "/api/jobs/"); ok {
+			id, found := strings.CutSuffix(rest, "/cancel")
+			return found && id != "" && !strings.Contains(id, "/")
+		}
 	}
 	return false
 }
