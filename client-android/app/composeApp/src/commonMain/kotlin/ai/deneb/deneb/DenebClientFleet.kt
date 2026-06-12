@@ -10,6 +10,7 @@ import io.ktor.http.contentType
 import io.ktor.http.encodeURLParameter
 import io.ktor.http.isSuccess
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -86,6 +87,17 @@ internal data class FleetJob(
 @Serializable
 private data class FleetJobIdResponse(val jobId: String = "")
 
+// fleetJson decodes SparkFleet (a Go server) responses: Go marshals nil
+// slices/maps as JSON null, so an unreachable node arrives as
+// "services": null / "gpus": null. coerceInputValues turns those nulls into
+// the field defaults instead of failing the whole decode (which left the
+// 노드 tab stuck on "불러오는 중" the moment any node carried a null array).
+internal val fleetJson = Json {
+    ignoreUnknownKeys = true
+    isLenient = true
+    coerceInputValues = true
+}
+
 // --- transport helpers -----------------------------------------------------
 
 private suspend fun DenebGatewayClient.fleetGetText(path: String): String? {
@@ -115,17 +127,17 @@ private suspend fun DenebGatewayClient.fleetPost(path: String, jsonBody: String)
 // --- reads ------------------------------------------------------------------
 
 internal suspend fun DenebGatewayClient.fleetState(): FleetState? =
-    fleetGetText("/api/state")?.let { runCatching { jsonCodec.decodeFromString<FleetState>(it) }.getOrNull() }
+    fleetGetText("/api/state")?.let { runCatching { fleetJson.decodeFromString<FleetState>(it) }.getOrNull() }
 
 internal suspend fun DenebGatewayClient.fleetRecipes(): List<FleetRecipe>? =
-    fleetGetText("/api/recipes")?.let { runCatching { jsonCodec.decodeFromString<List<FleetRecipe>>(it) }.getOrNull() }
+    fleetGetText("/api/recipes")?.let { runCatching { fleetJson.decodeFromString<List<FleetRecipe>>(it) }.getOrNull() }
 
 internal suspend fun DenebGatewayClient.fleetJobs(): List<FleetJob>? =
-    fleetGetText("/api/jobs")?.let { runCatching { jsonCodec.decodeFromString<List<FleetJob>>(it) }.getOrNull() }
+    fleetGetText("/api/jobs")?.let { runCatching { fleetJson.decodeFromString<List<FleetJob>>(it) }.getOrNull() }
 
 internal suspend fun DenebGatewayClient.fleetJob(id: String): FleetJob? =
     fleetGetText("/api/jobs/${id.encodeURLParameter()}")?.let {
-        runCatching { jsonCodec.decodeFromString<FleetJob>(it) }.getOrNull()
+        runCatching { fleetJson.decodeFromString<FleetJob>(it) }.getOrNull()
     }
 
 // --- writes -----------------------------------------------------------------
@@ -147,7 +159,7 @@ internal suspend fun DenebGatewayClient.fleetRecipeAction(
     val (ok, err) = fleetPost("/api/recipes/action", body)
     if (err != null) return err
     ok?.let { text ->
-        runCatching { jsonCodec.decodeFromString<FleetJobIdResponse>(text) }.getOrNull()
+        runCatching { fleetJson.decodeFromString<FleetJobIdResponse>(text) }.getOrNull()
             ?.jobId?.takeIf { it.isNotBlank() }?.let(onJob)
     }
     return null
