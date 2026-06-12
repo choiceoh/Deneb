@@ -1,5 +1,6 @@
 package ai.deneb.data
 
+import ai.deneb.DenebLog
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
@@ -37,7 +38,7 @@ class TaskStore(private val appSettings: AppSettings) {
         if (migrated) saveTasks(upgraded)
         upgraded
     } catch (e: Exception) {
-        println("TaskStore: failed to load tasks: ${e.message}")
+        DenebLog.error("TaskStore", "failed to load tasks: ${e.message}")
         mutableListOf()
     }
 

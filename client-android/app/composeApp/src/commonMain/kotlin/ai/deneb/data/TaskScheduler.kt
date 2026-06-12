@@ -1,5 +1,6 @@
 package ai.deneb.data
 
+import ai.deneb.DenebLog
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.email.EmailPoller
 import ai.deneb.getBackgroundDispatcher
@@ -428,7 +429,7 @@ class TaskScheduler(
                 CronExpression(task.cron).nextAfter(now)
             } catch (e: Exception) {
                 // Cron computation failed — leave pending for retry
-                println("TaskScheduler: failed to compute next cron time for task ${task.id}: ${e.message}")
+                DenebLog.error("TaskScheduler", "failed to compute next cron time for task ${task.id}: ${e.message}")
                 taskStore!!.updateTask(
                     task.copy(
                         status = TaskStatus.PENDING,
