@@ -51,6 +51,7 @@ import ai.deneb.Platform
 import ai.deneb.currentPlatform
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import ai.deneb.ui.handCursor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -406,7 +407,7 @@ private fun FleetNodeRow(node: FleetNode) {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
-    HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+    HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
 }
 
 @Composable
@@ -434,7 +435,7 @@ private fun FleetRecipeRow(rc: FleetRecipe, onAction: (String) -> Unit) {
             }
         }
     }
-    HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+    HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
 }
 
 @Composable
@@ -470,7 +471,7 @@ private fun FleetJobRow(job: FleetJob, expanded: Boolean, onToggle: () -> Unit, 
             }
         }
     }
-    HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+    HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
 }
 
 @Composable
@@ -589,7 +590,7 @@ private fun FleetModelsPage(client: DenebGatewayClient, nodes: List<FleetNode>, 
                         )
                     }
                 }
-                HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
             }
         }
         nodes.filter { it.models.isNotEmpty() }.forEach { node ->

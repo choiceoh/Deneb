@@ -26,6 +26,7 @@ import ai.deneb.Platform
 import ai.deneb.currentPlatform
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebPressable
 import kotlinx.coroutines.launch
 
@@ -124,7 +125,7 @@ fun DenebCategoriesScreen(
                                 color = MaterialTheme.colorScheme.primary,
                             )
                         }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(color = denebHairline())
                     }
                     Spacer(Modifier.height(24.dp))
                 }
@@ -156,5 +157,5 @@ private fun PinnedEntryRow(label: String, onClick: () -> Unit) {
             color = MaterialTheme.colorScheme.primary,
         )
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+    HorizontalDivider(color = denebHairline())
 }

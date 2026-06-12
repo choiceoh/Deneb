@@ -61,6 +61,7 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.LinkifiedText
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
+import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebShrinkOut
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.MarkdownContent
@@ -290,7 +291,7 @@ fun DenebMailDetailScreen(
             }
 
             Spacer(Modifier.height(16.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider(color = denebHairline())
             Spacer(Modifier.height(12.dp))
             // The body is plain text (gateway already rendered HTML → text), not
             // markdown — but its URLs must be tappable (auth/CTA mails are the

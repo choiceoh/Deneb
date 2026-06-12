@@ -20,9 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import ai.deneb.DenebCalendar
 import ai.deneb.DenebCategories
@@ -31,6 +29,7 @@ import ai.deneb.DenebFleet
 import ai.deneb.DenebMail
 import ai.deneb.DenebSearch
 import ai.deneb.Home
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -143,9 +142,7 @@ private fun SidebarRow(label: String, selected: Boolean, onClick: () -> Unit) {
     )
     Text(
         text = label,
-        fontSize = 20.sp,
-        lineHeight = 34.sp,
-        fontWeight = FontWeight.ExtraLight,
+        style = DenebType.railItem,
         color = color,
         modifier = Modifier
             // Full row width: the whole 200dp band is the click target, not just the glyphs.

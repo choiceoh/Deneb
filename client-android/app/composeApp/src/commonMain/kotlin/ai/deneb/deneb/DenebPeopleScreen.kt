@@ -2,6 +2,7 @@ package ai.deneb.deneb
 
 import androidx.compose.foundation.layout.Column
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebPressable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -150,7 +151,7 @@ private fun ContactPersonRow(person: PersonHit, onTap: () -> Unit, modifier: Mod
     }
     HorizontalDivider(
         modifier = Modifier.padding(start = 16.dp),
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+        color = denebHairline(),
     )
 }
 
@@ -184,6 +185,6 @@ private fun WikiPersonRow(person: PersonHit, onTap: () -> Unit, modifier: Modifi
     }
     HorizontalDivider(
         modifier = Modifier.padding(start = 16.dp),
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+        color = denebHairline(),
     )
 }

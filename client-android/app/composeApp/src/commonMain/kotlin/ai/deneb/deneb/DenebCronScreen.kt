@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
@@ -123,7 +124,7 @@ fun DenebCronScreen(
             }
 
             Spacer(Modifier.height(16.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider(color = denebHairline())
             Spacer(Modifier.height(12.dp))
             Text("작업", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             Text(
@@ -147,7 +148,7 @@ fun DenebCronScreen(
             }
 
             Spacer(Modifier.height(16.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider(color = denebHairline())
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(

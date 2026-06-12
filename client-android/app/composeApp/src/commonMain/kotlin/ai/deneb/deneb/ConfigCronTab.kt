@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import kotlinx.coroutines.launch
 
 /**
@@ -63,7 +64,7 @@ internal fun CronTab(client: DenebGatewayClient, onOpenCron: (String) -> Unit) {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
             }
         }
     }

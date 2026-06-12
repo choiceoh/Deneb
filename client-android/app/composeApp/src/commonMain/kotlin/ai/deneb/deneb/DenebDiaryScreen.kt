@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.denebHairline
 import kotlinx.coroutines.launch
 
 /**
@@ -78,7 +79,7 @@ fun DenebDiaryScreen(
                         }
                         DenebMarkdown(entry.content.ifBlank { "(빈 항목)" })
                         Spacer(Modifier.height(12.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(color = denebHairline())
                         Spacer(Modifier.height(12.dp))
                     }
                     Spacer(Modifier.height(12.dp))

@@ -124,7 +124,7 @@ fun DenebCategoryPagesScreen(
                     )
                 }
                 Spacer(Modifier.height(12.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                HorizontalDivider(color = denebHairline())
             }
 
             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -214,7 +214,7 @@ fun DenebCategoryPagesScreen(
                                     }
                                 }
                             }
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                            HorizontalDivider(color = denebHairline())
                         }
                     }
                     Spacer(Modifier.height(24.dp))

@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import kotlinx.coroutines.launch
 
 /**
@@ -100,7 +101,7 @@ fun DenebPersonScreen(
 
             if (c.wikiHits.isNotEmpty()) {
                 Spacer(Modifier.height(16.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                HorizontalDivider(color = denebHairline())
                 Spacer(Modifier.height(12.dp))
                 Text("관련 위키", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                 c.wikiHits.forEach { hit ->
@@ -121,7 +122,7 @@ fun DenebPersonScreen(
             val mail = recent
             if (!mail.isNullOrEmpty()) {
                 Spacer(Modifier.height(16.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                HorizontalDivider(color = denebHairline())
                 Spacer(Modifier.height(12.dp))
                 Text("최근 메일 ${mail.size}", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.height(4.dp))

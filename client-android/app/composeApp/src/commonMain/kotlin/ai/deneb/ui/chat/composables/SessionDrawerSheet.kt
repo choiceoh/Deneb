@@ -37,12 +37,12 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.ChatActions
 import ai.deneb.ui.chat.ConversationSummary
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebPressable
 import ai.deneb.ui.handCursor
 import deneb.composeapp.generated.resources.Res
@@ -105,9 +105,7 @@ fun DenebSessionDrawerSheet(
                 // Small quiet header, mirroring the topic drawer's "topics" label.
                 Text(
                     text = stringResource(Res.string.chat_history_title),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Normal,
-                    letterSpacing = 0.01.em,
+                    style = DenebType.rowTitle,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = 40.dp, bottom = 12.dp),
                 )
@@ -115,7 +113,7 @@ fun DenebSessionDrawerSheet(
                 if (conversations.isEmpty()) {
                     Text(
                         text = stringResource(Res.string.chat_history_empty),
-                        fontSize = 15.sp,
+                        style = DenebType.body,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
                     )
@@ -204,9 +202,8 @@ private fun SessionItem(
             if (conversation.isHeartbeat) {
                 Text(
                     text = stringResource(Res.string.chat_history_heartbeat_label),
-                    fontSize = 11.sp,
-                    letterSpacing = 0.06.em,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    style = DenebType.meta,
+                    color = denebHint(),
                 )
             }
             if (conversation.title.isNotEmpty()) {
@@ -228,8 +225,8 @@ private fun SessionItem(
             }
             Text(
                 text = formatDate(conversation.updatedAt),
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                style = DenebType.meta,
+                color = denebHint(),
             )
         }
         // Faint × to delete (undo via snackbar), keeping the row text-first. The 44dp
@@ -247,7 +244,7 @@ private fun SessionItem(
                 Text(
                     text = "×",
                     fontSize = 18.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                    color = denebHint(),
                 )
             }
         }
@@ -297,18 +294,18 @@ private fun SessionFolderHeader(count: Int, expanded: Boolean, onToggle: () -> U
         Text(
             text = if (expanded) "▾" else "▸",
             fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            color = denebHint(),
             modifier = Modifier.padding(end = 10.dp),
         )
         Text(
             text = "예약·시스템 세션",
-            fontSize = 15.sp,
+            style = DenebType.rowTitle,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             text = "$count",
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            style = DenebType.meta,
+            color = denebHint(),
             modifier = Modifier.padding(start = 8.dp),
         )
     }
