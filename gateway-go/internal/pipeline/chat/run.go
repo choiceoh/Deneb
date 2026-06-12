@@ -50,6 +50,14 @@ type RunParams struct {
 	ResponseFormat   *llm.ResponseFormat
 	ToolChoice       any // "auto", "none", "required", or structured object
 
+	// Thinking is a per-run thinking-level override: a resolveThinkingConfig
+	// level ("minimal".."xhigh") or "off"/"none" to disable the thinking
+	// phase. Takes precedence over the session's ThinkingLevel. Set from the
+	// cron payload's `thinking` field so an operator can run a routine,
+	// well-templated job without paying the dual-mode model's default
+	// high-effort reasoning. Empty = session/provider default.
+	Thinking string
+
 	// PrebuiltMessages, when set, replaces the normal transcript-based context
 	// assembly. Used by the OpenAI-compatible HTTP API to pass through the full
 	// conversation history from the client.

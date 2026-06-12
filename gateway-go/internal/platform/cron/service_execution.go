@@ -174,6 +174,7 @@ func (s *Service) runJobOnce(ctx context.Context, job StoreJob, trigger triggerS
 				To:         safeStr(target, func(t *DeliveryTarget) string { return t.To }),
 				AccountID:  safeStr(target, func(t *DeliveryTarget) string { return t.AccountID }),
 				ThreadID:   safeStr(target, func(t *DeliveryTarget) string { return t.ThreadID }),
+				Thinking:   job.Payload.Thinking,
 			})
 			if runErr == nil {
 				break

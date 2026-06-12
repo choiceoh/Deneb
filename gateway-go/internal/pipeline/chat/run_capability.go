@@ -40,7 +40,16 @@ func modelCapability(deps runDeps, providerID, model string) modelcaps.Capabilit
 //     hitting the output ceiling (raise-only, skipped when the caller set an
 //     explicit max). Request-level parameters only, so per-model variation
 //     never touches the prompt cache.
+//   - Thinking toggle kwarg: an explicitly-disabled thinking config (session
+//     level "off" or a cron payload override) gets the model's
+//     chat_template_kwargs toggle attached — on dual-mode vLLM models that
+//     kwarg is the only effective off-switch (the reasoning_effort field is a
+//     no-op on deepseek-v4). The effort router builds its own disabled config
+//     with the kwarg already set; this covers the config-driven path.
 func applyModelTuning(cfg *agent.AgentConfig, deps runDeps, params RunParams, providerID, model string) {
+	if t := cfg.Thinking; t != nil && t.Type == "disabled" && t.TemplateKwarg == "" {
+		t.TemplateKwarg = modelCapability(deps, providerID, model).ThinkingToggleKwarg
+	}
 	if deps.registry == nil {
 		profile := modelrole.ProfileFor(model)
 		fillSamplingDefaults(cfg, profile)

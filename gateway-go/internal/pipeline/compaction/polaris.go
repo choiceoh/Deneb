@@ -26,7 +26,18 @@ const (
 	// tokens for CJK content; below this stubbing yields little gain
 	// while losing the entire result.
 	DefaultStubMinChars = 256
-	runesPerToken       = 2
+	// CheapPruneMinUsagePct gates the Tier 2/2b cheap pruning: below this
+	// fraction of the context budget they are skipped entirely. Pruning is
+	// recomputed from the raw transcript every turn with a moving 4-turn
+	// cutoff, so each turn it rewrites bytes mid-history — on the local-vLLM
+	// path that invalidates the prefix cache (APC) from that point and forces
+	// a re-prefill of the recent tail on every call. Far from the budget that
+	// trade is a pure loss (the model handles the un-pruned context fine; the
+	// measured dsv4 decode rate is flat to 250K input). The gate keys on the
+	// pre-pruning estimate, which only shrinks when a Tier 3 summary persists
+	// — so it cannot oscillate at the boundary.
+	CheapPruneMinUsagePct = 0.50
+	runesPerToken         = 2
 )
 
 // Config holds Polaris compaction parameters.
@@ -116,20 +127,32 @@ func Compact(
 		}
 	}
 
-	// Tier 2: Micro — strip code from old tool results (zero cost).
-	var pruned int
-	messages, pruned = MicroCompact(messages, DefaultMicroTurnThreshold)
-	r.MicroPruned = pruned
+	// Tier 2/2b run only when the context is actually under pressure
+	// (above CheapPruneMinUsagePct of the budget) — see the constant's
+	// comment for the APC rationale. Emergency keeps them unconditionally:
+	// that path already rewrote history wholesale. A non-positive budget
+	// (boot session, subagent) also keeps the old always-prune behavior.
+	cheapPrune := emergencyFired || cfg.ContextBudget <= 0 ||
+		r.TokensBefore > int(float64(cfg.ContextBudget)*CheapPruneMinUsagePct)
+	if cheapPrune {
+		// Tier 2: Micro — strip code from old tool results (zero cost).
+		var pruned int
+		messages, pruned = MicroCompact(messages, DefaultMicroTurnThreshold)
+		r.MicroPruned = pruned
 
-	// Tier 2b: Stub bulky old tool_result content (Hermes Agent Phase 1
-	// cheap pruning). Runs after MicroCompact so blocks already shrunk by
-	// fence-stripping fall under DefaultStubMinChars and are skipped here.
-	// Still zero-cost: no LLM call.
-	var stubbed int
-	messages, stubbed = TruncateOldToolResults(messages, DefaultMicroTurnThreshold, DefaultStubMinChars)
-	r.OldToolResultsStubbed = stubbed
-	if stubbed > 0 && logger != nil {
-		logger.Info("polaris: stubbed old tool results", "count", stubbed)
+		// Tier 2b: Stub bulky old tool_result content (Hermes Agent Phase 1
+		// cheap pruning). Runs after MicroCompact so blocks already shrunk by
+		// fence-stripping fall under DefaultStubMinChars and are skipped here.
+		// Still zero-cost: no LLM call.
+		var stubbed int
+		messages, stubbed = TruncateOldToolResults(messages, DefaultMicroTurnThreshold, DefaultStubMinChars)
+		r.OldToolResultsStubbed = stubbed
+		if stubbed > 0 && logger != nil {
+			logger.Info("polaris: stubbed old tool results", "count", stubbed)
+		}
+	} else if logger != nil {
+		logger.Debug("polaris: cheap pruning skipped (context far from budget)",
+			"tokens", r.TokensBefore, "budget", cfg.ContextBudget)
 	}
 
 	if !emergencyFired {

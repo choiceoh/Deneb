@@ -362,6 +362,18 @@
           "none"
         ]
       },
+      "thinking": {
+        "type": "string",
+        "description": "Per-job thinking level for the agent turn. \"off\" disables the thinking phase (use for routine, well-templated jobs - much faster on the dual-mode main model). Levels minimal/low/medium/high set a budget; \"default\" clears the override.",
+        "enum": [
+          "off",
+          "minimal",
+          "low",
+          "medium",
+          "high",
+          "default"
+        ]
+      },
       "job": {
         "type": "object",
         "description": "Job definition object (alternative to top-level name/schedule/command)",

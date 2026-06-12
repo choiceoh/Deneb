@@ -63,6 +63,10 @@ type SyncOptions struct {
 	Stop             []string
 	ResponseFormat   *llm.ResponseFormat
 	ToolChoice       any // "auto", "none", "required", or structured object
+	// Thinking overrides the session's thinking level for this run — a
+	// resolveThinkingConfig level or "off"/"none" to disable the thinking
+	// phase (cron jobs use this). Empty = session/provider default.
+	Thinking string
 
 	// Messages provides a full conversation context (system, user, assistant,
 	// tool messages). When set, this replaces the normal transcript-based
@@ -147,6 +151,7 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 		params.Stop = opts.Stop
 		params.ResponseFormat = opts.ResponseFormat
 		params.ToolChoice = opts.ToolChoice
+		params.Thinking = opts.Thinking
 		if len(opts.Messages) > 0 {
 			params.PrebuiltMessages = opts.Messages
 		}

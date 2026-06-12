@@ -189,6 +189,13 @@ func executeAgentRun(
 		RecallChars:       len(prep.RecallMemory),
 	})
 
+	// Stage 3.5: APC prefix-stability diagnostics — classify how this run's
+	// assembled prompt diverges from the session's previous run and bracket
+	// the engine prefix-cache counters around the run. Deferred so the "apc
+	// diag" line is emitted on error paths too. See apc_diag.go.
+	apcDiag := beginAPCDiag(ctx, deps, params.SessionKey, providerID, model, systemPrompt, prep.RecallMemory, messages, logger)
+	defer apcDiag.finish()
+
 	// Stage 4: Build tool list and agent config.
 	acd := agentConfigDeps{
 		Tools:              deps.tools,

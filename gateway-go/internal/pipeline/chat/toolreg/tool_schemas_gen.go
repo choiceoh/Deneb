@@ -352,6 +352,11 @@ func cronToolSchema() map[string]any {
 				"type":        "string",
 				"description": "System event text for wake action",
 			},
+			"thinking": map[string]any{
+				"type":        "string",
+				"description": "Per-job thinking level for the agent turn. \"off\" disables the thinking phase (use for routine, well-templated jobs - much faster on the dual-mode main model). Levels minimal/low/medium/high set a budget; \"default\" clears the override.",
+				"enum":        []string{"off", "minimal", "low", "medium", "high", "default"},
+			},
 			"tz": map[string]any{
 				"type":        "string",
 				"description": "Timezone for cron schedules (e.g. Asia/Seoul, UTC). Defaults to system local timezone",

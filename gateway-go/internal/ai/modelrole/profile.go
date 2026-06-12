@@ -53,6 +53,22 @@ func ProfileFor(model string) Profile {
 			TopK:        ptr(20),
 		}
 
+	case strings.Contains(m, "deepseek-v4"), strings.Contains(m, "deepseek_v4"):
+		// DeepSeek-V4 family (deepseek-v4-flash is the self-hosted main model):
+		// recommended sampling temp 0.6 / top_p 0.95 (model card; the shipped
+		// generation_config.json says 1.0/1.0, which loops on long agentic
+		// turns). repetition_penalty 1.2 is also recommended but has no
+		// ChatRequest field — it is applied server-side via the vLLM launcher's
+		// --override-generation-config. Reasoning stays false on purpose: the
+		// thinking channel is toggled per-request through
+		// modelcaps.ThinkingToggleKwarg (chat_template_kwargs.thinking), and
+		// flipping Reasoning here would re-order the localai hub fallback chain
+		// for a model the hub never serves.
+		return Profile{
+			Temperature: ptr(0.6),
+			TopP:        ptr(0.95),
+		}
+
 	case strings.Contains(m, "qwq"),
 		strings.Contains(m, "deepseek-r1"), strings.Contains(m, "deepseek-reasoner"),
 		strings.Contains(m, "gpt-oss"):

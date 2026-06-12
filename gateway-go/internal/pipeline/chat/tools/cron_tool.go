@@ -35,6 +35,7 @@ func ToolCron(d *toolctx.ChronoDeps) ToolFunc {
 			RetryCount   *int           `json:"retryCount"`
 			RetryBackoff *int64         `json:"retryBackoffMs"`
 			DeliveryMode string         `json:"deliveryMode"`
+			Thinking     string         `json:"thinking"`
 		}
 		if err := jsonutil.UnmarshalInto("cron params", input, &p); err != nil {
 			return "", err
@@ -53,6 +54,7 @@ func ToolCron(d *toolctx.ChronoDeps) ToolFunc {
 			RetryCount:   p.RetryCount,
 			RetryBackoff: p.RetryBackoff,
 			DeliveryMode: p.DeliveryMode,
+			Thinking:     p.Thinking,
 		}
 
 		switch p.Action {
@@ -100,6 +102,10 @@ type cronToolOpts struct {
 	RetryCount   *int
 	RetryBackoff *int64
 	DeliveryMode string
+	// Thinking sets the job's per-run thinking level ("off" disables the
+	// thinking phase — right for routine, well-templated jobs on the
+	// dual-mode main model). "default" clears an existing override.
+	Thinking string
 }
 
 func cronStatus(svc *cron.Service) (string, error) {
@@ -227,6 +233,9 @@ func cronAdd(ctx context.Context, d *toolctx.ChronoDeps, name, schedule, command
 		if opts.RetryBackoff != nil {
 			payload.RetryBackoffMs = *opts.RetryBackoff
 		}
+		if opts.Thinking != "" && opts.Thinking != "default" {
+			payload.Thinking = opts.Thinking
+		}
 
 		job := cron.StoreJob{
 			ID:       name,
@@ -311,6 +320,14 @@ func cronUpdate(ctx context.Context, d *toolctx.ChronoDeps, jobID, name, schedul
 			}
 			if opts.RetryBackoff != nil {
 				j.Payload.RetryBackoffMs = *opts.RetryBackoff
+			}
+			switch opts.Thinking {
+			case "":
+				// not specified — keep as-is
+			case "default":
+				j.Payload.Thinking = "" // clear the override
+			default:
+				j.Payload.Thinking = opts.Thinking
 			}
 		})
 		if err != nil {
