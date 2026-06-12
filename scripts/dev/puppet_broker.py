@@ -34,13 +34,21 @@ Client mode (operator CLI; broker URL from --broker or DENEB_PUPPET_URL):
     python3 puppet_broker.py fail ID [--message M]
     python3 puppet_broker.py history
 
-Timeout choreography (why keepalives exist):
+Timeout choreography (why keepalives + chunked framing exist):
   - gateway LLM HTTP client: 10 min hard cap, >=5 min per-request context
     (internal/ai/llm/client.go) — SSE comment lines keep bytes flowing.
   - miniapp.chat.send turn deadline: 5 min for the WHOLE turn
     (internal/runtime/server DefaultTurnDeadline). When it fires the gateway
     drops the connection; the next keepalive write fails and the request is
     marked gone.
+  - The SSE response is chunked (HTTP/1.1): if the broker dies mid-hold the
+    gateway reads an unexpected EOF and surfaces a stream ERROR. With plain
+    HTTP/1.0 close-delimited framing the same death reads as a clean EOF and
+    the turn completes as a silent EMPTY success — the worst failure mode for
+    a testing tool.
+  - Non-stream holds (Complete() callers like title generation) cannot
+    receive keepalives, so they are capped at COMPLETE_HOLD_MAX inside the
+    5-minute turn deadline — answering after the gateway hung up is useless.
 
 Stdlib only — no external dependencies (matches mock_native_client.py).
 """
@@ -59,10 +67,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 KEEPALIVE_INTERVAL = 10.0  # SSE comment cadence while a request is held
 STREAM_HOLD_MAX = 1800.0  # absolute cap on holding a streaming request
-COMPLETE_HOLD_MAX = 540.0  # non-stream requests can't keepalive; stay <10min
+# Non-stream requests can't keepalive; the broker must answer while the
+# gateway is still listening, i.e. inside the 5-minute turn deadline
+# (DefaultTurnDeadline) — not merely inside the 10-minute client timeout.
+COMPLETE_HOLD_MAX = 270.0
 PENDING_WAIT_CAP = 55.0  # long-poll cap (under common curl timeouts)
 HISTORY_LIMIT = 100
 JOURNAL_TRUNC = 2000  # per-field char cap when journaling requests
+JOURNAL_MAX_BYTES = 5_000_000  # rotate past this — /tmp is tmpfs on the DGX
+# Long text/arguments are emitted as multiple deltas: the gateway's SSE
+# parser caps one line at 1 MB (internal/ai/llm/sse.go) and one delta is one
+# data line. 48K chars stays far under the cap even after JSON escaping.
+SSE_DELTA_CHARS = 48_000
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +95,9 @@ class HeldRequest:
         self.created = time.time()
         self.event = threading.Event()
         self.response: dict | None = None
-        self.status = "waiting"  # waiting|answered|gone|expired
+        # Live states: waiting → answered. Finished (history) states:
+        # done | failed | gone.
+        self.status = "waiting"
 
     def summary(self) -> dict:
         msgs = self.payload.get("messages") or []
@@ -149,10 +167,29 @@ class Broker:
             entry.event.set()
             return True, ""
 
-    def finish(self, entry: HeldRequest, status: str) -> None:
-        """Move a request out of the live map and journal the exchange."""
+    def final_response(self, entry: HeldRequest, timeout_message: str) -> dict:
+        """Resolve a held request's response exactly once, under the lock.
+
+        If the operator answered first, their payload wins. Otherwise the
+        entry is claimed with a timeout error, so a late respond() is
+        rejected loudly (status != waiting) instead of racing an
+        unsynchronized overwrite and being silently discarded.
+        """
         with self.cond:
-            self.requests.pop(entry.id, None)
+            if entry.status == "waiting":
+                entry.response = {"error": timeout_message}
+                entry.status = "answered"
+            return entry.response or {}
+
+    def finish(self, entry: HeldRequest, status: str) -> None:
+        """Move a request out of the live map and journal the exchange.
+
+        Idempotent: only the first caller records; later calls no-op, so the
+        try/finally safety net around the hold paths can't double-journal.
+        """
+        with self.cond:
+            if self.requests.pop(entry.id, None) is None:
+                return
             record = {
                 "ts": round(time.time(), 3),
                 "id": entry.id,
@@ -181,6 +218,11 @@ class Broker:
         line = dict(record)
         line["requestTail"] = msgs
         try:
+            try:
+                if os.path.getsize(self.journal_path) > JOURNAL_MAX_BYTES:
+                    os.replace(self.journal_path, self.journal_path + ".1")
+            except OSError:
+                pass  # journal doesn't exist yet — the append creates it
             with open(self.journal_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(line, ensure_ascii=False) + "\n")
         except OSError:
@@ -219,10 +261,13 @@ def content_preview(content, limit: int) -> str:
         text = " ".join(parts)
     else:
         text = str(content)
-    text = text.replace("\n", "\\n")
-    if len(text) > limit:
-        return text[:limit] + f"… (+{len(text) - limit} chars)"
-    return text
+    # Slice before escaping — this runs on every pending poll and the
+    # content can be hundreds of KB; never copy more than the preview needs.
+    total = len(text)
+    snippet = text[:limit].replace("\n", "\\n")
+    if total > limit:
+        snippet += f"… (+{total - limit} chars)"
+    return snippet
 
 
 def estimate_tokens(obj) -> int:
@@ -230,6 +275,19 @@ def estimate_tokens(obj) -> int:
         return max(1, len(json.dumps(obj, ensure_ascii=False)) // 4)
     except (TypeError, ValueError):
         return 1
+
+
+def usage_payload(prompt_obj, response_obj) -> dict:
+    prompt = estimate_tokens(prompt_obj)
+    completion = estimate_tokens(response_obj)
+    return {"prompt_tokens": prompt, "completion_tokens": completion,
+            "total_tokens": prompt + completion}
+
+
+def split_delta(s: str) -> list:
+    """Split a long string into SSE-safe delta pieces (>=1, even for "")."""
+    return [s[i:i + SSE_DELTA_CHARS]
+            for i in range(0, len(s), SSE_DELTA_CHARS)] or [""]
 
 
 # ---------------------------------------------------------------------------
@@ -240,8 +298,16 @@ BROKER: Broker | None = None
 
 
 class Handler(BaseHTTPRequestHandler):
-    # HTTP/1.0 keeps SSE simple: no chunked encoding, body ends at close.
-    # Go's net/http reads EOF-delimited bodies fine.
+    # HTTP/1.1 + chunked framing for the SSE stream. With HTTP/1.0
+    # close-delimited bodies, a broker crash mid-hold reads as a CLEAN EOF on
+    # the gateway side: sse.go sees no scanner error, openai_stream.go emits
+    # message_stop, and the turn completes as a silent empty success. Chunked
+    # framing turns the same death into an unexpected-EOF stream error.
+    protocol_version = "HTTP/1.1"
+    # Bound idle keep-alive reads so pooled gateway connections release their
+    # handler threads. Held requests block on an Event, not on socket reads,
+    # and are unaffected.
+    timeout = 130
 
     def log_message(self, fmt, *args):  # quiet default access log
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
@@ -264,6 +330,21 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, OSError):
             return None
 
+    def _write_chunk(self, data: bytes) -> bool:
+        try:
+            self.wfile.write(b"%x\r\n" % len(data) + data + b"\r\n")
+            self.wfile.flush()
+            return True
+        except OSError:
+            return False
+
+    def _end_chunks(self) -> None:
+        try:
+            self.wfile.write(b"0\r\n\r\n")
+            self.wfile.flush()
+        except OSError:
+            pass
+
     # -- routing ------------------------------------------------------------
 
     def do_GET(self):  # noqa: N802 (BaseHTTPRequestHandler API)
@@ -279,7 +360,11 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/puppet/state":
             self._json(200, BROKER.state())
         elif path == "/puppet/pending":
-            wait = float(params.get("wait", "0") or 0)
+            try:
+                wait = float(params.get("wait", "0") or 0)
+            except ValueError:
+                self._json(400, {"error": "invalid wait parameter"})
+                return
             items = (BROKER.wait_pending(wait) if wait > 0
                      else BROKER.pending())
             self._json(200, {"pending": items})
@@ -327,57 +412,56 @@ class Handler(BaseHTTPRequestHandler):
             f"[puppet] held {entry.id}: kind={kind} "
             f"messages={len(payload.get('messages') or [])} "
             f"tools={len(payload.get('tools') or [])}\n")
-        if kind == "stream":
-            self._hold_stream(entry)
-        else:
-            self._hold_complete(entry)
+        try:
+            if kind == "stream":
+                self._hold_stream(entry)
+            else:
+                self._hold_complete(entry)
+        finally:
+            # Safety net: if the hold path died before finishing the entry
+            # (e.g. an unexpected exception while writing to a socket the
+            # gateway already closed), don't leave a ghost in the pending
+            # list. No-op when the entry was already finished.
+            BROKER.finish(entry, "gone")
 
     def _hold_stream(self, entry: HeldRequest) -> None:
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
+        self.send_header("Transfer-Encoding", "chunked")
         self.end_headers()
-        # Flush headers now — wfile is buffered and the next write may be a
-        # keepalive 10s away; the gateway should see the stream open at once.
-        if not self._write(b": seat\n\n"):
+        # One stream per connection — don't let keep-alive reuse it.
+        self.close_connection = True
+        # Open the stream right away; the next write may be 10s out and the
+        # gateway should see the response headers immediately.
+        if not self._write_chunk(b": seat\n\n"):
             BROKER.finish(entry, "gone")
             return
 
         deadline = time.time() + STREAM_HOLD_MAX
-        answered = False
         while time.time() < deadline:
             if entry.event.wait(timeout=KEEPALIVE_INTERVAL):
-                answered = True
                 break
             # SSE comment line — ignored by the gateway's parser (sse.go)
             # but keeps bytes flowing under its 10-minute client timeout,
             # and detects a gateway-side cancel (write fails → gone).
-            if not self._write(b": hold\n\n"):
+            if not self._write_chunk(b": hold\n\n"):
                 BROKER.finish(entry, "gone")
                 return
-        if not answered:
-            entry.response = {"error": "puppet hold timeout "
-                                       f"({int(STREAM_HOLD_MAX)}s)"}
-        self._emit_sse_response(entry)
+        resp = BROKER.final_response(
+            entry, f"puppet hold timeout ({int(STREAM_HOLD_MAX)}s)")
+        self._emit_sse_response(entry, resp)
 
-    def _write(self, data: bytes) -> bool:
-        try:
-            self.wfile.write(data)
-            self.wfile.flush()
-            return True
-        except OSError:
-            return False
-
-    def _emit_sse_response(self, entry: HeldRequest) -> None:
-        resp = entry.response or {}
+    def _emit_sse_response(self, entry: HeldRequest, resp: dict) -> None:
         if resp.get("error"):
-            # `event: error` is required — a bare data:{"error":...} parses as
-            # an empty chunk and is silently skipped (openai_stream.go).
+            # `event: error` is required — a bare data:{"error":...} parses
+            # as an empty chunk and is silently skipped (openai_stream.go).
             payload = json.dumps({"type": "puppet_abort",
                                   "message": str(resp["error"])},
                                  ensure_ascii=False)
-            ok = self._write(f"event: error\ndata: {payload}\n\n"
-                             .encode("utf-8"))
+            ok = self._write_chunk(f"event: error\ndata: {payload}\n\n"
+                                   .encode("utf-8"))
+            self._end_chunks()
             BROKER.finish(entry, "failed" if ok else "gone")
             return
 
@@ -396,64 +480,67 @@ class Handler(BaseHTTPRequestHandler):
 
         out = [chunk({"role": "assistant"})]
         if resp.get("reasoning"):
-            out.append(chunk({"reasoning_content": str(resp["reasoning"])}))
+            for piece in split_delta(str(resp["reasoning"])):
+                out.append(chunk({"reasoning_content": piece}))
         if resp.get("text") is not None:
-            out.append(chunk({"content": str(resp.get("text") or "")}))
+            for piece in split_delta(str(resp.get("text") or "")):
+                out.append(chunk({"content": piece}))
         tool_calls = resp.get("tool_calls") or []
         for i, tc in enumerate(tool_calls):
             args = tc.get("arguments", {})
             if not isinstance(args, str):
                 args = json.dumps(args, ensure_ascii=False)
+            pieces = split_delta(args)
             out.append(chunk({"tool_calls": [{
                 "index": i,
                 "id": tc.get("id") or f"call_{entry.id}_{i}",
                 "type": "function",
                 "function": {"name": str(tc.get("name", "")),
-                             "arguments": args},
+                             "arguments": pieces[0]},
             }]}))
+            # Long arguments continue as bare fragments keyed by index —
+            # exactly how real providers stream them.
+            for piece in pieces[1:]:
+                out.append(chunk({"tool_calls": [{
+                    "index": i, "function": {"arguments": piece}}]}))
         finish = resp.get("finish_reason") or \
             ("tool_calls" if tool_calls else "stop")
-        usage = {
-            "prompt_tokens": estimate_tokens(entry.payload.get("messages")),
-            "completion_tokens": estimate_tokens(resp),
-        }
-        usage["total_tokens"] = usage["prompt_tokens"] + \
-            usage["completion_tokens"]
+        usage = usage_payload(entry.payload.get("messages"), resp)
         out.append(chunk({}, finish=finish, usage=usage))
         out.append(b"data: [DONE]\n\n")
 
-        ok = all(self._write(b) for b in out)
+        ok = all(self._write_chunk(b) for b in out)
+        self._end_chunks()
         BROKER.finish(entry, "done" if ok else "gone")
 
     def _hold_complete(self, entry: HeldRequest) -> None:
         # Non-stream callers (e.g. title generation via Complete()) can't
-        # receive keepalives; the gateway's 10-minute client timeout bounds us.
-        if not entry.event.wait(timeout=COMPLETE_HOLD_MAX):
-            entry.response = {"error": "puppet hold timeout "
-                                       f"({int(COMPLETE_HOLD_MAX)}s)"}
-        resp = entry.response or {}
-        if resp.get("error"):
-            # 400 = permanent for the gateway's retry logic (no retry storm).
-            self._json(400, {"error": {"message": str(resp["error"]),
-                                       "type": "puppet_abort"}})
-            BROKER.finish(entry, "failed")
-            return
-        text = str(resp.get("text") or "")
-        usage = {
-            "prompt_tokens": estimate_tokens(entry.payload.get("messages")),
-            "completion_tokens": estimate_tokens(text),
-        }
-        usage["total_tokens"] = usage["prompt_tokens"] + \
-            usage["completion_tokens"]
-        self._json(200, {
-            "id": f"chatcmpl-puppet-{entry.id}",
-            "object": "chat.completion",
-            "model": BROKER.model,
-            "choices": [{"index": 0, "finish_reason": "stop",
-                         "message": {"role": "assistant", "content": text}}],
-            "usage": usage,
-        })
-        BROKER.finish(entry, "done")
+        # receive keepalives; COMPLETE_HOLD_MAX keeps the answer inside the
+        # gateway's 5-minute turn deadline.
+        entry.event.wait(timeout=COMPLETE_HOLD_MAX)
+        resp = BROKER.final_response(
+            entry, f"puppet hold timeout ({int(COMPLETE_HOLD_MAX)}s)")
+        try:
+            if resp.get("error"):
+                # 400 = permanent for the gateway's retry logic (no storm).
+                self._json(400, {"error": {"message": str(resp["error"]),
+                                           "type": "puppet_abort"}})
+                BROKER.finish(entry, "failed")
+                return
+            text = str(resp.get("text") or "")
+            self._json(200, {
+                "id": f"chatcmpl-puppet-{entry.id}",
+                "object": "chat.completion",
+                "model": BROKER.model,
+                "choices": [{"index": 0, "finish_reason": "stop",
+                             "message": {"role": "assistant",
+                                         "content": text}}],
+                "usage": usage_payload(entry.payload.get("messages"), text),
+            })
+            BROKER.finish(entry, "done")
+        except OSError:
+            # The gateway hung up (turn deadline) before we answered.
+            BROKER.finish(entry, "gone")
 
 
 def serve(args) -> int:

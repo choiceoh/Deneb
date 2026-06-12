@@ -48,20 +48,17 @@ MOCK_TELEGRAM_TOKEN="mock-dev-token"
 MOCK_TELEGRAM_PORT="${DENEB_DEV_MOCK_TELEGRAM_PORT:-$DEVLIB_MOCK_DEFAULT_PORT}"
 export DENEB_DEV_MOCK_TELEGRAM_URL="${DENEB_DEV_MOCK_TELEGRAM_URL:-http://$DEV_HOST:$MOCK_TELEGRAM_PORT}"
 
-# Broker: default instance keeps 18793 (prod=18789 dev=18790 iterate=18791
-# mock=18792); named instances use the free 4th slot of their port block.
-if [[ "$DEVLIB_INSTANCE" == "default" ]]; then
-  PUPPET_PORT="${DENEB_PUPPET_PORT:-18793}"
-else
-  PUPPET_PORT="${DENEB_PUPPET_PORT:-$((DEVLIB_LIVE_PORT + 3))}"
-fi
+# Broker port: 4th slot of the lib-server.sh instance port block
+# (default instance: prod=18789 dev=18790 iterate=18791 mock=18792 → 18793).
+PUPPET_PORT="${DENEB_PUPPET_PORT:-$DEVLIB_PUPPET_PORT}"
 PUPPET_URL="http://$DEV_HOST:$PUPPET_PORT"
 PUPPET_PID_FILE="${DEVLIB_TMP_PREFIX}-puppet-broker.pid"
 PUPPET_LOG="${DEVLIB_TMP_PREFIX}-puppet-broker.log"
 PUPPET_JOURNAL="${DEVLIB_TMP_PREFIX}-puppet-journal.jsonl"
 PUPPET_CONFIG="${DEVLIB_TMP_PREFIX}-puppet-config.json"
-PUPPET_SEND_OUT="${DEVLIB_TMP_PREFIX}-puppet-send.out"
-PUPPET_SEND_PID="${DEVLIB_TMP_PREFIX}-puppet-send.pid"
+# Each send gets its own output/pid file (concurrent sends must not clobber
+# each other); this pointer file names the most recent one for cmd_result.
+PUPPET_SEND_LAST="${DEVLIB_TMP_PREFIX}-puppet-send.last"
 PUPPET_MODEL="agent-seat"
 
 # Operator CLI + chat injection reach their servers through these.
@@ -151,6 +148,17 @@ cmd_start() {
     esac
   done
 
+  # config-gen.sh reads DENEB_CONFIG_PATH as the PRODUCTION source. If the
+  # operator's shell still exports it pointing at a previously *generated*
+  # dev/puppet config, generation would feed on its own output (and a later
+  # live-test.sh start would inherit puppet roles and hang). Custom non-/tmp
+  # paths are left alone — pointing config-gen at a bespoke base config is a
+  # supported workflow.
+  if [[ "${DENEB_CONFIG_PATH:-}" == /tmp/deneb*config*.json ]]; then
+    echo "    WARN: ignoring DENEB_CONFIG_PATH=${DENEB_CONFIG_PATH} (generated dev config, not a production source)"
+    unset DENEB_CONFIG_PATH
+  fi
+
   if _gateway_running; then
     echo "==> Dev gateway already running — restarting with puppet config..."
     devlib_stop_pid "$(cat "$DEV_PID_FILE")"
@@ -170,8 +178,12 @@ cmd_start() {
   fi
 
   # The gateway's startup still expects the mock Telegram endpoint wiring
-  # that live-test.sh provides; keep parity.
-  devlib_start_mock_telegram "$MOCK_TELEGRAM_PORT" "$DEV_HOST" >/dev/null || true
+  # that live-test.sh provides; keep parity. Not fatal (the Telegram plugin
+  # was retired in PR #1922), but a failure usually means a port conflict —
+  # surface it instead of swallowing.
+  if ! devlib_start_mock_telegram "$MOCK_TELEGRAM_PORT" "$DEV_HOST" >/dev/null; then
+    echo "    WARN: mock Telegram server failed to start (log: $DEVLIB_MOCK_LOG) — continuing"
+  fi
 
   echo "==> Generating puppet config (production config + puppet provider)..."
   DENEB_DEV_TELEGRAM_TOKEN="$MOCK_TELEGRAM_TOKEN" devlib_gen_config "$PUPPET_CONFIG"
@@ -213,19 +225,40 @@ cmd_send() {
     echo "Usage: puppet.sh send MESSAGE [--new-session] [--sync] [--timeout SECS]" >&2
     return 1
   fi
-  local session="client:puppet" sync=0 timeout=330
+  # Instance-scoped default session: gateway transcripts/agent-logs live in
+  # shared home dirs (~/.deneb/...), NOT the instance state dir — a fixed
+  # global key would cross-contaminate parallel worktree instances.
+  local session="client:puppet-${DEVLIB_INSTANCE}" sync=0 timeout=330
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --new-session) session="client:puppet-$(date +%s)"; shift ;;
-      --session)     session="$2"; shift 2 ;;
+      --new-session) session="client:puppet-${DEVLIB_INSTANCE}-$(date +%s)-$$"; shift ;;
+      --session)     session="${2:?--session requires a value}"; shift 2 ;;
       --sync)        sync=1; shift ;;
-      --timeout)     timeout="$2"; shift 2 ;;
+      --timeout)     timeout="${2:?--timeout requires a value}"; shift 2 ;;
       *) echo "unknown flag: $1" >&2; return 1 ;;
     esac
   done
 
   if ! _gateway_running; then
     echo "gateway not running — scripts/dev/puppet.sh start" >&2
+    return 1
+  fi
+
+  # Same preflight live-test.sh chat runs: clear diagnostics for unreachable
+  # gateway / missing client token, instead of a cryptic error buried in the
+  # async result file.
+  export DENEB_SCRIPTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+  if ! python3 - <<'PYEOF'
+import os, sys, urllib.parse
+sys.path.insert(0, os.environ["DENEB_SCRIPTS_DIR"])
+from mock_native_client import check_prerequisites
+u = urllib.parse.urlparse(os.environ.get("DENEB_LIVETEST_GW_URL") or "")
+ok, detail = check_prerequisites(u.hostname or "127.0.0.1", u.port or 18790)
+if not ok:
+    print(f"Native chat prerequisites not met: {detail}", file=sys.stderr)
+    raise SystemExit(1)
+PYEOF
+  then
     return 1
   fi
 
@@ -256,27 +289,34 @@ async def main():
 asyncio.run(main())
 PYEOF
 )
-  export DENEB_SCRIPTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
   export MOCK_MESSAGE="$message" MOCK_SESSION="$session" MOCK_TIMEOUT="$timeout"
   if [[ "$sync" == "1" ]]; then
     python3 -c "$runner"
     return $?
   fi
-  nohup python3 -c "$runner" > "$PUPPET_SEND_OUT" 2>&1 &
-  echo $! > "$PUPPET_SEND_PID"
-  echo "sent (session=$session, pid $(cat "$PUPPET_SEND_PID"))"
+  # Per-send files: a second send must not truncate the first one's output.
+  local out="${DEVLIB_TMP_PREFIX}-puppet-send-$$.out"
+  nohup python3 -c "$runner" > "$out" 2>&1 &
+  echo $! > "${out%.out}.pid"
+  printf '%s\n' "$out" > "$PUPPET_SEND_LAST"
+  echo "sent (session=$session, pid $(cat "${out%.out}.pid"), out $out)"
   echo "next: scripts/dev/puppet.sh pending --wait 60"
 }
 
 cmd_result() {
-  if [[ ! -f "$PUPPET_SEND_OUT" ]]; then
+  local out=""
+  if [[ -f "$PUPPET_SEND_LAST" ]]; then
+    out="$(cat "$PUPPET_SEND_LAST")"
+  fi
+  if [[ -z "$out" || ! -f "$out" ]]; then
     echo "(no send yet)"
     return 1
   fi
-  if [[ -f "$PUPPET_SEND_PID" ]] && devlib_is_pid_alive "$(cat "$PUPPET_SEND_PID")"; then
+  local pidf="${out%.out}.pid"
+  if [[ -f "$pidf" ]] && devlib_is_pid_alive "$(cat "$pidf")"; then
     echo "(turn still running — gateway has not returned yet)"
   fi
-  cat "$PUPPET_SEND_OUT"
+  cat "$out"
 }
 
 cmd_status() {
@@ -305,6 +345,9 @@ cmd_stop() {
   if devlib_mock_telegram_running "$MOCK_TELEGRAM_PORT"; then
     devlib_stop_mock_telegram
   fi
+  # /tmp is tmpfs on the DGX hosts — don't leave per-send result files behind.
+  rm -f "${DEVLIB_TMP_PREFIX}"-puppet-send-*.out \
+        "${DEVLIB_TMP_PREFIX}"-puppet-send-*.pid "$PUPPET_SEND_LAST"
   echo "stopped"
 }
 
