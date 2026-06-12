@@ -1,0 +1,53 @@
+# kotlin-lint.yml — formatting + bug-lint gate for the native client.
+#
+# The gateway has had a lint gate (golangci) from the start; the Kotlin side
+# had spotless configured but never enforced (118 files drifted before this
+# gate landed) and no bug-focused analysis at all. This runs both on every
+# client PR:
+#   - spotlessCheck: ktlint formatting (config in client-android/app/build.gradle.kts)
+#   - detekt: bug catchers only (config/detekt.yml; style rulesets are off,
+#     accepted pre-existing findings live in config/detekt-baseline.xml —
+#     baseline updates need operator approval per .claude/rules/testing.md)
+name: kotlin-lint
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "client-android/**"
+      - ".github/workflows/kotlin-lint.yml"
+
+concurrency:
+  group: kotlin-lint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: spotless + detekt
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: client-android/app
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: spotlessCheck
+        run: ./gradlew spotlessCheck --no-daemon
+
+      - name: detekt
+        run: ./gradlew detekt --no-daemon
