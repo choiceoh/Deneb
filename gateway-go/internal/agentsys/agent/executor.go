@@ -291,8 +291,15 @@ func RunAgent(
 			tokenest.RecordFeedback(est.Family(), estimated, turnRes.usage.InputTokens)
 		}
 
-		// Log LLM turn result to agent detail log.
+		// Log LLM turn result to agent detail log. ThinkingOff/ObsRunes record
+		// the per-step effort decision (turnThinking) and the observation size
+		// that informed it (run-scoped tool-result runes seen so far) — the
+		// label feed for a future learned router.
 		if runLog != nil {
+			obsRunes := 0
+			for _, ta := range result.ToolActivities {
+				obsRunes += ta.OutputRunes
+			}
 			runLog.LogTurnLLM(agentlog.TurnLLMData{
 				Turn:                turn + 1,
 				InputTokens:         turnRes.usage.InputTokens,
@@ -302,6 +309,8 @@ func RunAgent(
 				ToolCalls:           len(turnRes.toolCalls),
 				CacheReadTokens:     turnRes.usage.CacheReadInputTokens,
 				CacheCreationTokens: turnRes.usage.CacheCreationInputTokens,
+				ThinkingOff:         turnThinking != nil && turnThinking.Type == "disabled",
+				ObsRunes:            obsRunes,
 			})
 		}
 

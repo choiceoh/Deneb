@@ -106,3 +106,22 @@ func TestToolObserve_TurnJoinsAgentLog(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatTurnEffort(t *testing.T) {
+	// No effort signal (router inactive) → empty.
+	if got := formatTurnEffort([]agentlog.TurnLLMData{{Turn: 1}, {Turn: 2}}); got != "" {
+		t.Fatalf("inactive router must render nothing, got %q", got)
+	}
+	// A routed run: turn 1 off (no obs), turn 2 off with obs, turn 3 reverted on.
+	turns := []agentlog.TurnLLMData{
+		{Turn: 1, ThinkingOff: true},
+		{Turn: 2, ThinkingOff: true, ObsRunes: 1500},
+		{Turn: 3, ObsRunes: 8200},
+	}
+	got := formatTurnEffort(turns)
+	for _, want := range []string{"effort:", "t1:off/obs=0", "t2:off/obs=1500", "t3:on/obs=8200"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in %q", want, got)
+		}
+	}
+}

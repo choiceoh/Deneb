@@ -83,6 +83,15 @@ type TurnLLMData struct {
 	// signals a cache break (see .claude/rules/prompt-cache.md).
 	CacheReadTokens     int `json:"cacheReadTokens,omitempty"`
 	CacheCreationTokens int `json:"cacheCreationTokens,omitempty"`
+	// ThinkingOff is true when the adaptive effort router ran this turn with
+	// thinking disabled. ObsRunes is the cumulative tool-result size (runes)
+	// the router had observed before deciding this turn's effort — together
+	// they are the per-step label feed for a future Ares-style learned router
+	// (arXiv:2603.07915): "at turn T with observation size O, was thinking-off
+	// sufficient?". Run-level EffortDecision/EffortEscalated on run.end say
+	// whether the routed run ultimately succeeded; these say what each step did.
+	ThinkingOff bool `json:"thinkingOff,omitempty"`
+	ObsRunes    int  `json:"obsRunes,omitempty"`
 }
 
 // TurnToolData records a single tool execution within a turn.
