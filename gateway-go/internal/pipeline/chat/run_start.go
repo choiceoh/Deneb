@@ -177,7 +177,7 @@ func (h *Handler) buildRunDeps() runDeps {
 			NewTypingSignaler: func(onStart func()) chatport.TypingSignaler {
 				ctrl := typing.NewTypingController(typing.TypingControllerConfig{
 					OnStart:    onStart,
-					IntervalMs: 5000, // Telegram typing expires after 5s
+					IntervalMs: 5000, // 5s keepalive cadence for the native typing indicator
 				})
 				return typing.NewFullTypingSignaler(ctrl, typing.TypingModeInstant, false)
 			},

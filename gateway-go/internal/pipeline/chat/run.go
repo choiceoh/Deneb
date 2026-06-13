@@ -177,10 +177,10 @@ type runDeps struct {
 }
 
 // abbreviateSession shortens channel prefixes in session keys for compact log output.
-// e.g. "telegram:7074071666" → "te:7074071666"
+// e.g. "client:main:task:ts" → "cl:main:task:ts"
 func abbreviateSession(key string) string {
 	prefixes := [][2]string{
-		{"telegram:", "te:"},
+		{"client:", "cl:"},
 	}
 	for _, p := range prefixes {
 		if len(key) > len(p[0]) && key[:len(p[0])] == p[0] {
@@ -197,8 +197,8 @@ func isSystemSession(key string) bool {
 	return strings.HasPrefix(key, "system:")
 }
 
-// isMainSession reports whether key is a top-level direct session (e.g. "telegram:123").
-// Sub-sessions ("telegram:123:task:ts"), system ("system:*"), cron, hook, and
+// isMainSession reports whether key is a top-level direct session (e.g. "client:main").
+// Sub-sessions ("client:main:task:ts"), system ("system:*"), cron, hook, and
 // bare keys (no colon, e.g. "dev-chat-xxx") return false.
 func isMainSession(key string) bool {
 	if isSystemSession(key) {
@@ -293,9 +293,9 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 	ctx = WithSessionKey(ctx, params.SessionKey)
 
-	// Set up phase-aware typing indicator for channel delivery (e.g., Telegram).
+	// Set up phase-aware typing indicator for native-client delivery.
 	// The factory (injected via chatport boundary) creates a TypingSignaler with
-	// a 5s keepalive matching Telegram's sendChatAction TTL.
+	// a 5s keepalive cadence for the native typing indicator.
 	var typingSignaler chatport.TypingSignaler
 	if deps.chatport.NewTypingSignaler != nil && deps.callbacks.typingFn != nil && params.Delivery != nil {
 		delivery := params.Delivery
