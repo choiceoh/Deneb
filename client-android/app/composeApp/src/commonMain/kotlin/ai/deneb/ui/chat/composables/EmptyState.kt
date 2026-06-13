@@ -4,6 +4,7 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.LogoAnimation
 import ai.deneb.ui.components.animatedGradientBorder
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHint
 import ai.deneb.ui.handCursor
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -59,8 +60,8 @@ internal fun EmptyState(
         Spacer(Modifier.height(8.dp))
         Text(
             text = "분석부터 일정까지 — 무엇이든 물어보세요",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+            style = DenebType.body,
+            color = denebHint(),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 24.dp),
         )
@@ -97,7 +98,7 @@ private fun AnimatedBorderButton(
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.labelLarge,
+            style = DenebType.button,
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
         )
