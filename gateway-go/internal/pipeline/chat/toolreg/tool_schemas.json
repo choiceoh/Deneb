@@ -356,7 +356,7 @@
       },
       "deliveryMode": {
         "type": "string",
-        "description": "How to deliver output: announce (send to Telegram, default) or none (run silently)",
+        "description": "How to deliver output: announce (send to the user, default) or none (run silently)",
         "enum": [
           "announce",
           "none"

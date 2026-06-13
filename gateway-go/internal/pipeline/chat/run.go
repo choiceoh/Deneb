@@ -254,7 +254,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	if deps.callbacks.replyFunc != nil {
 		ctx = WithReplyFunc(ctx, deps.callbacks.replyFunc)
 	} else if deps.logger != nil {
-		// Diagnostic for the self-contradicting "텔레그램이 끊겼어요" cron
+		// Diagnostic for the self-contradicting "채널이 끊겼어요" cron
 		// incident class: when this branch fires, the in-loop message tool
 		// will trip its replyFn-nil guard and (without the new wording in
 		// tools/message.go) the LLM has historically translated that into a
