@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "설정 > 스킬 > 진화 내역의 항목을 누르면 그 자리에서 펼쳐짐 — 잘렸던 전체 사유와 판단 근거, 정확한 시각, 리뷰 판정까지. 스킬이 지정된 항목은 '스킬 보기'로 해당 스킬 상세로 이동",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "메일 분석 접기 카드의 이중 테두리 제거 — 카드 속 카드로 좁아졌던 본문이 좌우로 넓어져 표·목록이 덜 잘림",
         ),
     ),

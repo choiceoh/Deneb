@@ -19,6 +19,7 @@ import ai.deneb.deneb.SchedMode
 import ai.deneb.deneb.ScheduleDraft
 import ai.deneb.deneb.SkillDetailContent
 import ai.deneb.deneb.SkillLifecycleContent
+import ai.deneb.deneb.SkillLifecycleRow
 import ai.deneb.deneb.SkillListContent
 import ai.deneb.deneb.SkillsViewSwitcher
 import ai.deneb.deneb.Todo
@@ -924,7 +925,8 @@ private fun sampleLifecycleEvents(now: Long) = listOf(
         skillName = "email-analysis",
         at = now - 3 * 3_600_000L,
         route = "no-op",
-        detail = "기존 email-analysis 스킬이 해당 워크플로우를 이미 커버",
+        detail = "기존 email-analysis 스킬이 해당 워크플로우를 이미 커버. 세션은 단일 메일 분석 요청으로 스킬 범위 내 — 새 스킬 생성이나 절차 변경 근거 없음.",
+        evidence = "cron(email-single-analysis) → gmail 스레드 수집 → 위키 컨텍스트 결합 → 중요도 분류까지 기존 절차대로 완주",
     ),
     SkillLifecycleEvent(
         type = "evolve_rejected",
@@ -1006,7 +1008,12 @@ private fun renderSkillLifecycle(name: String, scheme: ColorScheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Column {
                     SkillsViewSwitcher(showLifecycle = true, onSelect = {})
-                    SkillLifecycleContent(sampleLifecycleEvents(System.currentTimeMillis()))
+                    // First row pre-expanded to validate the tap-to-expand state:
+                    // full reason, 근거 evidence, absolute time + verdict, 스킬 보기.
+                    val events = sampleLifecycleEvents(System.currentTimeMillis())
+                    SkillLifecycleRow(events[1], initiallyExpanded = true, onOpenSkill = {})
+                    HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
+                    SkillLifecycleContent(events.filterIndexed { i, _ -> i != 1 })
                 }
             }
         }
