@@ -813,6 +813,7 @@ internal object ModelCatalog {
         // ==============================================================
         "glm-5" to CuratedModelInfo("GLM-5", 200_000, "2026-02"),
         "glm5" to CuratedModelInfo("GLM-5", 200_000, "2026-02"),
+        "glm-5.2" to CuratedModelInfo("GLM-5.2", 1_000_000, "2026-06"),
         "glm-5.1" to CuratedModelInfo("GLM-5.1", 200_000, "2026-03"),
         "glm-5-turbo" to CuratedModelInfo("GLM-5 Turbo", 128_000, "2026-02"),
         "glm-5v-turbo" to CuratedModelInfo("GLM-5V Turbo", 64_000, "2026-02"),
@@ -1464,7 +1465,7 @@ internal object ModelCatalog {
         "mixtral-8x22b" to 1228, "mixtral-8x22b-instruct" to 1228,
         "mixtral-8x7b" to 1196, "mixtral-8x7b-instruct" to 1196,
         // --- GLM / Zhipu ---
-        "glm-5.1" to 1472, "glm-5" to 1457, "glm5" to 1457,
+        "glm-5.2" to 1473, "glm-5.1" to 1472, "glm-5" to 1457, "glm5" to 1457,
         "glm-4.7" to 1443, "glm4.7" to 1443, "zai-glm-4.7" to 1443,
         "glm-4.7-flash" to 1368, "glm-4.6v" to 1378,
         "glm-4.6" to 1426, "glm-4.5" to 1411, "glm-4.5-air" to 1373, "glm-4-plus" to 1319,
