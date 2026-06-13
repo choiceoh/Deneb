@@ -1,10 +1,14 @@
 package chat
 
 import (
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 )
 
 // hasImageAttachment returns true if any attachment is an image.
@@ -50,7 +54,8 @@ func buildAttachmentBlocks(text string, attachments []ChatAttachment) []llm.Cont
 			}
 
 		case "document_text":
-			// Text extracted from a document (PDF, Office, etc.) via LiteParse.
+			// Server-extracted document text (PDF/Office/CSV), produced by
+			// prepareDocumentAttachments from a raw native attachment.
 			label := att.Name
 			if label == "" {
 				label = "document"
@@ -62,6 +67,43 @@ func buildAttachmentBlocks(text string, attachments []ChatAttachment) []llm.Cont
 		}
 	}
 	return blocks
+}
+
+// prepareDocumentAttachments converts raw document attachments (PDF, Office,
+// CSV) into "document_text" attachments carrying server-extracted text. The
+// native client sends these as base64 Data + a document MimeType with no
+// explicit Type, so without this step they match neither the image nor the
+// document_text branch in buildAttachmentBlocks and get silently dropped.
+// Images and already-extracted text pass through unchanged.
+func prepareDocumentAttachments(ctx context.Context, attachments []ChatAttachment) []ChatAttachment {
+	if len(attachments) == 0 {
+		return attachments
+	}
+	out := make([]ChatAttachment, 0, len(attachments))
+	for _, att := range attachments {
+		if att.Type == "image" || att.Type == "document_text" || att.Data == "" ||
+			!tools.IsExtractableDocument(att.MimeType, att.Name) {
+			out = append(out, att)
+			continue
+		}
+		raw, err := base64.StdEncoding.DecodeString(att.Data)
+		if err != nil {
+			out = append(out, att) // not base64 — leave untouched
+			continue
+		}
+		text, ok := tools.ExtractDocumentText(ctx, raw, att.Name, att.MimeType)
+		if !ok || strings.TrimSpace(text) == "" {
+			out = append(out, att) // extraction failed — leave untouched
+			continue
+		}
+		label := att.Name
+		if label == "" {
+			label = "document"
+		}
+		// document_text branch renders Data as the text body.
+		out = append(out, ChatAttachment{Type: "document_text", Name: label, Data: text})
+	}
+	return out
 }
 
 // appendAttachmentsToHistory finds the last user message in the history and
