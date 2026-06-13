@@ -109,8 +109,9 @@ func logsHandler(deps Deps) rpcutil.HandlerFunc {
 		var p struct {
 			RunID    string `json:"runId"`
 			Session  string `json:"session"`
-			Level    string `json:"level"` // debug|info|warn|error (default debug = all)
-			SinceMs  int64  `json:"sinceMs"`
+			Level    string `json:"level"`   // debug|info|warn|error (default debug = all)
+			Days     int    `json:"days"`    // window in days (convenience for sinceMs)
+			SinceMs  int64  `json:"sinceMs"` // explicit window start; takes precedence
 			Contains string `json:"contains"`
 			Limit    int    `json:"limit"`
 		}
@@ -126,11 +127,15 @@ func logsHandler(deps Deps) rpcutil.HandlerFunc {
 			})
 			return resp
 		}
+		since := p.SinceMs
+		if since == 0 && p.Days > 0 {
+			since = time.Now().Add(-time.Duration(p.Days) * 24 * time.Hour).UnixMilli()
+		}
 		lines := ring.Query(observe.QueryOpts{
 			RunID:    p.RunID,
 			Session:  p.Session,
 			MinLevel: observe.ParseLevel(p.Level),
-			SinceMs:  p.SinceMs,
+			SinceMs:  since,
 			Contains: p.Contains,
 			Limit:    p.Limit,
 		})
