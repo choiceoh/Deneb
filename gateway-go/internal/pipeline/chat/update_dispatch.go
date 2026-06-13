@@ -1,6 +1,6 @@
 // update_dispatch.go — /update slash command dispatcher.
 //
-// Lets the operator update Deneb from inside Telegram: pull the latest
+// Lets the operator update Deneb from the native client: pull the latest
 // `main`, rebuild the production binary, and restart the gateway — no SSH,
 // no terminal.
 //
@@ -39,8 +39,8 @@ const updateBuildTimeout = 5 * time.Minute
 const updateFetchTimeout = 30 * time.Second
 
 // updatePreviewCommitCap caps how many pending commits the preview lists.
-// Twenty short one-line entries stay comfortably inside Telegram's message
-// limit while still giving a clear sense of "how big is this update".
+// Twenty short one-line entries stay comfortably readable on a phone screen
+// while still giving a clear sense of "how big is this update".
 const updatePreviewCommitCap = 20
 
 // updateInFlight guards against a second "/update 확인" kicking off a parallel
@@ -481,9 +481,9 @@ func updateVersionNote(version string) string {
 	return " (현재 v" + version + ")"
 }
 
-// truncateUpdateOutput caps git/make failure output so an error fits inside a
-// Telegram message. The tail is kept because build and pull failures put the
-// actual error at the end.
+// truncateUpdateOutput caps git/make failure output so an error stays
+// readable on a phone screen. The tail is kept because build and pull failures
+// put the actual error at the end.
 func truncateUpdateOutput(s string) string {
 	const maxRunes = 1000
 	r := []rune(s)

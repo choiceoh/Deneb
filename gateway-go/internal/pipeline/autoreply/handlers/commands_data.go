@@ -1,6 +1,6 @@
 // commands_data.go — Hardcoded command metadata dataset.
 // Contains the full set of built-in chat command definitions.
-// Native (Telegram) commands are limited to the ones actively used:
+// Native client commands are limited to the ones actively used:
 // status, model, compact, reset, verbose.
 package handlers
 

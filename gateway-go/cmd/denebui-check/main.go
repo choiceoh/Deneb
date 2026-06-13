@@ -26,7 +26,7 @@ func main() {
 	fenced := len(blocks) > 0
 	if !fenced {
 		// No fence — treat the whole input as a candidate block so callers can
-		// validate raw JSON that lost its fence in transit (e.g. Telegram).
+		// validate raw JSON that lost its fence in transit.
 		blocks = []string{text}
 	}
 

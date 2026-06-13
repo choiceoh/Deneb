@@ -96,7 +96,7 @@ type Handler struct {
 	calendarGlanceFn CalendarGlanceFunc
 }
 
-// TopicResolver maps a Telegram forum threadID to a per-topic knowledge key
+// TopicResolver maps a forum/topic threadID to a per-topic knowledge key
 // (from deneb.json topics.map). The concrete implementation lives in the
 // server package and snapshots config at boot; the chat package stays free of
 // any infra/config import by talking through this interface. nil disables

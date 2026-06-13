@@ -397,8 +397,9 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	d.WriteString("\n")
 
 	// Rich interactive UI (deneb-ui) — gated to clients that can render it (the
-	// native app). Lives in the dynamic block, so Telegram (flag off) keeps
-	// byte-identical prompt and the prompt cache is untouched.
+	// native app). Lives in the dynamic block, so clients without rich-UI
+	// support (flag off) keep a byte-identical prompt and the prompt cache is
+	// untouched.
 	if params.SupportsRichUI {
 		d.WriteString("## 리치 인터랙티브 UI (deneb-ui)\n")
 		d.WriteString("이 클라이언트는 인터랙티브 화면을 렌더할 수 있다. 대시보드·폼·선택지·구조화된 데이터를 보여줄 때 일반 텍스트 대신 ```deneb-ui 코드펜스 안에 JSON 한 객체를 넣어라. 펜스는 네이티브 화면으로 렌더되고, 버튼을 누르면 새 사용자 턴으로 돌아온다.\n")

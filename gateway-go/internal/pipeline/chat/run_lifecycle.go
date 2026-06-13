@@ -27,8 +27,8 @@ func handleRunSuccess(
 ) {
 	// Strip silent reply token (NO_REPLY) from the response text before
 	// persisting, broadcasting, or delivering. This ensures the internal
-	// token is never exposed to any client (RPC, WebSocket, Telegram) and
-	// is not stored in transcript history.
+	// token is never exposed to any client (RPC, WebSocket, native client)
+	// and is not stored in transcript history.
 	isSilent := IsSilentReply(result.Text)
 	if !isSilent {
 		stripped := StripSilentToken(result.Text)
@@ -99,7 +99,7 @@ func handleRunSuccess(
 		broadcaster.EmitComplete(result.Text, result.Usage)
 	}
 
-	// Deliver response back to the originating channel (e.g., Telegram).
+	// Deliver response back to the originating channel (e.g., the native client).
 	// Use parseReplyDirectives (chatport boundary) for unified processing: silent token
 	// detection, leaked tool-call stripping, MEDIA: extraction, and threading.
 	if params.Delivery != nil && result.Text == "" && !isSilent {
@@ -172,8 +172,8 @@ func handleRunSuccess(
 			replyText = strings.TrimSpace(replyText)
 
 			// Optionally surface extended-thinking text to the channel reply.
-			// Gated by the session flag so the noise stays opt-in. Telegram
-			// receives an HTML expandable blockquote that collapses by default.
+			// Gated by the session flag so the noise stays opt-in. The reply
+			// carries a collapsible thinking block that stays hidden by default.
 			if showThinkingInChat(deps, params.SessionKey) && result.Thinking != "" {
 				if formatted := formatThinkingForChannel(params.Delivery.Channel, result.Thinking); formatted != "" {
 					if replyText != "" {

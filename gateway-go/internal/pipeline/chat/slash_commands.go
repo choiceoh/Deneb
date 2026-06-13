@@ -30,7 +30,7 @@ func ParseSlashCommand(text string) *SlashResult {
 	parts := strings.SplitN(trimmed[1:], " ", 2)
 	cmd := strings.ToLower(parts[0])
 
-	// Strip Telegram bot username suffix (e.g., "/reset@MyBot" → "reset").
+	// Strip any bot-username suffix (e.g., "/reset@MyBot" → "reset").
 	if idx := strings.IndexByte(cmd, '@'); idx != -1 {
 		cmd = cmd[:idx]
 	}

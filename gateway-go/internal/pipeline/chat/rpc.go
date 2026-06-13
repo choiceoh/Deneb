@@ -174,13 +174,13 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 		runID = shortid.New("run")
 	}
 
-	// Derive DeliveryContext from the session key ("telegram:<chatID>" →
-	// channel=telegram, to=<chatID>) so the reply pipeline routes the
+	// Derive DeliveryContext from the session key ("client:<id>" →
+	// channel=client, to=<id>) so the reply pipeline routes the
 	// response to the originating channel. Without this, any caller of
 	// sessions.send that targets a channel-keyed session (the tool
 	// `sessions.send` / `chrono.send`, external RPC clients, other
 	// internal automation) produces a run with nil Delivery and the
-	// Telegram reply function drops the response. Keys without a channel
+	// reply function drops the response. Keys without a channel
 	// prefix (e.g. "cron:<id>") yield nil, which preserves prior behavior.
 	return h.startAsyncRun(req.ID, RunParams{
 		SessionKey:  p.Key,
@@ -437,8 +437,8 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 // SendDirect programmatically sends a message to a session and triggers an
 // LLM run, just like chat.send but without going through RPC. Used by the
 // bridge injector so the main agent automatically responds to bridge messages.
-// Delivery context is derived from the session key (e.g., "telegram:123" →
-// channel="telegram", to="123") so the response reaches the user's device.
+// Delivery context is derived from the session key (e.g., "client:main" →
+// channel="client", to="main") so the response reaches the user's device.
 func (h *Handler) SendDirect(sessionKey, message string) {
 	params := RunParams{
 		SessionKey: sessionKey,
@@ -456,10 +456,10 @@ func (h *Handler) SendDirect(sessionKey, message string) {
 }
 
 // deliveryFromSessionKey extracts a DeliveryContext from a session key.
-// "telegram:7074071666" → Channel="telegram", To="7074071666".
-// "telegram:7074071666:thread:42" → adds ThreadID="42" so reply paths
+// "client:main" → Channel="client", To="main".
+// "client:main:thread:42" → adds ThreadID="42" so reply paths
 // without an explicit Delivery (e.g. cron-driven autoreply, internal
-// dispatches) still land in the forum topic the session belongs to.
+// dispatches) still land in the forum/topic the session belongs to.
 func deliveryFromSessionKey(key string) *DeliveryContext {
 	idx := strings.Index(key, ":")
 	if idx < 0 {

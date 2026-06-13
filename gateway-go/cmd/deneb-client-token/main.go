@@ -5,7 +5,7 @@
 //	go run ./cmd/deneb-client-token
 //
 // Generating the token is what enables standalone-client auth; until then the
-// gateway only accepts Telegram Mini App initData. Keep the printed value secret.
+// gateway rejects native-client RPCs as unauthenticated. Keep the printed value secret.
 package main
 
 import (

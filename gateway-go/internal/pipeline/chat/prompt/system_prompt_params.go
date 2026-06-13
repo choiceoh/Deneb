@@ -107,7 +107,7 @@ type SystemPromptParams struct {
 
 	// SupportsRichUI gates the deneb-ui interactive-UI instructions in the
 	// dynamic block. True only for clients that can render deneb-ui fences
-	// (the native Android app); Telegram leaves it false so its prompt
+	// (the native Android app); other clients leave it false so their prompt
 	// bytes are unchanged. Dynamic (uncached) block — no prompt-cache impact.
 	SupportsRichUI bool
 }

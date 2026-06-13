@@ -6,7 +6,7 @@ import (
 )
 
 // APIError represents a non-2xx HTTP response from an external API
-// (LLM provider, Telegram Bot API, etc.). Shared across all API clients
+// (LLM provider, Gmail API, etc.). Shared across all API clients
 // so retry logic and error inspection use a single type.
 type APIError struct {
 	StatusCode int

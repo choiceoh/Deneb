@@ -209,7 +209,7 @@ func (h *Handler) rollbackDiff(delivery *DeliveryContext, mgr *checkpoint.Manage
 }
 
 // renderRollbackDiff wraps the diff in a code fence with a Korean header.
-// Truncates to stay under Telegram's 4096-char cap — keeps the header and
+// Truncates to stay readable on a phone screen — keeps the header and
 // the first hunk, then appends "... (총 <N>줄 중 M줄 표시)".
 func renderRollbackDiff(target *checkpoint.Snapshot, diff string) string {
 	header := fmt.Sprintf("체크포인트 #%d 차이 — %s", target.Seq, baseName(target.Path))

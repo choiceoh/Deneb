@@ -36,12 +36,7 @@ func HandleSubagentsAgentsAction(ctx *SubagentsCommandContext, deps *SubagentAge
 				bindings := deps.ListBindings(entry.ChildSessionKey)
 				for _, b := range bindings {
 					if b.Status == "active" && b.Channel == ctx.Channel && b.AccountID == ctx.AccountID {
-						switch b.Channel {
-						case "telegram":
-							bindingText = fmt.Sprintf("conversation:%s", b.ConversationID)
-						default:
-							bindingText = fmt.Sprintf("binding:%s", b.ConversationID)
-						}
+						bindingText = fmt.Sprintf("binding:%s", b.ConversationID)
 						break
 					}
 				}

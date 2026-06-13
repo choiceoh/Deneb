@@ -23,7 +23,7 @@ import (
 // One model does transcription + speaker diarization + timestamps, and accepts
 // `hotwords` (Deneb contacts / deals / company names) that reliably fix the
 // Korean proper nouns bare ASR mis-hears (탑솔라, 데네브). It decodes any
-// container (Telegram .oga/opus, m4a, mp3, wav) to 24 kHz mono internally.
+// container (.oga/opus, m4a, mp3, wav) to 24 kHz mono internally.
 // Unlike the OCR path there is no local fallback — when the server is down,
 // transcription returns a clear error and the caller degrades by surfacing it.
 

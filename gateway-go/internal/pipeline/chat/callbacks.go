@@ -1,7 +1,7 @@
 // callbacks.go — Late-bind callback registry for channel integration.
 //
 // ChannelCallbacks stores all callback functions that integrate the chat
-// handler with a specific channel (e.g., Telegram). Set during server
+// handler with a specific channel (e.g., the native client). Set during server
 // initialization, read during request handling. Protected by an RWMutex.
 package chat
 
