@@ -112,7 +112,7 @@ func extractAttachmentText(ctx context.Context, att *gmail.AttachmentInfo, data 
 
 	switch {
 	case isPDF:
-		text, err := pdfToText(ctx, data)
+		text, err := pdfToTextStructured(ctx, data)
 		if err == nil {
 			return fmt.Sprintf("## 📎 %s (PDF)\n\n%s", att.Filename, truncate(text, attachmentTextLimit))
 		}
@@ -609,53 +609,85 @@ func imageOCR(ctx context.Context, img []byte) (string, error) {
 	return ocrImageBytes(ctx, img)
 }
 
-// pdfOCR rasterizes a PDF with pdftoppm and OCRs each page. It is the fallback
-// path when pdftotext extracts nothing — i.e. a scanned (image-only) PDF.
-func pdfOCR(ctx context.Context, pdf []byte) (string, error) {
+// ocrPageCap bounds how many pages of a PDF we rasterize — enough for typical
+// business documents without letting a huge PDF monopolize the GPU.
+const ocrPageCap = 10
+
+// rasterizePDF renders the first maxPages of a PDF to PNG (200 DPI) via
+// pdftoppm, returned in page order (index 0 = page 1; a nil entry means that
+// page failed to read). Shared by the scanned-PDF OCR fallback and the
+// table-page upgrade.
+func rasterizePDF(ctx context.Context, pdf []byte, maxPages int) ([][]byte, error) {
 	if _, err := exec.LookPath("pdftoppm"); err != nil {
-		return "", fmt.Errorf("pdftoppm 미설치 (poppler-utils)")
-	}
-	if _, err := exec.LookPath("tesseract"); err != nil {
-		return "", fmt.Errorf("tesseract 미설치 — `apt install tesseract-ocr tesseract-ocr-kor` 필요")
+		return nil, fmt.Errorf("pdftoppm 미설치 (poppler-utils)")
 	}
 
-	dir, err := os.MkdirTemp("", "deneb-pdfocr-")
+	dir, err := os.MkdirTemp("", "deneb-pdfraster-")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer os.RemoveAll(dir)
 
 	if err := os.WriteFile(filepath.Join(dir, "in.pdf"), pdf, 0o600); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	runCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 
-	// Rasterize the first ocrPageLimit pages to PNG at 200 DPI. The command
-	// runs inside the temp dir so every argument is a literal — no variable
-	// (and therefore no tainted) input reaches the subprocess.
-	const ocrPageLimit = "10"
+	// The command runs inside the temp dir so every argument is a literal — no
+	// variable (and therefore no tainted) input reaches the subprocess.
 	rast := exec.CommandContext(runCtx, "pdftoppm", "-png", "-r", "200",
-		"-f", "1", "-l", ocrPageLimit, "in.pdf", "page")
+		"-f", "1", "-l", strconv.Itoa(maxPages), "in.pdf", "page")
 	rast.Dir = dir
 	if err := rast.Run(); err != nil {
-		return "", fmt.Errorf("PDF 래스터화 실패: %w", err)
+		return nil, fmt.Errorf("PDF 래스터화 실패: %w", err)
 	}
 
-	pages, _ := filepath.Glob(filepath.Join(dir, "page") + "-*.png")
-	sort.Strings(pages)
-	if len(pages) == 0 {
-		return "", fmt.Errorf("래스터화된 페이지 없음")
-	}
-
-	var sb strings.Builder
-	for i, page := range pages {
-		img, err := os.ReadFile(page)
+	// pdftoppm names files page-N.png without zero-padding, so order by the
+	// parsed page number — a lexicographic sort would put page-10 before page-2.
+	files, _ := filepath.Glob(filepath.Join(dir, "page") + "-*.png")
+	byNum := make(map[int][]byte, len(files))
+	maxN := 0
+	for _, f := range files {
+		numStr := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(f), "page-"), ".png")
+		n, err := strconv.Atoi(numStr)
 		if err != nil {
 			continue
 		}
-		text, err := ocrImageBytes(runCtx, img)
+		b, rerr := os.ReadFile(f)
+		if rerr != nil {
+			continue
+		}
+		byNum[n] = b
+		if n > maxN {
+			maxN = n
+		}
+	}
+	if maxN == 0 {
+		return nil, fmt.Errorf("래스터화된 페이지 없음")
+	}
+	out := make([][]byte, maxN)
+	for n, b := range byNum {
+		out[n-1] = b
+	}
+	return out, nil
+}
+
+// pdfOCR rasterizes a PDF and OCRs each page. It is the fallback path when
+// pdftotext extracts nothing — i.e. a scanned (image-only) PDF.
+func pdfOCR(ctx context.Context, pdf []byte) (string, error) {
+	imgs, err := rasterizePDF(ctx, pdf, ocrPageCap)
+	if err != nil {
+		return "", err
+	}
+
+	var sb strings.Builder
+	for i, img := range imgs {
+		if img == nil {
+			continue
+		}
+		text, err := ocrImageBytes(ctx, img)
 		if err != nil || strings.TrimSpace(text) == "" {
 			continue
 		}

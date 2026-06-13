@@ -86,3 +86,35 @@ func TestIsExtractableDocument(t *testing.T) {
 		}
 	}
 }
+
+func TestColumnGaps(t *testing.T) {
+	cases := map[string]int{
+		"품목       수량      단가": 2, // two multi-space gaps → 3 columns
+		"모듈       100":        1,
+		"단일 단어 단어들":           0, // single spaces are not column gaps
+		"":                    0,
+		"   ":                 0,
+	}
+	for line, want := range cases {
+		if got := columnGaps(line); got != want {
+			t.Errorf("columnGaps(%q) = %d, want %d", line, got, want)
+		}
+	}
+}
+
+func TestPageHasTable(t *testing.T) {
+	table := "견적서\n" +
+		"품목       수량      단가\n" +
+		"모듈       100       5000\n" +
+		"인버터     20        30000\n"
+	if !pageHasTable(table) {
+		t.Error("aligned-column block should be detected as a table")
+	}
+
+	prose := "이것은 일반 문단입니다 표가 아니라 그냥 줄글이며\n" +
+		"여러 줄에 걸쳐 있지만 컬럼 정렬이 전혀 없습니다\n" +
+		"따라서 표로 감지되면 안 됩니다\n"
+	if pageHasTable(prose) {
+		t.Error("prose should not be detected as a table")
+	}
+}
