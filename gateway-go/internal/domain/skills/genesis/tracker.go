@@ -81,6 +81,21 @@ type Tracker struct {
 	evolveThreshold int
 	evolveMinGap    time.Duration
 	triggerInflight bool
+
+	// Post-evolve rollback watch (set via SetRollback). After a skill is
+	// evolved (LogEvolve), its next uses are watched; rollbackThreshold
+	// consecutive failures fire `rollback` to revert the evolution. Guarded by
+	// mu. postEvolve is empty at startup (populated only by runtime LogEvolve),
+	// so replaying usage history never triggers a rollback.
+	rollback          func(skillName string)
+	rollbackThreshold int
+	postEvolve        map[string]*evolveWatch
+}
+
+// evolveWatch tracks consecutive failures of a skill since its last evolve.
+type evolveWatch struct {
+	version          string
+	consecutiveFails int
 }
 
 // usageAgg holds running aggregates per skill.
@@ -114,6 +129,7 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 		livenessPath: filepath.Join(dir, "skill_liveness.json"),
 		stats:        make(map[string]*usageAgg),
 		recentErrors: make(map[string][]string),
+		postEvolve:   make(map[string]*evolveWatch),
 	}
 
 	// Rebuild in-memory state from existing JSONL.
@@ -168,10 +184,42 @@ func (t *Tracker) RecordUsage(record UsageRecord) error {
 		return fmt.Errorf("genesis-tracker: append usage: %w", err)
 	}
 	t.ingest(record)
+	t.maybeFireRollbackLocked(record)
 	if err := t.touchCuratorUsageLocked(record.SkillName, record.UsedAt); err != nil {
 		return err
 	}
 	return nil
+}
+
+// maybeFireRollbackLocked advances the post-evolve watch for the used skill: a
+// success validates the evolution (watch cleared), and rollbackThreshold
+// consecutive failures fire the rollback in the background. Caller holds t.mu;
+// the callback runs lock-free in a recovered goroutine (it re-enters the
+// tracker via LogEvolveRolledBack, so it must not run under the lock).
+func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
+	w := t.postEvolve[r.SkillName]
+	if w == nil || t.rollback == nil {
+		return
+	}
+	if r.Success {
+		delete(t.postEvolve, r.SkillName)
+		return
+	}
+	w.consecutiveFails++
+	if w.consecutiveFails < t.rollbackThreshold {
+		return
+	}
+	delete(t.postEvolve, r.SkillName)
+	fn := t.rollback
+	skill := r.SkillName
+	go func() {
+		defer func() {
+			if rec := recover(); rec != nil && t.logger != nil {
+				t.logger.Error("genesis: rollback callback panic", "panic", rec)
+			}
+		}()
+		fn(skill)
+	}()
 }
 
 // Stats returns aggregated usage stats for a skill.
@@ -307,7 +355,7 @@ func (t *Tracker) LogEvolutionProposal(record EvolutionProposalRecord) error {
 // records every committed or rejected evolve — including ones on user-authored
 // skills — so the native client can render a complete evolution timeline.
 type evolveLogEntry struct {
-	Type        string `json:"type"` // "evolved" | "evolve_rejected"
+	Type        string `json:"type"` // "evolved" | "evolve_rejected" | "evolve_rolled_back"
 	SkillName   string `json:"skillName"`
 	NewVersion  string `json:"newVersion,omitempty"`
 	Description string `json:"description,omitempty"`
@@ -315,16 +363,32 @@ type evolveLogEntry struct {
 	CreatedAt   int64  `json:"createdAt"`
 }
 
-// LogEvolve records a committed skill evolution (rewrite applied to disk).
+// LogEvolve records a committed skill evolution (rewrite applied to disk) and
+// starts the post-evolve rollback watch so the next few uses are monitored.
 func (t *Tracker) LogEvolve(skillName, newVersion, description string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.rollbackThreshold > 0 {
+		t.postEvolve[skillName] = &evolveWatch{version: newVersion}
+	}
 	return jsonlstore.Append(t.logPath, evolveLogEntry{
 		Type:        "evolved",
 		SkillName:   skillName,
 		NewVersion:  newVersion,
 		Description: description,
 		CreatedAt:   time.Now().UnixMilli(),
+	})
+}
+
+// LogEvolveRolledBack records that an evolution was reverted after it regressed
+// (rollbackThreshold consecutive post-evolve failures).
+func (t *Tracker) LogEvolveRolledBack(skillName string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return jsonlstore.Append(t.logPath, evolveLogEntry{
+		Type:      "evolve_rolled_back",
+		SkillName: skillName,
+		CreatedAt: time.Now().UnixMilli(),
 	})
 }
 
@@ -446,6 +510,16 @@ func (t *Tracker) SetEvolveTrigger(fn func(), threshold int, minGap time.Duratio
 	t.evolveTrigger = fn
 	t.evolveThreshold = threshold
 	t.evolveMinGap = minGap
+}
+
+// SetRollback wires the post-evolve rollback. After a skill is evolved, its
+// next uses are watched; `threshold` consecutive failures fire `fn` to revert
+// the evolution. threshold<=0 disables the watch.
+func (t *Tracker) SetRollback(fn func(skillName string), threshold int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.rollback = fn
+	t.rollbackThreshold = threshold
 }
 
 // maybeFireEvolveLocked bumps the genesis counter and fires the evolve trigger

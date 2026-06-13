@@ -13,6 +13,52 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 )
 
+// TestBackupAndRollbackSkill verifies the backup-then-restore path: after an
+// evolve overwrites a skill, RollbackSkill restores the exact pre-evolve content
+// from the backup, and the backup sits in a .backups subdir (out of discovery).
+func TestBackupAndRollbackSkill(t *testing.T) {
+	dir := t.TempDir()
+	skillFile := filepath.Join(dir, "SKILL.md")
+	original := "---\nname: foo\nversion: \"1.0.0\"\n---\n\n# Foo\n\noriginal body\n"
+	if err := os.WriteFile(skillFile, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Back up, then simulate an evolve overwriting the file with a worse body.
+	if err := backupSkillVersion(skillFile, original); err != nil {
+		t.Fatalf("backupSkillVersion: %v", err)
+	}
+	if got := skillBackupPath(skillFile); filepath.Base(filepath.Dir(got)) != ".backups" {
+		t.Fatalf("backup must live under .backups, got %q", got)
+	}
+	regressed := "---\nname: foo\nversion: \"1.0.1\"\n---\n\n# Foo\n\nregressed body\n"
+	if err := os.WriteFile(skillFile, []byte(regressed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cat := skills.NewCatalog(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	cat.Register(skills.SkillEntry{Skill: skills.Skill{Name: "foo", FilePath: skillFile, Version: "1.0.1"}})
+	e := &Evolver{
+		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		catalog: cat,
+	}
+
+	e.RollbackSkill("foo")
+
+	got, err := os.ReadFile(skillFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != original {
+		t.Fatalf("rollback must restore the exact pre-evolve content\n got: %q\nwant: %q", got, original)
+	}
+
+	// A skill with no backup is a safe no-op (does not crash or truncate).
+	cat.Register(skills.SkillEntry{Skill: skills.Skill{Name: "bar", FilePath: filepath.Join(dir, "missing", "SKILL.md")}})
+	e.RollbackSkill("bar")    // no backup → no-op
+	e.RollbackSkill("absent") // not in catalog → no-op
+}
+
 // TestPickCandidateJudge_AvoidsSameFamily verifies that a lightweight-produced
 // candidate is judged by the teacher when one is wired (judge != producer,
 // arXiv:2508.02994), and falls back to the lightweight model only when no

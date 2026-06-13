@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,12 @@ var _ autonomous.PeriodicTask = (*EvolutionTask)(nil)
 // event-driven evolve trigger fires (every 5 new skills), instead of waiting
 // for the 6h periodic cycle.
 const DefaultEvolveEventThreshold = 5
+
+// DefaultRollbackThreshold is how many consecutive post-evolve failures revert
+// an evolution. Single-user traffic is sparse, so a small fixed count (not a
+// success-rate delta, which needs weeks of samples) is the practical signal: an
+// evolution that breaks the next few uses in a row is reverted to its backup.
+const DefaultRollbackThreshold = 3
 
 // EvolveResult describes the outcome of an evolution attempt.
 type EvolveResult struct {
@@ -277,6 +284,15 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 	}
 	newContent := newHeader + "\n" + candidateBody + "\n"
 
+	// Back up the pre-evolve content before overwriting so a regressing evolve
+	// can be rolled back (post-evolve watch in the tracker). Best-effort: a
+	// backup failure must not block the evolve, but it disables rollback for
+	// this version until the next evolve refreshes the backup.
+	if err := backupSkillVersion(entry.Skill.FilePath, originalContent); err != nil {
+		e.logger.Warn("evolver: skill backup failed, rollback disabled for this evolve",
+			"skill", entry.Skill.Name, "error", err)
+	}
+
 	// Write back atomically so a crash mid-write can't corrupt the skill.
 	if err := atomicfile.WriteFile(entry.Skill.FilePath, []byte(newContent), &atomicfile.Options{Perm: 0o644}); err != nil {
 		return nil, fmt.Errorf("evolver: write file: %w", err)
@@ -425,6 +441,55 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	}
 	e.logger.Info("evolver: teacher escalation succeeded", "skill", entry.Skill.Name)
 	return teacherBody, true, treason
+}
+
+// skillBackupPath returns the rollback backup path for a skill file. The
+// .backups subdir and .prev suffix keep it out of SKILL.md discovery.
+func skillBackupPath(skillFile string) string {
+	return filepath.Join(filepath.Dir(skillFile), ".backups", filepath.Base(skillFile)+".prev")
+}
+
+// backupSkillVersion saves the pre-evolve content next to the skill. One level
+// of undo is enough: each evolve overwrites the backup with the then-current
+// content, so it always holds the version immediately before the latest evolve.
+func backupSkillVersion(skillFile, content string) error {
+	backup := skillBackupPath(skillFile)
+	if err := os.MkdirAll(filepath.Dir(backup), 0o755); err != nil {
+		return err
+	}
+	return atomicfile.WriteFile(backup, []byte(content), &atomicfile.Options{Perm: 0o644})
+}
+
+// RollbackSkill restores the pre-evolve version of a skill from its backup. The
+// tracker's post-evolve watch calls this when an evolved skill fails its next
+// few uses in a row. It mirrors parseAndApply's write behavior (atomic file
+// write + lifecycle log), so the reverted skill propagates the same way an
+// evolve does. Best-effort: a missing backup or absent catalog entry is a
+// no-op (logged), never a crash.
+func (e *Evolver) RollbackSkill(skillName string) {
+	if e.catalog == nil {
+		return
+	}
+	entry, ok := e.catalog.Get(skillName)
+	if !ok {
+		e.logger.Warn("evolver: rollback skipped, skill not in catalog", "skill", skillName)
+		return
+	}
+	prev, err := os.ReadFile(skillBackupPath(entry.Skill.FilePath))
+	if err != nil {
+		e.logger.Warn("evolver: rollback skipped, no backup available", "skill", skillName, "error", err)
+		return
+	}
+	if err := atomicfile.WriteFile(entry.Skill.FilePath, prev, &atomicfile.Options{Perm: 0o644}); err != nil {
+		e.logger.Error("evolver: rollback write failed", "skill", skillName, "error", err)
+		return
+	}
+	e.logger.Info("evolver: skill rolled back after consecutive post-evolve failures", "skill", skillName)
+	if e.tracker != nil {
+		if err := e.tracker.LogEvolveRolledBack(skillName); err != nil {
+			e.logger.Warn("evolver: rollback lifecycle log failed", "skill", skillName, "error", err)
+		}
+	}
 }
 
 // pickCandidateJudge returns the client/model that should judge a
