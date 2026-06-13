@@ -28,6 +28,9 @@ type MessageDeleter = toolctx.MessageDeleter
 // ProviderConfig holds credentials and endpoint for an LLM provider.
 type ProviderConfig = toolctx.ProviderConfig
 
+// RoutingConfig is the deneb.json per-model effort-router tuning block.
+type RoutingConfig = toolctx.RoutingConfig
+
 // DeliveryContext carries channel routing information for a chat message.
 type DeliveryContext = toolctx.DeliveryContext
 

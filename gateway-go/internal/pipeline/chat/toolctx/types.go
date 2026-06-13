@@ -92,6 +92,25 @@ type ProviderConfig struct {
 	Temperature *float64 `json:"temperature,omitempty"`
 	TopP        *float64 `json:"topP,omitempty"`
 	TopK        *int     `json:"topK,omitempty"`
+
+	// Routing overrides the per-model effort-router policy, layered over the
+	// builtin profile by modelrole.Registry.RoutingProfileForModel. Absent
+	// (nil) keeps the builtin behavior — see internal/ai/router.
+	Routing *RoutingConfig `json:"routing,omitempty"`
+}
+
+// RoutingConfig is the deneb.json models.providers.<id>.routing block: optional
+// per-model effort-router tuning. Every field is a pointer so an absent or
+// partial block only overrides what it names; the rest stays at the builtin
+// default (router.DefaultProfile + the model's capability toggle).
+type RoutingConfig struct {
+	Enabled           *bool   `json:"enabled,omitempty"`           // master switch for this model's routing
+	ToggleKwarg       *string `json:"toggleKwarg,omitempty"`       // chat_template_kwargs off-switch name
+	MaxSimpleRunes    *int    `json:"maxSimpleRunes,omitempty"`    // turn-0 query-length gate (volume lever)
+	StepCeilingTurn   *int    `json:"stepCeilingTurn,omitempty"`   // ceiling turn after which thinking reverts
+	ObservationRunes  *int    `json:"observationRunes,omitempty"`  // single tool-result size that reverts
+	CumulativeRunes   *int    `json:"cumulativeRunes,omitempty"`   // whole-run tool-output size that reverts
+	HeavyHistoryRunes *int    `json:"heavyHistoryRunes,omitempty"` // assistant-message length marking context heavy
 }
 
 // DeliveryContext carries channel routing information for a chat message.
