@@ -308,7 +308,7 @@ func cronToolSchema() map[string]any {
 			},
 			"deliveryMode": map[string]any{
 				"type":        "string",
-				"description": "How to deliver output: announce (send to Telegram, default) or none (run silently)",
+				"description": "How to deliver output: announce (send to the user, default) or none (run silently)",
 				"enum":        []string{"announce", "none"},
 			},
 			"enabled": map[string]any{

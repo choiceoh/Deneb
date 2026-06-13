@@ -30,7 +30,7 @@ const llmSafetySendGuidance = " Do not tell the user the channel is down, do not
 //
 // Returning a non-error result is deliberate. A tool *error* makes the LLM
 // treat the situation as a problem to surface, and it has historically
-// translated an in-loop send guard failure into a user-facing "텔레그램 채널이
+// translated an in-loop send guard failure into a user-facing "채널이
 // 연결되지 않았다" apology — which then reached the user through that very
 // channel via the cron relay, producing a self-contradicting message. By
 // reporting a benign no-op, the model simply writes the final result text and
@@ -80,7 +80,7 @@ func ToolMessage() ToolFunc {
 				}
 				// IMPORTANT — phrasing matters: the LLM reads this error
 				// verbatim and historically translated "channel not connected"
-				// into a Korean "텔레그램이 끊겼어요" report to the user, which
+				// into a Korean "채널이 끊겼어요" report to the user, which
 				// then *did* reach the user via the cron proactive-relay path —
 				// producing a self-contradicting message ("the channel is down"
 				// delivered through that same channel). The wording below tells

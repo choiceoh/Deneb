@@ -31,7 +31,7 @@ const HeartbeatBackupName = "HEARTBEAT.md.prev"
 // Used by the autonomous heartbeat loop to retire completed/cancelled items
 // and update progress, breaking the "repeat the same report every 30 minutes"
 // failure mode. Also usable from a normal user session ("add this to my
-// heartbeat") so the user can self-manage the file without leaving Telegram.
+// heartbeat") so the user can self-manage the file without leaving the chat.
 func ToolHeartbeatUpdate() ToolFunc {
 	return toolHeartbeatUpdateWithHome("")
 }

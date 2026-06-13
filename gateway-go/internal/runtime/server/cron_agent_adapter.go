@@ -88,7 +88,7 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 	// relay / main-session handoff / DeliverCronOutput), so the agent must
 	// not deliver it via the message tool, and an in-loop send-guard failure
 	// is a benign no-op rather than an outage to report. This stops the LLM
-	// from translating a tool error into a "텔레그램 채널이 연결되지 않았다"
+	// from translating a tool error into a "채널이 연결되지 않았다"
 	// apology that itself gets delivered through that very channel.
 	opts := &chat.SyncOptions{AutoDeliveredOutput: true, Thinking: params.Thinking}
 	if params.Channel != "" && params.To != "" {
