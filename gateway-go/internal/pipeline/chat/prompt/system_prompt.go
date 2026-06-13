@@ -19,7 +19,7 @@ var toolCategories = []struct {
 	{"Exec", []string{"exec", "process"}},
 	{"Web", []string{"web"}},
 	{"Memory", []string{"wiki", "polaris"}},
-	{"System", []string{"message", "clarify", "gateway"}},
+	{"System", []string{"message", "gateway"}},
 	{"Routine", []string{"cron", "gmail"}},
 	{"Schedule", []string{"calendar"}},
 	{"Sessions", []string{"sessions", "sessions_spawn", "subagents"}},
@@ -376,17 +376,14 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	d.WriteString("- Current session replies auto-route to source channel. Cross-session: sessions(action=send, sessionKey=..., message=...).\n")
 	d.WriteString("- 외부 채널 전송이 실패하면 전달 상태는 실패/미확인이다. 성공을 추정하거나 현재 채팅에 보인다고 추정하지 마라.\n")
 	d.WriteString("- 특히 '여기에 떠 있다', '이미 보인다', '채널 복구 후 다시 보낼 수 있다' 같은 추정성 안내 금지. 도구가 확인한 사실만 말하라.\n")
-	// message/clarify protocol coaching gates on eagerSet, not toolSet: both
-	// are deferred by default (toolreg/core.go), and their full usage protocol
+	// message protocol coaching gates on eagerSet, not toolSet: message is
+	// deferred by default (toolreg/core.go), and its full usage protocol
 	// ships in the tool description at fetch_tools time. These lines render
-	// only if a deployment re-eagerizes them — avoiding per-turn dynamic cost
-	// for tools not on the wire.
+	// only if a deployment re-eagerizes it — avoiding per-turn dynamic cost
+	// for a tool not on the wire.
 	if _, ok := eagerSet["message"]; ok {
 		fmt.Fprintf(&d, "- `message` for proactive sends + channel actions. If used for user-visible reply, respond with ONLY: %s.\n", SilentReplyToken)
 		fmt.Fprintf(&d, "- %s 규칙: 메시지 전체가 %s만이어야 한다. 다른 텍스트와 섞지 마라. **사용자가 방금 보낸 메시지에 대응할 때는 절대 사용 금지** — 오직 proactive/maintenance 전송(`message` 도구 사용) 후에만 허용.\n", SilentReplyToken, SilentReplyToken)
-	}
-	if _, ok := eagerSet["clarify"]; ok {
-		d.WriteString("- `clarify(question, options)` 로 진짜 모호성을 버튼 선택으로 해결하라: 파일·경로·이름이 여러 개 매치되어 사용자만이 선택할 수 있을 때. 평서문으로 되물어 답변 타이핑을 요구하지 말고 이 도구를 써라. 예/아니오 수준의 사소한 확인, 스스로 추론 가능한 질문에는 쓰지 마라. 호출 후에는 턴을 즉시 종료한다 — 선택 결과는 다음 턴에 `[유저 응답 (버튼): ...]` 형태로 도착한다.\n")
 	}
 	// Auto-delivered runs (cron relay, miniapp sync) used to get a 3-line
 	// delivery directive here, gated per run — which split heartbeat and

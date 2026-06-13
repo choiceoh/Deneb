@@ -417,7 +417,7 @@
       },
       "channel": {
         "type": "string",
-        "description": "Target channel (e.g., telegram)"
+        "description": "Target channel (e.g., client)"
       },
       "replyTo": {
         "type": "string",
@@ -438,28 +438,6 @@
     },
     "required": [
       "action"
-    ]
-  },
-  {
-    "name": "clarify",
-    "properties": {
-      "question": {
-        "type": "string",
-        "description": "Korean question asking the user to resolve an ambiguity. Example: '현재 3개의 config.yaml이 있습니다. 어느 것을 수정할까요?'"
-      },
-      "options": {
-        "type": "array",
-        "description": "2-5 selection options. Each must be Korean text, 40 characters or less (visible as a Telegram inline-keyboard button label).",
-        "minItems": 2,
-        "maxItems": 5,
-        "items": {
-          "type": "string"
-        }
-      }
-    },
-    "required": [
-      "question",
-      "options"
     ]
   },
   {
