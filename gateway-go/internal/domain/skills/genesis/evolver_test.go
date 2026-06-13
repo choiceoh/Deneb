@@ -9,8 +9,28 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 )
+
+// TestPickCandidateJudge_AvoidsSameFamily verifies that a lightweight-produced
+// candidate is judged by the teacher when one is wired (judge != producer,
+// arXiv:2508.02994), and falls back to the lightweight model only when no
+// teacher is available.
+func TestPickCandidateJudge_AvoidsSameFamily(t *testing.T) {
+	lw := &llm.Client{}
+	teacher := &llm.Client{}
+
+	withTeacher := &Evolver{llmClient: lw, model: "lightweight", teacherClient: teacher, teacherModel: "main"}
+	if c, m := withTeacher.pickCandidateJudge(); c != teacher || m != "main" {
+		t.Fatalf("expected teacher judge for lightweight candidate, got model=%q sameAsLightweight=%v", m, c == lw)
+	}
+
+	noTeacher := &Evolver{llmClient: lw, model: "lightweight"}
+	if c, m := noTeacher.pickCandidateJudge(); c != lw || m != "lightweight" {
+		t.Fatalf("expected lightweight fallback judge with no teacher, got model=%q", m)
+	}
+}
 
 func TestStripEchoedFrontmatter(t *testing.T) {
 	fm := "---\nname: demo\nversion: \"1.1.0\"\n---\n"

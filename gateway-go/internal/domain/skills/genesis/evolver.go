@@ -384,7 +384,14 @@ func drainStreamText(events <-chan llm.StreamEvent) string {
 // attempt, then re-judges. Returns (finalBody, ok, reason). ok=false means the
 // caller must keep the original skill untouched.
 func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.SkillEntry, originalContent, candidateBody string, stats *UsageStats) (body string, ok bool, reason string) {
-	pass, reason, err := e.judgeCandidate(ctx, e.llmClient, e.resolveModel(), originalContent, candidateBody, stats)
+	hasTeacher := e.teacherClient != nil && e.teacherModel != ""
+
+	// Judge != producer. The candidate came from the lightweight model, so a
+	// lightweight judge would be grading its own output — same-family /
+	// self-preference bias skews toward accepting it (LLM-judge survey
+	// arXiv:2508.02994). pickCandidateJudge routes to the teacher when wired.
+	judgeClient, judgeModel := e.pickCandidateJudge()
+	pass, reason, err := e.judgeCandidate(ctx, judgeClient, judgeModel, originalContent, candidateBody, stats)
 	if err != nil {
 		e.logger.Warn("evolver: self-test errored, keeping original",
 			"skill", entry.Skill.Name, "error", err)
@@ -396,9 +403,8 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	e.logger.Info("evolver: self-test rejected lightweight rewrite",
 		"skill", entry.Skill.Name, "reason", reason)
 
-	// Teacher-escalation: let the stronger model rewrite once, then re-judge
-	// with the teacher so the bar is held by the model best able to meet it.
-	if e.teacherClient == nil || e.teacherModel == "" {
+	// Teacher-escalation: let the stronger model rewrite once.
+	if !hasTeacher {
 		return "", false, reason
 	}
 	teacherBody, terr := e.teacherRewrite(ctx, originalContent, candidateBody, reason, stats)
@@ -407,7 +413,11 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 			"skill", entry.Skill.Name, "error", terr)
 		return "", false, "teacher escalation failed"
 	}
-	tpass, treason, tjerr := e.judgeCandidate(ctx, e.teacherClient, e.teacherModel, originalContent, teacherBody, stats)
+	// This rewrite came from the teacher, so judge it with the lightweight model
+	// — again keeping judge != producer rather than letting the teacher rubber-
+	// stamp its own rewrite. A weaker judge may false-reject a good rewrite, but
+	// the loop is fail-closed (keeps the original), so that errs safe.
+	tpass, treason, tjerr := e.judgeCandidate(ctx, e.llmClient, e.resolveModel(), originalContent, teacherBody, stats)
 	if tjerr != nil || !tpass {
 		e.logger.Info("evolver: teacher rewrite still failed self-test",
 			"skill", entry.Skill.Name, "reason", treason)
@@ -415,6 +425,17 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	}
 	e.logger.Info("evolver: teacher escalation succeeded", "skill", entry.Skill.Name)
 	return teacherBody, true, treason
+}
+
+// pickCandidateJudge returns the client/model that should judge a
+// lightweight-produced candidate: the teacher when wired (keeping judge !=
+// producer to avoid same-family self-preference bias, arXiv:2508.02994), else
+// the lightweight model itself (self-judge is unavoidable with no teacher).
+func (e *Evolver) pickCandidateJudge() (*llm.Client, string) {
+	if e.teacherClient != nil && e.teacherModel != "" {
+		return e.teacherClient, e.teacherModel
+	}
+	return e.llmClient, e.resolveModel()
 }
 
 // judgeCandidate asks a model to validate a rewritten skill body against the
