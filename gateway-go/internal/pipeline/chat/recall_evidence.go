@@ -49,6 +49,14 @@ func recallWikiEvidence(ctx context.Context, store *wiki.Store, queries []string
 func formatRecallWikiNote(store *wiki.Store, result wiki.SearchResult) string {
 	var parts []string
 	if page, err := store.ReadPage(result.Path); err == nil && page != nil {
+		// Staleness marker first: search already demotes superseded/archived
+		// pages (validityFactor 0.5x/0.3x) but a demoted page can still
+		// surface. Without an inline marker the model has no way to know the
+		// facts were revised and may cite an old value as current
+		// (agent-papers-2026-deep-dive 1A; Zep/Engram supersession).
+		if marker := recallWikiStalenessMarker(page.Meta); marker != "" {
+			parts = append(parts, marker)
+		}
 		if page.Meta.Title != "" {
 			parts = append(parts, "title: "+page.Meta.Title)
 		}
@@ -66,6 +74,20 @@ func formatRecallWikiNote(store *wiki.Store, result wiki.SearchResult) string {
 		return result.Path
 	}
 	return truncateRecallText(strings.Join(parts, " | "), 420)
+}
+
+// recallWikiStalenessMarker returns a loud inline marker when a recalled wiki
+// page is superseded or archived, so the model treats its facts as possibly
+// outdated rather than current. Superseded takes priority (it names the
+// replacement); both states mean "do not cite as the current value."
+func recallWikiStalenessMarker(meta wiki.Frontmatter) string {
+	switch {
+	case meta.SupersededBy != "":
+		return "⚠ 대체됨(최신 사실은 " + meta.SupersededBy + " 참조 — 아래는 옛 값일 수 있으니 현행으로 단정하지 말 것)"
+	case meta.Archived:
+		return "⚠ 보관됨(비활성 문서 — 현행이 아닐 수 있음)"
+	}
+	return ""
 }
 
 // recallDiaryEvidence runs each query against the diary BM25 index, dedups

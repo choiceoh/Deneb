@@ -89,6 +89,52 @@ func TestBuildRecallPreflightInjectsWikiEvidence(t *testing.T) {
 	}
 }
 
+func TestRecallWikiStalenessMarker(t *testing.T) {
+	if m := recallWikiStalenessMarker(wiki.Frontmatter{}); m != "" {
+		t.Fatalf("current page must have no marker, got %q", m)
+	}
+	if m := recallWikiStalenessMarker(wiki.Frontmatter{SupersededBy: "거래/hyundai-v2.md"}); !strings.Contains(m, "대체됨") || !strings.Contains(m, "거래/hyundai-v2.md") {
+		t.Fatalf("superseded marker must name replacement, got %q", m)
+	}
+	if m := recallWikiStalenessMarker(wiki.Frontmatter{Archived: true}); !strings.Contains(m, "보관됨") {
+		t.Fatalf("archived marker missing, got %q", m)
+	}
+	// Superseded wins over archived — it names the live replacement.
+	if m := recallWikiStalenessMarker(wiki.Frontmatter{Archived: true, SupersededBy: "x.md"}); !strings.Contains(m, "대체됨") {
+		t.Fatalf("superseded must take priority over archived, got %q", m)
+	}
+}
+
+func TestFormatRecallWikiNoteIncludesStalenessMarker(t *testing.T) {
+	dir := t.TempDir()
+	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	page := &wiki.Page{
+		Meta: wiki.Frontmatter{
+			Title:        "현대차 울산 담당자",
+			Summary:      "담당자 김민준 부장",
+			SupersededBy: "거래/hyundai-ulsan-v2.md",
+		},
+		Body: "담당자: 김민준 부장",
+	}
+	if err := store.WritePage("거래/hyundai-ulsan.md", page); err != nil {
+		t.Fatalf("WritePage: %v", err)
+	}
+
+	note := formatRecallWikiNote(store, wiki.SearchResult{Path: "거래/hyundai-ulsan.md"})
+	if !strings.Contains(note, "⚠ 대체됨") || !strings.Contains(note, "거래/hyundai-ulsan-v2.md") {
+		t.Fatalf("expected staleness marker naming the replacement, got %q", note)
+	}
+	// Marker must precede the title so the model reads "outdated" before the facts.
+	if strings.Index(note, "대체됨") > strings.Index(note, "title:") {
+		t.Fatalf("marker must come before title, got %q", note)
+	}
+}
+
 func TestBuildRecallPreflightUsesRecentDiaryForTopiclessRecall(t *testing.T) {
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
