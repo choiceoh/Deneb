@@ -186,6 +186,26 @@ EvolveR Table 7: principle store 성능 **45k에서 피크 0.410 → 49.9k에서
 
 ---
 
+## 구현 상태 (2026-06-13, 브랜치 claude/cool-kirch-8dc190)
+
+| 항목 | 상태 | 커밋 |
+|---|---|---|
+| 1A recall superseded 마커 | ✅ 구현 | `feat(recall): mark superseded/archived wiki pages` |
+| 1D 사실수정 회귀 케이스 | ✅ 구현 | `test(recall): fact-revision supersession` |
+| 3B genesis 구체성 게이트 | ✅ 구현 | `feat(genesis): reject vague self-generated skills` |
+| 3A evolver judge 분리 | ✅ 구현 | `fix(genesis): judge with a different model` |
+| P2-6 진화 자동 롤백 | ✅ 구현 | `feat(genesis): auto-rollback evolutions that regress` |
+| P1-1 라우터 effort 스코어카드 | ✅ 구현 (observe action=effort) | `feat(observe): effort-router scorecard` — prod 진단: escalation 0%, ~4.5x 절감, 표본 작아 상수변경 미정당 |
+| P1-4 능동 FTR 스코어카드 | ✅ 구현 (observe action=proactive) | `feat(observe): proactive-card FTR scorecard` — prod 진단: FTR 0%(166카드 중 162 engaged), 노이즈플로어 효과 실증 |
+| **P2-5 anchor 자동 보강** | ⏸️ **보류(근거 있음)** | — |
+| 1B retain 시각 메타, 1C hindsight 무효화 전파 | ⏸️ 미착수 | hindsight 서버 측, 효과 데이터 의존 |
+| 2A/2C ACON 가이드라인·문서 큐레이션 | ⏸️ 미착수 | 상위 복잡도 |
+| 5B 학습형 라우터 섀도 모드 | ⏸️ 미착수 | effort 스코어카드(P1-1)가 선행 데이터 축적 중 |
+
+**P2-5 보류 근거**: anchor 시스템(`anchor_keywords.go` + `polaris/engine.go` SetAnchorKeywords)은 이미 완전히 배선·작동 중 — 위키 Tier1 중요도 ≥0.95 페이지 제목을 **최대 5개**(많으면 압축 무력화) 압축 summarizer에 보존. ACON의 "중요한 것 보존" 메커니즘 그 자체다. "압축 후 재조회" 프록시로 자동 보강하면 ①신호가 모호하고 ②cap-5 anchor 세트를 노이즈로 오염시켜 잘 튜닝된 메커니즘을 **악화**시킬 위험이 더 크다. 위키 중요도 기반 선택이 이미 옳은 소스라, 순효과 음(-)으로 판단해 보류. (프로젝트 철학 "narrow scope, deep quality" 일치.)
+
+**P1-1/P1-4 패턴**: 둘 다 per-step/per-event 신규 로깅 없이 **기존 데이터(agentlog run.end · workfeed 카드 상태)로 진단을 산출**하고 observe 도구로 노출 — 네이티브 변경 0, 즉시 prod 데이터로 검증. 둘 다 "현 증거상 건강, 데이터 누적 시 추적 가능"이 결론(상수/임계 변경은 표본이 더 모인 뒤). 5B 학습형 라우터·로컬 능동 판정기는 이 스코어카드들이 쌓는 데이터가 선행 조건.
+
 ## 탐사 방법 주의
 
 - 4개 병렬 탐사 에이전트 중 2개가 dreaming `Supersedes` 배선 여부에서 상충 → 직접 grep으로 확정 (배선됨). **다중 에이전트 보고는 상충 시 반드시 1차 소스(코드)로 재검증**할 것.
