@@ -214,15 +214,15 @@ private fun SessionItem(
             if (conversation.title.isNotEmpty()) {
                 Text(
                     text = conversation.title,
-                    // subject (22 / Light) carries the row; the active/interactive row
-                    // steps up to Normal — the old ExtraLight rest state read as a
-                    // hairline on Korean session titles.
+                    // subject (22 / Light) carries the row; the active row steps up to
+                    // Normal — the old ExtraLight rest state read as a hairline on
+                    // Korean session titles.
                     style = DenebType.subject,
-                    fontWeight = if (isActive || conversation.isInteractive) FontWeight.Normal else null,
-                    color = when {
-                        isActive -> MaterialTheme.colorScheme.onBackground
-                        conversation.isInteractive -> MaterialTheme.colorScheme.primary
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    fontWeight = if (isActive) FontWeight.Normal else null,
+                    color = if (isActive) {
+                        MaterialTheme.colorScheme.onBackground
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
                     },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

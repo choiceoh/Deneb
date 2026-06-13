@@ -85,10 +85,6 @@ interface DataRepository {
     fun getThemeMode(): ThemeMode
     fun setThemeMode(mode: ThemeMode)
 
-    // Interactive mode
-    fun setInteractiveMode(enabled: Boolean)
-    fun isInteractiveModeActive(): Boolean
-
     // Daemon mode
     fun isDaemonEnabled(): Boolean
     fun setDaemonEnabled(enabled: Boolean)

@@ -31,7 +31,9 @@ data class Conversation(
     companion object {
         const val TYPE_CHAT = "chat"
         const val TYPE_HEARTBEAT = "heartbeat"
-        const val TYPE_INTERACTIVE = "interactive"
+        // Note: conversations persisted before the interactive-mode removal may still
+        // carry type "interactive" on disk; nothing branches on it anymore, so they
+        // simply load as a normal chat (their deneb-ui history renders inline).
     }
 
     @OptIn(ExperimentalSerializationApi::class)

@@ -88,10 +88,10 @@ class ChatSystemPromptBuilderTest {
     // region CHAT_REMOTE — focused tests
 
     @Test
-    fun `interactive catalog stays inside a timestamp-stable prefix`() {
+    fun `deneb-ui catalog stays inside a timestamp-stable prefix`() {
         // Two builds differing ONLY in the Context timestamp must share an identical prefix up
         // to and including the deneb-ui catalog, so vLLM prefix caching can reuse it across
-        // interactive-mode turns. If the catalog ever moves back behind the timestamp, the
+        // dynamic-ui turns. If the catalog ever moves back behind the timestamp, the
         // prefix diverges before it and this fails.
         fun buildAt(ts: String): String = buildChatSystemPrompt(
             variant = SystemPromptVariant.CHAT_REMOTE,
@@ -108,7 +108,7 @@ class ChatSystemPromptBuilderTest {
             heartbeatAdditions = emptyList(),
             emailAccounts = emptyList(),
             runtime = runtime.copy(nowLocalIsoWithOffset = ts, nowUtcIsoString = ts),
-            uiMode = ChatPromptUiMode.INTERACTIVE_UI,
+            uiMode = ChatPromptUiMode.DYNAMIC_UI,
         )
         val a = buildAt("2026-06-03T10:00:00+09:00")
         val b = buildAt("2026-06-03T23:59:59+09:00")
@@ -385,17 +385,6 @@ class ChatSystemPromptBuilderTest {
         )
         assertTrue("## Dynamic UI" in out)
         assertTrue("deneb-ui" in out)
-        assertFalse("## Interactive UI Mode" in out)
-    }
-
-    @Test
-    fun `CHAT_REMOTE includes Interactive UI Mode section when uiMode is INTERACTIVE_UI`() {
-        val out = build(
-            variant = SystemPromptVariant.CHAT_REMOTE,
-            uiMode = ChatPromptUiMode.INTERACTIVE_UI,
-        )
-        assertTrue("## Interactive UI Mode (ACTIVE)" in out)
-        assertFalse("## Dynamic UI\n" in out)
     }
 
     @Test
@@ -405,7 +394,6 @@ class ChatSystemPromptBuilderTest {
             uiMode = ChatPromptUiMode.NONE,
         )
         assertFalse("## Dynamic UI" in out)
-        assertFalse("## Interactive UI Mode" in out)
     }
 
     // endregion
@@ -574,12 +562,12 @@ class ChatSystemPromptBuilderTest {
     }
 
     @Test
-    fun `CHAT_LOCAL omits Interactive UI Mode even when uiMode is INTERACTIVE_UI`() {
+    fun `CHAT_LOCAL omits UI sections even when uiMode is set`() {
         val out = build(
             variant = SystemPromptVariant.CHAT_LOCAL,
-            uiMode = ChatPromptUiMode.INTERACTIVE_UI,
+            uiMode = ChatPromptUiMode.DYNAMIC_UI,
         )
-        assertFalse("## Interactive UI Mode" in out)
+        assertFalse("## Dynamic UI" in out)
     }
 
     // endregion
@@ -642,8 +630,8 @@ class ChatSystemPromptBuilderTest {
             ),
             uiMode = ChatPromptUiMode.NONE,
         )
-        // Just assert the section headers are present in order — the full deneb-ui sections
-        // are verified by separate DYNAMIC_UI / INTERACTIVE_UI tests.
+        // Just assert the section headers are present in order — the full deneb-ui section
+        // is verified by the separate DYNAMIC_UI test.
         val headerOrder = listOf(
             "You are Deneb.",
             DEFAULT_HONESTY_RULE,

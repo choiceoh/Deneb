@@ -10,11 +10,6 @@ import ai.deneb.deneb.refreshModelsAsync
 import ai.deneb.deneb.selectDenebModelInstance
 import ai.deneb.getBackgroundDispatcher
 import ai.deneb.network.toUiError
-import ai.deneb.ui.dynamicui.DenebUiParser
-import ai.deneb.ui.markdown.DenebUiBlock
-import ai.deneb.ui.markdown.DenebUiError
-import ai.deneb.ui.markdown.DenebUiPending
-import ai.deneb.ui.markdown.parseMarkdown
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import deneb.composeapp.generated.resources.Res
@@ -27,9 +22,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.collect
@@ -73,9 +66,6 @@ class ChatViewModel(
         undoDeleteConversation = ::undoDeleteConversation,
         submitUiCallback = ::submitUiCallback,
         resubmit = ::resubmit,
-        enterInteractiveMode = ::enterInteractiveMode,
-        exitInteractiveMode = ::exitInteractiveMode,
-        goBackInteractiveMode = ::goBackInteractiveMode,
         sendSmsDraft = ::sendSmsDraft,
         discardSmsDraft = ::discardSmsDraft,
         refreshConversations = { dataRepository.loadConversations() },
@@ -107,11 +97,9 @@ class ChatViewModel(
 
         // Keep restoreCurrentConversation off the main thread; see issue #197 (large persisted
         // tool outputs caused ANRs when JSON-decoded synchronously during VM construction).
-        // ChatScreen gates the interactive-mode branch on !isRestoring to avoid a flash.
         viewModelScope.launch(backgroundDispatcher) {
             dataRepository.loadConversations()
             dataRepository.restoreCurrentConversation()
-            presetInteractiveModeForCurrentConversation()
             _state.update { it.copy(isRestoring = false) }
         }
 
@@ -182,13 +170,11 @@ class ChatViewModel(
                 .sortedByDescending { it.updatedAt }
                 .map {
                     val isHeartbeat = it.type == Conversation.TYPE_HEARTBEAT
-                    val isInteractive = it.type == Conversation.TYPE_INTERACTIVE
                     ConversationSummary(
                         id = it.id,
                         title = if (isHeartbeat) "" else it.title.ifEmpty { getString(Res.string.conversation_untitled) },
                         updatedAt = it.updatedAt,
                         isHeartbeat = isHeartbeat,
-                        isInteractive = isInteractive,
                     )
                 }
                 .toImmutableList()
@@ -243,11 +229,6 @@ class ChatViewModel(
             try {
                 dataRepository.ask(question, files, uiSubmission)
 
-                // Auto-retry in interactive mode if the response has no valid deneb-ui
-                if (_state.value.isInteractiveMode) {
-                    retryIfNoValidDenebUi()
-                }
-
                 _state.update {
                     it.copy(isLoading = false)
                 }
@@ -262,35 +243,6 @@ class ChatViewModel(
                     )
                 }
             }
-        }
-    }
-
-    private suspend fun retryIfNoValidDenebUi(maxRetries: Int = 2) {
-        repeat(maxRetries) {
-            currentCoroutineContext().ensureActive()
-            val lastAssistant = dataRepository.chatHistory.value.lastRenderedAssistant() ?: return
-
-            val blocks = parseMarkdown(DenebUiParser.wrapBareDenebUiContent(lastAssistant.content)).blocks
-            // An unclosed fence on a *final* reply (DenebUiPending) still counts as valid
-            // when its body salvages to a UI — the renderer shows that salvage, so a retry
-            // would needlessly re-do a screen the user can already see.
-            val hasValidUi = blocks.any {
-                it is DenebUiBlock ||
-                    (it is DenebUiPending && DenebUiParser.parseUiBlockBody(it.rawBody) is DenebUiParser.UiBlockResult.Ui)
-            }
-            if (hasValidUi) return
-
-            // Build error feedback for the AI
-            val errorBlock = blocks.filterIsInstance<DenebUiError>().firstOrNull()
-            val errorDetail = if (errorBlock != null) {
-                "JSON parse error in: ${errorBlock.rawJson.take(200)}"
-            } else {
-                "No deneb-ui code fence found in your response."
-            }
-            val retryMessage = "[SYSTEM] Your previous response failed to render as interactive UI. $errorDetail " +
-                "Remember: respond with ONLY a single ```deneb-ui code fence containing valid JSON. No text outside the fence."
-
-            dataRepository.ask(retryMessage, emptyList())
         }
     }
 
@@ -410,12 +362,9 @@ class ChatViewModel(
     private fun loadConversation(id: String) {
         currentJob?.cancel()
         currentJob = null
-        val conversation = dataRepository.savedConversations.value.find { it.id == id }
-        val isInteractive = conversation?.type == Conversation.TYPE_INTERACTIVE
-        dataRepository.setInteractiveMode(isInteractive)
         dataRepository.loadConversation(id)
         _state.update {
-            it.copy(error = null, isInteractiveMode = isInteractive, isLoading = false)
+            it.copy(error = null, isLoading = false)
         }
     }
 
@@ -526,27 +475,8 @@ class ChatViewModel(
         currentJob?.cancel()
         currentJob = null
         dataRepository.startNewChat()
-        dataRepository.setInteractiveMode(false)
         _state.update {
-            it.copy(error = null, isInteractiveMode = false, isLoading = false)
-        }
-    }
-
-    private fun enterInteractiveMode() {
-        dataRepository.startNewChat()
-        dataRepository.setInteractiveMode(true)
-        _state.update {
-            it.copy(isInteractiveMode = true, error = null)
-        }
-    }
-
-    private fun exitInteractiveMode() {
-        currentJob?.cancel()
-        currentJob = null
-        dataRepository.startNewChat()
-        dataRepository.setInteractiveMode(false)
-        _state.update {
-            it.copy(isInteractiveMode = false, isLoading = false, error = null)
+            it.copy(error = null, isLoading = false)
         }
     }
 
@@ -556,37 +486,10 @@ class ChatViewModel(
         submitUiCallback(event, data)
     }
 
-    private fun goBackInteractiveMode() {
-        val userCount = dataRepository.chatHistory.value.count { it.role == History.Role.USER }
-        if (userCount <= 1) {
-            // Go back to initial prompt — clear history but stay in interactive mode
-            dataRepository.clearHistory()
-        } else {
-            dataRepository.popLastExchange()
-        }
-    }
-
     fun refreshSettings() {
         updateAvailableServices()
         viewModelScope.launch(backgroundDispatcher) {
             dataRepository.restoreCurrentConversation()
-            presetInteractiveModeForCurrentConversation()
         }
-    }
-
-    /**
-     * Resolves the interactive mode flag from the currently-loaded conversation, or — when
-     * there is no loaded conversation (new empty chat) — falls back to the persisted flag.
-     */
-    private fun presetInteractiveModeForCurrentConversation() {
-        val currentId = dataRepository.currentConversationId.value
-        val conversation = dataRepository.savedConversations.value.find { it.id == currentId }
-        val isInteractive = if (conversation != null) {
-            conversation.type == Conversation.TYPE_INTERACTIVE
-        } else {
-            dataRepository.isInteractiveModeActive()
-        }
-        dataRepository.setInteractiveMode(isInteractive)
-        _state.update { it.copy(isInteractiveMode = isInteractive) }
     }
 }

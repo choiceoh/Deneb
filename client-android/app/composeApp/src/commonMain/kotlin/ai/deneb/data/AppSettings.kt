@@ -194,12 +194,6 @@ class AppSettings(internal val settings: Settings) {
         }
     }
 
-    fun getCurrentInteractiveMode(): Boolean = settings.getBoolean(KEY_CURRENT_INTERACTIVE_MODE, false)
-
-    fun setCurrentInteractiveMode(enabled: Boolean) {
-        settings.putBoolean(KEY_CURRENT_INTERACTIVE_MODE, enabled)
-    }
-
     fun isCurrentConversationMigrated(): Boolean = settings.getBoolean(KEY_CURRENT_CONVERSATION_MIGRATED, false)
 
     fun markCurrentConversationMigrated() {
@@ -427,7 +421,6 @@ class AppSettings(internal val settings: Settings) {
 
         const val KEY_CONVERSATIONS = "conversations_json"
         const val KEY_CURRENT_CONVERSATION_ID = "current_conversation_id"
-        const val KEY_CURRENT_INTERACTIVE_MODE = "current_interactive_mode"
         const val KEY_CURRENT_CONVERSATION_MIGRATED = "current_conversation_migrated"
         const val KEY_ENCRYPTION_KEY = "encryption_key"
         const val KEY_MIGRATION_COMPLETE = "migration_complete_v1"

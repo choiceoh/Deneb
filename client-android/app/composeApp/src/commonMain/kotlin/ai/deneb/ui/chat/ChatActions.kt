@@ -29,9 +29,6 @@ data class ChatActions(
     val undoDeleteConversation: () -> Unit,
     val submitUiCallback: (event: String, data: Map<String, String>) -> Unit,
     val resubmit: (messageId: String, event: String, data: Map<String, String>) -> Unit,
-    val enterInteractiveMode: () -> Unit,
-    val exitInteractiveMode: () -> Unit,
-    val goBackInteractiveMode: () -> Unit,
     val sendSmsDraft: (String) -> Unit,
     val discardSmsDraft: (String) -> Unit,
     // Reload the session list from the gateway — fired when the drawer opens so it
