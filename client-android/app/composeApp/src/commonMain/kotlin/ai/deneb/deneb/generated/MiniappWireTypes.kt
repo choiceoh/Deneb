@@ -179,6 +179,7 @@ data class ModelOption(
     val health: String = "",
     val current: Boolean = false,
     val custom: Boolean = false,
+    val deletable: Boolean = false,
     val unhealthy: Boolean = false,
     val note: String = "",
 )

@@ -58,6 +58,7 @@ suspend fun DenebGatewayClient.refreshModels() {
                 current = it.id == payload.current,
                 health = it.health,
                 custom = it.custom,
+                deletable = it.deletable,
                 unhealthy = it.unhealthy,
                 note = it.note,
             )

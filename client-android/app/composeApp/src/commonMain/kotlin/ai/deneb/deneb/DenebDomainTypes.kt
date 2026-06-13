@@ -12,6 +12,8 @@ data class ModelOption(
     val current: Boolean,
     val health: String,
     val custom: Boolean = false,
+    /** Picker may remove this model (custom + cloud-catalog; local vLLM/LocalAI can't). */
+    val deletable: Boolean = false,
     /** Circuit breaker open: consecutive failures, fallback engaged. */
     val unhealthy: Boolean = false,
     /** Tuner stat line (runs, p95, cache, fallback/stall, probe, floor). */

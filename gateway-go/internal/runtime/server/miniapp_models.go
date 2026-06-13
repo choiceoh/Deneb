@@ -143,11 +143,15 @@ func (s *Server) listMiniappModels(ctx context.Context) ([]handlerminiapp.ModelS
 	// Tuner enrichment: latest scorecard window (small JSON, read per list
 	// call — the picker is an on-demand screen) + circuit-breaker state.
 	scorecard := modeltuner.LoadScorecard(modeltuner.DefaultStatePath())
+	hidden := config.LoadHiddenModels(config.ResolveConfigPath())
 
 	out := make([]handlerminiapp.ModelSection, 0, len(snapshot.sections))
 	for _, section := range snapshot.sections {
 		models := make([]handlerminiapp.ModelOption, 0, len(section.entries))
 		for _, entry := range section.entries {
+			if hidden[entry.fullID] {
+				continue // soft-hidden via models.hiddenModels (deleted built-in cloud model)
+			}
 			modelName := entry.display
 			if modelName == "" {
 				_, modelName = modelrole.ParseModelID(entry.fullID)
@@ -166,6 +170,7 @@ func (s *Server) listMiniappModels(ctx context.Context) ([]handlerminiapp.ModelS
 				Health:    snapshot.health[entry.fullID],
 				Current:   entry.fullID == current,
 				Custom:    isMiniappCustomProvider(entry.provider),
+				Deletable: isMiniappDeletableProvider(entry.provider),
 				Unhealthy: unhealthy,
 				Note:      scorecard.NoteFor(modelName, tunedFloor),
 			})
@@ -302,22 +307,47 @@ func (s *Server) addMiniappCustomModel(ctx context.Context, endpoint, model stri
 	}, nil
 }
 
-// deleteMiniappCustomModel removes a user-added custom model and applies the
-// change live (no gateway restart). If the deleted model was bound to a role,
-// that role is reset to the local vLLM default — the same fallback a fresh
-// registry build applies for an unset role — so a deletion never leaves a
-// dangling reference behind. The inverse of addMiniappCustomModel.
+// deleteMiniappCustomModel removes a model from the picker and applies the
+// change live (no gateway restart). Three cases by provider:
+//   - custom/custom-N (user-added)      → the entry is removed from config
+//   - cloud catalog (openrouter/zai/…)  → soft-hidden via models.hiddenModels
+//     (the built-in catalog re-merges these every build, so a config removal
+//     wouldn't stick — a hide entry does)
+//   - vllm/localai (node-local)         → rejected; role-critical, ops-managed
+//
+// Any role bound to the removed model is reset to the local vLLM default — the
+// same fallback a fresh registry build applies for an unset role — so a deletion
+// never leaves a dangling reference behind. The inverse of addMiniappCustomModel.
 func (s *Server) deleteMiniappCustomModel(_ context.Context, id string) (handlerminiapp.ModelDeleteResult, error) {
 	cfgPath := config.ResolveConfigPath()
-	deleted, err := config.DeleteCustomProviderModel(cfgPath, id, s.logger)
-	if err != nil {
-		if errors.Is(err, config.ErrInvalidCustomModel) {
-			return handlerminiapp.ModelDeleteResult{}, rpcerr.InvalidRequest(err.Error())
-		}
-		return handlerminiapp.ModelDeleteResult{}, rpcerr.WrapDependencyFailed("delete custom model", err)
+	provider, _ := modelrole.ParseModelID(id)
+	if isMiniappLocalProvider(provider) {
+		return handlerminiapp.ModelDeleteResult{}, rpcerr.InvalidRequest("로컬 모델(vLLM/LocalAI)은 삭제할 수 없습니다")
 	}
-	if !deleted.Removed {
-		return handlerminiapp.ModelDeleteResult{}, rpcerr.Newf(protocol.ErrNotFound, "custom model not found: %s", id)
+
+	var fullID string
+	var clearedRoles []string
+	if isMiniappCustomProvider(provider) {
+		deleted, err := config.DeleteCustomProviderModel(cfgPath, id, s.logger)
+		if err != nil {
+			if errors.Is(err, config.ErrInvalidCustomModel) {
+				return handlerminiapp.ModelDeleteResult{}, rpcerr.InvalidRequest(err.Error())
+			}
+			return handlerminiapp.ModelDeleteResult{}, rpcerr.WrapDependencyFailed("delete custom model", err)
+		}
+		if !deleted.Removed {
+			return handlerminiapp.ModelDeleteResult{}, rpcerr.Newf(protocol.ErrNotFound, "custom model not found: %s", id)
+		}
+		fullID, clearedRoles = deleted.FullModelID, deleted.ClearedRoles
+	} else {
+		hidden, err := config.HideModel(cfgPath, id, s.logger)
+		if err != nil {
+			if errors.Is(err, config.ErrInvalidCustomModel) {
+				return handlerminiapp.ModelDeleteResult{}, rpcerr.InvalidRequest(err.Error())
+			}
+			return handlerminiapp.ModelDeleteResult{}, rpcerr.WrapDependencyFailed("hide model", err)
+		}
+		fullID, clearedRoles = hidden.FullModelID, hidden.ClearedRoles
 	}
 
 	// Drop cached local-model discovery so the removed entry disappears from
@@ -331,7 +361,7 @@ func (s *Server) deleteMiniappCustomModel(_ context.Context, id string) (handler
 	// default. SetRoleModelID reconciles the actual served vLLM model name, so
 	// this stays valid even if config drifted.
 	defaultModel := "vllm/" + modelrole.DefaultVllmModel
-	for _, role := range deleted.ClearedRoles {
+	for _, role := range clearedRoles {
 		switch role {
 		case "main":
 			// Reset both the live chat default and the registry role: the
@@ -359,9 +389,9 @@ func (s *Server) deleteMiniappCustomModel(_ context.Context, id string) (handler
 
 	return handlerminiapp.ModelDeleteResult{
 		OK:           true,
-		ID:           deleted.FullModelID,
+		ID:           fullID,
 		Removed:      true,
-		ClearedRoles: deleted.ClearedRoles,
+		ClearedRoles: clearedRoles,
 		Current:      s.currentMiniappModel(),
 	}, nil
 }

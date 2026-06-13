@@ -429,3 +429,99 @@ func clearRolesReferencingModel(raw map[string]any, fullModelID string) []string
 	}
 	return cleared
 }
+
+// HiddenModel reports the outcome of soft-hiding a built-in/cloud catalog model.
+type HiddenModel struct {
+	FullModelID  string   // provider/model that was hidden
+	Hidden       bool     // present in models.hiddenModels after the call
+	ClearedRoles []string // roles cleared because they pointed at the hidden model
+}
+
+// HideModel soft-hides a model id by adding it to models.hiddenModels so the
+// picker filters it out. Built-in cloud-catalog models (openrouter/zai/kimi/…)
+// can't be removed from config the way custom models can — they are re-merged
+// from the shipped catalog on every build (appendBuiltinProviders) — so
+// "deleting" one persists as a hide entry instead. Idempotent: re-hiding an
+// already-hidden id writes only if a stale role binding still needs clearing.
+// Roles pointing at the hidden model are cleared so they fall back to default.
+func HideModel(configPath, fullModelID string, logger *slog.Logger) (HiddenModel, error) {
+	id := strings.TrimSpace(fullModelID)
+	if slash := strings.IndexByte(id, '/'); id == "" || slash <= 0 || slash >= len(id)-1 {
+		return HiddenModel{}, fmt.Errorf("%w: model id must be provider/model", ErrInvalidCustomModel)
+	}
+	result := HiddenModel{FullModelID: id}
+
+	var raw map[string]any
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return HiddenModel{}, fmt.Errorf("reading config: %w", err)
+		}
+		raw = make(map[string]any)
+	} else if err := json.Unmarshal(data, &raw); err != nil {
+		return HiddenModel{}, fmt.Errorf("parsing config: %w", err)
+	}
+
+	models := ensureObject(raw, "models")
+	hidden, _ := models["hiddenModels"].([]any)
+	already := false
+	for _, h := range hidden {
+		if s, ok := h.(string); ok && strings.TrimSpace(s) == id {
+			already = true
+			break
+		}
+	}
+	if !already {
+		models["hiddenModels"] = append(hidden, id)
+	}
+	result.Hidden = true
+	result.ClearedRoles = clearRolesReferencingModel(raw, id)
+
+	if already && len(result.ClearedRoles) == 0 {
+		return result, nil // already hidden, no role to clear — skip the write
+	}
+
+	ensureObject(raw, "meta")["lastTouchedAt"] = time.Now().UTC().Format(time.RFC3339)
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return HiddenModel{}, fmt.Errorf("encoding config: %w", err)
+	}
+	if err := os.WriteFile(configPath, append(out, '\n'), 0o600); err != nil {
+		return HiddenModel{}, fmt.Errorf("writing config: %w", err)
+	}
+	if logger != nil {
+		logger.Info("hid model", "model", id, "clearedRoles", result.ClearedRoles, "path", configPath)
+	}
+	return result, nil
+}
+
+// LoadHiddenModels reads models.hiddenModels into a lookup set of full model IDs
+// the picker must omit. Missing/empty/unreadable → nil (callers treat nil as an
+// empty set). Read per models.list call; the file is small.
+func LoadHiddenModels(configPath string) map[string]bool {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil
+	}
+	models, ok := raw["models"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	arr, ok := models["hiddenModels"].([]any)
+	if !ok || len(arr) == 0 {
+		return nil
+	}
+	set := make(map[string]bool, len(arr))
+	for _, h := range arr {
+		if s, ok := h.(string); ok {
+			if t := strings.TrimSpace(s); t != "" {
+				set[t] = true
+			}
+		}
+	}
+	return set
+}

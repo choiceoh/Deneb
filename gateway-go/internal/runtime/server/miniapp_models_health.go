@@ -172,6 +172,21 @@ func isMiniappCustomProvider(name string) bool {
 	return name == "custom" || strings.HasPrefix(name, "custom-")
 }
 
+// isMiniappLocalProvider reports whether a provider serves node-local models
+// (the vLLM cluster / LocalAI) that are role-critical and ops-managed, hence
+// not removable from the picker.
+func isMiniappLocalProvider(name string) bool {
+	return name == "vllm" || name == "localai"
+}
+
+// isMiniappDeletableProvider reports whether the picker may offer to remove a
+// model from this provider: user-added custom providers and cloud-catalog
+// providers (openrouter/zai/kimi/mimo-plan/…) are deletable; node-local and
+// empty/unknown providers are not.
+func isMiniappDeletableProvider(name string) bool {
+	return name != "" && !isMiniappLocalProvider(name)
+}
+
 // probeModelsClassified does GET <baseURL>/models and classifies the outcome so
 // the picker can show a meaningful dot for any OpenAI-style endpoint:
 //
