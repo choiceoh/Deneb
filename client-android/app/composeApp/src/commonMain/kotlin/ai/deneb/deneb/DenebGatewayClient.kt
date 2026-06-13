@@ -744,11 +744,12 @@ class DenebGatewayClient(
      *  recent logs for the settings 관찰 tab. Returns null on transport/auth failure. */
     internal suspend fun observeBehavior(days: Int): ObserveBehavior? = callRpc("miniapp.observe.behavior", buildJsonObject { put("days", days) })
 
-    internal suspend fun observeLogs(level: String, limit: Int): ObserveLogsPayload? = callRpc(
+    internal suspend fun observeLogs(level: String, limit: Int, days: Int = 0): ObserveLogsPayload? = callRpc(
         "miniapp.observe.logs",
         buildJsonObject {
             put("level", level)
             put("limit", limit)
+            if (days > 0) put("days", days)
         },
     )
 
