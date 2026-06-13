@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -83,8 +84,18 @@ func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, vllmBases func()
 			}
 			return out, nil
 
+		case "effort":
+			if alog == nil {
+				return "agent log is not wired (no effort-router data available)", nil
+			}
+			var since int64
+			if days := p.Days.Int(); days > 0 {
+				since = time.Now().Add(-time.Duration(days) * 24 * time.Hour).UnixMilli()
+			}
+			return formatObserveEffort(alog.AggregateEffort(since), p.Days.Int()), nil
+
 		default:
-			return "", fmt.Errorf("observe: unknown action %q — use turn | logs | behavior", p.Action)
+			return "", fmt.Errorf("observe: unknown action %q — use turn | logs | behavior | effort", p.Action)
 		}
 	}
 }
@@ -168,6 +179,68 @@ func formatObserveBehavior(agg agentlog.AggregateResult, days int) string {
 		fmt.Fprintf(&b, "  background errors: %v\n", agg.BackgroundErrors)
 	}
 	return b.String()
+}
+
+// formatObserveEffort renders the adaptive effort-router scorecard: how often
+// thinking was routed off vs kept, the escalation rate (routed-off runs that
+// had to restore thinking — the recalibration signal), which gates kept it on,
+// and the rough output-token savings. Empty when the router has not run in the
+// window (gate closed or no traffic).
+func formatObserveEffort(s agentlog.EffortStat, days int) string {
+	window := "all retained history"
+	if days > 0 {
+		window = fmt.Sprintf("last %dd", days)
+	}
+	total := s.RoutedRuns + s.KeptRuns
+	if total == 0 {
+		return fmt.Sprintf("effort router (%s): no router-active runs — gate closed (non-dual-mode model or DENEB_ADAPTIVE_EFFORT off) or no traffic.\n", window)
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "effort router (%s): active=%d routed-off=%d (%.0f%%) kept-on=%d\n",
+		window, total, s.RoutedRuns, s.RoutedShare()*100, s.KeptRuns)
+	fmt.Fprintf(&b, "  escalation: %d/%d routed-off runs restored thinking (%.0f%%)",
+		s.EscalatedRuns, s.RoutedRuns, s.EscalationRate()*100)
+	switch {
+	case s.RoutedRuns == 0:
+		b.WriteString(" — router never routed off; gates may be too strict\n")
+	case s.EscalationRate() >= 0.15:
+		b.WriteString(" — high: gates may be too aggressive (routing off when thinking was needed)\n")
+	default:
+		b.WriteString(" — healthy\n")
+	}
+	if s.RoutedTimeout > 0 {
+		fmt.Fprintf(&b, "  routed-off outcomes: %d clean, %d timeout\n", s.RoutedEndTurn, s.RoutedTimeout)
+	}
+	if avgR, avgK := meanTokens(s.RoutedOutputTokens, s.RoutedRuns), meanTokens(s.KeptOutputTokens, s.KeptRuns); avgK > 0 {
+		fmt.Fprintf(&b, "  mean output tokens: routed-off=%d kept-on=%d (savings proxy)\n", avgR, avgK)
+	}
+	if len(s.KeptReasons) > 0 {
+		reasons := make([]string, 0, len(s.KeptReasons))
+		for r := range s.KeptReasons {
+			reasons = append(reasons, r)
+		}
+		sort.Slice(reasons, func(i, j int) bool {
+			if s.KeptReasons[reasons[i]] != s.KeptReasons[reasons[j]] {
+				return s.KeptReasons[reasons[i]] > s.KeptReasons[reasons[j]]
+			}
+			return reasons[i] < reasons[j]
+		})
+		b.WriteString("  kept-on gates: ")
+		parts := make([]string, len(reasons))
+		for i, r := range reasons {
+			parts[i] = fmt.Sprintf("%s=%d", r, s.KeptReasons[r])
+		}
+		b.WriteString(strings.Join(parts, " ") + "\n")
+	}
+	return b.String()
+}
+
+func meanTokens(sum int64, n int) int64 {
+	if n == 0 {
+		return 0
+	}
+	return sum / int64(n)
 }
 
 // formatVllmPrefixCaches renders the engine-level prefix-cache hit rate, one

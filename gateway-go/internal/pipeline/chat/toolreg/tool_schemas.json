@@ -1301,11 +1301,12 @@
     "properties": {
       "action": {
         "type": "string",
-        "description": "What to observe about your own runtime: turn | logs | behavior",
+        "description": "What to observe about your own runtime: turn | logs | behavior | effort",
         "enum": [
           "turn",
           "logs",
-          "behavior"
+          "behavior",
+          "effort"
         ]
       },
       "runId": {
@@ -1322,7 +1323,7 @@
       },
       "days": {
         "type": "number",
-        "description": "Window in days for action=behavior (omit = all retained history)"
+        "description": "Window in days for action=behavior and action=effort (omit = all retained history)"
       },
       "limit": {
         "type": "number",
