@@ -39,12 +39,17 @@ import (
 // costs ~100 tokens on exactly the turns it applies to and the system prompt
 // stays byte-identical across both run families.
 //
-// Wording preserved from the old system-prompt block — the semantics are
-// battle-tested against "channel down" hallucinations (see git history of
-// prompt/system_prompt.go).
+// AutoDeliveredOutput is true for cron/scheduled runs AND every interactive
+// native-client chat (miniapp_bridge sets it — the reply is returned/pushed,
+// not streamed to a blocking SSE waiter). So this directive must read true for
+// both: the earlier wording ("이 실행은 예약된 자동 실행이다" + "보고 본문(제목/헤딩)
+// 으로 시작") falsely told every interactive chat it was a scheduled run and
+// forced report framing, fighting the system prompt's conversational guidance.
+// The load-bearing semantics — don't deliver via the message tool, don't
+// hallucinate a "channel down" apology — are battle-tested and preserved.
 const autoDeliveryDirective = `[전달 정책 — 이번 턴]
-- **이 실행은 예약된 자동 실행이다.** 최종 응답 텍스트는 시스템이 자동으로 사용자 채널에 전달한다. 결과를 전달하려고 ` + "`message`" + ` 도구를 호출하지 마라 — 그냥 최종 결과 텍스트를 작성하고 턴을 끝내라.
-- 최종 텍스트는 그대로 사용자에게 보이는 배달문이다. 보고 본문(제목/헤딩)으로 바로 시작하라 — "이제 분석 보고를 정리해" 같은 사고·전환 문장을 본문 앞에 붙이지 마라.
+- 최종 응답 텍스트는 시스템이 사용자에게 그대로 전달한다. 결과를 전달하려고 ` + "`message`" + ` 도구를 호출하지 마라 — 최종 결과 텍스트를 작성하고 턴을 끝내라.
+- 결과(답/본문)부터 바로 시작하라 — "이제 ...를 정리할게요" 같은 사고·전환 문장을 앞에 붙이지 마라.
 - 내부 전송 도구가 실패하더라도 그것은 채널 장애가 아니다. "채널이 끊겼다 / 연결되지 않았다 / 복구되면 보내겠다 / 여기 직접 전달한다" 같은 안내를 절대 하지 마라 — 채널은 정상이고 너의 결과물은 그대로 전달된다.`
 
 // buildTailAdditions collects the per-turn wire-only additions for this run
