@@ -306,3 +306,37 @@ func TestMdTable(t *testing.T) {
 		t.Error("mdTable(nil) should be empty")
 	}
 }
+
+// TestXLSXToText_OversizedRef is the security regression guard: a crafted cell
+// ref beyond Excel's column ceiling must be skipped, not drive the column-
+// padding loop into an unbounded allocation. Without the cap this would try to
+// allocate hundreds of thousands of cells (and far more for longer refs).
+func TestXLSXToText_OversizedRef(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	write := func(name, content string) {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("xl/sharedStrings.xml", `<?xml version="1.0"?><sst><si><t>정상</t></si></sst>`)
+	write("xl/worksheets/sheet1.xml",
+		`<?xml version="1.0"?><worksheet><sheetData>`+
+			`<row r="1"><c r="A1" t="s"><v>0</v></c><c r="ZZZZ1"><v>9</v></c></row>`+ // ZZZZ ≫ XFD
+			`</sheetData></worksheet>`)
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	text, err := xlsxToText(buf.Bytes())
+	if err != nil {
+		t.Fatalf("xlsxToText: %v", err)
+	}
+	if !strings.Contains(text, "정상") {
+		t.Errorf("valid cell dropped:\n%s", text)
+	}
+}

@@ -316,7 +316,14 @@ func xlsxToText(data []byte) (string, error) {
 	}
 	sort.Slice(sheetFiles, func(i, j int) bool { return sheetFiles[i].Name < sheetFiles[j].Name })
 
-	const maxRowsPerSheet = 500
+	const (
+		maxRowsPerSheet = 500
+		// maxExcelCols is Excel's hard column ceiling (XFD). A cell ref beyond it
+		// is malformed or crafted; capping here stops a single bad ref from
+		// driving the column-padding loop into an unbounded allocation — a DoS
+		// vector, since .xlsx bytes are untrusted attachment input.
+		maxExcelCols = 16384
+	)
 	var sb strings.Builder
 	for idx, f := range sheetFiles {
 		var sheet xlsxSheet
@@ -345,6 +352,9 @@ func xlsxToText(data []byte) (string, error) {
 				col := colIndexFromRef(c.Ref)
 				if col < 0 {
 					col = len(cells) // no usable ref → next slot
+				}
+				if col >= maxExcelCols {
+					continue // reject malformed/oversized refs before padding
 				}
 				for len(cells) <= col {
 					cells = append(cells, "")
