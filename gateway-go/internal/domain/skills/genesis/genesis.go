@@ -323,7 +323,7 @@ func (s *Service) Generate(ctx context.Context, sctx SessionContext) (*Generated
 		}
 	}
 
-	return parseGenesisResponse(sb.String())
+	return s.gateGenerated(parseGenesisResponse(sb.String()))
 }
 
 // GenerateFromDream creates a skill from an Aurora dreaming summary.
@@ -371,7 +371,74 @@ func (s *Service) GenerateFromDream(ctx context.Context, summaryContent string) 
 		}
 	}
 
-	return parseGenesisResponse(sb.String())
+	return s.gateGenerated(parseGenesisResponse(sb.String()))
+}
+
+// gateGenerated applies a specificity gate to a freshly generated skill before
+// it reaches Persist. Self-generated skills are, on average, net-harmful unless
+// curated (SkillsBench: human-curated +16.2pp vs self-generated -1.3pp; SoK
+// arXiv:2602.20867) and the dominant failure mode is vagueness — "correct but
+// not actionable" (EvolveR arXiv:2510.16079, 50% of low-score principles). A
+// rejected skill is treated like a skip (nil, nil), not an error: the session
+// pattern can regenerate later, and we log the issues for gate tuning rather
+// than spamming the operator with a non-failure.
+func (s *Service) gateGenerated(skill *GeneratedSkill, err error) (*GeneratedSkill, error) {
+	if err != nil || skill == nil {
+		return skill, err
+	}
+	if issues := skillSpecificityIssues(skill); len(issues) > 0 {
+		s.logger.Info("genesis: specificity gate rejected skill",
+			"skill", skill.Name, "issues", strings.Join(issues, "; "))
+		return nil, nil
+	}
+	return skill, nil
+}
+
+// skillSpecificityIssues returns the reasons a generated skill is too vague to
+// be worth persisting, or nil if it passes. The checks mirror the structure the
+// genesis prompt asks for (When to Use / Procedure / Pitfalls / Verification,
+// description with a "Use when" trigger) and target the vagueness failure mode.
+func skillSpecificityIssues(skill *GeneratedSkill) []string {
+	var issues []string
+	body := strings.TrimSpace(skill.Body)
+	lower := strings.ToLower(body)
+
+	if n := len([]rune(body)); n < 400 {
+		issues = append(issues, fmt.Sprintf("본문이 너무 짧음(%d자<400)", n))
+	}
+	// The two load-bearing sections: a skill must say WHEN it applies and HOW
+	// to run it. Pitfalls/Verification are recommended but not hard-required to
+	// avoid false rejects of otherwise-actionable skills.
+	if !strings.Contains(lower, "when to use") {
+		issues = append(issues, "When to Use 섹션 누락(트리거 불명)")
+	}
+	if !strings.Contains(lower, "procedure") {
+		issues = append(issues, "Procedure 섹션 누락(절차 없음)")
+	}
+	if !hasActionableStep(body) {
+		issues = append(issues, "구체적 단계 부재(번호 절차/도구 호출/명령어 없음)")
+	}
+	desc := strings.ToLower(skill.Description)
+	if !strings.Contains(desc, "use when") && !strings.Contains(skill.Description, "트리거") && !strings.Contains(desc, "when:") {
+		issues = append(issues, "description에 트리거(Use when) 없음")
+	}
+	return issues
+}
+
+// hasActionableStep reports whether a skill body contains a concrete step — a
+// numbered list item, or an inline code/command reference — as opposed to pure
+// vague prose ("read the context carefully").
+func hasActionableStep(body string) bool {
+	if strings.Contains(body, "`") { // inline code or command
+		return true
+	}
+	for _, line := range strings.Split(body, "\n") {
+		t := strings.TrimSpace(line)
+		if len(t) >= 2 && t[0] >= '1' && t[0] <= '9' && (t[1] == '.' || t[1] == ')') {
+			return true
+		}
+	}
+	return false
 }
 
 // Persist writes a generated skill to disk and registers it in the catalog.
