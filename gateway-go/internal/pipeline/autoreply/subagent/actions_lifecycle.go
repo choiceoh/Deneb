@@ -29,7 +29,7 @@ func HandleSubagentsLogAction(ctx *SubagentsCommandContext, deps *SubagentLogDep
 		target = ctx.RestTokens[0]
 	}
 	if target == "" {
-		return StopWithText("📜 Usage: /subagents log <id|#> [limit]")
+		return StopWithText("📜 사용법: /subagents log <id|#> [개수]")
 	}
 
 	// Parse optional limit.
@@ -50,24 +50,24 @@ func HandleSubagentsLogAction(ctx *SubagentsCommandContext, deps *SubagentLogDep
 	}
 
 	if deps == nil || deps.GetHistory == nil {
-		return StopWithText("⚠️ Log not available.")
+		return StopWithText("⚠️ 로그를 불러올 수 없습니다.")
 	}
 
 	messages, err := deps.GetHistory(entry.ChildSessionKey, limit)
 	if err != nil {
-		return StopWithText(fmt.Sprintf("⚠️ Failed to load log: %s", err))
+		return StopWithText(fmt.Sprintf("⚠️ 로그 불러오기 실패: %s", err))
 	}
 
-	header := fmt.Sprintf("📜 Subagent log: %s", FormatRunLabel(*entry))
+	header := fmt.Sprintf("📜 하위 작업 로그: %s", FormatRunLabel(*entry))
 	if len(messages) == 0 {
-		return StopWithText(header + "\n(no messages)")
+		return StopWithText(header + "\n(메시지 없음)")
 	}
 
 	lines := []string{header}
 	for _, msg := range messages {
-		label := "User"
+		label := "사용자"
 		if msg.Role == "assistant" {
-			label = "Assistant"
+			label = "어시스턴트"
 		}
 		lines = append(lines, fmt.Sprintf("%s: %s", label, msg.Content))
 	}
@@ -115,11 +115,11 @@ func HandleSubagentsSendAction(ctx *SubagentsCommandContext, steerRequested bool
 	if target == "" || message == "" {
 		if steerRequested {
 			if ctx.HandledPrefix == SubagentsCmdPrefix {
-				return StopWithText("Usage: /subagents steer <id|#> <message>")
+				return StopWithText("사용법: /subagents steer <id|#> <메시지>")
 			}
-			return StopWithText(fmt.Sprintf("Usage: %s <id|#> <message>", ctx.HandledPrefix))
+			return StopWithText(fmt.Sprintf("사용법: %s <id|#> <메시지>", ctx.HandledPrefix))
 		}
-		return StopWithText("Usage: /subagents send <id|#> <message>")
+		return StopWithText("사용법: /subagents send <id|#> <메시지>")
 	}
 
 	entry, errMsg := ResolveSubagentTarget(ctx.Runs, target)
@@ -128,16 +128,16 @@ func HandleSubagentsSendAction(ctx *SubagentsCommandContext, steerRequested bool
 	}
 
 	if steerRequested && entry.EndedAt > 0 {
-		return StopWithText(fmt.Sprintf("%s is already finished.", FormatRunLabel(*entry)))
+		return StopWithText(fmt.Sprintf("%s은(는) 이미 종료되었습니다.", FormatRunLabel(*entry)))
 	}
 
 	if deps == nil {
-		return StopWithText("⚠️ Send not available.")
+		return StopWithText("⚠️ 전송 기능을 사용할 수 없습니다.")
 	}
 
 	if steerRequested {
 		if deps.SteerRun == nil {
-			return StopWithText("⚠️ Steer not available.")
+			return StopWithText("⚠️ 조정 기능을 사용할 수 없습니다.")
 		}
 		result, err := deps.SteerRun(entry.RunID, message)
 		if err != nil {
@@ -149,13 +149,13 @@ func HandleSubagentsSendAction(ctx *SubagentsCommandContext, steerRequested bool
 			if len(runPrefix) > 8 {
 				runPrefix = runPrefix[:8]
 			}
-			return StopWithText(fmt.Sprintf("steered %s (run %s).", FormatRunLabel(*entry), runPrefix))
+			return StopWithText(fmt.Sprintf("%s을(를) 조정했습니다 (run %s).", FormatRunLabel(*entry), runPrefix))
 		case "done":
 			if result.Text != "" {
 				return StopWithText(result.Text)
 			}
 		case "error":
-			return StopWithText(fmt.Sprintf("send failed: %s", result.Error))
+			return StopWithText(fmt.Sprintf("전송 실패: %s", result.Error))
 		case "forbidden":
 			return StopWithText(fmt.Sprintf("⚠️ %s", result.Error))
 		}
@@ -163,7 +163,7 @@ func HandleSubagentsSendAction(ctx *SubagentsCommandContext, steerRequested bool
 	}
 
 	if deps.SendMessage == nil {
-		return StopWithText("⚠️ Send not available.")
+		return StopWithText("⚠️ 전송 기능을 사용할 수 없습니다.")
 	}
 	result, err := deps.SendMessage(entry.ChildSessionKey, message)
 	if err != nil {
@@ -175,16 +175,16 @@ func HandleSubagentsSendAction(ctx *SubagentsCommandContext, steerRequested bool
 	}
 	switch result.Status {
 	case "timeout":
-		return StopWithText(fmt.Sprintf("⏳ Subagent still running (run %s).", runPrefix))
+		return StopWithText(fmt.Sprintf("⏳ 하위 작업이 아직 실행 중입니다 (run %s).", runPrefix))
 	case "error":
-		return StopWithText(fmt.Sprintf("⚠️ Subagent error: %s (run %s).", result.Error, runPrefix))
+		return StopWithText(fmt.Sprintf("⚠️ 하위 작업 오류: %s (run %s).", result.Error, runPrefix))
 	case "forbidden":
 		return StopWithText(fmt.Sprintf("⚠️ %s", result.Error))
 	}
 	if result.ReplyText != "" {
 		return StopWithText(result.ReplyText)
 	}
-	return StopWithText(fmt.Sprintf("✅ Sent to %s (run %s).", FormatRunLabel(*entry), runPrefix))
+	return StopWithText(fmt.Sprintf("✅ %s에 전달했습니다 (run %s).", FormatRunLabel(*entry), runPrefix))
 }
 
 // ---------------------------------------------------------------------------
@@ -229,7 +229,7 @@ type SubagentSpawnResult struct {
 func HandleSubagentsSpawnAction(ctx *SubagentsCommandContext, deps *SubagentSpawnDeps) *SubagentCommandResult {
 	restTokens := ctx.RestTokens
 	if len(restTokens) == 0 {
-		return StopWithText("Usage: /subagents spawn <agentId> <task> [--model <model>] [--thinking <level>] [--tool-preset <preset>]")
+		return StopWithText("사용법: /subagents spawn <agentId> <작업> [--model <모델>] [--thinking <수준>] [--tool-preset <프리셋>]")
 	}
 
 	agentID := restTokens[0]
@@ -253,11 +253,11 @@ func HandleSubagentsSpawnAction(ctx *SubagentsCommandContext, deps *SubagentSpaw
 	}
 	task := strings.TrimSpace(strings.Join(taskParts, " "))
 	if agentID == "" || task == "" {
-		return StopWithText("Usage: /subagents spawn <agentId> <task> [--model <model>] [--thinking <level>] [--tool-preset <preset>]")
+		return StopWithText("사용법: /subagents spawn <agentId> <작업> [--model <모델>] [--thinking <수준>] [--tool-preset <프리셋>]")
 	}
 
 	if deps == nil || deps.SpawnDirect == nil {
-		return StopWithText("⚠️ Spawn not available.")
+		return StopWithText("⚠️ 실행 기능을 사용할 수 없습니다.")
 	}
 
 	result, err := deps.SpawnDirect(
@@ -278,7 +278,7 @@ func HandleSubagentsSpawnAction(ctx *SubagentsCommandContext, deps *SubagentSpaw
 		},
 	)
 	if err != nil {
-		return StopWithText(fmt.Sprintf("Spawn failed: %s", err))
+		return StopWithText(fmt.Sprintf("실행 실패: %s", err))
 	}
 	if result.Status == "accepted" {
 		runPrefix := result.RunID
@@ -286,12 +286,12 @@ func HandleSubagentsSpawnAction(ctx *SubagentsCommandContext, deps *SubagentSpaw
 			runPrefix = runPrefix[:8]
 		}
 		return StopWithText(
-			fmt.Sprintf("Spawned subagent %s (session %s, run %s).", agentID, result.ChildSessionKey, runPrefix),
+			fmt.Sprintf("하위 작업 %s을(를) 시작했습니다 (세션 %s, run %s).", agentID, result.ChildSessionKey, runPrefix),
 		)
 	}
 	errText := result.Error
 	if errText == "" {
 		errText = result.Status
 	}
-	return StopWithText(fmt.Sprintf("Spawn failed: %s", errText))
+	return StopWithText(fmt.Sprintf("실행 실패: %s", errText))
 }

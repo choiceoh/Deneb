@@ -111,7 +111,8 @@ func (h *Handler) updatePreview(reqID, sessionKey string, delivery *DeliveryCont
 
 	root, err := updateRepoRoot(ctx)
 	if err != nil {
-		h.deliverSlashResponse(delivery, err.Error())
+		h.logger.Warn("update: repo root resolution failed", "error", err)
+		h.deliverSlashResponse(delivery, "저장소 위치를 확인하지 못했습니다. 게이트웨이 설치 경로를 확인해 주세요.")
 		return
 	}
 	if !h.runUpdatePrechecks(ctx, reqID, sessionKey, delivery, root).Proceed {
@@ -160,7 +161,8 @@ func (h *Handler) updateExecute(reqID, sessionKey string, delivery *DeliveryCont
 
 	root, err := updateRepoRoot(ctx)
 	if err != nil {
-		h.deliverSlashResponse(delivery, err.Error())
+		h.logger.Warn("update: repo root resolution failed", "error", err)
+		h.deliverSlashResponse(delivery, "저장소 위치를 확인하지 못했습니다. 게이트웨이 설치 경로를 확인해 주세요.")
 		return
 	}
 	outcome := h.runUpdatePrechecks(ctx, reqID, sessionKey, delivery, root)
