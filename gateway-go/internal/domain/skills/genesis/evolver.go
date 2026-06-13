@@ -58,6 +58,15 @@ type Evolver struct {
 	teacherClient *llm.Client
 	teacherModel  string
 
+	// thinkingKwargs maps a bare model name to its chat_template_kwargs toggle
+	// that truly disables the thinking phase (e.g. "thinking" for DeepSeek V4).
+	// Wired from the model registry (SetThinkingKwargs). An absent/empty entry
+	// means the model has no per-request off-switch and the provider layer falls
+	// back to a minimal reasoning-effort floor. Without this the dsv4 judge and
+	// teacher spent their whole output budget reasoning and returned truncated
+	// JSON ("judge error" / "parse response: unexpected end of JSON input").
+	thinkingKwargs map[string]string
+
 	// runMu serializes evolve cycles so the periodic task and the event
 	// trigger can't overlap (TryLock: a second concurrent caller skips).
 	runMu sync.Mutex
@@ -85,6 +94,22 @@ func NewEvolver(llmClient *llm.Client, catalog *skills.Catalog, tracker *Tracker
 func (e *Evolver) SetTeacher(client *llm.Client, model string) {
 	e.teacherClient = client
 	e.teacherModel = model
+}
+
+// SetThinkingKwargs wires per-model chat_template_kwargs thinking toggles so the
+// evolver's judge/teacher/rewrite calls truly disable reasoning on dual-mode
+// vLLM models (the only effective control on e.g. deepseek-v4). Keyed by bare
+// model name. Safe to call with nil (the calls then fall back to the provider's
+// reasoning-effort floor).
+func (e *Evolver) SetThinkingKwargs(kwargs map[string]string) {
+	e.thinkingKwargs = kwargs
+}
+
+// thinkingOff returns a disabled ThinkingConfig for model, naming the model's
+// chat_template_kwargs toggle when known so the provider layer emits a real
+// off-switch instead of merely lowering reasoning effort.
+func (e *Evolver) thinkingOff(model string) *llm.ThinkingConfig {
+	return &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: e.thinkingKwargs[model]}
 }
 
 // EvolveSkill attempts to improve a single skill based on usage feedback.
@@ -141,8 +166,9 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 		Model:          e.resolveModel(),
 		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
 		System:         llm.SystemString(evolveSystemPrompt),
-		MaxTokens:      2048,
+		MaxTokens:      4096,
 		Stream:         true,
+		Thinking:       e.thinkingOff(e.resolveModel()),
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
 	if err != nil {
@@ -527,8 +553,9 @@ func (e *Evolver) judgeCandidate(ctx context.Context, client *llm.Client, model,
 		Model:          model,
 		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
 		System:         llm.SystemString(skillJudgeSystemPrompt),
-		MaxTokens:      512,
+		MaxTokens:      2048,
 		Stream:         true,
+		Thinking:       e.thinkingOff(model),
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
 	if err != nil {
@@ -577,8 +604,9 @@ func (e *Evolver) teacherRewrite(ctx context.Context, originalContent, failedCan
 		Model:          e.teacherModel,
 		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
 		System:         llm.SystemString(evolveSystemPrompt),
-		MaxTokens:      2048,
+		MaxTokens:      4096,
 		Stream:         true,
+		Thinking:       e.thinkingOff(e.teacherModel),
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
 	if err != nil {

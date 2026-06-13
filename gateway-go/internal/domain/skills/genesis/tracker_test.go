@@ -222,6 +222,66 @@ func TestTrackerCuratorTransitionsOnlyAgentCreatedAndHonorsPin(t *testing.T) {
 	}
 }
 
+// TestUsageStats_ExcludeConsultInfraFailures verifies that "tool skills errored"
+// failures (the skill could not be loaded — a gateway path/catalog bug, not the
+// skill's fault) are dropped from a skill's usage aggregate. Counting them
+// pinned email-analysis below the evolver's success-rate threshold and triggered
+// a phantom re-evolution every 6h that chased an error the skill cannot fix.
+func TestUsageStats_ExcludeConsultInfraFailures(t *testing.T) {
+	tr := newTestTracker(t)
+	rec := func(ok bool, errMsg string) {
+		if err := tr.RecordUsage(UsageRecord{SkillName: "email-analysis", Success: ok, ErrorMsg: errMsg}); err != nil {
+			t.Fatalf("RecordUsage: %v", err)
+		}
+	}
+	rec(true, "")                                  // real success
+	rec(false, "turn failed: tool skills errored") // infra → dropped
+	rec(false, "turn failed: tool skills errored") // infra → dropped
+	rec(false, "wiki write failed")                // real failure → counts
+
+	stats, err := tr.Stats("email-analysis")
+	if err != nil {
+		t.Fatalf("Stats: %v", err)
+	}
+	if stats.TotalUses != 2 || stats.SuccessCount != 1 || stats.FailureCount != 1 {
+		t.Fatalf("infra failures not excluded from aggregate: %+v", stats)
+	}
+	if stats.SuccessRate != 0.5 {
+		t.Fatalf("success rate = %v, want 0.5 (infra failures excluded)", stats.SuccessRate)
+	}
+	for _, e := range stats.RecentErrors {
+		if isConsultInfraError(e) {
+			t.Fatalf("recentErrors must not surface an infra error to the judge: %q", e)
+		}
+	}
+}
+
+// TestPostEvolveRollback_IgnoresConsultInfraFailures verifies an infra failure
+// (skill couldn't be loaded) never counts toward a post-evolve rollback, so a
+// good evolution is not reverted by a gateway-side consult error.
+func TestPostEvolveRollback_IgnoresConsultInfraFailures(t *testing.T) {
+	tr := newTestTracker(t)
+	fired := make(chan string, 1)
+	tr.SetRollback(func(s string) { fired <- s }, 3)
+	if err := tr.LogEvolve("email-analysis", "1.1.3", "tighten steps"); err != nil {
+		t.Fatalf("LogEvolve: %v", err)
+	}
+	for i := 0; i < 5; i++ {
+		if err := tr.RecordUsage(UsageRecord{
+			SkillName: "email-analysis",
+			Success:   false,
+			ErrorMsg:  "turn failed: tool skills errored",
+		}); err != nil {
+			t.Fatalf("RecordUsage: %v", err)
+		}
+	}
+	select {
+	case got := <-fired:
+		t.Fatalf("rollback fired (%q) on infra failures that are not the skill's fault", got)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
 func (t *Tracker) markSkillAgentCreatedLockedForTest(skillName string, createdAt int64) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()

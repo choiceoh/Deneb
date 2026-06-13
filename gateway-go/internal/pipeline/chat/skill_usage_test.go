@@ -50,6 +50,42 @@ func TestRecordTurnSkillUsage_erroredTurnIsFailure(t *testing.T) {
 	}
 }
 
+func TestRecordTurnSkillUsage_skillsToolErrorIsNotSkillFailure(t *testing.T) {
+	// When the "skills" tool itself errors, the consult mechanism failed to load
+	// the skill (a gateway path/catalog bug) — that is not the skill performing
+	// badly, so the consulted skill must NOT be recorded as a failure. Otherwise
+	// the evolver pins it below its success-rate threshold and re-evolves it
+	// forever chasing a gateway error it cannot fix.
+	rec := &fakeUsageRecorder{}
+	log := NewSkillConsultLog()
+	log.Add("email-analysis")
+	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills", IsError: true}}, "system:skill-review:cron:x")
+
+	if len(rec.calls) != 1 {
+		t.Fatalf("got %d calls, want 1: %+v", len(rec.calls), rec.calls)
+	}
+	c := rec.calls[0]
+	if !c.success || c.errMsg != "" {
+		t.Fatalf("a skills-tool error must not be attributed to the skill: %+v", c)
+	}
+}
+
+func TestRecordTurnSkillUsage_nonSkillsErrorStillFailsAlongsideSkills(t *testing.T) {
+	// A genuine non-"skills" tool error is still a real failure even when the
+	// skills tool also appears in the turn's activities.
+	rec := &fakeUsageRecorder{}
+	log := NewSkillConsultLog()
+	log.Add("deploy-flow")
+	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills", IsError: true}, {Name: "exec", IsError: true}}, "client:main")
+
+	if len(rec.calls) != 1 {
+		t.Fatalf("got %d calls, want 1: %+v", len(rec.calls), rec.calls)
+	}
+	if c := rec.calls[0]; c.success || c.errMsg == "" {
+		t.Fatalf("a non-skills tool error must still record failure: %+v", c)
+	}
+}
+
 func TestRecordTurnSkillUsage_noOps(t *testing.T) {
 	// Nil recorder must not panic.
 	recordTurnSkillUsage(nil, NewSkillConsultLog(), nil, "s")

@@ -291,7 +291,11 @@ func recordTurnSkillUsage(rec SkillUsageRecorder, log *SkillConsultLog, activiti
 	}
 	errMsg := ""
 	for _, a := range activities {
-		if a.IsError {
+		// A "skills" tool error means the consult mechanism itself failed to load
+		// the skill (e.g. a path/catalog bug) — not the skill performing badly.
+		// Attributing it would pin the skill below the evolver's success-rate
+		// threshold and trigger phantom re-evolutions, so skip it.
+		if a.IsError && a.Name != "skills" {
 			errMsg = "turn failed: tool " + a.Name + " errored"
 			break
 		}
