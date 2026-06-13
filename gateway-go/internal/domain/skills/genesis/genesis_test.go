@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -109,6 +110,56 @@ func TestEvaluate_Pass(t *testing.T) {
 	}
 	if !svc.Evaluate(sctx) {
 		t.Error("should accept session meeting all criteria")
+	}
+}
+
+func TestSkillSpecificityIssues(t *testing.T) {
+	good := &GeneratedSkill{
+		Name:        "deploy-gateway",
+		Description: "게이트웨이를 배포한다. Use when: 코드 머지 후 프로덕션 반영이 필요할 때. NOT for: 로컬 테스트.",
+		Body: "# 게이트웨이 배포\n\n## When to Use\n" +
+			"PR이 main에 머지되어 프로덕션 게이트웨이에 변경을 반영해야 할 때 사용한다. " +
+			"단순 로컬 검증이나 dev 인스턴스 재시작에는 쓰지 않는다.\n\n" +
+			"## Procedure\n1. `make gateway-prod` 로 프로덕션 바이너리를 빌드한다.\n" +
+			"2. 워치독이 있으면 먼저 PAUSE 한다(재시작 부활 범위 안에서 트립 방지).\n" +
+			"3. `scripts/deploy/deploy.sh` 를 실행해 SIGUSR1 핫리스타트를 건다.\n" +
+			"4. `/health` 와 로그로 기동 단계를 확인한다.\n\n" +
+			"## Pitfalls\n- 워치독을 먼저 PAUSE 하지 않으면 재시작이 트립된다.\n" +
+			"- 컨텍스트 길이를 바꿨다면 launcher 와 deneb.json 양쪽을 동기화한다.\n\n" +
+			"## Verification\n`ss -ltnp | rg 18789` 로 포트가 떴는지 확인하고, " +
+			"로그에 에러/경고가 없는지 본다.",
+	}
+	if issues := skillSpecificityIssues(good); len(issues) != 0 {
+		t.Fatalf("well-formed skill should pass, got issues: %v", issues)
+	}
+
+	// Vague prose, no sections, no steps, no trigger — the EvolveR failure mode.
+	vague := &GeneratedSkill{
+		Name:        "be-careful",
+		Description: "유용한 일반 지침",
+		Body:        "# 주의\n\n맥락을 잘 살펴보고 신중하게 작업하세요.",
+	}
+	issues := skillSpecificityIssues(vague)
+	if len(issues) == 0 {
+		t.Fatal("vague skill must be rejected")
+	}
+	joined := strings.Join(issues, "; ")
+	for _, want := range []string{"너무 짧음", "When to Use", "Procedure", "단계", "트리거"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("expected issue mentioning %q, got: %s", want, joined)
+		}
+	}
+}
+
+func TestHasActionableStep(t *testing.T) {
+	if !hasActionableStep("1. 먼저 빌드한다\n2. 배포한다") {
+		t.Error("numbered steps should count as actionable")
+	}
+	if !hasActionableStep("실행: `make go` 로 빌드") {
+		t.Error("inline code should count as actionable")
+	}
+	if hasActionableStep("맥락을 잘 살펴보세요. 신중하게 판단하세요.") {
+		t.Error("pure prose must not count as actionable")
 	}
 }
 

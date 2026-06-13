@@ -18,6 +18,72 @@ func newTestTracker(t *testing.T) *Tracker {
 		livenessPath: filepath.Join(dir, "skill_liveness.json"),
 		stats:        make(map[string]*usageAgg),
 		recentErrors: make(map[string][]string),
+		postEvolve:   make(map[string]*evolveWatch),
+	}
+}
+
+// TestPostEvolveRollback_FiresAfterConsecutiveFailures verifies the post-evolve
+// watch reverts an evolution after the configured number of consecutive
+// failures, and only then.
+func TestPostEvolveRollback_FiresAfterConsecutiveFailures(t *testing.T) {
+	tr := newTestTracker(t)
+	fired := make(chan string, 1)
+	tr.SetRollback(func(s string) { fired <- s }, 3)
+
+	if err := tr.LogEvolve("deploy-helper", "1.0.1", "tighten steps"); err != nil {
+		t.Fatalf("LogEvolve: %v", err)
+	}
+	fail := func() {
+		if err := tr.RecordUsage(UsageRecord{SkillName: "deploy-helper", Success: false, ErrorMsg: "boom"}); err != nil {
+			t.Fatalf("RecordUsage: %v", err)
+		}
+	}
+	fail() // 1
+	fail() // 2
+	select {
+	case <-fired:
+		t.Fatal("rollback fired before reaching the failure threshold")
+	default:
+	}
+	fail() // 3 → revert
+
+	select {
+	case got := <-fired:
+		if got != "deploy-helper" {
+			t.Fatalf("rollback fired for %q, want deploy-helper", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("rollback did not fire after 3 consecutive post-evolve failures")
+	}
+}
+
+// TestPostEvolveRollback_SuccessClearsWatch verifies a single success between
+// failures validates the evolution and stops the watch, so later failures of an
+// already-accepted skill do not trigger a spurious rollback.
+func TestPostEvolveRollback_SuccessClearsWatch(t *testing.T) {
+	tr := newTestTracker(t)
+	fired := make(chan string, 1)
+	tr.SetRollback(func(s string) { fired <- s }, 3)
+
+	if err := tr.LogEvolve("deploy-helper", "1.0.1", "tighten steps"); err != nil {
+		t.Fatalf("LogEvolve: %v", err)
+	}
+	rec := func(ok bool) {
+		if err := tr.RecordUsage(UsageRecord{SkillName: "deploy-helper", Success: ok}); err != nil {
+			t.Fatalf("RecordUsage: %v", err)
+		}
+	}
+	rec(false) // 1 fail
+	rec(false) // 2 fail
+	rec(true)  // success → watch cleared
+	rec(false) // these can't accumulate to a rollback anymore
+	rec(false)
+	rec(false)
+
+	select {
+	case got := <-fired:
+		t.Fatalf("rollback fired (%q) after a success cleared the watch", got)
+	case <-time.After(300 * time.Millisecond):
 	}
 }
 

@@ -4,13 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/observe"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
+
+// proactiveStaleWindowMs is how long a delivered proactive card may sit unread
+// before it counts as ignored (over-intervention). 48h: a work-feed card the
+// user has not touched in two days was, in effect, an interruption without value.
+const proactiveStaleWindowMs = 48 * 60 * 60 * 1000
 
 // ToolObserve lets the agent inspect its OWN runtime through the in-process
 // observation plane (internal/runtime/observe) — the same core the external
@@ -29,7 +36,7 @@ import (
 //
 // This is the self-observation adapter: the self-evolution loop or the operator
 // in chat ("방금 그 턴 왜 느렸어?") can read it without leaving the agent.
-func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, vllmBases func() []string) ToolFunc {
+func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Store, vllmBases func() []string) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action   string  `json:"action"`
@@ -83,8 +90,28 @@ func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, vllmBases func()
 			}
 			return out, nil
 
+		case "effort":
+			if alog == nil {
+				return "agent log is not wired (no effort-router data available)", nil
+			}
+			var since int64
+			if days := p.Days.Int(); days > 0 {
+				since = time.Now().Add(-time.Duration(days) * 24 * time.Hour).UnixMilli()
+			}
+			return formatObserveEffort(alog.AggregateEffort(since), p.Days.Int()), nil
+
+		case "proactive":
+			if wf == nil {
+				return "work feed is not wired (no proactive engagement data available)", nil
+			}
+			stat, err := wf.Engagement(time.Now().UnixMilli(), proactiveStaleWindowMs)
+			if err != nil {
+				return "", fmt.Errorf("observe proactive: %w", err)
+			}
+			return formatObserveProactive(stat), nil
+
 		default:
-			return "", fmt.Errorf("observe: unknown action %q — use turn | logs | behavior", p.Action)
+			return "", fmt.Errorf("observe: unknown action %q — use turn | logs | behavior | effort | proactive", p.Action)
 		}
 	}
 }
@@ -166,6 +193,113 @@ func formatObserveBehavior(agg agentlog.AggregateResult, days int) string {
 	}
 	if len(agg.BackgroundErrors) > 0 {
 		fmt.Fprintf(&b, "  background errors: %v\n", agg.BackgroundErrors)
+	}
+	return b.String()
+}
+
+// formatObserveEffort renders the adaptive effort-router scorecard: how often
+// thinking was routed off vs kept, the escalation rate (routed-off runs that
+// had to restore thinking — the recalibration signal), which gates kept it on,
+// and the rough output-token savings. Empty when the router has not run in the
+// window (gate closed or no traffic).
+func formatObserveEffort(s agentlog.EffortStat, days int) string {
+	window := "all retained history"
+	if days > 0 {
+		window = fmt.Sprintf("last %dd", days)
+	}
+	total := s.RoutedRuns + s.KeptRuns
+	if total == 0 {
+		return fmt.Sprintf("effort router (%s): no router-active runs — gate closed (non-dual-mode model or DENEB_ADAPTIVE_EFFORT off) or no traffic.\n", window)
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "effort router (%s): active=%d routed-off=%d (%.0f%%) kept-on=%d\n",
+		window, total, s.RoutedRuns, s.RoutedShare()*100, s.KeptRuns)
+	fmt.Fprintf(&b, "  escalation: %d/%d routed-off runs restored thinking (%.0f%%)",
+		s.EscalatedRuns, s.RoutedRuns, s.EscalationRate()*100)
+	switch {
+	case s.RoutedRuns == 0:
+		b.WriteString(" — router never routed off; gates may be too strict\n")
+	case s.EscalationRate() >= 0.15:
+		b.WriteString(" — high: gates may be too aggressive (routing off when thinking was needed)\n")
+	default:
+		b.WriteString(" — healthy\n")
+	}
+	if s.RoutedTimeout > 0 {
+		fmt.Fprintf(&b, "  routed-off outcomes: %d clean, %d timeout\n", s.RoutedEndTurn, s.RoutedTimeout)
+	}
+	if avgR, avgK := meanTokens(s.RoutedOutputTokens, s.RoutedRuns), meanTokens(s.KeptOutputTokens, s.KeptRuns); avgK > 0 {
+		fmt.Fprintf(&b, "  mean output tokens: routed-off=%d kept-on=%d (savings proxy)\n", avgR, avgK)
+	}
+	if len(s.KeptReasons) > 0 {
+		reasons := make([]string, 0, len(s.KeptReasons))
+		for r := range s.KeptReasons {
+			reasons = append(reasons, r)
+		}
+		sort.Slice(reasons, func(i, j int) bool {
+			if s.KeptReasons[reasons[i]] != s.KeptReasons[reasons[j]] {
+				return s.KeptReasons[reasons[i]] > s.KeptReasons[reasons[j]]
+			}
+			return reasons[i] < reasons[j]
+		})
+		b.WriteString("  kept-on gates: ")
+		parts := make([]string, len(reasons))
+		for i, r := range reasons {
+			parts[i] = fmt.Sprintf("%s=%d", r, s.KeptReasons[r])
+		}
+		b.WriteString(strings.Join(parts, " ") + "\n")
+	}
+	return b.String()
+}
+
+func meanTokens(sum int64, n int) int64 {
+	if n == 0 {
+		return 0
+	}
+	return sum / int64(n)
+}
+
+// formatObserveProactive renders the proactive-card engagement scorecard: of the
+// retained delivered cards, how many the user engaged (acked/snoozed) vs ignored
+// (unread past 48h), the resulting FTR (over-intervention rate), and which
+// sources are over-firing. The companion to action=behavior's delivery funnel —
+// behavior shows what was delivered, this shows whether it was worth delivering.
+func formatObserveProactive(s workfeed.EngagementStat) string {
+	if s.Total == 0 {
+		return "proactive engagement: no retained cards.\n"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "proactive engagement (retained cards): total=%d engaged=%d ignored=%d pending=%d\n",
+		s.Total, s.Engaged, s.Ignored, s.Pending)
+	if s.Engaged+s.Ignored > 0 {
+		fmt.Fprintf(&b, "  FTR (ignored / judged): %.0f%%", s.FTR()*100)
+		switch {
+		case s.FTR() >= 0.5:
+			b.WriteString(" — high over-intervention: most delivered cards go untouched\n")
+		case s.FTR() >= 0.25:
+			b.WriteString(" — watch: a quarter of cards go untouched\n")
+		default:
+			b.WriteString(" — healthy\n")
+		}
+	} else {
+		b.WriteString("  FTR: not enough judged cards yet (all pending)\n")
+	}
+	if len(s.BySource) > 0 {
+		sources := make([]string, 0, len(s.BySource))
+		for src := range s.BySource {
+			sources = append(sources, src)
+		}
+		sort.Slice(sources, func(i, j int) bool {
+			if s.BySource[sources[i]] != s.BySource[sources[j]] {
+				return s.BySource[sources[i]] > s.BySource[sources[j]]
+			}
+			return sources[i] < sources[j]
+		})
+		parts := make([]string, len(sources))
+		for i, src := range sources {
+			parts[i] = fmt.Sprintf("%s=%d", src, s.BySource[src])
+		}
+		b.WriteString("  ignored by source: " + strings.Join(parts, " ") + "\n")
 	}
 	return b.String()
 }

@@ -173,6 +173,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		DefaultModel: reg.Model(modelrole.RoleLightweight),
 		AgentLog:     agentLogWriter,
 		LogCapture:   s.logCapture,
+		WorkFeed:     s.workFeedStore,
 		// Engine-level prefix-cache scrape targets for the observe tool.
 		VllmBaseURLs: reg.VllmBaseURLs,
 	}

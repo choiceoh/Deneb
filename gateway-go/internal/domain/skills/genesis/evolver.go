@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,12 @@ var _ autonomous.PeriodicTask = (*EvolutionTask)(nil)
 // event-driven evolve trigger fires (every 5 new skills), instead of waiting
 // for the 6h periodic cycle.
 const DefaultEvolveEventThreshold = 5
+
+// DefaultRollbackThreshold is how many consecutive post-evolve failures revert
+// an evolution. Single-user traffic is sparse, so a small fixed count (not a
+// success-rate delta, which needs weeks of samples) is the practical signal: an
+// evolution that breaks the next few uses in a row is reverted to its backup.
+const DefaultRollbackThreshold = 3
 
 // EvolveResult describes the outcome of an evolution attempt.
 type EvolveResult struct {
@@ -277,6 +284,15 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 	}
 	newContent := newHeader + "\n" + candidateBody + "\n"
 
+	// Back up the pre-evolve content before overwriting so a regressing evolve
+	// can be rolled back (post-evolve watch in the tracker). Best-effort: a
+	// backup failure must not block the evolve, but it disables rollback for
+	// this version until the next evolve refreshes the backup.
+	if err := backupSkillVersion(entry.Skill.FilePath, originalContent); err != nil {
+		e.logger.Warn("evolver: skill backup failed, rollback disabled for this evolve",
+			"skill", entry.Skill.Name, "error", err)
+	}
+
 	// Write back atomically so a crash mid-write can't corrupt the skill.
 	if err := atomicfile.WriteFile(entry.Skill.FilePath, []byte(newContent), &atomicfile.Options{Perm: 0o644}); err != nil {
 		return nil, fmt.Errorf("evolver: write file: %w", err)
@@ -384,7 +400,14 @@ func drainStreamText(events <-chan llm.StreamEvent) string {
 // attempt, then re-judges. Returns (finalBody, ok, reason). ok=false means the
 // caller must keep the original skill untouched.
 func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.SkillEntry, originalContent, candidateBody string, stats *UsageStats) (body string, ok bool, reason string) {
-	pass, reason, err := e.judgeCandidate(ctx, e.llmClient, e.resolveModel(), originalContent, candidateBody, stats)
+	hasTeacher := e.teacherClient != nil && e.teacherModel != ""
+
+	// Judge != producer. The candidate came from the lightweight model, so a
+	// lightweight judge would be grading its own output — same-family /
+	// self-preference bias skews toward accepting it (LLM-judge survey
+	// arXiv:2508.02994). pickCandidateJudge routes to the teacher when wired.
+	judgeClient, judgeModel := e.pickCandidateJudge()
+	pass, reason, err := e.judgeCandidate(ctx, judgeClient, judgeModel, originalContent, candidateBody, stats)
 	if err != nil {
 		e.logger.Warn("evolver: self-test errored, keeping original",
 			"skill", entry.Skill.Name, "error", err)
@@ -396,9 +419,8 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	e.logger.Info("evolver: self-test rejected lightweight rewrite",
 		"skill", entry.Skill.Name, "reason", reason)
 
-	// Teacher-escalation: let the stronger model rewrite once, then re-judge
-	// with the teacher so the bar is held by the model best able to meet it.
-	if e.teacherClient == nil || e.teacherModel == "" {
+	// Teacher-escalation: let the stronger model rewrite once.
+	if !hasTeacher {
 		return "", false, reason
 	}
 	teacherBody, terr := e.teacherRewrite(ctx, originalContent, candidateBody, reason, stats)
@@ -407,7 +429,11 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 			"skill", entry.Skill.Name, "error", terr)
 		return "", false, "teacher escalation failed"
 	}
-	tpass, treason, tjerr := e.judgeCandidate(ctx, e.teacherClient, e.teacherModel, originalContent, teacherBody, stats)
+	// This rewrite came from the teacher, so judge it with the lightweight model
+	// — again keeping judge != producer rather than letting the teacher rubber-
+	// stamp its own rewrite. A weaker judge may false-reject a good rewrite, but
+	// the loop is fail-closed (keeps the original), so that errs safe.
+	tpass, treason, tjerr := e.judgeCandidate(ctx, e.llmClient, e.resolveModel(), originalContent, teacherBody, stats)
 	if tjerr != nil || !tpass {
 		e.logger.Info("evolver: teacher rewrite still failed self-test",
 			"skill", entry.Skill.Name, "reason", treason)
@@ -415,6 +441,66 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	}
 	e.logger.Info("evolver: teacher escalation succeeded", "skill", entry.Skill.Name)
 	return teacherBody, true, treason
+}
+
+// skillBackupPath returns the rollback backup path for a skill file. The
+// .backups subdir and .prev suffix keep it out of SKILL.md discovery.
+func skillBackupPath(skillFile string) string {
+	return filepath.Join(filepath.Dir(skillFile), ".backups", filepath.Base(skillFile)+".prev")
+}
+
+// backupSkillVersion saves the pre-evolve content next to the skill. One level
+// of undo is enough: each evolve overwrites the backup with the then-current
+// content, so it always holds the version immediately before the latest evolve.
+func backupSkillVersion(skillFile, content string) error {
+	backup := skillBackupPath(skillFile)
+	if err := os.MkdirAll(filepath.Dir(backup), 0o755); err != nil {
+		return err
+	}
+	return atomicfile.WriteFile(backup, []byte(content), &atomicfile.Options{Perm: 0o644})
+}
+
+// RollbackSkill restores the pre-evolve version of a skill from its backup. The
+// tracker's post-evolve watch calls this when an evolved skill fails its next
+// few uses in a row. It mirrors parseAndApply's write behavior (atomic file
+// write + lifecycle log), so the reverted skill propagates the same way an
+// evolve does. Best-effort: a missing backup or absent catalog entry is a
+// no-op (logged), never a crash.
+func (e *Evolver) RollbackSkill(skillName string) {
+	if e.catalog == nil {
+		return
+	}
+	entry, ok := e.catalog.Get(skillName)
+	if !ok {
+		e.logger.Warn("evolver: rollback skipped, skill not in catalog", "skill", skillName)
+		return
+	}
+	prev, err := os.ReadFile(skillBackupPath(entry.Skill.FilePath))
+	if err != nil {
+		e.logger.Warn("evolver: rollback skipped, no backup available", "skill", skillName, "error", err)
+		return
+	}
+	if err := atomicfile.WriteFile(entry.Skill.FilePath, prev, &atomicfile.Options{Perm: 0o644}); err != nil {
+		e.logger.Error("evolver: rollback write failed", "skill", skillName, "error", err)
+		return
+	}
+	e.logger.Info("evolver: skill rolled back after consecutive post-evolve failures", "skill", skillName)
+	if e.tracker != nil {
+		if err := e.tracker.LogEvolveRolledBack(skillName); err != nil {
+			e.logger.Warn("evolver: rollback lifecycle log failed", "skill", skillName, "error", err)
+		}
+	}
+}
+
+// pickCandidateJudge returns the client/model that should judge a
+// lightweight-produced candidate: the teacher when wired (keeping judge !=
+// producer to avoid same-family self-preference bias, arXiv:2508.02994), else
+// the lightweight model itself (self-judge is unavoidable with no teacher).
+func (e *Evolver) pickCandidateJudge() (*llm.Client, string) {
+	if e.teacherClient != nil && e.teacherModel != "" {
+		return e.teacherClient, e.teacherModel
+	}
+	return e.llmClient, e.resolveModel()
 }
 
 // judgeCandidate asks a model to validate a rewritten skill body against the
