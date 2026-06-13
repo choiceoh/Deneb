@@ -5,19 +5,17 @@
 //	/rollback                     → last 5 snapshots (Korean summary)
 //	/rollback list [N]            → last N snapshots (default 5, clamped 1..20)
 //	/rollback 목록 [N]            → Korean alias for list
-//	/rollback diff <id>           → unified diff (truncated to Telegram limit)
+//	/rollback diff <id>           → unified diff (truncated for phone readability)
 //	/rollback 비교 <id>           → Korean alias for diff
 //	/rollback restore <id>        → restore snapshot
 //	/rollback 복원 <id>           → Korean alias for restore
 //
-// All responses are delivered through the channel-bound replyFunc as plain
-// text. Code blocks use triple-backtick fences because Telegram treats
-// code-block content literally (no MarkdownV2 escaping required inside),
-// which is what we want for diffs and IDs.
+// All responses are delivered through the native client as plain text. Code
+// blocks use triple-backtick fences so the native Markdown renderer shows diffs
+// and IDs literally (monospace, no inline-markup interpretation).
 //
-// Session key is the delivery.SessionKey pattern already used by the
-// /insights dispatcher — a per-chat session that matches the pkg/checkpoint
-// sessionID on disk.
+// Session key follows the per-chat delivery.SessionKey pattern that matches the
+// pkg/checkpoint sessionID on disk.
 
 package chat
 
@@ -36,13 +34,13 @@ import (
 // user types bare "/rollback" or "/rollback list" without an argument.
 const rollbackDefaultListLimit = 5
 
-// rollbackMaxListLimit caps "/rollback list N" to a sane Telegram-sized
-// summary. More than ~20 entries becomes hard to scan on a phone.
+// rollbackMaxListLimit caps "/rollback list N" to a phone-readable summary.
+// More than ~20 entries becomes hard to scan on a phone.
 const rollbackMaxListLimit = 20
 
-// rollbackDiffBodyCap is the soft cap for rendered diff output. Telegram's
-// hard limit per message is 4096; we reserve headroom for the header
-// ("체크포인트 #N  /path") and the "... (총 N줄)" marker.
+// rollbackDiffBodyCap is the soft cap for rendered diff output — kept readable
+// on a phone card, with headroom for the header ("체크포인트 #N  /path") and
+// the "... (총 N줄)" marker.
 const rollbackDiffBodyCap = 3800
 
 // handleRollbackCommand parses the subcommand + args and dispatches to the

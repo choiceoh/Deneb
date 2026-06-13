@@ -382,5 +382,5 @@ func truncateForBroadcast(s string, maxLen int) string {
 	for cut > 0 && s[cut]&0xC0 == 0x80 {
 		cut--
 	}
-	return s[:cut] + "... [truncated]"
+	return s[:cut] + "… (이하 생략)"
 }

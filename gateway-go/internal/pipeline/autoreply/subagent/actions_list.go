@@ -139,24 +139,24 @@ func HandleSubagentsKillAction(ctx *SubagentsCommandContext, deps *SubagentKillD
 	}
 	if target == "" {
 		if ctx.HandledPrefix == SubagentsCmdPrefix {
-			return StopWithText("Usage: /subagents kill <id|#|all>")
+			return StopWithText("사용법: /subagents kill <id|#|all>")
 		}
-		return StopWithText("Usage: /kill <id|#|all>")
+		return StopWithText("사용법: /kill <id|#|all>")
 	}
 
 	if target == "all" || target == "*" {
 		if deps == nil || deps.KillAll == nil {
-			return StopWithText("⚠️ Kill all not available.")
+			return StopWithText("⚠️ 전체 중단 기능을 사용할 수 없습니다.")
 		}
 		killed, err := deps.KillAll(ctx.RequesterKey, ctx.Runs)
 		if err != nil {
 			return StopWithText(fmt.Sprintf("⚠️ %s", err))
 		}
 		if killed == 0 {
-			return StopWithText("No active subagents to kill.")
+			return StopWithText("중단할 활성 하위 작업이 없습니다.")
 		}
 		return &SubagentCommandResult{
-			Reply:      fmt.Sprintf("Killed %d subagent(s).", killed),
+			Reply:      fmt.Sprintf("하위 작업 %d개를 중단했습니다.", killed),
 			ShouldStop: true,
 		}
 	}
@@ -166,18 +166,18 @@ func HandleSubagentsKillAction(ctx *SubagentsCommandContext, deps *SubagentKillD
 		return StopWithText(fmt.Sprintf("⚠️ %s", errMsg))
 	}
 	if entry.EndedAt > 0 {
-		return StopWithText(fmt.Sprintf("%s is already finished.", FormatRunLabel(*entry)))
+		return StopWithText(fmt.Sprintf("%s은(는) 이미 종료되었습니다.", FormatRunLabel(*entry)))
 	}
 
 	if deps == nil || deps.KillRun == nil {
-		return StopWithText("⚠️ Kill not available.")
+		return StopWithText("⚠️ 중단 기능을 사용할 수 없습니다.")
 	}
 	killed, err := deps.KillRun(entry.RunID)
 	if err != nil {
 		return StopWithText(fmt.Sprintf("⚠️ %s", err))
 	}
 	if !killed {
-		return StopWithText(fmt.Sprintf("⚠️ Failed to kill %s.", FormatRunLabel(*entry)))
+		return StopWithText(fmt.Sprintf("⚠️ %s 중단에 실패했습니다.", FormatRunLabel(*entry)))
 	}
 	return &SubagentCommandResult{ShouldStop: true}
 }
@@ -193,7 +193,7 @@ func HandleSubagentsInfoAction(ctx *SubagentsCommandContext) *SubagentCommandRes
 		target = ctx.RestTokens[0]
 	}
 	if target == "" {
-		return StopWithText("ℹ️ Usage: /subagents info <id|#>")
+		return StopWithText("ℹ️ 사용법: /subagents info <id|#>")
 	}
 
 	entry, errMsg := ResolveSubagentTarget(ctx.Runs, target)

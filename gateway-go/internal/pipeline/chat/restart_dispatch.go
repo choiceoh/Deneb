@@ -1,6 +1,6 @@
 // restart_dispatch.go — /restart slash command dispatcher.
 //
-// Restarts the gateway from inside Telegram without pulling or rebuilding —
+// Restarts the gateway from the native client without pulling or rebuilding —
 // useful for picking up a config change or clearing a wedged state.
 //
 // Shape:

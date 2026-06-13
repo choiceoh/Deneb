@@ -403,8 +403,16 @@ func handleRunError(
 		emitJobEvent(deps, params.ClientRunID, "end", true, err.Error(), now)
 	} else {
 		logger.Error("agent run failed", "error", err)
+		// Surface a Korean reason to the user instead of the raw (often English)
+		// error string — classifyRunFailureReason already computes the in-persona
+		// label, with a generic fallback when the cause is unrecognized. (The raw
+		// err is preserved in the log above and the job event below.)
 		if broadcaster != nil {
-			broadcaster.EmitError(err.Error())
+			reason := classifyRunFailureReason(err)
+			if reason == "" {
+				reason = "응답을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요."
+			}
+			broadcaster.EmitError(reason)
 		}
 		finishRun(deps, params, session.PhaseError, "error", "failed", classifyRunFailureReason(err), now)
 		emitJobEvent(deps, params.ClientRunID, "error", false, err.Error(), now)

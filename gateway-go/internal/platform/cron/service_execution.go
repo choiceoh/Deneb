@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/tokens"
@@ -468,6 +469,30 @@ func ShouldSendFailureAlert(state JobState, failureAlert *CronFailureAlert, outc
 	return true
 }
 
+// koreanFailureCause maps a RunOutcome.Error (raw, often-English internal
+// strings like "job already running" or "delivery target error: …") to a short
+// Korean phrase for the user-facing failure alert. The raw string stays in the
+// operator log (see sendFailureAlert); the push gets a clean, in-persona cause.
+func koreanFailureCause(raw string) string {
+	switch {
+	case raw == "":
+		return "원인 미상"
+	case strings.Contains(raw, "already running"),
+		strings.Contains(raw, "concurrent execution"):
+		return "이미 실행 중이어서 건너뜀"
+	case strings.Contains(raw, "delivery target"):
+		return "결과 전달 실패"
+	case strings.Contains(raw, "no agent runner"):
+		return "실행기가 구성되지 않음"
+	case strings.Contains(raw, "context deadline"),
+		strings.Contains(raw, "timeout"):
+		return "시간 초과"
+	case strings.Contains(raw, "connection refused"):
+		return "백엔드 연결 실패"
+	}
+	return "내부 오류"
+}
+
 // sendFailureAlert delivers a failure notification for a cron job.
 func (s *Service) sendFailureAlert(ctx context.Context, job StoreJob, outcome RunOutcome) {
 	alert := job.FailureAlert
@@ -484,7 +509,13 @@ func (s *Service) sendFailureAlert(ctx context.Context, job StoreJob, outcome Ru
 		return
 	}
 
-	text := fmt.Sprintf("⚠️ 크론 작업 '%s' 실행 실패 (연속 %d회): %s", job.Name, job.State.ConsecutiveErrors, outcome.Error)
+	cause := koreanFailureCause(outcome.Error)
+	if cause == "내부 오류" {
+		// Unrecognized cause — keep the raw string in the operator log so the
+		// generic Korean phrase in the push doesn't hide it.
+		s.logger.Warn("cron failure: unmapped cause", "jobID", job.ID, "raw", outcome.Error)
+	}
+	text := fmt.Sprintf("⚠️ 크론 작업 '%s' 실행 실패 (연속 %d회): %s", job.Name, job.State.ConsecutiveErrors, cause)
 
 	// Deliver via the main-session handoff (native client 업무 transcript +
 	// push), the same path regular cron output uses. ch/to are passed for the
