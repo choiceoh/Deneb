@@ -50,7 +50,7 @@ func providerDisplayName(name string) string {
 // builtinProviders lists the well-known providers Deneb ships with.
 func builtinProviders() []providerSpec {
 	return []providerSpec{
-		{name: "zai", models: []string{"glm-5-turbo", "glm-5.2"}},
+		{name: "zai", models: []string{"glm-5.2"}},
 		{name: "openrouter", models: []string{
 			"anthropic/claude-opus-4.7",
 			"anthropic/claude-sonnet-4.6",
