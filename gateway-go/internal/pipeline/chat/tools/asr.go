@@ -30,10 +30,14 @@ import (
 const (
 	// asrDefaultURL is the local VibeVoice-ASR FastAPI base.
 	asrDefaultURL = "http://127.0.0.1:18013"
-	// asrTimeout bounds a single transcription. The model is serialized
-	// (single-user) and a long recording takes a while; the generous ceiling
-	// stays under the 5-minute agent turn deadline.
-	asrTimeout = 4 * time.Minute
+	// asrTimeout bounds a single transcription, which runs in the capture.audio
+	// RPC *before* the meeting-minutes turn (with the request ctx, not the
+	// 5-minute turn deadline — that bounds the turn afterward). The model is
+	// serialized (single-user); on-demand loading frees the ~16GB sidecar model
+	// when idle, so the first capture after an idle window pays an ~89s
+	// cold-load. The ceiling must clear cold-load + a real recording's
+	// inference (RTF ~0.6).
+	asrTimeout = 10 * time.Minute
 )
 
 // asrBaseURL returns the ASR server base URL, overridable via DENEB_ASR_URL for
