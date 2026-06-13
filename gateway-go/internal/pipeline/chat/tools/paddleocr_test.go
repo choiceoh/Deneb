@@ -118,3 +118,26 @@ func TestPaddleOCR_FallbackOnError(t *testing.T) {
 		t.Logf("fallback error (expected tesseract-related): %v", err)
 	}
 }
+
+// TestHTMLTablesToMarkdown verifies that HTML tables embedded in OCR output are
+// normalized to markdown while the surrounding text is preserved. No GPU needed.
+func TestHTMLTablesToMarkdown(t *testing.T) {
+	in := "보고서 요약\n" +
+		"<table><tr><td>품목</td><td>수량</td></tr><tr><td>모듈</td><td>100</td></tr></table>\n" +
+		"이상."
+	got := htmlTablesToMarkdown(in)
+	for _, want := range []string{"보고서 요약", "이상.", "품목", "수량", "모듈", "100", "---"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+	if !strings.Contains(got, "|") {
+		t.Errorf("no markdown table pipes in:\n%s", got)
+	}
+
+	// No table → returned unchanged.
+	const plain = "plain text, no tables here"
+	if htmlTablesToMarkdown(plain) != plain {
+		t.Errorf("plain text was mutated")
+	}
+}
