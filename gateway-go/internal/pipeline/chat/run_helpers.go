@@ -174,6 +174,20 @@ func isTransientLLMError(err error) bool {
 	}
 }
 
+// shouldStripThinking reports whether an error is an Anthropic-style
+// thinking-block signature rejection whose classified recovery is to drop
+// thinking blocks from the history and retry once (llmerr.ReasonThinkingSignature
+// -> Action.StripThink). Backed by the shared llmerr classifier so the
+// decision uses the same taxonomy as isContextOverflow / isTransientLLMError;
+// reading the Action keeps the recovery matrix (llmerr/action.go) the single
+// source of truth for what each reason warrants.
+func shouldStripThinking(err error) bool {
+	if err == nil {
+		return false
+	}
+	return classifyLLMError(err).Reason.DefaultAction(1).StripThink
+}
+
 // resolveWorkspaceDirForPrompt returns the workspace directory for system prompt assembly.
 // Reads agents.defaults.workspace / agents.list[].workspace from config,
 // falling back to ~/.deneb/workspace (matching TS resolveAgentWorkspaceDir).

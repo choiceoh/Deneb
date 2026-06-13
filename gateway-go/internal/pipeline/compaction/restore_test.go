@@ -7,6 +7,121 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
+func TestStripThinkingBlocks(t *testing.T) {
+	mustBlocks := func(blocks ...llm.ContentBlock) llm.Message {
+		raw, err := json.Marshal(blocks)
+		if err != nil {
+			t.Fatalf("marshal blocks: %v", err)
+		}
+		return llm.Message{Role: "assistant", Content: raw}
+	}
+	blockTypes := func(t *testing.T, msg llm.Message) []string {
+		t.Helper()
+		var blocks []llm.ContentBlock
+		if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+			t.Fatalf("unmarshal content %q: %v", msg.Content, err)
+		}
+		types := make([]string, len(blocks))
+		for i, b := range blocks {
+			types[i] = b.Type
+		}
+		return types
+	}
+	eq := func(got, want []string) bool {
+		if len(got) != len(want) {
+			return false
+		}
+		for i := range got {
+			if got[i] != want[i] {
+				return false
+			}
+		}
+		return true
+	}
+
+	t.Run("drops thinking but keeps text and tool_use", func(t *testing.T) {
+		in := []llm.Message{
+			llm.NewTextMessage("user", "hi"),
+			mustBlocks(
+				llm.ContentBlock{Type: "thinking", Thinking: "secret reasoning", Signature: "sig-abc"},
+				llm.ContentBlock{Type: "text", Text: "the answer"},
+				llm.ContentBlock{Type: "tool_use", ID: "t1", Name: "exec", Input: json.RawMessage(`{}`)},
+			),
+		}
+		out, n := StripThinkingBlocks(in)
+		if n != 1 {
+			t.Fatalf("stripped count = %d, want 1", n)
+		}
+		// User message (string content) is untouched.
+		if string(out[0].Content) != string(in[0].Content) {
+			t.Errorf("user message changed: %q", out[0].Content)
+		}
+		if got := blockTypes(t, out[1]); !eq(got, []string{"text", "tool_use"}) {
+			t.Errorf("assistant block types = %v, want [text tool_use]", got)
+		}
+	})
+
+	t.Run("drops redacted_thinking", func(t *testing.T) {
+		in := []llm.Message{mustBlocks(
+			llm.ContentBlock{Type: "redacted_thinking", Data: "EncryptedOpaque=="},
+			llm.ContentBlock{Type: "text", Text: "answer"},
+		)}
+		out, n := StripThinkingBlocks(in)
+		if n != 1 {
+			t.Fatalf("stripped count = %d, want 1", n)
+		}
+		if got := blockTypes(t, out[0]); !eq(got, []string{"text"}) {
+			t.Errorf("block types = %v, want [text]", got)
+		}
+	})
+
+	t.Run("thinking-only assistant becomes empty block array", func(t *testing.T) {
+		in := []llm.Message{mustBlocks(
+			llm.ContentBlock{Type: "thinking", Thinking: "only reasoning", Signature: "sig"},
+		)}
+		out, n := StripThinkingBlocks(in)
+		if n != 1 {
+			t.Fatalf("stripped count = %d, want 1", n)
+		}
+		if got := blockTypes(t, out[0]); len(got) != 0 {
+			t.Errorf("block types = %v, want empty", got)
+		}
+	})
+
+	t.Run("no thinking blocks: unchanged, count 0", func(t *testing.T) {
+		in := []llm.Message{
+			llm.NewTextMessage("user", "plain string content"),
+			mustBlocks(llm.ContentBlock{Type: "text", Text: "no reasoning here"}),
+		}
+		out, n := StripThinkingBlocks(in)
+		if n != 0 {
+			t.Fatalf("stripped count = %d, want 0", n)
+		}
+		for i := range in {
+			if string(out[i].Content) != string(in[i].Content) {
+				t.Errorf("message %d changed: %q -> %q", i, in[i].Content, out[i].Content)
+			}
+		}
+	})
+
+	t.Run("counts across multiple messages", func(t *testing.T) {
+		in := []llm.Message{
+			mustBlocks(
+				llm.ContentBlock{Type: "thinking", Thinking: "a"},
+				llm.ContentBlock{Type: "text", Text: "x"},
+			),
+			mustBlocks(
+				llm.ContentBlock{Type: "redacted_thinking", Data: "d"},
+				llm.ContentBlock{Type: "thinking", Thinking: "b"},
+				llm.ContentBlock{Type: "text", Text: "y"},
+			),
+		}
+		if _, n := StripThinkingBlocks(in); n != 3 {
+			t.Fatalf("stripped count = %d, want 3", n)
+		}
+	})
+}
+
 // assistantToolUseMsg builds a minimal assistant message that invokes a single
 // file-reading tool with the given id and path.
 func assistantToolUseMsg(t *testing.T, toolName, id, path string) llm.Message {

@@ -277,6 +277,34 @@ func runAgentWithFallback(
 			}
 		}
 
+		// Anthropic thinking-signature recovery: a stale/invalid thinking-block
+		// signature (e.g. a mid-loop compaction shifted the prefix the block was
+		// signed against, or signed reasoning was replayed to a model that did
+		// not mint it) makes the provider reject the echoed thinking blocks with
+		// a 400. The recovery classified in llmerr (ReasonThinkingSignature ->
+		// Action{StripThink, RetryOnce}) is to drop thinking blocks from the
+		// history and retry once on the same model — without it the identical
+		// broken history is re-sent and the turn wedges until /reset. Stripping
+		// rewrites the in-memory call slice only (never the transcript), and the
+		// stripped history also helps the fallback chain below if this retry
+		// fails. Only retried when blocks were actually removed (n > 0);
+		// otherwise the same request would 400 again.
+		if runErr != nil && ctx.Err() == nil && shouldStripThinking(runErr) {
+			if strippedMsgs, n := compact.StripThinkingBlocks(messages); n > 0 {
+				logger.Warn("thinking-block signature rejected; stripping thinking blocks and retrying once",
+					"model", cfg.Model, "stripped", n, "error", runErr)
+				messages = strippedMsgs
+				agentResult, runErr = agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+				if runErr == nil && isStalledResult(agentResult) {
+					runErr = errModelStalled
+					stalledResult = agentResult
+				}
+				if runErr != nil {
+					logger.Warn("thinking-strip retry also failed", "error", runErr)
+				}
+			}
+		}
+
 		// Model fallback chain: try each subsequent role in the chain.
 		// e.g., Main → Lightweight → Fallback
 		if runErr != nil && deps.registry != nil {
