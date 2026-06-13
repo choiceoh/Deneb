@@ -4,15 +4,6 @@
 
 package chat
 
-// channelSilentTools lists tools that suppress chat delivery on specific
-// channels. When the agent calls one of these tools, the response is not
-// delivered as a chat message — the tool executes normally but the chat
-// output is silenced. Only purely internal tools (session management,
-// bridge, kv) should be listed here — user-facing tools must respond.
-var channelSilentTools = map[string][]string{
-	"telegram": []string{"gateway", "message", "sessions", "sessions_spawn", "subagents", "skills", "skill_lifecycle"},
-}
-
 // mutatingTools are tools that change the filesystem or run commands.
 // When a run uses these, it likely needs a verification follow-up.
 var mutatingTools = map[string]struct{}{

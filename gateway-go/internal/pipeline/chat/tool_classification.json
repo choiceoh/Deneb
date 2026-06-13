@@ -11,21 +11,6 @@
       "exec": true
     }
   },
-  "channelSilentTools": {
-    "_type": "map[string][]string",
-    "_doc": "channelSilentTools lists tools that suppress chat delivery on specific\nchannels. When the agent calls one of these tools, the response is not\ndelivered as a chat message \u2014 the tool executes normally but the chat\noutput is silenced. Only purely internal tools (session management,\nbridge, kv) should be listed here \u2014 user-facing tools must respond.",
-    "_values": {
-      "telegram": [
-        "gateway",
-        "message",
-        "sessions",
-        "sessions_spawn",
-        "subagents",
-        "skills",
-        "skill_lifecycle"
-      ]
-    }
-  },
   "toolCompressSkipSet": {
     "_type": "map[string]struct{}",
     "_doc": "toolCompressSkipSet contains tools whose output should not be compressed.\nStructured-output tools are already handled by post-processors.\nInternal / already-small tools add no compression value.",
