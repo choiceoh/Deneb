@@ -104,12 +104,6 @@ type SystemPromptParams struct {
 	// from the topic key, so the Static cache key needs no extra input; frozen
 	// per session together with TopicKnowledge.
 	TopicKnowledgePath string
-
-	// SupportsRichUI gates the deneb-ui interactive-UI instructions in the
-	// dynamic block. True only for clients that can render deneb-ui fences
-	// (the native Android app); other clients leave it false so their prompt
-	// bytes are unchanged. Dynamic (uncached) block — no prompt-cache impact.
-	SupportsRichUI bool
 }
 
 // RuntimeInfo describes the current runtime environment for the system prompt.

@@ -181,7 +181,7 @@ func prepareContextAndPrompt(
 			return
 		}
 		tz, _ := prompt.LoadCachedTimezone()
-		// Channel feeds the prompt only (runtime line + SupportsRichUI gate).
+		// Channel feeds the prompt only (the runtime line).
 		// Runs without a DeliveryContext that piggyback on a client session
 		// (heartbeat, boot) fall back to the session's channel so their
 		// system prompt stays byte-identical to the interactive turns of the
@@ -262,7 +262,6 @@ func prepareContextAndPrompt(
 			TopicKnowledge:     topicKnowledge,
 			TopicCacheKey:      topicCacheKey,
 			TopicKnowledgePath: topicKnowledgePath,
-			SupportsRichUI:     richUIChannel(ch),
 		}
 
 		systemPrompt = llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp))
