@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,7 +44,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
+import kotlin.time.Instant
 
 // Settings hub "스킬" tab: skills the agent can use (read-only) plus the
 // self-evolution timeline. The list mirrors the system-prompt skill catalog via
@@ -51,7 +55,9 @@ import kotlin.time.Clock
 // the skill's origin (생성 = the self-evolution loop authored it, 최초 = it was
 // installed or hand-written) and evolve/usage counters. The 진화 내역 segment
 // streams miniapp.skills.lifecycle: genesis creations, committed evolves,
-// rejected evolve attempts, and review verdicts, newest first.
+// rejected evolve attempts, and review verdicts, newest first. Timeline rows
+// expand on tap — full reason, review evidence, absolute time, verdict — and
+// link through to the skill when the event names one.
 // No toggles: discovery is filesystem-driven, so the list reflects what's
 // installed on the gateway host. Tapping a row opens [DenebSkillScreen]
 // (full meta + SKILL.md body + per-skill timeline) via [onOpenSkill].
@@ -106,7 +112,7 @@ internal fun SkillsTab(client: DenebGatewayClient, onOpenSkill: (String) -> Unit
 
                 events.isEmpty() -> EmptyTab("아직 자기진화 활동이 없습니다.")
 
-                else -> SkillLifecycleContent(events)
+                else -> SkillLifecycleContent(events, onOpenSkill)
             }
         }
     }
@@ -211,11 +217,12 @@ internal fun SkillListContent(skills: List<SkillRow>, onOpenSkill: (String) -> U
 }
 
 // Stateless self-evolution timeline — previewable without a gateway client.
+// Rows expand on tap; [onOpenSkill] backs the expanded row's 스킬 보기 link.
 @Composable
-internal fun SkillLifecycleContent(events: List<SkillLifecycleEvent>) {
+internal fun SkillLifecycleContent(events: List<SkillLifecycleEvent>, onOpenSkill: (String) -> Unit = {}) {
     LazyColumn(Modifier.fillMaxSize()) {
         itemsIndexed(events) { _, event ->
-            SkillLifecycleRow(event)
+            SkillLifecycleRow(event, onOpenSkill = onOpenSkill)
             HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
         }
     }
@@ -225,13 +232,33 @@ internal fun SkillLifecycleContent(events: List<SkillLifecycleEvent>) {
 // per-skill section in [DenebSkillScreen]. [showSkillName] is off in the
 // detail screen, where every event belongs to the same skill (the type badge
 // alone carries the row) and the parent column already pads horizontally.
+//
+// Collapsed, the detail clamps to 3 lines; tapping the row expands it to the
+// full reason plus the review evidence, absolute timestamp, and verdict. The
+// expansion is in-place because over half of real review events carry no
+// skill name (no-op verdicts) — a tap-through-only design would leave those
+// rows dead. When the event does name a skill and [onOpenSkill] is wired, the
+// expanded row offers a 스킬 보기 link into [DenebSkillScreen].
 @Composable
 internal fun SkillLifecycleRow(
     event: SkillLifecycleEvent,
     showSkillName: Boolean = true,
     horizontalPadding: Dp = 16.dp,
+    initiallyExpanded: Boolean = false,
+    onOpenSkill: ((String) -> Unit)? = null,
 ) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = horizontalPadding, vertical = 12.dp)) {
+    val haptics = rememberHaptics()
+    var expanded by rememberSaveable { mutableStateOf(initiallyExpanded) }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .handCursor()
+            .clickable {
+                haptics.tap()
+                expanded = !expanded
+            }
+            .padding(horizontal = horizontalPadding, vertical = 12.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             LifecycleTypeBadge(event.type)
             Spacer(Modifier.width(8.dp))
@@ -264,9 +291,42 @@ internal fun SkillLifecycleRow(
                 detail,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 3,
+                maxLines = if (expanded) Int.MAX_VALUE else 3,
                 overflow = TextOverflow.Ellipsis,
             )
+        }
+        if (expanded) {
+            if (event.evidence.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "근거: ${event.evidence}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = denebHint(),
+                )
+            }
+            val meta = listOfNotNull(
+                lifecycleDateTime(event.at).takeIf { it.isNotBlank() },
+                lifecycleRouteLabel(event.route),
+            ).joinToString(" · ")
+            if (meta.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(meta, style = MaterialTheme.typography.labelSmall, color = denebHint())
+            }
+            if (onOpenSkill != null && event.skillName.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "스킬 보기 →",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .handCursor()
+                        .clickable {
+                            haptics.tap()
+                            onOpenSkill(event.skillName)
+                        }
+                        .padding(vertical = 2.dp),
+                )
+            }
         }
     }
 }
@@ -339,6 +399,27 @@ private fun skillMetaLine(skill: SkillRow): String = listOfNotNull(
     skill.evolveCount.takeIf { it > 0 }?.let { "진화 ${it}회" },
     skill.totalUses.takeIf { it > 0 }?.let { "사용 ${it}회" },
 ).joinToString(" · ")
+
+/** Review verdict in Korean for the expanded timeline row; null for events
+ *  without a route (genesis/evolved/rejected). Unknown future routes fall back
+ *  to the raw value rather than hiding the verdict. */
+internal fun lifecycleRouteLabel(route: String): String? = when (route) {
+    "no-op" -> "판정: 변경 없음"
+    "evolve" -> "판정: 기존 스킬 진화"
+    "create", "genesis" -> "판정: 새 스킬 생성"
+    else -> route.takeIf { it.isNotBlank() }?.let { "판정: $it" }
+}
+
+/** Absolute local timestamp ("2026-06-13 14:05") for the expanded timeline
+ *  row — the collapsed header only carries the relative stamp. Blank when the
+ *  event has no timestamp. */
+internal fun lifecycleDateTime(epochMs: Long): String {
+    if (epochMs <= 0L) return ""
+    val dt = Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(TimeZone.currentSystemDefault())
+    val hh = dt.hour.toString().padStart(2, '0')
+    val mm = dt.minute.toString().padStart(2, '0')
+    return "${dt.date} $hh:$mm"
+}
 
 /** Short Korean relative time for timeline rows ("방금" / "N분 전" / "N시간 전" /
  *  "N일 전"). Blank for missing/future timestamps so the row omits the stamp.
