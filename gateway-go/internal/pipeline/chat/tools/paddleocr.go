@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/coreparsing/htmlmd"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
@@ -146,8 +147,47 @@ func paddleOCR(ctx context.Context, img []byte, task string) (string, error) {
 func ocrImageBytes(ctx context.Context, img []byte) (string, error) {
 	text, err := paddleOCR(ctx, img, "OCR:")
 	if err == nil {
-		return text, nil
+		// PaddleOCR-VL's full-page mode recognizes tables and emits them as
+		// HTML; render those as markdown so the model reads columns as a grid
+		// instead of a flattened blob. No-op when the page has no table.
+		return htmlTablesToMarkdown(text), nil
 	}
 	slog.Default().Debug("paddleocr-vl unavailable, falling back to tesseract", "error", err)
 	return tesseract(ctx, img)
+}
+
+// htmlTablesToMarkdown converts any <table>…</table> blocks embedded in s to
+// markdown, leaving the surrounding text untouched. PaddleOCR-VL returns
+// recognized tables as HTML inside otherwise-plain OCR text; this normalizes
+// them to GitHub-flavored markdown tables. A no-op when s contains no table.
+func htmlTablesToMarkdown(s string) string {
+	const openTag, closeTag = "<table", "</table>"
+	lower := strings.ToLower(s)
+	if !strings.Contains(lower, openTag) {
+		return s
+	}
+	var b strings.Builder
+	i := 0
+	for {
+		rel := strings.Index(lower[i:], openTag)
+		if rel < 0 {
+			b.WriteString(s[i:])
+			break
+		}
+		start := i + rel
+		endRel := strings.Index(lower[start:], closeTag)
+		if endRel < 0 {
+			b.WriteString(s[i:]) // unterminated table — keep the rest verbatim
+			break
+		}
+		end := start + endRel + len(closeTag)
+		b.WriteString(s[i:start]) // text before the table
+		if md := strings.TrimSpace(htmlmd.Convert(s[start:end]).Text); md != "" {
+			b.WriteString(md)
+		} else {
+			b.WriteString(s[start:end]) // conversion produced nothing — keep original
+		}
+		i = end
+	}
+	return b.String()
 }

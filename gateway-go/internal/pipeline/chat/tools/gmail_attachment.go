@@ -108,6 +108,7 @@ func extractAttachmentText(ctx context.Context, att *gmail.AttachmentInfo, data 
 	isDOCX := strings.Contains(mime, "wordprocessingml") || strings.HasSuffix(lower, ".docx")
 	isPPTX := strings.Contains(mime, "presentationml") || strings.HasSuffix(lower, ".pptx")
 	isImage := strings.HasPrefix(mime, "image/") || hasImageExt(lower)
+	isCSV := strings.Contains(mime, "csv") || strings.HasSuffix(lower, ".csv")
 
 	switch {
 	case isPDF:
@@ -144,6 +145,11 @@ func extractAttachmentText(ctx context.Context, att *gmail.AttachmentInfo, data 
 			return fmt.Sprintf("📎 %s (이미지, %s)\n\n⚠️ 이미지 OCR 실패: %s", att.Filename, formatBytes(int64(att.Size)), err)
 		}
 		return fmt.Sprintf("## 📎 %s (이미지 OCR)\n\n%s", att.Filename, truncate(text, attachmentTextLimit))
+	case isCSV:
+		if md, err := csvToMarkdown(data); err == nil {
+			return fmt.Sprintf("## 📎 %s (CSV)\n\n%s", att.Filename, truncate(md, attachmentTextLimit))
+		}
+		return fmt.Sprintf("## 📎 %s (CSV)\n\n%s", att.Filename, truncate(string(data), attachmentTextLimit))
 	case strings.HasPrefix(mime, "text/") || isTextFile(lower):
 		return fmt.Sprintf("## 📎 %s\n\n%s", att.Filename, truncate(string(data), attachmentTextLimit))
 	default:
@@ -310,7 +316,14 @@ func xlsxToText(data []byte) (string, error) {
 	}
 	sort.Slice(sheetFiles, func(i, j int) bool { return sheetFiles[i].Name < sheetFiles[j].Name })
 
-	const maxRowsPerSheet = 500
+	const (
+		maxRowsPerSheet = 500
+		// maxExcelCols is Excel's hard column ceiling (XFD). A cell ref beyond it
+		// is malformed or crafted; capping here stops a single bad ref from
+		// driving the column-padding loop into an unbounded allocation — a DoS
+		// vector, since .xlsx bytes are untrusted attachment input.
+		maxExcelCols = 16384
+	)
 	var sb strings.Builder
 	for idx, f := range sheetFiles {
 		var sheet xlsxSheet
@@ -328,15 +341,33 @@ func xlsxToText(data []byte) (string, error) {
 			rows = rows[:maxRowsPerSheet]
 			truncated = true
 		}
+		// Place each cell in its true column (parsed from the A1-style ref like
+		// "B2") so sparse rows — where empty leading/middle cells are dropped
+		// from the XML — stay aligned. Without this a markdown table shifts
+		// columns row-to-row.
+		var grid [][]string
 		for _, row := range rows {
-			cells := make([]string, 0, len(row.Cells))
+			var cells []string
 			for _, c := range row.Cells {
-				cells = append(cells, xlsxCellValue(c, shared))
+				col := colIndexFromRef(c.Ref)
+				if col < 0 {
+					col = len(cells) // no usable ref → next slot
+				}
+				if col >= maxExcelCols {
+					continue // reject malformed/oversized refs before padding
+				}
+				for len(cells) <= col {
+					cells = append(cells, "")
+				}
+				cells[col] = xlsxCellValue(c, shared)
 			}
 			if strings.TrimSpace(strings.Join(cells, "")) == "" {
 				continue // skip fully empty rows
 			}
-			sb.WriteString(strings.Join(cells, " | "))
+			grid = append(grid, cells)
+		}
+		if table := mdTable(grid); table != "" {
+			sb.WriteString(table)
 			sb.WriteString("\n")
 		}
 		if truncated {
@@ -399,12 +430,25 @@ func unmarshalZipXML(f *zip.File, v any) error {
 // paragraphs. Go's xml decoder matches local names regardless of namespace
 // prefix, so a single streaming extractor (`extractOOXMLText`) handles both.
 
-// extractOOXMLText streams an Office Open XML part and concatenates the text
-// inside every <t> element, separating paragraphs (<p>) with newlines.
+// extractOOXMLText streams an Office Open XML part and returns its text. Plain
+// paragraphs (<p>) are separated by newlines; tables (<tbl>/<tr>/<tc>) are
+// rendered as markdown so column structure survives instead of collapsing into
+// a vertical list of cell values. The same local names cover Word
+// (w:tbl/w:tr/w:tc) and PowerPoint (a:tbl/a:tr/a:tc), so one extractor does both.
 func extractOOXMLText(r io.Reader) string {
 	decoder := xml.NewDecoder(r)
 	var sb strings.Builder
 	var inT, paragraphOpen bool
+
+	// Table state. tableDepth>0 means we're inside a <tbl>; rows/cells are only
+	// tracked at the outermost level (depth 1) — a nested table's text inlines
+	// into its parent cell rather than corrupting the grid.
+	tableDepth := 0
+	var rows [][]string
+	var curRow []string
+	var curCell strings.Builder
+	cellOpen := false
+
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
@@ -413,15 +457,61 @@ func extractOOXMLText(r io.Reader) string {
 		switch t := tok.(type) {
 		case xml.StartElement:
 			switch t.Name.Local {
+			case "tbl":
+				tableDepth++
+				if tableDepth == 1 {
+					rows = nil
+				}
+			case "tr":
+				if tableDepth == 1 {
+					curRow = nil
+				}
+			case "tc":
+				if tableDepth == 1 {
+					cellOpen = true
+					curCell.Reset()
+				}
 			case "p":
-				paragraphOpen = true
+				if cellOpen {
+					// New paragraph inside a cell → keep words apart.
+					if curCell.Len() > 0 {
+						curCell.WriteByte(' ')
+					}
+				} else {
+					paragraphOpen = true
+				}
 			case "t":
 				inT = true
 			}
 		case xml.EndElement:
 			switch t.Name.Local {
+			case "tbl":
+				if tableDepth == 1 {
+					if table := mdTable(rows); table != "" {
+						if sb.Len() > 0 {
+							sb.WriteString("\n")
+						}
+						sb.WriteString(table)
+						sb.WriteString("\n")
+					}
+					rows = nil
+				}
+				if tableDepth > 0 {
+					tableDepth--
+				}
+			case "tr":
+				if tableDepth == 1 {
+					rows = append(rows, curRow)
+					curRow = nil
+				}
+			case "tc":
+				if tableDepth == 1 {
+					curRow = append(curRow, strings.TrimSpace(curCell.String()))
+					curCell.Reset()
+					cellOpen = false
+				}
 			case "p":
-				if paragraphOpen {
+				if !cellOpen && paragraphOpen {
 					sb.WriteString("\n")
 					paragraphOpen = false
 				}
@@ -430,7 +520,11 @@ func extractOOXMLText(r io.Reader) string {
 			}
 		case xml.CharData:
 			if inT {
-				sb.Write(t)
+				if cellOpen {
+					curCell.Write(t)
+				} else {
+					sb.Write(t)
+				}
 			}
 		}
 	}
@@ -613,4 +707,80 @@ func firstLine(s string) string {
 		return strings.TrimSpace(s[:i])
 	}
 	return s
+}
+
+// --- markdown table helpers ---
+//
+// Office documents carry tabular data (Excel sheets, Word/PowerPoint tables)
+// that the LLM reads far more reliably as a GitHub-flavored markdown table than
+// as a flattened blob. These helpers render any [][]string grid as a well-formed
+// table, padding ragged rows and escaping cell content.
+
+// colIndexFromRef parses the 0-based column index from an A1-style cell
+// reference (e.g. "A1" → 0, "B2" → 1, "AA10" → 26). Returns -1 when the ref has
+// no leading letters, so the caller can fall back to positional placement.
+func colIndexFromRef(ref string) int {
+	n, letters := 0, 0
+	for i := 0; i < len(ref); i++ {
+		ch := ref[i]
+		if ch >= 'a' && ch <= 'z' {
+			ch -= 'a' - 'A'
+		}
+		if ch < 'A' || ch > 'Z' {
+			break
+		}
+		n = n*26 + int(ch-'A') + 1
+		letters++
+	}
+	if letters == 0 {
+		return -1
+	}
+	return n - 1
+}
+
+// mdEscapeCell makes a string safe inside a markdown table cell: pipes are
+// escaped and any newline/whitespace run collapses to a single space, so a cell
+// can never break the table grid.
+func mdEscapeCell(s string) string {
+	s = strings.ReplaceAll(s, "|", "\\|")
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// mdTable renders rows as a GitHub-flavored markdown table, treating the first
+// row as the header. Ragged rows are padded to the widest row so the grid stays
+// valid. Returns "" when there are no cells.
+func mdTable(rows [][]string) string {
+	maxCols := 0
+	for _, r := range rows {
+		if len(r) > maxCols {
+			maxCols = len(r)
+		}
+	}
+	if maxCols == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	writeRow := func(cells []string) {
+		sb.WriteByte('|')
+		for i := 0; i < maxCols; i++ {
+			v := ""
+			if i < len(cells) {
+				v = mdEscapeCell(cells[i])
+			}
+			sb.WriteByte(' ')
+			sb.WriteString(v)
+			sb.WriteString(" |")
+		}
+		sb.WriteByte('\n')
+	}
+	writeRow(rows[0])
+	sb.WriteByte('|')
+	for i := 0; i < maxCols; i++ {
+		sb.WriteString(" --- |")
+	}
+	sb.WriteByte('\n')
+	for _, r := range rows[1:] {
+		writeRow(r)
+	}
+	return strings.TrimRight(sb.String(), "\n")
 }

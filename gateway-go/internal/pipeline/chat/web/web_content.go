@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/liteparse"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
@@ -50,7 +51,7 @@ const (
 	contentTypeDocument fetchedContentType = "document"
 )
 
-func classifyContentType(contentType string) fetchedContentType {
+func classifyContentType(contentType, url string) fetchedContentType {
 	switch {
 	case strings.Contains(contentType, "text/html"),
 		strings.Contains(contentType, "application/xhtml"):
@@ -58,11 +59,29 @@ func classifyContentType(contentType string) fetchedContentType {
 	case strings.Contains(contentType, "application/json"),
 		strings.Contains(contentType, "+json"):
 		return contentTypeJSON
-	case liteparse.Available() && liteparse.SupportedMIME(contentType):
+	case tools.IsExtractableDocument(contentType, documentName(url)):
 		return contentTypeDocument
 	default:
 		return contentTypePlain
 	}
+}
+
+// documentName derives a filename from a URL's last path segment (query string
+// stripped) so extension-based document detection still fires when a download
+// endpoint labels the payload application/octet-stream or text/plain. Returns
+// "document" when the URL carries no usable name.
+func documentName(url string) string {
+	name := url
+	if idx := strings.LastIndex(name, "/"); idx >= 0 {
+		name = name[idx+1:]
+	}
+	if idx := strings.Index(name, "?"); idx >= 0 {
+		name = name[:idx]
+	}
+	if strings.TrimSpace(name) == "" {
+		return "document"
+	}
+	return name
 }
 
 // processFetchedContent classifies fetched payloads and routes each type
@@ -76,14 +95,14 @@ func processFetchedContent(
 	localAI *LocalAIExtractor,
 	meta *webFetchMeta,
 ) string {
-	switch classifyContentType(contentType) {
+	switch classifyContentType(contentType, url) {
 	case contentTypeHTML:
 		return processHTML(ctx, rawContent, url, localAI, meta)
 	case contentTypeJSON:
 		return processJSON(rawContent)
 	case contentTypeDocument:
 		// Use raw bytes (not charset-normalized string) for binary documents.
-		return processDocument(ctx, rawBytes, url)
+		return processDocument(ctx, rawBytes, url, contentType)
 	default:
 		return rawContent
 	}
@@ -102,29 +121,21 @@ func processJSON(raw string) string {
 	return string(pretty)
 }
 
-// processDocument extracts text from a binary document (PDF, Office, etc.)
-// using the LiteParse CLI. Falls back to a notice if parsing fails.
-func processDocument(ctx context.Context, data []byte, url string) string {
-	name := "document"
-	if url != "" {
-		// Extract filename from URL path.
-		if idx := strings.LastIndex(url, "/"); idx >= 0 {
-			name = url[idx+1:]
-		}
-		// Strip query string.
-		if idx := strings.Index(name, "?"); idx >= 0 {
-			name = name[:idx]
-		}
-	}
+// processDocument extracts text from a binary document (PDF, Office, CSV). It
+// prefers the lit CLI when installed (richer parsing) and otherwise falls back
+// to the built-in Go extractors, so document fetch works with no external deps.
+func processDocument(ctx context.Context, data []byte, url, contentType string) string {
+	name := documentName(url)
 
-	text, err := liteparse.Parse(ctx, data, name)
-	if err != nil {
-		return fmt.Sprintf("(문서 파싱 실패: %s)", err)
+	if liteparse.Available() {
+		if text, err := liteparse.Parse(ctx, data, name); err == nil && strings.TrimSpace(text) != "" {
+			return text
+		}
 	}
-	if strings.TrimSpace(text) == "" {
-		return "(문서에서 텍스트를 추출하지 못했습니다)"
+	if text, ok := tools.ExtractDocumentText(ctx, data, name, contentType); ok && strings.TrimSpace(text) != "" {
+		return text
 	}
-	return text
+	return "(문서에서 텍스트를 추출하지 못했습니다)"
 }
 
 // --- Output formatting ---

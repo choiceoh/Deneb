@@ -313,6 +313,11 @@ func assembleMessages(
 ) []llm.Message {
 	messages := prep.Messages
 
+	// Extract raw document attachments (PDF/Office/CSV the native client sends as
+	// base64 bytes with no explicit type) into text up front, so the block
+	// builders below render their content instead of silently dropping them.
+	attachments := prepareDocumentAttachments(ctx, params.Attachments)
+
 	// If the caller provided pre-built messages (e.g., OpenAI-compatible HTTP API
 	// with full conversation history), use those instead of transcript context.
 	if len(params.PrebuiltMessages) > 0 {
@@ -321,7 +326,7 @@ func assembleMessages(
 		messages = append([]llm.Message(nil), params.PrebuiltMessages...)
 		// When the caller also supplies a Message, append it so the LLM sees
 		// it without re-loading the entire transcript.
-		if params.Message != "" && len(params.Attachments) == 0 {
+		if params.Message != "" && len(attachments) == 0 {
 			messages = append(messages, llm.NewTextMessage("user", params.Message))
 		}
 	}
@@ -329,17 +334,17 @@ func assembleMessages(
 	// Build or augment user message with attachments.
 	if len(messages) == 0 && params.Message != "" {
 		// No history — build the user message from scratch.
-		if len(params.Attachments) > 0 {
-			blocks := buildAttachmentBlocks(params.Message, params.Attachments)
+		if len(attachments) > 0 {
+			blocks := buildAttachmentBlocks(params.Message, attachments)
 			messages = []llm.Message{llm.NewBlockMessage("user", blocks)}
 		} else {
 			messages = []llm.Message{llm.NewTextMessage("user", params.Message)}
 		}
-	} else if len(messages) > 0 && len(params.Attachments) > 0 {
+	} else if len(messages) > 0 && len(attachments) > 0 {
 		// History exists but current message has attachments — replace the
 		// last user message (which was persisted as text-only) with a
 		// multimodal version that includes the image/video content blocks.
-		messages = appendAttachmentsToHistory(messages, params.Message, params.Attachments)
+		messages = appendAttachmentsToHistory(messages, params.Message, attachments)
 	}
 
 	// Model marked non-vision (provider config `vision: false`): replace image
