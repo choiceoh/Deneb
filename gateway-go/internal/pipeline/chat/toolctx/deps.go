@@ -9,6 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
@@ -37,6 +38,7 @@ type CoreToolDeps struct {
 	DefaultModel      string
 	AgentLog          *agentlog.Writer
 	LogCapture        *observe.LogCapture   // optional; in-memory log ring for the observe tool
+	WorkFeed          *workfeed.Store       // optional; proactive-card engagement for observe action=proactive
 	SpilloverStore    *agent.SpilloverStore // optional; spills large tool results to disk
 
 	// VllmBaseURLs lazily lists the deduped base URLs of OpenAI-mode vLLM

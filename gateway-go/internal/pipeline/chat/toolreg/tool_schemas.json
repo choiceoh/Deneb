@@ -1301,12 +1301,13 @@
     "properties": {
       "action": {
         "type": "string",
-        "description": "What to observe about your own runtime: turn | logs | behavior | effort",
+        "description": "What to observe about your own runtime: turn | logs | behavior | effort | proactive",
         "enum": [
           "turn",
           "logs",
           "behavior",
-          "effort"
+          "effort",
+          "proactive"
         ]
       },
       "runId": {

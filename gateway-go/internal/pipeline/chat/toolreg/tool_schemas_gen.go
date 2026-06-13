@@ -1166,8 +1166,8 @@ func observeToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "What to observe about your own runtime: turn | logs | behavior | effort",
-				"enum":        []string{"turn", "logs", "behavior", "effort"},
+				"description": "What to observe about your own runtime: turn | logs | behavior | effort | proactive",
+				"enum":        []string{"turn", "logs", "behavior", "effort", "proactive"},
 			},
 			"contains": map[string]any{
 				"type":        "string",

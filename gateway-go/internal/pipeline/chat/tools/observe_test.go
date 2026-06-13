@@ -18,7 +18,7 @@ func TestToolObserve_RoutesAndValidates(t *testing.T) {
 	w := agentlog.NewWriter(dir)
 	ring := observe.NewRing(10)
 	lc := observe.NewCapture(slog.NewTextHandler(io.Discard, nil), ring)
-	fn := ToolObserve(lc, w, nil)
+	fn := ToolObserve(lc, w, nil, nil)
 
 	// behavior on an empty log still produces a formatted summary; with no
 	// vllmBases wired, no prefix-cache line appears.
@@ -66,7 +66,7 @@ func TestToolObserve_BehaviorVllmPrefixCache(t *testing.T) {
 
 	dir := t.TempDir()
 	w := agentlog.NewWriter(dir)
-	fn := ToolObserve(nil, w, func() []string { return []string{srv.URL + "/v1"} })
+	fn := ToolObserve(nil, w, nil, func() []string { return []string{srv.URL + "/v1"} })
 	out, err := callTool(t, fn, map[string]any{"action": "behavior"})
 	if err != nil {
 		t.Fatalf("behavior errored: %v", err)
@@ -95,7 +95,7 @@ func TestToolObserve_TurnJoinsAgentLog(t *testing.T) {
 	rl.LogTurnTool(agentlog.TurnToolData{Turn: 1, Name: "grep", DurationMs: 7})
 	rl.LogEnd(agentlog.RunEndData{StopReason: "end_turn", Turns: 1, OutputTokens: 40})
 
-	fn := ToolObserve(nil, w, nil) // nil capture: turn still works off the agent log
+	fn := ToolObserve(nil, w, nil, nil) // nil capture: turn still works off the agent log
 	out, err := callTool(t, fn, map[string]any{"action": "turn", "runId": "run-9"})
 	if err != nil {
 		t.Fatalf("turn errored: %v", err)

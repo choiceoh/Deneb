@@ -211,6 +211,66 @@ func (s *Store) List(limit int, includeAcked bool) ([]Item, int, error) {
 	return filtered, total, nil
 }
 
+// EngagementStat summarizes how delivered proactive cards fared. A card the user
+// acked or snoozed counts as engaged (they interacted — snooze is "later", not
+// dismissed); a card still unread past the stale window counts as ignored
+// (delivered, no engagement — the over-intervention / interruption-cost signal);
+// a fresh unread card is pending (too new to judge). FTR is the over-intervention
+// proxy from the proactive-agent literature (ProAgentBench precision = interruption
+// cost): the fraction of judged cards that were ignored.
+type EngagementStat struct {
+	Total    int            `json:"total"`
+	Engaged  int            `json:"engaged"`
+	Ignored  int            `json:"ignored"`
+	Pending  int            `json:"pending"`
+	BySource map[string]int `json:"ignoredBySource"` // ignored count per card source
+}
+
+// FTR is the fraction of judged (non-pending) cards that were ignored. 0 when
+// nothing has been judged yet.
+func (e EngagementStat) FTR() float64 {
+	judged := e.Engaged + e.Ignored
+	if judged == 0 {
+		return 0
+	}
+	return float64(e.Ignored) / float64(judged)
+}
+
+// Engagement rolls up the retained cards' engagement as of `now`, treating an
+// unread card older than staleWindowMs as ignored. It reads raw stored status
+// (snoozed stays engaged rather than re-surfacing as unread), so it conservatively
+// under-counts ignored rather than flagging a just-resurfaced snooze. Reflects
+// retained history only (old cards are pruned), so it is a recent-engagement view.
+func (s *Store) Engagement(now, staleWindowMs int64) (EngagementStat, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	items, err := jsonlstore.Load[Item](s.path)
+	if err != nil {
+		return EngagementStat{BySource: map[string]int{}}, err
+	}
+	stat := EngagementStat{BySource: map[string]int{}}
+	for _, it := range items {
+		stat.Total++
+		switch it.Status {
+		case StatusAcked, StatusSnoozed:
+			stat.Engaged++
+		default: // unread (incl. legacy empty status)
+			if staleWindowMs > 0 && now-it.CreatedAtMs > staleWindowMs {
+				stat.Ignored++
+				src := it.Source
+				if src == "" {
+					src = "unknown"
+				}
+				stat.BySource[src]++
+			} else {
+				stat.Pending++
+			}
+		}
+	}
+	return stat, nil
+}
+
 func (s *Store) Ack(id string) (Item, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
