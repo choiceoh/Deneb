@@ -82,22 +82,101 @@ func TestThinkingPreviewTailTruncation(t *testing.T) {
 		t.Fatalf("sub-minimum preview = %q, want empty", got)
 	}
 
-	// Long accumulation keeps the most recent runes with a leading ellipsis —
-	// the tail (newest thought) is the readable part, and Korean runes must
-	// not split mid-character.
+	// Long accumulation without a terminator surfaces the live fragment from its
+	// head with only a trailing ellipsis (never a leading one), so the thought
+	// starts at its beginning. Korean runes must not split mid-character.
 	for range 40 {
 		sb.appendThinking("과거 거래 조건을 다시 확인한다 ")
 	}
 	got := sb.thinkingPreview()
 	runes := []rune(got)
-	if len(runes) == 0 || runes[0] != '…' {
-		t.Fatalf("truncated preview should lead with ellipsis, got %q", got)
+	if len(runes) == 0 || runes[0] == '…' {
+		t.Fatalf("preview should not lead with an ellipsis, got %q", got)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Fatalf("overflowing preview should end with a trailing ellipsis, got %q", got)
 	}
 	if len(runes) != thinkingPreviewRunes+1 {
 		t.Fatalf("preview length = %d runes, want %d", len(runes), thinkingPreviewRunes+1)
 	}
-	if !strings.HasSuffix(got, "확인한다") {
-		t.Fatalf("preview should end with the newest text, got %q", got)
+	if !strings.Contains(got, "확인한다") {
+		t.Fatalf("preview should carry the accumulated reasoning text, got %q", got)
+	}
+}
+
+// TestCleanThinkingPreviewSentenceExtraction pins the chip-line cleanup against
+// a real DeepSeek-V4 reasoning sample: Korean, wrapped in parentheses, verbose
+// multi-sentence thoughts. The chip must surface the latest complete sentence
+// from its head — no wrapper parens, no leading ellipsis, opener dropped.
+func TestCleanThinkingPreviewSentenceExtraction(t *testing.T) {
+	// Verbatim shape from the live engine (truncated middle for brevity).
+	raw := "(아, 탑솔라의 김 부장님에게서 온 이메일에 대해 문의하시는군요. " +
+		"보통 때와 다른 어조에 계좌 변경 요청까지 있다니... 상당히 의심스러운 상황입니다.)\n\n" +
+		"(우선 발신자 주소부터 확인해야 합니다. 실제 업무용 도메인과 일치하는지 꼭 살펴보셨으면 좋겠습니다. " +
+		"그리고 제목이나 본문에서 급박함을 강조하며 개인정보나 금융 정보를 바로 제공하게 만드는 " +
+		"전형적인 사회공학 기법이 사용되지는 않았는지도 중요합니다.)"
+
+	got := cleanThinkingPreview(raw)
+
+	if strings.ContainsAny(got, "()（）[]「」*#`>") {
+		t.Errorf("preview should strip wrapper/markdown noise, got %q", got)
+	}
+	if strings.HasPrefix(got, "…") {
+		t.Errorf("preview must not lead with an ellipsis, got %q", got)
+	}
+	if strings.HasPrefix(got, "그리고") {
+		t.Errorf("preview should drop the leading discourse marker, got %q", got)
+	}
+	// The latest sentence ("그리고 제목이나 본문에서 …") surfaces from its head
+	// (with 그리고 stripped), not the earlier 발신자/도메인 ones.
+	if !strings.HasPrefix(got, "제목이나 본문에서") {
+		t.Errorf("preview should surface the latest sentence head, got %q", got)
+	}
+	if r := []rune(got); len(r) > thinkingPreviewRunes+1 {
+		t.Errorf("preview overflowed the chip cap: %d runes (%q)", len(r), got)
+	}
+}
+
+func TestCleanThinkingPreviewEdgeCases(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"whitespace only", "  \n\t ", ""},
+		{"below minimum", "발신자", ""},
+		{
+			// No terminator yet → show the live fragment from its head, whole.
+			name: "in-progress fragment",
+			in:   "발신자 도메인을 면밀히 대조하는 중",
+			want: "발신자 도메인을 면밀히 대조하는 중",
+		},
+		{
+			// Latest complete sentence wins over a short trailing blip.
+			name: "latest complete sentence",
+			in:   "발신자 주소를 확인한다. 도메인을 대조한다. 음...",
+			want: "도메인을 대조한다",
+		},
+		{
+			// Leading interjection + wrapper parens both stripped.
+			name: "opener and parens",
+			in:   "(음, 계좌 변경은 전형적인 BEC 수법입니다.)",
+			want: "계좌 변경은 전형적인 BEC 수법입니다",
+		},
+		{
+			// English reasoning splits on ". " just the same.
+			name: "english sentences",
+			in:   "Let me check the sender. The domain looks spoofed.",
+			want: "The domain looks spoofed",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cleanThinkingPreview(tt.in); got != tt.want {
+				t.Errorf("cleanThinkingPreview(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
 	}
 }
 
