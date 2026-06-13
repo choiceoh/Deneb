@@ -220,3 +220,66 @@ func TestRecallSourceAttribution(t *testing.T) {
 		t.Error("no source attribution found in any case output")
 	}
 }
+
+// TestRecallFactRevisionSupersession exercises the "selective forgetting"
+// competency (MemoryAgentBench arXiv:2507.05257): when a stored fact is revised,
+// recall must surface the new value and must never present the old value as a
+// current fact. Deneb's mechanism is the wiki supersession marker — even if a
+// demoted superseded page still surfaces, it carries a staleness marker so the
+// model does not cite the old value. This is an incremental, turn-by-turn
+// scenario (seed → query → revise → re-query), not a static corpus snapshot.
+func TestRecallFactRevisionSupersession(t *testing.T) {
+	dir := t.TempDir()
+	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	const oldPath, newPath = "거래/acme-old.md", "거래/acme-new.md"
+	recall := func(msg string) string {
+		out, _ := buildRecallPreflight(context.Background(),
+			RunParams{SessionKey: "client:main", Message: msg},
+			runDeps{wikiStore: store}, nil)
+		return out
+	}
+
+	// Phase 1 — seed the original fact and confirm it surfaces cleanly.
+	if err := store.WritePage(oldPath, &wiki.Page{
+		Meta: wiki.Frontmatter{ID: "acme", Title: "에이콘 상사 담당자", Category: "거래",
+			Summary: "에이콘 상사 구매 담당자 정보", Tags: []string{"에이콘"}, Importance: 0.8},
+		Body: "에이콘 상사 구매 담당자는 김민준 부장이다.",
+	}); err != nil {
+		t.Fatalf("WritePage old: %v", err)
+	}
+	before := recall("전에 에이콘 상사 담당자 누구였지?")
+	if !strings.Contains(before, "김민준") {
+		t.Fatalf("phase 1: original fact must surface, got %q", before)
+	}
+	if strings.Contains(before, "대체됨") {
+		t.Fatalf("phase 1: a current page must carry no staleness marker, got %q", before)
+	}
+
+	// Phase 2 — the fact changes: write the new page and supersede the old one
+	// (the dreamer's MarkSuperseded path).
+	if err := store.WritePage(newPath, &wiki.Page{
+		Meta: wiki.Frontmatter{ID: "acme-v2", Title: "에이콘 상사 담당자 (갱신)", Category: "거래",
+			Summary: "에이콘 상사 구매 담당자 갱신", Tags: []string{"에이콘"}, Importance: 0.9},
+		Body: "에이콘 상사 구매 담당자는 박수진 과장으로 교체되었다.",
+	}); err != nil {
+		t.Fatalf("WritePage new: %v", err)
+	}
+	if err := store.MarkSuperseded(oldPath, newPath); err != nil {
+		t.Fatalf("MarkSuperseded: %v", err)
+	}
+
+	// Phase 3 — re-query. The new fact must surface, and the old page must never
+	// appear as an unmarked current fact.
+	after := recall("전에 에이콘 상사 담당자 누구였지?")
+	if !strings.Contains(after, "박수진") {
+		t.Fatalf("phase 3: revised fact must surface, got %q", after)
+	}
+	if strings.Contains(after, oldPath) && !strings.Contains(after, "대체됨") {
+		t.Fatalf("phase 3: superseded old page surfaced without a staleness marker — model could cite the stale value, got %q", after)
+	}
+}
