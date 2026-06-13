@@ -349,8 +349,11 @@ func serializeMessages(messages []llm.Message) string {
 					sb.WriteString(fmt.Sprintf("<tool: %s>", b.Name))
 				case "tool_result":
 					content := b.Content
-					if len(content) > 800 {
-						content = content[:800] + "..."
+					// Rune-aware cap: slicing at byte 800 can split a multi-byte
+					// rune (Korean is 3 bytes/char), emitting a broken UTF-8
+					// sequence into the summarizer input.
+					if r := []rune(content); len(r) > 800 {
+						content = string(r[:800]) + "..."
 					}
 					sb.WriteString(fmt.Sprintf("<result: %s>", content))
 				}

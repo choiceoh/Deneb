@@ -75,7 +75,11 @@ func EmergencyCompact(
 			maxOutput = 2048
 		}
 		summary, err := summarizer.Summarize(ctx, compactionPrompt(compactionSystemPrompt, cfg), text, maxOutput)
-		if err == nil && summary != "" {
+		// summarizeCallErr converts a nil error with an already-expired context
+		// into ctx.Err(): the stream was likely cut mid-output and `summary` is
+		// truncated. Persisting it as covering the evicted range would silently
+		// lose facts — the same guard the LLM tier (llm.go) already applies.
+		if err = summarizeCallErr(ctx, err); err == nil && summary != "" {
 			result := make([]llm.Message, 0, 1+len(recent))
 			result = append(result, llm.NewTextMessage("user",
 				FormatContextFence(
