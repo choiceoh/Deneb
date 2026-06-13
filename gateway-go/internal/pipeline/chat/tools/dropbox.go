@@ -291,7 +291,7 @@ func extractDropboxFileText(ctx context.Context, name string, data []byte) strin
 	lower := strings.ToLower(name)
 	switch {
 	case strings.HasSuffix(lower, ".pdf"):
-		if text, err := pdfToText(ctx, data); err == nil && strings.TrimSpace(text) != "" {
+		if text, err := pdfToTextStructured(ctx, data); err == nil && strings.TrimSpace(text) != "" {
 			return text
 		}
 		// Scanned PDF: fall back to per-page OCR.
