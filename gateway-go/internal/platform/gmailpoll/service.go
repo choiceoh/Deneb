@@ -261,6 +261,17 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	report, items, err := s.batchAnalyze(ctx, client, details)
 	if err != nil {
 		s.log.Warn("배치 분석 실패", "error", err, "count", len(details))
+		// Total failure — no per-email analysis survived (typically the LLM was
+		// unreachable). Bail BEFORE marking these emails seen so the next cycle
+		// retries them. Otherwise they are dropped silently: the "(분석 실패)"
+		// stub is contentless-suppressed (no card), yet the unconditional
+		// markSeen below would still bury them — exactly the lost-mail pattern.
+		// When only the consolidated report failed, items still holds the
+		// per-email analyses, which are persisted below; only the all-failed
+		// case bails here.
+		if len(items) == 0 {
+			return nil
+		}
 		report = "(분석 실패)"
 	}
 
