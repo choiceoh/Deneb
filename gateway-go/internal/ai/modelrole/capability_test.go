@@ -13,7 +13,9 @@ func TestCapabilityForModel_Layering(t *testing.T) {
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		MainModel: "vllm/gemma4",
 		Providers: map[string]ProviderResolved{
-			"vllm": {BaseURL: srv.URL + "/v1"},
+			// vLLM carries a static contextWindow that now serves as a
+			// FALLBACK — live /models discovery (max_model_len) wins over it.
+			"vllm": {BaseURL: srv.URL + "/v1", ContextWindow: 262144},
 			"kimi": {BaseURL: "https://api.kimi.example/coding", PromptCache: boolPtr(true)},
 			"acme": {
 				BaseURL:       "https://acme.example/v1",
@@ -24,13 +26,24 @@ func TestCapabilityForModel_Layering(t *testing.T) {
 		},
 	})
 
-	t.Run("vllm discovery fills context window", func(t *testing.T) {
+	t.Run("vllm discovery wins over deneb.json contextWindow", func(t *testing.T) {
+		// gemma4 is discovered at 131072; the vllm provider's static 262144 is
+		// only a fallback, so discovery must win (the gateway tracks the server).
 		caps := reg.CapabilityForModel("vllm", "gemma4")
 		if caps.ContextWindow != 131072 {
-			t.Errorf("ContextWindow = %d, want 131072 from discovery", caps.ContextWindow)
+			t.Errorf("ContextWindow = %d, want 131072 from discovery (over 262144 fallback)", caps.ContextWindow)
 		}
 		if caps.Reasoning || caps.NoVision || caps.RejectsCacheControl {
 			t.Errorf("unexpected flags set: %+v", caps)
+		}
+	})
+
+	t.Run("vllm model without discovery falls back to deneb.json window", func(t *testing.T) {
+		// A vllm model the server never advertised (discovery empty) keeps the
+		// static fallback so a startup-time probe failure degrades safely.
+		caps := reg.CapabilityForModel("vllm", "not-served-model")
+		if caps.ContextWindow != 262144 {
+			t.Errorf("ContextWindow = %d, want 262144 fallback when discovery has nothing", caps.ContextWindow)
 		}
 	})
 

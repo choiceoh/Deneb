@@ -15,9 +15,20 @@ const vllmRefreshMinInterval = time.Minute
 // pair by layering, lowest to highest precedence:
 //
 //  1. modelcaps builtin defaults (reasoning prefixes, Kimi cache rejection)
-//  2. vLLM /models discovery (max_model_len → ContextWindow, provider "vllm")
-//  3. deneb.json provider catalog overrides (contextWindow/reasoning/vision/
+//  2. deneb.json provider catalog overrides (contextWindow/reasoning/vision/
 //     promptCache on the models.providers.<id> entry)
+//  3. vLLM /models discovery (max_model_len → ContextWindow, provider "vllm")
+//
+// ContextWindow precedence is deliberately discovery-on-top for vLLM: the
+// served model's advertised max_model_len is ground truth, so it wins over the
+// deneb.json static value, which is demoted to a FALLBACK used only when
+// discovery has nothing (the local server was unreachable at startup). This
+// lets the gateway track a model swap / context resize on the local vLLM
+// server WITHOUT a deneb.json edit — removing the stale-config footgun where a
+// hand-maintained contextWindow drifts from the server (too high → prompts that
+// exceed max_model_len 400 the turn; too low → the model's headroom is wasted
+// and compaction fires early). The other deneb.json overrides
+// (reasoning/vision/promptCache) are NOT discovered, so they stay authoritative.
 //
 // Zero/absent values at every layer mean "unknown — keep current behavior",
 // so an unconfigured deployment resolves to the permissive zero Capability.
@@ -25,9 +36,10 @@ func (r *Registry) CapabilityForModel(providerID, model string) modelcaps.Capabi
 	caps := modelcaps.Builtin(providerID, model)
 
 	r.mu.RLock()
+	var discoveredWindow int
 	if providerID == "vllm" {
 		if w, ok := r.vllmWindows[model]; ok && w > 0 {
-			caps.ContextWindow = w
+			discoveredWindow = w
 		}
 	}
 	p, hasProvider := r.providers[providerID]
@@ -35,7 +47,7 @@ func (r *Registry) CapabilityForModel(providerID, model string) modelcaps.Capabi
 
 	if hasProvider {
 		if p.ContextWindow > 0 {
-			caps.ContextWindow = p.ContextWindow
+			caps.ContextWindow = p.ContextWindow // fallback for vLLM; override for other providers
 		}
 		if p.Reasoning != nil {
 			caps.Reasoning = *p.Reasoning
@@ -46,6 +58,13 @@ func (r *Registry) CapabilityForModel(providerID, model string) modelcaps.Capabi
 		if p.PromptCache != nil {
 			caps.RejectsCacheControl = !*p.PromptCache
 		}
+	}
+
+	// vLLM discovery wins for ContextWindow: track the server's live
+	// max_model_len, not the static config. (Empty for non-vllm providers,
+	// which have no /models discovery — their deneb.json window stands.)
+	if discoveredWindow > 0 {
+		caps.ContextWindow = discoveredWindow
 	}
 	return caps
 }
