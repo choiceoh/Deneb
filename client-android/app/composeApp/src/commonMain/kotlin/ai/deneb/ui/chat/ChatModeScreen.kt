@@ -361,7 +361,6 @@ internal fun ChatModeScreen(
                                     if (uiState.history.isEmpty()) {
                                         EmptyState(
                                             modifier = Modifier.fillMaxWidth().weight(1f),
-                                            onStartInteractiveMode = uiState.actions.enterInteractiveMode,
                                         )
                                     } else {
                                         // Prefetch ~half a viewport ahead so each expensive markdown item is

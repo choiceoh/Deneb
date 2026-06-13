@@ -2,39 +2,27 @@ package ai.deneb.ui.chat.composables
 
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.LogoAnimation
-import ai.deneb.ui.components.animatedGradientBorder
-import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
-import ai.deneb.ui.handCursor
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import deneb.composeapp.generated.resources.Res
-import deneb.composeapp.generated.resources.start_interactive_ui
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Clock
 
 @Composable
 internal fun EmptyState(
     modifier: Modifier,
-    onStartInteractiveMode: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier,
@@ -64,43 +52,6 @@ internal fun EmptyState(
             color = denebHint(),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 24.dp),
-        )
-        if (onStartInteractiveMode != null) {
-            Spacer(Modifier.height(16.dp))
-            AnimatedBorderButton(
-                text = stringResource(Res.string.start_interactive_ui),
-                onClick = onStartInteractiveMode,
-            )
-            Spacer(Modifier.height(8.dp))
-        }
-    }
-}
-
-@Composable
-private fun AnimatedBorderButton(
-    text: String,
-    onClick: () -> Unit,
-) {
-    val haptics = rememberHaptics()
-    Box(
-        modifier = Modifier
-            .handCursor()
-            .clip(RoundedCornerShape(50))
-            .clickable {
-                haptics.tap()
-                onClick()
-            }
-            .animatedGradientBorder(
-                cornerRadius = 50.dp,
-                borderWidth = 3.dp,
-                backgroundColor = MaterialTheme.colorScheme.background,
-            ),
-    ) {
-        Text(
-            text = text,
-            style = DenebType.button,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
         )
     }
 }

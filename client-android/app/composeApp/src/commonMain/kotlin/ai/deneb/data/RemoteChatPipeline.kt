@@ -72,26 +72,6 @@ internal data class AssistantTurn(
 
 private enum class BailoutReason { LIMIT_REACHED, REPEATING }
 
-/**
- * Output-token headroom for interactive UI mode, which must emit the entire screen as one
- * un-truncated deneb-ui JSON block — and reasoning models spend part of the budget thinking
- * first, so a turn that renders fine in plain chat can truncate mid-JSON and surface as a
- * "parsing failed" screen. Applied to the OpenAI-compatible path only (normal chat there
- * sends no ceiling at all). The Anthropic path keeps its fixed 8192: there's no per-model
- * output-cap data here, and Anthropic 400s when max_tokens exceeds a model's cap (e.g.
- * Claude 3.5 Sonnet = 8192), so a blanket raise would be unsafe.
- */
-private const val INTERACTIVE_UI_MAX_TOKENS = 16384
-
-/**
- * reasoning_effort sent on the OpenAI-compatible path in interactive UI mode. Models that
- * "think" before answering spend part of the budget reasoning, which is a main cause of a
- * first-turn deneb-ui JSON arriving empty or truncated. "low" is the minimal-reasoning setting
- * that local vLLM (e.g. step3p7) and OpenAI o-series both accept; providers that don't
- * recognize the field ignore it. Null in normal chat, so reasoning is untouched there.
- */
-private const val INTERACTIVE_REASONING_EFFORT = "low"
-
 private interface ToolLoopStrategy {
     suspend fun chat(history: List<History>, systemPrompt: String?): LoopChatResult
     suspend fun bailout(history: List<History>, systemPrompt: String?, reason: BailoutReason): String
@@ -164,8 +144,6 @@ private suspend fun RemoteDataRepository.handleOpenAICompatibleChatWithTools(
                     credentials,
                     msgs,
                     tools,
-                    maxTokens = INTERACTIVE_UI_MAX_TOKENS.takeIf { interactiveModeFlag },
-                    reasoningEffort = INTERACTIVE_REASONING_EFFORT.takeIf { interactiveModeFlag },
                 ).getOrThrow()
             }
             val message = response.choices.firstOrNull()?.message ?: throw OpenAICompatibleEmptyResponseException()

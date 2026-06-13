@@ -65,7 +65,6 @@ data class ConversationSummary(
     val title: String,
     val updatedAt: Long,
     val isHeartbeat: Boolean = false,
-    val isInteractive: Boolean = false,
 )
 
 @Immutable
@@ -125,7 +124,6 @@ data class ChatUiState(
     val smsDrafts: ImmutableList<SmsDraft> = persistentListOf(),
     val snackbarMessage: StringResource? = null,
     val pendingConversationDeletion: String? = null,
-    val isInteractiveMode: Boolean = false,
     val fallbackStatus: FallbackStatus? = null,
     val isRestoring: Boolean = true,
 ) {

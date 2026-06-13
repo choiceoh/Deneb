@@ -43,7 +43,7 @@ internal data class ChatPromptRuntimeContext(
 )
 
 /** Which deneb-ui section, if any, to render. */
-internal enum class ChatPromptUiMode { NONE, DYNAMIC_UI, INTERACTIVE_UI }
+internal enum class ChatPromptUiMode { NONE, DYNAMIC_UI }
 
 /**
  * Shared shape for rendering a connected email account into a prompt section — used by
@@ -183,7 +183,6 @@ internal fun buildChatSystemPrompt(
     if (variant == SystemPromptVariant.CHAT_REMOTE) {
         when (uiMode) {
             ChatPromptUiMode.DYNAMIC_UI -> appendDynamicUiSection()
-            ChatPromptUiMode.INTERACTIVE_UI -> appendInteractiveUiSection()
             ChatPromptUiMode.NONE -> {}
         }
     }
@@ -381,39 +380,10 @@ private fun StringBuilder.appendDynamicUiSection() {
     append("Example:\n```deneb-ui\n{\"type\":\"column\",\"children\":[{\"type\":\"text\",\"value\":\"Your name?\",\"style\":\"title\"},{\"type\":\"text_input\",\"id\":\"name\",\"placeholder\":\"Enter name\"},{\"type\":\"button\",\"label\":\"Submit\",\"action\":{\"type\":\"callback\",\"event\":\"submit\",\"collectFrom\":[\"name\"]}}]}\n```\n")
 }
 
-private fun StringBuilder.appendInteractiveUiSection() {
-    append("\n## Interactive UI Mode (ACTIVE)\n")
-    append("You are in full-screen interactive UI mode. The user ONLY sees rendered deneb-ui components — they cannot see markdown, plain text, or anything outside a deneb-ui fence.\n")
-    append("Your ENTIRE response must be a single ```deneb-ui code fence. No text before it, no text after it, no markdown. If you write anything outside the fence, the user will NOT see it.\n\n")
-    append(DENEB_UI_COMPONENT_CATALOG)
-    append("Rules:\n")
-    append("- Each response is a COMPLETE screen layout. Include all content and actions in one deneb-ui block.\n")
-    append("- Always include clear primary action buttons so the user can proceed.\n")
-    append("- Every screen MUST have at least one interactive element with a callback action (button, countdown with expiry action, etc.). A screen without any callback is a dead end the user cannot proceed from.\n")
-    append("- Use headline text for screen titles. Structure screens with cards for grouping related content.\n")
-    append("- Use descriptive callback events (e.g., \"select_destination\", \"submit_form\") so you understand what the user selected.\n")
-    append("- Do NOT include back buttons, navigation bars, or any navigation controls. The app provides a back button and close button in the toolbar. The user can also type instructions in a text field below your UI.\n")
-    append("Layout:\n")
-    append("- Put buttons INSIDE cards, directly below related content — never group all buttons separately at the bottom\n")
-    append("- Use rows for groups of buttons or chips — rows wrap automatically, so any number of items is fine\n")
-    append("- Keep button labels short (1-3 words)\n")
-    append("- Use columns for vertical flow. Use the full component set: tabs, accordion, alerts, progress, chips, icons, etc.\n\n")
-    append("Limitations — respect these strictly:\n")
-    append("- The UI is static once rendered. NEVER show loading, fetching, or verifying states. You cannot fetch data or run operations asynchronously. Present all content immediately.\n")
-    append("- Never use indeterminate progress (progress without a value) or text like \"Loading...\", \"Fetching...\", \"Verifying...\" as if something will happen later — nothing will.\n")
-    append("- Each screen is independent. Only conversation history carries state between screens — there is no client-side state persistence, no session storage, no variables that survive across responses.\n")
-    append("- Do not attempt to build multi-screen stateful applications (e.g., shopping carts that accumulate items, dashboards that refresh). Each response is a fresh, self-contained screen.\n")
-    append("- Only use the exact components and properties defined above. Do not invent attributes, component types, or behaviors that are not listed. If a component doesn't support a feature, do not pretend it does.\n")
-    append("- Start with simple, clean layouts. A well-structured screen with a few cards and clear actions is better than a complex layout that pushes the component set beyond its capabilities.\n")
-    append("- When unsure whether something will work, use a simpler approach. A working simple screen is always better than a broken ambitious one.\n\n")
-    append("Example:\n```deneb-ui\n{\"type\":\"column\",\"children\":[{\"type\":\"text\",\"value\":\"Welcome\",\"style\":\"headline\"},{\"type\":\"card\",\"children\":[{\"type\":\"text\",\"value\":\"What would you like to do?\",\"style\":\"title\"},{\"type\":\"button\",\"label\":\"Get Started\",\"action\":{\"type\":\"callback\",\"event\":\"get_started\"}}]}]}\n```\n")
-}
-
 /**
- * Pre-computed deneb-ui component catalog text — shared between [appendDynamicUiSection]
- * and [appendInteractiveUiSection]. Pre-building the ~3KB of static text once (instead
- * of re-running ~30 `append` calls per message) is the main reason this is a top-level
- * val rather than a helper function.
+ * Pre-computed deneb-ui component catalog text — used by [appendDynamicUiSection].
+ * Pre-building the ~3KB of static text once (instead of re-running ~30 `append` calls
+ * per message) is the main reason this is a top-level val rather than a helper function.
  */
 private val DENEB_UI_COMPONENT_CATALOG: String = buildString {
     append("Format: wrap a JSON object in ```deneb-ui fences.\n\n")

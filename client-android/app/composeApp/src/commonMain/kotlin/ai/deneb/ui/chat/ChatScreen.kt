@@ -50,18 +50,14 @@ fun ChatScreenContent(
     onOpenCategories: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
-    if (uiState.isInteractiveMode && !uiState.isRestoring) {
-        InteractiveModeScreen(uiState = uiState)
-    } else {
-        ChatModeScreen(
-            uiState = uiState,
-            textToSpeech = textToSpeech,
-            onNavigateToSettings = onNavigateToSettings,
-            onOpenMail = onOpenMail,
-            onOpenCalendar = onOpenCalendar,
-            onOpenSearch = onOpenSearch,
-            onOpenCategories = onOpenCategories,
-            navigationTabBar = navigationTabBar,
-        )
-    }
+    ChatModeScreen(
+        uiState = uiState,
+        textToSpeech = textToSpeech,
+        onNavigateToSettings = onNavigateToSettings,
+        onOpenMail = onOpenMail,
+        onOpenCalendar = onOpenCalendar,
+        onOpenSearch = onOpenSearch,
+        onOpenCategories = onOpenCategories,
+        navigationTabBar = navigationTabBar,
+    )
 }

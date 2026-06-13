@@ -217,12 +217,6 @@
     <string name="terminal_input_placeholder">명령어 입력…</string>
     <string name="terminal_run_content_description">실행</string>
     <string name="terminal_stop_content_description">중지</string>
-    <string name="interactive_welcome_title">무엇을 도와드릴까요?</string>
-    <string name="interactive_welcome_subtitle">무엇을 하고 싶은지 알려주세요.</string>
-    <string name="interactive_back_content_description">뒤로</string>
-    <string name="interactive_title">Deneb</string>
-    <string name="interactive_exit_content_description">인터랙티브 모드 종료</string>
-    <string name="interactive_ui_parsing_failed">UI 파싱 실패, 다시 시도 중…</string>
     <string name="snackbar_undo">실행 취소</string>
     <string name="snackbar_memory_deleted">기억이 삭제되었습니다</string>
     <string name="snackbar_task_cancelled">작업이 취소되었습니다</string>
@@ -230,7 +224,6 @@
     <string name="snackbar_service_removed">서비스가 제거되었습니다</string>
     <string name="snackbar_mcp_server_removed">MCP 서버가 제거되었습니다</string>
     <string name="snackbar_conversation_deleted">대화가 삭제되었습니다</string>
-    <string name="start_interactive_ui">인터랙티브 UI 시작</string>
     <string name="settings_reorder_content_description">순서 변경</string>
     <string name="model_sort_date">날짜</string>
     <string name="model_sort_score">점수</string>

@@ -29,16 +29,3 @@ internal fun supportsTools(modelId: String): Boolean {
     val lower = modelId.lowercase()
     return LIMITED_MODELS.none { lower.startsWith(it) }
 }
-
-/**
- * True if a service+model combo is suitable for autonomous/agentic flows —
- * heartbeat, interactive mode, and any future background feature that runs a
- * tool-calling loop without the user present to course-correct.
- *
- * The model must support tools: some small open-weight models don't
- * (see [LIMITED_MODELS]).
- *
- * If you're filtering a service/model picker for a background feature,
- * prefer this over checking the model gate in isolation.
- */
-internal fun supportsAgenticFlows(serviceId: String, modelId: String): Boolean = supportsTools(modelId)

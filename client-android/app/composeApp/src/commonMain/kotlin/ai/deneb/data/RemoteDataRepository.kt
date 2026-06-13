@@ -472,7 +472,7 @@ class RemoteDataRepository(
             createdAt = existingConversation?.createdAt ?: now,
             updatedAt = now,
             title = title,
-            type = existingConversation?.type ?: if (interactiveModeFlag) Conversation.TYPE_INTERACTIVE else Conversation.TYPE_CHAT,
+            type = existingConversation?.type ?: Conversation.TYPE_CHAT,
         )
 
         conversationStorage.saveConversation(conversation)
@@ -700,7 +700,6 @@ class RemoteDataRepository(
 
         val isLimited = !supportsTools(modelId)
         val uiMode = when {
-            interactiveModeFlag -> ChatPromptUiMode.INTERACTIVE_UI
             appSettings.isDynamicUiEnabled() && !isLimited -> ChatPromptUiMode.DYNAMIC_UI
             else -> ChatPromptUiMode.NONE
         }
@@ -744,15 +743,6 @@ class RemoteDataRepository(
     override fun setThemeMode(mode: ThemeMode) {
         appSettings.setThemeMode(mode)
     }
-
-    internal var interactiveModeFlag = appSettings.getCurrentInteractiveMode()
-
-    override fun setInteractiveMode(enabled: Boolean) {
-        interactiveModeFlag = enabled
-        appSettings.setCurrentInteractiveMode(enabled)
-    }
-
-    override fun isInteractiveModeActive(): Boolean = interactiveModeFlag
 
     override fun isMemoryEnabled(): Boolean = appSettings.isMemoryEnabled()
 

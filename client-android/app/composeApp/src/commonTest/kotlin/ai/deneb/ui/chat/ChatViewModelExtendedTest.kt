@@ -174,7 +174,6 @@ class ChatViewModelExtendedTest {
             assertTrue(clearedState.history.isEmpty())
             assertNull(clearedState.error)
             assertFalse(clearedState.isLoading)
-            assertFalse(clearedState.isInteractiveMode)
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -207,57 +206,6 @@ class ChatViewModelExtendedTest {
             assertEquals(0, fakeRepository.regenerateCalls)
             assertEquals(1, fakeRepository.askCalls.size)
             assertEquals("First", fakeRepository.askCalls.single().first)
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    // ---- enter / exit interactive mode ----
-
-    @Test
-    fun `enterInteractiveMode sets the flag and clears error`() = runTest {
-        val viewModel = createViewModel()
-        viewModel.state.test {
-            val initialState = awaitItem()
-            assertFalse(initialState.isInteractiveMode)
-
-            initialState.actions.enterInteractiveMode()
-            testDispatcher.scheduler.advanceUntilIdle()
-
-            var interactiveState: ChatUiState
-            do {
-                interactiveState = awaitItem()
-            } while (!interactiveState.isInteractiveMode)
-            assertTrue(interactiveState.isInteractiveMode)
-            assertNull(interactiveState.error)
-            assertTrue(fakeRepository.isInteractiveModeActive())
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    @Test
-    fun `exitInteractiveMode clears the flag and stops loading`() = runTest {
-        val viewModel = createViewModel()
-        viewModel.state.test {
-            val initial = awaitItem()
-            initial.actions.enterInteractiveMode()
-            testDispatcher.scheduler.advanceUntilIdle()
-
-            var interactiveState: ChatUiState
-            do {
-                interactiveState = awaitItem()
-            } while (!interactiveState.isInteractiveMode)
-
-            interactiveState.actions.exitInteractiveMode()
-            testDispatcher.scheduler.advanceUntilIdle()
-
-            var exitedState: ChatUiState
-            do {
-                exitedState = awaitItem()
-            } while (exitedState.isInteractiveMode)
-            assertFalse(exitedState.isInteractiveMode)
-            assertFalse(exitedState.isLoading)
-            assertNull(exitedState.error)
-            assertFalse(fakeRepository.isInteractiveModeActive())
             cancelAndIgnoreRemainingEvents()
         }
     }
