@@ -112,7 +112,7 @@ fun DenebCategoriesScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(8.dp))
-                    d.categories.filter { it.name != PEOPLE_WIKI_CATEGORY }.forEach { cat ->
+                    topLevelCategories(d.categories).filter { it.name != PEOPLE_WIKI_CATEGORY }.forEach { cat ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -170,4 +170,34 @@ private fun PinnedEntryRow(label: String, onClick: () -> Unit) {
         )
     }
     HorizontalDivider(color = denebHairline())
+}
+
+/** A browsable category node — a top-level bucket or a sub-folder. [name] is the
+ *  full category path (the navigation key); [pageCount] is its subtree total. */
+internal data class CategoryNode(val name: String, val pageCount: Int)
+
+/** Collapse the flat category list into top-level buckets keyed by the first
+ *  path segment, summing each subtree so "프로젝트/영산고" folds under "프로젝트" and
+ *  the top-level list stays clean. */
+internal fun topLevelCategories(cats: List<WikiCategory>): List<CategoryNode> {
+    val sums = LinkedHashMap<String, Int>()
+    for (c in cats) {
+        val top = c.name.substringBefore('/')
+        sums[top] = (sums[top] ?: 0) + c.pageCount
+    }
+    return sums.map { (name, count) -> CategoryNode(name, count) }
+}
+
+/** Immediate sub-folders of [parent]: the next path segment under "parent/…",
+ *  each with its subtree total. Empty when [parent] is a leaf. Node names are
+ *  full paths so a tap drills straight in. */
+internal fun subCategories(parent: String, cats: List<WikiCategory>): List<CategoryNode> {
+    val prefix = "$parent/"
+    val sums = LinkedHashMap<String, Int>()
+    for (c in cats) {
+        if (!c.name.startsWith(prefix)) continue
+        val seg = c.name.removePrefix(prefix).substringBefore('/')
+        if (seg.isNotBlank()) sums[seg] = (sums[seg] ?: 0) + c.pageCount
+    }
+    return sums.map { (seg, count) -> CategoryNode(prefix + seg, count) }
 }

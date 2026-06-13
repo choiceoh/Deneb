@@ -4,6 +4,7 @@ import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebPressable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -50,9 +51,11 @@ fun DenebCategoryPagesScreen(
     category: String,
     onBack: () -> Unit,
     onOpenWiki: (String) -> Unit = {},
+    onOpenCategory: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var pages by remember(category) { mutableStateOf<List<WikiPageRef>?>(null) }
+    var subFolders by remember(category) { mutableStateOf<List<CategoryNode>>(emptyList()) }
     var loadFailed by remember(category) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
@@ -75,6 +78,10 @@ fun DenebCategoryPagesScreen(
         pages = null
         val fetched = client.fetchCategoryPages(category)
         if (fetched == null) loadFailed = true else pages = fetched
+        // Sub-folders under this category (the next path segment) so a project
+        // that accrues several documents drills down instead of cluttering the
+        // top-level list. Derived from the full category list.
+        subFolders = subCategories(category, client.fetchCategories()?.categories ?: emptyList())
     }
     LaunchedEffect(category) { load() }
 
@@ -133,6 +140,12 @@ fun DenebCategoryPagesScreen(
                     .padding(horizontal = 24.dp)
                     .verticalScroll(rememberScrollState()),
             ) {
+                if (!selecting && subFolders.isNotEmpty()) {
+                    subFolders.forEach { sf ->
+                        SubCategoryRow(sf.name.substringAfterLast('/'), sf.pageCount) { onOpenCategory(sf.name) }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                }
                 val p = pages
                 when {
                     loadFailed -> {
@@ -244,4 +257,33 @@ fun DenebCategoryPagesScreen(
             }
         }
     }
+}
+
+/** A sub-folder row in the Deneb idiom: name + page count + a drill chevron, in
+ *  the flat-hairline row style of the category browser. Navigation only — never
+ *  part of the page multi-select below it. */
+@Composable
+private fun SubCategoryRow(label: String, count: Int, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .denebPressable(onClick = onClick)
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            "$count ›",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+    HorizontalDivider(color = denebHairline())
 }

@@ -546,6 +546,7 @@ private fun AppContent(
                                     category = entry.toRoute<DenebCategoryPages>().category,
                                     onBack = { navController.navigateUp() },
                                     onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
+                                    onOpenCategory = { cat -> navController.navigate(DenebCategoryPages(cat)) },
                                     navigationTabBar = if (showTabBar) navigationTabBar else null,
                                 )
                             }
