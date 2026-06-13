@@ -25,6 +25,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/middleware"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/sparkfleet"
 	arSession "github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
@@ -131,6 +132,11 @@ type Server struct {
 	// insights aggregates session/usage data for /insights reports.
 	// Created during registerEarlyMethods; nil until then.
 	insights *insights.Engine
+
+	// polarisStore is the compaction summary store, created in
+	// registerSessionRPCMethods (Session phase) and read by the opt-in
+	// compaction tuner registered in registerWorkflowSideEffects (later phase).
+	polarisStore *polaris.Store
 
 	// notify mirrors user-impacting error events and status snapshots to the
 	// native client (live push) and the operator log. Created during

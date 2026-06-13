@@ -22,6 +22,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/compactuner"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
@@ -82,6 +84,7 @@ func (s *Server) registerSessionRPCMethods() {
 			} else {
 				transcriptStore = polaris.NewBridge(cached, polarisStore, s.logger)
 				polarisStoreForSweep = polarisStore
+				s.polarisStore = polarisStore // read by the opt-in compaction tuner
 			}
 		}
 		// Fallback: if Polaris initialization failed, use cached store directly.
@@ -507,6 +510,23 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 				Notify:    tunerNotify,
 				Logger:    s.logger,
 			}))
+
+			// Compaction tuner (opt-in): refine the summarizer's preservation
+			// guidelines from recent summaries' vagueness. Off by default — it
+			// auto-edits a prompt, so it ships behind a flag.
+			if os.Getenv("DENEB_COMPACTION_TUNER") == "1" && s.polarisStore != nil && s.modelRegistry != nil {
+				if lw := s.modelRegistry.Client(modelrole.RoleLightweight); lw != nil {
+					s.autonomousSvc.RegisterTask(compactuner.NewTask(compactuner.Deps{
+						Summaries:  s.polarisStore,
+						Guidelines: compaction.NewGuidelineStore(filepath.Join(config.ResolveStateDir(), compaction.GuidelineFileName)),
+						Client:     lw,
+						Model:      s.modelRegistry.Model(modelrole.RoleLightweight),
+						Notify:     tunerNotify,
+						Logger:     s.logger,
+					}))
+					s.logger.Info("compaction-tuner: enabled (DENEB_COMPACTION_TUNER)")
+				}
+			}
 		}
 	}
 
