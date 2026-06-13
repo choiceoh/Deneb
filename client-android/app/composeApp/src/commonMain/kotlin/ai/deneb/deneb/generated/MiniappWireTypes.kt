@@ -299,6 +299,7 @@ data class SkillLifecycleEvent(
     val version: String = "",
     val detail: String = "",
     val route: String = "",
+    val evidence: String = "",
 )
 
 @Serializable

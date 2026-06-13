@@ -45,7 +45,7 @@ func testSkillsDeps() SkillsDeps {
 		RecentLifecycle: func(limit int) ([]genesis.LifecycleLogEntry, error) {
 			return []genesis.LifecycleLogEntry{
 				{Type: "evolved", SkillName: "email-analysis", NewVersion: "1.1.1", Description: "개선", CreatedAt: 333},
-				{Type: "evolution_proposal", SkillName: "email-analysis", Route: "no-op", Reason: "기존 커버", CreatedAt: 300},
+				{Type: "evolution_proposal", SkillName: "email-analysis", Route: "no-op", Reason: "기존 커버", Evidence: "세션 관찰 기록", CreatedAt: 300},
 				{Type: "evolve_rejected", SkillName: "email-analysis", Reason: "judge 기각", CreatedAt: 250},
 				{Type: "evolved", SkillName: "email-analysis", NewVersion: "1.1.0", CreatedAt: 200},
 				{Type: "genesis", SkillName: "morning-letter", Description: "생성", CreatedAt: 111},
@@ -194,9 +194,21 @@ func TestSkillsLifecycle_MappingAndLimit(t *testing.T) {
 	if second.Type != "review" || second.Route != "no-op" || second.Detail != "기존 커버" {
 		t.Errorf("proposal must map to review verdict, got %+v", second)
 	}
+	if second.Evidence != "세션 관찰 기록" {
+		t.Errorf("review evidence = %q, want the proposal evidence", second.Evidence)
+	}
 	third := payload.Events[2]
 	if third.Type != "evolve_rejected" || third.Detail != "judge 기각" {
 		t.Errorf("third event = %+v, want evolve_rejected", third)
+	}
+}
+
+// A proposal whose reason is empty falls back to evidence as the detail line
+// and must not duplicate it into the Evidence field.
+func TestLifecycleEvent_EvidenceFallback(t *testing.T) {
+	ev := lifecycleEvent(genesis.LifecycleLogEntry{Type: "evolution_proposal", Route: "no-op", Evidence: "관찰만 존재"})
+	if ev.Detail != "관찰만 존재" || ev.Evidence != "" {
+		t.Errorf("evidence-only proposal = %+v, want Detail=관찰만 존재 Evidence=empty", ev)
 	}
 }
 

@@ -103,10 +103,14 @@ type SkillLifecycleEvent struct {
 	At        int64  `json:"at,omitempty"` // unix millis
 	// Version is the new version of a committed evolve.
 	Version string `json:"version,omitempty"`
-	// Detail is a one-line human summary (description or reason).
+	// Detail is the human summary (description or reason). The timeline row
+	// clamps it visually and reveals the full text when expanded.
 	Detail string `json:"detail,omitempty"`
 	// Route is the review decision for type=review: no-op | evolve | create | genesis.
 	Route string `json:"route,omitempty"`
+	// Evidence is the session observation a review verdict was based on —
+	// only set when it isn't already serving as Detail.
+	Evidence string `json:"evidence,omitempty"`
 }
 
 // SkillsLifecycleResponse is the miniapp.skills.lifecycle payload,
@@ -312,6 +316,12 @@ func skillsLifecycle(deps SkillsDeps) rpcutil.HandlerFunc {
 	}
 }
 
+// lifecycleTextMaxRunes caps Detail/Evidence on lifecycle events. The native
+// timeline clamps collapsed rows to a few lines and reveals the full text on
+// tap, so this is a transport guard against a pathological log line, not a
+// display cap (review reasons run 300-500 runes in practice).
+const lifecycleTextMaxRunes = 2000
+
 // lifecycleEvent projects a tracker log entry into the slim wire event.
 func lifecycleEvent(e genesis.LifecycleLogEntry) SkillLifecycleEvent {
 	ev := SkillLifecycleEvent{SkillName: e.SkillName, At: e.CreatedAt}
@@ -333,9 +343,12 @@ func lifecycleEvent(e genesis.LifecycleLogEntry) SkillLifecycleEvent {
 		ev.Detail = e.Reason
 		if ev.Detail == "" {
 			ev.Detail = e.Evidence
+		} else {
+			ev.Evidence = e.Evidence
 		}
 	}
-	ev.Detail = truncateDetail(ev.Detail, 200)
+	ev.Detail = truncateDetail(ev.Detail, lifecycleTextMaxRunes)
+	ev.Evidence = truncateDetail(ev.Evidence, lifecycleTextMaxRunes)
 	return ev
 }
 
