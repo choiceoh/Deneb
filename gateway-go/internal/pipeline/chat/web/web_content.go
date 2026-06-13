@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/liteparse"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
@@ -58,7 +59,7 @@ func classifyContentType(contentType string) fetchedContentType {
 	case strings.Contains(contentType, "application/json"),
 		strings.Contains(contentType, "+json"):
 		return contentTypeJSON
-	case liteparse.Available() && liteparse.SupportedMIME(contentType):
+	case tools.IsExtractableDocument(contentType, ""):
 		return contentTypeDocument
 	default:
 		return contentTypePlain
@@ -83,7 +84,7 @@ func processFetchedContent(
 		return processJSON(rawContent)
 	case contentTypeDocument:
 		// Use raw bytes (not charset-normalized string) for binary documents.
-		return processDocument(ctx, rawBytes, url)
+		return processDocument(ctx, rawBytes, url, contentType)
 	default:
 		return rawContent
 	}
@@ -102,9 +103,10 @@ func processJSON(raw string) string {
 	return string(pretty)
 }
 
-// processDocument extracts text from a binary document (PDF, Office, etc.)
-// using the LiteParse CLI. Falls back to a notice if parsing fails.
-func processDocument(ctx context.Context, data []byte, url string) string {
+// processDocument extracts text from a binary document (PDF, Office, CSV). It
+// prefers the lit CLI when installed (richer parsing) and otherwise falls back
+// to the built-in Go extractors, so document fetch works with no external deps.
+func processDocument(ctx context.Context, data []byte, url, contentType string) string {
 	name := "document"
 	if url != "" {
 		// Extract filename from URL path.
@@ -117,14 +119,15 @@ func processDocument(ctx context.Context, data []byte, url string) string {
 		}
 	}
 
-	text, err := liteparse.Parse(ctx, data, name)
-	if err != nil {
-		return fmt.Sprintf("(문서 파싱 실패: %s)", err)
+	if liteparse.Available() {
+		if text, err := liteparse.Parse(ctx, data, name); err == nil && strings.TrimSpace(text) != "" {
+			return text
+		}
 	}
-	if strings.TrimSpace(text) == "" {
-		return "(문서에서 텍스트를 추출하지 못했습니다)"
+	if text, ok := tools.ExtractDocumentText(ctx, data, name, contentType); ok && strings.TrimSpace(text) != "" {
+		return text
 	}
-	return text
+	return "(문서에서 텍스트를 추출하지 못했습니다)"
 }
 
 // --- Output formatting ---

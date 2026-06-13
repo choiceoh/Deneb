@@ -319,6 +319,11 @@ func extractDropboxFileText(ctx context.Context, name string, data []byte) strin
 			return text
 		}
 		return ""
+	case strings.HasSuffix(lower, ".csv"):
+		if text, err := csvToMarkdown(data); err == nil {
+			return text
+		}
+		return string(data)
 	case isTextFile(lower):
 		return string(data)
 	default:

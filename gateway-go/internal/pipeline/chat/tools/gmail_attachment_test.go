@@ -158,3 +158,151 @@ func TestSaveAttachmentToDisk(t *testing.T) {
 		t.Errorf("readback = %q, %v", got, err)
 	}
 }
+
+// TestXLSXToText_MarkdownTable verifies the sheet renders as a well-formed
+// markdown table (header row + separator), not a loose pipe-joined blob.
+func TestXLSXToText_MarkdownTable(t *testing.T) {
+	text, err := xlsxToText(makeTestXLSX(t))
+	if err != nil {
+		t.Fatalf("xlsxToText: %v", err)
+	}
+	for _, want := range []string{
+		"| 품목 | 금액 |",       // header row wrapped in pipes
+		"| --- | --- |",     // markdown header separator
+		"| 계약서 | 1500000 |", // body row
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+}
+
+// TestXLSXToText_SparseColumns is the regression guard for the alignment bug:
+// a cell whose A1-ref skips earlier columns (here only C2 is present) must land
+// in its true column, not slide left into column A.
+func TestXLSXToText_SparseColumns(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	write := func(name, content string) {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("xl/sharedStrings.xml",
+		`<?xml version="1.0"?><sst><si><t>품목</t></si><si><t>수량</t></si><si><t>금액</t></si><si><t>비고</t></si></sst>`)
+	write("xl/worksheets/sheet1.xml",
+		`<?xml version="1.0"?><worksheet><sheetData>`+
+			`<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c></row>`+
+			`<row r="2"><c r="C2" t="s"><v>3</v></c></row>`+ // only column C present
+			`</sheetData></worksheet>`)
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	text, err := xlsxToText(buf.Bytes())
+	if err != nil {
+		t.Fatalf("xlsxToText: %v", err)
+	}
+	if !strings.Contains(text, "|  |  | 비고 |") {
+		t.Errorf("sparse cell C2 did not align to column 3:\n%s", text)
+	}
+}
+
+// TestDOCXTable verifies a Word table (<w:tbl>) renders as a markdown table
+// rather than collapsing into a vertical list of cell values.
+func TestDOCXTable(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.Create("word/document.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Write([]byte(`<?xml version="1.0"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p><w:r><w:t>견적 내역</w:t></w:r></w:p>
+<w:tbl>
+<w:tr><w:tc><w:p><w:r><w:t>품목</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>수량</w:t></w:r></w:p></w:tc></w:tr>
+<w:tr><w:tc><w:p><w:r><w:t>모듈</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>100</w:t></w:r></w:p></w:tc></w:tr>
+</w:tbl>
+</w:body>
+</w:document>`))
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	text, err := docxToText(buf.Bytes())
+	if err != nil {
+		t.Fatalf("docxToText: %v", err)
+	}
+	for _, want := range []string{"견적 내역", "| 품목 | 수량 |", "| --- | --- |", "| 모듈 | 100 |"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+}
+
+// TestPPTXTable verifies a PowerPoint DrawingML table (<a:tbl>) renders as a
+// markdown table.
+func TestPPTXTable(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.Create("ppt/slides/slide1.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Write([]byte(`<?xml version="1.0"?>
+<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<p:cSld><p:spTree><p:graphicFrame><a:graphic><a:graphicData>
+<a:tbl>
+<a:tr><a:tc><a:txBody><a:p><a:r><a:t>지역</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>매출</a:t></a:r></a:p></a:txBody></a:tc></a:tr>
+<a:tr><a:tc><a:txBody><a:p><a:r><a:t>서울</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>50억</a:t></a:r></a:p></a:txBody></a:tc></a:tr>
+</a:tbl>
+</a:graphicData></a:graphic></p:graphicFrame></p:spTree></p:cSld>
+</p:sld>`))
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	text, err := pptxToText(buf.Bytes())
+	if err != nil {
+		t.Fatalf("pptxToText: %v", err)
+	}
+	for _, want := range []string{"| 지역 | 매출 |", "| 서울 | 50억 |"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+}
+
+func TestColIndexFromRef(t *testing.T) {
+	cases := map[string]int{
+		"A1": 0, "B2": 1, "Z9": 25, "AA10": 26, "AB1": 27,
+		"": -1, "1": -1, "  ": -1,
+	}
+	for ref, want := range cases {
+		if got := colIndexFromRef(ref); got != want {
+			t.Errorf("colIndexFromRef(%q) = %d, want %d", ref, got, want)
+		}
+	}
+}
+
+func TestMdTable(t *testing.T) {
+	// Ragged rows are padded; a pipe in a cell is escaped.
+	got := mdTable([][]string{
+		{"a", "b"},
+		{"c|d"}, // shorter row + embedded pipe
+	})
+	want := "| a | b |\n| --- | --- |\n| c\\|d |  |"
+	if got != want {
+		t.Errorf("mdTable mismatch:\n got: %q\nwant: %q", got, want)
+	}
+	if mdTable(nil) != "" {
+		t.Error("mdTable(nil) should be empty")
+	}
+}
