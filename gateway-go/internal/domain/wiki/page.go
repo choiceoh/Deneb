@@ -424,7 +424,7 @@ func parseFrontmatterFields(raw string) Frontmatter {
 		case "summary":
 			fm.Summary = val
 		case "category":
-			fm.Category = val
+			fm.Category = normalizeCategory(val)
 		case "tags":
 			fm.Tags = parseFlowArray(val)
 		case "related":
@@ -448,6 +448,21 @@ func parseFrontmatterFields(raw string) Frontmatter {
 		}
 	}
 	return fm
+}
+
+// normalizeCategory collapses a category value that leaked a wikilink form down
+// to its plain name so one bucket doesn't split into phantom categories in the
+// browser. The auto-categorizer sometimes wrote a category as a wiki ref —
+// "w:프로젝트" (knowledge-router namespace) or "[[프로젝트]]" — which the count
+// treated as distinct from "프로젝트". Path categories ("프로젝트/영산고") are
+// intentional sub-buckets and kept as-is; a plain name is returned unchanged.
+func normalizeCategory(s string) string {
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "[[") && strings.HasSuffix(s, "]]") {
+		s = strings.TrimSpace(s[2 : len(s)-2])
+	}
+	s = strings.TrimPrefix(s, "w:")
+	return strings.TrimSpace(s)
 }
 
 // parseKV splits "key: value" into (key, value, true).
