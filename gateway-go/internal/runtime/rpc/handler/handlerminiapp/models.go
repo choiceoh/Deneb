@@ -23,6 +23,12 @@ type ModelOption struct {
 	// Custom marks a user-added model (provider custom/custom-N) that the
 	// picker may delete; built-in/role models leave this false.
 	Custom bool `json:"custom,omitempty"`
+	// Deletable marks a model the picker may remove. True for user-added custom
+	// models AND cloud-catalog provider models (openrouter/zai/kimi/mimo-plan/…);
+	// local vLLM/localai models are role-critical and stay false. The delete path
+	// removes custom models from config and adds built-in cloud models to
+	// models.hiddenModels (a soft hide that survives the built-in re-merge).
+	Deletable bool `json:"deletable,omitempty"`
 	// Unhealthy is the model-health circuit breaker state (consecutive
 	// failures; initial attempts are being skipped in favor of fallback).
 	// Distinct from Health, which is endpoint reachability.

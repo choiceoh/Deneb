@@ -346,8 +346,8 @@ internal fun ModelTab(client: DenebGatewayClient) {
                                 )
                             }
                         }
-                        // User-added models can be removed; built-in/role models can't.
-                        if (model.custom) {
+                        // Custom + cloud-catalog models can be removed; local vLLM/LocalAI can't.
+                        if (model.deletable) {
                             TextButton(
                                 onClick = {
                                     haptics.reject()
