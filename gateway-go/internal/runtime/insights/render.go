@@ -1,16 +1,16 @@
-// render.go — MarkdownV2 (Telegram-flavored) and plain-text rendering for Report.
+// render.go — MarkdownV2-style and plain-text rendering for Report.
 // Consumed by the insights RPC handler; the format conventions below are
 // inherited from the retired Telegram surface and kept for renderer compat.
 //
 // MarkdownV2 reserved characters: _ * [ ] ( ) ~ ` > # + - = | { } . !
 // We always wrap tabular data in ```-fenced code blocks where escaping is not
-// required (Telegram treats code-block contents literally). Labels outside the
+// required (code-block contents are treated literally). Labels outside the
 // code block are escaped via escapeMDv2.
 //
-// Telegram's hard cap is 4096 chars per message — we cap at 3800 to leave
-// headroom for the caller's chunk prefix, emoji width and MarkdownV2 escape
-// overhead. If a report would exceed the cap we trim sections and append a
-// "…" marker; the renderer never returns something longer than the limit.
+// We cap the rendered body at 3800 chars to leave headroom for the caller's
+// chunk prefix, emoji width and MarkdownV2 escape overhead. If a report would
+// exceed the cap we trim sections and append a "…" marker; the renderer never
+// returns something longer than the limit.
 
 package insights
 
@@ -19,14 +19,13 @@ import (
 	"strings"
 )
 
-// maxTelegramBody is the soft limit for rendered MarkdownV2 output.
-// Telegram's hard limit is 4096; we stay conservative to account for
-// downstream wrapping and emoji char width.
-const maxTelegramBody = 3800
+// maxRenderedBody is the soft limit for rendered MarkdownV2 output.
+// We stay conservative to account for downstream wrapping and emoji char width.
+const maxRenderedBody = 3800
 
-// RenderMarkdownV2 renders a report as Telegram-safe MarkdownV2.
+// RenderMarkdownV2 renders a report as escaped MarkdownV2.
 // Labels are escaped; tabular data lives in code fences (no escaping needed).
-// The output is guaranteed to be <= maxTelegramBody characters.
+// The output is guaranteed to be <= maxRenderedBody characters.
 func RenderMarkdownV2(r *Report) string {
 	if r == nil {
 		return escapeMDv2("리포트 생성 실패.")
@@ -236,13 +235,13 @@ func appendSchemaNotes(b *strings.Builder, notes []string) {
 	}
 }
 
-// capBody truncates rendered text to maxTelegramBody with a truncation marker.
+// capBody truncates rendered text to maxRenderedBody with a truncation marker.
 // It prefers to cut at a newline to avoid slicing through a code fence.
 func capBody(s string) string {
-	if len(s) <= maxTelegramBody {
+	if len(s) <= maxRenderedBody {
 		return s
 	}
-	cut := maxTelegramBody - 32
+	cut := maxRenderedBody - 32
 	if cut < 0 {
 		cut = 0
 	}

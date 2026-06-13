@@ -13,9 +13,8 @@ import (
 // Auto-titling of native-client conversations.
 //
 // The native client's conversation drawer renders each session's Label (via the
-// miniapp.sessions.recent RPC). Telegram sessions get a label at inbound time
-// (sender / chat name, see server/inbound.go), but a fresh native chat — session
-// key "client:main:<uuid>" started by the app's "new chat" — has no label, so the
+// miniapp.sessions.recent RPC). A fresh native chat — session key
+// "client:main:<uuid>" started by the app's "new chat" — has no label, so the
 // drawer fell back to "내 대화 · a1b2c3d4". Here we derive a short Korean title
 // from the first exchange using the lightweight model role and patch it onto the
 // session. The client needs zero changes: every surface that reads Label benefits.
@@ -46,8 +45,7 @@ func (h *Handler) autoTitleSessionAsync(sessionKey, userMsg string, result *Sync
 		return
 	}
 	// Only per-conversation native sub-sessions ("client:main:<uuid>"). The bare
-	// "client:main" home, telegram:* (labeled at inbound), and cron/system keys
-	// are all intentionally excluded.
+	// "client:main" home and cron/system keys are all intentionally excluded.
 	if !strings.HasPrefix(sessionKey, nativeChatSessionPrefix) {
 		return
 	}

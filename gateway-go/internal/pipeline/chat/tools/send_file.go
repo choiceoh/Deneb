@@ -40,7 +40,7 @@ func ToolSendFile() ToolFunc {
 		}
 
 		// Enforce the channel-specific upload limit injected at run start.
-		// Falls back to 50 MB (Telegram's limit) when no channel limit is registered.
+		// Falls back to 50 MB when no channel limit is registered.
 		maxFileSize := toolctx.MaxUploadBytesFromContext(ctx)
 		if maxFileSize == 0 {
 			maxFileSize = 50 * 1024 * 1024 // safe default

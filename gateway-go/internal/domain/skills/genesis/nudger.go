@@ -29,8 +29,8 @@ import (
 
 // DefaultNudgeInterval is the default number of tool invocations between
 // background skill-review fires. Hermes uses 10, but Deneb's primary I/O
-// surface (Telegram) typically ends sessions at 5-7 tool calls before
-// the threshold is ever crossed, so we use a tighter default so the
+// surface (the native client) typically ends sessions at 5-7 tool calls
+// before the threshold is ever crossed, so we use a tighter default so the
 // system actually fires on real conversations.
 const DefaultNudgeInterval = 5
 

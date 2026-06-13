@@ -421,9 +421,9 @@ func gatewayUpdate(ctx context.Context, deps GatewayDeps, repoDir string, confir
 
 // approvalEnvelope returns a structured JSON response signalling that the
 // action is destructive and requires user confirmation via a button.
-// The pipeline / channel layer interprets `confirm_button` and renders an
-// inline keyboard in Telegram; the agent relays the Korean summary as plain
-// text if no button UI is available.
+// The pipeline / channel layer interprets `confirm_button` and renders a
+// confirmation button in the native client; the agent relays the Korean
+// summary as plain text if no button UI is available.
 func approvalEnvelope(token, action, summary, buttonLabel string) (string, error) {
 	envelope := map[string]any{
 		"needs_approval": true,

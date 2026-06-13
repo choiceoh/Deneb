@@ -61,7 +61,7 @@ func ClearAbortCutoffInSession(entry *SessionAbortCutoffEntry) bool {
 }
 
 // toNumericMessageSid attempts to parse a message SID as a big integer
-// for Telegram-style numeric message IDs.
+// for numeric message IDs.
 func toNumericMessageSid(value string) *big.Int {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
@@ -81,8 +81,8 @@ func toNumericMessageSid(value string) *big.Int {
 
 // ShouldSkipMessageByAbortCutoff determines whether a message should be
 // skipped because it falls at or before the abort cutoff marker.
-// Uses numeric SID comparison (for Telegram) with string fallback,
-// then timestamp comparison.
+// Uses numeric SID comparison (when the SIDs are numeric) with string
+// fallback, then timestamp comparison.
 func ShouldSkipMessageByAbortCutoff(cutoffSid string, cutoffTimestamp *int64, messageSid string, messageTimestamp *int64) bool {
 	cSid := strings.TrimSpace(cutoffSid)
 	mSid := strings.TrimSpace(messageSid)
