@@ -130,6 +130,9 @@ func formatObserveTurn(v observe.TurnView) string {
 	if v.Failure != nil {
 		fmt.Fprintf(&b, "  ERROR: %s (aborted=%v)\n", v.Failure.Error, v.Failure.Aborted)
 	}
+	if eff := formatTurnEffort(v.Turns); eff != "" {
+		b.WriteString(eff)
+	}
 	if len(v.Tools) > 0 {
 		b.WriteString("  tools:\n")
 		for _, t := range v.Tools {
@@ -167,6 +170,30 @@ func formatObserveLogs(lines []observe.LogLine) string {
 		fmt.Fprintf(&b, "  [%s]%s %s\n", l.Level, tag, l.Msg)
 	}
 	return b.String()
+}
+
+// formatTurnEffort renders the per-step effort decisions across a run's turns —
+// thinking on/off and the observation size that informed each (the per-step
+// label feed for a future learned router). Empty when the effort router was
+// inactive (no turn carried a routed decision or observation).
+func formatTurnEffort(turns []agentlog.TurnLLMData) string {
+	parts := make([]string, 0, len(turns))
+	hasSignal := false
+	for _, t := range turns {
+		mode := "on"
+		if t.ThinkingOff {
+			mode = "off"
+			hasSignal = true
+		}
+		if t.ObsRunes > 0 {
+			hasSignal = true
+		}
+		parts = append(parts, fmt.Sprintf("t%d:%s/obs=%d", t.Turn, mode, t.ObsRunes))
+	}
+	if !hasSignal {
+		return ""
+	}
+	return "  effort: " + strings.Join(parts, " ") + "\n"
 }
 
 func formatObserveBehavior(agg agentlog.AggregateResult, days int) string {
