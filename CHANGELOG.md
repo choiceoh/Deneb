@@ -1,5 +1,41 @@
 # Changelog
 
+## [4.27.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.26.0...deneb-v4.27.0) (2026-06-13)
+
+
+### ✨ Features
+
+* **agentlog:** log per-step effort decision and observation size ([#2305](https://github.com/choiceoh/Deneb/issues/2305)) ([bf189e5](https://github.com/choiceoh/Deneb/commit/bf189e52904718069386bb4072cc5b42bb2709b7))
+* **compaction:** ACON-style learned summarizer guidelines (opt-in) ([#2303](https://github.com/choiceoh/Deneb/issues/2303)) ([b05f34b](https://github.com/choiceoh/Deneb/commit/b05f34ba52f666fe08649294d28eb82500bdb396))
+* **native:** 스킬 진화 내역 탭하면 펼쳐서 자세히 보기 ([#2297](https://github.com/choiceoh/Deneb/issues/2297)) ([ad54f8d](https://github.com/choiceoh/Deneb/commit/ad54f8d3f32b94e1b034303376a43accc9e2d286))
+* research-grounded recall/skill correctness + effort & proactive observability ([#2299](https://github.com/choiceoh/Deneb/issues/2299)) ([8cf3c98](https://github.com/choiceoh/Deneb/commit/8cf3c9851d949d7bd2c04725464a5ad1c71df8c6))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** gateway 사용자 표면 한국어 누출 봉합 + Telegram 화석 정리 ([#2301](https://github.com/choiceoh/Deneb/issues/2301)) ([f42b308](https://github.com/choiceoh/Deneb/commit/f42b30806a8990edafbc2c8296b63d34e1f360e4))
+* **chat:** stop labeling interactive native chats as scheduled auto-runs ([#2312](https://github.com/choiceoh/Deneb/issues/2312)) ([d480e9c](https://github.com/choiceoh/Deneb/commit/d480e9c3a09d341ccb50ce7a7528a667e98c1dd2))
+* **chat:** 깊이 생각 중 칩을 추론 토막 대신 완결 문장으로 정제 ([#2298](https://github.com/choiceoh/Deneb/issues/2298)) ([c1485f7](https://github.com/choiceoh/Deneb/commit/c1485f7ce884493fa566c078cf9823dbc11ce472))
+* **compaction:** rune-safe tool-result truncation + ctx-guard in emergency tier ([#2307](https://github.com/choiceoh/Deneb/issues/2307)) ([1b5118b](https://github.com/choiceoh/Deneb/commit/1b5118bc644e1b53b5417e34708c21d0a0464b25))
+* **gmailpoll:** retry on total batch-analysis failure instead of dropping mail ([#2310](https://github.com/choiceoh/Deneb/issues/2310)) ([877fcc1](https://github.com/choiceoh/Deneb/commit/877fcc1f569f9dcd5f79db2878fb36568f64ec2e))
+* **native:** drop the outer card around self-chromed deneb-ui roots ([#2293](https://github.com/choiceoh/Deneb/issues/2293)) ([3171299](https://github.com/choiceoh/Deneb/commit/3171299544a0bb884e2195a543aeba6591c971db))
+* **native:** quiet per-message action buttons to hint tone ([#2290](https://github.com/choiceoh/Deneb/issues/2290)) ([20c81f3](https://github.com/choiceoh/Deneb/commit/20c81f3fb2bf9c9e66a1d14655c4da0653a231f1))
+
+
+### ⚡ Performance
+
+* **chat:** widen effort-router non-thinking window ([#2302](https://github.com/choiceoh/Deneb/issues/2302)) ([09f435b](https://github.com/choiceoh/Deneb/commit/09f435bb95b1879cd047d9fd964333c5c5404d27))
+
+
+### 🔧 Internal
+
+* **chat:** dead channel-silent 억제 메커니즘 통째 제거 ([#2309](https://github.com/choiceoh/Deneb/issues/2309)) ([97a5d10](https://github.com/choiceoh/Deneb/commit/97a5d10fdb7d4f8c76bc9fa43c5975fc0c124502))
+* **chat:** dead clarify 도구 통째 제거 + message channel 예시 정리 ([#2308](https://github.com/choiceoh/Deneb/issues/2308)) ([cdfe57c](https://github.com/choiceoh/Deneb/commit/cdfe57cd206860674afde8dc5a787f2eb53d45c7))
+* **chat:** LLM 프롬프트의 텔레그램 잔재 제거 + 놓친 주석 정리 ([#2311](https://github.com/choiceoh/Deneb/issues/2311)) ([87bbcde](https://github.com/choiceoh/Deneb/commit/87bbcde3f88164bc71b3341c8f168ba3cb0155dd))
+* **chat:** 잔여 Telegram 화석 전수 정리 (주석·식별자·dead 분기) ([#2306](https://github.com/choiceoh/Deneb/issues/2306)) ([aa1e9cc](https://github.com/choiceoh/Deneb/commit/aa1e9ccb7a13fae123dd64385ab2db740a1090c9))
+* **native:** drop per-message copy button ([#2292](https://github.com/choiceoh/Deneb/issues/2292)) ([f2ad065](https://github.com/choiceoh/Deneb/commit/f2ad065a30794c5bb39fc65de8b946fb15cf3430))
+* **native:** 한국어 표면 폴리싱 — 영어 누출·톤 통일·검색 디자인 이식 ([#2304](https://github.com/choiceoh/Deneb/issues/2304)) ([0c85f34](https://github.com/choiceoh/Deneb/commit/0c85f343903eb129b9aa3bf4e49328aa42ebe2c7))
+
 ## [4.26.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.25.0...deneb-v4.26.0) (2026-06-12)
 
 
