@@ -16,9 +16,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// nativeClientChannel routes standalone native-client chat turns. The chat
-// pipeline's richUIChannel treats this channel as rich-UI-capable, so the agent
-// emits deneb-ui fences for the native app (and Telegram stays unaffected).
+// nativeClientChannel is the channel identity for standalone native-client chat
+// turns — it keys the session, delivery, and the system prompt's runtime line.
+// (deneb-ui blocks still render on the native side; the gateway no longer
+// prompts the model to emit them — see PR removing the deneb-ui instructions.)
 const nativeClientChannel = "client"
 
 // MiniappMethods returns the miniapp-namespaced chat bridge. The standalone
@@ -368,7 +369,6 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 		}
 
 		res, err := deps.Chat.SendSync(ctx, sessionKey, p.Message, strings.TrimSpace(p.Model), &chatpkg.SyncOptions{
-			// Channel "client" flips on deneb-ui emission (richUIChannel).
 			Delivery: &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
 			// The reply text is returned here, not pushed via the message tool.
 			AutoDeliveredOutput: true,

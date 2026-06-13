@@ -393,28 +393,6 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// system prompt stays byte-identical across both run families.
 	d.WriteString("\n")
 
-	// Rich interactive UI (deneb-ui) — gated to clients that can render it (the
-	// native app). Lives in the dynamic block, so clients without rich-UI
-	// support (flag off) keep a byte-identical prompt and the prompt cache is
-	// untouched.
-	if params.SupportsRichUI {
-		d.WriteString("## 리치 인터랙티브 UI (deneb-ui)\n")
-		d.WriteString("이 클라이언트는 인터랙티브 화면을 렌더할 수 있다. 대시보드·폼·선택지·구조화된 데이터를 보여줄 때 일반 텍스트 대신 ```deneb-ui 코드펜스 안에 JSON 한 객체를 넣어라. 펜스는 네이티브 화면으로 렌더되고, 버튼을 누르면 새 사용자 턴으로 돌아온다.\n")
-		d.WriteString("- 언제: 비교/현황/지표 → 대시보드, 입력 받기 → 폼, 분기 선택 → 버튼/칩. 단순 한두 문장 답변은 그냥 텍스트로 (모든 답을 UI로 만들지 마라).\n")
-		d.WriteString("- **반드시 ```deneb-ui 코드펜스로 감싸라** — 펜스 없는 raw JSON은 화면으로 렌더되지 않는다. 펜스 안은 유효한 JSON 한 객체, 보통 root는 `{\"type\":\"column\",\"children\":[...]}`. 짧은 안내 문장 + 펜스 조합이 좋다.\n")
-		d.WriteString("- 노드 `type`: 레이아웃 column/row/card/box/list/accordion(title,children — 접힌 카드, 탭해서 펼침; 긴 보고서는 accordion+markdown 조합)/tabs/divider · 콘텐츠 text(value,style:headline|title|body|caption)/markdown(value — 리치 마크다운 본문, 긴 prose는 text 대신 이걸로)/image/icon/code/quote/badge/stat(value,label)/avatar/table(headers,rows) · 입력 text_input/date_input(value:ISO날짜)/time_input(value:HH:mm)/checkbox/select/switch/slider/radio_group/chip_group · 피드백 progress/alert(message,severity:info|success|warning|error)/countdown · button(label,variant:filled|outlined|text|tonal,action).\n")
-		d.WriteString("- **입력 노드(text_input/date_input/time_input/checkbox/select/switch/slider/radio_group/chip_group)는 고유한 `id` 필수.** date_input/time_input은 네이티브 날짜·시간 피커를 연다 — 마감일·미팅 시각은 text_input 대신 이걸 써라. 비우면 안 되는 입력엔 `\"required\":true` — 빈 채로 제출하면 클라가 막고 해당 필드를 표시한다. text_input은 `\"keyboard\":\"number|decimal|email|phone|url\"`로 키보드 지정 가능, select는 `\"placeholder\"` 지원.\n")
-		d.WriteString("- 상호작용: button/countdown의 `action`은 `{\"type\":\"callback\",\"event\":\"이름\",\"collectFrom\":[\"입력id\",...]}`. `event`는 다음 턴에 받을 식별자, `collectFrom`은 함께 보낼 입력 노드 id들. 외부 링크는 `{\"type\":\"open_url\",\"url\":\"...\"}`.\n")
-		d.WriteString("- 예시(대시보드):\n")
-		d.WriteString("```deneb-ui\n")
-		d.WriteString("{\"type\":\"column\",\"children\":[{\"type\":\"text\",\"value\":\"오늘 거래 현황\",\"style\":\"title\"},{\"type\":\"row\",\"children\":[{\"type\":\"stat\",\"value\":\"3\",\"label\":\"임박\"},{\"type\":\"stat\",\"value\":\"12\",\"label\":\"진행\"}]},{\"type\":\"button\",\"label\":\"새로고침\",\"action\":{\"type\":\"callback\",\"event\":\"refresh_deals\"}}]}\n")
-		d.WriteString("```\n")
-		d.WriteString("- 예시(폼):\n")
-		d.WriteString("```deneb-ui\n")
-		d.WriteString("{\"type\":\"column\",\"children\":[{\"type\":\"text_input\",\"id\":\"title\",\"label\":\"제목\"},{\"type\":\"select\",\"id\":\"cat\",\"label\":\"분류\",\"options\":[\"업무\",\"개인\"]},{\"type\":\"button\",\"label\":\"저장\",\"action\":{\"type\":\"callback\",\"event\":\"save_note\",\"collectFrom\":[\"title\",\"cat\"]}}]}\n")
-		d.WriteString("```\n\n")
-	}
-
 	// Inter-agent bridge.
 	if _, ok := toolSet["bridge"]; ok {
 		d.WriteString("## 에이전트 간 통신 (Bridge)\n")
