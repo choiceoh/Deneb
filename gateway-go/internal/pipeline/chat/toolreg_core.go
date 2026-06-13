@@ -38,6 +38,20 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Fn:          tools.ToolFetchTools(registry),
 	})
 
+	// code_action (CodeAct): the model writes Python to orchestrate several
+	// read-only tools / batch-process data in one turn. Registered here (like
+	// fetch_tools) because it dials back into this ToolRegistry as its bridge.
+	// Deferred — niche but powerful, so it stays out of the eager prompt and is
+	// loaded via fetch_tools. Main-only by construction: it is absent from
+	// toolpreset, so restricted sub-agents cannot reach this primitive.
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "code_action",
+		Description: tools.CodeActionDescription,
+		InputSchema: tools.CodeActionSchema(),
+		Deferred:    true,
+		Fn:          tools.ToolCodeAction(registry),
+	})
+
 	RegisterDefaultPostProcessors(registry)
 
 	// Wire spillover store for large tool result management.
