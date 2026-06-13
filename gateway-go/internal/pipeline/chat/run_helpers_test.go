@@ -4,7 +4,45 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
 )
+
+// TestShouldStripThinking verifies the Anthropic thinking-signature recovery
+// is actually wired: a 400 whose body names a thinking-block signature
+// classifies (llmerr) to Action.StripThink, while other 4xx/5xx do not. This
+// is the consumer that makes the StripThink recovery action live — without a
+// caller reading it, the classified recovery never fires.
+func TestShouldStripThinking(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil error", nil, false},
+		{
+			"anthropic thinking-signature 400",
+			&httpretry.APIError{StatusCode: 400, Message: `{"error":{"message":"messages.1.content.0.thinking.signature: invalid signature for thinking block"}}`},
+			true,
+		},
+		{
+			"plain 400 format error",
+			&httpretry.APIError{StatusCode: 400, Message: "invalid request body"},
+			false,
+		},
+		{
+			"transient 502",
+			&httpretry.APIError{StatusCode: 502, Message: "bad gateway"},
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldStripThinking(tt.err); got != tt.want {
+				t.Errorf("shouldStripThinking(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
 
 func TestFormatToolActivitySummary(t *testing.T) {
 	tests := []struct {

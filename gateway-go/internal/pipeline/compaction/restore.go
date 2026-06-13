@@ -266,6 +266,51 @@ func StripImageBlocks(messages []llm.Message) []llm.Message {
 	return out
 }
 
+// StripThinkingBlocks removes extended-thinking blocks ("thinking" and
+// "redacted_thinking") from messages, returning the rewritten slice and the
+// number of blocks removed.
+//
+// Anthropic-compatible endpoints reject a request with a 400 when an echoed
+// thinking block carries an invalid or stale cryptographic signature — for
+// example after a mid-loop compaction shifts the prefix the block was signed
+// against, or when signed reasoning is replayed to a model that did not mint
+// it. The classified recovery (llmerr.ReasonThinkingSignature ->
+// Action.StripThink) is to drop the thinking blocks and retry; the reasoning
+// text is non-user-facing, so losing it on a recovery retry costs nothing.
+//
+// An assistant turn that becomes empty (thinking-only) is left with an empty
+// block array — the Anthropic converter already skips empty/thinking-only
+// assistant messages, and no tool_result depends on a thinking-only turn.
+func StripThinkingBlocks(messages []llm.Message) ([]llm.Message, int) {
+	out := make([]llm.Message, len(messages))
+	stripped := 0
+	for i, msg := range messages {
+		var blocks []llm.ContentBlock
+		if json.Unmarshal(msg.Content, &blocks) != nil {
+			// String content (no blocks) — nothing to strip.
+			out[i] = msg
+			continue
+		}
+		modified := false
+		filtered := make([]llm.ContentBlock, 0, len(blocks))
+		for _, b := range blocks {
+			if b.Type == "thinking" || b.Type == "redacted_thinking" {
+				stripped++
+				modified = true
+				continue
+			}
+			filtered = append(filtered, b)
+		}
+		if modified {
+			raw, _ := json.Marshal(filtered)
+			out[i] = llm.Message{Role: msg.Role, Content: raw}
+		} else {
+			out[i] = msg
+		}
+	}
+	return out, stripped
+}
+
 // TruncateOldToolResults replaces the content of old tool_result blocks
 // with a short placeholder when the content exceeds minChars runes.
 // Operates on tool_result blocks older than turnThreshold assistant turns
