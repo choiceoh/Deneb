@@ -266,7 +266,7 @@ private fun GatewayStatusCard(
             )
         } else {
             Text(
-                "Gateway v${status.version.ifBlank { "unknown" }} · Native API ${status.nativeApiVersion}",
+                "게이트웨이 v${status.version.ifBlank { "확인 불가" }} · 네이티브 API ${status.nativeApiVersion}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )

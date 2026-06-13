@@ -125,7 +125,7 @@ fun DenebTodoScreen(
                         loadOk == null && todos.isEmpty() -> DenebLoading()
 
                         loadOk == false && todos.isEmpty() -> DenebError(
-                            "할 일을 불러오지 못했어요.",
+                            "할 일을 불러오지 못했습니다.",
                             onRetry = {
                                 scope.launch {
                                     loadOk = null
@@ -134,7 +134,7 @@ fun DenebTodoScreen(
                             },
                         )
 
-                        todos.isEmpty() -> DenebEmpty("할 일이 없어요.", actionLabel = "할 일 추가", onAction = onAddTodo)
+                        todos.isEmpty() -> DenebEmpty("할 일이 없습니다.", actionLabel = "할 일 추가", onAction = onAddTodo)
 
                         else -> TodoListContent(todos, onToggle = ::toggle, onOpen = onOpenTodo)
                     }

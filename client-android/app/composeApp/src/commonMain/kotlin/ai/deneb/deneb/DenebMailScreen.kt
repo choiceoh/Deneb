@@ -215,7 +215,7 @@ fun DenebMailScreen(
                             item(key = "load-error") {
                                 Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
                                     DenebError(
-                                        "메일을 불러오지 못했어요.",
+                                        "메일을 불러오지 못했습니다.",
                                         onRetry = {
                                             scope.launch {
                                                 loadOk = null

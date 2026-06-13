@@ -2,9 +2,12 @@ package ai.deneb.deneb
 
 import ai.deneb.Platform
 import ai.deneb.currentPlatform
+import ai.deneb.ui.DenebRow
 import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebSectionLabel
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
-import androidx.compose.foundation.clickable
+import ai.deneb.ui.denebHint
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -110,17 +113,17 @@ fun DenebSearchScreen(
                 searching && r == null -> DenebLoading("검색 중…")
 
                 failed -> DenebError(
-                    "검색에 실패했어요.",
+                    "검색에 실패했습니다.",
                     onRetry = { run() },
                 )
 
                 r == null -> Text(
                     "위키 · 일기 · 사람을 한 번에 검색합니다.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = DenebType.body,
+                    color = denebHint(),
                 )
 
-                r.wiki.isEmpty() && r.diary.isEmpty() && r.people.isEmpty() -> DenebEmpty("결과 없음")
+                r.wiki.isEmpty() && r.diary.isEmpty() && r.people.isEmpty() -> DenebEmpty("검색 결과가 없습니다")
 
                 else -> {
                     if (r.wiki.isNotEmpty()) {
@@ -154,45 +157,32 @@ fun DenebSearchScreen(
 
 @Composable
 private fun GroupHeader(label: String) {
-    Spacer(Modifier.height(12.dp))
-    Text(
-        label,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-    )
-    Spacer(Modifier.height(2.dp))
+    DenebSectionLabel(label)
 }
 
 @Composable
 private fun ResultRow(title: String, snippet: String, onClick: (() -> Unit)?) {
     val haptics = rememberHaptics()
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable {
-                        haptics.tap()
-                        onClick()
-                    }
-                } else {
-                    Modifier
-                },
-            )
-            .padding(vertical = 10.dp),
+    DenebRow(
+        onClick = onClick?.let { cb ->
+            {
+                haptics.tap()
+                cb()
+            }
+        },
     ) {
         Text(
             title.ifBlank { "(제목 없음)" },
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = DenebType.subject,
+            color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         if (snippet.isNotBlank()) {
             Text(
                 snippet,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = DenebType.snippet,
+                color = denebHint(),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )

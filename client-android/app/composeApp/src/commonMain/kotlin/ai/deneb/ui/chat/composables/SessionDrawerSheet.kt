@@ -54,16 +54,18 @@ import deneb.composeapp.generated.resources.snackbar_undo
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.datetime.format
 import kotlinx.datetime.format.DateTimeComponents.Companion.Format
-import kotlinx.datetime.format.MonthNames
 import kotlinx.datetime.format.char
 import org.jetbrains.compose.resources.stringResource
 
 private val dateFormat = Format {
-    day()
-    char(' ')
-    monthName(MonthNames.ENGLISH_ABBREVIATED)
-    char(' ')
     year()
+    char('년')
+    char(' ')
+    monthNumber()
+    char('월')
+    char(' ')
+    day()
+    char('일')
 }
 
 /**
