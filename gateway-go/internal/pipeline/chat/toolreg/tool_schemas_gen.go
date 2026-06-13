@@ -383,7 +383,7 @@ func messageToolSchema() map[string]any {
 			},
 			"channel": map[string]any{
 				"type":        "string",
-				"description": "Target channel (e.g., telegram)",
+				"description": "Target channel (e.g., client)",
 			},
 			"emoji": map[string]any{
 				"type":        "string",
@@ -411,28 +411,6 @@ func messageToolSchema() map[string]any {
 			},
 		},
 		"required": []string{"action"},
-	}
-}
-
-func clarifyToolSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"options": map[string]any{
-				"type":        "array",
-				"description": "2-5 selection options. Each must be Korean text, 40 characters or less (visible as a Telegram inline-keyboard button label).",
-				"minItems":    2,
-				"maxItems":    5,
-				"items": map[string]any{
-					"type": "string",
-				},
-			},
-			"question": map[string]any{
-				"type":        "string",
-				"description": "Korean question asking the user to resolve an ambiguity. Example: '현재 3개의 config.yaml이 있습니다. 어느 것을 수정할까요?'",
-			},
-		},
-		"required": []string{"question", "options"},
 	}
 }
 

@@ -254,14 +254,13 @@ func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps
 
 // RegisterChronoTools registers messaging tools (non-periodic).
 //
-// message and clarify are deferred (prompt audit 2026-06-12): 1 and 4 uses in
-// 14 days respectively for ~510 wire tokens. Normal replies auto-route as the
-// turn's final text, so message only matters for rare mid-turn/proactive sends;
-// clarify only for genuine option-pick ambiguity. Their usage protocol moved
-// from the dynamic Messaging block into the descriptions below — it ships at
-// fetch_tools time, exactly when the model has the tool in hand (graphify
-// pattern). The boot prompt is the one automation that names message, and it
-// already runs with fetch_tools in its preset.
+// message is deferred (prompt audit 2026-06-12): 1 use in 14 days for its wire
+// tokens. Normal replies auto-route as the turn's final text, so message only
+// matters for rare mid-turn/proactive sends. Its usage protocol moved from the
+// dynamic Messaging block into the description below — it ships at fetch_tools
+// time, exactly when the model has the tool in hand (graphify pattern). The boot
+// prompt is the one automation that names message, and it already runs with
+// fetch_tools in its preset.
 func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 	registry.RegisterTool(toolctx.ToolDef{
 		Name: "message",
@@ -270,16 +269,6 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 			"이 도구로 사용자에게 보일 내용을 이미 전송했다면, 중복 전달을 막기 위해 턴의 최종 텍스트는 정확히 NO_REPLY 한 단어만 출력하라(다른 텍스트와 섞지 말 것).",
 		InputSchema: messageToolSchema(),
 		Fn:          tools.ToolMessage(),
-		Deferred:    true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name: "clarify",
-		Description: "Ask the user to resolve ambiguity by presenting 2-5 numbered options. Sends the question + numbered choices; the agent's turn ends, and the user's choice arrives as a new user message on the next turn. Use only for genuine ambiguity the agent cannot resolve itself. " +
-			"파일·경로·이름이 여러 개 매치되어 사용자만이 고를 수 있을 때 평서문으로 되묻는 대신 이 도구를 써라. " +
-			"예/아니오 수준의 사소한 확인이나 스스로 추론 가능한 질문에는 쓰지 마라. " +
-			"호출 후에는 턴을 즉시 종료한다 — 선택 결과는 다음 턴에 `[유저 응답 (버튼): ...]` 형태로 도착한다.",
-		InputSchema: clarifyToolSchema(),
-		Fn:          tools.ToolClarify(),
 		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
