@@ -120,8 +120,14 @@ func TestInjectTailAdditions_NothingToAdd(t *testing.T) {
 func TestBuildTailAdditions(t *testing.T) {
 	// Interactive turn with recall: recall first, then the directive.
 	adds := buildTailAdditions(RunParams{AutoDeliveredOutput: true}, "recall-블록")
-	if len(adds) != 2 || adds[0] != "recall-블록" || !strings.Contains(adds[1], "예약된 자동 실행") {
+	if len(adds) != 2 || adds[0] != "recall-블록" ||
+		!strings.Contains(adds[1], "전달 정책") || !strings.Contains(adds[1], "message") {
 		t.Fatalf("unexpected additions: %#v", adds)
+	}
+	// The directive must read true for an interactive chat too: no false
+	// "scheduled run" label, no report-only framing.
+	if strings.Contains(adds[1], "예약된 자동 실행") || strings.Contains(adds[1], "보고 본문") {
+		t.Fatalf("directive still carries cron-only framing: %q", adds[1])
 	}
 	// Heartbeat shape: no recall (EphemeralUser skips it), no auto-delivery.
 	if adds := buildTailAdditions(RunParams{}, ""); len(adds) != 0 {
