@@ -25,13 +25,14 @@ const (
 // Engine orchestrates Polaris compaction with DAG persistence and condensation.
 // Long-lived: stored on Bridge, shared across runs for the same session.
 type Engine struct {
-	store          *Store
-	logger         *slog.Logger
-	cfg            Config
-	circuit        *CircuitBreaker
-	embedder       compact.Embedder // optional; BGE-M3 for MMR compaction fallback
-	anchorMu       sync.RWMutex
-	anchorKeywords []string // wiki Tier1 page titles to preserve through summarization
+	store             *Store
+	logger            *slog.Logger
+	cfg               Config
+	circuit           *CircuitBreaker
+	embedder          compact.Embedder // optional; BGE-M3 for MMR compaction fallback
+	anchorMu          sync.RWMutex
+	anchorKeywords    []string // wiki Tier1 page titles to preserve through summarization
+	learnedGuidelines []string // ACON-style preservation rules distilled from past compaction misses
 }
 
 // NewEngine creates a Polaris engine backed by the given store.
@@ -56,6 +57,15 @@ func (e *Engine) SetAnchorKeywords(keywords []string) {
 	e.anchorKeywords = append(e.anchorKeywords[:0], keywords...)
 }
 
+// SetLearnedGuidelines sets ACON-style preservation rules distilled from past
+// compaction misses. Snapshotted into the per-call config like anchors; shares
+// anchorMu since both are externally-set preservation hints read per-compact.
+func (e *Engine) SetLearnedGuidelines(guidelines []string) {
+	e.anchorMu.Lock()
+	defer e.anchorMu.Unlock()
+	e.learnedGuidelines = append(e.learnedGuidelines[:0], guidelines...)
+}
+
 // CompactAndPersist runs Polaris compaction and persists any LLM summary
 // into the DAG as a leaf node. Summary messages already injected by
 // AssembleContext (or bootstrap) are protected from re-summarization, but the
@@ -76,6 +86,7 @@ func (e *Engine) CompactAndPersist(
 	polarisCfg.Embedder = e.embedder
 	e.anchorMu.RLock()
 	polarisCfg.AnchorKeywords = append([]string(nil), e.anchorKeywords...)
+	polarisCfg.LearnedGuidelines = append([]string(nil), e.learnedGuidelines...)
 	e.anchorMu.RUnlock()
 
 	// Bootstrap: recover older messages dropped by freshTailCount.

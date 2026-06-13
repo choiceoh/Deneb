@@ -101,9 +101,9 @@ func summarizeOldMessages(
 	maxOutput := int(float64(cfg.ContextBudget) * DefaultLLMTargetPct)
 	hasPrev := strings.TrimSpace(cfg.PreviousSummary) != ""
 
-	systemPrompt := augmentWithAnchors(compactionSystemPrompt, cfg.AnchorKeywords)
+	systemPrompt := compactionPrompt(compactionSystemPrompt, cfg)
 	if hasPrev {
-		systemPrompt = augmentWithAnchors(recompactionSystemPrompt, cfg.AnchorKeywords)
+		systemPrompt = compactionPrompt(recompactionSystemPrompt, cfg)
 	}
 
 	if EstimateMessagesTokens(old) > chunkMaxTokens {
@@ -118,7 +118,7 @@ func summarizeOldMessages(
 				logger.Info("polaris: incremental update input too large, using fresh chunked path",
 					"oldTokens", EstimateMessagesTokens(old))
 			}
-			systemPrompt = augmentWithAnchors(compactionSystemPrompt, cfg.AnchorKeywords)
+			systemPrompt = compactionPrompt(compactionSystemPrompt, cfg)
 		}
 		return summarizeInChunks(ctx, old, summarizer, maxOutput, systemPrompt, logger)
 	}
@@ -155,6 +155,14 @@ func summarizeCallErr(ctx context.Context, err error) error {
 	return ctx.Err()
 }
 
+// compactionPrompt applies both soft-hint augmentations (anchors, then learned
+// guidelines) to a base summarization prompt. Single choke point so every
+// compaction path — fresh, recompaction, chunked, emergency — emphasizes the
+// same preservation hints.
+func compactionPrompt(base string, cfg Config) string {
+	return augmentWithGuidelines(augmentWithAnchors(base, cfg.AnchorKeywords), cfg.LearnedGuidelines)
+}
+
 // augmentWithAnchors appends an anchor preservation instruction to the base
 // summarization prompt when keywords are present. Soft hint — the summarizer
 // is asked to preserve facts related to these keywords as inevictable.
@@ -163,6 +171,17 @@ func augmentWithAnchors(base string, anchors []string) string {
 		return base
 	}
 	return base + "\n\n## 필수 보존 키워드 (Anchor)\n다음 키워드와 관련된 사실은 절대 누락하지 말고 보존하라:\n- " + strings.Join(anchors, "\n- ")
+}
+
+// augmentWithGuidelines appends learned preservation guidelines (distilled from
+// past compaction misses) to the base prompt. Additive soft hints — they tell
+// the summarizer what categories of detail to keep, learned from cases where a
+// compacted summary later proved insufficient.
+func augmentWithGuidelines(base string, guidelines []string) string {
+	if len(guidelines) == 0 {
+		return base
+	}
+	return base + "\n\n## 학습된 보존 지침 (과거 압축 누락에서 도출)\n과거 요약에서 빠져 문제가 됐던 항목들이다. 다음 종류의 정보를 특히 보존하라:\n- " + strings.Join(guidelines, "\n- ")
 }
 
 // summarizeInChunks splits old messages into ≤chunkMaxTokens chunks,

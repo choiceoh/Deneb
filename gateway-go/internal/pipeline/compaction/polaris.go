@@ -54,6 +54,12 @@ type Config struct {
 	// prompt so the LLM emphasizes related facts as inevictable.
 	AnchorKeywords []string
 
+	// LearnedGuidelines are short preservation rules distilled from past
+	// compaction misses (ACON-style: refine the compression guideline from
+	// failures). Additive soft hints appended to the summarizer prompt — they
+	// only ever add "preserve X", never relax the hardcoded rules.
+	LearnedGuidelines []string
+
 	// PreviousSummary, when non-empty, switches LLM compaction from
 	// summarize-from-scratch to incremental UPDATE: the prior summary is fed
 	// alongside the new turns and the model is asked to update it (move items
