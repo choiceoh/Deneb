@@ -347,15 +347,15 @@ func runAgentWithFallback(
 					// (GLM leaks chain-of-thought without it; step3p7
 					// truncates, see applySamplingParams).
 					if route != nil && effortRouted(&cfg) {
-						if kw := modelCapability(deps, fbCfg.ProviderID, fbCfg.Model).ThinkingToggleKwarg; kw != "" {
+						if fbProfile := routingProfileForRun(deps, fbCfg.ProviderID, fbCfg.Model); fbProfile.Enabled {
 							// Rebuild (not drop) the per-step policy on the
-							// FALLBACK model's own kwarg — the original
-							// closure carries the old spelling, and nil-ing
-							// it would pin every fallback turn non-thinking
-							// with no per-step revert.
-							fbDisabled := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: kw}
+							// FALLBACK model's own profile — the original
+							// closure carries the old kwarg/thresholds, and
+							// nil-ing it would pin every fallback turn
+							// non-thinking with no per-step revert.
+							fbDisabled := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: fbProfile.ToggleKwarg}
 							agentCfg.Thinking = fbDisabled
-							agentCfg.ThinkingModulator = effortStepModulator(fbDisabled, route.origThinking)
+							agentCfg.ThinkingModulator = effortStepModulator(fbProfile, fbDisabled, route.origThinking)
 						} else {
 							restoreEffort(&agentCfg, route)
 						}

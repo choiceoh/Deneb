@@ -6,6 +6,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/router"
 )
 
 // Context-budget clamping constants.
@@ -28,6 +29,22 @@ func modelCapability(deps runDeps, providerID, model string) modelcaps.Capabilit
 		return deps.registry.CapabilityForModel(providerID, model)
 	}
 	return modelcaps.Builtin(providerID, model)
+}
+
+// routingProfileForRun resolves the effort-routing profile for the run's
+// provider/model pair. The registry layers builtin defaults (router.Default
+// Profile + the model's capability toggle) with deneb.json routing overrides;
+// without a registry (tests, minimal deployments) only the builtin default plus
+// the model's toggle apply — so an unconfigured deployment still routes the
+// current main model exactly as before.
+func routingProfileForRun(deps runDeps, providerID, model string) router.Profile {
+	if deps.registry != nil {
+		return deps.registry.RoutingProfileForModel(providerID, model)
+	}
+	p := router.DefaultProfile()
+	p.ToggleKwarg = modelcaps.Builtin(providerID, model).ThinkingToggleKwarg
+	p.Enabled = p.ToggleKwarg != ""
+	return p
 }
 
 // applyModelTuning fills model-derived defaults into the agent config after

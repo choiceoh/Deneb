@@ -65,6 +65,27 @@ type ProviderResolved struct {
 	Temperature *float64
 	TopP        *float64
 	TopK        *int
+
+	// Routing overrides the per-model effort-routing policy, layered over
+	// router.DefaultProfile() by RoutingProfileForModel. Nil means "no
+	// override — the builtin profile stands". This is the per-model knob that
+	// lets an operator enable routing for a new dual-mode model, point it at
+	// that model's template toggle, or retune the gates without a code change.
+	Routing *RoutingOverride
+}
+
+// RoutingOverride carries optional per-model effort-router tuning from a
+// provider's deneb.json entry. Every field is a pointer: nil leaves the builtin
+// (router.DefaultProfile + capability toggle) value in place, so an absent or
+// partial block only changes what it names.
+type RoutingOverride struct {
+	Enabled           *bool   // master switch for this model's routing
+	ToggleKwarg       *string // override the chat_template_kwargs off-switch name
+	MaxSimpleRunes    *int    // turn-0 query-length gate (primary volume lever)
+	StepCeilingTurn   *int    // hard ceiling turn after which thinking always reverts
+	ObservationRunes  *int    // single tool-result size that reverts to thinking
+	CumulativeRunes   *int    // whole-run tool-output size that reverts to thinking
+	HeavyHistoryRunes *int    // assistant-message length that marks context heavy
 }
 
 // RegistryOptions configures NewRegistryWithOptions.
