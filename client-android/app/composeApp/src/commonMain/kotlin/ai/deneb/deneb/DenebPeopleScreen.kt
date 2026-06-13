@@ -67,7 +67,7 @@ fun DenebPeopleScreen(
         val list = people
         when {
             failed -> DenebError(
-                "사람 목록을 불러오지 못했어요.",
+                "사람 목록을 불러오지 못했습니다.",
                 onRetry = { scope.launch { load() } },
             )
 

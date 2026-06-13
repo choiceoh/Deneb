@@ -95,7 +95,7 @@ internal fun WorkFeedPanel(
             }
         }
         if (items.isEmpty()) {
-            DenebEmpty("아직 업무 알림이 없어요")
+            DenebEmpty("아직 업무 알림이 없습니다")
         } else {
             // Cap the height so a long feed scrolls inside the sheet instead of
             // pushing the sheet past the screen.

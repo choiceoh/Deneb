@@ -278,7 +278,7 @@ fun DenebCalendarScreen(
                         selEvents == null && failed[selMonth] != true -> DenebLoading()
 
                         selEvents == null -> DenebError(
-                            "일정을 불러오지 못했어요.",
+                            "일정을 불러오지 못했습니다.",
                             onRetry = { scope.launch { loadMonth(selMonth, force = true) } },
                         )
 
@@ -501,7 +501,7 @@ internal fun CalendarEmptyDay(onAdd: () -> Unit) {
         Modifier.fillMaxWidth().padding(vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("이 날 일정이 없어요.", style = DenebType.body, color = denebHint())
+        Text("이 날 일정이 없습니다.", style = DenebType.body, color = denebHint())
         Spacer(Modifier.height(8.dp))
         TextButton(onClick = onAdd) { Text("이 날 일정 추가") }
     }
