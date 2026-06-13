@@ -85,6 +85,14 @@ const (
 	effortHeavyHistoryRunes = 1500 // an assistant message this long marks recent context heavy
 )
 
+// effortMaxSimpleRunes is the turn-0 query-length gate: a user message longer
+// than this keeps thinking ("long"); shorter ones stay eligible for routing.
+// This is the primary lever for routing VOLUME — raise it to push more
+// conversational turns to non-thinking. Set aggressively (2026-06-13, 60->140):
+// a genuinely complex long request is caught by the hard-signal/context-heavy
+// gates, so length alone need not keep thinking until the message is large.
+const effortMaxSimpleRunes = 140
+
 // effortRoute records what the router replaced so escalation and the model
 // fallback chain can restore the session's original thinking configuration
 // with plain field assignment (no shared state to strip). Reason/escalated
@@ -107,11 +115,15 @@ var effortHardSignals = []string{
 	"코드", "디버그", "오류", "버그", "에러", "빌드", "테스트", "리팩",
 	// math / logic
 	"계산", "증명", "수식",
-	// open-ended interrogatives
-	"왜", "어떻게", "어떡",
+	// open-ended interrogatives — keep only explanation-seeking "왜"/"why"
+	// (reliably reasoning). "어떻게"/"어떡"/"how" were trimmed (2026-06-13):
+	// they collide with greetings ("어떻게 지내", "how are you") and substrings
+	// ("show" contains "how"), a false-hard the 140-rune length gate now
+	// absorbs for genuinely complex how-to questions.
+	"왜",
 	// english equivalents
 	"analyz", "plan", "design", "implement", "debug", "review", "compare",
-	"why", "how", "code", "fix", "refactor", "summar", "report",
+	"why", "code", "fix", "refactor", "summar", "report",
 }
 
 // effortPureAcks are messages that stay routable even when the recent
@@ -201,7 +213,7 @@ func decideThinkingOff(params RunParams, messages []llm.Message) (bool, string) 
 	if msg == "" {
 		return false, "empty"
 	}
-	if len([]rune(msg)) > 60 {
+	if len([]rune(msg)) > effortMaxSimpleRunes {
 		return false, "long"
 	}
 	if strings.Contains(msg, "```") || strings.Count(msg, "\n") >= 2 {
