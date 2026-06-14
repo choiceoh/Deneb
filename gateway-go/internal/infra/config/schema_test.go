@@ -29,18 +29,13 @@ func TestLookupSchema(t *testing.T) {
 			wantDesc: "Gateway port",
 		},
 		{
-			name:     "gateway.mode",
-			path:     "gateway.mode",
+			name:     "gateway.bind",
+			path:     "gateway.bind",
 			wantType: "string",
 		},
 		{
 			name:     "logging.level",
 			path:     "logging.level",
-			wantType: "string",
-		},
-		{
-			name:     "session.mainKey",
-			path:     "session.mainKey",
 			wantType: "string",
 		},
 		{
@@ -95,26 +90,18 @@ func TestLookupSchemaDefaults(t *testing.T) {
 	if node.Default != DefaultGatewayPort {
 		t.Errorf("Default = %v, want %v", node.Default, DefaultGatewayPort)
 	}
-
-	node = LookupSchema("session.mainKey")
-	if node == nil {
-		t.Fatal("session.mainKey should exist")
-	}
-	if node.Default != "main" {
-		t.Errorf("Default = %v, want %q", node.Default, "main")
-	}
 }
 
 func TestLookupSchemaEnums(t *testing.T) {
-	node := LookupSchema("gateway.mode")
+	node := LookupSchema("gateway.bind")
 	if node == nil {
-		t.Fatal("gateway.mode should exist")
+		t.Fatal("gateway.bind should exist")
 	}
-	if len(node.Enum) != 2 {
-		t.Fatalf("len(Enum) = %d, want 2", len(node.Enum))
+	if len(node.Enum) != 5 {
+		t.Fatalf("len(Enum) = %d, want 5", len(node.Enum))
 	}
-	if node.Enum[0] != "local" || node.Enum[1] != "remote" {
-		t.Errorf("Enum = %v, want [local remote]", node.Enum)
+	if node.Enum[0] != BindAuto {
+		t.Errorf("Enum[0] = %v, want %q", node.Enum[0], BindAuto)
 	}
 
 	node = LookupSchema("logging.level")

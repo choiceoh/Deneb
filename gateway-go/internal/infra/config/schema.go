@@ -27,7 +27,6 @@ func Schema() *SchemaNode {
 				Description: "Gateway server settings",
 				Properties: map[string]*SchemaNode{
 					"port": {Type: "number", Description: "Gateway port", Default: DefaultGatewayPort},
-					"mode": {Type: "string", Description: "Gateway mode", Enum: []string{"local", "remote"}},
 					"bind": {Type: "string", Description: "Bind mode", Enum: []string{BindAuto, BindLAN, BindLoopback, BindCustom, BindTailnet}},
 				},
 			},
@@ -38,13 +37,6 @@ func Schema() *SchemaNode {
 					"level":  {Type: "string", Description: "Log level", Enum: []string{"debug", "info", "warn", "error"}},
 					"format": {Type: "string", Description: "Log output format", Enum: []string{LogFormatText, LogFormatJSON}},
 					"file":   {Type: "string", Description: "Log file path"},
-				},
-			},
-			"session": {
-				Type:        "object",
-				Description: "Session configuration",
-				Properties: map[string]*SchemaNode{
-					"mainKey": {Type: "string", Description: "Main session key", Default: DefaultSessionMainKey},
 				},
 			},
 			"agents": {

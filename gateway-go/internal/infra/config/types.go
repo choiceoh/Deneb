@@ -55,12 +55,6 @@ const (
 	ReloadHybrid  = "hybrid"
 )
 
-// Remote transport modes.
-const (
-	TransportSSH    = "ssh"
-	TransportDirect = "direct"
-)
-
 // Logging formats.
 const (
 	LogFormatText = "text"
@@ -75,7 +69,6 @@ const (
 	DefaultChannelMaxRestartsPerHour    = 10
 	DefaultReloadDebounceMs             = 300
 	DefaultReloadDeferralTimeoutMs      = 300_000
-	DefaultSessionMainKey               = "main"
 	DefaultAgentMaxConcurrent           = 8
 	DefaultSubagentMaxConcurrent        = 2
 	DefaultLogRedactSensitive           = "tools"
@@ -90,8 +83,6 @@ type DenebConfig struct {
 	Gateway     *GatewayConfig     `json:"gateway,omitempty"`
 	Logging     *LoggingConfig     `json:"logging,omitempty"`
 	Hooks       *HooksConfig       `json:"hooks,omitempty"`
-	Media       *MediaConfig       `json:"media,omitempty"`
-	Secrets     *SecretsConfig     `json:"secrets,omitempty"`
 	Session     *SessionConfig     `json:"session,omitempty"`
 	Agents      *AgentsConfig      `json:"agents,omitempty"`
 	GmailPoll   *GmailPollConfig   `json:"gmailPoll,omitempty"`
@@ -113,18 +104,14 @@ type MetaConfig struct {
 // GatewayConfig holds all gateway server settings.
 type GatewayConfig struct {
 	Port                              *int                    `json:"port,omitempty"`
-	Mode                              string                  `json:"mode,omitempty"` // "local" | "remote"
 	Bind                              string                  `json:"bind,omitempty"` // GatewayBindMode
 	CustomBindHost                    string                  `json:"customBindHost,omitempty"`
 	ControlUI                         *GatewayControlUIConfig `json:"controlUi,omitempty"`
 	Auth                              *GatewayAuthConfig      `json:"auth,omitempty"`
 	Tailscale                         *GatewayTailscaleConfig `json:"tailscale,omitempty"`
-	Remote                            *GatewayRemoteConfig    `json:"remote,omitempty"`
 	Reload                            *GatewayReloadConfig    `json:"reload,omitempty"`
-	HTTP                              *GatewayHTTPConfig      `json:"http,omitempty"`
 	TrustedProxies                    []string                `json:"trustedProxies,omitempty"`
 	AllowRealIPFallback               *bool                   `json:"allowRealIpFallback,omitempty"`
-	Tools                             *GatewayToolsConfig     `json:"tools,omitempty"`
 	ChannelHealthCheckMinutes         *int                    `json:"channelHealthCheckMinutes,omitempty"`
 	ChannelStaleEventThresholdMinutes *int                    `json:"channelStaleEventThresholdMinutes,omitempty"`
 	ChannelMaxRestartsPerHour         *int                    `json:"channelMaxRestartsPerHour,omitempty"`
@@ -137,8 +124,6 @@ type GatewayControlUIConfig struct {
 	Root                                     string   `json:"root,omitempty"`
 	AllowedOrigins                           []string `json:"allowedOrigins,omitempty"`
 	DangerouslyAllowHostHeaderOriginFallback *bool    `json:"dangerouslyAllowHostHeaderOriginFallback,omitempty"`
-	AllowInsecureAuth                        *bool    `json:"allowInsecureAuth,omitempty"`
-	DangerouslyDisableDeviceAuth             *bool    `json:"dangerouslyDisableDeviceAuth,omitempty"`
 }
 
 // GatewayAuthConfig configures gateway authentication.
@@ -163,39 +148,11 @@ type GatewayTailscaleConfig struct {
 	ResetOnExit *bool  `json:"resetOnExit,omitempty"`
 }
 
-// GatewayRemoteConfig for remote gateway connections.
-type GatewayRemoteConfig struct {
-	Enabled        *bool  `json:"enabled,omitempty"`
-	URL            string `json:"url,omitempty"`
-	Transport      string `json:"transport,omitempty"` // "ssh" | "direct"
-	Token          string `json:"token,omitempty"`
-	Password       string `json:"password,omitempty"`
-	TLSFingerprint string `json:"tlsFingerprint,omitempty"`
-	SSHTarget      string `json:"sshTarget,omitempty"`
-	SSHIdentity    string `json:"sshIdentity,omitempty"`
-}
-
 // GatewayReloadConfig for config reload behavior.
 type GatewayReloadConfig struct {
 	Mode              string `json:"mode,omitempty"` // "off" | "restart" | "hot" | "hybrid"
 	DebounceMs        *int   `json:"debounceMs,omitempty"`
 	DeferralTimeoutMs *int   `json:"deferralTimeoutMs,omitempty"`
-}
-
-// GatewayHTTPConfig for HTTP endpoint settings.
-type GatewayHTTPConfig struct {
-	SecurityHeaders *GatewayHTTPSecurityHeadersConfig `json:"securityHeaders,omitempty"`
-}
-
-// GatewayHTTPSecurityHeadersConfig for HTTP security headers.
-type GatewayHTTPSecurityHeadersConfig struct {
-	StrictTransportSecurity *string `json:"strictTransportSecurity,omitempty"`
-}
-
-// GatewayToolsConfig for HTTP /tools/invoke access control.
-type GatewayToolsConfig struct {
-	Deny  []string `json:"deny,omitempty"`
-	Allow []string `json:"allow,omitempty"`
 }
 
 // LoggingConfig for structured logging.
@@ -222,23 +179,8 @@ type HookEntry struct {
 	Enabled   *bool  `json:"enabled,omitempty"`
 }
 
-// MediaConfig for media handling.
-type MediaConfig struct {
-	PreserveFilenames *bool `json:"preserveFilenames,omitempty"`
-	TTLHours          *int  `json:"ttlHours,omitempty"`
-}
-
-// SecretsConfig for secret storage.
-type SecretsConfig struct {
-	Defaults map[string]string `json:"defaults,omitempty"`
-}
-
 // SessionConfig for session lifecycle.
 type SessionConfig struct {
-	Scope   string `json:"scope,omitempty"`
-	DMScope string `json:"dmScope,omitempty"`
-	MainKey string `json:"mainKey,omitempty"`
-
 	// AutoResume opts the gateway into re-injecting a resume message for
 	// sessions whose previous agent run was interrupted by a crash or
 	// restart. Default: enabled (nil or unset means true). See

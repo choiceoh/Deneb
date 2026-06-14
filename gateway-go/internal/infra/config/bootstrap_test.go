@@ -193,27 +193,6 @@ func TestBootstrapAuthOverride(t *testing.T) {
 	}
 }
 
-func TestResolveMediaCleanupTTLMs(t *testing.T) {
-	tests := []struct {
-		hours    int
-		expected int64
-	}{
-		{0, 1 * 60 * 60_000}, // Clamped to 1 hour.
-		{1, 1 * 60 * 60_000},
-		{24, 24 * 60 * 60_000},
-		{200, 168 * 60 * 60_000}, // Clamped to 168 hours.
-	}
-	for _, tt := range tests {
-		ms, err := ResolveMediaCleanupTTLMs(tt.hours)
-		if err != nil {
-			t.Errorf("hours=%d: unexpected error: %v", tt.hours, err)
-		}
-		if ms != tt.expected {
-			t.Errorf("hours=%d: got %d, want %d", tt.hours, ms, tt.expected)
-		}
-	}
-}
-
 func TestPersistDefaultModel(t *testing.T) {
 	logger := slog.Default()
 

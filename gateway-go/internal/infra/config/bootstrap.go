@@ -14,12 +14,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
-const (
-	// generatedTokenBytes is the number of random bytes for auto-generated tokens (24 bytes = 48 hex chars).
-	generatedTokenBytes = 24
-	// maxMediaTTLHours is the maximum media retention window (7 days).
-	maxMediaTTLHours = 24 * 7
-)
+// generatedTokenBytes is the number of random bytes for auto-generated tokens (24 bytes = 48 hex chars).
+const generatedTokenBytes = 24
 
 // BootstrapResult is the result of the gateway config bootstrap sequence.
 type BootstrapResult struct {
@@ -319,20 +315,4 @@ func mergeTailscaleConfig(base, override *GatewayTailscaleConfig) *GatewayTailsc
 		merged.ResetOnExit = override.ResetOnExit
 	}
 	return &merged
-}
-
-// ResolveMediaCleanupTTLMs resolves the media cleanup TTL from hours to milliseconds.
-// Bounds: 1 hour minimum, 168 hours (7 days) maximum.
-func ResolveMediaCleanupTTLMs(ttlHours int) (int64, error) {
-	if ttlHours < 1 {
-		ttlHours = 1
-	}
-	if ttlHours > maxMediaTTLHours {
-		ttlHours = maxMediaTTLHours
-	}
-	ttlMs := int64(ttlHours) * 60 * 60_000
-	if ttlMs <= 0 {
-		return 0, fmt.Errorf("invalid media.ttlHours: %d", ttlHours)
-	}
-	return ttlMs, nil
 }
