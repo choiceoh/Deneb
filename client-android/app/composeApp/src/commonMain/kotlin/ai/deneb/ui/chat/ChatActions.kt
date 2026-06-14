@@ -7,6 +7,8 @@ import io.github.vinceglb.filekit.PlatformFile
 data class ChatActions(
     val ask: (String) -> Unit,
     val toggleSpeechOutput: () -> Unit,
+    // Toggles the gateway long-term-memory recall (focused chat / memory off).
+    val toggleRecall: () -> Unit,
     val retry: () -> Unit,
     val clearHistory: () -> Unit,
     val setIsSpeaking: (Boolean, String) -> Unit,

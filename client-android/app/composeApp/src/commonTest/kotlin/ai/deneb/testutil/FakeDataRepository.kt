@@ -339,6 +339,12 @@ class FakeDataRepository : DataRepository {
         memoryEnabled = enabled
     }
 
+    private var recallEnabled = true
+    override fun isRecallEnabled(): Boolean = recallEnabled
+    override fun setRecallEnabled(enabled: Boolean) {
+        recallEnabled = enabled
+    }
+
     override fun getMemories(): List<MemoryEntry> = memories.toList()
 
     override suspend fun deleteMemory(key: String) {

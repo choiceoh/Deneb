@@ -105,6 +105,9 @@ data class ChatUiState(
     val actions: ChatActions,
     val history: ImmutableList<History> = persistentListOf(),
     val isSpeechOutputEnabled: Boolean = false,
+    // Gateway long-term-memory recall on/off (focused chat / memory off toggle).
+    // Default true; the ViewModel seeds it from the persisted setting at init.
+    val recallEnabled: Boolean = true,
     val isLoading: Boolean = false,
     val error: UiError? = null,
     val warning: StringResource? = null,

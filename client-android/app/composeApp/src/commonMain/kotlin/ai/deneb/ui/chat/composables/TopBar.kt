@@ -2,12 +2,17 @@ package ai.deneb.ui.chat.composables
 
 import ai.deneb.ui.chat.ChatActions
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHint
 import ai.deneb.ui.handCursor
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
@@ -20,6 +25,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.ic_add
@@ -39,6 +48,7 @@ internal fun TopBar(
     isSpeaking: Boolean,
     actions: ChatActions,
     isChatHistoryEmpty: Boolean,
+    recallEnabled: Boolean = true,
     onOpenDrawer: (() -> Unit)? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
     onOpenSessionDrawer: (() -> Unit)? = null,
@@ -60,6 +70,7 @@ internal fun TopBar(
                 modifier = Modifier.align(Alignment.CenterEnd),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                RecallModePill(recallEnabled, actions)
                 if (textToSpeech != null) {
                     SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
                 }
@@ -72,6 +83,7 @@ internal fun TopBar(
             DrawerButton(onOpenDrawer)
             LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty)
             Spacer(Modifier.weight(1f))
+            RecallModePill(recallEnabled, actions)
             if (textToSpeech != null) {
                 SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
             }
@@ -180,6 +192,66 @@ private fun LeadingButtons(
             )
         }
     }
+}
+
+// RecallModePill is the top-bar mode switch (Trae-style): a rounded track with
+// two segments, the active one a filled pill. "챗봇" = focused chat (gateway
+// recall off), "업무" = full work context (recall on). This is a CONTEXT toggle,
+// not a persona split — the same single assistant answers either way; only
+// whether long-term work memories are recalled (and retained) changes.
+@Composable
+private fun RecallModePill(recallEnabled: Boolean, actions: ChatActions) {
+    val haptics = rememberHaptics()
+    Row(
+        modifier = Modifier
+            .padding(horizontal = 4.dp)
+            .clip(RoundedCornerShape(percent = 50))
+            .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.06f))
+            .padding(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RecallModeSegment(
+            label = "챗봇",
+            selected = !recallEnabled,
+            onSelect = {
+                if (recallEnabled) {
+                    haptics.toggle(false)
+                    actions.toggleRecall()
+                }
+            },
+        )
+        RecallModeSegment(
+            label = "업무",
+            selected = recallEnabled,
+            onSelect = {
+                if (!recallEnabled) {
+                    haptics.toggle(true)
+                    actions.toggleRecall()
+                }
+            },
+        )
+    }
+}
+
+// RecallModeSegment is one tab of the pill: ink + filled pill when active, hint
+// text on the bare track when not. Material selectable + Role.Tab for a11y;
+// Deneb presentation (ink/hint, no border).
+@Composable
+private fun RecallModeSegment(label: String, selected: Boolean, onSelect: () -> Unit) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        color = if (selected) MaterialTheme.colorScheme.onBackground else denebHint(),
+        modifier = Modifier
+            .handCursor()
+            .clip(RoundedCornerShape(percent = 50))
+            .background(
+                if (selected) MaterialTheme.colorScheme.onBackground.copy(alpha = 0.14f) else Color.Transparent,
+            )
+            .selectable(selected = selected, role = Role.Tab, onClick = onSelect)
+            .padding(horizontal = 12.dp, vertical = 5.dp),
+    )
 }
 
 @Composable

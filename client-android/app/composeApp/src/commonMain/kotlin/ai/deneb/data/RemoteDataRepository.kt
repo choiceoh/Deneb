@@ -750,6 +750,12 @@ class RemoteDataRepository(
         appSettings.setMemoryEnabled(enabled)
     }
 
+    override fun isRecallEnabled(): Boolean = appSettings.isRecallEnabled()
+
+    override fun setRecallEnabled(enabled: Boolean) {
+        appSettings.setRecallEnabled(enabled)
+    }
+
     override fun getMemories(): List<MemoryEntry> = memoryStore.getAllMemories()
 
     override suspend fun deleteMemory(key: String) {

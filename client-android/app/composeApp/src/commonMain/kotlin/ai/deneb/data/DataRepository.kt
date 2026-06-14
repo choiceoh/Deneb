@@ -67,6 +67,13 @@ interface DataRepository {
     // Memory management
     fun isMemoryEnabled(): Boolean
     fun setMemoryEnabled(enabled: Boolean)
+
+    // Recall toggle: gateway long-term-memory recall on/off — the "focused chat /
+    // memory off" top-bar toggle. On (default) injects work-context recall; off
+    // skips both recall and retain for the turn. Persona is unchanged.
+    fun isRecallEnabled(): Boolean
+    fun setRecallEnabled(enabled: Boolean)
+
     fun getMemories(): List<MemoryEntry>
     suspend fun deleteMemory(key: String)
     suspend fun updateMemoryContent(key: String, content: String)

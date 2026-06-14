@@ -224,6 +224,15 @@ class AppSettings(internal val settings: Settings) {
         settings.putBoolean(KEY_MEMORY_ENABLED, enabled)
     }
 
+    // Recall: the gateway's long-term-memory recall (hindsight/wiki/diary). The
+    // "focused chat / memory off" top-bar toggle. On (default) = full recall;
+    // off = the gateway skips recall AND retain for the turn. Persona unchanged.
+    fun isRecallEnabled(): Boolean = settings.getBoolean(KEY_RECALL_ENABLED, true)
+
+    fun setRecallEnabled(enabled: Boolean) {
+        settings.putBoolean(KEY_RECALL_ENABLED, enabled)
+    }
+
     fun getMemoryInstructions(): String = settings.getString(KEY_MEMORY_INSTRUCTIONS, DEFAULT_MEMORY_INSTRUCTIONS)
 
     // Agent memories
@@ -427,6 +436,7 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_TOOL_PREFIX = "tool_enabled_"
         const val KEY_SOUL = "soul_text"
         const val KEY_MEMORY_ENABLED = "memory_enabled"
+        const val KEY_RECALL_ENABLED = "recall_enabled"
         const val KEY_MEMORY_INSTRUCTIONS = "memory_instructions"
         const val KEY_AGENT_MEMORIES = "agent_memories"
         const val KEY_SCHEDULED_TASKS = "scheduled_tasks"
