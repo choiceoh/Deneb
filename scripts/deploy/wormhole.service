@@ -1,3 +1,9 @@
+# Install as a systemd --user unit (matching deneb-gateway.service):
+#   cp scripts/deploy/wormhole.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now wormhole.service
+# A --user unit runs as the logged-in user already, so it carries no User= (that
+# is a system-unit directive and fails here with 216/GROUP) and is wanted by
+# default.target (the user manager has no multi-user.target).
 [Unit]
 Description=wormhole model router (Deneb) — OpenAI/Anthropic-compatible multiplexer
 After=network.target
@@ -6,7 +12,6 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-User=choiceoh
 # wormhole fans one endpoint out to many model backends (local vLLM + cloud) by
 # model name. With Deneb's roles pointed at it, it sits in the model hot path, so
 # it restarts on failure. The binary is built by `make wormhole` into dist/.
@@ -31,4 +36,4 @@ StandardError=journal
 SyslogIdentifier=wormhole
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
