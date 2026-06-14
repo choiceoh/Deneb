@@ -29,6 +29,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.DisableSelection
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SuggestionChip
@@ -36,7 +38,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -228,18 +233,71 @@ fun QuestionInput(
             } else {
                 KeyboardActions() // No keyboard send action on mobile
             },
-            leadingIcon = if (filePickerLauncher != null) {
-                {
-                    CircleIconButton(
-                        icon = vectorResource(Res.drawable.ic_attach),
-                        onClick = { filePickerLauncher.launch() },
-                        modifier = Modifier.padding(start = 7.dp),
-                        tint = MaterialTheme.colorScheme.onBackground,
-                        contentDescription = "파일 첨부",
-                    )
+            leadingIcon = run {
+                // The attach (+) button. With capture launchers present (Android), it
+                // opens a menu — file attach + the captures (image OCR / transcribe /
+                // voice) that used to live in the now-removed left nav drawer footer.
+                // Without captures (desktop) it stays a direct file picker.
+                val captures = LocalCaptureActions.current
+                if (filePickerLauncher == null && captures == null) {
+                    null
+                } else {
+                    {
+                        var attachMenuOpen by remember { mutableStateOf(false) }
+                        Box {
+                            CircleIconButton(
+                                icon = vectorResource(Res.drawable.ic_attach),
+                                onClick = {
+                                    if (captures == null && filePickerLauncher != null) {
+                                        filePickerLauncher.launch()
+                                    } else {
+                                        attachMenuOpen = true
+                                    }
+                                },
+                                modifier = Modifier.padding(start = 7.dp),
+                                tint = MaterialTheme.colorScheme.onBackground,
+                                contentDescription = "첨부",
+                            )
+                            DropdownMenu(
+                                expanded = attachMenuOpen,
+                                onDismissRequest = { attachMenuOpen = false },
+                            ) {
+                                if (filePickerLauncher != null) {
+                                    DropdownMenuItem(
+                                        text = { Text("파일 첨부") },
+                                        onClick = {
+                                            attachMenuOpen = false
+                                            filePickerLauncher.launch()
+                                        },
+                                    )
+                                }
+                                if (captures != null) {
+                                    DropdownMenuItem(
+                                        text = { Text("이미지 OCR") },
+                                        onClick = {
+                                            attachMenuOpen = false
+                                            captures.onCaptureImage()
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("음성 전사") },
+                                        onClick = {
+                                            attachMenuOpen = false
+                                            captures.onCaptureAudio()
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("음성 입력") },
+                                        onClick = {
+                                            attachMenuOpen = false
+                                            captures.onVoiceInput()
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
-            } else {
-                null
             },
             keyboardOptions = KeyboardOptions(
                 imeAction = if (currentPlatform is Platform.Mobile) ImeAction.Default else ImeAction.Send,
