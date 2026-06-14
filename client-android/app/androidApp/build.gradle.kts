@@ -6,6 +6,17 @@ plugins {
     alias(libs.plugins.composeCompiler)
 }
 
+// FCM (Firebase Cloud Messaging) for proactive push when the app is fully closed
+// or in Doze. The google-services plugin requires google-services.json, which is
+// NOT committed — it carries the Firebase API key and this repo is public. It is
+// injected at build time from the host (~/.deneb/google-services.json) by
+// scripts/dev/publish-apk.sh. Apply the plugin only when the file is present so
+// desktop/CI builds (which don't ship it and don't use FCM) still configure
+// cleanly; FirebaseMessaging calls are guarded so such a build degrades to no-push.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 // versionCode normally comes from libs.versions.toml, but publish-apk.sh overrides
 // it with -PdenebVersionCode=<auto>. That lets concurrent agent worktrees each get
 // a distinct, monotonically increasing code (serve-dir max + 1, flock-serialized)
@@ -133,6 +144,7 @@ androidComponents {
 
 dependencies {
     implementation(project(":composeApp"))
+    implementation(libs.firebase.messaging)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.foundation.android)

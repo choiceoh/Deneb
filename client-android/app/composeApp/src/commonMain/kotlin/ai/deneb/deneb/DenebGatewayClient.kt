@@ -1323,6 +1323,33 @@ class DenebGatewayClient(
         }.getOrElse { "요청을 처리하지 못했습니다." }
     }
 
+    /**
+     * Registers this device's FCM registration token so the gateway can deliver
+     * proactive reports when no live SSE connection is held (app fully closed /
+     * Doze). Best-effort and idempotent — the gateway dedups by token — so it is
+     * cheap to call on every foreground. Returns true on success. Android-only
+     * caller, but the RPC itself is platform-agnostic so this lives in commonMain.
+     */
+    suspend fun registerPushToken(token: String, platform: String): Boolean {
+        if (token.isBlank()) return false
+        return rpcWrite(
+            "miniapp.push.register",
+            buildJsonObject {
+                put("token", token)
+                put("platform", platform)
+            },
+        ) == null
+    }
+
+    /** Removes a device token (e.g. on sign-out / token invalidation). */
+    suspend fun unregisterPushToken(token: String): Boolean {
+        if (token.isBlank()) return false
+        return rpcWrite(
+            "miniapp.push.unregister",
+            buildJsonObject { put("token", token) },
+        ) == null
+    }
+
     @Serializable
     private data class RpcRequest(val id: String, val method: String, val params: SendParams)
 
