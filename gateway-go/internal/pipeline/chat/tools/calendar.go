@@ -110,32 +110,9 @@ func ToolCalendar(d *toolctx.CalendarDeps) toolctx.ToolFunc {
 // --- list ----------------------------------------------------------------
 
 func calActionList(ctx context.Context, d *toolctx.CalendarDeps, p calParams) string {
-	now := time.Now()
-	var from, to time.Time
-
-	// Explicit [from, to) window takes priority; otherwise "now + N hours".
-	if strings.TrimSpace(p.From) != "" || strings.TrimSpace(p.To) != "" {
-		var err error
-		from, err = time.Parse(time.RFC3339, strings.TrimSpace(p.From))
-		if err != nil {
-			return "from은 RFC3339 형식이어야 합니다 (예: 2026-06-10T00:00:00+09:00)."
-		}
-		to, err = time.Parse(time.RFC3339, strings.TrimSpace(p.To))
-		if err != nil {
-			return "to는 RFC3339 형식이어야 합니다 (예: 2026-06-17T00:00:00+09:00)."
-		}
-		if !to.After(from) {
-			return "to는 from보다 뒤여야 합니다."
-		}
-	} else {
-		hours := p.HoursAhead
-		if hours <= 0 {
-			hours = calDefaultHoursAhead
-		}
-		if hours > calMaxHoursAhead {
-			hours = calMaxHoursAhead
-		}
-		from, to = now, now.Add(time.Duration(hours)*time.Hour)
+	from, to, errMsg := calResolveWindow(p.From, p.To, p.HoursAhead)
+	if errMsg != "" {
+		return errMsg
 	}
 
 	events, warn := calMerged(ctx, d, from, to)
@@ -163,6 +140,37 @@ func calActionList(ctx context.Context, d *toolctx.CalendarDeps, p calParams) st
 	}
 	sb.WriteString("\n상세·수정·삭제는 calendar(action=\"get|update|delete\", id=\"...\"). 빈 시간은 free_slots.")
 	return strings.TrimRight(sb.String(), "\n")
+}
+
+// calResolveWindow resolves the [from, to) read window shared by the text list
+// action and the structured (code_action as_json) path: an explicit RFC3339
+// [from, to) takes priority, otherwise "now + hoursAhead" (clamped). A non-empty
+// errMsg is a user-facing Korean validation message.
+func calResolveWindow(fromStr, toStr string, hoursAhead int) (from, to time.Time, errMsg string) {
+	if strings.TrimSpace(fromStr) != "" || strings.TrimSpace(toStr) != "" {
+		var err error
+		from, err = time.Parse(time.RFC3339, strings.TrimSpace(fromStr))
+		if err != nil {
+			return from, to, "from은 RFC3339 형식이어야 합니다 (예: 2026-06-10T00:00:00+09:00)."
+		}
+		to, err = time.Parse(time.RFC3339, strings.TrimSpace(toStr))
+		if err != nil {
+			return from, to, "to는 RFC3339 형식이어야 합니다 (예: 2026-06-17T00:00:00+09:00)."
+		}
+		if !to.After(from) {
+			return from, to, "to는 from보다 뒤여야 합니다."
+		}
+		return from, to, ""
+	}
+	hours := hoursAhead
+	if hours <= 0 {
+		hours = calDefaultHoursAhead
+	}
+	if hours > calMaxHoursAhead {
+		hours = calMaxHoursAhead
+	}
+	now := time.Now()
+	return now, now.Add(time.Duration(hours) * time.Hour), ""
 }
 
 // calListRow renders one compact event line: index, source-tagged ID, KST time

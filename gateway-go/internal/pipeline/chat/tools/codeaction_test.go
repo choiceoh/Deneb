@@ -10,8 +10,13 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 )
 
 // recordingInvoker captures the tool calls the bridge forwards and returns a
@@ -364,5 +369,129 @@ func TestCodeAction_ReadThroughBridge(t *testing.T) {
 	calls := inv.called()
 	if len(calls) != 1 || !strings.HasPrefix(calls[0], "read:") || !strings.Contains(calls[0], "notes.txt") {
 		t.Fatalf("expected one read call, got %v", calls)
+	}
+}
+
+// fakeLocalCal is a minimal LocalCalendar for the structured-calendar tests.
+type fakeLocalCal struct{ events []calendar.Event }
+
+func (f *fakeLocalCal) ListRange(_, _ time.Time) []calendar.Event { return f.events }
+func (f *fakeLocalCal) Get(id string) *calendar.Event {
+	for i := range f.events {
+		if f.events[i].ID == id {
+			return &f.events[i]
+		}
+	}
+	return nil
+}
+func (f *fakeLocalCal) Create(localcal.CreateInput) (calendar.Event, error) {
+	return calendar.Event{}, nil
+}
+func (f *fakeLocalCal) Update(string, localcal.CreateInput) (*calendar.Event, error) {
+	return nil, nil
+}
+func (f *fakeLocalCal) Delete(string) error { return nil }
+
+// TestCalendarStructured covers the typed calendar path: list maps merged
+// events to DTOs, get routes a local: ID to the local store, mutating actions
+// are rejected.
+func TestCalendarStructured(t *testing.T) {
+	start := time.Now().Add(time.Hour)
+	fake := &fakeLocalCal{events: []calendar.Event{{
+		ID: "local:evt1", Summary: "탑솔라 미팅", Start: start, End: start.Add(time.Hour),
+		Location: "본사", Attendees: []calendar.Attendee{{Email: "a@x.com"}, {Email: "b@x.com"}},
+	}}}
+	d := &toolctx.CalendarDeps{Local: fake}
+
+	val, err := calendarStructured(context.Background(), d, map[string]any{"action": "list"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	evs, ok := val.([]caEvent)
+	if !ok || len(evs) != 1 {
+		t.Fatalf("want 1 event, got %T %v", val, val)
+	}
+	if evs[0].Title != "탑솔라 미팅" || evs[0].ID != "local:evt1" || len(evs[0].Attendees) != 2 {
+		t.Fatalf("event mapped wrong: %+v", evs[0])
+	}
+	if evs[0].Start == "" || evs[0].End == "" {
+		t.Fatalf("start/end should be RFC3339, got %+v", evs[0])
+	}
+
+	gv, err := calendarStructured(context.Background(), d, map[string]any{"action": "get", "id": "local:evt1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gv.(caEvent).Title != "탑솔라 미팅" {
+		t.Fatalf("get returned wrong event: %+v", gv)
+	}
+
+	if _, err := calendarStructured(context.Background(), d, map[string]any{"action": "create"}); err == nil {
+		t.Fatal("calendar structured 'create' must be rejected")
+	}
+}
+
+// TestWikiStructured covers the typed wiki path: read returns page metadata +
+// body, search returns ranked hits, mutating actions are rejected.
+func TestWikiStructured(t *testing.T) {
+	dir := t.TempDir()
+	wdir := filepath.Join(dir, "wiki")
+	store, err := wiki.NewStore(wdir, filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WritePage("프로젝트/topsolar.md", &wiki.Page{
+		Meta: wiki.Frontmatter{Title: "탑솔라", Summary: "태양광 EPC", Category: "프로젝트", Tags: []string{"태양광"}},
+		Body: "탑솔라는 태양광 EPC 회사. zorptest marker.",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Fresh store rebuilds the in-memory FTS index from disk (a running index is
+	// not guaranteed to pick up a just-written page).
+	store2, err := wiki.NewStore(wdir, filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rv, err := wikiStructured(context.Background(), store2, map[string]any{"action": "read", "query": "프로젝트/topsolar.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pg, ok := rv.(caWikiPage)
+	if !ok || pg.Title != "탑솔라" || !strings.Contains(pg.Body, "zorptest") {
+		t.Fatalf("read wrong: %T %+v", rv, rv)
+	}
+
+	sv, err := wikiStructured(context.Background(), store2, map[string]any{"action": "search", "query": "zorptest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hits, ok := sv.([]caWikiHit)
+	if !ok {
+		t.Fatalf("want []caWikiHit, got %T", sv)
+	}
+	if len(hits) == 0 || !strings.Contains(hits[0].Path, "topsolar") {
+		t.Fatalf("search should find the page, got %+v", hits)
+	}
+
+	if _, err := wikiStructured(context.Background(), store2, map[string]any{"action": "write"}); err == nil {
+		t.Fatal("wiki structured 'write' must be rejected")
+	}
+}
+
+// TestCodeAction_StructuredCalendar is the python e2e for deneb.calendar(as_json=True).
+func TestCodeAction_StructuredCalendar(t *testing.T) {
+	requirePython(t)
+	start := time.Now().Add(time.Hour)
+	fake := &fakeLocalCal{events: []calendar.Event{{
+		ID: "local:evt1", Summary: "탑솔라 미팅", Start: start, End: start.Add(time.Hour),
+	}}}
+	out := runCodeAction(t, CodeActionDeps{Invoker: &recordingInvoker{}, Calendar: &toolctx.CalendarDeps{Local: fake}}, `
+evs = deneb.calendar("list", as_json=True)
+print("TYPE", type(evs).__name__, "N", len(evs))
+print("TITLE", evs[0]["title"] if evs else "none")
+`)
+	if !strings.Contains(out, "TYPE list") || !strings.Contains(out, "TITLE 탑솔라 미팅") {
+		t.Fatalf("calendar as_json should yield event dicts, got:\n%s", out)
 	}
 }
