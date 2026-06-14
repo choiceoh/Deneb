@@ -86,7 +86,9 @@ import kotlin.uuid.Uuid
 @OptIn(ExperimentalUuidApi::class)
 class DenebGatewayClient(
     private val base: RemoteDataRepository,
-    private val appSettings: AppSettings,
+    // internal (not private) so session-list extensions can read the active
+    // workspace (recall on = 업무, off = 챗봇) to filter the recent-session list.
+    internal val appSettings: AppSettings,
 ) : DataRepository by base {
 
     internal val jsonCodec = Json {
@@ -212,7 +214,9 @@ class DenebGatewayClient(
     // happens-before covers visibility without @Volatile.
     private var nativeSyncBaselined = false
 
-    internal var sessionKey: String = "client:main"
+    // Restored to the last-open session of the persisted workspace (업무 ↔ 챗봇),
+    // so a restart reopens the space the user left, not always client:main.
+    internal var sessionKey: String = appSettings.lastSession(appSettings.isRecallEnabled())
         private set
     private val _currentConversationId = MutableStateFlow<String?>(sessionKey)
     override val currentConversationId: StateFlow<String?> = _currentConversationId
@@ -577,8 +581,11 @@ class DenebGatewayClient(
 
     override fun startNewChat() {
         _chatHistory.value = emptyList()
-        // Scope the fresh conversation to a unique session off the client:main home.
-        switchSession("client:main:${Uuid.random()}")
+        // Scope the fresh conversation to the CURRENT workspace's home: 업무 chats
+        // live under client:main, 챗봇 chats under chat:main — so the two session
+        // lists never mix.
+        val home = workspaceHome(appSettings.isRecallEnabled())
+        switchSession("$home:${Uuid.random()}")
     }
 
     // --- Proactive-report deep link → session transcript --------------------
@@ -605,9 +612,34 @@ class DenebGatewayClient(
      * a concurrent cold-start share can't be clobbered (see historyGate).
      */
     fun openWorkTopic() {
+        // Proactive reports live in the 업무 workspace, so opening one from a push
+        // also switches the active workspace to 업무 (recall on) — otherwise the
+        // user would land on client:main while the pill still said 챗봇.
+        appSettings.setRecallEnabled(true)
         switchSession("client:main")
         syncNativeStateAsync()
         scope.launch { loadTranscriptGuarded("client:main") }
+        loadConversations()
+    }
+
+    /** Workspace home session for a mode: 업무 → client:main, 챗봇 → chat:main. */
+    private fun workspaceHome(work: Boolean): String = if (work) "client:main" else "chat:main"
+
+    /**
+     * Switch the active workspace (업무 ↔ 챗봇). Each keeps its OWN session list
+     * and recall behavior, so this flips recall, restores that workspace's last
+     * session, and refreshes the (now mode-filtered) drawer. The persona is
+     * unchanged — only which session space + whether recall fires.
+     */
+    fun switchWorkspace(toWork: Boolean) {
+        if (appSettings.isRecallEnabled() == toWork) return
+        appSettings.setRecallEnabled(toWork)
+        val target = appSettings.lastSession(toWork)
+        _chatHistory.value = emptyList()
+        switchSession(target)
+        syncNativeStateAsync()
+        scope.launch { loadTranscriptGuarded(target) }
+        loadConversations()
     }
 
     /**
@@ -622,6 +654,7 @@ class DenebGatewayClient(
      * clobbered.
      */
     suspend fun openWorkTopicAtItem(item: WorkFeedItem): String? {
+        appSettings.setRecallEnabled(true) // work-feed cards belong to the 업무 workspace
         switchSession("client:main")
         syncNativeStateAsync()
         val startEpoch = historyGate.withLock { historyEpoch }
@@ -654,8 +687,15 @@ class DenebGatewayClient(
      * home session.
      */
     override fun restoreCurrentConversation() {
-        if (_chatHistory.value.isEmpty() && sessionKey == "client:main") {
-            openWorkTopic()
+        if (_chatHistory.value.isEmpty() && isHomeSession(sessionKey)) {
+            // 업무 home pulls in the mirrored proactive reports via openWorkTopic;
+            // the 챗봇 home is a plain general-chat space, so just load its transcript.
+            if (sessionKey == "client:main") {
+                openWorkTopic()
+            } else {
+                syncNativeStateAsync()
+                scope.launch { loadTranscriptGuarded(sessionKey) }
+            }
         }
     }
 
@@ -1217,6 +1257,9 @@ class DenebGatewayClient(
     private fun switchSession(key: String) {
         sessionKey = key
         _currentConversationId.value = key
+        // Remember this as the active session of ITS workspace (by key namespace),
+        // so switching the pill back restores where each space was left.
+        appSettings.setLastSession(work = !key.startsWith("chat:"), key)
     }
 
     private suspend fun fetchTranscript(sessionKey: String): List<History> {
