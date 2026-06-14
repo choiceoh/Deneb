@@ -119,10 +119,20 @@ suspend fun DenebGatewayClient.deleteCustomModel(id: String): Boolean {
 // sources that list from here so the switcher changes the gateway main model
 // instead of the upstream local providers.
 
-/** Gateway models as switcher entries, current model first (it renders as selected). */
+/** Gateway models as switcher entries, the ACTIVE workspace's model first (the
+ *  ServiceSelector renders the first entry as selected). 챗봇 mode binds the chatbot
+ *  role (falling back to the main model when no separate chatbot model is assigned);
+ *  업무 mode binds the main model. */
 fun DenebGatewayClient.denebServiceEntries(): List<ServiceEntry> {
     val models = _denebModels.value
-    val ordered = models.filter { it.current } + models.filterNot { it.current }
+    val mainId = models.firstOrNull { it.current }?.id
+    val chatMode = !appSettings.isRecallEnabled()
+    val selectedId = if (chatMode) {
+        _denebRoleModels.value["chatbot"]?.takeIf { id -> models.any { it.id == id } } ?: mainId
+    } else {
+        mainId
+    }
+    val ordered = models.filter { it.id == selectedId } + models.filterNot { it.id == selectedId }
     return ordered.map { model ->
         ServiceEntry(
             instanceId = DENEB_MODEL_PREFIX + model.id,
@@ -180,11 +190,14 @@ private fun denebModelIcon(model: ModelOption) = with("${model.id} ${model.displ
     }
 }
 
-/** Switch the gateway main model from a switcher tap (instanceId = prefixed model id). */
+/** Switch the active workspace's model from a switcher tap (instanceId = prefixed
+ *  model id). 챗봇 mode binds the chatbot role (the model 챗봇 turns actually use);
+ *  업무 mode sets the main model. Mirrors [denebServiceEntries]' selection. */
 fun DenebGatewayClient.selectDenebModelInstance(instanceId: String) {
     val modelId = instanceId.removePrefix(DENEB_MODEL_PREFIX)
     if (modelId.isBlank() || modelId == instanceId) return
-    scope.launch { setMainModel(modelId) }
+    val role = if (appSettings.isRecallEnabled()) "main" else "chatbot"
+    scope.launch { setRoleModel(modelId, role) }
 }
 
 // Prefix marking a switcher instanceId as a gateway model (vs. an upstream
