@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "챗봇 모드에서는 하단 탭바가 통째로 사라져 채팅에 집중할 수 있습니다 — 상단의 챗봇/업무 토글로만 전환하고, 업무 모드로 돌아오면 탭바가 다시 나타납니다",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "응답을 생성하는 동안 화면 위쪽에서 색이 천천히 한 바퀴 순환하는(파랑→청록→…→파랑) 은은한 빛이 차오르고, 답변이 시작되면 검정으로 사라집니다 — 가장자리 글로우를 대신하는 '생성 중' 배경",
         ),
     ),
