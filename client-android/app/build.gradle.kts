@@ -7,6 +7,10 @@ plugins {
     alias(libs.plugins.composeMultiplatform) apply false
     alias(libs.plugins.composeCompiler) apply false
     alias(libs.plugins.kotlinMultiplatform) apply false
+    // FCM: kept on the classpath but applied conditionally in :androidApp (only
+    // when google-services.json is present), so desktop/CI builds that don't ship
+    // the credential still configure. See androidApp/build.gradle.kts.
+    alias(libs.plugins.googleServices) apply false
     alias(libs.plugins.spotless)
     alias(libs.plugins.detekt)
 }

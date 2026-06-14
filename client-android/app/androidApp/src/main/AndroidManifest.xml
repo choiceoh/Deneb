@@ -57,6 +57,16 @@
             android:name="ai.deneb.DaemonService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <!-- FCM: receives proactive pushes when the app is fully closed / Doze
+             (the gateway's fallback when no live SSE client is connected) and
+             token rotations. See FcmService.kt. -->
+        <service
+            android:name="ai.deneb.FcmService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
         <!-- Home-screen widget: next meeting + unread mail. -->
         <receiver
             android:name="ai.deneb.DenebWidgetProvider"

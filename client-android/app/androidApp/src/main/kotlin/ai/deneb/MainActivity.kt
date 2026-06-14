@@ -154,6 +154,10 @@ class MainActivity : ComponentActivity() {
         // close and reopen the app for scheduling to resume. `startForegroundService`
         // is idempotent when the service is already up.
         autoStartDaemon()
+        // Register the FCM token so the gateway can push proactive reports when the
+        // app is fully closed / in Doze (no live SSE). Idempotent + best-effort:
+        // the gateway dedups by token, and a build without Firebase no-ops.
+        FcmRegistration.fetchAndRegister(get())
     }
 
     private fun autoStartDaemon() {
