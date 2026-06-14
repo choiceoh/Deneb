@@ -18,6 +18,16 @@ import (
 // bounded; this stops a runaway client from buffering us out of memory.
 const maxBodyBytes = 32 << 20 // 32 MiB
 
+// maxUpstreamRetries bounds retries of a transient upstream failure (connection
+// error or 5xx) on the explicit-model path before the error reaches the client.
+// Retried only BEFORE any bytes stream (doUpstream returns before reading the
+// body), so a completion is never half-sent twice. retryBackoffBase × attempt is
+// the inter-retry delay.
+const (
+	maxUpstreamRetries = 2
+	retryBackoffBase   = 150 * time.Millisecond
+)
+
 // router fans /v1 requests out to upstream backends by model name.
 // snapshot is the live, swappable view of the config: the parsed config plus its
 // model lookup and the file mtime it was loaded from. The watcher re-reads the
@@ -293,7 +303,7 @@ func (rt *router) serve(w http.ResponseWriter, r *http.Request, proto, pathSuffi
 			out = rewritten
 		}
 	}
-	if rt.cur().cfg.effortRoutingOn() {
+	if rt.cur().cfg.effortRoutingOn() && !noEffortRouting(r) {
 		out = rt.applyThinking(entry, out)
 	}
 	rt.forward(w, r, entry, out, pathSuffix)
@@ -328,7 +338,7 @@ func (rt *router) serveAuto(w http.ResponseWriter, r *http.Request, body []byte,
 		if rewritten, rerr := rewriteModel(body, entry.UpstreamModel); rerr == nil {
 			out = rewritten
 		}
-		if rt.cur().cfg.effortRoutingOn() {
+		if rt.cur().cfg.effortRoutingOn() && !noEffortRouting(r) {
 			out = rt.applyThinking(entry, out)
 		}
 		resp, err := rt.doUpstream(r, entry, out, pathSuffix)
@@ -400,9 +410,42 @@ func (rt *router) doUpstream(r *http.Request, entry modelEntry, body []byte, pat
 	return rt.client.Do(upReq)
 }
 
-// forward proxies a single model's request and streams the response back.
+// doUpstreamWithRetry calls doUpstream, retrying a transient failure — a
+// connection error or a 5xx — up to maxUpstreamRetries times before returning.
+// It's safe because doUpstream hasn't read the body yet, so nothing has streamed:
+// a 5xx/connection failure means the upstream produced no usable completion, so a
+// fresh attempt can't duplicate output. A <500 response (success or a 4xx the
+// client should see) returns immediately. The request context cancels the wait.
+func (rt *router) doUpstreamWithRetry(r *http.Request, entry modelEntry, body []byte, pathSuffix string) (*http.Response, error) {
+	var resp *http.Response
+	var err error
+	for attempt := 0; attempt <= maxUpstreamRetries; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-r.Context().Done():
+				return nil, r.Context().Err()
+			case <-time.After(time.Duration(attempt) * retryBackoffBase):
+			}
+		}
+		resp, err = rt.doUpstream(r, entry, body, pathSuffix)
+		if err != nil {
+			rt.log.Warn("upstream transient error, retrying", "model", entry.Name, "attempt", attempt+1, "error", err)
+			continue
+		}
+		if resp.StatusCode >= 500 && attempt < maxUpstreamRetries {
+			rt.log.Warn("upstream 5xx, retrying", "model", entry.Name, "attempt", attempt+1, "status", resp.StatusCode)
+			_ = resp.Body.Close()
+			continue
+		}
+		return resp, nil
+	}
+	return resp, err // retries exhausted: surface the last error (resp is nil)
+}
+
+// forward proxies a single model's request and streams the response back, with a
+// bounded retry of transient upstream failures (this is Deneb's model hot path).
 func (rt *router) forward(w http.ResponseWriter, r *http.Request, entry modelEntry, body []byte, pathSuffix string) {
-	resp, err := rt.doUpstream(r, entry, body, pathSuffix)
+	resp, err := rt.doUpstreamWithRetry(r, entry, body, pathSuffix)
 	if err != nil {
 		rt.log.Warn("upstream call failed", "model", entry.Name, "url", entry.URL, "error", err)
 		writeErr(w, http.StatusBadGateway, "upstream unreachable: "+entry.Name)

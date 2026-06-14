@@ -15,10 +15,26 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"strings"
 
 	ares "github.com/choiceoh/deneb/gateway-go/internal/ai/router"
 )
+
+// noEffortRouting reports whether the caller opted OUT of wormhole's effort
+// routing for this request (header X-Wormhole-No-Effort). A "smart" client that
+// already does its own thinking control — the Deneb gateway, whose pipeline runs
+// Ares per turn — sends this so wormhole doesn't re-run the classifier and
+// overwrite its decision (which would also break the gateway's vLLM prefix cache).
+// A "dumb" external client (Claude Code, a script) omits it and gets effort
+// routing for free.
+func noEffortRouting(r *http.Request) bool {
+	switch strings.ToLower(strings.TrimSpace(r.Header.Get("X-Wormhole-No-Effort"))) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
+}
 
 // applyThinking runs the effort router for one resolved model and logs when it
 // turns thinking off (the actionable event; the no-op pass-through stays quiet).

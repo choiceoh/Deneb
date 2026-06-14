@@ -52,6 +52,20 @@ re-implementation. Routing is one-directional: it only ever turns thinking off f
 a simple turn, never forces it on. A model with no `toggleKwarg` passes through
 untouched.
 
+A **smart client that already does its own thinking control** — the Deneb gateway,
+whose pipeline runs Ares per turn — sends `X-Wormhole-No-Effort: 1` to opt OUT, so
+wormhole doesn't re-decide and overwrite its choice (which would also break the
+gateway's vLLM prefix cache). Dumb external clients omit the header and get effort
+routing for free. This lets one `toggleKwarg` entry serve both.
+
+## Reliability
+
+On the explicit-model path, wormhole retries a **transient upstream failure** (a
+connection error or a 5xx) up to twice with a short backoff before the error
+reaches the client — safe because nothing has streamed yet, so a completion is
+never half-sent twice. (`auto` already falls across candidates; this covers the
+single-model hot path.)
+
 ## SparkFleet auto-discovery
 
 wormhole can pull its local model list from **SparkFleet** (the GB10 fleet
@@ -117,10 +131,19 @@ live in the environment, not the file. Each model entry:
 | `toggleKwarg` | vLLM kwarg that disables the model's thinking phase — enables thinking routing (see below) |
 | `local` | override the local/cloud auto-detection (see below); default auto |
 
-Top-level config: `localOnly: true` air-gaps the whole instance (every cloud
-model is refused); `auto: ["dsv4", "claude"]` sets the ordered candidate list for
-the reserved `auto` model name (`autoName` overrides the name; default `auto`);
-`sparkfleet: { url, token }` auto-discovers local models (see above).
+Top-level config: `listen` (default `:18800`); `token` gates every request
+(`Authorization: Bearer` or `x-api-key`) — empty means open; `localOnly: true`
+air-gaps the whole instance (every cloud model is refused); `auto: ["dsv4",
+"claude"]` sets the ordered candidate list for the reserved `auto` model name
+(`autoName` overrides the name; default `auto`); `sparkfleet: { url, token }`
+auto-discovers local models (see above).
+
+**Exposing it (single URL for external clients).** To let Claude Code / scripts
+reach wormhole over the tailnet, bind a routable address (`"listen": ":18800"`)
+**and set a `token`** — then point the client at `http://<host>:18800/v1` with
+that token. wormhole logs an `INSECURE` error at boot if it binds a non-loopback
+address with no token (open to the network, cloud keys and all). Loopback +
+no-token is fine for a same-box gateway.
 
 ## Local-first egress guard
 
