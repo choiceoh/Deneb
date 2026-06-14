@@ -9,11 +9,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -54,74 +56,82 @@ internal fun UserMessage(
     val bubbleColor = cs.surfaceVariant
     val bubbleText = cs.onSurfaceVariant
     SelectionContainer {
-        Row(Modifier.padding(16.dp)) {
-            Spacer(Modifier.weight(1f))
-            Column(
-                modifier = Modifier
-                    .background(bubbleColor, bubbleShape)
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.End,
-            ) {
-                val images = attachments.filter { it.mimeType.startsWith("image/") }
-                val others = attachments.filter { !it.mimeType.startsWith("image/") }
-                for (att in images) {
-                    val imageBitmap = remember(att.data) {
-                        try {
-                            decodeToImageBitmap(Base64.decode(att.data))
-                        } catch (_: Exception) {
-                            null
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            // Cap the bubble so a long message hugs the right instead of stretching to
+            // the left edge: ~80% of the available width on phones, with an absolute
+            // ceiling so it doesn't sprawl on wide desktop. Short messages still size
+            // to their content (the trailing Spacer keeps it right-aligned).
+            val bubbleMax = minOf(maxWidth * 0.80f, 520.dp)
+            Row(Modifier.fillMaxWidth().padding(16.dp)) {
+                Spacer(Modifier.weight(1f))
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = bubbleMax)
+                        .background(bubbleColor, bubbleShape)
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.End,
+                ) {
+                    val images = attachments.filter { it.mimeType.startsWith("image/") }
+                    val others = attachments.filter { !it.mimeType.startsWith("image/") }
+                    for (att in images) {
+                        val imageBitmap = remember(att.data) {
+                            try {
+                                decodeToImageBitmap(Base64.decode(att.data))
+                            } catch (_: Exception) {
+                                null
+                            }
+                        }
+                        if (imageBitmap != null) {
+                            Image(
+                                bitmap = imageBitmap,
+                                contentDescription = "첨부 이미지",
+                                modifier = Modifier
+                                    .widthIn(max = 200.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .handCursor()
+                                    .clickable(onClickLabel = "확대") {
+                                        haptics.tap()
+                                        showFullScreen(imageBitmap)
+                                    },
+                                contentScale = ContentScale.FillWidth,
+                            )
+                            Spacer(Modifier.height(8.dp))
                         }
                     }
-                    if (imageBitmap != null) {
-                        Image(
-                            bitmap = imageBitmap,
-                            contentDescription = "첨부 이미지",
-                            modifier = Modifier
-                                .widthIn(max = 200.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .handCursor()
-                                .clickable(onClickLabel = "확대") {
-                                    haptics.tap()
-                                    showFullScreen(imageBitmap)
-                                },
-                            contentScale = ContentScale.FillWidth,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                    }
-                }
-                if (others.isNotEmpty()) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        for (att in others) {
-                            SuggestionChip(
-                                onClick = {},
-                                icon = {
-                                    Icon(
-                                        modifier = Modifier.size(16.dp),
-                                        painter = painterResource(Res.drawable.ic_file),
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    )
-                                },
-                                label = { Text(truncateFileName(att.fileName ?: att.mimeType)) },
-                            )
+                    if (others.isNotEmpty()) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            for (att in others) {
+                                SuggestionChip(
+                                    onClick = {},
+                                    icon = {
+                                        Icon(
+                                            modifier = Modifier.size(16.dp),
+                                            painter = painterResource(Res.drawable.ic_file),
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        )
+                                    },
+                                    label = { Text(truncateFileName(att.fileName ?: att.mimeType)) },
+                                )
+                            }
+                        }
+                        if (message.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
                         }
                     }
                     if (message.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
+                        // Explicit body style (was unstyled => LocalTextStyle default,
+                        // a different size/face than the assistant's bodyLarge). 14sp
+                        // keeps it one step down, matching the chat answer body.
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = bubbleText,
+                        )
                     }
-                }
-                if (message.isNotEmpty()) {
-                    // Explicit body style (was unstyled => LocalTextStyle default,
-                    // a different size/face than the assistant's bodyLarge). 14sp
-                    // keeps it one step down, matching the chat answer body.
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = bubbleText,
-                    )
                 }
             }
         }
