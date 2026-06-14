@@ -24,6 +24,7 @@ import ai.deneb.ui.chat.composables.WorkReportBanner
 import ai.deneb.ui.chat.composables.uiErrorText
 import ai.deneb.ui.components.VerticalScrollbarForList
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.components.streamingAuroraGlow
 import ai.deneb.ui.denebContentWidthModifier
 import ai.deneb.ui.denebPopEnter
 import ai.deneb.ui.denebPopExit
@@ -570,7 +571,14 @@ internal fun ChatModeScreen(
                                             }
                                         }
 
-                                        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .weight(1f)
+                                                // Gemini-style: a lively aurora glow rings the message
+                                                // area while a reply is being written, then dissolves.
+                                                .streamingAuroraGlow(active = uiState.isLoading),
+                                        ) {
                                             LazyColumn(
                                                 modifier = Modifier.fillMaxSize(),
                                                 state = listState,
