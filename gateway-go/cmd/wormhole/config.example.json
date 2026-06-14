@@ -1,0 +1,13 @@
+{
+  "listen": ":18800",
+  "token": "${WORMHOLE_TOKEN}",
+  "models": [
+    { "name": "dsv4", "url": "http://127.0.0.1:8000/v1" },
+    {
+      "name": "claude",
+      "url": "https://openrouter.ai/api/v1",
+      "key": "${OPENROUTER_API_KEY}",
+      "upstreamModel": "anthropic/claude-opus-4"
+    }
+  ]
+}
