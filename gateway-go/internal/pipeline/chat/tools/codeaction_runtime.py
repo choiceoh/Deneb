@@ -134,22 +134,32 @@ sys.addaudithook(_audit)
 
 
 class _Deneb:
-    """Read-only access to Deneb tools via the in-process bridge.
+    """Access to Deneb tools via the in-process bridge.
 
-    Each method returns the tool's text result (a str). Allowed surface:
+    Methods return the tool's text result (a str) by default. Allowed surface:
       deneb.gmail(action, query=..., message_id=..., max=...)
-          actions: inbox, search, read, thread, analyze
-      deneb.calendar(action, **kw)
-          actions: list, get, free_slots
-      deneb.contacts(action, query)
-          actions: lookup, search
-      deneb.wiki(action, query=..., **kw)
-          actions: search, read, index, daily, status
-    Write/outbound actions (gmail send/reply, calendar create, wiki write, ...)
-    are rejected by the bridge."""
+          actions: inbox, search, read, thread, analyze (READ-ONLY — no send).
+      deneb.calendar(action, as_json=False, **kw)
+          read: list, get, free_slots. write: create, update, delete (local
+          calendar). as_json=True (list/get) returns event dicts
+          ({id, title, start, end, location, all_day, attendees}).
+      deneb.contacts(action, query, as_json=False)
+          actions: lookup, search. as_json=True returns a list of dicts
+          ({name, phones, emails, org}) instead of text — ideal for
+          filtering/counting in Python.
+      deneb.wiki(action, query=..., as_json=False, **kw)
+          read: search, read, index, daily, status. write: write, log.
+          as_json=True returns {path, snippet, score} hits (search), a
+          {path, title, summary, body} page (read), or page paths (index).
+      deneb.read(file_path) / deneb.write(file_path, content)
+      deneb.edit(file_path, old_string, new_string)
+          workspace files (paths clamped to the workspace; system files and
+          secrets are unreachable).
+    Writes here are internal and recoverable. Outbound actions (gmail
+    send/reply) are rejected — do those as a normal top-level tool call."""
 
-    def _call(self, tool, args):
-        body = json.dumps({"tool": tool, "args": args}).encode("utf-8")
+    def _call(self, tool, args, as_json=False):
+        body = json.dumps({"tool": tool, "args": args, "json": as_json}).encode("utf-8")
         req = urllib.request.Request(
             _BRIDGE_URL, data=body, method="POST",
             headers={"Content-Type": "application/json",
@@ -158,24 +168,42 @@ class _Deneb:
             payload = json.loads(resp.read().decode("utf-8"))
         if not payload.get("ok"):
             raise RuntimeError("deneb.%s error: %s" % (tool, payload.get("error")))
-        return payload.get("result", "")
+        result = payload.get("result", "")
+        if as_json and isinstance(result, str) and result:
+            return json.loads(result)
+        return result
 
     def gmail(self, action, **kw):
         kw["action"] = action
         return self._call("gmail", kw)
 
-    def calendar(self, action, **kw):
+    def calendar(self, action, as_json=False, **kw):
         kw["action"] = action
-        return self._call("calendar", kw)
+        return self._call("calendar", kw, as_json=as_json)
 
-    def contacts(self, action, query, **kw):
+    def contacts(self, action, query, as_json=False, **kw):
         kw["action"] = action
         kw["query"] = query
-        return self._call("contacts", kw)
+        return self._call("contacts", kw, as_json=as_json)
 
-    def wiki(self, action, **kw):
+    def wiki(self, action, as_json=False, **kw):
         kw["action"] = action
-        return self._call("wiki", kw)
+        return self._call("wiki", kw, as_json=as_json)
+
+    def read(self, file_path, **kw):
+        kw["file_path"] = file_path
+        return self._call("read", kw)
+
+    def write(self, file_path, content, **kw):
+        kw["file_path"] = file_path
+        kw["content"] = content
+        return self._call("write", kw)
+
+    def edit(self, file_path, old_string, new_string, **kw):
+        kw["file_path"] = file_path
+        kw["old_string"] = old_string
+        kw["new_string"] = new_string
+        return self._call("edit", kw)
 
 
 def _run():
