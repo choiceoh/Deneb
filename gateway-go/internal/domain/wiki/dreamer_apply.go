@@ -182,6 +182,13 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 		if !strings.HasSuffix(u.Path, ".md") {
 			u.Path += ".md"
 		}
+		// Strip a wikilink namespace ("w:") the model sometimes prefixes onto the
+		// path's category directory (e.g. "w:프로젝트/…"). Categories are the page's
+		// directory (Store.Stats uses filepath.Dir), so a "w:프로젝트/" path files the
+		// page under a phantom "w:프로젝트" that duplicates the real "프로젝트" in the
+		// browser and, sharing a title, slips past the dedup below. Normalizing here
+		// folds both away and lets the dedup catch the duplicate.
+		u.Path = normalizeWikiPath(u.Path)
 		// Validate category; remap invalid ones to "운영시스템" as fallback.
 		if u.Category != "" && !ValidateCategory(u.Category) {
 			wd.logger.Warn("wiki-dream: invalid category, remapping to 운영시스템",
@@ -443,6 +450,15 @@ func normalizeSlug(path string) string {
 		}
 	}
 	return sb.String()
+}
+
+// normalizeWikiPath strips a leading wikilink namespace ("w:") from a proposed
+// page path. The dreamer model occasionally prefixes the path's category
+// directory with the knowledge-router's "w:" ref form ("w:프로젝트/…"); since the
+// category is the page's directory, that files the page under a phantom
+// "w:프로젝트" bucket that duplicates "프로젝트". A plain path is unchanged.
+func normalizeWikiPath(p string) string {
+	return strings.TrimPrefix(strings.TrimSpace(p), "w:")
 }
 
 func (wd *WikiDreamer) resetCounters() {
