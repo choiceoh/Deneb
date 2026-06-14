@@ -434,6 +434,15 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		s.autonomousSvc.SetStateDir(filepath.Join(home, ".deneb"))
 	}
 
+	// Persist per-session frozen system-prompt snapshots (tier-1 wiki, context
+	// files, topic knowledge) so the same SIGUSR1 restarts don't force a
+	// per-session vLLM APC re-prefill: the restored snapshot reproduces the
+	// system prompt byte-for-byte, keeping the engine's KV cache for the tool
+	// schemas + history valid. DENEB_STATE_DIR-aware so a dev gateway never
+	// writes into the production file. Loaded in restoreAndWakeSessions's
+	// goroutine (server_lifecycle.go). See chat/prompt_snapshot_persist.go.
+	chat.ConfigurePromptSnapshots(config.ResolveStateDir(), s.logger)
+
 	// Wire wiki dreamer for autonomous diary → wiki consolidation.
 	if s.wikiDreamer != nil {
 		s.autonomousSvc.SetDreamer(s.wikiDreamer)

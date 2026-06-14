@@ -43,6 +43,7 @@ func (h *Handler) handleSlashCommand(
 		prompt.ClearSessionSnapshot(sessionKey)
 		clearRecallMemory(sessionKey)
 		clearTier1Wiki(sessionKey)
+		forgetPromptSnapshot(sessionKey) // drop the persisted copy too, not just memory
 		// Stop any standing goal bound to this session so /reset is a clean slate.
 		if gs := goals.Default(); gs != nil {
 			gs.Clear(sessionKey)
