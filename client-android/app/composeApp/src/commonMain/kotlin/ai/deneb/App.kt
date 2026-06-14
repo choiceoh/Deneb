@@ -18,6 +18,7 @@ import ai.deneb.deneb.DenebFleetScreen
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.deneb.DenebMailDetailScreen
 import ai.deneb.deneb.DenebMailScreen
+import ai.deneb.deneb.DenebMoreScreen
 import ai.deneb.deneb.DenebPeopleScreen
 import ai.deneb.deneb.DenebPersonScreen
 import ai.deneb.deneb.DenebSearchScreen
@@ -42,17 +43,27 @@ import ai.deneb.ui.Theme
 import ai.deneb.ui.chat.ChatScreen
 import ai.deneb.ui.chat.ChatViewModel
 import ai.deneb.ui.chat.composables.CaptureActions
+import ai.deneb.ui.chat.composables.DenebBottomBar
 import ai.deneb.ui.chat.composables.DenebSidebar
 import ai.deneb.ui.chat.composables.LocalCaptureActions
+import ai.deneb.ui.chat.composables.denebBottomBarRoutes
+import ai.deneb.ui.chat.composables.denebMoreRoutes
+import ai.deneb.ui.chat.composables.navigateToDenebSection
 import ai.deneb.ui.components.FullScreenImageHost
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.withBlackBackground
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -151,6 +162,10 @@ data class DenebTodoEdit(val id: String)
 @Serializable
 @SerialName("deneb_search")
 object DenebSearch
+
+@Serializable
+@SerialName("deneb_more")
+object DenebMore
 
 @Serializable
 @SerialName("deneb_wiki")
@@ -508,6 +523,12 @@ private fun AppContent(
                                 )
                             }
                         }
+                        composable<DenebMore> {
+                            DenebMoreScreen(
+                                onBack = { navController.navigateUp() },
+                                onOpen = { dest -> navController.navigate(dest) },
+                            )
+                        }
                         composable<DenebWiki> { entry ->
                             denebClient?.let { client ->
                                 DenebWikiPageScreen(
@@ -629,7 +650,39 @@ private fun AppContent(
                         Box(Modifier.weight(1f).fillMaxHeight()) { navHost(Modifier.fillMaxSize()) }
                     }
                 } else {
-                    navHost(Modifier)
+                    // Phone: dock the super-app bottom bar under the content on
+                    // top-level sections (project_superapp_vision). Pushed detail
+                    // screens hide it and keep their back nav; the keyboard also hides
+                    // it so the chat input owns the bottom. The content area consumes
+                    // the navigation-bar inset (the bar applies it) so the screens'
+                    // own navigationBarsPadding doesn't double up.
+                    val route = currentBackStackEntry?.destination?.route
+                    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+                    val showBar = route in denebBottomBarRoutes && !imeVisible
+                    Column(Modifier.fillMaxSize()) {
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .then(
+                                    if (showBar) {
+                                        Modifier.consumeWindowInsets(WindowInsets.navigationBars)
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
+                        ) {
+                            navHost(Modifier.fillMaxSize())
+                        }
+                        if (showBar) {
+                            DenebBottomBar(
+                                currentRoute = route,
+                                moreActive = route in denebMoreRoutes,
+                                onNavigate = { dest -> navigateToDenebSection(navController, dest) },
+                                onMore = { navigateToDenebSection(navController, DenebMore) },
+                            )
+                        }
+                    }
                 }
             }
         }

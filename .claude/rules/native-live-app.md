@@ -70,7 +70,7 @@ scripts/dev/native-app.sh stop
 
 | 변수 | 기본 | 용도 |
 |---|---|---|
-| profile 인자 | `phone`(412×915) | `desktop`(1280×800)도 가능 |
+| profile 인자 | `phone`(412×915) | `desktop`(1280×800)도 가능. ★**phone=모바일 UI 분기(하단 탭바)·desktop=데스크톱 분기(좌측 레일)** — 창 크기뿐 아니라 실제 플랫폼 분기를 렌더 |
 | `NATIVE_W` / `NATIVE_H` | 프로파일값 | 더 큰 프레임(예: `NATIVE_W=480 NATIVE_H=1040`) |
 | `DENEB_GATEWAY_URL` | `http://100.105.145.6:18789` | 다른 게이트웨이로 시드 (dev 게이트웨이 연결은 ↓ 전용 섹션 참조) |
 | `DENEB_INSTANCE` | worktree 이름 | **인스턴스 격리 키** — 디스플레이/상태디렉토리/VNC포트가 이 값의 해시 오프셋으로 분리되어, 동시에 도는 다른 에이전트 worktree의 앱을 서로 죽이거나 잘못된 화면을 캡처하지 않는다 |
@@ -79,6 +79,7 @@ scripts/dev/native-app.sh stop
 | `NATIVE_APP_XMX` | `1024m` | 앱 JVM 힙 캡 |
 
 - **프로덕션 연결**(실데이터). 메일/일정/세션이 진짜로 보이고, **채팅을 보내면 실제 에이전트 턴이 돈다** — 입력 메커니즘만 볼 땐 Enter/전송 누르지 말 것.
+- ★**phone 프로파일 = 실제 모바일 UI**(2026-06-14 추가): 예전엔 항상 `Platform.Desktop`(phone 은 창 크기만)이라 폰 전용 분기를 못 봤는데, 이제 phone 프로파일이 `-Ddeneb.platform=phone` 으로 `currentPlatform=Mobile.Android` 를 강제하고 창을 프로파일 크기로 연다(`-Ddeneb.window.{width,height}` — Compose 가 1280 기본을 재적용해 좁은 레이아웃을 잘라먹던 클립 제거). 그래서 **하단 탭바·모달 드로어 등 폰 전용 분기를 헤드리스로 검증**할 수 있다. desktop 프로파일은 그대로 `Platform.Desktop`(좌측 레일). 구현: `Platform.jvm.kt` 가 `deneb.platform` 시스템 프로퍼티를, `main.kt` 가 `deneb.window.*` 를 인식(프로덕션 런치는 미설정). **단 실제 Android 인셋·소프트 키보드·엣지 제스처는 여전히 실기기 필요** — 이건 레이아웃·네비게이션 검증이지 OS 런타임 동작 검증이 아니다.
 
 ## dev 게이트웨이 연결 (수정 빌드를 prod 배포 없이 검증)
 

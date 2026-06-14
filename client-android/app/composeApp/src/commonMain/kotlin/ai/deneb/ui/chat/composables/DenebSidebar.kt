@@ -17,23 +17,44 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import androidx.compose.material.icons.automirrored.filled.Chat as ChatFilled
+import androidx.compose.material.icons.automirrored.outlined.Chat as ChatOutlined
+import androidx.compose.material.icons.filled.CalendarMonth as CalFilled
+import androidx.compose.material.icons.filled.Dns as DnsFilled
+import androidx.compose.material.icons.filled.Email as EmailFilled
+import androidx.compose.material.icons.filled.GridView as GridFilled
+import androidx.compose.material.icons.filled.Search as SearchFilled
+import androidx.compose.material.icons.filled.Settings as SettingsFilled
+import androidx.compose.material.icons.outlined.CalendarMonth as CalOutlined
+import androidx.compose.material.icons.outlined.Dns as DnsOutlined
+import androidx.compose.material.icons.outlined.Email as EmailOutlined
+import androidx.compose.material.icons.outlined.GridView as GridOutlined
+import androidx.compose.material.icons.outlined.Search as SearchOutlined
+import androidx.compose.material.icons.outlined.Settings as SettingsOutlined
 
 /**
  * Desktop's always-visible left navigation rail — the persistent counterpart to the
@@ -47,7 +68,13 @@ import androidx.navigation.NavHostController
  * a fixed width is the only reliable size here (see DenebDesign.denebContentWidthModifier).
  */
 
-private data class SidebarItem(val label: String, val route: String, val dest: Any)
+private data class SidebarItem(
+    val label: String,
+    val route: String,
+    val dest: Any,
+    val outlined: ImageVector,
+    val filled: ImageVector,
+)
 
 // [route] is the destination @SerialName (matches currentBackStackEntry.destination.route
 // for highlighting); [dest] is the typed route object passed to navController.navigate —
@@ -55,13 +82,13 @@ private data class SidebarItem(val label: String, val route: String, val dest: A
 // "people" is not a rail item: the merged people surface (recent contacts +
 // 인물 wiki) is reached through categories' pinned "사람" row.
 private val sidebarItems = listOf(
-    SidebarItem("chat", "home", Home),
-    SidebarItem("mail", "deneb_mail", DenebMail),
-    SidebarItem("calendar", "deneb_calendar", DenebCalendar),
-    SidebarItem("search", "deneb_search", DenebSearch),
-    SidebarItem("categories", "deneb_categories", DenebCategories),
-    SidebarItem("fleet", "deneb_fleet", DenebFleet),
-    SidebarItem("settings", "deneb_config", DenebConfig),
+    SidebarItem("chat", "home", Home, Icons.AutoMirrored.Outlined.ChatOutlined, Icons.AutoMirrored.Filled.ChatFilled),
+    SidebarItem("mail", "deneb_mail", DenebMail, Icons.Outlined.EmailOutlined, Icons.Filled.EmailFilled),
+    SidebarItem("calendar", "deneb_calendar", DenebCalendar, Icons.Outlined.CalOutlined, Icons.Filled.CalFilled),
+    SidebarItem("search", "deneb_search", DenebSearch, Icons.Outlined.SearchOutlined, Icons.Filled.SearchFilled),
+    SidebarItem("categories", "deneb_categories", DenebCategories, Icons.Outlined.GridOutlined, Icons.Filled.GridFilled),
+    SidebarItem("fleet", "deneb_fleet", DenebFleet, Icons.Outlined.DnsOutlined, Icons.Filled.DnsFilled),
+    SidebarItem("settings", "deneb_config", DenebConfig, Icons.Outlined.SettingsOutlined, Icons.Filled.SettingsFilled),
 )
 
 /**
@@ -117,6 +144,8 @@ private fun SidebarContent(
             sidebarItems.forEach { item ->
                 SidebarRow(
                     label = item.label,
+                    outlined = item.outlined,
+                    filled = item.filled,
                     selected = currentRoute == item.route,
                     onClick = { onNavigate(item.dest) },
                 )
@@ -126,7 +155,13 @@ private fun SidebarContent(
 }
 
 @Composable
-private fun SidebarRow(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun SidebarRow(
+    label: String,
+    outlined: ImageVector,
+    filled: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     val haptics = rememberHaptics()
     // Hover feedback by color only — `indication = null` because the default ripple
     // also draws a focus overlay, and on desktop a mouse click focuses the row,
@@ -140,10 +175,7 @@ private fun SidebarRow(label: String, selected: Boolean, onClick: () -> Unit) {
             else -> denebHint()
         },
     )
-    Text(
-        text = label,
-        style = DenebType.railItem,
-        color = color,
+    Row(
         modifier = Modifier
             // Full row width: the whole 200dp band is the click target, not just the glyphs.
             .fillMaxWidth()
@@ -153,5 +185,17 @@ private fun SidebarRow(label: String, selected: Boolean, onClick: () -> Unit) {
             }
             .handCursor()
             .padding(vertical = 8.dp),
-    )
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Same icon language as the phone bottom bar: outlined when idle, filled when
+        // the section is active (Apple SF). Tint follows the row's mono color state.
+        Icon(
+            imageVector = if (selected) filled else outlined,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(14.dp))
+        Text(text = label, style = DenebType.railItem, color = color)
+    }
 }
