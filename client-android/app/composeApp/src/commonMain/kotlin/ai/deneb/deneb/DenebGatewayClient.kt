@@ -4,12 +4,17 @@ import ai.deneb.data.AppSettings
 import ai.deneb.data.Attachment
 import ai.deneb.data.Conversation
 import ai.deneb.data.DataRepository
+import ai.deneb.data.FallbackStatus
 import ai.deneb.data.MemoryEntry
-import ai.deneb.data.RemoteDataRepository
 import ai.deneb.data.ScheduledTask
+import ai.deneb.data.SmsDraft
+import ai.deneb.data.SmsDraftStatus
+import ai.deneb.data.SmsDraftStore
 import ai.deneb.data.UiSubmission
 import ai.deneb.deneb.generated.SkillRow
 import ai.deneb.httpClient
+import ai.deneb.sms.SmsSendResult
+import ai.deneb.sms.SmsSender
 import ai.deneb.ui.chat.History
 import ai.deneb.ui.chat.WorkFeedItem
 import io.github.vinceglb.filekit.PlatformFile
@@ -59,12 +64,11 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 /**
- * A [DataRepository] backed by the Deneb gateway.
+ * A [DataRepository] backed by the Deneb gateway — the sole production implementation.
  *
- * It delegates every non-chat member to [base] (the upstream RemoteDataRepository, kept
- * so settings and the rest keep working) and overrides the chat path plus the
- * conversation drawer to drive the gateway's `miniapp.*` RPC surface. The reply
- * text may carry a ```deneb-ui fence, which the upstream chat renderer turns into an
+ * It implements the full (narrow) [DataRepository] surface directly and drives the
+ * gateway's `miniapp.*` RPC surface for the chat path plus the conversation drawer.
+ * The reply text may carry a ```deneb-ui fence, which the chat renderer turns into an
  * interactive screen.
  *
  * Auth uses the X-Deneb-Client-Token header. Generate the token on the gateway
@@ -78,18 +82,20 @@ import kotlin.uuid.Uuid
  * sessions browser) — they reach the transport and the backing StateFlows
  * through the internal members below.
  *
- * Revival pattern: to bring another dead upstream screen back to life, override the
- * DataRepository method(s) it calls and route them through [callRpc]. Flow-typed
- * members (chatHistory, savedConversations) map cleanly; synchronous getters need
- * a cached StateFlow refreshed off [scope].
+ * The remaining non-chat [DataRepository] members the UI still reaches through the
+ * interface (recall read, SMS drafts, file extensions, the heartbeat / work-report
+ * notification pulses) are implemented inline in the "DataRepository: non-chat
+ * surface" section near the bottom. The legacy on-device (cloud-direct) provider
+ * path that used to back those via `RemoteDataRepository` delegation is gone.
  */
 @OptIn(ExperimentalUuidApi::class)
 class DenebGatewayClient(
-    private val base: RemoteDataRepository,
     // internal (not private) so session-list extensions can read the active
     // workspace (recall on = 업무, off = 챗봇) to filter the recent-session list.
     internal val appSettings: AppSettings,
-) : DataRepository by base {
+    private val smsDraftStore: SmsDraftStore,
+    private val smsSender: SmsSender,
+) : DataRepository {
 
     internal val jsonCodec = Json {
         ignoreUnknownKeys = true
@@ -569,9 +575,8 @@ class DenebGatewayClient(
     }
 
     // Drop the last user message and everything after it (its assistant reply).
-    // The gateway client renders from its own [_chatHistory], so the base
-    // implementation — which mutates RemoteDataRepository's separate flow — has
-    // no visible effect here. Used by regenerate() before it re-asks.
+    // Operates on the gateway client's own [_chatHistory] (the visible one). Used
+    // by regenerate() before it re-asks.
     override fun popLastExchange() {
         _chatHistory.update { history ->
             val lastUserIndex = history.indexOfLast { it.role == History.Role.USER }
@@ -677,9 +682,7 @@ class DenebGatewayClient(
     /**
      * Cold-start home = the client:main 업무 topic, where proactive reports
      * (morning-letter, mail-analysis) are mirrored. Open it so those reports are
-     * visible by default instead of an empty chat. base.restoreCurrentConversation
-     * targets RemoteDataRepository's own history flow (not ours), so it has no
-     * visible effect for the gateway client — this is the real restore.
+     * visible by default instead of an empty chat.
      *
      * Guarded so a settings refresh (refreshSettings re-calls this) or a
      * cold-start share can't yank the user out of what they're viewing: only
@@ -703,15 +706,17 @@ class DenebGatewayClient(
      * A proactive report just landed in client:main while the app is foregrounded
      * (so the scheduler raised no notification). If the user is already on the
      * home transcript, reload it so the report appears live — the SSE push frame
-     * carries only a one-line preview, not the body. Otherwise fall back to the
-     * base unread badge so the in-app banner points them at the work topic.
+     * carries only a one-line preview, not the body. Otherwise raise the unread
+     * badge so the in-app banner points them at the work topic.
      */
     override fun onProactiveReportForeground() {
         syncNativeStateAsync()
         if (sessionKey == "client:main") {
             scope.launch { loadTranscriptGuarded("client:main") }
         } else {
-            base.onProactiveReportForeground()
+            // Not on the work home — raise the in-app unread badge so the banner
+            // points the user at the 업무 topic.
+            _hasUnreadWorkReport.value = true
         }
     }
 
@@ -955,34 +960,11 @@ class DenebGatewayClient(
     }
 
     // --- Memory screen → Deneb wiki (read-only browser) ---------------------
-    // The wiki list RPC carries titles, not full bodies, so writing back from the
-    // list view would clobber a page body with its title. Keep memory read-only
-    // until a body-aware edit path exists; the value here is browsing Deneb's
-    // knowledge base on the phone.
-
-    override fun isMemoryEnabled(): Boolean = true
-
-    override fun getMemories(): List<MemoryEntry> {
-        scope.launch { refreshMemories() }
-        return _denebMemories.value
-    }
-
-    override suspend fun updateMemoryContent(key: String, content: String) = Unit
-
-    override suspend fun deleteMemory(key: String) = Unit
-
-    // --- Scheduler screen → Deneb cron --------------------------------------
-
-    override fun isSchedulingEnabled(): Boolean = true
-
-    override fun getScheduledTasks(): List<ScheduledTask> {
-        scope.launch { refreshScheduledTasks() }
-        return _denebScheduledTasks.value
-    }
-
-    override suspend fun cancelScheduledTask(id: String) {
-        removeCron(id)
-    }
+    // Wiki pages ([denebMemories]) and Deneb crons ([denebScheduledTasks]) are
+    // surfaced to their screens through the concrete StateFlows + refresh
+    // extensions in DenebClientMemory.kt / DenebClientAdmin.kt (refreshMemories,
+    // refreshScheduledTasks, removeCron) — not the DataRepository interface, which
+    // no longer carries on-device memory/scheduling members.
 
     suspend fun refreshClientStatus(): ClientStatus? {
         val payload = callRpc<ClientHelloPayload>("miniapp.client.hello", buildJsonObject {}) ?: run {
@@ -1430,6 +1412,95 @@ class DenebGatewayClient(
 
     // Internal (not private) because the inline [callRpc] and the per-domain
     // extension files reference these constants.
+    // --- DataRepository: non-chat surface -----------------------------------
+    // The small set of non-chat DataRepository members the UI still reaches
+    // through the interface. Re-homed here when the on-device RemoteDataRepository
+    // (and its `by base` delegation) was removed; backed by appSettings + the SMS
+    // draft store + self-contained notification-pulse flows.
+
+    // The gateway is the single backend, so there is no client-side provider
+    // fallback ladder — this stays null. Kept only to satisfy the chat fallback
+    // banner, which renders nothing when null.
+    override val fallbackStatus: StateFlow<FallbackStatus?> = MutableStateFlow(null)
+
+    override fun isRecallEnabled(): Boolean = appSettings.isRecallEnabled()
+
+    // Gateway-side document extraction accepts the same set the on-device OpenAI
+    // service used to advertise (images + text + pdf). The file picker filters by
+    // this list before an attachment is sent to ask().
+    override fun supportedFileExtensions(): List<String> = ai.deneb.data.supportedFileExtensions + "pdf"
+
+    override fun truncateFrom(messageId: String) {
+        // Operate on the gateway client's own history (the visible one). The old
+        // delegated impl mutated RemoteDataRepository's separate flow and had no
+        // visible effect here — the same gotcha popLastExchange documents.
+        _chatHistory.update { history ->
+            val index = history.indexOfFirst { it.id == messageId }
+            if (index >= 0) history.take(index) else history
+        }
+    }
+
+    // SMS drafts: the gateway proposes a draft, the user approves it via the in-app
+    // banner, and the phone sends it. Explicitly user-triggered (never AI-triggered)
+    // — the banner is the gate.
+    override val smsDrafts: StateFlow<List<SmsDraft>> = smsDraftStore.drafts
+
+    override suspend fun sendSmsDraft(draftId: String): Boolean {
+        val draft = smsDraftStore.getDraft(draftId) ?: return false
+        if (draft.status != SmsDraftStatus.PENDING) return false
+        smsDraftStore.updateStatus(draftId, SmsDraftStatus.SENDING)
+        return when (val result = smsSender.send(draft.address, draft.body)) {
+            is SmsSendResult.Success -> {
+                smsDraftStore.updateStatus(draftId, SmsDraftStatus.SENT)
+                true
+            }
+
+            is SmsSendResult.Failure -> {
+                smsDraftStore.updateStatus(draftId, SmsDraftStatus.FAILED, result.message)
+                false
+            }
+        }
+    }
+
+    override suspend fun discardSmsDraft(draftId: String) {
+        smsDraftStore.removeDraft(draftId)
+    }
+
+    // Heartbeat / work-report notification pulses. Set by MainActivity (Android
+    // push tap → requestOpen*) and by onProactiveReportForeground; collected by
+    // ChatViewModel. Self-contained flows with no backend. Note: hasUnreadHeartbeat
+    // is never raised in gateway mode (the old on-device heartbeat that set it is
+    // gone); the flow stays so the badge wiring keeps compiling.
+    private val _hasUnreadHeartbeat = MutableStateFlow(false)
+    override val hasUnreadHeartbeat: StateFlow<Boolean> = _hasUnreadHeartbeat
+    override fun clearUnreadHeartbeat() {
+        _hasUnreadHeartbeat.value = false
+    }
+
+    private val _openHeartbeatRequested = MutableStateFlow(false)
+    override val openHeartbeatRequested: StateFlow<Boolean> = _openHeartbeatRequested
+    override fun requestOpenHeartbeat() {
+        _openHeartbeatRequested.value = true
+    }
+    override fun consumeOpenHeartbeatRequest() {
+        _openHeartbeatRequested.value = false
+    }
+
+    private val _openWorkTopicRequested = MutableStateFlow(false)
+    override val openWorkTopicRequested: StateFlow<Boolean> = _openWorkTopicRequested
+    override fun requestOpenWorkTopic() {
+        _openWorkTopicRequested.value = true
+    }
+    override fun consumeOpenWorkTopicRequest() {
+        _openWorkTopicRequested.value = false
+    }
+
+    private val _hasUnreadWorkReport = MutableStateFlow(false)
+    override val hasUnreadWorkReport: StateFlow<Boolean> = _hasUnreadWorkReport
+    override fun clearUnreadWorkReport() {
+        _hasUnreadWorkReport.value = false
+    }
+
     internal companion object {
         const val CLIENT_TOKEN_HEADER = "X-Deneb-Client-Token"
         const val KEY_URL = "deneb.gatewayUrl"
