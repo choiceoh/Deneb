@@ -21,6 +21,12 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "하단 탭바가 채팅·메일·달력·설정으로 — 자주 쓰는 설정이 더보기 안쪽 대신 탭으로 올라오고, 카테고리는 더보기로 이동",
+            "더보기에서 플릿 항목 제거 — 플릿은 설정 > 라우팅·인프라 안에 있어 한 곳에서만 보입니다",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "앱을 완전히 종료했거나 절전(Doze) 상태여도 능동 보고 알림이 도착 — 그동안 앱이 켜져 있을 때만 뜨던 메일 분석·아침 브리핑·예약 작업 알림을 푸시(FCM)로 받습니다",
         ),
     ),
