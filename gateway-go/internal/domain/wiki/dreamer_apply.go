@@ -71,7 +71,7 @@ type wikiUpdate struct {
 	Type       string         `json:"type"`       // concept, entity, source, comparison, log
 	Confidence string         `json:"confidence"` // high, medium, low
 	Due        string         `json:"due"`        // YYYY-MM-DD upcoming deadline (프로젝트, 거래성 건)
-	Supersedes string         `json:"supersedes"` // relPath of an existing page this update REPLACES (contradicted facts)
+	Supersedes flexStringList `json:"supersedes"` // relPath(s) of existing page(s) this update REPLACES; accepts a string or an array (the LLM emits both, and an array used to fail synthesis parsing)
 }
 
 // synthesize calls the LLM to determine which wiki pages should be updated.
@@ -333,15 +333,18 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 			updated++
 		}
 
-		// Contradiction handling: when the LLM flagged this update as
-		// REPLACING an existing page's facts, stamp the old page so search
+		// Contradiction handling: when the LLM flagged this update as REPLACING
+		// one or more existing pages' facts, stamp each old page so search
 		// demotes it (the page itself stays readable — history is memory too).
-		if u.Supersedes != "" {
-			if err := wd.store.MarkSuperseded(u.Supersedes, u.Path); err != nil {
+		for _, old := range u.Supersedes {
+			if old == "" {
+				continue
+			}
+			if err := wd.store.MarkSuperseded(old, u.Path); err != nil {
 				wd.logger.Warn("wiki-dream: supersede mark failed",
-					"old", u.Supersedes, "new", u.Path, "error", err)
+					"old", old, "new", u.Path, "error", err)
 			} else {
-				wd.logger.Info("wiki-dream: page superseded", "old", u.Supersedes, "new", u.Path)
+				wd.logger.Info("wiki-dream: page superseded", "old", old, "new", u.Path)
 			}
 		}
 

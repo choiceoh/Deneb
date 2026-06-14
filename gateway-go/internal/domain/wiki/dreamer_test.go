@@ -160,6 +160,36 @@ func TestDreamProposalReportWritesPreview(t *testing.T) {
 	}
 }
 
+// TestWikiUpdateSupersedesAcceptsStringOrArray guards the synthesis parse bug:
+// the LLM emits `supersedes` as either a single string or an array, and an
+// array used to crash the whole dream cycle ("cannot unmarshal array into ...
+// of type string"). Both must parse now (flexStringList, like tags/related).
+func TestWikiUpdateSupersedesAcceptsStringOrArray(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want []string
+	}{
+		{`{"supersedes":"old/page.md"}`, []string{"old/page.md"}},
+		{`{"supersedes":["a/p.md","b/q.md"]}`, []string{"a/p.md", "b/q.md"}},
+		{`{"supersedes":""}`, nil},
+		{`{}`, nil},
+	}
+	for _, c := range cases {
+		var u wikiUpdate
+		if err := json.Unmarshal([]byte(c.raw), &u); err != nil {
+			t.Fatalf("Unmarshal(%s): %v (the array case used to fail here)", c.raw, err)
+		}
+		if len(u.Supersedes) != len(c.want) {
+			t.Fatalf("%s → %v, want %v", c.raw, u.Supersedes, c.want)
+		}
+		for i := range c.want {
+			if u.Supersedes[i] != c.want[i] {
+				t.Fatalf("%s → %v, want %v", c.raw, u.Supersedes, c.want)
+			}
+		}
+	}
+}
+
 func scanContent(scan *diaryScanResult) string {
 	if scan == nil {
 		return ""
