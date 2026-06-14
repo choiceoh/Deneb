@@ -1,5 +1,66 @@
 # Changelog
 
+## [4.28.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.27.0...deneb-v4.28.0) (2026-06-14)
+
+
+### ✨ Features
+
+* **chat:** add code_action (CodeAct) — sandboxed Python to batch read-only tools in one turn ([#2326](https://github.com/choiceoh/Deneb/issues/2326)) ([420468b](https://github.com/choiceoh/Deneb/commit/420468b6fa7ccee0d489ecf174863e0c99d5b044))
+* **chat:** extract documents as markdown tables, drop external lit dependency ([#2316](https://github.com/choiceoh/Deneb/issues/2316)) ([ddfd4f8](https://github.com/choiceoh/Deneb/commit/ddfd4f8049ff78ad1ff1930ef7087e8528cfdba7))
+* **chat:** re-land code_action follow-ups dropped from main ([#2329](https://github.com/choiceoh/Deneb/issues/2329)/[#2330](https://github.com/choiceoh/Deneb/issues/2330)/[#2331](https://github.com/choiceoh/Deneb/issues/2331)/[#2333](https://github.com/choiceoh/Deneb/issues/2333)) ([#2334](https://github.com/choiceoh/Deneb/issues/2334)) ([2910b0e](https://github.com/choiceoh/Deneb/commit/2910b0ec769e936539e28fdb1597f4581edaba87))
+* **chat:** skipRecall on chat send/stream (focused-chat memory toggle — server side) ([#2340](https://github.com/choiceoh/Deneb/issues/2340)) ([a6ad1a5](https://github.com/choiceoh/Deneb/commit/a6ad1a5463c35c27ecaf971138150e1d30ee3bda))
+* **chat:** upgrade digital PDF tables to markdown via PaddleOCR ([#2317](https://github.com/choiceoh/Deneb/issues/2317)) ([83c44f9](https://github.com/choiceoh/Deneb/commit/83c44f9e445903301c6a3477967ac32180dab493))
+* **genesis:** honest evolve signal + thrash visibility ([#2336](https://github.com/choiceoh/Deneb/issues/2336)) ([7befc53](https://github.com/choiceoh/Deneb/commit/7befc53f514970b812a60b0ee4b50f69fa8bf89f))
+* **genesis:** quality-gate generated skills + measure library value ([#2338](https://github.com/choiceoh/Deneb/issues/2338)) ([6db2c19](https://github.com/choiceoh/Deneb/commit/6db2c198f4c653e5c48122f5cc631d5bd92abead))
+* **genesis:** reconcile orphan curator entries against catalog at startup ([#2344](https://github.com/choiceoh/Deneb/issues/2344)) ([c51c31f](https://github.com/choiceoh/Deneb/commit/c51c31f38a19f6bd6c936490886c2c3b4c900fe8))
+* **goal:** agent-driven standing goals (Ralph loop) with subgoals + idempotency ledger ([#2339](https://github.com/choiceoh/Deneb/issues/2339)) ([4fb2256](https://github.com/choiceoh/Deneb/commit/4fb2256f9aea790cca7989e1c65923c39b2df5ef))
+* **memory:** add miniapp.memory.move_page to reclassify wiki pages ([#2342](https://github.com/choiceoh/Deneb/issues/2342)) ([a3462d8](https://github.com/choiceoh/Deneb/commit/a3462d8218c49b14dab409cd0d031d3c10563dd7))
+* **memory:** nest mail analyses under their related project ([#2343](https://github.com/choiceoh/Deneb/issues/2343)) ([c1b6b08](https://github.com/choiceoh/Deneb/commit/c1b6b0863a32dbd9fa9a1e18a2eed9de3956b50d))
+* **miniapp:** make cloud-catalog models deletable from the native picker ([#2322](https://github.com/choiceoh/Deneb/issues/2322)) ([b90c88c](https://github.com/choiceoh/Deneb/commit/b90c88cbe6ec48181266c714833162ea5da18fa5))
+* **miniapp:** settings as section list, push into detail ([#2335](https://github.com/choiceoh/Deneb/issues/2335)) ([924c4f5](https://github.com/choiceoh/Deneb/commit/924c4f55063cb618dc2f0823e0d4b97c3922c60e))
+* **miniapp:** wormhole router status + feature toggles RPC ([#2358](https://github.com/choiceoh/Deneb/issues/2358)) ([e2f0ef4](https://github.com/choiceoh/Deneb/commit/e2f0ef4160d64a4faafeb7fd669845d7355f425c))
+* **models:** drop GLM-5 Turbo from z.ai picker (superseded by GLM-5.2) ([#2320](https://github.com/choiceoh/Deneb/issues/2320)) ([b0b057c](https://github.com/choiceoh/Deneb/commit/b0b057c816da21b416c6bb81a3a204c0f9f04761))
+* **models:** offer GLM-5.2 (replace GLM-5.1 in z.ai picker, add catalog entry) ([#2319](https://github.com/choiceoh/Deneb/issues/2319)) ([18bd511](https://github.com/choiceoh/Deneb/commit/18bd511ce87d5076b0559d735060b8b1394c820b))
+* **native:** focused-chat memory toggle in the chat top bar ([#2346](https://github.com/choiceoh/Deneb/issues/2346)) ([4bbce5f](https://github.com/choiceoh/Deneb/commit/4bbce5f579423345b1dde027f1164a21739d0d41))
+* **native:** reclassify wiki pages from the category screen ([#2347](https://github.com/choiceoh/Deneb/issues/2347)) ([4211403](https://github.com/choiceoh/Deneb/commit/4211403206aefe715a905349a75089b27da22cf9))
+* **native:** separate 챗봇/업무 session lists (workspace switch via the mode pill) ([#2351](https://github.com/choiceoh/Deneb/issues/2351)) ([16cb7e6](https://github.com/choiceoh/Deneb/commit/16cb7e6352ce1e40c823b45e6e4b0b2c38ae448f))
+* **native:** split fleet and version into their own settings sections ([#2359](https://github.com/choiceoh/Deneb/issues/2359)) ([6da5afe](https://github.com/choiceoh/Deneb/commit/6da5afe7189fed86f5023dee4afb0077182603f1))
+* **native:** Wormhole settings tab — router status + feature toggles ([#2360](https://github.com/choiceoh/Deneb/issues/2360)) ([5db4ca4](https://github.com/choiceoh/Deneb/commit/5db4ca4da683b2596173d69048a6d82c6c56502c))
+* **observe:** add 1일/7일 period switcher to the 관찰 tab ([#2324](https://github.com/choiceoh/Deneb/issues/2324)) ([999b84b](https://github.com/choiceoh/Deneb/commit/999b84bc2ed2af6b04fe68b632f1a97e5630d96d))
+* **wiki:** 6-category taxonomy (프로젝트·인물·시스템·업무·사용자·기타) ([#2337](https://github.com/choiceoh/Deneb/issues/2337)) ([0bd5567](https://github.com/choiceoh/Deneb/commit/0bd5567e05dadbc0154820d5ed7aab841d221d53))
+* **wiki:** auto-apply high-confidence verify findings in the dream cycle ([#2345](https://github.com/choiceoh/Deneb/issues/2345)) ([ab95883](https://github.com/choiceoh/Deneb/commit/ab9588330fd8e4df9494ef11d93ff0d7faac8ce0))
+* **wiki:** clean up the category browser — w: normalize + path hierarchy ([#2325](https://github.com/choiceoh/Deneb/issues/2325)) ([ce9eeea](https://github.com/choiceoh/Deneb/commit/ce9eeea4130441b3c388d44bae39d74a37f7cd1f))
+* **wormhole:** auto model selection on the same endpoint ([#2353](https://github.com/choiceoh/Deneb/issues/2353)) ([8f191ce](https://github.com/choiceoh/Deneb/commit/8f191cef01f14674113deda8d5bf388b72e7c8ce))
+* **wormhole:** live config hot-reload + global effortRouting switch ([#2357](https://github.com/choiceoh/Deneb/issues/2357)) ([af1665f](https://github.com/choiceoh/Deneb/commit/af1665f4be29049e79ad3c47f5d2fe9e5fdf45f4))
+* **wormhole:** local-first egress guard ([#2350](https://github.com/choiceoh/Deneb/issues/2350)) ([e3883f4](https://github.com/choiceoh/Deneb/commit/e3883f47a4d69f2f81691ccf6c0c7dc92fb0ff52))
+* **wormhole:** native Anthropic via /v1/messages pass-through ([#2352](https://github.com/choiceoh/Deneb/issues/2352)) ([6d31a7e](https://github.com/choiceoh/Deneb/commit/6d31a7e140776d4e515e6009ac12085e15f910e0))
+* **wormhole:** OpenAI-compatible model router — first slice ([#2349](https://github.com/choiceoh/Deneb/issues/2349)) ([68b5a3a](https://github.com/choiceoh/Deneb/commit/68b5a3a717e701c5e021051e48b97a9467cf408d))
+* **wormhole:** thinking/non-thinking routing at the proxy ([#2354](https://github.com/choiceoh/Deneb/issues/2354)) ([a5ba610](https://github.com/choiceoh/Deneb/commit/a5ba6100700c2d607b602e8e15056f1d8461a526))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** raise ASR transcription timeout 4m→10m for on-demand cold-load ([#2321](https://github.com/choiceoh/Deneb/issues/2321)) ([d012f30](https://github.com/choiceoh/Deneb/commit/d012f309b02b3c202439f7e998085641a076a71e))
+* **chat:** wire StripThink recovery for Anthropic thinking-signature 400s ([#2327](https://github.com/choiceoh/Deneb/issues/2327)) ([cfaad37](https://github.com/choiceoh/Deneb/commit/cfaad3786b023fe52753ecad940e28ff2bd3a56d))
+* **genesis:** stop evolve thrashing — drop infra-failure usage signal, disable judge thinking on dsv4 ([#2328](https://github.com/choiceoh/Deneb/issues/2328)) ([2d5910d](https://github.com/choiceoh/Deneb/commit/2d5910d14a8c6a80a71a0e4605ab961c6cfd3cbc))
+* **modelrole:** vLLM /models discovery wins over deneb.json contextWindow ([#2318](https://github.com/choiceoh/Deneb/issues/2318)) ([a52878a](https://github.com/choiceoh/Deneb/commit/a52878ac21a02a464415d1ca51c512d292996019))
+* **native:** center the 챗봇/업무 mode pill in the chat top bar ([#2356](https://github.com/choiceoh/Deneb/issues/2356)) ([cc5add1](https://github.com/choiceoh/Deneb/commit/cc5add1d93a8e28e802be4bcf7fc64340552ab16))
+* **sparkfleet:** move GPU-backend status to a dedicated log + log only on transitions ([#2355](https://github.com/choiceoh/Deneb/issues/2355)) ([8d0d27d](https://github.com/choiceoh/Deneb/commit/8d0d27dc7c9b92d0880fe85cb2052b95e22a93ce))
+* **wiki:** accept array or string for dream supersedes (parse crash) ([#2341](https://github.com/choiceoh/Deneb/issues/2341)) ([bae27e9](https://github.com/choiceoh/Deneb/commit/bae27e9f40710b38a51a3e495e8d99add2cf6350))
+* **wiki:** parse dream synthesis items individually (one bad item no longer sinks the cycle) ([#2348](https://github.com/choiceoh/Deneb/issues/2348)) ([9cba4f2](https://github.com/choiceoh/Deneb/commit/9cba4f22050d25704bff67dffc82b98ff6bfabb5))
+* **wiki:** strip w: namespace from dreamer page paths (category misfiling) ([#2332](https://github.com/choiceoh/Deneb/issues/2332)) ([6b29e9f](https://github.com/choiceoh/Deneb/commit/6b29e9fa066a9dbed2b7913b2aa6008e46c6d52b))
+
+
+### ⚡ Performance
+
+* **prompt:** drop the deneb-ui instruction block — 0.02% model use, server cards keep working ([#2315](https://github.com/choiceoh/Deneb/issues/2315)) ([cbf4197](https://github.com/choiceoh/Deneb/commit/cbf419738e8c74dd7d5db359898d408c62fc6928))
+
+
+### 🔧 Internal
+
+* **native:** fold deneb-ui into chat, drop standalone interactive mode ([#2313](https://github.com/choiceoh/Deneb/issues/2313)) ([aa1dbb9](https://github.com/choiceoh/Deneb/commit/aa1dbb99cd3df3ecf6fc308a8aa918eec821e493))
+* **router:** generalize effort router into per-model config-driven layer ([#2323](https://github.com/choiceoh/Deneb/issues/2323)) ([5b27286](https://github.com/choiceoh/Deneb/commit/5b2728654bc826ab79f8ee63b51f7dff46b0d6cc))
+
 ## [4.27.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.26.0...deneb-v4.27.0) (2026-06-13)
 
 
