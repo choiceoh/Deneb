@@ -243,7 +243,7 @@ class DenebGatewayClient(
 
     // Restored to the last-open session of the persisted workspace (업무 ↔ 챗봇),
     // so a restart reopens the space the user left, not always client:main.
-    internal var sessionKey: String = appSettings.lastSession(appSettings.isRecallEnabled())
+    internal var sessionKey: String = resolveInitialSession()
         private set
     private val _currentConversationId = MutableStateFlow<String?>(sessionKey)
     override val currentConversationId: StateFlow<String?> = _currentConversationId
@@ -607,11 +607,10 @@ class DenebGatewayClient(
 
     override fun startNewChat() {
         _chatHistory.value = emptyList()
-        // Scope the fresh conversation to the CURRENT workspace's home: 업무 chats
-        // live under client:main, 챗봇 chats under chat:main — so the two session
-        // lists never mix.
-        val home = workspaceHome(appSettings.isRecallEnabled())
-        switchSession("$home:${Uuid.random()}")
+        // A fresh independent conversation in the CURRENT workspace: 업무 branches
+        // off its home (client:main:<uuid>), 챗봇 mints a flat chat:<uuid> with no
+        // home — so the two session lists never mix.
+        switchSession(newSessionKey(appSettings.isRecallEnabled()))
     }
 
     // --- Proactive-report deep link → session transcript --------------------
@@ -648,8 +647,33 @@ class DenebGatewayClient(
         loadConversations()
     }
 
-    /** Workspace home session for a mode: 업무 → client:main, 챗봇 → chat:main. */
-    private fun workspaceHome(work: Boolean): String = if (work) "client:main" else "chat:main"
+    /**
+     * Mint a fresh independent session key for a workspace. 업무 branches off its
+     * home (client:main:<uuid>); 챗봇 has no home, so each chat is a flat,
+     * independent chat:<uuid>.
+     */
+    private fun newSessionKey(work: Boolean): String = if (work) "client:main:${Uuid.random()}" else "chat:${Uuid.random()}"
+
+    /**
+     * The session to OPEN when entering a workspace: the last one used, or — when
+     * 챗봇 has none yet (blank default) — a freshly minted chat:<uuid>. 업무 always
+     * defaults to its client:main home, so it never mints here.
+     */
+    private fun openSessionFor(work: Boolean): String = appSettings.lastSession(work).ifBlank { newSessionKey(work) }
+
+    /**
+     * Initial active session at construction: the persisted last session, or — for
+     * a 챗봇 first run with no home — a freshly minted chat:<uuid> persisted right
+     * away so the next cold start restores it. (switchSession persists thereafter.)
+     */
+    private fun resolveInitialSession(): String {
+        val work = appSettings.isRecallEnabled()
+        val stored = appSettings.lastSession(work)
+        if (stored.isNotBlank()) return stored
+        val minted = newSessionKey(work)
+        appSettings.setLastSession(work, minted)
+        return minted
+    }
 
     /**
      * Single writer for the active workspace mode: persist it (AppSettings is the
@@ -672,7 +696,7 @@ class DenebGatewayClient(
     fun switchWorkspace(toWork: Boolean) {
         if (appSettings.isRecallEnabled() == toWork) return
         setWorkspace(toWork)
-        val target = appSettings.lastSession(toWork)
+        val target = openSessionFor(toWork)
         _chatHistory.value = emptyList()
         switchSession(target)
         syncNativeStateAsync()
@@ -723,12 +747,14 @@ class DenebGatewayClient(
      * home session.
      */
     override fun restoreCurrentConversation() {
-        if (_chatHistory.value.isEmpty() && isHomeSession(sessionKey)) {
-            // 업무 home pulls in the mirrored proactive reports via openWorkTopic;
-            // the 챗봇 home is a plain general-chat space, so just load its transcript.
-            if (sessionKey == "client:main") {
-                openWorkTopic()
-            } else {
+        if (_chatHistory.value.isNotEmpty()) return
+        when {
+            // 업무 home pulls in the mirrored proactive reports via openWorkTopic.
+            sessionKey == "client:main" -> openWorkTopic()
+
+            // 챗봇 sessions are plain general chats (flat chat:<uuid>, no home) — just
+            // load the last one's transcript so a cold start restores it.
+            isChatWorkspaceKey(sessionKey) -> {
                 syncNativeStateAsync()
                 scope.launch { loadTranscriptGuarded(sessionKey) }
             }

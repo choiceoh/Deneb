@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "챗봇 대화 기록을 개별 대화 목록으로 정리 — 고정 '챗봇' 홈 없이 각 대화가 독립 세션(전부 삭제 가능). 챗봇 모드로 돌아오면 마지막 대화를 복원하고, 없으면 새 대화로 시작",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "설정 > 모델에 '챗봇' 역할 추가 — 챗봇 모드 대화에 업무 모드와 다른(더 가벼운) 모델을 지정할 수 있습니다. 미설정이면 메인 모델을 그대로 사용",
         ),
     ),
