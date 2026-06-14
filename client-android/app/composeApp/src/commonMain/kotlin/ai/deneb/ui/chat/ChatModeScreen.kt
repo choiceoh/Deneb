@@ -246,7 +246,14 @@ internal fun ChatModeScreen(
                                 } else {
                                     null
                                 },
-                                onOpenWorkFeed = { showWorkFeed = true },
+                                // 업무 알림 inbox belongs to the 업무 workspace only —
+                                // hide the bell entirely in 챗봇 mode so 업무 리포트
+                                // never surfaces there (separate notification histories).
+                                onOpenWorkFeed = if (uiState.recallEnabled) {
+                                    { showWorkFeed = true }
+                                } else {
+                                    null
+                                },
                                 workFeedCount = uiState.workFeed.size,
                             )
 
