@@ -23,8 +23,8 @@ import ai.deneb.ui.chat.composables.WorkFeedPanel
 import ai.deneb.ui.chat.composables.WorkReportBanner
 import ai.deneb.ui.chat.composables.uiErrorText
 import ai.deneb.ui.components.VerticalScrollbarForList
+import ai.deneb.ui.components.generatingBackdrop
 import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.components.streamingAuroraGlow
 import ai.deneb.ui.denebContentWidthModifier
 import ai.deneb.ui.denebPopEnter
 import ai.deneb.ui.denebPopExit
@@ -176,6 +176,22 @@ internal fun ChatModeScreen(
         if (pendingId != null) uiState.savedConversations.filter { it.id != pendingId }.toImmutableList() else uiState.savedConversations
     }
 
+    // The "generating" backdrop shows only during the thinking window — from send
+    // until the answer's text starts rendering. True while loading and no non-empty
+    // assistant answer sits after the latest user message yet; flips false (backdrop
+    // fades to black) the moment the reply begins, matching the reference.
+    val generatingActive = remember(uiState.history, uiState.isLoading) {
+        if (!uiState.isLoading) {
+            false
+        } else {
+            val lastUser = uiState.history.indexOfLast { it.role == History.Role.USER }
+            val lastAnswer = uiState.history.indexOfLast {
+                it.role == History.Role.ASSISTANT && !it.isThinking && it.content.isNotEmpty()
+            }
+            lastAnswer <= lastUser
+        }
+    }
+
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         ModalNavigationDrawer(
             drawerState = sessionDrawerState,
@@ -221,6 +237,11 @@ internal fun ChatModeScreen(
                         Modifier
                             .fillMaxSize()
                             .background(MaterialTheme.colorScheme.background)
+                            // Gemini-style "generating" backdrop: a top-down hue-cycling glow
+                            // behind everything while the reply is being thought up; fades to
+                            // black once the answer starts rendering. Drawn over the solid
+                            // background but under the content (top bar / chat / input).
+                            .generatingBackdrop(active = generatingActive)
                             .navigationBarsPadding()
                             .statusBarsPadding()
                             .imePadding(),
@@ -571,14 +592,7 @@ internal fun ChatModeScreen(
                                             }
                                         }
 
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .weight(1f)
-                                                // Gemini-style: a lively aurora glow rings the message
-                                                // area while a reply is being written, then dissolves.
-                                                .streamingAuroraGlow(active = uiState.isLoading),
-                                        ) {
+                                        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                                             LazyColumn(
                                                 modifier = Modifier.fillMaxSize(),
                                                 state = listState,

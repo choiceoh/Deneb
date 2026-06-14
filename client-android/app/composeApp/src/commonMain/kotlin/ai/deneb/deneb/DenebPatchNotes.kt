@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "응답을 생성하는 동안 화면 위쪽에서 색이 천천히 한 바퀴 순환하는(파랑→청록→…→파랑) 은은한 빛이 차오르고, 답변이 시작되면 검정으로 사라집니다 — 가장자리 글로우를 대신하는 '생성 중' 배경",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "더보기 화면을 설정과 같은 그룹 카드 양식으로 통일 — 검색·할일·일기·카테고리가 아이콘·제목·한 줄 설명·화살표가 있는 같은 행 모양으로 정돈됩니다",
         ),
     ),
