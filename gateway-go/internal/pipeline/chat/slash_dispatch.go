@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/goals"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
@@ -42,6 +43,10 @@ func (h *Handler) handleSlashCommand(
 		prompt.ClearSessionSnapshot(sessionKey)
 		clearRecallMemory(sessionKey)
 		clearTier1Wiki(sessionKey)
+		// Stop any standing goal bound to this session so /reset is a clean slate.
+		if gs := goals.Default(); gs != nil {
+			gs.Clear(sessionKey)
+		}
 		if h.transcript != nil {
 			if err := h.transcript.Delete(sessionKey); err != nil {
 				h.logger.Error("failed to delete transcript on reset", "error", err)
@@ -115,6 +120,11 @@ func (h *Handler) handleSlashCommand(
 			}()
 			h.handleRestartCommand(delivery, cmd.Args)
 		}()
+
+	case "goal":
+		// /goal <text> sets a standing goal (Ralph loop); status|pause|resume|stop
+		// manage it. Synchronous (store ops only) — handled in goal_command.go.
+		h.handleGoalCommand(sessionKey, cmd.Args, respond)
 
 	}
 

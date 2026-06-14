@@ -85,6 +85,21 @@ type RunParams struct {
 	// so the LLM does not translate it into a self-contradicting "channel
 	// down" report delivered through that very channel.
 	AutoDeliveredOutput bool
+
+	// BeforeToolCall, when set, is consulted before each tool execution and can
+	// block the call (block=true, with blockReason surfaced as the tool's error
+	// output). The goal loop sets this to its idempotency guard so a re-driven
+	// run cannot repeat a destructive action already committed to the goal's
+	// ledger. nil = no gate. Wired in wireStreamHooks; per-run only, never
+	// persisted (does not touch the transcript or the prompt cache).
+	BeforeToolCall func(name, toolCallID string, input []byte) (block bool, blockReason string)
+
+	// OnToolResult, when set, observes each tool result (name, id, output,
+	// isError). The goal loop uses it to record successfully-executed
+	// destructive actions into the goal ledger — errors are skipped so a failed
+	// send stays retryable. Composed (fan-out) with the broadcaster's own
+	// result hook, so it never displaces streaming. nil = no observer.
+	OnToolResult func(name, toolUseID, result string, isErr bool)
 }
 
 // Agent run defaults.

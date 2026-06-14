@@ -20,6 +20,7 @@ var slashBuiltinHelp = []slashHelpEntry{
 	{"/status", "세션 상태·토큰·캐시 히트율"},
 	{"/reset", "세션 초기화 (대화 기록 삭제)"},
 	{"/kill", "실행 중단 (`/stop`, `/cancel`)"},
+	{"/goal <목표>", "표준 목표 설정·자동 진행 (`status`·`pause`·`resume`·`stop`, `/목표`)"},
 	{"/rollback", "변경 롤백 (`/롤백`)"},
 	{"/update [확인]", "풀·빌드·재시작 (`/업데이트`)"},
 	{"/restart", "게이트웨이 재시작 (`/재시작`)"},

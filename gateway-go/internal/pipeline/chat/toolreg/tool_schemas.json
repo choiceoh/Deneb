@@ -1359,5 +1359,38 @@
       "to",
       "text"
     ]
+  },
+  {
+    "name": "goal",
+    "description": "Set and manage a standing goal (Ralph loop) the agent keeps working toward across turns while the user is idle.",
+    "properties": {
+      "action": {
+        "type": "string",
+        "description": "Goal action",
+        "enum": [
+          "set",
+          "subgoal",
+          "status",
+          "pause",
+          "resume",
+          "stop"
+        ]
+      },
+      "goal": {
+        "type": "string",
+        "description": "Objective text (required for action=set). Free-form, e.g. '탑솔라 6월 견적을 정리해 초안까지'."
+      },
+      "subgoal": {
+        "type": "string",
+        "description": "A specific completion criterion to add (required for action=subgoal). The judge requires per-criterion evidence before marking the goal done."
+      },
+      "max_turns": {
+        "type": "number",
+        "description": "Optional run budget for action=set (default 20). Auto-pauses (resumable) when exhausted."
+      }
+    },
+    "required": [
+      "action"
+    ]
   }
 ]
