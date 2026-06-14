@@ -124,6 +124,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		if eh.Thrash {
 			se["thrash"] = true
 		}
+		// Skill-library value: how many self-generated skills earn their keep.
+		// Many unused = net-negative cost (catalog + prompt tokens, no payoff).
+		if agentSkills, unused := s.genesisTracker.AgentSkillValueSummary(); agentSkills > 0 {
+			se["agent_skills"] = agentSkills
+			se["unused_agent_skills"] = unused
+		}
 		health["self_evolution"] = se
 	}
 

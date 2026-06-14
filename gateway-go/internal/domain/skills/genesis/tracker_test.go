@@ -374,6 +374,52 @@ func TestEvolutionHealth_SingleSkillDominanceIsThrash(t *testing.T) {
 	}
 }
 
+// TestCuratorUseCount_RealUseOnly verifies a review verdict does NOT bump the
+// curator use-count/staleness (only genuine execution does), so a verdict-only
+// skill correctly reads as unused and stays eligible for staleness pruning.
+func TestCuratorUseCount_RealUseOnly(t *testing.T) {
+	tr := newTestTracker(t)
+	if err := tr.LogGenesis("gen-skill", "session", "client:main", "productivity", "x"); err != nil {
+		t.Fatalf("LogGenesis: %v", err)
+	}
+	if err := tr.RecordUsage(UsageRecord{SkillName: "gen-skill", SessionKey: "system:skill-review:client:main", Success: true, Source: UsageSourceReviewVerdict}); err != nil {
+		t.Fatalf("RecordUsage verdict: %v", err)
+	}
+	report, err := tr.SkillCuratorReport("gen-skill")
+	if err != nil || len(report) != 1 {
+		t.Fatalf("report: %v %+v", err, report)
+	}
+	if report[0].UseCount != 0 {
+		t.Fatalf("a review verdict must not bump curator use-count: %+v", report[0])
+	}
+	if err := tr.RecordUsage(UsageRecord{SkillName: "gen-skill", SessionKey: "client:main", Success: true}); err != nil {
+		t.Fatalf("RecordUsage real: %v", err)
+	}
+	report, _ = tr.SkillCuratorReport("gen-skill")
+	if report[0].UseCount != 1 {
+		t.Fatalf("real use must bump curator use-count to 1: %+v", report[0])
+	}
+}
+
+// TestAgentSkillValueSummary verifies the /health "dead weight" measurement:
+// agent-created skills total + how many have zero real uses.
+func TestAgentSkillValueSummary(t *testing.T) {
+	tr := newTestTracker(t)
+	if err := tr.LogGenesis("used-skill", "session", "client:main", "productivity", ""); err != nil {
+		t.Fatalf("LogGenesis used: %v", err)
+	}
+	if err := tr.LogGenesis("dead-skill", "session", "client:main", "productivity", ""); err != nil {
+		t.Fatalf("LogGenesis dead: %v", err)
+	}
+	if err := tr.RecordUsage(UsageRecord{SkillName: "used-skill", SessionKey: "client:main", Success: true}); err != nil {
+		t.Fatalf("RecordUsage: %v", err)
+	}
+	total, unused := tr.AgentSkillValueSummary()
+	if total != 2 || unused != 1 {
+		t.Fatalf("expected 2 agent skills / 1 unused, got total=%d unused=%d", total, unused)
+	}
+}
+
 func (t *Tracker) markSkillAgentCreatedLockedForTest(skillName string, createdAt int64) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()

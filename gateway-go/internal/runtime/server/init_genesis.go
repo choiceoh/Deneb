@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
@@ -74,6 +75,18 @@ func (s *Server) initGenesisServices() {
 		}
 	}
 	s.genesisEvolver.SetThinkingKwargs(thinkingKwargs)
+
+	// Quality-gate generated skills with the stronger main model (judge !=
+	// producer): rejects semantic duplicates + vague/one-off skills the
+	// specificity heuristic can't catch. Self-generated skills are net-harmful
+	// unless curated (SoK SkillsBench -1.3pp), so this is the genesis counterpart
+	// to the evolver's self-test. Thinking off (same dsv4 toggle as the evolver).
+	if mainClient != nil && mainModel != "" {
+		s.genesisSvc.SetJudge(mainClient, mainModel, &llm.ThinkingConfig{
+			Type:          "disabled",
+			TemplateKwarg: thinkingKwargs[mainModel],
+		})
+	}
 
 	// Iteration-based nudger (Hermes-style): fires a mid-session skill
 	// review every N tool calls. Env var DENEB_SKILL_NUDGE_INTERVAL

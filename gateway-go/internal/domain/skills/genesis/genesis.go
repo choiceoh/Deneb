@@ -125,6 +125,13 @@ type Service struct {
 	catalog   *skills.Catalog
 	logger    *slog.Logger
 
+	// Optional quality judge (stronger model, judge != producer) that rejects
+	// semantic duplicates + low-value skills the specificity heuristic can't
+	// catch. nil → heuristic gate only (prior behavior). See SetJudge.
+	judgeClient   *llm.Client
+	judgeModel    string
+	judgeThinking *llm.ThinkingConfig
+
 	mu             sync.Mutex
 	recentSkills   map[string]time.Time // skill name → last generated
 	dailyCount     int
@@ -158,6 +165,16 @@ func NewService(cfg Config, llmClient *llm.Client, catalog *skills.Catalog, logg
 	}
 	svc.loadDailyCap()
 	return svc
+}
+
+// SetJudge wires an optional stronger model to quality-gate generated skills
+// (reject semantic duplicates of existing skills and vague/one-off/low-value
+// skills the specificity heuristic misses). judge != producer to avoid same-
+// family self-preference bias. Safe to call with a nil client (no-op gate).
+func (s *Service) SetJudge(client *llm.Client, model string, thinking *llm.ThinkingConfig) {
+	s.judgeClient = client
+	s.judgeModel = model
+	s.judgeThinking = thinking
 }
 
 type dailyCapState struct {
@@ -323,7 +340,8 @@ func (s *Service) Generate(ctx context.Context, sctx SessionContext) (*Generated
 		}
 	}
 
-	return s.gateGenerated(parseGenesisResponse(sb.String()))
+	gen, perr := parseGenesisResponse(sb.String())
+	return s.gateGenerated(ctx, gen, perr)
 }
 
 // GenerateFromDream creates a skill from an Aurora dreaming summary.
@@ -371,7 +389,8 @@ func (s *Service) GenerateFromDream(ctx context.Context, summaryContent string) 
 		}
 	}
 
-	return s.gateGenerated(parseGenesisResponse(sb.String()))
+	gen, perr := parseGenesisResponse(sb.String())
+	return s.gateGenerated(ctx, gen, perr)
 }
 
 // gateGenerated applies a specificity gate to a freshly generated skill before
@@ -382,7 +401,7 @@ func (s *Service) GenerateFromDream(ctx context.Context, summaryContent string) 
 // rejected skill is treated like a skip (nil, nil), not an error: the session
 // pattern can regenerate later, and we log the issues for gate tuning rather
 // than spamming the operator with a non-failure.
-func (s *Service) gateGenerated(skill *GeneratedSkill, err error) (*GeneratedSkill, error) {
+func (s *Service) gateGenerated(ctx context.Context, skill *GeneratedSkill, err error) (*GeneratedSkill, error) {
 	if err != nil || skill == nil {
 		return skill, err
 	}
@@ -391,7 +410,62 @@ func (s *Service) gateGenerated(skill *GeneratedSkill, err error) (*GeneratedSki
 			"skill", skill.Name, "issues", strings.Join(issues, "; "))
 		return nil, nil
 	}
+	if pass, reason := s.judgeGenerated(ctx, skill); !pass {
+		s.logger.Info("genesis: quality judge rejected skill",
+			"skill", skill.Name, "reason", reason)
+		return nil, nil
+	}
 	return skill, nil
+}
+
+// judgeGenerated runs the LLM quality gate on a candidate that already passed
+// the specificity heuristic: it rejects semantic duplicates of existing skills
+// and vague/one-off/low-value skills the structural checks can't see. This is
+// the genesis counterpart to the evolver's self-test judge. Fail-OPEN: with no
+// judge wired or on any judge call/parse error, fall back to the heuristic gate
+// alone (the prior behavior) rather than blocking all genesis on a model hiccup
+// — the heuristic still guards against the dominant (vagueness) failure mode.
+func (s *Service) judgeGenerated(ctx context.Context, skill *GeneratedSkill) (pass bool, reason string) {
+	if s.judgeClient == nil || s.judgeModel == "" {
+		return true, ""
+	}
+	userPrompt := fmt.Sprintf(`## 후보 스킬
+이름: %s
+설명: %s
+
+본문:
+%s
+
+## 기존 스킬 (중복 판정용)
+%s`, skill.Name, skill.Description, skill.Body, s.listExistingSkillDescriptions())
+
+	events, err := s.judgeClient.StreamChat(ctx, llm.ChatRequest{
+		Model:          s.judgeModel,
+		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
+		System:         llm.SystemString(genesisJudgeSystemPrompt),
+		MaxTokens:      1024,
+		Stream:         true,
+		Thinking:       s.judgeThinking,
+		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
+	})
+	if err != nil {
+		s.logger.Warn("genesis: judge unavailable, accepting on heuristic", "skill", skill.Name, "error", err)
+		return true, ""
+	}
+	extracted := jsonutil.ExtractObject(drainStreamText(events))
+	if extracted == "" {
+		s.logger.Warn("genesis: judge empty verdict, accepting on heuristic", "skill", skill.Name)
+		return true, ""
+	}
+	var resp struct {
+		Pass   bool   `json:"pass"`
+		Reason string `json:"reason"`
+	}
+	if jerr := json.Unmarshal([]byte(extracted), &resp); jerr != nil {
+		s.logger.Warn("genesis: judge parse failed, accepting on heuristic", "skill", skill.Name, "error", jerr)
+		return true, ""
+	}
+	return resp.Pass, resp.Reason
 }
 
 // skillSpecificityIssues returns the reasons a generated skill is too vague to
@@ -542,6 +616,28 @@ func (s *Service) listExistingSkillNames() []string {
 		names = append(names, e.Skill.Name)
 	}
 	return names
+}
+
+// listExistingSkillDescriptions returns the existing skills as "- name: desc"
+// lines for the genesis judge's redundancy check (descriptions capture "what /
+// when" far better than names alone, which token-Jaccard dedup can't compare).
+func (s *Service) listExistingSkillDescriptions() string {
+	if s.catalog == nil {
+		return "(없음)"
+	}
+	entries := s.catalog.List()
+	if len(entries) == 0 {
+		return "(없음)"
+	}
+	var b strings.Builder
+	for _, e := range entries {
+		desc := e.Skill.Description
+		if r := []rune(desc); len(r) > 200 {
+			desc = string(r[:200]) + "…"
+		}
+		fmt.Fprintf(&b, "- %s: %s\n", e.Skill.Name, desc)
+	}
+	return b.String()
 }
 
 func (s *Service) resolveModel(sessionModel string) string {
