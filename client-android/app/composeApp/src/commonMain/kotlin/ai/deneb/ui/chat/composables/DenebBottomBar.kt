@@ -1,7 +1,7 @@
 package ai.deneb.ui.chat.composables
 
 import ai.deneb.DenebCalendar
-import ai.deneb.DenebCategories
+import ai.deneb.DenebConfig
 import ai.deneb.DenebMail
 import ai.deneb.Home
 import ai.deneb.ui.DenebType
@@ -25,11 +25,11 @@ import androidx.compose.material.icons.automirrored.filled.Chat as ChatFilled
 import androidx.compose.material.icons.automirrored.outlined.Chat as ChatOutlined
 import androidx.compose.material.icons.filled.CalendarMonth as CalFilled
 import androidx.compose.material.icons.filled.Email as EmailFilled
-import androidx.compose.material.icons.filled.GridView as GridFilled
+import androidx.compose.material.icons.filled.Settings as SettingsFilled
 import androidx.compose.material.icons.outlined.CalendarMonth as CalOutlined
 import androidx.compose.material.icons.outlined.Email as EmailOutlined
-import androidx.compose.material.icons.outlined.GridView as GridOutlined
 import androidx.compose.material.icons.outlined.MoreHoriz as MoreOutlined
+import androidx.compose.material.icons.outlined.Settings as SettingsOutlined
 
 /**
  * The phone's bottom tab bar — the super-app's primary navigation (토스식).
@@ -57,20 +57,22 @@ data class DenebTab(
     val filled: ImageVector,
 )
 
-// The four primary sections. Search·todo·diary·fleet·settings live under 더보기.
+// The four primary sections. Search·todo·diary·categories live under 더보기 (and fleet
+// lives inside settings, so it is reached through the 설정 tab — not 더보기).
 val denebBottomTabs: List<DenebTab> = listOf(
     DenebTab("채팅", "home", Home, Icons.AutoMirrored.Outlined.ChatOutlined, Icons.AutoMirrored.Filled.ChatFilled),
     DenebTab("메일", "deneb_mail", DenebMail, Icons.Outlined.EmailOutlined, Icons.Filled.EmailFilled),
     DenebTab("달력", "deneb_calendar", DenebCalendar, Icons.Outlined.CalOutlined, Icons.Filled.CalFilled),
-    DenebTab("카테", "deneb_categories", DenebCategories, Icons.Outlined.GridOutlined, Icons.Filled.GridFilled),
+    DenebTab("설정", "deneb_config", DenebConfig, Icons.Outlined.SettingsOutlined, Icons.Filled.SettingsFilled),
 )
 
 // Top-level routes that show the bottom bar: the 4 tabs + the 더보기 screen and its
 // destinations. Pushed detail screens (data-class routes with args) are absent, so
-// they hide the bar and keep their own back nav.
+// they hide the bar and keep their own back nav. Fleet is now a settings sub-screen
+// (like skill/cron) — a pushed detail with its own back nav, so it is not listed here.
 val denebBottomBarRoutes: Set<String> = setOf(
-    "home", "deneb_mail", "deneb_calendar", "deneb_categories",
-    "deneb_more", "deneb_search", "deneb_todo", "deneb_diary", "deneb_fleet", "deneb_config",
+    "home", "deneb_mail", "deneb_calendar", "deneb_config",
+    "deneb_more", "deneb_search", "deneb_todo", "deneb_diary", "deneb_categories",
 )
 
 // Routes where 더보기 is the active tab (the More screen itself, or a section opened
@@ -80,8 +82,7 @@ val denebMoreRoutes: Set<String> = setOf(
     "deneb_search",
     "deneb_todo",
     "deneb_diary",
-    "deneb_fleet",
-    "deneb_config",
+    "deneb_categories",
 )
 
 @Composable
