@@ -36,16 +36,16 @@ func TestUpsertDealPage_CreatesPage(t *testing.T) {
 	if !created {
 		t.Error("expected created=true for a new deal page")
 	}
-	if relPath != "거래/탑솔라.md" {
-		t.Errorf("relPath = %q, want 거래/탑솔라.md", relPath)
+	if relPath != "프로젝트/거래/탑솔라.md" {
+		t.Errorf("relPath = %q, want 프로젝트/거래/탑솔라.md", relPath)
 	}
 
 	page, err := s.ReadPage(relPath)
 	if err != nil || page == nil {
 		t.Fatalf("ReadPage: %v", err)
 	}
-	if page.Meta.Category != "거래" {
-		t.Errorf("category = %q, want 거래", page.Meta.Category)
+	if page.Meta.Category != "프로젝트" {
+		t.Errorf("category = %q, want 프로젝트", page.Meta.Category)
 	}
 	if page.Meta.Due != "2026-06-30" {
 		t.Errorf("Due = %q, want 2026-06-30 (payment due surfaced to frontmatter)", page.Meta.Due)
@@ -93,13 +93,13 @@ func TestUpsertDealPage_IdempotentBySourceRef(t *testing.T) {
 	if _, _, err := s.UpsertDealPage(in, now); err != nil {
 		t.Fatal(err)
 	}
-	before, _ := s.ReadPage("거래/탑솔라.md")
+	before, _ := s.ReadPage("프로젝트/거래/탑솔라.md")
 
 	// Re-filing the same mail (same SourceRef) must be a no-op.
 	if _, created, err := s.UpsertDealPage(in, now.AddDate(0, 0, 3)); err != nil || created {
 		t.Errorf("re-file should be no-op: created=%v err=%v", created, err)
 	}
-	after, _ := s.ReadPage("거래/탑솔라.md")
+	after, _ := s.ReadPage("프로젝트/거래/탑솔라.md")
 	if before.Body != after.Body {
 		t.Errorf("idempotent re-file changed the body:\nBEFORE:\n%s\nAFTER:\n%s", before.Body, after.Body)
 	}

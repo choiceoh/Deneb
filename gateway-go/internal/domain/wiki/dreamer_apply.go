@@ -59,7 +59,7 @@ func splitFlexList(s string) flexStringList {
 // wikiUpdate represents a single page update instruction from the LLM.
 type wikiUpdate struct {
 	Action     string         `json:"action"` // "create" or "update"
-	Path       string         `json:"path"`   // e.g., "기술/dgx-spark.md"
+	Path       string         `json:"path"`   // e.g., "업무/dgx-spark.md"
 	Title      string         `json:"title"`
 	ID         string         `json:"id"`      // short kebab-case identifier (e.g., "dgx-spark")
 	Summary    string         `json:"summary"` // one-line description (~80 chars)
@@ -70,7 +70,7 @@ type wikiUpdate struct {
 	Importance float64        `json:"importance"`
 	Type       string         `json:"type"`       // concept, entity, source, comparison, log
 	Confidence string         `json:"confidence"` // high, medium, low
-	Due        string         `json:"due"`        // YYYY-MM-DD upcoming deadline (거래 category)
+	Due        string         `json:"due"`        // YYYY-MM-DD upcoming deadline (프로젝트, 거래성 건)
 	Supersedes string         `json:"supersedes"` // relPath of an existing page this update REPLACES (contradicted facts)
 }
 
@@ -107,13 +107,19 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 - 중요한 결정, 새로운 사실, 인물 정보, 프로젝트 진행 등만 위키에 반영
 - 기존 페이지가 있으면 action:"update", 없으면 action:"create"
 - 최근 처리 이력에 이미 반영된 주제/경로는 새 사실이 추가된 경우에만 update하고, 같은 내용을 반복 생성하지 마라
-- 카테고리: 사람, 프로젝트, 거래, 기술, 업무, 결정, 선호
-- 거래 카테고리: 거래처·금액·납기가 걸린 건별 트랜잭션. 가장 임박한 결제기한/마감일은 frontmatter의 due 필드(YYYY-MM-DD)에 기록
+- 카테고리는 반드시 다음 6개 중 하나 (경로의 첫 디렉토리 = 카테고리):
+  - 프로젝트: 진행 중인 일·거래·결정 — 거래처/금액/납기가 걸린 건, 의사결정 근거 등 특정 건별 컨텍스트
+  - 인물: 사람·조직 — 연락처, 관계, 담당자, 거래처 인물
+  - 시스템: Deneb 자신의 구성·운영 — 서버/모델/배포/도구 설정
+  - 업무: 직무 도메인 지식 — 태양광·전선·구리값 등 일에 직접 쓰이는 지식
+  - 사용자: 사용자 개인 — 선호, 톤·스타일 규칙, 개인 컨텍스트
+  - 기타: 그 외 일반/세상 지식 — 국제정세·시사·잡학 등 위 분류에 안 맞는 것 (catch-all)
+- 프로젝트 중 거래성 건(거래처·금액·납기)은 가장 임박한 결제기한/마감일을 frontmatter의 due 필드(YYYY-MM-DD)에 기록
 - content는 마크다운 형식. create 시 전체 본문, update 시 추가할 섹션/내용. 본문에서 다른 페이지를 언급할 때는 [[경로-또는-제목]] 형식의 위키링크를 쓰면 지식그래프 엣지가 된다 (예: [[프로젝트/dgx-spark]], [[홍길동]])
 - importance: 0.5(일반) ~ 0.9(핵심 결정)
 - type: 페이지 유형 — concept(개념), entity(인물/조직), source(출처), comparison(비교), log(이력)
 - confidence: 정보 신뢰도 — high(검증됨), medium(합리적 추론), low(불확실)
-- due: 거래의 임박한 결제기한·마감일 (YYYY-MM-DD). 거래 카테고리에서만 사용, 없으면 생략
+- due: 임박한 결제기한·마감일 (YYYY-MM-DD). 프로젝트의 거래성 건에서만 사용, 없으면 생략
 - supersedes: 새 일지 내용이 기존 페이지의 사실과 **모순되거나 그것을 대체**할 때, 대체되는 기존 페이지 경로 (인덱스에서 선택). 단순 추가 정보면 생략 — 사실이 바뀐 경우에만 (예: 단가 변경, 담당자 교체, 정책 폐기)
 - id: 짧은 kebab-case 식별자 (예: "dgx-spark", "gemma4-switch", "peter-kim")
 - summary: 한 줄 요약 (~80자, 한국어)
@@ -189,16 +195,17 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 		// browser and, sharing a title, slips past the dedup below. Normalizing here
 		// folds both away and lets the dedup catch the duplicate.
 		u.Path = normalizeWikiPath(u.Path)
-		// Validate category; remap invalid ones to "운영시스템" as fallback.
-		if u.Category != "" && !ValidateCategory(u.Category) {
-			wd.logger.Warn("wiki-dream: invalid category, remapping to 운영시스템",
-				"category", u.Category, "path", u.Path)
-			u.Category = "운영시스템"
-			// Fix path prefix to match corrected category.
-			parts := strings.SplitN(u.Path, "/", 2)
-			if len(parts) == 2 {
-				u.Path = u.Category + "/" + parts[1]
-			}
+		// Fold the page onto the 5-category taxonomy by its *directory*. The
+		// bucket is the path's leading dir (Store.Stats uses filepath.Dir), so the
+		// path — not the category field — is what files the page. This remaps
+		// legacy dir names (거래/결정→프로젝트, 사람→인물, 기술→업무, 선호→사용자,
+		// 운영시스템→시스템) and routes anything unrecognized to the 기타 catch-all,
+		// returning the category that matches the corrected directory so the
+		// frontmatter and the on-disk bucket agree.
+		if newPath, newCat := normalizeCategoryPath(u.Path, u.Category); newPath != u.Path || newCat != u.Category {
+			wd.logger.Info("wiki-dream: normalized category path",
+				"from", u.Path, "fromCat", u.Category, "to", newPath, "toCat", newCat)
+			u.Path, u.Category = newPath, newCat
 		}
 
 		// Duplicate prevention: if creating, check for existing similar pages.
@@ -459,6 +466,67 @@ func normalizeSlug(path string) string {
 // "w:프로젝트" bucket that duplicates "프로젝트". A plain path is unchanged.
 func normalizeWikiPath(p string) string {
 	return strings.TrimPrefix(strings.TrimSpace(p), "w:")
+}
+
+// defaultCategory is the catch-all bucket for pages whose directory maps to no
+// taxonomy category — keeps nothing loose at the wiki root.
+const defaultCategory = "기타"
+
+// remapLegacyCategory folds a legacy or alias category/directory name onto the
+// current 5-category taxonomy, returning ("", false) when there's no known
+// mapping. Used during the transition so the dreamer emitting an old name (거래,
+// 기술, 운영시스템, …) still files correctly instead of resurrecting a retired
+// bucket.
+func remapLegacyCategory(name string) (string, bool) {
+	switch strings.TrimSpace(name) {
+	case "거래", "결정", "메일분석", "mail-analyses", "mail-analysis":
+		return "프로젝트", true
+	case "사람", "연락처", "관계":
+		return "인물", true
+	case "기술", "지식", "산업", "세상":
+		return "업무", true
+	case "선호", "취향":
+		return "사용자", true
+	case "운영시스템", "운영", "시스템설정":
+		return "시스템", true
+	}
+	return "", false
+}
+
+// resolveCategory maps a category field value onto a valid taxonomy category,
+// falling back to the 기타 catch-all.
+func resolveCategory(category string) string {
+	if ValidateCategory(category) {
+		return category
+	}
+	if cat, ok := remapLegacyCategory(category); ok {
+		return cat
+	}
+	return defaultCategory
+}
+
+// normalizeCategoryPath canonicalizes a page path onto the 5-category taxonomy by
+// its leading directory and returns the corrected path plus the category that now
+// matches that directory. Resolution order: (1) a path already under a valid
+// category (including a valid-category sub-folder like "프로젝트/거래/…") is kept;
+// (2) a legacy/alias directory is remapped; (3) otherwise the category field is
+// consulted (valid, then remappable); (4) failing all that, the 기타 catch-all. A
+// path with no directory ("foo.md") derives its directory from the same cascade
+// so nothing lands at the wiki root.
+func normalizeCategoryPath(path, category string) (string, string) {
+	if parts := strings.SplitN(path, "/", 2); len(parts) == 2 {
+		dir, rest := parts[0], parts[1]
+		if ValidateCategory(dir) {
+			return path, dir
+		}
+		if cat, ok := remapLegacyCategory(dir); ok {
+			return cat + "/" + rest, cat
+		}
+		cat := resolveCategory(category)
+		return cat + "/" + rest, cat
+	}
+	cat := resolveCategory(category)
+	return cat + "/" + path, cat
 }
 
 func (wd *WikiDreamer) resetCounters() {

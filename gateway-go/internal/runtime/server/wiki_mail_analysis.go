@@ -23,9 +23,12 @@ import (
 // email analyzer as related-project candidates.
 const wikiProjectCategory = "프로젝트"
 
-// mailAnalysisWikiPath maps a Gmail message ID to its wiki page path.
+// mailAnalysisWikiPath maps a Gmail message ID to its wiki page path. Mail
+// analyses live in a raw-data sub-folder of 프로젝트 (one page per message),
+// nested so they stay browsable/searchable without cluttering the top-level
+// category list.
 func mailAnalysisWikiPath(msgID string) string {
-	return "mail-analyses/" + msgID + ".md"
+	return wikiProjectCategory + "/mail-analyses/" + msgID + ".md"
 }
 
 // buildMailAnalysisPage renders a wiki.Page from a fresh analysis. The
@@ -59,7 +62,7 @@ func buildMailAnalysisPage(in handlerminiapp.WikiAnalysisInput) *wiki.Page {
 		Meta: wiki.Frontmatter{
 			Title:      title,
 			Summary:    senderShortLabel(in.From) + " 메일 분석",
-			Category:   "mail-analysis",
+			Category:   wikiProjectCategory, // 프로젝트 (raw-data sub-folder; bucket = path dir)
 			Tags:       tags,
 			Related:    in.RelatedProjects, // wiki paths of projects the analyzer linked
 			Created:    today,
@@ -116,6 +119,13 @@ func (s *Server) projectCandidatesFn() func() []gmailpoll.ProjectCandidate {
 		}
 		cands := make([]gmailpoll.ProjectCandidate, 0, len(paths))
 		for _, p := range paths {
+			// Only direct project pages ("프로젝트/<name>.md") are related-project
+			// candidates. ListPages walks recursively, so skip the nested raw-data
+			// sub-folders (프로젝트/mail-analyses/, 프로젝트/거래/) — the analyzer must
+			// not cite an auto-generated mail dump or deal log as a "related project".
+			if strings.Count(p, "/") != 1 {
+				continue
+			}
 			c := gmailpoll.ProjectCandidate{Path: p}
 			if page, err := store.ReadPage(p); err == nil && page != nil {
 				c.Title = page.Meta.Title

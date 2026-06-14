@@ -14,12 +14,25 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
-// Categories are the top-level wiki directories.
+// Categories are the top-level wiki directories — the fixed 6-category taxonomy.
+//
+//	프로젝트 — 진행 중인 일·거래·결정 (거래/결정/메일분석은 하위 폴더로 흡수)
+//	인물     — 사람·조직 (연락처·관계·담당자)
+//	시스템   — Deneb 자신의 구성·운영 (서버·모델·배포·도구 설정)
+//	업무     — 직무 도메인 지식 (태양광·전선·구리값 등 일에 직접 쓰이는 지식)
+//	사용자   — 사용자 개인 (선호·톤 규칙·개인 컨텍스트)
+//	기타     — 그 외 일반/세상 지식 (국제정세·시사·잡학) + catch-all
+//
+// The bucket a page lands in is its path's leading directory (Stats uses
+// filepath.Dir), not its frontmatter category field — so the write paths
+// (dreamer, deals, mail-analysis) keep page paths under these directories.
 var Categories = []string{
 	"프로젝트",
 	"인물",
-	"운영시스템",
-	"거래",
+	"시스템",
+	"업무",
+	"사용자",
+	"기타",
 }
 
 // ValidateCategory returns true if cat is one of the allowed wiki categories.
