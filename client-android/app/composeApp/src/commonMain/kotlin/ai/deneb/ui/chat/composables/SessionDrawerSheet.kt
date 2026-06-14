@@ -138,7 +138,7 @@ fun DenebSessionDrawerSheet(
                                 // The 업무 home (client:main) is the permanent base
                                 // conversation where proactive reports are mirrored —
                                 // no × so it can't be deleted out from under them.
-                                onDelete = if (conversation.id == HOME_SESSION_ID) {
+                                onDelete = if (conversation.id == HOME_SESSION_ID || conversation.id == "chat:main") {
                                     null
                                 } else {
                                     { actions.deleteConversation(conversation.id) }
@@ -275,7 +275,9 @@ internal const val HOME_SESSION_ID = "client:main"
 // known machine ones) means a newly-added background session kind can never leak
 // into the chat list, which is what made the grouping look intermittent.
 internal fun isSystemSession(id: String): Boolean = when (id.substringBefore(':', id)) {
-    "client" -> false
+    "client", "chat" -> false
+
+    // both user-chat workspaces (업무 = client:, 챗봇 = chat:)
     else -> true
 }
 

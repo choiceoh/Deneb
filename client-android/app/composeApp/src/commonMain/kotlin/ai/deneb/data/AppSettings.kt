@@ -233,6 +233,15 @@ class AppSettings(internal val settings: Settings) {
         settings.putBoolean(KEY_RECALL_ENABLED, enabled)
     }
 
+    // Per-workspace active session. 업무(work) and 챗봇(chat) keep SEPARATE session
+    // lists, so each remembers its own last-open conversation across restarts and
+    // pill switches. Defaults are the two home sessions.
+    fun lastSession(work: Boolean): String = settings.getString(if (work) KEY_WORK_SESSION else KEY_CHAT_SESSION, if (work) "client:main" else "chat:main")
+
+    fun setLastSession(work: Boolean, key: String) {
+        settings.putString(if (work) KEY_WORK_SESSION else KEY_CHAT_SESSION, key)
+    }
+
     fun getMemoryInstructions(): String = settings.getString(KEY_MEMORY_INSTRUCTIONS, DEFAULT_MEMORY_INSTRUCTIONS)
 
     // Agent memories
@@ -437,6 +446,8 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_SOUL = "soul_text"
         const val KEY_MEMORY_ENABLED = "memory_enabled"
         const val KEY_RECALL_ENABLED = "recall_enabled"
+        const val KEY_WORK_SESSION = "workspace_session_work"
+        const val KEY_CHAT_SESSION = "workspace_session_chat"
         const val KEY_MEMORY_INSTRUCTIONS = "memory_instructions"
         const val KEY_AGENT_MEMORIES = "agent_memories"
         const val KEY_SCHEDULED_TASKS = "scheduled_tasks"

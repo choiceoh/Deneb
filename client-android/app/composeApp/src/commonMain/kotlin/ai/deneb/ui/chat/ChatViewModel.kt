@@ -146,6 +146,8 @@ class ChatViewModel(
                 .filter { it }
                 .collect {
                     (dataRepository as? DenebGatewayClient)?.openWorkTopic()
+                    // openWorkTopic forces the 업무 workspace — reflect it in the pill.
+                    _state.update { it.copy(recallEnabled = true) }
                     dataRepository.consumeOpenWorkTopicRequest()
                 }
         }
@@ -307,13 +309,18 @@ class ChatViewModel(
         }
     }
 
-    // Flips the gateway memory-recall toggle and persists it. The next chat send
-    // reads the setting and includes skipRecall, so the gateway skips recall (and
-    // retain) for focused-chat turns. Persona is unchanged.
+    // Switches workspace (업무 ↔ 챗봇). For the gateway client this also swaps the
+    // active session space + its recent-session list (the two never share a list)
+    // and persists the recall setting; otherwise it just flips recall. Persona is
+    // unchanged — only the session space + whether recall (and retain) fires.
     private fun toggleRecall() {
-        val enabled = !_state.value.recallEnabled
-        dataRepository.setRecallEnabled(enabled)
-        _state.update { it.copy(recallEnabled = enabled) }
+        val toWork = !_state.value.recallEnabled
+        if (dataRepository is DenebGatewayClient) {
+            dataRepository.switchWorkspace(toWork)
+        } else {
+            dataRepository.setRecallEnabled(toWork)
+        }
+        _state.update { it.copy(recallEnabled = toWork) }
     }
 
     private fun cancel() {
@@ -429,10 +436,13 @@ class ChatViewModel(
     // proactive report was mirrored, and clear the unread badge.
     private fun openWorkReport() {
         (dataRepository as? DenebGatewayClient)?.openWorkTopic()
+        _state.update { it.copy(recallEnabled = true) } // proactive reports = 업무 workspace
         dataRepository.clearUnreadWorkReport()
     }
 
     private fun openWorkFeedItem(id: String) {
+        // Work-feed items live in the 업무 workspace; reflect that in the pill.
+        _state.update { it.copy(recallEnabled = true) }
         viewModelScope.launch(backgroundDispatcher) {
             val gateway = dataRepository as? DenebGatewayClient
             val item = _state.value.workFeed.firstOrNull { it.id == id }
