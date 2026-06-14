@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "내 메시지 말풍선을 테두리 없는 회색 배경으로 — 파란 강조 워시와 외곽선을 빼고 차분한 중립 회색으로 정돈",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "챗봇 모드에서는 하단 탭바가 통째로 사라져 채팅에 집중할 수 있습니다 — 상단의 챗봇/업무 토글로만 전환하고, 업무 모드로 돌아오면 탭바가 다시 나타납니다",
         ),
     ),
