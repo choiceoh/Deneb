@@ -65,9 +65,19 @@ func (s *Server) miniappModelHealthProbes(
 			// Local providers are probed once by discoverMiniappLocalModels and
 			// reused here; a non-empty served list means up + enumerable.
 			models := localDiscovered[provider.name]
+			reachable := len(models) > 0
+			if !reachable {
+				// No enumerable list — e.g. a loopback Anthropic endpoint that has
+				// no /models (the wormhole router's anthropic front). Probe
+				// reachability so a port that answers (even non-200) shows online
+				// instead of a false offline, matching the remote-provider rule.
+				rctx, cancel := context.WithTimeout(ctx, miniappModelHealthTimeout)
+				_, _, reachable = probeModelsClassified(rctx, baseURL)
+				cancel()
+			}
 			probes[provider.name] = providerModelProbe{
 				checked:   true,
-				reachable: len(models) > 0,
+				reachable: reachable,
 				listed:    len(models) > 0,
 				models:    models,
 			}
