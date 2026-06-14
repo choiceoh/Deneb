@@ -306,11 +306,14 @@ func (b *skillLifecycleBackend) recordReviewUsage(req chattools.SkillEvolutionPr
 	if name == "" {
 		return
 	}
+	// Tagged review-verdict so it stays out of the evolver's real-use success
+	// rate (it drives the curator's staleness/lastUsed signal, but a judgment is
+	// not a real execution — conflating them is what thrashed email-analysis).
 	switch route {
 	case "no-op":
-		_ = b.tracker.RecordUsage(genesis.UsageRecord{SkillName: name, SessionKey: req.SessionKey, Success: true})
+		_ = b.tracker.RecordUsage(genesis.UsageRecord{SkillName: name, SessionKey: req.SessionKey, Success: true, Source: genesis.UsageSourceReviewVerdict})
 	case "evolve":
-		_ = b.tracker.RecordUsage(genesis.UsageRecord{SkillName: name, SessionKey: req.SessionKey, Success: false, ErrorMsg: strings.TrimSpace(req.Reason)})
+		_ = b.tracker.RecordUsage(genesis.UsageRecord{SkillName: name, SessionKey: req.SessionKey, Success: false, ErrorMsg: strings.TrimSpace(req.Reason), Source: genesis.UsageSourceReviewVerdict})
 	}
 }
 

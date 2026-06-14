@@ -111,6 +111,19 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		if live.LastError != "" {
 			se["last_error"] = live.LastError
 		}
+		// Productivity/thrash signals so a loop that burns its budget re-evolving
+		// one skill is visible here instead of only in the logs (PR #2328).
+		eh := s.genesisTracker.EvolutionHealth()
+		se["evolves_7d"] = eh.Evolves7d
+		se["genesis_7d"] = eh.Genesis7d
+		se["distinct_skills_evolved_7d"] = eh.DistinctSkillsEvolved7d
+		if eh.TopEvolvedSkill != "" {
+			se["top_evolved_skill"] = eh.TopEvolvedSkill
+			se["top_evolved_count"] = eh.TopEvolvedCount
+		}
+		if eh.Thrash {
+			se["thrash"] = true
+		}
 		health["self_evolution"] = se
 	}
 

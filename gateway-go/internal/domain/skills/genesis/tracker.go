@@ -42,13 +42,25 @@ type SkillLivenessState struct {
 	GenesisSinceEvolve int `json:"genesisSinceEvolve,omitempty"`
 }
 
+// Usage record sources. Only real-use records feed the evolver's success-rate
+// gate; the skill-review fork's own introspection (consult + verdict) must not —
+// conflating the loop's self-activity with the skill's real-world outcome is
+// what drove the email-analysis evolve thrash (PR #2328). Legacy records carry
+// no Source; ingest falls back to the session prefix for those.
+const (
+	UsageSourceReal          = "real"           // genuine use in a client/cron turn
+	UsageSourceReviewVerdict = "review-verdict" // the review fork's no-op/evolve judgment
+	UsageSourceReviewConsult = "review-consult" // the review fork reading a skill to judge it
+)
+
 // UsageRecord represents a single skill usage event.
 type UsageRecord struct {
 	SkillName  string `json:"skillName"`
 	SessionKey string `json:"sessionKey"`
 	Success    bool   `json:"success"`
 	ErrorMsg   string `json:"errorMsg,omitempty"`
-	UsedAt     int64  `json:"usedAt"` // unix millis
+	UsedAt     int64  `json:"usedAt"`           // unix millis
+	Source     string `json:"source,omitempty"` // "" = legacy (classified by session prefix)
 }
 
 // UsageStats aggregates usage metrics for a skill.
@@ -91,6 +103,11 @@ type Tracker struct {
 	rollback          func(skillName string)
 	rollbackThreshold int
 	postEvolve        map[string]*evolveWatch
+
+	// Cached evolve-health summary (EvolutionHealth) so frequent /health polls
+	// don't rescan the growing lifecycle log every call. Guarded by mu.
+	evoHealth   EvolutionHealthSummary
+	evoHealthAt time.Time
 }
 
 // evolveWatch tracks consecutive failures of a skill since its last evolve.
@@ -156,13 +173,37 @@ func isConsultInfraError(errMsg string) bool {
 	return strings.Contains(errMsg, "tool skills errored")
 }
 
-// ingest updates in-memory aggregates from a single usage record.
-func (t *Tracker) ingest(r UsageRecord) {
-	// Drop consult-infrastructure failures entirely (both on startup replay and
-	// live): they mean the skill could not be loaded, not that it performed
-	// badly. Discarding them on replay also clears the historical backlog that
-	// would otherwise re-pollute the success rate on every restart.
+// reviewSessionPrefix marks sessions spawned by the skill-review fork. The fork
+// reads and judges skills as introspection, not real use, so its records (both
+// the verdict and the consult turn) must never feed the real-use success rate.
+const reviewSessionPrefix = "system:skill-review:"
+
+// isRealUsageRecord reports whether r reflects a genuine, fair execution of the
+// skill — the only signal the evolver's success-rate gate should see. Excluded:
+// records explicitly tagged as a review source, the skill-review fork's own
+// sessions (legacy records carry no Source, so fall back to the session prefix),
+// and consult-infrastructure failures (the skill could not even be loaded).
+func isRealUsageRecord(r UsageRecord) bool {
+	switch r.Source {
+	case UsageSourceReviewVerdict, UsageSourceReviewConsult:
+		return false
+	}
+	if strings.HasPrefix(r.SessionKey, reviewSessionPrefix) {
+		return false
+	}
 	if !r.Success && isConsultInfraError(r.ErrorMsg) {
+		return false
+	}
+	return true
+}
+
+// ingest updates in-memory aggregates from a single usage record. Only real-use
+// records (isRealUsageRecord) count toward the success-rate aggregate the
+// evolver gates on — both live and on startup replay, which also discards the
+// historical review/infra backlog that would otherwise re-pollute the rate on
+// every restart and pin a healthy skill as a phantom underperformer.
+func (t *Tracker) ingest(r UsageRecord) {
+	if !isRealUsageRecord(r) {
 		return
 	}
 	agg := t.stats[r.SkillName]
@@ -220,9 +261,10 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 	if w == nil || t.rollback == nil {
 		return
 	}
-	// An infra failure (skill couldn't be loaded) isn't the evolved skill's
-	// fault — don't let it advance the rollback counter and revert a good evolve.
-	if !r.Success && isConsultInfraError(r.ErrorMsg) {
+	// Only real use is fair evidence for or against a fresh evolve: a review-fork
+	// record or a consult-infra failure must neither advance the rollback counter
+	// (reverting a good evolve) nor clear the watch (rubber-stamping a bad one).
+	if !isRealUsageRecord(r) {
 		return
 	}
 	if r.Success {
@@ -287,6 +329,84 @@ func (t *Tracker) ListAllStats() ([]UsageStats, error) {
 		return result[i].TotalUses > result[j].TotalUses
 	})
 	return result, nil
+}
+
+// Evolve-health window + thrash thresholds. A single skill eating most of a
+// non-trivial recent evolve budget is the thrash signature (email-analysis ran
+// 6 evolves in ~2 days, all one skill, undetected — PR #2328).
+const (
+	evolutionHealthWindow   = 7 * 24 * time.Hour
+	evolutionHealthCacheTTL = 60 * time.Second
+	// Thrash = one skill re-evolved >= evolutionThrashMinEvolves times in the
+	// window AND accounting for >= evolutionThrashDominancePct of all evolves. A
+	// good evolve should stick, so a skill needing 3+ fixes in a week while
+	// dominating the budget is the non-convergence signature (email-analysis hit
+	// 6). Tuned to flag early; a false positive only shows an operator a glance.
+	evolutionThrashMinEvolves   = 3
+	evolutionThrashDominancePct = 60
+)
+
+// EvolutionHealthSummary surfaces evolve-loop productivity for /health so a
+// silent thrash (the loop burning its budget re-evolving one skill) is visible
+// without log spelunking — the failure mode behind every past silent death.
+type EvolutionHealthSummary struct {
+	Evolves7d               int    `json:"evolves7d"`
+	Genesis7d               int    `json:"genesis7d"`
+	DistinctSkillsEvolved7d int    `json:"distinctSkillsEvolved7d"`
+	TopEvolvedSkill         string `json:"topEvolvedSkill,omitempty"`
+	TopEvolvedCount         int    `json:"topEvolvedCount,omitempty"`
+	Thrash                  bool   `json:"thrash"`
+}
+
+// EvolutionHealth summarizes evolve/genesis activity over the last 7 days from
+// the persisted lifecycle log (so the counts survive the frequent SIGUSR1
+// restarts). Cached for evolutionHealthCacheTTL to bound rescans of the growing
+// log under frequent /health polls.
+func (t *Tracker) EvolutionHealth() EvolutionHealthSummary {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	now := time.Now()
+	if !t.evoHealthAt.IsZero() && now.Sub(t.evoHealthAt) < evolutionHealthCacheTTL {
+		return t.evoHealth
+	}
+	t.evoHealth = t.computeEvolutionHealthLocked(now)
+	t.evoHealthAt = now
+	return t.evoHealth
+}
+
+func (t *Tracker) computeEvolutionHealthLocked(now time.Time) EvolutionHealthSummary {
+	entries, err := jsonlstore.Load[LifecycleLogEntry](t.logPath)
+	if err != nil {
+		return EvolutionHealthSummary{}
+	}
+	cutoff := now.Add(-evolutionHealthWindow).UnixMilli()
+	perSkill := map[string]int{}
+	var s EvolutionHealthSummary
+	for _, e := range entries {
+		if e.CreatedAt < cutoff {
+			continue
+		}
+		switch e.Type {
+		case "evolved":
+			s.Evolves7d++
+			if e.SkillName != "" {
+				perSkill[e.SkillName]++
+			}
+		case "genesis", "": // legacy genesis entries have no Type
+			s.Genesis7d++
+		}
+	}
+	s.DistinctSkillsEvolved7d = len(perSkill)
+	for name, n := range perSkill {
+		if n > s.TopEvolvedCount {
+			s.TopEvolvedCount, s.TopEvolvedSkill = n, name
+		}
+	}
+	if s.TopEvolvedCount >= evolutionThrashMinEvolves &&
+		s.TopEvolvedCount*100 >= s.Evolves7d*evolutionThrashDominancePct {
+		s.Thrash = true
+	}
+	return s
 }
 
 // LifecycleLogEntry is the combined JSONL view for genesis and evolution
