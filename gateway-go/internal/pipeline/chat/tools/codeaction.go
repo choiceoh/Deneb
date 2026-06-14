@@ -39,7 +39,10 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -54,12 +57,15 @@ type ToolInvoker interface {
 }
 
 // CodeActionDeps wires the code_action tool. Invoker is the read-only tool
-// surface (the chat registry) the bridge forwards to; Contacts is the typed
-// store used to answer deneb.contacts(..., as_json=True) with structured data
-// (nil disables the structured path — callers fall back to formatted text).
+// surface (the chat registry) the bridge forwards to. Contacts/Calendar/Wiki
+// are the typed sources used to answer deneb.<tool>(..., as_json=True) with
+// structured data; any nil disables the structured path for that tool (callers
+// fall back to formatted text).
 type CodeActionDeps struct {
 	Invoker  ToolInvoker
 	Contacts *contacts.Store
+	Calendar *toolctx.CalendarDeps
+	Wiki     *wiki.Store
 }
 
 // CodeActionDescription is the deferred-listing description. The first sentence
@@ -118,7 +124,9 @@ func sortedActionKeys(m map[string]bool) []string {
 // preset / TurnContext / run-cache propagate exactly as a top-level call would).
 type codeActionBridge struct {
 	invoker  ToolInvoker
-	contacts *contacts.Store // optional; backs structured (as_json) contacts
+	contacts *contacts.Store       // optional; backs structured (as_json) contacts
+	calendar *toolctx.CalendarDeps // optional; backs structured calendar
+	wiki     *wiki.Store           // optional; backs structured wiki
 	token    string
 	ctx      context.Context
 }
@@ -190,9 +198,176 @@ func (b *codeActionBridge) structuredResult(tool string, args map[string]any) (a
 			return nil, fmt.Errorf("contacts store is unavailable for structured output")
 		}
 		return contactsStructured(b.contacts, args)
+	case "calendar":
+		if b.calendar == nil {
+			return nil, fmt.Errorf("calendar is unavailable for structured output")
+		}
+		return calendarStructured(b.ctx, b.calendar, args)
+	case "wiki":
+		if b.wiki == nil {
+			return nil, fmt.Errorf("wiki is unavailable for structured output")
+		}
+		return wikiStructured(b.ctx, b.wiki, args)
 	default:
 		return nil, fmt.Errorf("structured output (as_json=True) is not available for %q — call it without as_json", tool)
 	}
+}
+
+// --- structured DTOs: stable lowercase JSON contracts for as_json=True ---
+
+type caEvent struct {
+	ID        string   `json:"id"`
+	Title     string   `json:"title"`
+	Start     string   `json:"start"` // RFC3339 (KST)
+	End       string   `json:"end"`
+	Location  string   `json:"location,omitempty"`
+	AllDay    bool     `json:"all_day"`
+	Status    string   `json:"status,omitempty"`
+	Attendees []string `json:"attendees,omitempty"` // emails
+}
+
+type caWikiHit struct {
+	Path    string  `json:"path"`
+	Snippet string  `json:"snippet"`
+	Score   float64 `json:"score"`
+}
+
+type caWikiPage struct {
+	Path     string   `json:"path"`
+	Title    string   `json:"title"`
+	Summary  string   `json:"summary,omitempty"`
+	Category string   `json:"category,omitempty"`
+	Tags     []string `json:"tags,omitempty"`
+	Updated  string   `json:"updated,omitempty"`
+	Body     string   `json:"body"`
+}
+
+func caEventOf(e calendar.Event) caEvent {
+	var att []string
+	for _, a := range e.Attendees {
+		if a.Email != "" {
+			att = append(att, a.Email)
+		}
+	}
+	return caEvent{
+		ID:        e.ID,
+		Title:     e.Summary,
+		Start:     e.Start.Format(time.RFC3339),
+		End:       e.End.Format(time.RFC3339),
+		Location:  e.Location,
+		AllDay:    e.AllDay,
+		Status:    e.Status,
+		Attendees: att,
+	}
+}
+
+// calendarStructured answers read-only calendar actions with typed data. list
+// reuses calMerged (the same Google+local merge the text tool uses, so the two
+// can't diverge); get replicates the local:/google ID routing.
+func calendarStructured(ctx context.Context, d *toolctx.CalendarDeps, args map[string]any) (any, error) {
+	action, _ := args["action"].(string)
+	switch strings.TrimSpace(action) {
+	case "list", "":
+		from, to, errMsg := calResolveWindow(stringArg(args, "from"), stringArg(args, "to"), intArg(args, "hours_ahead"))
+		if errMsg != "" {
+			return nil, fmt.Errorf("%s", errMsg)
+		}
+		events, _ := calMerged(ctx, d, from, to)
+		out := make([]caEvent, 0, len(events))
+		for _, e := range events {
+			out = append(out, caEventOf(e))
+		}
+		return out, nil
+	case "get":
+		id := strings.TrimSpace(stringArg(args, "id"))
+		if id == "" {
+			return nil, fmt.Errorf("calendar get requires id")
+		}
+		ev, err := calStructGet(ctx, d, id)
+		if err != nil {
+			return nil, err
+		}
+		if ev == nil {
+			return nil, fmt.Errorf("event %q not found", id)
+		}
+		return caEventOf(*ev), nil
+	default:
+		return nil, fmt.Errorf("calendar structured: action %q not supported (list, get); use as_json=False for free_slots", action)
+	}
+}
+
+// calStructGet resolves one event by ID, routing local: IDs to the local store
+// and others to the read-only Google client (mirrors calActionGet).
+func calStructGet(ctx context.Context, d *toolctx.CalendarDeps, id string) (*calendar.Event, error) {
+	if localcal.IsLocalID(id) {
+		if d.Local == nil {
+			return nil, fmt.Errorf("local calendar unavailable")
+		}
+		return d.Local.Get(id), nil
+	}
+	if d.Client == nil {
+		return nil, fmt.Errorf("google calendar not connected")
+	}
+	client, err := d.Client()
+	if err != nil {
+		return nil, err
+	}
+	return client.Get(ctx, id)
+}
+
+// wikiStructured answers read-only wiki actions with typed data: search returns
+// ranked hits, read returns a page's metadata + body.
+func wikiStructured(ctx context.Context, store *wiki.Store, args map[string]any) (any, error) {
+	action, _ := args["action"].(string)
+	query := stringArg(args, "query")
+	switch strings.TrimSpace(action) {
+	case "search":
+		limit := 10
+		if n := intArg(args, "limit"); n > 0 {
+			limit = n
+		}
+		hits, err := store.Search(ctx, query, limit)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]caWikiHit, 0, len(hits))
+		for _, h := range hits {
+			out = append(out, caWikiHit{Path: h.Path, Snippet: h.Content, Score: h.Score})
+		}
+		return out, nil
+	case "read":
+		if strings.TrimSpace(query) == "" {
+			return nil, fmt.Errorf("wiki read requires query (the page path)")
+		}
+		pg, err := store.ReadPage(query)
+		if err != nil {
+			return nil, err
+		}
+		return caWikiPage{
+			Path:     query,
+			Title:    pg.Meta.Title,
+			Summary:  pg.Meta.Summary,
+			Category: pg.Meta.Category,
+			Tags:     pg.Meta.Tags,
+			Updated:  pg.Meta.Updated,
+			Body:     pg.Body,
+		}, nil
+	default:
+		return nil, fmt.Errorf("wiki structured: action %q not supported (search, read); use as_json=False for index/daily/status", action)
+	}
+}
+
+// stringArg / intArg read a bridge arg (JSON map) with the right dynamic type.
+func stringArg(args map[string]any, key string) string {
+	s, _ := args[key].(string)
+	return s
+}
+
+func intArg(args map[string]any, key string) int {
+	if f, ok := args[key].(float64); ok {
+		return int(f)
+	}
+	return 0
 }
 
 // contactsStructured answers a read-only contacts call with []contacts.Contact
@@ -270,7 +445,7 @@ func ToolCodeAction(d CodeActionDeps) toolctx.ToolFunc {
 		}
 		token := newBridgeToken()
 		srv := &http.Server{
-			Handler:           &codeActionBridge{invoker: d.Invoker, contacts: d.Contacts, token: token, ctx: ctx},
+			Handler:           &codeActionBridge{invoker: d.Invoker, contacts: d.Contacts, calendar: d.Calendar, wiki: d.Wiki, token: token, ctx: ctx},
 			ReadHeaderTimeout: 5 * time.Second,
 		}
 		go func() { _ = srv.Serve(lis) }()
@@ -390,7 +565,7 @@ func CodeActionSchema() map[string]any {
 		"properties": map[string]any{
 			"code": map[string]any{
 				"type":        "string",
-				"description": "Python 3 source. A preloaded `deneb` object exposes read-only tools that each return the tool's text result: deneb.gmail(action, query=…, message_id=…, max=…) [inbox|search|read|thread|analyze], deneb.calendar(action, **kw) [list|get|free_slots], deneb.contacts(action, query, as_json=False) [lookup|search], deneb.wiki(action, query=…, **kw) [search|read|index|daily|status], deneb.read(file_path) [workspace files]. Pass as_json=True to deneb.contacts for parsed objects (list of {name, phones, emails, org}) instead of text — ideal for filtering/counting. Use print() to return data to yourself — only stdout and any traceback come back. No network (except the bridge), no subprocess, no writes outside the scratch dir.",
+				"description": "Python 3 source. A preloaded `deneb` object exposes read-only tools that each return the tool's text result: deneb.gmail(action, query=…, message_id=…, max=…) [inbox|search|read|thread|analyze], deneb.calendar(action, **kw) [list|get|free_slots], deneb.contacts(action, query) [lookup|search], deneb.wiki(action, query=…, **kw) [search|read|index|daily|status], deneb.read(file_path) [workspace files]. Pass as_json=True for parsed Python objects instead of text — deneb.contacts (list of {name,phones,emails,org}), deneb.calendar list/get (events {id,title,start,end,location,all_day,attendees}), deneb.wiki search/read ({path,snippet,score} / {path,title,summary,body}) — ideal for filtering, counting, and joining across sources. Use print() to return data to yourself — only stdout and any traceback come back. No network (except the bridge), no subprocess, no writes outside the scratch dir.",
 			},
 			"timeout": map[string]any{
 				"type":        "number",

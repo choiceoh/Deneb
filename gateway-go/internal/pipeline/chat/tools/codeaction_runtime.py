@@ -139,14 +139,17 @@ class _Deneb:
     Methods return the tool's text result (a str) by default. Allowed surface:
       deneb.gmail(action, query=..., message_id=..., max=...)
           actions: inbox, search, read, thread, analyze
-      deneb.calendar(action, **kw)
-          actions: list, get, free_slots
+      deneb.calendar(action, as_json=False, **kw)
+          actions: list, get, free_slots. as_json=True (list/get) returns
+          event dicts ({id, title, start, end, location, all_day, attendees}).
       deneb.contacts(action, query, as_json=False)
           actions: lookup, search. as_json=True returns a list of dicts
           ({name, phones, emails, org}) instead of text — ideal for
           filtering/counting in Python.
-      deneb.wiki(action, query=..., **kw)
-          actions: search, read, index, daily, status
+      deneb.wiki(action, query=..., as_json=False, **kw)
+          actions: search, read, index, daily, status. as_json=True
+          (search/read) returns {path, snippet, score} hits or a
+          {path, title, summary, body} page.
       deneb.read(file_path)
           read a workspace file (path clamped to the workspace + skills roots).
     Write/outbound actions (gmail send/reply, calendar create, wiki write, ...)
@@ -171,18 +174,18 @@ class _Deneb:
         kw["action"] = action
         return self._call("gmail", kw)
 
-    def calendar(self, action, **kw):
+    def calendar(self, action, as_json=False, **kw):
         kw["action"] = action
-        return self._call("calendar", kw)
+        return self._call("calendar", kw, as_json=as_json)
 
     def contacts(self, action, query, as_json=False, **kw):
         kw["action"] = action
         kw["query"] = query
         return self._call("contacts", kw, as_json=as_json)
 
-    def wiki(self, action, **kw):
+    def wiki(self, action, as_json=False, **kw):
         kw["action"] = action
-        return self._call("wiki", kw)
+        return self._call("wiki", kw, as_json=as_json)
 
     def read(self, file_path, **kw):
         kw["file_path"] = file_path
