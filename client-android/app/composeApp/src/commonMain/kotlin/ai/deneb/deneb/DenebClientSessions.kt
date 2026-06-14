@@ -22,9 +22,6 @@ import kotlinx.serialization.json.put
  *  everything else (client:main, cron:, system:, wf-…) is the 업무 workspace. */
 internal fun isChatWorkspaceKey(key: String): Boolean = key.startsWith("chat:")
 
-/** The two workspace home sessions — neither is deletable. */
-internal fun isHomeSession(key: String): Boolean = key == "client:main" || key == "chat:main"
-
 internal suspend fun DenebGatewayClient.fetchRecentSessions(): List<Conversation>? {
     // null return = RPC failed (timeout/transient/load). The caller keeps the
     // existing drawer list instead of collapsing to just the home row.
@@ -47,31 +44,32 @@ internal suspend fun DenebGatewayClient.fetchRecentSessions(): List<Conversation
             )
         }
         .orEmpty()
-    // Pin the active workspace's home to the top (synthesize if absent), so it is
-    // never missing once other sessions exist.
-    val homeKey = if (chatMode) "chat:main" else "client:main"
-    val homeTitle = if (chatMode) "챗봇" else "업무"
-    val home = recent.find { it.id == homeKey }
+    // 챗봇 has no home session — each chat is an independent chat:<uuid>, so just
+    // list them (newest as the RPC returns). 업무 keeps its persistent client:main
+    // home pinned to the top (synthesized when absent) since proactive reports
+    // land there and it must never be missing.
+    if (chatMode) return recent
+    val home = recent.find { it.id == "client:main" }
         ?: Conversation(
-            id = homeKey,
+            id = "client:main",
             messages = emptyList(),
             createdAt = 0,
             updatedAt = kotlin.time.Clock.System.now().toEpochMilliseconds(),
-            title = homeTitle,
+            title = "업무",
         )
-    return listOf(home) + recent.filterNot { it.id == homeKey }
+    return listOf(home) + recent.filterNot { it.id == "client:main" }
 }
 
 private fun DenebGatewayClient.conversationTitle(s: SessionRowOut): String {
     if (s.label.isNotBlank()) return s.label
-    // The home sessions keep their workspace labels (match the empty-drawer
-    // fallback), not "내 대화 · main".
+    // The 업무 home keeps its workspace label (matches the empty-drawer fallback),
+    // not "내 대화 · main".
     if (s.key == "client:main") return "업무"
-    if (s.key == "chat:main") return "챗봇"
-    // 챗봇 workspace side-conversations.
+    // 챗봇 conversations are independent chat:<uuid> with no home; an unlabeled one
+    // reads as "챗봇 · <shortId>".
     if (isChatWorkspaceKey(s.key)) {
         val shortId = s.key.substringAfterLast(':').take(8)
-        return if (shortId.isNotBlank() && shortId != "main") "챗봇 · $shortId" else "챗봇"
+        return if (shortId.isNotBlank()) "챗봇 · $shortId" else "챗봇"
     }
     // 업무-card side-conversations (opened from a feed card) read with the item's
     // title while it is still in the feed, falling back to a generic 업무 메모

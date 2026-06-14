@@ -90,8 +90,11 @@ class AppSettings(internal val settings: Settings) {
 
     // Per-workspace active session. 업무(work) and 챗봇(chat) keep SEPARATE session
     // lists, so each remembers its own last-open conversation across restarts and
-    // pill switches. Defaults are the two home sessions.
-    fun lastSession(work: Boolean): String = settings.getString(if (work) KEY_WORK_SESSION else KEY_CHAT_SESSION, if (work) "client:main" else "chat:main")
+    // pill switches. 업무 defaults to its persistent home (client:main) where
+    // proactive reports land; 챗봇 has no home — each chat is an independent
+    // chat:<uuid> — so an unset last session returns "" and the caller mints a
+    // fresh one (DenebGatewayClient.newSessionKey).
+    fun lastSession(work: Boolean): String = settings.getString(if (work) KEY_WORK_SESSION else KEY_CHAT_SESSION, if (work) "client:main" else "")
 
     fun setLastSession(work: Boolean, key: String) {
         settings.putString(if (work) KEY_WORK_SESSION else KEY_CHAT_SESSION, key)

@@ -137,8 +137,9 @@ fun DenebSessionDrawerSheet(
                                 },
                                 // The 업무 home (client:main) is the permanent base
                                 // conversation where proactive reports are mirrored —
-                                // no × so it can't be deleted out from under them.
-                                onDelete = if (conversation.id == HOME_SESSION_ID || conversation.id == "chat:main") {
+                                // no × so it can't be deleted out from under them. 챗봇
+                                // has no home, so every 챗봇 conversation is deletable.
+                                onDelete = if (conversation.id == HOME_SESSION_ID) {
                                     null
                                 } else {
                                     { actions.deleteConversation(conversation.id) }
