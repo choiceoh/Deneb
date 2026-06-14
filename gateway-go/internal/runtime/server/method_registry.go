@@ -285,6 +285,9 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		handlerminiapp.SyncMethods(handlerminiapp.SyncDeps{
 			Store: s.nativeSyncStore,
 		}),
+		// Wormhole router status + feature toggles (config path / URL resolved
+		// from env, defaulting to the on-host single-machine layout).
+		handlerminiapp.WormholeMethods(handlerminiapp.WormholeDeps{}),
 		handlerminiapp.WorkFeedMethods(handlerminiapp.WorkFeedDeps{
 			Store: nativeWorkFeed,
 		}),
