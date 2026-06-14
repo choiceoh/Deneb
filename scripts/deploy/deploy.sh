@@ -87,7 +87,7 @@ restart_with_systemd() {
 restart_with_nohup() {
     # Restart — graceful first (SIGTERM, up to 10s), then SIGKILL as fallback.
     # This gives active agent runs a chance to finish instead of being killed
-    # mid-turn, which otherwise leaves half-delivered replies in Telegram.
+    # mid-turn, which otherwise leaves replies half-delivered to the native client.
     echo "==> restarting gateway with nohup fallback (port $PROD_PORT)"
 
     # Prefer port-based detection so we catch both the built binary AND any

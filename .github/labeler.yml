@@ -26,11 +26,6 @@
           - "gateway-go/internal/agentsys/autonomous/**"
           - "gateway-go/internal/agentsys/agent/**"
 
-"channel: telegram":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "gateway-go/internal/platform/telegram/**"
-
 "gateway":
   - changed-files:
       - any-glob-to-any-file:

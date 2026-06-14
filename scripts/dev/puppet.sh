@@ -44,12 +44,8 @@ DEV_LOG="${DEVLIB_TMP_PREFIX}-gateway-live.log"
 DEV_HOST="$DEVLIB_HOST"
 DEV_STATE_DIR="${DEVLIB_TMP_PREFIX}-dev-state"
 
-MOCK_TELEGRAM_TOKEN="mock-dev-token"
-MOCK_TELEGRAM_PORT="${DENEB_DEV_MOCK_TELEGRAM_PORT:-$DEVLIB_MOCK_DEFAULT_PORT}"
-export DENEB_DEV_MOCK_TELEGRAM_URL="${DENEB_DEV_MOCK_TELEGRAM_URL:-http://$DEV_HOST:$MOCK_TELEGRAM_PORT}"
-
 # Broker port: 4th slot of the lib-server.sh instance port block
-# (default instance: prod=18789 dev=18790 iterate=18791 mock=18792 → 18793).
+# (default instance: prod=18789 dev=18790 iterate=18791 [+2 reserved] → 18793).
 PUPPET_PORT="${DENEB_PUPPET_PORT:-$DEVLIB_PUPPET_PORT}"
 PUPPET_URL="http://$DEV_HOST:$PUPPET_PORT"
 PUPPET_PID_FILE="${DEVLIB_TMP_PREFIX}-puppet-broker.pid"
@@ -177,16 +173,8 @@ cmd_start() {
     return 1
   fi
 
-  # The gateway's startup still expects the mock Telegram endpoint wiring
-  # that live-test.sh provides; keep parity. Not fatal (the Telegram plugin
-  # was retired in PR #1922), but a failure usually means a port conflict —
-  # surface it instead of swallowing.
-  if ! devlib_start_mock_telegram "$MOCK_TELEGRAM_PORT" "$DEV_HOST" >/dev/null; then
-    echo "    WARN: mock Telegram server failed to start (log: $DEVLIB_MOCK_LOG) — continuing"
-  fi
-
   echo "==> Generating puppet config (production config + puppet provider)..."
-  DENEB_DEV_TELEGRAM_TOKEN="$MOCK_TELEGRAM_TOKEN" devlib_gen_config "$PUPPET_CONFIG"
+  devlib_gen_config "$PUPPET_CONFIG"
   _overlay_config "$all_roles" >/dev/null
   if [[ "$all_roles" == "1" ]]; then
     echo "    Roles: ALL LLM roles → puppet/$PUPPET_MODEL"
@@ -195,9 +183,8 @@ cmd_start() {
   fi
 
   echo "==> Starting dev gateway on $DEV_HOST:$DEV_PORT (puppet seat)..."
-  DENEB_DEV_TELEGRAM_TOKEN="$MOCK_TELEGRAM_TOKEN" \
-    devlib_start_gateway "$DEV_BINARY" "$DEV_PORT" "$PUPPET_CONFIG" \
-      "$DEV_STATE_DIR" "$DEV_LOG" nohup
+  devlib_start_gateway "$DEV_BINARY" "$DEV_PORT" "$PUPPET_CONFIG" \
+    "$DEV_STATE_DIR" "$DEV_LOG" nohup
   echo "$DEVLIB_PID" > "$DEV_PID_FILE"
 
   if ! devlib_wait_healthy "$DEV_HOST" "$DEV_PORT" 25; then
@@ -342,9 +329,6 @@ cmd_stop() {
   fi
   echo "==> Stopping puppet broker..."
   _stop_broker
-  if devlib_mock_telegram_running "$MOCK_TELEGRAM_PORT"; then
-    devlib_stop_mock_telegram
-  fi
   # /tmp is tmpfs on the DGX hosts — don't leave per-send result files behind.
   rm -f "${DEVLIB_TMP_PREFIX}"-puppet-send-*.out \
         "${DEVLIB_TMP_PREFIX}"-puppet-send-*.pid "$PUPPET_SEND_LAST"

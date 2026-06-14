@@ -194,8 +194,8 @@ func (s *Server) doShutdown() error {
 
 	// 3. Stop cron service. The bounded context cancels every in-flight
 	// executor (scheduler, recovery, async POST /api/cron/run) and waits
-	// for them so that downstream subsystems (Telegram plugin, chat
-	// handler) are not torn down while a cron run is still using them.
+	// for them so that downstream subsystems (the chat handler) are not
+	// torn down while a cron run is still using them.
 	// See issue #1633.
 	if s.cronService != nil {
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)

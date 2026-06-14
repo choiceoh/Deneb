@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"html"
 	"os"
 	"strings"
 
@@ -148,16 +147,4 @@ func AnalyzeEmail(ctx context.Context, client *llm.Client, model, prompt string,
 		return "", fmt.Errorf("LLM 응답이 비어있습니다")
 	}
 	return result, nil
-}
-
-// formatReport builds the Telegram notification message for an analyzed email.
-// Uses HTML formatting for Telegram parse mode.
-func formatReport(msg *gmail.MessageDetail, analysis string) string {
-	var sb strings.Builder
-	sb.WriteString("📬 <b>새 메일 분석</b>\n\n")
-	fmt.Fprintf(&sb, "<b>From:</b> %s\n", html.EscapeString(msg.From))
-	fmt.Fprintf(&sb, "<b>Subject:</b> %s\n", html.EscapeString(msg.Subject))
-	sb.WriteString("\n")
-	sb.WriteString(html.EscapeString(analysis))
-	return sb.String()
 }

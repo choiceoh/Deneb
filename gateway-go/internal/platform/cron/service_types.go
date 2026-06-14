@@ -29,7 +29,7 @@ type RunOutcome struct {
 var ErrTurnAborted = errors.New("agent turn aborted before completion")
 
 // AgentRunner abstracts the agent execution so the cron package does not
-// depend on chat.Handler or protocol (which pull in CGo/FFI).
+// depend on chat.Handler or protocol (a heavy dependency tree).
 type AgentRunner interface {
 	// RunAgentTurn executes an agent turn for a cron job and returns the text output.
 	// It blocks until the agent completes or the context is canceled.

@@ -268,7 +268,7 @@ func (s *Server) registerSessionRPCMethods() {
 	s.toolDeps.Chrono.SendFn = sendFn
 
 	// Build the proactive-relay deps now that both dependencies
-	// (telegram plugin, transcript store) are available. Shared by the
+	// (native send function, transcript store) are available. Shared by the
 	// cron handoff below, wiki dreaming in registerWorkflowSideEffects,
 	// and gmail polling in initGmailPoll.
 	s.proactiveRelay = proactiveRelayDeps{
@@ -382,12 +382,12 @@ func (s *Server) registerSessionRPCMethods() {
 		})
 	}
 
-	// Chat, BTW, Exec, Aurora, cron wiring, and Telegram pipeline are
-	// registered in registerLateMethods() after this function returns.
+	// Chat, BTW, Exec, Aurora, and cron wiring are registered in
+	// registerLateMethods() after this function returns.
 }
 
 // registerWorkflowSideEffects wires non-RPC business logic: process approval
-// callbacks, autonomous/dreaming service, Telegram notifiers, and memory flush.
+// callbacks, autonomous/dreaming service, native notifiers, and memory flush.
 // All RPC domain registrations (approval, agent CRUD) are now
 // handled by registerEarlyMethods via hub adapters.
 func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {

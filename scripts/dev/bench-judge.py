@@ -38,7 +38,7 @@ import urllib.request
 JUDGE_SYSTEM_ABSOLUTE = """\
 You are an expert evaluator for Deneb, a Korean-first personal AI gateway on \
 NVIDIA DGX Spark. It has 130+ tools (file ops, exec, grep, memory, git, etc.) \
-and communicates via Telegram.
+and communicates through a native client app.
 
 Score the assistant's response on each dimension (integer 0-10):
 

@@ -1,8 +1,8 @@
 // Package insights provides the insights.generate RPC handler.
 //
-// It is a thin wrapper that takes a *insights.Engine and returns both the
-// structured Report (for programmatic callers) and a ready-to-send MarkdownV2
-// string (for slash-command flows that forward directly to Telegram).
+// It is a thin wrapper that takes a *insights.Engine and returns the
+// structured Report (for programmatic callers) plus a plain-text rendering
+// for human-readable display.
 package insights
 
 import (
@@ -29,9 +29,8 @@ type GenerateParams struct {
 
 // GenerateResult is the RPC response shape.
 type GenerateResult struct {
-	Report   *insights.Report `json:"report"`
-	Markdown string           `json:"markdown"`
-	Plain    string           `json:"plain"`
+	Report *insights.Report `json:"report"`
+	Plain  string           `json:"plain"`
 }
 
 // Methods returns the insights domain handler map.
@@ -67,9 +66,8 @@ func generateHandler(deps Deps) rpcutil.HandlerFunc {
 			return rpcerr.WrapUnavailable("insights generation failed", err).Response(req.ID)
 		}
 		return rpcutil.RespondOK(req.ID, &GenerateResult{
-			Report:   rep,
-			Markdown: insights.RenderMarkdownV2(rep),
-			Plain:    insights.RenderPlain(rep),
+			Report: rep,
+			Plain:  insights.RenderPlain(rep),
 		})
 	}
 }

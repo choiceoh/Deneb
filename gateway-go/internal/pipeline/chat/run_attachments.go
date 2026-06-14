@@ -33,7 +33,7 @@ func buildAttachmentBlocks(text string, attachments []ChatAttachment) []llm.Cont
 		switch att.Type {
 		case "image":
 			if att.Data != "" {
-				// Base64-encoded inline image (from Telegram download).
+				// Base64-encoded inline image (from native attachment upload).
 				blocks = append(blocks, llm.ContentBlock{
 					Type: "image",
 					Source: &llm.ImageSource{
