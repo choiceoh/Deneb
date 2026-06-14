@@ -51,22 +51,25 @@ func TestCodeActionAllow(t *testing.T) {
 		{"gmail", "search", true},
 		{"gmail", "inbox", true},
 		{"gmail", "analyze", true},
-		{"gmail", "send", false},
-		{"gmail", "reply", false},
-		{"gmail", "label", false},
+		{"gmail", "send", false},  // outbound — never on the bridge
+		{"gmail", "reply", false}, // outbound
+		{"gmail", "label", false}, // Gmail-account mutation — top-level only
 		{"gmail", "attachment", false},
 		{"calendar", "list", true},
 		{"calendar", "free_slots", true},
-		{"calendar", "create", false},
-		{"calendar", "delete", false},
+		{"calendar", "create", true}, // internal write (local store)
+		{"calendar", "update", true},
+		{"calendar", "delete", true},
 		{"contacts", "lookup", true},
 		{"contacts", "search", true},
 		{"wiki", "search", true},
 		{"wiki", "read", true},
-		{"wiki", "write", false},
-		{"wiki", "log", false},
-		{"read", "", true}, // read self-clamps to workspace+skills roots
-		{"exec", "", false},
+		{"wiki", "write", true}, // internal write (git-versioned)
+		{"wiki", "log", true},
+		{"read", "", true},  // workspace-clamped fs read
+		{"write", "", true}, // workspace-clamped fs write
+		{"edit", "", true},  // workspace-clamped fs edit
+		{"exec", "", false}, // not on the bridge
 		{"fs", "", false},
 	}
 	for _, c := range cases {
@@ -542,5 +545,50 @@ print("HAS", any("topsolar" in p for p in paths))
 `)
 	if !strings.Contains(out, "TYPE list") || !strings.Contains(out, "HAS True") {
 		t.Fatalf("wiki index as_json should yield a path list, got:\n%s", out)
+	}
+}
+
+// TestCodeAction_InternalWrites confirms internal writes (calendar create, wiki
+// write, fs write) forward to the tool registry, while outbound gmail send is
+// rejected at the bridge and never reaches the invoker.
+func TestCodeAction_InternalWrites(t *testing.T) {
+	requirePython(t)
+	inv := &recordingInvoker{result: "ok"}
+	out := runCodeAction(t, CodeActionDeps{Invoker: inv}, `
+deneb.calendar("create", summary="탑솔라 미팅", start="2026-06-20T15:00:00+09:00")
+deneb.wiki("write", query="프로젝트/x.md", title="X", content="body")
+deneb.write("note.txt", "hello")
+try:
+    deneb.gmail("send", to="a@b.c", body="x")
+    print("LEAK: send allowed")
+except Exception as e:
+    print("BLOCKED:", "not allowed" in str(e))
+`)
+	if strings.Contains(out, "LEAK") {
+		t.Fatalf("gmail send must be blocked, got:\n%s", out)
+	}
+	if !strings.Contains(out, "BLOCKED: True") {
+		t.Fatalf("send should raise a clear block, got:\n%s", out)
+	}
+
+	var hasCreate, hasWikiWrite, hasFsWrite, hasSend bool
+	for _, c := range inv.called() {
+		switch {
+		case strings.HasPrefix(c, "calendar:") && strings.Contains(c, `"action":"create"`):
+			hasCreate = true
+		case strings.HasPrefix(c, "wiki:") && strings.Contains(c, `"action":"write"`):
+			hasWikiWrite = true
+		case strings.HasPrefix(c, "write:") && strings.Contains(c, "note.txt"):
+			hasFsWrite = true
+		}
+		if strings.Contains(c, `"action":"send"`) {
+			hasSend = true
+		}
+	}
+	if !hasCreate || !hasWikiWrite || !hasFsWrite {
+		t.Fatalf("internal writes should forward to the invoker; calls=%v", inv.called())
+	}
+	if hasSend {
+		t.Fatalf("gmail send must never reach the invoker; calls=%v", inv.called())
 	}
 }
