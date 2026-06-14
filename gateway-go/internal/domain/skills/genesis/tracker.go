@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -144,8 +145,26 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 	return t, nil
 }
 
+// isConsultInfraError reports whether a usage failure was caused by the skills
+// consult mechanism itself failing to load the skill (a gateway path/catalog
+// bug, e.g. #2125's "tool skills errored") rather than the skill running badly.
+// Such failures must not count against a skill's success rate: they pinned
+// email-analysis below the evolver's threshold long after the gateway bug was
+// fixed, triggering a fresh "fix" every 6h that chased an error the skill could
+// not influence (and over-fit the skill body to that phantom error string).
+func isConsultInfraError(errMsg string) bool {
+	return strings.Contains(errMsg, "tool skills errored")
+}
+
 // ingest updates in-memory aggregates from a single usage record.
 func (t *Tracker) ingest(r UsageRecord) {
+	// Drop consult-infrastructure failures entirely (both on startup replay and
+	// live): they mean the skill could not be loaded, not that it performed
+	// badly. Discarding them on replay also clears the historical backlog that
+	// would otherwise re-pollute the success rate on every restart.
+	if !r.Success && isConsultInfraError(r.ErrorMsg) {
+		return
+	}
 	agg := t.stats[r.SkillName]
 	if agg == nil {
 		agg = &usageAgg{}
@@ -199,6 +218,11 @@ func (t *Tracker) RecordUsage(record UsageRecord) error {
 func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 	w := t.postEvolve[r.SkillName]
 	if w == nil || t.rollback == nil {
+		return
+	}
+	// An infra failure (skill couldn't be loaded) isn't the evolved skill's
+	// fault — don't let it advance the rollback counter and revert a good evolve.
+	if !r.Success && isConsultInfraError(r.ErrorMsg) {
 		return
 	}
 	if r.Success {

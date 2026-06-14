@@ -61,6 +61,20 @@ func (s *Server) initGenesisServices() {
 		s.genesisEvolver.SetTeacher(mainClient, mainModel)
 	}
 
+	// Resolve per-model thinking toggles so the evolver's judge/teacher/rewrite
+	// calls truly disable reasoning on dual-mode vLLM models (dsv4) instead of
+	// burning their whole output budget on chain-of-thought and returning
+	// truncated JSON ("judge error"). Keyed by bare model name to match the names
+	// the evolver passes to thinkingOff.
+	thinkingKwargs := map[string]string{}
+	for _, role := range []modelrole.Role{modelrole.RoleLightweight, modelrole.RoleMain} {
+		mc := s.modelRegistry.Config(role)
+		if k := s.modelRegistry.CapabilityForModel(mc.ProviderID, mc.Model).ThinkingToggleKwarg; k != "" {
+			thinkingKwargs[mc.Model] = k
+		}
+	}
+	s.genesisEvolver.SetThinkingKwargs(thinkingKwargs)
+
 	// Iteration-based nudger (Hermes-style): fires a mid-session skill
 	// review every N tool calls. Env var DENEB_SKILL_NUDGE_INTERVAL
 	// overrides the default (10); 0 disables.
