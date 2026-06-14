@@ -44,10 +44,26 @@ internal suspend fun DenebGatewayClient.fetchRecentSessions(): List<Conversation
             )
         }
     // 챗봇 has no home session — each chat is an independent chat:<uuid>, so just
-    // list them (newest as the RPC returns). 업무 keeps its persistent client:main
-    // home pinned to the top (synthesized when absent) since proactive reports
-    // land there and it must never be missing.
-    if (chatMode) return recent
+    // list them (newest as the RPC returns). But the conversation the user is
+    // ACTIVELY in must always appear, even when the gateway's recent list doesn't
+    // carry it: a freshly minted chat:<uuid> hasn't run a turn yet (no session row
+    // exists), and the gateway drops chat: sessions on its frequent restarts until
+    // a new turn re-registers them — without this the drawer reads "저장된 대화 없음"
+    // mid-conversation. Inject the active chat as a synthesized row, symmetric to
+    // 업무's client:main home below.
+    if (chatMode) {
+        val activeKey = sessionKey
+        if (!isChatWorkspaceKey(activeKey) || recent.any { it.id == activeKey }) return recent
+        val shortId = activeKey.substringAfterLast(':').take(8)
+        val active = Conversation(
+            id = activeKey,
+            messages = emptyList(),
+            createdAt = 0,
+            updatedAt = kotlin.time.Clock.System.now().toEpochMilliseconds(),
+            title = if (shortId.isNotBlank()) "챗봇 · $shortId" else "챗봇",
+        )
+        return listOf(active) + recent
+    }
     val home = recent.find { it.id == "client:main" }
         ?: Conversation(
             id = "client:main",
