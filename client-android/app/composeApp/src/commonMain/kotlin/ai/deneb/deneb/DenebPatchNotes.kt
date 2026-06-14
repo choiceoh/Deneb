@@ -21,6 +21,12 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "채팅 입력창을 더 작고 단정하게 — 여백과 보내기 아이콘을 줄여, 마지막 메시지가 입력창 바로 위까지 붙어 보입니다",
+            "맨 아래가 아닐 때 '맨 아래로' 버튼이 제대로 뜨고, 눌렀을 때 긴 메시지의 진짜 끝까지 내려갑니다 (GPT·클로드처럼)",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "챗봇 대화 기록을 개별 대화 목록으로 정리 — 고정 '챗봇' 홈 없이 각 대화가 독립 세션(전부 삭제 가능). 챗봇 모드로 돌아오면 마지막 대화를 복원하고, 없으면 새 대화로 시작",
         ),
     ),

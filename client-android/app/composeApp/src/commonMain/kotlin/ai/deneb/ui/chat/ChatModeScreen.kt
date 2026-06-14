@@ -523,8 +523,17 @@ internal fun ChatModeScreen(
 
                                         val showScrollToBottom by remember {
                                             derivedStateOf {
-                                                val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()
-                                                lastVisibleItem != null && lastVisibleItem.index < listState.layoutInfo.totalItemsCount - 1
+                                                val info = listState.layoutInfo
+                                                val last = info.visibleItemsInfo.lastOrNull()
+                                                // Show whenever the conversation's bottom isn't in view — either the
+                                                // last item isn't composed yet, OR it is but its bottom edge sits
+                                                // below the viewport (a tall last message the user scrolled up within).
+                                                // An index-only check missed the latter; GPT/Claude/Gemini show the
+                                                // jump button in both cases.
+                                                last != null && (
+                                                    last.index < info.totalItemsCount - 1 ||
+                                                        last.offset + last.size > info.viewportEndOffset
+                                                    )
                                             }
                                         }
 
@@ -566,9 +575,11 @@ internal fun ChatModeScreen(
                                                 modifier = Modifier.fillMaxSize(),
                                                 state = listState,
                                                 horizontalAlignment = CenterHorizontally,
-                                                // Breathing room so the first message clears the top bar and the
-                                                // last clears the input bar instead of sitting flush against them.
-                                                contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp),
+                                                // A little breathing room at the top so the first message clears the
+                                                // top bar. At the bottom keep it tight (8dp) so the last message sits
+                                                // right above the input bar — like GPT/Claude/Gemini — rather than
+                                                // floating with a wide gap.
+                                                contentPadding = PaddingValues(top = 4.dp, bottom = 8.dp),
                                             ) {
                                                 items(uiState.history, key = { it.id }, contentType = { it.role }) { history ->
                                                     // Readable measure on a wide desktop window: cap every row at the
@@ -704,7 +715,12 @@ internal fun ChatModeScreen(
                                                         componentScope.launch {
                                                             val totalItems = listState.layoutInfo.totalItemsCount
                                                             if (totalItems > 0) {
-                                                                listState.animateScrollToItem(totalItems - 1)
+                                                                // Land on the true bottom, not the last item's top: a single
+                                                                // tall final message (e.g. a long report) would otherwise leave
+                                                                // its top pinned to the viewport — the button would appear to do
+                                                                // nothing. The large scrollOffset pins the item's bottom edge to
+                                                                // the viewport bottom (same idiom as the streaming follow above).
+                                                                listState.animateScrollToItem(totalItems - 1, Int.MAX_VALUE)
                                                             }
                                                         }
                                                     },
