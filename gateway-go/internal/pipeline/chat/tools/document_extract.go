@@ -11,10 +11,15 @@ import (
 
 // --- shared document extraction (Gmail, Dropbox, and web fetch) ---
 //
-// These build on the per-format extractors in gmail_attachment.go (pdfToText,
-// xlsxToText, docxToText, pptxToText) plus the OCR fallback, exposing one entry
-// point so callers outside the attachment flow — notably web fetch — get the
-// same local extraction with no external `lit` CLI required.
+// extractDocument below is the single canonical MIME/extension dispatcher: it
+// maps a document's type to the right per-format parser in docparse.go (PDF with
+// a scanned-PDF OCR fallback, Excel/Word/PowerPoint, CSV, images, plain text).
+// Every caller funnels through it instead of carrying its own copy of the switch:
+//   - ExtractDocumentText — the exported (text, ok) facade used by web fetch and
+//     the attachment-classifier; declines images/plain-text (not "documents").
+//   - extractAttachmentText (gmail_attachment.go) — adds Gmail Korean headers/errors.
+//   - extractDropboxFileText (dropbox.go) — returns the raw text or "".
+// One switch, three thin formatters — so the paths can never drift apart again.
 
 // csvToMarkdown parses CSV bytes and renders them as a markdown table so the
 // model reads columns as a grid instead of comma soup. Ragged rows are
@@ -51,41 +56,91 @@ func csvToMarkdown(data []byte) (string, error) {
 	return table, nil
 }
 
-// ExtractDocumentText extracts text from a document's raw bytes for callers
-// outside the attachment flow (e.g. web fetch). It dispatches by MIME type /
-// filename extension to the same local extractors the Gmail and Dropbox paths
-// use — PDF (with a scanned-PDF OCR fallback), Excel, Word, PowerPoint, CSV.
-// Returns (text, true) on success; ("", false) when the format is unsupported
-// or extraction yields nothing.
-func ExtractDocumentText(ctx context.Context, data []byte, filename, mimeType string) (string, bool) {
+// docKind identifies which format family the dispatcher recognized for a payload.
+type docKind int
+
+const (
+	docUnsupported docKind = iota
+	docPDF
+	docXLSX
+	docDOCX
+	docPPTX
+	docImage
+	docCSV
+	docText
+)
+
+// docResult is the canonical extraction outcome. text holds the extracted text
+// (empty on failure); err is the parser's error when extraction failed (nil on
+// success, and always nil for docText/docUnsupported); ocr reports that a PDF's
+// text came from the scanned-page OCR fallback rather than pdftotext. Callers
+// layer their own headers and error strings over these fields.
+type docResult struct {
+	kind docKind
+	text string
+	ocr  bool
+	err  error
+}
+
+// extractDocument is the single canonical dispatcher: it classifies a payload by
+// MIME type / filename extension and runs the matching parser from docparse.go.
+// The classification predicates and their order are the one shared definition —
+// every caller (ExtractDocumentText, the Gmail attachment path, the Dropbox path)
+// funnels through here, so the supported-format set can never drift between them.
+// Dropbox passes an empty MIME type, which naturally degrades to filename-only
+// classification.
+func extractDocument(ctx context.Context, data []byte, filename, mimeType string) docResult {
 	lower := strings.ToLower(filename)
 	mime := strings.ToLower(mimeType)
 
 	switch {
 	case strings.Contains(mime, "pdf") || strings.HasSuffix(lower, ".pdf"):
-		if t, err := pdfToTextStructured(ctx, data); err == nil && strings.TrimSpace(t) != "" {
-			return t, true
+		text, err := pdfToTextStructured(ctx, data)
+		if err == nil && strings.TrimSpace(text) != "" {
+			return docResult{kind: docPDF, text: text}
 		}
-		// pdftotext found nothing — likely a scanned PDF. Try OCR.
-		if t, err := pdfOCR(ctx, data); err == nil && strings.TrimSpace(t) != "" {
-			return t, true
+		// pdftotext found nothing — likely a scanned PDF. Try per-page OCR.
+		if ocrText, ocrErr := pdfOCR(ctx, data); ocrErr == nil && strings.TrimSpace(ocrText) != "" {
+			return docResult{kind: docPDF, text: ocrText, ocr: true}
 		}
+		return docResult{kind: docPDF, err: err}
 	case strings.Contains(mime, "spreadsheetml") || strings.HasSuffix(lower, ".xlsx") || strings.HasSuffix(lower, ".xlsm"):
-		if t, err := xlsxToText(data); err == nil {
-			return t, true
-		}
+		text, err := xlsxToText(data)
+		return docResult{kind: docXLSX, text: text, err: err}
 	case strings.Contains(mime, "wordprocessingml") || strings.HasSuffix(lower, ".docx"):
-		if t, err := docxToText(data); err == nil {
-			return t, true
-		}
+		text, err := docxToText(data)
+		return docResult{kind: docDOCX, text: text, err: err}
 	case strings.Contains(mime, "presentationml") || strings.HasSuffix(lower, ".pptx"):
-		if t, err := pptxToText(data); err == nil {
-			return t, true
-		}
+		text, err := pptxToText(data)
+		return docResult{kind: docPPTX, text: text, err: err}
+	case strings.HasPrefix(mime, "image/") || hasImageExt(lower):
+		text, err := imageOCR(ctx, data)
+		return docResult{kind: docImage, text: text, err: err}
 	case strings.Contains(mime, "csv") || strings.HasSuffix(lower, ".csv"):
-		if t, err := csvToMarkdown(data); err == nil {
-			return t, true
+		text, err := csvToMarkdown(data)
+		return docResult{kind: docCSV, text: text, err: err}
+	case strings.HasPrefix(mime, "text/") || isTextFile(lower):
+		return docResult{kind: docText, text: string(data)}
+	default:
+		return docResult{kind: docUnsupported}
+	}
+}
+
+// ExtractDocumentText extracts text from a document's raw bytes for callers
+// outside the attachment flow (web fetch, the attachment classifier). It runs the
+// canonical extractDocument dispatcher and promotes only true document formats —
+// PDF (with a scanned-PDF OCR fallback), Excel, Word, PowerPoint, CSV — to a
+// successful (text, true). Images and plain text are not "documents" here, so
+// they yield ("", false), as does any unsupported type or empty extraction.
+func ExtractDocumentText(ctx context.Context, data []byte, filename, mimeType string) (string, bool) {
+	r := extractDocument(ctx, data, filename, mimeType)
+	switch r.kind {
+	case docPDF, docXLSX, docDOCX, docPPTX, docCSV:
+		if r.err == nil && strings.TrimSpace(r.text) != "" {
+			return r.text, true
 		}
+	default:
+		// docImage, docText, docUnsupported are not "documents" for this facade.
 	}
 	return "", false
 }
