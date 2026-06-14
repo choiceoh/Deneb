@@ -1,3 +1,8 @@
+---
+description: "프롬프트 캐시 불가침 원칙, 3계층 구조, cache-aware 슬래시"
+globs: ["gateway-go/internal/pipeline/chat/prompt/**", "gateway-go/internal/pipeline/chat/slash_commands.go"]
+---
+
 # Prompt Cache Doctrine
 
 > **프롬프트 캐시는 불가침 영역이다.** Anthropic/OpenRouter의 `cache_control` 기반 prefix 캐시가 깨지면 Claude 요청당 입력 토큰 비용이 정가로 복귀한다 (캐시 히트 시 10% 수준). 코드베이스 전반에 걸쳐 이 원칙을 **강제**한다.

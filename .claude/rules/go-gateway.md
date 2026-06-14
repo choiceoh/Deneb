@@ -5,7 +5,7 @@ globs: ["gateway-go/**"]
 
 # Go Gateway (`gateway-go/`)
 
-Primary runtime — HTTP/WS gateway server.
+Primary runtime — HTTP + SSE gateway server.
 
 ## Structure
 

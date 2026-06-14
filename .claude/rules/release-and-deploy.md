@@ -15,7 +15,7 @@ globs: ["scripts/release*", "scripts/deploy*", "scripts/dev/publish-apk.sh", "cl
 
 ## DGX Spark Operations
 
-- Restart gateway: `pkill -9 -f deneb-gateway || true; nohup ./gateway-go/deneb-gateway --bind loopback --port 18789 > /tmp/deneb-gateway.log 2>&1 &`
+- Restart gateway: `pkill -9 -f deneb-gateway || true; nohup ./dist/deneb-gateway --bind loopback --port 18789 > /tmp/deneb-gateway.log 2>&1 &`
 - Verify: `ss -ltnp | rg 18789`, `tail -n 120 /tmp/deneb-gateway.log`.
 
 ## Native Client APK Publishing

@@ -1,6 +1,6 @@
 # Go Gateway Module
 
-Go HTTP/WS gateway server — the primary Deneb runtime.
+Go HTTP + SSE gateway server — the primary Deneb runtime.
 
 ## Build & Test
 
