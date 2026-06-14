@@ -46,32 +46,6 @@ func Available() bool {
 	return availableVal
 }
 
-// supportedMIMEPrefixes lists MIME type prefixes that LiteParse can handle.
-var supportedMIMEPrefixes = []string{
-	"application/pdf",
-	// Office Open XML (DOCX, XLSX, PPTX)
-	"application/vnd.openxmlformats-officedocument.",
-	// Legacy Office (DOC, XLS, PPT)
-	"application/msword",
-	"application/vnd.ms-excel",
-	"application/vnd.ms-powerpoint",
-	// OpenDocument (ODT, ODS, ODP)
-	"application/vnd.oasis.opendocument.",
-	// CSV
-	"text/csv",
-}
-
-// SupportedMIME returns true if the given MIME type is parseable by LiteParse.
-func SupportedMIME(mime string) bool {
-	mime = strings.ToLower(strings.TrimSpace(mime))
-	for _, prefix := range supportedMIMEPrefixes {
-		if strings.HasPrefix(mime, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
 // Parse extracts text content from a document using the lit CLI.
 // fileName is used to determine the temp file extension (important for format
 // detection). Returns the extracted plain text.
