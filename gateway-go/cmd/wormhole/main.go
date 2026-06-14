@@ -34,6 +34,10 @@ type modelEntry struct {
 	URL           string `json:"url"` // upstream OpenAI base, e.g. http://127.0.0.1:8000/v1
 	Key           string `json:"key,omitempty"`
 	UpstreamModel string `json:"upstreamModel,omitempty"`
+	// Protocol is the backend's wire API: "openai" (default, reached via
+	// /v1/chat/completions) or "anthropic" (reached via /v1/messages). wormhole
+	// forwards the matching protocol straight through — no cross-translation.
+	Protocol string `json:"protocol,omitempty"`
 	// Local overrides the loopback/private-IP auto-detection (privacy.go). Set it
 	// false to mark an on-box endpoint as cloud (e.g. a local tunnel that egresses)
 	// or true for a public URL you trust as local. Nil = auto-detect from URL.

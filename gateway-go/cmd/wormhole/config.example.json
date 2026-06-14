@@ -4,10 +4,17 @@
   "models": [
     { "name": "dsv4", "url": "http://127.0.0.1:8000/v1" },
     {
-      "name": "claude",
+      "name": "claude-or",
       "url": "https://openrouter.ai/api/v1",
       "key": "${OPENROUTER_API_KEY}",
       "upstreamModel": "anthropic/claude-opus-4"
+    },
+    {
+      "name": "claude",
+      "protocol": "anthropic",
+      "url": "https://api.anthropic.com/v1",
+      "key": "${ANTHROPIC_API_KEY}",
+      "upstreamModel": "claude-opus-4-20260101"
     }
   ]
 }
