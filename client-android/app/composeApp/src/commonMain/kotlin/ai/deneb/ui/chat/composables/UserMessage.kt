@@ -7,7 +7,6 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,8 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import deneb.composeapp.generated.resources.Res
@@ -50,28 +47,18 @@ internal fun UserMessage(
 ) {
     val showFullScreen = LocalShowFullScreenImage.current
     val haptics = rememberHaptics()
-    // Dark/OLED: an aurora-tinted bubble (primary wash + hairline ring) so "my
-    // message" carries the brand accent against the flat black surface. Light
-    // keeps the solid secondaryContainer — a low-alpha wash was nearly invisible
-    // on the white background (the lesson that picked secondaryContainer).
+    // Borderless gray bubble for "my message": a neutral surfaceVariant container in
+    // both light (#E1E7EE) and OLED dark (#2A2F35) — no accent wash, no hairline ring.
     val cs = MaterialTheme.colorScheme
-    val dark = cs.background.luminance() < 0.5f
     val bubbleShape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp)
-    val bubbleColor = if (dark) cs.primary.copy(alpha = 0.16f) else cs.secondaryContainer
-    val bubbleText = if (dark) Color(0xFFEAF1F8) else cs.onSecondaryContainer
+    val bubbleColor = cs.surfaceVariant
+    val bubbleText = cs.onSurfaceVariant
     SelectionContainer {
         Row(Modifier.padding(16.dp)) {
             Spacer(Modifier.weight(1f))
             Column(
                 modifier = Modifier
                     .background(bubbleColor, bubbleShape)
-                    .then(
-                        if (dark) {
-                            Modifier.border(1.dp, cs.primary.copy(alpha = 0.28f), bubbleShape)
-                        } else {
-                            Modifier
-                        },
-                    )
                     .padding(16.dp),
                 horizontalAlignment = Alignment.End,
             ) {
