@@ -40,6 +40,25 @@ func (e modelEntry) isLocal() bool {
 	return isLocalURL(e.URL)
 }
 
+// isLoopbackListen reports whether a listen address binds only the loopback
+// interface (so it is unreachable off-box). Used to warn loudly when wormhole
+// binds a routable address (tailnet / all interfaces) without a token — i.e. it
+// is OPEN to the network. A bare ":18800" (empty host) binds all interfaces.
+func isLoopbackListen(listen string) bool {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(listen))
+	if err != nil {
+		host = strings.TrimSpace(listen) // tolerate a host with no port
+	}
+	if host == "" {
+		return false // ":18800" / "" = all interfaces, NOT loopback
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 // localOnly reports whether THIS request must stay local — either the instance
 // is in local-only mode, or the caller set the X-Wormhole-Local-Only header to
 // guarantee no cloud egress for a sensitive payload.
