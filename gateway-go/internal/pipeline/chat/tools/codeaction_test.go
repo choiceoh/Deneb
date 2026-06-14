@@ -474,6 +474,25 @@ func TestWikiStructured(t *testing.T) {
 		t.Fatalf("search should find the page, got %+v", hits)
 	}
 
+	// index → page paths in a category (enables enumerate-then-read batches).
+	iv, err := wikiStructured(context.Background(), store2, map[string]any{"action": "index", "category": "프로젝트"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths, ok := iv.([]string)
+	if !ok {
+		t.Fatalf("index want []string, got %T", iv)
+	}
+	foundPath := false
+	for _, p := range paths {
+		if strings.Contains(p, "topsolar") {
+			foundPath = true
+		}
+	}
+	if !foundPath {
+		t.Fatalf("index should list the page, got %v", paths)
+	}
+
 	if _, err := wikiStructured(context.Background(), store2, map[string]any{"action": "write"}); err == nil {
 		t.Fatal("wiki structured 'write' must be rejected")
 	}
@@ -493,5 +512,35 @@ print("TITLE", evs[0]["title"] if evs else "none")
 `)
 	if !strings.Contains(out, "TYPE list") || !strings.Contains(out, "TITLE 탑솔라 미팅") {
 		t.Fatalf("calendar as_json should yield event dicts, got:\n%s", out)
+	}
+}
+
+// TestCodeAction_StructuredWikiIndex is the python e2e for deneb.wiki("index",
+// as_json=True): the full subprocess→bridge→ListPages path yields a path list
+// the model can enumerate and then read.
+func TestCodeAction_StructuredWikiIndex(t *testing.T) {
+	requirePython(t)
+	dir := t.TempDir()
+	wdir := filepath.Join(dir, "wiki")
+	store, err := wiki.NewStore(wdir, filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WritePage("프로젝트/topsolar.md", &wiki.Page{
+		Meta: wiki.Frontmatter{Title: "탑솔라"}, Body: "x",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	store2, err := wiki.NewStore(wdir, filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := runCodeAction(t, CodeActionDeps{Invoker: &recordingInvoker{}, Wiki: store2}, `
+paths = deneb.wiki("index", category="프로젝트", as_json=True)
+print("TYPE", type(paths).__name__, "N", len(paths))
+print("HAS", any("topsolar" in p for p in paths))
+`)
+	if !strings.Contains(out, "TYPE list") || !strings.Contains(out, "HAS True") {
+		t.Fatalf("wiki index as_json should yield a path list, got:\n%s", out)
 	}
 }
