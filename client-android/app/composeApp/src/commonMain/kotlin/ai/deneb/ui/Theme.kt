@@ -5,30 +5,20 @@ package ai.deneb.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.CardColors
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.luminance
@@ -281,38 +271,6 @@ fun DenebOutlinedTextField(
         keyboardOptions = keyboardOptions,
         shape = RoundedCornerShape(12.dp),
         colors = outlineTextFieldColors(),
-    )
-}
-
-@Composable
-fun DenebClearableTextField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    label: @Composable (() -> Unit)? = null,
-    singleLine: Boolean = false,
-) {
-    var focused by remember { mutableStateOf(false) }
-    DenebOutlinedTextField(
-        modifier = modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
-        value = value,
-        onValueChange = onValueChange,
-        label = label,
-        singleLine = singleLine,
-        trailingIcon = {
-            IconButton(
-                onClick = { onValueChange("") },
-                modifier = Modifier.handCursor()
-                    .alpha(if (focused && value.isNotEmpty()) 1f else 0f),
-                enabled = value.isNotEmpty(),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Clear,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
     )
 }
 

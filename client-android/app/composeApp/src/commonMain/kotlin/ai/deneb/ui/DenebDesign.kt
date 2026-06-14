@@ -99,22 +99,6 @@ val DenebMaxContentWidth: Dp = 760.dp
 @Composable
 fun denebContentWidthModifier(cap: Dp = DenebMaxContentWidth): Modifier = if (currentPlatform is Platform.Desktop) Modifier.width(cap) else Modifier.fillMaxWidth()
 
-/**
- * Centers [content] in a column capped at [cap] (desktop) or filling the width (phone).
- * Drop this around the body of a self-built screen (mail, search, people) so its list
- * reads at a comfortable width instead of spanning a wide desktop window edge to edge.
- */
-@Composable
-fun DenebContentWidth(
-    modifier: Modifier = Modifier,
-    cap: Dp = DenebMaxContentWidth,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        Column(denebContentWidthModifier(cap).fillMaxHeight(), content = content)
-    }
-}
-
 /** Hairline rule color — onBackground at low alpha, theme-aware (≈white 9% dark / black 6% light). */
 @Composable
 fun denebHairline(): Color {
