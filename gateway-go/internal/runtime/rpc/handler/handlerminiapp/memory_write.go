@@ -282,6 +282,73 @@ func memoryMergePage(deps MemoryDeps) rpcutil.HandlerFunc {
 	}
 }
 
+// memoryMovePage relocates a wiki page to a new path — the surface for
+// reclassifying a page into a different category or project sub-folder. Since
+// the on-disk path encodes the category (its leading directory is the bucket),
+// "move" is how the native client lets the operator fix a misfiled page without
+// retyping it. The target's top-level directory must be a valid taxonomy
+// category; sub-folders within it are free (e.g. 프로젝트/해남-EPC/). Never
+// overwrites — an existing target is a conflict (merge is the right tool there).
+//
+// Single-operator, last-write-wins, recoverable from the wiki's git history.
+func memoryMovePage(deps MemoryDeps) rpcutil.HandlerFunc {
+	type params struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+	}
+	type out struct {
+		OK   bool   `json:"ok"`
+		From string `json:"from"`
+		To   string `json:"to"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if errResp := requireAuth(ctx, req.ID); errResp != nil {
+			return errResp
+		}
+		var p params
+		if len(req.Params) > 0 {
+			if err := json.Unmarshal(req.Params, &p); err != nil {
+				return rpcerr.InvalidParams(err).Response(req.ID)
+			}
+		}
+		from := strings.TrimSpace(p.From)
+		to := strings.TrimSpace(p.To)
+		if from == "" {
+			return rpcerr.MissingParam("from").Response(req.ID)
+		}
+		if to == "" {
+			return rpcerr.MissingParam("to").Response(req.ID)
+		}
+		// Same traversal guard as get_page/write_page on both ends.
+		if err := validateWikiPath(from); err != nil {
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+		}
+		if err := validateWikiPath(to); err != nil {
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+		}
+		// The destination must land under a real taxonomy category so a typo
+		// can't spawn a junk top-level bucket (the very mess move exists to fix).
+		topCat, _, _ := strings.Cut(to, "/")
+		if !wiki.ValidateCategory(topCat) {
+			return rpcerr.InvalidRequest(
+				"target category must be one of: " + strings.Join(wiki.Categories, ", "),
+			).Response(req.ID)
+		}
+
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.WrapUnavailable("memory store unavailable", err).Response(req.ID)
+		}
+		if err := store.MovePage(from, to); err != nil {
+			// MovePage's errors are all caller-fixable (source missing, target
+			// already exists, bad path) — surface as INVALID_REQUEST so the
+			// client shows an actionable message rather than a generic outage.
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, out{OK: true, From: from, To: to})
+	}
+}
+
 // memoryDeletePages deletes one or more wiki pages by path. Drives the
 // category-page multi-select delete in the native client / Mini App. Each
 // path runs through the same traversal guard as get_page; deletes are

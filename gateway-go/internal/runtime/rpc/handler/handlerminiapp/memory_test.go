@@ -18,6 +18,7 @@ type fakeMemoryStore struct {
 	readPageFn    func(relPath string) (*wiki.Page, error)
 	writePageFn   func(relPath string, page *wiki.Page) error
 	deletePageFn  func(relPath string) error
+	movePageFn    func(from, to string) error
 	statsFn       func() wiki.StoreStats
 	listPagesFn   func(category string) ([]string, error)
 	diaryRecentFn func(limit int) []wiki.DiaryHit
@@ -56,6 +57,13 @@ func (f *fakeMemoryStore) DeletePage(relPath string) error {
 		return errors.New("DeletePage not stubbed")
 	}
 	return f.deletePageFn(relPath)
+}
+
+func (f *fakeMemoryStore) MovePage(from, to string) error {
+	if f.movePageFn == nil {
+		return errors.New("MovePage not stubbed")
+	}
+	return f.movePageFn(from, to)
 }
 
 func (f *fakeMemoryStore) Stats() wiki.StoreStats {
@@ -1198,6 +1206,112 @@ func TestMemoryDeletePages_RequiresAuth(t *testing.T) {
 	h := memoryDeletePages(memoryDepsFor(&fakeMemoryStore{}))
 	resp := h(context.Background(), reqWith(t, "miniapp.memory.delete_pages", map[string]any{
 		"paths": []string{"a.md"},
+	}))
+	if resp.OK {
+		t.Errorf("expected auth rejection, got OK")
+	}
+}
+
+// --- move_page ----------------------------------------------------------
+// Tests use 프로젝트/인물 — valid taxonomy categories independent of the 6-category
+// migration — so they hold whether or not that change has landed.
+
+func TestMemoryMovePage_HappyPath(t *testing.T) {
+	var gotFrom, gotTo string
+	store := &fakeMemoryStore{
+		movePageFn: func(from, to string) error {
+			gotFrom, gotTo = from, to
+			return nil
+		},
+	}
+	h := memoryMovePage(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.move_page", map[string]any{
+		"from": "프로젝트/홍길동.md",
+		"to":   "인물/홍길동.md",
+	}))
+
+	var got struct {
+		OK   bool   `json:"ok"`
+		From string `json:"from"`
+		To   string `json:"to"`
+	}
+	decode(t, resp, &got)
+	if !got.OK || got.From != "프로젝트/홍길동.md" || got.To != "인물/홍길동.md" {
+		t.Fatalf("got %+v, want ok + echoed paths", got)
+	}
+	if gotFrom != "프로젝트/홍길동.md" || gotTo != "인물/홍길동.md" {
+		t.Errorf("MovePage(%q, %q), want 프로젝트/홍길동.md → 인물/홍길동.md", gotFrom, gotTo)
+	}
+}
+
+func TestMemoryMovePage_RejectsInvalidTargetCategory(t *testing.T) {
+	// A target whose top-level dir isn't a taxonomy category must be rejected
+	// before reaching the store — otherwise a typo spawns a junk bucket.
+	store := &fakeMemoryStore{
+		movePageFn: func(from, to string) error {
+			t.Fatalf("MovePage should not be called for an invalid target category")
+			return nil
+		},
+	}
+	h := memoryMovePage(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.move_page", map[string]any{
+		"from": "프로젝트/a.md",
+		"to":   "엉뚱한카테고리/a.md",
+	}))
+	if resp.OK {
+		t.Errorf("expected rejection for invalid target category, got OK")
+	}
+}
+
+func TestMemoryMovePage_RejectsTraversal(t *testing.T) {
+	store := &fakeMemoryStore{
+		movePageFn: func(from, to string) error {
+			t.Fatalf("MovePage should not be called when a path fails the traversal guard")
+			return nil
+		},
+	}
+	h := memoryMovePage(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.move_page", map[string]any{
+		"from": "프로젝트/a.md",
+		"to":   "../escape.md",
+	}))
+	if resp.OK {
+		t.Errorf("expected rejection for traversal in target, got OK")
+	}
+}
+
+func TestMemoryMovePage_MissingParams(t *testing.T) {
+	h := memoryMovePage(memoryDepsFor(&fakeMemoryStore{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.move_page", map[string]any{
+		"from": "프로젝트/a.md",
+	}))
+	if resp.OK || resp.Error.Code != protocol.ErrMissingParam {
+		t.Errorf("expected MISSING_PARAM for missing 'to': %+v", resp)
+	}
+}
+
+func TestMemoryMovePage_StoreErrorSurfaces(t *testing.T) {
+	// A conflict (target exists) or missing source comes back from MovePage as a
+	// plain error — the handler must surface it as a non-OK response.
+	store := &fakeMemoryStore{
+		movePageFn: func(from, to string) error {
+			return errors.New("target already exists")
+		},
+	}
+	h := memoryMovePage(memoryDepsFor(store))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.move_page", map[string]any{
+		"from": "프로젝트/a.md",
+		"to":   "인물/a.md",
+	}))
+	if resp.OK {
+		t.Errorf("expected non-OK when MovePage errors")
+	}
+}
+
+func TestMemoryMovePage_RequiresAuth(t *testing.T) {
+	h := memoryMovePage(memoryDepsFor(&fakeMemoryStore{}))
+	resp := h(context.Background(), reqWith(t, "miniapp.memory.move_page", map[string]any{
+		"from": "프로젝트/a.md", "to": "인물/a.md",
 	}))
 	if resp.OK {
 		t.Errorf("expected auth rejection, got OK")
