@@ -1,6 +1,6 @@
 ---
 description: 뮤텍스·채널·goroutine 패턴 — 데드락 방지와 응답성 유지를 위한 규칙
-globs: gateway-go/**/*.go
+globs: ["gateway-go/**/*.go"]
 ---
 
 # Concurrency Rules
