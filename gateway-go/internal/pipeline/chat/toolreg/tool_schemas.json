@@ -890,9 +890,11 @@
         "enum": [
           "프로젝트",
           "인물",
-          "운영시스템"
+          "시스템",
+          "업무",
+          "사용자"
         ],
-        "description": "Wiki category for write action or index filter"
+        "description": "Wiki category for write action or index filter — one of the 5: 프로젝트(일·거래·결정), 인물(사람·조직), 시스템(Deneb 구성·운영), 업무(업무 일반 지식), 사용자(개인 선호·규칙)"
       },
       "content": {
         "type": "string",
@@ -1128,7 +1130,7 @@
       },
       "page": {
         "type": "string",
-        "description": "wiki 페이지 상대 경로 (op=record). 카테고리/이름 형식 — 예: `인물/박부장`, `운영시스템/ABC상사-NDA`"
+        "description": "wiki 페이지 상대 경로 (op=record). 카테고리/이름 형식 — 예: `인물/박부장`, `프로젝트/ABC상사-NDA`"
       },
       "title": {
         "type": "string",
@@ -1136,7 +1138,7 @@
       },
       "category": {
         "type": "string",
-        "description": "프론트매터 카테고리 (op=record) — 프로젝트·인물·운영시스템"
+        "description": "프론트매터 카테고리 (op=record) — 프로젝트·인물·시스템·업무·사용자"
       },
       "body": {
         "type": "string",
