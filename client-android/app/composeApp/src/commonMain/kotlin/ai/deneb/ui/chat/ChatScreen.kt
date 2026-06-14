@@ -18,11 +18,6 @@ import org.koin.compose.viewmodel.koinViewModel
 fun ChatScreen(
     viewModel: ChatViewModel = koinViewModel(),
     textToSpeech: TextToSpeechInstance?,
-    onNavigateToSettings: () -> Unit,
-    onOpenMail: () -> Unit = {},
-    onOpenCalendar: () -> Unit = {},
-    onOpenSearch: () -> Unit = {},
-    onOpenCategories: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
@@ -30,11 +25,6 @@ fun ChatScreen(
     ChatScreenContent(
         uiState = uiState,
         textToSpeech = textToSpeech,
-        onNavigateToSettings = onNavigateToSettings,
-        onOpenMail = onOpenMail,
-        onOpenCalendar = onOpenCalendar,
-        onOpenSearch = onOpenSearch,
-        onOpenCategories = onOpenCategories,
         navigationTabBar = navigationTabBar,
     )
 }
@@ -43,21 +33,11 @@ fun ChatScreen(
 fun ChatScreenContent(
     uiState: ChatUiState,
     textToSpeech: TextToSpeechInstance? = null,
-    onNavigateToSettings: () -> Unit = {},
-    onOpenMail: () -> Unit = {},
-    onOpenCalendar: () -> Unit = {},
-    onOpenSearch: () -> Unit = {},
-    onOpenCategories: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     ChatModeScreen(
         uiState = uiState,
         textToSpeech = textToSpeech,
-        onNavigateToSettings = onNavigateToSettings,
-        onOpenMail = onOpenMail,
-        onOpenCalendar = onOpenCalendar,
-        onOpenSearch = onOpenSearch,
-        onOpenCategories = onOpenCategories,
         navigationTabBar = navigationTabBar,
     )
 }

@@ -355,9 +355,6 @@ private fun AppContent(
                                 // Deneb chat is text-first — the TTS instance App
                                 // still configures above is not wired into chat.
                                 textToSpeech = null,
-                                onNavigateToSettings = {
-                                    navController.navigate(DenebConfig)
-                                },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }
