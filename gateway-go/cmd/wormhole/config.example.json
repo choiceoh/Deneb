@@ -1,6 +1,7 @@
 {
   "listen": ":18800",
   "token": "${WORMHOLE_TOKEN}",
+  "auto": ["dsv4", "claude"],
   "models": [
     { "name": "dsv4", "url": "http://127.0.0.1:8000/v1" },
     {

@@ -28,6 +28,17 @@ reach an OpenAI backend the same way. Each model declares its `protocol`
 (`openai` default, or `anthropic`); hitting the wrong endpoint for a model gets
 an actionable `400`.
 
+## Explicit or auto model selection
+
+On the same endpoint a client either **names a model** (`"model": "dsv4"`) to hit
+that backend directly, or sends **`"model": "auto"`** to delegate the choice. Auto
+runs a **local-first fallback chain**: the configured `auto` candidates are tried
+in order — local first — committing to the first that connects with a non-5xx
+status and falling through on an unreachable or 5xx backend. The egress guard
+still applies (a local-only request skips cloud candidates), and only candidates
+matching the endpoint's protocol are considered. (Task-aware routing — pick by
+request size/effort — can layer on top of this chain later.)
+
 ## Endpoints
 
 - `POST /v1/chat/completions` — OpenAI clients → OpenAI-protocol backends.
@@ -55,8 +66,9 @@ live in the environment, not the file. Each model entry:
 | `upstreamModel` | rewrite the model id when forwarding (default: `name`) |
 | `local` | override the local/cloud auto-detection (see below); default auto |
 
-Top-level `localOnly: true` air-gaps the whole instance (every cloud model is
-refused).
+Top-level config: `localOnly: true` air-gaps the whole instance (every cloud
+model is refused); `auto: ["dsv4", "claude"]` sets the ordered candidate list for
+the reserved `auto` model name (`autoName` overrides the name; default `auto`).
 
 ## Local-first egress guard
 
