@@ -4,28 +4,10 @@ import ai.deneb.defaultUiScale
 import com.russhwolf.settings.Settings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
-
-enum class ImportSection {
-    SERVICES,
-    SOUL,
-    MEMORY,
-    SCHEDULING,
-    HEARTBEAT,
-    EMAIL,
-    SMS,
-    TOOLS,
-    MCP,
-    CONVERSATIONS,
-}
 
 enum class ThemeMode {
     System,
@@ -33,133 +15,6 @@ enum class ThemeMode {
     Dark,
     OledBlack,
 }
-
-/**
- * Stricter than [detectImportSections]: only includes sections that contain actual user data,
- * skipping ones that exist purely because of default feature-toggle flags (e.g. `sms_enabled = false`,
- * `mcp_servers = []`). Used to drive the Export preview dialog.
- */
-fun detectExportableSections(json: JsonObject): Map<ImportSection, String?> {
-    val sections = mutableMapOf<ImportSection, String?>()
-
-    val configured = json["configured_services"]?.jsonArray
-    if (configured != null && configured.isNotEmpty()) {
-        sections[ImportSection.SERVICES] = "${configured.size}"
-    }
-
-    if (json["soul_text"] != null) {
-        sections[ImportSection.SOUL] = null
-    }
-
-    val memories = json["agent_memories"]?.jsonArray
-    if (memories != null && memories.isNotEmpty()) {
-        sections[ImportSection.MEMORY] = "${memories.size}"
-    }
-
-    val tasks = json["scheduled_tasks"]?.jsonArray
-    if (tasks != null && tasks.isNotEmpty()) {
-        sections[ImportSection.SCHEDULING] = "${tasks.size}"
-    }
-
-    val heartbeatHasPrompt = json["heartbeat_prompt"] != null
-    val heartbeatHasConfig = json["heartbeat_config"] != null
-    val heartbeatHasLog = json["heartbeat_log"]?.jsonArray?.isNotEmpty() == true
-    if (heartbeatHasPrompt || heartbeatHasConfig || heartbeatHasLog) {
-        sections[ImportSection.HEARTBEAT] = null
-    }
-
-    val emails = json["email_accounts"]?.jsonArray
-    if (emails != null && emails.isNotEmpty()) {
-        sections[ImportSection.EMAIL] = "${emails.size}"
-    }
-
-    val smsEnabled = json["sms_enabled"]?.jsonPrimitive?.content?.toBoolean() == true
-    val smsSendEnabled = json["sms_send_enabled"]?.jsonPrimitive?.content?.toBoolean() == true
-    if (smsEnabled || smsSendEnabled) {
-        sections[ImportSection.SMS] = null
-    }
-
-    val toolOverrides = json["tool_overrides"]?.jsonObject
-    if (toolOverrides != null && toolOverrides.isNotEmpty()) {
-        val enabled = toolOverrides.count { (_, v) ->
-            try {
-                v.jsonPrimitive.content.toBoolean()
-            } catch (_: Exception) {
-                false
-            }
-        }
-        sections[ImportSection.TOOLS] = "$enabled"
-    }
-
-    val mcp = json["mcp_servers"]?.jsonArray
-    if (mcp != null && mcp.isNotEmpty()) {
-        sections[ImportSection.MCP] = "${mcp.size}"
-    }
-
-    val conversations = json["conversations"]?.jsonArray
-    if (conversations != null && conversations.isNotEmpty()) {
-        sections[ImportSection.CONVERSATIONS] = "${conversations.size}"
-    }
-
-    return sections
-}
-
-fun detectImportSections(json: JsonObject): Map<ImportSection, String?> {
-    val sections = mutableMapOf<ImportSection, String?>()
-    if (json["configured_services"] != null || json["current_service_id"] != null || json["instance_settings"] != null) {
-        val count = json["configured_services"]?.jsonArray?.size
-        sections[ImportSection.SERVICES] = count?.let { "$it" }
-    }
-    if (json["soul_text"] != null) {
-        sections[ImportSection.SOUL] = null
-    }
-    if (json["memory_enabled"] != null || json["agent_memories"] != null) {
-        val count = json["agent_memories"]?.jsonArray?.size
-        sections[ImportSection.MEMORY] = count?.let { "$it" }
-    }
-    if (json["scheduling_enabled"] != null || json["scheduled_tasks"] != null) {
-        val count = json["scheduled_tasks"]?.jsonArray?.size
-        sections[ImportSection.SCHEDULING] = count?.let { "$it" }
-    }
-    if (json["heartbeat_config"] != null || json["heartbeat_prompt"] != null || json["heartbeat_log"] != null) {
-        sections[ImportSection.HEARTBEAT] = null
-    }
-    if (json["email_enabled"] != null || json["email_accounts"] != null) {
-        val count = json["email_accounts"]?.jsonArray?.size
-        sections[ImportSection.EMAIL] = count?.let { "$it" }
-    }
-    if (json["sms_enabled"] != null || json["sms_poll_interval"] != null || json["sms_send_enabled"] != null) {
-        sections[ImportSection.SMS] = null
-    }
-    if (json["tool_overrides"] != null) {
-        val enabled = json["tool_overrides"]?.jsonObject?.count { (_, v) ->
-            try {
-                v.jsonPrimitive.content.toBoolean()
-            } catch (_: Exception) {
-                false
-            }
-        }
-        sections[ImportSection.TOOLS] = enabled?.let { "$it" }
-    }
-    if (json["mcp_servers"] != null) {
-        val count = json["mcp_servers"]?.jsonArray?.size
-        sections[ImportSection.MCP] = count?.let { "$it" }
-    }
-    if (json["conversations"] != null) {
-        val count = try {
-            json["conversations"]?.jsonArray?.size
-        } catch (_: Exception) {
-            null
-        }
-        sections[ImportSection.CONVERSATIONS] = count?.let { "$it" }
-    }
-    return sections
-}
-
-data class ServiceInstance(
-    val instanceId: String,
-    val serviceId: String,
-)
 
 class AppSettings(internal val settings: Settings) {
 
@@ -434,7 +289,6 @@ class AppSettings(internal val settings: Settings) {
     }
 
     companion object {
-        const val KEY_CURRENT_SERVICE_ID = "current_service_id"
         const val KEY_APP_OPENS = "app_opens"
 
         const val KEY_CONVERSATIONS = "conversations_json"
@@ -474,12 +328,8 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_SMS_SEND_ENABLED = "sms_send_enabled"
         const val KEY_SMS_DRAFTS = "sms_drafts"
 
-        const val KEY_CONFIGURED_SERVICES = "configured_services"
-        const val KEY_SERVICES_MIGRATION_COMPLETE = "services_migration_complete_v1"
         const val KEY_UI_SCALE = "ui_scale"
         const val KEY_MCP_SERVERS = "mcp_servers"
-        const val KEY_INSTANCE_MIGRATION_COMPLETE = "instance_migration_complete_v1"
-        const val KEY_BASE_URL_V1_MIGRATION_COMPLETE = "base_url_v1_migration_complete"
 
         const val KEY_MODEL_CONTEXT_PREFIX = "model_context_"
 
