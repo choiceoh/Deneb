@@ -34,6 +34,8 @@ import ai.deneb.deneb.koreanDayOfWeek
 import ai.deneb.deneb.layoutMonthBars
 import ai.deneb.deneb.timedSingleDayDots
 import ai.deneb.ui.DarkColorScheme
+import ai.deneb.ui.DenebGroup
+import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebRow
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
@@ -46,6 +48,8 @@ import ai.deneb.ui.chat.composables.WorkFeedPanel
 import ai.deneb.ui.components.SkeletonList
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebInsight
+import ai.deneb.ui.denebInsightContainer
 import ai.deneb.ui.dynamicui.ChartNode
 import ai.deneb.ui.dynamicui.DenebUiRenderer
 import ai.deneb.ui.markdown.MarkdownContent
@@ -61,6 +65,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -120,6 +132,8 @@ fun main() {
     renderCollapsedReport("mail_collapsed_dark.png", DarkColorScheme, expanded = false)
     renderCollapsedReport("mail_collapsed_light.png", LightColorScheme, expanded = false)
     renderCollapsedReport("mail_expanded_dark.png", DarkColorScheme, expanded = true)
+    renderDesignRefresh("design_refresh_dark.png", DarkColorScheme)
+    renderDesignRefresh("design_refresh_light.png", LightColorScheme)
     renderBottomBar("bottombar_chat_dark.png", DarkColorScheme, "home")
     renderBottomBar("bottombar_chat_light.png", LightColorScheme, "home")
     renderBottomBar("bottombar_mail_dark.png", DarkColorScheme, "deneb_mail")
@@ -528,6 +542,63 @@ private fun renderBottomBar(name: String, scheme: ColorScheme, route: String, mo
                         onNavigate = {},
                         onMore = {},
                     )
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+// Design-refresh pilot (2026-06): the grouped-inset card idiom + the two-accent
+// system — cool primary on the selected row, warm apricot on the AI-insight callout.
+private fun renderDesignRefresh(name: String, scheme: ColorScheme) {
+    val scene = ImageComposeScene(width = 824, height = 1380, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.fillMaxSize().padding(top = 26.dp)) {
+                    Text(
+                        "설정",
+                        style = DenebType.viewTitle,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.padding(start = 24.dp, bottom = 16.dp),
+                    )
+                    DenebGroup(label = "시스템") {
+                        DenebListRow("게이트웨이", {}, icon = Icons.Outlined.Dns, subtitle = "연결 · 버전 · 동기화")
+                        DenebListRow("화면", {}, icon = Icons.Outlined.Palette, subtitle = "테마 · UI 배율")
+                        DenebListRow("모델", {}, icon = Icons.Outlined.Memory, subtitle = "역할별 지정 · 엔드포인트", selected = true, divider = false)
+                    }
+                    Spacer(Modifier.height(22.dp))
+                    DenebGroup(label = "자동화 · 관찰") {
+                        DenebListRow("스킬", {}, icon = Icons.Outlined.Extension, subtitle = "설치 · 수명 주기")
+                        DenebListRow("크론", {}, icon = Icons.Outlined.Schedule, subtitle = "예약 작업")
+                        DenebListRow("관찰", {}, icon = Icons.Outlined.Visibility, subtitle = "동작 · 로그", divider = false)
+                    }
+                    Spacer(Modifier.height(26.dp))
+                    Row(
+                        Modifier
+                            .padding(horizontal = 16.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(denebInsightContainer())
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = denebInsight(), modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text("AI 분석", style = DenebType.rowTitleStrong, color = denebInsight())
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                "탑솔라 견적 3건이 환차익 구간에 들어왔습니다. 월요일 콜 권장.",
+                                style = DenebType.rowSubtitle,
+                                color = MaterialTheme.colorScheme.onBackground,
+                            )
+                        }
+                    }
                 }
             }
         }

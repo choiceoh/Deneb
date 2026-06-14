@@ -224,6 +224,24 @@ fun denebWarningContainer(): Color = if (MaterialTheme.colorScheme.isDarkFlavor)
 @Composable
 fun denebOnWarningContainer(): Color = if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFFFF9100) else Color(0xFFE65100)
 
+// ── Accent doctrine (design refresh, 2026-06) ───────────────────────────────
+// Two restrained accents on the monochrome AMOLED base:
+//   • Interactive = the existing Material `primary` (cool, Prussian-derived blue,
+//     #7FA8D0 on dark / #003153 light). Used on active tabs, selected rows, links,
+//     primary CTAs — it was suppressed to ink before this refresh.
+//   • Insight = a warm apricot companion ([denebInsight]) — the cool↔warm complement
+//     of the primary — marking AI-analysis / insight surfaces (Deneb's 분석↔비서
+//     split, in color). Both stay restrained: small marks and soft fills, never a
+//     whole screen.
+
+/** Warm apricot — the AI-insight / analysis accent; the complement to the cool primary. */
+@Composable
+fun denebInsight(): Color = if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFFE8B58C) else Color(0xFF9C5A2E)
+
+/** Soft apricot tint for insight callouts/cards (text/icon on it use [denebInsight]). */
+@Composable
+fun denebInsightContainer(): Color = if (MaterialTheme.colorScheme.isDarkFlavor) Color(0xFF2C2118) else Color(0xFFF6E7D8)
+
 @Composable
 fun outlineTextFieldColors() = OutlinedTextFieldDefaults.colors()
 
