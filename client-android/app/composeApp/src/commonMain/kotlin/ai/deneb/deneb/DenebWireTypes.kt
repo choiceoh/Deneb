@@ -87,6 +87,9 @@ internal data class DiaryRecentRow(
 internal data class DeletePagesPayload(val ok: Boolean = false, val deleted: Int = 0)
 
 @Serializable
+internal data class MovePagePayload(val ok: Boolean = false)
+
+@Serializable
 internal data class CategoriesPayload(
     val categories: List<MemoryCategoryRow> = emptyList(),
     val totalPages: Int = 0,
