@@ -1,0 +1,34 @@
+[Unit]
+Description=wormhole model router (Deneb) — OpenAI/Anthropic-compatible multiplexer
+After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=choiceoh
+# wormhole fans one endpoint out to many model backends (local vLLM + cloud) by
+# model name. With Deneb's roles pointed at it, it sits in the model hot path, so
+# it restarts on failure. The binary is built by `make wormhole` into dist/.
+ExecStart=/home/choiceoh/deneb/dist/wormhole --config /home/choiceoh/.wormhole/config.json
+WorkingDirectory=/home/choiceoh/deneb
+Restart=on-failure
+RestartSec=5
+
+# A streaming reverse proxy: it buffers at most a few in-flight request bodies
+# (32 MiB cap each) and streams responses through, so its own footprint is small.
+# 512M is generous headroom and a guard against a runaway.
+MemoryMax=512M
+MemoryHigh=384M
+
+# Graceful shutdown.
+TimeoutStopSec=10
+KillSignal=SIGTERM
+
+# Logging.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wormhole
+
+[Install]
+WantedBy=multi-user.target
