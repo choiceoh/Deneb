@@ -367,6 +367,7 @@ data class WormholeModelOut(
     val protocol: String = "",
     val local: Boolean = false,
     val thinking: Boolean = false,
+    val source: String = "",
 )
 
 @Serializable
