@@ -67,12 +67,13 @@ func Builtin(providerID, model string) Capability {
 
 // ThinkingToggleKwarg reports the chat_template_kwargs boolean that disables
 // the thinking phase for a provider/model pair, or "" when the pair has no
-// per-request template toggle. Gated to vllm provider ids because
+// per-request template toggle. Gated to vLLM-backed providers because
 // chat_template_kwargs is a vLLM serving feature: the same model name via
-// OpenRouter or an Anthropic-wire relay must NOT receive the field.
+// OpenRouter or an Anthropic-wire relay must NOT receive the field. The
+// model-name gate below still discriminates, so a cloud model fronted by a
+// vLLM-backed proxy never gets the toggle.
 func ThinkingToggleKwarg(providerID, model string) string {
-	p := strings.ToLower(strings.TrimSpace(providerID))
-	if p != "vllm" && !strings.HasPrefix(p, "vllm-") && !strings.HasPrefix(p, "vllm_") {
+	if !servesVllmTemplates(providerID) {
 		return ""
 	}
 	m := strings.ToLower(model)
@@ -80,6 +81,28 @@ func ThinkingToggleKwarg(providerID, model string) string {
 		return "thinking"
 	}
 	return ""
+}
+
+// servesVllmTemplates reports whether a provider id forwards requests to a vLLM
+// serving that honors chat_template_kwargs. That is a direct vllm provider, or
+// wormhole — Deneb's first-party byte-transparent model router (cmd/wormhole),
+// which passes the request body (kwargs and all) straight through to a vLLM
+// backend for a local model. Cloud models fronted by wormhole (glm, mimo) are
+// excluded by the model-name gate in ThinkingToggleKwarg, so opening the gate to
+// the proxy never leaks the field to a non-vLLM upstream. Without this, routing
+// the main model through wormhole (agents.defaultModel = "wormhole/deepseek-v4-…")
+// silently disables the effort router — every turn keeps the serving default
+// (thinking on).
+func servesVllmTemplates(providerID string) bool {
+	p := strings.ToLower(strings.TrimSpace(providerID))
+	switch {
+	case p == "vllm", strings.HasPrefix(p, "vllm-"), strings.HasPrefix(p, "vllm_"):
+		return true
+	case p == "wormhole", strings.HasPrefix(p, "wormhole-"), strings.HasPrefix(p, "wormhole_"):
+		return true
+	default:
+		return false
+	}
 }
 
 // IsOpenAIReasoningModel reports whether model is a genuine OpenAI reasoning
