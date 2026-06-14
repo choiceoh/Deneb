@@ -167,7 +167,9 @@ fun QuestionInput(
             modifier = Modifier
                 .focusRequester(focusRequester)
                 .onFocusChanged { isFocused = it.isFocused }
-                .padding(16.dp)
+                // Tighter than the old uniform 16dp so the bar is more compact and the
+                // last message sits close above it (the wide top gap is gone).
+                .padding(horizontal = 12.dp, vertical = 8.dp)
                 .heightIn(max = 120.dp)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(28.dp))
@@ -365,7 +367,9 @@ internal fun TrailingIcon(
     ) {
         Icon(
             vectorResource(icon),
-            modifier = Modifier.size(32.dp).then(pulseModifier),
+            // 24dp glyph in the 42dp circle: keeps the touch target but drops the
+            // oversized 32dp icon that made the send/stop button look chunky.
+            modifier = Modifier.size(24.dp).then(pulseModifier),
             contentDescription = contentDescription,
             tint = Color.White,
         )
