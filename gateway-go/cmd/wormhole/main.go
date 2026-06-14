@@ -136,6 +136,7 @@ func main() {
 	if cfg.Token == "" {
 		log.Warn("no token configured — wormhole is OPEN to anyone who can reach it")
 	}
+	logConfigWarnings(log, cfg) // catch misconfig (e.g. anthropic url missing /v1) at boot
 
 	rt := newRouter(cfg, configPath, log)
 

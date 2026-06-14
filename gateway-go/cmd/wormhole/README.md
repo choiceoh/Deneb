@@ -78,7 +78,23 @@ removing the `sparkfleet` block drops the discovered models on the next reload.
 - `POST /v1/chat/completions` — OpenAI clients → OpenAI-protocol backends.
 - `POST /v1/messages` — Anthropic clients → Anthropic-protocol backends.
 - `GET /v1/models` — lists the routable model names (configured + discovered).
+- `GET /status` — rich live operational readout (feature flags + per-model
+  protocol/local/thinking/source); token-gated. Powers the native management tab.
+- `GET /metrics` — Prometheus text: request/error counts and cumulative latency,
+  total and per model. The always-on visibility for the hot path (wormhole
+  otherwise logs only errors); token-gated. Scrape it or `curl` it to see what is
+  flowing. Divide `wormhole_model_latency_ms_sum` by `wormhole_model_requests_total`
+  for the average latency per model.
 - `GET /health` — liveness.
+
+## Config validation
+
+On load and on every hot-reload, wormhole logs warnings for a config that would
+route wrong but parse fine — most usefully an **anthropic `url` that doesn't end
+in `/v1`** (wormhole appends only `/messages`, so a bare base `404`s), plus
+duplicate model names, unknown `protocol` values, and `auto` candidates that
+aren't configured models. It never fails the load (a bad reload must not take down
+the hot path); it surfaces the problem so you fix it before the first request does.
 
 ## Run
 

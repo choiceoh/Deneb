@@ -55,6 +55,7 @@ type router struct {
 	// by the watcher goroutine (the sole caller of refreshFleet), so it needs no
 	// lock; it exists to log discovery on transitions instead of every 15s poll.
 	fleetState string
+	metrics    *metrics // per-request counters, exposed at GET /metrics
 	client     *http.Client
 	log        *slog.Logger
 }
@@ -72,7 +73,8 @@ func newRouter(cfg config, path string, log *slog.Logger) *router {
 			MaxIdleConns:          100,
 			IdleConnTimeout:       90 * time.Second,
 		}},
-		log: log,
+		log:     log,
+		metrics: newMetrics(),
 	}
 	rt.snap.Store(buildSnapshot(cfg, time.Time{}))
 	empty := map[string]modelEntry{}
@@ -201,6 +203,7 @@ func (rt *router) reloadIfChanged() bool {
 	}
 	rt.snap.Store(buildSnapshot(nc, st.ModTime()))
 	rt.log.Info("config reloaded", "models", len(nc.Models))
+	logConfigWarnings(rt.log, nc) // surface a bad edit at reload, not on first request
 	return true
 }
 
@@ -210,6 +213,7 @@ func (rt *router) handler() http.Handler {
 	mux.HandleFunc("POST /v1/messages", rt.messages)
 	mux.HandleFunc("GET /v1/models", rt.listModels)
 	mux.HandleFunc("GET /status", rt.status)
+	mux.HandleFunc("GET /metrics", rt.metricsHandler)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
@@ -239,6 +243,18 @@ func (rt *router) authed(w http.ResponseWriter, r *http.Request) bool {
 // OpenAI and Anthropic request bodies carry a top-level "model", so the read is
 // protocol-agnostic.
 func (rt *router) serve(w http.ResponseWriter, r *http.Request, proto, pathSuffix string) {
+	// Observe every request from one place: wrap w to capture the final status —
+	// an early 4xx, a forwarded upstream status, or an auto-routing 5xx — and
+	// record it on return. This is the visibility wormhole lacked as the hot path.
+	start := time.Now()
+	sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+	w = sw
+	model := ""
+	defer func() {
+		d := time.Since(start)
+		rt.metrics.record(model, sw.status, d)
+		rt.log.Debug("request", "model", model, "status", sw.status, "ms", d.Milliseconds())
+	}()
 	if !rt.authed(w, r) {
 		return
 	}
@@ -247,7 +263,7 @@ func (rt *router) serve(w http.ResponseWriter, r *http.Request, proto, pathSuffi
 		writeErr(w, http.StatusBadRequest, "read request body")
 		return
 	}
-	model := extractModel(body)
+	model = extractModel(body)
 	if model == "" {
 		writeErr(w, http.StatusBadRequest, "missing 'model'")
 		return
