@@ -39,6 +39,19 @@ still applies (a local-only request skips cloud candidates), and only candidates
 matching the endpoint's protocol are considered. (Task-aware routing — pick by
 request size/effort — can layer on top of this chain later.)
 
+## Thinking routing (effort)
+
+For a model that declares a `toggleKwarg` (the vLLM `chat_template_kwargs` boolean
+that disables its thinking phase — `thinking` for DeepSeek V4, `enable_thinking`
+for Qwen3), wormhole runs Deneb's **Ares effort classifier** on each request and
+turns thinking **off** for an obviously-simple turn (short, no code, no
+analysis/planning signal, no attachment) — injecting the toggle into the request
+before forwarding. It's the same `Decide()` the chat pipeline uses, so any client
+hitting wormhole (Claude Code, scripts) gets the same routing for free, no
+re-implementation. Routing is one-directional: it only ever turns thinking off for
+a simple turn, never forces it on. A model with no `toggleKwarg` passes through
+untouched.
+
 ## Endpoints
 
 - `POST /v1/chat/completions` — OpenAI clients → OpenAI-protocol backends.
@@ -64,6 +77,7 @@ live in the environment, not the file. Each model entry:
 | `key` | upstream token (omit for keyless local vLLM) |
 | `protocol` | `openai` (default) or `anthropic` — which front endpoint + auth shape |
 | `upstreamModel` | rewrite the model id when forwarding (default: `name`) |
+| `toggleKwarg` | vLLM kwarg that disables the model's thinking phase — enables thinking routing (see below) |
 | `local` | override the local/cloud auto-detection (see below); default auto |
 
 Top-level config: `localOnly: true` air-gaps the whole instance (every cloud

@@ -116,6 +116,7 @@ func (rt *router) serve(w http.ResponseWriter, r *http.Request, proto, pathSuffi
 			out = rewritten
 		}
 	}
+	out = rt.applyThinking(entry, out)
 	rt.forward(w, r, entry, out, pathSuffix)
 }
 
@@ -148,6 +149,7 @@ func (rt *router) serveAuto(w http.ResponseWriter, r *http.Request, body []byte,
 		if rewritten, rerr := rewriteModel(body, entry.UpstreamModel); rerr == nil {
 			out = rewritten
 		}
+		out = rt.applyThinking(entry, out)
 		resp, err := rt.doUpstream(r, entry, out, pathSuffix)
 		if err != nil {
 			rt.log.Warn("auto: candidate unreachable, trying next", "model", entry.Name, "error", err)

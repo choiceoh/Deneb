@@ -38,6 +38,11 @@ type modelEntry struct {
 	// /v1/chat/completions) or "anthropic" (reached via /v1/messages). wormhole
 	// forwards the matching protocol straight through — no cross-translation.
 	Protocol string `json:"protocol,omitempty"`
+	// ToggleKwarg is the vLLM chat_template_kwargs boolean that disables this
+	// model's thinking phase ("thinking" for DeepSeek V4, "enable_thinking" for
+	// Qwen3). Set it to enable effort-based thinking routing: wormhole turns
+	// thinking OFF for obviously-simple turns. Empty = no routing (pass through).
+	ToggleKwarg string `json:"toggleKwarg,omitempty"`
 	// Local overrides the loopback/private-IP auto-detection (privacy.go). Set it
 	// false to mark an on-box endpoint as cloud (e.g. a local tunnel that egresses)
 	// or true for a public URL you trust as local. Nil = auto-detect from URL.
