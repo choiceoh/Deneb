@@ -52,6 +52,12 @@ re-implementation. Routing is one-directional: it only ever turns thinking off f
 a simple turn, never forces it on. A model with no `toggleKwarg` passes through
 untouched.
 
+The decision is **multi-turn aware**: wormhole reconstructs the conversation from
+the request's `messages` (both wire shapes — OpenAI `tool_calls`/`role:"tool"` and
+Anthropic `tool_use`/`tool_result` blocks), so a short follow-up ("continue")
+steering a thread already deep in tool work keeps thinking, where the current
+message alone would look trivial.
+
 A **smart client that already does its own thinking control** — the Deneb gateway,
 whose pipeline runs Ares per turn — sends `X-Wormhole-No-Effort: 1` to opt OUT, so
 wormhole doesn't re-decide and overwrite its choice (which would also break the
