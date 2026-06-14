@@ -24,11 +24,35 @@ import (
 const wikiProjectCategory = "프로젝트"
 
 // mailAnalysisWikiPath maps a Gmail message ID to its wiki page path. Mail
-// analyses live in a raw-data sub-folder of 프로젝트 (one page per message),
-// nested so they stay browsable/searchable without cluttering the top-level
-// category list.
-func mailAnalysisWikiPath(msgID string) string {
-	return wikiProjectCategory + "/mail-analyses/" + msgID + ".md"
+// analyses live in a raw-data sub-folder of 프로젝트 (one page per message) and —
+// when the analyzer linked the mail to a project — under a per-project sub-folder
+// of that, so the analyses for one deal sit together instead of scattering across
+// a single flat list. Mails with no related project land flat in mail-analyses/.
+func mailAnalysisWikiPath(msgID string, relatedProjects []string) string {
+	base := wikiProjectCategory + "/mail-analyses/"
+	if sub := mailProjectSubfolder(relatedProjects); sub != "" {
+		return base + sub + "/" + msgID + ".md"
+	}
+	return base + msgID + ".md"
+}
+
+// mailProjectSubfolder picks a per-project sub-folder name from the analyzer's
+// related-project list: the basename (sans .md) of the first entry already under
+// the 프로젝트 category that isn't itself a mail-analyses page. Empty when the mail
+// relates to no project. The related list is the reliable project signal the
+// analyzer computed — far better than guessing the project from the mail subject.
+func mailProjectSubfolder(relatedProjects []string) string {
+	prefix := wikiProjectCategory + "/"
+	for _, r := range relatedProjects {
+		r = strings.TrimSpace(r)
+		if !strings.HasPrefix(r, prefix) || strings.Contains(r, "mail-analyses") {
+			continue
+		}
+		if name := strings.TrimSuffix(filepath.Base(r), ".md"); name != "" {
+			return name
+		}
+	}
+	return ""
 }
 
 // buildMailAnalysisPage renders a wiki.Page from a fresh analysis. The
@@ -170,7 +194,7 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, gmailpoll.Ana
 				Analysis:        res.Text,
 				RelatedProjects: res.RelatedProjects,
 			})
-			if err := s.wikiStore.WritePage(mailAnalysisWikiPath(msg.ID), page); err != nil {
+			if err := s.wikiStore.WritePage(mailAnalysisWikiPath(msg.ID, res.RelatedProjects), page); err != nil {
 				s.logger.Warn("mail analysis 위키 저장 실패", "id", msg.ID, "error", err)
 			}
 		}
