@@ -6,6 +6,7 @@ import ai.deneb.ui.auroraPeriwinkle
 import ai.deneb.ui.auroraViolet
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -15,6 +16,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -90,6 +93,92 @@ fun Modifier.animatedGradientBorder(
                 brush = Brush.sweepGradient(sweepColors),
                 cornerRadius = cr,
                 style = strokeStyle,
+            )
+        }
+    }
+}
+
+// Glow band depth (how far the aurora light reaches inward from each edge before
+// fading to transparent) and how fast it flows while a reply streams. Faster than
+// the calm 6s border sweep — this is the "it's thinking" liveliness.
+private const val GLOW_SWEEP_DURATION_MS = 2800
+
+/**
+ * A lively aurora glow that rings the edges of the content while [active] (a reply
+ * is being written) and dissolves when idle. Same cool aurora palette as
+ * [animatedGradientBorder] — keeping the Deneb identity rather than a full rainbow —
+ * but faster and brighter: the Gemini-style "it's responding" shimmer. Kept to a
+ * soft edge glow that fades to transparent toward the center (not a full-screen
+ * wash) so message text stays legible and the monochrome-restraint doctrine holds.
+ *
+ * Drawn over the content at the margins. Each edge samples a different point on the
+ * rotating aurora loop, so the color appears to travel around the frame. When
+ * [active] flips off the whole glow eases out over [intensity]; at rest it costs
+ * only an early-return.
+ */
+@Composable
+fun Modifier.streamingAuroraGlow(
+    active: Boolean,
+    glow: Dp = 56.dp,
+    peakAlpha: Float = 0.5f,
+): Modifier {
+    val intensity by animateFloatAsState(
+        targetValue = if (active) 1f else 0f,
+        animationSpec = tween(durationMillis = 450, easing = LinearEasing),
+        label = "auroraGlowIntensity",
+    )
+    val transition = rememberInfiniteTransition()
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = GLOW_SWEEP_DURATION_MS, easing = LinearEasing),
+        ),
+    )
+    return this.drawWithCache {
+        val g = glow.toPx()
+        onDrawWithContent {
+            drawContent()
+            if (intensity <= 0.01f) return@onDrawWithContent
+            val a = peakAlpha * intensity
+            val p = phase
+            // Top
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(auroraAt(p).copy(alpha = a), Color.Transparent),
+                    startY = 0f,
+                    endY = g,
+                ),
+                size = Size(size.width, g),
+            )
+            // Bottom
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Color.Transparent, auroraAt(p + 0.5f).copy(alpha = a)),
+                    startY = size.height - g,
+                    endY = size.height,
+                ),
+                topLeft = Offset(0f, size.height - g),
+                size = Size(size.width, g),
+            )
+            // Left
+            drawRect(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(auroraAt(p + 0.25f).copy(alpha = a), Color.Transparent),
+                    startX = 0f,
+                    endX = g,
+                ),
+                size = Size(g, size.height),
+            )
+            // Right
+            drawRect(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(Color.Transparent, auroraAt(p + 0.75f).copy(alpha = a)),
+                    startX = size.width - g,
+                    endX = size.width,
+                ),
+                topLeft = Offset(size.width - g, 0f),
+                size = Size(g, size.height),
             )
         }
     }
