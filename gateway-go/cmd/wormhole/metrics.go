@@ -16,10 +16,11 @@ import (
 // and SparkFleet expose), so "what is flowing, how fast, how often it fails" is
 // answerable without grepping logs or probing the upstream.
 type metrics struct {
-	mu      sync.Mutex // guards the maps/counters; held only briefly (no I/O under lock)
-	total   int64
-	errors  int64
-	byModel map[string]*modelStat
+	mu       sync.Mutex // guards the maps/counters; held only briefly (no I/O under lock)
+	total    int64
+	errors   int64
+	byModel  map[string]*modelStat
+	byClient map[string]int64 // request count per client kind (who is calling)
 }
 
 type modelStat struct {
@@ -28,17 +29,23 @@ type modelStat struct {
 	sumMs    int64 // cumulative latency; avg = sumMs/requests
 }
 
-func newMetrics() *metrics { return &metrics{byModel: map[string]*modelStat{}} }
+func newMetrics() *metrics {
+	return &metrics{byModel: map[string]*modelStat{}, byClient: map[string]int64{}}
+}
 
 // record folds one finished request into the counters. status 0 (upstream
-// unreachable) and >=400 count as errors.
-func (m *metrics) record(model string, status int, d time.Duration) {
+// unreachable) and >=400 count as errors. client is the caller kind (who).
+func (m *metrics) record(model, client string, status int, d time.Duration) {
 	if model == "" {
 		model = "(none)"
+	}
+	if client == "" {
+		client = string(clientUnknown)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.total++
+	m.byClient[client]++
 	st := m.byModel[model]
 	if st == nil {
 		st = &modelStat{}
@@ -65,8 +72,17 @@ func (m *metrics) writePrometheus(w io.Writer) {
 	for k, v := range m.byModel {
 		rows = append(rows, row{k, *v})
 	}
+	type crow struct {
+		client string
+		n      int64
+	}
+	clients := make([]crow, 0, len(m.byClient))
+	for k, v := range m.byClient {
+		clients = append(clients, crow{k, v})
+	}
 	m.mu.Unlock()
 	sort.Slice(rows, func(i, j int) bool { return rows[i].model < rows[j].model }) // stable output
+	sort.Slice(clients, func(i, j int) bool { return clients[i].client < clients[j].client })
 
 	fmt.Fprint(w, "# HELP wormhole_requests_total Total requests handled.\n# TYPE wormhole_requests_total counter\n")
 	fmt.Fprintf(w, "wormhole_requests_total %d\n", total)
@@ -83,6 +99,10 @@ func (m *metrics) writePrometheus(w io.Writer) {
 	fmt.Fprint(w, "# HELP wormhole_model_latency_ms_sum Cumulative request latency per model; divide by requests for the average.\n# TYPE wormhole_model_latency_ms_sum counter\n")
 	for _, r := range rows {
 		fmt.Fprintf(w, "wormhole_model_latency_ms_sum{model=%q} %d\n", r.model, r.st.sumMs)
+	}
+	fmt.Fprint(w, "# HELP wormhole_client_requests_total Requests per client kind (who is calling).\n# TYPE wormhole_client_requests_total counter\n")
+	for _, c := range clients {
+		fmt.Fprintf(w, "wormhole_client_requests_total{client=%q} %d\n", c.client, c.n)
 	}
 }
 

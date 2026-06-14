@@ -257,13 +257,14 @@ func (rt *router) serve(w http.ResponseWriter, r *http.Request, proto, pathSuffi
 	// an early 4xx, a forwarded upstream status, or an auto-routing 5xx — and
 	// record it on return. This is the visibility wormhole lacked as the hot path.
 	start := time.Now()
+	client := identifyClient(r) // who is calling — for per-client shaping + metrics
 	sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 	w = sw
 	model := ""
 	defer func() {
 		d := time.Since(start)
-		rt.metrics.record(model, sw.status, d)
-		rt.log.Debug("request", "model", model, "status", sw.status, "ms", d.Milliseconds())
+		rt.metrics.record(model, string(client.kind), sw.status, d)
+		rt.log.Debug("request", "model", model, "client", client.name, "status", sw.status, "ms", d.Milliseconds())
 	}()
 	if !rt.authed(w, r) {
 		return
@@ -280,7 +281,7 @@ func (rt *router) serve(w http.ResponseWriter, r *http.Request, proto, pathSuffi
 	}
 	// "auto" (when configured) lets the client delegate the choice.
 	if model == rt.autoName() && len(rt.cur().cfg.Auto) > 0 {
-		rt.serveAuto(w, r, body, proto, pathSuffix)
+		rt.serveAuto(client, w, r, body, proto, pathSuffix)
 		return
 	}
 	entry, ok := rt.lookup(model)
@@ -306,7 +307,7 @@ func (rt *router) serve(w http.ResponseWriter, r *http.Request, proto, pathSuffi
 	if rt.cur().cfg.effortRoutingOn() && !noEffortRouting(r) {
 		out = rt.applyThinking(entry, out)
 	}
-	rt.forward(w, r, entry, out, pathSuffix)
+	rt.forward(client, w, r, entry, out, pathSuffix)
 }
 
 // chatCompletions serves OpenAI clients: POST /v1/chat/completions.
@@ -326,7 +327,7 @@ func (rt *router) messages(w http.ResponseWriter, r *http.Request) {
 // status and falling through on an unreachable or 5xx backend. Fallback only
 // happens before any bytes are streamed; once a candidate starts responding we
 // ride it out.
-func (rt *router) serveAuto(w http.ResponseWriter, r *http.Request, body []byte, proto, pathSuffix string) {
+func (rt *router) serveAuto(client clientInfo, w http.ResponseWriter, r *http.Request, body []byte, proto, pathSuffix string) {
 	cands := rt.autoCandidates(r, proto)
 	if len(cands) == 0 {
 		writeErr(w, http.StatusServiceUnavailable, "no eligible auto model for this protocol/policy")
@@ -354,7 +355,7 @@ func (rt *router) serveAuto(w http.ResponseWriter, r *http.Request, body []byte,
 			continue
 		}
 		rt.log.Info("auto routed", "model", entry.Name)
-		streamResponse(w, resp)
+		streamResponse(client, w, resp)
 		return
 	}
 	rt.log.Warn("auto: all candidates failed", "error", lastErr)
@@ -444,20 +445,29 @@ func (rt *router) doUpstreamWithRetry(r *http.Request, entry modelEntry, body []
 
 // forward proxies a single model's request and streams the response back, with a
 // bounded retry of transient upstream failures (this is Deneb's model hot path).
-func (rt *router) forward(w http.ResponseWriter, r *http.Request, entry modelEntry, body []byte, pathSuffix string) {
+func (rt *router) forward(client clientInfo, w http.ResponseWriter, r *http.Request, entry modelEntry, body []byte, pathSuffix string) {
 	resp, err := rt.doUpstreamWithRetry(r, entry, body, pathSuffix)
 	if err != nil {
 		rt.log.Warn("upstream call failed", "model", entry.Name, "url", entry.URL, "error", err)
 		writeErr(w, http.StatusBadGateway, "upstream unreachable: "+entry.Name)
 		return
 	}
-	streamResponse(w, resp)
+	streamResponse(client, w, resp)
 }
 
 // streamResponse copies the upstream status, headers, and body straight back —
 // flushing as chunks arrive so SSE tokens reach the client immediately.
-func streamResponse(w http.ResponseWriter, resp *http.Response) {
+func streamResponse(client clientInfo, w http.ResponseWriter, resp *http.Response) {
 	defer resp.Body.Close()
+
+	// ── per-client response shaping seam ───────────────────────────────────────
+	// `client` identifies the caller (clientInfo: deneb / claude-code / openai-sdk
+	// / …). This is the hook where a future per-client adaptation plugs in — e.g.
+	// wrap `resp.Body` in a transforming reader, or rewrite a header — when a
+	// specific client needs the output massaged. Today every client gets the same
+	// faithful pass-through, so the body is copied through untouched below.
+	_ = client
+	// ───────────────────────────────────────────────────────────────────────────
 
 	// Copy upstream headers (Content-Type drives SSE vs JSON on the client side).
 	for k, vs := range resp.Header {
