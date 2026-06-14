@@ -30,9 +30,11 @@ type ServedModelInfo struct {
 // DiscoverServedVllmModels probes an OpenAI-compatible /models endpoint and
 // returns the served model ids in the order the server reports them.
 // Returns a non-nil error when the probe fails (network, bad payload, empty
-// data list). The returned slice may be empty only when err != nil.
-func DiscoverServedVllmModels(ctx context.Context, baseURL string) ([]string, error) {
-	infos, err := DiscoverServedVllmModelInfos(ctx, baseURL)
+// data list). The returned slice may be empty only when err != nil. An optional
+// apiKey is sent as a Bearer token for endpoints that gate /models (e.g. the
+// wormhole router); omit it for keyless local vLLM.
+func DiscoverServedVllmModels(ctx context.Context, baseURL string, apiKey ...string) ([]string, error) {
+	infos, err := DiscoverServedVllmModelInfos(ctx, baseURL, apiKey...)
 	if err != nil {
 		return nil, err
 	}
@@ -47,11 +49,14 @@ func DiscoverServedVllmModels(ctx context.Context, baseURL string) ([]string, er
 // reports each model's advertised context length (max_model_len). Used to
 // auto-populate a custom model's contextWindow when it is added, so the
 // persisted entry is complete rather than a bare {"id": ...} stub.
-func DiscoverServedVllmModelInfos(ctx context.Context, baseURL string) ([]ServedModelInfo, error) {
+func DiscoverServedVllmModelInfos(ctx context.Context, baseURL string, apiKey ...string) ([]ServedModelInfo, error) {
 	url := strings.TrimRight(baseURL, "/") + "/models"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
+	}
+	if len(apiKey) > 0 && apiKey[0] != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey[0])
 	}
 	resp, err := vllmDiscoveryClient.Do(req)
 	if err != nil {

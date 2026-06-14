@@ -31,6 +31,35 @@ func newDiscoverySrv(t *testing.T, body string, status int) *httptest.Server {
 	return srv
 }
 
+// A token-gated /models endpoint (e.g. the wormhole router) is discoverable only
+// when the optional apiKey is forwarded as a Bearer token.
+func TestDiscoverServedVllmModels_SendsBearer(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		if gotAuth != "Bearer sekret" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"dsv4"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+	prev := vllmDiscoveryClient
+	vllmDiscoveryClient = &http.Client{Timeout: 2 * time.Second}
+	t.Cleanup(func() { vllmDiscoveryClient = prev })
+
+	// With the key: the endpoint accepts it and returns the served model.
+	ids, err := DiscoverServedVllmModels(context.Background(), srv.URL+"/v1", "sekret")
+	if err != nil || len(ids) != 1 || ids[0] != "dsv4" {
+		t.Fatalf("with key: ids=%v err=%v (auth seen=%q)", ids, err, gotAuth)
+	}
+	// Without the key: 401 → discovery fails (proves the key is what unlocked it).
+	if _, err := DiscoverServedVllmModels(context.Background(), srv.URL+"/v1"); err == nil {
+		t.Error("without the key, a token-gated endpoint should fail discovery")
+	}
+}
+
 func TestDiscoverServedVllmModels(t *testing.T) {
 	cases := []struct {
 		name    string
