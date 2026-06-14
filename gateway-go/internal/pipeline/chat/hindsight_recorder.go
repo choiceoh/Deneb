@@ -51,6 +51,13 @@ func retainTurnToHindsight(client *hindsight.Client, params RunParams, assistant
 // grouped under document_id=SessionKey so the bank can relate a session's
 // turns to each other.
 func buildHindsightRetainItem(params RunParams, assistantText string) (hindsight.RetainItem, bool) {
+	// Focused chat (memory off) is symmetric: a turn the user asked NOT to
+	// recall against is also not stored. This keeps general chatter out of the
+	// work-memory bank, where it would otherwise resurface later as irrelevant
+	// recall — feeding the very pollution the toggle exists to avoid.
+	if params.SkipRecall {
+		return hindsight.RetainItem{}, false
+	}
 	userMsg := truncateRecallText(params.Message, hindsightMaxTurnChars)
 	assistant := truncateRecallText(assistantText, hindsightMaxTurnChars)
 	if userMsg == "" || assistant == "" {

@@ -43,6 +43,19 @@ func TestBuildHindsightRetainItemSkipsEmptyTurns(t *testing.T) {
 	}
 }
 
+// TestBuildHindsightRetainItemSkipsFocusedChat confirms the memory-off toggle is
+// symmetric: a SkipRecall turn that would otherwise be storable produces no
+// retain item, so focused chat does not pollute the work-memory bank.
+func TestBuildHindsightRetainItemSkipsFocusedChat(t *testing.T) {
+	if _, ok := buildHindsightRetainItem(RunParams{Message: "데코레이터가 뭐야", SkipRecall: true}, "데코레이터는 함수를 감싸는 함수입니다"); ok {
+		t.Fatal("SkipRecall (focused chat) turn must not produce a retain item")
+	}
+	// Sanity: the same turn without SkipRecall IS storable.
+	if _, ok := buildHindsightRetainItem(RunParams{Message: "데코레이터가 뭐야"}, "데코레이터는 함수를 감싸는 함수입니다"); !ok {
+		t.Fatal("non-focused turn should produce a retain item")
+	}
+}
+
 func TestRetainTurnToHindsightNilClientNoPanic(t *testing.T) {
 	// A nil client (Hindsight unconfigured) must be a safe no-op.
 	retainTurnToHindsight(nil, RunParams{SessionKey: "telegram:1", Message: "hi"}, "hello", nil)
