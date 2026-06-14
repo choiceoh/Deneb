@@ -190,6 +190,39 @@ func TestWikiUpdateSupersedesAcceptsStringOrArray(t *testing.T) {
 	}
 }
 
+// TestParseWikiUpdates_SkipsMalformedItem verifies one malformed update is
+// skipped while the well-formed ones still apply — the whole batch used to fail
+// on a single bad field and, if deterministic, stall the diary pipeline (the
+// structural generalization of the #2341 supersedes fix).
+func TestParseWikiUpdates_SkipsMalformedItem(t *testing.T) {
+	text := `[
+		{"action":"create","path":"good/a.md","title":"A"},
+		{"action":"create","path":"bad.md","title":"B","importance":"not-a-number"},
+		{"action":"update","path":"good/c.md","title":"C","supersedes":["x.md","y.md"]}
+	]`
+	updates, err := parseWikiUpdates(text, nil)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(updates) != 2 {
+		t.Fatalf("expected 2 well-formed updates (1 skipped), got %d: %+v", len(updates), updates)
+	}
+	if updates[0].Path != "good/a.md" || updates[1].Path != "good/c.md" {
+		t.Fatalf("wrong updates kept: %+v", updates)
+	}
+	if len(updates[1].Supersedes) != 2 {
+		t.Fatalf("supersedes array should still parse: %+v", updates[1].Supersedes)
+	}
+}
+
+// TestParseWikiUpdates_NonArrayIsError verifies a non-array response is a
+// genuine total failure (caller backs off and re-consumes the diary content).
+func TestParseWikiUpdates_NonArrayIsError(t *testing.T) {
+	if _, err := parseWikiUpdates(`{"not":"an array"}`, nil); err == nil {
+		t.Fatal("expected error for non-array response")
+	}
+}
+
 func scanContent(scan *diaryScanResult) string {
 	if scan == nil {
 		return ""
