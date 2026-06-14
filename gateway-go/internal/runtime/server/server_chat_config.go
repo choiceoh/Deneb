@@ -402,6 +402,13 @@ func resolveAnalysisModel(logger *slog.Logger) string {
 	return resolveAgentRoleModel("analysisModel", logger)
 }
 
+// resolveChatbotModel reads the optional agents.chatbotModel override from
+// deneb.json. Empty leaves RoleChatbot absent, so 챗봇(chat:) turns use the
+// main model — separating a chatbot model is fully opt-in.
+func resolveChatbotModel(logger *slog.Logger) string {
+	return resolveAgentRoleModel("chatbotModel", logger)
+}
+
 // resolveAgentRoleModel reads a string field directly under "agents" in
 // deneb.json (e.g. "lightweightModel"). Returns "" when absent/unparseable.
 func resolveAgentRoleModel(field string, logger *slog.Logger) string {

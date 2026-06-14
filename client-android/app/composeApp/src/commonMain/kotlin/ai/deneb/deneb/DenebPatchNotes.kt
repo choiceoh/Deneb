@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "설정 > 모델에 '챗봇' 역할 추가 — 챗봇 모드 대화에 업무 모드와 다른(더 가벼운) 모델을 지정할 수 있습니다. 미설정이면 메인 모델을 그대로 사용",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "채팅 입력창 안내 문구를 '메시지를 입력하세요'로 정돈하고, 입력칸에 커서가 들어가면 안내 문구가 사라지도록 변경",
             "빈 대화 환영 화면을 모드별로 분리 — 업무는 시간대별 개인 맞춤 인사, 챗봇은 가벼운 대화 인사로 다르게 표시",
         ),

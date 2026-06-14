@@ -419,6 +419,7 @@ func clearRolesReferencingModel(raw map[string]any, fullModelID string) []string
 		{"lightweightModel", "lightweight"},
 		{"analysisModel", "analysis"},
 		{"fallbackModel", "fallback"},
+		{"chatbotModel", "chatbot"},
 	}
 	var cleared []string
 	for _, f := range fields {

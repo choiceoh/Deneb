@@ -200,7 +200,7 @@ func (s *Server) setMiniappModel(ctx context.Context, role, requested string) (s
 	// original three roles, so switching the 초경량/분석 tiers was rejected here
 	// ("unknown model role") and surfaced as "모델 전환에 실패했어요" to the user.
 	switch role {
-	case "main", "tiny", "lightweight", "analysis", "fallback":
+	case "main", "tiny", "lightweight", "analysis", "fallback", "chatbot":
 	default:
 		return "", rpcerr.InvalidRequest("unknown model role: " + role)
 	}
@@ -274,6 +274,12 @@ func (s *Server) roleMiniappModels() []handlerminiapp.RoleModel {
 		if m := s.chatHandler.DefaultModel(); m != "" {
 			out[0].Model = m
 		}
+	}
+	// Chatbot role is opt-in: report it only when an operator assigned a model.
+	// When absent the native picker shows "미설정" and 챗봇 turns use the main
+	// model (resolveModel), so omitting the row keeps that fallback visible.
+	if cb := s.modelRegistry.FullModelID(modelrole.RoleChatbot); cb != "" {
+		out = append(out, handlerminiapp.RoleModel{Role: string(modelrole.RoleChatbot), Model: cb})
 	}
 	return out
 }
@@ -380,6 +386,13 @@ func (s *Server) deleteMiniappCustomModel(_ context.Context, id string) (handler
 			// so a deleted model could be left dangling on those roles if not reset.
 			if s.modelRegistry != nil {
 				s.modelRegistry.SetRoleModelID(modelrole.Role(role), defaultModel)
+			}
+		case "chatbot":
+			// Chatbot is opt-in: remove the role so 챗봇 reverts to the main
+			// model (config already cleared chatbotModel) instead of pinning it
+			// to the vLLM default like the always-on roles above.
+			if s.modelRegistry != nil {
+				s.modelRegistry.ClearRole(modelrole.RoleChatbot)
 			}
 		}
 	}

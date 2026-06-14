@@ -31,6 +31,12 @@ const (
 	RoleLightweight Role = "lightweight" // mid model: bounded summarization
 	RoleAnalysis    Role = "analysis"    // highest-quality local model: reasoning-grade tasks
 	RoleFallback    Role = "fallback"
+	// RoleChatbot is the 챗봇 workspace model (chat: sessions), distinct from
+	// RoleMain (업무, client: sessions) so focused general chat can run a
+	// different/lighter model. OPT-IN: the role is absent unless
+	// agents.chatbotModel is configured; when absent, 챗봇 turns use the main
+	// model (see resolveModel in the chat pipeline).
+	RoleChatbot Role = "chatbot"
 )
 
 // ModelConfig holds the provider and endpoint settings for a single model role.
@@ -96,6 +102,9 @@ type RegistryOptions struct {
 	TinyModel        string // override for RoleTiny; empty → same as lightweight
 	AnalysisModel    string // override for RoleAnalysis; empty → same as lightweight
 	FallbackModel    string // override for RoleFallback; empty → local vLLM
+	// ChatbotModel overrides RoleChatbot (챗봇 workspace). Empty → the role is
+	// absent and 챗봇 turns fall back to the main model (prior behavior).
+	ChatbotModel string
 	// Providers is the deneb.json provider catalog (providerID → resolved
 	// endpoint/credentials). A role whose provider is present here resolves
 	// from the catalog; otherwise it falls back to the built-in switch.
@@ -238,14 +247,26 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	if opts.AnalysisModel != "" {
 		models[RoleAnalysis] = resolveModelConfig(opts.AnalysisModel, opts.Providers)
 	}
+	// Chatbot role is OPT-IN: only added to the map when explicitly configured,
+	// so an unconfigured deployment leaves 챗봇 turns on the main model. Its
+	// presence in the map is what resolveModel keys off to activate the role.
+	if opts.ChatbotModel != "" {
+		models[RoleChatbot] = resolveModelConfig(opts.ChatbotModel, opts.Providers)
+	}
 
 	// Auto-discover the actual model name the local vLLM is serving and
 	// substitute it in when config drifts. reconcileVllmModel is a no-op for
 	// non-vllm roles, so running it across all roles is safe. The discovery
 	// payload also carries each model's max_model_len; collect it so
 	// CapabilityForModel can clamp context budgets against the real window.
+	// Chatbot is included only when present so the loop never inserts a phantom
+	// (empty) entry that would make the opt-in role look configured.
 	vllmWindows := make(map[string]int)
-	for _, role := range []Role{RoleMain, RoleTiny, RoleLightweight, RoleAnalysis, RoleFallback} {
+	reconcileRoles := []Role{RoleMain, RoleTiny, RoleLightweight, RoleAnalysis, RoleFallback}
+	if _, ok := models[RoleChatbot]; ok {
+		reconcileRoles = append(reconcileRoles, RoleChatbot)
+	}
+	for _, role := range reconcileRoles {
 		cfg := models[role]
 		for _, info := range reconcileVllmModel(logger, &cfg) {
 			if info.MaxModelLen > 0 {
@@ -483,6 +504,10 @@ func (r *Registry) FallbackChain(role Role) []Role {
 		return []Role{RoleLightweight, RoleFallback}
 	case RoleAnalysis:
 		return []Role{RoleAnalysis, RoleLightweight, RoleFallback}
+	case RoleChatbot:
+		// On chatbot-model failure, degrade to the main (업무) model, then the
+		// shared fallback — so a bad chatbot model never leaves 챗봇 dead.
+		return []Role{RoleChatbot, RoleMain, RoleFallback}
 	case RoleFallback:
 		return []Role{RoleFallback}
 	default:
@@ -521,6 +546,19 @@ func (r *Registry) SetRoleModelID(role Role, modelID string) ModelConfig {
 	r.logger.Info("modelrole: role model updated",
 		"role", role, "model", logModelAlias(cfg))
 	return cfg
+}
+
+// ClearRole removes a role's explicit model so it reverts to its default
+// resolution. Used when the model a role pointed at is deleted. The always-on
+// roles (main/lightweight/fallback/tiny/analysis) are reset via SetRoleModelID
+// instead; this is for opt-in roles like RoleChatbot that should disappear —
+// and fall back to the main model — when left unconfigured.
+func (r *Registry) ClearRole(role Role) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.models, role)
+	delete(r.clients, role)
+	r.logger.Info("modelrole: role cleared", "role", role)
 }
 
 // ParseModelID splits "provider/model" into provider and model name.

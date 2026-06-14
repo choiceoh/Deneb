@@ -71,6 +71,7 @@ func PersistDefaultModel(configPath, model string, logger *slog.Logger) error {
 //	lightweight → agents.lightweightModel
 //	analysis    → agents.analysisModel
 //	fallback    → agents.fallbackModel
+//	chatbot     → agents.chatbotModel
 //
 // Mirrors PersistDefaultModel; used by the miniapp per-role model picker.
 func PersistRoleModel(configPath, role, model string, logger *slog.Logger) error {
@@ -86,6 +87,8 @@ func PersistRoleModel(configPath, role, model string, logger *slog.Logger) error
 		field = "analysisModel"
 	case "fallback":
 		field = "fallbackModel"
+	case "chatbot":
+		field = "chatbotModel"
 	default:
 		return fmt.Errorf("unknown model role %q", role)
 	}
