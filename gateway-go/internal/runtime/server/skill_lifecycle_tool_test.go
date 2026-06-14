@@ -184,11 +184,13 @@ func TestProposeSkillEvolution_ExecutableRouteRequiresCandidate(t *testing.T) {
 	}
 }
 
-// TestProposeSkillEvolution_RecordsUsageFromVerdict verifies the review verdict
-// drives automatic skill usage: a no-op records a success, an evolve records a
-// failure — the only automatic source of usage data, which the evolver and
-// curator were starved of (TotalUses always 0) before.
-func TestProposeSkillEvolution_RecordsUsageFromVerdict(t *testing.T) {
+// TestProposeSkillEvolution_VerdictExcludedFromSuccessRate verifies a review
+// verdict is recorded (it still drives the curator's staleness/lastUsed signal)
+// but is NOT counted toward the evolver's success-rate stats. A judgment is not
+// a real execution; conflating them pinned email-analysis as a phantom
+// underperformer that re-evolved six times in two days (PR #2328). The
+// success-rate now reflects real use only, so a pair of verdicts leaves it empty.
+func TestProposeSkillEvolution_VerdictExcludedFromSuccessRate(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
 	b := &skillLifecycleBackend{tracker: tracker}
 
@@ -207,8 +209,7 @@ func TestProposeSkillEvolution_RecordsUsageFromVerdict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stats: %v", err)
 	}
-	if stats.TotalUses != 2 || stats.SuccessCount != 1 || stats.FailureCount != 1 {
-		t.Fatalf("expected 2 uses (1 success, 1 failure), got total=%d success=%d failure=%d",
-			stats.TotalUses, stats.SuccessCount, stats.FailureCount)
+	if stats.TotalUses != 0 {
+		t.Fatalf("review verdicts must not feed the success rate, got total=%d", stats.TotalUses)
 	}
 }

@@ -282,6 +282,98 @@ func TestPostEvolveRollback_IgnoresConsultInfraFailures(t *testing.T) {
 	}
 }
 
+// TestUsageStats_ExcludeReviewSources verifies the evolver's success-rate sees
+// only genuine skill executions: review-fork verdicts (explicit Source) and
+// consult turns (session prefix) and consult-infra failures are all excluded.
+func TestUsageStats_ExcludeReviewSources(t *testing.T) {
+	tr := newTestTracker(t)
+	rec := func(r UsageRecord) {
+		if err := tr.RecordUsage(r); err != nil {
+			t.Fatalf("RecordUsage: %v", err)
+		}
+	}
+	rec(UsageRecord{SkillName: "s", SessionKey: "client:main", Success: true})                            // real success
+	rec(UsageRecord{SkillName: "s", SessionKey: "cron:x", Success: false, ErrorMsg: "wiki write failed"}) // real failure
+	// review verdict (explicit Source) → excluded
+	rec(UsageRecord{SkillName: "s", SessionKey: "system:skill-review:client:main", Success: false, Source: UsageSourceReviewVerdict})
+	// review fork consult (session prefix, legacy untagged) → excluded
+	rec(UsageRecord{SkillName: "s", SessionKey: "system:skill-review:cron:y", Success: false, ErrorMsg: "turn failed: tool skills errored"})
+	// real session but consult-infra failure → excluded
+	rec(UsageRecord{SkillName: "s", SessionKey: "cron:z", Success: false, ErrorMsg: "turn failed: tool skills errored"})
+
+	stats, err := tr.Stats("s")
+	if err != nil {
+		t.Fatalf("Stats: %v", err)
+	}
+	if stats.TotalUses != 2 || stats.SuccessCount != 1 || stats.FailureCount != 1 {
+		t.Fatalf("only real use should count: %+v", stats)
+	}
+	if stats.SuccessRate != 0.5 {
+		t.Fatalf("success rate = %v, want 0.5", stats.SuccessRate)
+	}
+}
+
+// TestEvolutionHealth_DetectsThrash verifies the /health summary flags a thrash
+// when one skill dominates recent evolutions (the email-analysis pattern).
+func TestEvolutionHealth_DetectsThrash(t *testing.T) {
+	tr := newTestTracker(t)
+	for i := 0; i < 6; i++ {
+		if err := tr.LogEvolve("email-analysis", "1.1.0", "x"); err != nil {
+			t.Fatalf("LogEvolve: %v", err)
+		}
+	}
+	if err := tr.LogEvolve("other-skill", "1.0.1", "y"); err != nil {
+		t.Fatalf("LogEvolve other: %v", err)
+	}
+	eh := tr.EvolutionHealth()
+	if eh.Evolves7d != 7 || eh.DistinctSkillsEvolved7d != 2 {
+		t.Fatalf("unexpected counts: %+v", eh)
+	}
+	if eh.TopEvolvedSkill != "email-analysis" || eh.TopEvolvedCount != 6 {
+		t.Fatalf("unexpected top skill: %+v", eh)
+	}
+	if !eh.Thrash {
+		t.Fatalf("expected thrash (one skill = 6/7 evolves): %+v", eh)
+	}
+}
+
+// TestEvolutionHealth_BalancedIsNotThrash verifies evenly spread evolutions do
+// not trip the thrash flag.
+func TestEvolutionHealth_BalancedIsNotThrash(t *testing.T) {
+	tr := newTestTracker(t)
+	for _, name := range []string{"a", "a", "b", "b", "c", "c"} {
+		if err := tr.LogEvolve(name, "1.0.1", ""); err != nil {
+			t.Fatalf("LogEvolve: %v", err)
+		}
+	}
+	eh := tr.EvolutionHealth()
+	if eh.Evolves7d != 6 || eh.DistinctSkillsEvolved7d != 3 {
+		t.Fatalf("unexpected counts: %+v", eh)
+	}
+	if eh.Thrash {
+		t.Fatalf("balanced evolves must not flag thrash: %+v", eh)
+	}
+}
+
+// TestEvolutionHealth_SingleSkillDominanceIsThrash verifies the low-volume but
+// total-dominance case (one skill is the ONLY thing evolving) trips the flag —
+// the real email-analysis state, where nothing else ever gets attention.
+func TestEvolutionHealth_SingleSkillDominanceIsThrash(t *testing.T) {
+	tr := newTestTracker(t)
+	for i := 0; i < 3; i++ {
+		if err := tr.LogEvolve("email-analysis", "1.1.0", ""); err != nil {
+			t.Fatalf("LogEvolve: %v", err)
+		}
+	}
+	eh := tr.EvolutionHealth()
+	if eh.DistinctSkillsEvolved7d != 1 || eh.Evolves7d != 3 {
+		t.Fatalf("unexpected counts: %+v", eh)
+	}
+	if !eh.Thrash {
+		t.Fatalf("one skill = 100%% of evolves must flag thrash: %+v", eh)
+	}
+}
+
 func (t *Tracker) markSkillAgentCreatedLockedForTest(skillName string, createdAt int64) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
