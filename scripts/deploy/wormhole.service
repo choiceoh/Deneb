@@ -12,6 +12,10 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
+# Cloud upstream keys for wormhole-routed subscription models (e.g. ${ZAI_API_KEY}
+# referenced by ~/.wormhole/config.json). Optional (leading '-'): wormhole runs
+# fine without it for local-only routing.
+EnvironmentFile=-/home/choiceoh/.deneb/.env
 # wormhole fans one endpoint out to many model backends (local vLLM + cloud) by
 # model name. With Deneb's roles pointed at it, it sits in the model hot path, so
 # it restarts on failure. The binary is built by `make wormhole` into dist/.

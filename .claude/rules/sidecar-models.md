@@ -155,8 +155,9 @@ curl -s -X POST http://127.0.0.1:8888/v1/default/banks/deneb/memories/recall \
 - **이름 일치**: 엔트리 `name == upstreamModel == vLLM 서빙 모델명`, deneb.json 이 그 name 을 보냄 → `rewriteModel` 미발동 → 바이트 동일. (model 필드는 렌더 프롬프트에 안 들어가 rewrite 자체는 APC-safe 지만, 무변경이 가장 안전.)
 - 결론: **effort 라우팅은 Deneb 가 단독 수행**(튜닝됨·파이프라인 통합), wormhole 은 메인에 대해 dumb passthrough. (외부 클라용 effort 라우팅을 살리려면 별도 toggleKwarg 엔트리 또는 향후 per-request opt-out 헤더.)
 
-### ★ SPOF 완화 (핫패스가 된 wormhole)
-- 메인을 wormhole 로 태우면 **wormhole 다운 = 메인 다운**. 완화: **fallback role 은 wormhole 을 거치지 말고 직결**(직접 클라우드 또는 직접 vLLM)로 둬 wormhole 사망 시 modelrole 헬스 서킷브레이커가 직결 fallback 으로 빠지게 한다. 즉 `main → wormhole:dsv4`, `fallback → 직접 anthropic/zai`.
+### ★ SPOF (핫패스가 된 wormhole)
+- 메인을 wormhole 로 태우면 **wormhole 다운 = 메인 다운**. **현재 운영(2026-06-14): main/lightweight/tiny + fallback/analysis(클라우드 glm-5.2) 전부 wormhole 경유** (사용자 "클라우드 호출 모아"). 즉 wormhole 이 모델 레이어의 단일 관문.
+- 핵심 구분: **흔한 실패(업스트림 모델 다운)는 여전히 커버됨** — main(dsv4@srv2) 죽으면 게이트웨이 서킷브레이커→fallback role→wormhole(살아있음)→다른 업스트림(zai). 안 커버되는 건 **wormhole 프로세스 자체 사망**뿐인데, 얇은 프록시 + `Restart=on-failure`(≈5s respawn) 로 자가치유. 더 강한 격리를 원하면 fallback 하나를 직결로 빼면 됨(그 경우 SPOF 0, 단 키 중복).
 - wormhole 은 `Restart=on-failure` systemd 서비스로 상주(아래).
 
 ### 서버 (상주)
@@ -183,6 +184,13 @@ curl -s -X POST http://127.0.0.1:8888/v1/default/banks/deneb/memories/recall \
   }
   ```
 - 게이트웨이는 OpenAI 호환 provider 로 wormhole 을 그냥 호출(`run_provider.go`, 코드 변경 0). provider `headers` 도 지원하니 향후 opt-out 헤더가 필요하면 거기로.
+
+### 클라우드 호출 통합 (구독 LLM 도 wormhole 경유, 2026-06-14)
+- **anthropic 프로토콜 클라우드**(zai/glm-5.2·kimi·mimo)도 wormhole 로 모음. ★**URL 함정**: wormhole 은 엔트리 `url` 뒤에 `/messages` 만 붙인다 → anthropic 엔트리 url 은 **반드시 `/v1` 로 끝나야** 한다(예 `https://api.z.ai/api/anthropic/v1`). deneb.json 의 anthropic baseUrl 은 클라가 `/v1/messages` 를 붙이느라 `/v1` 이 없으니 그대로 쓰면 404. (openai 엔트리는 `.../v1` + `/chat/completions` 로 이미 일관.)
+- wormhole config 의 cloud 엔트리: `{name, url(.../v1), upstreamModel, "protocol":"anthropic", "key":"${ENV}" 또는 리터럴}`. **no toggleKwarg**(APC/effort 규칙 동일).
+- **env 키 배선**: zai 등은 키가 `${ZAI_API_KEY}` env ref → wormhole.service 의 `EnvironmentFile=-/home/choiceoh/.deneb/.env`(이 PR) 로 주입(게이트웨이와 동일 소스). 리터럴 키(kimi/mimo)는 config 에 직접.
+- **deneb.json 배선**: anthropic 은 별도 provider 필요(`api:"anthropic"`) — `wormhole-anthropic: { api:"anthropic", baseUrl:"http://127.0.0.1:18800", apiKey:"loopback", models:[glm-5.2,…] }`. role 전환: `fallbackModel`·`analysisModel` → `wormhole-anthropic/glm-5.2`. (openai 모델은 기존 `wormhole` provider.)
+- 검증: `curl :18800/v1/messages -H "x-api-key: loopback" -d '{"model":"glm-5.2",…}'` 가 200 + (스트리밍 시) `event: message_start …` SSE 통과하면 게이트웨이 anthropic stream 호출과 동형.
 
 ### 운영 명령
 ```bash
