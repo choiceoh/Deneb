@@ -3,7 +3,7 @@
 # Pure Go gateway build (Rust core has been removed).
 
 .PHONY: all \
-       go go-run go-dev go-test go-vet go-fmt go-lint go-clean go-bench go-binary gateway-prod \
+       go go-run go-dev go-test go-vet go-fmt go-lint go-clean go-bench go-binary gateway-prod wormhole \
        test clean check check-go fmt generate generate-check \
        tool-schemas tool-schemas-check \
        data-gen data-gen-check \
@@ -105,6 +105,12 @@ go-binary:
 gateway-prod:
 	$(MAKE) go-binary
 	@echo "Production gateway ready: dist/deneb-gateway"
+
+# Build the wormhole model router binary to dist/ (cmd/wormhole). Managed as a
+# sibling service (scripts/deploy/start-wormhole.sh, wormhole.service).
+wormhole:
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build -trimpath -p $(GO_PAR) $(GO_LDFLAGS) -o ../dist/wormhole ./cmd/wormhole/
+	@echo "wormhole router ready: dist/wormhole"
 
 go-clean:
 	cd gateway-go && go clean ./...

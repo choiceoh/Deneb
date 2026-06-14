@@ -1,6 +1,6 @@
 ---
 description: 로컬 GPU 사이드카 모델 운영 현황 (OCR/ASR/장기기억/추출/임베딩) — 엔드포인트·기동·배선·폴백
-globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/internal/pipeline/chat/tools/asr.go", "gateway-go/internal/pipeline/chat/tools/gmail_attachment.go", "gateway-go/internal/pipeline/chat/web/web_html.go", "gateway-go/internal/ai/modelrole/**", "gateway-go/internal/pipeline/pilot/**", "gateway-go/internal/domain/hindsight/**", "gateway-go/internal/pipeline/chat/recall_hindsight.go", "gateway-go/internal/pipeline/chat/hindsight_recorder.go"]
+globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/internal/pipeline/chat/tools/asr.go", "gateway-go/internal/pipeline/chat/tools/gmail_attachment.go", "gateway-go/internal/pipeline/chat/web/web_html.go", "gateway-go/internal/ai/modelrole/**", "gateway-go/internal/pipeline/pilot/**", "gateway-go/internal/domain/hindsight/**", "gateway-go/internal/pipeline/chat/recall_hindsight.go", "gateway-go/internal/pipeline/chat/hindsight_recorder.go", "gateway-go/cmd/wormhole/**", "scripts/deploy/start-wormhole.sh", "scripts/deploy/wormhole.service"]
 ---
 
 # Sidecar Models (GPU 부가 모델 운영 현황)
@@ -141,6 +141,60 @@ curl -s -X POST http://127.0.0.1:8888/v1/default/banks/deneb/memories/recall \
 ```
 
 ---
+
+## wormhole (모델 라우터 — Deneb 모델 접근의 단일 관문)
+
+### 무엇 / 왜
+- 사이드카 *모델*이 아니라 모델 *라우터*. OpenAI/Anthropic 호환 단일 엔드포인트(`:18800`) 뒤로 로컬 vLLM + 클라우드(claude 등)를 **모델명으로** 멀티플렉싱하는 우리 자체 Go 바이너리(`gateway-go/cmd/wormhole`). 원래 목적=외부 클라(Claude Code·스크립트) 단일 URL. **이제 Deneb 자신의 모델 호출도 wormhole 경유**로 통합(2026-06-14, 사용자 결정 "메인 포함 전부").
+- 이득: 단일 엔드포인트 + 업스트림 키 단일 금고 + SparkFleet 자동발견(`:18900`) + 로컬→클라우드 auto 폴백 + 프라이버시 가드. 상세 설계는 [[project_wormhole]].
+
+### ★★ APC 불가침 (메인 경로의 절대 규칙)
+> 메인 챗(dsv4)은 vLLM APC(byte-prefix 캐시)에 극도로 민감하다(`.claude/rules/prompt-cache.md` §1.5). wormhole을 메인 앞에 두려면 **바이트 투명**해야 한다.
+
+- **Deneb 가 쓰는 wormhole 엔트리는 `toggleKwarg` 를 절대 달지 마라.** `toggleKwarg` 가 있으면 wormhole 이 effort 라우팅으로 `chat_template_kwargs` 를 **주입**해 렌더 프롬프트를 바꾼다 → APC 파괴 + Deneb 자체 effort 라우팅(`run_capability.go`)과 **이중화 충돌**(injectKwarg 가 기존 값 덮어씀). 엔트리에 toggleKwarg 가 없으면 `applyThinking` 이 즉시 return → **순수 패스스루**.
+- **이름 일치**: 엔트리 `name == upstreamModel == vLLM 서빙 모델명`, deneb.json 이 그 name 을 보냄 → `rewriteModel` 미발동 → 바이트 동일. (model 필드는 렌더 프롬프트에 안 들어가 rewrite 자체는 APC-safe 지만, 무변경이 가장 안전.)
+- 결론: **effort 라우팅은 Deneb 가 단독 수행**(튜닝됨·파이프라인 통합), wormhole 은 메인에 대해 dumb passthrough. (외부 클라용 effort 라우팅을 살리려면 별도 toggleKwarg 엔트리 또는 향후 per-request opt-out 헤더.)
+
+### ★ SPOF 완화 (핫패스가 된 wormhole)
+- 메인을 wormhole 로 태우면 **wormhole 다운 = 메인 다운**. 완화: **fallback role 은 wormhole 을 거치지 말고 직결**(직접 클라우드 또는 직접 vLLM)로 둬 wormhole 사망 시 modelrole 헬스 서킷브레이커가 직결 fallback 으로 빠지게 한다. 즉 `main → wormhole:dsv4`, `fallback → 직접 anthropic/zai`.
+- wormhole 은 `Restart=on-failure` systemd 서비스로 상주(아래).
+
+### 서버 (상주)
+- 빌드: **`make wormhole`** → `dist/wormhole`. 서비스: **`scripts/deploy/wormhole.service`**(systemd, `Restart=on-failure`, `MemoryMax=512M`, journal) 또는 수동 **`scripts/deploy/start-wormhole.sh {start|stop|restart|status}`**.
+- 설정: **`~/.wormhole/config.json`**(레포 밖, 시크릿 포함). 템플릿 = `gateway-go/cmd/wormhole/config.example.json`. `token` + 각 model `key` 는 `${ENV}` 확장. 포트 기본 `:18800`.
+- Deneb-백엔드용 config 골격(메인 dsv4 = no-toggleKwarg 패스스루):
+  ```json
+  {
+    "listen": ":18800",
+    "token": "${WORMHOLE_TOKEN}",
+    "sparkfleet": { "url": "http://127.0.0.1:18900" },
+    "models": [
+      { "name": "dsv4", "url": "http://127.0.0.1:8000/v1", "upstreamModel": "<vLLM 서빙명>" }
+    ]
+  }
+  ```
+
+### Deneb 배선 (deneb.json — 호스트 prod config)
+- `models.providers` 에 wormhole 추가 + role 을 거기로:
+  ```json5
+  "models": {
+    "providers": { "wormhole": { "baseUrl": "http://127.0.0.1:18800/v1", "apiKey": "${WORMHOLE_TOKEN}" } },
+    "modelRole": { "main": "wormhole:dsv4" /* fallback 은 직결 유지 */ }
+  }
+  ```
+- 게이트웨이는 OpenAI 호환 provider 로 wormhole 을 그냥 호출(`run_provider.go`, 코드 변경 0). provider `headers` 도 지원하니 향후 opt-out 헤더가 필요하면 거기로.
+
+### 운영 명령
+```bash
+make wormhole                                    # 빌드
+systemctl --user enable --now wormhole.service   # 상주 (또는 scripts/deploy/start-wormhole.sh start)
+curl -s http://127.0.0.1:18800/health            # ok
+curl -s http://127.0.0.1:18800/v1/models -H "Authorization: Bearer $WORMHOLE_TOKEN"  # 라우팅 테이블(config+발견)
+```
+
+### 라이브 검증 (메인 경로 cutover 시 필수)
+- **바이트 패스스루 증명**: 같은 요청을 `:18800`(wormhole) 과 `:8000`(직결 vLLM) 에 보내 vLLM `prefix_cache` 메트릭이 동일하게 적중하는지 확인 → wormhole 이 APC 를 깨지 않음을 보장.
+- **멀티턴 APC**: cutover 후 `scripts/dev/live-test.sh logs-grep prefix_cache` 또는 엔진 `/metrics` 의 `vllm:prefix_cache_hits_total` 가 정상 누적되는지(직결 때 대비 적중률 유지) 확인. 떨어지면 즉시 롤백(deneb.json role 직결 복구 + 게이트웨이 재시작).
 
 ## 새 사이드카 모델 추가 시 체크리스트
 - [ ] vLLM(또는 호환) 서버를 OpenAI `/v1` 로 띄우고, 호스트 런처 스크립트(`~/start-*.sh`)를 `--restart unless-stopped` 로 작성
