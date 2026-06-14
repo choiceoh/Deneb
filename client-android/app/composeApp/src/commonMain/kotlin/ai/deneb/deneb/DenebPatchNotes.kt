@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "챗봇 모드에서는 업무 데이터 화면(메일·달력·검색·카테고리·플릿)을 네비게이션에서 숨겨 깨끗한 일반 대화 공간이 됩니다 — 업무 모드로 돌아오면 다시 나타납니다",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "채팅 입력창을 더 작고 단정하게 — 여백과 보내기 아이콘을 줄여, 마지막 메시지가 입력창 바로 위까지 붙어 보입니다",
             "맨 아래가 아닐 때 '맨 아래로' 버튼이 제대로 뜨고, 눌렀을 때 긴 메시지의 진짜 끝까지 내려갑니다 (GPT·클로드처럼)",
             "답변을 쓰는 동안 메시지 영역 가장자리에 은은한 오로라 빛이 흐릅니다 — 응답이 끝나면 사라집니다",
