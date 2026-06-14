@@ -41,7 +41,6 @@ import ai.deneb.ui.LightColorScheme
 import ai.deneb.ui.chat.WorkFeedAction
 import ai.deneb.ui.chat.WorkFeedItem
 import ai.deneb.ui.chat.composables.DenebBottomBar
-import ai.deneb.ui.chat.composables.DenebDrawerSheet
 import ai.deneb.ui.chat.composables.WaitingResponseRow
 import ai.deneb.ui.chat.composables.WorkFeedPanel
 import ai.deneb.ui.components.SkeletonList
@@ -121,8 +120,6 @@ fun main() {
     renderCollapsedReport("mail_collapsed_dark.png", DarkColorScheme, expanded = false)
     renderCollapsedReport("mail_collapsed_light.png", LightColorScheme, expanded = false)
     renderCollapsedReport("mail_expanded_dark.png", DarkColorScheme, expanded = true)
-    renderChrome("chrome_dark.png", DarkColorScheme)
-    renderChrome("chrome_light.png", LightColorScheme)
     renderBottomBar("bottombar_chat_dark.png", DarkColorScheme, "home")
     renderBottomBar("bottombar_chat_light.png", LightColorScheme, "home")
     renderBottomBar("bottombar_mail_dark.png", DarkColorScheme, "deneb_mail")
@@ -506,32 +503,6 @@ private fun renderCronEdit(name: String, scheme: ColorScheme, draft: ScheduleDra
                         error = null,
                         saving = false,
                         onSave = {},
-                    )
-                }
-            }
-        }
-    }
-    val image = scene.render()
-    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
-    File("/tmp/deneb-render").mkdirs()
-    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
-    scene.close()
-}
-
-// Renders the left navigation drawer (분석 + 기록·설정 groups) so the look can be
-// checked without an APK.
-private fun renderChrome(name: String, scheme: ColorScheme) {
-    val scene = ImageComposeScene(width = 760, height = 1200, density = Density(2f)) {
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Box(Modifier.width(320.dp)) {
-                    DenebDrawerSheet(
-                        onOpenSearch = {},
-                        onOpenMail = {},
-                        onOpenCalendar = {},
-                        onOpenCategories = {},
-                        onNavigateToSettings = {},
-                        onClose = {},
                     )
                 }
             }

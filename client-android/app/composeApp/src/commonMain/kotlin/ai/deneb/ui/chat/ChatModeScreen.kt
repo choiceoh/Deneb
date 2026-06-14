@@ -10,7 +10,6 @@ import ai.deneb.currentPlatform
 import ai.deneb.getBackgroundDispatcher
 import ai.deneb.onDragAndDropEventDropped
 import ai.deneb.ui.chat.composables.BotMessage
-import ai.deneb.ui.chat.composables.DenebDrawerSheet
 import ai.deneb.ui.chat.composables.DenebSessionDrawerSheet
 import ai.deneb.ui.chat.composables.EmptyState
 import ai.deneb.ui.chat.composables.ErrorMessage
@@ -119,11 +118,6 @@ import kotlin.time.TimeSource
 internal fun ChatModeScreen(
     uiState: ChatUiState,
     textToSpeech: TextToSpeechInstance?,
-    onNavigateToSettings: () -> Unit,
-    onOpenMail: () -> Unit = {},
-    onOpenCalendar: () -> Unit = {},
-    onOpenSearch: () -> Unit = {},
-    onOpenCategories: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)?,
 ) {
     var showWorkFeed by rememberSaveable { mutableStateOf(false) }

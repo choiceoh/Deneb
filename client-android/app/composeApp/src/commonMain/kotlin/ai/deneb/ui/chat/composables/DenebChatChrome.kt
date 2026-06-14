@@ -1,38 +1,16 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
-
 package ai.deneb.ui.chat.composables
 
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.handCursor
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 
-// Deneb-specific chat chrome: the left navigation drawer (a typographic menu in
-// the Mini App's idiom — pure words, no icons). Kept out of ChatScreen.kt to hold
-// that file under the size guideline; the chat UI stays free of any deneb-package
-// import by speaking UI-neutral types and primitive callbacks.
+// Capture actions for the chat input. The left navigation drawer that used to host
+// them (a typographic menu) was retired when the bottom tab bar took over section
+// navigation and the left drawer became the session history; the captures now live
+// in the input's attach (+) menu (QuestionInput).
 
 /**
- * Platform capture actions surfaced in the drawer. Provided by the Android entry
- * point via [LocalCaptureActions]; null (the default) hides them on platforms
- * (desktop/iOS) without these system launchers.
+ * Platform capture actions surfaced in the chat input's attach (+) menu. Provided
+ * by the Android entry point via [LocalCaptureActions]; null (the default) hides
+ * them on platforms (desktop/iOS) without these system launchers.
  */
 data class CaptureActions(
     val onCaptureImage: () -> Unit,
@@ -40,112 +18,5 @@ data class CaptureActions(
     val onVoiceInput: () -> Unit,
 )
 
-/** Ambient capture actions for the drawer; null hides the capture footer. */
+/** Ambient capture actions; null hides the capture options. */
 val LocalCaptureActions = compositionLocalOf<CaptureActions?> { null }
-
-/**
- * The left drawer, restyled as the Mini App's typographic menu (its home idiom,
- * frontend/src/views/home.ts): pure black-and-white words, no icons, no
- * dividers — the page is the list. Big [DenebType.menuItem] lowercase rows
- * navigate to the domain surfaces; a small capture footer (Android only) hangs
- * below. The
- * chat itself stays the home screen — this menu is revealed by a left swipe, so
- * the beauty lives in the navigation without costing the chat-first flow.
- */
-@Composable
-fun DenebDrawerSheet(
-    onOpenSearch: () -> Unit,
-    onOpenMail: () -> Unit,
-    onOpenCalendar: () -> Unit,
-    onOpenCategories: () -> Unit,
-    onNavigateToSettings: () -> Unit,
-    onClose: () -> Unit,
-) {
-    ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 28.dp, vertical = 40.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            // "people" is no longer a drawer destination: the merged people surface
-            // (recent contacts + 인물 wiki) lives inside categories as a pinned row.
-            TypeMenuItem("mail") {
-                onOpenMail()
-                onClose()
-            }
-            TypeMenuItem("calendar") {
-                onOpenCalendar()
-                onClose()
-            }
-            TypeMenuItem("search") {
-                onOpenSearch()
-                onClose()
-            }
-            TypeMenuItem("categories") {
-                onOpenCategories()
-                onClose()
-            }
-            TypeMenuItem("settings") {
-                onNavigateToSettings()
-                onClose()
-            }
-
-            val capture = LocalCaptureActions.current
-            if (capture != null) {
-                Spacer(Modifier.height(24.dp))
-                CaptureItem("image ocr") {
-                    capture.onCaptureImage()
-                    onClose()
-                }
-                CaptureItem("transcribe") {
-                    capture.onCaptureAudio()
-                    onClose()
-                }
-                CaptureItem("voice") {
-                    capture.onVoiceInput()
-                    onClose()
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TypeMenuItem(label: String, onClick: () -> Unit) {
-    val haptics = rememberHaptics()
-    Text(
-        text = label,
-        style = DenebType.menuItem,
-        color = MaterialTheme.colorScheme.onBackground,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                haptics.tap()
-                onClick()
-            }
-            .handCursor()
-            .padding(vertical = 5.dp),
-    )
-}
-
-// Capture actions are verbs, not destinations — kept small and quiet below the
-// type menu so the navigation reads as pure typography.
-@Composable
-private fun CaptureItem(label: String, onClick: () -> Unit) {
-    val haptics = rememberHaptics()
-    Text(
-        text = label,
-        style = DenebType.rowTitle,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                haptics.tap()
-                onClick()
-            }
-            .handCursor()
-            .padding(vertical = 6.dp),
-    )
-}
