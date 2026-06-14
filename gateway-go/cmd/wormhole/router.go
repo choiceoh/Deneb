@@ -460,6 +460,14 @@ func (rt *router) listModels(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, modelRow{ID: rt.autoName(), Object: "model", OwnedBy: "wormhole-auto"})
 	}
 	for _, e := range models {
+		// /v1/models is the OpenAI front's catalog — only models reachable via
+		// POST /v1/chat/completions belong here. An anthropic-protocol model 400s
+		// on that endpoint, so listing it would mislead a client (and a discovering
+		// picker) into binding it to the OpenAI surface. Anthropic models are still
+		// served on /v1/messages and enumerated in /status (with protocol).
+		if e.protocol() != protocolOpenAI {
+			continue
+		}
 		owner := "wormhole-cloud"
 		if e.isLocal() {
 			owner = "wormhole-local"

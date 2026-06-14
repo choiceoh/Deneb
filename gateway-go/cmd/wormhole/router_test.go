@@ -85,9 +85,13 @@ func TestChatCompletions_TokenRequired(t *testing.T) {
 }
 
 func TestListModels(t *testing.T) {
+	// /v1/models is the OpenAI front's catalog: openai-protocol models only. An
+	// anthropic model is served on /v1/messages, not /v1/chat/completions, so it
+	// must NOT appear here (else a discovering picker binds it to the wrong front).
 	rt := quietRouter(config{Models: []modelEntry{
 		{Name: "dsv4", URL: "http://x/v1", UpstreamModel: "dsv4"},
-		{Name: "claude", URL: "http://y/v1", UpstreamModel: "anthropic/claude-x"},
+		{Name: "claude-or", URL: "http://y/v1", UpstreamModel: "anthropic/claude-x"},
+		{Name: "glm", URL: "http://z/v1", Protocol: "anthropic", UpstreamModel: "glm-5.2"},
 	}})
 	srv := httptest.NewServer(rt.handler())
 	defer srv.Close()
@@ -104,11 +108,17 @@ func TestListModels(t *testing.T) {
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&got)
 	if got.Object != "list" || len(got.Data) != 2 {
-		t.Fatalf("models = %+v, want a 2-entry list", got)
+		t.Fatalf("models = %+v, want a 2-entry list (the 2 openai models, not the anthropic one)", got)
 	}
-	ids := got.Data[0].ID + "," + got.Data[1].ID
-	if !strings.Contains(ids, "dsv4") || !strings.Contains(ids, "claude") {
-		t.Errorf("model ids = %q, want dsv4 + claude", ids)
+	var ids string
+	for _, d := range got.Data {
+		ids += d.ID + ","
+	}
+	if !strings.Contains(ids, "dsv4") || !strings.Contains(ids, "claude-or") {
+		t.Errorf("model ids = %q, want the openai models dsv4 + claude-or", ids)
+	}
+	if strings.Contains(ids, "glm") {
+		t.Errorf("anthropic model glm must be excluded from /v1/models, got %q", ids)
 	}
 }
 
