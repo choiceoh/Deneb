@@ -6,25 +6,32 @@ picked by the requested **model name**. External clients (Claude Code, scripts,
 future apps) point at one URL with one token; the upstream provider keys stay
 inside wormhole.
 
-## What it does (first slice)
+## What it does
 
-Pure pass-through for **OpenAI-compatible** upstreams (local vLLM, OpenRouter,
-Kimi, MiMo, …). Per request it:
+A **multi-protocol transparent proxy**. wormhole speaks both wire APIs on the
+front and forwards each to a backend of the matching protocol — **no
+cross-translation**. Per request it:
 
-1. authenticates the client against the wormhole token,
+1. authenticates the client against the wormhole token (`Authorization: Bearer`
+   or `x-api-key`),
 2. resolves the requested `model` to an upstream backend,
-3. rewrites the upstream URL, injects that backend's key, and (optionally)
-   rewrites the `model` id,
+3. rewrites the upstream URL, injects that backend's key in the right shape
+   (Bearer for OpenAI, `x-api-key` for Anthropic), and (optionally) rewrites the
+   `model` id,
 4. streams the response straight back — so streaming, tool calls, and every
-   OpenAI parameter ride through untouched.
+   parameter ride through untouched.
 
-Native **Anthropic-API** translation is a planned fast-follow (it will reuse
-`internal/ai/llm`'s hardened Anthropic client). Until then, reach Claude through
-an OpenAI-compatible front such as OpenRouter (see the example config).
+The insight: a client that already speaks Anthropic (Claude Code, the Anthropic
+SDK) just hits `/v1/messages` and rides straight through to an Anthropic backend
+— there's nothing to translate. OpenAI clients hit `/v1/chat/completions` and
+reach an OpenAI backend the same way. Each model declares its `protocol`
+(`openai` default, or `anthropic`); hitting the wrong endpoint for a model gets
+an actionable `400`.
 
 ## Endpoints
 
-- `POST /v1/chat/completions` — the proxied chat endpoint.
+- `POST /v1/chat/completions` — OpenAI clients → OpenAI-protocol backends.
+- `POST /v1/messages` — Anthropic clients → Anthropic-protocol backends.
 - `GET /v1/models` — lists the configured model names so clients can discover.
 - `GET /health` — liveness.
 
@@ -42,8 +49,9 @@ live in the environment, not the file. Each model entry:
 | field | meaning |
 |---|---|
 | `name` | the model id clients request |
-| `url` | upstream OpenAI base, e.g. `http://127.0.0.1:8000/v1` |
-| `key` | upstream bearer token (omit for keyless local vLLM) |
+| `url` | upstream API base, e.g. `http://127.0.0.1:8000/v1` |
+| `key` | upstream token (omit for keyless local vLLM) |
+| `protocol` | `openai` (default) or `anthropic` — which front endpoint + auth shape |
 | `upstreamModel` | rewrite the model id when forwarding (default: `name`) |
 | `local` | override the local/cloud auto-detection (see below); default auto |
 
