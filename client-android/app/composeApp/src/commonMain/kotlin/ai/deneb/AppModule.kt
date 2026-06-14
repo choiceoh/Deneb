@@ -8,7 +8,6 @@ import ai.deneb.data.DurableMirrorSettings
 import ai.deneb.data.EmailStore
 import ai.deneb.data.HeartbeatManager
 import ai.deneb.data.MemoryStore
-import ai.deneb.data.RemoteDataRepository
 import ai.deneb.data.SmsDraftStore
 import ai.deneb.data.SmsStore
 import ai.deneb.data.TaskScheduler
@@ -92,29 +91,7 @@ val appModule = module {
     single<McpServerManager> {
         McpServerManager(get())
     }
-    single<RemoteDataRepository> {
-        RemoteDataRepository(
-            requests = get(),
-            appSettings = get(),
-            conversationStorage = get(),
-            toolExecutor = get(),
-            memoryStore = get(),
-            taskStore = get(),
-            heartbeatManager = get(),
-            emailStore = get(),
-            emailPoller = get(),
-            smsStore = get(),
-            smsPoller = get(),
-            smsReader = get(),
-            smsPermissionController = get(),
-            smsSendPermissionController = get(),
-            smsSender = get(),
-            smsDraftStore = get(),
-            mcpServerManager = get(),
-            sandboxController = get(),
-        )
-    }
-    single<DataRepository> { DenebGatewayClient(get<RemoteDataRepository>(), get<AppSettings>()) }
+    single<DataRepository> { DenebGatewayClient(get<AppSettings>(), get<SmsDraftStore>(), get<SmsSender>()) }
     single<TaskScheduler> {
         // Deneb scheduling, heartbeats, mail polling, and model work live on the
         // gateway. The native app only needs the scheduler shell for the

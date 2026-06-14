@@ -106,17 +106,11 @@ class ChatViewModel(
             _state.update { it.copy(isRestoring = false) }
         }
 
-        viewModelScope.launch(backgroundDispatcher) {
-            if (dataRepository !is DenebGatewayClient) {
-                dataRepository.connectEnabledMcpServers()
-            }
-        }
         viewModelScope.launch {
             dataRepository.fallbackStatus.collect { status ->
                 _state.update { it.copy(fallbackStatus = status) }
             }
         }
-        taskScheduler.isLoadingCheck = { _state.value.isLoading }
         taskScheduler.start()
 
         viewModelScope.launch {
@@ -315,11 +309,9 @@ class ChatViewModel(
     // unchanged — only the session space + whether recall (and retain) fires.
     private fun toggleRecall() {
         val toWork = !_state.value.recallEnabled
-        if (dataRepository is DenebGatewayClient) {
-            dataRepository.switchWorkspace(toWork)
-        } else {
-            dataRepository.setRecallEnabled(toWork)
-        }
+        // Gateway client swaps the active session space (업무 ↔ 챗봇) and persists
+        // the recall setting; the UI pill reflects it immediately either way.
+        (dataRepository as? DenebGatewayClient)?.switchWorkspace(toWork)
         _state.update { it.copy(recallEnabled = toWork) }
     }
 
@@ -332,29 +324,16 @@ class ChatViewModel(
     }
 
     private fun selectService(instanceId: String) {
-        if (dataRepository is DenebGatewayClient) {
-            dataRepository.selectDenebModelInstance(instanceId)
-            return
-        }
-        val instances = dataRepository.getConfiguredServiceInstances()
-        val currentIds = instances.map { it.instanceId }
-        if (instanceId !in currentIds) return
-        val reordered = listOf(instanceId) + currentIds.filter { it != instanceId }
-        dataRepository.reorderConfiguredServices(reordered)
-        updateAvailableServices()
+        // The chat-input switcher lists gateway models; selecting one swaps the
+        // active role-model instance on the gateway client.
+        (dataRepository as? DenebGatewayClient)?.selectDenebModelInstance(instanceId)
     }
 
     private fun updateAvailableServices() {
-        if (dataRepository is DenebGatewayClient) {
-            _state.update {
-                it.copy(
-                    availableServices = dataRepository.denebServiceEntries().toImmutableList(),
-                    warning = null,
-                )
-            }
-            return
-        }
-        val entries = dataRepository.getServiceEntries().toImmutableList()
+        val entries = (dataRepository as? DenebGatewayClient)
+            ?.denebServiceEntries()
+            ?.toImmutableList()
+            ?: persistentListOf()
         _state.update { it.copy(availableServices = entries, warning = null) }
     }
 
@@ -415,12 +394,9 @@ class ChatViewModel(
 
     override fun onCleared() {
         commitPendingConversationDeletion()
-        // The scheduler lives longer than this ViewModel (it's a singleton driving the
-        // Android foreground service). Reset the predicate so the daemon path keeps
-        // running without a stale reference to a dead state flow. The foreground-visible
-        // signal (`appInForeground`) is tracked separately via `ProcessLifecycleOwner`
-        // on Android — ViewModel lifecycle is too narrow (survives backgrounding).
-        taskScheduler.isLoadingCheck = { false }
+        // The scheduler is a process-lifetime singleton (it drives the Android
+        // foreground service + gateway event subscriptions), so it deliberately
+        // outlives this ViewModel — nothing to tear down here.
         super.onCleared()
     }
 

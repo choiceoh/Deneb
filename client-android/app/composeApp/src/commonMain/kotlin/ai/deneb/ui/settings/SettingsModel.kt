@@ -5,11 +5,10 @@ import org.jetbrains.compose.resources.StringResource
 
 /**
  * A selectable model row for a configured service. Lives in [ai.deneb.ui.settings]
- * for historical reasons: the data layer ([ai.deneb.data.DataRepository],
- * [ai.deneb.data.RemoteDataRepository], [ai.deneb.data.ModelTransformations]) maps
- * provider model lists into this shape. The Kai-style settings UI that originally
- * rendered it was removed (it was unreachable), but this transport type is still
- * live, so it was extracted here on its own.
+ * for historical reasons: [ai.deneb.data.ModelTransformations] maps provider model
+ * lists into this shape. The Kai-style settings UI that originally rendered it was
+ * removed (it was unreachable), but this transport type is still live, so it was
+ * extracted here on its own.
  */
 @Immutable
 data class SettingsModel(

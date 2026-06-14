@@ -1,7 +1,5 @@
 package ai.deneb.ui.chat
 
-import ai.deneb.data.Service
-import ai.deneb.data.ServiceEntry
 import ai.deneb.data.TaskScheduler
 import ai.deneb.testutil.FakeDataRepository
 import app.cash.turbine.test
@@ -44,14 +42,6 @@ class ChatViewModelExtendedTest {
         return ChatViewModel(fakeRepository, noOpScheduler, unconfinedDispatcher)
     }
 
-    private fun makeServiceEntry(instanceId: String, service: Service) = ServiceEntry(
-        instanceId = instanceId,
-        serviceId = service.id,
-        serviceName = service.displayName,
-        modelId = "test-model",
-        icon = service.icon,
-    )
-
     // ---- Concurrent ask prevention ----
 
     @Test
@@ -81,66 +71,6 @@ class ChatViewModelExtendedTest {
             // Release the gate so the first ask completes
             fakeRepository.askGate = null
             gate.complete(Unit)
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    // ---- selectService ----
-
-    @Test
-    fun `selectService reorders configured services so the selected instance is first`() = runTest {
-        fakeRepository.setConfiguredServices(Service.Gemini, Service.OpenAI, Service.Anthropic)
-        fakeRepository.fakeServiceEntries = listOf(
-            makeServiceEntry("gemini", Service.Gemini),
-            makeServiceEntry("openai", Service.OpenAI),
-            makeServiceEntry("anthropic", Service.Anthropic),
-        )
-
-        val viewModel = createViewModel()
-        viewModel.state.test {
-            skipItems(1)
-            val initialState = awaitItem()
-            assertEquals("gemini", initialState.availableServices.first().instanceId)
-
-            // Update fakeServiceEntries to reflect the reorder happens via getServiceEntries
-            // The fake's reorderConfiguredServices changes configuredInstances, but
-            // fakeServiceEntries is independent — update it after reorder happens.
-            fakeRepository.fakeServiceEntries = listOf(
-                makeServiceEntry("openai", Service.OpenAI),
-                makeServiceEntry("gemini", Service.Gemini),
-                makeServiceEntry("anthropic", Service.Anthropic),
-            )
-
-            initialState.actions.selectService("openai")
-            testDispatcher.scheduler.advanceUntilIdle()
-
-            val reordered = awaitItem()
-            assertEquals("openai", reordered.availableServices.first().instanceId)
-            // Repository should have been told to reorder
-            val configured = fakeRepository.getConfiguredServiceInstances()
-            assertEquals("openai", configured.first().instanceId)
-        }
-    }
-
-    @Test
-    fun `selectService is a no-op when instanceId is unknown`() = runTest {
-        fakeRepository.setConfiguredServices(Service.Gemini, Service.OpenAI)
-        fakeRepository.fakeServiceEntries = listOf(
-            makeServiceEntry("gemini", Service.Gemini),
-            makeServiceEntry("openai", Service.OpenAI),
-        )
-        val viewModel = createViewModel()
-
-        viewModel.state.test {
-            skipItems(1)
-            val initialState = awaitItem()
-            initialState.actions.selectService("nonexistent_id")
-            testDispatcher.scheduler.advanceUntilIdle()
-
-            // Order should be unchanged
-            val configured = fakeRepository.getConfiguredServiceInstances()
-            assertEquals("gemini", configured[0].instanceId)
-            assertEquals("openai", configured[1].instanceId)
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -203,7 +133,6 @@ class ChatViewModelExtendedTest {
             // ask(null) was dropped at the empty-text guard). It now drops the last
             // user+assistant pair via popLastExchange() and re-asks the captured last-user
             // text through the normal ask() path. See ChatViewModel.regenerate().
-            assertEquals(0, fakeRepository.regenerateCalls)
             assertEquals(1, fakeRepository.askCalls.size)
             assertEquals("First", fakeRepository.askCalls.single().first)
             cancelAndIgnoreRemainingEvents()

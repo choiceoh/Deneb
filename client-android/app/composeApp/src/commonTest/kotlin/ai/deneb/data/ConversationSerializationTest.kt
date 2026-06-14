@@ -365,7 +365,7 @@ class ConversationSerializationTest {
     fun `deserialize legacy single-file message keeps old fields readable`() {
         // Conversations saved by earlier versions have data/mimeType/fileName on the message
         // and no `attachments` field. The schema must still accept this shape; the conversion
-        // to an `attachments` list happens in RemoteDataRepository.loadConversation.
+        // to an `attachments` list happens when a stored conversation is loaded for display.
         val jsonString = """
             {
                 "id": "conv-legacy",
