@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -41,6 +42,15 @@ private fun denebGroupFill(): Color {
 }
 
 /**
+ * The grouped-card surface — rounded corners + the faint monochrome wash. Shared by
+ * [DenebGroup] and the settings-tab `SettingsCard` so every grouped surface reads
+ * identically. Note: it keeps a faint wash even on OLED (the design-refresh idiom),
+ * distinct from the older `denebAdaptiveCard*` outline-on-OLED callout style.
+ */
+@Composable
+fun Modifier.denebGroupSurface(shape: Shape = RoundedCornerShape(16.dp)): Modifier = clip(shape).background(denebGroupFill())
+
+/**
  * A grouped inset card. Optionally preceded by a [label] (tracked-caps section header).
  * Wrap a run of [DenebListRow]s; set `divider = false` on the last so no hairline shows
  * against the rounded bottom edge.
@@ -56,8 +66,7 @@ fun DenebGroup(
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(denebGroupFill()),
+                .denebGroupSurface(),
             content = content,
         )
     }
