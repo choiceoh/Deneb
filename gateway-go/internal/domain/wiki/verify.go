@@ -20,6 +20,18 @@ type VerifyFinding struct {
 	Detail string `json:"detail"`          // human-readable description (Korean)
 	PageA  string `json:"pageA"`           // primary page path
 	PageB  string `json:"pageB,omitempty"` // secondary page path (for duplicates)
+	// Fix is set only on HIGH-CONFIDENCE findings the dream cycle may auto-apply
+	// (Phase 5): an exact-duplicate merge or an LLM-high-confidence category move.
+	// Nil means advisory-only — surfaced in the report, never auto-touched.
+	Fix *VerifyFix `json:"fix,omitempty"`
+}
+
+// VerifyFix is the structured, auto-applicable correction attached to a
+// high-confidence VerifyFinding. Conservative by construction: only the two
+// safe, reversible (git-recoverable) actions are expressible.
+type VerifyFix struct {
+	Kind    string `json:"kind"`              // "merge" (fold PageB into PageA, delete PageB) | "move" (PageA → NewPath)
+	NewPath string `json:"newPath,omitempty"` // move: the corrected path under the right category
 }
 
 // verifyPages runs verification on existing wiki pages:
@@ -154,11 +166,8 @@ func detectDuplicates(idx *Index) []VerifyFinding {
 			if a.title != "" && b.title != "" && isSimilar(a.title, b.title) {
 				dist := levenshtein(a.title, b.title)
 				if dist == 0 {
-					findings = append(findings, VerifyFinding{
-						Type:   "duplicate",
-						Detail: fmt.Sprintf("동일한 제목: \"%s\"", a.title),
-						PageA:  a.path, PageB: b.path,
-					})
+					findings = append(findings, exactDupFinding(idx, a.path, b.path,
+						fmt.Sprintf("동일한 제목: \"%s\"", a.title)))
 				} else {
 					findings = append(findings, VerifyFinding{
 						Type:   "duplicate",
@@ -174,11 +183,8 @@ func detectDuplicates(idx *Index) []VerifyFinding {
 			if _, dup := seen[key]; a.id != "" && b.id != "" && !dup && isSimilar(a.id, b.id) {
 				dist := levenshtein(a.id, b.id)
 				if dist == 0 {
-					findings = append(findings, VerifyFinding{
-						Type:   "duplicate",
-						Detail: fmt.Sprintf("동일한 ID: \"%s\"", a.id),
-						PageA:  a.path, PageB: b.path,
-					})
+					findings = append(findings, exactDupFinding(idx, a.path, b.path,
+						fmt.Sprintf("동일한 ID: \"%s\"", a.id)))
 				} else {
 					findings = append(findings, VerifyFinding{
 						Type:   "duplicate",
@@ -215,6 +221,7 @@ type misclassificationResult struct {
 	Path            string `json:"path"`
 	CurrentCategory string `json:"currentCategory"`
 	CorrectCategory string `json:"correctCategory"`
+	Confidence      string `json:"confidence"` // high | medium | low — only "high" is auto-applied
 	Reason          string `json:"reason"`
 }
 
@@ -242,10 +249,11 @@ func (wd *WikiDreamer) detectMisclassifications(ctx context.Context, idx *Index)
 - 애매한 경우는 무시 (현재 분류 유지)
 - 예: 호수/산/건물 이름이 "인물"로 분류됨 → 지적
 - 예: 사람 이름이 "시스템"으로 분류됨 → 지적
+- confidence: 분류 오류 확신도 — high(누가 봐도 명백)/medium/low. **high만 자동 수정되니, 정말 확실할 때만 high**를 쓰고 조금이라도 애매하면 medium 이하로.
 - 문제 없으면 빈 배열 [] 반환
 
 JSON 배열만 반환. 다른 텍스트 없이.
-형식: [{"path":"...", "currentCategory":"...", "correctCategory":"...", "reason":"..."}]`,
+형식: [{"path":"...", "currentCategory":"...", "correctCategory":"...", "confidence":"high|medium|low", "reason":"..."}]`,
 		strings.Join(Categories, ", "), strings.Join(lines, "\n"))
 
 	systemJSON, _ := json.Marshal("You are a wiki category validator. Respond only with a JSON array.")
@@ -272,11 +280,20 @@ JSON 배열만 반환. 다른 텍스트 없이.
 
 	var findings []VerifyFinding
 	for _, r := range results {
-		findings = append(findings, VerifyFinding{
+		f := VerifyFinding{
 			Type:   "misclassified",
 			Detail: fmt.Sprintf("%s → %s (%s)", r.CurrentCategory, r.CorrectCategory, r.Reason),
 			PageA:  r.Path,
-		})
+		}
+		// Attach an auto-applicable move ONLY when the LLM is highly confident
+		// and the target is a real, different category — a low-confidence guess
+		// stays advisory and never moves a real page.
+		if strings.EqualFold(strings.TrimSpace(r.Confidence), "high") {
+			if np := recategorizedPath(r.Path, r.CorrectCategory); np != "" {
+				f.Fix = &VerifyFix{Kind: "move", NewPath: np}
+			}
+		}
+		findings = append(findings, f)
 	}
 
 	return findings

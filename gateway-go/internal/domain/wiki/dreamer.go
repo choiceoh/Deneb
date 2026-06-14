@@ -318,13 +318,28 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 		phaseErrors = append(phaseErrors, fmt.Sprintf("index-rebuild: %v", err))
 	}
 
-	// Phase 5: Verify existing pages (duplicate detection + misclassification).
+	// Phase 5: Verify existing pages (duplicate detection + misclassification),
+	// then AUTO-APPLY the high-confidence fixes (exact-duplicate merge, LLM
+	// high-confidence category move). Low-confidence findings stay advisory in
+	// the report; auto-applied corrections are logged and capped per cycle, and
+	// are reversible from this cycle's git snapshot.
 	findings := wd.verifyPages(ctx)
 	if len(findings) > 0 {
+		applied := wd.applyVerifyFixes(findings)
 		for _, f := range findings {
+			if f.Fix != nil {
+				continue // high-confidence: auto-applied (or attempted, logged), not advisory
+			}
 			report.VerifyFindings = append(report.VerifyFindings, f.Detail)
 		}
-		wd.logger.Info("wiki-dream: verification findings", "count", len(findings))
+		wd.logger.Info("wiki-dream: verification", "findings", len(findings), "autoApplied", applied)
+		if applied > 0 {
+			// The moves/merges changed the page set — rebuild so the snapshot
+			// (Phase 6) and next cycle see the corrected wiki.
+			if err := wd.rebuildIndex(); err != nil {
+				phaseErrors = append(phaseErrors, fmt.Sprintf("index-rebuild after auto-fix: %v", err))
+			}
+		}
 	}
 
 	// Phase 5.5: Densify the graph. For pages that have no related links yet,
