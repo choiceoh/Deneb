@@ -21,8 +21,11 @@ func validateConfig(cfg config) []string {
 			warns = append(warns, "duplicate model name "+e.Name+" — the last one wins, routing is ambiguous")
 		}
 		seen[e.Name] = true
-		if strings.TrimSpace(e.URL) == "" {
+		if strings.TrimSpace(e.URL) == "" && !e.Fleet {
 			warns = append(warns, "model "+e.Name+" has an empty url")
+		}
+		if e.Fleet && cfg.Sparkfleet == nil {
+			warns = append(warns, "model "+e.Name+" is fleet-backed (fleet:true) but no top-level sparkfleet source is configured — it can never resolve a URL")
 		}
 		// Check the raw field: protocol() silently collapses anything non-"anthropic"
 		// to openai, so a typo ("anthropics") would route wrong with no error.

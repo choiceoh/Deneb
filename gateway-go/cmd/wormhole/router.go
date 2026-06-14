@@ -100,12 +100,37 @@ func (rt *router) cur() *snapshot { return rt.snap.Load() }
 // override (e.g. to pin a key, protocol, or upstream id) and must beat discovery.
 func (rt *router) lookup(name string) (modelEntry, bool) {
 	if e, ok := rt.cur().models[name]; ok {
+		if e.Fleet {
+			return rt.resolveFleetEntry(e)
+		}
 		return e, true
 	}
 	if f := rt.fleet.Load(); f != nil {
 		if e, ok := (*f)[name]; ok {
 			return e, true
 		}
+	}
+	return modelEntry{}, false
+}
+
+// resolveFleetEntry overlays the live SparkFleet-discovered URL onto a fleet-backed
+// explicit entry (Fleet:true), preserving the entry's own routing config
+// (toggleKwarg, protocol, key, upstreamModel) that bare discovery omits. The
+// discovered set is keyed by served model id, which is the entry's UpstreamModel
+// (loadConfig defaults it to Name). When no live backend serves the model, fall
+// back to the entry's static url if present; otherwise the entry is unroutable so
+// the caller 404s / auto-fallback takes over — a moved or stopped model is never
+// pinned to a dead node. lookup returns entries by value, so overlaying URL here
+// never mutates the stored config.
+func (rt *router) resolveFleetEntry(e modelEntry) (modelEntry, bool) {
+	if f := rt.fleet.Load(); f != nil {
+		if d, ok := (*f)[e.UpstreamModel]; ok {
+			e.URL = d.URL
+			return e, true
+		}
+	}
+	if strings.TrimSpace(e.URL) != "" {
+		return e, true // static fallback while no live backend is discovered
 	}
 	return modelEntry{}, false
 }

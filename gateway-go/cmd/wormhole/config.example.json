@@ -5,6 +5,7 @@
   "sparkfleet": { "url": "http://127.0.0.1:18900", "token": "${FLEET_TOKEN}" },
   "models": [
     { "name": "dsv4", "url": "http://127.0.0.1:8000/v1", "toggleKwarg": "thinking" },
+    { "name": "qwen", "fleet": true, "upstreamModel": "qwen3.6-35b-a3b", "toggleKwarg": "enable_thinking" },
     {
       "name": "claude-or",
       "url": "https://openrouter.ai/api/v1",

@@ -47,6 +47,15 @@ type modelEntry struct {
 	// false to mark an on-box endpoint as cloud (e.g. a local tunnel that egresses)
 	// or true for a public URL you trust as local. Nil = auto-detect from URL.
 	Local *bool `json:"local,omitempty"`
+	// Fleet makes this an explicit entry whose backend URL is resolved LIVE from
+	// SparkFleet discovery (keyed by UpstreamModel/Name) instead of a static url —
+	// so the model can move between nodes without editing this file, while the entry
+	// still carries its own routing config (toggleKwarg, protocol, key, upstreamModel)
+	// that bare discovery can't express. Requires a top-level "sparkfleet" source.
+	// A static url, if also set, is the fallback used while no live backend serves
+	// the model; with neither a live backend nor a static url the entry is unroutable
+	// (clean 404 / auto-fallback) — never a stale pin to a dead node.
+	Fleet bool `json:"fleet,omitempty"`
 }
 
 // config is the wormhole config file (default ~/.wormhole/config.json). Token and
