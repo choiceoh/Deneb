@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Generate a dev-safe config from the production deneb.json.
 #
-# Copies ~/.deneb/deneb.json and replaces the Telegram bot token with a
-# dev-specific token (from DENEB_DEV_TELEGRAM_TOKEN env var) to prevent
-# 409 conflicts with the production gateway's long-poll.  If no dev token
-# is set, the token is stripped entirely (Telegram disabled).
+# Copies ~/.deneb/deneb.json and disables Gmail polling and the cron scheduler
+# so the dev instance never collides with the production gateway's background
+# work (duplicate poll cycles / duplicate cron runs).
 #
 # Everything else (providers, agents, sessions, hooks, logging, auth, ...)
 # is preserved so the dev instance exercises the same code paths as production.
@@ -41,20 +40,12 @@ if [[ ! -f "$PROD_CONFIG" ]]; then
     exit 1
   fi
   echo "WARN: production config not found at $PROD_CONFIG" >&2
-  echo "      generating minimal dev config with mock Telegram channel" >&2
-  # Write a minimal dev-safe config. We still wire the Telegram channel
-  # because live-test.sh points TELEGRAM_API_BASE at the local mock server,
-  # so the plugin needs *some* channels.telegram section to boot.
+  echo "      generating minimal dev config" >&2
+  # Write a minimal dev-safe config. Chat injection uses the native
+  # miniapp.chat.send RPC, so no channel section is needed to boot.
   python3 -c "
-import json, os
-dev_token = os.environ.get('DENEB_DEV_TELEGRAM_TOKEN') or 'mock-dev-token'
+import json
 cfg = {
-    'channels': {
-        'telegram': {
-            'botToken': dev_token,
-            'chatID': 10000001,
-        }
-    },
     'cron': {'enabled': False},
     'gmailPoll': {'enabled': False},
 }
@@ -74,21 +65,12 @@ case "$MODE" in
   diff)
     # Show what fields get stripped/replaced.
     python3 -c "
-import json, os, sys
+import json
 
 with open('$PROD_CONFIG') as f:
     cfg = json.load(f)
 
 changes = []
-dev_token = os.environ.get('DENEB_DEV_TELEGRAM_TOKEN', '')
-
-# Telegram bot token: replace with dev token or strip.
-tg = cfg.get('channels', {}).get('telegram', {})
-if tg.get('botToken'):
-    if dev_token:
-        changes.append('channels.telegram.botToken (replaced with dev bot token)')
-    else:
-        changes.append('channels.telegram.botToken (stripped, no DENEB_DEV_TELEGRAM_TOKEN)')
 
 # Strip Gmail polling (avoid duplicate poll cycles).
 gp = cfg.get('gmailPoll', {})
@@ -117,27 +99,10 @@ print('  - DENEB_WIKI_DIARY_DIR → isolated from ~/.deneb/memory/diary')
 
   generate)
     python3 -c "
-import json, os, sys
+import json
 
 with open('$PROD_CONFIG') as f:
     cfg = json.load(f)
-
-# live-test.sh always passes a mock token (via DENEB_DEV_TELEGRAM_TOKEN) so
-# the Telegram plugin has something to boot with. The real bot is never
-# contacted because TELEGRAM_API_BASE points at the local mock server.
-dev_token = os.environ.get('DENEB_DEV_TELEGRAM_TOKEN', '') or 'mock-dev-token'
-
-# Ensure channels.telegram exists so the plugin actually starts in dev mode.
-channels = cfg.setdefault('channels', {})
-tg = channels.get('telegram')
-if not isinstance(tg, dict):
-    tg = {}
-    channels['telegram'] = tg
-tg['botToken'] = dev_token
-# Seed a chat ID so the primary-DM path has a valid target. The value is
-# synthetic — messages flow through the mock, never a real chat.
-if not tg.get('chatID'):
-    tg['chatID'] = 10000001
 
 # Disable Gmail polling to avoid duplicate poll cycles.
 gp = cfg.get('gmailPoll')

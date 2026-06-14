@@ -94,7 +94,7 @@ class TurnResult:
         return [c for c in self.checks if not c.passed and not c.skipped]
 
 
-# --- Telegram Client Wrapper ---
+# --- Native Client Wrapper ---
 
 class GatewayClient:
     """Native-client test client (drives miniapp.chat.send over HTTP)."""

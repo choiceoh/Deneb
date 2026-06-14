@@ -1321,8 +1321,8 @@ async def run(args):
             finally:
                 await client.close()
         else:
-            # Sequential mode: one shared mock-Telegram connection, reset per
-            # test. Mock connects are cheap (HTTP to localhost) but reusing
+            # Sequential mode: one shared native-client connection, reset per
+            # test. Connects are cheap (HTTP to localhost) but reusing
             # the same capture cursor keeps the output stable.
             client = GatewayClient(HOST, args.port, bot=bot_name)
             await client.connect()

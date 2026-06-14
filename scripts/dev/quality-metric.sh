@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Quality metric for constant optimization.
-# Sends a chat message via the mock Telegram server, measures response
-# quality, and returns a numeric score.
+# Sends a chat message via the native miniapp RPC surface
+# (POST /api/v1/miniapp/rpc -> miniapp.chat.send), measures response quality,
+# and returns a numeric score. The target gateway is resolved from
+# DENEB_LIVETEST_GW_URL (exported by live-test.sh / iterate.sh).
 #
 # Usage:
 #   scripts/quality-metric.sh [MSG]
@@ -31,7 +33,7 @@ import re
 import sys
 
 sys.path.insert(0, os.environ["DENEB_SCRIPTS_DIR"])
-from mock_telegram_client import TelegramTestClient, check_prerequisites
+from mock_native_client import NativeTestClient, check_prerequisites
 
 MESSAGE = os.environ.get("MOCK_QUALITY_MESSAGE", "")
 
@@ -81,7 +83,7 @@ async def main():
         print('metric_value=0')
         return
 
-    client = TelegramTestClient()
+    client = NativeTestClient()
     try:
         await client.connect()
     except Exception as e:

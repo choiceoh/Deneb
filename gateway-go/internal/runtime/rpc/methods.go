@@ -7,7 +7,7 @@ import (
 // RegisterBuiltinMethods registers stateless built-in RPC methods:
 // tools catalog.
 //
-// Domain handlers that require dependencies (sessions, telegram, health, etc.)
+// Domain handlers that require dependencies (sessions, chat, health, etc.)
 // are registered via method_registry.go's table-driven path.
 func RegisterBuiltinMethods(d *Dispatcher) {
 	d.RegisterDomain(handlerskill.CatalogMethods())

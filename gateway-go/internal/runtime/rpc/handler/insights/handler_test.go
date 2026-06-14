@@ -45,9 +45,6 @@ func TestInsightsGenerateDefaultsTo30Days(t *testing.T) {
 	if out.Report == nil || out.Report.Days != 30 {
 		t.Errorf("expected Days=30; got %+v", out.Report)
 	}
-	if out.Markdown == "" {
-		t.Errorf("expected MarkdownV2 output, got empty string")
-	}
 }
 
 func TestInsightsGenerateCustomDays(t *testing.T) {

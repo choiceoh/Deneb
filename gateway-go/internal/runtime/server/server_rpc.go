@@ -11,7 +11,7 @@
 //   8. RPC Dispatcher + middleware:
 //      a. hub = buildHub()              — GatewayHub (Chat=nil at this point)
 //      b. registerBuiltinMethods()      — gateway.status, gateway.ping
-//      c. rpc.RegisterBuiltinMethods()  — stateless FFI (protocol/security/media) + tools.catalog
+//      c. rpc.RegisterBuiltinMethods()  — stateless built-ins (skill/tools catalog)
 //      d. registerEarlyMethods(hub)     — ~35 domains via hub adapters (method_registry.go)
 //      e. registerSessionRPCMethods()   — chat pipeline init + handler creation
 //      f. registerLateMethods(hub)      — Chat-dependent domains (method_registry.go)
@@ -21,9 +21,8 @@
 // initAndListen():
 //  10. HTTP server + TLS
 //  11. Background subsystems (tick broadcaster, monitoring, process pruner, session GC)
-//  12. Telegram plugin start (channel callbacks wired in registerLateMethods)
-//  13. Cron service start + session restore
-//  14. Run state machine + autonomous service
+//  12. Cron service start + session restore
+//  13. Run state machine + autonomous service
 //
 // GatewayHub (gateway_hub.go):
 //  Central service registry built from Server fields via buildHub().

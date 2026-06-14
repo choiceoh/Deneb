@@ -95,7 +95,6 @@ type DenebConfig struct {
 	Hooks       *HooksConfig       `json:"hooks,omitempty"`
 	Media       *MediaConfig       `json:"media,omitempty"`
 	Secrets     *SecretsConfig     `json:"secrets,omitempty"`
-	Channels    *ChannelsConfig    `json:"channels,omitempty"`
 	Session     *SessionConfig     `json:"session,omitempty"`
 	Agents      *AgentsConfig      `json:"agents,omitempty"`
 	GmailPoll   *GmailPollConfig   `json:"gmailPoll,omitempty"`
@@ -244,18 +243,6 @@ type MediaConfig struct {
 // SecretsConfig for secret storage.
 type SecretsConfig struct {
 	Defaults map[string]string `json:"defaults,omitempty"`
-}
-
-// ChannelsConfig holds channel-level settings from deneb.json.
-// Any per-channel plugin configs (DM policy, channel credentials) are loaded
-// directly by each channel plugin; this struct captures cross-channel settings
-// that the gateway core consumes.
-type ChannelsConfig struct {
-	// ModelByChannel maps channel names to model overrides.
-	// Structure: {"client": {"*": "model-id", "chat:123": "other-model"}}
-	ModelByChannel map[string]map[string]string `json:"modelByChannel,omitempty"`
-	// DefaultSessionScope sets the default session scope for all channels.
-	DefaultSessionScope string `json:"defaultSessionScope,omitempty"`
 }
 
 // SessionConfig for session lifecycle.

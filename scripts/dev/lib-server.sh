@@ -8,7 +8,7 @@
 #   devlib_load_dotenv                 Load ~/.deneb/.env
 #   devlib_version                     Get deneb version from git tags
 #   devlib_build BINARY [REPO]         Build gateway binary
-#   devlib_gen_config OUT [TOKEN]      Generate dev config
+#   devlib_gen_config OUT              Generate dev config
 #   devlib_start_gateway BIN PORT CFG STATE LOG [nohup]
 #   devlib_wait_healthy HOST PORT [MAX]
 #   devlib_stop_pid PID [TIMEOUT_DS]
@@ -35,22 +35,23 @@ DEVLIB_HOST="127.0.0.1"
 #
 # DENEB_INSTANCE scopes every /tmp state path and default port so multiple
 # worktrees/agents can run live-test.sh and iterate.sh concurrently without
-# clobbering each other's binary, logs, state dir, mock server, or ports.
+# clobbering each other's binary, logs, state dir, or ports.
 #
 # The "default" instance keeps the historical paths and ports byte-for-byte
-# (live=18790, iterate=18791, mock=18792, /tmp/deneb-*), so existing habits and
-# any already-running default instance are undisturbed. A named instance — e.g.
+# (live=18790, iterate=18791, /tmp/deneb-*), so existing habits and any
+# already-running default instance are undisturbed. A named instance — e.g.
 # `export DENEB_INSTANCE="$(basename "$PWD")"` per worktree — gets its own /tmp
-# prefix plus a deterministic 4-port block derived from the name. Paths are
-# keyed by the full name so they never collide; ports use a name hash mod 100,
-# so two differently-named instances clash on ports only ~1% of the time (and
-# then merely can't run at the same instant, same as today's single default).
+# prefix plus a deterministic 4-port block derived from the name (offset +2 is
+# reserved — it was the retired mock-Telegram server). Paths are keyed by the
+# full name so they never collide; ports use a name hash mod 100, so two
+# differently-named instances clash on ports only ~1% of the time (and then
+# merely can't run at the same instant, same as today's single default).
 DEVLIB_INSTANCE="${DENEB_INSTANCE:-default}"
 if [[ "$DEVLIB_INSTANCE" == "default" ]]; then
   DEVLIB_TMP_PREFIX="/tmp/deneb"
   DEVLIB_LIVE_PORT=18790
   DEVLIB_ITERATE_PORT=18791
-  DEVLIB_MOCK_DEFAULT_PORT=18792
+  # 18792 (offset +2) reserved — retired mock-Telegram server slot.
   DEVLIB_PUPPET_PORT=18793
 else
   DEVLIB_TMP_PREFIX="/tmp/deneb-${DEVLIB_INSTANCE}"
@@ -58,7 +59,7 @@ else
   _devlib_base=$(( 18800 + (_devlib_off % 100) * 4 ))
   DEVLIB_LIVE_PORT=$_devlib_base
   DEVLIB_ITERATE_PORT=$((_devlib_base + 1))
-  DEVLIB_MOCK_DEFAULT_PORT=$((_devlib_base + 2))
+  # Offset +2 reserved — retired mock-Telegram server slot.
   # 4th and last slot of the instance port block — puppet.sh's broker.
   DEVLIB_PUPPET_PORT=$((_devlib_base + 3))
 fi
@@ -113,15 +114,9 @@ devlib_build() {
 
 # Generate dev config via config-gen.sh.
 #   $1 — output path (required)
-#   $2 — Telegram token override (optional)
 devlib_gen_config() {
   local out="$1"
-  if [[ -n "${2:-}" ]]; then
-    DENEB_DEV_TELEGRAM_TOKEN="$2" \
-      "$DEVLIB_SCRIPT_DIR/config-gen.sh" --out "$out" >/dev/null 2>&1
-  else
-    "$DEVLIB_SCRIPT_DIR/config-gen.sh" --out "$out" >/dev/null 2>&1
-  fi
+  "$DEVLIB_SCRIPT_DIR/config-gen.sh" --out "$out" >/dev/null 2>&1
 }
 
 # ---------------------------------------------------------------------------
@@ -189,10 +184,9 @@ devlib_ensure_client_token() {
 #   $5 — log file path
 #   $6 — "nohup" to survive terminal close (optional)
 #
-# Live tests point the Telegram plugin at the mock Bot API server via
-# TELEGRAM_API_BASE so the entire chat pipeline runs without hitting
-# api.telegram.org. Callers can override DENEB_DEV_MOCK_TELEGRAM_URL if they
-# run the mock on a non-default port.
+# Chat/quality tests inject through the native miniapp.chat.send RPC, so no
+# channel-plugin endpoint wiring is needed here — the gateway just serves
+# /api/v1/miniapp/rpc on the dev port.
 devlib_start_gateway() {
   local binary="$1" port="$2" config="$3" state_dir="$4" log="$5"
   local use_nohup="${6:-}"
@@ -206,90 +200,20 @@ devlib_start_gateway() {
   # restarts and prefer devlib_seed_client_token's production-token mirror.
   devlib_ensure_client_token "$state_dir"
 
-  local mock_url="${DENEB_DEV_MOCK_TELEGRAM_URL:-http://127.0.0.1:${DEVLIB_MOCK_DEFAULT_PORT}}"
-  # Plugin appends the bot token to TELEGRAM_API_BASE, so the base must end
-  # with "/bot" — the token is joined directly after with no separator.
-  local telegram_api_base="${mock_url%/}/bot"
-
   if [[ "$use_nohup" == "nohup" ]]; then
     DENEB_CONFIG_PATH="$config" \
     DENEB_STATE_DIR="$state_dir" \
     DENEB_WIKI_DIR="$state_dir/wiki" \
     DENEB_WIKI_DIARY_DIR="$state_dir/memory/diary" \
-    TELEGRAM_API_BASE="$telegram_api_base" \
     nohup "$binary" --bind loopback --port "$port" > "$log" 2>&1 &
   else
     DENEB_CONFIG_PATH="$config" \
     DENEB_STATE_DIR="$state_dir" \
     DENEB_WIKI_DIR="$state_dir/wiki" \
     DENEB_WIKI_DIARY_DIR="$state_dir/memory/diary" \
-    TELEGRAM_API_BASE="$telegram_api_base" \
     "$binary" --bind loopback --port "$port" > "$log" 2>&1 &
   fi
   DEVLIB_PID=$!
-}
-
-# --- Mock Telegram server lifecycle ---
-#
-# The dev and iterate gateways both talk to a local mock that speaks the
-# Telegram Bot API. The mock is cheap (stdlib http.server) and stateless
-# across restarts, so we run a single instance per port for as long as any
-# dev gateway needs it. Helpers below manage start/stop/healthcheck.
-
-# DEVLIB_MOCK_DEFAULT_PORT is set in the instance-isolation block near the top.
-DEVLIB_MOCK_PID_FILE="${DEVLIB_TMP_PREFIX}-mock-telegram.pid"
-DEVLIB_MOCK_LOG="${DEVLIB_TMP_PREFIX}-mock-telegram.log"
-
-# Start the mock Telegram server. No-op if already running.
-#   $1 — port (optional, default 18792)
-#   $2 — host (optional, default 127.0.0.1)
-devlib_start_mock_telegram() {
-  local port="${1:-$DEVLIB_MOCK_DEFAULT_PORT}"
-  local host="${2:-$DEVLIB_HOST}"
-
-  if devlib_mock_telegram_running "$port"; then
-    return 0
-  fi
-
-  # Clean up a stale pid file from a crashed previous run.
-  rm -f "$DEVLIB_MOCK_PID_FILE"
-
-  nohup python3 "$DEVLIB_SCRIPT_DIR/../mock_telegram_server.py" \
-    --host "$host" --port "$port" > "$DEVLIB_MOCK_LOG" 2>&1 &
-  local pid=$!
-  echo "$pid" > "$DEVLIB_MOCK_PID_FILE"
-
-  # Short readiness probe so callers know the port is live before starting
-  # the gateway (otherwise getMe at startup fails on ECONNREFUSED).
-  local retries=0 max_retries=20
-  while (( retries < max_retries )); do
-    if curl -sf "http://$host:$port/_test/health" > /dev/null 2>&1; then
-      return 0
-    fi
-    if ! kill -0 "$pid" 2>/dev/null; then
-      return 1
-    fi
-    sleep 0.1
-    retries=$((retries + 1))
-  done
-  return 1
-}
-
-# Stop the mock Telegram server if we started it.
-devlib_stop_mock_telegram() {
-  [[ -f "$DEVLIB_MOCK_PID_FILE" ]] || return 0
-  local pid
-  pid=$(cat "$DEVLIB_MOCK_PID_FILE" 2>/dev/null || echo "")
-  rm -f "$DEVLIB_MOCK_PID_FILE"
-  [[ -n "$pid" ]] || return 0
-  devlib_stop_pid "$pid"
-}
-
-# Check whether the mock Telegram server is running on the given port.
-#   $1 — port (optional, default 18792)
-devlib_mock_telegram_running() {
-  local port="${1:-$DEVLIB_MOCK_DEFAULT_PORT}"
-  curl -sf "http://$DEVLIB_HOST:$port/_test/health" > /dev/null 2>&1
 }
 
 # Wait for /health to respond OK (exponential backoff: 50ms -> 300ms cap).

@@ -12,7 +12,7 @@
 //
 // Layer overview:
 //   - web_http.go           — HTTP fetch, retry, error type, error classification
-//   - web_html.go           — HTML → text (FFI, local AI)
+//   - web_html.go           — HTML → text (local AI, htmlmd fallback)
 //   - web_html_preprocess.go — HTML noise stripping, metadata, signals, charset
 //   - web_content.go        — Content dispatch, metadata type, output formatting
 //   - web_fetch_stealth.go  — Browser profiles, bot-block evasion

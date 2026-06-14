@@ -28,7 +28,7 @@ import (
 // 1. Extract metadata from raw HTML
 // 2. Detect quality signals
 // 3. Strip noise elements (nav, aside, footer, ads, cookie banners)
-// 4. Convert to Markdown (local AI or FFI fallback)
+// 4. Convert to Markdown (local AI, with the htmlmd pure-Go converter as fallback)
 func processHTML(ctx context.Context, html, url string, localAI *LocalAIExtractor, meta *webFetchMeta) string {
 	// Step 1: Extract metadata from raw HTML (before any stripping).
 	extractHTMLMeta(html, meta)

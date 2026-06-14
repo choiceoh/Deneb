@@ -33,8 +33,8 @@ func (g *singleflight) do(key string, fn func() (any, error)) (any, error) {
 	g.calls[key] = c
 	g.mu.Unlock()
 
-	// Clean up with defer so a panic in fn (e.g. a fault in the htmlmd cgo FFI
-	// or a parser nil-deref) cannot poison the key. Without defer, an unwind
+	// Clean up with defer so a panic in fn (e.g. a fault in the htmlmd parser
+	// or a nil-deref) cannot poison the key. Without defer, an unwind
 	// skips wg.Done()/delete, leaving the *call stuck in g.calls with its
 	// WaitGroup at 1 — every later caller for this key then blocks on
 	// c.wg.Wait() forever (bounded only by the turn deadline) and leaks a

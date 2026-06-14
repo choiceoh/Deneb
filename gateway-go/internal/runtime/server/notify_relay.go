@@ -51,7 +51,7 @@ const notifyEventQueueSize = 32
 const notifyDebounce = 30 * time.Second
 
 // mirroredEvents enumerates the broadcast event names that the notifier
-// mirrors to the secondary chat. Limited to events that signal an actual
+// mirrors to connected native clients. Limited to events that signal an actual
 // user-observable problem (delivery dropped, mutation failed, context broken,
 // compaction looping). Routine `sessions.changed` / `session.tool` traffic is
 // excluded — that would drown the operator in noise.

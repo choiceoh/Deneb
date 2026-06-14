@@ -8,13 +8,12 @@
 # The native surface runs one synchronous agent turn and returns the reply, so
 # content quality (Korean, substance, leak-free, latency) is exercised end-to-end;
 # per-token/per-tool streaming is not observable on this surface (see
-# mock_native_client.py). The mock Telegram server is still started for legacy
-# health checks but is no longer used to drive chat.
+# mock_native_client.py).
 #
 # Usage:
 #   scripts/live-test.sh build              Build gateway from current tree
-#   scripts/live-test.sh start              Start dev gateway + mock telegram
-#   scripts/live-test.sh stop               Stop dev gateway + mock telegram
+#   scripts/live-test.sh start              Start dev gateway
+#   scripts/live-test.sh stop               Stop dev gateway
 #   scripts/live-test.sh restart            Rebuild + restart
 #   scripts/live-test.sh status             Check if dev gateway is running
 #   scripts/live-test.sh health             Hit /health endpoint
@@ -44,13 +43,12 @@
 #   scripts/live-test.sh multi-chat MSG1 MSG2 MSG3 [--expect-context PAT]
 #   scripts/live-test.sh tool-check TOOL_NAME MSG
 #
-# The dev gateway runs on port 18790 (separate from production on 18789) and
-# the mock Telegram server on port 18792 (override via DENEB_DEV_MOCK_TELEGRAM_URL).
+# The dev gateway runs on port 18790 (separate from production on 18789).
 #
-# Config: always uses production config (via config-gen.sh), with the bot
-# token replaced by a fake "mock-dev-token" so the plugin happily calls the
-# local mock server. Providers, auth, hooks, agents, sessions, and logging
-# all exercise the same code paths as production.
+# Config: always uses production config (via config-gen.sh), with Gmail polling
+# and cron disabled so the dev instance never collides with the production
+# gateway's background work. Providers, auth, hooks, agents, sessions, and
+# logging all exercise the same code paths as production.
 
 set -euo pipefail
 
@@ -67,13 +65,6 @@ DEV_LOG="${DEVLIB_TMP_PREFIX}-gateway-live.log"
 DEV_HOST="$DEVLIB_HOST"
 DEV_STATE_DIR="${DEVLIB_TMP_PREFIX}-dev-state"
 DENEB_VERSION=$(devlib_version)
-
-# Mock Telegram server: any fake token works because /bot<TOKEN>/<method> is
-# only used for routing by the mock. A fixed placeholder keeps startup logs
-# stable and avoids accidentally shadowing a real credential from the env.
-MOCK_TELEGRAM_TOKEN="mock-dev-token"
-MOCK_TELEGRAM_PORT="${DENEB_DEV_MOCK_TELEGRAM_PORT:-$DEVLIB_MOCK_DEFAULT_PORT}"
-export DENEB_DEV_MOCK_TELEGRAM_URL="${DENEB_DEV_MOCK_TELEGRAM_URL:-http://$DEV_HOST:$MOCK_TELEGRAM_PORT}"
 
 # Chat/quality tests inject through the real native-client surface
 # (POST /api/v1/miniapp/rpc → miniapp.chat.send) instead of the retired
@@ -100,25 +91,12 @@ cmd_start() {
     cmd_build
   fi
 
-  # Start the mock Telegram server first so the gateway's getMe probe finds
-  # it immediately at startup. The mock is idempotent — no-op if a previous
-  # live-test or iterate run already left it up.
-  echo "==> Starting mock Telegram server on $DEV_HOST:$MOCK_TELEGRAM_PORT..."
-  if devlib_start_mock_telegram "$MOCK_TELEGRAM_PORT" "$DEV_HOST"; then
-    echo "    Mock ready ($DENEB_DEV_MOCK_TELEGRAM_URL)"
-  else
-    echo "    FAIL: mock Telegram server did not start"
-    echo "    Check log: $DEVLIB_MOCK_LOG"
-    return 1
-  fi
-
   local dev_config="${DEVLIB_TMP_PREFIX}-dev-config.json"
-  DENEB_DEV_TELEGRAM_TOKEN="$MOCK_TELEGRAM_TOKEN" devlib_gen_config "$dev_config"
-  echo "    Config: production (Telegram: mock bot on port $MOCK_TELEGRAM_PORT)"
+  devlib_gen_config "$dev_config"
+  echo "    Config: production"
 
   echo "==> Starting dev gateway on $DEV_HOST:$DEV_PORT..."
-  DENEB_DEV_TELEGRAM_TOKEN="$MOCK_TELEGRAM_TOKEN" \
-    devlib_start_gateway "$DEV_BINARY" "$DEV_PORT" "$dev_config" "$DEV_STATE_DIR" "$DEV_LOG" nohup
+  devlib_start_gateway "$DEV_BINARY" "$DEV_PORT" "$dev_config" "$DEV_STATE_DIR" "$DEV_LOG" nohup
   echo "$DEVLIB_PID" > "$DEV_PID_FILE"
 
   if devlib_wait_healthy "$DEV_HOST" "$DEV_PORT" 25; then
@@ -132,9 +110,7 @@ cmd_start() {
 }
 
 cmd_stop() {
-  local had_gateway=false
   if _is_running; then
-    had_gateway=true
     local pid
     pid=$(cat "$DEV_PID_FILE")
     echo "==> Stopping dev gateway (PID $pid)..."
@@ -148,16 +124,6 @@ cmd_stop() {
     fi
   else
     echo "Dev gateway not running"
-  fi
-
-  # Stop the mock Telegram server last so in-flight getUpdates calls from
-  # the gateway unwind against a live socket instead of EOF'ing mid-shutdown.
-  if devlib_mock_telegram_running "$MOCK_TELEGRAM_PORT"; then
-    echo "==> Stopping mock Telegram server..."
-    devlib_stop_mock_telegram
-    echo "    Stopped"
-  elif [[ "$had_gateway" == "false" ]]; then
-    echo "Mock Telegram server not running"
   fi
 }
 
@@ -218,11 +184,7 @@ cmd_smoke() {
   echo "==> All smoke tests passed"
 
   # Brief parity note.
-  if devlib_mock_telegram_running "$MOCK_TELEGRAM_PORT"; then
-    echo "    (config: production, Telegram: mock on port $MOCK_TELEGRAM_PORT)"
-  else
-    echo "    (config: production, Telegram: mock not running)"
-  fi
+  echo "    (config: production)"
 }
 
 cmd_parity() {
@@ -248,18 +210,10 @@ cmd_parity() {
   echo "  [OK]   Pure Go (Rust core removed)"
   echo ""
 
-  # 3. Telegram parity (mock server).
-  echo "--- Telegram (mock) ---"
-  if devlib_mock_telegram_running "$MOCK_TELEGRAM_PORT"; then
-    echo "  [OK]   Mock Telegram server: running on $DEV_HOST:$MOCK_TELEGRAM_PORT"
-    echo "         Gateway talks to $DENEB_DEV_MOCK_TELEGRAM_URL/bot<token>"
-  else
-    echo "  [GAP]  Mock Telegram server: not running"
-    echo "         Fix: scripts/dev/live-test.sh start (starts the mock automatically)"
-    issues=$((issues + 1))
-  fi
-  echo "  [INFO] Production and dev no longer share bot tokens — mock mode runs"
-  echo "         without real credentials and never reaches api.telegram.org."
+  # 3. Chat injection path.
+  echo "--- Chat Injection ---"
+  echo "  [OK]   Native miniapp RPC (POST /api/v1/miniapp/rpc → miniapp.chat.send)"
+  echo "         No external network, no channel plugin (Telegram retired in #1922)."
   echo ""
 
   # 4. Environment variables.
@@ -663,11 +617,11 @@ PYEOF
     echo "  restart         Rebuild + restart"
     echo "  status          Show dev gateway status + health"
     echo ""
-    echo "Testing (Mock Telegram 기반 — 목환경에서 실제 경로 검증):"
+    echo "Testing (네이티브 클라 RPC 주입 — 실제 경로 검증):"
     echo "  health              GET /health (JSON)"
     echo "  smoke               Smoke test (health + ready)"
-    echo "  chat MSG            목 텔레그램으로 채팅 메시지 전송, 응답 확인"
-    echo "  quality [SCENARIO]  품질 테스트 (165 cases, mock Telegram)"
+    echo "  chat MSG            네이티브 miniapp RPC로 채팅 메시지 전송, 응답 확인"
+    echo "  quality [SCENARIO]  품질 테스트 (165 cases, 네이티브 RPC)"
     echo "    Scenarios: all|core|health|daily|system|code|task|search|knowledge"
     echo "               format|context|edge|safety|korean|persona|reasoning"
     echo "               bench-challenge|bench-multiturn|bench-oolong|bench (all bench)"
@@ -679,7 +633,7 @@ PYEOF
     echo "  quality-compare A B 두 실행 비교"
     echo "  quality-trend NAME  점수 추이"
     echo ""
-    echo "Reproduction (AI 에이전트 증상 재현, mock Telegram):"
+    echo "Reproduction (AI 에이전트 증상 재현, 네이티브 RPC):"
     echo "  chat-check MSG [--expect PAT] [--expect-not PAT] [--expect-tool TOOL]"
     echo "                      채팅 + assertion (Korean, latency, patterns, tools)"
     echo "  multi-chat M1 M2..  멀티턴 채팅 (컨텍스트 유지 확인)"
@@ -719,12 +673,11 @@ PYEOF
     echo "Parity:"
     echo "  parity              Show dev vs production environment differences"
     echo ""
-    echo "Config: always uses production config (via config-gen.sh), but the"
-    echo "Telegram bot token is replaced with a fake mock token so the plugin"
-    echo "talks to the local mock Bot API server (default port 18792) instead"
-    echo "of api.telegram.org."
+    echo "Config: always uses production config (via config-gen.sh), with Gmail"
+    echo "polling and cron disabled so the dev instance never collides with the"
+    echo "production gateway's background work."
     echo ""
-    echo "전제조건: 없음. 실제 텔레그램 자격증명, 세션 파일, Telethon 설치 모두"
-    echo "          필요 없다. 목 서버는 파이썬 stdlib만 사용한다."
+    echo "전제조건: 없음. 채팅 주입은 네이티브 클라 표면(miniapp.chat.send)을 직접"
+    echo "          호출하며, 파이썬 stdlib만 사용한다."
     ;;
 esac
