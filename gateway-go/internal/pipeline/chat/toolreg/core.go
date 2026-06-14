@@ -33,6 +33,17 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	RegisterRoutineTools(registry, &deps.Chrono, deps.LLMClient, deps.DefaultModel, diaryDir, wikiDir)
 	RegisterPhoneTools(registry)
 
+	// Standing goal (Ralph loop). Eager: the agent must discover it to set a
+	// goal on a multi-step request. Once set, the server's goalTask advances it
+	// one run per idle tick, judges completion with the lightweight model, and a
+	// per-goal idempotency ledger blocks repeated destructive actions.
+	registry.RegisterTool(toolctx.ToolDef{
+		Name:        "goal",
+		Description: "다단계·장기 작업을 여러 턴에 걸쳐 끝까지 진행해야 할 때 표준 목표(standing goal)를 설정·관리한다. action=set(목표 설정) | subgoal(완료 기준 추가) | status | pause | resume | stop. 설정하면 사용자가 자리를 비운 동안 자동으로 한 단계씩 진행하고 완료를 판정한다. 이미 실행한 작업은 멱등 가드로 중복되지 않는다.",
+		InputSchema: goalToolSchema(),
+		Fn:          tools.ToolGoal(),
+	})
+
 	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
 	// because it depends on local AI hooks that live in the chat package.
 	// NOTE: fetch_tools is registered by chat.RegisterCoreTools because it

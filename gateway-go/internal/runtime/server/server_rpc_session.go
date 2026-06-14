@@ -11,6 +11,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/goals"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
@@ -483,6 +484,33 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 				newTodoDeadlineCollector(),
 			),
 			signalConfig: autonomous.DefaultSignalConfig(),
+		})
+
+		// Register the goal loop (Ralph loop): advances active standing goals
+		// (set via /goal) one run at a time while the user is idle, judging
+		// completion with the lightweight model and enforcing a per-goal
+		// idempotency ledger so a re-driven run never repeats a destructive
+		// action. State persists in ~/.deneb/goals.json (beside
+		// autonomous_state.json) so a standing goal survives the auto-deploy
+		// restarts. The store singleton is shared with the /goal slash command.
+		goalStateDir := ""
+		if homeDir != "" {
+			goalStateDir = filepath.Join(homeDir, ".deneb")
+		}
+		goalStore := goals.NewStore(goalStateDir, s.logger)
+		goals.SetDefault(goalStore)
+		s.autonomousSvc.RegisterTask(&goalTask{
+			chatHandler: s.chatHandler,
+			store:       goalStore,
+			activity:    s.activity,
+			logger:      s.logger,
+			notify: func(ctx context.Context, sessionKey, msg string) error {
+				n := s.proactiveRelay.notifierForSession(sessionKey)
+				if n == nil {
+					return nil
+				}
+				return n.Notify(ctx, msg)
+			},
 		})
 
 		// Daily offsite memory backup: tar.gz of the memory stores streamed

@@ -109,6 +109,16 @@ type SyncOptions struct {
 	// see RunParams.AutoDeliveredOutput.
 	AutoDeliveredOutput bool
 
+	// BeforeToolCall, when set, gates each tool execution (block + reason).
+	// Propagated to RunParams.BeforeToolCall; the goal loop uses it for its
+	// idempotency guard. nil = no gate.
+	BeforeToolCall func(name, toolCallID string, input []byte) (block bool, blockReason string)
+
+	// OnToolResult, when set, observes each tool result. Propagated to
+	// RunParams.OnToolResult; the goal loop uses it to record committed
+	// destructive actions into the ledger. nil = no observer.
+	OnToolResult func(name, toolUseID, result string, isErr bool)
+
 	// OnToolEvent, when set on a streaming run (SendSyncStream only), receives
 	// tool lifecycle transitions (started/completed, with detail hint and
 	// error flag) so the transport can surface live tool progress — the native
@@ -167,6 +177,8 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 		params.EphemeralUser = opts.EphemeralUser
 		params.EphemeralAssistant = opts.EphemeralAssistant
 		params.AutoDeliveredOutput = opts.AutoDeliveredOutput
+		params.BeforeToolCall = opts.BeforeToolCall
+		params.OnToolResult = opts.OnToolResult
 	}
 
 	deps := h.buildRunDeps()

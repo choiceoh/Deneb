@@ -1212,6 +1212,32 @@ func phoneWriteToolSchema() map[string]any {
 	}
 }
 
+func goalToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "Goal action",
+				"enum":        []string{"set", "subgoal", "status", "pause", "resume", "stop"},
+			},
+			"goal": map[string]any{
+				"type":        "string",
+				"description": "Objective text (required for action=set). Free-form, e.g. '탑솔라 6월 견적을 정리해 초안까지'.",
+			},
+			"max_turns": map[string]any{
+				"type":        "number",
+				"description": "Optional run budget for action=set (default 20). Auto-pauses (resumable) when exhausted.",
+			},
+			"subgoal": map[string]any{
+				"type":        "string",
+				"description": "A specific completion criterion to add (required for action=subgoal). The judge requires per-criterion evidence before marking the goal done.",
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 // ToolMaxOutputs returns per-tool output character budgets from tool_schemas.json.
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {

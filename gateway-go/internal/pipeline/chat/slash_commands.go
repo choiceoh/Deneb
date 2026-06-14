@@ -78,6 +78,16 @@ func ParseSlashCommand(text string) *SlashResult {
 			Response: "실행이 중단되었습니다.",
 			Command:  "kill",
 		}
+	case "goal", "목표":
+		// Standing goal (Ralph loop). Subcommands parsed in slash_dispatch.go:
+		// "/goal <text>" sets a new goal; status | pause | resume | stop manage
+		// it. Korean alias /목표 routes to the same handler.
+		return &SlashResult{
+			Handled:  true,
+			Response: "",
+			Command:  "goal",
+			Args:     args,
+		}
 	case "rollback", "롤백":
 		// Subcommand parsing (list/목록 | diff/비교 | restore/복원) happens in
 		// rollback_dispatch.go. Korean alias /롤백 routes to the same handler.
