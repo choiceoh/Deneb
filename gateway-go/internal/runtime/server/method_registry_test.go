@@ -123,6 +123,9 @@ var requiredMethods = []string{
 	"miniapp.models.delete_custom",
 	"miniapp.models.list",
 	"miniapp.models.set",
+	"miniapp.dropbox.status",
+	"miniapp.dropbox.begin",
+	"miniapp.dropbox.complete",
 	// miniapp.gmail.analyze and miniapp.gmail.analysis_cached are
 	// conditional on an LLM client being configured
 	// (modelRegistry.Client(RoleMain) returning non-nil) — not in the

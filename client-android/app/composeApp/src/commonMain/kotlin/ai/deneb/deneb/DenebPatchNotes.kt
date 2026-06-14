@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "설정 > 연동에서 Dropbox 계정을 앱에서 직접 연결 — App key 입력 → 승인 페이지 열기 → 코드 붙여넣기로 끝납니다(호스트 명령어 불필요). 연결 후 채팅의 dropbox 도구·백업이 동작합니다",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "대화를 스크롤하는 동안 '맨 아래로' 버튼이 부드럽게 사라졌다가, 스크롤을 멈추면 다시 나타납니다 — 움직이는 화면을 가리지 않도록",
         ),
     ),

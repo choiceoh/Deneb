@@ -356,9 +356,13 @@ func GeneratePKCE() (verifier, challenge string, err error) {
 	return verifier, challenge, nil
 }
 
-// AuthorizeURL builds the consent URL for the PKCE flow. With no redirect_uri,
-// Dropbox shows the authorization code on screen for the user to copy.
-func AuthorizeURL(appKey, challenge string, scopes []string) string {
+// AuthorizeURL builds the consent URL for the PKCE flow. With no redirectURI,
+// Dropbox shows the authorization code on screen for the user to copy
+// (out-of-band, used by the host CLI + desktop). With a redirectURI registered
+// in the app's OAuth settings, Dropbox redirects there with ?code=… instead —
+// the native app's deep-link auto-capture path. The same redirectURI must be
+// passed to ExchangeCode.
+func AuthorizeURL(appKey, challenge string, scopes []string, redirectURI string) string {
 	q := url.Values{
 		"client_id":             {appKey},
 		"response_type":         {"code"},
@@ -366,6 +370,9 @@ func AuthorizeURL(appKey, challenge string, scopes []string) string {
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
 		"scope":                 {strings.Join(scopes, " ")},
+	}
+	if redirectURI != "" {
+		q.Set("redirect_uri", redirectURI)
 	}
 	return defaultAuthorizeURL + "?" + q.Encode()
 }
@@ -379,12 +386,18 @@ type TokenResult struct {
 
 // ExchangeCode trades an authorization code (+ PKCE verifier) for tokens. For a
 // confidential app, pass appSecret; for a pure PKCE public app, leave it empty.
-func ExchangeCode(ctx context.Context, appKey, appSecret, code, verifier string) (*TokenResult, error) {
+// redirectURI must match the one used in AuthorizeURL (Dropbox requires it on
+// the token request when the authorize step used one); pass "" for the
+// out-of-band / paste-code flow.
+func ExchangeCode(ctx context.Context, appKey, appSecret, code, verifier, redirectURI string) (*TokenResult, error) {
 	data := url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {strings.TrimSpace(code)},
 		"client_id":     {appKey},
 		"code_verifier": {verifier},
+	}
+	if redirectURI != "" {
+		data.Set("redirect_uri", redirectURI)
 	}
 	if appSecret != "" {
 		data.Set("client_secret", appSecret)

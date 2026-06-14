@@ -40,6 +40,16 @@
                 <data android:mimeType="image/*" />
                 <data android:mimeType="audio/*" />
             </intent-filter>
+            <!-- Dropbox OAuth redirect: after consent Dropbox returns to
+                 deneb://dropbox-auth?code=… and MainActivity hands the code to
+                 the connect wizard (Settings > 연동). Must match the redirect URI
+                 registered in the Dropbox App Console. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="deneb" android:host="dropbox-auth" />
+            </intent-filter>
             <meta-data
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />

@@ -258,7 +258,7 @@ func TestGeneratePKCE(t *testing.T) {
 }
 
 func TestAuthorizeURL(t *testing.T) {
-	u := AuthorizeURL("appkey123", "chal", DefaultScopes)
+	u := AuthorizeURL("appkey123", "chal", DefaultScopes, "")
 	parsed, err := url.Parse(u)
 	if err != nil {
 		t.Fatal(err)

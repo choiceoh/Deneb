@@ -324,6 +324,11 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		}),
 		s.miniappModelMethods(),
 
+		// Native Dropbox connect wizard (miniapp.dropbox.{status,begin,complete}):
+		// the PKCE OAuth flow that used to require the deneb-dropbox-auth host CLI,
+		// exposed so the operator can link Dropbox from Settings > 연동.
+		s.miniappDropboxMethods(),
+
 		// Mini App Gmail domain (miniapp.gmail.list_recent / get /
 		// mark_read / archive). Lazy factory around gmail.DefaultClient
 		// — if OAuth tokens are missing the gateway still starts; the

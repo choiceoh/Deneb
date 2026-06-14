@@ -196,6 +196,10 @@ type Server struct {
 	// OnListening is called after the TCP listener is bound successfully.
 	// Use this to print the startup banner or signal readiness to external callers.
 	OnListening func(addr net.Addr)
+
+	// dropboxPKCE holds the in-flight Dropbox OAuth PKCE state between the
+	// native connect wizard's begin and complete RPCs (single-user, one slot).
+	dropboxPKCE dropboxPending
 }
 
 // sessionSnapshotProvider implements events.SessionSnapshotProvider by
