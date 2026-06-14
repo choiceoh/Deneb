@@ -1,8 +1,10 @@
-// deals.go — upserts a "거래" (deal/transaction) wiki page from a structured
+// deals.go — upserts a deal/transaction wiki page from a structured
 // business-document extraction (견적서/계약서/세금계산서/거래명세서 등).
 //
-// One page per counterparty under 거래/<slug>.md, accumulating each document as
-// a dated entry in a "## 거래 문서" log. Idempotent: a document already filed
+// One page per counterparty under 프로젝트/거래/<slug>.md — a raw-data sub-folder
+// of the 프로젝트 category (거래 folded into 프로젝트 in the 5-category taxonomy),
+// accumulating each document as a dated entry in a "## 거래 문서" log. Idempotent:
+// a document already filed
 // (matched by its SourceRef) is a no-op, so re-analyzing the same mail never
 // double-appends or bumps the Updated date. Mirrors the contacts.go enrichment
 // precedent (createPersonPage / enrichPersonPage / upsertSection).
@@ -15,6 +17,10 @@ import (
 )
 
 const dealDocsHeading = "거래 문서"
+
+// dealCategoryDir is the raw-data sub-folder under 프로젝트 where per-counterparty
+// deal pages live (거래 is a 프로젝트 sub-folder, not a top-level category).
+const dealCategoryDir = "프로젝트/거래"
 
 // DealPageInput is the structured business-document data filed onto a deal
 // page. Counterparty is required (it keys the page); every other field is
@@ -43,7 +49,7 @@ func (s *Store) UpsertDealPage(in DealPageInput, now time.Time) (relPath string,
 	if slug == "" {
 		return "", false, fmt.Errorf("wiki: counterparty %q slugs to empty", counterparty)
 	}
-	relPath = "거래/" + slug + ".md"
+	relPath = dealCategoryDir + "/" + slug + ".md"
 	today := now.Format("2006-01-02")
 	entry := dealEntryLine(in, today)
 
@@ -65,7 +71,7 @@ func (s *Store) UpsertDealPage(in DealPageInput, now time.Time) (relPath string,
 		return relPath, false, nil
 	}
 
-	page := NewPage(counterparty, "거래", nil)
+	page := NewPage(counterparty, "프로젝트", nil)
 	page.Meta.Type = "deal"
 	page.Meta.Updated = today
 	if d := strings.TrimSpace(in.DueDate); d != "" {

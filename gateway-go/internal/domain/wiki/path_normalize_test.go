@@ -20,3 +20,63 @@ func TestNormalizeWikiPath(t *testing.T) {
 		}
 	}
 }
+
+// TestNormalizeCategoryPath locks the 5-category taxonomy enforcement: a page is
+// filed by its path's *directory* (the real bucket), so legacy dir names are
+// remapped, the matching category is returned, and nothing lands at the root.
+func TestNormalizeCategoryPath(t *testing.T) {
+	cases := []struct {
+		path, cat string
+		wantPath  string
+		wantCat   string
+	}{
+		// Valid category dir is kept; an empty/mismatched cat field is corrected to it.
+		{"프로젝트/foo.md", "프로젝트", "프로젝트/foo.md", "프로젝트"},
+		{"프로젝트/foo.md", "", "프로젝트/foo.md", "프로젝트"},
+		{"인물/홍길동.md", "프로젝트", "인물/홍길동.md", "인물"},             // valid dir wins over mismatched cat
+		{"프로젝트/거래/탑솔라.md", "프로젝트", "프로젝트/거래/탑솔라.md", "프로젝트"}, // valid-cat sub-folder kept
+		// Legacy dir names fold onto the taxonomy.
+		{"거래/탑솔라.md", "거래", "프로젝트/탑솔라.md", "프로젝트"},
+		{"결정/gemma.md", "결정", "프로젝트/gemma.md", "프로젝트"},
+		{"기술/dgx.md", "기술", "업무/dgx.md", "업무"},
+		{"사람/김부장.md", "", "인물/김부장.md", "인물"},
+		{"선호/톤.md", "선호", "사용자/톤.md", "사용자"},
+		{"운영시스템/ssh.md", "운영시스템", "시스템/ssh.md", "시스템"},
+		// Unknown dir + unknown cat → 업무 catch-all.
+		{"잡동사니/y.md", "기타", "업무/y.md", "업무"},
+		// No directory in the path: derive the bucket from the category field.
+		{"foo.md", "프로젝트", "프로젝트/foo.md", "프로젝트"},
+		{"foo.md", "거래", "프로젝트/foo.md", "프로젝트"},
+		{"foo.md", "", "업무/foo.md", "업무"},
+	}
+	for _, c := range cases {
+		gotPath, gotCat := normalizeCategoryPath(c.path, c.cat)
+		if gotPath != c.wantPath || gotCat != c.wantCat {
+			t.Errorf("normalizeCategoryPath(%q, %q) = (%q, %q), want (%q, %q)",
+				c.path, c.cat, gotPath, gotCat, c.wantPath, c.wantCat)
+		}
+	}
+}
+
+// TestRemapLegacyCategory pins the legacy→taxonomy alias map and the no-mapping
+// signal that routes unrecognized names to the catch-all.
+func TestRemapLegacyCategory(t *testing.T) {
+	mapped := map[string]string{
+		"거래": "프로젝트", "결정": "프로젝트", "mail-analyses": "프로젝트",
+		"사람": "인물", "기술": "업무", "선호": "사용자", "운영시스템": "시스템",
+	}
+	for in, want := range mapped {
+		if got, ok := remapLegacyCategory(in); !ok || got != want {
+			t.Errorf("remapLegacyCategory(%q) = (%q, %v), want (%q, true)", in, got, ok, want)
+		}
+	}
+	// A current category is not "legacy" — it has no remapping (callers keep it as-is).
+	for _, cur := range Categories {
+		if _, ok := remapLegacyCategory(cur); ok {
+			t.Errorf("remapLegacyCategory(%q) should report no mapping for a current category", cur)
+		}
+	}
+	if _, ok := remapLegacyCategory("듣도보도못한것"); ok {
+		t.Error("remapLegacyCategory should report no mapping for an unknown name")
+	}
+}

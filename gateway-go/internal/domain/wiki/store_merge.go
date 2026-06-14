@@ -292,5 +292,5 @@ func earlierDate(a, b string) string {
 	}
 }
 
-// ListPages returns all page paths in a category (e.g., "기술").
+// ListPages returns all page paths in a category (e.g., "업무").
 // If category is empty, returns all pages.
