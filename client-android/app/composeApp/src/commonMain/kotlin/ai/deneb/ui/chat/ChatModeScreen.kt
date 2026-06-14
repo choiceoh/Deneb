@@ -31,6 +31,7 @@ import ai.deneb.ui.denebFadeExit
 import ai.deneb.ui.dynamicui.FrozenSubmission
 import ai.deneb.ui.dynamicui.toSpeakableText
 import ai.deneb.ui.handCursor
+import ai.deneb.ui.markdown.ChatbotTextScale
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
@@ -191,6 +192,9 @@ internal fun ChatModeScreen(
             lastAnswer <= lastUser
         }
     }
+
+    // 챗봇 workspace reads larger (font + line spacing); 업무 stays at 1f.
+    val chatTextScale = if (uiState.recallEnabled) 1f else ChatbotTextScale
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         ModalNavigationDrawer(
@@ -623,6 +627,7 @@ internal fun ChatModeScreen(
                                                                     UserMessage(
                                                                         message = history.content,
                                                                         attachments = history.attachments,
+                                                                        textScale = chatTextScale,
                                                                     )
                                                                 }
                                                             }
@@ -653,6 +658,7 @@ internal fun ChatModeScreen(
                                                                         },
                                                                         reasoningSegments = reasoningSegmentsByAssistantId[history.id] ?: persistentListOf(),
                                                                         isStreaming = isLastAssistant && isResponseStreaming,
+                                                                        textScale = chatTextScale,
                                                                     )
                                                                     if (history.toolFootprint != null) {
                                                                         androidx.compose.material3.Text(
@@ -684,6 +690,7 @@ internal fun ChatModeScreen(
                                                                         setIsSpeaking = {},
                                                                         reasoningSegments = reasoningSegmentsByAssistantId[history.id]
                                                                             ?: persistentListOf(history.content),
+                                                                        textScale = chatTextScale,
                                                                     )
                                                                 }
                                                             }

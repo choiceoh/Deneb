@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "챗봇 모드에서는 대화 글자 크기와 줄간격을 키워 더 편하게 읽을 수 있습니다 — 업무 모드는 기존 크기 그대로",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "내 메시지 말풍선이 긴 글에서도 화면 폭의 약 80%까지만 차지하도록 제한했습니다 — 왼쪽 끝까지 늘어나지 않고 항상 오른쪽에 단정하게 붙습니다",
         ),
     ),
