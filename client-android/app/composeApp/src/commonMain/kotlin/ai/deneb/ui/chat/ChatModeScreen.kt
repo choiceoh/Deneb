@@ -26,8 +26,8 @@ import ai.deneb.ui.components.VerticalScrollbarForList
 import ai.deneb.ui.components.generatingBackdrop
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebContentWidthModifier
-import ai.deneb.ui.denebPopEnter
-import ai.deneb.ui.denebPopExit
+import ai.deneb.ui.denebFadeEnter
+import ai.deneb.ui.denebFadeExit
 import ai.deneb.ui.dynamicui.FrozenSubmission
 import ai.deneb.ui.dynamicui.toSpeakableText
 import ai.deneb.ui.handCursor
@@ -545,6 +545,10 @@ internal fun ChatModeScreen(
 
                                         val showScrollToBottom by remember {
                                             derivedStateOf {
+                                                // While the list is actively scrolling, fade the jump button out
+                                                // (화면이 움직일 땐 점점 사라지게) — it fades back in once the list
+                                                // settles, if the bottom is still out of view.
+                                                if (listState.isScrollInProgress) return@derivedStateOf false
                                                 val info = listState.layoutInfo
                                                 val last = info.visibleItemsInfo.lastOrNull()
                                                 // Show whenever the conversation's bottom isn't in view — either the
@@ -727,8 +731,8 @@ internal fun ChatModeScreen(
                                             androidx.compose.animation.AnimatedVisibility(
                                                 visible = showScrollToBottom,
                                                 modifier = Modifier.align(BottomCenter).padding(bottom = 8.dp),
-                                                enter = denebPopEnter,
-                                                exit = denebPopExit,
+                                                enter = denebFadeEnter,
+                                                exit = denebFadeExit,
                                             ) {
                                                 SmallFloatingActionButton(
                                                     modifier = Modifier

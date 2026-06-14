@@ -126,6 +126,14 @@ val denebPopExit: ExitTransition =
     scaleOut(tween(DenebMotion.DurationFast, easing = DenebMotion.emphasizedAccelerate), targetScale = 0.7f) +
         fadeOut(tween(DenebMotion.DurationQuick))
 
+/** A plain calm fade in — for controls that toggle often (e.g. the scroll-to-bottom
+ *  FAB hiding while the list is actively scrolling), where a bouncy pop each time
+ *  would read as busy. */
+val denebFadeEnter: EnterTransition = fadeIn(tween(DenebMotion.DurationMedium, easing = DenebMotion.emphasizedDecelerate))
+
+/** The matching calm fade out — gradually dissolves away (no scale). */
+val denebFadeExit: ExitTransition = fadeOut(tween(DenebMotion.DurationMedium, easing = DenebMotion.emphasizedAccelerate))
+
 /**
  * Press feedback for flat, cardless rows and tiles: a subtle scale-down while
  * held that springs back on release, layered over the normal ripple. This is the
