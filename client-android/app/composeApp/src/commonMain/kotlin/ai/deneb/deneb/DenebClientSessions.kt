@@ -18,6 +18,13 @@ import kotlinx.serialization.json.put
 // the retired topics back into the drawer. List real Deneb sessions only, and
 // fall back to a lone client:main home when there are no sessions yet so the
 // drawer is never empty.
+/** A session belongs to the 챗봇 workspace iff its key is in the chat: namespace;
+ *  everything else (client:main, cron:, system:, wf-…) is the 업무 workspace. */
+internal fun isChatWorkspaceKey(key: String): Boolean = key.startsWith("chat:")
+
+/** The two workspace home sessions — neither is deletable. */
+internal fun isHomeSession(key: String): Boolean = key == "client:main" || key == "chat:main"
+
 internal suspend fun DenebGatewayClient.fetchRecentSessions(): List<Conversation>? {
     // null return = RPC failed (timeout/transient/load). The caller keeps the
     // existing drawer list instead of collapsing to just the home row.
@@ -25,8 +32,11 @@ internal suspend fun DenebGatewayClient.fetchRecentSessions(): List<Conversation
         "miniapp.sessions.recent",
         buildJsonObject { put("limit", 50) },
     ) ?: return null
+    // 업무 and 챗봇 keep SEPARATE session lists — show only the active workspace's
+    // sessions. recall on = 업무, off = 챗봇 (the top-bar pill).
+    val chatMode = !appSettings.isRecallEnabled()
     val recent = payload.sessions
-        ?.filter { it.key.isNotBlank() }
+        ?.filter { it.key.isNotBlank() && isChatWorkspaceKey(it.key) == chatMode }
         ?.map { s ->
             Conversation(
                 id = s.key,
@@ -37,27 +47,32 @@ internal suspend fun DenebGatewayClient.fetchRecentSessions(): List<Conversation
             )
         }
         .orEmpty()
-    // Always pin the client:main 업무 home to the top. If it's already in the
-    // recent list (it usually is), lift it there; otherwise synthesize it. The
-    // home used to appear only via the empty-list fallback, so once ANY other
-    // session existed the main 업무 conversation dropped out of the drawer —
-    // which is exactly why it looked "missing".
-    val home = recent.find { it.id == "client:main" }
+    // Pin the active workspace's home to the top (synthesize if absent), so it is
+    // never missing once other sessions exist.
+    val homeKey = if (chatMode) "chat:main" else "client:main"
+    val homeTitle = if (chatMode) "챗봇" else "업무"
+    val home = recent.find { it.id == homeKey }
         ?: Conversation(
-            id = "client:main",
+            id = homeKey,
             messages = emptyList(),
             createdAt = 0,
             updatedAt = kotlin.time.Clock.System.now().toEpochMilliseconds(),
-            title = "업무",
+            title = homeTitle,
         )
-    return listOf(home) + recent.filterNot { it.id == "client:main" }
+    return listOf(home) + recent.filterNot { it.id == homeKey }
 }
 
 private fun DenebGatewayClient.conversationTitle(s: SessionRowOut): String {
     if (s.label.isNotBlank()) return s.label
-    // The single home session keeps the familiar 업무 label (matches the
-    // empty-drawer fallback), not "내 대화 · main".
+    // The home sessions keep their workspace labels (match the empty-drawer
+    // fallback), not "내 대화 · main".
     if (s.key == "client:main") return "업무"
+    if (s.key == "chat:main") return "챗봇"
+    // 챗봇 workspace side-conversations.
+    if (isChatWorkspaceKey(s.key)) {
+        val shortId = s.key.substringAfterLast(':').take(8)
+        return if (shortId.isNotBlank() && shortId != "main") "챗봇 · $shortId" else "챗봇"
+    }
     // 업무-card side-conversations (opened from a feed card) read with the item's
     // title while it is still in the feed, falling back to a generic 업무 메모
     // label once the card is acked and dropped from the feed.
