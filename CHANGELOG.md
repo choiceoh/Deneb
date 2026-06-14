@@ -1,5 +1,37 @@
 # Changelog
 
+## [4.29.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.28.0...deneb-v4.29.0) (2026-06-14)
+
+
+### ✨ Features
+
+* **native:** FCM push for closed-app proactive delivery ([#2375](https://github.com/choiceoh/Deneb/issues/2375)) ([eb14135](https://github.com/choiceoh/Deneb/commit/eb1413568b037397e4d504978a4e612adaded679))
+* **native:** GPT/Claude-style left session drawer + captures in input ([#2374](https://github.com/choiceoh/Deneb/issues/2374)) ([2ea68d3](https://github.com/choiceoh/Deneb/commit/2ea68d3f3987520f1b69edc89cea9deb8f6cb49c))
+* **native:** Toss-style bottom tab bar + super-app icon nav ([#2366](https://github.com/choiceoh/Deneb/issues/2366)) ([a44d469](https://github.com/choiceoh/Deneb/commit/a44d4694bf82affea7b8f884e2afc320e65b760f))
+* **push:** FCM proactive delivery fallback (gateway scaffolding, dormant) ([#2365](https://github.com/choiceoh/Deneb/issues/2365)) ([7a76e75](https://github.com/choiceoh/Deneb/commit/7a76e75b7f3e17d4a44e6bdf9a8cd138d2bfcbeb))
+* **wormhole:** auto-discover local models from SparkFleet ([#2361](https://github.com/choiceoh/Deneb/issues/2361)) ([9a224dd](https://github.com/choiceoh/Deneb/commit/9a224dde7dfa6df97340eb1b61abee44327dd85a))
+* **wormhole:** re-land status-tab fleet surfacing dropped from main ([#2364](https://github.com/choiceoh/Deneb/issues/2364)) ([#2370](https://github.com/choiceoh/Deneb/issues/2370)) ([9c219d7](https://github.com/choiceoh/Deneb/commit/9c219d76edec09601a108a91011445b9cb9ef651))
+* **wormhole:** wire cloud upstream keys (EnvironmentFile) + document cloud routing ([#2378](https://github.com/choiceoh/Deneb/issues/2378)) ([a85cb5d](https://github.com/choiceoh/Deneb/commit/a85cb5d8aa19b8907d171cf5f7427cbb3030ac42))
+
+
+### 🐛 Bug Fixes
+
+* **wormhole:** correct systemd unit for --user scope (drop User=, default.target) ([#2372](https://github.com/choiceoh/Deneb/issues/2372)) ([5f65320](https://github.com/choiceoh/Deneb/commit/5f6532001e77dcf10ab8eebdaa04b623d9ab1890))
+
+
+### ⚡ Performance
+
+* **chat:** persist frozen prompt snapshots across restarts ([#2368](https://github.com/choiceoh/Deneb/issues/2368)) ([82dd0fc](https://github.com/choiceoh/Deneb/commit/82dd0fcf48e572013ca32ac7bf4550bba624fb8b))
+* **compaction:** defer LLM compaction off the interactive critical path ([#2369](https://github.com/choiceoh/Deneb/issues/2369)) ([ebb8579](https://github.com/choiceoh/Deneb/commit/ebb8579048240e9a0456a4686054ac6801882c4e))
+
+
+### 🔧 Internal
+
+* **cleanup:** remove retired Telegram channel vestiges ([#1922](https://github.com/choiceoh/Deneb/issues/1922) follow-up) ([#2376](https://github.com/choiceoh/Deneb/issues/2376)) ([b5ac271](https://github.com/choiceoh/Deneb/commit/b5ac271371d9a51d7ff7d7033c424948500c3b82))
+* **native:** re-wire chat repo off dead cloud-direct path ([#2379](https://github.com/choiceoh/Deneb/issues/2379)) ([f6f7744](https://github.com/choiceoh/Deneb/commit/f6f7744040ac849938c2e5df29807e0f867db761))
+* **native:** remove the retired left nav menu + dead nav callbacks ([#2377](https://github.com/choiceoh/Deneb/issues/2377)) ([cc54dab](https://github.com/choiceoh/Deneb/commit/cc54dab7bb45ac9e702213f734bf3f81e2dae65f))
+* **tools:** split document parsers into docparse.go, unify extraction dispatch ([#2363](https://github.com/choiceoh/Deneb/issues/2363)) ([690359d](https://github.com/choiceoh/Deneb/commit/690359ddd5f9186ea94aa92f209402dde7a7d899))
+
 ## [4.28.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.27.0...deneb-v4.28.0) (2026-06-14)
 
 
