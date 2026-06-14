@@ -46,6 +46,7 @@ class ChatViewModel(
         ask = ::ask,
         retry = ::retry,
         toggleSpeechOutput = ::toggleSpeechOutput,
+        toggleRecall = ::toggleRecall,
         clearHistory = ::clearHistory,
         setIsSpeaking = ::setIsSpeaking,
         addFile = ::addFile,
@@ -79,6 +80,8 @@ class ChatViewModel(
     )
 
     init {
+        // Seed the memory-recall toggle from the persisted setting (default on).
+        _state.update { it.copy(recallEnabled = dataRepository.isRecallEnabled()) }
         updateAvailableServices()
         // Deneb: the chat-input model switcher lists gateway models; rebuild it
         // whenever the model registry changes (after a switch or on first load).
@@ -302,6 +305,15 @@ class ChatViewModel(
                 isSpeechOutputEnabled = !it.isSpeechOutputEnabled,
             )
         }
+    }
+
+    // Flips the gateway memory-recall toggle and persists it. The next chat send
+    // reads the setting and includes skipRecall, so the gateway skips recall (and
+    // retain) for focused-chat turns. Persona is unchanged.
+    private fun toggleRecall() {
+        val enabled = !_state.value.recallEnabled
+        dataRepository.setRecallEnabled(enabled)
+        _state.update { it.copy(recallEnabled = enabled) }
     }
 
     private fun cancel() {

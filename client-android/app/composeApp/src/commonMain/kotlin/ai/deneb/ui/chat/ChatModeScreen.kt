@@ -260,6 +260,7 @@ internal fun ChatModeScreen(
                                 isSpeaking = uiState.isSpeaking,
                                 actions = uiState.actions,
                                 isChatHistoryEmpty = uiState.history.isEmpty(),
+                                recallEnabled = uiState.recallEnabled,
                                 // Desktop has the persistent sidebar, so no hamburger (null → DrawerButton hides).
                                 onOpenDrawer = if (currentPlatform is Platform.Desktop) {
                                     null

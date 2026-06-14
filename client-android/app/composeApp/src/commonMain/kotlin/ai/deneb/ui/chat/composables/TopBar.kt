@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -39,6 +40,7 @@ internal fun TopBar(
     isSpeaking: Boolean,
     actions: ChatActions,
     isChatHistoryEmpty: Boolean,
+    recallEnabled: Boolean = true,
     onOpenDrawer: (() -> Unit)? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
     onOpenSessionDrawer: (() -> Unit)? = null,
@@ -60,6 +62,7 @@ internal fun TopBar(
                 modifier = Modifier.align(Alignment.CenterEnd),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                RecallToggleButton(recallEnabled, actions)
                 if (textToSpeech != null) {
                     SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
                 }
@@ -72,6 +75,7 @@ internal fun TopBar(
             DrawerButton(onOpenDrawer)
             LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty)
             Spacer(Modifier.weight(1f))
+            RecallToggleButton(recallEnabled, actions)
             if (textToSpeech != null) {
                 SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
             }
@@ -179,6 +183,35 @@ private fun LeadingButtons(
                 tint = MaterialTheme.colorScheme.onBackground,
             )
         }
+    }
+}
+
+// RecallToggleButton toggles the gateway's long-term-memory recall (the "focused
+// chat / memory off" control). Same persona either way — only whether the agent
+// pulls work-context memories into the turn. Filled brain = on; dimmed = off.
+@Composable
+private fun RecallToggleButton(recallEnabled: Boolean, actions: ChatActions) {
+    val haptics = rememberHaptics()
+    IconButton(
+        modifier = Modifier.handCursor(),
+        onClick = {
+            haptics.toggle(!recallEnabled)
+            actions.toggleRecall()
+        },
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Psychology,
+            contentDescription = if (recallEnabled) {
+                "메모리 회상 켜짐 — 탭하면 집중 대화(회상 끄기)"
+            } else {
+                "집중 대화 (메모리 회상 꺼짐) — 탭하면 켜기"
+            },
+            tint = if (recallEnabled) {
+                MaterialTheme.colorScheme.onBackground
+            } else {
+                MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
+            },
+        )
     }
 }
 

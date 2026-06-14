@@ -1005,6 +1005,7 @@ class DenebGatewayClient(
                     params = SendParams(
                         message = message,
                         sessionKey = sessionKey,
+                        skipRecall = !appSettings.isRecallEnabled(),
                     ),
                 ),
             )
@@ -1052,7 +1053,7 @@ class DenebGatewayClient(
             header(CLIENT_TOKEN_HEADER, clientToken)
             header("Accept", "text/event-stream")
             contentType(ContentType.Application.Json)
-            setBody(SendParams(message = message, sessionKey = sessionKey))
+            setBody(SendParams(message = message, sessionKey = sessionKey, skipRecall = !appSettings.isRecallEnabled()))
             timeout {
                 // No overall request cap: an agent turn (tool calls included) can
                 // outlast any fixed window. Long.MAX_VALUE is the plugin's
@@ -1286,6 +1287,10 @@ class DenebGatewayClient(
     private data class SendParams(
         val message: String,
         val sessionKey: String? = null,
+        // "focused chat / memory off" toggle: true skips the gateway's recall
+        // (and retain) for this turn. Default false (recall on) is omitted by the
+        // encoder, so an older gateway simply ignores the absent field.
+        val skipRecall: Boolean = false,
     )
 
     @Serializable
