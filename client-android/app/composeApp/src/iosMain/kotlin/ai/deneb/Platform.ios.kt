@@ -1,16 +1,5 @@
 package ai.deneb
 
-import ai.deneb.data.AppSettings
-import ai.deneb.data.EmailStore
-import ai.deneb.data.MemoryStore
-import ai.deneb.data.TaskStore
-import ai.deneb.mcp.McpServerManager
-import ai.deneb.network.tools.Tool
-import ai.deneb.network.tools.ToolInfo
-import ai.deneb.tools.CommonTools
-import ai.deneb.tools.EmailTools
-import ai.deneb.tools.HeartbeatTools
-import ai.deneb.tools.SchedulingTools
 import ai.deneb.ui.icons.ArrowBackIos
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.draganddrop.DragAndDropEvent
@@ -33,8 +22,6 @@ import kotlinx.cinterop.useContents
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
-import org.koin.core.component.KoinComponent
-import org.koin.core.component.inject
 import platform.Foundation.NSData
 import platform.Foundation.dataWithBytes
 import kotlin.coroutines.CoroutineContext
@@ -126,31 +113,6 @@ actual fun createLegacySettings(): Settings? = NSUserDefaultsSettings(platform.F
 // No durable mirror needed: the iOS Keychain survives app updates by design, so the
 // gateway token never gets wiped the way Android's encrypted prefs do.
 actual fun createDurableSettings(): Settings? = null
-
-actual fun getPlatformToolDefinitions(): List<ToolInfo> = CommonTools.commonToolDefinitions
-
-private object IosKoinHelper : KoinComponent {
-    val appSettings: AppSettings by inject()
-    val memoryStore: MemoryStore by inject()
-    val taskStore: TaskStore by inject()
-    val emailStore: EmailStore by inject()
-    val mcpServerManager: McpServerManager by inject()
-}
-
-actual fun getAvailableTools(): List<Tool> = buildList {
-    addAll(CommonTools.getCommonTools(IosKoinHelper.appSettings))
-    if (IosKoinHelper.appSettings.isMemoryEnabled()) {
-        addAll(CommonTools.getMemoryTools(IosKoinHelper.memoryStore))
-    }
-    if (IosKoinHelper.appSettings.isSchedulingEnabled()) {
-        addAll(SchedulingTools.getSchedulingTools(IosKoinHelper.taskStore))
-        addAll(HeartbeatTools.getHeartbeatTools(IosKoinHelper.memoryStore, IosKoinHelper.appSettings))
-    }
-    if (IosKoinHelper.appSettings.isEmailEnabled()) {
-        addAll(EmailTools.getEmailTools(IosKoinHelper.emailStore))
-    }
-    addAll(IosKoinHelper.mcpServerManager.getEnabledMcpTools())
-}
 
 @Suppress("CAST_NEVER_SUCCEEDS")
 actual fun openUrl(url: String): Boolean = try {

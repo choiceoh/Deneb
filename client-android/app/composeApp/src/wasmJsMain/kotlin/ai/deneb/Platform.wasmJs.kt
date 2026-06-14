@@ -1,14 +1,5 @@
 package ai.deneb
 
-import ai.deneb.data.AppSettings
-import ai.deneb.data.MemoryStore
-import ai.deneb.data.TaskStore
-import ai.deneb.mcp.McpServerManager
-import ai.deneb.network.tools.Tool
-import ai.deneb.network.tools.ToolInfo
-import ai.deneb.tools.CommonTools
-import ai.deneb.tools.HeartbeatTools
-import ai.deneb.tools.SchedulingTools
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.draganddrop.DragAndDropEvent
@@ -23,8 +14,6 @@ import io.github.vinceglb.filekit.download
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.js.Js
-import org.koin.core.component.KoinComponent
-import org.koin.core.component.inject
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 
@@ -62,27 +51,6 @@ actual fun createLegacySettings(): Settings? = null // Same storage location, no
 
 // No durable mirror needed: web localStorage already persists across reloads.
 actual fun createDurableSettings(): Settings? = null
-
-actual fun getPlatformToolDefinitions(): List<ToolInfo> = CommonTools.commonToolDefinitions
-
-private object WebKoinHelper : KoinComponent {
-    val appSettings: AppSettings by inject()
-    val memoryStore: MemoryStore by inject()
-    val taskStore: TaskStore by inject()
-    val mcpServerManager: McpServerManager by inject()
-}
-
-actual fun getAvailableTools(): List<Tool> = buildList {
-    addAll(CommonTools.getCommonTools(WebKoinHelper.appSettings))
-    if (WebKoinHelper.appSettings.isMemoryEnabled()) {
-        addAll(CommonTools.getMemoryTools(WebKoinHelper.memoryStore))
-    }
-    if (WebKoinHelper.appSettings.isSchedulingEnabled()) {
-        addAll(SchedulingTools.getSchedulingTools(WebKoinHelper.taskStore))
-        addAll(HeartbeatTools.getHeartbeatTools(WebKoinHelper.memoryStore, WebKoinHelper.appSettings))
-    }
-    addAll(WebKoinHelper.mcpServerManager.getEnabledMcpTools())
-}
 
 actual fun openUrl(url: String): Boolean = try {
     kotlinx.browser.window.open(url, "_blank")

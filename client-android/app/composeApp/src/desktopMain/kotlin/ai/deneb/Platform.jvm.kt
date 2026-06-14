@@ -2,20 +2,7 @@
 
 package ai.deneb
 
-import ai.deneb.data.AppSettings
-import ai.deneb.data.EmailStore
 import ai.deneb.data.EncryptedFileSettings
-import ai.deneb.data.MemoryStore
-import ai.deneb.data.TaskStore
-import ai.deneb.mcp.McpServerManager
-import ai.deneb.network.tools.Tool
-import ai.deneb.network.tools.ToolInfo
-import ai.deneb.tools.CommonTools
-import ai.deneb.tools.EmailTools
-import ai.deneb.tools.HeartbeatTools
-import ai.deneb.tools.ProcessManagerTool
-import ai.deneb.tools.SchedulingTools
-import ai.deneb.tools.ShellCommandTool
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -34,7 +21,6 @@ import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.cio.CIO
 import kotlinx.coroutines.Dispatchers
-import org.koin.java.KoinJavaComponent.inject
 import java.io.File
 import java.net.URI
 import kotlin.coroutines.CoroutineContext
@@ -153,35 +139,6 @@ actual fun createLegacySettings(): Settings? = null // Same storage location, no
 // No durable mirror needed: EncryptedFileSettings keeps its key on disk next to the
 // data, so it survives app updates (unlike Android's hardware-Keystore-bound store).
 actual fun createDurableSettings(): Settings? = null
-
-actual fun getPlatformToolDefinitions(): List<ToolInfo> = listOf(ShellCommandTool.toolInfo, ProcessManagerTool.toolInfo) + CommonTools.commonToolDefinitions
-
-actual fun getAvailableTools(): List<Tool> {
-    val appSettings: AppSettings by inject(AppSettings::class.java)
-    val memoryStore: MemoryStore by inject(MemoryStore::class.java)
-    val taskStore: TaskStore by inject(TaskStore::class.java)
-    val emailStore: EmailStore by inject(EmailStore::class.java)
-    return buildList {
-        addAll(CommonTools.getCommonTools(appSettings))
-        if (appSettings.isMemoryEnabled()) {
-            addAll(CommonTools.getMemoryTools(memoryStore))
-        }
-        if (appSettings.isSchedulingEnabled()) {
-            addAll(SchedulingTools.getSchedulingTools(taskStore))
-            addAll(HeartbeatTools.getHeartbeatTools(memoryStore, appSettings))
-        }
-        if (appSettings.isToolEnabled(ShellCommandTool.schema.name, defaultEnabled = false)) {
-            add(ShellCommandTool)
-            add(ProcessManagerTool)
-        }
-        if (appSettings.isEmailEnabled()) {
-            addAll(EmailTools.getEmailTools(emailStore))
-        }
-
-        val mcpServerManager: McpServerManager by inject(McpServerManager::class.java)
-        addAll(mcpServerManager.getEnabledMcpTools())
-    }
-}
 
 actual fun openUrl(url: String): Boolean = try {
     java.awt.Desktop.getDesktop().browse(URI(url))
