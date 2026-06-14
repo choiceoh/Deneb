@@ -122,7 +122,7 @@ func buildRecallPreflight(ctx context.Context, params RunParams, deps runDeps, l
 		}
 	}()
 
-	if params.EphemeralUser {
+	if params.EphemeralUser || params.SkipRecall {
 		return "", false
 	}
 

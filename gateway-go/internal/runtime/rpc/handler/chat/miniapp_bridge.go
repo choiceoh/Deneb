@@ -356,6 +356,11 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 			SessionKey string `json:"sessionKey"`
 			Message    string `json:"message"`
 			Model      string `json:"model"`
+			// SkipRecall is the native client's "focused chat / memory off"
+			// toggle: when true the long-term-memory recall preflight is skipped
+			// for this turn (faster, no unrelated work-context injection). The
+			// persona is unchanged. Default false = full recall.
+			SkipRecall bool `json:"skipRecall"`
 		}](req)
 		if errResp != nil {
 			return errResp
@@ -372,6 +377,7 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 			Delivery: &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
 			// The reply text is returned here, not pushed via the message tool.
 			AutoDeliveredOutput: true,
+			SkipRecall:          p.SkipRecall,
 		})
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)

@@ -69,6 +69,15 @@ type RunParams struct {
 	// LLM into modeling fake user requests.
 	EphemeralUser bool
 
+	// SkipRecall, when true, skips the long-term-memory recall preflight
+	// (wiki/diary/transcript/hindsight) for this turn — the native client's
+	// "memory off / focused chat" toggle. The persona is unchanged; only the
+	// work-context evidence injection is suppressed, so a general question
+	// answers fast without pulling unrelated work memories. Recall is
+	// tail-injected (not in the cached system prefix), so toggling it per turn
+	// does not fragment the prompt cache.
+	SkipRecall bool
+
 	// EphemeralAssistant, when true, suppresses persistence of the assistant
 	// and tool_result messages produced during the run. When false, the
 	// assistant's reply IS persisted — required for self-triggers that must

@@ -197,6 +197,25 @@ func TestBuildRecallPreflightSkipsEphemeralUser(t *testing.T) {
 	}
 }
 
+// TestBuildRecallPreflightSkipsWhenSkipRecall covers the "focused chat / memory
+// off" toggle: the same query that surfaces transcript evidence (see
+// TestBuildRecallPreflightSearchesTranscript) must produce an empty preflight
+// when SkipRecall is set — no work-context injection, no search latency.
+func TestBuildRecallPreflightSkipsWhenSkipRecall(t *testing.T) {
+	transcript := NewMemoryTranscriptStore()
+	if err := transcript.Append("telegram:1", NewTextChatMessage("user", "alpha 결정은 서버 preflight로 하기로 했다", 1000)); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	out, _ := buildRecallPreflight(context.Background(),
+		RunParams{SessionKey: "telegram:1", Message: "전에 alpha 결정 기억나?", SkipRecall: true},
+		runDeps{transcript: transcript},
+		nil,
+	)
+	if out != "" {
+		t.Fatalf("SkipRecall must skip the recall preflight, got %q", out)
+	}
+}
+
 func TestFormatRecallEvidenceScrubsFenceTags(t *testing.T) {
 	out := formatRecallEvidence([]recallEvidence{{
 		Kind:   "wiki",

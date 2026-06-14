@@ -96,6 +96,11 @@ type SyncOptions struct {
 	// recurring self-triggers do not crowd out the recent-history window.
 	EphemeralUser bool
 
+	// SkipRecall skips the long-term-memory recall preflight for this turn —
+	// see RunParams.SkipRecall. Set from the native client's "memory off /
+	// focused chat" toggle so general questions skip work-context injection.
+	SkipRecall bool
+
 	// EphemeralAssistant suppresses persistence of assistant/tool_result
 	// messages produced during the run — see RunParams.EphemeralAssistant.
 	// Heartbeat sets this true so autonomous ticks do not crowd out the
@@ -175,6 +180,7 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 			params.Delivery = opts.Delivery
 		}
 		params.EphemeralUser = opts.EphemeralUser
+		params.SkipRecall = opts.SkipRecall
 		params.EphemeralAssistant = opts.EphemeralAssistant
 		params.AutoDeliveredOutput = opts.AutoDeliveredOutput
 		params.BeforeToolCall = opts.BeforeToolCall
