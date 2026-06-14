@@ -1,5 +1,5 @@
 <resources>
-    <string name="prompt_ask_question">Ask a question</string>
+    <string name="prompt_ask_question">Type a message</string>
     <string name="error_invalid_api_key">Invalid API Key. Please check your settings.</string>
     <string name="error_rate_limit_exceeded">Rate limit exceeded. Please try again later.</string>
     <string name="error_empty_response">No response received. Try starting a new chat or shortening your message.</string>

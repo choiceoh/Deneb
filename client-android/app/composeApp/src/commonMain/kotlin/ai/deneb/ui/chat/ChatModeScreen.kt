@@ -345,6 +345,7 @@ internal fun ChatModeScreen(
                                 ) {
                                     if (uiState.history.isEmpty()) {
                                         EmptyState(
+                                            recallEnabled = uiState.recallEnabled,
                                             modifier = Modifier.fillMaxWidth().weight(1f),
                                         )
                                     } else {

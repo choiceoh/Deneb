@@ -21,6 +21,12 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "채팅 입력창 안내 문구를 '메시지를 입력하세요'로 정돈하고, 입력칸에 커서가 들어가면 안내 문구가 사라지도록 변경",
+            "빈 대화 환영 화면을 모드별로 분리 — 업무는 시간대별 개인 맞춤 인사, 챗봇은 가벼운 대화 인사로 다르게 표시",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "하단 탭바가 채팅·메일·달력·설정으로 — 자주 쓰는 설정이 더보기 안쪽 대신 탭으로 올라오고, 카테고리는 더보기로 이동",
             "더보기에서 플릿 항목 제거 — 플릿은 설정 > 라우팅·인프라 안에 있어 한 곳에서만 보입니다",
         ),

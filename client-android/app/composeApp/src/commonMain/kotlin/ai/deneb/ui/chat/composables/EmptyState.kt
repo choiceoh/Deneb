@@ -2,7 +2,6 @@ package ai.deneb.ui.chat.composables
 
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.LogoAnimation
-import ai.deneb.ui.denebHint
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -22,6 +21,10 @@ import kotlin.time.Clock
 
 @Composable
 internal fun EmptyState(
+    // recall on = 업무 workspace, recall off = 챗봇 workspace (the top-bar pill).
+    // 업무 greets the operator with a personalized time-of-day line; 챗봇 opens a
+    // light general chat. A single greeting line — no subtitle in either mode.
+    recallEnabled: Boolean,
     modifier: Modifier,
 ) {
     Column(
@@ -29,14 +32,18 @@ internal fun EmptyState(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        val greeting = remember {
-            val hour = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
+        val hour = remember {
+            Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
+        }
+        val greeting = if (recallEnabled) {
             when (hour) {
-                in 5..10 -> "좋은 아침이에요"
-                in 11..16 -> "좋은 오후예요"
-                in 17..21 -> "좋은 저녁이에요"
-                else -> "늦은 시간까지 고생 많으세요"
+                in 5..10 -> "선택님, 좋은 아침이에요"
+                in 11..16 -> "선택님, 좋은 오후예요"
+                in 17..21 -> "선택님, 좋은 저녁이에요"
+                else -> "선택님, 늦은 시간까지 고생 많으세요"
             }
+        } else {
+            "안녕하세요? 무슨 대화를 할까요?"
         }
         LogoAnimation()
         Spacer(Modifier.height(16.dp))
@@ -44,12 +51,6 @@ internal fun EmptyState(
             text = greeting,
             style = DenebType.subject,
             color = MaterialTheme.colorScheme.onBackground,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "분석부터 일정까지 — 무엇이든 물어보세요",
-            style = DenebType.body,
-            color = denebHint(),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 24.dp),
         )
