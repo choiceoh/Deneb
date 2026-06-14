@@ -41,9 +41,10 @@ kotlin {
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "ComposeApp"
-            // Dynamic so LiteRT-LM's `-Xlinker -all_load` (in its Package.swift) doesn't
-            // sweep up ComposeApp's static archive too and trip thousands of duplicate
-            // symbols at link time. Each framework gets its own link context.
+            // Kept dynamic. Originally forced by LiteRT-LM (its Package.swift `-Xlinker
+            // -all_load` swept ComposeApp's static archive into thousands of duplicate
+            // symbols at link time). LiteRT-LM has since been removed; isStatic=false is
+            // retained until iOS linking is re-verified (likely revertible to true).
             isStatic = false
             // Must differ from the iosApp bundle identifier — iOS refuses to install a
             // .app whose embedded framework shares its parent's identifier (MIInstaller
@@ -99,7 +100,6 @@ kotlin {
             implementation(libs.koin.android)
             implementation(libs.material)
             implementation(libs.bouncycastle.provider)
-            implementation(libs.litert.lm)
         }
         commonMain.dependencies {
             implementation(libs.compose.material3)
@@ -150,7 +150,6 @@ kotlin {
             implementation(libs.ktor.client.cio)
             implementation(libs.bouncycastle.provider)
             implementation(libs.slf4j.nop)
-            implementation(libs.litert.lm.jvm)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
