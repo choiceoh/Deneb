@@ -892,9 +892,10 @@
           "인물",
           "시스템",
           "업무",
-          "사용자"
+          "사용자",
+          "기타"
         ],
-        "description": "Wiki category for write action or index filter — one of the 5: 프로젝트(일·거래·결정), 인물(사람·조직), 시스템(Deneb 구성·운영), 업무(업무 일반 지식), 사용자(개인 선호·규칙)"
+        "description": "Wiki category for write action or index filter — one of the 6: 프로젝트(일·거래·결정), 인물(사람·조직), 시스템(Deneb 구성·운영), 업무(직무 도메인 지식), 사용자(개인 선호·규칙), 기타(시사·잡학·그 외)"
       },
       "content": {
         "type": "string",
@@ -1138,7 +1139,7 @@
       },
       "category": {
         "type": "string",
-        "description": "프론트매터 카테고리 (op=record) — 프로젝트·인물·시스템·업무·사용자"
+        "description": "프론트매터 카테고리 (op=record) — 프로젝트·인물·시스템·업무·사용자·기타"
       },
       "body": {
         "type": "string",

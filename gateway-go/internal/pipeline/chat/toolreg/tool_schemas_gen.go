@@ -769,8 +769,8 @@ func wikiToolSchema() map[string]any {
 			},
 			"category": map[string]any{
 				"type":        "string",
-				"description": "Wiki category for write action or index filter — one of the 5: 프로젝트(일·거래·결정), 인물(사람·조직), 시스템(Deneb 구성·운영), 업무(업무 일반 지식), 사용자(개인 선호·규칙)",
-				"enum":        []string{"프로젝트", "인물", "시스템", "업무", "사용자"},
+				"description": "Wiki category for write action or index filter — one of the 6: 프로젝트(일·거래·결정), 인물(사람·조직), 시스템(Deneb 구성·운영), 업무(직무 도메인 지식), 사용자(개인 선호·규칙), 기타(시사·잡학·그 외)",
+				"enum":        []string{"프로젝트", "인물", "시스템", "업무", "사용자", "기타"},
 			},
 			"confidence": map[string]any{
 				"type":        "string",
@@ -975,7 +975,7 @@ func knowledgeToolSchema() map[string]any {
 			},
 			"category": map[string]any{
 				"type":        "string",
-				"description": "프론트매터 카테고리 (op=record) — 프로젝트·인물·시스템·업무·사용자",
+				"description": "프론트매터 카테고리 (op=record) — 프로젝트·인물·시스템·업무·사용자·기타",
 			},
 			"importance": map[string]any{
 				"type":        "number",
