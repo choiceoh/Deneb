@@ -703,7 +703,7 @@ func makeMailAnalysisWikiSink(hub *rpcutil.GatewayHub) func(handlerminiapp.WikiA
 		if store == nil {
 			return nil
 		}
-		return store.WritePage(mailAnalysisWikiPath(in.MsgID), buildMailAnalysisPage(in))
+		return store.WritePage(mailAnalysisWikiPath(in.MsgID, in.RelatedProjects), buildMailAnalysisPage(in))
 	}
 }
 
