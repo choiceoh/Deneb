@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "대화를 스크롤하는 동안 '맨 아래로' 버튼이 부드럽게 사라졌다가, 스크롤을 멈추면 다시 나타납니다 — 움직이는 화면을 가리지 않도록",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "내 메시지 말풍선을 테두리 없는 회색 배경으로 — 파란 강조 워시와 외곽선을 빼고 차분한 중립 회색으로 정돈",
         ),
     ),
