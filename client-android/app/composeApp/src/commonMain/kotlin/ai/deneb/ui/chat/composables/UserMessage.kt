@@ -5,6 +5,7 @@ import ai.deneb.decodeToImageBitmap
 import ai.deneb.ui.components.LocalShowFullScreenImage
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
+import ai.deneb.ui.markdown.scaledBy
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -46,6 +47,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 internal fun UserMessage(
     message: String,
     attachments: ImmutableList<Attachment> = persistentListOf(),
+    textScale: Float = 1f,
 ) {
     val showFullScreen = LocalShowFullScreenImage.current
     val haptics = rememberHaptics()
@@ -128,7 +130,8 @@ internal fun UserMessage(
                         // keeps it one step down, matching the chat answer body.
                         Text(
                             text = message,
-                            style = MaterialTheme.typography.bodyMedium,
+                            // Scaled with the assistant body so 챗봇 mode enlarges both sides.
+                            style = MaterialTheme.typography.bodyMedium.scaledBy(textScale),
                             color = bubbleText,
                         )
                     }
