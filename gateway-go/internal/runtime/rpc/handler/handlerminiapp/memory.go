@@ -30,6 +30,7 @@ type MemorySearcher interface {
 	ReadPage(relPath string) (*wiki.Page, error)
 	WritePage(relPath string, page *wiki.Page) error
 	DeletePage(relPath string) error
+	MovePage(from, to string) error
 	Stats() wiki.StoreStats
 	ListPages(category string) ([]string, error)
 	RecentDiaryEntries(limit int) []wiki.DiaryHit
@@ -83,6 +84,7 @@ func MemoryMethods(deps MemoryDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.memory.create_page":      memoryCreatePage(deps),
 		"miniapp.memory.merge":            memoryMergePage(deps),
 		"miniapp.memory.delete_pages":     memoryDeletePages(deps),
+		"miniapp.memory.move_page":        memoryMovePage(deps),
 		"miniapp.memory.categories":       memoryCategories(deps),
 		"miniapp.memory.list_in_category": memoryListInCategory(deps),
 		"miniapp.memory.diary_recent":     memoryDiaryRecent(deps),
