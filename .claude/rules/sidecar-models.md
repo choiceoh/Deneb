@@ -185,12 +185,18 @@ curl -s -X POST http://127.0.0.1:8888/v1/default/banks/deneb/memories/recall \
   ```
 - 게이트웨이는 OpenAI 호환 provider 로 wormhole 을 그냥 호출(`run_provider.go`, 코드 변경 0). provider `headers` 도 지원하니 향후 opt-out 헤더가 필요하면 거기로.
 
-### 클라우드 호출 통합 (구독 LLM 도 wormhole 경유, 2026-06-14)
-- **anthropic 프로토콜 클라우드**(zai/glm-5.2·kimi·mimo)도 wormhole 로 모음. ★**URL 함정**: wormhole 은 엔트리 `url` 뒤에 `/messages` 만 붙인다 → anthropic 엔트리 url 은 **반드시 `/v1` 로 끝나야** 한다(예 `https://api.z.ai/api/anthropic/v1`). deneb.json 의 anthropic baseUrl 은 클라가 `/v1/messages` 를 붙이느라 `/v1` 이 없으니 그대로 쓰면 404. (openai 엔트리는 `.../v1` + `/chat/completions` 로 이미 일관.)
-- wormhole config 의 cloud 엔트리: `{name, url(.../v1), upstreamModel, "protocol":"anthropic", "key":"${ENV}" 또는 리터럴}`. **no toggleKwarg**(APC/effort 규칙 동일).
-- **env 키 배선**: zai 등은 키가 `${ZAI_API_KEY}` env ref → wormhole.service 의 `EnvironmentFile=-/home/choiceoh/.deneb/.env`(이 PR) 로 주입(게이트웨이와 동일 소스). 리터럴 키(kimi/mimo)는 config 에 직접.
-- **deneb.json 배선**: anthropic 은 별도 provider 필요(`api:"anthropic"`) — `wormhole-anthropic: { api:"anthropic", baseUrl:"http://127.0.0.1:18800", apiKey:"loopback", models:[glm-5.2,…] }`. role 전환: `fallbackModel`·`analysisModel` → `wormhole-anthropic/glm-5.2`. (openai 모델은 기존 `wormhole` provider.)
-- 검증: `curl :18800/v1/messages -H "x-api-key: loopback" -d '{"model":"glm-5.2",…}'` 가 200 + (스트리밍 시) `event: message_start …` SSE 통과하면 게이트웨이 anthropic stream 호출과 동형.
+### 클라우드 호출 통합 (구독 LLM 을 wormhole 경유, ★openai 프로토콜 권장, 2026-06-15)
+> 구독 클라우드(zai/glm·mimo)를 wormhole 로 모을 때 **각 프로바이더의 OpenAI 호환 엔드포인트로 openai 라우팅**하라. anthropic 으로 모으면 아래 loopback-anthropic 마찰에 빠진다.
+
+- wormhole config cloud 엔트리(openai): `{name, url(openai base), upstreamModel, "key":"${ENV}" 또는 리터럴}` — protocol 생략(openai 기본). **no toggleKwarg**(APC/effort 규칙). wormhole 이 url 뒤에 `/chat/completions` 만 붙이니 url 은 그 base.
+  - **zai/glm**: ★**코딩플랜 전용** `https://api.z.ai/api/coding/paas/v4` (일반 `…/api/paas/v4` 는 잔액부족 429). 키 `${ZAI_API_KEY}`.
+  - **mimo**: `https://token-plan-sgp.xiaomimimo.com/v1`. 리터럴 키.
+  - **kimi**: openai 엔드포인트가 **Coding-Agent 전용 403** → openai 불가, **직결 유지**(직결 anthropic remote provider 는 피커에서 정상 그린).
+- **env 키 배선**: wormhole.service `EnvironmentFile=-/home/choiceoh/.deneb/.env` 로 `${ZAI_API_KEY}` 등 주입(게이트웨이와 동일 소스). 리터럴 키는 config 직접.
+- **deneb.json 배선**: openai 라 **별도 provider 불필요** — 기존 `wormhole`(openai) provider 의 `models` 에 glm-5.2/mimo 추가, role 전환 `fallbackModel → wormhole/glm-5.2`.
+- 검증: `curl :18800/v1/models` 에 glm/mimo 가 뜨고 `:18800/v1/chat/completions -d '{"model":"glm-5.2",…}'` 200.
+
+> ★★**왜 anthropic 말고 openai 인가 (2026-06-15 교훈)**: anthropic 으로 모으려면 별도 `wormhole-anthropic` provider(baseUrl `:18800` 무 /v1, 클라가 `/v1/messages` 부착, wormhole 은 url 뒤 `/messages`)가 필요한데 이건 **loopback-anthropic 라 `/v1/models` 가 없다(404)**. 그런데 모델 피커 프로브 **그리고** modelrole 레지스트리 모델 해석 둘 다 `/v1/models` 에 의존 → glm 이 피커에 안 뜨고 fallback 이 역할 목록·resolve 실패(라우팅은 됨, 브라우징/해석 불가). **백엔드가 openai 호환 엔드포인트를 가지면 그걸로 openai 라우팅하는 게 cross-protocol provider 보다 깔끔** — /v1/models 가 있어 피커·레지스트리가 그대로 동작. (anthropic-only 백엔드는 직결 remote provider 로 두면 피커는 non-200=reachable 로 그린.)
 
 ### 운영 명령
 ```bash
