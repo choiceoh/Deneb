@@ -20,10 +20,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 
 // Closed aurora loop: four evenly spaced cool-spectrum colors that the border
 // sweep rotates through. Treating it as a continuous, periodic function (see
@@ -111,15 +116,18 @@ private const val GLOW_SWEEP_DURATION_MS = 2800
  * soft edge glow that fades to transparent toward the center (not a full-screen
  * wash) so message text stays legible and the monochrome-restraint doctrine holds.
  *
- * Drawn over the content at the margins. Each edge samples a different point on the
- * rotating aurora loop, so the color appears to travel around the frame. When
- * [active] flips off the whole glow eases out over [intensity]; at rest it costs
- * only an early-return.
+ * Drawn over the content at the margins, but NOT as an even four-sided frame: the
+ * light is concentrated at a bright "head" that travels around the perimeter and
+ * fades away from it (see [edgeHotspot]), so it flows around the message like an
+ * aurora rather than lighting all four edges at once. Its inward reach also undulates
+ * along each edge and drifts over time (see [glowDepthAt]) — thick here, thin there —
+ * and the hue rotates around the loop. When [active] flips off the whole glow eases
+ * out over [intensity]; at rest it costs only an early-return.
  */
 @Composable
 fun Modifier.streamingAuroraGlow(
     active: Boolean,
-    glow: Dp = 56.dp,
+    glow: Dp = 64.dp,
     peakAlpha: Float = 0.5f,
 ): Modifier {
     val intensity by animateFloatAsState(
@@ -135,51 +143,133 @@ fun Modifier.streamingAuroraGlow(
             animation = tween(durationMillis = GLOW_SWEEP_DURATION_MS, easing = LinearEasing),
         ),
     )
+    // A separate, slower cycle: the perimeter position of the bright head as it
+    // travels around the frame. Slower than the hue sweep so the light glides.
+    val head by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = GLOW_TRAVEL_DURATION_MS, easing = LinearEasing),
+        ),
+    )
     return this.drawWithCache {
-        val g = glow.toPx()
+        val maxDepth = glow.toPx()
+        val minDepth = maxDepth * GLOW_MIN_DEPTH_FRACTION
+        val step = GLOW_SLICE_DP.dp.toPx()
         onDrawWithContent {
             drawContent()
             if (intensity <= 0.01f) return@onDrawWithContent
             val a = peakAlpha * intensity
-            val p = phase
-            // Top
-            drawRect(
-                brush = Brush.verticalGradient(
-                    colors = listOf(auroraAt(p).copy(alpha = a), Color.Transparent),
-                    startY = 0f,
-                    endY = g,
-                ),
-                size = Size(size.width, g),
-            )
-            // Bottom
-            drawRect(
-                brush = Brush.verticalGradient(
-                    colors = listOf(Color.Transparent, auroraAt(p + 0.5f).copy(alpha = a)),
-                    startY = size.height - g,
-                    endY = size.height,
-                ),
-                topLeft = Offset(0f, size.height - g),
-                size = Size(size.width, g),
-            )
-            // Left
-            drawRect(
-                brush = Brush.horizontalGradient(
-                    colors = listOf(auroraAt(p + 0.25f).copy(alpha = a), Color.Transparent),
-                    startX = 0f,
-                    endX = g,
-                ),
-                size = Size(g, size.height),
-            )
-            // Right
-            drawRect(
-                brush = Brush.horizontalGradient(
-                    colors = listOf(Color.Transparent, auroraAt(p + 0.75f).copy(alpha = a)),
-                    startX = size.width - g,
-                    endX = size.width,
-                ),
-                topLeft = Offset(size.width - g, 0f),
-                size = Size(g, size.height),
-            )
+            // The light is concentrated at [head] and fades around the perimeter, so it
+            // flows around the message instead of lighting all four edges at once.
+            drawAuroraEdge(GlowEdge.TOP, minDepth, maxDepth, step, phase, head, a)
+            drawAuroraEdge(GlowEdge.RIGHT, minDepth, maxDepth, step, phase, head, a)
+            drawAuroraEdge(GlowEdge.BOTTOM, minDepth, maxDepth, step, phase, head, a)
+            drawAuroraEdge(GlowEdge.LEFT, minDepth, maxDepth, step, phase, head, a)
         }
     }
+}
+
+// The glow is intentionally uneven: each edge's depth undulates between
+// GLOW_MIN_DEPTH_FRACTION*max and max along its length and drifts over time, so the
+// light ripples like an aurora curtain rather than sitting as a flat band. Smaller
+// slices = smoother wave at a little more draw cost; 14dp reads as continuous once
+// the gradient fade softens the slice seams.
+private const val GLOW_MIN_DEPTH_FRACTION = 0.22f
+private const val GLOW_SLICE_DP = 14f
+
+// One trip of the bright head around the perimeter — slower than the hue sweep so the
+// light glides gracefully rather than spinning.
+private const val GLOW_TRAVEL_DURATION_MS = 5200
+
+// Half-width of the lit arc as a fraction of the perimeter: the head fades to dark
+// this far away on each side, so roughly HOTSPOT_HALF*2 of the frame glows at once.
+private const val HOTSPOT_HALF = 0.2f
+
+private enum class GlowEdge { TOP, BOTTOM, LEFT, RIGHT }
+
+// Undulating band depth at [t01] (0..1 along the edge), drifting with [phase]. Two
+// sine harmonics at different spatial frequencies give an organic, non-repeating
+// wave; normalized to 0..1 then mapped into [minDepth, maxDepth].
+private fun glowDepthAt(t01: Float, phase: Float, minDepth: Float, maxDepth: Float): Float {
+    val w1 = sin((2.0 * PI * (t01 * 1.3 + phase)).toFloat())
+    val w2 = sin((2.0 * PI * (t01 * 2.7 - phase * 0.7f)).toFloat())
+    val n = (((w1 + w2) / 2f) + 1f) / 2f
+    return minDepth + (maxDepth - minDepth) * n
+}
+
+// Draws one aurora edge as thin slices. Each slice's inward depth undulates
+// ([glowDepthAt]) and its alpha is gated by [edgeHotspot] — how close the slice sits
+// to the traveling [head] on the rectangle's perimeter — so only the stretch near the
+// head glows and the light appears to flow around the frame. Slices outside the lit
+// arc are skipped, so this is cheaper than a full four-sided band.
+private fun DrawScope.drawAuroraEdge(
+    edge: GlowEdge,
+    minDepth: Float,
+    maxDepth: Float,
+    step: Float,
+    phase: Float,
+    head: Float,
+    baseAlpha: Float,
+) {
+    val w = size.width
+    val h = size.height
+    val perimeter = 2f * (w + h)
+    val horizontal = edge == GlowEdge.TOP || edge == GlowEdge.BOTTOM
+    val span = if (horizontal) w else h
+    var pos = 0f
+    while (pos < span) {
+        val sliceLen = minOf(step, span - pos)
+        val mid = pos + sliceLen / 2f
+        // Clockwise perimeter position: TL -> TR -> BR -> BL -> TL.
+        val arc = when (edge) {
+            GlowEdge.TOP -> mid
+            GlowEdge.RIGHT -> w + mid
+            GlowEdge.BOTTOM -> w + h + (w - mid)
+            GlowEdge.LEFT -> 2f * w + h + (h - mid)
+        }
+        val s01 = arc / perimeter
+        val lit = edgeHotspot(s01, head)
+        if (lit > 0.02f) {
+            val t01 = mid / span
+            val depth = glowDepthAt(t01, phase, minDepth, maxDepth)
+            val color = auroraAt(phase + s01 * 0.6f).copy(alpha = baseAlpha * lit)
+            when (edge) {
+                GlowEdge.TOP -> drawRect(
+                    brush = Brush.verticalGradient(listOf(color, Color.Transparent), startY = 0f, endY = depth),
+                    topLeft = Offset(pos, 0f),
+                    size = Size(sliceLen, depth),
+                )
+
+                GlowEdge.BOTTOM -> drawRect(
+                    brush = Brush.verticalGradient(listOf(Color.Transparent, color), startY = h - depth, endY = h),
+                    topLeft = Offset(pos, h - depth),
+                    size = Size(sliceLen, depth),
+                )
+
+                GlowEdge.LEFT -> drawRect(
+                    brush = Brush.horizontalGradient(listOf(color, Color.Transparent), startX = 0f, endX = depth),
+                    topLeft = Offset(0f, pos),
+                    size = Size(depth, sliceLen),
+                )
+
+                GlowEdge.RIGHT -> drawRect(
+                    brush = Brush.horizontalGradient(listOf(Color.Transparent, color), startX = w - depth, endX = w),
+                    topLeft = Offset(w - depth, pos),
+                    size = Size(depth, sliceLen),
+                )
+            }
+        }
+        pos += sliceLen
+    }
+}
+
+// Brightness of the traveling head at perimeter position [s] (0..1) given the head at
+// [head] (0..1). Cosine falloff to zero at HOTSPOT_HALF away (circular distance), so a
+// single soft arc of light glows and the rest of the frame stays dark.
+private fun edgeHotspot(s: Float, head: Float): Float {
+    var d = abs(s - head)
+    if (d > 0.5f) d = 1f - d
+    if (d >= HOTSPOT_HALF) return 0f
+    return (cos((d / HOTSPOT_HALF) * PI.toFloat()) + 1f) / 2f
 }
