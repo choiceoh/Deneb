@@ -55,11 +55,12 @@ func TestCompaction_TransientErrorRetry(t *testing.T) {
 
 	status := waitForSessionStatus(sm, "transient-retry-1", session.StatusDone, 15*time.Second)
 	if status != session.StatusDone {
-		// Transient retry may not be available in all configurations.
-		if status == session.StatusFailed {
-			t.Skip("transient retry not triggered in this configuration")
-		}
-		t.Fatalf("session status = %q, want done", status)
+		// StatusFailed here IS the regression this test exists to catch, not an
+		// environment quirk: the 502→retry→200 path is deterministic (the mock
+		// server always 502s once then succeeds, and run_fallback.go classifies
+		// 502 as transient and retries once). Skipping on StatusFailed let a
+		// broken transient-retry path pass silently green — fail instead.
+		t.Fatalf("session status = %q, want done (transient 502 must be retried)", status)
 	}
 
 	if callCount < 2 {

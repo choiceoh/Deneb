@@ -51,8 +51,14 @@ func TestEmergencyCompact_DropsTruncatedSummaryOnCtxCancel(t *testing.T) {
 	cancel() // expired before Summarize returns
 
 	out, evicted := EmergencyCompact(ctx, cfg, messages, partialSummarizer{}, nil)
+	// Eviction is deterministic here, so a zero count IS the regression: two
+	// 8000-char messages each estimate to thousands of tokens, far over the
+	// 200-token ContextBudget, so the loop must evict the oldest before the
+	// remaining old + recent fit. Skipping on evicted==0 let a broken budget
+	// path bypass the ctx-cancel guard below without exercising it — fail
+	// instead so a regression in the eviction math cannot pass green.
 	if evicted == 0 {
-		t.Skip("budget did not trigger eviction in this environment; path not exercised")
+		t.Fatalf("evicted = 0, want > 0 (8000-char messages must overflow the 200-token budget)")
 	}
 	joined := serializeMessages(out)
 	if strings.Contains(joined, "TRUNCATED_SUMMARY") {

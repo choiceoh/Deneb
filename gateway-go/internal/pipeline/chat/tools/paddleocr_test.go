@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -99,8 +100,11 @@ func TestPaddleOCR_WireFormat(t *testing.T) {
 	}
 }
 
-// TestPaddleOCR_FallbackOnError confirms ocrImageBytes degrades to tesseract
-// when the OCR server returns an error. Skipped if tesseract is absent.
+// TestPaddleOCR_FallbackOnError confirms ocrImageBytes actually reaches the
+// tesseract fallback when PaddleOCR-VL errors — not that it merely avoids a
+// panic. ocrImageBytes returns tesseract's (text, err) verbatim on PaddleOCR-VL
+// failure (it discards the HTTP error), so the fallback being reached is
+// provable from the returned error alone.
 func TestPaddleOCR_FallbackOnError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -108,14 +112,27 @@ func TestPaddleOCR_FallbackOnError(t *testing.T) {
 	defer srv.Close()
 	t.Setenv("DENEB_OCR_VL_URL", srv.URL)
 
-	// Empty image: tesseract will also fail, but the point is that
-	// ocrImageBytes reaches the fallback path without panicking.
-	_, err := ocrImageBytes(context.Background(), []byte{0x00})
+	// Server is up but 500s, so paddleOCR fails and ocrImageBytes must fall
+	// through to tesseract on this 1-byte junk image.
+	text, err := ocrImageBytes(context.Background(), []byte{0x00})
+
+	// The fallback must surface an error: with the OCR server down, the only
+	// path left is tesseract, which rejects the junk image (or, if not
+	// installed, returns its install-hint error). A nil error would mean the
+	// 500 was swallowed and the fallback bypassed — the regression to catch.
 	if err == nil {
-		t.Skip("tesseract produced output for junk input; fallback path exercised")
+		t.Fatalf("OCR server down + junk image: want a fallback error, got success text=%q", text)
 	}
-	if !strings.Contains(err.Error(), "tesseract") && !strings.Contains(err.Error(), "OCR") {
-		t.Logf("fallback error (expected tesseract-related): %v", err)
+	// The PaddleOCR-VL error must NOT leak through: ocrImageBytes drops it in
+	// favor of tesseract's result, so its presence proves the fallback was
+	// skipped instead of reached.
+	if strings.Contains(strings.ToLower(err.Error()), "paddleocr") {
+		t.Fatalf("fallback not reached — PaddleOCR-VL error leaked instead of tesseract: %v", err)
+	}
+	// When tesseract is installed it must have actually run (and rejected the
+	// junk), so the error is the CLI's — never the "not installed" hint.
+	if _, look := exec.LookPath("tesseract"); look == nil && strings.Contains(err.Error(), "미설치") {
+		t.Fatalf("tesseract present but fallback returned the not-installed hint: %v", err)
 	}
 }
 

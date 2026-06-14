@@ -289,14 +289,15 @@ func TestAutoResume_SkipsCleanEnd(t *testing.T) {
 	}
 	srv.autoResumeInterruptedRunsWithOpts(context.Background(), opts)
 
-	// Give any (unexpected) goroutine a chance to run.
-	time.Sleep(200 * time.Millisecond)
+	// The skip decision is synchronous: the call deletes the marker inline and
+	// never launches a dispatch goroutine, so the outcome is final on return —
+	// no blind sleep needed. A regression that wrongly dispatched would leave
+	// the marker present (attempts incremented, not deleted), which the marker
+	// assertion below catches deterministically.
 	if fd.count() != 0 {
 		t.Errorf("expected no dispatch, got %d calls", fd.count())
 	}
-	// Marker should be deleted.
-	m, _ := store.Read("client:7")
-	if m != nil {
+	if m, _ := store.Read("client:7"); m != nil {
 		t.Errorf("expected marker to be deleted, got %+v", m)
 	}
 }
@@ -324,13 +325,12 @@ func TestAutoResume_DiscardsStaleMarker(t *testing.T) {
 	}
 	srv.autoResumeInterruptedRunsWithOpts(context.Background(), opts)
 
-	time.Sleep(100 * time.Millisecond)
+	// Synchronous skip (see TestAutoResume_SkipsCleanEnd): no goroutine is
+	// launched for a stale marker, so assert immediately.
 	if fd.count() != 0 {
 		t.Errorf("expected no dispatch for stale marker, got %d", fd.count())
 	}
-	// Stale markers get cleaned up.
-	m, _ := store.Read("client:stale")
-	if m != nil {
+	if m, _ := store.Read("client:stale"); m != nil {
 		t.Errorf("expected stale marker to be deleted, got %+v", m)
 	}
 }
@@ -357,13 +357,12 @@ func TestAutoResume_RespectsAttemptLimit(t *testing.T) {
 	}
 	srv.autoResumeInterruptedRunsWithOpts(context.Background(), opts)
 
-	time.Sleep(100 * time.Millisecond)
+	// Synchronous skip (see TestAutoResume_SkipsCleanEnd): no goroutine is
+	// launched once the attempt limit is hit, so assert immediately.
 	if fd.count() != 0 {
 		t.Errorf("expected no dispatch when attempts exhausted, got %d", fd.count())
 	}
-	// Marker is cleared so it does not show up on future boots.
-	m, _ := store.Read("client:loop")
-	if m != nil {
+	if m, _ := store.Read("client:loop"); m != nil {
 		t.Errorf("expected exhausted marker to be deleted, got %+v", m)
 	}
 }
@@ -389,14 +388,14 @@ func TestAutoResume_DisabledDrainsMarkers(t *testing.T) {
 	}
 	srv.autoResumeInterruptedRunsWithOpts(context.Background(), opts)
 
-	time.Sleep(100 * time.Millisecond)
+	// The disabled path returns synchronously after draining markers and never
+	// dispatches, so assert immediately (no blind sleep).
 	if fd.count() != 0 {
 		t.Errorf("expected no dispatch when disabled, got %d", fd.count())
 	}
 	// Markers are proactively cleared even when the feature is off, so they
 	// cannot accumulate to infinity.
-	m, _ := store.Read("client:1")
-	if m != nil {
+	if m, _ := store.Read("client:1"); m != nil {
 		t.Errorf("expected marker to be cleared on disabled path, got %+v", m)
 	}
 }
@@ -423,9 +422,17 @@ func TestAutoResume_SkipsNonUserSessions(t *testing.T) {
 	}
 	srv.autoResumeInterruptedRunsWithOpts(context.Background(), opts)
 
-	time.Sleep(100 * time.Millisecond)
+	// Non-resumable sessions are skipped and their markers deleted synchronously
+	// — no goroutine launched — so assert immediately. The marker-deletion
+	// checks are the deterministic proof the skip path (not dispatch) ran.
 	if fd.count() != 0 {
 		t.Errorf("expected no dispatch for non-user sessions, got %d", fd.count())
+	}
+	if m, _ := store.Read("cron:nightly"); m != nil {
+		t.Errorf("expected cron marker to be deleted, got %+v", m)
+	}
+	if m, _ := store.Read("btw:abc"); m != nil {
+		t.Errorf("expected btw marker to be deleted, got %+v", m)
 	}
 }
 
@@ -482,6 +489,9 @@ func TestRunMarkerLifecycle_SkipsNonDirectKinds(t *testing.T) {
 	defer unsub()
 
 	sm := srv.sessions
+	store := srv.runMarkerStore()
+
+	// Non-direct kind: the listener must NOT write a marker for it.
 	sm.Create("cron:job1", session.KindCron)
 	if err := sm.Set(&session.Session{
 		Key: "cron:job1", Kind: session.KindCron,
@@ -489,11 +499,26 @@ func TestRunMarkerLifecycle_SkipsNonDirectKinds(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// Give the async event bus a chance to fire.
-	time.Sleep(300 * time.Millisecond)
-	store := srv.runMarkerStore()
-	m, _ := store.Read("cron:job1")
-	if m != nil {
+
+	// Sentinel: a direct session enqueued AFTER the cron event. The marker
+	// listener drains its mailbox FIFO in a single goroutine (session.EventBus),
+	// so once the sentinel's marker appears the earlier cron event has already
+	// been processed. That ordering is a deterministic sync point — it replaces
+	// the old blind sleep, which false-passed if the (unwanted) write was merely
+	// slow rather than absent.
+	sm.Create("client:sentinel", session.KindDirect)
+	if err := sm.Set(&session.Session{
+		Key: "client:sentinel", Kind: session.KindDirect, Channel: "client",
+		Status: session.StatusRunning,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	waitForCondition(t, 2*time.Second, func() bool {
+		m, _ := store.Read("client:sentinel")
+		return m != nil
+	})
+
+	if m, _ := store.Read("cron:job1"); m != nil {
 		t.Errorf("expected no marker for cron session, got %+v", m)
 	}
 }
