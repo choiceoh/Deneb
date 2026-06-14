@@ -1,9 +1,13 @@
 package genesis
 
 import (
+	"context"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 )
 
 func TestSanitizeSkillName(t *testing.T) {
@@ -200,6 +204,33 @@ func TestBumpPatchVersion(t *testing.T) {
 		got := bumpPatchVersion(tt.input)
 		if got != tt.want {
 			t.Errorf("bumpPatchVersion(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+// TestJudgeGenerated_NoJudgePassesThrough verifies the genesis judge is fail-
+// open: with no judge wired it falls through to the heuristic gate (prior
+// behavior) instead of blocking all skill creation.
+func TestJudgeGenerated_NoJudgePassesThrough(t *testing.T) {
+	svc := &Service{logger: slog.Default()}
+	pass, _ := svc.judgeGenerated(context.Background(), &GeneratedSkill{Name: "x", Body: "body"})
+	if !pass {
+		t.Fatal("no judge wired must pass through (fail-open)")
+	}
+}
+
+// TestListExistingSkillDescriptions verifies the judge's redundancy context
+// includes existing skill names AND descriptions (token-Jaccard dedup can only
+// see names; semantic duplicates need the descriptions).
+func TestListExistingSkillDescriptions(t *testing.T) {
+	cat := skills.NewCatalog(nil)
+	cat.Register(skills.SkillEntry{Skill: skills.Skill{Name: "morning-letter", Description: "wiki+gmail morning letter"}})
+	cat.Register(skills.SkillEntry{Skill: skills.Skill{Name: "deploy", Description: "deploy gateway"}})
+	svc := &Service{catalog: cat, logger: slog.Default()}
+	out := svc.listExistingSkillDescriptions()
+	for _, want := range []string{"morning-letter", "wiki+gmail", "deploy"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("descriptions missing %q in: %q", want, out)
 		}
 	}
 }

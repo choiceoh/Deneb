@@ -245,8 +245,14 @@ func (t *Tracker) RecordUsage(record UsageRecord) error {
 	}
 	t.ingest(record)
 	t.maybeFireRollbackLocked(record)
-	if err := t.touchCuratorUsageLocked(record.SkillName, record.UsedAt); err != nil {
-		return err
+	// Curator use-count / staleness must reflect real use only (consistent with
+	// the success rate): a review verdict isn't an execution, so it must not bump
+	// lastUsed and mask a never-really-used skill from staleness pruning — that
+	// masking is what lets dead self-generated skills linger as net-negative cost.
+	if isRealUsageRecord(record) {
+		if err := t.touchCuratorUsageLocked(record.SkillName, record.UsedAt); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -407,6 +413,29 @@ func (t *Tracker) computeEvolutionHealthLocked(now time.Time) EvolutionHealthSum
 		s.Thrash = true
 	}
 	return s
+}
+
+// AgentSkillValueSummary counts agent-created (genesis) skills and how many have
+// zero real uses. Self-generated skills are net-negative unless they earn their
+// keep (SoK -1.3pp); an unused one is pure cost (catalog + prompt tokens with no
+// payoff). Surfaced on /health so dead weight is visible without inspecting the
+// curator file. Real-use only: the curator use-count is now gated to genuine
+// executions, so a verdict-only skill correctly reads as unused.
+func (t *Tracker) AgentSkillValueSummary() (total, unused int) {
+	report, err := t.SkillCuratorReport("")
+	if err != nil {
+		return 0, 0
+	}
+	for _, r := range report {
+		if r.CreatedBy != SkillCuratorCreatedByAgent {
+			continue
+		}
+		total++
+		if r.UseCount == 0 {
+			unused++
+		}
+	}
+	return total, unused
 }
 
 // LifecycleLogEntry is the combined JSONL view for genesis and evolution

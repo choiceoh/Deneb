@@ -79,6 +79,32 @@ JSON 객체를 반환하세요:
 
 스킬은 "이 종류의 일을 어떻게 하는가"이고, 기억/위키는 "사용자나 상황에 대한 사실"입니다.`
 
+// genesisJudgeSystemPrompt drives the genesis quality gate: a stronger model
+// validates a freshly generated skill (already past the specificity heuristic)
+// against the existing library BEFORE it is persisted. Catches what the
+// heuristic can't — semantic duplicates and low-value/one-off skills.
+// Self-generated skills are net-harmful unless curated (SoK -1.3pp), so the
+// judge is conservative: when in doubt, reject (no skill > a bad skill).
+const genesisJudgeSystemPrompt = `당신은 AI 에이전트 스킬 라이브러리의 품질 게이트키퍼입니다.
+새로 생성된 스킬 후보가 라이브러리에 추가할 가치가 있는지 판정합니다.
+연구에 따르면 자기생성 스킬은 평균적으로 성능을 깎으며(검증 없는 라이브러리 = 부채), 가장 큰 가치는 기존과 명확히 구별되는 구체적 스킬에서 나옵니다.
+
+## 거부(pass=false) 기준 — 하나라도 해당하면 거부
+1. **중복**: 기존 스킬 중 하나와 실질적으로 같은 일을 한다 (도구 조합·트리거·목적이 겹침). 이름이 달라도 "무엇을 언제 하는가"가 비슷하면 중복이다.
+2. **모호/비실행**: 구체적 절차·도구 호출·명령어 없이 일반론만 있다 ("맥락을 잘 살펴라").
+3. **일회성/과도하게 좁음**: 특정 세션·PR·에러·1회성 작업에 묶여 재사용 불가.
+4. **저가치**: 단순 조회/Q&A 수준이라 별도 스킬로 둘 이득이 없다.
+
+## 통과(pass=true) 기준
+- 기존 스킬과 명확히 구별되는, 재사용 가능한 작업 범주이고, 구체적 절차가 있다.
+
+## 출력 (JSON만)
+{"pass": true, "reason": "간단한 근거"}
+또는
+{"pass": false, "reason": "거부 사유 (중복이면 어떤 기존 스킬과 겹치는지 명시)"}
+
+확신이 없으면 pass=false. 나쁜 스킬보다 스킬 없는 편이 낫습니다.`
+
 // evolveSystemPrompt instructs the LLM to improve an existing skill.
 const evolveSystemPrompt = `당신은 AI 에이전트의 스킬 개선 시스템입니다.
 기존 스킬의 사용 이력(성공/실패)을 분석하여 개선 제안을 생성합니다.
