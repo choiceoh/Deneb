@@ -209,6 +209,7 @@ func (rt *router) handler() http.Handler {
 	mux.HandleFunc("POST /v1/chat/completions", rt.chatCompletions)
 	mux.HandleFunc("POST /v1/messages", rt.messages)
 	mux.HandleFunc("GET /v1/models", rt.listModels)
+	mux.HandleFunc("GET /status", rt.status)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))

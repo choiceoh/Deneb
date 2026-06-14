@@ -9,6 +9,7 @@ package handlerminiapp
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -36,8 +37,11 @@ type WormholeStatusOut struct {
 	Models        []WormholeModelOut `json:"models"`
 }
 
-// WormholeModelOut is one configured model: name, wire protocol, whether it stays
-// on-box (local), and whether it's effort-routable (has a thinking toggle).
+// WormholeModelOut is one routable model: name, wire protocol, whether it stays
+// on-box (local), whether it's effort-routable (has a thinking toggle), and its
+// source — "config" (declared in the file) or "fleet" (auto-discovered from
+// SparkFleet). Source is "config" when the live view is unavailable and we fall
+// back to the config file.
 //
 //deneb:wire
 type WormholeModelOut struct {
@@ -45,6 +49,7 @@ type WormholeModelOut struct {
 	Protocol string `json:"protocol"`
 	Local    bool   `json:"local"`
 	Thinking bool   `json:"thinking"`
+	Source   string `json:"source"`
 }
 
 // WormholeDeps is the wiring for the wormhole status/toggle handlers. Empty
@@ -101,32 +106,145 @@ func wormholeStatus(deps WormholeDeps) rpcutil.HandlerFunc {
 		if errResp := requireAuth(ctx, req.ID); errResp != nil {
 			return errResp
 		}
-		var cfg whConfig
-		if b, err := os.ReadFile(deps.ConfigPath); err == nil {
-			_ = json.Unmarshal(b, &cfg)
+		// Prefer wormhole's live /status: it carries the discovered SparkFleet
+		// models and reflects hot-reloaded toggles, which the static config file
+		// can't. Fall back to the config-file view when wormhole is unreachable or
+		// rejects the token (then we show only configured models, reachable from a
+		// /health probe).
+		if live, ok := wormholeLiveStatus(ctx, deps.BaseURL, wormholeToken(deps.ConfigPath)); ok {
+			return rpcutil.RespondOK(req.ID, statusFromLive(live))
 		}
-		out := WormholeStatusOut{
-			Reachable:     wormholeReachable(ctx, deps.BaseURL),
-			Listen:        cfg.Listen,
-			LocalOnly:     cfg.LocalOnly,
-			EffortRouting: cfg.EffortRouting == nil || *cfg.EffortRouting,
-			Auto:          cfg.Auto,
-			Models:        make([]WormholeModelOut, 0, len(cfg.Models)),
-		}
-		for _, m := range cfg.Models {
-			proto := m.Protocol
-			if proto == "" {
-				proto = "openai"
-			}
-			out.Models = append(out.Models, WormholeModelOut{
-				Name:     m.Name,
-				Protocol: proto,
-				Local:    modelIsLocal(m.Local, m.URL),
-				Thinking: m.ToggleKwarg != "",
-			})
-		}
-		return rpcutil.RespondOK(req.ID, out)
+		return rpcutil.RespondOK(req.ID, statusFromConfigFile(ctx, deps))
 	}
+}
+
+// statusFromLive maps wormhole's live /status readout onto the wire shape.
+func statusFromLive(live *whLiveStatus) WormholeStatusOut {
+	out := WormholeStatusOut{
+		Reachable:     true,
+		Listen:        live.Listen,
+		LocalOnly:     live.LocalOnly,
+		EffortRouting: live.EffortRouting,
+		Auto:          live.Auto,
+		Models:        make([]WormholeModelOut, 0, len(live.Models)),
+	}
+	for _, m := range live.Models {
+		proto := m.Protocol
+		if proto == "" {
+			proto = "openai"
+		}
+		src := m.Source
+		if src == "" {
+			src = "config"
+		}
+		out.Models = append(out.Models, WormholeModelOut{
+			Name:     m.Name,
+			Protocol: proto,
+			Local:    m.Local,
+			Thinking: m.Thinking,
+			Source:   src,
+		})
+	}
+	return out
+}
+
+// statusFromConfigFile is the fallback view when wormhole's live /status is
+// unavailable: the configured models read straight from the file (no discovered
+// models), with reachability from a /health probe. Source is always "config".
+func statusFromConfigFile(ctx context.Context, deps WormholeDeps) WormholeStatusOut {
+	var cfg whConfig
+	if b, err := os.ReadFile(deps.ConfigPath); err == nil {
+		_ = json.Unmarshal(b, &cfg)
+	}
+	out := WormholeStatusOut{
+		Reachable:     wormholeReachable(ctx, deps.BaseURL),
+		Listen:        cfg.Listen,
+		LocalOnly:     cfg.LocalOnly,
+		EffortRouting: cfg.EffortRouting == nil || *cfg.EffortRouting,
+		Auto:          cfg.Auto,
+		Models:        make([]WormholeModelOut, 0, len(cfg.Models)),
+	}
+	for _, m := range cfg.Models {
+		proto := m.Protocol
+		if proto == "" {
+			proto = "openai"
+		}
+		out.Models = append(out.Models, WormholeModelOut{
+			Name:     m.Name,
+			Protocol: proto,
+			Local:    modelIsLocal(m.Local, m.URL),
+			Thinking: m.ToggleKwarg != "",
+			Source:   "config",
+		})
+	}
+	return out
+}
+
+// whLiveStatus mirrors wormhole's GET /status response (cmd/wormhole/status.go).
+// Parsed with its own struct — loose coupling, like the SparkFleet discovery
+// client — so the two binaries share a shape, not a package. No key field exists
+// here: /status never emits one.
+type whLiveStatus struct {
+	Listen        string   `json:"listen"`
+	LocalOnly     bool     `json:"localOnly"`
+	EffortRouting bool     `json:"effortRouting"`
+	Auto          []string `json:"auto"`
+	Models        []struct {
+		Name     string `json:"name"`
+		Protocol string `json:"protocol"`
+		Local    bool   `json:"local"`
+		Thinking bool   `json:"thinking"`
+		Source   string `json:"source"`
+	} `json:"models"`
+}
+
+// wormholeToken reads the wormhole gate token from the config (with ${ENV}
+// expansion, matching wormhole's own loadConfig). Used ONLY to authenticate the
+// gateway→wormhole /status call; it is never placed in any response. If the env
+// var is absent the expansion yields "" and the /status call goes unauthenticated
+// — wormhole then rejects it and we fall back to the config-file view.
+func wormholeToken(configPath string) string {
+	b, err := os.ReadFile(configPath)
+	if err != nil {
+		return ""
+	}
+	var probe struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(b, &probe)
+	return os.ExpandEnv(probe.Token)
+}
+
+// wormholeLiveStatus fetches wormhole's rich GET /status — the live routing table
+// including SparkFleet-discovered models. Authenticated with the wormhole token.
+// Returns ok=false (so the caller falls back to the static file view) when
+// wormhole is unreachable, rejects the token, or returns an unparseable body.
+func wormholeLiveStatus(ctx context.Context, baseURL, token string) (*whLiveStatus, bool) {
+	if baseURL == "" {
+		return nil, false
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	reqr, err := http.NewRequestWithContext(probeCtx, http.MethodGet, strings.TrimRight(baseURL, "/")+"/status", nil)
+	if err != nil {
+		return nil, false
+	}
+	if token != "" {
+		reqr.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := httputil.NewClient(2 * time.Second).Do(reqr)
+	if err != nil {
+		return nil, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, false
+	}
+	var live whLiveStatus
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&live); err != nil {
+		return nil, false
+	}
+	return &live, true
 }
 
 // wormholeSetFeature flips a global wormhole feature flag (localOnly or
