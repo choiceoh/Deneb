@@ -38,11 +38,25 @@ func buildSnapshot(cfg config, mtime time.Time) *snapshot {
 	return &snapshot{cfg: cfg, models: m, mtime: mtime}
 }
 
+// fleetRefreshInterval is how often the watcher re-polls SparkFleet for live
+// models. Slower than the config mtime check (3s): discovery is an off-box HTTP
+// call and model lifecycle changes on the order of minutes, not seconds.
+const fleetRefreshInterval = 15 * time.Second
+
 type router struct {
-	path   string // config path to watch ("" disables hot-reload)
-	snap   atomic.Pointer[snapshot]
-	client *http.Client
-	log    *slog.Logger
+	path string // config path to watch ("" disables hot-reload)
+	snap atomic.Pointer[snapshot]
+	// fleet holds models discovered from SparkFleet (fleet.go), refreshed by the
+	// watcher on fleetRefreshInterval. Separate from snap because it refreshes on
+	// its own cadence (HTTP poll), independent of the config file's mtime. Never
+	// nil after newRouter; lookup() consults it after configured models.
+	fleet atomic.Pointer[map[string]modelEntry]
+	// fleetState is the last-logged discovery state ("up:N" / "down"). Touched ONLY
+	// by the watcher goroutine (the sole caller of refreshFleet), so it needs no
+	// lock; it exists to log discovery on transitions instead of every 15s poll.
+	fleetState string
+	client     *http.Client
+	log        *slog.Logger
 }
 
 func newRouter(cfg config, path string, log *slog.Logger) *router {
@@ -61,33 +75,115 @@ func newRouter(cfg config, path string, log *slog.Logger) *router {
 		log: log,
 	}
 	rt.snap.Store(buildSnapshot(cfg, time.Time{}))
+	empty := map[string]modelEntry{}
+	rt.fleet.Store(&empty)
 	return rt
 }
 
 // cur returns the live config snapshot (lock-free).
 func (rt *router) cur() *snapshot { return rt.snap.Load() }
 
-// watch re-reads the config file when its mtime advances and swaps in a fresh
-// snapshot, so management toggles apply live. It exits when ctx is cancelled.
-func (rt *router) watch(ctx context.Context) {
-	if rt.path == "" {
-		return
+// lookup resolves a client-facing model name to its backend. Configured models
+// win over SparkFleet-discovered ones: an explicit config entry is an operator
+// override (e.g. to pin a key, protocol, or upstream id) and must beat discovery.
+func (rt *router) lookup(name string) (modelEntry, bool) {
+	if e, ok := rt.cur().models[name]; ok {
+		return e, true
 	}
+	if f := rt.fleet.Load(); f != nil {
+		if e, ok := (*f)[name]; ok {
+			return e, true
+		}
+	}
+	return modelEntry{}, false
+}
+
+// mergedModels returns the full routable set for display/listing — configured
+// models (in config order) followed by discovered ones not shadowed by a config
+// entry of the same name. Not used on the hot path (that's lookup); only by
+// listModels.
+func (rt *router) mergedModels() []modelEntry {
+	s := rt.cur()
+	out := make([]modelEntry, 0, len(s.cfg.Models))
+	out = append(out, s.cfg.Models...)
+	if f := rt.fleet.Load(); f != nil {
+		for name, e := range *f {
+			if _, shadowed := s.models[name]; !shadowed {
+				out = append(out, e)
+			}
+		}
+	}
+	return out
+}
+
+// watch re-reads the config file when its mtime advances (so management toggles
+// apply live) and re-polls SparkFleet for discovered models. It exits when ctx is
+// cancelled.
+func (rt *router) watch(ctx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {
 			rt.log.Error("config watcher panic", "panic", r)
 		}
 	}()
-	t := time.NewTicker(3 * time.Second)
-	defer t.Stop()
+	// Discover once up front so fleet models are routable as soon as possible.
+	rt.refreshFleet(ctx)
+	if rt.path == "" && rt.cur().cfg.Sparkfleet == nil {
+		return // nothing to poll: static config, no discovery
+	}
+	cfgTick := time.NewTicker(3 * time.Second)
+	defer cfgTick.Stop()
+	fleetTick := time.NewTicker(fleetRefreshInterval)
+	defer fleetTick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.C:
+		case <-cfgTick.C:
 			rt.reloadIfChanged()
+		case <-fleetTick.C:
+			rt.refreshFleet(ctx)
 		}
 	}
+}
+
+// refreshFleet re-polls SparkFleet and swaps in the freshly discovered model set.
+// On a transient discovery error it KEEPS the last-known set — a single failed
+// poll shouldn't drop every fleet route mid-flight (a stale entry just 502s and
+// auto-fallback handles it). When the source is removed (hot-reload) it clears.
+func (rt *router) refreshFleet(parent context.Context) {
+	src := rt.cur().cfg.Sparkfleet
+	if src == nil || src.URL == "" {
+		rt.clearFleet()
+		return
+	}
+	ctx, cancel := context.WithTimeout(parent, 8*time.Second)
+	defer cancel()
+	entries, err := discoverFleet(ctx, rt.client, *src)
+	if err != nil {
+		if rt.fleetState != "down" { // log the failure once, not every poll
+			rt.log.Warn("sparkfleet discovery failing, keeping last known", "url", src.URL, "error", err)
+			rt.fleetState = "down"
+		}
+		return
+	}
+	m := make(map[string]modelEntry, len(entries))
+	for _, e := range entries {
+		m[e.Name] = e
+	}
+	rt.fleet.Store(&m)
+	if st := fmt.Sprintf("up:%d", len(m)); st != rt.fleetState { // log only on change
+		rt.log.Info("sparkfleet discovery", "models", len(m))
+		rt.fleetState = st
+	}
+}
+
+// clearFleet drops all discovered models (the source was removed via hot-reload).
+func (rt *router) clearFleet() {
+	if f := rt.fleet.Load(); f == nil || len(*f) == 0 {
+		return
+	}
+	empty := map[string]modelEntry{}
+	rt.fleet.Store(&empty)
 }
 
 // reloadIfChanged re-reads the config file and swaps in a fresh snapshot when the
@@ -156,12 +252,11 @@ func (rt *router) serve(w http.ResponseWriter, r *http.Request, proto, pathSuffi
 		return
 	}
 	// "auto" (when configured) lets the client delegate the choice.
-	s := rt.cur()
-	if model == rt.autoName() && len(s.cfg.Auto) > 0 {
+	if model == rt.autoName() && len(rt.cur().cfg.Auto) > 0 {
 		rt.serveAuto(w, r, body, proto, pathSuffix)
 		return
 	}
-	entry, ok := s.models[model]
+	entry, ok := rt.lookup(model)
 	if !ok {
 		writeErr(w, http.StatusNotFound, "unknown model: "+model)
 		return
@@ -181,7 +276,7 @@ func (rt *router) serve(w http.ResponseWriter, r *http.Request, proto, pathSuffi
 			out = rewritten
 		}
 	}
-	if s.cfg.effortRoutingOn() {
+	if rt.cur().cfg.effortRoutingOn() {
 		out = rt.applyThinking(entry, out)
 	}
 	rt.forward(w, r, entry, out, pathSuffix)
@@ -242,10 +337,10 @@ func (rt *router) serveAuto(w http.ResponseWriter, r *http.Request, body []byte,
 // autoCandidates returns the configured auto models eligible for this request, in
 // order: those matching the endpoint's protocol and passing the egress guard.
 func (rt *router) autoCandidates(r *http.Request, proto string) []modelEntry {
-	s := rt.cur()
-	out := make([]modelEntry, 0, len(s.cfg.Auto))
-	for _, name := range s.cfg.Auto {
-		e, ok := s.models[name]
+	auto := rt.cur().cfg.Auto
+	out := make([]modelEntry, 0, len(auto))
+	for _, name := range auto {
+		e, ok := rt.lookup(name) // an auto candidate may be a discovered fleet model
 		if !ok || e.protocol() != proto {
 			continue
 		}
@@ -341,13 +436,13 @@ func (rt *router) listModels(w http.ResponseWriter, r *http.Request) {
 		Object  string `json:"object"`
 		OwnedBy string `json:"owned_by"`
 	}
-	s := rt.cur()
-	rows := make([]modelRow, 0, len(s.cfg.Models)+1)
+	models := rt.mergedModels() // configured + SparkFleet-discovered
+	rows := make([]modelRow, 0, len(models)+1)
 	// Advertise the reserved auto name first so clients see they can delegate.
-	if len(s.cfg.Auto) > 0 {
+	if len(rt.cur().cfg.Auto) > 0 {
 		rows = append(rows, modelRow{ID: rt.autoName(), Object: "model", OwnedBy: "wormhole-auto"})
 	}
-	for _, e := range s.cfg.Models {
+	for _, e := range models {
 		owner := "wormhole-cloud"
 		if e.isLocal() {
 			owner = "wormhole-local"

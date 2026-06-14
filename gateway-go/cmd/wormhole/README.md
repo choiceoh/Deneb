@@ -52,11 +52,32 @@ re-implementation. Routing is one-directional: it only ever turns thinking off f
 a simple turn, never forces it on. A model with no `toggleKwarg` passes through
 untouched.
 
+## SparkFleet auto-discovery
+
+wormhole can pull its local model list from **SparkFleet** (the GB10 fleet
+manager) instead of hand-maintaining one. Point it at SparkFleet's control-plane:
+
+```json
+"sparkfleet": { "url": "http://127.0.0.1:18900", "token": "${FLEET_TOKEN}" }
+```
+
+wormhole polls SparkFleet's `GET /api/services` every 15s, and every **live vLLM**
+becomes a routable model: `name` = the served model id, `url` = its `/v1` base,
+`protocol` = openai, marked **local**, no key. Launch a model in SparkFleet and it
+becomes reachable here within a poll — no config edit. This is a one-way coupling:
+wormhole (the **data plane** — model access) reads SparkFleet (the **control
+plane** — model lifecycle), never the reverse.
+
+A configured `models` entry **wins** over a discovered one of the same name (so
+you can still pin a key, protocol, or upstream id). A transient SparkFleet outage
+keeps the last-known set (a stale entry just `502`s, and `auto` falls past it);
+removing the `sparkfleet` block drops the discovered models on the next reload.
+
 ## Endpoints
 
 - `POST /v1/chat/completions` — OpenAI clients → OpenAI-protocol backends.
 - `POST /v1/messages` — Anthropic clients → Anthropic-protocol backends.
-- `GET /v1/models` — lists the configured model names so clients can discover.
+- `GET /v1/models` — lists the routable model names (configured + discovered).
 - `GET /health` — liveness.
 
 ## Run
@@ -82,7 +103,8 @@ live in the environment, not the file. Each model entry:
 
 Top-level config: `localOnly: true` air-gaps the whole instance (every cloud
 model is refused); `auto: ["dsv4", "claude"]` sets the ordered candidate list for
-the reserved `auto` model name (`autoName` overrides the name; default `auto`).
+the reserved `auto` model name (`autoName` overrides the name; default `auto`);
+`sparkfleet: { url, token }` auto-discovers local models (see above).
 
 ## Local-first egress guard
 
