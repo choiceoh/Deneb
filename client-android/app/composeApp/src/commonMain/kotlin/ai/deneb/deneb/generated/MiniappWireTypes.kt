@@ -360,3 +360,21 @@ data class TranscriptMsgOut(
     val attachments: List<TranscriptAttachmentOut> = emptyList(),
     val timestampMs: Long = 0L,
 )
+
+@Serializable
+data class WormholeModelOut(
+    val name: String = "",
+    val protocol: String = "",
+    val local: Boolean = false,
+    val thinking: Boolean = false,
+)
+
+@Serializable
+data class WormholeStatusOut(
+    val reachable: Boolean = false,
+    val listen: String = "",
+    val localOnly: Boolean = false,
+    val effortRouting: Boolean = false,
+    val auto: List<String> = emptyList(),
+    val models: List<WormholeModelOut> = emptyList(),
+)
