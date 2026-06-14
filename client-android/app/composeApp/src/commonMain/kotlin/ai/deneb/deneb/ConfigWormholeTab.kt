@@ -122,6 +122,7 @@ internal fun WormholeTab(client: DenebGatewayClient) {
                                         append(" · ")
                                         append(m.protocol)
                                         if (m.thinking) append(" · thinking 토글")
+                                        if (m.source == "fleet") append(" · 자동발견")
                                     },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
