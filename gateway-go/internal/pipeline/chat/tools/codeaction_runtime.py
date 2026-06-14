@@ -147,9 +147,9 @@ class _Deneb:
           ({name, phones, emails, org}) instead of text — ideal for
           filtering/counting in Python.
       deneb.wiki(action, query=..., as_json=False, **kw)
-          actions: search, read, index, daily, status. as_json=True
-          (search/read) returns {path, snippet, score} hits or a
-          {path, title, summary, body} page.
+          actions: search, read, index, daily, status. as_json=True returns
+          {path, snippet, score} hits (search), a {path, title, summary, body}
+          page (read), or a list of page paths (index, category=...).
       deneb.read(file_path)
           read a workspace file (path clamped to the workspace + skills roots).
     Write/outbound actions (gmail send/reply, calendar create, wiki write, ...)

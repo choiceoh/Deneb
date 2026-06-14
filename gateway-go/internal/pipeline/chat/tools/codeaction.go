@@ -352,8 +352,24 @@ func wikiStructured(ctx context.Context, store *wiki.Store, args map[string]any)
 			Updated:  pg.Meta.Updated,
 			Body:     pg.Body,
 		}, nil
+	case "index":
+		// Mirrors the text tool (wikiIndex uses p.Category); accept query as a
+		// forgiving fallback. Returns page paths so model code can enumerate a
+		// category and read/aggregate each page.
+		category := strings.TrimSpace(stringArg(args, "category"))
+		if category == "" {
+			category = strings.TrimSpace(query)
+		}
+		paths, err := store.ListPages(category)
+		if err != nil {
+			return nil, err
+		}
+		if paths == nil {
+			paths = []string{}
+		}
+		return paths, nil
 	default:
-		return nil, fmt.Errorf("wiki structured: action %q not supported (search, read); use as_json=False for index/daily/status", action)
+		return nil, fmt.Errorf("wiki structured: action %q not supported (search, read, index); use as_json=False for daily/status", action)
 	}
 }
 
@@ -565,7 +581,7 @@ func CodeActionSchema() map[string]any {
 		"properties": map[string]any{
 			"code": map[string]any{
 				"type":        "string",
-				"description": "Python 3 source. A preloaded `deneb` object exposes read-only tools that each return the tool's text result: deneb.gmail(action, query=…, message_id=…, max=…) [inbox|search|read|thread|analyze], deneb.calendar(action, **kw) [list|get|free_slots], deneb.contacts(action, query) [lookup|search], deneb.wiki(action, query=…, **kw) [search|read|index|daily|status], deneb.read(file_path) [workspace files]. Pass as_json=True for parsed Python objects instead of text — deneb.contacts (list of {name,phones,emails,org}), deneb.calendar list/get (events {id,title,start,end,location,all_day,attendees}), deneb.wiki search/read ({path,snippet,score} / {path,title,summary,body}) — ideal for filtering, counting, and joining across sources. Use print() to return data to yourself — only stdout and any traceback come back. No network (except the bridge), no subprocess, no writes outside the scratch dir.",
+				"description": "Python 3 source. A preloaded `deneb` object exposes read-only tools that each return the tool's text result: deneb.gmail(action, query=…, message_id=…, max=…) [inbox|search|read|thread|analyze], deneb.calendar(action, **kw) [list|get|free_slots], deneb.contacts(action, query) [lookup|search], deneb.wiki(action, query=…, **kw) [search|read|index|daily|status], deneb.read(file_path) [workspace files]. Pass as_json=True for parsed Python objects instead of text — deneb.contacts (list of {name,phones,emails,org}), deneb.calendar list/get (events {id,title,start,end,location,all_day,attendees}), deneb.wiki search/read/index ({path,snippet,score} / {path,title,summary,body} / list of page paths) — ideal for filtering, counting, and joining across sources. Use print() to return data to yourself — only stdout and any traceback come back. No network (except the bridge), no subprocess, no writes outside the scratch dir.",
 			},
 			"timeout": map[string]any{
 				"type":        "number",
