@@ -87,6 +87,12 @@ func (rt *router) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "unknown model: "+model)
 		return
 	}
+	// Local-first egress guard: a local-only request (instance mode or the
+	// X-Wormhole-Local-Only header) must not reach a cloud-backed model.
+	if rt.localOnly(r) && !entry.isLocal() {
+		writeErr(w, http.StatusForbidden, "model '"+model+"' is cloud-backed and blocked by local-only policy")
+		return
+	}
 	out := body
 	if entry.UpstreamModel != model {
 		if rewritten, rerr := rewriteModel(body, entry.UpstreamModel); rerr == nil {
@@ -159,7 +165,11 @@ func (rt *router) listModels(w http.ResponseWriter, r *http.Request) {
 	}
 	rows := make([]modelRow, 0, len(rt.cfg.Models))
 	for _, e := range rt.cfg.Models {
-		rows = append(rows, modelRow{ID: e.Name, Object: "model", OwnedBy: "wormhole"})
+		owner := "wormhole-cloud"
+		if e.isLocal() {
+			owner = "wormhole-local"
+		}
+		rows = append(rows, modelRow{ID: e.Name, Object: "model", OwnedBy: owner})
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": rows})

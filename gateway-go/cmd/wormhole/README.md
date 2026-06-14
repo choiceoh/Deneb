@@ -45,6 +45,26 @@ live in the environment, not the file. Each model entry:
 | `url` | upstream OpenAI base, e.g. `http://127.0.0.1:8000/v1` |
 | `key` | upstream bearer token (omit for keyless local vLLM) |
 | `upstreamModel` | rewrite the model id when forwarding (default: `name`) |
+| `local` | override the local/cloud auto-detection (see below); default auto |
+
+Top-level `localOnly: true` air-gaps the whole instance (every cloud model is
+refused).
+
+## Local-first egress guard
+
+A wormhole that fronts both local and cloud models is a place where one routing
+slip could send private data to a cloud provider. wormhole auto-classifies each
+model as **local** (loopback / private-network / `localhost` URL) or **cloud**
+(anything else), logs the cloud models at startup so the egress surface is
+visible, and lets a sensitive caller guarantee no cloud egress:
+
+- per-request: send header `X-Wormhole-Local-Only: 1` → any cloud-backed model
+  is refused with `403` for that request.
+- per-instance: set `"localOnly": true` in the config → cloud models are always
+  refused.
+
+Override the auto-detection with a model's `"local"` field (e.g. mark an on-box
+tunnel that egresses as `false`).
 
 ## Use from a client
 

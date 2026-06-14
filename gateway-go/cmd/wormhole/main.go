@@ -34,6 +34,10 @@ type modelEntry struct {
 	URL           string `json:"url"` // upstream OpenAI base, e.g. http://127.0.0.1:8000/v1
 	Key           string `json:"key,omitempty"`
 	UpstreamModel string `json:"upstreamModel,omitempty"`
+	// Local overrides the loopback/private-IP auto-detection (privacy.go). Set it
+	// false to mark an on-box endpoint as cloud (e.g. a local tunnel that egresses)
+	// or true for a public URL you trust as local. Nil = auto-detect from URL.
+	Local *bool `json:"local,omitempty"`
 }
 
 // config is the wormhole config file (default ~/.wormhole/config.json). Token and
@@ -43,6 +47,10 @@ type config struct {
 	Listen string       `json:"listen,omitempty"`
 	Token  string       `json:"token,omitempty"`
 	Models []modelEntry `json:"models"`
+	// LocalOnly air-gaps this wormhole: every cloud-backed model is refused, so a
+	// routing slip can't egress private data. Per-request, a sensitive caller can
+	// force the same with the X-Wormhole-Local-Only header.
+	LocalOnly bool `json:"localOnly,omitempty"`
 }
 
 func loadConfig(path string) (config, error) {
@@ -95,6 +103,21 @@ func main() {
 	}
 
 	rt := newRouter(cfg, log)
+
+	// Egress visibility: name every model whose data leaves the box, so the
+	// operator sees the cloud surface at a glance (local-first hygiene).
+	var cloud []string
+	for _, e := range cfg.Models {
+		if !e.isLocal() {
+			cloud = append(cloud, e.Name)
+		}
+	}
+	if cfg.LocalOnly {
+		log.Info("local-only mode: cloud-backed models are refused")
+	} else if len(cloud) > 0 {
+		log.Warn("cloud egress models — requests to these leave this box", "models", cloud)
+	}
+
 	srv := &http.Server{
 		Addr:    cfg.Listen,
 		Handler: rt.handler(),
