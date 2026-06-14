@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,6 +73,38 @@ type wikiUpdate struct {
 	Confidence string         `json:"confidence"` // high, medium, low
 	Due        string         `json:"due"`        // YYYY-MM-DD upcoming deadline (프로젝트, 거래성 건)
 	Supersedes flexStringList `json:"supersedes"` // relPath(s) of existing page(s) this update REPLACES; accepts a string or an array (the LLM emits both, and an array used to fail synthesis parsing)
+}
+
+// parseWikiUpdates parses the synthesis response array leniently: one malformed
+// update is skipped (logged), not fatal. The all-or-nothing alternative failed
+// the whole batch on a single bad field and — if the malformation was
+// deterministic (the #2341 supersedes case) — re-failed every cycle, stalling
+// the diary pipeline. Returns an error only when the response is not a JSON
+// array at all (a genuine total failure worth backing off on).
+func parseWikiUpdates(text string, logger *slog.Logger) ([]wikiUpdate, error) {
+	var rawItems []json.RawMessage
+	if err := json.Unmarshal([]byte(text), &rawItems); err != nil {
+		return nil, err
+	}
+	updates := make([]wikiUpdate, 0, len(rawItems))
+	skipped := 0
+	for _, item := range rawItems {
+		var u wikiUpdate
+		if err := json.Unmarshal(item, &u); err != nil {
+			skipped++
+			if logger != nil {
+				logger.Warn("wiki-dream: skipped malformed update item",
+					"error", err, "raw", fmt.Sprintf("%.200s", string(item)))
+			}
+			continue
+		}
+		updates = append(updates, u)
+	}
+	if skipped > 0 && logger != nil {
+		logger.Warn("wiki-dream: synthesis dropped malformed items",
+			"skipped", skipped, "applied", len(updates))
+	}
+	return updates, nil
 }
 
 // synthesize calls the LLM to determine which wiki pages should be updated.
@@ -152,8 +185,8 @@ JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, process
 		text = strings.TrimSpace(text)
 	}
 
-	var updates []wikiUpdate
-	if err := json.Unmarshal([]byte(text), &updates); err != nil {
+	updates, err := parseWikiUpdates(text, wd.logger)
+	if err != nil {
 		return nil, fmt.Errorf("parse LLM response: %w (raw: %.200s)", err, text)
 	}
 
