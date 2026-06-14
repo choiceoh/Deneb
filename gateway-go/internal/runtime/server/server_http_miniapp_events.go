@@ -31,6 +31,9 @@ func (s *Server) handleMiniappEvents(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.authenticateMiniappRequest(w, r); !ok {
 		return
 	}
+	// This SSE stream lives until the client disconnects (potentially hours), so
+	// lift the global WriteTimeout for it.
+	disableWriteDeadline(w)
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)

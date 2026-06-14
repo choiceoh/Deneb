@@ -270,28 +270,6 @@ func applyDefaults(cfg *DenebConfig) {
 		cfg.Gateway.Reload.DeferralTimeoutMs = &v
 	}
 
-	// Auth rate limit defaults.
-	if cfg.Gateway.Auth.RateLimit == nil {
-		cfg.Gateway.Auth.RateLimit = &GatewayAuthRateLimitConfig{}
-	}
-	rl := cfg.Gateway.Auth.RateLimit
-	if rl.MaxAttempts == nil {
-		v := DefaultAuthRateLimitMaxAttempts
-		rl.MaxAttempts = &v
-	}
-	if rl.WindowMs == nil {
-		v := DefaultAuthRateLimitWindowMs
-		rl.WindowMs = &v
-	}
-	if rl.LockoutMs == nil {
-		v := DefaultAuthRateLimitLockoutMs
-		rl.LockoutMs = &v
-	}
-	if rl.ExemptLoopback == nil {
-		v := true
-		rl.ExemptLoopback = &v
-	}
-
 	// Session defaults.
 	if cfg.Session == nil {
 		cfg.Session = &SessionConfig{}

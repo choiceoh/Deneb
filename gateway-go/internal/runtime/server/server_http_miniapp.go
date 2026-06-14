@@ -27,6 +27,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime"
 	"net/http"
@@ -36,6 +37,15 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
+
+// maxMiniappRPCBodyBytes caps the POST /api/v1/miniapp/rpc body. This endpoint
+// carries the whole miniapp.* surface, including capture RPCs whose params hold
+// a base64-encoded image or audio recording (VibeVoice-ASR accepts up to a
+// 60-minute clip), so the cap is generous — its job is to stop an unbounded
+// io.ReadAll from OOMing the host (GPU memory == system RAM on the DGX), not to
+// tightly bound captures. The text-only chat stream uses the smaller
+// maxMiniappChatStreamBodyBytes.
+const maxMiniappRPCBodyBytes = 128 << 20 // 128 MiB
 
 type miniappGmailAttachmentClient interface {
 	GetAttachment(ctx context.Context, messageID, attachmentID string) ([]byte, error)
@@ -54,10 +64,24 @@ func (s *Server) handleMiniappRPC(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// This is the dispatch point for the whole miniapp.* surface, including the
+	// blocking chat.send turn and the capture RPCs (audio ASR can run minutes,
+	// then an agent turn). Those legitimately outlast the global WriteTimeout —
+	// and RPC handlers return a ResponseFrame, so they can't lift it themselves.
+	// Lift it here; each operation is bounded by its own deadline (turn deadline,
+	// ASR timeout), and responses are small JSON (no slow-read write stall). The
+	// body cap above and the interactive-turn semaphore are this endpoint's real
+	// DoS bounds.
+	disableWriteDeadline(w)
 
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxMiniappRPCBodyBytes))
 	if err != nil {
-		s.writeJSON(w, http.StatusBadRequest, map[string]any{
+		status := http.StatusBadRequest
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		s.writeJSON(w, status, map[string]any{
 			"error": "read body: " + err.Error(),
 		})
 		return
@@ -111,6 +135,8 @@ func (s *Server) handleMiniappGmailAttachment(w http.ResponseWriter, r *http.Req
 	if _, ok := s.authenticateMiniappDownloadRequest(w, r); !ok {
 		return
 	}
+	// A large attachment over a slow link can outlast the global WriteTimeout.
+	disableWriteDeadline(w)
 
 	q := r.URL.Query()
 	messageID := strings.TrimSpace(q.Get("messageId"))

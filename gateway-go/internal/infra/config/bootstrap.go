@@ -297,9 +297,6 @@ func mergeAuthConfig(base, override *GatewayAuthConfig) *GatewayAuthConfig {
 	if override.AllowTailscale != nil {
 		merged.AllowTailscale = override.AllowTailscale
 	}
-	if override.RateLimit != nil {
-		merged.RateLimit = override.RateLimit
-	}
 	if override.TrustedProxy != nil {
 		merged.TrustedProxy = override.TrustedProxy
 	}

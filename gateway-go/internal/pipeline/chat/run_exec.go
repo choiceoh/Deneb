@@ -266,6 +266,10 @@ func executeAgentRun(
 	// Set up stream hooks via compositor: fan-out dispatch for each hook type.
 	var hc agent.HookCompositor
 	wireStreamHooks(&hc, params, deps, broadcaster, typingSignaler, statusCtrl)
+	// Untrusted-origin tool gate (interactive runs only): block irreversible
+	// tools once promptware enters the turn. Placed here so prep.RecallMemory is
+	// available to seed the taint; composes with any gate wireStreamHooks set.
+	wireUntrustedToolGate(&hc, params, prep, deps, logger)
 
 	hooks := hc.Build()
 

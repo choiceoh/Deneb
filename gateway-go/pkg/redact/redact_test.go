@@ -153,6 +153,22 @@ func TestString_URLQueryParams(t *testing.T) {
 			wantGone: "x-amz-signature=SIG123",
 			wantIn:   "x-amz-signature=***",
 		},
+		{
+			// Native-client download URLs carry the client token as a query param.
+			in:       "https://gw.host/api/v1/app/update/download?file=app.apk&clientToken=SECRETTOKEN123",
+			wantGone: "clientToken=SECRETTOKEN123",
+			wantIn:   "clientToken=***",
+		},
+		{
+			in:       "https://gw.host/api/v1/miniapp/gmail/attachment?client_token=SECRETTOKEN123&messageId=1",
+			wantGone: "client_token=SECRETTOKEN123",
+			wantIn:   "client_token=***",
+		},
+		{
+			in:       "https://gw.host/webview?tma=user%3D123%26hash%3Ddeadbeef",
+			wantGone: "tma=user%3D123",
+			wantIn:   "tma=***",
+		},
 	}
 	for _, c := range cases {
 		got := String(c.in)
