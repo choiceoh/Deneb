@@ -45,26 +45,33 @@ func TestBuiltin(t *testing.T) {
 	}
 }
 
-// TestThinkingToggleKwarg verifies provider-aware gating: only vllm provider
-// ids get the template toggle, and only for the DeepSeek V4 family.
+// TestThinkingToggleKwarg verifies provider-aware gating: only vLLM-backed
+// providers (a direct vllm provider OR the wormhole proxy) get the template
+// toggle, and only for the DeepSeek V4 family.
 func TestThinkingToggleKwarg(t *testing.T) {
-	if got := ThinkingToggleKwarg("vllm", "deepseek-v4-flash"); got != "thinking" {
-		t.Errorf("vllm/deepseek-v4-flash = %q, want \"thinking\"", got)
-	}
-	if got := ThinkingToggleKwarg("vllm", "DeepSeek-V4-Flash"); got != "thinking" {
-		t.Errorf("case-insensitive match failed: %q", got)
+	for _, c := range []struct{ p, m string }{
+		{"vllm", "deepseek-v4-flash"},
+		{"vllm", "DeepSeek-V4-Flash"},     // case-insensitive
+		{"wormhole", "deepseek-v4-flash"}, // main routed via wormhole/dsv4 must still route
+		{"wormhole-vllm", "deepseek-v4"},  // wormhole alias prefix
+	} {
+		if got := ThinkingToggleKwarg(c.p, c.m); got != "thinking" {
+			t.Errorf("ThinkingToggleKwarg(%q,%q) = %q, want \"thinking\"", c.p, c.m, got)
+		}
 	}
 	for _, c := range []struct{ p, m string }{
 		{"vllm", "step3p7"},               // non-dual-mode model
-		{"openrouter", "deepseek-v4"},     // non-vllm provider must NOT get the kwarg
+		{"openrouter", "deepseek-v4"},     // non-vLLM provider must NOT get the kwarg
 		{"deepseek", "deepseek-v4-flash"}, // official API is not vLLM serving
-		{"", "deepseek-v4-flash"},
+		{"", "deepseek-v4-flash"},         // no provider
+		{"wormhole", "glm-5.2"},           // cloud model fronted by wormhole — model gate excludes
+		{"wormhole", "mimo-v2.5-pro"},     // cloud model fronted by wormhole
 	} {
 		if got := ThinkingToggleKwarg(c.p, c.m); got != "" {
 			t.Errorf("ThinkingToggleKwarg(%q,%q) = %q, want \"\"", c.p, c.m, got)
 		}
 	}
-	if Builtin("vllm", "deepseek-v4-flash").ThinkingToggleKwarg != "thinking" {
-		t.Error("Builtin must surface the toggle kwarg")
+	if Builtin("wormhole", "deepseek-v4-flash").ThinkingToggleKwarg != "thinking" {
+		t.Error("Builtin must surface the toggle kwarg for wormhole/dsv4")
 	}
 }
