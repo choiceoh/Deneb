@@ -275,6 +275,7 @@ func (s *Server) registerSessionRPCMethods() {
 		transcriptStore: transcriptStore,
 		logger:          s.logger,
 		pushHub:         s.pushHub,
+		pushFCM:         s.pushNotifier,
 		workFeed:        s.nativeWorkFeedStore(),
 		nativeSync:      s.nativeSyncStore,
 		behaviorLog:     agentLogWriter,

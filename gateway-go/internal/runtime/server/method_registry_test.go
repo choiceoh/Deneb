@@ -130,6 +130,11 @@ var requiredMethods = []string{
 	"miniapp.sessions.recent",
 	"miniapp.sessions.delete",
 	"miniapp.sessions.transcript",
+	// FCM device-token registration — the token store always resolves (temp
+	// state dir in tests), so these register unconditionally even though the
+	// FCM sender stays dormant without credentials.
+	"miniapp.push.register",
+	"miniapp.push.unregister",
 	// Skills catalog + detail + self-evolution feed — List is always wired,
 	// so all three register unconditionally (tracker absence degrades the
 	// payload, not the registration).
