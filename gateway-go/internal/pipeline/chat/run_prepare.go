@@ -91,8 +91,11 @@ func prepareContextAndPrompt(
 	safego.GoWithSlog(logger, "prep-recall", func() {
 		defer prepWg.Done()
 		// Ephemeral turns (autonomous heartbeat self-triggers) never run
-		// recall — there is no real user message to recall against.
-		if params.EphemeralUser {
+		// recall — there is no real user message to recall against. SkipRecall
+		// is the user's "focused chat / memory off" toggle: skip the whole
+		// preflight so a general question pays no search latency and pulls no
+		// unrelated work memories.
+		if params.EphemeralUser || params.SkipRecall {
 			return
 		}
 		fingerprint := recallCueFingerprint(params.Message)

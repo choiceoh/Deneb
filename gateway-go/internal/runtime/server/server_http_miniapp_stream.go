@@ -110,6 +110,10 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 		SessionKey string `json:"sessionKey"`
 		Message    string `json:"message"`
 		Model      string `json:"model"`
+		// SkipRecall is the native client's "focused chat / memory off" toggle:
+		// skip the long-term-memory recall preflight for this turn (faster, no
+		// unrelated work-context injection). Persona unchanged. Default false.
+		SkipRecall bool `json:"skipRecall"`
 	}
 	if err := json.Unmarshal(body, &reqBody); err != nil {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid body: " + err.Error()})
@@ -135,6 +139,7 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 			Delivery: &chat.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
 			// The reply text is streamed here, not pushed via the message tool.
 			AutoDeliveredOutput: true,
+			SkipRecall:          reqBody.SkipRecall,
 			// Live progress for the client's waiting indicator: which tool is
 			// running, and a throttled "thinking" pulse before the first token.
 			OnToolEvent: sinks.Tool,
