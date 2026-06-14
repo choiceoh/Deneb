@@ -71,12 +71,18 @@ fun DenebDiaryScreen(
                 list.isEmpty() -> DenebEmpty("아직 기록된 일기가 없습니다.")
 
                 else -> {
-                    list.forEach { entry ->
+                    list.forEachIndexed { index, entry ->
                         if (entry.header.isNotBlank()) {
+                            // Newest-first list: the first entry is the current day —
+                            // mark only its title in the cool interactive accent.
                             Text(
                                 entry.header,
-                                style = DenebType.cardTitle,
-                                color = MaterialTheme.colorScheme.onSurface,
+                                style = DenebType.subject,
+                                color = if (index == 0) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
                             )
                             Spacer(Modifier.height(4.dp))
                         }

@@ -32,7 +32,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -196,10 +195,12 @@ internal fun TodoCheckRow(
             )
             Spacer(Modifier.width(4.dp))
             Column(Modifier.weight(1f).padding(top = 12.dp)) {
+                // Active items take the emphasized row-title (SemiBold); completed
+                // items relax to the plain row-title + hint color so the open work
+                // reads first. (Named row tokens, not body+manual weight — law 3.)
                 Text(
                     todo.title.ifBlank { "(제목 없음)" },
-                    style = DenebType.body,
-                    fontWeight = FontWeight.SemiBold,
+                    style = if (todo.done) DenebType.rowTitle else DenebType.rowTitleStrong,
                     color = if (todo.done) denebHint() else MaterialTheme.colorScheme.onSurface,
                     textDecoration = if (todo.done) TextDecoration.LineThrough else TextDecoration.None,
                     maxLines = 2,

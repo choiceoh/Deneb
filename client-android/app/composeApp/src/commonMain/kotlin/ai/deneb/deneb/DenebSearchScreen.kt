@@ -4,7 +4,6 @@ import ai.deneb.Platform
 import ai.deneb.currentPlatform
 import ai.deneb.ui.DenebRow
 import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
@@ -127,23 +126,26 @@ fun DenebSearchScreen(
 
                 else -> {
                     if (r.wiki.isNotEmpty()) {
-                        GroupHeader("위키 ${r.wiki.size}")
+                        GroupHeader("위키", r.wiki.size)
                         r.wiki.forEach { hit ->
                             ResultRow(hit.title, hit.snippet) { onOpenWiki(hit.path) }
                         }
                     }
                     if (r.people.isNotEmpty()) {
-                        GroupHeader("사람 ${r.people.size}")
+                        GroupHeader("사람", r.people.size)
                         r.people.forEach { person ->
                             ResultRow(
-                                "${person.name}  ·  ${person.messageCount}통",
+                                person.name,
                                 person.lastSubject,
+                                // Message volume is the activity signal for this person —
+                                // the one cool-primary mark on the row (matches DenebPeopleScreen).
+                                trailing = "${person.messageCount}통",
                                 onClick = { onOpenPerson(person.email.ifBlank { person.name }) },
                             )
                         }
                     }
                     if (r.diary.isNotEmpty()) {
-                        GroupHeader("일기 ${r.diary.size}")
+                        GroupHeader("일기", r.diary.size)
                         r.diary.forEach { hit ->
                             ResultRow(hit.title, hit.snippet, onClick = null)
                         }
@@ -156,12 +158,29 @@ fun DenebSearchScreen(
 }
 
 @Composable
-private fun GroupHeader(label: String) {
-    DenebSectionLabel(label)
+private fun GroupHeader(label: String, count: Int) {
+    // Tracked-caps grouping label with the hit count as the one cool-primary mark —
+    // a small interactive indicator, not a colored row (design refresh §accents).
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(top = 22.dp, bottom = 8.dp),
+    ) {
+        Text(
+            text = label.uppercase(),
+            style = DenebType.sectionLabel,
+            color = denebHint(),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = count.toString(),
+            style = DenebType.sectionLabel,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
 }
 
 @Composable
-private fun ResultRow(title: String, snippet: String, onClick: (() -> Unit)?) {
+private fun ResultRow(title: String, snippet: String, trailing: String? = null, onClick: (() -> Unit)?) {
     val haptics = rememberHaptics()
     DenebRow(
         onClick = onClick?.let { cb ->
@@ -171,13 +190,24 @@ private fun ResultRow(title: String, snippet: String, onClick: (() -> Unit)?) {
             }
         },
     ) {
-        Text(
-            title.ifBlank { "(제목 없음)" },
-            style = DenebType.subject,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                title.ifBlank { "(제목 없음)" },
+                style = DenebType.subject,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (trailing != null) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    trailing,
+                    style = DenebType.meta,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
         if (snippet.isNotBlank()) {
             Text(
                 snippet,

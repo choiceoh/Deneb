@@ -1,16 +1,27 @@
 package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.WormholeStatusOut
+import ai.deneb.ui.DenebGroup
+import ai.deneb.ui.DenebListRow
+import ai.deneb.ui.DenebSectionLabel
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
+import ai.deneb.ui.settings.SettingsCard
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -23,7 +34,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -32,6 +46,11 @@ import kotlinx.coroutines.launch
 // router dashboard plus two on/off switches; the gateway writes the toggle to
 // the wormhole config, which hot-reloads it. Editing models/keys stays in chat
 // (the agentic-actions pattern). Hosted by [DenebConfigScreen]'s pager.
+//
+// Design refresh (2026-06): the settings grouped-card idiom — toggles in a
+// [DenebGroup]/[DenebListRow] block, the model list in a [SettingsCard], and the
+// restrained cool accent (`primary`) only on the live-state marks (router up,
+// locally-served models).
 @Composable
 internal fun WormholeTab(client: DenebGatewayClient) {
     var status by remember { mutableStateOf<WormholeStatusOut?>(null) }
@@ -72,75 +91,77 @@ internal fun WormholeTab(client: DenebGatewayClient) {
 
             else -> {
                 val s = status!!
-                LazyColumn(Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.fillMaxSize().padding(vertical = 12.dp)) {
+                    item { WormholeStatusHeader(s) }
+
                     item {
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
-                            Text(
-                                if (s.reachable) "● 가동 중" else "○ 꺼짐",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (s.reachable) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        DenebGroup(label = "기능") {
+                            DenebListRow(
+                                title = "로컬 전용 (클라우드 차단)",
+                                onClick = { toggle("localOnly", !s.localOnly) },
+                                icon = Icons.Outlined.CloudOff,
+                                selected = s.localOnly,
+                                chevron = false,
+                                trailing = {
+                                    Switch(
+                                        checked = s.localOnly,
+                                        onCheckedChange = { if (!busy) toggle("localOnly", it) },
+                                        enabled = !busy,
+                                    )
+                                },
                             )
-                            if (s.listen.isNotBlank()) {
-                                Text(
-                                    s.listen,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                            DenebListRow(
+                                title = "Effort 라우팅 (간단한 턴은 thinking off)",
+                                onClick = { toggle("effortRouting", !s.effortRouting) },
+                                icon = Icons.Outlined.Bolt,
+                                selected = s.effortRouting,
+                                divider = false,
+                                chevron = false,
+                                trailing = {
+                                    Switch(
+                                        checked = s.effortRouting,
+                                        onCheckedChange = { if (!busy) toggle("effortRouting", it) },
+                                        enabled = !busy,
+                                    )
+                                },
+                            )
                         }
-                        HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
                     }
 
-                    item { WormholeSectionHeader("기능") }
-                    item {
-                        WormholeToggleRow("로컬 전용 (클라우드 차단)", s.localOnly, busy) { toggle("localOnly", it) }
-                        HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
-                    }
-                    item {
-                        WormholeToggleRow("Effort 라우팅 (간단한 턴은 thinking off)", s.effortRouting, busy) { toggle("effortRouting", it) }
-                        HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
-                    }
-
-                    item { WormholeSectionHeader("모델") }
+                    item { DenebSectionLabel("모델", Modifier.padding(horizontal = 16.dp)) }
                     if (s.models.isEmpty()) {
                         item {
-                            Text(
-                                "구성된 모델이 없습니다.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            )
+                            SettingsCard(Modifier.padding(horizontal = 16.dp)) {
+                                Text("구성된 모델이 없습니다.", style = DenebType.body, color = denebHint())
+                            }
                         }
                     } else {
-                        items(s.models, key = { it.name }) { m ->
-                            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                                Text(m.name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
-                                Text(
-                                    buildString {
-                                        append(if (m.local) "로컬" else "클라우드")
-                                        append(" · ")
-                                        append(m.protocol)
-                                        if (m.thinking) append(" · thinking 토글")
-                                        if (m.source == "fleet") append(" · 자동발견")
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                        item {
+                            SettingsCard(Modifier.padding(horizontal = 16.dp), innerPadding = false) {
+                                s.models.forEachIndexed { i, m ->
+                                    WormholeModelRow(
+                                        name = m.name,
+                                        local = m.local,
+                                        meta = buildString {
+                                            append(if (m.local) "로컬" else "클라우드")
+                                            append(" · ")
+                                            append(m.protocol)
+                                            if (m.thinking) append(" · thinking 토글")
+                                            if (m.source == "fleet") append(" · 자동발견")
+                                        },
+                                        divider = i < s.models.lastIndex,
+                                    )
+                                }
                             }
-                            HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
                         }
                     }
 
                     if (s.auto.isNotEmpty()) {
-                        item { WormholeSectionHeader("auto 후보 (순서)") }
+                        item { DenebSectionLabel("auto 후보 (순서)", Modifier.padding(horizontal = 16.dp)) }
                         item {
-                            Text(
-                                s.auto.joinToString(" → "),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                            )
+                            SettingsCard(Modifier.padding(horizontal = 16.dp)) {
+                                Text(s.auto.joinToString(" → "), style = DenebType.body, color = MaterialTheme.colorScheme.onBackground)
+                            }
                         }
                     }
                 }
@@ -149,31 +170,49 @@ internal fun WormholeTab(client: DenebGatewayClient) {
     }
 }
 
-/** A label + Material Switch row in the tab's flat-hairline idiom. The switch is
- *  Material (control), the label Material typography (matching the config pager). */
+/** Router liveness header: the running-state mark in the cool interactive accent
+ *  (`primary`) when reachable, muted hint when off, with the listen address below. */
 @Composable
-private fun WormholeToggleRow(label: String, checked: Boolean, busy: Boolean, onToggle: (Boolean) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+private fun WormholeStatusHeader(s: WormholeStatusOut) {
+    val accent = MaterialTheme.colorScheme.primary
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
         Text(
-            label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
+            if (s.reachable) "● 가동 중" else "○ 꺼짐",
+            style = DenebType.rowTitleStrong,
+            color = if (s.reachable) accent else denebHint(),
         )
-        Switch(checked = checked, onCheckedChange = { if (!busy) onToggle(it) }, enabled = !busy)
+        if (s.listen.isNotBlank()) {
+            Text(s.listen, style = DenebType.meta, color = denebHint())
+        }
     }
 }
 
+/** A read-only model row inside the model [SettingsCard]: a small live-state dot
+ *  (cool accent when served locally, muted otherwise), the model name, and its
+ *  protocol/source metadata. Not tappable — editing models stays in chat. */
 @Composable
-private fun WormholeSectionHeader(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 6.dp),
-    )
+private fun WormholeModelRow(name: String, local: Boolean, meta: String, divider: Boolean) {
+    val hairline = denebHairline()
+    val dot = if (local) MaterialTheme.colorScheme.primary else denebHint()
+    val insetPx = with(LocalDensity.current) { 48.dp.toPx() }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .drawBehind {
+                if (divider) {
+                    val stroke = 1.dp.toPx()
+                    val y = size.height - stroke / 2f
+                    drawLine(hairline, Offset(insetPx, y), Offset(size.width, y), strokeWidth = stroke)
+                }
+            }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(8.dp).clip(CircleShape).drawBehind { drawRect(dot) })
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(name, style = DenebType.rowTitleStrong, color = MaterialTheme.colorScheme.onBackground)
+            Text(meta, style = DenebType.rowSubtitle, color = denebHint())
+        }
+    }
 }

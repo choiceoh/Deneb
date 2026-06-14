@@ -2,8 +2,10 @@ package ai.deneb.deneb
 
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebPressable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,7 +27,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -134,16 +135,17 @@ private fun ContactPersonRow(person: PersonHit, onTap: () -> Unit, modifier: Mod
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 person.name.ifBlank { "(이름 없음)" },
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
+                style = DenebType.rowTitleStrong,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
+            // Message volume is the activity signal for this counterparty — the one
+            // interactive/active mark on the row, so it carries the cool primary accent.
             Text(
                 "${person.messageCount}통",
-                style = MaterialTheme.typography.labelMedium,
+                style = DenebType.meta,
                 color = MaterialTheme.colorScheme.primary,
             )
         }
@@ -152,8 +154,8 @@ private fun ContactPersonRow(person: PersonHit, onTap: () -> Unit, modifier: Mod
             Spacer(Modifier.height(2.dp))
             Text(
                 subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = DenebType.rowSubtitle,
+                color = denebHint(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -176,8 +178,7 @@ private fun WikiPersonRow(person: PersonHit, onTap: () -> Unit, modifier: Modifi
     ) {
         Text(
             person.name.ifBlank { "(이름 없음)" },
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
+            style = DenebType.rowTitleStrong,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -186,8 +187,8 @@ private fun WikiPersonRow(person: PersonHit, onTap: () -> Unit, modifier: Modifi
             Spacer(Modifier.height(2.dp))
             Text(
                 person.wikiSummary,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = DenebType.rowSubtitle,
+                color = denebHint(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

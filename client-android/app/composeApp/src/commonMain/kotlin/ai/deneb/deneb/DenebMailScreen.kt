@@ -344,7 +344,10 @@ internal fun MailRow(
                 Text(
                     senderName(message.from).ifBlank { "(발신자 없음)" },
                     style = if (message.unread) DenebType.rowTitleStrong else DenebType.rowTitle,
-                    color = MaterialTheme.colorScheme.onBackground,
+                    // The row open in the desktop detail pane is the active item: its
+                    // title takes the cool interactive accent (just the mark, not the
+                    // whole row — the faint background tint already carries the fill).
+                    color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),

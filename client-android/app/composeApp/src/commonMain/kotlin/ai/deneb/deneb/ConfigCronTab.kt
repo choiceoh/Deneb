@@ -1,18 +1,16 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebGroup
+import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHairline
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -23,14 +21,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 /**
  * Settings hub "크론" tab: the scheduled-job list; tapping a row deep-links into
- * the cron detail/edit screen. Hosted by [DenebConfigScreen]'s pager.
+ * the cron detail/edit screen. Hosted by [DenebConfigScreen]'s pager. The jobs sit
+ * in a grouped inset card ([DenebGroup] + [DenebListRow]) — the settings idiom —
+ * each row a clock-icon title (its cron spec as the subtitle) with a chevron.
  */
 @Composable
 internal fun CronTab(client: DenebGatewayClient, onOpenCron: (String) -> Unit) {
@@ -49,27 +47,22 @@ internal fun CronTab(client: DenebGatewayClient, onOpenCron: (String) -> Unit) {
 
         crons.isEmpty() -> EmptyTab("예약된 작업이 없습니다.")
 
-        else -> LazyColumn(Modifier.fillMaxSize()) {
-            items(crons, key = { it.id }) { cron ->
-                Column(
-                    Modifier.animateItem().fillMaxWidth().clickable {
-                        haptics.tap()
-                        onOpenCron(cron.id)
-                    }.padding(horizontal = 16.dp, vertical = 14.dp),
-                ) {
-                    Text(
-                        cron.description.ifBlank { cron.id },
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+        else -> Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 12.dp),
+        ) {
+            DenebGroup {
+                crons.forEachIndexed { i, cron ->
+                    DenebListRow(
+                        title = cron.description.ifBlank { cron.id },
+                        onClick = {
+                            haptics.tap()
+                            onOpenCron(cron.id)
+                        },
+                        icon = Icons.Outlined.Schedule,
+                        subtitle = cron.cron,
+                        divider = i < crons.lastIndex,
                     )
-                    cron.cron?.let {
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
                 }
-                HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
             }
         }
     }

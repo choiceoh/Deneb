@@ -1,9 +1,11 @@
 package ai.deneb.deneb
 
 import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -84,10 +86,12 @@ fun DenebCronScreen(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Active cron's title carries the cool interactive accent; a disabled
+                // one falls back to ink (primary = interactive/active state only).
                 Text(
                     c.name.ifBlank { c.id },
                     style = DenebType.subject,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = if (c.enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.weight(1f),
                 )
                 Switch(
@@ -107,30 +111,29 @@ fun DenebCronScreen(
             }
 
             Spacer(Modifier.height(8.dp))
-            Text(c.schedule.ifBlank { "(일정 없음)" }, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+            Text(c.schedule.ifBlank { "(일정 없음)" }, style = DenebType.body, color = MaterialTheme.colorScheme.onBackground)
             if (c.scheduleSpec.isNotBlank()) {
-                Text("${c.scheduleKind} · ${c.scheduleSpec}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${c.scheduleKind} · ${c.scheduleSpec}", style = DenebType.meta, color = denebHint())
             }
             nextRun(c.nextRunAtMs)?.let {
-                Text("다음 실행 $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("다음 실행 $it", style = DenebType.meta, color = denebHint())
             }
             if (c.autoDisabledAtMs > 0) {
-                Text("자동 비활성화됨 (연속 실패 ${c.consecutiveErrors})", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Text("자동 비활성화됨 (연속 실패 ${c.consecutiveErrors})", style = DenebType.meta, color = MaterialTheme.colorScheme.error)
             } else if (c.consecutiveErrors > 0) {
-                Text("연속 실패 ${c.consecutiveErrors}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Text("연속 실패 ${c.consecutiveErrors}", style = DenebType.meta, color = MaterialTheme.colorScheme.error)
             }
             if (c.lastError.isNotBlank()) {
-                Text("마지막 오류: ${c.lastError}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Text("마지막 오류: ${c.lastError}", style = DenebType.meta, color = MaterialTheme.colorScheme.error)
             }
 
             Spacer(Modifier.height(16.dp))
             HorizontalDivider(color = denebHairline())
-            Spacer(Modifier.height(12.dp))
-            Text("작업", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            DenebSectionLabel("작업")
             Text(
                 payloadKindLabel(c.payloadKind) + if (c.model.isNotBlank()) "  ·  ${c.model}" else "",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = DenebType.meta,
+                color = denebHint(),
             )
             if (c.prompt.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
@@ -138,12 +141,11 @@ fun DenebCronScreen(
             }
 
             if (c.deliveryChannel.isNotBlank() || c.deliveryTo.isNotBlank()) {
-                Spacer(Modifier.height(12.dp))
-                Text("전달", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                DenebSectionLabel("전달")
                 Text(
                     listOf(c.deliveryChannel, c.deliveryTo).filter { it.isNotBlank() }.joinToString("  ·  "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = DenebType.meta,
+                    color = denebHint(),
                 )
             }
 
@@ -179,7 +181,7 @@ fun DenebCronScreen(
             }
             status?.let {
                 Spacer(Modifier.height(8.dp))
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(it, style = DenebType.meta, color = denebHint())
             }
 
             if (confirmDelete) {

@@ -10,11 +10,15 @@ import ai.deneb.ui.components.LinkifiedText
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
 import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebInsight
+import ai.deneb.ui.denebInsightContainer
 import ai.deneb.ui.denebShrinkOut
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -36,9 +40,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -62,7 +66,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.async
@@ -164,12 +167,12 @@ fun DenebMailDetailScreen(
             color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.height(6.dp))
-        Text(mail.from, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+        Text(mail.from, style = DenebType.rowSubtitle, color = MaterialTheme.colorScheme.onSurface)
         if (mail.date.isNotBlank()) {
             Text(
                 shortDate(mail.date),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = DenebType.meta,
+                color = denebHint(),
             )
         }
         Spacer(Modifier.height(16.dp))
@@ -210,91 +213,106 @@ fun DenebMailDetailScreen(
                 val body = lines.firstOrNull { !it.startsWith("#") } ?: lines.firstOrNull().orEmpty()
                 body.trimStart('#', '*', '-', '>', ' ').replace("*", "").replace("`", "").trim()
             }
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth()
-                            .clickable {
-                                haptics.toggle(!analysisExpanded)
-                                analysisExpanded = !analysisExpanded
-                            }
-                            .handCursor(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            imageVector = if (analysisExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (analysisExpanded) "AI 분석 접기" else "AI 분석 펼치기",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            "AI 분석",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        if (!analysisExpanded && analysisPreview.isNotEmpty()) {
-                            Text(
-                                " · $analysisPreview",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f).padding(start = 4.dp),
-                            )
-                        } else {
-                            Spacer(Modifier.weight(1f))
+            // AI-analysis callout: the warm-apricot insight surface (the screen's
+            // one AI-insight block). Soft apricot fill + AutoAwesome mark + apricot
+            // title; everything below the header keeps the same collapse/teaser/
+            // rerun behavior, just re-skinned. See native-design-system.md (2-accent).
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(denebInsightContainer())
+                    .padding(16.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .clickable {
+                            haptics.toggle(!analysisExpanded)
+                            analysisExpanded = !analysisExpanded
                         }
-                        analysis?.let { a ->
-                            Text(
-                                if (a.cached) "저장됨 · ${a.createdAt.take(10)}" else "${a.durationMs / 1000}s",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            // Rerun lives behind the fold: hiding it while collapsed keeps
-                            // the whole header a safe expand target (no accidental reruns).
-                            if (analysisExpanded) {
-                                Spacer(Modifier.width(8.dp))
-                                TextButton(onClick = {
-                                    haptics.tap()
-                                    runAnalysis(force = true)
-                                }, enabled = !analyzing) { Text("다시") }
-                            }
+                        .handCursor(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.AutoAwesome,
+                        contentDescription = null,
+                        tint = denebInsight(),
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "AI 분석",
+                        style = DenebType.rowTitleStrong,
+                        color = denebInsight(),
+                    )
+                    if (!analysisExpanded && analysisPreview.isNotEmpty()) {
+                        Text(
+                            " · $analysisPreview",
+                            style = DenebType.meta,
+                            color = denebHint(),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f).padding(start = 4.dp),
+                        )
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                    analysis?.let { a ->
+                        Text(
+                            if (a.cached) "저장됨 · ${a.createdAt.take(10)}" else "${a.durationMs / 1000}s",
+                            style = DenebType.meta,
+                            color = denebHint(),
+                        )
+                        // Rerun lives behind the fold: hiding it while collapsed keeps
+                        // the whole header a safe expand target (no accidental reruns).
+                        if (analysisExpanded) {
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = {
+                                haptics.tap()
+                                runAnalysis(force = true)
+                            }, enabled = !analyzing) { Text("다시") }
                         }
                     }
-                    AnimatedVisibility(visible = analysisExpanded, enter = denebExpandIn, exit = denebShrinkOut) {
-                        Column {
-                            Spacer(Modifier.height(6.dp))
-                            when {
-                                analyzing -> Row(verticalAlignment = Alignment.CenterVertically) {
-                                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("분석 중…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        imageVector = if (analysisExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (analysisExpanded) "AI 분석 접기" else "AI 분석 펼치기",
+                        tint = denebInsight(),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                AnimatedVisibility(visible = analysisExpanded, enter = denebExpandIn, exit = denebShrinkOut) {
+                    Column {
+                        Spacer(Modifier.height(6.dp))
+                        when {
+                            analyzing -> Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = denebInsight())
+                                Spacer(Modifier.width(8.dp))
+                                Text("분석 중…", style = DenebType.rowSubtitle, color = denebHint())
+                            }
 
-                                analysis != null -> Column {
-                                    MarkdownContent(analysis!!.text)
-                                    if (analysis!!.related.isNotEmpty()) {
-                                        Spacer(Modifier.height(10.dp))
-                                        Text("관련 프로젝트", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Spacer(Modifier.height(4.dp))
-                                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            analysis!!.related.forEach { rp ->
-                                                AssistChip(
-                                                    onClick = { onOpenWiki(rp.path) },
-                                                    label = { Text(rp.title.ifBlank { rp.path }) },
-                                                )
-                                            }
+                            analysis != null -> Column {
+                                MarkdownContent(analysis!!.text)
+                                if (analysis!!.related.isNotEmpty()) {
+                                    Spacer(Modifier.height(10.dp))
+                                    Text("관련 프로젝트", style = DenebType.meta, color = denebHint())
+                                    Spacer(Modifier.height(4.dp))
+                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        analysis!!.related.forEach { rp ->
+                                            AssistChip(
+                                                onClick = { onOpenWiki(rp.path) },
+                                                label = { Text(rp.title.ifBlank { rp.path }) },
+                                            )
                                         }
                                     }
                                 }
-
-                                else -> Text(
-                                    "분석을 가져오지 못했습니다.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                )
                             }
+
+                            else -> Text(
+                                "분석을 가져오지 못했습니다.",
+                                style = DenebType.rowSubtitle,
+                                color = MaterialTheme.colorScheme.error,
+                            )
                         }
                     }
                 }
@@ -318,8 +336,8 @@ fun DenebMailDetailScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "${mail.bodyTotal}자 중 일부만 표시",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = DenebType.meta,
+                    color = denebHint(),
                 )
                 TextButton(
                     onClick = {
@@ -336,7 +354,7 @@ fun DenebMailDetailScreen(
         }
         if (mail.attachments.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
-            Text("첨부 ${mail.attachments.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("첨부 ${mail.attachments.size}", style = DenebType.meta, color = denebHint())
             Spacer(Modifier.height(4.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 mail.attachments.forEach { att ->
@@ -374,7 +392,7 @@ fun DenebMailDetailScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                                 Spacer(Modifier.width(8.dp))
-                                Text(att.filename, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(att.filename, style = DenebType.meta, color = denebHint())
                             }
                         }
 
@@ -397,11 +415,11 @@ fun DenebMailDetailScreen(
         }
 
         Spacer(Modifier.height(20.dp))
-        Text("이 메일에 질문", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+        Text("이 메일에 질문", style = DenebType.cardTitle, color = MaterialTheme.colorScheme.onSurface)
         Spacer(Modifier.height(8.dp))
         qa.forEach { (question, answer) ->
             Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                Text("Q. $question", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Text("Q. $question", style = DenebType.rowTitleStrong, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(2.dp))
                 MarkdownContent(answer)
             }

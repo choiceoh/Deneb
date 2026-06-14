@@ -2,9 +2,12 @@ package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.SkillLifecycleEvent
 import ai.deneb.deneb.generated.SkillRow
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebInsight
+import ai.deneb.ui.denebInsightContainer
 import ai.deneb.ui.handCursor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -118,11 +121,13 @@ internal fun SkillsTab(client: DenebGatewayClient, onOpenSkill: (String) -> Unit
     }
 }
 
-// Flat view switcher in the Deneb idiom — ink-vs-hint text over a shared
+// Flat view switcher in the Deneb idiom — accent-vs-hint text over a shared
 // hairline, no capsule or fill. The Material SegmentedButton it replaces read
 // as a third chrome layer stacked under the settings hub's pill tab bar; this
 // is view navigation (not a form input), so presentation belongs to Deneb
-// while each label keeps Material selectable + Role.Tab semantics.
+// while each label keeps Material selectable + Role.Tab semantics. Per the
+// 2026-06 accent doctrine the active label takes the cool interactive `primary`
+// (was suppressed to ink) so the selected view reads at a glance.
 @Composable
 internal fun SkillsViewSwitcher(showLifecycle: Boolean, onSelect: (Boolean) -> Unit) {
     val haptics = rememberHaptics()
@@ -137,7 +142,7 @@ internal fun SkillsViewSwitcher(showLifecycle: Boolean, onSelect: (Boolean) -> U
                     label,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (selected) MaterialTheme.colorScheme.onSurface else denebHint(),
+                    color = if (selected) MaterialTheme.colorScheme.primary else denebHint(),
                     modifier = Modifier
                         .handCursor()
                         .selectable(
@@ -182,8 +187,7 @@ internal fun SkillListContent(skills: List<SkillRow>, onOpenSkill: (String) -> U
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         skill.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
+                        style = DenebType.rowTitleStrong,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -195,8 +199,8 @@ internal fun SkillListContent(skills: List<SkillRow>, onOpenSkill: (String) -> U
                 if (skill.description.isNotBlank()) {
                     Text(
                         skill.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = DenebType.rowSubtitle,
+                        color = denebHint(),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -206,8 +210,8 @@ internal fun SkillListContent(skills: List<SkillRow>, onOpenSkill: (String) -> U
                     Spacer(Modifier.height(2.dp))
                     Text(
                         meta,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = DenebType.meta,
+                        color = denebHint(),
                     )
                 }
             }
@@ -265,8 +269,7 @@ internal fun SkillLifecycleRow(
             if (showSkillName) {
                 Text(
                     event.skillName.ifBlank { "(스킬 미지정)" },
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
+                    style = DenebType.rowTitleStrong,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -277,8 +280,8 @@ internal fun SkillLifecycleRow(
             }
             Text(
                 lifecycleTime(event.at),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = DenebType.meta,
+                color = denebHint(),
             )
         }
         val detail = listOfNotNull(
@@ -289,8 +292,8 @@ internal fun SkillLifecycleRow(
             Spacer(Modifier.height(2.dp))
             Text(
                 detail,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = DenebType.rowSubtitle,
+                color = denebHint(),
                 maxLines = if (expanded) Int.MAX_VALUE else 3,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -300,7 +303,7 @@ internal fun SkillLifecycleRow(
                 Spacer(Modifier.height(6.dp))
                 Text(
                     "근거: ${event.evidence}",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = DenebType.rowSubtitle,
                     color = denebHint(),
                 )
             }
@@ -310,7 +313,7 @@ internal fun SkillLifecycleRow(
             ).joinToString(" · ")
             if (meta.isNotBlank()) {
                 Spacer(Modifier.height(6.dp))
-                Text(meta, style = MaterialTheme.typography.labelSmall, color = denebHint())
+                Text(meta, style = DenebType.meta, color = denebHint())
             }
             if (onOpenSkill != null && event.skillName.isNotBlank()) {
                 Spacer(Modifier.height(6.dp))
@@ -332,12 +335,14 @@ internal fun SkillLifecycleRow(
 }
 
 // Origin badge: 생성 (self-evolution authored) vs 최초 (installed/hand-written).
-// Both render so the distinction is explicit, not inferred from absence.
+// Both render so the distinction is explicit, not inferred from absence. A
+// self-authored skill is AI-analysis output, so 생성 takes the warm apricot
+// insight accent (2026-06 doctrine); 최초 stays a neutral mono chip.
 @Composable
 internal fun SkillOriginBadge(origin: String) {
     val generated = origin == "genesis"
-    val bg = if (generated) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-    val fg = if (generated) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+    val bg = if (generated) denebInsightContainer() else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (generated) denebInsight() else MaterialTheme.colorScheme.onSurfaceVariant
     Text(
         if (generated) "생성" else "최초",
         style = MaterialTheme.typography.labelSmall,
@@ -359,8 +364,11 @@ private fun lifecycleTypeLabel(type: String): String = when (type) {
 
 @Composable
 private fun LifecycleTypeBadge(type: String) {
+    // Two-accent + semantic mapping (2026-06 doctrine): genesis (AI authored a new
+    // skill) = warm apricot insight; evolved (an applied/committed change) = cool
+    // interactive primary; rejected = semantic error; review/no-op = neutral mono.
     val (bg, fg) = when (type) {
-        "genesis" -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
+        "genesis" -> denebInsightContainer() to denebInsight()
         "evolved" -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
         "evolve_rejected" -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
         else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
