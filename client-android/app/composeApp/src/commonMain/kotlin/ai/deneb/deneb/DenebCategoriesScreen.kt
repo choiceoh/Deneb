@@ -3,8 +3,10 @@ package ai.deneb.deneb
 import ai.deneb.Platform
 import ai.deneb.currentPlatform
 import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebPressable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -108,8 +110,8 @@ fun DenebCategoriesScreen(
                 else -> {
                     Text(
                         "${d.totalPages}개 페이지 · ${humanBytes(d.totalBytes)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = DenebType.meta,
+                        color = denebHint(),
                     )
                     Spacer(Modifier.height(8.dp))
                     topLevelCategories(d.categories).filter { it.name != PEOPLE_WIKI_CATEGORY }.forEach { cat ->
@@ -125,7 +127,7 @@ fun DenebCategoriesScreen(
                         ) {
                             Text(
                                 cat.name.ifBlank { "(미분류)" },
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = DenebType.rowTitleStrong,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.weight(1f),
                                 maxLines = 1,
@@ -133,7 +135,7 @@ fun DenebCategoriesScreen(
                             )
                             Text(
                                 "${cat.pageCount}",
-                                style = MaterialTheme.typography.labelMedium,
+                                style = DenebType.meta,
                                 color = MaterialTheme.colorScheme.primary,
                             )
                         }
@@ -159,13 +161,13 @@ private fun PinnedEntryRow(label: String, onClick: () -> Unit) {
     ) {
         Text(
             label,
-            style = MaterialTheme.typography.bodyLarge,
+            style = DenebType.rowTitleStrong,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
         )
         Text(
             "→",
-            style = MaterialTheme.typography.labelMedium,
+            style = DenebType.meta,
             color = MaterialTheme.colorScheme.primary,
         )
     }

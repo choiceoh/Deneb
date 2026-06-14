@@ -4,6 +4,8 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebInsight
+import ai.deneb.ui.denebInsightContainer
 import ai.deneb.ui.denebPressable
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.settings.SettingsCard
@@ -26,11 +28,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RichTooltip
@@ -156,9 +164,17 @@ internal fun ModelTab(client: DenebGatewayClient) {
         // per-model optimization loop (stalls, cache breaks, slow tails). Shown
         // only when something needs attention — silence is the normal state.
         // Collapsed to a one-line count by default; tap to read the details.
+        // This is the tab's one AI-analysis surface, so it wears the warm-apricot
+        // insight callout (soft apricot fill + AutoAwesome mark + apricot title),
+        // matching the mail detail's "AI 분석" block. See native-design-system.md.
         if (advisories.isNotEmpty()) {
             var advisoriesOpen by remember { mutableStateOf(false) }
-            SettingsCard(innerPadding = false) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(denebInsightContainer()),
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -170,17 +186,24 @@ internal fun ModelTab(client: DenebGatewayClient) {
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Icon(
+                        imageVector = Icons.Outlined.AutoAwesome,
+                        contentDescription = null,
+                        tint = denebInsight(),
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
                     Text(
                         "튜너 권고 ${advisories.size}건",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = DenebType.rowTitleStrong,
+                        color = denebInsight(),
                         modifier = Modifier.weight(1f),
                     )
-                    Text(
-                        if (advisoriesOpen) "▾" else "▸",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Icon(
+                        imageVector = if (advisoriesOpen) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (advisoriesOpen) "튜너 권고 접기" else "튜너 권고 펼치기",
+                        tint = denebInsight(),
+                        modifier = Modifier.size(18.dp),
                     )
                 }
                 if (advisoriesOpen) {
@@ -192,7 +215,7 @@ internal fun ModelTab(client: DenebGatewayClient) {
                             Text(
                                 line,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = denebInsight().copy(alpha = 0.85f),
                             )
                         }
                     }

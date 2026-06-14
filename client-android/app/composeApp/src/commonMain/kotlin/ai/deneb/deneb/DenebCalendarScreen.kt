@@ -463,15 +463,14 @@ internal fun CalendarDayList(
             ) {
                 Text(
                     dayTimeLabel(event, selected, tz),
-                    style = DenebType.body,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.width(56.dp),
+                    style = DenebType.meta,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(56.dp).padding(top = 2.dp),
                 )
                 Column(Modifier.weight(1f)) {
                     Text(
                         event.title.ifBlank { "(제목 없음)" },
-                        style = DenebType.body,
+                        style = DenebType.rowTitleStrong,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,

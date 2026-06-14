@@ -1,18 +1,28 @@
 package ai.deneb.deneb
 
 import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebInsight
+import ai.deneb.ui.denebInsightContainer
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,8 +32,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -81,29 +92,50 @@ fun DenebPersonScreen(
             Text(
                 c.displayName,
                 style = DenebType.subject,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = MaterialTheme.colorScheme.onBackground,
             )
             if (c.email.isNotBlank()) {
-                Text(c.email, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(c.email, style = DenebType.rowSubtitle, color = denebHint())
             }
             if (c.recentCount > 0) {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "최근 ${c.windowDays}일 · ${c.recentCount}통 수신",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    style = DenebType.meta,
+                    color = denebHint(),
                 )
             }
             if (c.wikiFacts.isNotBlank()) {
-                Spacer(Modifier.height(12.dp))
-                DenebMarkdown(c.wikiFacts)
+                // AI-insight callout: wikiFacts is the graphify-CLI synthesized
+                // dossier of what the wiki graph knows about this person. It is the
+                // screen's one AI-analysis block, so it gets the warm-apricot insight
+                // surface (soft fill + AutoAwesome mark + apricot title), matching the
+                // mail-detail idiom. See native-design-system.md (2-accent doctrine).
+                Spacer(Modifier.height(16.dp))
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(denebInsightContainer())
+                        .padding(16.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Outlined.AutoAwesome,
+                            contentDescription = null,
+                            tint = denebInsight(),
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text("AI 분석", style = DenebType.rowTitleStrong, color = denebInsight())
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    DenebMarkdown(c.wikiFacts)
+                }
             }
 
             if (c.wikiHits.isNotEmpty()) {
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider(color = denebHairline())
-                Spacer(Modifier.height(12.dp))
-                Text("관련 위키", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                DenebSectionLabel("관련 위키")
                 c.wikiHits.forEach { hit ->
                     Column(
                         Modifier
@@ -120,9 +152,9 @@ fun DenebPersonScreen(
                             )
                             .padding(vertical = 8.dp),
                     ) {
-                        Text(hit.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                        Text(hit.title, style = DenebType.rowTitle, color = MaterialTheme.colorScheme.onBackground)
                         if (hit.summary.isNotBlank()) {
-                            Text(hit.summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(hit.summary, style = DenebType.rowSubtitle, color = denebHint())
                         }
                     }
                 }
@@ -130,11 +162,7 @@ fun DenebPersonScreen(
 
             val mail = recent
             if (!mail.isNullOrEmpty()) {
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider(color = denebHairline())
-                Spacer(Modifier.height(12.dp))
-                Text("최근 메일 ${mail.size}", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.height(4.dp))
+                DenebSectionLabel("최근 메일 ${mail.size}")
                 mail.forEach { m ->
                     MailRow(
                         message = m,
@@ -153,8 +181,8 @@ fun DenebPersonScreen(
                 Spacer(Modifier.height(12.dp))
                 Text(
                     "알려진 컨텍스트가 없습니다.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = DenebType.body,
+                    color = denebHint(),
                 )
             }
             Spacer(Modifier.height(24.dp))

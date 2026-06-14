@@ -4,6 +4,7 @@ import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebPressable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -165,7 +166,7 @@ fun DenebCategoryPagesScreen(
                         ) {
                             Text(
                                 cat,
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = DenebType.rowTitle,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
@@ -274,15 +275,19 @@ fun DenebCategoryPagesScreen(
                             Column(Modifier.weight(1f)) {
                                 Text(
                                     page.title,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = DenebType.rowTitleStrong,
+                                    color = if (isSelected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    },
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 if (page.summary.isNotBlank()) {
                                     Text(
                                         page.summary,
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = DenebType.rowSubtitle,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis,
@@ -291,8 +296,8 @@ fun DenebCategoryPagesScreen(
                                 if (page.updated.isNotBlank()) {
                                     Text(
                                         page.updated.take(10),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = DenebType.meta,
+                                        color = denebHint(),
                                     )
                                 }
                             }
@@ -347,7 +352,7 @@ private fun SubCategoryRow(label: String, count: Int, onClick: () -> Unit) {
     ) {
         Text(
             label,
-            style = MaterialTheme.typography.bodyLarge,
+            style = DenebType.rowTitle,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
             maxLines = 1,
@@ -355,7 +360,7 @@ private fun SubCategoryRow(label: String, count: Int, onClick: () -> Unit) {
         )
         Text(
             "$count ›",
-            style = MaterialTheme.typography.labelMedium,
+            style = DenebType.meta,
             color = MaterialTheme.colorScheme.primary,
         )
     }

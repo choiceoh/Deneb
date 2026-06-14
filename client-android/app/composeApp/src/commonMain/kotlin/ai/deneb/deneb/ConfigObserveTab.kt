@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -27,7 +28,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -70,11 +70,11 @@ internal fun ObserveTab(client: DenebGatewayClient) {
                     behavior?.let { b ->
                         item {
                             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
-                                Text("최근 ${selectedDays}일 동작", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                Text("최근 ${selectedDays}일 동작", style = DenebType.rowTitleStrong, color = MaterialTheme.colorScheme.onBackground)
                                 Text(
                                     "실행 ${b.runs}회 · 능동 ${b.proactiveRuns} · 압축 ${b.compactedRuns}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = DenebType.rowSubtitle,
+                                    color = denebHint(),
                                 )
                             }
                             HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
@@ -83,11 +83,11 @@ internal fun ObserveTab(client: DenebGatewayClient) {
                             item { ObserveSectionHeader("도구 사용") }
                             items(b.tools, key = { it.name }) { t ->
                                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                                    Text(t.name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                                    Text(t.name, style = DenebType.rowTitle, color = MaterialTheme.colorScheme.onBackground)
                                     Text(
                                         if (t.errors > 0) "${t.calls}회 · ${t.errors} 오류 · 평균 ${t.avgMs}ms" else "${t.calls}회 · 평균 ${t.avgMs}ms",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (t.errors > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = DenebType.snippet,
+                                        color = if (t.errors > 0) MaterialTheme.colorScheme.error else denebHint(),
                                     )
                                 }
                                 HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
@@ -101,11 +101,10 @@ internal fun ObserveTab(client: DenebGatewayClient) {
                             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
                                 Text(
                                     l.level,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (l.level == "ERROR") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
+                                    style = DenebType.sectionLabel,
+                                    color = if (l.level == "ERROR") MaterialTheme.colorScheme.error else denebHint(),
                                 )
-                                Text(l.msg, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                                Text(l.msg, style = DenebType.body, color = MaterialTheme.colorScheme.onBackground, maxLines = 3, overflow = TextOverflow.Ellipsis)
                             }
                             HorizontalDivider(Modifier.padding(start = 16.dp), color = denebHairline())
                         }
@@ -113,7 +112,7 @@ internal fun ObserveTab(client: DenebGatewayClient) {
                     if ((behavior?.runs ?: 0) == 0 && logs.isEmpty()) {
                         item {
                             Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                                Text("아직 관찰된 동작이 없습니다.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("아직 관찰된 동작이 없습니다.", style = DenebType.body, color = denebHint())
                             }
                         }
                     }
@@ -123,8 +122,9 @@ internal fun ObserveTab(client: DenebGatewayClient) {
     }
 }
 
-// Flat period switcher in the Deneb idiom (mirrors SkillsViewSwitcher): ink-vs-
-// hint text over a shared hairline, no capsule or fill. Selecting a window
+// Flat period switcher in the Deneb idiom (mirrors SkillsViewSwitcher): a flat
+// text switcher over a shared hairline, no capsule or fill. The active span is
+// the one interactive accent (primary), the rest muted hint. Selecting a window
 // re-queries behavior + logs for that span. View navigation (not a form input),
 // so presentation is Deneb while each label keeps Material selectable + Role.Tab.
 @Composable
@@ -139,9 +139,8 @@ private fun ObservePeriodSwitcher(days: Int, onSelect: (Int) -> Unit) {
                 val selected = days == d
                 Text(
                     label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (selected) MaterialTheme.colorScheme.onSurface else denebHint(),
+                    style = if (selected) DenebType.rowTitleStrong else DenebType.rowTitle,
+                    color = if (selected) MaterialTheme.colorScheme.primary else denebHint(),
                     modifier = Modifier
                         .handCursor()
                         .selectable(
@@ -162,13 +161,14 @@ private fun ObservePeriodSwitcher(days: Int, onSelect: (Int) -> Unit) {
     }
 }
 
+// Tracked-caps section header in the Deneb idiom (mirrors [ai.deneb.ui.DenebSectionLabel]),
+// but laid out inside a LazyColumn item so it keeps its own horizontal inset.
 @Composable
 private fun ObserveSectionHeader(text: String) {
     Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        text.uppercase(),
+        style = DenebType.sectionLabel,
+        color = denebHint(),
         modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 6.dp),
     )
 }

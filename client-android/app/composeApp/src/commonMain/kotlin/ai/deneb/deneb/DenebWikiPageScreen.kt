@@ -4,6 +4,7 @@ import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
+import ai.deneb.ui.denebHint
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -138,7 +139,7 @@ fun DenebWikiPageScreen(
                     if (pg.updated.isNotBlank()) add(pg.updated.take(10))
                 }.joinToString("  ·  ")
                 if (meta.isNotBlank()) {
-                    Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(meta, style = DenebType.meta, color = denebHint())
                 }
                 if (pg.tags.isNotEmpty()) {
                     Text(
@@ -207,7 +208,7 @@ fun DenebWikiPageScreen(
                 }
                 status?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(it, style = DenebType.meta, color = denebHint())
                 }
             } else if (pg != null) {
                 DenebMarkdown(pg.body.ifBlank { "(빈 페이지)" })
