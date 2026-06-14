@@ -90,7 +90,12 @@ func NewTask(deps Deps) *Task {
 			}
 		}
 		if len(prev.Recommendations) > 0 {
-			deps.Logger.Info("modeltuner: persisted tuning re-applied",
+			// Debug, not Info: this restore runs on every boot (the registry is
+			// rebuilt from config at each start, so tuned floors must be re-applied),
+			// and auto-deploy restarts the gateway dozens of times a day — at Info it
+			// floods the log and reads as the tuner "running" each boot. The real 6h
+			// cycle still logs "cycle complete" at Info.
+			deps.Logger.Debug("modeltuner: persisted tuning re-applied",
 				"recommendations", len(prev.Recommendations))
 		}
 	}
