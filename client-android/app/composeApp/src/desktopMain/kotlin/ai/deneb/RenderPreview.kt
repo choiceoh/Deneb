@@ -40,6 +40,7 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.LightColorScheme
 import ai.deneb.ui.chat.WorkFeedAction
 import ai.deneb.ui.chat.WorkFeedItem
+import ai.deneb.ui.chat.composables.DenebBottomBar
 import ai.deneb.ui.chat.composables.DenebDrawerSheet
 import ai.deneb.ui.chat.composables.WaitingResponseRow
 import ai.deneb.ui.chat.composables.WorkFeedPanel
@@ -122,6 +123,10 @@ fun main() {
     renderCollapsedReport("mail_expanded_dark.png", DarkColorScheme, expanded = true)
     renderChrome("chrome_dark.png", DarkColorScheme)
     renderChrome("chrome_light.png", LightColorScheme)
+    renderBottomBar("bottombar_chat_dark.png", DarkColorScheme, "home")
+    renderBottomBar("bottombar_chat_light.png", LightColorScheme, "home")
+    renderBottomBar("bottombar_mail_dark.png", DarkColorScheme, "deneb_mail")
+    renderBottomBar("bottombar_more_dark.png", DarkColorScheme, "", moreActive = true)
     renderDesignSample("design_dark.png", DarkColorScheme)
     renderDesignSample("design_light.png", LightColorScheme)
     renderCalendarEvent("calendar_event_dark.png", DarkColorScheme)
@@ -527,6 +532,30 @@ private fun renderChrome(name: String, scheme: ColorScheme) {
                         onOpenCategories = {},
                         onNavigateToSettings = {},
                         onClose = {},
+                    )
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
+private fun renderBottomBar(name: String, scheme: ColorScheme, route: String, moreActive: Boolean = false) {
+    // Phone width (412dp = 824px @ density 2) so the bar matches the real device.
+    val scene = ImageComposeScene(width = 824, height = 240, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.fillMaxSize()) {
+                    Spacer(Modifier.weight(1f))
+                    DenebBottomBar(
+                        currentRoute = route,
+                        moreActive = moreActive,
+                        onNavigate = {},
+                        onMore = {},
                     )
                 }
             }
