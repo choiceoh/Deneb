@@ -136,20 +136,24 @@ sys.addaudithook(_audit)
 class _Deneb:
     """Read-only access to Deneb tools via the in-process bridge.
 
-    Each method returns the tool's text result (a str). Allowed surface:
+    Methods return the tool's text result (a str) by default. Allowed surface:
       deneb.gmail(action, query=..., message_id=..., max=...)
           actions: inbox, search, read, thread, analyze
       deneb.calendar(action, **kw)
           actions: list, get, free_slots
-      deneb.contacts(action, query)
-          actions: lookup, search
+      deneb.contacts(action, query, as_json=False)
+          actions: lookup, search. as_json=True returns a list of dicts
+          ({name, phones, emails, org}) instead of text — ideal for
+          filtering/counting in Python.
       deneb.wiki(action, query=..., **kw)
           actions: search, read, index, daily, status
+      deneb.read(file_path)
+          read a workspace file (path clamped to the workspace + skills roots).
     Write/outbound actions (gmail send/reply, calendar create, wiki write, ...)
     are rejected by the bridge."""
 
-    def _call(self, tool, args):
-        body = json.dumps({"tool": tool, "args": args}).encode("utf-8")
+    def _call(self, tool, args, as_json=False):
+        body = json.dumps({"tool": tool, "args": args, "json": as_json}).encode("utf-8")
         req = urllib.request.Request(
             _BRIDGE_URL, data=body, method="POST",
             headers={"Content-Type": "application/json",
@@ -158,7 +162,10 @@ class _Deneb:
             payload = json.loads(resp.read().decode("utf-8"))
         if not payload.get("ok"):
             raise RuntimeError("deneb.%s error: %s" % (tool, payload.get("error")))
-        return payload.get("result", "")
+        result = payload.get("result", "")
+        if as_json and isinstance(result, str) and result:
+            return json.loads(result)
+        return result
 
     def gmail(self, action, **kw):
         kw["action"] = action
@@ -168,14 +175,18 @@ class _Deneb:
         kw["action"] = action
         return self._call("calendar", kw)
 
-    def contacts(self, action, query, **kw):
+    def contacts(self, action, query, as_json=False, **kw):
         kw["action"] = action
         kw["query"] = query
-        return self._call("contacts", kw)
+        return self._call("contacts", kw, as_json=as_json)
 
     def wiki(self, action, **kw):
         kw["action"] = action
         return self._call("wiki", kw)
+
+    def read(self, file_path, **kw):
+        kw["file_path"] = file_path
+        return self._call("read", kw)
 
 
 def _run():

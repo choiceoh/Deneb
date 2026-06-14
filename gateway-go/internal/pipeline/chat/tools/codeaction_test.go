@@ -6,9 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 )
 
 // recordingInvoker captures the tool calls the bridge forwards and returns a
@@ -57,7 +60,7 @@ func TestCodeActionAllow(t *testing.T) {
 		{"wiki", "read", true},
 		{"wiki", "write", false},
 		{"wiki", "log", false},
-		{"read", "", false}, // arbitrary file read is not on the bridge
+		{"read", "", true}, // read self-clamps to workspace+skills roots
 		{"exec", "", false},
 		{"fs", "", false},
 	}
@@ -139,14 +142,31 @@ func requirePython(t *testing.T) {
 	}
 }
 
-func runCodeAction(t *testing.T, inv ToolInvoker, code string) string {
+func runCodeAction(t *testing.T, d CodeActionDeps, code string) string {
 	t.Helper()
 	in, _ := json.Marshal(map[string]any{"code": code, "timeout": 30})
-	out, err := ToolCodeAction(inv)(context.Background(), json.RawMessage(in))
+	out, err := ToolCodeAction(d)(context.Background(), json.RawMessage(in))
 	if err != nil {
 		t.Fatalf("ToolCodeAction: %v", err)
 	}
 	return out
+}
+
+// newTestContactsStore builds a populated address book for the structured path.
+func newTestContactsStore(t *testing.T) *contacts.Store {
+	t.Helper()
+	store, err := contacts.NewStore(filepath.Join(t.TempDir(), "contacts.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReplaceAll([]contacts.Contact{
+		{Name: "오선택", Phones: []string{"010-9945-4849"}, Emails: []string{"choiceoh@example.com"}, Org: "탑솔라"},
+		{Name: "김민준", Phones: []string{"010-1111-2222"}, Org: "탑솔라에코"},
+		{Name: "이서연", Phones: []string{"010-3333-4444"}, Org: "다른회사"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return store
 }
 
 // TestCodeAction_OutputAndBridge runs real Python: print() round-trips and a
@@ -154,7 +174,7 @@ func runCodeAction(t *testing.T, inv ToolInvoker, code string) string {
 func TestCodeAction_OutputAndBridge(t *testing.T) {
 	requirePython(t)
 	inv := &recordingInvoker{result: "MAILS:a,b,c"}
-	out := runCodeAction(t, inv, `
+	out := runCodeAction(t, CodeActionDeps{Invoker: inv}, `
 mails = deneb.gmail("search", query="탑솔라", max=5)
 print("GOT", mails)
 `)
@@ -207,7 +227,7 @@ func TestCodeAction_SandboxBlocks(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			out := runCodeAction(t, inv, c.code)
+			out := runCodeAction(t, CodeActionDeps{Invoker: inv}, c.code)
 			if !strings.Contains(out, c.want) {
 				t.Fatalf("expected block %q, got:\n%s", c.want, out)
 			}
@@ -219,7 +239,7 @@ func TestCodeAction_SandboxBlocks(t *testing.T) {
 // over-broad: writing inside the scratch dir works.
 func TestCodeAction_WriteInSandboxAllowed(t *testing.T) {
 	requirePython(t)
-	out := runCodeAction(t, &recordingInvoker{}, `
+	out := runCodeAction(t, CodeActionDeps{Invoker: &recordingInvoker{}}, `
 import os
 p = os.path.join(os.environ["DENEB_SANDBOX_DIR"], "scratch.txt")
 open(p, "w").write("hello")
@@ -230,5 +250,119 @@ print("WROTE", open(p).read())
 	}
 	if strings.Contains(out, "sandbox:") {
 		t.Fatalf("unexpected sandbox block on a legal write:\n%s", out)
+	}
+}
+
+// TestContactsStructured covers the typed structured-output handler: read
+// actions return []Contact, empty results are non-nil, mutating actions reject.
+func TestContactsStructured(t *testing.T) {
+	store := newTestContactsStore(t)
+
+	val, err := contactsStructured(store, map[string]any{"action": "search", "query": "탑솔라"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, ok := val.([]contacts.Contact)
+	if !ok {
+		t.Fatalf("want []contacts.Contact, got %T", val)
+	}
+	found := false
+	for _, c := range list {
+		if c.Name == "오선택" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("탑솔라 search should include 오선택, got %+v", list)
+	}
+
+	// Empty result is a non-nil slice (Python decodes to [], not None).
+	empty, err := contactsStructured(store, map[string]any{"action": "search", "query": "존재하지않는검색어zzz"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if empty == nil {
+		t.Fatal("empty result must be a non-nil slice")
+	}
+
+	// A non-read action is rejected even on the structured path.
+	if _, err := contactsStructured(store, map[string]any{"action": "create"}); err == nil {
+		t.Fatal("contacts structured 'create' must be rejected")
+	}
+}
+
+// TestCodeActionBridge_structured verifies the json=true path: contacts returns
+// a marshaled []Contact, and a tool without a structured handler errors clearly.
+func TestCodeActionBridge_structured(t *testing.T) {
+	store := newTestContactsStore(t)
+	b := &codeActionBridge{invoker: &recordingInvoker{}, contacts: store, token: "tok", ctx: context.Background()}
+	srv := httptest.NewServer(b)
+	defer srv.Close()
+
+	post := func(body string) map[string]any {
+		req, _ := http.NewRequest(http.MethodPost, srv.URL, strings.NewReader(body))
+		req.Header.Set("X-Deneb-Bridge-Token", "tok")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("post: %v", err)
+		}
+		defer resp.Body.Close()
+		var out map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		return out
+	}
+
+	// contacts structured → result is a JSON array string including 오선택.
+	out := post(`{"tool":"contacts","args":{"action":"search","query":"탑솔라"},"json":true}`)
+	if out["ok"] != true {
+		t.Fatalf("structured contacts should succeed, got %v", out)
+	}
+	result, _ := out["result"].(string)
+	if !strings.HasPrefix(strings.TrimSpace(result), "[") || !strings.Contains(result, "오선택") {
+		t.Fatalf("structured result should be a JSON array with 오선택, got %q", result)
+	}
+
+	// gmail has no structured handler → clear error, not a crash.
+	out = post(`{"tool":"gmail","args":{"action":"search","query":"x"},"json":true}`)
+	if out["ok"] != false {
+		t.Fatalf("structured gmail should be rejected, got %v", out)
+	}
+	if msg, _ := out["error"].(string); !strings.Contains(msg, "not available") {
+		t.Fatalf("expected 'not available' error, got %q", msg)
+	}
+}
+
+// TestCodeAction_StructuredContacts is the python e2e for as_json=True: model
+// code receives a real Python list of dicts it can filter/count.
+func TestCodeAction_StructuredContacts(t *testing.T) {
+	requirePython(t)
+	store := newTestContactsStore(t)
+	out := runCodeAction(t, CodeActionDeps{Invoker: &recordingInvoker{}, Contacts: store}, `
+rows = deneb.contacts("search", "탑솔라", as_json=True)
+print("TYPE", type(rows).__name__)
+hits = [r for r in rows if "탑솔라" in (r.get("org") or "")]
+print("COUNT", len(hits))
+print("FIRST", hits[0]["name"] if hits else "none")
+`)
+	if !strings.Contains(out, "TYPE list") {
+		t.Fatalf("as_json=True should yield a Python list, got:\n%s", out)
+	}
+	if strings.Contains(out, "COUNT 0") || !strings.Contains(out, "COUNT") {
+		t.Fatalf("expected at least one 탑솔라 contact, got:\n%s", out)
+	}
+}
+
+// TestCodeAction_ReadThroughBridge confirms deneb.read reaches the read tool
+// (the read tool's own workspace clamping is covered by fs tests).
+func TestCodeAction_ReadThroughBridge(t *testing.T) {
+	requirePython(t)
+	inv := &recordingInvoker{result: "FILE_CONTENTS_HERE"}
+	out := runCodeAction(t, CodeActionDeps{Invoker: inv}, `print(deneb.read("notes.txt"))`)
+	if !strings.Contains(out, "FILE_CONTENTS_HERE") {
+		t.Fatalf("deneb.read should return the read tool result, got:\n%s", out)
+	}
+	calls := inv.called()
+	if len(calls) != 1 || !strings.HasPrefix(calls[0], "read:") || !strings.Contains(calls[0], "notes.txt") {
+		t.Fatalf("expected one read call, got %v", calls)
 	}
 }

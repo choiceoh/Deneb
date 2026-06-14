@@ -38,6 +38,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -50,6 +51,15 @@ var codeActionRuntime string
 // wiring is needed — the registry passes itself in toolreg_core.go.
 type ToolInvoker interface {
 	Execute(ctx context.Context, name string, input json.RawMessage) (string, error)
+}
+
+// CodeActionDeps wires the code_action tool. Invoker is the read-only tool
+// surface (the chat registry) the bridge forwards to; Contacts is the typed
+// store used to answer deneb.contacts(..., as_json=True) with structured data
+// (nil disables the structured path — callers fall back to formatted text).
+type CodeActionDeps struct {
+	Invoker  ToolInvoker
+	Contacts *contacts.Store
 }
 
 // CodeActionDescription is the deferred-listing description. The first sentence
@@ -71,6 +81,13 @@ var codeActionReadOnly = map[string]map[string]bool{
 // codeActionAllow returns nil if (tool, args.action) is a permitted read-only
 // call, or a descriptive error the model can learn from.
 func codeActionAllow(tool string, args map[string]any) error {
+	// read has no "action"; it is read-only and the read tool itself clamps
+	// file_path to the workspace + skills roots (ResolvePathWithRoots clamps
+	// out-of-root paths to the workspace, so secrets like ~/.deneb are never
+	// reachable), so it needs no extra gating here.
+	if tool == "read" {
+		return nil
+	}
 	actions, ok := codeActionReadOnly[tool]
 	if !ok {
 		return fmt.Errorf("tool %q is not available from code_action (read-only only: gmail, calendar, contacts, wiki)", tool)
@@ -100,9 +117,10 @@ func sortedActionKeys(m map[string]bool) []string {
 // forwards the call to the chat tool registry on the captured turn context (so
 // preset / TurnContext / run-cache propagate exactly as a top-level call would).
 type codeActionBridge struct {
-	invoker ToolInvoker
-	token   string
-	ctx     context.Context
+	invoker  ToolInvoker
+	contacts *contacts.Store // optional; backs structured (as_json) contacts
+	token    string
+	ctx      context.Context
 }
 
 func (b *codeActionBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -117,6 +135,7 @@ func (b *codeActionBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Tool string         `json:"tool"`
 		Args map[string]any `json:"args"`
+		JSON bool           `json:"json"` // request structured output where supported
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
 		writeBridgeJSON(w, map[string]any{"ok": false, "error": "bad request: " + err.Error()})
@@ -125,10 +144,29 @@ func (b *codeActionBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if req.Args == nil {
 		req.Args = map[string]any{}
 	}
+	// The read-only allowlist gates both paths identically.
 	if err := codeActionAllow(req.Tool, req.Args); err != nil {
 		writeBridgeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+
+	// Structured path: serialize the tool's typed data (as_json=True) so model
+	// code gets a Python list/dict instead of formatted text to re-parse.
+	if req.JSON {
+		val, err := b.structuredResult(req.Tool, req.Args)
+		if err != nil {
+			writeBridgeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		data, err := json.Marshal(val)
+		if err != nil {
+			writeBridgeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		writeBridgeJSON(w, map[string]any{"ok": true, "result": string(data)})
+		return
+	}
+
 	argsJSON, err := json.Marshal(req.Args)
 	if err != nil {
 		writeBridgeJSON(w, map[string]any{"ok": false, "error": err.Error()})
@@ -142,17 +180,57 @@ func (b *codeActionBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	writeBridgeJSON(w, map[string]any{"ok": true, "result": result})
 }
 
+// structuredResult returns typed data for tools that support as_json=True.
+// Only the read-only contacts surface is wired in v1; calendar/wiki can be
+// added here as their typed readers are exposed.
+func (b *codeActionBridge) structuredResult(tool string, args map[string]any) (any, error) {
+	switch tool {
+	case "contacts":
+		if b.contacts == nil {
+			return nil, fmt.Errorf("contacts store is unavailable for structured output")
+		}
+		return contactsStructured(b.contacts, args)
+	default:
+		return nil, fmt.Errorf("structured output (as_json=True) is not available for %q — call it without as_json", tool)
+	}
+}
+
+// contactsStructured answers a read-only contacts call with []contacts.Contact
+// (json-tagged) instead of formatted text. Always returns a non-nil slice so
+// the Python side decodes to a list, never None.
+func contactsStructured(store *contacts.Store, args map[string]any) (any, error) {
+	action, _ := args["action"].(string)
+	query, _ := args["query"].(string)
+	var res []contacts.Contact
+	switch action {
+	case "lookup":
+		res = store.LookupPhone(query)
+	case "search":
+		limit := 20
+		if m, ok := args["max"].(float64); ok && m > 0 {
+			limit = int(m)
+		}
+		res = store.Search(query, limit)
+	default:
+		return nil, fmt.Errorf("contacts structured: action %q not supported (lookup, search)", action)
+	}
+	if res == nil {
+		res = []contacts.Contact{}
+	}
+	return res, nil
+}
+
 func writeBridgeJSON(w http.ResponseWriter, payload map[string]any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
-// ToolCodeAction returns the code_action tool. invoker is the read-only tool
-// surface (the chat registry); baseDir is unused for the scratch dir (a fresh
-// system temp dir is used) but kept for symmetry with other tool constructors.
-func ToolCodeAction(invoker ToolInvoker) toolctx.ToolFunc {
+// ToolCodeAction returns the code_action tool. d.Invoker is the read-only tool
+// surface (the chat registry) the bridge forwards to; the scratch dir is a
+// fresh system temp dir per run.
+func ToolCodeAction(d CodeActionDeps) toolctx.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		if invoker == nil {
+		if d.Invoker == nil {
 			return "", fmt.Errorf("code_action is unavailable")
 		}
 		var p struct {
@@ -192,7 +270,7 @@ func ToolCodeAction(invoker ToolInvoker) toolctx.ToolFunc {
 		}
 		token := newBridgeToken()
 		srv := &http.Server{
-			Handler:           &codeActionBridge{invoker: invoker, token: token, ctx: ctx},
+			Handler:           &codeActionBridge{invoker: d.Invoker, contacts: d.Contacts, token: token, ctx: ctx},
 			ReadHeaderTimeout: 5 * time.Second,
 		}
 		go func() { _ = srv.Serve(lis) }()
@@ -312,7 +390,7 @@ func CodeActionSchema() map[string]any {
 		"properties": map[string]any{
 			"code": map[string]any{
 				"type":        "string",
-				"description": "Python 3 source. A preloaded `deneb` object exposes read-only tools that each return the tool's text result: deneb.gmail(action, query=…, message_id=…, max=…) [inbox|search|read|thread|analyze], deneb.calendar(action, **kw) [list|get|free_slots], deneb.contacts(action, query) [lookup|search], deneb.wiki(action, query=…, **kw) [search|read|index|daily|status]. Use print() to return data to yourself — only stdout and any traceback come back. No network (except the bridge), no subprocess, no writes outside the scratch dir.",
+				"description": "Python 3 source. A preloaded `deneb` object exposes read-only tools that each return the tool's text result: deneb.gmail(action, query=…, message_id=…, max=…) [inbox|search|read|thread|analyze], deneb.calendar(action, **kw) [list|get|free_slots], deneb.contacts(action, query, as_json=False) [lookup|search], deneb.wiki(action, query=…, **kw) [search|read|index|daily|status], deneb.read(file_path) [workspace files]. Pass as_json=True to deneb.contacts for parsed objects (list of {name, phones, emails, org}) instead of text — ideal for filtering/counting. Use print() to return data to yourself — only stdout and any traceback come back. No network (except the bridge), no subprocess, no writes outside the scratch dir.",
 			},
 			"timeout": map[string]any{
 				"type":        "number",
