@@ -70,6 +70,13 @@ type config struct {
 	// means ON — a model with a toggleKwarg routes by effort. Set false to turn
 	// the whole feature off without editing every model. Pointer so absent ≠ off.
 	EffortRouting *bool `json:"effortRouting,omitempty"`
+	// Sparkfleet, when set, auto-discovers local vLLM backends from a SparkFleet
+	// control-plane (its GET /api/services): each live model becomes a routable
+	// entry, refreshed periodically, so launching a model in SparkFleet makes it
+	// reachable here without editing this file. Configured Models win on a name
+	// clash (an explicit entry overrides discovery). Nil = no discovery. See
+	// fleet.go.
+	Sparkfleet *fleetSource `json:"sparkfleet,omitempty"`
 }
 
 // effortRoutingOn reports whether thinking routing is active (default on; an
@@ -93,6 +100,9 @@ func loadConfig(path string) (config, error) {
 		if cfg.Models[i].UpstreamModel == "" {
 			cfg.Models[i].UpstreamModel = cfg.Models[i].Name
 		}
+	}
+	if cfg.Sparkfleet != nil {
+		cfg.Sparkfleet.Token = os.ExpandEnv(cfg.Sparkfleet.Token)
 	}
 	return cfg, nil
 }
@@ -141,6 +151,9 @@ func main() {
 		log.Info("local-only mode: cloud-backed models are refused")
 	} else if len(cloud) > 0 {
 		log.Warn("cloud egress models — requests to these leave this box", "models", cloud)
+	}
+	if cfg.Sparkfleet != nil && cfg.Sparkfleet.URL != "" {
+		log.Info("sparkfleet discovery enabled", "url", cfg.Sparkfleet.URL)
 	}
 
 	srv := &http.Server{
