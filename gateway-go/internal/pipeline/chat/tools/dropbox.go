@@ -284,51 +284,18 @@ func collectBackupFiles(root, label string, exts []string) []backupItem {
 
 // --- shared helpers ---
 
-// extractDropboxFileText extracts text from downloaded bytes by extension,
-// reusing the gmail attachment extractors (same package). Returns "" when the
-// format is unsupported or extraction fails.
+// extractDropboxFileText extracts text from downloaded bytes via the shared
+// document dispatcher (document_extract.go). Passing an empty MIME type degrades
+// to filename-only classification, matching how Dropbox identifies files.
+// Returns the extracted text, or "" when the format is unsupported or extraction
+// fails — except CSV, which falls back to the raw bytes (an empty/garbled CSV is
+// still worth showing the agent).
 func extractDropboxFileText(ctx context.Context, name string, data []byte) string {
-	lower := strings.ToLower(name)
-	switch {
-	case strings.HasSuffix(lower, ".pdf"):
-		if text, err := pdfToTextStructured(ctx, data); err == nil && strings.TrimSpace(text) != "" {
-			return text
-		}
-		// Scanned PDF: fall back to per-page OCR.
-		if text, err := pdfOCR(ctx, data); err == nil {
-			return text
-		}
-		return ""
-	case strings.HasSuffix(lower, ".xlsx"):
-		if text, err := xlsxToText(data); err == nil {
-			return text
-		}
-		return ""
-	case strings.HasSuffix(lower, ".docx"):
-		if text, err := docxToText(data); err == nil {
-			return text
-		}
-		return ""
-	case strings.HasSuffix(lower, ".pptx"):
-		if text, err := pptxToText(data); err == nil {
-			return text
-		}
-		return ""
-	case hasImageExt(lower):
-		if text, err := imageOCR(ctx, data); err == nil {
-			return text
-		}
-		return ""
-	case strings.HasSuffix(lower, ".csv"):
-		if text, err := csvToMarkdown(data); err == nil {
-			return text
-		}
+	r := extractDocument(ctx, data, name, "")
+	if r.kind == docCSV && r.err != nil {
 		return string(data)
-	case isTextFile(lower):
-		return string(data)
-	default:
-		return ""
 	}
+	return r.text
 }
 
 // saveDropboxFile writes downloaded bytes to a temp file so the agent can hand

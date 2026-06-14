@@ -526,22 +526,3 @@ func humanAge(d time.Duration) string {
 		return fmt.Sprintf("%d일", int(d.Hours()/24))
 	}
 }
-
-func truncate(s string, maxRunes int) string {
-	runes := []rune(s)
-	if len(runes) <= maxRunes {
-		return s
-	}
-	return string(runes[:maxRunes]) + "..."
-}
-
-func formatBytes(b int64) string {
-	switch {
-	case b >= 1024*1024:
-		return fmt.Sprintf("%.1f MB", float64(b)/(1024*1024))
-	case b >= 1024:
-		return fmt.Sprintf("%.1f KB", float64(b)/1024)
-	default:
-		return fmt.Sprintf("%d B", b)
-	}
-}
