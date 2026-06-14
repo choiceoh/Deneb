@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "앱을 완전히 종료했거나 절전(Doze) 상태여도 능동 보고 알림이 도착 — 그동안 앱이 켜져 있을 때만 뜨던 메일 분석·아침 브리핑·예약 작업 알림을 푸시(FCM)로 받습니다",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "설정 > 스킬 > 진화 내역의 항목을 누르면 그 자리에서 펼쳐짐 — 잘렸던 전체 사유와 판단 근거, 정확한 시각, 리뷰 판정까지. 스킬이 지정된 항목은 '스킬 보기'로 해당 스킬 상세로 이동",
         ),
     ),

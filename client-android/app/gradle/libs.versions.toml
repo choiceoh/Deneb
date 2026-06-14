@@ -31,6 +31,8 @@ turbine = "1.2.1"
 bouncycastle = "1.84"
 reorderable = "3.1.0"
 materialIcons = "1.7.3"
+google-services = "4.4.2"
+firebase-messaging = "24.1.1"
 
 [libraries]
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
@@ -85,6 +87,7 @@ compose-components-uiToolingPreview = { module = "org.jetbrains.compose.componen
 compose-ui-tooling = { module = "org.jetbrains.compose.ui:ui-tooling", version.ref = "compose-multiplatform" }
 bouncycastle-provider = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
+firebase-messaging = { module = "com.google.firebase:firebase-messaging", version.ref = "firebase-messaging" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
@@ -96,3 +99,4 @@ kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", versio
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
 androidMultiplatformLibrary = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
+googleServices = { id = "com.google.gms.google-services", version.ref = "google-services" }

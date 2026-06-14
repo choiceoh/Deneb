@@ -19,6 +19,10 @@ captures
 *.aab
 /screenshotTests/src/test/snapshots/images/
 fastlane/play-store-key.json
+# Firebase config carries the project's API key; this repo is public, so it is
+# never committed — it is injected at build time from ~/.deneb/google-services.json
+# by scripts/dev/publish-apk.sh (see androidApp/build.gradle.kts).
+google-services.json
 fastlane/report.xml
 fastlane/README.md
 .build-native/

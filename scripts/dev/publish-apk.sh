@@ -53,6 +53,20 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 APP_DIR="$REPO_ROOT/client-android/app"
 cd "$APP_DIR"
 
+# Inject the Firebase config for FCM push. It is NOT committed — it carries the
+# project's API key and this repo is public — so it lives on the host and is
+# copied into the androidApp module at build time. Present → FCM is built in;
+# absent → the build proceeds without FCM (the google-services plugin is applied
+# conditionally; see androidApp/build.gradle.kts), so this never blocks a publish.
+GSJSON_SRC="${DENEB_GOOGLE_SERVICES_JSON:-$HOME/.deneb/google-services.json}"
+if [ -f "$GSJSON_SRC" ]; then
+  cp "$GSJSON_SRC" "$APP_DIR/androidApp/google-services.json"
+  echo "google-services.json injected — FCM push enabled in this build"
+else
+  rm -f "$APP_DIR/androidApp/google-services.json"
+  echo "WARNING: $GSJSON_SRC not found — building WITHOUT FCM push" >&2
+fi
+
 LIBS_VERSION_CODE="$(sed -n 's/^android-versionCode = "\(.*\)"/\1/p' gradle/libs.versions.toml)"
 SHA="$(git -C "$REPO_ROOT" rev-parse --short=8 HEAD)"
 
