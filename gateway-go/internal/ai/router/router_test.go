@@ -70,6 +70,40 @@ func TestDecideReasonTags(t *testing.T) {
 	}
 }
 
+// TestHardSignalWordBoundary pins the script-aware hard-signal matching: a Latin
+// stem fires only at a word start, so a substring buried mid-word (the false-hard
+// that quietly kept simple chatter thinking) now routes off — while real cues and
+// CJK substrings still keep thinking.
+func TestHardSignalWordBoundary(t *testing.T) {
+	p := enabled()
+	// Recovered: the only would-be signal is a non-word-start substring → routes off.
+	for _, msg := range []string{
+		"prefix 캐시 좋네",    // "fix" inside "prefix"
+		"이 decode 결과 괜찮아", // "code" inside "decode"
+		"anywhere 가능해?",   // "why" inside "anywhere"
+		"suffix 정해졌어",     // "fix" inside "suffix"
+	} {
+		if got := Decide(p, Request{Message: msg}); !got.ThinkingOff {
+			t.Errorf("substring false-hard not recovered: Decide(%q) kept thinking (reason=%s)", msg, got.Reason)
+		}
+	}
+	// Still kept: a real Latin cue at a word start (incl. stems) and CJK substrings.
+	for _, c := range []struct{ msg, sig string }{
+		{"fix this bug", "fix"},
+		{"code 좀 봐줘", "code"},
+		{"analyzing the trace", "analyz"},
+		{"planning the sprint", "plan"},
+		{"이 코드 분석해줘", "분석"},     // CJK substring (분석 precedes 코드 in the list)
+		{"codebase 봐줘", "code"}, // word-start prefix (codebase begins with code)
+	} {
+		got := Decide(p, Request{Message: c.msg})
+		if got.ThinkingOff || got.Reason != "hard-signal:"+c.sig {
+			t.Errorf("real cue lost: Decide(%q) off=%v reason=%s, want kept on hard-signal:%s",
+				c.msg, got.ThinkingOff, got.Reason, c.sig)
+		}
+	}
+}
+
 // TestContextHeavyRouting: a short follow-up in a heavy thread keeps thinking
 // (Ares #3 — router sees h_t), pure acks stay routable.
 func TestContextHeavyRouting(t *testing.T) {
