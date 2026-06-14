@@ -128,3 +128,27 @@ func effectiveContextBudget(deps runDeps, providerID, model string, logger *slog
 	}
 	return avail
 }
+
+// contextWindowCeiling returns the maximum history tokens that still fit the
+// model's context window (window - system-prompt budget - output reserve), or 0
+// when the window is unknown. This is the unclamped `avail` from
+// effectiveContextBudget: a turn whose assembled raw history is at or below this
+// can run as-is (it fits the window), which is the precondition for deferring
+// compaction to the background instead of doing it synchronously. Returning 0
+// for an unknown window makes the deferral conservatively fall back to the
+// synchronous path.
+func contextWindowCeiling(deps runDeps, providerID, model string) int {
+	caps := modelCapability(deps, providerID, model)
+	if caps.ContextWindow <= 0 {
+		return 0
+	}
+	reserve := deps.maxTokens
+	if reserve <= 0 {
+		reserve = defaultOutputReserve
+	}
+	avail := caps.ContextWindow - int(deps.contextCfg.SystemPromptBudget) - reserve //nolint:gosec // G115
+	if avail < 0 {
+		avail = 0
+	}
+	return avail
+}
