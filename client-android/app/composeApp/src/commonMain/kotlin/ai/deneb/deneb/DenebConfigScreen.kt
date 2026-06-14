@@ -98,6 +98,7 @@ fun DenebConfigScreen(
             ConfigTab.SKILLS -> denebClient?.let { SkillsTab(it, onOpenSkill) } ?: NotConnectedTab()
             ConfigTab.CRON -> denebClient?.let { CronTab(it, onOpenCron) } ?: NotConnectedTab()
             ConfigTab.OBSERVE -> denebClient?.let { ObserveTab(it) } ?: NotConnectedTab()
+            ConfigTab.WORMHOLE -> denebClient?.let { WormholeTab(it) } ?: NotConnectedTab()
         }
     }
 }
@@ -155,4 +156,5 @@ private enum class ConfigTab(val label: String, val desc: String) {
     SKILLS("스킬", "설치된 스킬, 수명 주기"),
     CRON("크론", "예약 작업"),
     OBSERVE("관찰", "게이트웨이 동작, 로그"),
+    WORMHOLE("Wormhole", "모델 라우터 상태, 기능 토글"),
 }
