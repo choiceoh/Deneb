@@ -396,6 +396,53 @@ func (t *Tracker) touchCuratorUsageLocked(skillName string, usedAt int64) error 
 	return t.saveCuratorStateLocked(state)
 }
 
+// ReconcileCuratorAgainstCatalog drops curator entries for agent-created skills
+// that no longer exist in the discovered catalog — orphans left behind when a
+// skill is removed or consolidated away (the curator and catalog are otherwise
+// independent, so a removed skill's lifecycle record lingers forever and skews
+// the agent-skill value metric on /health). Run at startup against the freshly-
+// discovered catalog, so it is race-free.
+//
+// Safety: if EVERY tracked agent skill is missing from the catalog, discovery
+// almost certainly failed (e.g. the genesis source dir didn't load) rather than
+// the user having removed all of them — skip the prune rather than wipe the
+// whole lifecycle history. Returns the pruned skill names.
+func (t *Tracker) ReconcileCuratorAgainstCatalog(catalogSkills map[string]bool) ([]string, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	state, err := t.loadCuratorStateLocked()
+	if err != nil {
+		return nil, err
+	}
+	agentCount := 0
+	var orphans []string
+	for name, rec := range state.Skills {
+		if rec.CreatedBy != SkillCuratorCreatedByAgent {
+			continue
+		}
+		agentCount++
+		if !catalogSkills[name] {
+			orphans = append(orphans, name)
+		}
+	}
+	if len(orphans) == 0 {
+		return nil, nil
+	}
+	if agentCount > 0 && len(orphans) == agentCount {
+		t.logger.Warn("genesis: curator reconcile skipped — every tracked agent skill is missing from the catalog (discovery likely failed)",
+			"agentSkills", agentCount)
+		return nil, nil
+	}
+	for _, name := range orphans {
+		delete(state.Skills, name)
+	}
+	if err := t.saveCuratorStateLocked(state); err != nil {
+		return nil, err
+	}
+	return orphans, nil
+}
+
 func (t *Tracker) loadCuratorStateLocked() (*SkillCuratorState, error) {
 	state := &SkillCuratorState{
 		Version: 1,

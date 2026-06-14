@@ -420,6 +420,54 @@ func TestAgentSkillValueSummary(t *testing.T) {
 	}
 }
 
+// TestReconcileCuratorAgainstCatalog verifies orphan curator entries (skills no
+// longer in the catalog) are pruned while present ones are kept.
+func TestReconcileCuratorAgainstCatalog(t *testing.T) {
+	tr := newTestTracker(t)
+	for _, n := range []string{"keep-skill", "orphan-skill"} {
+		if err := tr.LogGenesis(n, "session", "client:main", "productivity", ""); err != nil {
+			t.Fatalf("LogGenesis(%s): %v", n, err)
+		}
+	}
+	pruned, err := tr.ReconcileCuratorAgainstCatalog(map[string]bool{"keep-skill": true})
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if len(pruned) != 1 || pruned[0] != "orphan-skill" {
+		t.Fatalf("expected to prune [orphan-skill], got %v", pruned)
+	}
+	report, _ := tr.SkillCuratorReport("")
+	names := map[string]bool{}
+	for _, r := range report {
+		names[r.SkillName] = true
+	}
+	if !names["keep-skill"] || names["orphan-skill"] {
+		t.Fatalf("after reconcile, curator should keep only keep-skill: %v", names)
+	}
+}
+
+// TestReconcileCuratorAgainstCatalog_SkipsWhenAllMissing verifies the safety
+// guard: an empty/failed catalog (every agent skill "missing") must NOT wipe the
+// lifecycle history — discovery probably failed, not a mass removal.
+func TestReconcileCuratorAgainstCatalog_SkipsWhenAllMissing(t *testing.T) {
+	tr := newTestTracker(t)
+	for _, n := range []string{"a", "b"} {
+		if err := tr.LogGenesis(n, "session", "client:main", "productivity", ""); err != nil {
+			t.Fatalf("LogGenesis(%s): %v", n, err)
+		}
+	}
+	pruned, err := tr.ReconcileCuratorAgainstCatalog(map[string]bool{})
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if len(pruned) != 0 {
+		t.Fatalf("must skip prune when all agent skills missing, pruned %v", pruned)
+	}
+	if report, _ := tr.SkillCuratorReport(""); len(report) != 2 {
+		t.Fatalf("lifecycle history must be preserved, got %d entries", len(report))
+	}
+}
+
 func (t *Tracker) markSkillAgentCreatedLockedForTest(skillName string, createdAt int64) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()

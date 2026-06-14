@@ -47,6 +47,23 @@ func (s *Server) initGenesisServices() {
 		s.genesisTracker = tracker
 	}
 
+	// Reconcile orphan curator entries against the freshly-discovered catalog:
+	// a skill removed or consolidated away otherwise leaves a lifecycle record
+	// that lingers forever and skews the agent-skill value metric. Race-free at
+	// startup; the reconcile itself guards against a discovery failure wiping
+	// history (see ReconcileCuratorAgainstCatalog).
+	if s.genesisTracker != nil && s.skillCatalog != nil {
+		known := map[string]bool{}
+		for _, e := range s.skillCatalog.List() {
+			known[e.Skill.Name] = true
+		}
+		if pruned, rerr := s.genesisTracker.ReconcileCuratorAgainstCatalog(known); rerr != nil {
+			s.logger.Warn("genesis: curator reconcile failed", "error", rerr)
+		} else if len(pruned) > 0 {
+			s.logger.Info("genesis: pruned orphan curator entries", "skills", pruned)
+		}
+	}
+
 	s.genesisEvolver = genesis.NewEvolver(lwClient, s.skillCatalog, s.genesisTracker, lwModel, s.logger)
 
 	// Teacher-escalation: wire the stronger main model so a rewrite that fails
