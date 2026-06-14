@@ -45,8 +45,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -193,8 +196,26 @@ class DenebGatewayClient(
     val clientStatus: StateFlow<ClientStatus?> = _clientStatus
 
     // Native work feed: proactive reports and native shares as actionable rows.
+    // _denebWorkFeed holds the raw feed (all workspaces); the public flow is scoped
+    // to the active workspace below.
     internal val _denebWorkFeed = MutableStateFlow<List<WorkFeedItem>>(emptyList())
-    val denebWorkFeed: StateFlow<List<WorkFeedItem>> = _denebWorkFeed
+
+    // Reactive workspace mode (업무 true ↔ 챗봇 false), seeded from the persisted
+    // recall setting and republished by [setWorkspace]. Drives the mode-scoped work
+    // feed and gates proactive notifications. AppSettings is the source of truth on
+    // disk; this mirror exists so flows can react to a switch.
+    private val _workspaceWork = MutableStateFlow(appSettings.isRecallEnabled())
+
+    // 업무 and 챗봇 keep SEPARATE notification histories. The work feed (= the 업무
+    // 알림 inbox) shown to the UI is scoped to the active workspace: 업무 shows its
+    // proactive reports (client:main / non-chat items), 챗봇 shows only chat: items —
+    // and since all proactive reports land in client:main, the 챗봇 feed is empty.
+    // 업무 리포트 never bleeds into 챗봇. The raw feed still accumulates everything so
+    // switching back to 업무 surfaces the reports that arrived meanwhile (조용히 쌓기).
+    val denebWorkFeed: StateFlow<List<WorkFeedItem>> =
+        combine(_denebWorkFeed, _workspaceWork) { items, work ->
+            items.filter { isChatWorkspaceKey(it.sessionKey) != work }
+        }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     /** One proactive 업무-feed report worth a tray notification. */
     data class ProactiveNotification(val title: String, val body: String)
@@ -620,7 +641,7 @@ class DenebGatewayClient(
         // Proactive reports live in the 업무 workspace, so opening one from a push
         // also switches the active workspace to 업무 (recall on) — otherwise the
         // user would land on client:main while the pill still said 챗봇.
-        appSettings.setRecallEnabled(true)
+        setWorkspace(true)
         switchSession("client:main")
         syncNativeStateAsync()
         scope.launch { loadTranscriptGuarded("client:main") }
@@ -631,6 +652,18 @@ class DenebGatewayClient(
     private fun workspaceHome(work: Boolean): String = if (work) "client:main" else "chat:main"
 
     /**
+     * Single writer for the active workspace mode: persist it (AppSettings is the
+     * on-disk source of truth) and republish to [_workspaceWork] so the mode-scoped
+     * work feed and the proactive-notification gates react. Entering 챗봇 also clears
+     * the 업무 리포트 unread badge — that banner belongs to the 업무 workspace.
+     */
+    private fun setWorkspace(work: Boolean) {
+        appSettings.setRecallEnabled(work)
+        _workspaceWork.value = work
+        if (!work) _hasUnreadWorkReport.value = false
+    }
+
+    /**
      * Switch the active workspace (업무 ↔ 챗봇). Each keeps its OWN session list
      * and recall behavior, so this flips recall, restores that workspace's last
      * session, and refreshes the (now mode-filtered) drawer. The persona is
@@ -638,7 +671,7 @@ class DenebGatewayClient(
      */
     fun switchWorkspace(toWork: Boolean) {
         if (appSettings.isRecallEnabled() == toWork) return
-        appSettings.setRecallEnabled(toWork)
+        setWorkspace(toWork)
         val target = appSettings.lastSession(toWork)
         _chatHistory.value = emptyList()
         switchSession(target)
@@ -659,7 +692,7 @@ class DenebGatewayClient(
      * clobbered.
      */
     suspend fun openWorkTopicAtItem(item: WorkFeedItem): String? {
-        appSettings.setRecallEnabled(true) // work-feed cards belong to the 업무 workspace
+        setWorkspace(true) // work-feed cards belong to the 업무 workspace
         switchSession("client:main")
         syncNativeStateAsync()
         val startEpoch = historyGate.withLock { historyEpoch }
@@ -711,6 +744,8 @@ class DenebGatewayClient(
      */
     override fun onProactiveReportForeground() {
         syncNativeStateAsync()
+        // 챗봇 모드에서는 업무 리포트 배지/배너를 올리지 않는다 (도착은 피드에 조용히 쌓임).
+        if (!_workspaceWork.value) return
         if (sessionKey == "client:main") {
             scope.launch { loadTranscriptGuarded("client:main") }
         } else {
@@ -917,6 +952,11 @@ class DenebGatewayClient(
     private fun maybeEmitProactiveNotification(item: WorkFeedItem) {
         if (!nativeSyncBaselined) return
         if (item.id.isBlank() || item.status != "unread") return
+        // 챗봇 모드에서는 업무 리포트가 도달하지 않는다: only notify when the item's
+        // workspace matches the active one. A 업무 item (client:main proactive report)
+        // arriving while in 챗봇 raises no tray notification — it sits silently in the
+        // raw feed and surfaces when the user switches back to 업무 (조용히 쌓기).
+        if (isChatWorkspaceKey(item.sessionKey) == _workspaceWork.value) return
         val body = item.summary.ifBlank { item.body }.ifBlank { item.title }
         _proactiveNotifications.tryEmit(
             ProactiveNotification(title = item.title.ifBlank { "Deneb" }, body = body),
