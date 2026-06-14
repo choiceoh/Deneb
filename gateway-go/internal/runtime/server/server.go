@@ -20,6 +20,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/middleware"
@@ -118,7 +119,20 @@ type Server struct {
 	// pushHub fans proactive 업무-topic reports out to connected native clients
 	// over their long-lived SSE connection (GET /api/v1/miniapp/events). Created
 	// in New so it's non-nil before any handler or relay touches it.
-	pushHub    *clientPushHub
+	pushHub *clientPushHub
+
+	// pushTokenStore holds native-client FCM registration IDs (durable). The
+	// registration RPCs (miniapp.push.register/unregister) write here regardless
+	// of whether FCM sending is configured, so tokens accumulate and proactive
+	// FCM delivery begins the moment credentials are provisioned. Created in
+	// registerEarlyMethods.
+	pushTokenStore *push.Store
+	// pushNotifier sends proactive notifications via FCM as a fallback when no
+	// native client holds a live SSE connection (app fully closed / Doze). nil
+	// (dormant) unless DENEB_FCM_CREDENTIALS_FILE points at a valid service
+	// account — see internal/domain/push.
+	pushNotifier *push.Notifier
+
 	runtimeCfg *config.GatewayRuntimeConfig
 	version    string
 	logColor   bool // true when ANSI color output is enabled

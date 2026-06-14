@@ -11,6 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
@@ -64,6 +65,13 @@ type proactiveRelayDeps struct {
 	// for its next heartbeat poll. nil in older wiring/tests; the push is then
 	// skipped (the report still lands in the transcript).
 	pushHub *clientPushHub
+
+	// pushFCM delivers the same {title, body} to registered device tokens via
+	// FCM when no client holds a live SSE connection (app fully closed / Doze) —
+	// i.e. when pushHub.publish reaches nobody. nil (dormant) unless FCM
+	// credentials are configured; nil-safe. The report is always in the
+	// transcript regardless, so this is additive, not load-bearing.
+	pushFCM *push.Notifier
 
 	// workFeed records each proactive report as a first-class native work item.
 	// Best-effort only: transcript delivery remains the source of truth.
@@ -248,6 +256,15 @@ func (d proactiveRelayDeps) relayNativeToOpts(sessionKey, content string, collap
 			Title: "Deneb",
 			Body:  pushPreview(content),
 		})
+		// Fallback: when no client holds a live SSE connection, the frame above
+		// reached nobody (app fully closed or in Android Doze). Push via FCM so
+		// closed devices still raise the notification. Nil-safe (dormant until
+		// credentials are configured) and skipped while a client is connected —
+		// the live frame already delivered. Fire-and-forget; the report is in the
+		// transcript regardless.
+		if d.pushFCM != nil && d.pushHub.subscriberCount() == 0 {
+			d.pushFCM.DeliverFallback("Deneb", pushPreview(content))
+		}
 	}
 	d.logProactive("delivered", "", origLen, pushPreview(content))
 	return true, nil

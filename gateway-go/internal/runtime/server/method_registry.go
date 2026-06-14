@@ -24,6 +24,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/mailpriority"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
@@ -114,6 +115,28 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	s.nativeSyncStore = nativesync.NewStore(filepath.Join(denebDir, "native_sync.jsonl"))
 	s.workFeedStore = workfeed.NewStore(filepath.Join(denebDir, "workfeed.jsonl"))
 	nativeWorkFeed := s.nativeWorkFeedStore()
+
+	// FCM push fallback (proactive delivery when the app is fully closed / Doze
+	// and no live SSE client is connected). The device-token store is always
+	// created so registration RPCs work and tokens accumulate; the sender is
+	// dormant until a service-account file is configured (DENEB_FCM_CREDENTIALS_FILE).
+	s.pushTokenStore = push.NewStore(filepath.Join(denebDir, "push_tokens.json"))
+	if fcmCfg := push.ConfigFromEnv(); fcmCfg.Enabled() {
+		if sender, err := push.NewFCMSender(fcmCfg); err != nil {
+			s.logger.Error("FCM push: credentials load failed; proactive FCM fallback disabled", "error", err)
+		} else {
+			s.pushNotifier = push.NewNotifier(push.NotifierDeps{
+				Store:  s.pushTokenStore,
+				Sender: sender,
+				Logger: s.logger,
+				Broadcast: func(event string, payload any) {
+					s.broadcaster.Broadcast(event, payload)
+				},
+				ShutdownCtx: s.ShutdownCtx(),
+			})
+			s.logger.Info("FCM push fallback enabled", "projectID", sender.ProjectID())
+		}
+	}
 
 	// Monitoring notify service (error mirrors + status snapshots → native push).
 	s.notify = newNotifyService(hub.Sessions(), hub.Logger(), s.pushHub, s.BoundAddr)
@@ -277,6 +300,8 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 					"workFeed":        s.workFeedStore != nil,
 					"workFeedActions": s.workFeedStore != nil,
 					"nativeSync":      s.nativeSyncStore != nil,
+					"pushRegister":    s.pushTokenStore != nil,
+					"pushFallback":    s.pushNotifier != nil,
 					"gmailAttachment": true,
 					"updateManifest":  true,
 				}
@@ -284,6 +309,12 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		}),
 		handlerminiapp.SyncMethods(handlerminiapp.SyncDeps{
 			Store: s.nativeSyncStore,
+		}),
+		// Native-client FCM device-token registration. Always available (tokens
+		// accumulate even before the FCM sender is configured); the proactive
+		// fallback that consumes them is wired separately via s.pushNotifier.
+		handlerminiapp.PushMethods(handlerminiapp.PushDeps{
+			Store: s.pushTokenStore,
 		}),
 		// Wormhole router status + feature toggles (config path / URL resolved
 		// from env, defaulting to the on-host single-machine layout).
