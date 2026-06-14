@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "내 메시지 말풍선이 긴 글에서도 화면 폭의 약 80%까지만 차지하도록 제한했습니다 — 왼쪽 끝까지 늘어나지 않고 항상 오른쪽에 단정하게 붙습니다",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "설정 > 연동에서 Dropbox 계정을 앱에서 직접 연결 — App key 입력 → 승인 페이지 열기 → 코드 붙여넣기로 끝납니다(호스트 명령어 불필요). 연결 후 채팅의 dropbox 도구·백업이 동작합니다",
         ),
     ),
