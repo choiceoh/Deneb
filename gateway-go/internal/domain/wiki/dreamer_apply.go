@@ -107,12 +107,13 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 - 중요한 결정, 새로운 사실, 인물 정보, 프로젝트 진행 등만 위키에 반영
 - 기존 페이지가 있으면 action:"update", 없으면 action:"create"
 - 최근 처리 이력에 이미 반영된 주제/경로는 새 사실이 추가된 경우에만 update하고, 같은 내용을 반복 생성하지 마라
-- 카테고리는 반드시 다음 5개 중 하나 (경로의 첫 디렉토리 = 카테고리):
+- 카테고리는 반드시 다음 6개 중 하나 (경로의 첫 디렉토리 = 카테고리):
   - 프로젝트: 진행 중인 일·거래·결정 — 거래처/금액/납기가 걸린 건, 의사결정 근거 등 특정 건별 컨텍스트
   - 인물: 사람·조직 — 연락처, 관계, 담당자, 거래처 인물
   - 시스템: Deneb 자신의 구성·운영 — 서버/모델/배포/도구 설정
-  - 업무: 업무 일반 지식 — 산업·시장·기술 등 특정 프로젝트에 매이지 않는 도메인 지식
+  - 업무: 직무 도메인 지식 — 태양광·전선·구리값 등 일에 직접 쓰이는 지식
   - 사용자: 사용자 개인 — 선호, 톤·스타일 규칙, 개인 컨텍스트
+  - 기타: 그 외 일반/세상 지식 — 국제정세·시사·잡학 등 위 분류에 안 맞는 것 (catch-all)
 - 프로젝트 중 거래성 건(거래처·금액·납기)은 가장 임박한 결제기한/마감일을 frontmatter의 due 필드(YYYY-MM-DD)에 기록
 - content는 마크다운 형식. create 시 전체 본문, update 시 추가할 섹션/내용. 본문에서 다른 페이지를 언급할 때는 [[경로-또는-제목]] 형식의 위키링크를 쓰면 지식그래프 엣지가 된다 (예: [[프로젝트/dgx-spark]], [[홍길동]])
 - importance: 0.5(일반) ~ 0.9(핵심 결정)
@@ -198,7 +199,7 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 		// bucket is the path's leading dir (Store.Stats uses filepath.Dir), so the
 		// path — not the category field — is what files the page. This remaps
 		// legacy dir names (거래/결정→프로젝트, 사람→인물, 기술→업무, 선호→사용자,
-		// 운영시스템→시스템) and routes anything unrecognized to the 업무 catch-all,
+		// 운영시스템→시스템) and routes anything unrecognized to the 기타 catch-all,
 		// returning the category that matches the corrected directory so the
 		// frontmatter and the on-disk bucket agree.
 		if newPath, newCat := normalizeCategoryPath(u.Path, u.Category); newPath != u.Path || newCat != u.Category {
@@ -469,7 +470,7 @@ func normalizeWikiPath(p string) string {
 
 // defaultCategory is the catch-all bucket for pages whose directory maps to no
 // taxonomy category — keeps nothing loose at the wiki root.
-const defaultCategory = "업무"
+const defaultCategory = "기타"
 
 // remapLegacyCategory folds a legacy or alias category/directory name onto the
 // current 5-category taxonomy, returning ("", false) when there's no known
@@ -493,7 +494,7 @@ func remapLegacyCategory(name string) (string, bool) {
 }
 
 // resolveCategory maps a category field value onto a valid taxonomy category,
-// falling back to the 업무 catch-all.
+// falling back to the 기타 catch-all.
 func resolveCategory(category string) string {
 	if ValidateCategory(category) {
 		return category
@@ -509,7 +510,7 @@ func resolveCategory(category string) string {
 // matches that directory. Resolution order: (1) a path already under a valid
 // category (including a valid-category sub-folder like "프로젝트/거래/…") is kept;
 // (2) a legacy/alias directory is remapped; (3) otherwise the category field is
-// consulted (valid, then remappable); (4) failing all that, the 업무 catch-all. A
+// consulted (valid, then remappable); (4) failing all that, the 기타 catch-all. A
 // path with no directory ("foo.md") derives its directory from the same cascade
 // so nothing lands at the wiki root.
 func normalizeCategoryPath(path, category string) (string, string) {

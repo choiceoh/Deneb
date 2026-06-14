@@ -21,7 +21,7 @@ func TestNormalizeWikiPath(t *testing.T) {
 	}
 }
 
-// TestNormalizeCategoryPath locks the 5-category taxonomy enforcement: a page is
+// TestNormalizeCategoryPath locks the 6-category taxonomy enforcement: a page is
 // filed by its path's *directory* (the real bucket), so legacy dir names are
 // remapped, the matching category is returned, and nothing lands at the root.
 func TestNormalizeCategoryPath(t *testing.T) {
@@ -33,6 +33,7 @@ func TestNormalizeCategoryPath(t *testing.T) {
 		// Valid category dir is kept; an empty/mismatched cat field is corrected to it.
 		{"프로젝트/foo.md", "프로젝트", "프로젝트/foo.md", "프로젝트"},
 		{"프로젝트/foo.md", "", "프로젝트/foo.md", "프로젝트"},
+		{"기타/멜로니.md", "기타", "기타/멜로니.md", "기타"},               // 기타 is a real category, not just the default
 		{"인물/홍길동.md", "프로젝트", "인물/홍길동.md", "인물"},             // valid dir wins over mismatched cat
 		{"프로젝트/거래/탑솔라.md", "프로젝트", "프로젝트/거래/탑솔라.md", "프로젝트"}, // valid-cat sub-folder kept
 		// Legacy dir names fold onto the taxonomy.
@@ -42,12 +43,12 @@ func TestNormalizeCategoryPath(t *testing.T) {
 		{"사람/김부장.md", "", "인물/김부장.md", "인물"},
 		{"선호/톤.md", "선호", "사용자/톤.md", "사용자"},
 		{"운영시스템/ssh.md", "운영시스템", "시스템/ssh.md", "시스템"},
-		// Unknown dir + unknown cat → 업무 catch-all.
-		{"잡동사니/y.md", "기타", "업무/y.md", "업무"},
+		// Unknown dir + unknown cat → 기타 catch-all.
+		{"잡동사니/y.md", "몰라", "기타/y.md", "기타"},
 		// No directory in the path: derive the bucket from the category field.
 		{"foo.md", "프로젝트", "프로젝트/foo.md", "프로젝트"},
 		{"foo.md", "거래", "프로젝트/foo.md", "프로젝트"},
-		{"foo.md", "", "업무/foo.md", "업무"},
+		{"foo.md", "", "기타/foo.md", "기타"},
 	}
 	for _, c := range cases {
 		gotPath, gotCat := normalizeCategoryPath(c.path, c.cat)
