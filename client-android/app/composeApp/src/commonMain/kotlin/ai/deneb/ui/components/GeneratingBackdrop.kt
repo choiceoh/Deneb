@@ -29,6 +29,12 @@ private const val BACKDROP_VALUE = 0.95f
 // fast inward falloff keeps message text legible.
 private const val BACKDROP_PEAK_ALPHA = 0.62f
 
+// The glow lives in the top portion of the screen only. The vertical gradient spans
+// this fraction of the height (stops below are relative to it), so the light fades to
+// black well before the reading/input area instead of reaching ~90% down. Lower this
+// to shorten the glow further.
+private const val BACKDROP_HEIGHT_FRACTION = 0.75f
+
 // Hue starts at blue (240 deg) and decreases a full turn, matching the observed
 // order (blue -> cyan -> green -> ...). Reset to this each time generation starts.
 private const val BACKDROP_START_HUE = 240f
@@ -79,7 +85,7 @@ fun Modifier.generatingBackdrop(active: Boolean): Modifier {
                     0.4f to hue.copy(alpha = peak * 0.45f),
                     0.9f to Color.Transparent,
                     startY = 0f,
-                    endY = size.height,
+                    endY = size.height * BACKDROP_HEIGHT_FRACTION,
                 ),
             )
         }
