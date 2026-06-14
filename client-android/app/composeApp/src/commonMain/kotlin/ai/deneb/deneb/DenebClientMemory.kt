@@ -90,6 +90,36 @@ suspend fun DenebGatewayClient.deleteCategoryPages(paths: List<String>): Boolean
     return resp.ok && resp.deleted == paths.size
 }
 
+/** Move one wiki page to a new path (`miniapp.memory.move_page`). The bucket is
+ *  the path's leading directory, so this is how a page is reclassified. The
+ *  backend rejects a traversal path, an invalid target category, or an existing
+ *  target (no overwrite); returns true only when the move actually happened. */
+suspend fun DenebGatewayClient.moveWikiPage(from: String, to: String): Boolean {
+    val resp = callRpc<MovePagePayload>(
+        "miniapp.memory.move_page",
+        buildJsonObject {
+            put("from", from)
+            put("to", to)
+        },
+    ) ?: return false
+    return resp.ok
+}
+
+/** Reclassify several pages into [targetCategory] — one move_page call each,
+ *  filing each page under `<targetCategory>/<basename>`. Returns the count
+ *  actually moved so the screen can report a partial move (e.g. a name already
+ *  taken in the target). A page already in the target category is skipped. */
+suspend fun DenebGatewayClient.moveCategoryPages(paths: List<String>, targetCategory: String): Int {
+    var moved = 0
+    for (p in paths) {
+        val base = p.substringAfterLast('/')
+        val to = "$targetCategory/$base"
+        if (p == to) continue
+        if (moveWikiPage(p, to)) moved++
+    }
+    return moved
+}
+
 /** Full wiki/memory page by path (`miniapp.memory.get_page`). */
 suspend fun DenebGatewayClient.fetchWikiPage(path: String): WikiPage? {
     val p = callRpc<WikiPagePayload>(

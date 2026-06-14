@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -41,8 +42,10 @@ import kotlinx.coroutines.launch
 /**
  * Pages within one wiki category (`miniapp.memory.list_in_category`). Tap a page
  * to open it; long-press (with haptic) to enter multi-select mode, then a flat
- * bottom bar deletes the selected pages via `miniapp.memory.delete_pages` after a
- * confirmation. Framed by [DenebScreenScaffold].
+ * bottom bar either reclassifies the selected pages into another category
+ * (`miniapp.memory.move_page`, via a picker) or deletes them
+ * (`miniapp.memory.delete_pages`, after a confirmation). Framed by
+ * [DenebScreenScaffold].
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -56,17 +59,20 @@ fun DenebCategoryPagesScreen(
 ) {
     var pages by remember(category) { mutableStateOf<List<WikiPageRef>?>(null) }
     var subFolders by remember(category) { mutableStateOf<List<CategoryNode>>(emptyList()) }
+    // Top-level taxonomy categories, populated on load — the move picker's options.
+    var topCategories by remember(category) { mutableStateOf<List<String>>(emptyList()) }
     var loadFailed by remember(category) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
 
-    // Multi-select state. selected holds page paths (the delete key). busy guards
-    // the in-flight delete so a double-tap can't fire two deletes; confirmDelete
-    // gates the destructive action behind a dialog.
+    // Multi-select state. selected holds page paths (the delete/move key). busy
+    // guards the in-flight action so a double-tap can't fire twice; confirmDelete
+    // gates the destructive delete, and showMovePicker the reclassify dialog.
     var selecting by remember(category) { mutableStateOf(false) }
     val selected = remember(category) { mutableStateListOf<String>() }
     var busy by remember(category) { mutableStateOf(false) }
     var confirmDelete by remember(category) { mutableStateOf(false) }
+    var showMovePicker by remember(category) { mutableStateOf(false) }
 
     fun clearSelection() {
         selecting = false
@@ -78,10 +84,18 @@ fun DenebCategoryPagesScreen(
         pages = null
         val fetched = client.fetchCategoryPages(category)
         if (fetched == null) loadFailed = true else pages = fetched
+        // One categories fetch feeds both the sub-folder rows and the move
+        // picker's options.
+        val cats = client.fetchCategories()?.categories ?: emptyList()
         // Sub-folders under this category (the next path segment) so a project
         // that accrues several documents drills down instead of cluttering the
-        // top-level list. Derived from the full category list.
-        subFolders = subCategories(category, client.fetchCategories()?.categories ?: emptyList())
+        // top-level list.
+        subFolders = subCategories(category, cats)
+        // Top-level taxonomy categories (first path segment) — the reclassify targets.
+        topCategories = cats.map { it.name.substringBefore('/') }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
     }
     LaunchedEffect(category) { load() }
 
@@ -101,6 +115,22 @@ fun DenebCategoryPagesScreen(
         }
     }
 
+    fun runMove(target: String) {
+        if (busy) return
+        haptics.tap()
+        val paths = selected.toList()
+        scope.launch {
+            busy = true
+            client.moveCategoryPages(paths, target)
+            busy = false
+            showMovePicker = false
+            clearSelection()
+            // Reload — moved pages leave this category's list (an honest view even
+            // on a partial move, e.g. a name already taken in the target).
+            load()
+        }
+    }
+
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { if (!busy) confirmDelete = false },
@@ -108,6 +138,43 @@ fun DenebCategoryPagesScreen(
             text = { Text("선택한 ${selected.size}개 페이지를 삭제할까요? 되돌릴 수 없습니다.") },
             confirmButton = { TextButton(onClick = { runDelete() }, enabled = !busy) { Text("삭제") } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }, enabled = !busy) { Text("취소") } },
+        )
+    }
+
+    if (showMovePicker) {
+        // Material overlay, Deneb-idiom rows inside: tap a category to reclassify
+        // the selected pages into it (filed under <category>/<basename>).
+        AlertDialog(
+            onDismissRequest = { if (!busy) showMovePicker = false },
+            title = { Text("${selected.size}개 페이지 이동") },
+            text = {
+                Column {
+                    Text(
+                        "옮길 카테고리를 선택하세요.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    topCategories.forEach { cat ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .denebPressable(onClick = { if (!busy) runMove(cat) })
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                cat,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        HorizontalDivider(color = denebHairline())
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showMovePicker = false }, enabled = !busy) { Text("취소") } },
         )
     }
 
@@ -247,6 +314,13 @@ fun DenebCategoryPagesScreen(
                 ) {
                     Text("${selected.size}개 선택", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.weight(1f))
+                    TextButton(
+                        onClick = { showMovePicker = true },
+                        enabled = !busy && topCategories.isNotEmpty(),
+                    ) {
+                        Text("이동")
+                    }
+                    Spacer(Modifier.width(4.dp))
                     TextButton(
                         onClick = { confirmDelete = true },
                         enabled = !busy,
