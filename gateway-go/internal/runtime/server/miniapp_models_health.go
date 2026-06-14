@@ -272,11 +272,12 @@ func (s *Server) discoverMiniappLocalModels(ctx context.Context, providers []pro
 	type target struct {
 		name    string
 		baseURL string
+		apiKey  string
 	}
 	var targets []target
 	for _, provider := range providers {
 		if base := effectiveBaseURL(provider); isLocalURL(base) {
-			targets = append(targets, target{name: provider.name, baseURL: base})
+			targets = append(targets, target{name: provider.name, baseURL: base, apiKey: provider.apiKey})
 		}
 	}
 
@@ -286,7 +287,7 @@ func (s *Server) discoverMiniappLocalModels(ctx context.Context, providers []pro
 		var wg sync.WaitGroup
 		for i, target := range targets {
 			wg.Add(1)
-			go func(idx int, name, baseURL string) {
+			go func(idx int, name, baseURL, apiKey string) {
 				defer wg.Done()
 				defer func() {
 					if r := recover(); r != nil {
@@ -295,8 +296,8 @@ func (s *Server) discoverMiniappLocalModels(ctx context.Context, providers []pro
 				}()
 				probeCtx, cancel := context.WithTimeout(ctx, localDiscoveryTimeout)
 				defer cancel()
-				results[idx] = discoverProviderModels(probeCtx, baseURL)
-			}(i, target.name, target.baseURL)
+				results[idx] = discoverProviderModels(probeCtx, baseURL, apiKey)
+			}(i, target.name, target.baseURL, target.apiKey)
 		}
 		wg.Wait()
 		for i, target := range targets {

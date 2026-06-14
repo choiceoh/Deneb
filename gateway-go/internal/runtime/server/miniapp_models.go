@@ -66,6 +66,7 @@ type modelSection struct {
 type providerSpec struct {
 	name    string   // provider key (zai, vllm, openrouter, ...)
 	baseURL string   // OpenAI-compatible endpoint, may be empty
+	apiKey  string   // credential (env-expanded); sent on the local /models probe for token-gated endpoints (wormhole)
 	models  []string // model ids declared in config (+ discovered, after merge)
 }
 

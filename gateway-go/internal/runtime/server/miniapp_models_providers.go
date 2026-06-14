@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 
@@ -141,6 +142,7 @@ func loadConfiguredProviders() []providerSpec {
 		Models struct {
 			Providers map[string]struct {
 				BaseURL string `json:"baseUrl"`
+				APIKey  string `json:"apiKey"`
 				Models  []struct {
 					ID string `json:"id"`
 				} `json:"models"`
@@ -152,7 +154,11 @@ func loadConfiguredProviders() []providerSpec {
 	}
 	specs := make([]providerSpec, 0, len(root.Models.Providers))
 	for name, pc := range root.Models.Providers {
-		spec := providerSpec{name: name, baseURL: strings.TrimSpace(pc.BaseURL)}
+		spec := providerSpec{
+			name:    name,
+			baseURL: strings.TrimSpace(pc.BaseURL),
+			apiKey:  os.ExpandEnv(strings.TrimSpace(pc.APIKey)), // expand ${ENV} like the chat path
+		}
 		for _, m := range pc.Models {
 			if id := strings.TrimSpace(m.ID); id != "" {
 				spec.models = append(spec.models, id)
@@ -240,12 +246,14 @@ func registryRoleEntries(reg *modelrole.Registry, liveMain string) []modelEntry 
 	return entries
 }
 
-// discoverProviderModels probes an OpenAI-compatible /models endpoint.
-func discoverProviderModels(ctx context.Context, baseURL string) []string {
+// discoverProviderModels probes an OpenAI-compatible /models endpoint. apiKey is
+// sent as a Bearer token for endpoints that gate /models (the wormhole router);
+// empty for keyless local vLLM.
+func discoverProviderModels(ctx context.Context, baseURL, apiKey string) []string {
 	if strings.TrimSpace(baseURL) == "" {
 		return nil
 	}
-	ids, err := modelrole.DiscoverServedVllmModels(ctx, baseURL)
+	ids, err := modelrole.DiscoverServedVllmModels(ctx, baseURL, apiKey)
 	if err != nil || len(ids) == 0 {
 		return nil
 	}
