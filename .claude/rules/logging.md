@@ -1,6 +1,6 @@
 ---
 description: slog 레벨 가이드 — 사용자 무응답/데이터 손실을 로그에 묻지 않기
-globs: gateway-go/**/*.go
+globs: ["gateway-go/**/*.go"]
 ---
 
 # Logging Conventions
