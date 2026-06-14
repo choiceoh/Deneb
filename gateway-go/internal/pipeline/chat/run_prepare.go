@@ -387,6 +387,45 @@ func assembleMessages(
 			summarizer = &localAISummarizer{}
 		}
 
+		// Off-critical-path compaction (defer the STW): when the assembled raw
+		// history is over the LLM threshold but still fits the model's context
+		// window with headroom — large-window local models (e.g. dsv4), whose
+		// decode rate is flat well past the configured budget — run THIS turn on
+		// the raw context and summarize in the BACKGROUND instead of blocking the
+		// agent loop on a multi-second STW summarization. The next turn assembles
+		// the background-persisted summary. The synchronous path below stays the
+		// backstop for: the first compaction (no summaries yet → AssembleContext
+		// truncated the tail, which CompactAndPersist must recover), models whose
+		// window has no headroom over the budget, and the hard ceiling where the
+		// raw history would not fit the window. Re-prefill behaviour is unchanged
+		// (the summary still lands one turn later); only the STW is removed. See
+		// polaris.Engine.CompactInBackground and prompt-cache.md §1.5.
+		if bridge, ok := deps.transcript.(*polaris.Bridge); ok && summarizer != nil {
+			engine := bridge.Engine()
+			currentTokens := compact.EstimateMessagesTokens(messages)
+			softThreshold := int(float64(contextBudget) * compact.DefaultLLMThresholdPct)
+			ceiling := contextWindowCeiling(deps, mr.providerID, mr.model)
+			deferEligible := currentTokens > softThreshold &&
+				ceiling > contextBudget && // model window clearly exceeds the budget
+				currentTokens <= ceiling && // raw history fits the window with reserve
+				engine.HasSummaries(params.SessionKey) // past bootstrap; tail is assembled raw
+			if deferEligible {
+				engine.CompactInBackground(
+					deps.callbacks.shutdownCtx, params.SessionKey, summarizer, contextBudget,
+					deps.embeddingClient, buildAnchorKeywords(deps.wikiStore), buildLearnedGuidelines())
+				// Belt-and-suspenders: never ship an orphan tool pair at the
+				// assembly's coverage boundary (e.g. a prior chunk-boundary
+				// leftover). No-op — byte-identical, APC-stable — when already
+				// balanced; operates on this turn's working list, not the store.
+				messages = compact.BalanceToolBlocks(messages)
+				polarisCancel()
+				logger.Info("polaris: deferred compaction to background (turn runs on raw context)",
+					"session", params.SessionKey, "tokens", currentTokens,
+					"budget", contextBudget, "ceiling", ceiling)
+				return messages
+			}
+		}
+
 		// STW: pre-check if LLM compaction will likely fire.
 		// Signal the user before the (potentially slow) summarization starts.
 		var compactTypingDone chan struct{}

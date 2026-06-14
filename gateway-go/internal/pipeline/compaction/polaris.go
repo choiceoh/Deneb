@@ -276,6 +276,12 @@ func lastUserInputTokens(messages []llm.Message) int {
 	return 0
 }
 
+// IsToolResultMessage reports whether a message's content is a tool_result
+// block array (a system-generated result) rather than real user text. Exported
+// so the Polaris engine can snap background-compaction coverage boundaries off
+// tool_use↔tool_result pairs without duplicating the parse.
+func IsToolResultMessage(content json.RawMessage) bool { return isToolResultMessage(content) }
+
 // isToolResultMessage checks if a user message contains tool_result blocks.
 func isToolResultMessage(content json.RawMessage) bool {
 	if len(content) == 0 || content[0] != '[' {

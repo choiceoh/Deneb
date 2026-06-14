@@ -83,6 +83,70 @@ func TestEffectiveContextBudget(t *testing.T) {
 	})
 }
 
+func TestContextWindowCeiling(t *testing.T) {
+	// Mirrors the production budget: 170K memory - 30K system → 140K configured.
+	baseDeps := runDeps{
+		contextCfg: ContextConfig{MemoryTokenBudget: 170_000, SystemPromptBudget: 30_000},
+		maxTokens:  16_384,
+	}
+
+	t.Run("unknown window returns 0 (defer disabled, conservative)", func(t *testing.T) {
+		// No registry → unknown window. 0 ceiling means deferral never fires and
+		// compaction stays synchronous, which is the safe fallback.
+		if got := contextWindowCeiling(baseDeps, "zai", "glm-5-turbo"); got != 0 {
+			t.Errorf("ceiling = %d, want 0 for unknown window", got)
+		}
+	})
+
+	t.Run("large window: ceiling exceeds the budget (defer band exists)", func(t *testing.T) {
+		deps := baseDeps
+		deps.registry = capTestRegistry(t, map[string]modelrole.ProviderResolved{
+			"acme": {BaseURL: "https://acme.example/v1", ContextWindow: 1_000_000},
+		})
+		// 1_000_000 - 30_000 system - 16_384 reserve = 953_616.
+		ceiling := contextWindowCeiling(deps, "acme", "custom-model")
+		if ceiling != 953_616 {
+			t.Errorf("ceiling = %d, want 953616", ceiling)
+		}
+		budget := effectiveContextBudget(deps, "acme", "custom-model", nil)
+		// The deferral precondition: a window clearly larger than the budget means
+		// a turn can run raw above the soft threshold without overflowing.
+		if ceiling <= budget {
+			t.Errorf("ceiling %d must exceed budget %d so deferral is eligible for large-window models", ceiling, budget)
+		}
+	})
+
+	t.Run("window-limited model: ceiling equals budget (no defer band)", func(t *testing.T) {
+		deps := baseDeps
+		deps.registry = capTestRegistry(t, map[string]modelrole.ProviderResolved{
+			"acme": {BaseURL: "https://acme.example/v1", ContextWindow: 60_000},
+		})
+		// Both compute window - 30000 - 16384 = 13616; the budget clamps to it, so
+		// ceiling == budget → ceiling > budget is false → deferral never fires and
+		// small-window models keep the synchronous path.
+		ceiling := contextWindowCeiling(deps, "acme", "custom-model")
+		budget := effectiveContextBudget(deps, "acme", "custom-model", nil)
+		if ceiling != 13_616 || budget != 13_616 {
+			t.Fatalf("ceiling=%d budget=%d, want both 13616", ceiling, budget)
+		}
+		if ceiling > budget {
+			t.Errorf("ceiling %d must not exceed budget %d for a window-limited model (no defer)", ceiling, budget)
+		}
+	})
+
+	t.Run("zero maxTokens uses the default output reserve", func(t *testing.T) {
+		deps := baseDeps
+		deps.maxTokens = 0
+		deps.registry = capTestRegistry(t, map[string]modelrole.ProviderResolved{
+			"acme": {BaseURL: "https://acme.example/v1", ContextWindow: 200_000},
+		})
+		// 200_000 - 30_000 - 8192 (default reserve) = 161_808.
+		if got := contextWindowCeiling(deps, "acme", "custom-model"); got != 161_808 {
+			t.Errorf("ceiling = %d, want 161808", got)
+		}
+	})
+}
+
 func TestApplyModelTuning(t *testing.T) {
 	reg := capTestRegistry(t, map[string]modelrole.ProviderResolved{
 		"acme": {BaseURL: "https://acme.example/v1"},

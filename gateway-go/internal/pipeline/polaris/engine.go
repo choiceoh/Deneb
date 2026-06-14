@@ -11,6 +11,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
+	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
 // summaryPrefix detects legacy already-summarized content so Polaris can skip
@@ -33,6 +34,13 @@ type Engine struct {
 	anchorMu          sync.RWMutex
 	anchorKeywords    []string // wiki Tier1 page titles to preserve through summarization
 	learnedGuidelines []string // ACON-style preservation rules distilled from past compaction misses
+
+	// compacting single-flights background compaction per session: a session
+	// key is present while CompactInBackground is running for it. Overlapping
+	// background passes would do redundant LLM work and could persist duplicate
+	// summary nodes, so a second launch is a no-op until the first completes.
+	// Independent of anchorMu (a sync.Map needs no external lock).
+	compacting sync.Map // sessionKey → struct{}
 }
 
 // NewEngine creates a Polaris engine backed by the given store.
@@ -175,6 +183,182 @@ func (e *Engine) CompactAndPersist(
 	}
 
 	return compacted, result
+}
+
+// HasSummaries reports whether the session has at least one persisted summary.
+// When false the session is still in the bootstrap stage: AssembleContext
+// returns a fresh-tail-truncated prefix and CompactAndPersist recovers the
+// dropped older messages, so compaction must stay on the critical path. Once a
+// summary exists every message after coverage is assembled raw, which is the
+// precondition for running a turn raw and compacting in the background instead.
+func (e *Engine) HasSummaries(sessionKey string) bool {
+	cov, err := e.store.LatestSummaryCoverage(sessionKey)
+	return err == nil && cov >= 0
+}
+
+// CompactionInFlight reports whether a background compaction is running for the
+// session. Callers use it only as a hint; CompactInBackground is itself
+// single-flighted, so a racing launch is always a safe no-op.
+func (e *Engine) CompactionInFlight(sessionKey string) bool {
+	_, ok := e.compacting.Load(sessionKey)
+	return ok
+}
+
+// tryAcquireCompaction marks a session as compacting and reports whether the
+// caller won the single-flight (false = another pass already holds it).
+func (e *Engine) tryAcquireCompaction(sessionKey string) bool {
+	_, loaded := e.compacting.LoadOrStore(sessionKey, struct{}{})
+	return !loaded
+}
+
+func (e *Engine) releaseCompaction(sessionKey string) { e.compacting.Delete(sessionKey) }
+
+// CompactInBackground summarizes a session's uncovered tail OFF the critical
+// path and persists the summary to the DAG, so a later turn assembles an
+// already-compacted context without a synchronous stop-the-world (STW)
+// summarization. The current turn runs on the raw context (cheap and APC-cached
+// on the local-vLLM path, where decode is flat well past the configured
+// budget); the next turn picks up the persisted summary.
+//
+// Safety:
+//   - Single-flighted per session — a no-op if a pass is already running.
+//   - Race-free coverage: the store's max message index is pinned at launch and
+//     the persisted summary covers only [coverage+1, coverage+covered] within
+//     that pinned range. Messages appended while the pass runs (the current
+//     turn's own tool results, or a following turn) keep indices past the pin,
+//     stay uncovered, and are never silently dropped.
+//   - Tool-pair safe: the covered boundary is snapped back past any trailing
+//     tool_result so the next assembly's recent window never begins with an
+//     orphan tool_result whose tool_use was summarized (Anthropic 400 / wedge).
+//   - Lifetime: derived from parentCtx (the server shutdown context) so it
+//     outlives the request turn but is cancelled on graceful shutdown, bounded
+//     by a 5-minute timeout, and wrapped in safego so a panic cannot take down
+//     the process.
+//
+// summarizer must be non-nil. embedder/anchors/guidelines are snapshotted by
+// the caller (mirroring CompactAndPersist's per-call config) and captured in
+// the closure, so no shared engine state is read concurrently.
+func (e *Engine) CompactInBackground(
+	parentCtx context.Context,
+	sessionKey string,
+	summarizer compact.Summarizer,
+	contextBudget int,
+	embedder compact.Embedder,
+	anchors, guidelines []string,
+) {
+	if summarizer == nil || contextBudget <= 0 {
+		return
+	}
+	if !e.tryAcquireCompaction(sessionKey) {
+		return // another pass already running for this session
+	}
+	// The single-flight is released by the spawned goroutine; if we bail out
+	// before spawning it, this defer releases it instead (exactly one release).
+	spawned := false
+	defer func() {
+		if !spawned {
+			e.releaseCompaction(sessionKey)
+		}
+	}()
+
+	// Pin a consistent store snapshot BEFORE spawning so the covered range
+	// cannot drift as new messages append.
+	coverage, _ := e.store.LatestSummaryCoverage(sessionKey)
+	pinnedMax, err := e.store.MaxMsgIndex(sessionKey)
+	if err != nil || pinnedMax <= coverage {
+		return // nothing uncovered to compact
+	}
+	rawChat, err := e.store.LoadMessages(sessionKey, coverage+1, pinnedMax)
+	if err != nil || len(rawChat) == 0 {
+		return
+	}
+	raw := chatToLLM(rawChat)
+	// Only worth a background LLM pass when the uncovered tail itself is over
+	// the LLM threshold — the same gate the synchronous tier uses, measured on
+	// the tail. Below it, summarizing buys little; a large existing summary set
+	// is the condense path's job and is handled by the synchronous hard-ceiling
+	// backstop if it ever pushes the context to the window.
+	if compact.EstimateMessagesTokens(raw) <= int(float64(contextBudget)*compact.DefaultLLMThresholdPct) {
+		return
+	}
+
+	cfg := compact.NewConfig(contextBudget)
+	cfg.Embedder = embedder
+	cfg.AnchorKeywords = anchors
+	cfg.LearnedGuidelines = guidelines
+
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+
+	spawned = true // the goroutine now owns the single-flight release
+	safego.GoWithSlog(e.logger, "polaris-bg-compact", func() {
+		defer e.releaseCompaction(sessionKey)
+		ctx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
+		defer cancel()
+
+		compacted, summary, ok := compact.LLMCompact(ctx, cfg, raw, summarizer, e.logger)
+		if !ok || summary == "" {
+			return
+		}
+		// covered = how many leading raw messages the summary covers. Mirrors
+		// the synchronous persistSummary math (preserved = compacted - the one
+		// summary message) but against the PINNED tail rather than live state.
+		preserved := len(compacted) - 1
+		if preserved < 0 {
+			preserved = 0
+		}
+		covered := len(raw) - preserved
+		covered = safeCoverageCount(raw, covered)
+		if covered <= 0 {
+			return
+		}
+		msgStart := coverage + 1
+		msgEnd := coverage + covered
+		node := SummaryNode{
+			SessionKey: sessionKey,
+			Level:      1,
+			Content:    summary,
+			TokenEst:   compact.EstimateTokens(summary),
+			CreatedAt:  time.Now().UnixMilli(),
+			MsgStart:   msgStart,
+			MsgEnd:     msgEnd,
+		}
+		id, ierr := e.store.InsertSummary(node)
+		if ierr != nil {
+			e.logger.Warn("polaris: background summary persist failed", "session", sessionKey, "error", ierr)
+			return
+		}
+		e.logger.Info("polaris: background compaction persisted summary",
+			"id", id, "session", sessionKey, "range", [2]int{msgStart, msgEnd},
+			"coveredMessages", covered, "summaryTokens", node.TokenEst)
+
+		// Mirror the synchronous path: merge leaves into higher-level nodes so
+		// summaries do not accumulate unbounded (the sync Condense goroutine in
+		// run_prepare does not fire for deferred turns).
+		if cErr := e.Condense(ctx, sessionKey, summarizer); cErr != nil {
+			e.logger.Warn("polaris: background condense failed", "session", sessionKey, "error", cErr)
+		}
+	})
+}
+
+// safeCoverageCount snaps a covered-message count back past any trailing
+// tool_result so the boundary between the summarized prefix raw[:covered] and
+// the uncovered remainder raw[covered:] never splits a tool_use↔tool_result
+// pair. The chunk splitter (splitIntoChunks) is token-aligned, not pair-aligned,
+// so a bounded-digestion boundary can otherwise leave raw[covered] as a
+// tool_result whose tool_use was summarized — which the next assembly would load
+// as an orphan and Anthropic would reject with a 400. Backing the boundary off
+// keeps both halves of the pair on the uncovered side (a few raw messages may
+// then also be described by the summary; harmless duplication, never an orphan).
+func safeCoverageCount(raw []llm.Message, covered int) int {
+	if covered > len(raw) {
+		covered = len(raw)
+	}
+	for covered > 0 && covered < len(raw) && compact.IsToolResultMessage(raw[covered].Content) {
+		covered--
+	}
+	return covered
 }
 
 // splitSummaryFences partitions messages into injected summary-fence messages
