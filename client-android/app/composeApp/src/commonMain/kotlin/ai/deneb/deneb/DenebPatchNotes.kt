@@ -21,6 +21,11 @@ data class DenebPatchNote(
 val DENEB_PATCH_NOTES: List<DenebPatchNote> = listOf(
     DenebPatchNote(
         highlights = listOf(
+            "더보기 화면을 설정과 같은 그룹 카드 양식으로 통일 — 검색·할일·일기·카테고리가 아이콘·제목·한 줄 설명·화살표가 있는 같은 행 모양으로 정돈됩니다",
+        ),
+    ),
+    DenebPatchNote(
+        highlights = listOf(
             "챗봇 모드에서는 업무 데이터 화면(메일·달력·검색·카테고리·플릿)을 네비게이션에서 숨겨 깨끗한 일반 대화 공간이 됩니다 — 업무 모드로 돌아오면 다시 나타납니다",
         ),
     ),
