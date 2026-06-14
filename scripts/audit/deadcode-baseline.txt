@@ -7,7 +7,6 @@
 # HookCompositor.SetBeforeToolCall in gateway-go/CLAUDE.md), or (c) pending an
 # operator rewire-vs-retire decision. Anything else should be deleted instead
 # of baselined.
-internal/agentsys/agent/hooks.go :: HookCompositor.SetBeforeToolCall
 internal/ai/llm/client.go :: WithMinRequestTimeout
 internal/ai/llm/client.go :: WithRetry
 internal/ai/llm/types.go :: AppendSystemTexts
@@ -101,7 +100,6 @@ internal/pipeline/chat/tool_context.go :: ReplyFuncFromContext
 internal/pipeline/chat/tool_context.go :: SessionKeyFromContext
 internal/pipeline/chat/tool_turn_context.go :: DetectCycle
 internal/pipeline/chat/toolctx/turn_context.go :: DetectCycle
-internal/pipeline/chat/toolpreset/preset.go :: IsValid
 internal/pipeline/chat/toolpreset/preset.go :: KnownPresets
 internal/pipeline/chat/tools/exec_safety.go :: DetectFileModification
 internal/pipeline/chat/tools/exec_safety.go :: sedModifiesFile
@@ -116,7 +114,6 @@ internal/pipeline/chat/transcript.go :: MemoryTranscriptStore.Load
 internal/pipeline/chat/transcript.go :: MemoryTranscriptStore.Search
 internal/pipeline/chat/transcript.go :: NewMemoryTranscriptStore
 internal/pipeline/chat/update_dispatch.go :: parsePRNumber
-internal/pipeline/chat/user_message_text.go :: StripUserMessageTimestamp
 internal/pipeline/pilot/localai.go :: LightweightModel
 internal/pipeline/pilot/localai.go :: TruncateHead
 internal/platform/calendar/client.go :: setTokenURL
@@ -176,8 +173,6 @@ pkg/httputil/hostmatch.go :: HostMatches
 pkg/httputil/hostmatch.go :: Hostname
 pkg/jsonutil/extract.go :: ExtractArray
 pkg/jsonutil/unmarshal.go :: Unmarshal
-pkg/llmerr/action.go :: Reason.DefaultAction
-pkg/llmerr/action.go :: backoffFor
 pkg/llmerr/reason.go :: Reason.Retryable
 pkg/llmerr/reason.go :: Reason.String
 pkg/promptguard/promptguard.go :: HasThreat
