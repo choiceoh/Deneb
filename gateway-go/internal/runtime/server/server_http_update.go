@@ -129,6 +129,8 @@ func (s *Server) handleAppUpdateDownload(w http.ResponseWriter, r *http.Request)
 	if _, ok := s.authenticateMiniappDownloadRequest(w, r); !ok {
 		return
 	}
+	// A multi-MB APK over a slow mobile link can outlast the global WriteTimeout.
+	disableWriteDeadline(w)
 	// filepath.Base strips any directory segments and the .apk suffix check
 	// keeps this confined to APK files inside the serve dir — no traversal.
 	name := filepath.Base(strings.TrimSpace(r.URL.Query().Get("file")))

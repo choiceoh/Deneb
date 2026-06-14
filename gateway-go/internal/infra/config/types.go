@@ -75,9 +75,6 @@ const (
 	DefaultChannelMaxRestartsPerHour    = 10
 	DefaultReloadDebounceMs             = 300
 	DefaultReloadDeferralTimeoutMs      = 300_000
-	DefaultAuthRateLimitMaxAttempts     = 10
-	DefaultAuthRateLimitWindowMs        = 60_000
-	DefaultAuthRateLimitLockoutMs       = 300_000
 	DefaultSessionMainKey               = "main"
 	DefaultAgentMaxConcurrent           = 8
 	DefaultSubagentMaxConcurrent        = 2
@@ -146,20 +143,11 @@ type GatewayControlUIConfig struct {
 
 // GatewayAuthConfig configures gateway authentication.
 type GatewayAuthConfig struct {
-	Mode           string                      `json:"mode,omitempty"` // "none" | "token" | "password" | "trusted-proxy"
-	Token          string                      `json:"token,omitempty"`
-	Password       string                      `json:"password,omitempty"`
-	AllowTailscale *bool                       `json:"allowTailscale,omitempty"`
-	RateLimit      *GatewayAuthRateLimitConfig `json:"rateLimit,omitempty"`
-	TrustedProxy   *GatewayTrustedProxyConfig  `json:"trustedProxy,omitempty"`
-}
-
-// GatewayAuthRateLimitConfig configures auth rate limiting.
-type GatewayAuthRateLimitConfig struct {
-	MaxAttempts    *int  `json:"maxAttempts,omitempty"`
-	WindowMs       *int  `json:"windowMs,omitempty"`
-	LockoutMs      *int  `json:"lockoutMs,omitempty"`
-	ExemptLoopback *bool `json:"exemptLoopback,omitempty"`
+	Mode           string                     `json:"mode,omitempty"` // "none" | "token" | "password" | "trusted-proxy"
+	Token          string                     `json:"token,omitempty"`
+	Password       string                     `json:"password,omitempty"`
+	AllowTailscale *bool                      `json:"allowTailscale,omitempty"`
+	TrustedProxy   *GatewayTrustedProxyConfig `json:"trustedProxy,omitempty"`
 }
 
 // GatewayTrustedProxyConfig for trusted-proxy auth mode.

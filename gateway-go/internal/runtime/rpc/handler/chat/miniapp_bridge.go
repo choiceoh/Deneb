@@ -124,9 +124,17 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		if savedPath != "" {
 			message += "\n\n(원문 보관: memory/" + savedPath + ")"
 		}
+		// Bound concurrent interactive turns (unified-memory OOM guard).
+		release, aerr := deps.Chat.AcquireInteractiveTurn(ctx)
+		if aerr != nil {
+			return rpcerr.Unavailable("gateway busy: too many concurrent turns").Response(req.ID)
+		}
+		defer release()
 		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
 			Delivery:            &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
+			// OCR'd text is untrusted (a malicious screenshot): block exec/gmail send if it carries promptware.
+			GateUntrustedTools: true,
 		})
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
@@ -220,9 +228,17 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 		if savedPath != "" {
 			message += "\n\n(전사 원문 보관: memory/" + savedPath + " — 회의록에 이 경로를 출처로 남겨라)"
 		}
+		// Bound concurrent interactive turns (unified-memory OOM guard).
+		release, aerr := deps.Chat.AcquireInteractiveTurn(ctx)
+		if aerr != nil {
+			return rpcerr.Unavailable("gateway busy: too many concurrent turns").Response(req.ID)
+		}
+		defer release()
 		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
 			Delivery:            &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
+			// Transcribed audio is untrusted input: block exec/gmail send if it carries promptware.
+			GateUntrustedTools: true,
 		})
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
@@ -373,11 +389,20 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 			sessionKey = nativeClientChannel + ":main"
 		}
 
+		// Bound concurrent interactive turns (unified-memory OOM guard).
+		release, aerr := deps.Chat.AcquireInteractiveTurn(ctx)
+		if aerr != nil {
+			return rpcerr.Unavailable("gateway busy: too many concurrent turns").Response(req.ID)
+		}
+		defer release()
+
 		res, err := deps.Chat.SendSync(ctx, sessionKey, p.Message, strings.TrimSpace(p.Model), &chatpkg.SyncOptions{
 			Delivery: &chatpkg.DeliveryContext{Channel: nativeClientChannel, To: sessionKey},
 			// The reply text is returned here, not pushed via the message tool.
 			AutoDeliveredOutput: true,
 			SkipRecall:          p.SkipRecall,
+			// Block irreversible tools (exec, gmail send) if promptware enters the turn.
+			GateUntrustedTools: true,
 		})
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)

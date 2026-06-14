@@ -31,6 +31,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -41,6 +42,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 )
+
+// maxMiniappChatStreamBodyBytes caps the POST /api/v1/miniapp/chat/stream body.
+// This endpoint carries only {sessionKey, message, model, skipRecall} — plain
+// text — so a few MiB is ample headroom even for a long pasted message, while
+// still stopping an unbounded io.ReadAll. Captures (base64 blobs) go through the
+// RPC endpoint, which has the larger maxMiniappRPCBodyBytes.
+const maxMiniappChatStreamBodyBytes = 8 << 20 // 8 MiB
 
 // nativeClientChannel mirrors the constant of the same name in the blocking
 // miniapp chat bridge (internal/runtime/rpc/handler/chat/miniapp_bridge.go).
@@ -101,9 +109,14 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxMiniappChatStreamBodyBytes))
 	if err != nil {
-		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "read body: " + err.Error()})
+		status := http.StatusBadRequest
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		s.writeJSON(w, status, map[string]any{"error": "read body: " + err.Error()})
 		return
 	}
 	var reqBody struct {
@@ -132,6 +145,16 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Bound concurrent interactive turns (unified-memory OOM guard). Acquired
+	// before any SSE byte so an over-limit caller still gets a clean JSON 503.
+	// Held for the whole turn via the deferred release.
+	release, err := s.chatHandler.AcquireInteractiveTurn(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "gateway busy: too many concurrent turns"})
+		return
+	}
+	defer release()
+
 	// From here on the response is SSE — no more writeJSON.
 	ctx := clientauth.WithContext(r.Context(), identity)
 	runner := func(ctx context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
@@ -140,6 +163,8 @@ func (s *Server) handleMiniappChatStream(w http.ResponseWriter, r *http.Request)
 			// The reply text is streamed here, not pushed via the message tool.
 			AutoDeliveredOutput: true,
 			SkipRecall:          reqBody.SkipRecall,
+			// Block irreversible tools (exec, gmail send) if promptware enters the turn.
+			GateUntrustedTools: true,
 			// Live progress for the client's waiting indicator: which tool is
 			// running, and a throttled "thinking" pulse before the first token.
 			OnToolEvent: sinks.Tool,
@@ -168,6 +193,8 @@ func writeChatStreamSSE(ctx context.Context, w http.ResponseWriter, sessionKey s
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
+	// A streamed turn runs up to DefaultTurnDeadline; lift the global WriteTimeout.
+	disableWriteDeadline(w)
 
 	h := w.Header()
 	h.Set("Content-Type", "text/event-stream")

@@ -188,7 +188,14 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 		return "", err
 	}
 
-	return applyTruncation(v.(string), maxChars), nil //nolint:errcheck // type guaranteed by preceding switch
+	// Comma-ok rather than v.(string): if the singleflight leader panicked, a
+	// waiter can receive (nil, nil) — a bare assertion would panic here (the
+	// agent loop recovers it into a tool error, but a clean error is better).
+	s, ok := v.(string)
+	if !ok {
+		return "", fmt.Errorf("web fetch %q: unexpected result type %T", targetURL, v)
+	}
+	return applyTruncation(s, maxChars), nil
 }
 
 // webFetchViaSerper extracts content for a single URL via Serper's dedicated

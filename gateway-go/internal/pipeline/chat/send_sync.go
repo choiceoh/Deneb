@@ -136,6 +136,11 @@ type SyncOptions struct {
 	// preview carries a chip-sized tail of the recent reasoning text ("" when
 	// nothing readable accumulated yet).
 	OnThinking func(preview string)
+
+	// GateUntrustedTools enables the untrusted-origin tool gate (block exec /
+	// gmail send when promptware enters the turn). Set by the interactive
+	// native-client transports. Propagated to RunParams.GateUntrustedTools.
+	GateUntrustedTools bool
 }
 
 // prepareSyncRun builds RunParams and runDeps from the common sync arguments.
@@ -185,6 +190,7 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 		params.AutoDeliveredOutput = opts.AutoDeliveredOutput
 		params.BeforeToolCall = opts.BeforeToolCall
 		params.OnToolResult = opts.OnToolResult
+		params.GateUntrustedTools = opts.GateUntrustedTools
 	}
 
 	deps := h.buildRunDeps()

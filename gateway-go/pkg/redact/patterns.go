@@ -27,6 +27,9 @@ var sensitiveQueryParams = map[string]struct{}{
 	"code":            {}, // OAuth authorization codes
 	"signature":       {}, // pre-signed URL signatures
 	"x-amz-signature": {},
+	"clienttoken":     {}, // Deneb native-client token (download URLs carry it as ?clientToken=)
+	"client_token":    {}, // snake_case variant
+	"tma":             {}, // retired Telegram Mini App initData (kept so any latent log line is scrubbed)
 }
 
 // Known vendor prefix patterns (ordered roughly by popularity).
