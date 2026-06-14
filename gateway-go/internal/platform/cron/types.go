@@ -17,6 +17,6 @@ type CronFailureAlert struct {
 	Channel    string `json:"channel,omitempty"`
 	To         string `json:"to,omitempty"`
 	CooldownMs int64  `json:"cooldownMs,omitempty"`
-	Mode       string `json:"mode,omitempty"` // "announce" (Telegram delivery)
+	Mode       string `json:"mode,omitempty"` // "announce" (proactive delivery)
 	AccountID  string `json:"accountId,omitempty"`
 }

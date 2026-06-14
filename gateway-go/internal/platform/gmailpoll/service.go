@@ -24,7 +24,7 @@ const (
 	searchMaxRetries   = 2
 )
 
-// Notifier delivers messages to the user (e.g., via Telegram).
+// Notifier delivers messages to the user (e.g., to the native client).
 type Notifier interface {
 	Notify(ctx context.Context, message string) error
 }

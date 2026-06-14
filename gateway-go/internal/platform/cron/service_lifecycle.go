@@ -167,7 +167,7 @@ func (s *Service) StopCtx(ctx context.Context) {
 
 	// Wait for in-flight executors to finish, bounded by the caller's
 	// deadline. Without this, doShutdown could tear down dependencies
-	// (Telegram plugin, chat handler, etc.) while a cron run is still
+	// (the chat handler and proactive delivery, etc.) while a cron run is still
 	// using them — see issue #1633.
 	waitDone := make(chan struct{})
 	go func() {

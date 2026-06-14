@@ -8,7 +8,7 @@ import (
 // The local vLLM reasoning model (step3.7) occasionally leaks chain-of-thought
 // delimiters into the answer text even with extended thinking disabled, when
 // the server-side reasoning parser fails to split them onto a separate channel.
-// The mail-analysis pipeline streams the model output straight to Telegram
+// The mail-analysis pipeline streams the model output straight to the user
 // without passing through the chat package's delivery sanitizer, so it needs
 // its own guard. This mirrors chat.stripReasoningLeak (the canonical version in
 // internal/pipeline/chat/reasoning_leak.go); kept local to avoid an import

@@ -94,7 +94,7 @@ type ServiceConfig struct {
 	// callback receives the resolved delivery target (channel/to), the cron
 	// job ID, and the cron agent's full analysis text. It is responsible for
 	// triggering a run on the main user session so that the main agent is
-	// the literal author of the Telegram message and the main session
+	// the literal author of the proactive message and the main session
 	// transcript records the proactive turn.
 	//
 	// Rationale: before this hook, cron jobs posted directly to Telegram
