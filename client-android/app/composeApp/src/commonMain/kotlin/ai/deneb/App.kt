@@ -671,7 +671,9 @@ private fun AppContent(
                     // own navigationBarsPadding doesn't double up.
                     val route = currentBackStackEntry?.destination?.route
                     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-                    val showBar = route in denebBottomBarRoutes && !imeVisible
+                    // 챗봇 workspace is a clean focus-chat space: no bottom tab bar at all
+                    // (the top 챗봇/업무 pill is the only way in/out). 업무 keeps the super-app bar.
+                    val showBar = route in denebBottomBarRoutes && !imeVisible && !navChatMode
                     Column(Modifier.fillMaxSize()) {
                         Box(
                             Modifier
@@ -693,7 +695,6 @@ private fun AppContent(
                                 moreActive = route in denebMoreRoutes,
                                 onNavigate = { dest -> navigateToDenebSection(navController, dest) },
                                 onMore = { navigateToDenebSection(navController, DenebMore) },
-                                chatMode = navChatMode,
                             )
                         }
                     }
