@@ -91,6 +91,12 @@ class ChatViewModel(
             viewModelScope.launch {
                 dataRepository.denebModels.collect { updateAvailableServices() }
             }
+            // The switcher's selected model is workspace-scoped (chatbot role in 챗봇
+            // mode, main in 업무), so rebuild it when the workspace flips — not only
+            // when the model list changes.
+            viewModelScope.launch {
+                dataRepository.workspaceWork.collect { updateAvailableServices() }
+            }
             viewModelScope.launch {
                 dataRepository.denebWorkFeed.collect { feed ->
                     _state.update { it.copy(workFeed = feed.toImmutableList()) }
