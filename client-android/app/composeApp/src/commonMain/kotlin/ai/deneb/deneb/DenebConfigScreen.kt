@@ -4,17 +4,27 @@ import ai.deneb.Platform
 import ai.deneb.PlatformBackHandler
 import ai.deneb.currentPlatform
 import ai.deneb.data.AppSettings
-import ai.deneb.ui.DenebRow
+import ai.deneb.ui.DenebGroup
+import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.rememberHaptics
-import ai.deneb.ui.denebHint
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.Hub
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,6 +34,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 
 /**
@@ -119,33 +130,40 @@ fun DenebConfigScreen(
     }
 }
 
-/** The settings-hub section list: one tappable [DenebRow] per [ConfigTab], in
- *  display order, each with its label + a one-line summary of what it holds. */
+/** Display-only grouping of [ConfigTab]s into inset cards. The enum order/ordinals
+ *  are unchanged (saved detail ordinals survive); this only decides which rows share
+ *  a [DenebGroup]. */
+private val configGroups: List<Pair<String, List<ConfigTab>>> = listOf(
+    "시스템" to listOf(ConfigTab.GATEWAY, ConfigTab.APPEARANCE, ConfigTab.MODEL),
+    "자동화 · 관찰" to listOf(ConfigTab.SKILLS, ConfigTab.CRON, ConfigTab.OBSERVE),
+    "라우팅 · 인프라" to listOf(ConfigTab.WORMHOLE, ConfigTab.FLEET),
+    "정보" to listOf(ConfigTab.VERSION),
+)
+
+/** The settings-hub section list, in the grouped inset-card idiom ([DenebGroup] +
+ *  [DenebListRow]): each [ConfigTab] is a row with its icon, label, and one-line
+ *  summary. Tapping pushes into that section's detail. */
 @Composable
 private fun ConfigSectionList(onOpen: (ConfigTab) -> Unit) {
-    val haptics = rememberHaptics()
     Column(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp),
+            .padding(top = 4.dp, bottom = 24.dp),
     ) {
-        ConfigTab.entries.forEach { entry ->
-            DenebRow(onClick = {
-                haptics.tap()
-                onOpen(entry)
-            }) {
-                Text(
-                    entry.label,
-                    style = DenebType.rowTitle,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
-                Text(
-                    entry.desc,
-                    style = DenebType.rowSubtitle,
-                    color = denebHint(),
-                )
+        configGroups.forEach { (label, tabs) ->
+            DenebGroup(label = label) {
+                tabs.forEachIndexed { i, tab ->
+                    DenebListRow(
+                        title = tab.label,
+                        onClick = { onOpen(tab) },
+                        icon = tab.icon,
+                        subtitle = tab.desc,
+                        divider = i < tabs.lastIndex,
+                    )
+                }
             }
+            Spacer(Modifier.height(20.dp))
         }
     }
 }
@@ -165,17 +183,17 @@ private fun NotConnectedTab() = EmptyTab("게이트웨이에 연결되지 않았
 /** The settings-hub sections, in display order. The screen renders [entries] as
  *  the section list and switches detail content by enum, so a reorder/rename
  *  happens in one place. [desc] is the one-line summary under each list row. */
-private enum class ConfigTab(val label: String, val desc: String) {
-    GATEWAY("게이트웨이", "연결, 상태, 연락처 동기화"),
-    APPEARANCE("화면", "테마, UI 배율"),
-    MODEL("모델", "역할별 모델 지정, 엔드포인트"),
-    SKILLS("스킬", "설치된 스킬, 수명 주기"),
-    CRON("크론", "예약 작업"),
-    OBSERVE("관찰", "게이트웨이 동작, 로그"),
-    WORMHOLE("Wormhole", "모델 라우터 상태, 기능 토글"),
+private enum class ConfigTab(val label: String, val desc: String, val icon: ImageVector) {
+    GATEWAY("게이트웨이", "연결, 상태, 연락처 동기화", Icons.Outlined.Dns),
+    APPEARANCE("화면", "테마, UI 배율", Icons.Outlined.Palette),
+    MODEL("모델", "역할별 모델 지정, 엔드포인트", Icons.Outlined.Memory),
+    SKILLS("스킬", "설치된 스킬, 수명 주기", Icons.Outlined.Extension),
+    CRON("크론", "예약 작업", Icons.Outlined.Schedule),
+    OBSERVE("관찰", "게이트웨이 동작, 로그", Icons.Outlined.Visibility),
+    WORMHOLE("Wormhole", "모델 라우터 상태, 기능 토글", Icons.Outlined.Hub),
 
     // Appended at the end so existing saved detail ordinals (rotation / process
     // death) keep pointing at the same section across this change.
-    FLEET("플릿", "GPU 노드 상태, 모델 기동/중지, 작업 로그"),
-    VERSION("버전", "현재 빌드, 패치노트, 업데이트"),
+    FLEET("플릿", "GPU 노드 상태, 모델 기동/중지, 작업 로그", Icons.Outlined.Storage),
+    VERSION("버전", "현재 빌드, 패치노트, 업데이트", Icons.Outlined.Info),
 }
