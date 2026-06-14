@@ -29,13 +29,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 
-private data class MoreEntry(val label: String, val dest: Any, val icon: ImageVector)
+private data class MoreEntry(
+    val label: String,
+    val dest: Any,
+    val icon: ImageVector,
+    // 업무 데이터 entry: hidden in the 챗봇 workspace (검색·카테고리). 할일·일기 stay.
+    val workData: Boolean = false,
+)
 
 private val moreEntries = listOf(
-    MoreEntry("검색", DenebSearch, Icons.Outlined.Search),
+    MoreEntry("검색", DenebSearch, Icons.Outlined.Search, workData = true),
     MoreEntry("할일", DenebTodo, Icons.Outlined.CheckCircle),
     MoreEntry("일기", DenebDiary, Icons.AutoMirrored.Outlined.MenuBook),
-    MoreEntry("카테고리", DenebCategories, Icons.Outlined.GridView),
+    MoreEntry("카테고리", DenebCategories, Icons.Outlined.GridView, workData = true),
 )
 
 /**
@@ -45,9 +51,10 @@ private val moreEntries = listOf(
  * Icon + label rows in the nav-icon idiom; the host wires [onOpen] to navigate.
  */
 @Composable
-fun DenebMoreScreen(onBack: () -> Unit, onOpen: (Any) -> Unit) {
+fun DenebMoreScreen(onBack: () -> Unit, onOpen: (Any) -> Unit, chatMode: Boolean = false) {
+    val entries = if (chatMode) moreEntries.filterNot { it.workData } else moreEntries
     DenebScreenScaffold(title = "더보기", onBack = onBack) {
-        moreEntries.forEach { entry ->
+        entries.forEach { entry ->
             MoreRow(entry.label, entry.icon) { onOpen(entry.dest) }
         }
     }

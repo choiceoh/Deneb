@@ -48,6 +48,7 @@ import ai.deneb.ui.chat.composables.DenebSidebar
 import ai.deneb.ui.chat.composables.LocalCaptureActions
 import ai.deneb.ui.chat.composables.denebBottomBarRoutes
 import ai.deneb.ui.chat.composables.denebMoreRoutes
+import ai.deneb.ui.chat.composables.denebWorkDataRoutes
 import ai.deneb.ui.chat.composables.navigateToDenebSection
 import ai.deneb.ui.components.FullScreenImageHost
 import ai.deneb.ui.handCursor
@@ -101,6 +102,7 @@ import coil3.svg.SvgDecoder
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.tab_chat
 import deneb.composeapp.generated.resources.tab_settings
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import nl.marc_apps.tts.TextToSpeechInstance
@@ -309,6 +311,23 @@ private fun AppContent(
                 val showTabBar = currentPlatform is Platform.Web
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val isHome = currentBackStackEntry?.destination?.route == "home"
+
+                // 챗봇 ↔ 업무 workspace, reactive. 챗봇 hides 업무 데이터 sections from
+                // every navigation surface (bottom bar, desktop rail, 더보기). Work is the
+                // default when there is no gateway client (previews / other repos).
+                val workspaceWorkFlow = remember(denebClient) {
+                    denebClient?.workspaceWork ?: MutableStateFlow(true)
+                }
+                val isWorkMode by workspaceWorkFlow.collectAsStateWithLifecycle()
+                val navChatMode = !isWorkMode
+                // Switching into 챗봇 while parked on a now-hidden 업무 데이터 screen would
+                // strand the user there with no active tab — bounce them back to home.
+                val activeRoute = currentBackStackEntry?.destination?.route
+                LaunchedEffect(navChatMode, activeRoute) {
+                    if (navChatMode && activeRoute != null && activeRoute in denebWorkDataRoutes) {
+                        navigateToDenebSection(navController, Home)
+                    }
+                }
 
                 val navigationTabBar: @Composable () -> Unit = {
                     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -520,6 +539,7 @@ private fun AppContent(
                             DenebMoreScreen(
                                 onBack = { navController.navigateUp() },
                                 onOpen = { dest -> navController.navigate(dest) },
+                                chatMode = navChatMode,
                             )
                         }
                         composable<DenebWiki> { entry ->
@@ -639,7 +659,7 @@ private fun AppContent(
                 // headless-harness over-measure trap.
                 if (currentPlatform is Platform.Desktop) {
                     Row(Modifier.fillMaxSize()) {
-                        DenebSidebar(navController, currentBackStackEntry?.destination?.route)
+                        DenebSidebar(navController, currentBackStackEntry?.destination?.route, chatMode = navChatMode)
                         Box(Modifier.weight(1f).fillMaxHeight()) { navHost(Modifier.fillMaxSize()) }
                     }
                 } else {
@@ -673,6 +693,7 @@ private fun AppContent(
                                 moreActive = route in denebMoreRoutes,
                                 onNavigate = { dest -> navigateToDenebSection(navController, dest) },
                                 onMore = { navigateToDenebSection(navController, DenebMore) },
+                                chatMode = navChatMode,
                             )
                         }
                     }

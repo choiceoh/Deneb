@@ -55,15 +55,29 @@ data class DenebTab(
     val dest: Any,
     val outlined: ImageVector,
     val filled: ImageVector,
+    // 업무 데이터 section (mail/calendar/…): hidden from navigation in the 챗봇
+    // workspace so it stays a clean general-chat space (separate from 업무).
+    val workData: Boolean = false,
 )
 
 // The four primary sections. Search·todo·diary·categories live under 더보기 (and fleet
 // lives inside settings, so it is reached through the 설정 tab — not 더보기).
 val denebBottomTabs: List<DenebTab> = listOf(
     DenebTab("채팅", "home", Home, Icons.AutoMirrored.Outlined.ChatOutlined, Icons.AutoMirrored.Filled.ChatFilled),
-    DenebTab("메일", "deneb_mail", DenebMail, Icons.Outlined.EmailOutlined, Icons.Filled.EmailFilled),
-    DenebTab("달력", "deneb_calendar", DenebCalendar, Icons.Outlined.CalOutlined, Icons.Filled.CalFilled),
+    DenebTab("메일", "deneb_mail", DenebMail, Icons.Outlined.EmailOutlined, Icons.Filled.EmailFilled, workData = true),
+    DenebTab("달력", "deneb_calendar", DenebCalendar, Icons.Outlined.CalOutlined, Icons.Filled.CalFilled, workData = true),
     DenebTab("설정", "deneb_config", DenebConfig, Icons.Outlined.SettingsOutlined, Icons.Filled.SettingsFilled),
+)
+
+// Routes that surface 업무 데이터 (mail/calendar/search/categories/fleet). The 챗봇
+// workspace hides these from every navigation surface; switching into 챗봇 while
+// parked on one of them bounces back to home (App.kt). 채팅·설정·할일·일기 stay.
+val denebWorkDataRoutes: Set<String> = setOf(
+    "deneb_mail",
+    "deneb_calendar",
+    "deneb_search",
+    "deneb_categories",
+    "deneb_fleet",
 )
 
 // Top-level routes that show the bottom bar: the 4 tabs + the 더보기 screen and its
@@ -92,7 +106,10 @@ fun DenebBottomBar(
     onNavigate: (Any) -> Unit,
     onMore: () -> Unit,
     modifier: Modifier = Modifier,
+    // 챗봇 workspace: drop the 업무 데이터 tabs (메일·달력). 더보기 stays for 할일·일기.
+    chatMode: Boolean = false,
 ) {
+    val tabs = if (chatMode) denebBottomTabs.filterNot { it.workData } else denebBottomTabs
     val haptics = rememberHaptics()
     val hairline = denebHairline()
     val ink = MaterialTheme.colorScheme.onBackground
@@ -114,7 +131,7 @@ fun DenebBottomBar(
             drawLine(hairline, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1.dp.toPx())
         },
     ) {
-        denebBottomTabs.forEach { tab ->
+        tabs.forEach { tab ->
             val selected = currentRoute == tab.route
             NavigationBarItem(
                 selected = selected,

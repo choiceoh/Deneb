@@ -74,6 +74,8 @@ private data class SidebarItem(
     val dest: Any,
     val outlined: ImageVector,
     val filled: ImageVector,
+    // 업무 데이터 section: hidden from the rail in the 챗봇 workspace (see DenebBottomBar).
+    val workData: Boolean = false,
 )
 
 // [route] is the destination @SerialName (matches currentBackStackEntry.destination.route
@@ -83,11 +85,11 @@ private data class SidebarItem(
 // 인물 wiki) is reached through categories' pinned "사람" row.
 private val sidebarItems = listOf(
     SidebarItem("chat", "home", Home, Icons.AutoMirrored.Outlined.ChatOutlined, Icons.AutoMirrored.Filled.ChatFilled),
-    SidebarItem("mail", "deneb_mail", DenebMail, Icons.Outlined.EmailOutlined, Icons.Filled.EmailFilled),
-    SidebarItem("calendar", "deneb_calendar", DenebCalendar, Icons.Outlined.CalOutlined, Icons.Filled.CalFilled),
-    SidebarItem("search", "deneb_search", DenebSearch, Icons.Outlined.SearchOutlined, Icons.Filled.SearchFilled),
-    SidebarItem("categories", "deneb_categories", DenebCategories, Icons.Outlined.GridOutlined, Icons.Filled.GridFilled),
-    SidebarItem("fleet", "deneb_fleet", DenebFleet, Icons.Outlined.DnsOutlined, Icons.Filled.DnsFilled),
+    SidebarItem("mail", "deneb_mail", DenebMail, Icons.Outlined.EmailOutlined, Icons.Filled.EmailFilled, workData = true),
+    SidebarItem("calendar", "deneb_calendar", DenebCalendar, Icons.Outlined.CalOutlined, Icons.Filled.CalFilled, workData = true),
+    SidebarItem("search", "deneb_search", DenebSearch, Icons.Outlined.SearchOutlined, Icons.Filled.SearchFilled, workData = true),
+    SidebarItem("categories", "deneb_categories", DenebCategories, Icons.Outlined.GridOutlined, Icons.Filled.GridFilled, workData = true),
+    SidebarItem("fleet", "deneb_fleet", DenebFleet, Icons.Outlined.DnsOutlined, Icons.Filled.DnsFilled, workData = true),
     SidebarItem("settings", "deneb_config", DenebConfig, Icons.Outlined.SettingsOutlined, Icons.Filled.SettingsFilled),
 )
 
@@ -116,8 +118,10 @@ fun DenebSidebar(
     navController: NavHostController,
     currentRoute: String?,
     modifier: Modifier = Modifier,
+    // 챗봇 workspace: hide 업무 데이터 rows (mail/calendar/search/categories/fleet).
+    chatMode: Boolean = false,
 ) {
-    SidebarContent(currentRoute = currentRoute, modifier = modifier) { dest ->
+    SidebarContent(currentRoute = currentRoute, chatMode = chatMode, modifier = modifier) { dest ->
         navigateToDenebSection(navController, dest)
     }
 }
@@ -125,9 +129,11 @@ fun DenebSidebar(
 @Composable
 private fun SidebarContent(
     currentRoute: String?,
+    chatMode: Boolean = false,
     modifier: Modifier = Modifier,
     onNavigate: (Any) -> Unit,
 ) {
+    val items = if (chatMode) sidebarItems.filterNot { it.workData } else sidebarItems
     val hairline = denebHairline()
     Surface(color = MaterialTheme.colorScheme.background, modifier = modifier) {
         Column(
@@ -141,7 +147,7 @@ private fun SidebarContent(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 28.dp),
         ) {
-            sidebarItems.forEach { item ->
+            items.forEach { item ->
                 SidebarRow(
                     label = item.label,
                     outlined = item.outlined,
