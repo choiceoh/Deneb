@@ -47,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
@@ -156,11 +157,16 @@ fun QuestionInput(
         }
 
         val focusRequester = remember { FocusRequester() }
+        // Hide the placeholder once the caret enters the field. Material's TextField keeps
+        // the placeholder visible whenever the value is empty (focused or not), so we gate
+        // it on focus ourselves and clear it the moment the cursor lands here.
+        var isFocused by remember { mutableStateOf(false) }
         TextField(
             value = textState,
             onValueChange = onTextStateChange,
             modifier = Modifier
                 .focusRequester(focusRequester)
+                .onFocusChanged { isFocused = it.isFocused }
                 .padding(16.dp)
                 .heightIn(max = 120.dp)
                 .fillMaxWidth()
@@ -204,10 +210,12 @@ fun QuestionInput(
                 errorIndicatorColor = Color.Transparent,
             ),
             placeholder = {
-                Text(
-                    stringResource(Res.string.prompt_ask_question),
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
+                if (!isFocused) {
+                    Text(
+                        stringResource(Res.string.prompt_ask_question),
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                }
             },
             trailingIcon = {
                 Row(
