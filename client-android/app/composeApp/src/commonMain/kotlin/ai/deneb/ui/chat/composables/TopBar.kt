@@ -7,7 +7,6 @@ import ai.deneb.ui.handCursor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -79,16 +78,32 @@ internal fun TopBar(
             }
         }
     } else {
-        Row {
-            DrawerButton(onOpenDrawer)
-            LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty)
-            Spacer(Modifier.weight(1f))
-            RecallModePill(recallEnabled, actions)
-            if (textToSpeech != null) {
-                SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
+        // Phone/desktop (no nav tab bar): the 챗봇/업무 mode pill takes the true
+        // center of the bar (Trae-style), with leading buttons pinned at the
+        // start and trailing icons at the end. A Box with three aligned slots —
+        // not a weight Row — so the pill is centered on the bar itself, not just
+        // pushed to the right of the leading group (the previous off-center bug).
+        Box(modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 64.dp)) {
+            Row(
+                modifier = Modifier.align(Alignment.CenterStart),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                DrawerButton(onOpenDrawer)
+                LeadingButtons(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions, isChatHistoryEmpty)
             }
-            WorkFeedButton(onOpenWorkFeed, workFeedCount)
-            SessionButton(onOpenSessionDrawer)
+            Box(modifier = Modifier.align(Alignment.Center)) {
+                RecallModePill(recallEnabled, actions)
+            }
+            Row(
+                modifier = Modifier.align(Alignment.CenterEnd),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (textToSpeech != null) {
+                    SpeechToggleButton(textToSpeech, isSpeechOutputEnabled, isSpeaking, actions)
+                }
+                WorkFeedButton(onOpenWorkFeed, workFeedCount)
+                SessionButton(onOpenSessionDrawer)
+            }
         }
     }
 }
