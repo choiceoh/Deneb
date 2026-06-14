@@ -152,9 +152,10 @@ internal fun ChatModeScreen(
     // Reload the session list whenever the session drawer starts opening, so it
     // reflects sessions created since startup (the list is otherwise loaded once
     // at init and never refreshed — which left a stale drawer).
-    LaunchedEffect(sessionDrawerState) {
-        snapshotFlow { sessionDrawerState.targetValue == DrawerValue.Open }
-            .collect { opening -> if (opening) uiState.actions.refreshConversations() }
+    LaunchedEffect(drawerState, sessionDrawerState) {
+        snapshotFlow {
+            drawerState.targetValue == DrawerValue.Open || sessionDrawerState.targetValue == DrawerValue.Open
+        }.collect { opening -> if (opening) uiState.actions.refreshConversations() }
     }
 
     // An edge-swipe opens either drawer without touching the input field, so the
@@ -183,6 +184,10 @@ internal fun ChatModeScreen(
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         ModalNavigationDrawer(
             drawerState = sessionDrawerState,
+            // Desktop-only: the RIGHT session drawer (opened by the session button). On
+            // phone the session drawer is the LEFT one (below, hamburger + left swipe),
+            // so disable this right drawer's edge gestures there.
+            gesturesEnabled = currentPlatform is Platform.Desktop,
             drawerContent = {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                     DenebSessionDrawerSheet(
@@ -202,13 +207,16 @@ internal fun ChatModeScreen(
                     // empty content + gestures off makes the left drawer inert there. Mobile unchanged.
                     gesturesEnabled = currentPlatform !is Platform.Desktop,
                     drawerContent = {
+                        // Phone: the LEFT drawer is the session history (GPT/Claude-style),
+                        // opened by the hamburger / left-edge swipe — sections moved to the
+                        // bottom bar, so the old left nav menu is gone. Desktop uses the
+                        // persistent DenebSidebar + the right session drawer, so this is empty.
                         if (currentPlatform !is Platform.Desktop) {
-                            DenebDrawerSheet(
-                                onOpenSearch = onOpenSearch,
-                                onOpenMail = onOpenMail,
-                                onOpenCalendar = onOpenCalendar,
-                                onOpenCategories = onOpenCategories,
-                                onNavigateToSettings = onNavigateToSettings,
+                            DenebSessionDrawerSheet(
+                                conversations = filteredConversations,
+                                currentConversationId = uiState.currentConversationId,
+                                pendingConversationDeletion = uiState.pendingConversationDeletion,
+                                actions = uiState.actions,
                                 onClose = { drawerScope.launch { drawerState.close() } },
                             )
                         }
@@ -220,38 +228,7 @@ internal fun ChatModeScreen(
                             .background(MaterialTheme.colorScheme.background)
                             .navigationBarsPadding()
                             .statusBarsPadding()
-                            .imePadding()
-                            // Right-to-left swipe → open the session drawer. A leftward, horizontal-dominant
-                            // drag that STARTS in the right half of the screen (from center up to just inside
-                            // the right edge) opens it. The very right edge is excluded because Android owns it
-                            // for the system "back" gesture; the left half is excluded so this doesn't clash
-                            // with the left drawer or text selection / input-cursor drags. On the content's
-                            // parent, so vertical scroll and taps/FAB pass through — only a clear leftward
-                            // swipe in the right half is consumed.
-                            .pointerInput(Unit) {
-                                val osEdgePx = 28.dp.toPx()
-                                val triggerPx = 24.dp.toPx()
-                                awaitEachGesture {
-                                    val down = awaitFirstDown(requireUnconsumed = false)
-                                    val startX = down.position.x
-                                    if (startX < size.width / 2f || startX > size.width - osEdgePx) return@awaitEachGesture
-                                    if (!sessionDrawerState.isClosed || !drawerState.isClosed) return@awaitEachGesture
-                                    var dx = 0f
-                                    var dy = 0f
-                                    while (true) {
-                                        val change = awaitPointerEvent().changes.firstOrNull() ?: return@awaitEachGesture
-                                        val moved = change.positionChange()
-                                        dx += moved.x
-                                        dy += moved.y
-                                        if (dx <= -triggerPx && -dx > kotlin.math.abs(dy)) {
-                                            change.consume()
-                                            drawerScope.launch { sessionDrawerState.open() }
-                                            return@awaitEachGesture
-                                        }
-                                        if (!change.pressed) return@awaitEachGesture
-                                    }
-                                }
-                            },
+                            .imePadding(),
                     ) {
                         Column(Modifier.fillMaxSize()) {
                             TopBar(
@@ -268,7 +245,13 @@ internal fun ChatModeScreen(
                                     { drawerScope.launch { drawerState.open() } }
                                 },
                                 navigationTabBar = navigationTabBar,
-                                onOpenSessionDrawer = { drawerScope.launch { sessionDrawerState.open() } },
+                                // Desktop opens sessions via this button (right drawer); on
+                                // phone the hamburger opens sessions (left drawer), so hide it.
+                                onOpenSessionDrawer = if (currentPlatform is Platform.Desktop) {
+                                    { drawerScope.launch { sessionDrawerState.open() } }
+                                } else {
+                                    null
+                                },
                                 onOpenWorkFeed = { showWorkFeed = true },
                                 workFeedCount = uiState.workFeed.size,
                             )

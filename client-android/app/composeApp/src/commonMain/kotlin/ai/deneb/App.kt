@@ -358,10 +358,6 @@ private fun AppContent(
                                 onNavigateToSettings = {
                                     navController.navigate(DenebConfig)
                                 },
-                                onOpenMail = { navController.navigate(DenebMail) },
-                                onOpenCalendar = { navController.navigate(DenebCalendar) },
-                                onOpenSearch = { navController.navigate(DenebSearch) },
-                                onOpenCategories = { navController.navigate(DenebCategories) },
                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                             )
                         }
