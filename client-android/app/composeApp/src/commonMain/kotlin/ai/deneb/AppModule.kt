@@ -12,12 +12,10 @@ import ai.deneb.data.SmsDraftStore
 import ai.deneb.data.SmsStore
 import ai.deneb.data.TaskScheduler
 import ai.deneb.data.TaskStore
-import ai.deneb.data.ToolExecutor
 import ai.deneb.data.runMigrations
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.email.EmailPoller
 import ai.deneb.mcp.McpServerManager
-import ai.deneb.network.Requests
 import ai.deneb.sms.SmsPoller
 import ai.deneb.sms.SmsReader
 import ai.deneb.sms.SmsSender
@@ -55,14 +53,8 @@ val appModule = module {
             it.runMigrations(createLegacySettings())
         }
     }
-    single<Requests> {
-        Requests()
-    }
     single<ConversationStorage> {
         ConversationStorage(get())
-    }
-    single<ToolExecutor> {
-        ToolExecutor()
     }
     single<MemoryStore> {
         MemoryStore(get())

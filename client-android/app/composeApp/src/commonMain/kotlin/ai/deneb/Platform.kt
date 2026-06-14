@@ -1,7 +1,5 @@
 package ai.deneb
 
-import ai.deneb.network.tools.Tool
-import ai.deneb.network.tools.ToolInfo
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -57,15 +55,6 @@ expect val currentPlatform: Platform
 expect val defaultUiScale: Float
 
 expect fun getAppFilesDirectory(): String
-
-expect fun getAvailableTools(): List<Tool>
-
-/**
- * Returns all raw tool definitions available on this platform.
- * The returned tools have no isEnabled state set - that's handled by RemoteDataRepository.
- * Unlike getAvailableTools(), this returns all tools regardless of enabled state.
- */
-expect fun getPlatformToolDefinitions(): List<ToolInfo>
 
 expect val isEmailSupported: Boolean
 
